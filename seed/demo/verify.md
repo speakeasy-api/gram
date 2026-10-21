@@ -139,7 +139,8 @@ unfiltered grid and table with an **Off** badge for organization admins.
 admins before enabling. Use the gateway switch to start the assignment review. Acknowledge the completed
 review and select **Enable Organization Gateway**. The same page then shows
 the endpoint `<server>/mcp/gateway/<org>` with a copy button and client install
-instructions. The endpoint appears in the textured welcome-style banner with a copy button,
+instructions. The page header uses the textured welcome-style background. Its endpoint has a
+white box and copy button with the enabled/disabled switch alongside it,
 above separate **Install** and **View assignments** tabs. Organization admins
 can inspect and edit assignments without turning the gateway off. The gateway response reports `available: true` with that URL.
 The old organization settings gateway URL redirects to this page.

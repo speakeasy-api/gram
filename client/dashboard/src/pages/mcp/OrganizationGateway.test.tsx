@@ -9,13 +9,15 @@ vi.mock("@/components/page-templates", () => ({
   SettingsPage: ({
     children,
     primaryAction,
+    renderHeader,
   }: {
     children: ReactNode;
     primaryAction: ReactNode;
+    renderHeader?: (header: ReactNode) => ReactNode;
   }) => (
     <TooltipProvider>
       <div>
-        {primaryAction}
+        {renderHeader ? renderHeader(primaryAction) : primaryAction}
         {children}
       </div>
     </TooltipProvider>

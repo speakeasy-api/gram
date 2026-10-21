@@ -90,27 +90,41 @@ function OrganizationGatewayContent({
           account. As their access changes, so does what they can use.
         </span>
       }
-      primaryAction={
-        isOn !== undefined && !!features.data && !features.error ? (
-          // Not a <label>: label activation would forward clicks on the text
-          // to the switch past RequireScope's pointer-events guard.
-          <div className="flex items-center gap-3">
-            <Text small muted as="span">
-              {isOn ? "Enabled" : "Off"}
-            </Text>
-            <OrganizationGatewaySwitch
-              on={isOn}
-              setOn={(enabled, options) => {
-                if (enabled) {
-                  setReviewing(true);
-                  setTab("assignments");
-                } else setOn(false, options);
-              }}
-              isPending={isPending}
-            />
+      renderHeader={(header) => (
+        <section
+          className={cn(
+            BRAND_MESH_SURFACE_CLASS,
+            "border-border mb-8 border px-6 py-6 sm:px-8 sm:py-8",
+          )}
+        >
+          <BrandMeshLayers />
+          {header}
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+            <div className="min-w-0 flex-1">
+              <GatewayBody gateway={gateway} isOn={isOn} />
+            </div>
+            {isOn !== undefined && !!features.data && !features.error ? (
+              // Not a <label>: label activation would forward clicks on the text
+              // to the switch past RequireScope's pointer-events guard.
+              <div className="flex items-center gap-3">
+                <Text small muted as="span">
+                  {isOn ? "Enabled" : "Disabled"}
+                </Text>
+                <OrganizationGatewaySwitch
+                  on={isOn}
+                  setOn={(enabled, options) => {
+                    if (enabled) {
+                      setReviewing(true);
+                      setTab("assignments");
+                    } else setOn(false, options);
+                  }}
+                  isPending={isPending}
+                />
+              </div>
+            ) : undefined}
           </div>
-        ) : undefined
-      }
+        </section>
+      )}
     >
       {features.error && (
         <Alert variant="error">
@@ -123,7 +137,6 @@ function OrganizationGatewayContent({
         </Alert>
       )}
       <div className="space-y-8">
-        <GatewayBody gateway={gateway} isOn={isOn} />
         <Tabs value={tab} onValueChange={setTab}>
           <div className="border-border border-b">
             <PageTabsList>
@@ -236,36 +249,20 @@ function GatewayBody({
   return (
     <section
       aria-label="Gateway endpoint"
-      className={cn(
-        BRAND_MESH_SURFACE_CLASS,
-        "border-border overflow-hidden border",
-      )}
+      className="border-border flex min-w-0 items-center gap-4 border bg-white px-5 py-4 text-black"
     >
-      <BrandMeshLayers />
-      <div className="space-y-4 px-6 pt-8 pb-10 sm:px-8 sm:pt-10 sm:pb-12">
-        <span className="text-eyebrow">Your organization gateway</span>
-        <h2 className="text-foreground font-display text-4xl leading-tight font-thin tracking-tight sm:text-5xl">
-          Every server. One connection.
-        </h2>
-        <Text muted className="max-w-xl">
-          Connect your agent once. Get every MCP server you can access, across
-          every project.
-        </Text>
+      <div className="min-w-0 flex-1 space-y-2">
+        <h2 className="text-eyebrow text-black/60">Endpoint URL</h2>
+        <code className="block font-mono text-lg break-all sm:text-xl">
+          {url}
+        </code>
       </div>
-      <div className="border-border bg-background/70 flex items-center gap-4 border-t px-6 py-5 sm:px-8">
-        <div className="min-w-0 flex-1 space-y-2">
-          <h3 className="text-eyebrow text-muted-foreground">Endpoint URL</h3>
-          <code className="text-foreground block font-mono text-base break-all sm:text-lg">
-            {url}
-          </code>
-        </div>
-        <CopyButton
-          text={url}
-          size="lg"
-          tooltip="Copy endpoint"
-          className="border-border bg-card shrink-0 border"
-        />
-      </div>
+      <CopyButton
+        text={url}
+        size="lg"
+        tooltip="Copy endpoint"
+        className="shrink-0 text-black hover:bg-black/5 hover:text-black"
+      />
     </section>
   );
 }
