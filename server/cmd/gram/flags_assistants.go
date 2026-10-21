@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net"
 	"net/url"
+	"regexp"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/urfave/cli/v2"
@@ -16,6 +17,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
 )
+
+var assistantRuntimeImageTagPattern = regexp.MustCompile(`^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$`)
 
 // Flag groups are built per call rather than kept in package-level slices
 // because urfave/cli writes the resolved value back onto the flag when it is
@@ -107,6 +110,9 @@ func assistantRuntimeConfigFromCLI(c *cli.Context, serverURL *url.URL) (assistan
 	imageTag := c.String("assistant-runtime-image-tag")
 	if imageTag == "" {
 		imageTag = AssistantRuntimeImageHash
+	}
+	if !assistantRuntimeImageTagPattern.MatchString(imageTag) {
+		return assistants.RuntimeBackendConfig{}, fmt.Errorf("invalid assistant runtime image tag: %q", imageTag)
 	}
 
 	environment := c.String("environment")
