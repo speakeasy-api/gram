@@ -14,6 +14,8 @@ type AiScanTarget struct {
 	// @access: confidential
 	ID string
 	// @access: confidential
+	AiProductID pgtype.Text
+	// @access: confidential
 	DisplayName pgtype.Text
 	// @access: confidential
 	Category pgtype.Text

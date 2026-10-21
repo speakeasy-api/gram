@@ -362,11 +362,100 @@ type AiIntegrationSync struct {
 	ID uuid.UUID
 }
 
+// Global AI client catalog of products Speakeasy knows, curated by staff. Shadow AI scan targets and CIMD documents reference it.
+type AiProduct struct {
+	// Stable product identifier, e.g. claude-code. Shadow AI scan reports key on it and decisions are recorded against it, so it must never change once used. Soft deletion keeps it reserved.
+	// @access: confidential
+	ID string
+	// Groups products by vendor. Not unique: a vendor may ship several products. Stable: renaming one is a breaking change. Names a product at the MCP gateway only when exactly one live product carries it.
+	// @access: confidential
+	VendorKey string
+	// @access: confidential
+	DisplayName string
+	// Product category (harness, assistant, local_model). Required when any signature is set; null for a product known only as an OAuth client.
+	// @access: confidential
+	Category pgtype.Text
+	// macOS CFBundleIdentifier values that identify the product on a device.
+	// @access: confidential
+	BundleIds []string
+	// Bare command names resolved on the device PATH.
+	// @access: confidential
+	Binaries []string
+	// Directories whose existence marks the product installed.
+	// @access: confidential
+	ConfigDirs []string
+	// Process names checked for the running signal.
+	// @access: confidential
+	ProcessNames []string
+	// Info.plist key read for the version on a bundle match; null means CFBundleShortVersionString.
+	// @access: confidential
+	VersionPlistKey pgtype.Text
+	// Names the product reports at MCP initialize. Attribution only, never enforcement: they are self-reported, so any client can claim any name.
+	// @access: confidential
+	ClientInfoNames []string
+	// Subject URN of the staff member who created the row; null for seeded rows.
+	// @access: confidential-pii
+	CreatedBy pgtype.Text
+	// Subject URN of the staff member who last changed the row; null for seeded rows.
+	// @access: confidential-pii
+	UpdatedBy pgtype.Text
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
+}
+
+// CIMD documents each catalog product publishes. Every enabled live row admits its client_id on presets-mode issuers.
+type AiProductCimdDocument struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	AiProductID string
+	// The client_id the product presents. Matching is exact, case-sensitive string equality with no normalization (so a trailing slash is a different document), and never origin matching. When is_pattern is set, * stands for exactly one complete path segment, and the scheme and host stay literal.
+	// @access: confidential
+	Url string
+	// How the admission catalog lists this document; per document, since a vendor's connector and shared documents differ.
+	// @access: confidential
+	DisplayName string
+	// Gates the document without deleting it. A disabled document is inert for admission but still listed, and still holds its URL. Admission is an OR over documents, so disabling one does not de-admit a URL another enabled document still matches.
+	// @access: confidential
+	Enabled bool
+	// Whether url is a wildcard pattern rather than a literal client_id. Explicit rather than inferred from *, so an exact URL is never read as a pattern.
+	// @access: confidential
+	IsPattern bool
+	// When the live document was last checked; null if never.
+	// @access: confidential
+	VerifiedAt pgtype.Timestamptz
+	// Reason code from the last check; null when it passed or never ran.
+	// @access: confidential
+	VerificationError pgtype.Text
+	// Subject URN of the staff member who created the row; null for seeded rows.
+	// @access: confidential-pii
+	CreatedBy pgtype.Text
+	// Subject URN of the staff member who last changed the row; null for seeded rows.
+	// @access: confidential-pii
+	UpdatedBy pgtype.Text
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
+}
+
 type AiScanTarget struct {
 	// @access: confidential
 	OrganizationID string
 	// @access: confidential
 	ID string
+	// @access: confidential
+	AiProductID pgtype.Text
 	// @access: confidential
 	DisplayName pgtype.Text
 	// @access: confidential
