@@ -1,0 +1,14 @@
+server/cmd/tools/enforceload/main.go
+  h_e404c1a6a54184 38,43,179,206,210,234-237,262,547-554,557,564-570,572-656,658,663,665-674,724-725,727-730,743,748,754,803
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "c45417c33f1148f196368bff3a69aeea9887ebdd",
+  "prompts": {},
+  "humans": {
+    "h_e404c1a6a54184": {
+      "author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
