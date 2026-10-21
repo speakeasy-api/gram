@@ -80,4 +80,37 @@ describe("CliCallback", () => {
     expect(mocks.createKey).not.toHaveBeenCalled();
     expect(mocks.authorizeCode).not.toHaveBeenCalled();
   });
+
+  it("keeps the CLI's state token on the callback URL when returning a key by redirect", async () => {
+    mocks.useSessionData.mockReturnValue({
+      status: "success",
+      session: {
+        session: "<SESSION>",
+        activeOrganizationId: "<ORG_ID>",
+        organization: { projects: [{ slug: "default" }] },
+        user: { email: "" },
+      },
+    });
+
+    render(
+      <CliCallback
+        localCallbackUrl="http://127.0.0.1:5555/callback?state=cli-state-token"
+        projectSlug="default"
+        callbackMethod="get"
+      />,
+    );
+
+    await waitFor(() => {
+      expect(window.location.replace).toHaveBeenCalledTimes(1);
+    });
+
+    const target = new URL(
+      vi.mocked(window.location.replace).mock.calls[0]![0] as string,
+    );
+    expect(target.origin).toBe("http://127.0.0.1:5555");
+    expect(target.pathname).toBe("/callback");
+    expect(target.searchParams.get("state")).toBe("cli-state-token");
+    expect(target.searchParams.get("api_key")).toBe("test-key");
+    expect(target.searchParams.get("project")).toBe("default");
+  });
 });

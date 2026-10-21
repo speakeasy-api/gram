@@ -2,9 +2,14 @@ package auth
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/subtle"
+	"encoding/hex"
 	"fmt"
 	"net"
 	"net/http"
+	"net/url"
+	"sync/atomic"
 	"time"
 )
 
@@ -12,6 +17,15 @@ const (
 	minPort         = 1024
 	maxPort         = 65535
 	callbackTimeout = 5 * time.Minute
+
+	// stateBytes is the entropy of the per-login state token. 32 bytes
+	// (256 bits) makes guessing the token of an active login infeasible.
+	stateBytes = 32
+
+	// stateParam is the callback query parameter that carries the state token.
+	// The dashboard preserves the callback URL's own query string when it
+	// appends the API key, so the token round-trips unchanged.
+	stateParam = "state"
 )
 
 // CallbackResult contains the data returned from the auth callback.
@@ -20,16 +34,32 @@ type CallbackResult struct {
 	Project string
 }
 
-// Listener manages an HTTP server that waits for OAuth callback.
+// Listener manages an HTTP server that waits for the dashboard to return an
+// API key. Each listener is bound to one login attempt by a random state token
+// carried in its callback URL: a callback without the exact token is rejected,
+// so another local user or process that finds the loopback port cannot
+// substitute a key for an account the user never signed in to.
 type Listener struct {
 	server   *http.Server
 	listener net.Listener
 	result   chan CallbackResult
 	errChan  chan error
+
+	// state is the token a callback must present to complete this attempt.
+	state string
+
+	// consumed is set by the first accepted callback; later callbacks are
+	// rejected even when they carry the correct state.
+	consumed atomic.Bool
 }
 
 // NewListener creates a new callback listener on an available port.
 func NewListener() (*Listener, error) {
+	state, err := newState()
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate login state: %w", err)
+	}
+
 	ln, err := findAvailablePort()
 	if err != nil {
 		return nil, fmt.Errorf("failed to find available port: %w", err)
@@ -40,6 +70,8 @@ func NewListener() (*Listener, error) {
 		listener: ln,
 		result:   make(chan CallbackResult, 1),
 		errChan:  make(chan error, 1),
+		state:    state,
+		consumed: atomic.Bool{},
 	}
 
 	mux := http.NewServeMux()
@@ -54,13 +86,16 @@ func NewListener() (*Listener, error) {
 	return l, nil
 }
 
-// URL returns the callback URL for this listener.
+// URL returns the callback URL for this listener, including the state token
+// that binds a callback to this login attempt.
 func (l *Listener) URL() string {
 	addr, ok := l.listener.Addr().(*net.TCPAddr)
 	if !ok {
 		return ""
 	}
-	return fmt.Sprintf("http://127.0.0.1:%d/callback", addr.Port)
+	q := url.Values{}
+	q.Set(stateParam, l.state)
+	return fmt.Sprintf("http://127.0.0.1:%d/callback?%s", addr.Port, q.Encode())
 }
 
 // Start begins listening for callbacks.
@@ -236,22 +271,43 @@ const authSuccessHTML = `<!doctype html>
 </html>
 `
 
+// handleCallback accepts the first callback that carries this attempt's state
+// and an API key. Rejected requests leave the attempt open, so a stray or
+// forged request cannot cancel the user's real login.
 func (l *Listener) handleCallback(w http.ResponseWriter, r *http.Request) {
-	apiKey := r.URL.Query().Get("api_key")
+	query := r.URL.Query()
+
+	if subtle.ConstantTimeCompare([]byte(query.Get(stateParam)), []byte(l.state)) != 1 {
+		http.Error(w, "invalid state parameter", http.StatusBadRequest)
+		return
+	}
+
+	apiKey := query.Get("api_key")
 	if apiKey == "" {
 		http.Error(w, "missing api_key parameter", http.StatusBadRequest)
 		return
 	}
 
-	project := r.URL.Query().Get("project")
+	if !l.consumed.CompareAndSwap(false, true) {
+		http.Error(w, "login already completed", http.StatusConflict)
+		return
+	}
 
 	l.result <- CallbackResult{
 		APIKey:  apiKey,
-		Project: project,
+		Project: query.Get("project"),
 	}
 	w.Header().Set("Content-Type", "text/html")
 	w.WriteHeader(http.StatusOK)
 	_, _ = fmt.Fprint(w, authSuccessHTML)
+}
+
+func newState() (string, error) {
+	b := make([]byte, stateBytes)
+	if _, err := rand.Read(b); err != nil {
+		return "", fmt.Errorf("read random bytes: %w", err)
+	}
+	return hex.EncodeToString(b), nil
 }
 
 func findAvailablePort() (net.Listener, error) {
