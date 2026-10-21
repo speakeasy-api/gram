@@ -25,6 +25,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpskills"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	featurerepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
@@ -163,7 +164,37 @@ func TestPlatformMCPSkillsToolsAuthorAndDistributeEndToEnd(t *testing.T) {
 	require.True(t, listed.Distributions[0].FollowsLatest)
 	require.Empty(t, listed.Distributions[0].PinnedVersionID)
 	require.Equal(t, revised.Version.ID, listed.Distributions[0].ResolvedVersionID)
+	require.Nil(t, listed.Distributions[0].LastLoadedOverMcpAt, "nothing has read the skill over MCP yet")
 	require.Empty(t, listed.NextCursor)
+
+	// Once an agent reads the skill over a hosted MCP server, the listing
+	// reports when, as an RFC 3339 time.
+	readAt := time.Now().UTC().Truncate(time.Second)
+	written, err := mcpskills.NewResolver(testenv.NewLogger(t), fixture.conn).RecordRead(ctx, mcpskills.Read{
+		Entry: mcpskills.Entry{
+			SkillID: uuid.MustParse(created.Skill.ID), ProjectID: fixture.project.ID, ProjectSlug: fixture.project.Slug,
+			VersionID: uuid.MustParse(revised.Version.ID),
+			Name:      "add-mcp", Content: "", RawSHA256: "", Frontmatter: nil,
+		},
+		UserID: "", SessionID: "mcp-session", SeenAt: readAt,
+	})
+	require.NoError(t, err)
+	require.True(t, written)
+	listed = callSkillsTool[ListSkillDistributionsOutput](t, ctx, session, "list_skill_distributions", map[string]any{
+		"project_slug": fixture.project.Slug,
+		"skill_id":     created.Skill.ID,
+	})
+	require.Len(t, listed.Distributions, 1)
+	require.NotNil(t, listed.Distributions[0].LastLoadedOverMcpAt)
+	lastLoaded, err := time.Parse(time.RFC3339, *listed.Distributions[0].LastLoadedOverMcpAt)
+	require.NoError(t, err)
+	require.True(t, lastLoaded.Equal(readAt), "last_loaded_over_mcp_at=%s readAt=%s", lastLoaded, readAt)
+	// get_skill carries the same per-skill value, with no distribution needed.
+	got := callSkillsTool[GetSkillOutput](t, ctx, session, "get_skill", map[string]any{
+		"project_slug": fixture.project.Slug,
+		"skill_id":     created.Skill.ID,
+	})
+	require.Equal(t, listed.Distributions[0].LastLoadedOverMcpAt, got.Skill.LastLoadedOverMcpAt)
 
 	// Taking the skill back is gated on the user's explicit confirmation, and
 	// an unconfirmed call revokes nothing.

@@ -384,6 +384,19 @@ SELECT count(*)
 FROM meta_mcp_server_members m
 WHERE m.project_id = @project_id::uuid AND m.deleted IS TRUE;
 
+-- Skills served over MCP must point at targets that survived the reseed.
+-- name: PostflightCountMCPSkillLinks :one
+SELECT count(*)
+FROM mcp_skill_links l
+LEFT JOIN mcp_servers ms
+  ON ms.project_id = l.project_id AND ms.id = l.mcp_server_id AND ms.deleted IS FALSE
+LEFT JOIN meta_mcp_servers mm
+  ON mm.project_id = l.project_id AND mm.id = l.meta_mcp_server_id AND mm.deleted IS FALSE
+WHERE l.project_id = @project_id::uuid AND l.deleted IS FALSE
+  AND (l.target_kind = 'organization_gateway'
+    OR (l.target_kind = 'mcp_server' AND ms.id IS NOT NULL)
+    OR (l.target_kind = 'meta_mcp_server' AND mm.id IS NOT NULL));
+
 -- name: PostflightCountUnwrappedToolsets :one
 SELECT count(*)
 FROM toolsets t

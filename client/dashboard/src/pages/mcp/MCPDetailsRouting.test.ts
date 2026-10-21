@@ -8,7 +8,7 @@ describe("activeTabFromPath", () => {
     ).toBeUndefined();
   });
 
-  it.each(["overview", "team-access", "settings"] as const)(
+  it.each(["overview", "skills", "team-access", "settings"] as const)(
     "reads the %s tab when the toolset slug has the same value",
     (tab) => {
       expect(

@@ -578,6 +578,10 @@ const ROUTE_STRUCTURE = {
             title: "Gateway Inspect",
             url: "inspect",
           },
+          skills: {
+            title: "Gateway Skills",
+            url: "skills",
+          },
           teamAccess: {
             title: "Gateway Team Access",
             url: "team-access",
@@ -612,6 +616,10 @@ const ROUTE_STRUCTURE = {
           prompts: {
             title: "MCP Prompts",
             url: "prompts",
+          },
+          skills: {
+            title: "MCP Skills",
+            url: "skills",
           },
           authentication: {
             title: "MCP Authentication",

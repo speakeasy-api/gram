@@ -242,6 +242,9 @@ type UpdateResponseBody struct {
 	LastSeenAt *string `form:"last_seen_at,omitempty" json:"last_seen_at,omitempty" xml:"last_seen_at,omitempty"`
 	// The number of reconciled activations observed for this skill.
 	SeenCount *int64 `form:"seen_count,omitempty" json:"seen_count,omitempty" xml:"seen_count,omitempty"`
+	// When an agent last loaded the skill over MCP from a Speakeasy-hosted server,
+	// absent when it never has. Returned by list and get only.
+	LastLoadedOverMcpAt *string `form:"last_loaded_over_mcp_at,omitempty" json:"last_loaded_over_mcp_at,omitempty" xml:"last_loaded_over_mcp_at,omitempty"`
 	// The active public share token, absent when the skill is not shared.
 	ShareToken *string `form:"share_token,omitempty" json:"share_token,omitempty" xml:"share_token,omitempty"`
 	// When the skill was created.
@@ -425,6 +428,9 @@ type DistributeResponseBody struct {
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// When the distribution configuration last changed.
 	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	// When an agent last loaded the skill over MCP from a Speakeasy-hosted server,
+	// absent when it never has. Loads are counted per skill, not per distribution.
+	LastLoadedOverMcpAt *string `form:"last_loaded_over_mcp_at,omitempty" json:"last_loaded_over_mcp_at,omitempty" xml:"last_loaded_over_mcp_at,omitempty"`
 }
 
 // ShareResponseBody is the type of the "skills" service "share" endpoint HTTP
@@ -5256,6 +5262,9 @@ type SkillResponseBody struct {
 	LastSeenAt *string `form:"last_seen_at,omitempty" json:"last_seen_at,omitempty" xml:"last_seen_at,omitempty"`
 	// The number of reconciled activations observed for this skill.
 	SeenCount *int64 `form:"seen_count,omitempty" json:"seen_count,omitempty" xml:"seen_count,omitempty"`
+	// When an agent last loaded the skill over MCP from a Speakeasy-hosted server,
+	// absent when it never has. Returned by list and get only.
+	LastLoadedOverMcpAt *string `form:"last_loaded_over_mcp_at,omitempty" json:"last_loaded_over_mcp_at,omitempty" xml:"last_loaded_over_mcp_at,omitempty"`
 	// The active public share token, absent when the skill is not shared.
 	ShareToken *string `form:"share_token,omitempty" json:"share_token,omitempty" xml:"share_token,omitempty"`
 	// When the skill was created.
@@ -5552,6 +5561,9 @@ type PluginSkillDistributionResponseBody struct {
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// When the distribution configuration last changed.
 	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	// When an agent last loaded the skill over MCP from a Speakeasy-hosted server,
+	// absent when it never has. Loads are counted per skill, not per distribution.
+	LastLoadedOverMcpAt *string `form:"last_loaded_over_mcp_at,omitempty" json:"last_loaded_over_mcp_at,omitempty" xml:"last_loaded_over_mcp_at,omitempty"`
 }
 
 // SkillLinkResponseBody is used to define fields on response body types.
@@ -6237,22 +6249,23 @@ func NewRestoreVersionGatewayError(body *RestoreVersionGatewayErrorResponseBody)
 // HTTP "OK" response.
 func NewUpdateSkillOK(body *UpdateResponseBody) *types.Skill {
 	v := &types.Skill{
-		ID:              *body.ID,
-		ProjectID:       *body.ProjectID,
-		Name:            *body.Name,
-		DisplayName:     *body.DisplayName,
-		Summary:         body.Summary,
-		SourceKind:      *body.SourceKind,
-		Classification:  *body.Classification,
-		LatestVersionID: body.LatestVersionID,
-		VersionCount:    *body.VersionCount,
-		HasValidVersion: *body.HasValidVersion,
-		FirstSeenAt:     body.FirstSeenAt,
-		LastSeenAt:      body.LastSeenAt,
-		SeenCount:       *body.SeenCount,
-		ShareToken:      body.ShareToken,
-		CreatedAt:       *body.CreatedAt,
-		UpdatedAt:       *body.UpdatedAt,
+		ID:                  *body.ID,
+		ProjectID:           *body.ProjectID,
+		Name:                *body.Name,
+		DisplayName:         *body.DisplayName,
+		Summary:             body.Summary,
+		SourceKind:          *body.SourceKind,
+		Classification:      *body.Classification,
+		LatestVersionID:     body.LatestVersionID,
+		VersionCount:        *body.VersionCount,
+		HasValidVersion:     *body.HasValidVersion,
+		FirstSeenAt:         body.FirstSeenAt,
+		LastSeenAt:          body.LastSeenAt,
+		SeenCount:           *body.SeenCount,
+		LastLoadedOverMcpAt: body.LastLoadedOverMcpAt,
+		ShareToken:          body.ShareToken,
+		CreatedAt:           *body.CreatedAt,
+		UpdatedAt:           *body.UpdatedAt,
 	}
 	v.Tags = make([]string, len(body.Tags))
 	for i, val := range body.Tags {
@@ -8567,21 +8580,22 @@ func NewArchiveGatewayError(body *ArchiveGatewayErrorResponseBody) *goa.ServiceE
 // endpoint result from a HTTP "OK" response.
 func NewDistributeSkillDistributionOK(body *DistributeResponseBody) *types.SkillDistribution {
 	v := &types.SkillDistribution{
-		ID:                *body.ID,
-		ProjectID:         *body.ProjectID,
-		SkillID:           *body.SkillID,
-		SkillName:         *body.SkillName,
-		SkillDisplayName:  *body.SkillDisplayName,
-		PluginID:          body.PluginID,
-		PluginName:        body.PluginName,
-		AssistantID:       body.AssistantID,
-		AssistantName:     body.AssistantName,
-		PinnedVersionID:   body.PinnedVersionID,
-		ResolvedVersionID: *body.ResolvedVersionID,
-		Channel:           *body.Channel,
-		CreatedByUserID:   *body.CreatedByUserID,
-		CreatedAt:         *body.CreatedAt,
-		UpdatedAt:         *body.UpdatedAt,
+		ID:                  *body.ID,
+		ProjectID:           *body.ProjectID,
+		SkillID:             *body.SkillID,
+		SkillName:           *body.SkillName,
+		SkillDisplayName:    *body.SkillDisplayName,
+		PluginID:            body.PluginID,
+		PluginName:          body.PluginName,
+		AssistantID:         body.AssistantID,
+		AssistantName:       body.AssistantName,
+		PinnedVersionID:     body.PinnedVersionID,
+		ResolvedVersionID:   *body.ResolvedVersionID,
+		Channel:             *body.Channel,
+		CreatedByUserID:     *body.CreatedByUserID,
+		CreatedAt:           *body.CreatedAt,
+		UpdatedAt:           *body.UpdatedAt,
+		LastLoadedOverMcpAt: body.LastLoadedOverMcpAt,
 	}
 
 	return v
@@ -10132,6 +10146,9 @@ func ValidateUpdateResponseBody(body *UpdateResponseBody) (err error) {
 	if body.LastSeenAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.last_seen_at", *body.LastSeenAt, goa.FormatDateTime))
 	}
+	if body.LastLoadedOverMcpAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.last_loaded_over_mcp_at", *body.LastLoadedOverMcpAt, goa.FormatDateTime))
+	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
 	}
@@ -10522,6 +10539,9 @@ func ValidateDistributeResponseBody(body *DistributeResponseBody) (err error) {
 	}
 	if body.UpdatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	if body.LastLoadedOverMcpAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.last_loaded_over_mcp_at", *body.LastLoadedOverMcpAt, goa.FormatDateTime))
 	}
 	return
 }
@@ -16935,6 +16955,9 @@ func ValidateSkillResponseBody(body *SkillResponseBody) (err error) {
 	if body.LastSeenAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.last_seen_at", *body.LastSeenAt, goa.FormatDateTime))
 	}
+	if body.LastLoadedOverMcpAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.last_loaded_over_mcp_at", *body.LastLoadedOverMcpAt, goa.FormatDateTime))
+	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
 	}
@@ -17498,6 +17521,9 @@ func ValidatePluginSkillDistributionResponseBody(body *PluginSkillDistributionRe
 	}
 	if body.UpdatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	if body.LastLoadedOverMcpAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.last_loaded_over_mcp_at", *body.LastLoadedOverMcpAt, goa.FormatDateTime))
 	}
 	return
 }

@@ -6,10 +6,12 @@ import {
 import { useExternalMcpOAuthConfigStatus } from "@/components/sources/sources-hooks";
 import { CopyButton } from "@/components/ui/CopyButton";
 import { Text } from "@/components/ui/Text";
+import { useProject } from "@/contexts/Auth";
 import { useToolset } from "@/hooks/toolTypes";
 import { useMissingRequiredEnvVars } from "@/hooks/useMissingEnvironmentVariables";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useMcpUrl } from "@/hooks/useToolsetUrl";
+import { useSkillsOverMcpEnabled } from "@/pages/skills/use-skills-over-mcp";
 import {
   MCPStatusDropdown,
   RenameMCPServerButton,
@@ -32,6 +34,7 @@ import {
   MessageSquareText,
   Plug,
   Settings as SettingsIcon,
+  Terminal,
   Users,
   Wrench,
 } from "lucide-react";
@@ -44,6 +47,7 @@ export function McpDetailSidebarNav(): React.JSX.Element | null {
   const { toolsetSlug } = useParams<{ toolsetSlug: string }>();
 
   const { data: toolset } = useToolset(toolsetSlug);
+  const project = useProject();
   const { hasScope } = useRBAC();
   const { url: mcpUrl, installPageUrl } = useMcpUrl(toolset);
   const { data: environmentsData } = useListEnvironments();
@@ -60,12 +64,17 @@ export function McpDetailSidebarNav(): React.JSX.Element | null {
   );
   const oauthRequiredUnconfigured =
     useExternalMcpOAuthConfigStatus(toolsetSlug) === "required-unconfigured";
+  const skillsOverMcp = useSkillsOverMcpEnabled();
 
   if (!toolsetSlug) return null;
 
   const activeTab = activeTabFromPath(location.pathname, toolsetSlug);
   const canViewTeamAccess =
     !!toolset && hasScope("org:read") && hasScope("mcp:read", toolset.id);
+  // Same check as the Skills tab route: skill read on this project, not on
+  // any project.
+  const canViewSkills =
+    skillsOverMcp && hasScope("skill:read", project.id, project.id);
 
   const items: DetailSidebarNavItem[] = [
     {
@@ -129,6 +138,17 @@ export function McpDetailSidebarNav(): React.JSX.Element | null {
       href: mcpDetailTabHref(routes, toolsetSlug, "prompts"),
       active: activeTab === "prompts",
     },
+    ...(canViewSkills
+      ? [
+          {
+            key: "skills",
+            title: "Skills",
+            Icon: Terminal,
+            href: mcpDetailTabHref(routes, toolsetSlug, "skills"),
+            active: activeTab === "skills",
+          },
+        ]
+      : []),
     {
       key: "sessions",
       title: "Clients and Sessions",

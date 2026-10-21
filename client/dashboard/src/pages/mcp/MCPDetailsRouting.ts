@@ -5,6 +5,7 @@ const VALID_TABS = [
   "tools",
   "resources",
   "prompts",
+  "skills",
   "authentication",
   "performance",
   "team-access",
@@ -77,6 +78,8 @@ export function mcpDetailTabHref(
       return routes.mcp.details.resources.href(toolsetSlug);
     case "prompts":
       return routes.mcp.details.prompts.href(toolsetSlug);
+    case "skills":
+      return routes.mcp.details.skills.href(toolsetSlug);
     case "authentication":
       return routes.mcp.details.authentication.href(toolsetSlug);
     case "performance":
