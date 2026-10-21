@@ -54,7 +54,7 @@ type MetricsSnapshot struct {
 	Errors uint64 `protobuf:"varint,11,opt,name=errors,proto3" json:"errors,omitempty"`
 	// Cumulative consumer-canceled requests completed in this bucket.
 	Canceled uint64 `protobuf:"varint,12,opt,name=canceled,proto3" json:"canceled,omitempty"`
-	// Requests: cumulative completions with no terminal result. Coverage/connections: producer loss watermark since boot; nonzero means conservatively partial.
+	// Requests: cumulative completions with no terminal result. Coverage/connections: this producer's loss watermark for this source since boot, including loss it could not attribute to one source; it never decreases, and growth since the producer's previous row for the source marks that interval partial.
 	Incomplete uint64 `protobuf:"varint,13,opt,name=incomplete,proto3" json:"incomplete,omitempty"`
 	// Exactly 12 cumulative completion counts in milliseconds: <=10, (10,50], (50,100], (100,250], (250,500], (500,1000], (1000,2500], (2500,5000], (5000,10000], (10000,30000], (30000,60000], >60000. Zero-filled for non-request kinds.
 	LatencyBins []uint64 `protobuf:"varint,14,rep,packed,name=latency_bins,json=latencyBins,proto3" json:"latency_bins,omitempty"`

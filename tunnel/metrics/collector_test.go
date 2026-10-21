@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -96,7 +97,7 @@ func TestFullFleetFlushIsBoundedAndRecordingContinues(t *testing.T) {
 func TestCoverageReportsIdleAndLossWithoutRequestPayloads(t *testing.T) {
 	c := New()
 	c.Observe("source", "server", "tools/list", "unknown", "attempt", 0)
-	c.dropped.Add(1)
+	c.drop("source")
 	var coverage Snapshot
 	c.Flush(t.Context(), func(_ context.Context, s Snapshot) error {
 		if s.Kind == "coverage" {
@@ -134,7 +135,7 @@ func TestCoverageSourcesExpireAndPublishedRowsDoNotCountAsLoss(t *testing.T) {
 	now = now.Add(10 * time.Minute)
 	c.Flush(t.Context(), publish)
 	require.Empty(t, c.sources)
-	require.Zero(t, c.dropped.Load())
+	require.Empty(t, c.drops)
 	c.Observe("replacement", "server", "tools/list", "unknown", "attempt", 0)
 	require.Contains(t, c.sources, "replacement")
 }
@@ -198,7 +199,7 @@ func TestFlushSkipsConfirmedRevisionsAndRetainsNewObservations(t *testing.T) {
 	for key := range c.series {
 		require.NotEqual(t, "requests", key.Kind)
 	}
-	require.Zero(t, c.dropped.Load())
+	require.Empty(t, c.drops)
 }
 
 func TestFlushRetriesUnconfirmedRevisions(t *testing.T) {
@@ -251,4 +252,72 @@ func TestUnroutedRequestsAreErrorsWithoutLatency(t *testing.T) {
 	})
 	require.EqualValues(t, 1, row.Errors)
 	require.Equal(t, [12]uint64{}, row.LatencyBins, "a request that never reached an agent has no response time")
+}
+
+func TestDiscardedRowsRaiseOnlyTheirSourceWatermark(t *testing.T) {
+	t.Parallel()
+	c := New()
+	now := time.Now().UTC().Truncate(time.Minute).Add(10 * time.Second)
+	c.now = func() time.Time { return now }
+	c.Observe("lossy", "server", "tools/call", "unknown", "attempt", 0)
+	c.Observe("healthy", "server", "tools/call", "unknown", "attempt", 0)
+	c.Flush(t.Context(), func(_ context.Context, s Snapshot) error {
+		if s.SourceID == "lossy" {
+			return errors.New("publisher unavailable")
+		}
+		return nil
+	})
+	// Past the retry limit, lossy's unpublished request and coverage rows are
+	// discarded; healthy's were published and are not loss.
+	now = now.Add(11 * time.Minute)
+	c.Flush(t.Context(), func(context.Context, Snapshot) error { return nil })
+	c.Observe("lossy", "server", "tools/call", "unknown", "attempt", 0)
+	c.Observe("healthy", "server", "tools/call", "unknown", "attempt", 0)
+	c.Connections("lossy", 1, 0, 0, 0)
+	c.Connections("healthy", 1, 0, 0, 0)
+	var mu sync.Mutex
+	watermarks := map[Key]uint64{}
+	c.Flush(t.Context(), func(_ context.Context, s Snapshot) error {
+		if s.Kind != "requests" {
+			mu.Lock()
+			watermarks[Key{SourceID: s.SourceID, Kind: s.Kind}] = s.Incomplete
+			mu.Unlock()
+		}
+		return nil
+	})
+	require.Equal(t, map[Key]uint64{
+		{SourceID: "lossy", Kind: "coverage"}:      2,
+		{SourceID: "lossy", Kind: "connections"}:   2,
+		{SourceID: "healthy", Kind: "coverage"}:    0,
+		{SourceID: "healthy", Kind: "connections"}: 0,
+	}, watermarks)
+}
+
+func TestSeriesCapLossIsChargedToTheDroppedSource(t *testing.T) {
+	t.Parallel()
+	c := New()
+	for i := range MaxSeries - maxSources {
+		c.series[Key{SourceID: "noisy", Kind: "requests", Bucket: int64(i)}] = Snapshot{}
+	}
+	c.Observe("quiet", "server", "tools/call", "unknown", "attempt", 0)
+	require.EqualValues(t, 1, c.watermark("quiet"))
+	require.Zero(t, c.watermark("noisy"))
+	c.Observe("quiet", "server", "tools/list", "unknown", "attempt", 0)
+	require.EqualValues(t, 2, c.watermark("quiet"), "a source's watermark keeps growing")
+}
+
+func TestLossBeyondTrackedSourcesMarksEverySource(t *testing.T) {
+	t.Parallel()
+	c := New()
+	for i := range maxSources {
+		c.drop(fmt.Sprint(i))
+	}
+	c.drop("0")
+	c.drop("untracked")
+	require.Len(t, c.drops, maxSources)
+	require.EqualValues(t, 1, c.overflowDrops)
+	require.EqualValues(t, 3, c.watermark("0"))
+	require.EqualValues(t, 2, c.watermark("1"))
+	require.EqualValues(t, 1, c.watermark("untracked"))
+	require.EqualValues(t, 1, c.watermark("never-dropped"))
 }

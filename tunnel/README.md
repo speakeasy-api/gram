@@ -96,7 +96,9 @@ URL userinfo, query strings and raw errors. Requests are collected in minute buc
 gateway connections are sampled every 15 seconds. The Overview groups history
 into 1-minute buckets for 1 hour, 15-minute buckets for 24 hours, and hourly
 buckets for 7 days.
-Missing samples remain gaps. Metrics are best-effort.
+Missing samples remain gaps. An interval is marked partial when the server or
+gateway that collected that tunnel's aggregates discarded some of them. Metrics
+are best-effort.
 
 Speakeasy servers record request metrics, `gram streams` ingests them, and the
 gateway polls capable agents for diagnostics and publishes connection history.

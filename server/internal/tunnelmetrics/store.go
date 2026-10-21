@@ -159,7 +159,8 @@ type RequestRow struct {
 	// Snapshots is the number of deduplicated snapshots in the interval. For
 	// coverage it counts producer-minutes that reported the source.
 	Snapshots uint64
-	// Lost reports that a producer's loss watermark grew in this interval.
+	// Lost reports that a producer's loss watermark for this source grew in
+	// this interval.
 	Lost bool
 	// Servers lists MCP servers that received at least one request.
 	Servers []string
@@ -185,9 +186,9 @@ type Aggregates struct {
 }
 
 // requestQuery keeps each snapshot key's latest revision, marks coverage rows
-// whose producer's loss watermark grew since that producer's previous row, then
-// sums per output interval. The window starts one interval early so the first
-// interval's rows have a predecessor to compare with.
+// whose producer's loss watermark for this source grew since that producer's
+// previous row, then sums per output interval. The window starts one interval
+// early so the first interval's rows have a predecessor to compare with.
 const requestQuery = `WITH deduplicated AS (
   SELECT bucket, kind, method, client_family, producer_id, server_id,
     argMax(attempts, revision) AS n_attempts, argMax(successes, revision) AS n_successes,

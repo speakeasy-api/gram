@@ -34,7 +34,7 @@ message MetricsSnapshot {
   uint64 errors = 11;
   // Cumulative consumer-canceled requests completed in this bucket.
   uint64 canceled = 12;
-  // Requests: cumulative completions with no terminal result. Coverage/connections: producer loss watermark since boot; nonzero means conservatively partial.
+  // Requests: cumulative completions with no terminal result. Coverage/connections: this producer's loss watermark for this source since boot, including loss it could not attribute to one source; it never decreases, and growth since the producer's previous row for the source marks that interval partial.
   uint64 incomplete = 13;
   // Exactly 12 cumulative completion counts in milliseconds: <=10, (10,50], (50,100], (100,250], (250,500], (500,1000], (1000,2500], (2500,5000], (5000,10000], (10000,30000], (30000,60000], >60000. Zero-filled for non-request kinds.
   repeated uint64 latency_bins = 14;

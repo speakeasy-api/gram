@@ -6,7 +6,6 @@ import (
 	"context"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -15,6 +14,10 @@ import (
 var LatencyBounds = [...]int64{10, 50, 100, 250, 500, 1000, 2500, 5000, 10000, 30000, 60000}
 
 const MaxSeries = 100000
+
+// maxSources bounds every per-source set the collector keeps. MaxSeries
+// reserves room for one coverage row per tracked source.
+const maxSources = 10000
 
 type Key struct {
 	SourceID, ServerID, Kind, Method, ClientFamily string
@@ -39,11 +42,19 @@ type Collector struct {
 	sources      map[string]time.Time
 	now          func() time.Time
 	gaugeSources map[string]time.Time
-	dropped      atomic.Uint64
+	// drops counts discarded aggregates per source since producer boot. Entries
+	// are never removed: the read side marks loss where a source's watermark
+	// grew versus this producer's previous row, so a shrinking count would hide
+	// later loss. At most maxSources entries, about 1 MB.
+	drops map[string]uint64
+	// overflowDrops counts drops for sources first seen once drops is full. It
+	// is added to every source's watermark, so in that extreme case loss marks
+	// every source on this producer as partial, as a producer-wide count would.
+	overflowDrops uint64
 }
 
 func New() *Collector {
-	return &Collector{producerID: uuid.NewString(), series: make(map[Key]Snapshot), published: make(map[Key]uint64), sources: make(map[string]time.Time), now: time.Now, gaugeSources: make(map[string]time.Time)}
+	return &Collector{producerID: uuid.NewString(), series: make(map[Key]Snapshot), published: make(map[Key]uint64), sources: make(map[string]time.Time), now: time.Now, gaugeSources: make(map[string]time.Time), drops: make(map[string]uint64), overflowDrops: 0}
 }
 func Method(value string) string {
 	switch value {
@@ -80,12 +91,12 @@ func (c *Collector) Observe(source, server, method, client, outcome string, dura
 	key := Key{SourceID: source, ServerID: server, Kind: "requests", Method: Method(method), ClientFamily: boundedFamily(client), Bucket: c.now().UTC().Truncate(time.Minute).Unix()}
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if _, exists := c.sources[source]; exists || len(c.sources) < 10000 {
+	if _, exists := c.sources[source]; exists || len(c.sources) < maxSources {
 		c.sources[source] = c.now()
 	}
 	row, ok := c.series[key]
-	if !ok && len(c.series) >= MaxSeries-10000 {
-		c.dropped.Add(1)
+	if !ok && len(c.series) >= MaxSeries-maxSources {
+		c.drop(source)
 		return
 	}
 	row.Key = key
@@ -126,13 +137,13 @@ func (c *Collector) Connections(source string, connections, consumers, substream
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if connections > 0 {
-		if _, exists := c.gaugeSources[source]; exists || len(c.gaugeSources) < 10000 {
+		if _, exists := c.gaugeSources[source]; exists || len(c.gaugeSources) < maxSources {
 			c.gaugeSources[source] = c.now()
 		}
 	}
 	row, ok := c.series[key]
-	if !ok && len(c.series) >= MaxSeries-10000 {
-		c.dropped.Add(1)
+	if !ok && len(c.series) >= MaxSeries-maxSources {
+		c.drop(source)
 		return
 	}
 	row.Key = key
@@ -140,8 +151,23 @@ func (c *Collector) Connections(source string, connections, consumers, substream
 	row.Revision++
 	row.Connections, row.Consumers, row.Substreams = connections, consumers, substreams
 	row.ConnectionsOpened += opened
-	row.Incomplete = c.dropped.Load()
+	row.Incomplete = c.watermark(source)
 	c.series[key] = row
+}
+
+// drop records one discarded aggregate for source. The caller holds c.mu.
+func (c *Collector) drop(source string) {
+	if _, exists := c.drops[source]; exists || len(c.drops) < maxSources {
+		c.drops[source]++
+		return
+	}
+	c.overflowDrops++
+}
+
+// watermark is source's loss count since producer boot, never decreasing.
+// The caller holds c.mu.
+func (c *Collector) watermark(source string) uint64 {
+	return c.drops[source] + c.overflowDrops
 }
 
 // Run exports cumulative revisions. Failed publishes remain retryable for ten
@@ -176,16 +202,16 @@ func (c *Collector) Flush(ctx context.Context, publish func(context.Context, Sna
 		}
 		row.Key, row.ProducerID = key, c.producerID
 		row.Revision++
-		// For coverage rows only, incomplete is a conservative loss watermark
+		// For coverage rows only, incomplete is this source's loss watermark
 		// since producer boot. Never add it to request outcome counters.
-		row.Incomplete = c.dropped.Load()
+		row.Incomplete = c.watermark(source)
 		c.series[key] = row
 	}
 	batch := make([]Snapshot, 0, len(c.series))
 	for key, row := range c.series {
 		if now.Unix()-key.Bucket > 600 {
 			if c.published[key] < row.Revision {
-				c.dropped.Add(1)
+				c.drop(key.SourceID)
 			}
 			delete(c.series, key)
 			delete(c.published, key)
