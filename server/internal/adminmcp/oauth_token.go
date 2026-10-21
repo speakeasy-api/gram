@@ -77,7 +77,7 @@ func (s *StaffOAuthTokens) TokenHandler() http.Handler {
 		client, err := s.authenticateClient(r.Context(), presented)
 		if err != nil {
 			if !errors.Is(err, errStaffGrant) {
-				staffOAuthError(w, http.StatusServiceUnavailable, oautherr.CodeTemporarilyUnavailable, "client authentication failed")
+				staffOAuthError(w, http.StatusServiceUnavailable, oautherr.CodeTemporarilyUnavailable, "client authentication is temporarily unavailable")
 				return
 			}
 			status, challenge := oauthwire.InvalidClientResponse(r.Header)

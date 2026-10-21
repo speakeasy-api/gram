@@ -283,7 +283,7 @@ func (s *Service) sharedChallengeEndpoint(ctx context.Context, issuer *sharedIss
 	}
 	challenge, err := s.authnChallengeCache.Get(ctx, "authnChallenge:"+stateID)
 	if err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "authn challenge state not found or expired").LogWarn(ctx, issuer.logger)
+		return nil, consentChallengeCacheError(ctx, issuer.logger, err)
 	}
 	if challenge.UserSessionIssuerID != issuer.authorizationServer.issuerID || !challenge.Endpoint.SharedAuthorizationServer {
 		return nil, oops.E(oops.CodeBadRequest, nil, "authn challenge state does not match this authorization server").LogWarn(ctx, issuer.logger)

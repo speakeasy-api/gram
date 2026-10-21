@@ -98,29 +98,54 @@ func TestConsentActionLiveAuthorityUnavailableMetric(t *testing.T) {
 	}
 }
 
-func TestConsentActionCacheErrors(t *testing.T) {
+func TestConsentChallengeCacheErrors(t *testing.T) {
 	t.Parallel()
-	for _, unavailable := range []bool{false, true} {
-		name := "missing"
-		if unavailable {
-			name = "unavailable"
-		}
-		t.Run(name, func(t *testing.T) {
+	for _, handler := range []struct {
+		name  string
+		serve func(*Service, http.ResponseWriter, *http.Request, *ResolvedMcpEndpoint) error
+	}{
+		{name: "action", serve: (*Service).ServeConsentAction},
+		{name: "get", serve: (*Service).serveConsentGet},
+		{name: "post", serve: (*Service).serveConsentPost},
+		{name: "mcp", serve: (*Service).ServeConsentMCP},
+		{name: "shared", serve: func(s *Service, _ http.ResponseWriter, r *http.Request, _ *ResolvedMcpEndpoint) error {
+			_, err := s.sharedChallengeEndpoint(r.Context(), &sharedIssuer{logger: s.logger}, "unknown")
+			return err
+		}},
+	} {
+		t.Run(handler.name, func(t *testing.T) {
 			t.Parallel()
-			service := browserTestService(t)
-			expected := oops.CodeBadRequest
-			if unavailable {
-				service.authnChallengeCache = cache.NewTypedObjectCache[AuthnChallengeState](service.logger, nil, cache.SuffixNone)
-				expected = oops.CodeUnavailable
+			for _, unavailable := range []bool{false, true} {
+				name := "missing"
+				if unavailable {
+					name = "unavailable"
+				}
+				t.Run(name, func(t *testing.T) {
+					t.Parallel()
+					service := browserTestService(t)
+					expected := oops.CodeBadRequest
+					description := "authn challenge state not found or expired"
+					if unavailable {
+						service.authnChallengeCache = cache.NewTypedObjectCache[AuthnChallengeState](service.logger, nil, cache.SuffixNone)
+						expected = oops.CodeUnavailable
+						description = "authn challenge state is temporarily unavailable"
+					}
+					request := httptest.NewRequest(http.MethodPost, "/mcp/test/connect?state=unknown", strings.NewReader("state=unknown"))
+					request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+					request.Header.Set(consentStateHeader, "unknown")
+					request.Header.Set(consentCSRFHeader, "test-csrf")
+					request.Header.Set(consentAttemptHeader, uuid.NewString())
+					request = request.WithContext(requestorigin.WithContext(t.Context(), requestorigin.Origin{Surface: requestorigin.SurfacePrivateNetwork, BaseURL: "https://private.example.ts.net"}))
+					response := httptest.NewRecorder()
+					endpoint := &ResolvedMcpEndpoint{Slug: "test", RouteBase: mcproute.MCP, McpServerID: uuid.NullUUID{UUID: uuid.New(), Valid: true}}
+					err := handler.serve(service, response, request, endpoint)
+					var failure *oops.ShareableError
+					require.ErrorAs(t, err, &failure)
+					require.Equal(t, expected, failure.Code)
+					require.Contains(t, failure.Error(), description)
+					require.Empty(t, response.Header().Get("WWW-Authenticate"))
+				})
 			}
-			request := httptest.NewRequest(http.MethodPost, "/mcp/test/connect/remote-session", strings.NewReader("state=unknown"))
-			request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-			response := httptest.NewRecorder()
-			err := service.ServeConsentAction(response, request, &ResolvedMcpEndpoint{Slug: "test", RouteBase: mcproute.MCP})
-			var failure *oops.ShareableError
-			require.ErrorAs(t, err, &failure)
-			require.Equal(t, expected, failure.Code)
-			require.Empty(t, response.Header().Get("WWW-Authenticate"))
 		})
 	}
 }

@@ -510,7 +510,7 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 
 	challengeState, err := s.authnChallengeCache.Get(ctx, "authnChallenge:"+stateID)
 	if err != nil {
-		return oops.E(oops.CodeBadRequest, err, "authn challenge state not found or expired").LogWarn(ctx, logger)
+		return consentChallengeCacheError(ctx, logger, err)
 	}
 	if err := validateChallengeBrowser(r, challengeState, false); err != nil {
 		return oops.E(oops.CodeBadRequest, err, "invalid consent browser binding")
@@ -826,7 +826,7 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 	// against the consumed value, which stays the single-use authority.
 	challengeState, err := s.authnChallengeCache.Get(ctx, "authnChallenge:"+stateID)
 	if err != nil {
-		return oops.E(oops.CodeBadRequest, err, "authn challenge state not found or expired").LogWarn(ctx, logger)
+		return consentChallengeCacheError(ctx, logger, err)
 	}
 	if err := validateChallengeBrowser(r, challengeState, false); err != nil {
 		return oops.E(oops.CodeBadRequest, err, "invalid consent browser binding")
@@ -886,7 +886,7 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		// and chose "no" — a decline, not an errant config. A lost consume
 		// race (double submit) reads as expired state.
 		if _, err := s.authnChallengeCache.GetAndDelete(ctx, "authnChallenge:"+stateID); err != nil {
-			return oops.E(oops.CodeBadRequest, err, "authn challenge state not found or expired").LogWarn(ctx, logger)
+			return consentChallengeCacheError(ctx, logger, err)
 		}
 		s.evictConsentToolInventory(ctx, stateID)
 		s.retireDeniedConsentCredentials(ctx, logger, endpoint, challengeState)
@@ -1081,7 +1081,7 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 	// the guards against it in case the preflighted copy went stale.
 	challengeState, err = s.authnChallengeCache.GetAndDelete(ctx, "authnChallenge:"+stateID)
 	if err != nil {
-		return oops.E(oops.CodeBadRequest, err, "authn challenge state not found or expired").LogWarn(ctx, logger)
+		return consentChallengeCacheError(ctx, logger, err)
 	}
 	if err := s.validateConsentChallenge(ctx, endpoint, &challengeState, r.PostForm.Get("csrf_token")); err != nil {
 		return err.LogError(ctx, logger)

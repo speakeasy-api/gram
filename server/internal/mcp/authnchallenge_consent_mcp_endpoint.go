@@ -138,7 +138,7 @@ func (s *Service) ServeConsentMCP(w http.ResponseWriter, r *http.Request, endpoi
 	// TTL and must not consume the state the approve POST needs.
 	challengeState, err := s.authnChallengeCache.Get(ctx, "authnChallenge:"+stateID)
 	if err != nil {
-		return oops.E(oops.CodeBadRequest, err, "authn challenge state not found or expired").LogWarn(ctx, logger)
+		return consentChallengeCacheError(ctx, logger, err)
 	}
 	if err := validateChallengeBrowser(r, challengeState, false); err != nil {
 		return oops.E(oops.CodeBadRequest, err, "invalid consent browser binding")

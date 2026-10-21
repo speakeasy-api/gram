@@ -13,7 +13,10 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/attribute"
+	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
@@ -45,7 +48,10 @@ func TestAuthorizeAuthorityLookupUnavailable(t *testing.T) {
 	t.Parallel()
 	tracer := &authorityLookupFailureTracer{}
 	logger := testenv.NewLogger(t)
-	ctx, ti := newTestMCPServiceWithPoolConfig(t, logger, testenv.NewMeterProvider(t),
+	reader := sdkmetric.NewManualReader()
+	provider := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader))
+	t.Cleanup(func() { require.NoError(t, provider.Shutdown(t.Context())) })
+	ctx, ti := newTestMCPServiceWithPoolConfig(t, logger, provider,
 		&mockIdentityResolver{hasAccessOK: true}, mcp.TunnelPublicConfig{}, nil,
 		func(config *pgxpool.Config) { config.ConnConfig.Tracer = tracer }, mcp.MetaRuntimeConfig{})
 	toolset, _, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
@@ -58,7 +64,8 @@ func TestAuthorizeAuthorityLookupUnavailable(t *testing.T) {
 	response := httptest.NewRecorder()
 	err = ti.service.ServeAuthorize(response, request, endpoint)
 	require.ErrorIs(t, err, networkingress.ErrAuthorityUnavailable)
-	requireOopsCode(t, err, oops.CodeUnavailable)
+	require.Contains(t, requireOopsCode(t, err, oops.CodeUnavailable), "private OAuth authority lookup is unavailable")
+	require.Equal(t, map[attribute.Set]int64{attribute.NewSet(attr.UserSessionIssuerID(endpoint.UserSessionIssuerID.String()), attr.ToolsetMCPSlug(endpoint.Slug), attr.OAuthFlowStage("authorize")): 1}, collectCounterPoints(t, reader, "oauth.authority.unavailable"))
 	require.EqualValues(t, 1, tracer.hits.Load())
 	require.Empty(t, response.Header().Get("Location"))
 	require.Empty(t, response.Header().Get("WWW-Authenticate"))

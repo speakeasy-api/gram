@@ -356,6 +356,7 @@ func TestStaffOAuthClientLookupUnavailable(t *testing.T) {
 			tokens.TokenHandler().ServeHTTP(response, request)
 			require.Equal(t, http.StatusServiceUnavailable, response.Code)
 			require.Contains(t, response.Body.String(), `"error":"temporarily_unavailable"`)
+			require.Contains(t, response.Body.String(), `"error_description":"client authentication is temporarily unavailable"`)
 			require.Empty(t, response.Header().Get("WWW-Authenticate"))
 			require.NotContains(t, response.Body.String(), "database unavailable")
 			require.Zero(t, store.validate)

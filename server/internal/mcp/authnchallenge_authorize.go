@@ -227,7 +227,8 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 	endpointRef, err := endpoint.EndpointRef(ctx, s.db, baseURL)
 	if err != nil {
 		if errors.Is(err, networkingress.ErrAuthorityUnavailable) {
-			return oops.E(oops.CodeUnavailable, err, "capture OAuth endpoint authority").LogError(ctx, logger)
+			s.metrics.RecordOAuthAuthorityUnavailable(ctx, endpoint.UserSessionIssuerID.String(), endpoint.Slug, mcpmetrics.OAuthFlowStageAuthorize)
+			return oauthAuthorityError(err).LogError(ctx, logger)
 		}
 		return oops.E(oops.CodeBadRequest, err, "capture OAuth endpoint authority").LogWarn(ctx, logger)
 	}

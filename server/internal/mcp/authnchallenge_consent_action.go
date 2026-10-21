@@ -12,7 +12,6 @@ import (
 	"net/url"
 
 	"github.com/go-chi/chi/v5"
-	redisCache "github.com/go-redis/cache/v9"
 	"github.com/google/uuid"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -66,10 +65,7 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 	// must not consume the state the approve POST needs.
 	challengeState, err := s.authnChallengeCache.Get(ctx, "authnChallenge:"+stateID)
 	if err != nil {
-		if !errors.Is(err, redisCache.ErrCacheMiss) {
-			return oops.E(oops.CodeUnavailable, err, "authn challenge state not found or expired").LogError(ctx, logger)
-		}
-		return oops.E(oops.CodeBadRequest, err, "authn challenge state not found or expired").LogWarn(ctx, logger)
+		return consentChallengeCacheError(ctx, logger, err)
 	}
 	if err := validateChallengeBrowser(r, challengeState, false); err != nil {
 		return oops.E(oops.CodeBadRequest, err, "invalid consent browser binding")
