@@ -1,6 +1,6 @@
 ---
 "server": minor
-"dashboard": patch
+"dashboard": minor
 ---
 
-Let selected internal and external participants invoke assistants with text commands in shared Google Chat spaces through authenticated Workspace Events delivery. Reuse scheduled triggers for digests, preserve thread replies, and document the required subscription setup. Opted-in active subscriptions renew automatically through one shared maintenance job, with renewal results in trigger event history.
+Connect Google Chat from Org > Identity, provision a shared space for an assistant, and map Google members to Speakeasy identities. Shared conversations preserve issue-triage and digest context while enforcing each sender's MCP access. Hosted event delivery renews through a shared worker schedule; customers do not configure Pub/Sub or service-account keys.

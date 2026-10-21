@@ -449,7 +449,7 @@ func NewActivities(
 		listToolsetsForIndexing:          activities.NewListToolsetsForIndexing(db),
 		dispatchTrigger:                  activities.NewDispatchTrigger(triggerApp),
 		processScheduledTrigger:          activities.NewProcessScheduledTrigger(triggerApp),
-		renewGoogleChatSubscriptions:     activities.NewRenewGoogleChatSubscriptions(triggerApp, guardianPolicy),
+		renewGoogleChatSubscriptions:     activities.NewRenewGoogleChatSubscriptions(triggerApp),
 		markTriggerFired:                 activities.NewMarkTriggerFired(triggerApp),
 		segmentChat:                      resolution_activities.NewSegmentChat(logger, db, chatClient),
 		deleteChatResolutions:            resolution_activities.NewDeleteChatResolutions(db),

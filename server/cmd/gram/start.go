@@ -75,6 +75,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/externalkeys"
 	"github.com/speakeasy-api/gram/server/internal/externalmcp"
 	"github.com/speakeasy-api/gram/server/internal/functions"
+	"github.com/speakeasy-api/gram/server/internal/googlechatconnections"
 	"github.com/speakeasy-api/gram/server/internal/hooks"
 	"github.com/speakeasy-api/gram/server/internal/identityapi"
 	"github.com/speakeasy-api/gram/server/internal/identityproviderconnections"
@@ -687,6 +688,7 @@ func newStartCommand() *cli.Command {
 	clickhouseShutdown := noopShutdown
 	meterClickhouseShutdown := noopShutdown
 	flags := append(serverFlags(), clickHouseReadFlags()...)
+	flags = append(flags, googleChatFlags()...)
 
 	return &cli.Command{
 		Name:  "start",
@@ -1117,13 +1119,17 @@ func newStartCommand() *cli.Command {
 			assistantPlatformExtras := append([]platformtools.ExternalTool{}, memoryTools...)
 			assistantPlatformExtras = append(assistantPlatformExtras, skillTools...)
 
+			hostedGoogleProvider, hostedGoogleRuntime := newHostedGoogleChat(c, db, guardianPolicy.PooledClient(), serverURL)
+			triggerApp.SetManagedGoogleChat(hostedGoogleRuntime)
 			platformSvc := platformtoolsruntime.NewService(
 				logger,
 				db,
 				telemSvc,
 				auditLogger,
 				platformtoolsruntime.WithTriggerTools(triggerApp),
-				platformtoolsruntime.WithSlackHTTPClient(guardianPolicy.PooledClient()),
+				platformtoolsruntime.WithIntegrationHTTPClient(guardianPolicy.PooledClient()),
+				platformtoolsruntime.WithGoogleChatTokenResolver(hostedGoogleRuntime.Token),
+				platformtoolsruntime.WithGoogleChatReplyRecorder(hostedGoogleRuntime.RecordReply),
 				platformtoolsruntime.WithFileURLMinting(encryptionClient, serverURL),
 				platformtoolsruntime.WithFeatureChecker(platformFeatureChecker),
 				platformtoolsruntime.WithExternalTools(assistantPlatformExtras),
@@ -1703,6 +1709,9 @@ func newStartCommand() *cli.Command {
 				WithPublicationRequests(publicationEmit).WithFeatureProvider(featureFlags)
 			mcpMetadataService.WithPluginPublication(publicationEmit, pluginsPublishSignaler).WithFeatureProvider(featureFlags)
 			toolsets.Attach(mux, toolsetsSvc)
+			googleChatService := googlechatconnections.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, cache.NewRedisCacheAdapter(redisClient), encryptionClient, hostedGoogleProvider, triggerApp, siteURL).WithAssistantSetup(&googlechatconnections.AssistantSetup{Assistants: assistantsSvc, Toolsets: toolsetsSvc})
+			hostedGoogleRuntime.RefreshMembers = googleChatService.RefreshDeliveryMembers
+			googlechatconnections.Attach(mux, googleChatService)
 			integrations.Attach(mux, integrations.NewService(logger, tracerProvider, db, sessionManager, authzEngine))
 			templates.Attach(mux, templates.NewService(logger, tracerProvider, db, sessionManager, toolsetsSvc, authzEngine, auditLogger))
 			assetsService := assets.NewService(logger, tracerProvider, guardianPolicy, db, sessionManager, chatSessionsManager, assetStorage, c.String(usersessions.JWTSigningKeyFlag), authzEngine, auditLogger)
@@ -1855,7 +1864,7 @@ func newStartCommand() *cli.Command {
 			widgetsSvc := widgets.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger)
 			dashboardsSvc := dashboards.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger)
 			platformMCPAssistant, err := configurePlatformMCP(ctx, platformMCPConfig{
-				AssistantIdentity:         assistantsSvc,
+				GoogleChat: googleChatService, AssistantIdentity: assistantsSvc,
 				SignalAuthoring:           sigintSvc,
 				Logger:                    logger,
 				MeterProvider:             meterProvider,

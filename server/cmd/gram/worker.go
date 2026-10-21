@@ -364,6 +364,7 @@ func newWorkerCommand() *cli.Command {
 	flags = append(flags, platformHostsCLIFlag())
 	flags = append(flags, callbackOriginFlags()...)
 	flags = append(flags, orgDefaultHostFlags()...)
+	flags = append(flags, googleChatFlags()...)
 
 	return &cli.Command{
 		Name:  "worker",
@@ -755,6 +756,8 @@ func newWorkerCommand() *cli.Command {
 			// unfurls is not needed here.
 			assistantIdentities := newAssistantIdentities(c, auditLogger)
 			triggerApp := newTriggersApp(logger, db, encryptionClient, temporalEnv, telemetryLogger, auditLogger, serverURL, nil, nil, slackClient, cache.NewRedisCacheAdapter(redisClient), assistantIdentities)
+			_, hostedGoogleRuntime := newHostedGoogleChat(c, db, guardianPolicy.PooledClient(), serverURL)
+			triggerApp.SetManagedGoogleChat(hostedGoogleRuntime)
 
 			platformSigner, err := mcpauthz.New(c.String("authz-private-key"), c.String("authz-public-keys"), c.String("authz-issuer-url"), c.String("environment") == "local")
 			if err != nil {

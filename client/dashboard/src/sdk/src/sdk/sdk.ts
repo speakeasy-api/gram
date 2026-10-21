@@ -32,6 +32,7 @@ import { External } from "./external.js";
 import { ExternalCredentials } from "./externalcredentials.js";
 import { ExternalKeys } from "./externalkeys.js";
 import { Features } from "./features.js";
+import { GoogleChatConnections } from "./googlechatconnections.js";
 import { Hooks } from "./hooks.js";
 import { HooksServerNames } from "./hooksservernames.js";
 import { Identity } from "./identity.js";
@@ -248,6 +249,13 @@ export class Gram extends ClientSDK {
   private _externalKeys?: ExternalKeys;
   get externalKeys(): ExternalKeys {
     return (this._externalKeys ??= new ExternalKeys(this._options));
+  }
+
+  private _googleChatConnections?: GoogleChatConnections;
+  get googleChatConnections(): GoogleChatConnections {
+    return (this._googleChatConnections ??= new GoogleChatConnections(
+      this._options,
+    ));
   }
 
   private _hooks?: Hooks;

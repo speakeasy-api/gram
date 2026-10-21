@@ -20,13 +20,13 @@ import (
 func workspaceConfig(t *testing.T) map[string]any {
 	t.Helper()
 	return map[string]any{
-		"space_names": []any{"spaces/test"},
-		"workspace_events": map[string]any{
+		"space_names":        []any{"spaces/test"},
+		"managed_binding_id": "4f4960c6-6d7a-4c0e-bf44-97f8a37be4a5",
+		"delivery": map[string]any{
 			"subscription":           "projects/test-project/subscriptions/chat-push",
 			"workspace_subscription": "subscriptions/chat-events",
 			"audience":               "https://example.test/chat-events",
 			"service_account_email":  "chat-push@test-project.iam.gserviceaccount.com",
-			"user_names":             []any{"users/internal", "users/external"},
 			"text_prefix":            "assistant:",
 		},
 	}
@@ -64,7 +64,7 @@ func TestGoogleChatWorkspaceCommands(t *testing.T) {
 		{"internal participant", "users/internal", "assistant: summarize", true},
 		{"external participant", "users/external", "assistant: explain the digest", true},
 		{"leading whitespace", "users/external", "  assistant: explain", true},
-		{"unlisted participant", "users/unlisted", "assistant: summarize", false},
+		{"unmapped participant reaches identity gate", "users/unlisted", "assistant: summarize", true},
 		{"ordinary conversation", "users/external", "thanks for the digest", false},
 		{"embedded command", "users/external", "someone said assistant: summarize", false},
 	} {
@@ -76,7 +76,12 @@ func TestGoogleChatWorkspaceCommands(t *testing.T) {
 			require.NotNil(t, result.Event)
 			allowed, err := config.Filter(result.Event.Event)
 			require.NoError(t, err)
-			require.Equal(t, tt.want, allowed)
+			require.True(t, allowed)
+			routed, ok := config.(RoutedConfig)
+			require.True(t, ok)
+			facts, ok := routed.RoutingFacts(result.Event.Event)
+			require.True(t, ok)
+			require.Equal(t, tt.want, facts.Addressed)
 			require.Equal(t, "spaces/test/messages/message", result.Event.EventID)
 			require.Equal(t, "spaces/test/threads/digest", result.Event.CorrelationID)
 			require.NotContains(t, string(result.Event.RawPayload), "subscription")
@@ -90,11 +95,11 @@ func TestGoogleChatWorkspaceCommands(t *testing.T) {
 func TestGoogleChatWorkspaceConfigFailsClosed(t *testing.T) {
 	t.Parallel()
 	definition, _ := GetDefinition("googlechat")
-	for _, field := range []string{"subscription", "workspace_subscription", "audience", "service_account_email", "user_names", "text_prefix"} {
+	for _, field := range []string{"subscription", "workspace_subscription", "audience", "service_account_email", "text_prefix"} {
 		t.Run("missing "+field, func(t *testing.T) {
 			t.Parallel()
 			raw := workspaceConfig(t)
-			settings, ok := raw["workspace_events"].(map[string]any)
+			settings, ok := raw["delivery"].(map[string]any)
 			require.True(t, ok)
 			delete(settings, field)
 			_, err := definition.DecodeConfig(raw)
@@ -107,14 +112,12 @@ func TestGoogleChatWorkspaceConfigFailsClosed(t *testing.T) {
 	}{
 		{"subscription", "chat-push"}, {"workspace_subscription", "chat-events"},
 		{"audience", "http://example.test/push"}, {"audience", "https://user@example.test/push"},
-		{"service_account_email", "user@example.test"}, {"user_names", []any{}},
-		{"user_names", []any{"users/all"}}, {"user_names", []any{"users/app"}},
-		{"user_names", []any{"users/external/other"}}, {"text_prefix", " "},
+		{"service_account_email", "user@example.test"}, {"text_prefix", " "},
 	} {
 		t.Run(tt.field+" invalid "+fmt.Sprint(tt.value), func(t *testing.T) {
 			t.Parallel()
 			raw := workspaceConfig(t)
-			settings, ok := raw["workspace_events"].(map[string]any)
+			settings, ok := raw["delivery"].(map[string]any)
 			require.True(t, ok)
 			settings[tt.field] = tt.value
 			_, err := definition.DecodeConfig(raw)
@@ -154,8 +157,13 @@ func TestGoogleChatWorkspaceRejectsCrossSubscriptionAndSpace(t *testing.T) {
 			push.Message.Data = []byte(strings.ReplaceAll(string(push.Message.Data), tt.from, tt.to))
 			changedBody, err := json.Marshal(push)
 			require.NoError(t, err)
-			_, err = definition.HandleWebhook(changedBody, nil, config)
-			require.Error(t, err)
+			result, err := definition.HandleWebhook(changedBody, nil, config)
+			if tt.name == "push subscription" || tt.name == "workspace source" || tt.name == "subject" {
+				require.NoError(t, err)
+				require.Nil(t, result.Event)
+			} else {
+				require.Error(t, err)
+			}
 		})
 	}
 }
@@ -222,14 +230,14 @@ func TestGoogleChatPushAuthentication(t *testing.T) {
 		key                           *rsa.PrivateKey
 		want                          bool
 	}{
-		{"valid", googleChatPushIssuer, config.WorkspaceEvents.Audience, config.WorkspaceEvents.ServiceAccountEmail, true, now.Add(time.Hour), now, key, true},
-		{"wrong issuer", googleChatIssuer, config.WorkspaceEvents.Audience, config.WorkspaceEvents.ServiceAccountEmail, true, now.Add(time.Hour), now, key, false},
-		{"wrong audience", googleChatPushIssuer, "https://other.test", config.WorkspaceEvents.ServiceAccountEmail, true, now.Add(time.Hour), now, key, false},
-		{"wrong identity", googleChatPushIssuer, config.WorkspaceEvents.Audience, "other@test-project.iam.gserviceaccount.com", true, now.Add(time.Hour), now, key, false},
-		{"unverified identity", googleChatPushIssuer, config.WorkspaceEvents.Audience, config.WorkspaceEvents.ServiceAccountEmail, false, now.Add(time.Hour), now, key, false},
-		{"expired", googleChatPushIssuer, config.WorkspaceEvents.Audience, config.WorkspaceEvents.ServiceAccountEmail, true, now.Add(-time.Minute), now.Add(-time.Hour), key, false},
-		{"future issued", googleChatPushIssuer, config.WorkspaceEvents.Audience, config.WorkspaceEvents.ServiceAccountEmail, true, now.Add(time.Hour), now.Add(10 * time.Minute), key, false},
-		{"wrong signature", googleChatPushIssuer, config.WorkspaceEvents.Audience, config.WorkspaceEvents.ServiceAccountEmail, true, now.Add(time.Hour), now, other, false},
+		{"valid", googleChatPushIssuer, config.Delivery.Audience, config.Delivery.ServiceAccountEmail, true, now.Add(time.Hour), now, key, true},
+		{"wrong issuer", googleChatIssuer, config.Delivery.Audience, config.Delivery.ServiceAccountEmail, true, now.Add(time.Hour), now, key, false},
+		{"wrong audience", googleChatPushIssuer, "https://other.test", config.Delivery.ServiceAccountEmail, true, now.Add(time.Hour), now, key, false},
+		{"wrong identity", googleChatPushIssuer, config.Delivery.Audience, "other@test-project.iam.gserviceaccount.com", true, now.Add(time.Hour), now, key, false},
+		{"unverified identity", googleChatPushIssuer, config.Delivery.Audience, config.Delivery.ServiceAccountEmail, false, now.Add(time.Hour), now, key, false},
+		{"expired", googleChatPushIssuer, config.Delivery.Audience, config.Delivery.ServiceAccountEmail, true, now.Add(-time.Minute), now.Add(-time.Hour), key, false},
+		{"future issued", googleChatPushIssuer, config.Delivery.Audience, config.Delivery.ServiceAccountEmail, true, now.Add(time.Hour), now.Add(10 * time.Minute), key, false},
+		{"wrong signature", googleChatPushIssuer, config.Delivery.Audience, config.Delivery.ServiceAccountEmail, true, now.Add(time.Hour), now, other, false},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
@@ -237,7 +245,7 @@ func TestGoogleChatPushAuthentication(t *testing.T) {
 			token.Header["kid"] = "test"
 			raw, err := token.SignedString(tt.key)
 			require.NoError(t, err)
-			err = authenticateGoogleChatPush(t.Context(), keys, http.Header{"Authorization": []string{"Bearer " + raw}}, *config.WorkspaceEvents, now)
+			err = authenticateGoogleChatPush(t.Context(), keys, http.Header{"Authorization": []string{"Bearer " + raw}}, *config.Delivery, now)
 			if tt.want {
 				require.NoError(t, err)
 			} else {
@@ -245,7 +253,7 @@ func TestGoogleChatPushAuthentication(t *testing.T) {
 			}
 		})
 	}
-	require.Error(t, authenticateGoogleChatPush(t.Context(), keys, nil, *config.WorkspaceEvents, now))
+	require.Error(t, authenticateGoogleChatPush(t.Context(), keys, nil, *config.Delivery, now))
 }
 
 func TestGoogleChatWorkspaceBatchKeepsThreadsAndPayloadsSeparate(t *testing.T) {
@@ -290,4 +298,25 @@ func TestGoogleChatWorkspaceRequiresMessageResourceData(t *testing.T) {
 	require.NoError(t, err)
 	_, err = definition.HandleWebhook(body, nil, config)
 	require.ErrorContains(t, err, "requires message resource data")
+}
+
+func TestGoogleChatFollowsOnlyEngagedThreads(t *testing.T) {
+	t.Parallel()
+	definition, _ := GetDefinition("googlechat")
+	config, err := definition.DecodeConfig(workspaceConfig(t))
+	require.NoError(t, err)
+	routed, ok := config.(RoutedConfig)
+	require.True(t, ok)
+	for _, text := range []string{"assistant: triage this issue", "what about the suggested fix?"} {
+		facts, ok := routed.RoutingFacts(googlechatTriggerEvent{Text: text})
+		require.True(t, ok)
+		initial := decideRoute(routeInput{policy: routed.RoutingPolicy(), facts: facts})
+		if strings.HasPrefix(text, "assistant:") {
+			require.Equal(t, routeDispatch, initial.action)
+		} else {
+			require.Equal(t, routeSkip, initial.action)
+		}
+		continuation := decideRoute(routeInput{policy: routed.RoutingPolicy(), facts: facts, route: threadRoute(ThreadRouteSubscribed, "")})
+		require.Equal(t, routeDispatch, continuation.action)
+	}
 }

@@ -44,7 +44,7 @@ func TestOperations(t *testing.T) {
 	const requestID = "1ee04a56-5969-4ac2-959e-019c00921bc6"
 	tests := []struct {
 		name                       string
-		factory                    func(*guardian.HTTPClient) core.PlatformToolExecutor
+		factory                    func(*guardian.HTTPClient, ...TokenResolver) core.PlatformToolExecutor
 		input, method, path, scope string
 		query                      url.Values
 		body                       string
@@ -107,7 +107,7 @@ func TestOperations(t *testing.T) {
 func TestInvalidInputNeverAuthenticates(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
-		factory func(*guardian.HTTPClient) core.PlatformToolExecutor
+		factory func(*guardian.HTTPClient, ...TokenResolver) core.PlatformToolExecutor
 		input   string
 	}{
 		{NewSendMessageTool, `{"space":"spaces/A/../B","text":"hi","request_id":"bad"}`},
@@ -176,7 +176,7 @@ func TestCredentialAndUpstreamErrorsAreSanitized(t *testing.T) {
 
 func TestDescriptorContracts(t *testing.T) {
 	t.Parallel()
-	for _, factory := range []func(*guardian.HTTPClient) core.PlatformToolExecutor{NewSendMessageTool, NewReplyToThreadTool, NewUpdateMessageTool, NewDeleteMessageTool, NewListSpacesTool, NewGetMessageTool, NewListMessagesTool} {
+	for _, factory := range []func(*guardian.HTTPClient, ...TokenResolver) core.PlatformToolExecutor{NewSendMessageTool, NewReplyToThreadTool, NewUpdateMessageTool, NewDeleteMessageTool, NewListSpacesTool, NewGetMessageTool, NewListMessagesTool} {
 		d := factory(nil).Descriptor()
 		require.Equal(t, "googlechat", d.SourceSlug)
 		require.True(t, d.Managed)

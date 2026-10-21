@@ -312,7 +312,7 @@ AIM-409 assistant fixtures use one ordinary project-pinned trust registration (n
 
 ### [~] Assistants: Google Chat trigger
 
-The identity-bound assistant includes a **Google Chat team assistant** trigger (`googlechat`), visibly paused. This display-only example shows a shared-space command prefix and an explicit participant allowlist using tenant-derived synthetic identifiers. It has no environment, credentials, real webhook subscription, or network activity. Both canonical dashboard roots remain unchanged. Browser verification pending.
+The identity-bound assistant includes a **Google Chat team assistant** trigger (`googlechat`), visibly paused. Org > Identity > Google Chat also contains one account awaiting reconnection, one paused space binding, and one mapped participant, all using tenant-derived synthetic identifiers. These display-only records have no credentials, real subscriptions, or network activity. Both canonical dashboard roots remain unchanged. Browser verification pending.
 
 ### Optional private-network onboarding
 

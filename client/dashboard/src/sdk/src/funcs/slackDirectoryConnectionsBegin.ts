@@ -13,9 +13,9 @@ import { RequestOptions } from "../lib/sdks.js";
 import { resolveSecurity } from "../lib/security.js";
 import { pathToFunc } from "../lib/url.js";
 import {
-  BeginResponseBody,
-  BeginResponseBody$inboundSchema,
-} from "../models/components/beginresponsebody.js";
+  BeginGoogleChatResult,
+  BeginGoogleChatResult$inboundSchema,
+} from "../models/components/begingooglechatresult.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -48,7 +48,7 @@ export function slackDirectoryConnectionsBegin(
   options?: RequestOptions,
 ): APIPromise<
   Result<
-    BeginResponseBody,
+    BeginGoogleChatResult,
     | ServiceError
     | GramError
     | ResponseValidationError
@@ -76,7 +76,7 @@ async function $do(
 ): Promise<
   [
     Result<
-      BeginResponseBody,
+      BeginGoogleChatResult,
       | ServiceError
       | GramError
       | ResponseValidationError
@@ -174,7 +174,7 @@ async function $do(
   };
 
   const [result] = await M.match<
-    BeginResponseBody,
+    BeginGoogleChatResult,
     | ServiceError
     | GramError
     | ResponseValidationError
@@ -185,7 +185,7 @@ async function $do(
     | UnexpectedClientError
     | SDKValidationError
   >(
-    M.json(200, BeginResponseBody$inboundSchema),
+    M.json(200, BeginGoogleChatResult$inboundSchema),
     M.jsonErr([400, 401, 403, 404, 409, 415, 422], ServiceError$inboundSchema),
     M.jsonErr([500, 502], ServiceError$inboundSchema),
     M.fail("4XX"),

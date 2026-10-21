@@ -201,3 +201,9 @@ func TestGoogleChatSpaceTypeNormalization(t *testing.T) {
 		require.Equal(t, tt.want, normalized.SpaceType)
 	}
 }
+
+func TestGoogleChatRenewalRejectsMissingRuntime(t *testing.T) {
+	t.Parallel()
+	app := &App{}
+	require.ErrorContains(t, app.RenewManagedGoogleChat(t.Context(), time.Now()), "not configured")
+}

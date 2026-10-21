@@ -377,3 +377,10 @@ DELETE FROM organization_role_assignments WHERE organization_id = @org_id::text;
 INSERT INTO organization_role_assignments
   (organization_id, workos_user_id, user_id, role_urn, workos_updated_at)
 VALUES (@org_id::text, @workos_user_id::text, @user_id::text, @role_urn::text, now());
+
+-- name: OrgDeleteGoogleChatMembers :exec
+DELETE FROM google_chat_members WHERE organization_id = @org_id::text AND project_id = @project_id::uuid;
+-- name: OrgDeleteGoogleChatBindings :exec
+DELETE FROM google_chat_bindings WHERE organization_id = @org_id::text AND project_id = @project_id::uuid;
+-- name: OrgDeleteGoogleChatConnections :exec
+DELETE FROM google_chat_connections WHERE organization_id = @org_id::text;

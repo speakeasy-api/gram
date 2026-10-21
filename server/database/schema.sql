@@ -14994,3 +14994,92 @@ ON sigint_sensor_signals (project_id, sensor_id);
 
 CREATE INDEX IF NOT EXISTS sigint_sensor_signals_signal_reference_idx
 ON sigint_sensor_signals (project_id, signal_id);
+
+-- Google connections are organization-owned, like Slack directory connections.
+-- Space bindings carry the project boundary; mappings never grant membership.
+CREATE TABLE google_chat_connections (
+ id uuid PRIMARY KEY DEFAULT generate_uuidv7(),
+ organization_id text NOT NULL REFERENCES organization_metadata(id),
+ google_subject text NOT NULL,
+ email text NOT NULL,
+ credentials_encrypted text,
+ granted_scopes text[] NOT NULL DEFAULT '{}',
+ generation uuid NOT NULL DEFAULT generate_uuidv7(),
+ status text NOT NULL DEFAULT 'connected' CHECK (status IN ('connected','reconnect_required','disconnected')),
+ created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+ updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+ UNIQUE (organization_id, google_subject),
+ UNIQUE (organization_id, id)
+);
+CREATE TABLE google_chat_bindings (
+ id uuid PRIMARY KEY DEFAULT generate_uuidv7(),
+ organization_id text NOT NULL,
+ project_id uuid NOT NULL REFERENCES projects(id),
+ connection_id uuid NOT NULL,
+ assistant_id uuid NOT NULL REFERENCES assistants(id),
+ trigger_id uuid REFERENCES trigger_instances(id),
+ space_name text NOT NULL,
+ display_name text NOT NULL,
+ prefix text NOT NULL DEFAULT 'assistant:',
+ subscription_name text,
+ status text NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','active','paused','error','deleted')),
+ last_error text,
+ revision bigint NOT NULL DEFAULT 0,
+ created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+ updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+ FOREIGN KEY (organization_id, connection_id) REFERENCES google_chat_connections(organization_id,id)
+);
+CREATE UNIQUE INDEX google_chat_bindings_space_key ON google_chat_bindings(connection_id,space_name) WHERE status <> 'deleted';
+CREATE TABLE google_chat_members (
+ id uuid PRIMARY KEY DEFAULT generate_uuidv7(),
+ organization_id text NOT NULL,
+ project_id uuid NOT NULL REFERENCES projects(id),
+ binding_id uuid NOT NULL REFERENCES google_chat_bindings(id),
+ google_user_name text NOT NULL,
+ display_name text NOT NULL DEFAULT '',
+ email text NOT NULL DEFAULT '',
+ user_id text REFERENCES users(id),
+ active boolean NOT NULL DEFAULT true,
+ revision bigint NOT NULL DEFAULT 0,
+ created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+ updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+ UNIQUE (binding_id,google_user_name)
+);
+COMMENT ON COLUMN google_chat_connections.id IS '@access: confidential';
+COMMENT ON COLUMN google_chat_connections.organization_id IS '@access: confidential';
+COMMENT ON COLUMN google_chat_connections.google_subject IS '@access: confidential-pii';
+COMMENT ON COLUMN google_chat_connections.email IS '@access: confidential-pii';
+COMMENT ON COLUMN google_chat_connections.credentials_encrypted IS '@access: secret-restricted';
+COMMENT ON COLUMN google_chat_connections.granted_scopes IS '@access: confidential';
+COMMENT ON COLUMN google_chat_connections.generation IS '@access: confidential';
+COMMENT ON COLUMN google_chat_connections.status IS '@access: confidential';
+COMMENT ON COLUMN google_chat_connections.created_at IS '@access: confidential';
+COMMENT ON COLUMN google_chat_connections.updated_at IS '@access: confidential';
+COMMENT ON COLUMN google_chat_bindings.id IS '@access: confidential';
+COMMENT ON COLUMN google_chat_bindings.organization_id IS '@access: confidential';
+COMMENT ON COLUMN google_chat_bindings.project_id IS '@access: confidential';
+COMMENT ON COLUMN google_chat_bindings.connection_id IS '@access: confidential';
+COMMENT ON COLUMN google_chat_bindings.assistant_id IS '@access: confidential';
+COMMENT ON COLUMN google_chat_bindings.trigger_id IS '@access: confidential';
+COMMENT ON COLUMN google_chat_bindings.space_name IS '@access: restricted';
+COMMENT ON COLUMN google_chat_bindings.display_name IS '@access: opaque-confidential';
+COMMENT ON COLUMN google_chat_bindings.prefix IS '@access: opaque-confidential';
+COMMENT ON COLUMN google_chat_bindings.subscription_name IS '@access: restricted';
+COMMENT ON COLUMN google_chat_bindings.status IS '@access: confidential';
+COMMENT ON COLUMN google_chat_bindings.last_error IS '@access: confidential';
+COMMENT ON COLUMN google_chat_bindings.revision IS '@access: confidential';
+COMMENT ON COLUMN google_chat_bindings.created_at IS '@access: confidential';
+COMMENT ON COLUMN google_chat_bindings.updated_at IS '@access: confidential';
+COMMENT ON COLUMN google_chat_members.id IS '@access: confidential';
+COMMENT ON COLUMN google_chat_members.organization_id IS '@access: confidential';
+COMMENT ON COLUMN google_chat_members.project_id IS '@access: confidential';
+COMMENT ON COLUMN google_chat_members.binding_id IS '@access: confidential';
+COMMENT ON COLUMN google_chat_members.google_user_name IS '@access: confidential-pii';
+COMMENT ON COLUMN google_chat_members.display_name IS '@access: confidential-pii';
+COMMENT ON COLUMN google_chat_members.user_id IS '@access: confidential-pii';
+COMMENT ON COLUMN google_chat_members.active IS '@access: confidential';
+COMMENT ON COLUMN google_chat_members.revision IS '@access: confidential';
+COMMENT ON COLUMN google_chat_members.created_at IS '@access: confidential';
+COMMENT ON COLUMN google_chat_members.updated_at IS '@access: confidential';
+
+COMMENT ON COLUMN google_chat_members.email IS '@access: confidential-pii';

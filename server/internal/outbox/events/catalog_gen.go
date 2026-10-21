@@ -35,6 +35,7 @@ var All = []outbox.EventRegistration{
 	EnvironmentV1,
 	GcpIamCredentialV1,
 	GcpKmsKeyV1,
+	GoogleChatV1,
 	IdentityProviderConnectionV1,
 	InternalSessionIssuerV1,
 	JsonWebKeySetV1,

@@ -12,6 +12,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/platformtools/core"
 	"github.com/speakeasy-api/gram/server/internal/platformtools/logs"
+	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 )
 
 const (
@@ -53,12 +54,14 @@ const (
 )
 
 type Dependencies struct {
-	Logger           *slog.Logger
-	DB               *pgxpool.Pool
-	TelemetryService TelemetryService
-	TriggerApp       *bgtriggers.App
-	SlackHTTPClient  *guardian.HTTPClient
-	Audit            *audit.Logger
+	Logger                  *slog.Logger
+	DB                      *pgxpool.Pool
+	TelemetryService        TelemetryService
+	TriggerApp              *bgtriggers.App
+	IntegrationHTTPClient   *guardian.HTTPClient
+	GoogleChatReplyRecorder func(context.Context, toolconfig.ToolCallEnv, []byte) error
+	GoogleChatTokenResolver func(context.Context, toolconfig.ToolCallEnv, string, string) (string, bool, error)
+	Audit                   *audit.Logger
 
 	// Encryption seals the payload behind minted asset download URLs.
 	Encryption *encryption.Client

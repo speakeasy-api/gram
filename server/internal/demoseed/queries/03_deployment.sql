@@ -296,3 +296,13 @@ SELECT @id::uuid, @organization_id::text,
        twb.workload_issuer_id, twb.subject, 'exact', @agent_id::uuid
 FROM trigger_workload_bindings twb
 WHERE twb.organization_id = @organization_id::text AND twb.project_id = @project_id::uuid;
+
+-- name: DeployInsertGoogleChatConnection :exec
+INSERT INTO google_chat_connections(id,organization_id,google_subject,email,status)
+VALUES(@id,@organization_id,@google_subject,@email,'reconnect_required');
+-- name: DeployInsertGoogleChatBinding :exec
+INSERT INTO google_chat_bindings(id,organization_id,project_id,connection_id,assistant_id,space_name,display_name,status)
+VALUES(@id,@organization_id,@project_id,@connection_id,@assistant_id,@space_name,'Engineering triage','paused');
+-- name: DeployInsertGoogleChatMember :exec
+INSERT INTO google_chat_members(organization_id,project_id,binding_id,google_user_name,display_name,user_id)
+VALUES(@organization_id,@project_id,@binding_id,@google_user_name,'Example participant',@user_id);

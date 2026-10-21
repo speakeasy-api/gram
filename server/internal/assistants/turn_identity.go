@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/speakeasy-api/gram/server/internal/assistantidentity"
+	googlerepo "github.com/speakeasy-api/gram/server/internal/googlechatconnections/repo"
 	slackrepo "github.com/speakeasy-api/gram/server/internal/slackdirectoryconnections/repo"
 )
 
@@ -152,8 +153,17 @@ func (s *ServiceCore) resolveTurnIdentity(ctx context.Context, assistant assista
 	if err != nil {
 		return turnIdentity{}, fmt.Errorf("load turn identity state: %w", err)
 	}
+	var googleEvent googlechatEventPayload
+	if turnSourceKind(thread.SourceKind, event) == sourceKindGoogleChat {
+		if err := json.Unmarshal(event.NormalizedPayloadJSON, &googleEvent); err != nil {
+			return turnIdentity{}, fmt.Errorf("%w: invalid Google event", ErrTurnIdentity)
+		}
+	}
 	switch states[assistant.ID].State {
 	case assistantidentity.NeverConfigured:
+		if googleEvent.ManagedBindingID != "" {
+			return turnIdentity{}, fmt.Errorf("%w: managed Google Chat requires an assistant identity", ErrTurnIdentity)
+		}
 		return turnIdentity{UserID: legacyTurnUserID(assistant, thread, event), AgentBacked: false, HumanKnown: false}, nil
 	case assistantidentity.Active:
 	default:
@@ -161,6 +171,18 @@ func (s *ServiceCore) resolveTurnIdentity(ctx context.Context, assistant assista
 	}
 
 	user, known, err := selectTurnUser(ctx, assistant, thread.SourceKind, event, slackrepo.New(s.db).ResolveSlackMappingUser)
+	if googleEvent.ManagedBindingID != "" {
+		binding, parseErr := uuid.Parse(googleEvent.ManagedBindingID)
+		if parseErr != nil {
+			return turnIdentity{}, fmt.Errorf("%w: invalid Google binding", ErrTurnIdentity)
+		}
+		user, err = googlerepo.New(s.db).ResolveMappedUser(ctx, googlerepo.ResolveMappedUserParams{OrganizationID: assistant.OrganizationID, ProjectID: assistant.ProjectID, BindingID: binding, AssistantID: assistant.ID, GoogleUserName: googleEvent.UserName})
+		known = true
+		if err != nil || user == "" {
+			return turnIdentity{}, fmt.Errorf("%w: Google sender has no active mapping", ErrTurnIdentity)
+		}
+	}
+
 	if err != nil {
 		return turnIdentity{}, fmt.Errorf("%w: %w", ErrTurnIdentity, err)
 	}
@@ -171,4 +193,15 @@ func (s *ServiceCore) resolveTurnIdentity(ctx context.Context, assistant assista
 		return turnIdentity{}, fmt.Errorf("check turn user: %w", err)
 	}
 	return turnIdentity{UserID: user, AgentBacked: true, HumanKnown: known}, nil
+}
+
+// turnSourceKind uses the server-stamped source when a conversation spans integrations.
+func turnSourceKind(fallback string, event assistantThreadEventRecord) string {
+	var fields map[string]json.RawMessage
+	if json.Unmarshal(event.NormalizedPayloadJSON, &fields) == nil {
+		if source, err := exactField[string](fields, eventSourceKindKey); err == nil && source != "" {
+			return source
+		}
+	}
+	return fallback
 }

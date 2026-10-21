@@ -37,8 +37,6 @@ var googleChatWorkspaceSubscription = regexp.MustCompile(`^subscriptions/[A-Za-z
 // googlechatWorkspaceConfig authorizes one space's message stream and limits
 // which participants can invoke the assistant. No field contains credentials.
 type googlechatWorkspaceConfig struct {
-	// AutoRenew lets the shared worker renew this subscription while the trigger is active.
-	AutoRenew bool `json:"auto_renew,omitempty"`
 
 	// Subscription is the exact Pub/Sub push subscription delivering messages.
 	Subscription string `json:"subscription"`
@@ -52,37 +50,26 @@ type googlechatWorkspaceConfig struct {
 	// ServiceAccountEmail identifies the expected, verified push token identity.
 	ServiceAccountEmail string `json:"service_account_email"`
 
-	// UserNames allowlists exact Chat user resources, including external users.
-	UserNames []string `json:"user_names"`
-
 	// TextPrefix is a literal, case-sensitive command prefix after whitespace.
 	TextPrefix string `json:"text_prefix"`
 }
 
 func (c googlechatWorkspaceConfig) validate(spaces []string) error {
 	if len(spaces) != 1 || !googleChatSpaceResource.MatchString(spaces[0]) {
-		return fmt.Errorf("workspace_events requires exactly one valid space_names entry")
+		return fmt.Errorf("delivery requires exactly one valid space_names entry")
 	}
 	if !googleChatPushSubscription.MatchString(c.Subscription) || !googleChatWorkspaceSubscription.MatchString(c.WorkspaceSubscription) {
-		return fmt.Errorf("workspace_events requires exact Pub/Sub and Workspace subscription resource names")
+		return fmt.Errorf("delivery requires exact Pub/Sub and Workspace subscription resource names")
 	}
 	audience, err := url.Parse(c.Audience)
 	if err != nil || audience.Scheme != "https" || audience.Host == "" || audience.User != nil || audience.Fragment != "" {
-		return fmt.Errorf("workspace_events audience must be an absolute HTTPS URL")
+		return fmt.Errorf("delivery audience must be an absolute HTTPS URL")
 	}
 	if !strings.HasSuffix(c.ServiceAccountEmail, ".iam.gserviceaccount.com") || strings.Count(c.ServiceAccountEmail, "@") != 1 || strings.ContainsAny(c.ServiceAccountEmail, " \t\r\n") {
-		return fmt.Errorf("workspace_events requires a push service account email")
-	}
-	if len(c.UserNames) == 0 {
-		return fmt.Errorf("workspace_events requires an explicit user_names allowlist")
-	}
-	for _, user := range c.UserNames {
-		if !googleChatUserResource.MatchString(user) || user == "users/all" || user == "users/app" {
-			return fmt.Errorf("workspace_events requires exact Chat user resource names")
-		}
+		return fmt.Errorf("delivery requires a push service account email")
 	}
 	if strings.TrimSpace(c.TextPrefix) == "" || strings.TrimSpace(c.TextPrefix) != c.TextPrefix {
-		return fmt.Errorf("workspace_events text_prefix must be nonempty without surrounding whitespace")
+		return fmt.Errorf("delivery text_prefix must be nonempty without surrounding whitespace")
 	}
 	return nil
 }
@@ -104,16 +91,19 @@ type googlechatPushEnvelope struct {
 }
 
 func ingestGoogleChatWorkspace(body []byte, cfg googlechatTriggerConfig) (*WebhookIngressResult, error) {
-	if cfg.WorkspaceEvents == nil {
-		return nil, fmt.Errorf("missing workspace_events configuration")
+	if cfg.Delivery == nil {
+		return nil, fmt.Errorf("missing delivery configuration")
 	}
 	var push googlechatPushEnvelope
 	if err := json.Unmarshal(body, &push); err != nil {
 		return nil, fmt.Errorf("decode Google Chat Pub/Sub envelope: %w", err)
 	}
-	settings := cfg.WorkspaceEvents
+	settings := cfg.Delivery
 	if push.Subscription != settings.Subscription || push.Message.Attributes["ce-source"] != "//workspaceevents.googleapis.com/"+settings.WorkspaceSubscription {
-		return nil, fmt.Errorf("unexpected Google Chat subscription")
+		if googleChatPushSubscription.MatchString(push.Subscription) && googleChatWorkspaceSubscription.MatchString(strings.TrimPrefix(push.Message.Attributes["ce-source"], "//workspaceevents.googleapis.com/")) {
+			return &WebhookIngressResult{Events: nil, Response: nil, Event: nil, Task: nil}, nil
+		}
+		return nil, fmt.Errorf("invalid Google Chat subscription metadata")
 	}
 	kind := push.Message.Attributes["ce-type"]
 	if kind != googleChatMessageCreated && kind != googleChatMessagesCreated {
@@ -121,7 +111,10 @@ func ingestGoogleChatWorkspace(body []byte, cfg googlechatTriggerConfig) (*Webho
 		return &WebhookIngressResult{Events: nil, Response: nil, Event: nil, Task: nil}, nil
 	}
 	if push.Message.Attributes["ce-specversion"] != "1.0" || push.Message.Attributes["ce-subject"] != "//chat.googleapis.com/"+cfg.SpaceNames[0] {
-		return nil, fmt.Errorf("unexpected Google Chat CloudEvent metadata")
+		if push.Message.Attributes["ce-specversion"] == "1.0" && googleChatSpaceResource.MatchString(strings.TrimPrefix(push.Message.Attributes["ce-subject"], "//chat.googleapis.com/")) {
+			return &WebhookIngressResult{Events: nil, Response: nil, Event: nil, Task: nil}, nil
+		}
+		return nil, fmt.Errorf("invalid Google Chat CloudEvent metadata")
 	}
 	if kind == googleChatMessagesCreated {
 		var batch struct {
@@ -135,7 +128,7 @@ func ingestGoogleChatWorkspace(body []byte, cfg googlechatTriggerConfig) (*Webho
 		}
 		events := make([]*EventEnvelope, 0, len(batch.Messages))
 		for _, raw := range batch.Messages {
-			event, err := decodeGoogleChatWorkspaceMessage(raw, cfg.SpaceNames[0])
+			event, err := decodeGoogleChatWorkspaceMessage(raw, cfg)
 			if err != nil {
 				return nil, err
 			}
@@ -145,14 +138,15 @@ func ingestGoogleChatWorkspace(body []byte, cfg googlechatTriggerConfig) (*Webho
 		}
 		return &WebhookIngressResult{Events: events, Response: nil, Event: nil, Task: nil}, nil
 	}
-	event, err := decodeGoogleChatWorkspaceMessage(push.Message.Data, cfg.SpaceNames[0])
+	event, err := decodeGoogleChatWorkspaceMessage(push.Message.Data, cfg)
 	if err != nil {
 		return nil, err
 	}
 	return &WebhookIngressResult{Events: nil, Response: nil, Event: event, Task: nil}, nil
 }
 
-func decodeGoogleChatWorkspaceMessage(raw []byte, space string) (*EventEnvelope, error) {
+func decodeGoogleChatWorkspaceMessage(raw []byte, cfg googlechatTriggerConfig) (*EventEnvelope, error) {
+	space := cfg.SpaceNames[0]
 	var interaction googlechatInteraction
 	if err := json.Unmarshal(raw, &interaction); err != nil {
 		return nil, fmt.Errorf("decode Google Chat message event: %w", err)
@@ -171,7 +165,7 @@ func decodeGoogleChatWorkspaceMessage(raw []byte, space string) (*EventEnvelope,
 		!validGoogleChatChild(message.Thread.Name, space+"/threads/") {
 		return nil, fmt.Errorf("invalid Google Chat message, thread or sender resource")
 	}
-	event := googlechatTriggerEvent{
+	event := googlechatTriggerEvent{ManagedBindingID: cfg.ManagedBindingID,
 		EventType: "MESSAGE", MessageName: message.Name, SpaceName: space,
 		SpaceType: "SPACE", ThreadName: message.Thread.Name, UserName: message.Sender.Name,
 		Text: message.Text, Timestamp: message.CreateTime, Addressed: true,
@@ -217,7 +211,7 @@ func authenticateGoogleChatPush(ctx context.Context, keys oidc.KeySet, headers h
 	return nil
 }
 
-func withGoogleChatWorkspaceEvents(definition Definition) Definition {
+func withGoogleChatDelivery(definition Definition) Definition {
 	keys := sync.OnceValue(func() oidc.KeySet {
 		client := guardian.NewDefaultPolicy(otel.GetTracerProvider()).PooledClient()
 		client.Timeout = googleChatPushTimeout
@@ -230,19 +224,19 @@ func withGoogleChatWorkspaceEvents(definition Definition) Definition {
 		if !ok {
 			return fmt.Errorf("invalid Google Chat configuration")
 		}
-		if cfg.WorkspaceEvents == nil {
+		if cfg.Delivery == nil {
 			return authenticateInteraction(ctx, body, headers, env, config)
 		}
 		ctx, cancel := context.WithTimeout(ctx, googleChatPushTimeout)
 		defer cancel()
-		return authenticateGoogleChatPush(ctx, keys(), headers, *cfg.WorkspaceEvents, time.Now())
+		return authenticateGoogleChatPush(ctx, keys(), headers, *cfg.Delivery, time.Now())
 	}
 	definition.HandleWebhook = func(body []byte, headers http.Header, config Config) (*WebhookIngressResult, error) {
 		cfg, ok := config.(googlechatTriggerConfig)
 		if !ok {
 			return nil, fmt.Errorf("invalid Google Chat configuration")
 		}
-		if cfg.WorkspaceEvents == nil {
+		if cfg.Delivery == nil {
 			return handleInteraction(body, headers, config)
 		}
 		return ingestGoogleChatWorkspace(body, cfg)

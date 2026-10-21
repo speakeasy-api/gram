@@ -105,6 +105,16 @@ func (s *seeder) orgMetadata(ctx context.Context) error {
 // that would block them (RESTRICT / NO ACTION, or SET NULL on a NOT NULL
 // column) spans the org's projects too, not just the seeded one.
 func (s *seeder) orgPurge(ctx context.Context) error {
+	if err := s.q.OrgDeleteGoogleChatMembers(ctx, repo.OrgDeleteGoogleChatMembersParams{OrgID: s.orgID(), ProjectID: s.projectID()}); err != nil {
+		return fmt.Errorf("delete demo Google members: %w", err)
+	}
+	if err := s.q.OrgDeleteGoogleChatBindings(ctx, repo.OrgDeleteGoogleChatBindingsParams{OrgID: s.orgID(), ProjectID: s.projectID()}); err != nil {
+		return fmt.Errorf("delete demo Google spaces: %w", err)
+	}
+	if err := s.q.OrgDeleteGoogleChatConnections(ctx, s.orgID()); err != nil {
+		return fmt.Errorf("delete demo Google connection: %w", err)
+	}
+
 	org := s.orgID()
 	proj := s.projectID()
 	return runOrgSteps([]orgStep{

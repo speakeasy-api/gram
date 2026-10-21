@@ -282,8 +282,7 @@ WHERE t.organization_id = @org_id::text AND t.project_id = @project_id::uuid
   AND t.deleted IS FALSE AND a.deleted IS FALSE AND a.id = @assistant_id::uuid
   AND t.definition_slug = 'googlechat' AND t.target_kind = 'assistant'
   AND t.status = 'paused' AND t.environment_id IS NULL
-  AND jsonb_typeof(t.config_json->'workspace_events') = 'object'
-  AND t.config_json->'workspace_events'->>'text_prefix' = 'assistant:';
+  AND jsonb_typeof(t.config_json) = 'object';
 
 -- name: PostflightIDAssistantAgentBindings :one
 SELECT count(*) FROM assistant_agent_bindings
@@ -527,3 +526,11 @@ LEFT JOIN sigint_custom_signals cs
 WHERE ss.project_id = @project_id::uuid AND ss.deleted IS FALSE
   AND (s.id IS NULL OR s.deleted IS TRUE
     OR cs.id IS NULL OR cs.deleted IS TRUE);
+
+-- name: PostflightIDGoogleChatBinding :one
+SELECT count(*) FROM google_chat_bindings b
+JOIN google_chat_connections c ON c.id=b.connection_id AND c.organization_id=b.organization_id
+JOIN google_chat_members m ON m.binding_id=b.id AND m.organization_id=b.organization_id
+WHERE b.organization_id = @org_id::text AND b.project_id = @project_id::uuid
+AND b.status='paused' AND c.status='reconnect_required' AND c.credentials_encrypted IS NULL
+AND b.subscription_name IS NULL AND m.user_id IS NOT NULL AND m.active;

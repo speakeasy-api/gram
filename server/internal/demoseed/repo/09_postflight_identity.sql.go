@@ -336,6 +336,27 @@ func (q *Queries) PostflightIDGitHubCheckAccessGrants(ctx context.Context, arg P
 	return count, err
 }
 
+const postflightIDGoogleChatBinding = `-- name: PostflightIDGoogleChatBinding :one
+SELECT count(*) FROM google_chat_bindings b
+JOIN google_chat_connections c ON c.id=b.connection_id AND c.organization_id=b.organization_id
+JOIN google_chat_members m ON m.binding_id=b.id AND m.organization_id=b.organization_id
+WHERE b.organization_id = $1::text AND b.project_id = $2::uuid
+AND b.status='paused' AND c.status='reconnect_required' AND c.credentials_encrypted IS NULL
+AND b.subscription_name IS NULL AND m.user_id IS NOT NULL AND m.active
+`
+
+type PostflightIDGoogleChatBindingParams struct {
+	OrgID     string
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) PostflightIDGoogleChatBinding(ctx context.Context, arg PostflightIDGoogleChatBindingParams) (int64, error) {
+	row := q.db.QueryRow(ctx, postflightIDGoogleChatBinding, arg.OrgID, arg.ProjectID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const postflightIDInertUpstreamSessions = `-- name: PostflightIDInertUpstreamSessions :one
 SELECT count(*) FROM remote_sessions
 WHERE remote_session_client_id = $1::uuid
@@ -600,8 +621,7 @@ WHERE t.organization_id = $1::text AND t.project_id = $2::uuid
   AND t.deleted IS FALSE AND a.deleted IS FALSE AND a.id = $3::uuid
   AND t.definition_slug = 'googlechat' AND t.target_kind = 'assistant'
   AND t.status = 'paused' AND t.environment_id IS NULL
-  AND jsonb_typeof(t.config_json->'workspace_events') = 'object'
-  AND t.config_json->'workspace_events'->>'text_prefix' = 'assistant:'
+  AND jsonb_typeof(t.config_json) = 'object'
 `
 
 type PostflightIDPausedGoogleChatTriggerParams struct {

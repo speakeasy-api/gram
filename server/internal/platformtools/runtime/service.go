@@ -60,9 +60,9 @@ func WithTriggerTools(app *bgtriggers.App) Option {
 	}
 }
 
-func WithSlackHTTPClient(client *guardian.HTTPClient) Option {
+func WithIntegrationHTTPClient(client *guardian.HTTPClient) Option {
 	return func(c *config) {
-		c.deps.SlackHTTPClient = client
+		c.deps.IntegrationHTTPClient = client
 	}
 }
 
@@ -99,14 +99,16 @@ func NewService(
 ) *Service {
 	cfg := config{
 		deps: platformtools.Dependencies{
-			Logger:           logger,
-			DB:               db,
-			TelemetryService: telemetrySvc,
-			Audit:            auditLogger,
-			TriggerApp:       nil,
-			SlackHTTPClient:  nil,
-			Encryption:       nil,
-			ServerURL:        nil,
+			Logger:                  logger,
+			DB:                      db,
+			TelemetryService:        telemetrySvc,
+			Audit:                   auditLogger,
+			TriggerApp:              nil,
+			IntegrationHTTPClient:   nil,
+			GoogleChatTokenResolver: nil,
+			GoogleChatReplyRecorder: nil,
+			Encryption:              nil,
+			ServerURL:               nil,
 		},
 		extras:         nil,
 		featureChecker: nil,
@@ -333,4 +335,14 @@ func (s *Service) ExecuteTool(ctx context.Context, plan *gateway.ToolCallPlan, e
 		ContentType: "application/json",
 		Body:        out.Bytes(),
 	}, nil
+}
+
+// WithGoogleChatTokenResolver enables hosted Google Chat credentials.
+func WithGoogleChatTokenResolver(resolve func(context.Context, toolconfig.ToolCallEnv, string, string) (string, bool, error)) Option {
+	return func(c *config) { c.deps.GoogleChatTokenResolver = resolve }
+}
+
+// WithGoogleChatReplyRecorder connects posted threads to their assistant chat.
+func WithGoogleChatReplyRecorder(record func(context.Context, toolconfig.ToolCallEnv, []byte) error) Option {
+	return func(c *config) { c.deps.GoogleChatReplyRecorder = record }
 }

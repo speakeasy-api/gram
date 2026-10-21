@@ -1,140 +1,57 @@
-# Connect an assistant to Google Chat
+# Google Chat assistants
 
-You own the Google Cloud project, Chat app, and service account. This integration uses a **Google Chat app that is not a Google Workspace add-on**, with an HTTP endpoint and **Project Number** authentication audience. Do not select Workspace add-on mode or HTTP endpoint URL audience. No user OAuth flow or domain-wide delegation is required.
+An organization administrator opens **Org > Identity > Google Chat**, chooses **Add Google account**, and completes Google consent. They select a project and assistant, then create an externally accessible space or choose an existing space they can manage. Speakeasy installs its Chat app, invites the specified people, attaches the Chat tools, creates event delivery, and maintains its subscription.
 
-## 1. Create your Chat app and service account
+The hosted connection is the only shared-space setup. Customers do not supply a Cloud project, Pub/Sub subscription, service-account key, or renewal job. Google Workspace policies must allow the app, external spaces, and the invited participants. A Google-owned space works only if its administrators permit the app and an authorized member can add it; Speakeasy cannot override the owning organization's policies. Creating a Speakeasy-owned test space is usually the simplest first test.
 
-1. In a Google Cloud project owned by your organization, enable the **Google Chat API**. Record its numeric **Project number** (not the project ID).
-2. Open **Google Chat API → Configuration**. Configure an interactive Chat app, not a Google Workspace add-on. Set its name, avatar, and description; enable receiving direct messages and joining spaces/group conversations. Limit visibility to your test users initially.
-3. Under **IAM & Admin → Service Accounts**, create a service account in the same project. Under **Keys → Add key → Create new key → JSON**, download its key. Keep the JSON private; do not paste it into assistant chat, instructions, source code, or support tickets. Your organization must permit service-account keys.
+## Identity and access
 
-The service account is used for **outbound Chat API calls**. It is not the inbound event signer: Google Chat signs incoming Project Number JWTs as `chat@system.gserviceaccount.com`.
+Sync reads Google-reported member identities and matches their emails to active Speakeasy organization members. Unmatched members need an explicit administrator mapping. A removed mapping stays removed during later syncs. External participants need their own active Speakeasy identity and the appropriate project/MCP access.
 
-## 2. Configure the assistant in Speakeasy
+Every incoming turn resolves its sender again. The assistant acts with that person's permitted access, intersected with the assistant's attached MCPs and identity grants. Membership in a Chat space grants no MCP rights. Unmapped senders get a single explanation per thread asking an administrator to link their account. Pausing or disconnecting a binding stops new turns.
 
-Open **Assistants → New assistant** (or open an existing assistant's setup chat) and ask to connect Google Chat. Choose the capabilities you need:
+Responses are visible to the space's participants. Administrators should attach only MCPs appropriate for that audience; per-person authorization does not make posted replies private.
 
-- Send messages and replies, update/delete the app's own messages, and list spaces: `https://www.googleapis.com/auth/chat.bot` (no special administrator approval).
-- Get/list messages, including thread history: `https://www.googleapis.com/auth/chat.app.messages.readonly` (**one-time Workspace administrator approval**, below). Do not enable history tools unless you need them.
+## Conversations, issue triage, and digests
 
-The setup assistant discovers the native Google Chat tool catalog, creates a dedicated toolset containing only the tools you select, and attaches it using the assistant's shared environment. The Google Chat trigger must use **that same environment**. Merely adding credentials to a trigger does not configure a separately attached toolset.
+A prefix such as `assistant:` starts a new conversation. Once invoked in a thread, subsequent messages from mapped participants continue the conversation without the prefix. Participants share one assistant chat, with their identity resolved independently each turn.
 
-Use the secure environment form to set:
+An automation can handle a GitHub issue and call `platform_googlechat_send_message` to post its triage summary. Speakeasy records the returned Chat thread against the originating assistant conversation. Team replies continue that conversation with the issue context intact. The same mechanism applies to a daily digest: configure an ordinary scheduled assistant trigger with its sources, destination space, and posting instructions. Google Chat does not prescribe the digest's content.
 
-| Variable                           | Value                                                                                |
-| ---------------------------------- | ------------------------------------------------------------------------------------ |
-| `GOOGLE_CHAT_PROJECT_NUMBER`       | The numeric Cloud project number selected as the Chat app's authentication audience. |
-| `GOOGLE_CHAT_SERVICE_ACCOUNT_JSON` | The complete downloaded service-account JSON, saved as a secret.                     |
+The assistant receives incoming messages as events. It may request earlier public thread history through its attached Chat tools when needed. Message text and fetched history remain untrusted input.
 
-You can maintain these values later on **Environments**. Never put credentials in the trigger configuration JSON. **Save both values before creating the trigger.** The backend checks required key presence; dashboard onboarding additionally checks that both values are populated before creating or resuming a trigger; empty declarations or a skipped/partial credential form are not sufficient. If either value is missing, finish the secure form first rather than retrying trigger creation. Then create the `googlechat` trigger targeting this assistant and copy its webhook URL. The Triggers page also exposes the URL and event status.
+## One-time operator setup
 
-## 3. Finish the Google Chat connection
+The hosted deployment needs one Google Cloud project with Chat, Workspace Events, and Pub/Sub enabled; a configured Chat app; an OAuth web client; and a dedicated event topic. Both the server and worker consume:
 
-1. In **Google Chat API → Configuration → Connection settings**, select **HTTP endpoint URL** and paste the trigger webhook URL.
-2. Set **Authentication Audience → Project Number**. It must match `GOOGLE_CHAT_PROJECT_NUMBER`. Keep the app in non-add-on mode; add-ons have a different event format and signer and are not supported here.
-3. Save the configuration. Add the app to a test space or open a direct message with it. Send a DM or explicitly **@mention** the app in a space to invoke the assistant.
-4. Check the assistant's Triggers tab / Triggers event history for delivery and processing errors. Test sending a reply; if history tools are enabled, separately test reading a thread after administrator approval.
+| Variable                                  | Purpose                                                 |
+| ----------------------------------------- | ------------------------------------------------------- |
+| `GOOGLE_CHAT_CLIENT_ID`                   | Hosted OAuth client ID                                  |
+| `GOOGLE_CHAT_CLIENT_SECRET`               | Hosted OAuth client secret                              |
+| `HOSTED_GOOGLE_CHAT_SERVICE_ACCOUNT_JSON` | Hosted app and Pub/Sub provisioning identity            |
+| `GOOGLE_CHAT_TOPIC`                       | Full `projects/<PROJECT_ID>/topics/<TOPIC_ID>` resource |
+| `GOOGLE_CHAT_PUSH_SERVICE_ACCOUNT`        | Dedicated push authentication service-account email     |
 
-## 4. Optional: approve message and thread history
+Register the callback at the server's `/rpc/googleChatConnections.callback` path. Use the path declared by `googlechatconnections.CallbackPath` if deploying behind a path prefix. Restrict topic publishing to Google's Chat event publisher (`chat-api-push@system.gserviceaccount.com`) and provisioning permissions to the hosted identity. Grant the Pub/Sub service agent the token-creation permission required for authenticated push. Each binding's push subscription filters on its exact space, authenticates the expected audience and push identity, and validates the event's subscription and target. Unrelated well-formed deliveries are acknowledged and dropped.
 
-For `chat.app.messages.readonly`, a Workspace administrator must approve the **app authentication scope**. Granting `chat.bot` alone is not enough.
+Google consent requests `openid`, `email`, `chat.spaces.create`, `chat.spaces.readonly`, `chat.memberships`, and `chat.memberships.app`. The user token is used for setup and membership sync. It is not used to read messages or renew event subscriptions.
 
-1. Open **IAM & Admin → Service Accounts → your account → Advanced settings**. Choose **Create Google Workspace Marketplace-compatible OAuth client**, then **Continue**. This is a service-account client, not an end-user OAuth consent flow. Do not enable domain-wide delegation.
-2. Enable the **Google Workspace Marketplace SDK** in the same Cloud project. Open **APIs & Services → Google Workspace Marketplace SDK → App Configuration**.
-3. Choose **App visibility: Private**, **Installation settings: Individual + admin install**, and **App integrations: Chat app**. This Marketplace selection does not mean Workspace add-on mode in Chat API configuration.
-4. Under **OAuth scopes**, add `https://www.googleapis.com/auth/chat.app.messages.readonly`. **Do not add `chat.bot` here**: Google explicitly excludes it from this configuration. Fill in developer name, website, and email, then **Save draft**.
-5. Have a Workspace administrator follow Google's [Set up authorization for Chat apps](https://support.google.com/a?p=chat-app-auth) procedure to grant approval to this app/client for the requested scope. Saving the draft alone does not grant access.
+**A Workspace administrator must also approve the app's `chat.app.messages.readonly` scope.** This supports event subscriptions and public message history with app authentication, independently of the connecting administrator's personal message access. Google login alone cannot grant this app scope. Missing approval prevents activation; reconnecting a user does not replace it. Follow Google's [app authentication setup](https://developers.google.com/workspace/chat/authenticate-authorize-chat-app) and [Workspace Events authorization requirements](https://developers.google.com/workspace/events/guides/auth).
 
-History reads are on demand, limited to spaces the app can access. This is not full-history ingestion or domain-wide access.
+## Delivery and renewal
 
-## Behavior and troubleshooting
+Subscriptions request `payloadOptions.includeResource: true` so events contain the message. Provisioning waits for Google's long-running create operation, stores the returned lease, and creates filtered, authenticated push delivery. [Subscription reference](https://developers.google.com/workspace/events/reference/rest/v1/subscriptions).
 
-- **Native ingress: DMs and @mentions only.** An unmentioned follow-up in a space/thread does not wake the assistant, even after it previously replied. Mention it again. For explicit text commands from external participants, configure the separate Workspace Events mode below. No background full-history ingestion.
-- **401 on webhook:** check non-add-on mode, Project Number audience, and the exact numeric environment value. Do not use your credential service account as the inbound signer or choose the endpoint URL as audience.
-- **403 on history reads:** confirm `chat.app.messages.readonly` approval for the correct service-account Marketplace-compatible client and Workspace organization. Recheck app membership in the space. Do not solve this with user OAuth or domain-wide delegation.
-- **403 on writes/spaces:** check Chat API is enabled, credentials belong to the configured app's project, the app is installed/allowed by Workspace policy, and it has access to the space. Updating/deleting messages is limited to app-owned messages.
-- **No reply:** check trigger is active, both environment values are populated, the toolset attachment uses the same environment, and you sent a DM or @mention. The event history distinguishes delivery problems from assistant/tool failures.
-- **Key creation blocked:** ask your Cloud administrator about the organization's service-account key policy. Do not bypass organization policy. Rotate compromised keys in Cloud and replace the environment secret.
+A shared hourly Temporal schedule renews active hosted bindings using app authentication. It runs in the worker, independently of assistants, and reports failures on the binding. There is one renewal job, with approximately 720 workflow starts plus 720 activities per month per shared namespace, before retries. The activity pages through bindings; it does not create an activity per space.
 
-## Management surfaces
+Preview workers do not register this shared schedule. A preview binding therefore expires after approximately four hours unless repaired or renewed explicitly. Production and main development workers register the maintenance job. [Renewal reference](https://developers.google.com/workspace/events/guides/update-subscription).
 
-Google Chat setup is intentionally a **dashboard onboarding workflow**, not a new Platform MCP administration tool. The operator selects an exact project and assistant, enters the customer-managed service-account key in the secure environment form, and binds the native toolset and trigger to that environment. The setup assistant receives populated key names, not credential values.
+## Management and verification
 
-The native Google Chat tools and existing generic trigger tools live in `server/internal/platformtools`; they are distinct from `server/internal/platformmcp`. The latter's assistant identity tool manages workload identity, not assistant creation, toolset attachment, or trigger setup. It is not an existing setup workflow to extend.
+Org administrators can inspect connections, synchronize members, map identities, pause/resume or repair a binding, and disconnect. Platform MCP exposes the corresponding administrative outcomes without exposing credentials; interactive Google consent remains a browser action.
 
-**Platform MCP decision: omit a new setup tool in this release.** A raw service-account-key argument would expose credentials to the agent conversation, while a tool accepting only an existing environment would not complete the required secure credential-entry workflow. Do not claim that generic native trigger discovery provides Platform MCP parity. Use dashboard onboarding for installation and credential rotation; use native tools for the assistant's Chat actions. Regression coverage verifies the masked credential form, populated-key prerequisites, shared-environment binding, and discovery of the Google Chat trigger configuration.
+Before rollout, test internal and external mapped participants, an unmapped participant, a prefix-free follow-up, a GitHub-originated Chat thread, and renewal from the worker. Verify identity-specific MCP denials, cross-space isolation, and pause/disconnect behavior. A successful API call or mocked transport test is not evidence of a completed live Google approval flow.
 
-## Google references
+## Native app compatibility
 
-Verified against Google's documentation:
-
-- [Authenticate and authorize as a Chat app](https://developers.google.com/workspace/chat/authenticate-authorize-chat-app): service-account key, Marketplace-compatible client, private Marketplace SDK configuration, and administrator approval.
-- [Verify requests from Chat](https://developers.google.com/workspace/chat/verify-requests-from-chat), specifically **Authenticate requests with a Project Number JWT (Chat apps that aren't add-ons)**. The page's earlier add-on instructions are a different mode.
-- [Configure a Chat app](https://developers.google.com/workspace/chat/configure-chat-api).
-
-## Shared-space commands and scheduled digests
-
-A shared space can contain members of multiple organizations, but Google disables native app interactions for external participants. A native `@mention` therefore cannot serve as a shared invocation mechanism. The optional **Workspace Events** ingress receives ordinary messages instead. Selected internal and external participants use the same literal command, for example `assistant: explain this digest`.
-
-The assistant remains generic: configure its instructions and MCP access normally. A daily digest is an ordinary `cron` trigger targeting that assistant, with a note that names the exact destination space and instructs it to use `platform_googlechat_send_message`. Cron events do not carry a Google Chat source context, so the destination must be explicit in the assistant's task or trigger note. The digest's data sources and contents belong in the assistant configuration, not in the Google Chat integration. Attach the Google Chat message-reading tools if the assistant should answer questions about a previously posted digest or other thread context; inbound read permission does not attach those tools automatically. Use only MCP access appropriate for the shared audience.
-
-### Configure a shared-space trigger
-
-1. Create an invitation-only space with external membership enabled, install the Chat app, and invite the intended participants. Workspace policy must permit external spaces. Use the actual Chat user resource names (`users/{id}`), not display names or email guesses, for the participant allowlist.
-2. Complete the service-account setup above, including Workspace administrator approval for `chat.app.messages.readonly`. This ingress needs message access even if the assistant has no history-reading tool attached. Enable the Google Workspace Events and Pub/Sub APIs in the app's Cloud project.
-3. Create a dedicated Pub/Sub topic. Grant `chat-api-push@system.gserviceaccount.com` the Pub/Sub Publisher role **on that topic only**, as required by Google's Workspace Events setup.
-4. Create a Workspace Events subscription as the approved Chat app service account, with this request body. Replace all placeholders; keep the returned `subscriptions/{id}` and its actual expiration time.
-
-   ```json
-   {
-     "targetResource": "//chat.googleapis.com/spaces/<SPACE_ID>",
-     "eventTypes": ["google.workspace.chat.message.v1.created"],
-     "notificationEndpoint": {
-       "pubsubTopic": "projects/<PROJECT_ID>/topics/<TOPIC_ID>"
-     },
-     "payloadOptions": { "includeResourceData": true },
-     "ttl": "14400s"
-   }
-   ```
-
-   Call `POST https://workspaceevents.googleapis.com/v1/subscriptions`. The same approved app identity can use `gws events subscriptions create --json '<body>'` with appropriately configured service-account authentication. The ordinary `gws` user login is a different identity and is not the app's credentials.
-
-5. Create a dedicated push service account and reserve a Pub/Sub push subscription name. Configure the Google Chat trigger with the following shape. These fields contain identifiers, not credentials; keep the outbound service-account JSON in the assistant's secure shared environment.
-
-   ```json
-   {
-     "space_names": ["spaces/<SPACE_ID>"],
-     "workspace_events": {
-       "auto_renew": true,
-       "subscription": "projects/<PROJECT_ID>/subscriptions/<PUSH_SUBSCRIPTION_ID>",
-       "workspace_subscription": "subscriptions/<WORKSPACE_SUBSCRIPTION_ID>",
-       "audience": "https://<PUBLIC_HOST>/<UNIQUE_PUSH_AUDIENCE>",
-       "service_account_email": "<PUSH_ACCOUNT>@<PROJECT_ID>.iam.gserviceaccount.com",
-       "user_names": ["users/<INTERNAL_USER_ID>", "users/<EXTERNAL_USER_ID>"],
-       "text_prefix": "assistant:"
-     }
-   }
-   ```
-
-   The trigger requires exactly one space, an explicit nonempty user allowlist, and a nonempty prefix. An optional `filter` CEL expression can narrow it further using `event.text`, `event.user_name`, or the other existing event fields. Prefix matching is literal and case-sensitive after leading whitespace. Every invocation, including a reply to a digest, requires the prefix; unprefixed follow-ups do not invoke the assistant.
-
-6. Create the authenticated, **wrapped** Pub/Sub push subscription against the dedicated topic. Set the trigger's returned webhook URL as the push endpoint, the dedicated push service account as the authentication identity, and `workspace_events.audience` as the exact token audience. Grant the Pub/Sub service agent the token-creation permission required by Google's authenticated-push setup. Keep publisher and service-account impersonation permissions narrow: anyone able to publish to this topic or impersonate the push account can submit events to this connection.
-7. Test a command from one internal participant and one external participant, a command from an unlisted participant, and an ordinary unprefixed message. Only the first two should invoke the assistant. Test two simultaneous commands in different threads and redelivery: replies must stay in their original threads without duplication. Check trigger delivery errors as well as the visible replies. Do not claim live external-user support has been verified based only on a successful API subscription or synthetic tests.
-
-This mode replaces native interaction delivery **for this trigger**. Do not configure the Chat app's native interaction endpoint to use this Pub/Sub webhook. The backend verifies a Google Accounts OIDC token for the exact audience and verified push service-account email, then checks both subscription identities and the space. The Project Number JWT used by native Chat interactions is not accepted here. Separate native-interaction and Workspace Events triggers remain possible, but overlapping triggers can invoke the assistant twice for the same message; use one path for a given space.
-
-Pub/Sub receives all subscribed message creations, including unselected participants' messages; the backend filters before invoking the assistant. Bot messages, edits, deletes, and subscription lifecycle notifications never invoke it. Google may batch message creations automatically; each human message is filtered, deduplicated, and routed to its own thread, with only that message's payload attached to the assistant event. MCP authorization continues to use the configured assistant identity, not the external sender's credentials.
-
-### Automatic subscription renewal
-
-Set `workspace_events.auto_renew` to `true` to have Speakeasy maintain the already-created subscription. No Cloud Scheduler job or assistant task is required. Automatic renewal is opt-in; omitting the field preserves manually managed subscriptions.
-
-The shared worker checks opted-in, active Google Chat triggers hourly. When a subscription has two hours or less remaining, it renews the lease to four hours using `GOOGLE_CHAT_SERVICE_ACCOUNT_JSON` from that trigger's environment. It checks the exact subscription name, space, active state, message-created event type, and resource-data setting before changing only the TTL, and reads the provider state back to verify expiry advanced. Credentials never enter the workflow's input or history. Successful renewals and failures appear in the trigger event history; one failing subscription does not prevent others from renewing.
-
-Paused or deleted triggers are excluded from renewal. If a trigger remains paused until its subscription expires, resuming the trigger does not recreate the subscription: recreate it and update `workspace_subscription` first. Revoked approval, missing app membership, a suspended subscription, or an expired/deleted subscription needs operator attention. Check trigger event history after resolving the cause. Speakeasy does not silently create a new subscription or change its destination.
-
-The recurring renewal job runs only on the shared worker, not PR-preview workers, because preview databases can contain copied integration configuration. A preview test therefore still needs a live subscription for its short test window. Provider setup and Workspace administrator approval remain one-time operator steps.
-
-No Platform MCP setup tool is added: existing native trigger tools expose the `auto_renew` option through the discovered configuration schema, while credential entry retains the secure onboarding flow. The single hourly workflow processes subscriptions in a paginated activity; it does not run an LLM or create a workflow per subscription.
-
-References: [Workspace event subscriptions](https://developers.google.com/workspace/events/guides/create-subscription), [event format and expiration](https://developers.google.com/workspace/events), [subscription renewal](https://developers.google.com/workspace/events/guides/update-subscription), [authenticated Pub/Sub push](https://cloud.google.com/pubsub/docs/authenticate-push-subscriptions), and [external-member restrictions](https://knowledge.workspace.google.com/admin/chat/chatting-with-external-users).
+The base integration still supports customer-managed native DMs and mentions. Its per-environment `GOOGLE_CHAT_SERVICE_ACCOUNT_JSON` and `GOOGLE_CHAT_PROJECT_NUMBER` remain separate from hosted deployment credentials. Native interactions use Project Number authentication for a non-add-on Chat app. This compatibility path does not offer shared-space text delivery or its own subscription renewal mode.

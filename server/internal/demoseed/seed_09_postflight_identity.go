@@ -234,6 +234,9 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 		{func(ctx context.Context) (int64, error) {
 			return s.q.PostflightIDAssistantAgentBindings(ctx, repo.PostflightIDAssistantAgentBindingsParams{OrgID: org, ProjectID: proj})
 		}, 1, "demo seed postflight: expected 1 assistant binding, found %d"},
+		{func(ctx context.Context) (int64, error) {
+			return s.q.PostflightIDGoogleChatBinding(ctx, repo.PostflightIDGoogleChatBindingParams{OrgID: org, ProjectID: proj})
+		}, 1, "demo seed postflight: expected 1 inert hosted Google space, found %d"},
 		{byProj(s.q.PostflightIDAssistantThreads), 2, "demo seed postflight: expected 2 assistant threads, found %d"},
 		{func(ctx context.Context) (int64, error) {
 			return s.q.PostflightIDTriggerWorkloadBindings(ctx, repo.PostflightIDTriggerWorkloadBindingsParams{OrgID: org, ProjectID: proj})

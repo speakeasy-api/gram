@@ -153,6 +153,43 @@ func (q *Queries) OrgDeleteExternalOAuthServerMetadata(ctx context.Context, arg 
 	return err
 }
 
+const orgDeleteGoogleChatBindings = `-- name: OrgDeleteGoogleChatBindings :exec
+DELETE FROM google_chat_bindings WHERE organization_id = $1::text AND project_id = $2::uuid
+`
+
+type OrgDeleteGoogleChatBindingsParams struct {
+	OrgID     string
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) OrgDeleteGoogleChatBindings(ctx context.Context, arg OrgDeleteGoogleChatBindingsParams) error {
+	_, err := q.db.Exec(ctx, orgDeleteGoogleChatBindings, arg.OrgID, arg.ProjectID)
+	return err
+}
+
+const orgDeleteGoogleChatConnections = `-- name: OrgDeleteGoogleChatConnections :exec
+DELETE FROM google_chat_connections WHERE organization_id = $1::text
+`
+
+func (q *Queries) OrgDeleteGoogleChatConnections(ctx context.Context, orgID string) error {
+	_, err := q.db.Exec(ctx, orgDeleteGoogleChatConnections, orgID)
+	return err
+}
+
+const orgDeleteGoogleChatMembers = `-- name: OrgDeleteGoogleChatMembers :exec
+DELETE FROM google_chat_members WHERE organization_id = $1::text AND project_id = $2::uuid
+`
+
+type OrgDeleteGoogleChatMembersParams struct {
+	OrgID     string
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) OrgDeleteGoogleChatMembers(ctx context.Context, arg OrgDeleteGoogleChatMembersParams) error {
+	_, err := q.db.Exec(ctx, orgDeleteGoogleChatMembers, arg.OrgID, arg.ProjectID)
+	return err
+}
+
 const orgDeleteGrantsByID = `-- name: OrgDeleteGrantsByID :exec
 DELETE FROM principal_grants
 WHERE organization_id = $1::text

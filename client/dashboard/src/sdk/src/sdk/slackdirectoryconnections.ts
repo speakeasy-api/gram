@@ -11,7 +11,7 @@ import { slackDirectoryConnectionsListPersonAccounts } from "../funcs/slackDirec
 import { slackDirectoryConnectionsSetMapping } from "../funcs/slackDirectoryConnectionsSetMapping.js";
 import { slackDirectoryConnectionsSync } from "../funcs/slackDirectoryConnectionsSync.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
-import { BeginResponseBody } from "../models/components/beginresponsebody.js";
+import { BeginGoogleChatResult } from "../models/components/begingooglechatresult.js";
 import { ListMembersResponseBody } from "../models/components/listmembersresponsebody.js";
 import { ListPersonAccountsResponseBody } from "../models/components/listpersonaccountsresponsebody.js";
 import { ListResponseBody } from "../models/components/listresponsebody.js";
@@ -60,7 +60,7 @@ export class SlackDirectoryConnections extends ClientSDK {
     request: BeginSlackDirectoryConnectionRequest,
     security?: BeginSlackDirectoryConnectionSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<BeginResponseBody> {
+  ): Promise<BeginGoogleChatResult> {
     return unwrapAsync(slackDirectoryConnectionsBegin(
       this,
       request,

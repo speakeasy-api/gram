@@ -383,6 +383,78 @@ func (q *Queries) DeployInsertExternalOAuthMetadata(ctx context.Context, arg Dep
 	return err
 }
 
+const deployInsertGoogleChatBinding = `-- name: DeployInsertGoogleChatBinding :exec
+INSERT INTO google_chat_bindings(id,organization_id,project_id,connection_id,assistant_id,space_name,display_name,status)
+VALUES($1,$2,$3,$4,$5,$6,'Engineering triage','paused')
+`
+
+type DeployInsertGoogleChatBindingParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.UUID
+	ConnectionID   uuid.UUID
+	AssistantID    uuid.UUID
+	SpaceName      string
+}
+
+func (q *Queries) DeployInsertGoogleChatBinding(ctx context.Context, arg DeployInsertGoogleChatBindingParams) error {
+	_, err := q.db.Exec(ctx, deployInsertGoogleChatBinding,
+		arg.ID,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.ConnectionID,
+		arg.AssistantID,
+		arg.SpaceName,
+	)
+	return err
+}
+
+const deployInsertGoogleChatConnection = `-- name: DeployInsertGoogleChatConnection :exec
+INSERT INTO google_chat_connections(id,organization_id,google_subject,email,status)
+VALUES($1,$2,$3,$4,'reconnect_required')
+`
+
+type DeployInsertGoogleChatConnectionParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+	GoogleSubject  string
+	Email          string
+}
+
+func (q *Queries) DeployInsertGoogleChatConnection(ctx context.Context, arg DeployInsertGoogleChatConnectionParams) error {
+	_, err := q.db.Exec(ctx, deployInsertGoogleChatConnection,
+		arg.ID,
+		arg.OrganizationID,
+		arg.GoogleSubject,
+		arg.Email,
+	)
+	return err
+}
+
+const deployInsertGoogleChatMember = `-- name: DeployInsertGoogleChatMember :exec
+INSERT INTO google_chat_members(organization_id,project_id,binding_id,google_user_name,display_name,user_id)
+VALUES($1,$2,$3,$4,'Example participant',$5)
+`
+
+type DeployInsertGoogleChatMemberParams struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+	BindingID      uuid.UUID
+	GoogleUserName string
+	UserID         pgtype.Text
+}
+
+func (q *Queries) DeployInsertGoogleChatMember(ctx context.Context, arg DeployInsertGoogleChatMemberParams) error {
+	_, err := q.db.Exec(ctx, deployInsertGoogleChatMember,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.BindingID,
+		arg.GoogleUserName,
+		arg.UserID,
+	)
+	return err
+}
+
 const deployInsertGoogleChatTrigger = `-- name: DeployInsertGoogleChatTrigger :exec
 INSERT INTO trigger_instances
   (id, organization_id, project_id, definition_slug, name, target_kind, target_ref, target_display, status, config_json)

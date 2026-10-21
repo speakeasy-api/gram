@@ -31,7 +31,7 @@ import {
 } from "@/pages/org/orgWelcomeBannerState";
 import { useOrgRoutes, useRoutes } from "@/routes";
 import {
-  Action,
+  RecordDashboardCtaEventRequestBodyAction as Action,
   Surface,
 } from "@gram/client/models/components/recorddashboardctaeventrequestbody.js";
 import { useGramContext } from "@gram/client/react-query/_context.js";

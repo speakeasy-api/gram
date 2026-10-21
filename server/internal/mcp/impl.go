@@ -499,7 +499,9 @@ func NewService(
 		telemSvc,
 		auditLogger,
 		platformtoolsruntime.WithTriggerTools(triggerApp),
-		platformtoolsruntime.WithSlackHTTPClient(guardianPolicy.PooledClient()),
+		platformtoolsruntime.WithIntegrationHTTPClient(guardianPolicy.PooledClient()),
+		platformtoolsruntime.WithGoogleChatTokenResolver(triggerApp.ResolveGoogleChatToken),
+		platformtoolsruntime.WithGoogleChatReplyRecorder(triggerApp.RecordGoogleChatReply),
 		platformtoolsruntime.WithExternalTools(platformExtras),
 		platformtoolsruntime.WithFeatureChecker(platformFeatureChecker),
 	)

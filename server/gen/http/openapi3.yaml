@@ -32202,6 +32202,760 @@ paths:
             x-speakeasy-name-override: verifyGcpKms
             x-speakeasy-react-hook:
                 name: VerifyGcpKmsKey
+    /rpc/googleChatConnections.begin:
+        post:
+            operationId: beginGoogleChatConnection
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/BeginGoogleChatResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: begin googleChatConnections
+            tags:
+                - googleChatConnections
+            x-speakeasy-name-override: begin
+            x-speakeasy-react-hook:
+                name: BeginGoogleChatConnection
+    /rpc/googleChatConnections.bind:
+        post:
+            operationId: bindGoogleChatSpace
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/BindGoogleChatRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/GoogleChatBinding'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: bind googleChatConnections
+            tags:
+                - googleChatConnections
+            x-speakeasy-name-override: bind
+            x-speakeasy-react-hook:
+                name: BindGoogleChatSpace
+    /rpc/googleChatConnections.disconnect:
+        post:
+            operationId: disconnectGoogleChatConnection
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/DisconnectGoogleChatRequestBody'
+                required: true
+            responses:
+                "204":
+                    description: No Content response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: disconnect googleChatConnections
+            tags:
+                - googleChatConnections
+            x-speakeasy-name-override: disconnect
+            x-speakeasy-react-hook:
+                name: DisconnectGoogleChatConnection
+    /rpc/googleChatConnections.list:
+        get:
+            operationId: listGoogleChatConnections
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListGoogleChatResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: list googleChatConnections
+            tags:
+                - googleChatConnections
+            x-speakeasy-name-override: list
+            x-speakeasy-react-hook:
+                name: GoogleChatConnections
+    /rpc/googleChatConnections.listMembers:
+        get:
+            operationId: listGoogleChatMembers
+            parameters:
+                - allowEmptyValue: true
+                  in: query
+                  name: binding_id
+                  required: true
+                  schema:
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListMembersGoogleChatResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: listMembers googleChatConnections
+            tags:
+                - googleChatConnections
+            x-speakeasy-name-override: listMembers
+            x-speakeasy-react-hook:
+                name: GoogleChatMembers
+    /rpc/googleChatConnections.listSpaces:
+        get:
+            operationId: listGoogleChatSpaces
+            parameters:
+                - allowEmptyValue: true
+                  in: query
+                  name: connection_id
+                  required: true
+                  schema:
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListSpacesGoogleChatResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: listSpaces googleChatConnections
+            tags:
+                - googleChatConnections
+            x-speakeasy-name-override: listSpaces
+            x-speakeasy-react-hook:
+                name: GoogleChatSpaces
+    /rpc/googleChatConnections.mapMember:
+        post:
+            operationId: mapGoogleChatMember
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/MapMemberGoogleChatRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/GoogleChatMember'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: mapMember googleChatConnections
+            tags:
+                - googleChatConnections
+            x-speakeasy-name-override: mapMember
+            x-speakeasy-react-hook:
+                name: MapGoogleChatMember
+    /rpc/googleChatConnections.syncMembers:
+        post:
+            operationId: syncGoogleChatMembers
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/SyncMembersGoogleChatRequestBody'
+                required: true
+            responses:
+                "204":
+                    description: No Content response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: syncMembers googleChatConnections
+            tags:
+                - googleChatConnections
+            x-speakeasy-name-override: syncMembers
+            x-speakeasy-react-hook:
+                name: SyncGoogleChatMembers
+    /rpc/googleChatConnections.updateBinding:
+        post:
+            operationId: updateGoogleChatBinding
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UpdateBindingGoogleChatRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/GoogleChatBinding'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: updateBinding googleChatConnections
+            tags:
+                - googleChatConnections
+            x-speakeasy-name-override: updateBinding
+            x-speakeasy-react-hook:
+                name: UpdateGoogleChatBinding
     /rpc/hooks.claude:
         post:
             tags:
@@ -71113,7 +71867,7 @@ paths:
                     content:
                         application/json:
                             schema:
-                                $ref: '#/components/schemas/BeginResponseBody'
+                                $ref: '#/components/schemas/BeginGoogleChatResult'
                     description: OK response.
                 "400":
                     content:
@@ -92728,12 +93482,11 @@ components:
                 - tool_urn
                 - created_at
                 - updated_at
-        BeginResponseBody:
+        BeginGoogleChatResult:
             type: object
             properties:
                 authorization_url:
                     type: string
-                    description: Slack authorization URL bound to the current session.
             required:
                 - authorization_url
         BeginSlackDirectoryConnectionRequestBody:
@@ -92750,6 +93503,40 @@ components:
                     type: string
                     description: The configured billing notification email. Omitted when organization administrators receive billing notifications.
                     format: email
+        BindGoogleChatRequestBody:
+            type: object
+            properties:
+                assistant_id:
+                    type: string
+                connection_id:
+                    type: string
+                display_name:
+                    type: string
+                invite_emails:
+                    type: array
+                    items:
+                        type: string
+                prefix:
+                    type: string
+                    default: 'assistant:'
+                    minLength: 1
+                    maxLength: 100
+                project_id:
+                    type: string
+                request_id:
+                    type: string
+                    description: Stable UUID reused when retrying this setup.
+                    format: uuid
+                space_name:
+                    type: string
+                    description: Existing space, or omit to create one.
+            required:
+                - request_id
+                - connection_id
+                - project_id
+                - assistant_id
+                - display_name
+                - prefix
         BuiltInCard:
             type: object
             properties:
@@ -97715,6 +98502,16 @@ components:
                     minLength: 1
             required:
                 - id
+        DisconnectGoogleChatRequestBody:
+            type: object
+            properties:
+                generation:
+                    type: string
+                id:
+                    type: string
+            required:
+                - id
+                - generation
         DisconnectSlackDirectoryConnectionRequestBody:
             type: object
             properties:
@@ -100981,6 +101778,99 @@ components:
                 - global_client_count
                 - tenant_client_count
                 - trusted_user_session_issuer_count
+        GoogleChatBinding:
+            type: object
+            properties:
+                assistant_id:
+                    type: string
+                connection_id:
+                    type: string
+                display_name:
+                    type: string
+                id:
+                    type: string
+                last_error:
+                    type: string
+                prefix:
+                    type: string
+                project_id:
+                    type: string
+                revision:
+                    type: integer
+                    format: int64
+                space_name:
+                    type: string
+                status:
+                    type: string
+            required:
+                - id
+                - connection_id
+                - project_id
+                - assistant_id
+                - space_name
+                - display_name
+                - prefix
+                - status
+                - revision
+        GoogleChatConnection:
+            type: object
+            properties:
+                email:
+                    type: string
+                generation:
+                    type: string
+                granted_scopes:
+                    type: array
+                    items:
+                        type: string
+                id:
+                    type: string
+                status:
+                    type: string
+            required:
+                - id
+                - email
+                - status
+                - generation
+                - granted_scopes
+        GoogleChatMember:
+            type: object
+            properties:
+                active:
+                    type: boolean
+                binding_id:
+                    type: string
+                display_name:
+                    type: string
+                google_user_name:
+                    type: string
+                id:
+                    type: string
+                revision:
+                    type: integer
+                    format: int64
+                user_id:
+                    type: string
+            required:
+                - id
+                - binding_id
+                - google_user_name
+                - display_name
+                - active
+                - revision
+        GoogleChatSpace:
+            type: object
+            properties:
+                display_name:
+                    type: string
+                external_user_allowed:
+                    type: boolean
+                name:
+                    type: string
+            required:
+                - name
+                - display_name
+                - external_user_allowed
         HTTPToolDefinition:
             type: object
             properties:
@@ -103881,6 +104771,23 @@ components:
             description: Result type for the platform-administrator global issuer listing.
             required:
                 - items
+        ListGoogleChatResult:
+            type: object
+            properties:
+                authorization_configured:
+                    type: boolean
+                bindings:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/GoogleChatBinding'
+                connections:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/GoogleChatConnection'
+            required:
+                - connections
+                - bindings
+                - authorization_configured
         ListHooksTracesPayload:
             type: object
             properties:
@@ -104118,6 +105025,15 @@ components:
             description: Result type for listing MCP servers
             required:
                 - mcp_servers
+        ListMembersGoogleChatResult:
+            type: object
+            properties:
+                members:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/GoogleChatMember'
+            required:
+                - members
         ListMembersResponseBody:
             type: object
             properties:
@@ -104988,6 +105904,15 @@ components:
                     description: The distinct agent sources present in this project's chats (raw source strings such as 'claude-code', 'Codex', 'playground').
             required:
                 - sources
+        ListSpacesGoogleChatResult:
+            type: object
+            properties:
+                spaces:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/GoogleChatSpace'
+            required:
+                - spaces
         ListSpendRuleEventsResult:
             type: object
             properties:
@@ -105848,6 +106773,23 @@ components:
                 - coverage_bucket
                 - first_seen_at
                 - last_seen_at
+        MapMemberGoogleChatRequestBody:
+            type: object
+            properties:
+                binding_id:
+                    type: string
+                member_id:
+                    type: string
+                revision:
+                    type: integer
+                    format: int64
+                user_id:
+                    type: string
+                    description: Existing active Speakeasy person, or omit to revoke.
+            required:
+                - binding_id
+                - member_id
+                - revision
         MarkEnterpriseTrialConvertedRequestBody:
             type: object
             properties:
@@ -118877,6 +119819,13 @@ components:
                     format: uuid
             required:
                 - id
+        SyncMembersGoogleChatRequestBody:
+            type: object
+            properties:
+                binding_id:
+                    type: string
+            required:
+                - binding_id
         SyncResponseBody:
             type: object
             properties:
@@ -121667,6 +122616,25 @@ components:
                 - id
                 - external_credential_id
                 - name
+        UpdateBindingGoogleChatRequestBody:
+            type: object
+            properties:
+                action:
+                    type: string
+                    enum:
+                        - pause
+                        - resume
+                        - delete
+                        - repair
+                binding_id:
+                    type: string
+                revision:
+                    type: integer
+                    format: int64
+            required:
+                - binding_id
+                - revision
+                - action
         UpdateConfigurationRequestBody:
             type: object
             properties:
@@ -125640,6 +126608,8 @@ tags:
       description: External MCP registry operations
     - name: functions
       description: Endpoints for working with functions.
+    - name: googleChatConnections
+      description: Connect a Google account, manage assistant spaces, and map participants to existing Speakeasy identities.
     - name: hooksServerNames
       description: Manages display name overrides for hooks servers.
     - name: hooks

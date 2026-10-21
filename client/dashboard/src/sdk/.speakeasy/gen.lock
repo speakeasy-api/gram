@@ -285,6 +285,15 @@ trackedFiles:
   src/funcs/featuresGet.ts: {}
   src/funcs/featuresSet.ts: {}
   src/funcs/featuresSetRemoteSessionAutoRefreshPolicy.ts: {}
+  src/funcs/googleChatConnectionsBegin.ts: {}
+  src/funcs/googleChatConnectionsBind.ts: {}
+  src/funcs/googleChatConnectionsDisconnect.ts: {}
+  src/funcs/googleChatConnectionsList.ts: {}
+  src/funcs/googleChatConnectionsListMembers.ts: {}
+  src/funcs/googleChatConnectionsListSpaces.ts: {}
+  src/funcs/googleChatConnectionsMapMember.ts: {}
+  src/funcs/googleChatConnectionsSyncMembers.ts: {}
+  src/funcs/googleChatConnectionsUpdateBinding.ts: {}
   src/funcs/hooksGetStatus.ts: {}
   src/funcs/hooksHooksNumberClaude.ts: {}
   src/funcs/hooksHooksNumberCodex.ts: {}
@@ -937,9 +946,10 @@ trackedFiles:
   src/models/components/authzchallenge.ts: {}
   src/models/components/awsiamcredential.ts: {}
   src/models/components/awskmskey.ts: {}
-  src/models/components/beginresponsebody.ts: {}
+  src/models/components/begingooglechatresult.ts: {}
   src/models/components/beginslackdirectoryconnectionrequestbody.ts: {}
   src/models/components/billingemail.ts: {}
+  src/models/components/bindgooglechatrequestbody.ts: {}
   src/models/components/builtincard.ts: {}
   src/models/components/builtindashboard.ts: {}
   src/models/components/builtinexclusioncategory.ts: {}
@@ -1086,6 +1096,7 @@ trackedFiles:
   src/models/components/directorygroupoption.ts: {}
   src/models/components/directoryrolemapping.ts: {}
   src/models/components/disableopenrouterkeyrequestbody.ts: {}
+  src/models/components/disconnectgooglechatrequestbody.ts: {}
   src/models/components/disconnectslackdirectoryconnectionrequestbody.ts: {}
   src/models/components/discoverprotectedresourcemetadatarequestbody.ts: {}
   src/models/components/dismissoktaserversuggestionrequestbody.ts: {}
@@ -1212,6 +1223,10 @@ trackedFiles:
   src/models/components/getusermetricssummarypayload.ts: {}
   src/models/components/getusermetricssummaryresult.ts: {}
   src/models/components/globalremotesessionissuer.ts: {}
+  src/models/components/googlechatbinding.ts: {}
+  src/models/components/googlechatconnection.ts: {}
+  src/models/components/googlechatmember.ts: {}
+  src/models/components/googlechatspace.ts: {}
   src/models/components/hookingestdata.ts: {}
   src/models/components/hookingestevent.ts: {}
   src/models/components/hookingestsession.ts: {}
@@ -1343,6 +1358,7 @@ trackedFiles:
   src/models/components/listfilteroptionspayload.ts: {}
   src/models/components/listfilteroptionsresult.ts: {}
   src/models/components/listglobalremotesessionissuersresult.ts: {}
+  src/models/components/listgooglechatresult.ts: {}
   src/models/components/listhookstracespayload.ts: {}
   src/models/components/listhookstracesresult.ts: {}
   src/models/components/listidentityaccessresult.ts: {}
@@ -1360,6 +1376,7 @@ trackedFiles:
   src/models/components/listmcpendpointsresult.ts: {}
   src/models/components/listmcpplatformtoolsetsresult.ts: {}
   src/models/components/listmcpserversresult.ts: {}
+  src/models/components/listmembersgooglechatresult.ts: {}
   src/models/components/listmembersresponsebody.ts: {}
   src/models/components/listmembersresult.ts: {}
   src/models/components/listmetamcpmembersresult.ts: {}
@@ -1415,6 +1432,7 @@ trackedFiles:
   src/models/components/listskilltagsresult.ts: {}
   src/models/components/listskillversionsresult.ts: {}
   src/models/components/listsourcesresult.ts: {}
+  src/models/components/listspacesgooglechatresult.ts: {}
   src/models/components/listspendruleeventsresult.ts: {}
   src/models/components/listspendrulesresult.ts: {}
   src/models/components/listsyncedusersresult.ts: {}
@@ -1455,6 +1473,7 @@ trackedFiles:
   src/models/components/logfilter.ts: {}
   src/models/components/managedagent.ts: {}
   src/models/components/manageddevice.ts: {}
+  src/models/components/mapmembergooglechatrequestbody.ts: {}
   src/models/components/marketplacesettingsresult.ts: {}
   src/models/components/markriskresultsfalsepositiverequestbody.ts: {}
   src/models/components/mcpendpoint.ts: {}
@@ -1854,6 +1873,7 @@ trackedFiles:
   src/models/components/syncdirectorygroupsresult.ts: {}
   src/models/components/syncedagentuser.ts: {}
   src/models/components/syncidentityproviderconnectionapplicationsrequestbody.ts: {}
+  src/models/components/syncmembersgooglechatrequestbody.ts: {}
   src/models/components/syncresponsebody.ts: {}
   src/models/components/syncslackdirectoryrequestbody.ts: {}
   src/models/components/telemetrylogrecord.ts: {}
@@ -1939,6 +1959,7 @@ trackedFiles:
   src/models/components/updateassistantform.ts: {}
   src/models/components/updateawsiamcredentialrequestbody.ts: {}
   src/models/components/updateawskmskeyrequestbody.ts: {}
+  src/models/components/updatebindinggooglechatrequestbody.ts: {}
   src/models/components/updateconfigurationrequestbody.ts: {}
   src/models/components/updatecustomdetectionrulerequestbody.ts: {}
   src/models/components/updatedashboardrequestbody.ts: {}
@@ -2097,7 +2118,9 @@ trackedFiles:
   src/models/operations/authlogin.ts: {}
   src/models/operations/authtransferin.ts: {}
   src/models/operations/authtransferout.ts: {}
+  src/models/operations/begingooglechatconnection.ts: {}
   src/models/operations/beginslackdirectoryconnection.ts: {}
+  src/models/operations/bindgooglechatspace.ts: {}
   src/models/operations/cancelstripesubscription.ts: {}
   src/models/operations/captureevent.ts: {}
   src/models/operations/checkdomainhealth.ts: {}
@@ -2246,6 +2269,7 @@ trackedFiles:
   src/models/operations/detachusersessionissuer.ts: {}
   src/models/operations/disableadminopenrouterkey.ts: {}
   src/models/operations/disablewebhooks.ts: {}
+  src/models/operations/disconnectgooglechatconnection.ts: {}
   src/models/operations/disconnectslackdirectoryconnection.ts: {}
   src/models/operations/discoverremotemcpprotectedresourcemetadata.ts: {}
   src/models/operations/discoverservers.ts: {}
@@ -2497,6 +2521,9 @@ trackedFiles:
   src/models/operations/listglobalremotesessionissuerconvergencecandidates.ts: {}
   src/models/operations/listglobalremotesessionissuers.ts: {}
   src/models/operations/listglobalvariations.ts: {}
+  src/models/operations/listgooglechatconnections.ts: {}
+  src/models/operations/listgooglechatmembers.ts: {}
+  src/models/operations/listgooglechatspaces.ts: {}
   src/models/operations/listgrants.ts: {}
   src/models/operations/listhookstraces.ts: {}
   src/models/operations/listidentityaccess.ts: {}
@@ -2609,6 +2636,7 @@ trackedFiles:
   src/models/operations/loadchatoverview.ts: {}
   src/models/operations/logout.ts: {}
   src/models/operations/logouteverywhere.ts: {}
+  src/models/operations/mapgooglechatmember.ts: {}
   src/models/operations/markriskresultsfalsepositive.ts: {}
   src/models/operations/migrateorganizationremotesessionissuer.ts: {}
   src/models/operations/migrateorganizationusersessionissuer.ts: {}
@@ -2767,6 +2795,7 @@ trackedFiles:
   src/models/operations/suspendagent.ts: {}
   src/models/operations/switchauthscopes.ts: {}
   src/models/operations/syncdirectorygroups.ts: {}
+  src/models/operations/syncgooglechatmembers.ts: {}
   src/models/operations/syncidentityproviderconnectionapplications.ts: {}
   src/models/operations/syncslackdirectory.ts: {}
   src/models/operations/testdetectionrule.ts: {}
@@ -2798,6 +2827,7 @@ trackedFiles:
   src/models/operations/updategcpkmskey.ts: {}
   src/models/operations/updateglobalremotesessionclient.ts: {}
   src/models/operations/updateglobalremotesessionissuer.ts: {}
+  src/models/operations/updategooglechatbinding.ts: {}
   src/models/operations/updateinviterole.ts: {}
   src/models/operations/updatejsonwebkeyset.ts: {}
   src/models/operations/updatemarketplacesettings.ts: {}
@@ -2948,7 +2978,9 @@ trackedFiles:
   src/react-query/auditLogs.core.ts: {}
   src/react-query/auditLogs.ts: {}
   src/react-query/batchKillswitchUserBadges.ts: {}
+  src/react-query/beginGoogleChatConnection.ts: {}
   src/react-query/beginSlackDirectoryConnection.ts: {}
+  src/react-query/bindGoogleChatSpace.ts: {}
   src/react-query/builtinExclusions.core.ts: {}
   src/react-query/builtinExclusions.ts: {}
   src/react-query/cancelStripeSubscription.ts: {}
@@ -3116,6 +3148,7 @@ trackedFiles:
   src/react-query/directoryRoleMappings.ts: {}
   src/react-query/disableAdminOpenRouterKey.ts: {}
   src/react-query/disableWebhooks.ts: {}
+  src/react-query/disconnectGoogleChatConnection.ts: {}
   src/react-query/disconnectSlackDirectoryConnection.ts: {}
   src/react-query/discoverRemoteMcpProtectedResourceMetadata.ts: {}
   src/react-query/dismissOktaServerSuggestion.ts: {}
@@ -3288,6 +3321,12 @@ trackedFiles:
   src/react-query/globalRemoteSessionIssuers.ts: {}
   src/react-query/globalVariations.core.ts: {}
   src/react-query/globalVariations.ts: {}
+  src/react-query/googleChatConnections.core.ts: {}
+  src/react-query/googleChatConnections.ts: {}
+  src/react-query/googleChatMembers.core.ts: {}
+  src/react-query/googleChatMembers.ts: {}
+  src/react-query/googleChatSpaces.core.ts: {}
+  src/react-query/googleChatSpaces.ts: {}
   src/react-query/grants.core.ts: {}
   src/react-query/grants.ts: {}
   src/react-query/hooksHooksNumberClaude.ts: {}
@@ -3445,6 +3484,7 @@ trackedFiles:
   src/react-query/logoutEverywhere.ts: {}
   src/react-query/managedDevices.core.ts: {}
   src/react-query/managedDevices.ts: {}
+  src/react-query/mapGoogleChatMember.ts: {}
   src/react-query/marketplaceSettings.core.ts: {}
   src/react-query/marketplaceSettings.ts: {}
   src/react-query/mcpEndpoints.core.ts: {}
@@ -3861,6 +3901,7 @@ trackedFiles:
   src/react-query/summarizeToolCall.ts: {}
   src/react-query/switchScopes.ts: {}
   src/react-query/syncDirectoryGroups.ts: {}
+  src/react-query/syncGoogleChatMembers.ts: {}
   src/react-query/syncIdentityProviderConnectionApplications.ts: {}
   src/react-query/syncSlackDirectory.ts: {}
   src/react-query/syncedAgentUsers.core.ts: {}
@@ -3913,6 +3954,7 @@ trackedFiles:
   src/react-query/updateGcpKmsKey.ts: {}
   src/react-query/updateGlobalRemoteSessionClient.ts: {}
   src/react-query/updateGlobalRemoteSessionIssuer.ts: {}
+  src/react-query/updateGoogleChatBinding.ts: {}
   src/react-query/updateInviteRole.ts: {}
   src/react-query/updateJsonWebKeySet.ts: {}
   src/react-query/updateMarketplaceSettings.ts: {}
@@ -4050,6 +4092,7 @@ trackedFiles:
   src/sdk/externalcredentials.ts: {}
   src/sdk/externalkeys.ts: {}
   src/sdk/features.ts: {}
+  src/sdk/googlechatconnections.ts: {}
   src/sdk/gramoverview.ts: {}
   src/sdk/gramrules.ts: {}
   src/sdk/hooks.ts: {}
@@ -4482,6 +4525,15 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  beginGoogleChatConnection:
+    speakeasy-default-begin-google-chat-connection:
+      responses:
+        "200":
+          application/json: {"authorization_url": "https://dim-freezing.info"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   beginSlackDirectoryConnection:
     speakeasy-default-begin-slack-directory-connection:
       requestBody:
@@ -4493,6 +4545,17 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  bindGoogleChatSpace:
+    speakeasy-default-bind-google-chat-space:
+      requestBody:
+        application/json: {"assistant_id": "<id>", "connection_id": "<id>", "display_name": "Wilfred_Kuhn19", "prefix": "assistant:", "project_id": "<id>", "request_id": "f67f34b3-f296-4165-88cf-4cdea9b9127d"}
+      responses:
+        "200":
+          application/json: {"assistant_id": "<id>", "connection_id": "<id>", "display_name": "Nella.Welch", "id": "<id>", "prefix": "<value>", "project_id": "<id>", "revision": 88859, "space_name": "<value>", "status": "<value>"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   blockShadowMCPInventoryServer:
     speakeasy-default-block-shadow-MCP-inventory-server:
       requestBody:
@@ -6311,6 +6374,15 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  disconnectGoogleChatConnection:
+    speakeasy-default-disconnect-google-chat-connection:
+      requestBody:
+        application/json: {"generation": "<value>", "id": "<id>"}
+      responses:
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   disconnectSlackDirectoryConnection:
     speakeasy-default-disconnect-slack-directory-connection:
       requestBody:
@@ -9411,6 +9483,39 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  listGoogleChatConnections:
+    speakeasy-default-list-google-chat-connections:
+      responses:
+        "200":
+          application/json: {"authorization_configured": false, "bindings": [{"assistant_id": "<id>", "connection_id": "<id>", "display_name": "Marcelina_Borer", "id": "<id>", "prefix": "<value>", "project_id": "<id>", "revision": 241340, "space_name": "<value>", "status": "<value>"}], "connections": [{"email": "Elwin_Conn79@hotmail.com", "generation": "<value>", "granted_scopes": [], "id": "<id>", "status": "<value>"}]}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  listGoogleChatMembers:
+    speakeasy-default-list-google-chat-members:
+      parameters:
+        query:
+          binding_id: "<id>"
+      responses:
+        "200":
+          application/json: {"members": []}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  listGoogleChatSpaces:
+    speakeasy-default-list-google-chat-spaces:
+      parameters:
+        query:
+          connection_id: "<id>"
+      responses:
+        "200":
+          application/json: {"spaces": [{"display_name": "Demond_Beer", "external_user_allowed": false, "name": "<value>"}]}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   listGrants:
     speakeasy-default-list-grants:
       responses:
@@ -10686,6 +10791,17 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  mapGoogleChatMember:
+    speakeasy-default-map-google-chat-member:
+      requestBody:
+        application/json: {"binding_id": "<id>", "member_id": "<id>", "revision": 759766}
+      responses:
+        "200":
+          application/json: {"active": true, "binding_id": "<id>", "display_name": "Ericka.Kris", "google_user_name": "<value>", "id": "<id>", "revision": 329771}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   markRiskResultsFalsePositive:
     speakeasy-default-mark-risk-results-false-positive:
       requestBody:
@@ -12552,6 +12668,15 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  syncGoogleChatMembers:
+    speakeasy-default-sync-google-chat-members:
+      requestBody:
+        application/json: {"binding_id": "<id>"}
+      responses:
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   syncIdentityProviderConnectionApplications:
     speakeasy-default-sync-identity-provider-connection-applications:
       requestBody:
@@ -12934,6 +13059,17 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  updateGoogleChatBinding:
+    speakeasy-default-update-google-chat-binding:
+      requestBody:
+        application/json: {"action": "resume", "binding_id": "<id>", "revision": 406077}
+      responses:
+        "200":
+          application/json: {"assistant_id": "<id>", "connection_id": "<id>", "display_name": "Millie74", "id": "<id>", "prefix": "<value>", "project_id": "<id>", "revision": 32417, "space_name": "<value>", "status": "<value>"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   updateInviteRole:
     speakeasy-default-update-invite-role:
       requestBody:

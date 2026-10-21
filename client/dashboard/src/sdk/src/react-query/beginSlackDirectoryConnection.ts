@@ -11,7 +11,7 @@ import { GramCore } from "../core.js";
 import { slackDirectoryConnectionsBegin } from "../funcs/slackDirectoryConnectionsBegin.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import { BeginResponseBody } from "../models/components/beginresponsebody.js";
+import { BeginGoogleChatResult } from "../models/components/begingooglechatresult.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -37,7 +37,7 @@ export type BeginSlackDirectoryConnectionMutationVariables = {
   options?: RequestOptions;
 };
 
-export type BeginSlackDirectoryConnectionMutationData = BeginResponseBody;
+export type BeginSlackDirectoryConnectionMutationData = BeginGoogleChatResult;
 
 export type BeginSlackDirectoryConnectionMutationError =
   | ServiceError

@@ -1,3 +1,4 @@
+import { GoogleChat } from "./google-chat/GoogleChat";
 import { SlackWorkspaces } from "./slack-workspaces/SlackWorkspaces";
 import { parseAsStringLiteral, useQueryState } from "nuqs";
 
@@ -331,12 +332,22 @@ export default function OrgIdentity(): JSX.Element {
   let activeTab: IdentityPageTab = requestedTab;
   if (requestedTab === "identity-providers" && !showIdentityProviders)
     activeTab = "sso";
-  if (requestedTab === "slack-workspaces" && !showSlack) activeTab = "sso";
+  if (
+    (requestedTab === "slack-workspaces" || requestedTab === "google-chat") &&
+    !showSlack
+  )
+    activeTab = "sso";
 
   const tabs: PageTab[] = [
     { value: "sso", label: "Single sign-on", href: "?tab=sso" },
     ...(showSlack
       ? [
+          {
+            value: "google-chat",
+            label: "Google Chat",
+            href: "?tab=google-chat",
+            stage: "preview" as const,
+          },
           {
             value: "slack-workspaces",
             label: "Slack workspaces",
@@ -373,6 +384,7 @@ export default function OrgIdentity(): JSX.Element {
         />
       )}
       {activeTab === "slack-workspaces" && <SlackWorkspaces />}
+      {activeTab === "google-chat" && <GoogleChat />}
     </TabbedPage>
   );
 }

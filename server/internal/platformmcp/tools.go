@@ -275,6 +275,7 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 		connectionMutationService = connectionMutations[0]
 	}
 	if postgresReader, ok := reader.(*PostgresReader); ok {
+		registerGoogleChatTools(reg, postgresReader.googleChat)
 		registerMCPConnectionSettingsTool(reg, NewMCPConnectionSettingsService(postgresReader.db))
 		registerMCPConnectionMutationTools(reg, connectionMutationService)
 		if postgresReader.networkIngress == nil {

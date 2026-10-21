@@ -2,6 +2,7 @@ export const IDENTITY_TABS = [
   "sso",
   "identity-providers",
   "slack-workspaces",
+  "google-chat",
 ] as const;
 export type IdentityPageTab = (typeof IDENTITY_TABS)[number];
 

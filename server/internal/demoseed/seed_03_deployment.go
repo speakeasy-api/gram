@@ -26,7 +26,10 @@ func (s *seeder) seedDeployment(ctx context.Context) error {
 	if err := s.seedDeploymentWorkloads(ctx); err != nil {
 		return err
 	}
-	return s.seedDeploymentAssistants(ctx)
+	if err := s.seedDeploymentAssistants(ctx); err != nil {
+		return err
+	}
+	return s.seedManagedGoogleChat(ctx)
 }
 
 // seedDeploymentStack writes one completed deployment with 8 HTTP tools whose
@@ -568,15 +571,6 @@ func (s *seeder) seedDeploymentAssistants(ctx context.Context) error {
 	// The shared-space example remains paused with synthetic identifiers and no credentials.
 	chatConfig, err := json.Marshal(map[string]any{
 		"space_names": []string{"spaces/" + s.det("googlechat-space").String()},
-		"workspace_events": map[string]any{
-			"auto_renew":             true,
-			"subscription":           "projects/example-project/subscriptions/demo-" + s.det("googlechat-push").String(),
-			"workspace_subscription": "subscriptions/" + s.det("googlechat-subscription").String(),
-			"audience":               "https://example.invalid/" + s.det("googlechat-audience").String(),
-			"service_account_email":  s.det("googlechat-push-account").String() + "@example-project.iam.gserviceaccount.com",
-			"user_names":             []string{"users/" + s.det("googlechat-participant").String()},
-			"text_prefix":            "assistant:",
-		},
 	})
 	if err != nil {
 		return fmt.Errorf("marshal demo Google Chat configuration: %w", err)
@@ -637,6 +631,20 @@ func (s *seeder) seedDeploymentAssistants(ctx context.Context) error {
 		ProjectID:      proj,
 	}); err != nil {
 		return fmt.Errorf("insert demo assistant assignment: %w", err)
+	}
+	return nil
+}
+
+func (s *seeder) seedManagedGoogleChat(ctx context.Context) error {
+	c, b := s.det("managed-google-connection"), s.det("managed-google-space")
+	if err := s.q.DeployInsertGoogleChatConnection(ctx, repo.DeployInsertGoogleChatConnectionParams{ID: c, OrganizationID: s.orgID(), GoogleSubject: s.name("google-account"), Email: s.email("lucas")}); err != nil {
+		return fmt.Errorf("seed Google connection: %w", err)
+	}
+	if err := s.q.DeployInsertGoogleChatBinding(ctx, repo.DeployInsertGoogleChatBindingParams{ID: b, OrganizationID: s.orgID(), ProjectID: s.projectID(), ConnectionID: c, AssistantID: s.det("assistant-bound"), SpaceName: "spaces/" + s.det("googlechat-space").String()}); err != nil {
+		return fmt.Errorf("seed Google binding: %w", err)
+	}
+	if err := s.q.DeployInsertGoogleChatMember(ctx, repo.DeployInsertGoogleChatMemberParams{OrganizationID: s.orgID(), ProjectID: s.projectID(), BindingID: b, GoogleUserName: "users/" + s.det("googlechat-participant").String(), UserID: pgtype.Text{String: s.userID("lucas"), Valid: true}}); err != nil {
+		return fmt.Errorf("seed Google member: %w", err)
 	}
 	return nil
 }

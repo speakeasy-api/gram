@@ -8,16 +8,13 @@ import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
-export type BeginResponseBody = {
-  /**
-   * Slack authorization URL bound to the current session.
-   */
+export type BeginGoogleChatResult = {
   authorizationUrl: string;
 };
 
 /** @internal */
-export const BeginResponseBody$inboundSchema: z.ZodMiniType<
-  BeginResponseBody,
+export const BeginGoogleChatResult$inboundSchema: z.ZodMiniType<
+  BeginGoogleChatResult,
   unknown
 > = z.pipe(
   z.object({
@@ -30,12 +27,12 @@ export const BeginResponseBody$inboundSchema: z.ZodMiniType<
   }),
 );
 
-export function beginResponseBodyFromJSON(
+export function beginGoogleChatResultFromJSON(
   jsonString: string,
-): SafeParseResult<BeginResponseBody, SDKValidationError> {
+): SafeParseResult<BeginGoogleChatResult, SDKValidationError> {
   return safeParse(
     jsonString,
-    (x) => BeginResponseBody$inboundSchema.parse(JSON.parse(x)),
-    `Failed to parse 'BeginResponseBody' from JSON`,
+    (x) => BeginGoogleChatResult$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'BeginGoogleChatResult' from JSON`,
   );
 }

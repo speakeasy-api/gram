@@ -36,7 +36,7 @@ func TestGoogleChatTriggerReseed(t *testing.T) {
 				require.True(t, ok)
 				_, err = definition.DecodeConfig(config)
 				require.NoError(t, err)
-				require.Contains(t, config, "workspace_events")
+				require.NotContains(t, config, "delivery")
 				require.Equal(t, "paused", instance.Status)
 				require.False(t, instance.EnvironmentID.Valid)
 			}

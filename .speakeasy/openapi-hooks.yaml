@@ -805,6 +805,8 @@ tags:
     description: External MCP registry operations
   - name: functions
     description: Endpoints for working with functions.
+  - name: googleChatConnections
+    description: Connect a Google account, manage assistant spaces, and map participants to existing Speakeasy identities.
   - name: hooksServerNames
     description: Manages display name overrides for hooks servers.
   - name: hooks

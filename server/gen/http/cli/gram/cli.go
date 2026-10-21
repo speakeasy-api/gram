@@ -45,6 +45,7 @@ import (
 	externalkeysc "github.com/speakeasy-api/gram/server/gen/http/external_keys/client"
 	featuresc "github.com/speakeasy-api/gram/server/gen/http/features/client"
 	functionsc "github.com/speakeasy-api/gram/server/gen/http/functions/client"
+	googlechatconnectionsc "github.com/speakeasy-api/gram/server/gen/http/google_chat_connections/client"
 	hooksc "github.com/speakeasy-api/gram/server/gen/http/hooks/client"
 	hooksservernamesc "github.com/speakeasy-api/gram/server/gen/http/hooks_server_names/client"
 	identityc "github.com/speakeasy-api/gram/server/gen/http/identity/client"
@@ -145,6 +146,7 @@ func UsageCommands() []string {
 		"external-keys (create-aws-kms-key|update-aws-kms-key|create-gcp-kms-key|update-gcp-kms-key|list-external-keys|list-aws-kms-keys|list-gcp-kms-keys|get-aws-kms-key|get-gcp-kms-key|verify-gcp-kms-key|delete-aws-kms-key|delete-gcp-kms-key)",
 		"mcp-registries (clear-cache|list-registries|list-catalog|get-server-details|get-setup-docs)",
 		"functions get-signed-asset-url",
+		"google-chat-connections (list|begin|disconnect|list-spaces|bind|list-members|sync-members|map-member|update-binding)",
 		"hooks-server-names (list|upsert|delete)",
 		"hooks (claude|cursor|codex|ingest|upload-skill-content|skill-feedback|logs|metrics|get-status)",
 		"identity resolve",
@@ -1485,6 +1487,42 @@ func ParseEndpoint(
 		functionsGetSignedAssetURLFlags             = flag.NewFlagSet("get-signed-asset-url", flag.ExitOnError)
 		functionsGetSignedAssetURLBodyFlag          = functionsGetSignedAssetURLFlags.String("body", "REQUIRED", "")
 		functionsGetSignedAssetURLFunctionTokenFlag = functionsGetSignedAssetURLFlags.String("function-token", "", "")
+
+		googleChatConnectionsFlags = flag.NewFlagSet("google-chat-connections", flag.ContinueOnError)
+
+		googleChatConnectionsListFlags            = flag.NewFlagSet("list", flag.ExitOnError)
+		googleChatConnectionsListSessionTokenFlag = googleChatConnectionsListFlags.String("session-token", "", "")
+
+		googleChatConnectionsBeginFlags            = flag.NewFlagSet("begin", flag.ExitOnError)
+		googleChatConnectionsBeginSessionTokenFlag = googleChatConnectionsBeginFlags.String("session-token", "", "")
+
+		googleChatConnectionsDisconnectFlags            = flag.NewFlagSet("disconnect", flag.ExitOnError)
+		googleChatConnectionsDisconnectBodyFlag         = googleChatConnectionsDisconnectFlags.String("body", "REQUIRED", "")
+		googleChatConnectionsDisconnectSessionTokenFlag = googleChatConnectionsDisconnectFlags.String("session-token", "", "")
+
+		googleChatConnectionsListSpacesFlags            = flag.NewFlagSet("list-spaces", flag.ExitOnError)
+		googleChatConnectionsListSpacesConnectionIDFlag = googleChatConnectionsListSpacesFlags.String("connection-id", "REQUIRED", "")
+		googleChatConnectionsListSpacesSessionTokenFlag = googleChatConnectionsListSpacesFlags.String("session-token", "", "")
+
+		googleChatConnectionsBindFlags            = flag.NewFlagSet("bind", flag.ExitOnError)
+		googleChatConnectionsBindBodyFlag         = googleChatConnectionsBindFlags.String("body", "REQUIRED", "")
+		googleChatConnectionsBindSessionTokenFlag = googleChatConnectionsBindFlags.String("session-token", "", "")
+
+		googleChatConnectionsListMembersFlags            = flag.NewFlagSet("list-members", flag.ExitOnError)
+		googleChatConnectionsListMembersBindingIDFlag    = googleChatConnectionsListMembersFlags.String("binding-id", "REQUIRED", "")
+		googleChatConnectionsListMembersSessionTokenFlag = googleChatConnectionsListMembersFlags.String("session-token", "", "")
+
+		googleChatConnectionsSyncMembersFlags            = flag.NewFlagSet("sync-members", flag.ExitOnError)
+		googleChatConnectionsSyncMembersBodyFlag         = googleChatConnectionsSyncMembersFlags.String("body", "REQUIRED", "")
+		googleChatConnectionsSyncMembersSessionTokenFlag = googleChatConnectionsSyncMembersFlags.String("session-token", "", "")
+
+		googleChatConnectionsMapMemberFlags            = flag.NewFlagSet("map-member", flag.ExitOnError)
+		googleChatConnectionsMapMemberBodyFlag         = googleChatConnectionsMapMemberFlags.String("body", "REQUIRED", "")
+		googleChatConnectionsMapMemberSessionTokenFlag = googleChatConnectionsMapMemberFlags.String("session-token", "", "")
+
+		googleChatConnectionsUpdateBindingFlags            = flag.NewFlagSet("update-binding", flag.ExitOnError)
+		googleChatConnectionsUpdateBindingBodyFlag         = googleChatConnectionsUpdateBindingFlags.String("body", "REQUIRED", "")
+		googleChatConnectionsUpdateBindingSessionTokenFlag = googleChatConnectionsUpdateBindingFlags.String("session-token", "", "")
 
 		hooksServerNamesFlags = flag.NewFlagSet("hooks-server-names", flag.ContinueOnError)
 
@@ -5407,6 +5445,17 @@ func ParseEndpoint(
 	functionsFlags.Usage = functionsUsage
 	functionsGetSignedAssetURLFlags.Usage = functionsGetSignedAssetURLUsage
 
+	googleChatConnectionsFlags.Usage = googleChatConnectionsUsage
+	googleChatConnectionsListFlags.Usage = googleChatConnectionsListUsage
+	googleChatConnectionsBeginFlags.Usage = googleChatConnectionsBeginUsage
+	googleChatConnectionsDisconnectFlags.Usage = googleChatConnectionsDisconnectUsage
+	googleChatConnectionsListSpacesFlags.Usage = googleChatConnectionsListSpacesUsage
+	googleChatConnectionsBindFlags.Usage = googleChatConnectionsBindUsage
+	googleChatConnectionsListMembersFlags.Usage = googleChatConnectionsListMembersUsage
+	googleChatConnectionsSyncMembersFlags.Usage = googleChatConnectionsSyncMembersUsage
+	googleChatConnectionsMapMemberFlags.Usage = googleChatConnectionsMapMemberUsage
+	googleChatConnectionsUpdateBindingFlags.Usage = googleChatConnectionsUpdateBindingUsage
+
 	hooksServerNamesFlags.Usage = hooksServerNamesUsage
 	hooksServerNamesListFlags.Usage = hooksServerNamesListUsage
 	hooksServerNamesUpsertFlags.Usage = hooksServerNamesUpsertUsage
@@ -6274,6 +6323,8 @@ func ParseEndpoint(
 			svcf = mcpRegistriesFlags
 		case "functions":
 			svcf = functionsFlags
+		case "google-chat-connections":
+			svcf = googleChatConnectionsFlags
 		case "hooks-server-names":
 			svcf = hooksServerNamesFlags
 		case "hooks":
@@ -7237,6 +7288,37 @@ func ParseEndpoint(
 			switch epn {
 			case "get-signed-asset-url":
 				epf = functionsGetSignedAssetURLFlags
+
+			}
+
+		case "google-chat-connections":
+			switch epn {
+			case "list":
+				epf = googleChatConnectionsListFlags
+
+			case "begin":
+				epf = googleChatConnectionsBeginFlags
+
+			case "disconnect":
+				epf = googleChatConnectionsDisconnectFlags
+
+			case "list-spaces":
+				epf = googleChatConnectionsListSpacesFlags
+
+			case "bind":
+				epf = googleChatConnectionsBindFlags
+
+			case "list-members":
+				epf = googleChatConnectionsListMembersFlags
+
+			case "sync-members":
+				epf = googleChatConnectionsSyncMembersFlags
+
+			case "map-member":
+				epf = googleChatConnectionsMapMemberFlags
+
+			case "update-binding":
+				epf = googleChatConnectionsUpdateBindingFlags
 
 			}
 
@@ -10347,6 +10429,37 @@ func ParseEndpoint(
 			case "get-signed-asset-url":
 				endpoint = c.GetSignedAssetURL()
 				data, err = functionsc.BuildGetSignedAssetURLPayload(*functionsGetSignedAssetURLBodyFlag, *functionsGetSignedAssetURLFunctionTokenFlag)
+			}
+		case "google-chat-connections":
+			c := googlechatconnectionsc.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "list":
+				endpoint = c.List()
+				data, err = googlechatconnectionsc.BuildListPayload(*googleChatConnectionsListSessionTokenFlag)
+			case "begin":
+				endpoint = c.Begin()
+				data, err = googlechatconnectionsc.BuildBeginPayload(*googleChatConnectionsBeginSessionTokenFlag)
+			case "disconnect":
+				endpoint = c.Disconnect()
+				data, err = googlechatconnectionsc.BuildDisconnectPayload(*googleChatConnectionsDisconnectBodyFlag, *googleChatConnectionsDisconnectSessionTokenFlag)
+			case "list-spaces":
+				endpoint = c.ListSpaces()
+				data, err = googlechatconnectionsc.BuildListSpacesPayload(*googleChatConnectionsListSpacesConnectionIDFlag, *googleChatConnectionsListSpacesSessionTokenFlag)
+			case "bind":
+				endpoint = c.Bind()
+				data, err = googlechatconnectionsc.BuildBindPayload(*googleChatConnectionsBindBodyFlag, *googleChatConnectionsBindSessionTokenFlag)
+			case "list-members":
+				endpoint = c.ListMembers()
+				data, err = googlechatconnectionsc.BuildListMembersPayload(*googleChatConnectionsListMembersBindingIDFlag, *googleChatConnectionsListMembersSessionTokenFlag)
+			case "sync-members":
+				endpoint = c.SyncMembers()
+				data, err = googlechatconnectionsc.BuildSyncMembersPayload(*googleChatConnectionsSyncMembersBodyFlag, *googleChatConnectionsSyncMembersSessionTokenFlag)
+			case "map-member":
+				endpoint = c.MapMember()
+				data, err = googlechatconnectionsc.BuildMapMemberPayload(*googleChatConnectionsMapMemberBodyFlag, *googleChatConnectionsMapMemberSessionTokenFlag)
+			case "update-binding":
+				endpoint = c.UpdateBinding()
+				data, err = googlechatconnectionsc.BuildUpdateBindingPayload(*googleChatConnectionsUpdateBindingBodyFlag, *googleChatConnectionsUpdateBindingSessionTokenFlag)
 			}
 		case "hooks-server-names":
 			c := hooksservernamesc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -18338,6 +18451,201 @@ func functionsGetSignedAssetURLUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "functions get-signed-asset-url --body '{\n      \"asset_id\": \"abc123\"\n   }' --function-token \"abc123\"")
+}
+
+// googleChatConnectionsUsage displays the usage of the google-chat-connections
+// command and its subcommands.
+func googleChatConnectionsUsage() {
+	fmt.Fprintln(os.Stderr, `Connect a Google account, manage assistant spaces, and map participants to existing Speakeasy identities.`)
+	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] google-chat-connections COMMAND [flags]\n\n", os.Args[0])
+	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    list: List implements list.`)
+	fmt.Fprintln(os.Stderr, `    begin: Begin implements begin.`)
+	fmt.Fprintln(os.Stderr, `    disconnect: Disconnect implements disconnect.`)
+	fmt.Fprintln(os.Stderr, `    list-spaces: ListSpaces implements listSpaces.`)
+	fmt.Fprintln(os.Stderr, `    bind: Bind implements bind.`)
+	fmt.Fprintln(os.Stderr, `    list-members: ListMembers implements listMembers.`)
+	fmt.Fprintln(os.Stderr, `    sync-members: SyncMembers implements syncMembers.`)
+	fmt.Fprintln(os.Stderr, `    map-member: MapMember implements mapMember.`)
+	fmt.Fprintln(os.Stderr, `    update-binding: UpdateBinding implements updateBinding.`)
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Additional help:")
+	fmt.Fprintf(os.Stderr, "    %s google-chat-connections COMMAND --help\n", os.Args[0])
+}
+func googleChatConnectionsListUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] google-chat-connections list", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List implements list.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "google-chat-connections list --session-token \"abc123\"")
+}
+
+func googleChatConnectionsBeginUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] google-chat-connections begin", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Begin implements begin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "google-chat-connections begin --session-token \"abc123\"")
+}
+
+func googleChatConnectionsDisconnectUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] google-chat-connections disconnect", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Disconnect implements disconnect.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "google-chat-connections disconnect --body '{\n      \"generation\": \"abc123\",\n      \"id\": \"abc123\"\n   }' --session-token \"abc123\"")
+}
+
+func googleChatConnectionsListSpacesUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] google-chat-connections list-spaces", os.Args[0])
+	fmt.Fprint(os.Stderr, " -connection-id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `ListSpaces implements listSpaces.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -connection-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "google-chat-connections list-spaces --connection-id \"abc123\" --session-token \"abc123\"")
+}
+
+func googleChatConnectionsBindUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] google-chat-connections bind", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Bind implements bind.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "google-chat-connections bind --body '{\n      \"assistant_id\": \"abc123\",\n      \"connection_id\": \"abc123\",\n      \"display_name\": \"abc123\",\n      \"invite_emails\": [\n         \"abc123\"\n      ],\n      \"prefix\": \"aa\",\n      \"project_id\": \"abc123\",\n      \"request_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"space_name\": \"abc123\"\n   }' --session-token \"abc123\"")
+}
+
+func googleChatConnectionsListMembersUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] google-chat-connections list-members", os.Args[0])
+	fmt.Fprint(os.Stderr, " -binding-id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `ListMembers implements listMembers.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -binding-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "google-chat-connections list-members --binding-id \"abc123\" --session-token \"abc123\"")
+}
+
+func googleChatConnectionsSyncMembersUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] google-chat-connections sync-members", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `SyncMembers implements syncMembers.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "google-chat-connections sync-members --body '{\n      \"binding_id\": \"abc123\"\n   }' --session-token \"abc123\"")
+}
+
+func googleChatConnectionsMapMemberUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] google-chat-connections map-member", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `MapMember implements mapMember.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "google-chat-connections map-member --body '{\n      \"binding_id\": \"abc123\",\n      \"member_id\": \"abc123\",\n      \"revision\": 1,\n      \"user_id\": \"abc123\"\n   }' --session-token \"abc123\"")
+}
+
+func googleChatConnectionsUpdateBindingUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] google-chat-connections update-binding", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `UpdateBinding implements updateBinding.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "google-chat-connections update-binding --body '{\n      \"action\": \"resume\",\n      \"binding_id\": \"abc123\",\n      \"revision\": 1\n   }' --session-token \"abc123\"")
 }
 
 // hooksServerNamesUsage displays the usage of the hooks-server-names command

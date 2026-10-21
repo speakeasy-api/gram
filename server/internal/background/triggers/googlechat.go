@@ -31,13 +31,14 @@ const googleChatKeysURL = "https://www.googleapis.com/service_accounts/v1/jwk/" 
 var googleChatProjectNumberPattern = regexp.MustCompile(`^[0-9]+$`)
 
 type googlechatTriggerConfig struct {
-	FilterExpr string   `json:"filter,omitempty"`
-	SpaceNames []string `json:"space_names,omitempty"`
+	ManagedBindingID string   `json:"managed_binding_id,omitempty"`
+	FilterExpr       string   `json:"filter,omitempty"`
+	SpaceNames       []string `json:"space_names,omitempty"`
 
-	// WorkspaceEvents opts into authenticated Pub/Sub message delivery instead
+	// Delivery opts into authenticated Pub/Sub message delivery instead
 	// of native Chat interactions. Each mode uses distinct inbound authentication.
-	WorkspaceEvents *googlechatWorkspaceConfig `json:"workspace_events,omitempty"`
-	compiledFilter  cel.Program
+	Delivery       *googlechatWorkspaceConfig `json:"delivery,omitempty"`
+	compiledFilter cel.Program
 }
 
 func (c googlechatTriggerConfig) Filter(event any) (bool, error) {
@@ -48,25 +49,42 @@ func (c googlechatTriggerConfig) Filter(event any) (bool, error) {
 	if len(c.SpaceNames) > 0 && !slices.Contains(c.SpaceNames, e.SpaceName) {
 		return false, nil
 	}
-	if c.WorkspaceEvents != nil && (!slices.Contains(c.WorkspaceEvents.UserNames, e.UserName) ||
-		!strings.HasPrefix(strings.TrimSpace(e.Text), c.WorkspaceEvents.TextPrefix)) {
-		return false, nil
-	}
 	return evalWebhookFilter(c.compiledFilter, nil, event, e.EventType, []string{"MESSAGE"})
+}
+
+// RoutingPolicy follows hosted conversations after the first explicit command.
+func (c googlechatTriggerConfig) RoutingPolicy() RoutingPolicy {
+	if c.Delivery != nil {
+		return RoutingPolicyThreads
+	}
+	return RoutingPolicyMentions
+}
+
+func (c googlechatTriggerConfig) RoutingFacts(event any) (RoutingFacts, bool) {
+	e, ok := event.(googlechatTriggerEvent)
+	if !ok {
+		return RoutingFacts{Addressed: false, SelfAuthored: false, InThread: false, Cursor: "", Conversation: false, DedupKey: ""}, false
+	}
+	addressed := e.Addressed
+	if c.Delivery != nil {
+		addressed = strings.HasPrefix(strings.TrimSpace(e.Text), c.Delivery.TextPrefix)
+	}
+	return RoutingFacts{Addressed: addressed, SelfAuthored: false, InThread: false, Cursor: "", Conversation: true, DedupKey: ""}, true
 }
 
 // Both native interactions and explicitly configured Workspace Events normalize
 // to this shape. Addressed describes routing, never authorization.
 type googlechatTriggerEvent struct {
-	EventType   string `json:"event_type" cel:"event_type"`
-	MessageName string `json:"message_name" cel:"message_name"`
-	SpaceName   string `json:"space_name" cel:"space_name"`
-	SpaceType   string `json:"space_type" cel:"space_type"`
-	ThreadName  string `json:"thread_name" cel:"thread_name"`
-	UserName    string `json:"user_name" cel:"user_name"`
-	Text        string `json:"text" cel:"text"`
-	Timestamp   string `json:"timestamp" cel:"timestamp"`
-	Addressed   bool   `json:"addressed" cel:"addressed"`
+	ManagedBindingID string `json:"managed_binding_id,omitempty"`
+	EventType        string `json:"event_type" cel:"event_type"`
+	MessageName      string `json:"message_name" cel:"message_name"`
+	SpaceName        string `json:"space_name" cel:"space_name"`
+	SpaceType        string `json:"space_type" cel:"space_type"`
+	ThreadName       string `json:"thread_name" cel:"thread_name"`
+	UserName         string `json:"user_name" cel:"user_name"`
+	Text             string `json:"text" cel:"text"`
+	Timestamp        string `json:"timestamp" cel:"timestamp"`
+	Addressed        bool   `json:"addressed" cel:"addressed"`
 }
 
 type googlechatInteraction struct {
@@ -126,7 +144,7 @@ func googlechatIngest(body []byte, _ http.Header) (*WebhookIngest, error) {
 		Response:      response,
 		EventID:       m.Name,
 		CorrelationID: m.Thread.Name,
-		Event:         googlechatTriggerEvent{EventType: "MESSAGE", MessageName: m.Name, SpaceName: space.Name, SpaceType: spaceType, ThreadName: m.Thread.Name, UserName: m.Sender.Name, Text: m.Text, Timestamp: m.CreateTime, Addressed: true},
+		Event:         googlechatTriggerEvent{ManagedBindingID: "", EventType: "MESSAGE", MessageName: m.Name, SpaceName: space.Name, SpaceType: spaceType, ThreadName: m.Thread.Name, UserName: m.Sender.Name, Text: m.Text, Timestamp: m.CreateTime, Addressed: true},
 	}, nil
 }
 
@@ -185,8 +203,11 @@ func newGoogleChatDefinition() Definition {
 				return nil, fmt.Errorf("invalid Google Chat space name %q", space)
 			}
 		}
-		if cfg.WorkspaceEvents != nil {
-			if err := cfg.WorkspaceEvents.validate(cfg.SpaceNames); err != nil {
+		if cfg.Delivery != nil {
+			if cfg.ManagedBindingID == "" {
+				return nil, fmt.Errorf("shared-space delivery requires a managed binding")
+			}
+			if err := cfg.Delivery.validate(cfg.SpaceNames); err != nil {
 				return nil, err
 			}
 		}
@@ -196,7 +217,7 @@ func newGoogleChatDefinition() Definition {
 		}
 		return cfg, nil
 	})
-	return withGoogleChatWorkspaceEvents(definition)
+	return withGoogleChatDelivery(definition)
 }
 
 func scopeGoogleChatCorrelation(instanceID, threadName string) string {

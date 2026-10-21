@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/speakeasy-api/gram/server/internal/googlechatconnections"
 	"log/slog"
 	"net/url"
 	"strings"
@@ -353,6 +354,7 @@ func (r *PostgresReadinessRecorder) RecordReady(ctx context.Context, principal P
 }
 
 type PostgresReader struct {
+	googleChat                *googlechatconnections.Service
 	xaaReadiness              *xaaReadinessService
 	issuerGate                *internalsessionissuers.Gate
 	logger                    *slog.Logger
@@ -393,6 +395,7 @@ type PostgresReader struct {
 
 func NewPostgresReader(logger *slog.Logger, db *pgxpool.Pool) *PostgresReader {
 	return &PostgresReader{
+		googleChat:                nil,
 		logger:                    logger.With(attr.SlogComponent("platformmcp")),
 		db:                        db,
 		reader:                    readmodel.New(db),
@@ -1098,4 +1101,10 @@ func inventoryQueryResult(mcps []MCP, query string, limit int) []MCP {
 		}
 	}
 	return mcps[:min(len(mcps), limit)]
+}
+
+// WithGoogleChat enables managed Google Chat tools.
+func (r *PostgresReader) WithGoogleChat(service *googlechatconnections.Service) *PostgresReader {
+	r.googleChat = service
+	return r
 }

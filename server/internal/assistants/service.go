@@ -3209,13 +3209,21 @@ func (s *ServiceCore) processEventTurn(
 	if mcpAuthPrompt, ok := decodeMCPAuthTurn(ctx, s.logger, event); ok {
 		prompt = mcpAuthPrompt
 	} else {
-		adapter, err := getSourceAdapter(thread.SourceKind)
+		source := thread.SourceKind
+		if turnSourceKind(thread.SourceKind, event) == sourceKindGoogleChat {
+			source = sourceKindGoogleChat
+		}
+		adapter, err := getSourceAdapter(source)
 		if err != nil {
 			return nil, err
 		}
 		prompt, err = adapter.DecodeTurn(event)
 		if err != nil {
 			return nil, fmt.Errorf("decode assistant turn: %w", err)
+		}
+		if source == sourceKindGoogleChat && thread.SourceKind != sourceKindGoogleChat {
+			// A triage started elsewhere still replies to its current Chat thread.
+			prompt = adapter.OutputChannelGuidance() + "\n\n" + prompt
 		}
 		// Best-effort: files attached to the triggering message ride along as
 		// vision/text content. Failures degrade to the metadata-only turn.

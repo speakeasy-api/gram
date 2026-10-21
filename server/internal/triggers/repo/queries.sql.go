@@ -470,59 +470,6 @@ func (q *Queries) ListActiveTriggerInstancesByTarget(ctx context.Context, arg Li
 	return items, nil
 }
 
-const listAutoRenewGoogleChatTriggers = `-- name: ListAutoRenewGoogleChatTriggers :many
-SELECT id, organization_id, project_id, definition_slug, name, environment_id, target_kind, target_ref, target_display, config_json, status, created_at, updated_at, deleted_at, deleted FROM trigger_instances
-WHERE definition_slug = 'googlechat'
-  AND status = 'active'
-  AND deleted IS FALSE
-  AND environment_id IS NOT NULL
-  AND config_json @> '{"workspace_events":{"auto_renew":true}}'::jsonb
-  AND id > $1::uuid
-ORDER BY id
-LIMIT $2
-`
-
-type ListAutoRenewGoogleChatTriggersParams struct {
-	AfterID  uuid.UUID
-	PageSize int32
-}
-
-func (q *Queries) ListAutoRenewGoogleChatTriggers(ctx context.Context, arg ListAutoRenewGoogleChatTriggersParams) ([]TriggerInstance, error) {
-	rows, err := q.db.Query(ctx, listAutoRenewGoogleChatTriggers, arg.AfterID, arg.PageSize)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []TriggerInstance
-	for rows.Next() {
-		var i TriggerInstance
-		if err := rows.Scan(
-			&i.ID,
-			&i.OrganizationID,
-			&i.ProjectID,
-			&i.DefinitionSlug,
-			&i.Name,
-			&i.EnvironmentID,
-			&i.TargetKind,
-			&i.TargetRef,
-			&i.TargetDisplay,
-			&i.ConfigJson,
-			&i.Status,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.DeletedAt,
-			&i.Deleted,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const listTriggerEvents = `-- name: ListTriggerEvents :many
 SELECT
     e.id,

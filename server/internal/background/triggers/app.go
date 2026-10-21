@@ -154,10 +154,11 @@ type App struct {
 	siteURL        *url.URL
 	// platformHosts are the extra first-party hosts (keys of
 	// customdomains.ParsePlatformHosts) that also serve the dashboard.
-	platformHosts map[string]string
-	dispatchers   map[string]Dispatcher
-	audit         *audit.Logger
-	slackClient   *slackclient.SlackClient
+	platformHosts     map[string]string
+	dispatchers       map[string]Dispatcher
+	audit             *audit.Logger
+	slackClient       *slackclient.SlackClient
+	managedGoogleChat ManagedGoogleChat
 
 	slackBotIdentities cache.TypedCacheObject[slackBotIdentity]
 }
@@ -221,19 +222,20 @@ func NewApp(
 	}
 
 	return &App{
-		identities:     identities,
-		logger:         logger,
-		db:             db,
-		repo:           triggerrepo.New(db),
-		envLoader:      envLoader,
-		deliveryLogger: deliveryLogger,
-		temporalEnv:    temporalEnv,
-		serverURL:      serverURL,
-		siteURL:        siteURL,
-		platformHosts:  platformHosts,
-		dispatchers:    dispatcherMap,
-		audit:          auditLogger,
-		slackClient:    slackClient,
+		managedGoogleChat: nil,
+		identities:        identities,
+		logger:            logger,
+		db:                db,
+		repo:              triggerrepo.New(db),
+		envLoader:         envLoader,
+		deliveryLogger:    deliveryLogger,
+		temporalEnv:       temporalEnv,
+		serverURL:         serverURL,
+		siteURL:           siteURL,
+		platformHosts:     platformHosts,
+		dispatchers:       dispatcherMap,
+		audit:             auditLogger,
+		slackClient:       slackClient,
 
 		slackBotIdentities: cache.NewTypedObjectCache[slackBotIdentity](logger.With(attr.SlogCacheNamespace("slack_bot_identity")), cacheImpl, cache.SuffixNone),
 	}
@@ -811,6 +813,14 @@ func (a *App) ProcessWebhook(ctx context.Context, instanceID uuid.UUID, body []b
 		}
 	}
 
+	if cfg, ok := config.(googlechatTriggerConfig); ok && cfg.ManagedBindingID != "" {
+		if a.managedGoogleChat == nil {
+			return nil, fmt.Errorf("hosted Google Chat unavailable")
+		}
+		if err := a.managedGoogleChat.Validate(ctx, instance.ProjectID, cfg.ManagedBindingID); err != nil {
+			return nil, fmt.Errorf("validate Google binding: %w", err)
+		}
+	}
 	if err := definition.AuthenticateWebhook(ctx, body, headers, envMap, config); err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrAuthFailed, err)
 	}
@@ -849,6 +859,54 @@ func (a *App) ProcessWebhook(ctx context.Context, instanceID uuid.UUID, body []b
 // processWebhookEvent independently filters, deduplicates, and routes each post,
 // including posts from different threads in a single provider delivery.
 func (a *App) processWebhookEvent(ctx context.Context, instance triggerrepo.TriggerInstance, envMap map[string]string, body []byte, event *EventEnvelope) (*Task, error) {
+	if value, ok := event.Event.(googlechatTriggerEvent); ok && value.ManagedBindingID != "" {
+		// Check routing before identity notices so unrelated conversation stays quiet.
+		raw, err := configJSONToMap(instance.ConfigJson)
+		if err != nil {
+			return nil, err
+		}
+		definition, _ := GetDefinition(DefinitionSlugGoogleChat)
+		cfg, err := definition.DecodeConfig(raw)
+		if err != nil {
+			return nil, err
+		}
+		matches, err := cfg.Filter(value)
+		if err != nil {
+			return nil, fmt.Errorf("filter Google event: %w", err)
+		}
+		if !matches {
+			return nil, nil
+		}
+		preview := *event
+		preview.CorrelationID = scopeGoogleChatCorrelation(instance.ID.String(), event.CorrelationID)
+		// This read only evaluates routing. A rejected sender must not subscribe a thread.
+		routed, ok := cfg.(RoutedConfig)
+		if !ok {
+			return nil, fmt.Errorf("google Chat routing is unavailable")
+		}
+		facts, _ := routed.RoutingFacts(value)
+		var existing *triggerrepo.TriggerThreadRoute
+		row, routeErr := a.repo.GetTriggerThreadRoute(ctx, triggerrepo.GetTriggerThreadRouteParams{ProjectID: instance.ProjectID, TargetKind: instance.TargetKind, TargetRef: instance.TargetRef, CorrelationID: boundAssistantKey(preview.CorrelationID)})
+		if routeErr == nil {
+			existing = &row
+		} else if !errors.Is(routeErr, pgx.ErrNoRows) {
+			return nil, fmt.Errorf("read Google thread route: %w", routeErr)
+		}
+		if decideRoute(routeInput{policy: routed.RoutingPolicy(), facts: facts, route: existing}).action == routeSkip {
+			return nil, nil
+		}
+		gate, ok := a.managedGoogleChat.(GoogleChatParticipantGate)
+		if !ok {
+			return nil, fmt.Errorf("managed Google participant gate is unavailable")
+		}
+		allowed, err := gate.Admit(ctx, instance.ProjectID, value.ManagedBindingID, value.UserName, value.SpaceName, value.ThreadName, value.MessageName)
+		if err != nil {
+			return nil, fmt.Errorf("check Google participant: %w", err)
+		}
+		if !allowed {
+			return nil, nil
+		}
+	}
 	event.Event = a.withSlackBotIdentity(ctx, instance, envMap, event.Event)
 	event.TriggerInstanceID = instance.ID.String()
 	event.DefinitionSlug = instance.DefinitionSlug
@@ -1164,6 +1222,13 @@ func (a *App) validateInstance(ctx context.Context, projectID uuid.UUID, environ
 		return Definition{}, nil, fmt.Errorf("decode trigger config: %w", err)
 	}
 
+	if cfg, ok := config.(googlechatTriggerConfig); ok && cfg.ManagedBindingID != "" {
+		// Creation may precede activation. Only the hosted setup service creates this mode.
+		if a.managedGoogleChat == nil {
+			return Definition{}, nil, fmt.Errorf("hosted Google Chat is not configured")
+		}
+		return definition, config, nil
+	}
 	hasRequiredEnv := false
 	for _, requirement := range definition.EnvRequirements {
 		if requirement.Required {
@@ -1287,4 +1352,69 @@ type AssistantIdentityLifecycle interface {
 	BindRootTrigger(ctx context.Context, tx pgx.Tx, projectID, triggerID uuid.UUID) error
 	RetargetRootTrigger(ctx context.Context, tx pgx.Tx, projectID, triggerID uuid.UUID) error
 	TombstoneTrigger(ctx context.Context, tx pgx.Tx, projectID, triggerID uuid.UUID) error
+}
+
+// SetManagedGoogleChat installs hosted connection support before serving requests.
+func (a *App) SetManagedGoogleChat(runtime ManagedGoogleChat) { a.managedGoogleChat = runtime }
+
+// RenewManagedGoogleChat maintains hosted subscriptions in the shared renewal job.
+func (a *App) RenewManagedGoogleChat(ctx context.Context, now time.Time) error {
+	if a.managedGoogleChat == nil {
+		return fmt.Errorf("hosted Google Chat renewal is not configured")
+	}
+	if err := a.managedGoogleChat.Renew(ctx, now); err != nil {
+		return fmt.Errorf("renew managed Google Chat: %w", err)
+	}
+	return nil
+}
+
+// ManagedGoogleChat validates hosted bindings and maintains their provider leases.
+type ManagedGoogleChat interface {
+	Validate(context.Context, uuid.UUID, string) error
+	Renew(context.Context, time.Time) error
+}
+
+// GoogleChatParticipantGate checks membership and replies to unmapped senders.
+type GoogleChatParticipantGate interface {
+	Admit(context.Context, uuid.UUID, string, string, string, string, string) (bool, error)
+}
+
+// GoogleChatTokenSource resolves a hosted tool credential within the caller's chat.
+type GoogleChatTokenSource interface {
+	Token(context.Context, toolconfig.ToolCallEnv, string, string) (string, bool, error)
+}
+
+// ResolveGoogleChatToken shares hosted credentials with the MCP execution path.
+func (a *App) ResolveGoogleChatToken(ctx context.Context, env toolconfig.ToolCallEnv, scope, resource string) (string, bool, error) {
+	if a == nil {
+		return "", false, nil
+	}
+	source, ok := a.managedGoogleChat.(GoogleChatTokenSource)
+	if !ok {
+		return "", false, nil
+	}
+	token, managed, err := source.Token(ctx, env, scope, resource)
+	if err != nil {
+		return "", managed, fmt.Errorf("resolve hosted Google token: %w", err)
+	}
+	return token, managed, nil
+}
+
+// GoogleChatReplyRecorder persists routing after a successful assistant post.
+type GoogleChatReplyRecorder interface {
+	RecordReply(context.Context, toolconfig.ToolCallEnv, []byte) error
+}
+
+func (a *App) RecordGoogleChatReply(ctx context.Context, env toolconfig.ToolCallEnv, response []byte) error {
+	if a == nil {
+		return nil
+	}
+	recorder, ok := a.managedGoogleChat.(GoogleChatReplyRecorder)
+	if !ok {
+		return nil
+	}
+	if err := recorder.RecordReply(ctx, env, response); err != nil {
+		return fmt.Errorf("record Google thread route: %w", err)
+	}
+	return nil
 }

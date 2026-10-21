@@ -30,11 +30,20 @@ const (
 	maxResponseBytes     = 4 << 20
 )
 
-type client struct{ http *guardian.HTTPClient }
+// TokenResolver resolves hosted credentials only for an authorized chat and resource.
+type TokenResolver func(context.Context, toolconfig.ToolCallEnv, string, string) (string, bool, error)
+type client struct {
+	http     *guardian.HTTPClient
+	resolver TokenResolver
+}
 
-func newClient(httpClient *guardian.HTTPClient) *client {
+func newClient(httpClient *guardian.HTTPClient, resolvers ...TokenResolver) *client {
+	var resolver TokenResolver
+	if len(resolvers) > 0 {
+		resolver = resolvers[0]
+	}
 	if httpClient == nil {
-		return &client{http: nil}
+		return &client{http: nil, resolver: resolver}
 	}
 	// Never forward signed assertions or bearer tokens through redirects, even
 	// when the caller's shared client permits them.
@@ -43,32 +52,44 @@ func newClient(httpClient *guardian.HTTPClient) *client {
 	if safe.Timeout == 0 {
 		safe.Timeout = 30 * time.Second
 	}
-	return &client{http: &safe}
+	return &client{http: &safe, resolver: resolver}
 }
 
 func (c *client) callAPI(ctx context.Context, env toolconfig.ToolCallEnv, scope, api, method, resource string, query url.Values, body any) ([]byte, error) {
 	if c.http == nil {
 		return nil, errors.New("google chat HTTP client not configured")
 	}
-	raw := env.Merged().Get(ServiceAccountEnvVar)
-	if raw == "" {
-		return nil, fmt.Errorf("google chat requires %s", ServiceAccountEnvVar)
+	var accessToken string
+	var err error
+	var managed bool
+	if c.resolver != nil {
+		accessToken, managed, err = c.resolver(ctx, env, scope, resource)
+		if err != nil {
+			return nil, err
+		}
 	}
-	var credentials struct {
-		Type       string `json:"type"`
-		Email      string `json:"client_email"`
-		PrivateKey string `json:"private_key"`
-	}
-	if len(raw) > 64<<10 || json.Unmarshal([]byte(raw), &credentials) != nil || credentials.Type != "service_account" || !strings.HasSuffix(credentials.Email, ".iam.gserviceaccount.com") || credentials.PrivateKey == "" {
-		return nil, errors.New("invalid Google Chat service account JSON")
-	}
-	// Construct the configuration ourselves: token_uri and other credential-file
-	// endpoints must never control where private signed assertions are sent.
-	config := jwt.Config{Email: credentials.Email, PrivateKey: []byte(credentials.PrivateKey), Scopes: []string{scope}, TokenURL: tokenURL, PrivateKeyID: "", Subject: "", Expires: 0, Audience: "", PrivateClaims: nil, UseIDToken: false}
-	ctx = context.WithValue(ctx, oauth2.HTTPClient, c.http)
-	token, err := config.TokenSource(ctx).Token()
-	if err != nil {
-		return nil, errors.New("google chat authentication failed; verify the service account and required app scope approval")
+	if !managed {
+		raw := env.Merged().Get(ServiceAccountEnvVar)
+		if raw == "" {
+			return nil, fmt.Errorf("google chat requires %s", ServiceAccountEnvVar)
+		}
+		var credentials struct {
+			Type       string `json:"type"`
+			Email      string `json:"client_email"`
+			PrivateKey string `json:"private_key"`
+		}
+		if len(raw) > 64<<10 || json.Unmarshal([]byte(raw), &credentials) != nil || credentials.Type != "service_account" || !strings.HasSuffix(credentials.Email, ".iam.gserviceaccount.com") || credentials.PrivateKey == "" {
+			return nil, errors.New("invalid Google Chat service account JSON")
+		}
+		// Construct the configuration ourselves: token_uri and other credential-file
+		// endpoints must never control where private signed assertions are sent.
+		config := jwt.Config{Email: credentials.Email, PrivateKey: []byte(credentials.PrivateKey), Scopes: []string{scope}, TokenURL: tokenURL, PrivateKeyID: "", Subject: "", Expires: 0, Audience: "", PrivateClaims: nil, UseIDToken: false}
+		ctx = context.WithValue(ctx, oauth2.HTTPClient, c.http)
+		token, err := config.TokenSource(ctx).Token()
+		if err != nil {
+			return nil, errors.New("google chat authentication failed; verify the service account and required app scope approval")
+		}
+		accessToken = token.AccessToken
 	}
 	var payload []byte
 	if body != nil {
@@ -85,7 +106,7 @@ func (c *client) callAPI(ctx context.Context, env toolconfig.ToolCallEnv, scope,
 	if err != nil {
 		return nil, errors.New("cannot build Google Chat request")
 	}
-	req.Header.Set("Authorization", "Bearer "+token.AccessToken)
+	req.Header.Set("Authorization", "Bearer "+accessToken)
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}

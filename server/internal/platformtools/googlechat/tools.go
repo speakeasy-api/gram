@@ -55,37 +55,48 @@ type listMessagesInput struct {
 type chatTool struct {
 	descriptor core.ToolDescriptor
 	client     *client
+	recorder   ReplyRecorder
+}
+
+// ReplyRecorder binds a posted Google thread to the calling assistant conversation.
+type ReplyRecorder func(context.Context, toolconfig.ToolCallEnv, []byte) error
+
+func WithReplyRecorder(tool core.PlatformToolExecutor, recorder ReplyRecorder) core.PlatformToolExecutor {
+	if chat, ok := tool.(*chatTool); ok {
+		chat.recorder = recorder
+	}
+	return tool
 }
 
 func (t *chatTool) Descriptor() core.ToolDescriptor { return t.descriptor }
-func newTool(h *guardian.HTTPClient, operation, description string, schema []byte, readOnly, destructive bool) core.PlatformToolExecutor {
+func newTool(h *guardian.HTTPClient, operation, description string, schema []byte, readOnly, destructive bool, resolvers ...TokenResolver) core.PlatformToolExecutor {
 	idempotent, openWorld := true, true
-	return &chatTool{client: newClient(h), descriptor: core.ToolDescriptor{
+	return &chatTool{recorder: nil, client: newClient(h, resolvers...), descriptor: core.ToolDescriptor{
 		SourceSlug: "googlechat", HandlerName: operation, Name: "platform_googlechat_" + operation,
-		Description: description + " Uses the customer-managed Chat app service account in GOOGLE_CHAT_SERVICE_ACCOUNT_JSON.", InputSchema: schema, Managed: true, Variables: nil, OwnerKind: nil, OwnerID: nil,
+		Description: description + " Uses the connected Chat app; standalone native integrations use GOOGLE_CHAT_SERVICE_ACCOUNT_JSON.", InputSchema: schema, Managed: true, Variables: nil, OwnerKind: nil, OwnerID: nil,
 		Annotations: &types.ToolAnnotations{Title: nil, ReadOnlyHint: &readOnly, DestructiveHint: &destructive, IdempotentHint: &idempotent, OpenWorldHint: &openWorld},
 	}}
 }
-func NewSendMessageTool(h *guardian.HTTPClient) core.PlatformToolExecutor {
-	return newTool(h, "send_message", "Send a new Google Chat message with chat.bot app auth. Supply a stable request_id for retry safety.", core.BuildInputSchema[sendInput](core.WithPropertyFormat("request_id", "uuid")), false, false)
+func NewSendMessageTool(h *guardian.HTTPClient, resolvers ...TokenResolver) core.PlatformToolExecutor {
+	return newTool(h, "send_message", "Send a new Google Chat message with chat.bot app auth. Supply a stable request_id for retry safety.", core.BuildInputSchema[sendInput](core.WithPropertyFormat("request_id", "uuid")), false, false, resolvers...)
 }
-func NewReplyToThreadTool(h *guardian.HTTPClient) core.PlatformToolExecutor {
-	return newTool(h, "reply_to_thread", "Reply to an existing Google Chat thread in a named space with chat.bot app auth. For direct messages and group chats use send_message instead. Never falls back to creating a new thread. Supply a stable request_id.", core.BuildInputSchema[replyInput](core.WithPropertyFormat("request_id", "uuid")), false, false)
+func NewReplyToThreadTool(h *guardian.HTTPClient, resolvers ...TokenResolver) core.PlatformToolExecutor {
+	return newTool(h, "reply_to_thread", "Reply to an existing Google Chat thread in a named space with chat.bot app auth. For direct messages and group chats use send_message instead. Never falls back to creating a new thread. Supply a stable request_id.", core.BuildInputSchema[replyInput](core.WithPropertyFormat("request_id", "uuid")), false, false, resolvers...)
 }
-func NewUpdateMessageTool(h *guardian.HTTPClient) core.PlatformToolExecutor {
-	return newTool(h, "update_message", "Replace the text of a message created by this Chat app using chat.bot. Cannot edit human or other apps' messages; Google enforces ownership. Does not create missing messages.", core.BuildInputSchema[updateInput](), false, true)
+func NewUpdateMessageTool(h *guardian.HTTPClient, resolvers ...TokenResolver) core.PlatformToolExecutor {
+	return newTool(h, "update_message", "Replace the text of a message created by this Chat app using chat.bot. Cannot edit human or other apps' messages; Google enforces ownership. Does not create missing messages.", core.BuildInputSchema[updateInput](), false, true, resolvers...)
 }
-func NewDeleteMessageTool(h *guardian.HTTPClient) core.PlatformToolExecutor {
-	return newTool(h, "delete_message", "Delete a message created by this Chat app using chat.bot. Cannot delete human or other apps' messages. Does not force-delete threaded replies (user-auth only); Google enforces ownership and deletion restrictions. A repeated delete can return 404.", core.BuildInputSchema[messageInput](), false, true)
+func NewDeleteMessageTool(h *guardian.HTTPClient, resolvers ...TokenResolver) core.PlatformToolExecutor {
+	return newTool(h, "delete_message", "Delete a message created by this Chat app using chat.bot. Cannot delete human or other apps' messages. Does not force-delete threaded replies (user-auth only); Google enforces ownership and deletion restrictions. A repeated delete can return 404.", core.BuildInputSchema[messageInput](), false, true, resolvers...)
 }
-func NewListSpacesTool(h *guardian.HTTPClient) core.PlatformToolExecutor {
-	return newTool(h, "list_spaces", "List one page of spaces the Chat app belongs to using chat.bot. Follow nextPageToken for more results.", core.BuildInputSchema[paginationInput](core.WithPropertyNumberRange("page_size", 1, 100)), true, false)
+func NewListSpacesTool(h *guardian.HTTPClient, resolvers ...TokenResolver) core.PlatformToolExecutor {
+	return newTool(h, "list_spaces", "List one page of spaces the Chat app belongs to using chat.bot. Follow nextPageToken for more results.", core.BuildInputSchema[paginationInput](core.WithPropertyNumberRange("page_size", 1, 100)), true, false, resolvers...)
 }
-func NewGetMessageTool(h *guardian.HTTPClient) core.PlatformToolExecutor {
-	return newTool(h, "get_message", "Read a public Google Chat message, including human messages, using chat.app.messages.readonly. Requires one-time Workspace administrator approval for that app scope. Does not expose private messages.", core.BuildInputSchema[messageInput](), true, false)
+func NewGetMessageTool(h *guardian.HTTPClient, resolvers ...TokenResolver) core.PlatformToolExecutor {
+	return newTool(h, "get_message", "Read a public Google Chat message, including human messages, using chat.app.messages.readonly. Requires one-time Workspace administrator approval for that app scope. Does not expose private messages.", core.BuildInputSchema[messageInput](), true, false, resolvers...)
 }
-func NewListMessagesTool(h *guardian.HTTPClient) core.PlatformToolExecutor {
-	return newTool(h, "list_messages", "Read one page of public Google Chat messages, including human messages, optionally within one thread. Uses chat.app.messages.readonly with one-time Workspace administrator approval. Private and deleted messages are excluded. Follow nextPageToken for more results.", core.BuildInputSchema[listMessagesInput](core.WithPropertyNumberRange("page_size", 1, 100)), true, false)
+func NewListMessagesTool(h *guardian.HTTPClient, resolvers ...TokenResolver) core.PlatformToolExecutor {
+	return newTool(h, "list_messages", "Read one page of public Google Chat messages, including human messages, optionally within one thread. Uses chat.app.messages.readonly with one-time Workspace administrator approval. Private and deleted messages are excluded. Follow nextPageToken for more results.", core.BuildInputSchema[listMessagesInput](core.WithPropertyNumberRange("page_size", 1, 100)), true, false, resolvers...)
 }
 
 func decode(payload io.Reader, target any) error {
@@ -215,6 +226,11 @@ func (t *chatTool) Call(ctx context.Context, env toolconfig.ToolCallEnv, payload
 	data, err := t.client.callAPI(ctx, env, scope, apiURL, method, resource, q, body)
 	if err != nil {
 		return err
+	}
+	if t.recorder != nil && (operation == "send_message" || operation == "reply_to_thread") {
+		if err := t.recorder(ctx, env, data); err != nil {
+			return fmt.Errorf("record posted Google thread: %w", err)
+		}
 	}
 	if _, err := wr.Write(data); err != nil {
 		return fmt.Errorf("write Google Chat response: %w", err)
