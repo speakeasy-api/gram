@@ -1828,6 +1828,7 @@ func (q *Queries) GetSharedUserSessionIssuerByID(ctx context.Context, id uuid.UU
 
 const getUpstreamClientSelection = `-- name: GetUpstreamClientSelection :one
 SELECT sel.remote_session_client_id,
+       chosen.remote_session_issuer_id AS remote_session_issuer_id,
        sel.no_auth,
        sel.source,
        (
@@ -1854,6 +1855,8 @@ SELECT sel.remote_session_client_id,
          END
        )::boolean AS usable
 FROM upstream_client_selections AS sel
+LEFT JOIN remote_session_clients AS chosen
+  ON chosen.id = sel.remote_session_client_id
 WHERE sel.credential_kind = $2::text
   AND sel.credential_id = $3::uuid
   AND sel.mcp_server_id = $4::uuid
@@ -1871,6 +1874,7 @@ type GetUpstreamClientSelectionParams struct {
 
 type GetUpstreamClientSelectionRow struct {
 	RemoteSessionClientID uuid.NullUUID
+	RemoteSessionIssuerID uuid.NullUUID
 	NoAuth                bool
 	Source                string
 	Usable                bool
@@ -1882,6 +1886,8 @@ type GetUpstreamClientSelectionRow struct {
 // holds only while the server has no associated client.
 // An unusable choice is reported as such rather than replaced, so the caller
 // fails closed instead of switching clients.
+// ListUpstreamClientSelections repeats the usable expression; the two must
+// stay identical.
 func (q *Queries) GetUpstreamClientSelection(ctx context.Context, arg GetUpstreamClientSelectionParams) (GetUpstreamClientSelectionRow, error) {
 	row := q.db.QueryRow(ctx, getUpstreamClientSelection,
 		arg.UserSessionIssuerID,
@@ -1893,6 +1899,7 @@ func (q *Queries) GetUpstreamClientSelection(ctx context.Context, arg GetUpstrea
 	var i GetUpstreamClientSelectionRow
 	err := row.Scan(
 		&i.RemoteSessionClientID,
+		&i.RemoteSessionIssuerID,
 		&i.NoAuth,
 		&i.Source,
 		&i.Usable,
@@ -2351,7 +2358,8 @@ func (q *Queries) GetUserSessionIssuerCimdClientByID(ctx context.Context, arg Ge
 
 const getUserSessionPolicyByJTI = `-- name: GetUserSessionPolicyByJTI :one
 SELECT tool_selection, expires_at,
-       COALESCE(refresh_token_hash ~ '^[A-Za-z0-9_-]{43}$', false)::boolean AS refreshable
+       COALESCE(refresh_token_hash ~ '^[A-Za-z0-9_-]{43}$', false)::boolean AS refreshable,
+       COALESCE(credential_id, id)::uuid AS credential_id
 FROM user_sessions
 WHERE user_session_issuer_id = $1
   AND jti = $2
@@ -2367,6 +2375,7 @@ type GetUserSessionPolicyByJTIRow struct {
 	ToolSelection []byte
 	ExpiresAt     pgtype.Timestamptz
 	Refreshable   bool
+	CredentialID  uuid.UUID
 }
 
 // Serve-path lookup for immutable session policy, keyed the same way
@@ -2380,7 +2389,12 @@ type GetUserSessionPolicyByJTIRow struct {
 func (q *Queries) GetUserSessionPolicyByJTI(ctx context.Context, arg GetUserSessionPolicyByJTIParams) (GetUserSessionPolicyByJTIRow, error) {
 	row := q.db.QueryRow(ctx, getUserSessionPolicyByJTI, arg.UserSessionIssuerID, arg.Jti)
 	var i GetUserSessionPolicyByJTIRow
-	err := row.Scan(&i.ToolSelection, &i.ExpiresAt, &i.Refreshable)
+	err := row.Scan(
+		&i.ToolSelection,
+		&i.ExpiresAt,
+		&i.Refreshable,
+		&i.CredentialID,
+	)
 	return i, err
 }
 
@@ -3185,6 +3199,99 @@ func (q *Queries) ListSharedUserSessionIssuersInOrganization(ctx context.Context
 			&i.UserSessionIssuer.Deleted,
 			&i.ProjectName,
 			&i.ProjectSlug,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listUpstreamClientSelections = `-- name: ListUpstreamClientSelections :many
+SELECT sel.mcp_server_id,
+       sel.remote_session_client_id,
+       chosen.remote_session_issuer_id AS remote_session_issuer_id,
+       sel.no_auth,
+       sel.source,
+       (
+         CASE
+           WHEN sel.no_auth THEN NOT EXISTS (
+             SELECT 1
+             FROM mcp_server_remote_session_clients AS a
+             WHERE a.mcp_server_id = sel.mcp_server_id
+               AND a.deleted IS FALSE
+           )
+           ELSE EXISTS (
+             SELECT 1
+             FROM mcp_server_remote_session_clients AS a
+             JOIN remote_session_clients AS c
+               ON c.id = a.remote_session_client_id
+              AND c.deleted IS FALSE
+             JOIN remote_session_client_user_session_issuers AS link
+               ON link.remote_session_client_id = a.remote_session_client_id
+              AND link.user_session_issuer_id = $1::uuid
+             WHERE a.mcp_server_id = sel.mcp_server_id
+               AND a.remote_session_client_id = sel.remote_session_client_id
+               AND a.deleted IS FALSE
+           )
+         END
+       )::boolean AS usable
+FROM upstream_client_selections AS sel
+LEFT JOIN remote_session_clients AS chosen
+  ON chosen.id = sel.remote_session_client_id
+WHERE sel.credential_kind = $2::text
+  AND sel.credential_id = $3::uuid
+  AND sel.mcp_server_id = ANY($4::uuid[])
+  AND sel.organization_id = $5::text
+  AND sel.deleted IS FALSE
+`
+
+type ListUpstreamClientSelectionsParams struct {
+	UserSessionIssuerID uuid.UUID
+	CredentialKind      string
+	CredentialID        uuid.UUID
+	McpServerIds        []uuid.UUID
+	OrganizationID      string
+}
+
+type ListUpstreamClientSelectionsRow struct {
+	McpServerID           uuid.UUID
+	RemoteSessionClientID uuid.NullUUID
+	RemoteSessionIssuerID uuid.NullUUID
+	NoAuth                bool
+	Source                string
+	Usable                bool
+}
+
+// GetUpstreamClientSelection for several MCP servers at once, as a gateway
+// reads its members' choices. Servers without a choice have no row.
+// The usable expression repeats GetUpstreamClientSelection's; the two must
+// stay identical, since both callers fail closed on it.
+func (q *Queries) ListUpstreamClientSelections(ctx context.Context, arg ListUpstreamClientSelectionsParams) ([]ListUpstreamClientSelectionsRow, error) {
+	rows, err := q.db.Query(ctx, listUpstreamClientSelections,
+		arg.UserSessionIssuerID,
+		arg.CredentialKind,
+		arg.CredentialID,
+		arg.McpServerIds,
+		arg.OrganizationID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListUpstreamClientSelectionsRow
+	for rows.Next() {
+		var i ListUpstreamClientSelectionsRow
+		if err := rows.Scan(
+			&i.McpServerID,
+			&i.RemoteSessionClientID,
+			&i.RemoteSessionIssuerID,
+			&i.NoAuth,
+			&i.Source,
+			&i.Usable,
 		); err != nil {
 			return nil, err
 		}

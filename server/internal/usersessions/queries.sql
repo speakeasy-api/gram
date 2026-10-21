@@ -1672,7 +1672,8 @@ RETURNING *;
 -- Access-only sessions instead store NULL or a colon-delimited source marker.
 -- Only the derived capability leaves SQL.
 SELECT tool_selection, expires_at,
-       COALESCE(refresh_token_hash ~ '^[A-Za-z0-9_-]{43}$', false)::boolean AS refreshable
+       COALESCE(refresh_token_hash ~ '^[A-Za-z0-9_-]{43}$', false)::boolean AS refreshable,
+       COALESCE(credential_id, id)::uuid AS credential_id
 FROM user_sessions
 WHERE user_session_issuer_id = @user_session_issuer_id
   AND jti = @jti
@@ -2524,7 +2525,10 @@ WHERE upstream_client_selections.no_auth
 -- holds only while the server has no associated client.
 -- An unusable choice is reported as such rather than replaced, so the caller
 -- fails closed instead of switching clients.
+-- ListUpstreamClientSelections repeats the usable expression; the two must
+-- stay identical.
 SELECT sel.remote_session_client_id,
+       chosen.remote_session_issuer_id AS remote_session_issuer_id,
        sel.no_auth,
        sel.source,
        (
@@ -2551,9 +2555,53 @@ SELECT sel.remote_session_client_id,
          END
        )::boolean AS usable
 FROM upstream_client_selections AS sel
+LEFT JOIN remote_session_clients AS chosen
+  ON chosen.id = sel.remote_session_client_id
 WHERE sel.credential_kind = @credential_kind::text
   AND sel.credential_id = @credential_id::uuid
   AND sel.mcp_server_id = @mcp_server_id::uuid
+  AND sel.organization_id = @organization_id::text
+  AND sel.deleted IS FALSE;
+
+-- name: ListUpstreamClientSelections :many
+-- GetUpstreamClientSelection for several MCP servers at once, as a gateway
+-- reads its members' choices. Servers without a choice have no row.
+-- The usable expression repeats GetUpstreamClientSelection's; the two must
+-- stay identical, since both callers fail closed on it.
+SELECT sel.mcp_server_id,
+       sel.remote_session_client_id,
+       chosen.remote_session_issuer_id AS remote_session_issuer_id,
+       sel.no_auth,
+       sel.source,
+       (
+         CASE
+           WHEN sel.no_auth THEN NOT EXISTS (
+             SELECT 1
+             FROM mcp_server_remote_session_clients AS a
+             WHERE a.mcp_server_id = sel.mcp_server_id
+               AND a.deleted IS FALSE
+           )
+           ELSE EXISTS (
+             SELECT 1
+             FROM mcp_server_remote_session_clients AS a
+             JOIN remote_session_clients AS c
+               ON c.id = a.remote_session_client_id
+              AND c.deleted IS FALSE
+             JOIN remote_session_client_user_session_issuers AS link
+               ON link.remote_session_client_id = a.remote_session_client_id
+              AND link.user_session_issuer_id = @user_session_issuer_id::uuid
+             WHERE a.mcp_server_id = sel.mcp_server_id
+               AND a.remote_session_client_id = sel.remote_session_client_id
+               AND a.deleted IS FALSE
+           )
+         END
+       )::boolean AS usable
+FROM upstream_client_selections AS sel
+LEFT JOIN remote_session_clients AS chosen
+  ON chosen.id = sel.remote_session_client_id
+WHERE sel.credential_kind = @credential_kind::text
+  AND sel.credential_id = @credential_id::uuid
+  AND sel.mcp_server_id = ANY(@mcp_server_ids::uuid[])
   AND sel.organization_id = @organization_id::text
   AND sel.deleted IS FALSE;
 

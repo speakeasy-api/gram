@@ -2151,6 +2151,11 @@ VALUES (
     (SELECT c.attachment_scope FROM remote_session_clients AS c WHERE c.id = @remote_session_client_id)
 );
 
+-- name: ClearMCPServerRemoteSessionClientsFixture :exec
+-- Test-only fixture: removes every upstream client association of one MCP
+-- server, so a table-driven test can set each case's associations afresh.
+DELETE FROM mcp_server_remote_session_clients WHERE mcp_server_id = @mcp_server_id;
+
 -- name: ListUserSessionCredentialsForSubjectFixture :many
 -- Test-only fixture: every session row of one subject, oldest first, with the
 -- credential it belongs to, so a test can follow refresh rotation.

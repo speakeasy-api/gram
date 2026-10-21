@@ -35,6 +35,12 @@ type Request struct {
 	// could deliver a sibling upstream's token into the tunnel.
 	RemoteSessionIssuerID uuid.NullUUID
 
+	// RemoteSessionClientID, when valid, restricts selection to a binding for
+	// that client: the client the caller's credential chose for the server.
+	// A binding for any other client, even at the same resource, never serves
+	// the caller.
+	RemoteSessionClientID uuid.NullUUID
+
 	// consentSignInID is the consent page's sign-in, set only by CheckConsent.
 	// It puts the request in consent mode: the Speakeasy provider vouches for
 	// this sign-in instead of a grant, and its credential is stored without
@@ -79,6 +85,7 @@ func NewUpstreamRequest(organizationID string, projectID, userSessionIssuerID uu
 		UserSessionJTI:        "",
 		UpstreamResource:      upstreamResource,
 		RemoteSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		RemoteSessionClientID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		consentSignInID:       uuid.Nil,
 	}
 	if tunneled {

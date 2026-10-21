@@ -430,7 +430,7 @@ func TestOrganizationGatewayRoutes_ShadowedEndpointKeepsItsRoutes(t *testing.T) 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	router := goahttp.NewMuxer()
-	mcp.Attach(router, ti.service, nil)
+	mcp.Attach(router, ti.service.Service, nil)
 
 	w := postRegistration(t, router, "/mcp/gateway/register")
 	require.Equal(t, http.StatusNotFound, w.Code, "without such an endpoint the path names an organization")
@@ -586,7 +586,7 @@ func TestServeOrganizationGateway_TurnedOffIsNotFound(t *testing.T) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	router := goahttp.NewMuxer()
-	mcp.Attach(router, ti.service, nil)
+	mcp.Attach(router, ti.service.Service, nil)
 	metadataPath := "/.well-known/oauth-protected-resource/mcp/gateway/" + fx.organizationSlug
 	getMetadata := func() int {
 		w := httptest.NewRecorder()

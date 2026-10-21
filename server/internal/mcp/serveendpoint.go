@@ -438,17 +438,6 @@ func grantRoutesToUpstream(resource, upstream string, tunneled bool) bool {
 	return want != "" && strings.TrimRight(resource, "/") == want
 }
 
-// tunneledBackendIssuer yields the identity a resourceless tunneled backend's
-// subject grants route by: the server's own derived remote_session_issuer,
-// and only for tunneled backends — a remote backend routes subject grants
-// strictly by recorded resource.
-func tunneledBackendIssuer(mcpServer *mcpserversrepo.McpServer) uuid.NullUUID {
-	if !mcpServer.TunneledMcpServerID.Valid {
-		return uuid.NullUUID{UUID: uuid.Nil, Valid: false}
-	}
-	return mcpServer.RemoteSessionIssuerID
-}
-
 // upstreamRoutingError is a fail-closed routing outcome: the endpoint's
 // credentials are ambiguous for this backend, which is a configuration state
 // an operator must resolve rather than a runtime fault. Call sites map it to a
