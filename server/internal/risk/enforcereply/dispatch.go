@@ -112,11 +112,10 @@ type DispatchRequest struct {
 	// ProjectID identifies the project whose policy configuration applies.
 	ProjectID string
 
-	// Content is the raw text scanned by each lane.
+	// Content is raw scanner input and consumes the shared publish budget first.
 	Content string
 
-	// Body is the message text the LLM lane renders into its prompt. It is
-	// truncated to MaxContentBytes independently of Content.
+	// Body is judge prompt input and consumes the shared publish budget second.
 	Body string
 
 	// ToolName is the tool the LLM lane attributes the message to. When empty,
@@ -127,7 +126,7 @@ type DispatchRequest struct {
 	// lane falls back to the origin's MessageType.
 	MessageType string
 
-	// ToolCalls are the tool invocations the LLM lane evaluates alongside Body.
+	// ToolCalls consume the remaining shared publish budget in order.
 	ToolCalls []ToolCall
 
 	// PresidioEntities is an optional scanner superset; empty requests all entities.
