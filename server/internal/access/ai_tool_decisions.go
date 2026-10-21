@@ -4,6 +4,8 @@ import (
 	"context"
 	"strings"
 
+	"github.com/jackc/pgx/v5/pgtype"
+
 	gen "github.com/speakeasy-api/gram/server/gen/access"
 	"github.com/speakeasy-api/gram/server/internal/agent/aitargets"
 	agentrepo "github.com/speakeasy-api/gram/server/internal/agent/repo"
@@ -80,11 +82,29 @@ func (s *Service) SetAIToolDecision(ctx context.Context, payload *gen.SetAIToolD
 		return nil, oops.E(oops.CodeBadRequest, nil, "%q publishes no client ID metadata document, so Speakeasy cannot recognize it at the gateway and cannot enforce a decision about it", targetID)
 	}
 
+	productID := pgtype.Text{String: "", Valid: false}
+	if entry.Source == aitargets.SourceDefault {
+		state, err := queries.GetAIScanTargetCatalogState(ctx, agentrepo.GetAIScanTargetCatalogStateParams{
+			OrganizationID: organizationID,
+			ID:             targetID,
+		})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "read AI target catalog state").LogError(ctx, s.logger)
+		}
+		if !state.HasDefinition {
+			if !state.ProductExists {
+				return nil, oops.E(oops.CodeUnavailable, nil, "AI client catalog is initializing; retry this decision shortly").LogWarn(ctx, s.logger)
+			}
+			productID = conv.ToPGText(targetID)
+		}
+	}
+
 	before := entry.Decision
 
 	actor := urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID)
 	saved, err := queries.SetAIScanTargetStatus(ctx, agentrepo.SetAIScanTargetStatusParams{
 		OrganizationID: organizationID,
+		AiProductID:    productID,
 		ID:             targetID,
 		Status:         string(decision),
 		Rationale:      conv.ToPGTextEmpty(rationale),

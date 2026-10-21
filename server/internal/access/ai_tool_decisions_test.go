@@ -1,13 +1,19 @@
 package access
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+	goahttp "goa.design/goa/v3/http"
 
 	gen "github.com/speakeasy-api/gram/server/gen/access"
+	accessserver "github.com/speakeasy-api/gram/server/gen/http/access/server"
+	agentrepo "github.com/speakeasy-api/gram/server/internal/agent/repo"
+	"github.com/speakeasy-api/gram/server/internal/aivendors/catalogseed"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -20,6 +26,7 @@ func TestService_SetAIToolDecision_RecordsDecisionAndSurfacesItOnTheInventory(t 
 	t.Parallel()
 
 	ctx, ti := newTestAccessService(t)
+	require.NoError(t, catalogseed.EnsureCatalog(ctx, ti.conn))
 	ctx, orgID, _ := withUniqueDetectionOrg(t, ctx, ti)
 	seedAIDetection(t, ctx, ti, orgID, "claude-code", "serial-1", "alex@example.com", "installed", "harness", "", time.Now().UTC())
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -36,6 +43,10 @@ func TestService_SetAIToolDecision_RecordsDecisionAndSurfacesItOnTheInventory(t 
 	})
 	require.NoError(t, err)
 	require.Equal(t, "claude-code", saved.TargetID)
+	rows, err := agentrepo.New(ti.conn).ListAIScanTargets(ctx, orgID)
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.Equal(t, conv.ToPGText("claude-code"), rows[0].AiProductID)
 	require.Equal(t, "blocked", saved.Access.State)
 	require.Equal(t, "blocked", saved.Access.Decision)
 	require.True(t, saved.Access.Enforceable)
@@ -89,6 +100,7 @@ func TestService_SetAIToolDecision_EnforceableForAVerifiedMatcher(t *testing.T) 
 	t.Parallel()
 
 	ctx, ti := newTestAccessService(t)
+	require.NoError(t, catalogseed.EnsureCatalog(ctx, ti.conn))
 	ctx, orgID, _ := withUniqueDetectionOrg(t, ctx, ti)
 	seedAIDetection(t, ctx, ti, orgID, "claude-code", "serial-1", "alex@example.com", "installed", "harness", "", time.Now().UTC())
 
@@ -111,6 +123,7 @@ func TestService_ListAIDetections_UnenforceableToolReadsUnreviewed(t *testing.T)
 	t.Parallel()
 
 	ctx, ti := newTestAccessService(t)
+	require.NoError(t, catalogseed.EnsureCatalog(ctx, ti.conn))
 	ctx, orgID, _ := withUniqueDetectionOrg(t, ctx, ti)
 	seedAIDetection(t, ctx, ti, orgID, "cursor", "serial-1", "alex@example.com", "installed", "harness", "", time.Now().UTC())
 
@@ -135,6 +148,7 @@ func TestService_SetAIToolDecision_RejectsUnknownTarget(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestAccessService(t)
+	require.NoError(t, catalogseed.EnsureCatalog(ctx, ti.conn))
 	ctx, _, _ = withUniqueDetectionOrg(t, ctx, ti)
 
 	_, err := ti.service.SetAIToolDecision(ctx, &gen.SetAIToolDecisionPayload{
@@ -152,6 +166,7 @@ func TestService_SetAIToolDecision_RequiresOrgAdmin(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestAccessService(t)
+	require.NoError(t, catalogseed.EnsureCatalog(ctx, ti.conn))
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
@@ -179,6 +194,7 @@ func TestService_ListAIDetections_ProjectReaderIsRefused(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestAccessService(t)
+	require.NoError(t, catalogseed.EnsureCatalog(ctx, ti.conn))
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
@@ -210,6 +226,7 @@ func TestService_ListEmployeeAIDetections_HidesWhoDecided(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestAccessService(t)
+	require.NoError(t, catalogseed.EnsureCatalog(ctx, ti.conn))
 	ctx, orgID, _ := withUniqueDetectionOrg(t, ctx, ti)
 	seedAIDetection(t, ctx, ti, orgID, "claude-code", "serial-1", "alex@example.com", "installed", "harness", "", time.Now().UTC())
 
@@ -250,6 +267,7 @@ func TestService_ListAIDetections_ProjectReaderCannotFilterByTeam(t *testing.T) 
 	t.Parallel()
 
 	ctx, ti := newTestAccessService(t)
+	require.NoError(t, catalogseed.EnsureCatalog(ctx, ti.conn))
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
@@ -274,4 +292,87 @@ func TestService_ListAIDetections_ProjectReaderCannotFilterByTeam(t *testing.T) 
 	var shareableErr *oops.ShareableError
 	require.ErrorAs(t, err, &shareableErr)
 	require.Equal(t, oops.CodeForbidden, shareableErr.Code)
+}
+
+func TestService_SetAIToolDecision_WaitsForCatalog(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestAccessService(t)
+	ctx, orgID, _ := withUniqueDetectionOrg(t, ctx, ti)
+	_, err := ti.service.SetAIToolDecision(ctx, &gen.SetAIToolDecisionPayload{
+		TargetID: "claude-code", Decision: "blocked",
+	})
+	require.Error(t, err)
+	var shareableErr *oops.ShareableError
+	require.ErrorAs(t, err, &shareableErr)
+	require.Equal(t, oops.CodeUnavailable, shareableErr.Code)
+	response := httptest.NewRecorder()
+	encode := accessserver.EncodeSetAIToolDecisionError(goahttp.ResponseEncoder, nil)
+	require.NoError(t, encode(ctx, response, shareableErr.AsGoa(ctx)))
+	require.Equal(t, http.StatusServiceUnavailable, response.Code)
+	rows, err := agentrepo.New(ti.conn).ListAIScanTargets(ctx, orgID)
+	require.NoError(t, err)
+	require.Empty(t, rows)
+}
+
+func TestService_SetAIToolDecision_LinksExistingDecision(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestAccessService(t)
+	ctx, orgID, _ := withUniqueDetectionOrg(t, ctx, ti)
+	q := agentrepo.New(ti.conn)
+	_, err := q.SetAIScanTargetStatus(ctx, agentrepo.SetAIScanTargetStatusParams{
+		OrganizationID: orgID, ID: "claude-code", Status: "approved",
+	})
+	require.NoError(t, err)
+	require.NoError(t, catalogseed.EnsureCatalog(ctx, ti.conn))
+	_, err = ti.service.SetAIToolDecision(ctx, &gen.SetAIToolDecisionPayload{
+		TargetID: "claude-code", Decision: "blocked",
+	})
+	require.NoError(t, err)
+	rows, err := q.ListAIScanTargets(ctx, orgID)
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.Equal(t, conv.ToPGText("claude-code"), rows[0].AiProductID)
+	require.Equal(t, "blocked", rows[0].Status)
+}
+
+func TestService_SetAIToolDecision_LeavesCustomTargetUnlinked(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name   string
+		id     string
+		seeded bool
+	}{
+		{name: "custom ID", id: "custom-tool", seeded: false},
+		{name: "built-in ID before bootstrap", id: "codex", seeded: false},
+		{name: "built-in ID after bootstrap", id: "codex", seeded: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ctx, ti := newTestAccessService(t)
+			ctx, orgID, _ := withUniqueDetectionOrg(t, ctx, ti)
+			q := agentrepo.New(ti.conn)
+			original, err := q.UpsertAIScanTarget(ctx, agentrepo.UpsertAIScanTargetParams{
+				OrganizationID: orgID, ID: tc.id, DisplayName: conv.ToPGText("Custom tool"),
+				Category: conv.ToPGText("harness"), BundleIds: []string{}, Binaries: []string{"custom-tool"},
+				ConfigDirs: []string{}, ProcessNames: []string{}, CimdVendorKeys: []string{},
+				OauthClientIds: []string{"https://example.com/client.json"}, ClientInfoNames: []string{},
+			})
+			require.NoError(t, err)
+			if tc.seeded {
+				require.NoError(t, catalogseed.Apply(ctx, ti.conn))
+			}
+			_, err = ti.service.SetAIToolDecision(ctx, &gen.SetAIToolDecisionPayload{
+				TargetID: tc.id, Decision: "blocked",
+			})
+			require.NoError(t, err)
+			rows, err := q.ListAIScanTargets(ctx, orgID)
+			require.NoError(t, err)
+			require.Len(t, rows, 1)
+			require.False(t, rows[0].AiProductID.Valid)
+			require.Equal(t, "blocked", rows[0].Status)
+			original.Status = "blocked"
+			original.UpdatedAt = rows[0].UpdatedAt
+			require.Equal(t, original, rows[0], "a decision update preserves the custom definition and reference")
+		})
+	}
 }

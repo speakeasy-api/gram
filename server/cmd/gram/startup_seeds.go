@@ -12,6 +12,7 @@ import (
 	"github.com/urfave/cli/v2"
 	"go.opentelemetry.io/otel"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors/catalogseed"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
 	"github.com/speakeasy-api/gram/server/internal/mcpregistry"
@@ -24,6 +25,13 @@ import (
 // deploy applies it. To add a kind of seed, append one here.
 func startupSeeds(logger *slog.Logger, db *pgxpool.Pool, assetBaseURL *url.URL) []activities.StartupSeed {
 	return []activities.StartupSeed{
+		{
+			Name:    "ai-client-catalog",
+			Version: catalogseed.Version(),
+			Apply: func(ctx context.Context) error {
+				return catalogseed.Apply(ctx, db)
+			},
+		},
 		{
 			Name:    "registry-okta",
 			Version: oktaseed.Version(),

@@ -709,3 +709,8 @@ WHERE t.project_id = @project_id::uuid
   AND t.deleted IS FALSE
   AND c.deleted IS FALSE
   AND c.session_surface = 'speakeasy-slack';
+-- name: PostflightIDLinkedAITools :one
+SELECT count(*) FROM ai_scan_targets t
+JOIN ai_products p ON p.id = t.ai_product_id
+WHERE t.organization_id = @org_id::text AND t.ai_product_id = t.id
+  AND t.id IN ('claude-code', 'codex', 'hermes-agent', 'zed', 'goose');

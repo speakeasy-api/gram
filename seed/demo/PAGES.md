@@ -525,3 +525,6 @@ register it so the Inspect tab connects, lists and calls tools with no internet:
 The local Admin holds wildcard `mcp:connect`, and allows combine, so only
 `blocked` can be shown to that user. The `read_only` reason needs a viewer
 in Support Desk, and `not_granted` a viewer without an allow grant for the tool.
+AI tool decisions: all five seeded built-ins reference global catalog products.
+The catalog bootstrap runs before tenant provisioning; reseeding preserves the
+references and catalog edits. Postflight checks five matching product links.
