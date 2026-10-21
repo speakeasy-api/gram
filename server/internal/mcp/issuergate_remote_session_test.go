@@ -396,17 +396,17 @@ func TestHandleToken_RefreshChecksStoredUpstreamCredentials(t *testing.T) {
 	}
 }
 
-// A provider's definitive refusal must not strand a human whose linked
-// upstream session needs reconnecting: the gate challenges as without
-// chaining, so reauthorizing reaches the consent page's separate sign-in,
-// which every chained card offers whatever the refusal. The reconnected
+// A provider's definitive refusal must not strand a human: the gate
+// challenges as without chaining, so reauthorizing reaches the consent page's
+// separate sign-in, which every chained card offers whatever the refusal. The
+// challenge applies whether or not the human linked the upstream, because the
+// credential's chosen client has no usable grant either way. The reconnected
 // session then routes directly and never chains, so even refusals a sign-in
 // cannot repair (configuration, invalid target) are served by it. Only
 // provider refusals challenge: refresh sees nothing else, so a selection or
 // authorization failure would loop between refresh and the challenge and
-// stands instead. Without a linked session there is nothing to reconnect and
-// the refusal stands; a retryable failure stays a retry.
-func TestServePublic_IssuerGate_ChainingRefusalChallengesTheLinkedSession(t *testing.T) {
+// stands instead. A retryable failure stays a retry.
+func TestServePublic_IssuerGate_ChainingProviderRefusalChallengesTheChosenClient(t *testing.T) {
 	t.Parallel()
 
 	type refusal struct {

@@ -82,10 +82,11 @@ type upstreamSelector struct {
 }
 
 // upstreamSelectorFor returns the selector for the credential in ctx, or nil
-// when the credential has no session row and keeps the issuer-derived path.
-// A session credential always has a selector: one whose auth context is
-// missing or names another organization is refused, never served outside its
-// recorded choices.
+// when the credential is not a session and keeps the issuer-derived path. A
+// session credential gets a selector or an error, never the issuer-derived
+// path: one whose auth context is missing or names another organization is
+// refused. Anonymous sessions carry no auth context; their choices are read
+// in the endpoint's organization.
 func (s *Service) upstreamSelectorFor(ctx context.Context, endpoint *ResolvedMcpEndpoint) (*upstreamSelector, error) {
 	identity, ok := mcpidentity.FromContext(ctx)
 	if !ok || identity.SessionJTI() == "" {
@@ -93,12 +94,13 @@ func (s *Service) upstreamSelectorFor(ctx context.Context, endpoint *ResolvedMcp
 	}
 	switch identity.Kind() {
 	case mcpidentity.KindUserSession, mcpidentity.KindAgent, mcpidentity.KindWorkload:
+		authCtx, ok := contextvalues.GetAuthContext(ctx)
+		if !ok || authCtx == nil || authCtx.ActiveOrganizationID != endpoint.OrganizationID {
+			return nil, errSessionAuthContextMismatch
+		}
+	case mcpidentity.KindAnonymous:
 	default:
 		return nil, nil
-	}
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil || authCtx.ActiveOrganizationID != endpoint.OrganizationID {
-		return nil, errSessionAuthContextMismatch
 	}
 	policy, err := s.loadSessionPolicy(ctx, endpoint, identity.SessionJTI())
 	if err != nil {

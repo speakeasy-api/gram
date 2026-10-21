@@ -225,6 +225,40 @@ func TestUpstreamClientSelection_DirectServersSharingAnIssuer(t *testing.T) {
 	require.Equal(t, before, linearUpstream.requestCount())
 }
 
+// An anonymous session is served through its recorded choices like any other
+// session: its chosen client forwards its own connection, and a server
+// configured after it was issued asks it to reconnect rather than serving
+// through the issuer's clients.
+func TestUpstreamClientSelection_AnonymousSessionFollowsItsChoices(t *testing.T) {
+	t.Parallel()
+	ctx, f := newSelectionFixture(t)
+
+	issuerID := createUserSessionIssuer(t, ctx, f.ti.conn, f.projectID)
+	upstream := newRecordingUpstream(t, "ping")
+	slug := "sel-anon-chosen-" + uuid.NewString()[:8]
+	server, _ := createRemoteMcpEndpoint(t, ctx, f.ti.conn, f.projectID, upstream.url, slug, "public", issuerID)
+	client := createConsentRemoteClient(t, ctx, f.ti.conn, f.projectID, f.orgID, "sel-anon", "", []uuid.UUID{issuerID})
+	f.associate(t, ctx, server.ID, client)
+
+	subject := urn.NewAnonymousSubject("sel-anon-" + uuid.NewString())
+	insertQualifiedRemoteSessionToken(t, ctx, f.ti, issuerID, client, subject, "token-anon", upstream.url)
+	bearer := f.issue(t, ctx, slug, issuerID, subject)
+
+	resp, err := callTool(t, f.ti, slug, bearer, "ping")
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
+	upstream.requireToolCallAuth(t, "Bearer token-anon")
+
+	laterUpstream := newRecordingUpstream(t, "ping")
+	laterSlug := "sel-anon-later-" + uuid.NewString()[:8]
+	later, _ := createRemoteMcpEndpoint(t, ctx, f.ti.conn, f.projectID, laterUpstream.url, laterSlug, "public", issuerID)
+	f.associate(t, ctx, later.ID, client)
+	insertQualifiedRemoteSessionToken(t, ctx, f.ti, issuerID, client, subject, "token-anon", laterUpstream.url)
+	resp, err = callTool(t, f.ti, laterSlug, bearer, "ping")
+	requireReconnect(t, resp, err, laterSlug)
+	require.Zero(t, laterUpstream.requestCount(), "a missing choice never reaches the upstream")
+}
+
 // A gateway member's credential comes from the client the credential chose
 // for that member, and a member added after issuance is unavailable until
 // the gateway is signed in to again, while the others keep serving.

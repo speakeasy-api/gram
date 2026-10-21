@@ -5878,8 +5878,10 @@ WHERE organization_id = @organization_id::text AND project_id = @project_id::uui
 -- name: ListEMAChainingResourceCandidates :many
 -- Diagnostic candidates only: an origin match can retain a configuration error
 -- after invalid discovery, but never authorizes an alias or selects a token.
+-- A caller that chose a client passes it, so only that client's bindings count.
 SELECT resource FROM remote_session_ema_bindings
 WHERE project_id = @project_id AND organization_id = @organization_id
   AND user_session_issuer_id = @user_session_issuer_id
   AND (sqlc.narg('remote_session_issuer_id')::uuid IS NULL OR remote_session_issuer_id = sqlc.narg('remote_session_issuer_id')::uuid)
+  AND (sqlc.narg('remote_session_client_id')::uuid IS NULL OR remote_session_client_id = sqlc.narg('remote_session_client_id')::uuid)
   AND state = 'ready' AND remote_session_client_id IS NOT NULL;

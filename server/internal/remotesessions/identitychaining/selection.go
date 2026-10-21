@@ -86,7 +86,7 @@ func (g *Governor) selectBindingWith(ctx context.Context, logger *slog.Logger, r
 		// to select a resource or token.
 		resources, readErr := repo.New(g.db).ListEMAChainingResourceCandidates(ctx, repo.ListEMAChainingResourceCandidatesParams{
 			ProjectID: req.ProjectID, OrganizationID: req.OrganizationID, UserSessionIssuerID: req.UserSessionIssuerID,
-			RemoteSessionIssuerID: req.RemoteSessionIssuerID,
+			RemoteSessionIssuerID: req.RemoteSessionIssuerID, RemoteSessionClientID: req.RemoteSessionClientID,
 		})
 		if readErr != nil {
 			// Unknown configuration keeps the upstream on the interactive path.

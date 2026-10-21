@@ -25,7 +25,9 @@ func TestMemberChoicesTokens_SlowMemberBlocksOnlyItself(t *testing.T) {
 	t.Parallel()
 
 	slow, fast := chosenMember("slow"), chosenMember("fast")
-	release := make(chan struct{})
+	gate := make(chan struct{})
+	release := sync.OnceFunc(func() { close(gate) })
+	t.Cleanup(release)
 	started := make(chan struct{})
 	var calls atomic.Int32
 	c := &memberChoices{
@@ -34,7 +36,7 @@ func TestMemberChoicesTokens_SlowMemberBlocksOnlyItself(t *testing.T) {
 			calls.Add(1)
 			if member.serverID == slow.serverID {
 				close(started)
-				<-release
+				<-gate
 			}
 			return map[uuid.UUID]remotesessions.UpstreamToken{member.chosenClientID.UUID: {Token: member.slug}}, nil
 		},
@@ -63,7 +65,7 @@ func TestMemberChoicesTokens_SlowMemberBlocksOnlyItself(t *testing.T) {
 	var memberErr *metaMemberError
 	require.ErrorAs(t, err, &memberErr, "a waiter gives up at its own deadline")
 
-	close(release)
+	release()
 	first := <-slowDone
 	require.NoError(t, first.err)
 	require.Equal(t, "slow", first.tokens[slow.chosenClientID.UUID].Token)

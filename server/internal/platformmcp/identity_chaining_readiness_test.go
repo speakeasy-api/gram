@@ -315,7 +315,7 @@ func TestMemberMCPConnectionStatusReportsIdentityChaining(t *testing.T) {
 			require.NoError(t, testrepo.New(conn).ClearMCPServerRemoteSessionClientsFixture(ctx, mcpID))
 			associated := []uuid.UUID{clientID}
 			switch {
-			case test.noIssuer:
+			case test.noIssuer, test.noClient:
 				associated = nil
 			case test.multi:
 				associated = append(associated, secondClientID)

@@ -1101,10 +1101,10 @@ func (s *Service) rotateRefreshToken(
 			admittedAgentSessionID = refreshSession.ID
 		}
 	}
-	if lookupErr == nil && refreshSession.SubjectUrn.Kind == urn.SessionSubjectKindUser &&
+	if lookupErr == nil &&
 		refreshSession.UserSessionClientID.Valid && refreshSession.UserSessionClientID.UUID == clientRow.ID &&
 		refreshSession.RefreshExpiresAt.Valid && refreshSession.RefreshExpiresAt.Time.After(time.Now()) &&
-		s.userRefreshNeedsUpstreamReconnect(ctx, logger, endpoint, refreshSession.SubjectUrn, refreshSession.Jti) {
+		s.refreshNeedsUpstreamReconnect(ctx, logger, endpoint, refreshSession.SubjectUrn, refreshSession.Jti) {
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token request rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", "upstream_reconnect_required")
 		return true, writeTokenError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeInvalidGrant, remoteSessionReconnectDescription)
 	}
@@ -1361,7 +1361,7 @@ func (s *Service) rotateRefreshToken(
 	return published, writeTokenSuccess(ctx, w, logger, minted.Body)
 }
 
-// userRefreshNeedsUpstreamReconnect reports whether a user's refresh should be
+// refreshNeedsUpstreamReconnect reports whether a session's refresh should be
 // refused because a required upstream remote session needs reconnecting. A new
 // access token would only hit the same invalid_token from the MCP runtime,
 // while invalid_grant sends the client through the consent page that
@@ -1369,10 +1369,11 @@ func (s *Service) rotateRefreshToken(
 // because many clients treat any failed refresh as a sign-out.
 //
 // A direct proxied server is served through the credential's choice, so
-// refresh judges that choice: a missing or unusable one is refused, as the
-// runtime would refuse it, a no-auth one needs no upstream, and a chosen
-// client needs reconnecting only when its own stored grant does. Sibling
-// clients on the user session issuer never decide. Other endpoints keep the
+// refresh judges that choice for every session the runtime holds to its
+// choices: a missing or unusable one is refused, as the runtime would refuse
+// it, and a no-auth one needs no upstream. For a user, a chosen client needs
+// reconnecting only when its own stored grant does; sibling clients on the
+// user session issuer never decide. Other endpoints keep the user's
 // issuer-wide check.
 //
 // When identity chaining owns the upstream, refresh follows the runtime, which
@@ -1383,16 +1384,27 @@ func (s *Service) rotateRefreshToken(
 // provider just refused chaining for good, which only the consent page's
 // separate sign-in works around. Anything chaining cannot confirm, a failed
 // read included, fails open, because no reconnect would change it.
-func (s *Service) userRefreshNeedsUpstreamReconnect(ctx context.Context, logger *slog.Logger, endpoint *ResolvedMcpEndpoint, subject urn.SessionSubject, jti string) bool {
+func (s *Service) refreshNeedsUpstreamReconnect(ctx context.Context, logger *slog.Logger, endpoint *ResolvedMcpEndpoint, subject urn.SessionSubject, jti string) bool {
+	switch subject.Kind {
+	case urn.SessionSubjectKindUser, urn.SessionSubjectKindAgent, urn.SessionSubjectKindWorkload, urn.SessionSubjectKindAnonymous:
+	case urn.SessionSubjectKindAPIKey:
+		return false
+	default:
+		return false
+	}
 	if endpoint.MetaMcpServerID.Valid {
 		return false
 	}
+	user := subject.Kind == urn.SessionSubjectKindUser
 	routing := consentRouting{backend: consentBackendNone, upstream: endpoint.UpstreamResource, members: nil}
-	_, proxied, err := s.consentDirectBackend(ctx, endpoint, routing)
+	tunneled, proxied, err := s.consentDirectBackend(ctx, endpoint, routing)
 	if err != nil {
 		return false
 	}
 	if !proxied {
+		if !user {
+			return false
+		}
 		reconnect, err := s.remoteChallengeMgr.RemoteSessionsNeedReconnect(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject)
 		if err != nil {
 			logger.WarnContext(ctx, "check upstream remote sessions before refresh", attr.SlogError(err))
@@ -1408,15 +1420,19 @@ func (s *Service) userRefreshNeedsUpstreamReconnect(ctx context.Context, logger 
 	case err != nil:
 		logger.WarnContext(ctx, "load upstream client choice before refresh", attr.SlogError(err))
 		return false
-	case choice.noAuth():
+	case choice.noAuth(), !user:
 		return false
+	}
+	routing.backend = consentBackendRemote
+	if tunneled {
+		routing.backend = consentBackendTunneled
 	}
 	reconnect, err := s.remoteChallengeMgr.ClientNeedsReconnect(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject, choice.clientID.UUID)
 	if err != nil {
 		logger.WarnContext(ctx, "check chosen upstream remote session before refresh", attr.SlogError(err))
 		return false
 	}
-	if !reconnect || s.identityChainer == nil || subject.Kind != urn.SessionSubjectKindUser || subject.ID == "" {
+	if !reconnect || s.identityChainer == nil || subject.ID == "" {
 		return reconnect
 	}
 	req, ok, err := s.directChainingRequest(ctx, endpoint, subject.ID, routing, choice)
