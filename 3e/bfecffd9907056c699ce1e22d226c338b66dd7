@@ -1,0 +1,23 @@
+server/cmd/tools/migrations/RISK_RESULTS_MIGRATION.md
+  s_9cf2081b319db4::t_3cee89c5922d70 243-247,250-258
+server/cmd/tools/sweep_builtin_presets/main.go
+  s_9cf2081b319db4::t_bc176924d07e82 43,55-56,60,82-83,97-106,112,119,162-177,191-192,208-209,225-232,284-305,344,346-355,365,445,462,487,493,497,510,512-520,551-558,566-568,575,585,621-622,642-649
+server/cmd/tools/sweep_builtin_presets/main_test.go
+  s_9cf2081b319db4::t_9fb10fdcbc92ce 12-15,18,24,68,71,83,130-159,173,200,216,240-241,252,266,273,279,283,288-398
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "3ebfecffd9907056c699ce1e22d226c338b66dd7",
+  "prompts": {},
+  "sessions": {
+    "s_9cf2081b319db4": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "agent-a718e7e6674c4c53d",
+        "model": "unknown"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
