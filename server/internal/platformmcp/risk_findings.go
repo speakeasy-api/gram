@@ -49,7 +49,7 @@ func NewRiskFindingsService(db *pgxpool.Pool, findings RiskFindingsReader, key s
 }
 
 func (s *RiskFindingsService) valid() bool {
-	return s != nil
+	return s != nil && s.findings != nil
 }
 
 type ListRiskFindingsInput struct {

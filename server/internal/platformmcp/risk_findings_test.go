@@ -101,6 +101,24 @@ func TestNewRiskFindingsService(t *testing.T) {
 	}
 }
 
+func TestRiskFindingsUnavailableReader(t *testing.T) {
+	t.Parallel()
+
+	service := NewRiskFindingsService(&pgxpool.Pool{}, nil, "test-key")
+	require.False(t, service.valid())
+	_, err := service.List(t.Context(), testRiskPrincipal("user"), ListRiskFindingsInput{})
+	require.ErrorIs(t, err, ErrUnavailable)
+
+	server := mcp.NewServer(&mcp.Implementation{Name: "findings-unavailable", Version: "1"}, nil)
+	reg := newRegistrar(server)
+	registerRiskFindingsTool(reg, service)
+	descriptor := descriptorByName(t, reg, "list_watchdog_findings")
+	require.Contains(t, descriptor.Description, "unavailable in this deployment")
+	_, err = descriptor.Invoke(ContextWithPrincipal(t.Context(), testRiskPrincipal("user")), json.RawMessage(`{}`))
+	var refusal *ToolRefusalError
+	require.ErrorAs(t, err, &refusal)
+}
+
 func TestRiskFindingsDefaultsAndGroups(t *testing.T) {
 	t.Parallel()
 	s, r, p := findingsFixture(t)

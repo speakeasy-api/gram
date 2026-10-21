@@ -103,7 +103,7 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
       },
       { route: routes.plugins, scope: readWrite },
       { route: routes.environments, scope: readWrite },
-      { route: routes.watchdog, scope: read },
+      { route: routes.watchdog, scope: ["org:admin"] as Scope[] },
       { route: routes.riskEvents, scope: ["org:admin"] as Scope[] },
       { route: routes.policyCenter, scope: readWrite },
       { route: routes.costs, scope: observe },

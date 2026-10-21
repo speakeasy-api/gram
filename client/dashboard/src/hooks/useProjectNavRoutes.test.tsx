@@ -260,6 +260,15 @@ describe("useProjectNavRoutes", () => {
     expect(shownRoutes).toContain(routes.dashboards);
   });
 
+  it("requires organization admin for Watchdog navigation, matching its page", () => {
+    const { result } = renderHook(() => useProjectNavRoutes());
+    const watchdog = result.current.find(
+      (entry) => entry.route === routes.watchdog,
+    );
+
+    expect(watchdog?.scope).toEqual(["org:admin"]);
+  });
+
   it("uses resolved values for feature-gated navigation", () => {
     testState.featureFlags = {
       [FEATURE_FLAGS.explore]: { status: "enabled" },
