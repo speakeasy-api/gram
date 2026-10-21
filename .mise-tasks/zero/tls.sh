@@ -14,9 +14,9 @@ extract_hostname() {
   local url="$1"
   # Remove protocol
   url="${url#*://}"
-  # Remove everything after the first slash (path)
-  url="${url%%/*}"
-  # Remove port number
+  # Keep the authority, then remove userinfo and the port.
+  url="${url%%[/?#]*}"
+  url="${url##*@}"
   url="${url%%:*}"
   echo "$url"
 }
@@ -38,7 +38,7 @@ ensure_dir() {
 
 is_https() {
   case "$1" in
-    https://*) return 0 ;;
+    [hH][tT][tT][pP][sS]://*) return 0 ;;
     *) return 1 ;;
   esac
 }
@@ -47,16 +47,8 @@ detect_tls() {
   is_https "$GRAM_SERVER_URL" || is_https "$GRAM_SITE_URL" || is_https "${GRAM_DEVIDP_EXTERNAL_URL:-}"
 }
 
-show_urls() {
-  printf "\t%s: %s\n" \
-    GRAM_SERVER_URL "$GRAM_SERVER_URL" \
-    GRAM_SITE_URL "$GRAM_SITE_URL" \
-    GRAM_DEVIDP_EXTERNAL_URL "${GRAM_DEVIDP_EXTERNAL_URL:-}" >&2
-}
-
 turn_off_tls() {
   echo "No https endpoints: skipping TLS"
-  show_urls
 
   mise set --file mise.local.toml GRAM_SSL_CERT_FILE=
   mise set --file mise.local.toml GRAM_SSL_KEY_FILE=
@@ -65,7 +57,6 @@ turn_off_tls() {
 
 turn_on_tls() {
   echo "Found https endpoints: enabling TLS"
-  show_urls
 
   mise set --file mise.local.toml GRAM_SSL_CERT_FILE="{{config_root}}/local/ssl/certs/local.pem"
   mise set --file mise.local.toml GRAM_SSL_KEY_FILE="{{config_root}}/local/ssl/keys/local-key.pem"
