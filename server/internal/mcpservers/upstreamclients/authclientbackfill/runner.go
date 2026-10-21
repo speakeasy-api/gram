@@ -21,6 +21,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"time"
 
 	"github.com/google/uuid"
@@ -597,11 +598,14 @@ func RunGrants(ctx context.Context, db Acquirer, opts Options) (Report, error) {
 func runGrantsPhase(ctx context.Context, conn *pgxpool.Conn, opts Options) (Report, error) {
 	report := newReport(opts.Apply)
 	local := newReport(opts.Apply)
-	ready, err := clientsRecorded(ctx, conn, opts.OrganizationID)
+	probe, err := clientsRecorded(ctx, conn, opts.OrganizationID)
 	if err != nil {
 		return report, fmt.Errorf("check recorded auth clients: %w", err)
 	}
+	ready := keysReady(probe)
 	report.APIKeysWaiting = !ready
+	// The probe's failures say why keys wait.
+	maps.Copy(report.PhaseErrors, probe.PhaseErrors)
 	p := phase{name: PhaseGrants, kind: "", run: func(ctx context.Context, tx pgx.Tx, local *Report) error {
 		return runGrants(ctx, tx, opts, local, ready)
 	}}
@@ -620,14 +624,20 @@ func runLocked(ctx context.Context, db TxStarter, opts Options, startedAt pgtype
 	return runPhases(ctx, db, opts, startedAt, true)
 }
 
-// clientsRecorded reports whether a dry run finds every auth client, link
-// and header copy recorded, so key policies written now are complete.
-func clientsRecorded(ctx context.Context, db TxStarter, organizationID string) (bool, error) {
-	report, err := runPhases(ctx, db, Options{OrganizationID: organizationID, Apply: false, PageSize: 0}, pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false}, false)
-	if err != nil {
-		return false, err
+// clientsRecorded dry-runs every phase but grants, to tell whether key
+// policies written now would be complete.
+func clientsRecorded(ctx context.Context, db TxStarter, organizationID string) (Report, error) {
+	return runPhases(ctx, db, Options{OrganizationID: organizationID, Apply: false, PageSize: 0}, pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false}, false)
+}
+
+// keysReady reports whether the phases before grants left every auth client,
+// link and header copy recorded: none failed, no decision lacks its records,
+// and a dry run has nothing left to write.
+func keysReady(r Report) bool {
+	if len(r.PhaseErrors) > 0 || r.Gaps > 0 {
+		return false
 	}
-	return report.PendingClients == 0 && report.PendingLinks == 0 && report.PendingHeaders == 0 && len(report.PhaseErrors) == 0, nil
+	return r.Mode == "apply" || (r.PendingClients == 0 && r.PendingLinks == 0 && r.PendingHeaders == 0)
 }
 
 func runPhases(ctx context.Context, db TxStarter, opts Options, startedAt pgtype.Timestamptz, withGrants bool) (Report, error) {
@@ -680,7 +690,9 @@ func runPhases(ctx context.Context, db TxStarter, opts Options, startedAt pgtype
 	if withGrants {
 		phases = append(phases, phase{name: PhaseGrants, kind: "", run: func(ctx context.Context, tx pgx.Tx, local *Report) error {
 			// Last, over every committed phase's auth clients.
-			return runGrants(ctx, tx, opts, local, len(report.PhaseErrors) == 0)
+			ready := keysReady(report)
+			local.APIKeysWaiting = !ready
+			return runGrants(ctx, tx, opts, local, ready)
 		}})
 	}
 	for _, p := range phases {
