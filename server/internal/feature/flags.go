@@ -68,10 +68,6 @@ const (
 	// like FlagBudgets. Evaluated server-side only; removed once the toolset
 	// is GA.
 	FlagAssistantPlatformMCP Flag = "assistant-platform-mcp"
-	// FlagRiskWatchdog gates the Watchdog signals endpoint (risk.getSignals).
-	// Key matches the dashboard's page-level flag so a single PostHog flag
-	// controls both the UI and the API surface.
-	FlagRiskWatchdog Flag = "gram-risk-watchdog"
 	// FlagExplore gates Explore and the Platform MCP analytics tools. The key
 	// matches the dashboard's page-level flag so one PostHog flag controls
 	// both surfaces; targeted by organization group (org slug), like

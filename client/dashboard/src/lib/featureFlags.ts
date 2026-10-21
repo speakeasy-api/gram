@@ -18,7 +18,6 @@ export const FEATURE_FLAGS = {
   // read is true for every variant, `off` included. `useDetectorMode` maps it
   // to the policy editor mode.
   riskLlmAnalyzer: "gram-risk-llm-analyzer",
-  riskWatchdog: "gram-risk-watchdog",
   // UI-only rollout gate for the organization's Speakeasy authorization
   // servers page; the APIs behind it are not gated.
   userSessionIssuerDashboard: "gram-user-session-issuer-dashboard",

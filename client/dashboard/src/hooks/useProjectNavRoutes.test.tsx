@@ -104,7 +104,6 @@ beforeEach(() => {
     data: { signalsIntelligenceEnabled: false },
   };
   testState.featureFlags = {
-    [FEATURE_FLAGS.riskWatchdog]: unavailableFeatureFlag("loading"),
     [FEATURE_FLAGS.explore]: unavailableFeatureFlag("loading"),
   };
 });
@@ -231,7 +230,6 @@ describe("useProjectNavRoutes", () => {
     "keeps standard navigation while rollout flags are %s",
     (status) => {
       testState.featureFlags = {
-        [FEATURE_FLAGS.riskWatchdog]: unavailableFeatureFlag(status),
         [FEATURE_FLAGS.explore]: unavailableFeatureFlag(status),
       };
 
@@ -239,7 +237,7 @@ describe("useProjectNavRoutes", () => {
       const navRoutes = result.current.map((entry) => entry.route);
 
       expect(navRoutes).toContain(routes.assistants);
-      expect(navRoutes).not.toContain(routes.watchdog);
+      expect(navRoutes).toContain(routes.watchdog);
       expect(navRoutes).not.toContain(routes.explore);
       expect(navRoutes).toContain(routes.deployments);
       expect(navRoutes).toContain(routes.riskEvents);
@@ -264,7 +262,6 @@ describe("useProjectNavRoutes", () => {
 
   it("uses resolved values for feature-gated navigation", () => {
     testState.featureFlags = {
-      [FEATURE_FLAGS.riskWatchdog]: { status: "enabled" },
       [FEATURE_FLAGS.explore]: { status: "enabled" },
     };
 

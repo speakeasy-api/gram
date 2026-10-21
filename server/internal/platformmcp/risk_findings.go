@@ -15,7 +15,6 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/risk/chrepo"
@@ -37,18 +36,16 @@ type findingPolicyReader interface {
 }
 
 type RiskFindingsService struct {
-	projects      riskProjectResolver
-	organizations OrganizationSlugResolver
-	flags         feature.Provider
-	policies      findingPolicyReader
-	findings      RiskFindingsReader
-	cursor        *riskCursorCodec
-	now           func() time.Time
+	projects riskProjectResolver
+	policies findingPolicyReader
+	findings RiskFindingsReader
+	cursor   *riskCursorCodec
+	now      func() time.Time
 }
 
-func NewRiskFindingsService(db *pgxpool.Pool, findings RiskFindingsReader, flags feature.Provider, organizations OrganizationSlugResolver, key string) *RiskFindingsService {
+func NewRiskFindingsService(db *pgxpool.Pool, findings RiskFindingsReader, key string) *RiskFindingsService {
 	codec := newRiskCursorCodec(key)
-	return &RiskFindingsService{projects: postgresRiskProjectResolver{queries: platformrepo.New(db)}, organizations: organizations, flags: flags, policies: riskrepo.New(db), findings: findings, cursor: codec, now: time.Now}
+	return &RiskFindingsService{projects: postgresRiskProjectResolver{queries: platformrepo.New(db)}, policies: riskrepo.New(db), findings: findings, cursor: codec, now: time.Now}
 }
 
 func (s *RiskFindingsService) valid() bool {
@@ -203,17 +200,6 @@ func (s *RiskFindingsService) List(ctx context.Context, principal Principal, inp
 	project, err := s.projects.Resolve(ctx, principal.OrganizationID, input.ProjectID, input.ProjectSlug)
 	if err != nil {
 		return zero, fmt.Errorf("resolve risk findings project: %w", err)
-	}
-	orgSlug, err := s.organizations.OrganizationSlug(ctx, principal.OrganizationID)
-	if err != nil || orgSlug == "" {
-		return zero, ErrUnavailable
-	}
-	evaluation, err := feature.EvaluateFlag(ctx, s.flags, feature.FlagRiskWatchdog, principal.OrganizationID, feature.OrgProjectGroups(orgSlug, project.Slug))
-	if err != nil {
-		return zero, fmt.Errorf("%w: evaluate findings capability", ErrUnavailable)
-	}
-	if evaluation != feature.EvaluationEnabled {
-		return zero, ErrRiskFeatureNotEnabled
 	}
 	params := chrepo.RiskSignalWindowParams{
 		OrganizationID: principal.OrganizationID,
