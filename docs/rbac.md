@@ -825,6 +825,18 @@ Result: denied.
 
 One nuance: if a grant has a key that the check does not include, matching skips that key. This allows a more specific grant to satisfy a broader connection-level check that does not yet constrain that dimension. Be aware of this when deciding whether a handler should use a plain resource check or a dimensional check.
 
+#### Auth client checks
+
+`mcp:auth` and `mcp:blocked_auth` protect the `mcp_auth_client` resource kind: the upstream identity Speakeasy presents to an MCP server. They have no server dimension, so a block on a shared client applies on every server that uses it. A caller will need `mcp:connect` on the server and `mcp:auth` on the selected client; neither implies the other. No request is checked against `mcp:auth` yet, and no system role holds it. Where the engine does not enforce RBAC, such as for legacy API keys, every auth-client check is denied.
+
+Auth client checks always match strictly, for allows and blocks: a grant key the check does not carry never matches. Build them with `authz.MCPAuthClientCheck`. Every check carries `client_type` and `project_id` (the project of the server using the client); `remote_session` checks also carry `connection_owner`, and no other type may. Evaluation rejects a check missing any of these.
+
+`connection_owner` accepts a user ID, `*`, or `$represented_user`. The engine binds `$represented_user` once per request from trusted context: the signed-in user, or the user an agent credential acts for, never the agent owner and never an API key's or assistant token's owner. A `remote_session` check is denied unless its owner is that represented user, whatever grants match, so an allow never lets anyone use another user's connection. An agent acting for a user must also pass that user's own policy.
+
+Delegated policies keep `$represented_user` symbolic. Containment accepts it only under a parent grant that is symbolic too or does not pin the owner, and intersecting it with a concrete owner yields no allow. A parent restriction pinned to a concrete owner is treated as overlapping a symbolic grant, so it must be carried, unless issuance knows the represented user and it is someone else. Where a symbolic block meets a direct grant pinned to the represented user, the block is carried rather than resolved, which can only narrow.
+
+The new scopes are safe from delegated policy version 5, but credentials are issued at version 4 (`IssuedDelegatedPolicyVersion`) until every server reads version 5, so no credential carries them yet.
+
 ### `Require`
 
 Use `Require` when the caller must satisfy every check passed to it.

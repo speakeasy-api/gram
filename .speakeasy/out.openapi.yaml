@@ -82337,6 +82337,19 @@ components:
     AgentPolicySelector:
       type: object
       properties:
+        client_type:
+          type: string
+          description: Auth client type filter (mcp:auth scopes only).
+          enum:
+            - remote_session
+            - service_account
+            - static_credential
+            - pass_through
+            - ema
+            - '*'
+        connection_owner:
+          type: string
+          description: 'Personal connection owner filter (mcp:auth scopes on remote_session clients only): a user ID, ''*'', or ''$represented_user''.'
         disposition:
           type: string
           description: Tool disposition filter (MCP scopes only).
@@ -82347,7 +82360,7 @@ components:
             - open_world
         project_id:
           type: string
-          description: Project filter (MCP, environment, and assistant scopes).
+          description: Project filter (MCP, environment, assistant, and mcp:auth scopes).
         resource_id:
           type: string
           description: The resource identifier, or '*' for all resources of this kind.
@@ -82364,6 +82377,7 @@ components:
             - risk_policy
             - chat
             - agent
+            - mcp_auth_client
             - '*'
         server_identity:
           type: string
@@ -95207,6 +95221,8 @@ components:
             - mcp:blocked_write
             - mcp:connect
             - mcp:blocked_connect
+            - mcp:auth
+            - mcp:blocked_auth
             - environment:read
             - environment:blocked_read
             - environment:write
@@ -95261,6 +95277,8 @@ components:
               - mcp:blocked_write
               - mcp:connect
               - mcp:blocked_connect
+              - mcp:auth
+              - mcp:blocked_auth
               - environment:read
               - environment:blocked_read
               - environment:write
@@ -104222,6 +104240,8 @@ components:
             - mcp:blocked_write
             - mcp:connect
             - mcp:blocked_connect
+            - mcp:auth
+            - mcp:blocked_auth
             - environment:read
             - environment:blocked_read
             - environment:write
@@ -104561,6 +104581,7 @@ components:
             - mcp:blocked_read
             - mcp:blocked_write
             - mcp:blocked_connect
+            - mcp:blocked_auth
             - environment:blocked_read
             - environment:blocked_write
             - skill:blocked_read
@@ -104585,6 +104606,7 @@ components:
             - chat
             - agent
             - workload
+            - mcp_auth_client
         slug:
           type: string
           description: Unique scope identifier.
@@ -104603,6 +104625,8 @@ components:
             - mcp:blocked_write
             - mcp:connect
             - mcp:blocked_connect
+            - mcp:auth
+            - mcp:blocked_auth
             - environment:read
             - environment:blocked_read
             - environment:write
@@ -105093,6 +105117,19 @@ components:
     Selector:
       type: object
       properties:
+        client_type:
+          type: string
+          description: Auth client type filter (mcp:auth scopes only).
+          enum:
+            - remote_session
+            - service_account
+            - static_credential
+            - pass_through
+            - ema
+            - '*'
+        connection_owner:
+          type: string
+          description: Personal connection owner filter (mcp:auth scopes on remote_session clients only). A user ID, '*', or '$represented_user' for the user the request acts for. Never lets a caller use another user's connection.
         disposition:
           type: string
           description: Tool disposition filter (MCP scopes only).
@@ -105103,7 +105140,7 @@ components:
             - open_world
         project_id:
           type: string
-          description: Project filter (MCP, environment, and assistant scopes). When set with resource_id='*', grants access to every resource of the kind in the project.
+          description: Project filter (MCP, environment, assistant, and mcp:auth scopes). When set with resource_id='*', grants access to every resource of the kind in the project. For mcp:auth it is the project of the server using the client.
         resource_id:
           type: string
           description: The resource identifier, or '*' for all resources of this kind.
@@ -105121,6 +105158,7 @@ components:
             - chat
             - agent
             - workload
+            - mcp_auth_client
             - '*'
         server_url:
           type: string

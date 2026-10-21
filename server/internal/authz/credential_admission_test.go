@@ -54,7 +54,7 @@ func TestCredentialAdmissionHookReloadsAndConjoinsPolicies(t *testing.T) {
 		if calls > 1 {
 			agent = nil
 		}
-		return PrincipalCredentialAdmission{OwnerUserID: "current-owner", Credential: grants, Agent: agent, Owner: grants}, nil
+		return PrincipalCredentialAdmission{OwnerUserID: "current-owner", Credential: grants, Agent: agent, Owner: grants, Authorizer: RepresentedUserPolicy{UserID: "current-owner", Policy: grants}}, nil
 	}
 	engine := NewEngine(testenv.NewLogger(t), nil, func(context.Context, string) (bool, error) { return false, nil }, workos.NewStubClient(), EngineOpts{AdmitPrincipalCredential: admit})
 	ctx := contextvalues.WithPrincipalCredentialAuthorization(t.Context(), &contextvalues.AuthContext{ActiveOrganizationID: "org-test"}, urn.NewPrincipal(urn.PrincipalTypeAgent, "018f8d7b-58d7-7cc4-bb16-9f8c6b99a001"), contextvalues.PrincipalCredential{})
@@ -108,7 +108,7 @@ func TestCredentialDBTXAdmissionHookReloadsAndConjoinsPolicies(t *testing.T) {
 		if calls > 1 {
 			agent = nil
 		}
-		return PrincipalCredentialAdmission{OwnerUserID: "current-owner", Credential: grants, Agent: agent, Owner: grants}, nil
+		return PrincipalCredentialAdmission{OwnerUserID: "current-owner", Credential: grants, Agent: agent, Owner: grants, Authorizer: RepresentedUserPolicy{UserID: "current-owner", Policy: grants}}, nil
 	}
 	engine := NewEngine(testenv.NewLogger(t), nil, func(context.Context, string) (bool, error) { return false, nil }, workos.NewStubClient(), EngineOpts{AdmitPrincipalCredentialWithDBTX: admit})
 	ctx := contextvalues.WithPrincipalCredentialAuthorization(t.Context(), &contextvalues.AuthContext{ActiveOrganizationID: "org-test"}, urn.NewPrincipal(urn.PrincipalTypeAgent, "018f8d7b-58d7-7cc4-bb16-9f8c6b99a001"), contextvalues.PrincipalCredential{})

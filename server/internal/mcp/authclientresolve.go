@@ -33,6 +33,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
 	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
@@ -42,13 +43,14 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-// Auth client types, as stored in mcp_auth_clients.client_type.
+// Auth client types, as stored in mcp_auth_clients.client_type. They are the
+// values mcp:auth checks carry.
 const (
-	authClientTypeRemoteSession    = "remote_session"
-	authClientTypeServiceAccount   = "service_account"
-	authClientTypeStaticCredential = "static_credential" // #nosec G101 -- a client type, not a credential
-	authClientTypePassThrough      = "pass_through"
-	authClientTypeEMA              = "ema"
+	authClientTypeRemoteSession    = authz.AuthClientTypeRemoteSession
+	authClientTypeServiceAccount   = authz.AuthClientTypeServiceAccount
+	authClientTypeStaticCredential = authz.AuthClientTypeStaticCredential
+	authClientTypePassThrough      = authz.AuthClientTypePassThrough
+	authClientTypeEMA              = authz.AuthClientTypeEMA
 )
 
 // authClientOutcome is how a credential's typed auth client resolves for a

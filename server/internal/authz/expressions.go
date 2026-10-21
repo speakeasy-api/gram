@@ -120,7 +120,7 @@ func (g GrantCheck) Evaluate(grants []Grant) (GrantExpressionResult, error) {
 	}
 
 	grant, _ := matchingGrant(grants, g.Check.expand())
-	if grant == nil {
+	if grant == nil || personalCheckUnbound(g.Check) {
 		return GrantExpressionResult{Satisfied: false, Reason: GrantExpressionReasonMissingBase}, nil
 	}
 
@@ -137,7 +137,7 @@ func (g GrantCheck) grantSet(grants []Grant) (grantSet, error) {
 	// matchingGrant already applies Check expansion and the Check's
 	// selector match mode. Grant expressions do not reimplement selector logic.
 	grant, _ := matchingGrant(grants, checks)
-	if grant == nil {
+	if grant == nil || personalCheckUnbound(g.Check) {
 		return grantSet{}, nil
 	}
 
@@ -283,7 +283,7 @@ func evaluateGrantCheckDifference(grants []Grant, base GrantCheck, exclusion Gra
 		return GrantExpressionResult{Satisfied: false, Reason: GrantExpressionReasonError}, err
 	}
 	baseGrant, _ := matchingGrant(grants, base.Check.expand())
-	if baseGrant == nil {
+	if baseGrant == nil || personalCheckUnbound(base.Check) {
 		return GrantExpressionResult{Satisfied: false, Reason: GrantExpressionReasonMissingBase}, nil
 	}
 

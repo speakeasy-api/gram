@@ -423,7 +423,7 @@ func accessRoleRulesToGenGrants(rules []normalizedMCPAccessRoleRule, projectID u
 		if rule.Disposition != "" {
 			selector[authz.SelectorKeyDisposition] = rule.Disposition
 		}
-		generated := &accessgen.Selector{ResourceKind: selector[authz.SelectorKeyResourceKind], ResourceID: selector[authz.SelectorKeyResourceID], Disposition: nil, Tool: nil, ProjectID: nil, ServerURL: nil}
+		generated := &accessgen.Selector{ResourceKind: selector[authz.SelectorKeyResourceKind], ResourceID: selector[authz.SelectorKeyResourceID], Disposition: nil, Tool: nil, ProjectID: nil, ServerURL: nil, ClientType: nil, ConnectionOwner: nil}
 		if value := selector[authz.SelectorKeyProjectID]; value != "" {
 			generated.ProjectID = &value
 		}
