@@ -377,7 +377,7 @@ func (s *Service) describeMemberToolset(
 	if gate.authenticated && !toolset.McpIsPublic {
 		for name, entry := range catalog.byName {
 			if err := ctx.Err(); err != nil {
-				return nil, err
+				return nil, fmt.Errorf("filter meta tools by authz: %w", err)
 			}
 			err := s.authz.Require(ctx, authz.MCPToolCallCheck(toolset.ID.String(), authz.MCPToolCallDimensions{
 				Tool:        name,

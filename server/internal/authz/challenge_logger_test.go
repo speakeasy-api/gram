@@ -2,6 +2,7 @@ package authz
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/google/uuid"
@@ -137,7 +138,7 @@ func TestChallengeLogger_publishesAfterRequestCanceled(t *testing.T) {
 		Focus:     &check,
 	}.Log(ctx, conn, testenv.NewLogger(t), func(ctx context.Context, _ string) (bool, error) {
 		if err := ctx.Err(); err != nil {
-			return false, err
+			return false, fmt.Errorf("flag check: %w", err)
 		}
 		_, bounded := ctx.Deadline()
 		require.True(t, bounded)

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 
 	"github.com/google/uuid"
@@ -169,7 +170,7 @@ func handleToolsList(
 		allowed := make([]*toolListEntry, 0, len(tools))
 		for _, t := range tools {
 			if err := ctx.Err(); err != nil {
-				return nil, err
+				return nil, fmt.Errorf("filter tools by authz: %w", err)
 			}
 			disposition := dispositionFromAnnotations(t.Annotations)
 			if err := authzEngine.Require(ctx, authz.MCPToolCallCheck(payload.mcpConnectResourceID(toolset.ID), authz.MCPToolCallDimensions{
