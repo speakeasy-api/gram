@@ -3,6 +3,7 @@ import { isExpectedAPIError } from "@/lib/errors";
 import type { RemoteSessionClient } from "@gram/client/models/components/remotesessionclient.js";
 import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
 import { invalidateAllRemoteSessionClients } from "@gram/client/react-query/remoteSessionClients.js";
+import { invalidateAllServerClientAssociations } from "@gram/client/react-query/serverClientAssociations.js";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -358,7 +359,10 @@ export function useServiceAccountClientDraft({
             `Couldn't connect this server to ${issuer.name}.`,
         );
       }
-      await invalidateAllRemoteSessionClients(queryClient);
+      await Promise.all([
+        invalidateAllRemoteSessionClients(queryClient),
+        invalidateAllServerClientAssociations(queryClient),
+      ]);
       // A signing key client made earlier is unbound once a client secret
       // one takes its place; the bound one is cleared without being deleted.
       if (madeHere) discardCreated();

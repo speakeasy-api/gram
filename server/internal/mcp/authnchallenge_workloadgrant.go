@@ -73,6 +73,28 @@ type workloadGrant struct {
 	issuers    *workloadIssuerAdmission
 	identities workloadIdentityLookup
 	verifier   *workload.Verifier
+	// deviceKeys resolves the key registered for a device subject, for issuers
+	// whose assertions verify per device. Nil refuses every such assertion.
+	deviceKeys workloadDeviceKeyLookup
+}
+
+// workloadDeviceKeyLookup returns the key registered for a device subject under
+// an issuer, or workloadidentity.ErrDeviceKeyNotFound.
+type workloadDeviceKeyLookup func(ctx context.Context, organizationID string, issuerID uuid.UUID, subject string) (workloadidentity.DeviceKey, error)
+
+// workloadDeviceKeyStoreLookup reads a device's registered key from the store.
+func workloadDeviceKeyStoreLookup(db workloadidentity_repo.DBTX) workloadDeviceKeyLookup {
+	return func(ctx context.Context, organizationID string, issuerID uuid.UUID, subject string) (workloadidentity.DeviceKey, error) {
+		key, err := workloadidentity.DeviceKeySet(ctx, db, workloadidentity.DeviceKeyParams{
+			OrganizationID:   organizationID,
+			WorkloadIssuerID: issuerID,
+			Subject:          subject,
+		})
+		if err != nil {
+			return workloadidentity.DeviceKey{}, fmt.Errorf("resolve workload device key: %w", err)
+		}
+		return key, nil
+	}
 }
 
 // newWorkloadGrant assembles the grant over the database and the shared Redis
@@ -109,6 +131,7 @@ func newWorkloadGrant(db *pgxpool.Pool, redisClient *redis.Client, policy *guard
 		issuers:    newWorkloadIssuerAdmission(workloadIssuerStoreLookup(db), newWorkloadIssuerLookupBudget(redisClient, meterProvider)),
 		identities: workloadIdentityStoreLookup(db),
 		verifier:   verifier,
+		deviceKeys: budgetedDeviceKeyLookup(workloadDeviceKeyStoreLookup(db), newWorkloadDeviceKeyLookupBudget(redisClient, meterProvider)),
 	}
 }
 
@@ -243,9 +266,13 @@ func admitWorkloadAssertion(
 	}
 	presented.issuerID = issuer.ID
 
-	source, err := workloadIssuerKeySource(tenancy, &issuer)
+	keyID := ""
+	if len(token.Headers) == 1 {
+		keyID = token.Headers[0].KeyID
+	}
+	source, err := grant.assertionKeySource(ctx, tenancy, &issuer, claims.Subject, keyID)
 	if err != nil {
-		return presented, refuseWorkloadGrant("issuer_jwks_uri_invalid", err)
+		return presented, err
 	}
 
 	if _, err := grant.verifier.Verify(ctx, raw, workload.Expectation{
@@ -283,6 +310,49 @@ func admitWorkloadAssertion(
 	}
 
 	return presented, nil
+}
+
+// assertionKeySource returns the keys an assertion must verify against: the one
+// key registered for a device subject, or the issuer's remote key set. The
+// unverified sub and kid only select the key; Verify checks the signed sub.
+func (grant *workloadGrant) assertionKeySource(ctx context.Context, tenancy workloadTenancy, issuer *workloadidentity_repo.WorkloadIssuer, subject, keyID string) (jwks.Source, error) {
+	// Any key_source other than none or device_keys fails closed rather than
+	// quietly falling back to the remote key set.
+	if issuer.KeySource.Valid && !workloadidentity.IsDeviceKeyIssuer(*issuer) {
+		return jwks.Source{}, refuseWorkloadGrant("issuer_key_source_unknown", fmt.Errorf("unknown issuer key source %q", issuer.KeySource.String))
+	}
+	if !workloadidentity.IsDeviceKeyIssuer(*issuer) {
+		source, err := workloadIssuerKeySource(tenancy, issuer)
+		if err != nil {
+			return jwks.Source{}, refuseWorkloadGrant("issuer_jwks_uri_invalid", err)
+		}
+		return source, nil
+	}
+
+	if grant.deviceKeys == nil {
+		return jwks.Source{}, refuseWorkloadGrant("device_key_not_registered", errors.New("no device key store is configured"))
+	}
+	key, err := grant.deviceKeys(ctx, tenancy.OrganizationID, issuer.ID, subject)
+	switch {
+	case errors.Is(err, workloadidentity.ErrDeviceKeyNotFound):
+		return jwks.Source{}, refuseWorkloadGrant("device_key_not_registered", err)
+	case errors.Is(err, errWorkloadDeviceKeyLookupRateLimited):
+		refusal := &workloadGrantError{reason: "device_key_lookup_rate_limited", outcome: workloadGrantRateLimited, retryAfter: 0, err: err}
+		if limited, ok := errors.AsType[*workloadDeviceKeyRateLimitedError](err); ok {
+			refusal.retryAfter = limited.retryAfter
+		}
+		return jwks.Source{}, refusal
+	case err != nil:
+		return jwks.Source{}, workloadGrantStageUnavailable("device_key_unavailable", err)
+	}
+	if keyID == "" || keyID != key.Thumbprint {
+		return jwks.Source{}, refuseWorkloadGrant("device_key_id_mismatch", errors.New("assertion kid does not name the device's registered key"))
+	}
+	source, err := jwks.NewInlineSource(key.KeySet)
+	if err != nil {
+		return jwks.Source{}, fmt.Errorf("build device key source: %w", err)
+	}
+	return source, nil
 }
 
 // workloadAssertionGrantAdvertised reports whether the endpoint's metadata
@@ -472,6 +542,8 @@ func workloadSessionIssuance(target workloadSessionTarget, subject urn.SessionSu
 		DesiredSessionDuration: &lifetime,
 		Replayable:             false,
 		SignInID:               uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		CredentialID:           uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		UpstreamClientPicks:    nil,
 	}
 }
 

@@ -15,19 +15,21 @@ import {
 import { Text } from "@/components/ui/Text";
 import { cn } from "@/lib/utils";
 import { useOrganization } from "@/contexts/Auth";
+import { useSdkClient } from "@/contexts/Sdk";
+import { collectPageItems } from "@/components/sessions/collectPageItems";
 import type { Role } from "@gram/client/models/components/role.js";
 import { useCreateRoleMutation } from "@gram/client/react-query/createRole.js";
 import {
   invalidateAllMembers,
   useMembers,
 } from "@gram/client/react-query/members.js";
-import { useAgents } from "@gram/client/react-query/agents.js";
+import { queryKeyAgents } from "@gram/client/react-query/agents.js";
 import { invalidateAllRoles } from "@gram/client/react-query/roles.js";
 import { useListScopes } from "@gram/client/react-query/listScopes.js";
 import { useUpdateRoleMutation } from "@gram/client/react-query/updateRole.js";
 import { Dialog } from "@/components/ui/Dialog";
 import { Button } from "@/components/ui/Button";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { ArrowLeft, Bot, Check, ChevronRight, Loader2 } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
@@ -185,10 +187,17 @@ export function CreateRoleDialog({
   const members = [...(membersData?.members ?? [])].sort((a, b) =>
     a.name.localeCompare(b.name),
   );
-  // The agent picker is optional here, so on any error (including 403 for
-  // callers without agent:read) it shows no agents instead of taking the role
-  // editor down.
-  const { data: agentsData } = useAgents(undefined, undefined, {
+  const sdk = useSdkClient();
+  // Every page of them: an agent missing from this picker cannot be given the
+  // role, and nothing on screen would say why.
+  //
+  // The picker is optional here, so on any error (including 403 for callers
+  // without agent:read) it shows no agents instead of taking the role editor
+  // down.
+  const { data: agentsData } = useQuery({
+    queryKey: [...queryKeyAgents({}), "all-pages"],
+    queryFn: ({ signal }) =>
+      collectPageItems(sdk.agents.list(undefined, undefined, { signal })),
     throwOnError: false,
   });
   // Suspended and revoked agents keep the roles they hold but cannot be given

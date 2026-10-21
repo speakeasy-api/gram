@@ -180,6 +180,7 @@ func (s *Service) ingestRequest(ctx context.Context, payload *gen.IngestPayload,
 
 	hookPayload := &hooksgen.IngestPayload{
 		ApikeyToken:      nil,
+		DeviceAgentToken: nil,
 		ProjectSlugInput: nil,
 		Replayed:         nil,
 		SchemaVersion:    "hook.ingest.v1",
@@ -217,6 +218,7 @@ func (s *Service) ingestRequest(ctx context.Context, payload *gen.IngestPayload,
 		Raw: nil,
 	}
 	outcome, err := s.hooks.IngestAuthenticatedDetailed(ctx, &authCopy, hookPayload, hooks.AuthenticatedIngestOptions{
+		ObserveOnly:                  false,
 		AllowWarnAcknowledgement:     false,
 		AllowSessionIdentityFallback: false,
 		SourceAttributes:             sourceAttributes(payload),
@@ -310,6 +312,7 @@ func (s *Service) ingestResponse(ctx context.Context, payload *gen.IngestPayload
 	role := "assistant"
 	hookPayload := &hooksgen.IngestPayload{
 		ApikeyToken:      nil,
+		DeviceAgentToken: nil,
 		ProjectSlugInput: nil,
 		Replayed:         nil,
 		SchemaVersion:    "hook.ingest.v1",
@@ -347,6 +350,7 @@ func (s *Service) ingestResponse(ctx context.Context, payload *gen.IngestPayload
 		Raw: nil,
 	}
 	_, err = s.hooks.IngestAuthenticatedDetailed(ctx, &authCopy, hookPayload, hooks.AuthenticatedIngestOptions{
+		ObserveOnly:                  false,
 		AllowWarnAcknowledgement:     false,
 		AllowSessionIdentityFallback: false,
 		SourceAttributes:             sourceAttributes(payload),

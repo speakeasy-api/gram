@@ -51,7 +51,7 @@ func describePlatformServer() serverDescription {
 	}
 }
 
-func describeMetaServer(meta *metamcprepo.MetaMcpServer) serverDescription {
+func describeMetaServer(meta *metamcprepo.MetaMcpServer, mode metamcp.DiscoveryMode) serverDescription {
 	hints := cacheHintsCallerUniform
 	if meta.UserSessionIssuerID.Valid {
 		hints = cacheHintsCallerVarying
@@ -59,7 +59,7 @@ func describeMetaServer(meta *metamcprepo.MetaMcpServer) serverDescription {
 	return serverDescription{
 		capabilities: map[string]json.RawMessage{"tools": json.RawMessage("{}"), "resources": json.RawMessage("{}")},
 		identity:     serverInfoMetaServer,
-		instructions: metamcp.ResolveInstructions(conv.FromPGText[string](meta.Instructions)),
+		instructions: metamcp.ResolveDiscoveryInstructions(conv.FromPGText[string](meta.Instructions), mode),
 		cacheHints:   hints,
 	}
 }
@@ -84,7 +84,7 @@ func describeHostedServer(ctx context.Context, logger *slog.Logger, metadataRepo
 
 	description.cacheHints = hostedListCacheHints(!payload.effectiveMCPPrivate(payload.toolsetIsPublic), payload.authenticated)
 
-	metadata, err := metadataRepo.GetMetadataByBackendID(ctx, metadata_repo.GetMetadataByBackendIDParams{ProjectID: payload.projectID, BackendID: payload.toolsetID.UUID})
+	metadata, err := metadataRepo.GetMetadataByBackendID(ctx, metadata_repo.GetMetadataByBackendIDParams{ProjectID: payload.projectID, BackendID: payload.toolsetID.UUID, ToolsetBackend: true})
 	if err != nil {
 		if !errors.Is(err, pgx.ErrNoRows) {
 			logger.WarnContext(ctx, "failed to fetch MCP metadata for instructions", attr.SlogError(err))

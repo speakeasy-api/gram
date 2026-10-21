@@ -30,6 +30,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
+// NoServerMessage is returned when a write names a toolset that has no canonical MCP server.
+const NoServerMessage = "toolset has no hosted MCP server"
+
 // ErrAddressInUse marks a Sync conflict caused by another server holding the hosted address.
 var ErrAddressInUse = errors.New("hosted MCP address is already in use")
 
@@ -457,6 +460,11 @@ func Delete(ctx context.Context, tx pgx.Tx, tracerProvider trace.TracerProvider,
 	}
 	if err != nil {
 		return DeleteResult{}, oops.E(oops.CodeUnexpected, err, "lock hosted MCP server for deletion")
+	}
+	// A server that kept the toolset's id but moved to a remote MCP backend no
+	// longer belongs to the toolset, so the toolset has nothing to tombstone.
+	if !locked.Server.ToolsetID.Valid && locked.Server.RemoteMcpServerID.Valid {
+		return DeleteResult{}, nil
 	}
 	if !locked.Server.ToolsetID.Valid || locked.Server.ToolsetID.UUID != toolset.ID {
 		return DeleteResult{}, oops.E(oops.CodeConflict, nil, "hosted MCP identity belongs to another server")

@@ -27,8 +27,9 @@ func TestDemoListProjectsSyntheticInventoryWithoutManagementCapabilities(t *test
 	require.NoError(t, repo.New(db).SeedAgentCredentialKeyActivityFixture(t.Context(), activityKeyFixture(constants.DemoOrganizationID, "synthetic-owner", agent.ID, used)))
 	service := newTestService(db, &fakeAuthorizationEngine{allowed: map[string]bool{}})
 	ctx := validatedHumanContext(t, constants.DemoOrganizationID, "visitor-without-membership")
-	rows, err := service.List(ctx, &gen.ListPayload{})
+	page, err := service.List(ctx, &gen.ListPayload{})
 	require.NoError(t, err)
+	rows := page.Items
 	require.Len(t, rows, 2)
 	for _, row := range rows {
 		require.Equal(t, &gen.AgentPermissions{Read: true, Write: false, Authorize: false, Transfer: false}, row.Permissions)

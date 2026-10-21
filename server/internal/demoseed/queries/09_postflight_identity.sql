@@ -362,6 +362,47 @@ WHERE project_id = @project_id::uuid AND deleted IS FALSE
   AND resource_identifier = 'https://mcp.linear.app/mcp'
   AND scope_override = ARRAY['read'];
 
+-- name: PostflightIDServerClientAssociations :one
+SELECT count(*) FROM mcp_server_remote_session_clients
+WHERE project_id = @project_id::uuid AND deleted IS FALSE;
+
+-- Check both the total and the expected credential/server/client tuples so
+-- eight misassigned choices cannot satisfy postflight.
+-- name: PostflightIDUpstreamClientChoices :one
+WITH live AS (
+  SELECT * FROM upstream_client_selections
+  WHERE project_id = @project_id::uuid AND deleted IS FALSE
+)
+SELECT count(*) FROM live
+WHERE (SELECT count(*) FROM live) = 8
+  AND credential_kind = 'user_session'
+  AND (
+    (credential_id = ANY(@linear_session_ids::uuid[])
+     AND mcp_server_id = @linear_server_id::uuid
+     AND remote_session_client_id = @linear_client_id::uuid
+     AND no_auth IS FALSE)
+    OR
+    (credential_id = ANY(@slack_session_ids::uuid[])
+     AND mcp_server_id = @slack_server_id::uuid
+     AND remote_session_client_id IS NULL
+     AND client_attachment_scope IS NULL
+     AND no_auth IS TRUE)
+  );
+
+-- Live choices that are not the intended ones: Linear through its main
+-- client, Slack with no upstream authentication, each on a seeded session.
+-- name: PostflightIDMisassignedUpstreamClientChoices :one
+SELECT count(*)
+FROM upstream_client_selections u
+WHERE u.project_id = @project_id::uuid AND u.deleted IS FALSE
+  AND NOT (
+    EXISTS (SELECT 1 FROM user_sessions s WHERE s.id = u.credential_id AND s.deleted IS FALSE)
+    AND (
+      (u.mcp_server_id = @linear_server_id::uuid AND u.remote_session_client_id = @linear_client_id::uuid)
+      OR (u.mcp_server_id = @slack_server_id::uuid AND u.no_auth)
+    )
+  );
+
 -- name: PostflightIDServiceAccountHeaders :one
 SELECT count(*)
 FROM remote_mcp_server_headers header
@@ -558,6 +599,29 @@ WHERE organization_id = @org_id::text AND status NOT IN ('approved', 'blocked');
 -- name: PostflightIDDirectoryRoleMappings :one
 SELECT count(*) FROM directory_role_mappings
 WHERE organization_id = @org_id::text AND deleted IS FALSE;
+
+-- name: PostflightIDPendingDirectoryReviewItems :one
+SELECT count(*) FROM directory_review_items
+WHERE organization_id = @org_id::text AND state = 'pending';
+
+-- name: PostflightIDDirectoryReviewEmailsEnabled :one
+SELECT count(*) FROM directory_review_org_states
+WHERE organization_id = @org_id::text AND emails_disabled_at IS NULL;
+
+-- name: PostflightIDDeletedGroupMappings :one
+SELECT count(*) FROM directory_role_mappings drm
+JOIN directory_groups dg ON dg.id = drm.directory_group_id
+  AND dg.organization_id = drm.organization_id
+WHERE drm.organization_id = @org_id::text AND drm.deleted IS FALSE
+  AND dg.workos_deleted IS TRUE;
+
+-- name: PostflightIDInfraGroupMappedRoles :one
+SELECT count(DISTINCT drm.role_urn) FROM directory_role_mappings drm
+JOIN directory_groups dg ON dg.id = drm.directory_group_id
+  AND dg.organization_id = drm.organization_id
+WHERE drm.organization_id = @org_id::text AND drm.deleted IS FALSE
+  AND dg.name = 'Infra'
+  AND dg.deleted IS FALSE AND dg.workos_deleted IS FALSE;
 
 -- name: PostflightIDGitHubCheckAccessGrants :one
 SELECT count(*) FROM principal_grants

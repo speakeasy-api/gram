@@ -79,7 +79,6 @@ function FleetPage(): JSX.Element {
   const routes = useRoutes();
   const { hasScope } = useRBAC();
   const access = useKillswitchAccess();
-  const assistantFlag = useFeatureFlag(FEATURE_FLAGS.assistants);
   const [params] = useSearchParams();
   const q = params.get("q") ?? "";
   const source = params.get("source") ?? "all";
@@ -112,7 +111,7 @@ function FleetPage(): JSX.Element {
     undefined,
     {
       queryKeyHashFn,
-      enabled: assistantFlag.status === "enabled" && hasScope("project:read"),
+      enabled: hasScope("project:read"),
       throwOnError: false,
       retry: false,
       refetchInterval: 30_000,
@@ -259,7 +258,7 @@ function FleetPage(): JSX.Element {
     void Promise.all([
       chats.refetch(),
       agents.refetch(),
-      ...(assistantFlag.status === "enabled" ? [assistants.refetch()] : []),
+      ...(hasScope("project:read") ? [assistants.refetch()] : []),
       ...(hasScope("org:read") ? [members.refetch()] : []),
       ...(access.canAccess && agentIds.length ? [badges.refetch()] : []),
     ]);

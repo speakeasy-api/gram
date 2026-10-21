@@ -76,8 +76,9 @@ func TestListAgentCredentialActivityCombinesSourcesAndRetainsRevokedHistory(t *t
 	require.NoError(t, queries.SeedAgentCredentialKeyActivityFixture(t.Context(), nullKey))
 	service := newTestService(conn, &fakeAuthorizationEngine{allowed: map[string]bool{}})
 	ctx := validatedHumanContext(t, "org-a", "owner")
-	listed, err := service.List(ctx, &gen.ListPayload{})
+	page, err := service.List(ctx, &gen.ListPayload{})
 	require.NoError(t, err)
+	listed := page.Items
 	require.Len(t, listed, 3)
 	byID := make(map[string]*gen.ManagedAgent, len(listed))
 	for _, view := range listed {
@@ -92,8 +93,9 @@ func TestListAgentCredentialActivityCombinesSourcesAndRetainsRevokedHistory(t *t
 	session.DeletedAt = conv.ToPGTimestamptz(used.Add(4 * time.Minute))
 	session.ExpiresAt = session.DeletedAt
 	require.NoError(t, queries.SeedAgentCredentialSessionActivityFixture(t.Context(), session))
-	listed, err = service.List(ctx, &gen.ListPayload{})
+	page, err = service.List(ctx, &gen.ListPayload{})
 	require.NoError(t, err)
+	listed = page.Items
 	for _, view := range listed {
 		if view.ID == agent.ID.String() {
 			require.Equal(t, new(used.Add(3*time.Minute).Format(time.RFC3339Nano)), view.LastCredentialUsedAt)
@@ -113,15 +115,17 @@ func TestListAgentCredentialActivityRequiresCredentialPermission(t *testing.T) {
 	grantActivityScope(t, conn, "org-a", "reader", agent.ID, authz.ScopeAgentRead)
 	service := newTestService(conn, &fakeAuthorizationEngine{allowed: map[string]bool{}})
 	ctx := validatedHumanContext(t, "org-a", "reader")
-	listed, err := service.List(ctx, &gen.ListPayload{})
+	page, err := service.List(ctx, &gen.ListPayload{})
 	require.NoError(t, err)
+	listed := page.Items
 	require.Len(t, listed, 1)
 	require.True(t, listed[0].Permissions.Read)
 	require.False(t, listed[0].Permissions.Authorize)
 	require.Nil(t, listed[0].LastCredentialUsedAt)
 	grantActivityScope(t, conn, "org-a", "reader", agent.ID, authz.ScopeAgentAuthorize)
-	listed, err = service.List(ctx, &gen.ListPayload{})
+	page, err = service.List(ctx, &gen.ListPayload{})
 	require.NoError(t, err)
+	listed = page.Items
 	require.Len(t, listed, 1)
 	require.True(t, listed[0].Permissions.Authorize)
 	require.Equal(t, new(used.Format(time.RFC3339Nano)), listed[0].LastCredentialUsedAt)
@@ -157,16 +161,18 @@ func TestListAgentCredentialActivityRejectsDisagreeingTenancy(t *testing.T) {
 	require.NoError(t, queries.SeedAgentCredentialKeyActivityFixture(t.Context(), foreignKeyProject))
 	service := newTestService(conn, &fakeAuthorizationEngine{allowed: map[string]bool{}})
 	ctx := validatedHumanContext(t, "org-a", "owner")
-	listed, err := service.List(ctx, &gen.ListPayload{})
+	page, err := service.List(ctx, &gen.ListPayload{})
 	require.NoError(t, err)
+	listed := page.Items
 	require.Len(t, listed, 1)
 	require.Nil(t, listed[0].LastCredentialUsedAt)
 	// Legacy org-null sessions still count when every known tenant agrees.
 	legacy := activitySessionFixture(t, conn, "org-a", agent.ID, used.Add(-time.Hour))
 	legacy.OrganizationID = conv.PtrToPGText(nil)
 	require.NoError(t, queries.SeedAgentCredentialSessionActivityFixture(t.Context(), legacy))
-	listed, err = service.List(ctx, &gen.ListPayload{})
+	page, err = service.List(ctx, &gen.ListPayload{})
 	require.NoError(t, err)
+	listed = page.Items
 	require.Equal(t, new(used.Add(-time.Hour).Format(time.RFC3339Nano)), listed[0].LastCredentialUsedAt)
 }
 
@@ -190,8 +196,9 @@ func TestListAgentCredentialActivityIsolatesSiblingAndOwnerSubjects(t *testing.T
 	ownerKey.Subject = conv.PtrToPGText(nil)
 	require.NoError(t, queries.SeedAgentCredentialKeyActivityFixture(t.Context(), ownerKey))
 	service := newTestService(conn, &fakeAuthorizationEngine{allowed: map[string]bool{}})
-	listed, err := service.List(validatedHumanContext(t, "org-a", "owner"), &gen.ListPayload{})
+	page, err := service.List(validatedHumanContext(t, "org-a", "owner"), &gen.ListPayload{})
 	require.NoError(t, err)
+	listed := page.Items
 	require.Len(t, listed, 2)
 	for _, view := range listed {
 		if view.ID == agent.ID.String() {
@@ -214,14 +221,16 @@ func TestListAgentCredentialActivityRespectsOwnerReassignmentLatch(t *testing.T)
 	grantActivityScope(t, conn, "org-a", "owner", agent.ID, authz.ScopeAgentRead)
 	service := newTestService(conn, &fakeAuthorizationEngine{allowed: map[string]bool{}})
 	ctx := validatedHumanContext(t, "org-a", "owner")
-	listed, err := service.List(ctx, &gen.ListPayload{})
+	page, err := service.List(ctx, &gen.ListPayload{})
 	require.NoError(t, err)
+	listed := page.Items
 	require.Len(t, listed, 1)
 	require.False(t, listed[0].Permissions.Authorize)
 	require.Nil(t, listed[0].LastCredentialUsedAt)
 	grantActivityScope(t, conn, "org-a", "owner", agent.ID, authz.ScopeAgentAuthorize)
-	listed, err = service.List(ctx, &gen.ListPayload{})
+	page, err = service.List(ctx, &gen.ListPayload{})
 	require.NoError(t, err)
+	listed = page.Items
 	require.True(t, listed[0].Permissions.Authorize)
 	require.Equal(t, new(used.Format(time.RFC3339Nano)), listed[0].LastCredentialUsedAt)
 }
@@ -237,12 +246,14 @@ func TestListAgentCredentialActivityUsesOneBatchQuery(t *testing.T) {
 		grantActivityScope(t, conn, "org-a", "reader", agent.ID, authz.ScopeAgentRead)
 	}
 	service := newTestService(conn, &fakeAuthorizationEngine{allowed: map[string]bool{}})
-	listed, err := service.List(validatedHumanContext(t, "org-a", "owner"), &gen.ListPayload{})
+	page, err := service.List(validatedHumanContext(t, "org-a", "owner"), &gen.ListPayload{})
 	require.NoError(t, err)
+	listed := page.Items
 	require.Len(t, listed, 3)
 	require.Equal(t, int64(1), counter.Load())
-	listed, err = service.List(validatedHumanContext(t, "org-a", "reader"), &gen.ListPayload{})
+	page, err = service.List(validatedHumanContext(t, "org-a", "reader"), &gen.ListPayload{})
 	require.NoError(t, err)
+	listed = page.Items
 	require.Len(t, listed, 3)
 	require.Equal(t, int64(1), counter.Load(), "read-only inventory must skip the activity query")
 }

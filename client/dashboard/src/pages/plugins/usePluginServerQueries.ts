@@ -39,17 +39,18 @@ export function usePluginServerQueries(): {
     enabled: canReadEndpoints,
   });
   // Disabled queries can still expose a previous identity's cache. Never pass
-  // that metadata to the page or picker after authorization is lost.
+  // that metadata (or a stale error that would offer a retry) to the page or
+  // picker after authorization is lost.
   return {
     canReadServers,
     toolsetsQuery: canReadServers
       ? toolsetsQuery
-      : { ...toolsetsQuery, data: undefined },
+      : { ...toolsetsQuery, data: undefined, error: null },
     serversQuery: canReadServers
       ? serversQuery
-      : { ...serversQuery, data: undefined },
+      : { ...serversQuery, data: undefined, error: null },
     endpointsQuery: canReadEndpoints
       ? endpointsQuery
-      : { ...endpointsQuery, data: undefined },
+      : { ...endpointsQuery, data: undefined, error: null },
   };
 }

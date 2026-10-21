@@ -2,8 +2,6 @@ package assistantidentity
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"fmt"
 
@@ -12,7 +10,6 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/agents"
 	"github.com/speakeasy-api/gram/server/internal/agents/lifecycle"
-	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
 	"github.com/speakeasy-api/gram/server/internal/assistantidentity/repo"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -136,46 +133,6 @@ func matchExpected(resolved Resolution, expected Identity) error {
 		return ErrInvalidIdentity
 	}
 	return nil
-}
-
-// SnapshotCeiling validates expected and captures the representable subset of
-// its agent's live policy in the same snapshot. Later policy edits cannot
-// mutate the returned canonical bytes.
-func (s *Service) SnapshotCeiling(ctx context.Context, db DB, expected Identity) (CeilingSnapshot, error) {
-	tx, err := readSnapshot(ctx, db)
-	if err != nil {
-		return CeilingSnapshot{}, err
-	}
-	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
-	resolved, err := resolve(ctx, tx, expected.OrganizationID, expected.ProjectID, expected.AssistantID, expected.TriggerID)
-	if err != nil {
-		return CeilingSnapshot{}, err
-	}
-	if err := matchExpected(resolved, expected); err != nil {
-		return CeilingSnapshot{}, err
-	}
-	policy, err := runtimepolicy.LoadAgentPolicy(ctx, tx, expected.OrganizationID, urn.NewPrincipal(urn.PrincipalTypeAgent, expected.AgentID.String()))
-	if err != nil {
-		return CeilingSnapshot{}, fmt.Errorf("load ceiling agent policy: %w", err)
-	}
-	grants, err := runtimepolicy.DelegableGrantsWithExclusions(policy, policy, policy)
-	if err != nil {
-		return CeilingSnapshot{}, fmt.Errorf("derive assistant ceiling: %w", err)
-	}
-	version := runtimepolicy.CurrentDelegatedPolicyVersion
-	delegated, err := runtimepolicy.NewDelegatedPolicy(version, grants)
-	if err != nil {
-		return CeilingSnapshot{}, fmt.Errorf("construct assistant ceiling: %w", err)
-	}
-	encoded, err := runtimepolicy.EncodeDelegatedPolicy(version, delegated)
-	if err != nil {
-		return CeilingSnapshot{}, fmt.Errorf("encode assistant ceiling: %w", err)
-	}
-	digest := sha256.Sum256(encoded)
-	if err := tx.Commit(ctx); err != nil {
-		return CeilingSnapshot{}, fmt.Errorf("commit ceiling snapshot: %w", err)
-	}
-	return CeilingSnapshot{EncodingVersion: version, Policy: encoded, Digest: hex.EncodeToString(digest[:])}, nil
 }
 
 func readSnapshot(ctx context.Context, db DB) (pgx.Tx, error) {

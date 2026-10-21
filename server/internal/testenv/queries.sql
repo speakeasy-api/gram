@@ -683,6 +683,12 @@ INSERT INTO audit_logs (organization_id, actor_id, actor_type, action, subject_i
 VALUES (@organization_id, 'system', 'user', 'organization:enterprise_trial_armed', @organization_id, 'organization')
 RETURNING id::text;
 
+-- name: SeedTrialStartAuditFixture :one
+-- Test-only fixture: records an admin-started trial generation.
+INSERT INTO audit_logs (organization_id, actor_id, actor_type, action, subject_id, subject_type)
+VALUES (@organization_id, 'system', 'user', 'organization:enterprise_trial_started', @organization_id, 'organization')
+RETURNING id::text;
+
 -- name: SeedTrialDemotionAuditFixture :exec
 -- Test-only fixture: records the committed demotion boundary for a retry cycle.
 INSERT INTO audit_logs (organization_id, actor_id, actor_type, action, subject_id, subject_type)
@@ -806,10 +812,10 @@ RETURNING id;
 
 -- name: SeedCapturedAgentChatMessageFixture :one
 -- Test-only fixture: inserts a captured transcript row with the full recall
--- shape — generation, tool_calls, capture source, asset offload marker, and
--- risk-analysis completion — at a deterministic created_at.
-INSERT INTO chat_messages (chat_id, project_id, role, content, generation, tool_calls, source, content_asset_url, risk_analyzed_at, created_at)
-VALUES (@chat_id, @project_id, @role, @content, @generation, sqlc.narg(tool_calls), sqlc.narg(source), sqlc.narg(content_asset_url), sqlc.narg(risk_analyzed_at), @created_at)
+-- shape — generation, tool_calls, stored payload, sender, capture source, asset
+-- offload marker, and risk-analysis completion — at a deterministic created_at.
+INSERT INTO chat_messages (chat_id, project_id, role, content, generation, tool_calls, content_raw, user_id, source, content_asset_url, risk_analyzed_at, created_at)
+VALUES (@chat_id, @project_id, @role, @content, @generation, sqlc.narg(tool_calls), sqlc.narg(content_raw), sqlc.narg(user_id), sqlc.narg(source), sqlc.narg(content_asset_url), sqlc.narg(risk_analyzed_at), @created_at)
 RETURNING id;
 
 -- name: SeedUserAccountFixture :one
@@ -1142,6 +1148,50 @@ UPDATE workload_issuers
 SET deleted_at = clock_timestamp()
 WHERE id = @id
   AND organization_id = @organization_id;
+
+-- name: CreateWorkloadDeviceIssuerFixture :one
+INSERT INTO workload_issuers (organization_id, name, issuer, jwks_uri, allow_wildcard_admission, key_source)
+VALUES (@organization_id, @name, @issuer, @jwks_uri, false, 'device_keys')
+RETURNING id;
+
+-- name: CreateWorkloadDeviceKeyFixture :exec
+INSERT INTO workload_device_keys (organization_id, workload_issuer_id, subject, public_jwk, thumbprint)
+VALUES (@organization_id, @workload_issuer_id, @subject, @public_jwk, @thumbprint);
+
+-- name: SetWorkloadIssuerKeySourceFixture :execrows
+UPDATE workload_issuers
+SET key_source = @key_source
+WHERE id = @id
+  AND organization_id = @organization_id;
+
+-- name: SoftDeleteWorkloadDeviceKeyFixture :execrows
+UPDATE workload_device_keys
+SET deleted_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND workload_issuer_id = @workload_issuer_id
+  AND subject = @subject
+  AND deleted IS FALSE;
+
+-- name: SoftDeleteWorkloadAdmissionFixture :execrows
+UPDATE workload_identity_admissions
+SET deleted_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND workload_issuer_id = @workload_issuer_id
+  AND subject = @subject
+  AND deleted IS FALSE;
+
+-- name: CountLiveWorkloadDeviceKeysFixture :one
+SELECT count(*)
+FROM workload_device_keys
+WHERE organization_id = @organization_id
+  AND subject = @subject
+  AND deleted IS FALSE;
+
+-- name: ExpireWorkloadDeviceJoinTokensFixture :execrows
+UPDATE workload_device_join_tokens
+SET expires_at = clock_timestamp() - interval '1 minute'
+WHERE organization_id = @organization_id;
+
 
 -- Shared attachment fixtures exercise authorization boundaries in remote-session,
 -- issuer-gate, and user-session projection tests.
@@ -2028,3 +2078,110 @@ SELECT id, kind, target, attempts, effective_at, next_attempt_at, claimed_until,
 FROM sign_in_revocation_deliveries
 WHERE organization_id = @organization_id
 ORDER BY created_at, id;
+
+-- name: SetDirectoryGroupWorkOSDeletedFixture :exec
+-- Deletes a directory group as a WorkOS deletion does, setting both markers,
+-- or with deleted false brings it back by clearing them.
+UPDATE directory_groups
+SET workos_deleted_at = CASE WHEN @deleted::boolean THEN clock_timestamp() END,
+    deleted_at = CASE WHEN @deleted::boolean THEN clock_timestamp() END
+WHERE id = @id;
+
+-- name: SetDirectoryUserAttributesFixture :exec
+UPDATE directory_users
+SET attributes = @attributes::jsonb
+WHERE workos_directory_user_id = @workos_directory_user_id;
+
+-- name: SetDirectoryUserWorkOSDeletedFixture :exec
+-- Deletes a directory user as a WorkOS deletion does, setting both markers.
+UPDATE directory_users
+SET workos_deleted_at = clock_timestamp(),
+    deleted_at = clock_timestamp()
+WHERE workos_directory_user_id = @workos_directory_user_id;
+
+-- name: SoftDeleteDirectoryGroupRoleMappingsFixture :exec
+UPDATE directory_role_mappings
+SET deleted_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND directory_group_id = @directory_group_id
+  AND deleted IS FALSE;
+
+-- name: ListDirectoryReviewItemsFixture :many
+-- Every review item of an organization, oldest first, with its source as a
+-- group's WorkOS ID or key=value.
+SELECT
+  i.kind,
+  COALESCE(dg.workos_directory_group_id, i.attribute_key || '=' || i.attribute_value)::text AS source,
+  i.occurrence,
+  i.state
+FROM directory_review_items AS i
+LEFT JOIN directory_groups AS dg ON dg.id = i.directory_group_id
+WHERE i.organization_id = @organization_id
+ORDER BY i.created_at, i.id;
+
+-- name: SetPendingDirectoryReviewItemsStateFixture :exec
+-- Resolves an organization's pending items of one kind, as an admin would.
+UPDATE directory_review_items
+SET state = @state, resolved_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND kind = @kind
+  AND state = 'pending';
+
+-- name: GetDirectoryReviewItemStateFixture :one
+SELECT state FROM directory_review_items WHERE id = @id;
+
+-- name: ListDirectoryReviewOrgStateIDsFixture :many
+SELECT organization_id FROM directory_review_org_states ORDER BY organization_id;
+
+-- name: DirectoryReviewAttributeOptedOutFixture :one
+SELECT EXISTS (
+  SELECT 1 FROM directory_review_attribute_opt_outs
+  WHERE organization_id = @organization_id
+    AND attribute_key = @attribute_key
+    AND deleted IS FALSE
+);
+
+-- name: InsertMCPServerRemoteSessionClientFixture :exec
+-- Test-only fixture: inserts an MCP server upstream client association with
+-- no application checks, so a test can prove the schema itself refuses a
+-- cross-tenant row.
+INSERT INTO mcp_server_remote_session_clients (project_id, organization_id, mcp_server_id, remote_session_client_id, client_attachment_scope)
+VALUES (
+    @project_id, @organization_id, @mcp_server_id, @remote_session_client_id,
+    (SELECT c.attachment_scope FROM remote_session_clients AS c WHERE c.id = @remote_session_client_id)
+);
+
+-- name: ClearMCPServerRemoteSessionClientsFixture :exec
+-- Test-only fixture: removes every upstream client association of one MCP
+-- server, so a table-driven test can set each case's associations afresh.
+DELETE FROM mcp_server_remote_session_clients WHERE mcp_server_id = @mcp_server_id;
+
+-- name: ListUserSessionCredentialsForSubjectFixture :many
+-- Test-only fixture: every session row of one subject, oldest first, with the
+-- credential it belongs to, so a test can follow refresh rotation.
+SELECT id, COALESCE(credential_id, id)::uuid AS credential_id, deleted
+FROM user_sessions
+WHERE subject_urn = @subject_urn
+ORDER BY created_at, id;
+
+-- name: CountDatabasesWithPrefixFixture :one
+-- Databases whose name starts with a prefix, so a test can show clones are dropped.
+SELECT count(*)::bigint AS databases FROM pg_catalog.pg_database
+WHERE starts_with(datname, @prefix::text);
+
+-- name: SeedChatMessageParticipantFixture :exec
+-- Test-only fixture: records one participant snapshot on a captured message.
+INSERT INTO chat_message_participants (project_id, chat_id, message_id, provider, provider_user_id, user_id)
+VALUES (@project_id, @chat_id, @message_id, @provider, @provider_user_id, sqlc.narg(user_id));
+
+-- name: InsertToolsetKeyedMcpMetadataFixture :one
+-- Plants a row under the toolset key, as pods from before the server-key writers wrote.
+INSERT INTO mcp_metadata (toolset_id, project_id, instructions, header_display_names, default_environment_id, external_documentation_url)
+VALUES (@toolset_id, @project_id, @instructions, COALESCE(sqlc.narg('header_display_names')::jsonb, '{}'::jsonb), @default_environment_id, sqlc.narg('external_documentation_url'))
+RETURNING id;
+
+-- name: InsertToolsetKeyedPluginServerFixture :one
+-- Plants a plugin entry under the toolset key, as pods from before the server-key writers wrote.
+INSERT INTO plugin_servers (plugin_id, toolset_id, display_name, policy, sort_order, deleted_at)
+VALUES (@plugin_id, @toolset_id, @display_name, @policy, @sort_order, sqlc.narg('deleted_at'))
+RETURNING *;

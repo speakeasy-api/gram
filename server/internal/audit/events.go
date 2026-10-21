@@ -29,6 +29,8 @@ const (
 	subjectTypeAiScanTarget                subjectType = "device_agent_ai_scan_target"
 	subjectTypeAIToolDecision              subjectType = "ai_tool_decision"
 	subjectTypeDeviceIntegration           subjectType = "device_integration_config"
+	subjectTypeDirectoryReviewItem         subjectType = "directory_review_item"
+	subjectTypeDirectoryReviewSettings     subjectType = "directory_review_settings"
 	subjectTypeDirectoryRoleMapping        subjectType = "directory_role_mapping"
 	subjectTypeEnvironment                 subjectType = "environment"
 	subjectTypeGcpIamCredential            subjectType = "gcp_iam_credential"
@@ -84,8 +86,9 @@ const (
 	subjectTypeVariation                   subjectType = "variation"
 	// The admitted subject, not the machine it admits: the row is the grant, so
 	// it is audited under its own subject rather than under the issuer's.
-	subjectTypeWorkloadAdmission subjectType = "workload_admission"
-	subjectTypeWorkloadIssuer    subjectType = "workload_issuer"
+	subjectTypeWorkloadAdmission       subjectType = "workload_admission"
+	subjectTypeWorkloadDeviceJoinToken subjectType = "workload_device_join_token"
+	subjectTypeWorkloadIssuer          subjectType = "workload_issuer"
 )
 
 type Action string

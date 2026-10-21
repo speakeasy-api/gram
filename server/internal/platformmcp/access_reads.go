@@ -205,11 +205,14 @@ type AccessReadService struct {
 	references *subjectReferenceCodec
 	now        func() time.Time
 	versionKey []byte
+	// directoryReview backs the directory review tools; nil leaves them
+	// reporting unavailable.
+	directoryReview DirectoryReviewBackend
 }
 
 func NewAccessReadService(logger *slog.Logger, db *pgxpool.Pool, budget OperationBudget, keyMaterial string) *AccessReadService {
 	if logger == nil {
-		return &AccessReadService{logger: nil, db: nil, roles: nil, budget: OperationBudget{Connection: nil, Organization: nil}, references: nil, now: nil, versionKey: nil}
+		return &AccessReadService{logger: nil, db: nil, roles: nil, budget: OperationBudget{Connection: nil, Organization: nil}, references: nil, now: nil, versionKey: nil, directoryReview: nil}
 	}
 	references, err := newSubjectReferenceCodec(keyMaterial)
 	if err != nil {
@@ -224,6 +227,8 @@ func NewAccessReadService(logger *slog.Logger, db *pgxpool.Pool, budget Operatio
 		references: references,
 		now:        time.Now,
 		versionKey: versionKey[:],
+
+		directoryReview: nil,
 	}
 }
 
@@ -335,24 +340,20 @@ func (s *AccessReadService) ListMembers(ctx context.Context, principal Principal
 	if input.Limit > 0 {
 		limit = min(input.Limit, maxAccessMembers)
 	}
-	rows, err := platformrepo.New(s.db).SearchPlatformMCPAccessMembers(ctx, platformrepo.SearchPlatformMCPAccessMembersParams{
-		ResultLimit:    int32(limit),
-		OrganizationID: principal.OrganizationID,
-		RoleID:         roleID,
-		Query:          query,
+	// Filtering and limiting share the dashboard's member query; privacy and
+	// masking remain at the MCP boundary.
+	page, err := s.roles.ListMembersFiltered(ctx, principal.OrganizationID, access.MemberListFilter{
+		Query: query, RoleID: roleID, Limit: int32(limit),
 	})
 	if err != nil {
-		return ListAccessMembersOutput{}, fmt.Errorf("search platform mcp access members: %w", err)
+		return ListAccessMembersOutput{}, fmt.Errorf("list platform mcp access members: %w", err)
 	}
-	var total int64
-	if len(rows) > 0 {
-		total = rows[0].TotalMatches
-	}
+	members, total := page.Members, page.TotalMatches
 	output := ListAccessMembersOutput{
 		Members:         []AccessMember{},
 		TotalMatches:    NewSubjectCount(total),
 		Suppressed:      total > 0 && total < SubjectSuppressionThreshold,
-		Truncated:       total > int64(len(rows)),
+		Truncated:       total > int64(len(members)),
 		ExactEmailMatch: false,
 		ExpiresAt:       "",
 	}
@@ -367,10 +368,10 @@ func (s *AccessReadService) ListMembers(ctx context.Context, principal Principal
 	// that differ only in case name several members; those stay suppressed so
 	// the caller is never handed a reference to the wrong person.
 	if output.Suppressed {
-		if !rows[0].ExactEmailMatch.Bool || rows[0].ExactEmailMatches != 1 {
+		if page.ExactEmailMatches != 1 {
 			return output, nil
 		}
-		rows = rows[:1]
+		members = members[:1]
 		output.TotalMatches = NewSubjectCount(1)
 		output.Suppressed = false
 		output.Truncated = false
@@ -379,24 +380,24 @@ func (s *AccessReadService) ListMembers(ctx context.Context, principal Principal
 
 	now := s.now().UTC()
 	output.ExpiresAt = now.Add(SubjectReferenceTTL).Format(time.RFC3339)
-	for _, row := range rows {
-		reference, err := s.references.Encode(principal, subjectKindAccessMember, row.ID, now)
-		if err != nil {
-			return ListAccessMembersOutput{}, fmt.Errorf("issue access member reference: %w", err)
-		}
-		names := make([]string, 0, len(row.RoleIds))
-		for _, id := range row.RoleIds {
+	for _, member := range members {
+		names := make([]string, 0, len(member.RoleIds)+len(member.DirectoryRoleIds))
+		for _, id := range slices.Concat(member.RoleIds, member.DirectoryRoleIds) {
 			if name := roleNames[id]; name != "" {
 				names = append(names, name)
 			}
 		}
 		slices.Sort(names)
-		version, err := accessMemberRoleVersion(s.versionKey, row.ID, row.RoleIds)
+		reference, err := s.references.Encode(principal, subjectKindAccessMember, member.ID, now)
+		if err != nil {
+			return ListAccessMembersOutput{}, fmt.Errorf("issue access member reference: %w", err)
+		}
+		version, err := accessMemberRoleVersion(s.versionKey, member.ID, member.RoleIds)
 		if err != nil {
 			return ListAccessMembersOutput{}, fmt.Errorf("version access member roles: %w", err)
 		}
 		output.Members = append(output.Members, AccessMember{
-			MaskedIdentity: maskSubject(conv.Default(row.Email, row.DisplayName)),
+			MaskedIdentity: maskSubject(conv.Default(member.Email, member.Name)),
 			Roles:          slices.Compact(names),
 			Reference:      reference,
 			Version:        version,

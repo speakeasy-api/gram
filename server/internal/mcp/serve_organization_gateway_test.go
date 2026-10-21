@@ -23,7 +23,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
+	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
@@ -110,6 +112,42 @@ func mintOrganizationGatewayBearer(t *testing.T, ti *testInstance, fx organizati
 	return token
 }
 
+// mintOrganizationGatewayBearerWithPolicy mints an organization gateway bearer
+// whose session carries the connection's consent policy.
+func mintOrganizationGatewayBearerWithPolicy(t *testing.T, ctx context.Context, ti *testInstance, fx organizationGatewayFixture, mode metamcp.DiscoveryMode) string {
+	t.Helper()
+
+	endpoint, err := ti.service.LoadResolvedMcpEndpointBySlug(ctx, ti.logger, fx.organizationSlug, "mcp/gateway")
+	require.NoError(t, err)
+	policy, err := json.Marshal(&toolfilter.SessionPolicy{
+		Resource:  "meta_mcp_server:" + endpoint.MetaMcpServerID.UUID.String(),
+		Selection: nil,
+		Gateway:   &toolfilter.GatewayOptions{DiscoveryMode: &mode},
+	})
+	require.NoError(t, err)
+	token, jti, err := usersessions.NewSigner("test-jwt-secret").Mint(usersessions.MintParams{
+		Subject:  fx.subject,
+		Audience: ti.serverURL.String() + "/mcp/gateway/" + fx.organizationSlug,
+		Issuer:   ti.serverURL.String() + "/mcp/gateway/" + fx.organizationSlug,
+		Lifetime: time.Hour,
+	})
+	require.NoError(t, err)
+	now := time.Now()
+	_, err = usersessionsrepo.New(ti.conn).CreateUserSession(ctx, usersessionsrepo.CreateUserSessionParams{
+		UserSessionIssuerID: fx.issuerID,
+		UserSessionClientID: uuid.NullUUID{},
+		SubjectUrn:          fx.subject,
+		Jti:                 jti,
+		RefreshTokenHash:    conv.ToPGText("test-bearer-" + uuid.NewString()),
+		RefreshExpiresAt:    pgtype.Timestamptz{Time: now.Add(24 * time.Hour), Valid: true},
+		ExpiresAt:           pgtype.Timestamptz{Time: now.Add(time.Hour), Valid: true},
+		ToolSelection:       policy,
+		SignInID:            uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+	})
+	require.NoError(t, err)
+	return token
+}
+
 // serveOrganizationGatewayHTTP drives the handler the way the router does,
 // including the path parameter. The error is returned rather than swallowed:
 // a rejected request never writes to the recorder, so its status would
@@ -148,9 +186,9 @@ func TestServeOrganizationGateway_ListsServersTheUserCanReach(t *testing.T) {
 
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
-	// Members span projects, so every slug is qualified by its project's.
-	require.Contains(t, w.Body.String(), fx.projectSlug+"."+fx.granted)
-	require.Contains(t, w.Body.String(), fx.projectSlug+"."+fx.open)
+	// Slugs are plain unless another project's member shares one.
+	require.Contains(t, w.Body.String(), `"slug":"`+fx.granted+`"`)
+	require.Contains(t, w.Body.String(), `"slug":"`+fx.open+`"`)
 	require.NotContains(t, w.Body.String(), fx.denied)
 }
 
@@ -200,6 +238,38 @@ func TestServeOrganizationGateway_UnauthenticatedIsChallenged(t *testing.T) {
 
 // Slugs are unique per project, so two projects may each hold a server with
 // the same slug. Both must be listed, each under its own project's name.
+func TestServeOrganizationGateway_DirectConnectionListsMemberTools(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPService(t)
+	fx := seedOrganizationGateway(t, ctx, ti)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	decoy := createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, "meta-"+uuid.NewString(), uuid.Nil)
+	hosted := seedHostedMetaMember(t, ctx, ti, decoy.ID, "Hosted tools", 3, mcpservers.VisibilityPublic, "alpha")
+	listTools := makeMetaRPCBody(t, "tools/list", map[string]any{})
+
+	// A connection without a choice stays Progressive.
+	w, err := serveOrganizationGatewayHTTP(t, t.Context(), ti, fx.organizationSlug, mintOrganizationGatewayBearer(t, ti, fx), listTools)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	require.Contains(t, w.Body.String(), `"name":"list_servers"`)
+	require.NotContains(t, w.Body.String(), hosted.slug+"--alpha")
+
+	bearer := mintOrganizationGatewayBearerWithPolicy(t, ctx, ti, fx, metamcp.DiscoveryModeDirect)
+	w, err = serveOrganizationGatewayHTTP(t, t.Context(), ti, fx.organizationSlug, bearer, listTools)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	require.Contains(t, w.Body.String(), `"name":"`+hosted.slug+`--alpha"`)
+	require.NotContains(t, w.Body.String(), `"name":"list_servers"`)
+
+	w, err = serveOrganizationGatewayHTTP(t, t.Context(), ti, fx.organizationSlug, bearer, makeMetaRPCBody(t, "tools/call", map[string]any{
+		"name": hosted.slug + "--alpha", "arguments": map[string]any{},
+	}))
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	require.NotContains(t, w.Body.String(), "unknown tool")
+}
+
 func TestServeOrganizationGateway_SameSlugInTwoProjects(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestMCPService(t)
@@ -304,7 +374,7 @@ func TestServeConsentAction_OrganizationGatewayConnectsAnotherProjectsClient(t *
 	require.NoError(t, err)
 	require.Equal(t, client, login.RemoteSessionClientID)
 	require.Equal(t, otherProject.ID, login.ProjectID, "the login runs in the project that owns the client")
-	require.Equal(t, "mcp/gateway", login.RouteBase, "the login returns to the gateway's consent page")
+	require.Equal(t, mcproute.OrganizationGateway, login.RouteBase, "the login returns to the gateway's consent page")
 	require.Equal(t, fx.organizationSlug, login.McpSlug)
 }
 
@@ -360,7 +430,7 @@ func TestOrganizationGatewayRoutes_ShadowedEndpointKeepsItsRoutes(t *testing.T) 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	router := goahttp.NewMuxer()
-	mcp.Attach(router, ti.service, nil)
+	mcp.Attach(router, ti.service.Service, nil)
 
 	w := postRegistration(t, router, "/mcp/gateway/register")
 	require.Equal(t, http.StatusNotFound, w.Code, "without such an endpoint the path names an organization")
@@ -427,7 +497,7 @@ func TestServeConsent_OrganizationGatewayListsOnlyReachableServersClients(t *tes
 		return w.Body.String()
 	}
 
-	grantedServer := fx.projectSlug + "." + fx.granted
+	grantedServer := fx.granted
 	page := render("")
 	require.Contains(t, page, `data-gateway-server="`+grantedServer+`"`)
 	require.NotContains(t, page, fx.denied)
@@ -437,7 +507,7 @@ func TestServeConsent_OrganizationGatewayListsOnlyReachableServersClients(t *tes
 	require.Contains(t, page, reachable)
 	require.NotContains(t, page, hidden)
 
-	page = render("&server=" + url.QueryEscape(fx.projectSlug+"."+fx.denied))
+	page = render("&server=" + url.QueryEscape(fx.denied))
 	require.Contains(t, page, "data-gateway-focus-unavailable", "a hidden server has no connect page")
 	require.NotContains(t, page, hidden)
 
@@ -504,7 +574,7 @@ func TestServeOrganizationGateway_ConnectionStatusLinksItsConnectPage(t *testing
 	for _, server := range structured.StructuredContent.Servers {
 		slugs = append(slugs, server.Slug)
 	}
-	require.ElementsMatch(t, []string{fx.projectSlug + "." + fx.granted, fx.projectSlug + "." + fx.open}, slugs)
+	require.ElementsMatch(t, []string{fx.granted, fx.open}, slugs)
 }
 
 // Turning the gateway off answers 404 on its MCP endpoint and its sign-in
@@ -516,7 +586,7 @@ func TestServeOrganizationGateway_TurnedOffIsNotFound(t *testing.T) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	router := goahttp.NewMuxer()
-	mcp.Attach(router, ti.service, nil)
+	mcp.Attach(router, ti.service.Service, nil)
 	metadataPath := "/.well-known/oauth-protected-resource/mcp/gateway/" + fx.organizationSlug
 	getMetadata := func() int {
 		w := httptest.NewRecorder()

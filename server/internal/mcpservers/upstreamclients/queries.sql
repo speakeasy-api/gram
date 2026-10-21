@@ -1,0 +1,437 @@
+-- name: AssociateMCPServerRemoteSessionClient :execrows
+-- Records that one MCP server uses one upstream OAuth client, returning one
+-- row whether the association is new or already live, and none when the
+-- server or client no longer qualifies. Both ids are re-checked against the
+-- caller's tenant here because the client id may come from an untenanted join
+-- table: the server must be live in the project, and the client live and owned
+-- by that project, its organization, or the platform.
+INSERT INTO mcp_server_remote_session_clients (project_id, organization_id, mcp_server_id, remote_session_client_id, client_attachment_scope)
+SELECT s.project_id, p.organization_id, s.id, c.id, c.attachment_scope
+FROM mcp_servers AS s
+JOIN projects AS p
+  ON p.id = s.project_id
+ AND p.organization_id = @organization_id::text
+ AND p.deleted IS FALSE
+JOIN remote_session_clients AS c
+  ON c.id = @remote_session_client_id::uuid
+ AND c.deleted IS FALSE
+ AND (c.project_id = p.id
+      OR (c.project_id IS NULL AND c.organization_id = p.organization_id)
+      OR (c.project_id IS NULL AND c.organization_id IS NULL))
+WHERE s.id = @mcp_server_id::uuid
+  AND s.project_id = @project_id::uuid
+  AND s.deleted IS FALSE
+ON CONFLICT (mcp_server_id, remote_session_client_id) WHERE deleted IS FALSE
+DO UPDATE SET updated_at = clock_timestamp();
+
+-- name: CaptureSoleConsumerAssociations :execrows
+-- Associates every client bound to a user session issuer with the issuer's
+-- MCP server when that server is the issuer's only consumer in the
+-- organization. With one consumer the binding can only be meant for that
+-- server, so the association is proven rather than guessed. Issuers shared by
+-- several servers, or also fronting a gateway, prove nothing and are left for
+-- explicit configuration.
+--
+-- Tenancy: the ids arrive from callers that already hold the issuer, but are
+-- re-pinned to the caller's project and organization so a foreign id writes
+-- nothing, and only the organization's own servers and gateways count as
+-- other consumers.
+INSERT INTO mcp_server_remote_session_clients (project_id, organization_id, mcp_server_id, remote_session_client_id, client_attachment_scope)
+SELECT s.project_id, p.organization_id, s.id, c.id, c.attachment_scope
+FROM mcp_servers AS s
+JOIN projects AS p
+  ON p.id = s.project_id
+ AND p.organization_id = @organization_id::text
+ AND p.deleted IS FALSE
+JOIN user_session_issuers AS usi
+  ON usi.id = s.user_session_issuer_id
+ AND usi.deleted IS FALSE
+ AND (usi.project_id = p.id
+      OR (usi.project_id IS NULL AND usi.organization_id = p.organization_id))
+JOIN remote_session_client_user_session_issuers AS link
+  ON link.user_session_issuer_id = usi.id
+JOIN remote_session_clients AS c
+  ON c.id = link.remote_session_client_id
+ AND c.deleted IS FALSE
+ AND (c.project_id = p.id
+      OR (c.project_id IS NULL AND c.organization_id = p.organization_id)
+      OR (c.project_id IS NULL AND c.organization_id IS NULL))
+WHERE s.project_id = @project_id::uuid
+  AND s.deleted IS FALSE
+  AND s.user_session_issuer_id = ANY(@user_session_issuer_ids::uuid[])
+  AND NOT EXISTS (
+    SELECT 1
+    FROM mcp_servers AS other
+    JOIN projects AS other_project
+      ON other_project.id = other.project_id
+     AND other_project.organization_id = p.organization_id
+     AND other_project.deleted IS FALSE
+    WHERE other.user_session_issuer_id = s.user_session_issuer_id
+      AND other.id <> s.id
+      AND other.deleted IS FALSE
+  )
+  AND NOT EXISTS (
+    SELECT 1
+    FROM meta_mcp_servers AS gateway
+    JOIN projects AS gateway_project
+      ON gateway_project.id = gateway.project_id
+     AND gateway_project.deleted IS FALSE
+    WHERE gateway.user_session_issuer_id = s.user_session_issuer_id
+      AND gateway.organization_id = p.organization_id
+      AND gateway.deleted IS FALSE
+  )
+ON CONFLICT (mcp_server_id, remote_session_client_id) WHERE deleted IS FALSE DO NOTHING;
+
+-- name: CaptureGatewayDerivedAssociations :execrows
+-- Associates a gateway-fronted server in the project with the one client its
+-- gateway issuer binds for the server's derived authorization server, which
+-- is how consent claims a member for a gateway client. Runs for a gateway
+-- issuer named in user_session_issuer_ids, or for a server whose own issuer
+-- is named there, since that issuer derives the server's authorization
+-- server. It writes nothing when several of the issuer's clients match, when
+-- a grant the issuer offers for the server's remote upstream routes it to
+-- another client (a grant minted through the issuer, or one for a client the
+-- issuer binds, whichever issuer minted it; a tunnel's claimed resource
+-- proves nothing), or when an explicit detach was recorded for the pair.
+WITH fronted AS (
+    SELECT gateway.user_session_issuer_id AS issuer_id, member.mcp_server_id AS server_id
+    FROM meta_mcp_servers AS gateway
+    JOIN user_session_issuers AS gateway_issuer
+      ON gateway_issuer.id = gateway.user_session_issuer_id
+     AND gateway_issuer.deleted IS FALSE
+     AND (gateway_issuer.project_id = gateway.project_id
+          OR (gateway_issuer.project_id IS NULL AND gateway_issuer.organization_id = gateway.organization_id))
+    JOIN meta_mcp_server_members AS member
+      ON member.meta_mcp_server_id = gateway.id
+     AND member.project_id = gateway.project_id
+     AND member.deleted IS FALSE
+    WHERE gateway.project_id = @project_id::uuid
+      AND gateway.organization_id = @organization_id::text
+      AND gateway.deleted IS FALSE
+    UNION
+    SELECT organization_issuer.id AS issuer_id, s.id AS server_id
+    FROM user_session_issuers AS organization_issuer
+    JOIN mcp_servers AS s
+      ON s.project_id = @project_id::uuid
+    WHERE organization_issuer.project_id IS NULL
+      AND organization_issuer.organization_id = @organization_id::text
+      AND organization_issuer.deleted IS FALSE
+      AND (
+        SELECT count(*)
+        FROM user_session_issuers AS sibling
+        WHERE sibling.organization_id = organization_issuer.organization_id
+          AND sibling.project_id IS NULL
+          AND sibling.deleted IS FALSE
+      ) = 1
+)
+INSERT INTO mcp_server_remote_session_clients (project_id, organization_id, mcp_server_id, remote_session_client_id, client_attachment_scope)
+SELECT s.project_id, p.organization_id, s.id, c.id, c.attachment_scope
+FROM fronted AS f
+JOIN mcp_servers AS s
+  ON s.id = f.server_id
+ AND s.project_id = @project_id::uuid
+ AND s.deleted IS FALSE
+ AND s.remote_session_issuer_id IS NOT NULL
+ AND (s.remote_mcp_server_id IS NOT NULL OR s.tunneled_mcp_server_id IS NOT NULL)
+JOIN projects AS p
+  ON p.id = s.project_id
+ AND p.organization_id = @organization_id::text
+ AND p.deleted IS FALSE
+JOIN remote_session_client_user_session_issuers AS link
+  ON link.user_session_issuer_id = f.issuer_id
+JOIN remote_session_issuers AS derived
+  ON derived.id = s.remote_session_issuer_id
+ AND derived.deleted IS FALSE
+ AND (derived.project_id = p.id
+      OR (derived.project_id IS NULL AND derived.organization_id = p.organization_id)
+      OR (derived.project_id IS NULL AND derived.organization_id IS NULL))
+JOIN remote_session_clients AS c
+  ON c.id = link.remote_session_client_id
+ AND c.deleted IS FALSE
+ AND c.remote_session_issuer_id = derived.id
+ AND (c.project_id = p.id
+      OR (c.project_id IS NULL AND c.organization_id = p.organization_id)
+      OR (c.project_id IS NULL AND c.organization_id IS NULL))
+LEFT JOIN remote_mcp_servers AS r
+  ON r.id = s.remote_mcp_server_id
+ AND r.project_id = s.project_id
+ AND r.deleted IS FALSE
+WHERE (f.issuer_id = ANY(@user_session_issuer_ids::uuid[]) OR s.user_session_issuer_id = ANY(@user_session_issuer_ids::uuid[]))
+  AND NOT EXISTS (
+    SELECT 1
+    FROM remote_session_client_user_session_issuers AS other_link
+    JOIN remote_session_clients AS other
+      ON other.id = other_link.remote_session_client_id
+     AND other.deleted IS FALSE
+    WHERE other_link.user_session_issuer_id = f.issuer_id
+      AND other.id <> c.id
+      AND other.remote_session_issuer_id = s.remote_session_issuer_id
+  )
+  AND NOT EXISTS (
+    SELECT 1
+    FROM remote_sessions AS rs
+    WHERE rs.remote_session_client_id <> c.id
+      AND rs.deleted IS FALSE
+      AND r.url IS NOT NULL
+      AND rtrim(rs.resource, '/') = rtrim(r.url, '/')
+      AND EXISTS (
+        SELECT 1
+        FROM user_session_issuers AS minted
+        LEFT JOIN projects AS minted_project ON minted_project.id = minted.project_id
+        WHERE minted.id = rs.user_session_issuer_id
+          AND COALESCE(minted.organization_id, minted_project.organization_id) = p.organization_id
+      )
+      AND (
+        rs.user_session_issuer_id = f.issuer_id
+        OR EXISTS (
+          SELECT 1
+          FROM remote_session_client_user_session_issuers AS grant_link
+          WHERE grant_link.remote_session_client_id = rs.remote_session_client_id
+            AND grant_link.user_session_issuer_id = f.issuer_id
+        )
+      )
+  )
+  AND NOT EXISTS (
+    SELECT 1
+    FROM mcp_server_remote_session_clients AS recorded
+    WHERE recorded.mcp_server_id = s.id
+      AND recorded.remote_session_client_id = c.id
+  )
+ON CONFLICT (mcp_server_id, remote_session_client_id) WHERE deleted IS FALSE DO NOTHING;
+
+-- name: PruneUnservableAssociations :execrows
+-- Removes the project's associations no issuer can serve: the server is gone,
+-- the client is deleted, or the client is bound neither to the server's own
+-- user session issuer nor to the live issuer of a gateway fronting the server
+-- (a gateway it is a member of, or its organization's only organization-level
+-- issuer for the organization gateway). Rows are deleted outright rather
+-- than soft-deleted: a soft-deleted row records an explicit detach, which
+-- capture and the backfill keep, and automatic cleanup must not read as one,
+-- so a server that regains its binding or rejoins a gateway is captured again.
+DELETE FROM mcp_server_remote_session_clients AS a
+USING mcp_servers AS s
+WHERE a.mcp_server_id = s.id
+  AND a.project_id = @project_id::uuid
+  AND a.organization_id = @organization_id::text
+  AND a.deleted IS FALSE
+  AND (
+    s.deleted IS TRUE
+    OR NOT EXISTS (
+      SELECT 1
+      FROM remote_session_client_user_session_issuers AS link
+      JOIN remote_session_clients AS c
+        ON c.id = link.remote_session_client_id
+       AND c.deleted IS FALSE
+      WHERE link.remote_session_client_id = a.remote_session_client_id
+        AND (
+          link.user_session_issuer_id = s.user_session_issuer_id
+          OR EXISTS (
+            SELECT 1
+            FROM meta_mcp_servers AS gateway
+            JOIN projects AS gateway_project
+              ON gateway_project.id = gateway.project_id
+             AND gateway_project.deleted IS FALSE
+            JOIN user_session_issuers AS gateway_issuer
+              ON gateway_issuer.id = gateway.user_session_issuer_id
+             AND gateway_issuer.deleted IS FALSE
+             AND (gateway_issuer.project_id = s.project_id
+                  OR (gateway_issuer.project_id IS NULL AND gateway_issuer.organization_id = a.organization_id))
+            JOIN meta_mcp_server_members AS member
+              ON member.meta_mcp_server_id = gateway.id
+             AND member.project_id = gateway.project_id
+             AND member.deleted IS FALSE
+            WHERE gateway.user_session_issuer_id = link.user_session_issuer_id
+              AND gateway.deleted IS FALSE
+              AND member.mcp_server_id = s.id
+          )
+          OR EXISTS (
+            SELECT 1
+            FROM user_session_issuers AS organization_issuer
+            WHERE organization_issuer.id = link.user_session_issuer_id
+              AND organization_issuer.project_id IS NULL
+              AND organization_issuer.organization_id = a.organization_id
+              AND organization_issuer.deleted IS FALSE
+              AND (
+              SELECT count(*)
+              FROM user_session_issuers AS sibling
+              WHERE sibling.organization_id = organization_issuer.organization_id
+                AND sibling.project_id IS NULL
+                AND sibling.deleted IS FALSE
+            ) = 1
+          )
+        )
+    )
+  );
+
+-- name: PruneRemoteSessionClientAssociations :execrows
+-- The client-keyed form of PruneUnservableAssociations, for a change to one
+-- client's bindings that reaches servers in several of the organization's
+-- projects: an organization issuer losing the client, or the client being
+-- deleted. Deletes outright for the same reason.
+DELETE FROM mcp_server_remote_session_clients AS a
+USING mcp_servers AS s
+WHERE a.mcp_server_id = s.id
+  AND a.remote_session_client_id = @remote_session_client_id::uuid
+  AND a.organization_id = @organization_id::text
+  AND a.deleted IS FALSE
+  AND (
+    s.deleted IS TRUE
+    OR NOT EXISTS (
+      SELECT 1
+      FROM remote_session_client_user_session_issuers AS link
+      JOIN remote_session_clients AS c
+        ON c.id = link.remote_session_client_id
+       AND c.deleted IS FALSE
+      WHERE link.remote_session_client_id = a.remote_session_client_id
+        AND (
+          link.user_session_issuer_id = s.user_session_issuer_id
+          OR EXISTS (
+            SELECT 1
+            FROM meta_mcp_servers AS gateway
+            JOIN projects AS gateway_project
+              ON gateway_project.id = gateway.project_id
+             AND gateway_project.deleted IS FALSE
+            JOIN user_session_issuers AS gateway_issuer
+              ON gateway_issuer.id = gateway.user_session_issuer_id
+             AND gateway_issuer.deleted IS FALSE
+             AND (gateway_issuer.project_id = s.project_id
+                  OR (gateway_issuer.project_id IS NULL AND gateway_issuer.organization_id = a.organization_id))
+            JOIN meta_mcp_server_members AS member
+              ON member.meta_mcp_server_id = gateway.id
+             AND member.project_id = gateway.project_id
+             AND member.deleted IS FALSE
+            WHERE gateway.user_session_issuer_id = link.user_session_issuer_id
+              AND gateway.deleted IS FALSE
+              AND member.mcp_server_id = s.id
+          )
+          OR EXISTS (
+            SELECT 1
+            FROM user_session_issuers AS organization_issuer
+            WHERE organization_issuer.id = link.user_session_issuer_id
+              AND organization_issuer.project_id IS NULL
+              AND organization_issuer.organization_id = a.organization_id
+              AND organization_issuer.deleted IS FALSE
+              AND (
+              SELECT count(*)
+              FROM user_session_issuers AS sibling
+              WHERE sibling.organization_id = organization_issuer.organization_id
+                AND sibling.project_id IS NULL
+                AND sibling.deleted IS FALSE
+            ) = 1
+          )
+        )
+    )
+  );
+
+-- name: RemoveGlobalClientAssociations :execrows
+-- Removes every association of a deleted platform-global client, in every
+-- organization. Only the platform-administered global client deletion calls
+-- it, and it touches nothing but that one client's rows. Deletes outright,
+-- like the prunes.
+DELETE FROM mcp_server_remote_session_clients AS a
+USING remote_session_clients AS c
+WHERE c.id = a.remote_session_client_id
+  AND c.project_id IS NULL
+  AND c.organization_id IS NULL
+  AND c.deleted IS TRUE
+  AND a.remote_session_client_id = @remote_session_client_id::uuid
+  AND a.deleted IS FALSE;
+
+-- name: ListMCPServerRemoteSessionClients :many
+-- The upstream OAuth clients one MCP server is associated with, and how many
+-- of the organization's live servers share each one, so a caller can warn
+-- that editing a shared client changes every server using it. A platform
+-- client's use by other organizations is never counted.
+SELECT
+    a.remote_session_client_id,
+    a.created_at                           AS associated_at,
+    c.client_id                            AS external_client_id,
+    c.project_id                           AS client_project_id,
+    c.organization_id                      AS client_organization_id,
+    c.remote_session_issuer_id,
+    i.slug                                 AS issuer_slug,
+    i.name                                 AS issuer_name,
+    i.issuer                               AS issuer_url,
+    (
+      SELECT count(*)
+      FROM mcp_server_remote_session_clients AS shared
+      JOIN mcp_servers AS shared_server
+        ON shared_server.id = shared.mcp_server_id
+       AND shared_server.deleted IS FALSE
+      WHERE shared.remote_session_client_id = a.remote_session_client_id
+        AND shared.organization_id = a.organization_id
+        AND shared.deleted IS FALSE
+    )::bigint                              AS server_count
+FROM mcp_server_remote_session_clients AS a
+JOIN remote_session_clients AS c
+  ON c.id = a.remote_session_client_id
+ AND c.deleted IS FALSE
+JOIN remote_session_issuers AS i
+  ON i.id = c.remote_session_issuer_id
+WHERE a.mcp_server_id = @mcp_server_id::uuid
+  AND a.project_id = @project_id::uuid
+  AND a.deleted IS FALSE
+ORDER BY a.created_at, a.remote_session_client_id;
+
+-- name: DetachMCPServerRemoteSessionClient :execrows
+-- Removes one server's association. The client and its other associations
+-- are untouched. The row is soft-deleted so capture and the backfill keep the
+-- explicit detach.
+UPDATE mcp_server_remote_session_clients
+SET deleted_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE mcp_server_id = @mcp_server_id::uuid
+  AND remote_session_client_id = @remote_session_client_id::uuid
+  AND project_id = @project_id::uuid
+  AND deleted IS FALSE;
+
+-- name: IsSoleConsumerBinding :one
+-- Whether the client is bound to the server's user session issuer and the
+-- server is that issuer's only consumer in its organization, in which case an
+-- association is re-derived from the binding and cannot be detached on its
+-- own.
+SELECT EXISTS (
+  SELECT 1
+  FROM mcp_servers AS s
+  JOIN projects AS p
+    ON p.id = s.project_id
+  JOIN remote_session_client_user_session_issuers AS link
+    ON link.user_session_issuer_id = s.user_session_issuer_id
+   AND link.remote_session_client_id = @remote_session_client_id::uuid
+  WHERE s.id = @mcp_server_id::uuid
+    AND s.project_id = @project_id::uuid
+    AND s.deleted IS FALSE
+    AND NOT EXISTS (
+      SELECT 1
+      FROM mcp_servers AS other
+      JOIN projects AS other_project
+        ON other_project.id = other.project_id
+       AND other_project.organization_id = p.organization_id
+       AND other_project.deleted IS FALSE
+      WHERE other.user_session_issuer_id = s.user_session_issuer_id
+        AND other.id <> s.id
+        AND other.deleted IS FALSE
+    )
+    AND NOT EXISTS (
+      SELECT 1
+      FROM meta_mcp_servers AS gateway
+      JOIN projects AS gateway_project
+        ON gateway_project.id = gateway.project_id
+       AND gateway_project.deleted IS FALSE
+      WHERE gateway.user_session_issuer_id = s.user_session_issuer_id
+        AND gateway.organization_id = p.organization_id
+        AND gateway.deleted IS FALSE
+    )
+) AS sole_consumer;
+
+-- name: ListServerAssociatedClients :many
+-- The live clients associated with each of the given servers, for consent to
+-- offer a server only its own clients.
+SELECT a.mcp_server_id, a.remote_session_client_id
+FROM mcp_server_remote_session_clients AS a
+JOIN remote_session_clients AS c
+  ON c.id = a.remote_session_client_id
+ AND c.deleted IS FALSE
+WHERE a.mcp_server_id = ANY(@mcp_server_ids::uuid[])
+  AND a.organization_id = @organization_id::text
+  AND a.deleted IS FALSE;

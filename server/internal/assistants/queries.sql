@@ -164,6 +164,7 @@ WHERE project_id = @project_id
   AND deleted IS FALSE;
 
 -- name: LoadAssistantToolsets :many
+-- Test-only: no production code writes legacy assistant_toolsets rows.
 SELECT
   at.assistant_id,
   at.toolset_id,
@@ -345,11 +346,13 @@ ORDER BY so.seen_at DESC, so.id DESC
 LIMIT 1;
 
 -- name: ClearAssistantToolsets :exec
+-- Clears legacy toolset-keyed rows left behind.
 DELETE FROM assistant_toolsets
 WHERE assistant_id = @assistant_id
   AND project_id = @project_id;
 
 -- name: AddAssistantToolsets :copyfrom
+-- Test-only, see LoadAssistantToolsets.
 INSERT INTO assistant_toolsets (
   assistant_id,
   toolset_id,
@@ -467,7 +470,7 @@ WHERE ams.assistant_id = @assistant_id
   AND ams.project_id = @project_id;
 
 -- name: ListCanonicalWrapperIDs :many
--- Dialable toolsets with a live canonical wrapper (same id): the attachments the dependent move re-keys.
+-- Writer-only: of the given toolsets, those with a live canonical wrapper (same id); hosted attachments are stored under it.
 SELECT ms.id
 FROM mcp_servers ms
 JOIN toolsets t ON t.id = ms.id AND t.project_id = ms.project_id
@@ -475,12 +478,10 @@ WHERE ms.project_id = @project_id
   AND ms.id = ANY(@toolset_ids::UUID[])
   AND ms.toolset_id = ms.id
   AND ms.deleted IS FALSE
-  AND ms.visibility <> 'disabled'
-  AND t.mcp_enabled IS TRUE
-  AND t.mcp_slug IS NOT NULL
   AND t.deleted IS FALSE;
 
 -- name: ClearAssistantToolsetsForServers :exec
+-- Clears legacy toolset-keyed rows left behind.
 DELETE FROM assistant_toolsets
 WHERE assistant_id = @assistant_id
   AND project_id = @project_id
@@ -1214,8 +1215,8 @@ WHERE project_id = @project_id
 
 -- name: ListAssistantRuntimesForReap :many
 -- Returns every runtime row for an assistant that still carries backend
--- metadata, regardless of soft-delete state. A stopped row whose Fly app
--- was not collected leaves its app_name in metadata and would otherwise
+-- metadata, regardless of soft-delete state. A stopped row whose resources
+-- were not collected retains backend metadata and would otherwise
 -- be invisible to deleted-aware queries.
 SELECT id, assistant_thread_id, assistant_id, project_id, backend, backend_metadata_json, state, warm_until
 FROM assistant_runtimes
@@ -1320,7 +1321,7 @@ WHERE r.state = @active_state
 ORDER BY r.updated_at ASC;
 
 -- name: MarkAssistantRuntimeReaped :exec
--- Records that the backend resource (e.g. Fly app) for this runtime has
+-- Records that the backend resource (e.g. sandbox claim) for this runtime has
 -- been torn down. Clearing backend_metadata_json removes it from the reap
 -- candidate set so the janitor stops re-scanning it.
 UPDATE assistant_runtimes
@@ -1339,7 +1340,7 @@ WHERE id = @runtime_id
 -- indefinitely. The NOT EXISTS guard restricts the candidate to the most
 -- recent non-reaped row per thread: ReserveAssistantRuntime copies the latest
 -- non-empty metadata into each new row, so a stale older sibling can share
--- `machine_id` with the current owner — destroying it would yank the live
+-- resource metadata with the current owner — destroying it would yank the live
 -- machine out from under a fresher row that is still inside its own TTL.
 SELECT r.id, r.assistant_thread_id, r.assistant_id, r.project_id, r.backend, r.backend_metadata_json, r.state, r.warm_until
 FROM assistant_runtimes r
@@ -1358,15 +1359,12 @@ ORDER BY r.updated_at ASC
 LIMIT @limit_count;
 
 -- name: MarkAssistantRuntimeMachineReaped :execrows
--- Per-thread reap: strips the machine slot from backend metadata while
--- preserving app-level fields (app_name, app_id, app_url, app_ip, region) so
--- the next admit for the same thread cold-launches into the same Fly app and
--- keeps its allocated IP and secrets. Filters by current state so a row that
--- raced into starting/active between selection and update is left alone — the
--- 0-rows return signals the caller to skip the destructive backend call.
+-- Per-thread reap: marks the stopped resource reaped while retaining backend
+-- metadata for full cleanup (e.g. local workspace volumes). Filters by current
+-- state so a row that raced into starting/active between selection and
+-- update is left alone.
 UPDATE assistant_runtimes
 SET state = @reaped_state,
-    backend_metadata_json = backend_metadata_json - 'machine_id' - 'last_boot_id',
     updated_at = clock_timestamp(),
     ended_at = COALESCE(ended_at, clock_timestamp()),
     deleted_at = COALESCE(deleted_at, clock_timestamp())

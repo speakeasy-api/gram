@@ -140,8 +140,6 @@ export default function AddMcpServer(): JSX.Element {
   // mcp:write regardless.
   const gatewaysEnabled =
     useFeatureFlag(FEATURE_FLAGS.gatewayEndpoints).status === "enabled";
-  const isFunctionsEnabled =
-    telemetry.isFeatureEnabled("gram-functions") ?? false;
   const isTunneledMcpEnabled =
     telemetry.isFeatureEnabled(TUNNELED_MCP_FEATURE_FLAG) ?? false;
 
@@ -224,18 +222,12 @@ export default function AddMcpServer(): JSX.Element {
       description:
         "Build a server from an OpenAPI document or function this project already has.",
     },
-    ...(isFunctionsEnabled
-      ? [
-          {
-            href: routes.mcp.add.function.href(),
-            icon: (
-              <Code className="text-foreground size-10" strokeWidth={1.25} />
-            ),
-            title: "Write custom code",
-            description: "Create tools with TypeScript functions.",
-          },
-        ]
-      : []),
+    {
+      href: routes.mcp.add.function.href(),
+      icon: <Code className="text-foreground size-10" strokeWidth={1.25} />,
+      title: "Write custom code",
+      description: "Create tools with TypeScript functions.",
+    },
   ];
 
   return (

@@ -1,7 +1,6 @@
 import { MCPSessionsEmptyState } from "@/components/setup-empty-state";
 import { useSessionAgents } from "@/hooks/useSessionAgents";
 import { useDeferredValue, useMemo, useState } from "react";
-import { Navigate } from "react-router";
 import {
   defineFilters,
   useFilterState,
@@ -10,8 +9,6 @@ import {
 } from "@/components/filters";
 import { Page } from "@/components/page-layout";
 import { ResourceListPage } from "@/components/page-templates";
-import { useTelemetry } from "@/contexts/Telemetry";
-import { useRoutes } from "@/routes";
 import { ConnectionsList } from "@/components/connections/ConnectionsList";
 import {
   CONNECTION_GROUPING_LABELS,
@@ -63,15 +60,6 @@ const GROUPING_OPTIONS: { value: ConnectionGrouping; label: string }[] = [
 
 export default function UserSessions(): JSX.Element {
   const project = useProject();
-  const telemetry = useTelemetry();
-  const routes = useRoutes();
-
-  // Gated behind the `user-sessions-dashboard` PostHog flag (internal rollout).
-  // Redirect direct-URL access when the flag has resolved to disabled; while it
-  // is still loading (undefined) we render and let RBAC guard the data.
-  if (telemetry.isFeatureEnabled("user-sessions-dashboard") === false) {
-    return <Navigate to={routes.home.href()} replace />;
-  }
 
   return <UserSessionsInner key={project.id} />;
 }

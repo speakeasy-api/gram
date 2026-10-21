@@ -6,6 +6,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 // WorkloadSessionAdmission contains the policy sets a workload session acts
@@ -51,6 +52,13 @@ func (e *Engine) AdmitWorkloadSession(ctx context.Context) (context.Context, err
 	if admission.AgentPrincipal == "" || admission.OwnerUserID == "" {
 		return ctx, oops.C(oops.CodeUnauthorized)
 	}
+	agent, err := urn.ParsePrincipal(admission.AgentPrincipal)
+	if err != nil || agent.Type != urn.PrincipalTypeAgent {
+		return ctx, oops.C(oops.CodeUnauthorized)
+	}
+	// Record the agent whose policy was admitted, so every later use reads this
+	// one value instead of resolving the assignment again.
+	ctx = contextvalues.WithWorkloadAgent(ctx, agent)
 	ctx = contextvalues.WithPrincipalCredentialOwner(ctx, admission.OwnerUserID)
 	return admittedPoliciesToContext(ctx, admission.Ceiling, admission.Agent, admission.Owner), nil
 }

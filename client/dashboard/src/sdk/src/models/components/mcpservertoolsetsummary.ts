@@ -13,6 +13,10 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
  */
 export type McpServerToolsetSummary = {
   /**
+   * The toolset's description, if any
+   */
+  description?: string | undefined;
+  /**
    * Whether every configured tool is an external MCP proxy tool, so the real tool count is unknown until a user signs in
    */
   externalMcpProxyOnly: boolean;
@@ -56,6 +60,7 @@ export const McpServerToolsetSummary$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
+    description: z.optional(z.string()),
     external_mcp_proxy_only: z.boolean(),
     external_mcp_slugs: z.array(z.string()),
     external_oauth_server_id: z.optional(z.string()),

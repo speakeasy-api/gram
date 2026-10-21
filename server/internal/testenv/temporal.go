@@ -42,9 +42,14 @@ const (
 	devServerMaxProcs = "2"
 )
 
-// devServerArgs bounds the dev server's caches by size rather than by entry
-// count, which is what the defaults do.
+// devServerArgs sizes the dev server for parallel tests, bounding caches and
+// task queues while allowing bursts of namespace registration during setup.
 var devServerArgs = []string{
+	// Each test registers its own namespace. The shared namespace-management
+	// limit defaults to 20 RPS (burst 40), which throttles parallel test setup.
+	// This ephemeral single-cluster server has no namespace replication to
+	// protect; 1000 RPS leaves headroom for setup bursts in large packages.
+	"--dynamic-config-value", "frontend.rps.namespaceReplicationInducingAPIs=1000",
 	// The history cache is count-bounded by default (128k mutable state
 	// entries host-wide), which puts no ceiling on bytes. Switching it to a
 	// size-based limit is what makes GOMEMLIMIT reachable instead of a source

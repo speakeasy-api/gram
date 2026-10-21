@@ -820,21 +820,17 @@ export function AddServersSheet({
         encodeURIComponent(gatewayId),
       allowed: canCreate,
     },
-    ...(telemetry.isFeatureEnabled("gram-functions")
-      ? [
-          {
-            label: "Write custom code",
-            description: "Create tools with TypeScript functions.",
-            Icon: Code,
-            group: "Advanced",
-            href:
-              routes.mcp.add.function.href() +
-              "?attachToGateway=" +
-              encodeURIComponent(gatewayId),
-            allowed: canWriteProject && canCreate,
-          },
-        ]
-      : []),
+    {
+      label: "Write custom code",
+      description: "Create tools with TypeScript functions.",
+      Icon: Code,
+      group: "Advanced",
+      href:
+        routes.mcp.add.function.href() +
+        "?attachToGateway=" +
+        encodeURIComponent(gatewayId),
+      allowed: canWriteProject && canCreate,
+    },
   ];
   const creationAllowed = creationOptions.some((option) => option.allowed);
   return (

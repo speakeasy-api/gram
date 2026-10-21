@@ -1,6 +1,11 @@
 import type { Employee } from "@/components/observe/insightsEmployeesData";
+import { identityHasAccount } from "./identityKind";
 import type { Gram } from "@gram/client";
 import type { ManagedAgent } from "@gram/client/models/components/managedagent.js";
+import type { Lifecycle } from "@gram/client/models/operations/listagents.js";
+
+/** The lifecycle values the agent roster filter may send. */
+export type AgentLifecycleFilter = Lifecycle;
 import { GramError } from "@gram/client/models/errors/gramerror.js";
 import { telemetrySearchUsers } from "@gram/client/funcs/telemetrySearchUsers";
 import { Source } from "@gram/client/models/components/searchuserspayload.js";
@@ -61,20 +66,70 @@ export async function fetchIdentityRoster(
   return users;
 }
 
-/** Agent management is org-scoped and returns 404 when its rollout is off. */
+/** One server-ordered page of the agent inventory. */
+export type RegisteredAgentPage = {
+  items: ManagedAgent[];
+  /** Absent once the inventory is exhausted. */
+  nextCursor?: string;
+};
+
+export type RegisteredAgentPageRequest = {
+  cursor?: string;
+  limit?: number;
+  /** Case-insensitive substring match on the agent name, applied by the server. */
+  search?: string;
+  /** Name order, which is the only order the inventory offers. */
+  sortOrder?: "asc" | "desc";
+  /** Lifecycle states to keep; empty means every state. */
+  lifecycle?: Lifecycle[];
+  /** Owners to keep; empty means every owner. */
+  ownerUserIds?: string[];
+  /** Registration window, as the server compares it. */
+  after?: Date;
+  before?: Date;
+};
+
+/**
+ * Agent management is org-scoped and returns 404 when its rollout is off.
+ *
+ * The page is decided by the server: ordering, searching and the cursor all
+ * belong to the same query, so narrowing or reordering in the browser would
+ * describe a different list than the one the cursor walks.
+ */
 export async function fetchRegisteredAgents(
   client: Gram,
+  request: RegisteredAgentPageRequest = {},
   signal?: AbortSignal,
-): Promise<ManagedAgent[]> {
+): Promise<RegisteredAgentPage> {
   try {
-    return await client.agents.list(undefined, undefined, { signal });
+    const page = await client.agents.list(
+      {
+        cursor: request.cursor,
+        limit: request.limit,
+        search: request.search?.trim() || undefined,
+        nameOrder: request.sortOrder,
+        lifecycle: request.lifecycle?.length ? request.lifecycle : undefined,
+        ownerUserIds: request.ownerUserIds?.length
+          ? request.ownerUserIds
+          : undefined,
+        registeredAfter: request.after,
+        registeredBefore: request.before,
+      },
+      undefined,
+      { signal },
+    );
+    return {
+      items: page.result.items,
+      nextCursor: page.result.nextCursor,
+    };
   } catch (error) {
-    if (error instanceof GramError && error.statusCode === 404) return [];
+    if (error instanceof GramError && error.statusCode === 404)
+      return { items: [] };
     throw error;
   }
 }
 
-/** Inventory rows do not imply human enrollment or telemetry activity. */
+/** Inventory rows imply no directory profile, membership or telemetry activity. */
 export function registeredAgentIdentity(agent: ManagedAgent): Employee {
   return {
     id: `agent:${agent.id}`,
@@ -82,7 +137,8 @@ export function registeredAgentIdentity(agent: ManagedAgent): Employee {
     name: agent.name,
     email: "",
     role: "",
-    status: "not_enrolled",
+    inDirectory: false,
+    seen: false,
     tokenCount: 0,
     lastActivity: "—",
     lastActivityTimestamp: null,
@@ -106,14 +162,39 @@ export function registeredAgentHref(
   return `${path}?${params.toString()}`;
 }
 
-/** Inventory-only agents have no known enrollment or activity classification. */
+/**
+ * The identity-fact filters, each answered on its own: in the directory, a
+ * member of this organization, and seen working. Values are the option values
+ * offered by the list ("in_directory", "not_in_directory", and so on); an
+ * empty or absent value leaves that fact unfiltered.
+ */
+export type IdentityFactFilters = {
+  directory?: string;
+  membership?: string;
+  seen?: string;
+};
+
+/**
+ * Inventory-only agents have no known directory, membership or activity
+ * classification, so any of these filters leaves them out rather than
+ * answering "no" for them.
+ */
 export function matchesIdentityTelemetryFilters(
   identity: Employee,
-  enrollment: string | undefined,
+  facts: IdentityFactFilters,
   activity: string | undefined,
 ): boolean {
-  if (identity.registeredAgentId && (enrollment || activity)) return false;
-  if (enrollment && identity.status !== enrollment) return false;
+  const { directory, membership, seen } = facts;
+  if (
+    identity.registeredAgentId &&
+    (directory || membership || seen || activity)
+  )
+    return false;
+  if (directory && identity.inDirectory !== (directory === "in_directory"))
+    return false;
+  if (membership && identityHasAccount(identity) !== (membership === "member"))
+    return false;
+  if (seen && identity.seen !== (seen === "seen")) return false;
   return !activity || matchesActivity(identity, activity);
 }
 

@@ -952,8 +952,8 @@ func (q *Queries) OrgInsertSigintSensorSignal(ctx context.Context, arg OrgInsert
 }
 
 const orgUpsertMetadata = `-- name: OrgUpsertMetadata :exec
-INSERT INTO organization_metadata (id, name, slug, gram_account_type, whitelisted)
-VALUES ($1::text, $2::text, $3::text, 'enterprise', TRUE)
+INSERT INTO organization_metadata (id, name, slug, gram_account_type, whitelisted, scim_enabled)
+VALUES ($1::text, $2::text, $3::text, 'enterprise', TRUE, TRUE)
 ON CONFLICT (id) DO UPDATE
   -- whitelisted is repaired, not just set on insert: a developer who logged
   -- in before seeding already has this row, created un-whitelisted by the
@@ -961,7 +961,8 @@ ON CONFLICT (id) DO UPDATE
   -- gate.
   SET name = EXCLUDED.name, slug = EXCLUDED.slug,
       gram_account_type = EXCLUDED.gram_account_type,
-      whitelisted = EXCLUDED.whitelisted
+      whitelisted = EXCLUDED.whitelisted,
+      scim_enabled = EXCLUDED.scim_enabled
 `
 
 type OrgUpsertMetadataParams struct {
