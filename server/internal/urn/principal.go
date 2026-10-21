@@ -23,6 +23,9 @@ const (
 	PrincipalTypeSystem PrincipalType = "system"
 	// PrincipalTypeWorkload is a machine vouched for by an external issuer; it holds no grants and inherits policy from its assigned agent.
 	PrincipalTypeWorkload PrincipalType = "workload"
+	// PrincipalTypeAPIKey is a legacy API key, named by its api_keys row id; it holds only the grants written to it.
+	// Not to be confused with urn.APIKey ("apikey:"), which names a key in audit entries and session subjects.
+	PrincipalTypeAPIKey PrincipalType = "api_key"
 )
 
 // PrincipalWildcard is the URN that matches any principal in the org. It is
@@ -41,6 +44,7 @@ var principalTypes = map[PrincipalType]struct{}{
 	PrincipalTypeAgent:    {},
 	PrincipalTypeSystem:   {},
 	PrincipalTypeWorkload: {},
+	PrincipalTypeAPIKey:   {},
 }
 
 // systemPrincipalIDPattern is the lowercase kebab-case component name a system principal carries.
@@ -48,7 +52,7 @@ var systemPrincipalIDPattern = regexp.MustCompile(`^[a-z0-9]+(?:-[a-z0-9]+)*$`)
 
 // Principal is a 2-segment URN that identifies a principal in the RBAC system.
 // Format: "type:id" where type is "user", "role", "email", "agent", "system",
-// or "workload" and id is the principal identifier (e.g. "user:user_01abc",
+// "workload", or "api_key" and id is the principal identifier (e.g. "user:user_01abc",
 // "user:all", "role:admin", "email:dev@example.com", "agent:<uuid>",
 // "system:issuer-metadata-refresh", or
 // "workload:<workload_issuers id>:<external subject>").
@@ -78,6 +82,11 @@ func NewPrincipal(typ PrincipalType, id string) Principal {
 // NewSystemPrincipal names a Speakeasy component acting on its own, for audit entries background work writes.
 func NewSystemPrincipal(component string) Principal {
 	return NewPrincipal(PrincipalTypeSystem, component)
+}
+
+// NewAPIKeyPrincipal names a legacy API key by its api_keys row id.
+func NewAPIKeyPrincipal(apiKeyID uuid.UUID) Principal {
+	return NewPrincipal(PrincipalTypeAPIKey, apiKeyID.String())
 }
 
 // NewWorkloadPrincipal names a workload by the workload_issuers row that
@@ -262,10 +271,10 @@ func (u *Principal) validate() error {
 		return u.err
 	}
 
-	if u.Type == PrincipalTypeAgent {
+	if u.Type == PrincipalTypeAgent || u.Type == PrincipalTypeAPIKey {
 		id, err := uuid.Parse(u.ID)
 		if err != nil || id.String() != u.ID {
-			u.err = fmt.Errorf("%w: agent principal id must be a canonical UUID", ErrInvalid)
+			u.err = fmt.Errorf("%w: %s principal id must be a canonical UUID", ErrInvalid, u.Type)
 			return u.err
 		}
 	}

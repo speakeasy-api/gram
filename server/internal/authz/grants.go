@@ -425,7 +425,13 @@ func grantMatchingCheck(grant *Grant, checks []Check) *Check {
 			continue
 		}
 
-		if !check.matchesAllowSelector(grant.Selector) {
+		var matched bool
+		if isAPIKeyGrant(grant) {
+			matched = apiKeyGrantMatches(grant, check)
+		} else {
+			matched = check.matchesAllowSelector(grant.Selector)
+		}
+		if !matched {
 			continue
 		}
 		return check
