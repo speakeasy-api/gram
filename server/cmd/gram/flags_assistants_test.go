@@ -111,6 +111,30 @@ func TestAssistantRuntimeConfigFromCLIEnablesLocalInLocalEnvironment(t *testing.
 	require.True(t, cfg.Local.Enabled)
 }
 
+func TestAssistantRuntimeConfigFromCLIImageTag(t *testing.T) {
+	for _, tt := range []struct {
+		name   string
+		envTag string
+		values map[string]string
+		want   string
+	}{
+		{name: "default", want: AssistantRuntimeImageHash},
+		{name: "environment override", envTag: "pr-123", want: "pr-123"},
+		{name: "flag override", values: map[string]string{"assistant-runtime-image-tag": "pr-456"}, want: "pr-456"},
+		{name: "flag takes precedence", envTag: "pr-123", values: map[string]string{"assistant-runtime-image-tag": "pr-456"}, want: "pr-456"},
+		{name: "empty flag falls back", envTag: "pr-123", values: map[string]string{"assistant-runtime-image-tag": ""}, want: AssistantRuntimeImageHash},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("GRAM_ASSISTANT_RUNTIME_IMAGE_TAG", tt.envTag)
+			ctx := newAssistantRuntimeCLIContext(t, tt.values)
+			cfg, err := assistantRuntimeConfigFromCLI(ctx, &url.URL{Scheme: "https", Host: "runtime.example.com"})
+			require.NoError(t, err)
+			require.Equal(t, tt.want, cfg.GKE.ImageTag)
+			require.Equal(t, tt.want, cfg.Local.ImageTag)
+		})
+	}
+}
+
 func newAssistantRuntimeCLIContext(t *testing.T, values map[string]string) *cli.Context {
 	t.Helper()
 

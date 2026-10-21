@@ -77,6 +77,11 @@ func assistantRuntimeFlags() []cli.Flag {
 			Usage:   "The OCI image repository for the assistant runtime image. It must not include a tag.",
 			EnvVars: []string{"GRAM_ASSISTANT_RUNTIME_OCI_IMAGE"},
 		},
+		&cli.StringFlag{
+			Name:    "assistant-runtime-image-tag",
+			Usage:   "Optional assistant runtime image tag. Defaults to the compiled assistant runtime image hash.",
+			EnvVars: []string{"GRAM_ASSISTANT_RUNTIME_IMAGE_TAG"},
+		},
 	}
 }
 
@@ -97,6 +102,11 @@ func assistantRuntimeConfigFromCLI(c *cli.Context, serverURL *url.URL) (assistan
 	case assistants.RuntimeProviderLocal:
 	default:
 		return assistants.RuntimeBackendConfig{}, fmt.Errorf("invalid assistant runtime provider: %s", provider)
+	}
+
+	imageTag := c.String("assistant-runtime-image-tag")
+	if imageTag == "" {
+		imageTag = AssistantRuntimeImageHash
 	}
 
 	environment := c.String("environment")
@@ -131,7 +141,7 @@ func assistantRuntimeConfigFromCLI(c *cli.Context, serverURL *url.URL) (assistan
 			SandboxTemplate:  c.String("assistant-runtime-gke-sandbox-template"),
 			GuestPort:        0,
 			OCIImage:         c.String("assistant-runtime-oci-image"),
-			ImageTag:         AssistantRuntimeImageHash,
+			ImageTag:         imageTag,
 			ServerURL:        resolvedServerURL,
 			RunnerCIDRBlocks: c.StringSlice("assistant-runtime-gke-runner-cidr"),
 		},
@@ -142,7 +152,7 @@ func assistantRuntimeConfigFromCLI(c *cli.Context, serverURL *url.URL) (assistan
 			Enabled:         provider == assistants.RuntimeProviderLocal || environment == "local",
 			Environment:     environment,
 			OCIImage:        c.String("assistant-runtime-oci-image"),
-			ImageTag:        AssistantRuntimeImageHash,
+			ImageTag:        imageTag,
 			GuestPort:       0,
 			ServerURL:       localRuntimeServerURL,
 			ExtraCACertFile: c.String("assistant-runtime-local-ca-file"),

@@ -246,6 +246,7 @@ jobs:
             components=$(jq -c --arg component "$1" --arg filters "$2" '. + [{component: $component, filters: $filters}]' <<< "$components")
           }
           [[ "$SERVER" == "true" ]] || add gram server
+          [[ "$SERVER" == "true" ]] || add gram-assistant-runtime server
           [[ "$SERVER" == "true" || "$CLIENT" == "true" ]] || add gram-dashboard "server client"
           [[ "$SERVER" == "true" || "$CLIENT" == "true" ]] || add gram-admin-dashboard "server client"
           [[ "$PYSTREAMS" == "true" ]] || add gram-pystreams pystreams
@@ -2627,6 +2628,7 @@ jobs:
         docker-build-server,
         docker-build-client,
         docker-build-pystreams,
+        assistant-runtime-image,
         preview-image-tags,
         upload-dashboard-assets,
       ]
@@ -2648,6 +2650,8 @@ jobs:
        needs.docker-build-client.result == 'success') &&
       (needs.changes.outputs.pystreams != 'true' ||
        needs.docker-build-pystreams.result == 'success') &&
+      (needs.changes.outputs.server != 'true' ||
+       needs.assistant-runtime-image.result == 'success') &&
       ((needs.changes.outputs.server != 'true' && needs.changes.outputs.client != 'true') ||
        needs.upload-dashboard-assets.result == 'success') &&
       contains(fromJSON('["success","skipped"]'), needs.preview-image-tags.result)
