@@ -120,12 +120,12 @@ func (r *Runner) rekeyRemovalOne(ctx context.Context, toolsetID uuid.UUID, dep L
 		return row, fmt.Errorf("lock server-keyed removal record: %w", err)
 	}
 
-	deletedAt, err := q.RekeyRemovalRecord(ctx, RekeyRemovalRecordParams{McpServerID: wrapper.ID, ID: record.ID, ProjectID: toolset.ProjectID})
+	updated, err := q.RekeyRemovalRecord(ctx, RekeyRemovalRecordParams{McpServerID: wrapper.ID, ID: record.ID, ProjectID: toolset.ProjectID})
 	if err != nil {
 		return row, fmt.Errorf("re-key removal record: %w", err)
 	}
-	if deletedAt != record.DeletedAt {
-		return row, fmt.Errorf("re-key removal record: deleted_at changed from %s to %s", record.DeletedAt, deletedAt)
+	if updated.DeletedAt != record.DeletedAt {
+		return row, fmt.Errorf("re-key removal record: deleted_at changed from %s to %s", record.DeletedAt, updated.DeletedAt)
 	}
 
 	row.Wrote = true
@@ -138,7 +138,7 @@ func (r *Runner) rekeyRemovalOne(ctx context.Context, toolsetID uuid.UUID, dep L
 	row, err = r.commitJournaled(ctx, tx, row, JournalRecord{
 		Event: JournalIntent, ProjectID: toolset.ProjectID, ToolsetID: toolsetID, RowID: record.ID, Outcome: row.Outcome,
 		From: from, To: to, CollapsedTwin: nil, Removed: nil,
-		Rekeyed: &RowImage{Table: tablePluginServers, ID: record.ID, Deletion: "soft_deleted", Row: record.RowJson, EnvironmentConfigs: nil, SoftDeletedAt: record.DeletedAt},
+		Rekeyed: &RowImage{Table: tablePluginServers, ID: record.ID, Deletion: "soft_deleted", Row: record.RowJson, EnvironmentConfigs: nil, SoftDeletedAt: record.DeletedAt, RekeyedUpdatedAt: updated.UpdatedAt},
 	})
 	if err == nil {
 		rekeyed[pair] = struct{}{}

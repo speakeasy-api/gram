@@ -386,7 +386,7 @@ WHERE ps.id = @id
   AND ps.mcp_server_id IS NULL
   AND ps.meta_mcp_server_id IS NULL
   AND ps.deleted IS TRUE
-RETURNING ps.deleted_at::text AS deleted_at;
+RETURNING ps.deleted_at::text AS deleted_at, ps.updated_at::text AS updated_at;
 
 -- TEST FIXTURE ONLY: every query below is for package tests and may create impossible states.
 
@@ -556,6 +556,11 @@ VALUES (@project_id, 1, 'owner', 'repo');
 
 -- name: BumpPluginServerDeletedAtFixture :exec
 UPDATE plugin_servers AS ps SET deleted_at = ps.deleted_at + interval '1 second'
+FROM plugins AS pl
+WHERE ps.id = @id AND pl.id = ps.plugin_id AND pl.project_id = @project_id;
+
+-- name: BumpPluginServerUpdatedAtFixture :exec
+UPDATE plugin_servers AS ps SET updated_at = ps.updated_at + interval '1 second'
 FROM plugins AS pl
 WHERE ps.id = @id AND pl.id = ps.plugin_id AND pl.project_id = @project_id;
 

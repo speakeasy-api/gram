@@ -68,6 +68,9 @@ type RowImage struct {
 
 	// SoftDeletedAt is the deleted_at the orphan cleanup set, so a restore undoes only that delete.
 	SoftDeletedAt string `json:"soft_deleted_at,omitempty"`
+
+	// RekeyedUpdatedAt is the updated_at a re-key set, so a restore skips a row changed since.
+	RekeyedUpdatedAt string `json:"rekeyed_updated_at,omitempty"`
 }
 
 // withoutImages keeps the row's identity only, for reports.
@@ -75,7 +78,7 @@ func (i *RowImage) withoutImages() *RowImage {
 	if i == nil {
 		return nil
 	}
-	return &RowImage{Table: i.Table, ID: i.ID, Deletion: i.Deletion, Row: nil, EnvironmentConfigs: nil, SoftDeletedAt: ""}
+	return &RowImage{Table: i.Table, ID: i.ID, Deletion: i.Deletion, Row: nil, EnvironmentConfigs: nil, SoftDeletedAt: "", RekeyedUpdatedAt: ""}
 }
 
 // RowKey names the column a dependent row is keyed by.
@@ -389,7 +392,7 @@ func (r *Runner) moveMetadata(ctx context.Context, tx pgx.Tx, m *dependentMove) 
 		if deleted != 1 {
 			return "", "", fmt.Errorf("delete metadata twin: %d rows deleted", deleted)
 		}
-		m.twin = &RowImage{Table: tableMcpMetadata, ID: twin.ID, Deletion: "deleted", Row: twin.RowJson, EnvironmentConfigs: configs, SoftDeletedAt: ""}
+		m.twin = &RowImage{Table: tableMcpMetadata, ID: twin.ID, Deletion: "deleted", Row: twin.RowJson, EnvironmentConfigs: configs, SoftDeletedAt: "", RekeyedUpdatedAt: ""}
 	}
 	after, err := q.RekeyMetadata(ctx, RekeyMetadataParams{McpServerID: serverKey, ID: m.rowID, ProjectID: m.toolset.ProjectID})
 	if err != nil {
@@ -505,7 +508,7 @@ func (r *Runner) movePluginServer(ctx context.Context, tx pgx.Tx, m *dependentMo
 		}); err != nil {
 			return "", "", fmt.Errorf("audit plugin server twin removal: %w", err)
 		}
-		m.twin = &RowImage{Table: tablePluginServers, ID: twin.ID, Deletion: "soft_deleted", Row: twin.RowJson, EnvironmentConfigs: nil, SoftDeletedAt: ""}
+		m.twin = &RowImage{Table: tablePluginServers, ID: twin.ID, Deletion: "soft_deleted", Row: twin.RowJson, EnvironmentConfigs: nil, SoftDeletedAt: "", RekeyedUpdatedAt: ""}
 	}
 	moved, err := q.RekeyPluginServer(ctx, RekeyPluginServerParams{McpServerID: serverKey, ID: m.rowID, ProjectID: m.toolset.ProjectID})
 	if err != nil {
@@ -571,7 +574,7 @@ func moveAssistantAttachment(ctx context.Context, tx pgx.Tx, m *dependentMove) (
 		if deleted != 1 {
 			return "", "", fmt.Errorf("delete assistant twin: %d rows deleted", deleted)
 		}
-		m.twin = &RowImage{Table: tableAssistantMcpServers, ID: twin.ID, Deletion: "deleted", Row: twin.RowJson, EnvironmentConfigs: nil, SoftDeletedAt: ""}
+		m.twin = &RowImage{Table: tableAssistantMcpServers, ID: twin.ID, Deletion: "deleted", Row: twin.RowJson, EnvironmentConfigs: nil, SoftDeletedAt: "", RekeyedUpdatedAt: ""}
 	}
 	moved, err := q.MoveAssistantToolset(ctx, MoveAssistantToolsetParams{McpServerID: m.wrapper.ID, ID: m.rowID, ProjectID: m.toolset.ProjectID})
 	if err != nil {

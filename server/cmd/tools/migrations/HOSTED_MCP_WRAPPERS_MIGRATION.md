@@ -234,7 +234,7 @@ Nothing visible to users changes: a soft-deleted member is not in any plugin pac
 
 The run tracks the (plugin, canonical server) pairs it re-keys, or in a dry run would re-key, so a dry run reports the same `blocked_duplicate_removal` rows as the apply.
 
-`-rekey-removal-records -apply` requires `-report` and writes `<report>.journal.jsonl` (mode 0600): an `intent` record before each commit and a `committed` (or `commit_unknown`) record after. Each record carries `from` (`toolset_id`), `to` (`mcp_server_id`) and `rekeyed`, which holds the row's full image from before the re-key (`to_jsonb`) and its `soft_deleted_at`. The report, whether from a dry run or an apply, carries ids, slugs, outcomes, reasons; never names.
+`-rekey-removal-records -apply` requires `-report` and writes `<report>.journal.jsonl` (mode 0600): an `intent` record before each commit and a `committed` (or `commit_unknown`) record after. Each record carries `from` (`toolset_id`), `to` (`mcp_server_id`) and `rekeyed`, which holds the row's full image from before the re-key (`to_jsonb`), its `soft_deleted_at`, and the `rekeyed_updated_at` the re-key set. The report, whether from a dry run or an apply, carries ids, slugs, outcomes, reasons; never names.
 
 ### Run book
 
@@ -266,4 +266,4 @@ for journal in <newest journal> ... <oldest journal>; do
 done
 ```
 
-Review each file, then run each in its own transaction (`psql -v ON_ERROR_STOP=1 --single-transaction -f <file>`), replaying every journal from every resumed batch, newest batch first. Each file replays only rows with a `committed` record, newest first. `commit_unknown` rows, and intents with no outcome record, are printed as `--` comments to check by hand. Each statement puts the row back under its toolset key, along with its recorded `updated_at`. It applies only while the row is still server-keyed and its `deleted_at` matches the journal, so a replay is a no-op and a row someone changed since is left alone. `TestRestoreRemovalRecordsJQReplaysCommittedRows` runs this program against a real journal.
+Review each file, then run each in its own transaction (`psql -v ON_ERROR_STOP=1 --single-transaction -f <file>`), replaying every journal from every resumed batch, newest batch first. Each file replays only rows with a `committed` record, newest first. `commit_unknown` rows, and intents with no outcome record, are printed as `--` comments to check by hand. Each statement puts the row back under its toolset key, along with its recorded `updated_at`. It applies only while the row is still server-keyed and both its `deleted_at` and `updated_at` match the journal, so a replay is a no-op and a row someone changed since is left alone. A committed record without `rekeyed_updated_at` is printed as a comment to check by hand. `TestRestoreRemovalRecordsJQReplaysCommittedRows` runs this program against a real journal.

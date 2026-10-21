@@ -286,12 +286,15 @@ func TestRestoreRemovalRecordsJQReplaysCommittedRows(t *testing.T) {
 	restoredRecord := f.seedRemoval(t, plugin, key(restored), uuid.NullUUID{}, "restored")
 	retouched := f.seedWrappedToolset(t, "retouched-"+uuid.NewString()[:8])
 	retouchedRecord := f.seedRemoval(t, plugin, key(retouched), uuid.NullUUID{}, "retouched")
+	updated := f.seedWrappedToolset(t, "updated-"+uuid.NewString()[:8])
+	updatedRecord := f.seedRemoval(t, plugin, key(updated), uuid.NullUUID{}, "updated")
 	before := f.removals(t)
 	opts, journal := rekeyOptions(true)
 	report := f.run(t, opts)
-	require.Equal(t, 2, report.Outcomes[OutcomeRekeyed])
-	// Someone changed this record after the re-key; the restore must leave it.
+	require.Equal(t, 3, report.Outcomes[OutcomeRekeyed])
+	// Someone changed these records after the re-key; the restore must leave them.
 	require.NoError(t, q.BumpPluginServerDeletedAtFixture(t.Context(), BumpPluginServerDeletedAtFixtureParams{ID: retouchedRecord, ProjectID: f.projectID}))
+	require.NoError(t, q.BumpPluginServerUpdatedAtFixture(t.Context(), BumpPluginServerUpdatedAtFixtureParams{ID: updatedRecord, ProjectID: f.projectID}))
 	rekeyedState := f.removals(t)
 
 	var lines bytes.Buffer
@@ -326,4 +329,5 @@ func TestRestoreRemovalRecordsJQReplaysCommittedRows(t *testing.T) {
 	after := f.removals(t)
 	require.Equal(t, removalFor(t, before, restoredRecord), removalFor(t, after, restoredRecord))
 	require.Equal(t, removalFor(t, rekeyedState, retouchedRecord), removalFor(t, after, retouchedRecord))
+	require.Equal(t, removalFor(t, rekeyedState, updatedRecord), removalFor(t, after, updatedRecord))
 }

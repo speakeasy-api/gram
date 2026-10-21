@@ -28,6 +28,22 @@ func (q *Queries) BumpPluginServerDeletedAtFixture(ctx context.Context, arg Bump
 	return err
 }
 
+const bumpPluginServerUpdatedAtFixture = `-- name: BumpPluginServerUpdatedAtFixture :exec
+UPDATE plugin_servers AS ps SET updated_at = ps.updated_at + interval '1 second'
+FROM plugins AS pl
+WHERE ps.id = $1 AND pl.id = ps.plugin_id AND pl.project_id = $2
+`
+
+type BumpPluginServerUpdatedAtFixtureParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) BumpPluginServerUpdatedAtFixture(ctx context.Context, arg BumpPluginServerUpdatedAtFixtureParams) error {
+	_, err := q.db.Exec(ctx, bumpPluginServerUpdatedAtFixture, arg.ID, arg.ProjectID)
+	return err
+}
+
 const canonicalWrapperLive = `-- name: CanonicalWrapperLive :one
 SELECT EXISTS (
   SELECT 1
@@ -1615,7 +1631,7 @@ WHERE ps.id = $2
   AND ps.mcp_server_id IS NULL
   AND ps.meta_mcp_server_id IS NULL
   AND ps.deleted IS TRUE
-RETURNING ps.deleted_at::text AS deleted_at
+RETURNING ps.deleted_at::text AS deleted_at, ps.updated_at::text AS updated_at
 `
 
 type RekeyRemovalRecordParams struct {
@@ -1624,12 +1640,17 @@ type RekeyRemovalRecordParams struct {
 	ProjectID   uuid.UUID
 }
 
+type RekeyRemovalRecordRow struct {
+	DeletedAt string
+	UpdatedAt string
+}
+
 // Soft-deleted rows only: every partial unique index on plugin_servers covers live rows, so none applies.
-func (q *Queries) RekeyRemovalRecord(ctx context.Context, arg RekeyRemovalRecordParams) (string, error) {
+func (q *Queries) RekeyRemovalRecord(ctx context.Context, arg RekeyRemovalRecordParams) (RekeyRemovalRecordRow, error) {
 	row := q.db.QueryRow(ctx, rekeyRemovalRecord, arg.McpServerID, arg.ID, arg.ProjectID)
-	var deleted_at string
-	err := row.Scan(&deleted_at)
-	return deleted_at, err
+	var i RekeyRemovalRecordRow
+	err := row.Scan(&i.DeletedAt, &i.UpdatedAt)
+	return i, err
 }
 
 const restoreEnvironmentConfigsFixture = `-- name: RestoreEnvironmentConfigsFixture :exec
