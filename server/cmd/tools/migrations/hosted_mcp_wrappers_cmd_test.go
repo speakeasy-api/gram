@@ -178,6 +178,28 @@ func TestHostedMCPWrappersModeFlagsKeepTheResumeInItsPhase(t *testing.T) {
 	require.Equal(t, "-apply", hostedMCPWrappersModeFlags(hostedmcpbackfill.Options{}))
 }
 
+func TestHostedMCPWrappersResumeFlagsKeepProjectAndPublicationEmit(t *testing.T) {
+	t.Parallel()
+	project := uuid.NewString()
+
+	plain, err := parseHostedMCPWrappersFlags([]string{"-delete-orphan-wrapper-servers", "-apply", "-report=/tmp/r.json"}, hostedMCPWrappersGetenv, io.Discard)
+	require.NoError(t, err)
+	require.Equal(t, "-apply -delete-orphan-wrapper-servers", hostedMCPWrappersResumeFlags(plain))
+
+	scoped, err := parseHostedMCPWrappersFlags([]string{"-cleanup-orphans", "-apply", "-report=/tmp/r.json", "-project", project, "-plugin-publication-emit=false"}, hostedMCPWrappersGetenv, io.Discard)
+	require.NoError(t, err)
+	require.Equal(t, "-apply -cleanup-orphans -project "+project+" -plugin-publication-emit=false", hostedMCPWrappersResumeFlags(scoped))
+
+	fromEnv, err := parseHostedMCPWrappersFlags([]string{"-delete-orphan-wrapper-servers", "-apply", "-report=/tmp/r.json"}, func(key string) string {
+		if key == "GRAM_PLUGIN_PUBLICATION_EMIT_ENABLED" {
+			return "true"
+		}
+		return hostedMCPWrappersGetenv(key)
+	}, io.Discard)
+	require.NoError(t, err)
+	require.Equal(t, "-apply -delete-orphan-wrapper-servers -plugin-publication-emit=true", hostedMCPWrappersResumeFlags(fromEnv))
+}
+
 func TestFileJournalAppendsOneLinePerRecord(t *testing.T) {
 	t.Parallel()
 

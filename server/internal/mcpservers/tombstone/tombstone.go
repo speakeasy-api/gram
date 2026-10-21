@@ -88,13 +88,10 @@ type Result struct {
 
 // Tombstone soft-deletes a locked server and its attachments; the caller audits the server delete.
 func Tombstone(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, locked Locked, input Input) (Result, error) {
-	if tx == nil || auditLogger == nil || input.TracerProvider == nil || input.OrganizationID == "" || input.ProjectID == uuid.Nil || (!ActorPresent(ctx, input.ActorUserID) && input.ActorSystem == "") {
+	if tx == nil || auditLogger == nil || input.TracerProvider == nil || input.OrganizationID == "" || input.ProjectID == uuid.Nil || !hasActor(ctx, input) {
 		return Result{}, errors.New("invalid MCP server tombstone input")
 	}
-	actor := urn.NewPrincipal(urn.PrincipalTypeUser, input.ActorUserID)
-	if input.ActorUserID == "" && input.ActorSystem != "" {
-		actor = urn.NewSystemPrincipal(input.ActorSystem)
-	}
+	actor := auditActor(input)
 	servers := repo.New(tx)
 
 	deleted, err := servers.DeleteMCPServer(ctx, repo.DeleteMCPServerParams{ID: locked.Server.ID, ProjectID: input.ProjectID})
@@ -186,6 +183,18 @@ func Tombstone(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, locked
 	}
 
 	return Result{Server: deleted, DetachedPluginServers: len(detachedPluginServers), DeletedRiskPolicies: deletedPolicies}, nil
+}
+
+func hasActor(ctx context.Context, input Input) bool {
+	return ActorPresent(ctx, input.ActorUserID) || input.ActorSystem != ""
+}
+
+// auditActor names the user, or system:<ActorSystem> only when there is no user id.
+func auditActor(input Input) urn.Principal {
+	if input.ActorUserID == "" && input.ActorSystem != "" {
+		return urn.NewSystemPrincipal(input.ActorSystem)
+	}
+	return urn.NewPrincipal(urn.PrincipalTypeUser, input.ActorUserID)
 }
 
 // ActorPresent reports whether a write has an actor: a user id, or an agent

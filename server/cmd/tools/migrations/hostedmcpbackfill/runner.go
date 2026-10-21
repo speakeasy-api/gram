@@ -218,6 +218,9 @@ type Runner struct {
 	pool    *pgxpool.Pool
 	audit   *audit.Logger
 	options Options
+
+	// beforeWrapperPrune runs inside the wrapper delete just before its session client prune; tests only.
+	beforeWrapperPrune func(context.Context)
 }
 
 func NewRunner(pool *pgxpool.Pool, options Options) *Runner {
@@ -227,7 +230,7 @@ func NewRunner(pool *pgxpool.Pool, options Options) *Runner {
 	if options.LockTimeout <= 0 {
 		options.LockTimeout = defaultLockTimeout
 	}
-	return &Runner{pool: pool, audit: audit.NewLogger(audit.WithoutOutbox()), options: options}
+	return &Runner{pool: pool, audit: audit.NewLogger(audit.WithoutOutbox()), options: options, beforeWrapperPrune: nil}
 }
 
 // Run processes every candidate. On error the report holds the rows processed so far.

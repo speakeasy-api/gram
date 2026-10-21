@@ -529,18 +529,63 @@ SELECT count(*)
 FROM assistant_mcp_servers AS a
 WHERE a.id = ANY(@ids::uuid[]) AND a.project_id = @project_id;
 
--- name: ListProjectSessionClientLinks :many
--- The issuer resync prunes project-wide, so every live link is imaged before it.
-SELECT c.id, to_jsonb(c)::jsonb AS row_json
-FROM mcp_server_remote_session_clients AS c
-WHERE c.project_id = @project_id AND c.deleted IS FALSE
-ORDER BY c.id;
-
--- name: ListLiveSessionClientLinkIDs :many
-SELECT c.id
-FROM mcp_server_remote_session_clients AS c
-WHERE c.id = ANY(@ids::uuid[]) AND c.project_id = @project_id AND c.deleted IS FALSE
-ORDER BY c.id;
+-- name: PruneUnservableSessionClientLinks :many
+-- PruneUnservableAssociations verbatim, as the app's post-delete issuer resync runs it, returning what it deleted.
+DELETE FROM mcp_server_remote_session_clients AS a
+USING mcp_servers AS s
+WHERE a.mcp_server_id = s.id
+  AND a.project_id = @project_id::uuid
+  AND a.organization_id = @organization_id::text
+  AND a.deleted IS FALSE
+  AND (
+    s.deleted IS TRUE
+    OR NOT EXISTS (
+      SELECT 1
+      FROM remote_session_client_user_session_issuers AS link
+      JOIN remote_session_clients AS c
+        ON c.id = link.remote_session_client_id
+       AND c.deleted IS FALSE
+      WHERE link.remote_session_client_id = a.remote_session_client_id
+        AND (
+          link.user_session_issuer_id = s.user_session_issuer_id
+          OR EXISTS (
+            SELECT 1
+            FROM meta_mcp_servers AS gateway
+            JOIN projects AS gateway_project
+              ON gateway_project.id = gateway.project_id
+             AND gateway_project.deleted IS FALSE
+            JOIN user_session_issuers AS gateway_issuer
+              ON gateway_issuer.id = gateway.user_session_issuer_id
+             AND gateway_issuer.deleted IS FALSE
+             AND (gateway_issuer.project_id = s.project_id
+                  OR (gateway_issuer.project_id IS NULL AND gateway_issuer.organization_id = a.organization_id))
+            JOIN meta_mcp_server_members AS member
+              ON member.meta_mcp_server_id = gateway.id
+             AND member.project_id = gateway.project_id
+             AND member.deleted IS FALSE
+            WHERE gateway.user_session_issuer_id = link.user_session_issuer_id
+              AND gateway.deleted IS FALSE
+              AND member.mcp_server_id = s.id
+          )
+          OR EXISTS (
+            SELECT 1
+            FROM user_session_issuers AS organization_issuer
+            WHERE organization_issuer.id = link.user_session_issuer_id
+              AND organization_issuer.project_id IS NULL
+              AND organization_issuer.organization_id = a.organization_id
+              AND organization_issuer.deleted IS FALSE
+              AND (
+              SELECT count(*)
+              FROM user_session_issuers AS sibling
+              WHERE sibling.organization_id = organization_issuer.organization_id
+                AND sibling.project_id IS NULL
+                AND sibling.deleted IS FALSE
+            ) = 1
+          )
+        )
+    )
+  )
+RETURNING a.id, a.mcp_server_id, to_jsonb(a)::jsonb AS row_json;
 
 -- TEST FIXTURE ONLY: every query below is for package tests and may create impossible states.
 
@@ -800,3 +845,15 @@ SELECT 'mcp_server_remote_session_clients', c.id, to_jsonb(c)::text FROM mcp_ser
 UNION ALL
 SELECT 'risk_policies', r.id, to_jsonb(r)::text FROM risk_policies AS r WHERE r.project_id = @project_id
 ORDER BY 1, 2;
+
+-- name: RestoreToolsetFixture :exec
+UPDATE toolsets SET deleted_at = NULL
+WHERE id = @id AND project_id = @project_id;
+
+-- name: SetServerToolsetFixture :exec
+UPDATE mcp_servers SET toolset_id = @toolset_id
+WHERE id = @id AND project_id = @project_id;
+
+-- name: DeleteSessionClientLinkFixture :exec
+DELETE FROM mcp_server_remote_session_clients
+WHERE id = @id AND project_id = @project_id;

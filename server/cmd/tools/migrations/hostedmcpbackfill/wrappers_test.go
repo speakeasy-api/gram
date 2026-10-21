@@ -158,8 +158,10 @@ func (s wrapperSeed) projectOptions(apply bool) (Options, *memJournal) {
 func TestDeleteOrphanWrapperServersDryRunWritesNothing(t *testing.T) {
 	t.Parallel()
 	s := seedOrphanWrappers(t)
+	require.NoError(t, New(s.f.pool).SeedPluginGithubConnectionFixture(t.Context(), s.f.projectID))
 	before, audits := s.f.wrapperState(t), s.f.state(t).audits
 	opts, journal := s.projectOptions(false)
+	opts.Publication = plugins.PublicationRequests{Enabled: true}
 
 	report := s.f.run(t, opts)
 
@@ -174,10 +176,14 @@ func TestDeleteOrphanWrapperServersDryRunWritesNothing(t *testing.T) {
 		require.Equal(t, outcome, dependentRowFor(t, report, id).Outcome, id.String())
 	}
 	row := dependentRowFor(t, report, s.eligible)
-	require.Equal(t, &WrapperDetached{GatewayMemberships: 1, PluginMembers: 1, AssistantAttachments: 1, SessionClientLinks: 2}, row.Detached)
+	require.Equal(t, &WrapperDetached{GatewayMemberships: 1, PluginMembers: 1, AssistantAttachments: 1, SessionClientLinks: 1, OtherSessionClientLinks: 1}, row.Detached)
 	require.Equal(t, before, s.f.wrapperState(t))
 	require.Equal(t, audits, s.f.state(t).audits)
 	require.Empty(t, journal.records)
+	require.False(t, row.PublicationRequested)
+	outbox, err := New(s.f.pool).CountOutboxFixture(t.Context(), s.f.orgID)
+	require.NoError(t, err)
+	require.Zero(t, outbox, "a dry run with publication emit writes no outbox row")
 }
 
 func TestDeleteOrphanWrapperServersApplyRequiresJournal(t *testing.T) {
@@ -225,7 +231,7 @@ func TestDeleteOrphanWrapperServersOutcomes(t *testing.T) {
 	require.Equal(t, []string{reasonRiskPolicy}, byReason[OutcomeBlockedRiskPolicy])
 	require.Equal(t, 1, report.Writes)
 	deleted := dependentRowFor(t, report, s.eligible)
-	require.Equal(t, &WrapperDetached{GatewayMemberships: 1, PluginMembers: 1, AssistantAttachments: 1, SessionClientLinks: 2}, deleted.Detached)
+	require.Equal(t, &WrapperDetached{GatewayMemberships: 1, PluginMembers: 1, AssistantAttachments: 1, SessionClientLinks: 1, OtherSessionClientLinks: 1}, deleted.Detached)
 	require.True(t, deleted.PublicationRequested)
 
 	after := f.wrapperState(t)
@@ -275,7 +281,8 @@ func TestDeleteOrphanWrapperServersOutcomes(t *testing.T) {
 	require.Len(t, record.Dependents.GatewayMemberships, 1)
 	require.Len(t, record.Dependents.PluginMembers, 1)
 	require.Len(t, record.Dependents.AssistantAttachments, 1)
-	require.Len(t, record.Dependents.SessionClientLinks, 2)
+	require.Len(t, record.Dependents.SessionClientLinks, 1)
+	require.Equal(t, s.deps.link, record.Dependents.SessionClientLinks[0].ID, "another server's pruned link is not journaled")
 	require.NotEmpty(t, record.Dependents.PluginMembers[0].SoftDeletedAt)
 	encoded, err := json.Marshal(report)
 	require.NoError(t, err)
@@ -391,14 +398,12 @@ func TestDeleteOrphanWrapperServersMatchesDeleteMcpServer(t *testing.T) {
 // TestRestoreOrphanWrapperServersJQReplaysCommittedRows runs restore-orphan-wrapper-servers.jq against a real journal.
 func TestRestoreOrphanWrapperServersJQReplaysCommittedRows(t *testing.T) {
 	t.Parallel()
-	jq, err := exec.LookPath("jq")
-	require.NoError(t, err, "jq is a mise tool; run the tests through mise")
 	f := newFixture(t)
 	toolsetID := f.seedWrappedToolset(t, "restore-"+uuid.NewString()[:8])
 	committedServer, intentServer := f.seedExtraServer(t, toolsetID), f.seedExtraServer(t, toolsetID)
 	f.seedWrapperDependents(t, committedServer)
 	f.seedWrapperDependents(t, intentServer)
-	f.seedUnservableLink(t, f.seedWrappedToolset(t, "neighbour-"+uuid.NewString()[:8]))
+	neighbourLink := f.seedUnservableLink(t, f.seedWrappedToolset(t, "neighbour-"+uuid.NewString()[:8]))
 	f.deleteToolset(t, toolsetID)
 	before := f.wrapperState(t)
 	opts, journal := wrapperOptions(true)
@@ -406,43 +411,24 @@ func TestRestoreOrphanWrapperServersJQReplaysCommittedRows(t *testing.T) {
 	deleted := f.wrapperState(t)
 
 	// The intent server keeps only its intent, as when the journal write after its commit fails.
-	var lines bytes.Buffer
+	kept := []JournalRecord{}
 	for _, record := range journal.records {
-		if record.Event == JournalCommitted && record.RowID == intentServer {
-			continue
+		if record.Event != JournalCommitted || record.RowID != intentServer {
+			kept = append(kept, record)
 		}
-		line, err := json.Marshal(record)
-		require.NoError(t, err)
-		lines.Write(append(line, '\n'))
 	}
-	journalPath := filepath.Join(t.TempDir(), "journal.jsonl")
-	require.NoError(t, os.WriteFile(journalPath, lines.Bytes(), 0o600))
-
-	replay := func(project uuid.UUID) string {
-		out, err := exec.CommandContext(t.Context(), jq, "-r", "-s", "--arg", "p", project.String(), "-f", "restore-orphan-wrapper-servers.jq", journalPath).Output() // #nosec G204 -- fixed jq program and test paths
-		require.NoError(t, err)
-		script := string(out)
-		for range 2 {
-			tx, err := f.pool.Begin(t.Context()) //nolint:glint // notestingrawsql: executes the runbook's generated restore SQL, which is the code under test.
-			require.NoError(t, err)
-			for statement := range strings.SplitSeq(strings.TrimSpace(script), "\n") {
-				if statement == "" || strings.HasPrefix(statement, "--") {
-					continue
-				}
-				_, err := tx.Exec(t.Context(), statement) //nolint:glint // notestingrawsql: the runbook's generated restore SQL is the code under test.
-				require.NoError(t, err, statement)
-			}
-			require.NoError(t, tx.Commit(t.Context()))
-		}
-		return script
-	}
+	journalPath := writeJournal(t, kept)
+	replay := func(project uuid.UUID) string { return f.replayWrapperRestore(t, journalPath, project) }
 
 	require.Empty(t, strings.TrimSpace(replay(uuid.New())), "another project's restore is empty")
 	require.Equal(t, deleted, f.wrapperState(t))
 	script := replay(f.projectID)
 	require.Contains(t, script, "-- intent without outcome: mcp_servers "+intentServer.String()+"; check by hand\nUPDATE mcp_servers")
 	require.Equal(t, 2, strings.Count(script, "UPDATE mcp_servers"))
-	require.Equal(t, before, f.wrapperState(t), "the restore brings back every changed row, and a second replay is a no-op")
+	neighbourKey := "mcp_server_remote_session_clients " + neighbourLink.String()
+	require.Contains(t, before, neighbourKey)
+	delete(before, neighbourKey)
+	require.Equal(t, before, f.wrapperState(t), "the restore brings back the deleted servers' rows, not another server's pruned link, and a second replay is a no-op")
 }
 
 // Deleting the wrapper first lets the leftover delete remove the record that was blocked_live_wrapper, and role delivery re-adds nothing.
@@ -487,4 +473,180 @@ func TestDeleteOrphanWrapperServersUnblocksLeftoverRemovalRecords(t *testing.T) 
 		require.Empty(t, members)
 		require.NoError(t, tx.Rollback(context.Background()))
 	}
+}
+
+// The delete rechecks under its locks what the listing saw.
+func TestDeleteOrphanWrapperServersRechecksUnderLock(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	ctx := t.Context()
+	q := New(f.pool)
+	revived := f.seedWrappedToolset(t, "revived-"+uuid.NewString()[:8])
+	f.seedExtraServer(t, revived)
+	f.deleteToolset(t, revived)
+	moved := f.seedWrappedToolset(t, "moved-"+uuid.NewString()[:8])
+	movedServer := f.seedExtraServer(t, moved)
+	f.deleteToolset(t, moved)
+	gone := f.seedWrappedToolset(t, "gone-"+uuid.NewString()[:8])
+	goneServer := f.seedExtraServer(t, gone)
+	f.deleteToolset(t, gone)
+
+	listed := map[uuid.UUID]ListToolsetOrphanWrappersRow{}
+	for _, toolsetID := range []uuid.UUID{revived, moved, gone} {
+		rows, err := q.ListToolsetOrphanWrappers(ctx, ListToolsetOrphanWrappersParams{ToolsetID: toolsetID, ProjectID: key(f.projectID)})
+		require.NoError(t, err)
+		require.Len(t, rows, 1)
+		listed[toolsetID] = rows[0]
+	}
+	require.NoError(t, q.RestoreToolsetFixture(ctx, RestoreToolsetFixtureParams{ID: revived, ProjectID: f.projectID}))
+	require.NoError(t, q.SetServerToolsetFixture(ctx, SetServerToolsetFixtureParams{ToolsetID: key(f.seedWrappedToolset(t, "other-"+uuid.NewString()[:8])), ID: movedServer, ProjectID: f.projectID}))
+	require.NoError(t, q.SoftDeleteServerFixture(ctx, SoftDeleteServerFixtureParams{ID: goneServer, ProjectID: f.projectID}))
+	before, audits := f.wrapperState(t), f.state(t).audits
+	opts, journal := wrapperOptions(true)
+	runner := NewRunner(f.pool, opts)
+
+	for toolsetID, reason := range map[uuid.UUID]string{revived: reasonToolsetLive, moved: reasonRowChanged, gone: reasonRowChanged} {
+		row, err := runner.deleteOrphanWrapperOne(ctx, toolsetID, listed[toolsetID])
+		require.NoError(t, err)
+		require.Equal(t, OutcomeSkipped, row.Outcome, toolsetID.String())
+		require.Equal(t, reason, row.Reason, toolsetID.String())
+		require.False(t, row.Wrote)
+	}
+	require.Equal(t, before, f.wrapperState(t))
+	require.Equal(t, audits, f.state(t).audits)
+	require.Empty(t, journal.records)
+}
+
+func TestDeleteOrphanWrapperServersIgnoresSoftDeletedEndpoints(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	toolsetID := f.seedWrappedToolset(t, "retired-endpoint-"+uuid.NewString()[:8])
+	server := f.seedExtraServer(t, toolsetID)
+	endpoint := f.seedEndpoint(t, server, uuid.NullUUID{}, "retired-"+uuid.NewString()[:8])
+	require.NoError(t, New(f.pool).SoftDeleteEndpointFixture(t.Context(), SoftDeleteEndpointFixtureParams{ID: endpoint, ProjectID: f.projectID}))
+	f.deleteToolset(t, toolsetID)
+	opts, _ := wrapperOptions(true)
+
+	row := dependentRowFor(t, f.run(t, opts), server)
+	require.Equal(t, OutcomeDeleted, row.Outcome)
+	require.Zero(t, row.LiveEndpoints)
+}
+
+// A link another transaction deletes before the prune is not journaled, so a restore cannot bring it back.
+func TestDeleteOrphanWrapperServersJournalsOnlyWhatThePruneDeleted(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	toolsetID := f.seedWrappedToolset(t, "concurrent-"+uuid.NewString()[:8])
+	server := f.seedExtraServer(t, toolsetID)
+	deps := f.seedWrapperDependents(t, server)
+	raced := f.seedUnservableLink(t, server)
+	f.deleteToolset(t, toolsetID)
+	listed, err := New(f.pool).ListToolsetOrphanWrappers(t.Context(), ListToolsetOrphanWrappersParams{ToolsetID: toolsetID, ProjectID: key(f.projectID)})
+	require.NoError(t, err)
+	require.Len(t, listed, 1)
+	opts, journal := wrapperOptions(true)
+	runner := NewRunner(f.pool, opts)
+	runner.beforeWrapperPrune = func(ctx context.Context) {
+		require.NoError(t, New(f.pool).DeleteSessionClientLinkFixture(ctx, DeleteSessionClientLinkFixtureParams{ID: raced, ProjectID: f.projectID}))
+	}
+
+	row, err := runner.deleteOrphanWrapperOne(t.Context(), toolsetID, listed[0])
+	require.NoError(t, err)
+	require.Equal(t, OutcomeDeleted, row.Outcome)
+	require.Equal(t, 1, row.Detached.SessionClientLinks)
+	require.Zero(t, row.Detached.OtherSessionClientLinks)
+	record := journal.committed()[server]
+	require.Len(t, record.Dependents.SessionClientLinks, 1)
+	require.Equal(t, deps.link, record.Dependents.SessionClientLinks[0].ID)
+	require.NotContains(t, f.wrapperState(t), "mcp_server_remote_session_clients "+raced.String())
+}
+
+// The tool's prune must stay the app's PruneUnservableAssociations, with RETURNING added.
+func TestPruneUnservableSessionClientLinksMatchesTheProductPrune(t *testing.T) {
+	t.Parallel()
+	body := func(path, name string) string {
+		raw, err := os.ReadFile(path) // #nosec G304 -- fixed repository paths
+		require.NoError(t, err)
+		text := string(raw)
+		start := strings.Index(text, "-- name: "+name+" ")
+		require.GreaterOrEqual(t, start, 0, name)
+		from := strings.Index(text[start:], "DELETE FROM")
+		require.GreaterOrEqual(t, from, 0, name)
+		text = text[start+from:]
+		if before, _, ok := strings.Cut(text, "\nRETURNING"); ok {
+			return before
+		}
+		before, _, ok := strings.Cut(text, ";")
+		require.True(t, ok, name)
+		return before
+	}
+	require.Equal(t,
+		body("../../../../internal/mcpservers/upstreamclients/queries.sql", "PruneUnservableAssociations"),
+		body("queries.sql", "PruneUnservableSessionClientLinks"))
+}
+
+// replayWrapperRestore runs restore-orphan-wrapper-servers.jq for the project and applies its SQL twice.
+func (f *fixture) replayWrapperRestore(t *testing.T, journalPath string, project uuid.UUID) string {
+	t.Helper()
+	jq, err := exec.LookPath("jq")
+	require.NoError(t, err, "jq is a mise tool; run the tests through mise")
+	out, err := exec.CommandContext(t.Context(), jq, "-r", "-s", "--arg", "p", project.String(), "-f", "restore-orphan-wrapper-servers.jq", journalPath).Output() // #nosec G204 -- fixed jq program and test paths
+	require.NoError(t, err)
+	script := string(out)
+	for range 2 {
+		tx, err := f.pool.Begin(t.Context()) //nolint:glint // notestingrawsql: executes the runbook's generated restore SQL, which is the code under test.
+		require.NoError(t, err)
+		for statement := range strings.SplitSeq(strings.TrimSpace(script), "\n") {
+			if statement == "" || strings.HasPrefix(statement, "--") {
+				continue
+			}
+			_, err := tx.Exec(t.Context(), statement) //nolint:glint // notestingrawsql: the runbook's generated restore SQL is the code under test.
+			require.NoError(t, err, statement)
+		}
+		require.NoError(t, tx.Commit(t.Context()))
+	}
+	return script
+}
+
+func writeJournal(t *testing.T, records []JournalRecord) string {
+	t.Helper()
+	var lines bytes.Buffer
+	for _, record := range records {
+		line, err := json.Marshal(record)
+		require.NoError(t, err)
+		lines.Write(append(line, '\n'))
+	}
+	path := filepath.Join(t.TempDir(), "journal.jsonl")
+	require.NoError(t, os.WriteFile(path, lines.Bytes(), 0o600))
+	return path
+}
+
+// A plugin entry whose name was taken while the server was deleted stays deleted, and the restore goes on.
+func TestRestoreOrphanWrapperServersJQSkipsAPluginEntryNameClash(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	toolsetID := f.seedWrappedToolset(t, "clash-"+uuid.NewString()[:8])
+	server := f.seedExtraServer(t, toolsetID)
+	deps := f.seedWrapperDependents(t, server)
+	f.deleteToolset(t, toolsetID)
+	opts, journal := wrapperOptions(true)
+	require.Equal(t, 1, f.run(t, opts).Outcomes[OutcomeDeleted])
+	var member struct {
+		PluginID    uuid.UUID `json:"plugin_id"`
+		DisplayName string    `json:"display_name"`
+	}
+	require.NoError(t, json.Unmarshal(journal.committed()[server].Dependents.PluginMembers[0].Row, &member))
+	taker := uuid.New()
+	other := f.seedExtraServer(t, f.seedWrappedToolset(t, "taker-"+uuid.NewString()[:8]))
+	require.NoError(t, New(f.pool).SeedPluginServerFixture(t.Context(), SeedPluginServerFixtureParams{ID: taker, PluginID: member.PluginID, ToolsetID: uuid.NullUUID{}, McpServerID: key(other), DisplayName: member.DisplayName}))
+
+	script := f.replayWrapperRestore(t, writeJournal(t, journal.records), f.projectID)
+	require.Contains(t, script, "-- plugin_servers "+deps.pluginMember.String()+" stays deleted if its plugin has a live entry with the same name or server; check by hand")
+	after := f.wrapperState(t)
+	var restored map[string]any
+	require.NoError(t, json.Unmarshal([]byte(after["mcp_servers "+server.String()]), &restored))
+	require.Nil(t, restored["deleted_at"], "the server comes back")
+	var skipped map[string]any
+	require.NoError(t, json.Unmarshal([]byte(after["plugin_servers "+deps.pluginMember.String()]), &skipped))
+	require.NotNil(t, skipped["deleted_at"], "the clashing entry stays deleted")
 }

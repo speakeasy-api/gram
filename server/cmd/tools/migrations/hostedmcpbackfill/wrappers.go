@@ -14,7 +14,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/tombstone"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
-	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -42,6 +41,9 @@ type WrapperDetached struct {
 	PluginMembers        int `json:"plugin_members"`
 	AssistantAttachments int `json:"assistant_attachments"`
 	SessionClientLinks   int `json:"session_client_links"`
+
+	// OtherSessionClientLinks are other servers' unservable links the same prune removed; the journal and restore leave them out.
+	OtherSessionClientLinks int `json:"other_session_client_links"`
 }
 
 // WrapperDependents are the images of the rows a server delete changed along with the server.
@@ -50,7 +52,7 @@ type WrapperDependents struct {
 	PluginMembers        []RowImage `json:"plugin_members"`
 	AssistantAttachments []RowImage `json:"assistant_attachments"`
 
-	// SessionClientLinks are the project's links the issuer resync pruned, including other servers' unservable ones.
+	// SessionClientLinks are the deleted server's own links the issuer prune removed.
 	SessionClientLinks []RowImage `json:"session_client_links"`
 }
 
@@ -154,11 +156,6 @@ func (r *Runner) deleteOrphanWrapperOne(ctx context.Context, toolsetID uuid.UUID
 	if err != nil {
 		return row, fmt.Errorf("lock assistant attachments: %w", err)
 	}
-	links, err := q.ListProjectSessionClientLinks(ctx, toolset.ProjectID)
-	if err != nil {
-		return row, fmt.Errorf("image session client links: %w", err)
-	}
-
 	tombstoned, err := tombstone.Tombstone(ctx, tx, r.audit, locked, tombstone.Input{
 		OrganizationID: toolset.OrganizationID, ProjectID: toolset.ProjectID, ActorUserID: "", ActorEmail: nil,
 		ActorSystem: WrapperCleanupActorComponent, TracerProvider: noop.NewTracerProvider(),
@@ -173,9 +170,13 @@ func (r *Runner) deleteOrphanWrapperOne(ctx context.Context, toolsetID uuid.UUID
 	if tombstoned.DetachedPluginServers != len(pluginMembers) {
 		return row, fmt.Errorf("tombstone server: detached %d plugin members, locked %d", tombstoned.DetachedPluginServers, len(pluginMembers))
 	}
-	// The app resyncs after commit; inside the transaction the prune is journaled and rolls back with a dry run.
-	if err := remotesessions.ResyncMCPServerRemoteSessionIssuers(ctx, tx, toolset.OrganizationID, toolset.ProjectID, nil); err != nil {
-		return row, fmt.Errorf("resync remote session issuers: %w", err)
+	if r.beforeWrapperPrune != nil {
+		r.beforeWrapperPrune(ctx)
+	}
+	// The app's post-commit resync with no issuers is this prune alone; RETURNING journals only what it deleted.
+	pruned, err := q.PruneUnservableSessionClientLinks(ctx, PruneUnservableSessionClientLinksParams{ProjectID: toolset.ProjectID, OrganizationID: toolset.OrganizationID})
+	if err != nil {
+		return row, fmt.Errorf("prune session client links: %w", err)
 	}
 	if err := r.audit.LogMcpServerDelete(ctx, tx, audit.LogMcpServerDeleteEvent{
 		OrganizationID: toolset.OrganizationID, ProjectID: toolset.ProjectID,
@@ -190,13 +191,14 @@ func (r *Runner) deleteOrphanWrapperOne(ctx context.Context, toolsetID uuid.UUID
 		return row, fmt.Errorf("request plugin publication: %w", err)
 	}
 
-	removed, dependents, err := imageWrapperDelete(ctx, q, toolset.ProjectID, dep.ID, serverImage, memberships, pluginMembers, attachments, links)
+	removed, dependents, err := imageWrapperDelete(ctx, q, toolset.ProjectID, dep.ID, serverImage, memberships, pluginMembers, attachments, pruned)
 	if err != nil {
 		return row, err
 	}
 	row.Detached = &WrapperDetached{
 		GatewayMemberships: len(dependents.GatewayMemberships), PluginMembers: len(dependents.PluginMembers),
 		AssistantAttachments: len(dependents.AssistantAttachments), SessionClientLinks: len(dependents.SessionClientLinks),
+		OtherSessionClientLinks: len(pruned) - len(dependents.SessionClientLinks),
 	}
 	row.Reason = "toolset deleted"
 	row.Removed = removed.withoutImages()
@@ -216,7 +218,7 @@ func (r *Runner) deleteOrphanWrapperOne(ctx context.Context, toolsetID uuid.UUID
 // imageWrapperDelete reads back what the delete changed, so a restore can match only this tool's writes.
 func imageWrapperDelete(
 	ctx context.Context, q *Queries, projectID, serverID uuid.UUID, serverImage []byte,
-	memberships []LockWrapperMembershipsRow, pluginMembers []LockWrapperPluginMembersRow, attachments []LockWrapperAssistantAttachmentsRow, links []ListProjectSessionClientLinksRow,
+	memberships []LockWrapperMembershipsRow, pluginMembers []LockWrapperPluginMembersRow, attachments []LockWrapperAssistantAttachmentsRow, pruned []PruneUnservableSessionClientLinksRow,
 ) (*RowImage, *WrapperDependents, error) {
 	deletedAt, err := q.WrapperServerDeletedAt(ctx, WrapperServerDeletedAtParams{ID: serverID, ProjectID: projectID})
 	if err != nil {
@@ -271,20 +273,8 @@ func imageWrapperDelete(
 		return nil, nil, fmt.Errorf("tombstone server: %d assistant attachments remain", left)
 	}
 
-	linkIDs := make([]uuid.UUID, 0, len(links))
-	for _, l := range links {
-		linkIDs = append(linkIDs, l.ID)
-	}
-	live, err := q.ListLiveSessionClientLinkIDs(ctx, ListLiveSessionClientLinkIDsParams{Ids: linkIDs, ProjectID: projectID})
-	if err != nil {
-		return nil, nil, fmt.Errorf("list live session client links: %w", err)
-	}
-	kept := make(map[uuid.UUID]bool, len(live))
-	for _, id := range live {
-		kept[id] = true
-	}
-	for _, l := range links {
-		if !kept[l.ID] {
+	for _, l := range pruned {
+		if l.McpServerID == serverID {
 			dependents.SessionClientLinks = append(dependents.SessionClientLinks, RowImage{Table: tableMcpServerRemoteSessionClient, ID: l.ID, Deletion: "deleted", Row: l.RowJson, EnvironmentConfigs: nil, SoftDeletedAt: "", RekeyedUpdatedAt: ""})
 		}
 	}

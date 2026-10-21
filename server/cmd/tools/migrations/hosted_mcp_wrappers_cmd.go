@@ -26,6 +26,9 @@ type hostedMCPWrappersConfig struct {
 	reportPath  string
 	journalPath string
 	options     hostedmcpbackfill.Options
+
+	// publicationEmitSet records -plugin-publication-emit or its environment default being given, so a resume repeats it.
+	publicationEmitSet bool
 }
 
 // Stdout carries counts and the resume cursor only, never slugs or names.
@@ -108,10 +111,13 @@ func parseHostedMCPWrappersFlags(args []string, getenv func(string) string, help
 		return hostedMCPWrappersConfig{}, errors.New("-readers-cut-over only applies to -move-dependents")
 	}
 
+	emitFlagSet := false
+	fs.Visit(func(f *flag.Flag) { emitFlagSet = emitFlagSet || f.Name == "plugin-publication-emit" })
 	cfg := hostedMCPWrappersConfig{
-		dbURL:       getenv("GRAM_DATABASE_URL"),
-		reportPath:  *reportPath,
-		journalPath: "",
+		dbURL:              getenv("GRAM_DATABASE_URL"),
+		reportPath:         *reportPath,
+		journalPath:        "",
+		publicationEmitSet: emitFlagSet || emitEnv != "",
 		options: hostedmcpbackfill.Options{
 			ProjectID:              uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 			Cursor:                 uuid.Nil,
@@ -212,12 +218,24 @@ func runHostedMCPWrappers(args []string, stdout io.Writer, getenv func(string) s
 	if runErr != nil {
 		code = 1
 		if cfg.options.Apply {
-			log.Printf("hosted-mcp-wrappers %s phase stopped early: %v; resume with the same mode flags (%s), -cursor %s and a new -report path", report.Phase, runErr, hostedMCPWrappersModeFlags(cfg.options), report.LastCursor)
+			log.Printf("hosted-mcp-wrappers %s phase stopped early: %v; resume with the same mode flags (%s), -cursor %s and a new -report path", report.Phase, runErr, hostedMCPWrappersResumeFlags(cfg), report.LastCursor)
 		} else {
 			log.Printf("hosted-mcp-wrappers stopped early: %v; dry-run cursors commit nothing, so rerun without -cursor", runErr)
 		}
 	}
 	return code
+}
+
+// hostedMCPWrappersResumeFlags adds the run's scope and publication choice to its mode flags.
+func hostedMCPWrappersResumeFlags(cfg hostedMCPWrappersConfig) string {
+	flags := hostedMCPWrappersModeFlags(cfg.options)
+	if cfg.options.ProjectID.Valid {
+		flags += " -project " + cfg.options.ProjectID.UUID.String()
+	}
+	if cfg.publicationEmitSet {
+		flags += " -plugin-publication-emit=" + strconv.FormatBool(cfg.options.Publication.Enabled)
+	}
+	return flags
 }
 
 // hostedMCPWrappersModeFlags names the flags that select the run's phase, so a resume stays in it.

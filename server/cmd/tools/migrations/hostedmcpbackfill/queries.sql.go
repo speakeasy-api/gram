@@ -280,6 +280,21 @@ func (q *Queries) DeleteOrphanMetadata(ctx context.Context, arg DeleteOrphanMeta
 	return result.RowsAffected(), nil
 }
 
+const deleteSessionClientLinkFixture = `-- name: DeleteSessionClientLinkFixture :exec
+DELETE FROM mcp_server_remote_session_clients
+WHERE id = $1 AND project_id = $2
+`
+
+type DeleteSessionClientLinkFixtureParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) DeleteSessionClientLinkFixture(ctx context.Context, arg DeleteSessionClientLinkFixtureParams) error {
+	_, err := q.db.Exec(ctx, deleteSessionClientLinkFixture, arg.ID, arg.ProjectID)
+	return err
+}
+
 const endpointAddressHeldElsewhere = `-- name: EndpointAddressHeldElsewhere :one
 SELECT EXISTS (
   SELECT 1
@@ -692,38 +707,6 @@ func (q *Queries) ListEnvironmentConfigsFixture(ctx context.Context, projectID u
 	return items, nil
 }
 
-const listLiveSessionClientLinkIDs = `-- name: ListLiveSessionClientLinkIDs :many
-SELECT c.id
-FROM mcp_server_remote_session_clients AS c
-WHERE c.id = ANY($1::uuid[]) AND c.project_id = $2 AND c.deleted IS FALSE
-ORDER BY c.id
-`
-
-type ListLiveSessionClientLinkIDsParams struct {
-	Ids       []uuid.UUID
-	ProjectID uuid.UUID
-}
-
-func (q *Queries) ListLiveSessionClientLinkIDs(ctx context.Context, arg ListLiveSessionClientLinkIDsParams) ([]uuid.UUID, error) {
-	rows, err := q.db.Query(ctx, listLiveSessionClientLinkIDs, arg.Ids, arg.ProjectID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []uuid.UUID
-	for rows.Next() {
-		var id uuid.UUID
-		if err := rows.Scan(&id); err != nil {
-			return nil, err
-		}
-		items = append(items, id)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const listMetadataEnvironmentConfigs = `-- name: ListMetadataEnvironmentConfigs :many
 SELECT id, project_id, mcp_metadata_id, variable_name, header_display_name, provided_by, created_at, updated_at
 FROM mcp_environment_configs
@@ -956,39 +939,6 @@ func (q *Queries) ListPluginServersFixture(ctx context.Context, projectID uuid.U
 			&i.McpServerID,
 			&i.Deleted,
 		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listProjectSessionClientLinks = `-- name: ListProjectSessionClientLinks :many
-SELECT c.id, to_jsonb(c)::jsonb AS row_json
-FROM mcp_server_remote_session_clients AS c
-WHERE c.project_id = $1 AND c.deleted IS FALSE
-ORDER BY c.id
-`
-
-type ListProjectSessionClientLinksRow struct {
-	ID      uuid.UUID
-	RowJson []byte
-}
-
-// The issuer resync prunes project-wide, so every live link is imaged before it.
-func (q *Queries) ListProjectSessionClientLinks(ctx context.Context, projectID uuid.UUID) ([]ListProjectSessionClientLinksRow, error) {
-	rows, err := q.db.Query(ctx, listProjectSessionClientLinks, projectID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ListProjectSessionClientLinksRow
-	for rows.Next() {
-		var i ListProjectSessionClientLinksRow
-		if err := rows.Scan(&i.ID, &i.RowJson); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -2047,6 +1997,96 @@ func (q *Queries) MoveAssistantToolset(ctx context.Context, arg MoveAssistantToo
 	return result.RowsAffected(), nil
 }
 
+const pruneUnservableSessionClientLinks = `-- name: PruneUnservableSessionClientLinks :many
+DELETE FROM mcp_server_remote_session_clients AS a
+USING mcp_servers AS s
+WHERE a.mcp_server_id = s.id
+  AND a.project_id = $1::uuid
+  AND a.organization_id = $2::text
+  AND a.deleted IS FALSE
+  AND (
+    s.deleted IS TRUE
+    OR NOT EXISTS (
+      SELECT 1
+      FROM remote_session_client_user_session_issuers AS link
+      JOIN remote_session_clients AS c
+        ON c.id = link.remote_session_client_id
+       AND c.deleted IS FALSE
+      WHERE link.remote_session_client_id = a.remote_session_client_id
+        AND (
+          link.user_session_issuer_id = s.user_session_issuer_id
+          OR EXISTS (
+            SELECT 1
+            FROM meta_mcp_servers AS gateway
+            JOIN projects AS gateway_project
+              ON gateway_project.id = gateway.project_id
+             AND gateway_project.deleted IS FALSE
+            JOIN user_session_issuers AS gateway_issuer
+              ON gateway_issuer.id = gateway.user_session_issuer_id
+             AND gateway_issuer.deleted IS FALSE
+             AND (gateway_issuer.project_id = s.project_id
+                  OR (gateway_issuer.project_id IS NULL AND gateway_issuer.organization_id = a.organization_id))
+            JOIN meta_mcp_server_members AS member
+              ON member.meta_mcp_server_id = gateway.id
+             AND member.project_id = gateway.project_id
+             AND member.deleted IS FALSE
+            WHERE gateway.user_session_issuer_id = link.user_session_issuer_id
+              AND gateway.deleted IS FALSE
+              AND member.mcp_server_id = s.id
+          )
+          OR EXISTS (
+            SELECT 1
+            FROM user_session_issuers AS organization_issuer
+            WHERE organization_issuer.id = link.user_session_issuer_id
+              AND organization_issuer.project_id IS NULL
+              AND organization_issuer.organization_id = a.organization_id
+              AND organization_issuer.deleted IS FALSE
+              AND (
+              SELECT count(*)
+              FROM user_session_issuers AS sibling
+              WHERE sibling.organization_id = organization_issuer.organization_id
+                AND sibling.project_id IS NULL
+                AND sibling.deleted IS FALSE
+            ) = 1
+          )
+        )
+    )
+  )
+RETURNING a.id, a.mcp_server_id, to_jsonb(a)::jsonb AS row_json
+`
+
+type PruneUnservableSessionClientLinksParams struct {
+	ProjectID      uuid.UUID
+	OrganizationID string
+}
+
+type PruneUnservableSessionClientLinksRow struct {
+	ID          uuid.UUID
+	McpServerID uuid.UUID
+	RowJson     []byte
+}
+
+// PruneUnservableAssociations verbatim, as the app's post-delete issuer resync runs it, returning what it deleted.
+func (q *Queries) PruneUnservableSessionClientLinks(ctx context.Context, arg PruneUnservableSessionClientLinksParams) ([]PruneUnservableSessionClientLinksRow, error) {
+	rows, err := q.db.Query(ctx, pruneUnservableSessionClientLinks, arg.ProjectID, arg.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []PruneUnservableSessionClientLinksRow
+	for rows.Next() {
+		var i PruneUnservableSessionClientLinksRow
+		if err := rows.Scan(&i.ID, &i.McpServerID, &i.RowJson); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const rekeyMetadata = `-- name: RekeyMetadata :one
 UPDATE mcp_metadata
 SET toolset_id = NULL, mcp_server_id = $1, updated_at = clock_timestamp()
@@ -2185,6 +2225,21 @@ type RestoreProjectFixtureParams struct {
 
 func (q *Queries) RestoreProjectFixture(ctx context.Context, arg RestoreProjectFixtureParams) error {
 	_, err := q.db.Exec(ctx, restoreProjectFixture, arg.ID, arg.OrganizationID)
+	return err
+}
+
+const restoreToolsetFixture = `-- name: RestoreToolsetFixture :exec
+UPDATE toolsets SET deleted_at = NULL
+WHERE id = $1 AND project_id = $2
+`
+
+type RestoreToolsetFixtureParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) RestoreToolsetFixture(ctx context.Context, arg RestoreToolsetFixtureParams) error {
+	_, err := q.db.Exec(ctx, restoreToolsetFixture, arg.ID, arg.ProjectID)
 	return err
 }
 
@@ -2814,6 +2869,22 @@ type SetServerIssuerFixtureParams struct {
 
 func (q *Queries) SetServerIssuerFixture(ctx context.Context, arg SetServerIssuerFixtureParams) error {
 	_, err := q.db.Exec(ctx, setServerIssuerFixture, arg.UserSessionIssuerID, arg.ID, arg.ProjectID)
+	return err
+}
+
+const setServerToolsetFixture = `-- name: SetServerToolsetFixture :exec
+UPDATE mcp_servers SET toolset_id = $1
+WHERE id = $2 AND project_id = $3
+`
+
+type SetServerToolsetFixtureParams struct {
+	ToolsetID uuid.NullUUID
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) SetServerToolsetFixture(ctx context.Context, arg SetServerToolsetFixtureParams) error {
+	_, err := q.db.Exec(ctx, setServerToolsetFixture, arg.ToolsetID, arg.ID, arg.ProjectID)
 	return err
 }
 
