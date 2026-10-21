@@ -1,4 +1,4 @@
-import { renderHook } from "@testing-library/react";
+import { act, renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
@@ -16,7 +16,13 @@ const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
   href: vi.fn((urn: string) => `/identities/${urn}/overview`),
   queryOptions: undefined as Record<string, unknown> | undefined,
-  queryData: undefined as Array<{ id: string; name: string }> | undefined,
+  queryData: undefined as
+    | { pages: Array<{ items: Array<{ id: string; name: string }> }> }
+    | undefined,
+  hasNextPage: false,
+  isFetchingNextPage: false,
+  isFetchNextPageError: false,
+  fetchNextPage: vi.fn<() => Promise<unknown>>(),
   fetchRegisteredAgents: vi.fn(),
 }));
 
@@ -45,9 +51,15 @@ vi.mock("react-router", () => ({
   useNavigate: () => mocks.navigate,
 }));
 vi.mock("@tanstack/react-query", () => ({
-  useQuery: (options: Record<string, unknown>) => {
+  useInfiniteQuery: (options: Record<string, unknown>) => {
     mocks.queryOptions = options;
-    return { data: mocks.queryData };
+    return {
+      data: mocks.queryData,
+      hasNextPage: mocks.hasNextPage,
+      isFetchingNextPage: mocks.isFetchingNextPage,
+      isFetchNextPageError: mocks.isFetchNextPageError,
+      fetchNextPage: mocks.fetchNextPage,
+    };
   },
 }));
 vi.mock("@/pages/identities/identityRoster", () => ({
@@ -71,6 +83,10 @@ describe("useAgentIdentityCandidates", () => {
     mocks.scopeOverride = null;
     mocks.projectSlug = "project-one";
     mocks.queryData = undefined;
+    mocks.hasNextPage = false;
+    mocks.isFetchingNextPage = false;
+    mocks.isFetchNextPageError = false;
+    mocks.fetchNextPage.mockReset().mockResolvedValue(undefined);
     mocks.queryOptions = undefined;
     mocks.navigate.mockReset();
     mocks.href.mockClear();
@@ -84,7 +100,17 @@ describe("useAgentIdentityCandidates", () => {
 
     expect(result.current).toEqual([]);
     expect(mocks.queryOptions).toMatchObject({
-      queryKey: ["identities", "registered-agents", "org-one", "user-one"],
+      queryKey: [
+        "identities",
+        "registered-agents",
+        "org-one",
+        "user-one",
+        "",
+        "asc",
+        "[]",
+        "[]",
+        "",
+      ],
       enabled: false,
       retry: false,
       throwOnError: false,
@@ -94,9 +120,20 @@ describe("useAgentIdentityCandidates", () => {
     await (
       mocks.queryOptions!.queryFn as (context: {
         signal: AbortSignal;
+        pageParam: string | undefined;
       }) => Promise<unknown>
-    )({ signal });
-    expect(mocks.fetchRegisteredAgents).toHaveBeenCalledWith(mocks.sdk, signal);
+    )({ signal, pageParam: "next-cursor" });
+    expect(mocks.fetchRegisteredAgents).toHaveBeenCalledWith(
+      mocks.sdk,
+      { cursor: "next-cursor", limit: 50, search: "", sortOrder: "asc" },
+      signal,
+    );
+    const getNextPage = mocks.queryOptions!.getNextPageParam as (page: {
+      nextCursor?: string;
+    }) => string | undefined;
+    expect(getNextPage({ nextCursor: "next" })).toBe("next");
+    expect(getNextPage({})).toBeUndefined();
+    expect(mocks.fetchNextPage).not.toHaveBeenCalled();
   });
 
   it.each([
@@ -108,7 +145,9 @@ describe("useAgentIdentityCandidates", () => {
     ],
     ["RBAC override", () => (mocks.scopeOverride = "project:read")],
   ])("does not expose agents in a %s", (_label, restrict) => {
-    mocks.queryData = [{ id: "agent-one", name: "Build bot" }];
+    mocks.queryData = {
+      pages: [{ items: [{ id: "agent-one", name: "Build bot" }] }],
+    };
     restrict();
 
     const { result } = renderHook(() =>
@@ -120,7 +159,9 @@ describe("useAgentIdentityCandidates", () => {
   });
 
   it("maps names and canonical URNs without exposing them to intent ranking", () => {
-    mocks.queryData = [{ id: "agent/one", name: "Release Agent" }];
+    mocks.queryData = {
+      pages: [{ items: [{ id: "agent/one", name: "Release Agent" }] }],
+    };
 
     const { result } = renderHook(() =>
       useAgentIdentityCandidates({ enabled: true }),
@@ -144,5 +185,36 @@ describe("useAgentIdentityCandidates", () => {
     expect(mocks.navigate).toHaveBeenCalledWith(
       "/identities/agent%3Aagent%2Fone/overview?range=30d&from=2025-01-01&to=2025-01-31",
     );
+  });
+  it("includes later pages and stops fetching when closed or pagination fails", async () => {
+    mocks.queryData = {
+      pages: [
+        { items: [{ id: "first", name: "Build Agent" }] },
+        { items: [{ id: "last", name: "Release Agent" }] },
+      ],
+    };
+    mocks.hasNextPage = true;
+    mocks.isFetchingNextPage = false;
+    mocks.isFetchNextPageError = false;
+    mocks.fetchNextPage.mockClear();
+    const { result, rerender } = renderHook(
+      ({ enabled }) => useAgentIdentityCandidates({ enabled }),
+      { initialProps: { enabled: true } },
+    );
+    expect(result.current.map((candidate) => candidate.title)).toEqual([
+      "Build Agent",
+      "Release Agent",
+    ]);
+    expect(mocks.fetchNextPage).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      await Promise.resolve();
+    });
+    mocks.isFetchNextPageError = true;
+    rerender({ enabled: true });
+    expect(mocks.fetchNextPage).toHaveBeenCalledTimes(1);
+    mocks.isFetchNextPageError = false;
+    rerender({ enabled: false });
+    expect(result.current).toEqual([]);
+    expect(mocks.fetchNextPage).toHaveBeenCalledTimes(1);
   });
 });
