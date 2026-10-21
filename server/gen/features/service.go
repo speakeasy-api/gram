@@ -114,6 +114,10 @@ type ProductFeatures struct {
 	// Whether an organization admin turned the organization gateway off, so its
 	// routes answer 404
 	OrganizationGatewayDisabled bool
+	// Whether risk enforcement fails closed for the organization: when a prompt
+	// policy judge times out or errors while enforcing, the message is blocked
+	// instead of allowed
+	RiskEnforcementFailClosed bool
 	// Whether the organization uses the device agent (any device has polled
 	// agent.getPlugins). Derived from device-agent syncs, not an admin-settable
 	// feature.
@@ -269,6 +273,9 @@ func newProductFeatures(vres *featuresviews.ProductFeaturesView) *ProductFeature
 	if vres.OrganizationGatewayDisabled != nil {
 		res.OrganizationGatewayDisabled = *vres.OrganizationGatewayDisabled
 	}
+	if vres.RiskEnforcementFailClosed != nil {
+		res.RiskEnforcementFailClosed = *vres.RiskEnforcementFailClosed
+	}
 	if vres.DeviceAgent != nil {
 		res.DeviceAgent = *vres.DeviceAgent
 	}
@@ -299,6 +306,7 @@ func newProductFeaturesView(res *ProductFeatures) *featuresviews.ProductFeatures
 		NetworkIngressEnabled:                   &res.NetworkIngressEnabled,
 		SignalsIntelligenceEnabled:              &res.SignalsIntelligenceEnabled,
 		OrganizationGatewayDisabled:             &res.OrganizationGatewayDisabled,
+		RiskEnforcementFailClosed:               &res.RiskEnforcementFailClosed,
 		DeviceAgent:                             &res.DeviceAgent,
 	}
 	return vres

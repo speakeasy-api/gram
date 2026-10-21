@@ -1161,6 +1161,29 @@ SELECT EXISTS (
     AND deleted IS FALSE
 ) AS enabled;
 
+-- name: ListOrganizationsWithFailClosedPromptPolicies :many
+-- Organizations with a live prompt_based policy that stored fail_open = false
+-- before the failure mode moved to the organization, and whether the same
+-- organization also has prompt_based policies that failed open.
+SELECT
+  organization_id,
+  BOOL_OR(COALESCE(model_config ->> 'fail_open', 'true') <> 'false')::boolean AS has_fail_open_policy
+FROM risk_policies
+WHERE policy_type = 'prompt_based'
+  AND deleted IS FALSE
+GROUP BY organization_id
+HAVING BOOL_OR(model_config ->> 'fail_open' = 'false')
+ORDER BY organization_id;
+
+-- name: IsOrganizationRiskEnforcementFailClosed :one
+SELECT EXISTS (
+  SELECT 1
+  FROM organization_features
+  WHERE organization_id = @organization_id
+    AND feature_name = 'risk_enforcement_fail_closed'
+    AND deleted IS FALSE
+) AS enabled;
+
 -- name: CreateSessionQuarantine :one
 INSERT INTO session_quarantines (
     organization_id

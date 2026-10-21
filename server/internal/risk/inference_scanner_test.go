@@ -88,11 +88,10 @@ func TestScanner_InferencePromptPolicyCompleteness(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			ctx, ti := newTestRiskService(t)
-			modelConfig := []byte(`{"fail_open":true}`)
+			insertPromptBasedBlockPolicy(t, ti, ctx, "inference prompt policy", "Block unsafe operations")
 			if tc.failClosed {
-				modelConfig = []byte(`{"fail_open":false}`)
+				setRiskEnforcementFailClosed(t, ti, ctx)
 			}
-			insertPromptBasedBlockPolicyWithConfig(t, ti, ctx, "inference prompt policy", "Block unsafe operations", modelConfig)
 			judge := &fakePromptJudge{verdict: tc.verdict, err: tc.err}
 			detector := promptpolicy.NewScanner(testenv.NewLogger(t), judge.Evaluate)
 			if tc.unavailable {

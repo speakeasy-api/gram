@@ -62,6 +62,10 @@ export type ProductFeatures = {
    */
   remoteSessionAutoRefreshEnforcedEnabled: boolean;
   /**
+   * Whether risk enforcement fails closed for the organization: when a prompt policy judge times out or errors while enforcing, the message is blocked instead of allowed
+   */
+  riskEnforcementFailClosed: boolean;
+  /**
    * Whether SCIM/directory sync setup is enabled for the organization
    */
   scimEnabled: boolean;
@@ -114,6 +118,7 @@ export const ProductFeatures$inboundSchema: z.ZodMiniType<
     platform_mcp_enabled: z.boolean(),
     remote_session_auto_refresh_enabled: z.boolean(),
     remote_session_auto_refresh_enforced_enabled: z.boolean(),
+    risk_enforcement_fail_closed: z.boolean(),
     scim_enabled: z.boolean(),
     session_capture_enabled: z.boolean(),
     session_portability_enabled: z.boolean(),
@@ -141,6 +146,7 @@ export const ProductFeatures$inboundSchema: z.ZodMiniType<
       "remote_session_auto_refresh_enabled": "remoteSessionAutoRefreshEnabled",
       "remote_session_auto_refresh_enforced_enabled":
         "remoteSessionAutoRefreshEnforcedEnabled",
+      "risk_enforcement_fail_closed": "riskEnforcementFailClosed",
       "scim_enabled": "scimEnabled",
       "session_capture_enabled": "sessionCaptureEnabled",
       "session_portability_enabled": "sessionPortabilityEnabled",

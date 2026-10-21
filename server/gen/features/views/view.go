@@ -72,6 +72,10 @@ type ProductFeaturesView struct {
 	// Whether an organization admin turned the organization gateway off, so its
 	// routes answer 404
 	OrganizationGatewayDisabled *bool
+	// Whether risk enforcement fails closed for the organization: when a prompt
+	// policy judge times out or errors while enforcing, the message is blocked
+	// instead of allowed
+	RiskEnforcementFailClosed *bool
 	// Whether the organization uses the device agent (any device has polled
 	// agent.getPlugins). Derived from device-agent syncs, not an admin-settable
 	// feature.
@@ -103,6 +107,7 @@ var (
 			"network_ingress_enabled",
 			"signals_intelligence_enabled",
 			"organization_gateway_disabled",
+			"risk_enforcement_fail_closed",
 			"device_agent",
 		},
 	}
@@ -182,6 +187,9 @@ func ValidateProductFeaturesView(result *ProductFeaturesView) (err error) {
 	}
 	if result.OrganizationGatewayDisabled == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("organization_gateway_disabled", "result"))
+	}
+	if result.RiskEnforcementFailClosed == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("risk_enforcement_fail_closed", "result"))
 	}
 	if result.DeviceAgent == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("device_agent", "result"))

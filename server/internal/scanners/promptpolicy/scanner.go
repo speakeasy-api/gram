@@ -45,7 +45,7 @@ func (s *Scanner) ScanWithVerdict(ctx context.Context, orgID, projectID, userID,
 		Message:   msg,
 		Config:    cfg,
 	})
-	if err != nil && cfg.FailOpen && s.logger != nil && !errors.Is(err, context.Canceled) {
+	if err != nil && !cfg.FailClosed && s.logger != nil && !errors.Is(err, context.Canceled) {
 		s.logger.WarnContext(ctx, "prompt policy judge failed; returning no findings",
 			attr.SlogError(err),
 			attr.SlogOrganizationID(orgID),
@@ -61,7 +61,7 @@ func (s *Scanner) ScanWithVerdict(ctx context.Context, orgID, projectID, userID,
 
 func FindingsFromEvaluation(cfg Config, verdict *Verdict, err error, judgeUnavailable bool) []scanners.Finding {
 	if err != nil || judgeUnavailable {
-		if cfg.FailOpen {
+		if !cfg.FailClosed {
 			return []scanners.Finding{}
 		}
 		return []scanners.Finding{NewFinding(FailClosedVerdict(err))}

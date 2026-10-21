@@ -110,7 +110,7 @@ func EvalPromptGuardrail(
 	if judge == nil || strings.TrimSpace(prompt) == "" {
 		for vi, idx := range judgedIndices {
 			result.Verdicts[vi] = messageVerdictSkeleton(idx, built[idx])
-			if !cfg.FailOpen {
+			if cfg.FailClosed {
 				applyFailClosedFallback(&result.Verdicts[vi], nil)
 			}
 		}
@@ -122,7 +122,7 @@ func EvalPromptGuardrail(
 		func(pos, idx int, verdict *promptpolicy.Verdict, err error, latency time.Duration) {
 			out := messageVerdictSkeleton(idx, built[idx])
 			out.LatencyMs = latency.Milliseconds()
-			if err != nil && !cfg.FailOpen {
+			if err != nil && cfg.FailClosed {
 				applyFailClosedFallback(&out, err)
 			} else if verdict != nil {
 				out.Verdict = *verdict

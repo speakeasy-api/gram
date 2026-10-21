@@ -87,6 +87,10 @@ type GetProductFeaturesResponseBody struct {
 	// Whether an organization admin turned the organization gateway off, so its
 	// routes answer 404
 	OrganizationGatewayDisabled *bool `form:"organization_gateway_disabled,omitempty" json:"organization_gateway_disabled,omitempty" xml:"organization_gateway_disabled,omitempty"`
+	// Whether risk enforcement fails closed for the organization: when a prompt
+	// policy judge times out or errors while enforcing, the message is blocked
+	// instead of allowed
+	RiskEnforcementFailClosed *bool `form:"risk_enforcement_fail_closed,omitempty" json:"risk_enforcement_fail_closed,omitempty" xml:"risk_enforcement_fail_closed,omitempty"`
 	// Whether the organization uses the device agent (any device has polled
 	// agent.getPlugins). Derived from device-agent syncs, not an admin-settable
 	// feature.
@@ -702,6 +706,7 @@ func NewGetProductFeaturesProductFeaturesOK(body *GetProductFeaturesResponseBody
 		NetworkIngressEnabled:                   body.NetworkIngressEnabled,
 		SignalsIntelligenceEnabled:              body.SignalsIntelligenceEnabled,
 		OrganizationGatewayDisabled:             body.OrganizationGatewayDisabled,
+		RiskEnforcementFailClosed:               body.RiskEnforcementFailClosed,
 		DeviceAgent:                             body.DeviceAgent,
 	}
 

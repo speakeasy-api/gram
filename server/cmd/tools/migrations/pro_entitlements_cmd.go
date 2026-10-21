@@ -18,45 +18,55 @@ import (
 	featurerepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 )
 
-type proEntitlementsConfig struct {
+// confirmedBackfillConfig is the parsed configuration shared by the
+// PostgreSQL application-data backfills that preview by default and write
+// only with -apply plus confirmations naming the environment, the database
+// target, and the backfill itself.
+type confirmedBackfillConfig struct {
 	dbURL       string
 	environment string
 	apply       bool
 }
 
+type proEntitlementsConfig = confirmedBackfillConfig
+
 func parseProEntitlementsFlags(args []string, getenv func(string) string) (proEntitlementsConfig, error) {
-	fs := flag.NewFlagSet("pro-entitlements", flag.ContinueOnError)
+	return parseConfirmedBackfillFlags("pro-entitlements", args, getenv)
+}
+
+func parseConfirmedBackfillFlags(name string, args []string, getenv func(string) string) (confirmedBackfillConfig, error) {
+	fs := flag.NewFlagSet(name, flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	apply := fs.Bool("apply", false, "write the backfill (default is dry run)")
 	environment := fs.String("environment", "", "target environment name")
 	confirmEnvironment := fs.String("confirm-environment", "", "must exactly match environment for writes")
 	confirmTarget := fs.String("confirm-target", "", "must exactly match the parsed host, port, and database for writes")
-	confirmApply := fs.String("confirm-apply", "", "must equal pro-entitlements for writes")
+	confirmApply := fs.String("confirm-apply", "", "must equal "+name+" for writes")
 	if err := fs.Parse(args); err != nil || fs.NArg() != 0 {
-		return proEntitlementsConfig{}, errors.New("invalid pro-entitlements flags")
+		return confirmedBackfillConfig{}, fmt.Errorf("invalid %s flags", name)
 	}
 	if *environment == "" {
-		return proEntitlementsConfig{}, errors.New("environment is required")
+		return confirmedBackfillConfig{}, errors.New("environment is required")
 	}
 	if *apply && *confirmEnvironment != *environment {
-		return proEntitlementsConfig{}, errors.New("writes require -confirm-environment to exactly match -environment")
+		return confirmedBackfillConfig{}, errors.New("writes require -confirm-environment to exactly match -environment")
 	}
 	dbURL := getenv("GRAM_DATABASE_URL")
 	if dbURL == "" {
-		return proEntitlementsConfig{}, errors.New("missing $GRAM_DATABASE_URL")
+		return confirmedBackfillConfig{}, errors.New("missing $GRAM_DATABASE_URL")
 	}
 	dbConfig, err := pgx.ParseConfig(dbURL)
 	if err != nil {
-		return proEntitlementsConfig{}, errors.New("invalid $GRAM_DATABASE_URL")
+		return confirmedBackfillConfig{}, errors.New("invalid $GRAM_DATABASE_URL")
 	}
 	target := net.JoinHostPort(dbConfig.Host, strconv.Itoa(int(dbConfig.Port))) + "/" + dbConfig.Database
 	if *apply && *confirmTarget != target {
-		return proEntitlementsConfig{}, fmt.Errorf("writes require -confirm-target=%s to match the parsed database target", target)
+		return confirmedBackfillConfig{}, fmt.Errorf("writes require -confirm-target=%s to match the parsed database target", target)
 	}
-	if *apply && *confirmApply != "pro-entitlements" {
-		return proEntitlementsConfig{}, errors.New("writes require -confirm-apply=pro-entitlements")
+	if *apply && *confirmApply != name {
+		return confirmedBackfillConfig{}, fmt.Errorf("writes require -confirm-apply=%s", name)
 	}
-	return proEntitlementsConfig{dbURL: dbURL, environment: *environment, apply: *apply}, nil
+	return confirmedBackfillConfig{dbURL: dbURL, environment: *environment, apply: *apply}, nil
 }
 
 type proEntitlementsDB interface {

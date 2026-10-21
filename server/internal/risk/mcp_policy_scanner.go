@@ -210,12 +210,9 @@ func (s *MCPPolicyScanner) scanPromptPolicy(ctx context.Context, policy policyco
 	if s.scanner.promptPolicy == nil {
 		return nil, errors.New("prompt policy detector is unavailable")
 	}
-	config := promptpolicy.Config{Temperature: nil, FailOpen: true}
+	config := promptpolicy.Config{Temperature: nil, FailClosed: s.scanner.enforcementFailClosed(ctx, policy.OrganizationID)}
 	if policy.ModelConfig != nil {
 		config.Temperature = policy.ModelConfig.Temperature
-		if policy.ModelConfig.FailOpen != nil {
-			config.FailOpen = *policy.ModelConfig.FailOpen
-		}
 	}
 	prompt := ""
 	if policy.Prompt != nil {

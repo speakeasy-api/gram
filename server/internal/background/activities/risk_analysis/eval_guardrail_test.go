@@ -44,7 +44,7 @@ func TestEvalPromptGuardrailStopsFanoutAfterCancellation(t *testing.T) {
 		"org",
 		"project",
 		"flag unsafe messages",
-		promptpolicy.Config{Temperature: nil, FailOpen: false},
+		promptpolicy.Config{Temperature: nil, FailClosed: true},
 		evalMessages(testJudgeConcurrency*2),
 		nil,
 		"",
@@ -57,7 +57,7 @@ func TestEvalPromptGuardrailStopsFanoutAfterCancellation(t *testing.T) {
 	for i, verdict := range result.Verdicts {
 		require.Equal(t, i, verdict.Index)
 		require.True(t, verdict.Matched)
-		require.Equal(t, "Policy judge was unavailable; flagged by fail-closed policy.", verdict.Rationale)
+		require.Equal(t, "Policy judge was unavailable; flagged because the organization fails closed.", verdict.Rationale)
 	}
 }
 
@@ -74,7 +74,7 @@ func TestEvalPromptGuardrailCapsInScopeMessages(t *testing.T) {
 		"org",
 		"project",
 		"flag unsafe messages",
-		promptpolicy.Config{Temperature: nil, FailOpen: true},
+		promptpolicy.Config{Temperature: nil, FailClosed: false},
 		evalMessages(totalMessages),
 		nil,
 		"",

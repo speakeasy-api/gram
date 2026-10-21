@@ -49,13 +49,17 @@ func RiskPolicyTypeEnum() {
 
 // RiskPolicyModelConfig is the per-policy LLM-judge configuration for
 // `prompt_based` policies. All fields are optional; unset fields fall back to
-// judge defaults (low temperature, fail-open on judge error). The judge model
-// itself is not configurable - every policy runs on the one benchmarked model.
+// judge defaults. What a judge error or timeout does is the organization's
+// risk_enforcement_fail_closed product feature, not a per-policy setting. The
+// judge model itself is not configurable - every policy runs on the one
+// benchmarked model.
 var RiskPolicyModelConfig = Type("RiskPolicyModelConfig", func() {
 	Meta("struct:pkg:path", "types")
 
 	Attribute("temperature", Float64, "Sampling temperature for the judge. Defaults to a low value for deterministic verdicts.")
-	Attribute("fail_open", Boolean, "When the judge errors or times out: true allows the message (fail-open), false blocks it (fail-closed). Defaults to fail-open.")
+	Attribute("fail_open", Boolean, "Deprecated: ignored. A judge error or timeout follows the organization's risk_enforcement_fail_closed product feature.", func() {
+		Meta("openapi:extension:x-speakeasy-deprecation-message", "Set the organization's risk_enforcement_fail_closed product feature instead")
+	})
 })
 
 // RiskPolicyAudienceTypeEnum applies the allowed-values constraint to a policy

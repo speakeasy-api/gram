@@ -3052,6 +3052,12 @@ func (s *Service) EvaluatePromptGuardrail(ctx context.Context, payload *gen.Eval
 		return nil, err
 	}
 	cfg := promptpolicy.ParseConfig(modelConfig)
+	// The replay mirrors enforcement, so a judge error shows as the verdict
+	// the organization's failure mode would produce.
+	cfg.FailClosed, err = s.repo.IsOrganizationRiskEnforcementFailClosed(ctx, authCtx.ActiveOrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "load risk enforcement failure mode").LogError(ctx, s.logger)
+	}
 
 	return s.evaluateGuardrailForChat(
 		ctx,
@@ -3931,10 +3937,10 @@ func validatePromptPolicyFields(promptPtr *string, mc *types.RiskPolicyModelConf
 
 // promptModelConfig is the JSONB storage shape for a prompt_based policy's
 // model_config column. Stored with stable snake_case keys independent of the
-// generated API type.
+// generated API type. The deprecated fail_open input is not stored: a judge
+// error follows the organization's risk failure mode.
 type promptModelConfig struct {
 	Temperature *float64 `json:"temperature,omitempty"`
-	FailOpen    *bool    `json:"fail_open,omitempty"`
 }
 
 // marshalModelConfig encodes an API model config into the JSONB column value.
@@ -3945,7 +3951,6 @@ func marshalModelConfig(mc *types.RiskPolicyModelConfig) ([]byte, error) {
 	}
 	raw, err := json.Marshal(promptModelConfig{
 		Temperature: mc.Temperature,
-		FailOpen:    mc.FailOpen,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "invalid model_config")

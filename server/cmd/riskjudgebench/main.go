@@ -228,7 +228,7 @@ func evaluate(client openrouter.CompletionClient, model, orgID, projectID string
 		ProjectID: projectID,
 		Prompt:    tc.Policy,
 		Message:   judgemessage.New(tc.MessageType, tc.ToolName, tc.Text),
-		Config:    promptpolicy.Config{Temperature: nil, FailOpen: true},
+		Config:    promptpolicy.Config{Temperature: nil, FailClosed: false},
 	})
 
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
