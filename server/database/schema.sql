@@ -5621,6 +5621,18 @@ CREATE TABLE IF NOT EXISTS chats (
   -- capture began.
   cwd TEXT,
 
+  -- The Speakeasy agent principal that produced this session, resolved from the
+  -- authenticated actor at capture time. A channel session has no assistant
+  -- record, so the assistant columns a session list reads stay NULL and the
+  -- agent that actually made the calls would otherwise be invisible. NULL when a
+  -- human (not an agent) authenticated the capture, and for rows ingested before
+  -- capture began. No FK constraint because agents is declared after chats (it
+  -- depends on organization_user_relationships, declared later), matching how
+  -- chats.user_account_id is referenced without a FK; capture maintains
+  -- integrity by only writing an agent id that resolves to a live agent in the
+  -- chat's own organization.
+  agent_id uuid,
+
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   deleted_at timestamptz,
@@ -5650,6 +5662,7 @@ COMMENT ON COLUMN chats.inference_actor_key IS '@access: confidential-pii';
 COMMENT ON COLUMN chats.user_account_id IS '@access: confidential';
 COMMENT ON COLUMN chats.litellm_proxied IS '@access: confidential';
 COMMENT ON COLUMN chats.cwd IS '@access: opaque-restricted';
+COMMENT ON COLUMN chats.agent_id IS '@access: confidential';
 COMMENT ON COLUMN chats.created_at IS '@access: confidential';
 COMMENT ON COLUMN chats.updated_at IS '@access: confidential';
 COMMENT ON COLUMN chats.deleted_at IS '@access: confidential';
