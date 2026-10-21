@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
@@ -23,7 +24,7 @@ export const MetricsMode = {
 /**
  * Indicates whether metrics are session-based or tool-call-based
  */
-export type MetricsMode = ClosedEnum<typeof MetricsMode>;
+export type MetricsMode = OpenEnum<typeof MetricsMode>;
 
 /**
  * Result of project overview query
@@ -44,8 +45,8 @@ export type GetProjectOverviewResult = {
 };
 
 /** @internal */
-export const MetricsMode$inboundSchema: z.ZodMiniEnum<typeof MetricsMode> = z
-  .enum(MetricsMode);
+export const MetricsMode$inboundSchema: z.ZodMiniType<MetricsMode, unknown> =
+  openEnums.inboundSchema(MetricsMode);
 
 /** @internal */
 export const GetProjectOverviewResult$inboundSchema: z.ZodMiniType<

@@ -23,6 +23,7 @@ import (
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	skillsrepo "github.com/speakeasy-api/gram/server/internal/skills/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -165,9 +166,9 @@ func createPlugin(t *testing.T, ctx context.Context, f *fixture, projectID uuid.
 func containToolset(t *testing.T, ctx context.Context, f *fixture, pluginID, toolsetID uuid.UUID) uuid.UUID {
 	t.Helper()
 
-	member, err := pluginsrepo.New(f.conn).AddPluginServer(ctx, pluginsrepo.AddPluginServerParams{
-		PluginID: pluginID, ToolsetID: conv.ToNullUUID(toolsetID), McpServerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		DisplayName: "toolset", Policy: "required", SortOrder: 0,
+	member, err := testrepo.New(f.conn).InsertToolsetKeyedPluginServerFixture(ctx, testrepo.InsertToolsetKeyedPluginServerFixtureParams{
+		PluginID: pluginID, ToolsetID: conv.ToNullUUID(toolsetID),
+		DisplayName: "toolset", Policy: "required", SortOrder: 0, DeletedAt: pgtype.Timestamptz{},
 	})
 	require.NoError(t, err)
 	return member.ID
@@ -177,7 +178,7 @@ func containMCPServer(t *testing.T, ctx context.Context, f *fixture, pluginID, s
 	t.Helper()
 
 	_, err := pluginsrepo.New(f.conn).AddPluginServer(ctx, pluginsrepo.AddPluginServerParams{
-		PluginID: pluginID, ToolsetID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, McpServerID: conv.ToNullUUID(serverID),
+		PluginID: pluginID, McpServerID: conv.ToNullUUID(serverID),
 		DisplayName: "server", Policy: "required", SortOrder: 0,
 	})
 	require.NoError(t, err)

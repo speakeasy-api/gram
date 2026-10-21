@@ -59,6 +59,7 @@ describe("directory mapping SDK contract", () => {
                   id: "mapping-1",
                   ...source,
                   roleUrn: previous,
+                  sourceStatus: "active",
                   createdAt: new Date(0),
                   updatedAt: new Date(0),
                 },

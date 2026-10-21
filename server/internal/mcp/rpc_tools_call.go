@@ -924,7 +924,7 @@ func filterOmittedEnvVars(
 	projectID uuid.UUID,
 	toolsetID uuid.UUID,
 ) error {
-	rawMetadata, err := repo.GetMetadataByBackendID(ctx, mcpmetadata_repo.GetMetadataByBackendIDParams{ProjectID: projectID, BackendID: toolsetID})
+	rawMetadata, err := repo.GetMetadataByBackendID(ctx, mcpmetadata_repo.GetMetadataByBackendIDParams{ProjectID: projectID, BackendID: toolsetID, ToolsetBackend: true})
 	if err != nil {
 		// Fallback behavior for backwards compatibility
 		if errors.Is(err, pgx.ErrNoRows) {

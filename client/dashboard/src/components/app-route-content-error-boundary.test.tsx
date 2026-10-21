@@ -84,13 +84,13 @@ describe("AppRouteContentErrorBoundary", () => {
       </MemoryRouter>,
     );
 
-    expect(await screen.findByText("Error loading Page")).toBeTruthy();
+    expect(await screen.findByText("This page didn't load")).toBeTruthy();
     await userEvent.click(
       screen.getByRole("link", { name: "Retry same route" }),
     );
 
     expect(await screen.findByText("Recovered same-path route")).toBeTruthy();
-    expect(screen.queryByText("Error loading Page")).toBeNull();
+    expect(screen.queryByText("This page didn't load")).toBeNull();
   });
 
   it("recovers from a sibling route error after navigation", async () => {
@@ -100,13 +100,13 @@ describe("AppRouteContentErrorBoundary", () => {
       </MemoryRouter>,
     );
 
-    expect(await screen.findByText("Error loading Page")).toBeTruthy();
+    expect(await screen.findByText("This page didn't load")).toBeTruthy();
 
     await userEvent.click(
       screen.getByRole("link", { name: "Open working route" }),
     );
 
     expect(await screen.findByText("Working route")).toBeTruthy();
-    expect(screen.queryByText("Error loading Page")).toBeNull();
+    expect(screen.queryByText("This page didn't load")).toBeNull();
   });
 });

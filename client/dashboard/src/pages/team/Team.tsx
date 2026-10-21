@@ -76,7 +76,12 @@ import { ChangeRoleDialog } from "@/pages/access/ChangeRoleDialog";
 import { killswitchCreateHref } from "@/components/killswitch/killswitch-routing";
 import { useKillswitchAccess } from "@/hooks/useKillswitchAccess";
 import { useIdentityHrefBuilder } from "@/lib/useIdentityHref";
-import { allMemberRoleIds } from "@/lib/member-roles";
+import {
+  allMemberRoleIds,
+  describeMemberRoleSource,
+  memberRoleSource,
+  shortMemberRoleSource,
+} from "@/lib/member-roles";
 
 /**
  * Everything from TeamInner's scope that the member actions menu needs,
@@ -85,16 +90,18 @@ import { allMemberRoleIds } from "@/lib/member-roles";
  */
 /**
  * A role chip on a member's row. A role granted through a directory role
- * mapping says so, because it cannot be removed from the member here.
+ * mapping names where it comes from, including when it is also assigned
+ * directly, because the directory part cannot be removed from the member here.
  */
 function MemberRoleLink({
   href,
   name,
-  fromDirectory,
+  sourceDescription,
 }: {
   href: string;
   name: string;
-  fromDirectory: boolean;
+  /** Undefined for a role that is only assigned directly. */
+  sourceDescription: string | undefined;
 }): JSX.Element {
   const link = (
     <Link
@@ -104,18 +111,14 @@ function MemberRoleLink({
       {name}
     </Link>
   );
-  if (!fromDirectory) return link;
-  return (
-    <SimpleTooltip tooltip="Granted by a directory role mapping. It follows the member's directory groups and attributes.">
-      {link}
-    </SimpleTooltip>
-  );
+  if (!sourceDescription) return link;
+  return <SimpleTooltip tooltip={sourceDescription}>{link}</SimpleTooltip>;
 }
 
-/** A role name in the Team page's overflow tooltip, noting a mapped role. */
-function overflowRoleLabel(name: string, fromDirectory: boolean): string {
-  if (!fromDirectory) return name;
-  return `${name} (directory mapping)`;
+/** A role name in the Team page's overflow tooltip, noting where it comes from. */
+function overflowRoleLabel(name: string, source: string | undefined): string {
+  if (!source) return name;
+  return `${name} (${source})`;
 }
 
 type MemberMenuDeps = {
@@ -670,7 +673,12 @@ function TeamInner() {
                 key={roleId}
                 href={`${orgRoutes.access.roles.href()}?editRole=${roleId}`}
                 name={getRoleName(roleId)}
-                fromDirectory={!accessMember?.roleIds.includes(roleId)}
+                sourceDescription={
+                  accessMember &&
+                  describeMemberRoleSource(
+                    memberRoleSource(accessMember, roleId),
+                  )
+                }
               />
             ))}
             {overflow.length > 0 && (
@@ -679,7 +687,10 @@ function TeamInner() {
                   .map((id) =>
                     overflowRoleLabel(
                       getRoleName(id),
-                      !accessMember?.roleIds.includes(id),
+                      accessMember &&
+                        shortMemberRoleSource(
+                          memberRoleSource(accessMember, id),
+                        ),
                     ),
                   )
                   .join(", ")}

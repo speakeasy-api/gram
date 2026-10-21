@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
@@ -20,7 +21,7 @@ export const LastPollStatus = {
 /**
  * Derived status for the latest usage poll state. Omitted when no config is set for the provider.
  */
-export type LastPollStatus = ClosedEnum<typeof LastPollStatus>;
+export type LastPollStatus = OpenEnum<typeof LastPollStatus>;
 
 /**
  * Per-organization AI provider integration config. The provider API key is write-only; reads only expose whether a key is configured.
@@ -89,9 +90,10 @@ export type AIIntegrationConfig = {
 };
 
 /** @internal */
-export const LastPollStatus$inboundSchema: z.ZodMiniEnum<
-  typeof LastPollStatus
-> = z.enum(LastPollStatus);
+export const LastPollStatus$inboundSchema: z.ZodMiniType<
+  LastPollStatus,
+  unknown
+> = openEnums.inboundSchema(LastPollStatus);
 
 /** @internal */
 export const AIIntegrationConfig$inboundSchema: z.ZodMiniType<

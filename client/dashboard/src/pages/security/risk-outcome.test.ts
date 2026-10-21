@@ -1,3 +1,4 @@
+import { unrecognized } from "@gram/client/types/unrecognized.js";
 import { describe, expect, it } from "vitest";
 import {
   enforcementOutcomeLabel,
@@ -47,4 +48,11 @@ describe("mcpServerDisplayName", () => {
     );
     expect(mcpServerDisplayName({ id })).toBe("12345678");
   });
+});
+
+it("labels an unrecognized outcome without treating it as a known outcome", () => {
+  expect(enforcementOutcomeLabel(unrecognized("future_outcome"))).toBe(
+    "Unknown",
+  );
+  expect(enforcementOutcomeLabel(unrecognized("constructor"))).toBe("Unknown");
 });
