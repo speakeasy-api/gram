@@ -38,6 +38,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -72,6 +73,9 @@ type Service struct {
 	// is a no-op then.
 	publisher PluginPublishSignaler
 	siteURL   *url.URL
+	// flags gates the skill link methods behind the skills-over-mcp rollout.
+	// Nil refuses them; see WithFeatureProvider.
+	flags feature.Provider
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -102,6 +106,7 @@ func NewService(
 		signaler:  signaler,
 		publisher: publisher,
 		siteURL:   siteURL,
+		flags:     nil,
 	}
 }
 
@@ -136,7 +141,8 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 	// and tenant resolution, without also demanding unrelated project:read.
 	switch ctx.Value(goa.MethodKey) {
 	case "list", "listTags", "listSuggestions", "listFeedback", "listSuggestionFeedback",
-		"get", "listUnknownActivations", "listVersions", "distribute", "undistribute", "listDistributions":
+		"get", "listUnknownActivations", "listVersions", "distribute", "undistribute", "listDistributions",
+		"link", "unlink", "listLinks":
 		return s.auth.AuthorizeWithHandlerProjectAccess(ctx, key, schema)
 	default:
 		return s.auth.Authorize(ctx, key, schema)
