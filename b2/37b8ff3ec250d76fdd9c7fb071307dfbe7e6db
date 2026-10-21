@@ -1,0 +1,115 @@
+server/internal/thirdparty/workos/connection.go
+  h_9630b74bdac540 106-107,150-151
+server/internal/demoseed/roster.go
+  h_9630b74bdac540 5,38-64
+  s_12b6bd18b15abe::t_17ea739e87308c 65-66
+server/internal/demoseed/seed_02_roles.go
+  h_9630b74bdac540 13,403,406,409-410,428-452
+  h_9630b74bdac540 453-455
+server/internal/demoseed/queries/02_roles.sql
+  h_9630b74bdac540 168,170-173
+server/internal/background/activities/process_workos_directory_attributes_events.go
+  h_9630b74bdac540 9,256-257
+server/cmd/directory-id-backfill/main.go
+  h_9630b74bdac540 31-32,69-76,79,84-85,87
+  s_12b6bd18b15abe::t_bc6272c48878cf 77-78
+server/internal/directory/group_members.go
+  h_9630b74bdac540 7,194-195
+server/internal/directory/queries.sql
+  h_9630b74bdac540 80-81,95-96,108-111,374-491,670-671,682-683,690-711
+  h_9630b74bdac540 712
+server/internal/access/directory_people_test.go
+  h_9630b74bdac540 1-186
+server/design/access/design.go
+  h_9630b74bdac540 177-205,1911-1946
+  h_9630b74bdac540 1947-1948
+server/internal/background/activities/process_workos_directory_attributes_events_test.go
+  h_9630b74bdac540 418-457
+.changeset/directory-people-read.md
+  h_9630b74bdac540 1-5
+server/internal/directory/names.go
+  h_9630b74bdac540 1-102
+server/internal/access/directory_people.go
+  h_9630b74bdac540 1-117
+server/internal/directory/names_test.go
+  h_9630b74bdac540 1-112
+server/internal/directory/repo/models.go
+  s_12b6bd18b15abe::t_f387de10633e76 26-31
+.speakeasy/out.openapi.yaml
+  h_9630b74bdac540 1483-1582,87850-87923,93659-93674
+client/dashboard/src/sdk/.speakeasy/gen.lock
+  h_9630b74bdac540 48,1088-1090,1340,2488,3120-3121,9257-9268
+client/dashboard/src/sdk/src/funcs/accessListDirectoryPeople.ts
+  h_9630b74bdac540 1-203
+client/dashboard/src/sdk/src/models/components/directorypeoplestatecounts.ts
+  h_9630b74bdac540 1-58
+client/dashboard/src/sdk/src/models/components/directoryperson.ts
+  h_9630b74bdac540 1-97
+client/dashboard/src/sdk/src/models/components/directorypersongroup.ts
+  h_9630b74bdac540 1-38
+client/dashboard/src/sdk/src/models/components/listdirectorypeopleresult.ts
+  h_9630b74bdac540 1-56
+client/dashboard/src/sdk/src/models/operations/listdirectorypeople.ts
+  h_9630b74bdac540 1-87
+client/dashboard/src/sdk/src/react-query/directoryPeople.core.ts
+  h_9630b74bdac540 1-86
+client/dashboard/src/sdk/src/react-query/directoryPeople.ts
+  h_9630b74bdac540 1-156
+client/dashboard/src/sdk/src/sdk/access.ts
+  h_9630b74bdac540 16,47,108-111,408-426
+server/gen/access/client.go
+  h_9630b74bdac540 24,55,63,223-245
+server/gen/access/endpoints.go
+  h_9630b74bdac540 25,66,105,345-367
+server/gen/access/service.go
+  h_9630b74bdac540 33-37,171,464-504,745-765
+server/gen/http/access/client/cli.go
+  h_9630b74bdac540 277-320
+server/gen/http/access/client/client.go
+  h_9630b74bdac540 44-47,182,362-385
+server/gen/http/access/client/encode_decode.go
+  h_9630b74bdac540 1430-1666,8280-8329
+server/gen/http/access/client/paths.go
+  h_9630b74bdac540 40-44
+server/gen/http/access/client/types.go
+  h_9630b74bdac540 270-280,1650-1835,6984-7029,8863-9031,13768-13791,15775-16014,22738-22803
+server/gen/http/access/server/encode_decode.go
+  h_9630b74bdac540 1310-1531,7693-7746
+server/gen/http/access/server/paths.go
+  h_9630b74bdac540 40-44
+server/gen/http/access/server/server.go
+  h_9630b74bdac540 28,91,126,168,209,551-603
+server/gen/http/access/server/types.go
+  h_9630b74bdac540 272-282,1656-1841,6964-7009,7766-7789,9206-9354,13429-13439
+server/gen/http/cli/gram/cli.go
+  h_9630b74bdac540 123,318-322,5156,6505-6507,9602-9604,12918,13078-13099
+server/gen/http/openapi3.yaml
+  h_9630b74bdac540 9403-9501,97832-97905,103956-103971
+server/internal/database/models.go
+  h_9630b74bdac540 1775-1780
+server/internal/demoseed/repo/02_roles.sql.go
+  h_9630b74bdac540 429-432,434-438,444,447-448,456,463-464
+server/internal/directory/repo/queries.sql.go
+  h_9630b74bdac540 343-386,472,488-489,669-670,683-685,696-697,714-715,992-1164,1508-1509,1527-1530,1536-1539,1544,1547,1560-1561,1576-1577
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b237b8ff3ec250d76fdd9c7fb071307dfbe7e6db",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  },
+  "sessions": {
+    "s_12b6bd18b15abe": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "6f00b5a6-e6b9-4c0e-a4bf-adddd583800e",
+        "model": "unknown"
+      },
+      "human_author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}
