@@ -40,12 +40,23 @@ vi.mock("@/components/require-scope", () => ({
     children: ReactNode;
     scope: string;
     level: string;
-  }) =>
-    scope === "org:admin" &&
-    (!state.admin || state.permissionsLoading) &&
-    level === "section" ? null : (
-      <>{children}</>
-    ),
+  }) => {
+    if (scope !== "org:admin" || (state.admin && !state.permissionsLoading))
+      return <>{children}</>;
+    if (level === "component")
+      return (
+        <div
+          aria-disabled="true"
+          onClickCapture={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+          }}
+        >
+          {children}
+        </div>
+      );
+    return null;
+  },
 }));
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({
@@ -78,12 +89,15 @@ vi.mock("@/components/mcp/useOrganizationGatewaySetting", () => ({
     isPending: false,
   }),
 }));
-vi.mock("@/components/mcp/organization-gateway-setting", () => ({
-  OrganizationGatewaySwitch: ({ setOn }: { setOn: (on: boolean) => void }) => (
-    <button onClick={() => setOn(true)}>Turn on</button>
-  ),
-  GatewayNotServed: () => null,
-}));
+vi.mock(
+  "@/components/mcp/organization-gateway-setting",
+  async (importOriginal) => ({
+    ...(await importOriginal<
+      typeof import("@/components/mcp/organization-gateway-setting")
+    >()),
+    GatewayNotServed: () => null,
+  }),
+);
 vi.mock("@/components/mcp/OrganizationGatewayCard", () => ({
   SpeakeasyMark: () => null,
 }));
@@ -109,7 +123,7 @@ beforeEach(() => {
 
 it("routes the MCP page switch through access review before mutating", () => {
   render(<OrganizationGateway />);
-  fireEvent.click(screen.getByRole("button", { name: "Turn on" }));
+  fireEvent.click(screen.getByRole("switch", { name: "Organization Gateway" }));
   expect(state.setOn).not.toHaveBeenCalled();
   const enable = screen.getByRole("button", {
     name: "Enable Organization Gateway",
@@ -127,7 +141,9 @@ it("routes the MCP page switch through access review before mutating", () => {
 it("does not offer mutation when the gateway setting failed to load", () => {
   state.error = true;
   render(<OrganizationGateway />);
-  expect(screen.queryByRole("button", { name: "Turn on" })).toBeNull();
+  expect(
+    screen.queryByRole("switch", { name: "Organization Gateway" }),
+  ).toBeNull();
   expect(screen.getByText(/load the gateway setting/)).toBeDefined();
 });
 
@@ -190,7 +206,7 @@ it("selects assignments after a disabled setting loads, preserving an explicit t
   ).toBe("true");
 });
 
-it("keeps non-admin members on install after the disabled setting loads", () => {
+it("keeps non-admin members on install after the disabled setting loads", async () => {
   state.admin = false;
   state.on = undefined;
   const { rerender } = render(<OrganizationGateway />);
@@ -199,7 +215,16 @@ it("keeps non-admin members on install after the disabled setting loads", () => 
   expect(
     screen.getByRole("tab", { name: "Install" }).getAttribute("aria-selected"),
   ).toBe("true");
-  expect(screen.getByText(/Enable Organization Gateway to get/)).toBeTruthy();
+  expect(screen.getByText(/An organization admin must enable/)).toBeTruthy();
+  const gatewaySwitch = screen.getByRole("switch", {
+    name: "Organization Gateway",
+  });
+  expect(gatewaySwitch.closest('[aria-disabled="true"]')).toBeTruthy();
+  await userEvent.click(gatewaySwitch);
+  expect(state.setOn).not.toHaveBeenCalled();
+  expect(
+    screen.queryByRole("button", { name: "Enable Organization Gateway" }),
+  ).toBeNull();
   expect(
     screen.queryByRole("button", { name: "Assignments loaded" }),
   ).toBeNull();

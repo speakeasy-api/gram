@@ -82,8 +82,9 @@ function OrganizationGatewayContent({
   let installStatus =
     "Organization Gateway installation is unavailable. Check the gateway status above.";
   if (isOn === false) {
-    installStatus =
-      "Enable Organization Gateway to get your endpoint and installation steps.";
+    installStatus = canManage
+      ? "Enable Organization Gateway to get your endpoint and installation steps."
+      : "An organization admin must enable Organization Gateway before installation details are available.";
   } else if (gateway.isLoading || isOn === undefined) {
     installStatus = "Loading Organization Gateway installation details…";
   }
