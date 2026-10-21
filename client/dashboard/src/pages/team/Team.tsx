@@ -2,6 +2,7 @@ import { IdentityLink } from "@/components/identity-link";
 import { AnyField } from "@/components/moon/any-field";
 import { InputField } from "@/components/moon/input-field";
 import { ResourceListPage } from "@/components/page-templates";
+import { DirectoryPeopleSummary } from "@/pages/identities/DirectoryPeopleSummary";
 import { Dialog } from "@/components/ui/Dialog";
 import {
   Select,
@@ -46,6 +47,8 @@ import { Input } from "@/components/ui/Input";
 import { Stack } from "@/components/ui/Stack";
 import { Column, Table } from "@/components/ui/Table";
 import { useQueryClient } from "@tanstack/react-query";
+import { invalidateAllDirectoryPeople } from "@gram/client/react-query/directoryPeople.js";
+import { directoryPeopleQueryKey } from "@/pages/identities/directoryPeople";
 import {
   ChevronLeft,
   ChevronRight,
@@ -394,6 +397,11 @@ function TeamInner() {
     await Promise.all([
       invalidateAllListOrganizationUsers(queryClient),
       invalidateAllListInvites(queryClient),
+      // Removing a member moves their directory profile out of "member".
+      invalidateAllDirectoryPeople(queryClient),
+      queryClient.invalidateQueries({
+        queryKey: directoryPeopleQueryKey(organization.id),
+      }),
     ]);
   };
 
@@ -1026,6 +1034,9 @@ function TeamInner() {
                   Manage identity settings
                 </Link>
               </Alert>
+            )}
+            {organization.scimEnabled && (
+              <DirectoryPeopleSummary className="-mt-4 mb-8 text-sm" />
             )}
 
             <div className="relative">

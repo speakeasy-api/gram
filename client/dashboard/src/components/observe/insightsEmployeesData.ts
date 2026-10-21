@@ -1,6 +1,7 @@
 import { dateTimeFormatters } from "@/lib/dates";
 import { mergeUserSummaries } from "@/components/observe/mergeUserSummaries";
 import type { AccessMember } from "@gram/client/models/components/accessmember.js";
+import type { DirectoryPersonState } from "@gram/client/models/components/directoryperson.js";
 import type { Role } from "@gram/client/models/components/role.js";
 import type { UserSummary } from "@gram/client/models/components/usersummary.js";
 import { allMemberRoleIds } from "@/lib/member-roles";
@@ -32,6 +33,11 @@ export type Employee = {
   // Whether the member has a live profile in the synced directory. False for
   // anyone with no member row.
   inDirectory: boolean;
+  // How the identity's directory profile relates to accounts here, when the
+  // directory people read has been folded in (see
+  // pages/identities/directoryPeople). Absent when that read is unavailable or
+  // the identity has no directory profile.
+  directoryState?: DirectoryPersonState;
   // Whether activity has been observed for this identity (hook or MCP
   // telemetry), at any time.
   seen: boolean;

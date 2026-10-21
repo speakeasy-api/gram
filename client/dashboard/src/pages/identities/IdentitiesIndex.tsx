@@ -59,6 +59,14 @@ import {
   fetchDeviceCoverage,
   NO_DEVICE_BUCKET,
 } from "./identityDeviceCoverage";
+import type { DirectoryPersonState } from "@gram/client/models/components/directoryperson.js";
+import {
+  DIRECTORY_STATE_DESCRIPTIONS,
+  DIRECTORY_STATE_LABELS,
+  directoryPeopleQueryKey,
+  fetchDirectoryPeople,
+  mergeDirectoryPeople,
+} from "./directoryPeople";
 import type { AgentLifecycleFilter } from "./identityRoster";
 import {
   fetchIdentityRoster,
@@ -121,6 +129,13 @@ const IDENTITY_FILTERS = defineFilters([
     allLabel: "All",
     description:
       "Whether the identity has a live profile in the organization's synced directory.",
+  },
+  {
+    id: "directory_state",
+    label: "Directory status",
+    kind: "multiselect",
+    description:
+      "How the identity's directory profile relates to accounts here: a member, an account that is not a member, not signed in yet, or an email shared with another profile.",
   },
   {
     id: "membership",
@@ -268,6 +283,16 @@ const DIRECTORY_OPTIONS = [
   { value: "not_in_directory", label: "Not in directory" },
 ];
 
+const DIRECTORY_STATE_VARIANTS: Record<
+  DirectoryPersonState,
+  "success" | "information" | "neutral" | "warning"
+> = {
+  member: "success",
+  account_not_member: "information",
+  not_signed_in: "neutral",
+  ambiguous_email: "warning",
+};
+
 const MEMBERSHIP_OPTIONS = [
   { value: "member", label: "Member" },
   { value: "not_member", label: "Not a member" },
@@ -370,6 +395,17 @@ const IDENTITY_COLUMNS: Column<Employee>[] = [
         </Badge>
       );
     },
+  },
+  {
+    key: "directoryState",
+    header: "Directory",
+    width: "190px",
+    sortable: true,
+    sortValue: (identity) =>
+      identity.directoryState
+        ? DIRECTORY_STATE_LABELS[identity.directoryState]
+        : "",
+    render: (identity) => <DirectoryStateCell identity={identity} />,
   },
   {
     key: "role",
@@ -607,6 +643,19 @@ function IdentitiesIndexContent({ kind }: { kind: RosterKind }): JSX.Element {
   const deviceCoverage = canReadOrganization
     ? deviceCoverageQuery.data
     : undefined;
+  // Directory people who are not members yet: the only read that lists
+  // someone the directory knows but who has never signed in. It needs
+  // org:read, and the roster stands without it, so a failure leaves the
+  // member and activity rows as they are rather than failing the page.
+  const directoryPeopleQuery = useQuery({
+    queryKey: directoryPeopleQueryKey(organization.id),
+    queryFn: () => fetchDirectoryPeople(client),
+    enabled: canReadOrganization,
+    throwOnError: false,
+  });
+  const directoryPeople = canReadOrganization
+    ? directoryPeopleQuery.data
+    : undefined;
 
   // The list is the join of the roster reads, so until they land there is no
   // roster to report on — and "0 identities" or "No identities match these
@@ -616,6 +665,7 @@ function IdentitiesIndexContent({ kind }: { kind: RosterKind }): JSX.Element {
     membersQuery.isLoading ||
     rolesQuery.isLoading ||
     usageQuery.isLoading ||
+    (canReadOrganization && directoryPeopleQuery.isLoading) ||
     (agentsEnabled && agentsQuery.isLoading);
   const rosterFailed =
     membersQuery.isError ||
@@ -631,10 +681,13 @@ function IdentitiesIndexContent({ kind }: { kind: RosterKind }): JSX.Element {
 
   const identities = useMemo(
     () => [
-      ...buildEmployees(
-        membersQuery.data?.members ?? [],
-        rolesQuery.data?.roles ?? [],
-        usageQuery.data ?? [],
+      ...mergeDirectoryPeople(
+        buildEmployees(
+          membersQuery.data?.members ?? [],
+          rolesQuery.data?.roles ?? [],
+          usageQuery.data ?? [],
+        ),
+        directoryPeople ?? [],
       ),
       ...(agentsEnabled ? registeredAgents : []).map(registeredAgentIdentity),
     ],
@@ -642,6 +695,7 @@ function IdentitiesIndexContent({ kind }: { kind: RosterKind }): JSX.Element {
       membersQuery.data,
       rolesQuery.data,
       usageQuery.data,
+      directoryPeople,
       agentsEnabled,
       registeredAgents,
     ],
@@ -687,6 +741,18 @@ function IdentitiesIndexContent({ kind }: { kind: RosterKind }): JSX.Element {
     () => sortedValueOptions(identities.flatMap((identity) => identity.teams)),
     [identities],
   );
+  // In a fixed order rather than alphabetical: member first, then the states
+  // that need an administrator's attention. Every state is offered once the
+  // directory people read has answered: Team and the SSO tab link here with
+  // all three non-member states, and a chip for a state nobody is in should
+  // still read as a label rather than a raw value.
+  const directoryStateOptions = useMemo(() => {
+    const anyState = identities.some((identity) => identity.directoryState);
+    if (!anyState) return [];
+    return (Object.keys(DIRECTORY_STATE_LABELS) as DirectoryPersonState[]).map(
+      (state) => ({ value: state, label: DIRECTORY_STATE_LABELS[state] }),
+    );
+  }, [identities]);
   const deviceStatusOptions = useMemo(() => {
     // A capped walk leaves every identity past the cap looking like it owns no
     // machine, which the filter would report as fact. Offer nothing rather than
@@ -737,6 +803,8 @@ function IdentitiesIndexContent({ kind }: { kind: RosterKind }): JSX.Element {
             if (dimension.id === "department")
               return departmentOptions.length > 0;
             if (dimension.id === "team") return teamOptions.length > 0;
+            if (dimension.id === "directory_state")
+              return directoryStateOptions.length > 0;
             if (dimension.id === "device_status") {
               return deviceStatusOptions.length > 0;
             }
@@ -755,6 +823,7 @@ function IdentitiesIndexContent({ kind }: { kind: RosterKind }): JSX.Element {
       roleOptions.length,
       departmentOptions.length,
       teamOptions.length,
+      directoryStateOptions.length,
       deviceStatusOptions.length,
     ],
   );
@@ -772,8 +841,10 @@ function IdentitiesIndexContent({ kind }: { kind: RosterKind }): JSX.Element {
   const roleKey = JSON.stringify(values.role ?? []);
   const departmentKey = JSON.stringify(values.department ?? []);
   const teamKey = JSON.stringify(values.team ?? []);
+  const directoryStateKey = JSON.stringify(values.directory_state ?? []);
   const rows = useMemo(() => {
     const selectedKinds = kindKey ? kindKey.split(",") : [];
+    const selectedDirectoryStates = JSON.parse(directoryStateKey) as string[];
     const selectedDeviceStatuses = JSON.parse(deviceStatusKey) as string[];
     const selectedRoles = JSON.parse(roleKey) as string[];
     const selectedDepartments = JSON.parse(departmentKey) as string[];
@@ -799,6 +870,15 @@ function IdentitiesIndexContent({ kind }: { kind: RosterKind }): JSX.Element {
         )
       )
         return false;
+      if (
+        selectedDirectoryStates.length > 0 &&
+        !(
+          identity.directoryState &&
+          selectedDirectoryStates.includes(identity.directoryState)
+        )
+      ) {
+        return false;
+      }
       if (
         selectedDeviceStatuses.length > 0 &&
         !selectedDeviceStatuses.includes(
@@ -862,6 +942,7 @@ function IdentitiesIndexContent({ kind }: { kind: RosterKind }): JSX.Element {
     roleKey,
     departmentKey,
     teamKey,
+    directoryStateKey,
   ]);
 
   const sortedRows = useMemo(
@@ -1208,6 +1289,7 @@ function IdentitiesIndexContent({ kind }: { kind: RosterKind }): JSX.Element {
                       ([value, label]) => ({ value, label }),
                     ),
                     directory: DIRECTORY_OPTIONS,
+                    directory_state: directoryStateOptions,
                     membership: MEMBERSHIP_OPTIONS,
                     seen: SEEN_OPTIONS,
                     activity: ACTIVITY_OPTIONS,
@@ -1411,6 +1493,31 @@ function IdentityGroup({
  * the timestamp names it — the workspace this identity was last working in.
  * Plain text otherwise.
  */
+/**
+ * The identity's directory status. Without the directory people read (no
+ * org:read, or it failed) a member's profile is still known from the member
+ * row, so it says "In directory" rather than guessing a state.
+ */
+function DirectoryStateCell({ identity }: { identity: Employee }): JSX.Element {
+  const state = identity.directoryState;
+  if (!state) {
+    return (
+      <Text muted small className="truncate">
+        {identity.inDirectory ? "In directory" : "\u2014"}
+      </Text>
+    );
+  }
+  return (
+    <SimpleTooltip tooltip={DIRECTORY_STATE_DESCRIPTIONS[state]}>
+      <span className="inline-flex">
+        <Badge variant={DIRECTORY_STATE_VARIANTS[state]}>
+          {DIRECTORY_STATE_LABELS[state]}
+        </Badge>
+      </span>
+    </SimpleTooltip>
+  );
+}
+
 function LastActivityCell({ identity }: { identity: Employee }): JSX.Element {
   if (!identity.mostRecentAccount) {
     return (
