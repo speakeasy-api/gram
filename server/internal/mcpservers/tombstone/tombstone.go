@@ -71,6 +71,9 @@ type Input struct {
 	ActorUserID    string
 	ActorEmail     *string
 
+	// ActorSystem audits a write with no user or agent behind it as system:<ActorSystem>.
+	ActorSystem string
+
 	// TracerProvider traces the risk policy cleanup the delete runs.
 	TracerProvider trace.TracerProvider
 }
@@ -85,10 +88,10 @@ type Result struct {
 
 // Tombstone soft-deletes a locked server and its attachments; the caller audits the server delete.
 func Tombstone(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, locked Locked, input Input) (Result, error) {
-	if tx == nil || auditLogger == nil || input.TracerProvider == nil || input.OrganizationID == "" || input.ProjectID == uuid.Nil || !ActorPresent(ctx, input.ActorUserID) {
+	if tx == nil || auditLogger == nil || input.TracerProvider == nil || input.OrganizationID == "" || input.ProjectID == uuid.Nil || !hasActor(ctx, input) {
 		return Result{}, errors.New("invalid MCP server tombstone input")
 	}
-	actor := urn.NewPrincipal(urn.PrincipalTypeUser, input.ActorUserID)
+	actor := auditActor(ctx, input)
 	servers := repo.New(tx)
 
 	deleted, err := servers.DeleteMCPServer(ctx, repo.DeleteMCPServerParams{ID: locked.Server.ID, ProjectID: input.ProjectID})
@@ -180,6 +183,21 @@ func Tombstone(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, locked
 	}
 
 	return Result{Server: deleted, DetachedPluginServers: len(detachedPluginServers), DeletedRiskPolicies: deletedPolicies}, nil
+}
+
+func hasActor(ctx context.Context, input Input) bool {
+	return ActorPresent(ctx, input.ActorUserID) || input.ActorSystem != ""
+}
+
+// auditActor names the principal the audit logger records: an authenticated agent, the user, then system:<ActorSystem>.
+func auditActor(ctx context.Context, input Input) urn.Principal {
+	if actor, ok := contextvalues.AuthenticatedActor(ctx); ok && actor.Type == urn.PrincipalTypeAgent {
+		return actor
+	}
+	if input.ActorUserID == "" && input.ActorSystem != "" {
+		return urn.NewSystemPrincipal(input.ActorSystem)
+	}
+	return urn.NewPrincipal(urn.PrincipalTypeUser, input.ActorUserID)
 }
 
 // ActorPresent reports whether a write has an actor: a user id, or an agent

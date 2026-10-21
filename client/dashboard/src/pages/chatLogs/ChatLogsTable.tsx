@@ -521,7 +521,10 @@ export function ChatLogsTable({
                         </>
                       )}
                       <span className="inline-flex items-center gap-1.5">
-                        {chat.assistantName && (
+                        {/* An assistant session names its assistant; a channel
+                            session has no assistant record, so it names the
+                            agent principal that produced it instead. */}
+                        {(chat.assistantName || chat.agentId) && (
                           <AssistantActorLink
                             chat={chat}
                             className="pointer-events-auto max-w-[200px]"

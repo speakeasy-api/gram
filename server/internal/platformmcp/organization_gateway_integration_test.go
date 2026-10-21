@@ -36,6 +36,13 @@ func newOrganizationGatewayFixture(t *testing.T) (context.Context, *pgxpool.Pool
 	})
 	require.NoError(t, err)
 
+	settings := featuresrepo.New(conn)
+	flag := featuresrepo.EnableFeatureParams{OrganizationID: organizationID, FeatureName: string(productfeatures.FeatureOrganizationGatewayDisabled)}
+	_, err = settings.EnableFeature(ctx, flag)
+	require.NoError(t, err)
+	_, err = settings.DeleteFeature(ctx, featuresrepo.DeleteFeatureParams(flag))
+	require.NoError(t, err)
+
 	serverURL, err := url.Parse("https://app.example.test")
 	require.NoError(t, err)
 	principal := Principal{UserID: "user-" + uuid.NewString()[:8], OrganizationID: organizationID}
@@ -108,5 +115,5 @@ func TestOrganizationGatewayUnavailableWhenTurnedOff(t *testing.T) {
 	require.False(t, output.Available)
 	require.Empty(t, output.URL)
 	require.Equal(t, "turned_off", output.UnavailableReason)
-	require.Contains(t, output.NextAction, "turn it back on")
+	require.Contains(t, output.NextAction, "review MCP Assignments")
 }

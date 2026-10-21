@@ -3423,6 +3423,8 @@ func unmarshalChatOverviewResponseBodyToChatChatOverview(v *ChatOverviewResponse
 		AssistantID:          v.AssistantID,
 		AssistantName:        v.AssistantName,
 		AssistantAgentID:     v.AssistantAgentID,
+		AgentID:              v.AgentID,
+		AgentName:            v.AgentName,
 		NumMessages:          *v.NumMessages,
 		Source:               v.Source,
 		OriginatingClient:    v.OriginatingClient,

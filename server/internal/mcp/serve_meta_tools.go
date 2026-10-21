@@ -11,6 +11,8 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
+	"slices"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -375,20 +377,16 @@ func (s *Service) describeMemberToolset(
 	// toolsets filter per-tool mcp:connect with tools/call's dimensions, so
 	// describe never discloses a tool the member endpoint would hide.
 	if gate.authenticated && !toolset.McpIsPublic {
-		for name, entry := range catalog.byName {
-			err := s.authz.Require(ctx, authz.MCPToolCallCheck(toolset.ID.String(), authz.MCPToolCallDimensions{
-				Tool:        name,
-				Disposition: dispositionFromAnnotations(entry.Annotations),
-				ProjectID:   toolset.ProjectID.String(),
-			}))
-			if err != nil {
-				var oopsErr *oops.ShareableError
-				if errors.As(err, &oopsErr) && oopsErr.Code == oops.CodeForbidden {
-					delete(catalog.byName, name)
-					continue
-				}
-				return nil, oops.E(oops.CodeUnexpected, err, "check tool-level authz for describe").LogError(ctx, logger)
-			}
+		allowed, err := filterToolsByMCPConnect(ctx, logger, s.authz, toolset.ID.String(), toolset.ProjectID.String(), slices.Collect(maps.Values(catalog.byName)))
+		if errors.Is(err, context.DeadlineExceeded) {
+			return nil, &metaMemberError{message: fmt.Sprintf("server %q did not answer in time", member.slug)}
+		}
+		if err != nil {
+			return nil, err
+		}
+		catalog.byName = make(map[string]*toolListEntry, len(allowed))
+		for _, entry := range allowed {
+			catalog.byName[entry.Name] = entry
 		}
 	}
 

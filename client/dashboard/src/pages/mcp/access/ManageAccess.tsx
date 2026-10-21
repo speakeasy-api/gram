@@ -201,6 +201,7 @@ export function ManageAccess({
       // Check access answers from the same rules, so an open answer is redone.
       await Promise.all([
         invalidateAllResourceAudience(queryClient),
+        queryClient.invalidateQueries({ queryKey: ["mcpAssignments"] }),
         invalidateAllExplainResourceAccess(queryClient),
         invalidateAllRoles(queryClient),
         invalidateAllPlugin(queryClient),

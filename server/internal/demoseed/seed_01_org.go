@@ -366,6 +366,11 @@ func (s *seeder) orgFeaturesAndUsers(ctx context.Context) error {
 	}); err != nil {
 		return fmt.Errorf("insert demo features: %w", err)
 	}
+	// Require access review on first seed, but retain an administrator's opt-in.
+	if err := s.q.OrgInsertGatewayDisabledFeature(ctx, org); err != nil {
+		return fmt.Errorf("insert demo gateway disabled feature: %w", err)
+	}
+
 	// Unlike demo entitlements, preserve an explicit fail-closed choice on
 	// reseed.
 	if err := s.q.OrgInsertHooksFailOpenFeature(ctx, org); err != nil {
