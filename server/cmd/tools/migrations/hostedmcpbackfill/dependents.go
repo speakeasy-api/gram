@@ -68,6 +68,9 @@ type RowImage struct {
 
 	// SoftDeletedAt is the deleted_at the orphan cleanup set, so a restore undoes only that delete.
 	SoftDeletedAt string `json:"soft_deleted_at,omitempty"`
+
+	// RekeyedUpdatedAt is the updated_at a re-key set, so a restore skips a row changed since.
+	RekeyedUpdatedAt string `json:"rekeyed_updated_at,omitempty"`
 }
 
 // withoutImages keeps the row's identity only, for reports.
@@ -75,7 +78,7 @@ func (i *RowImage) withoutImages() *RowImage {
 	if i == nil {
 		return nil
 	}
-	return &RowImage{Table: i.Table, ID: i.ID, Deletion: i.Deletion, Row: nil, EnvironmentConfigs: nil, SoftDeletedAt: ""}
+	return &RowImage{Table: i.Table, ID: i.ID, Deletion: i.Deletion, Row: nil, EnvironmentConfigs: nil, SoftDeletedAt: "", RekeyedUpdatedAt: ""}
 }
 
 // RowKey names the column a dependent row is keyed by.
@@ -110,6 +113,9 @@ type JournalRecord struct {
 
 	// Removed is the deleted orphan in a -cleanup-orphans journal, with its row image; To is then empty.
 	Removed *RowImage `json:"removed,omitempty"`
+
+	// Rekeyed is the removal record's row image before a -rekey-removal-records re-key.
+	Rekeyed *RowImage `json:"rekeyed,omitempty"`
 }
 
 // Journal records each dependent row's move durably around its commit.
@@ -147,22 +153,49 @@ func moveKeys(table string, key uuid.UUID) (RowKey, RowKey) {
 	return RowKey{Table: table, Column: "toolset_id", ID: key}, RowKey{Table: table, Column: "mcp_server_id", ID: key}
 }
 
-type dependentProcessor func(ctx context.Context, toolsetID uuid.UUID, dep ListToolsetDependentsRow) (RowReport, error)
+// dependentPhase lists a phase's toolsets and their rows and processes each row.
+type dependentPhase[D dependentRow] struct {
+	listToolsets   func(ctx context.Context, after uuid.UUID) ([]uuid.UUID, error)
+	listDependents func(ctx context.Context, toolsetID uuid.UUID) ([]D, error)
+	process        func(ctx context.Context, toolsetID uuid.UUID, dep D) (RowReport, error)
+}
 
-// runDependents walks toolsets that still have toolset-keyed dependents; Limit and the cursor count toolsets.
-func (r *Runner) runDependents(ctx context.Context, report Report, process dependentProcessor) (Report, error) {
+type dependentRow interface {
+	label() string
+}
+
+func (d ListToolsetDependentsRow) label() string { return d.TableName + " " + d.ID.String() }
+
+func (r *Runner) dependentsPhase(process func(context.Context, uuid.UUID, ListToolsetDependentsRow) (RowReport, error)) dependentPhase[ListToolsetDependentsRow] {
+	return dependentPhase[ListToolsetDependentsRow]{
+		listToolsets: func(ctx context.Context, after uuid.UUID) ([]uuid.UUID, error) {
+			page, err := New(r.pool).ListDependentToolsets(ctx, ListDependentToolsetsParams{ProjectID: r.options.ProjectID, AfterID: after, PageSize: conv.SafeInt32(r.options.PageSize)})
+			if err != nil {
+				return nil, fmt.Errorf("list dependent toolsets: %w", err)
+			}
+			return page, nil
+		},
+		listDependents: func(ctx context.Context, toolsetID uuid.UUID) ([]ListToolsetDependentsRow, error) {
+			deps, err := New(r.pool).ListToolsetDependents(ctx, ListToolsetDependentsParams{ToolsetID: toolsetID, ProjectID: r.options.ProjectID})
+			if err != nil {
+				return nil, fmt.Errorf("list dependents: %w", err)
+			}
+			return deps, nil
+		},
+		process: process,
+	}
+}
+
+// runDependents walks toolsets that still have toolset-keyed rows; Limit and the cursor count toolsets.
+func runDependents[D dependentRow](ctx context.Context, r *Runner, report Report, phase dependentPhase[D]) (Report, error) {
 	if r.options.Apply && r.options.Journal == nil {
 		return report, fmt.Errorf("applying the %s phase requires a journal", report.Phase)
 	}
 	after := r.options.Cursor
 	for {
-		page, err := New(r.pool).ListDependentToolsets(ctx, ListDependentToolsetsParams{
-			ProjectID: r.options.ProjectID,
-			AfterID:   after,
-			PageSize:  conv.SafeInt32(r.options.PageSize),
-		})
+		page, err := phase.listToolsets(ctx, after)
 		if err != nil {
-			return report, fmt.Errorf("list dependent toolsets: %w", err)
+			return report, err
 		}
 		if len(page) == 0 {
 			return report, nil
@@ -171,14 +204,14 @@ func (r *Runner) runDependents(ctx context.Context, report Report, process depen
 			if r.options.Limit > 0 && report.Toolsets >= r.options.Limit {
 				return report, nil
 			}
-			deps, err := New(r.pool).ListToolsetDependents(ctx, ListToolsetDependentsParams{ToolsetID: toolsetID, ProjectID: r.options.ProjectID})
+			deps, err := phase.listDependents(ctx, toolsetID)
 			if err != nil {
-				return report, fmt.Errorf("toolset %s: list dependents: %w", toolsetID, err)
+				return report, fmt.Errorf("toolset %s: %w", toolsetID, err)
 			}
 			for _, dep := range deps {
-				row, err := process(ctx, toolsetID, dep)
+				row, err := phase.process(ctx, toolsetID, dep)
 				if err != nil && row.Outcome == "" {
-					return report, fmt.Errorf("toolset %s: %s %s: %w", toolsetID, dep.TableName, dep.ID, err)
+					return report, fmt.Errorf("toolset %s: %s: %w", toolsetID, dep.label(), err)
 				}
 				report.Scanned++
 				report.Outcomes[row.Outcome]++
@@ -187,7 +220,7 @@ func (r *Runner) runDependents(ctx context.Context, report Report, process depen
 				}
 				report.Rows = append(report.Rows, row)
 				if err != nil {
-					return report, fmt.Errorf("toolset %s: %s %s: %w", toolsetID, dep.TableName, dep.ID, err)
+					return report, fmt.Errorf("toolset %s: %s: %w", toolsetID, dep.label(), err)
 				}
 			}
 			report.Toolsets++
@@ -304,7 +337,7 @@ func (r *Runner) moveOne(ctx context.Context, toolsetID uuid.UUID, dep ListTools
 	from, to := moveKeys(dep.TableName, toolsetID)
 	return r.commitJournaled(ctx, tx, row, JournalRecord{
 		Event: JournalIntent, ProjectID: toolset.ProjectID, ToolsetID: toolsetID, RowID: dep.ID, Outcome: row.Outcome,
-		From: from, To: to, CollapsedTwin: move.twin, Removed: nil,
+		From: from, To: to, CollapsedTwin: move.twin, Removed: nil, Rekeyed: nil,
 	})
 }
 
@@ -359,7 +392,7 @@ func (r *Runner) moveMetadata(ctx context.Context, tx pgx.Tx, m *dependentMove) 
 		if deleted != 1 {
 			return "", "", fmt.Errorf("delete metadata twin: %d rows deleted", deleted)
 		}
-		m.twin = &RowImage{Table: tableMcpMetadata, ID: twin.ID, Deletion: "deleted", Row: twin.RowJson, EnvironmentConfigs: configs, SoftDeletedAt: ""}
+		m.twin = &RowImage{Table: tableMcpMetadata, ID: twin.ID, Deletion: "deleted", Row: twin.RowJson, EnvironmentConfigs: configs, SoftDeletedAt: "", RekeyedUpdatedAt: ""}
 	}
 	after, err := q.RekeyMetadata(ctx, RekeyMetadataParams{McpServerID: serverKey, ID: m.rowID, ProjectID: m.toolset.ProjectID})
 	if err != nil {
@@ -475,7 +508,7 @@ func (r *Runner) movePluginServer(ctx context.Context, tx pgx.Tx, m *dependentMo
 		}); err != nil {
 			return "", "", fmt.Errorf("audit plugin server twin removal: %w", err)
 		}
-		m.twin = &RowImage{Table: tablePluginServers, ID: twin.ID, Deletion: "soft_deleted", Row: twin.RowJson, EnvironmentConfigs: nil, SoftDeletedAt: ""}
+		m.twin = &RowImage{Table: tablePluginServers, ID: twin.ID, Deletion: "soft_deleted", Row: twin.RowJson, EnvironmentConfigs: nil, SoftDeletedAt: "", RekeyedUpdatedAt: ""}
 	}
 	moved, err := q.RekeyPluginServer(ctx, RekeyPluginServerParams{McpServerID: serverKey, ID: m.rowID, ProjectID: m.toolset.ProjectID})
 	if err != nil {
@@ -541,7 +574,7 @@ func moveAssistantAttachment(ctx context.Context, tx pgx.Tx, m *dependentMove) (
 		if deleted != 1 {
 			return "", "", fmt.Errorf("delete assistant twin: %d rows deleted", deleted)
 		}
-		m.twin = &RowImage{Table: tableAssistantMcpServers, ID: twin.ID, Deletion: "deleted", Row: twin.RowJson, EnvironmentConfigs: nil, SoftDeletedAt: ""}
+		m.twin = &RowImage{Table: tableAssistantMcpServers, ID: twin.ID, Deletion: "deleted", Row: twin.RowJson, EnvironmentConfigs: nil, SoftDeletedAt: "", RekeyedUpdatedAt: ""}
 	}
 	moved, err := q.MoveAssistantToolset(ctx, MoveAssistantToolsetParams{McpServerID: m.wrapper.ID, ID: m.rowID, ProjectID: m.toolset.ProjectID})
 	if err != nil {

@@ -1101,6 +1101,8 @@ type Chat struct {
 	// @access: opaque-restricted
 	Cwd pgtype.Text
 	// @access: confidential
+	AgentID uuid.NullUUID
+	// @access: confidential
 	CreatedAt pgtype.Timestamptz
 	// @access: confidential
 	UpdatedAt pgtype.Timestamptz
