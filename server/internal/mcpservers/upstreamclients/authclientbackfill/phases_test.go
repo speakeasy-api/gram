@@ -433,6 +433,75 @@ func TestRun_CredentialHeadersOnAnOAuthSourceAreCopiedOntoTheOAuthClient(t *test
 	require.Empty(t, f.headers(oauthID), "a copy no source names is retired")
 }
 
+// emaSourceAt is a remote source at url and one server on it the user
+// session issuer signs in to.
+func (f *fixture) emaSourceAt(url string, usi uuid.UUID) (sourceID, serverID uuid.UUID) {
+	f.t.Helper()
+	sourceID = uuid.New()
+	require.NoError(f.t, f.q.SeedRemoteMCPServerFixture(f.t.Context(), SeedRemoteMCPServerFixtureParams{ID: sourceID, ProjectID: f.projectID, Url: url}))
+	serverID = f.serverOn(sourceID)
+	require.NoError(f.t, f.q.SetServerUserSessionIssuerFixture(f.t.Context(), SetServerUserSessionIssuerFixtureParams{UserSessionIssuerID: uuid.NullUUID{UUID: usi, Valid: true}, ID: serverID}))
+	return sourceID, serverID
+}
+
+// A server an ema client serves keeps its auxiliary credential headers on
+// that client, tracking the source, rather than as a separate client.
+func TestRun_EMAClientCarriesItsServersCredentialHeaders(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	usi := f.userSessionIssuer()
+	clientID, issuerID := f.emaClient()
+	resource := "https://mcp.vendor.example.com/mcp"
+	source, server := f.emaSourceAt(resource, usi)
+	key := f.header(source, "X-Api-Key", true, secretValue, "")
+	f.binding(usi, issuerID, clientID, resource, []string{})
+
+	dry := f.run(false)
+	require.Positive(t, dry.ByKind[KindEMA].PendingHeaders, "a dry run counts the copy")
+
+	f.run(true)
+	require.Empty(t, f.live(TypeStaticCredential), "no separate client for a server an ema client serves")
+	emaID := f.live(TypeEMA)[0].ID
+	require.Contains(t, f.links(server), emaID)
+	headers := f.headers(emaID)
+	require.Len(t, headers, 1)
+	require.Equal(t, "X-Api-Key", headers[0].Name)
+	require.Equal(t, secretValue, headers[0].Value.String)
+	require.Empty(t, results(f.run(true), KindEMA, OutcomeUpdated), "a rerun changes nothing")
+
+	require.NoError(t, f.q.UpdateRemoteHeaderFixture(t.Context(), UpdateRemoteHeaderFixtureParams{Name: "X-Api-Key", Value: pgtype.Text{String: "rotated", Valid: true}, ValueFromRequestHeader: pgtype.Text{}, IsSecret: true, ID: key}))
+	f.run(true)
+	require.Equal(t, "rotated", f.headers(emaID)[0].Value.String, "the copy follows a rotation")
+
+	require.NoError(t, f.q.SoftDeleteRemoteHeaderFixture(t.Context(), key))
+	f.run(true)
+	require.Empty(t, f.headers(emaID), "a copy no source names is retired")
+}
+
+// An ema client its servers reach from more than one source with credential
+// headers is reported and carries no copies: one source's credentials would
+// otherwise be sent from the other's servers.
+func TestRun_EMAClientSharedAcrossSourcesIsNeverCopiedOnto(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	usi := f.userSessionIssuer()
+	clientID, issuerID := f.emaClient()
+	resource := "https://mcp.vendor.example.com/mcp"
+	first, _ := f.emaSourceAt(resource, usi)
+	second, _ := f.emaSourceAt(resource, usi)
+	f.header(first, "X-Api-Key", true, secretValue, "")
+	f.header(second, "X-Api-Key", true, "other-"+secretValue, "")
+	f.binding(usi, issuerID, clientID, resource, []string{})
+
+	report := f.run(true)
+	shared := results(report, KindEMA, OutcomeAmbiguous)
+	require.Len(t, shared, 1)
+	require.Equal(t, ReasonEMAClientSharedAcrossSources, shared[0].Reason)
+	require.ElementsMatch(t, []uuid.UUID{first, second}, shared[0].SourceIDs)
+	require.Empty(t, f.headers(f.live(TypeEMA)[0].ID))
+	require.Empty(t, f.live(TypeStaticCredential))
+}
+
 // Retiring an OAuth client whose association is gone retires its header
 // copies with it, so none stays live on a client nothing reaches.
 func TestRun_RetiredOAuthClientRetiresItsHeaderCopies(t *testing.T) {
