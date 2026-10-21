@@ -1,0 +1,29 @@
+server/cmd/tools/sweep_builtin_presets/main_test.go
+  s_3996489960ebdb::t_bd53186b2e49d3 1-252
+server/internal/risk/chrepo/unmask.go
+  s_2a1bde7be2b8cb::t_d2009731ddcfb8 28-39,222-285
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "99e7e70f67d19b9fc4578103efd1306ebb116a4c",
+  "prompts": {},
+  "sessions": {
+    "s_2a1bde7be2b8cb": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "agent-ad432d1cef2bbc8c7",
+        "model": "unknown"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    },
+    "s_3996489960ebdb": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "agent-a25f7b49eb1f6cde1",
+        "model": "unknown"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
