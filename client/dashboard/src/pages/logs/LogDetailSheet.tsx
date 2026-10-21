@@ -1,5 +1,6 @@
 import { useRoutes } from "@/routes";
 import { Link } from "react-router";
+import { ActingPrincipal } from "@/components/ui/ActingPrincipal";
 import { IdentityAvatar } from "@/components/identity-avatar";
 import { IdentityLink } from "@/components/identity-link";
 import { identityRefForKind } from "@/lib/identity-urn";
@@ -163,6 +164,29 @@ function LogDetailContent({
     filteredAttrs = removeNestedKey(filteredAttrs, HOOK_ERROR_KEY);
   }
 
+  // An agent that made this call, and the person whose authority it used.
+  //
+  // Both are on the raw log and neither reaches the summary the table reads,
+  // so this sheet is the only place the pair can be shown. Without it a call
+  // an agent made under someone's authority rendered as that person calling
+  // the tool themselves, which is the wrong accusation to put in front of
+  // whoever opened the trace.
+  const actingAgent = (() => {
+    if (!attrs) return null;
+    if (getNestedValue(attrs, "gram.authorization.actor.type") !== "agent") {
+      return null;
+    }
+    const id = getNestedValue(attrs, "gram.authorization.actor.id");
+    if (!id) return null;
+    return {
+      id,
+      name: getNestedValue(attrs, "gram.authorization.actor.name") || undefined,
+    };
+  })();
+  const authorizerUserID = attrs
+    ? getNestedValue(attrs, "gram.authorization.authorizer_user_id")
+    : "";
+
   // The caller, by the same precedence the roster uses: an address first,
   // then the ids an agent or an external user is keyed on.
   const caller = (() => {
@@ -260,20 +284,36 @@ function LogDetailContent({
           {/* Who made the call. The first question asked of a single trace is
               usually "who did this", and it was previously only answerable by
               unfolding Context. */}
-          {caller && (
-            <div className="flex items-center gap-2.5 pt-1.5">
-              <IdentityAvatar
-                label={caller.label}
-                className="size-7"
-                textClassName="text-xs"
+          {actingAgent ? (
+            <div className="flex items-center gap-2.5 pt-1.5 text-sm">
+              <ActingPrincipal
+                agent={actingAgent}
+                authorizer={
+                  // The address is the better label when the log carries
+                  // one; the bare id is all there is otherwise.
+                  authorizerUserID
+                    ? { id: authorizerUserID, name: caller?.label }
+                    : undefined
+                }
+                className="truncate"
               />
-              <IdentityLink
-                identifier={caller.ref}
-                className="text-foreground truncate text-sm"
-              >
-                {caller.label}
-              </IdentityLink>
             </div>
+          ) : (
+            caller && (
+              <div className="flex items-center gap-2.5 pt-1.5">
+                <IdentityAvatar
+                  label={caller.label}
+                  className="size-7"
+                  textClassName="text-xs"
+                />
+                <IdentityLink
+                  identifier={caller.ref}
+                  className="text-foreground truncate text-sm"
+                >
+                  {caller.label}
+                </IdentityLink>
+              </div>
+            )
           )}
         </div>
 

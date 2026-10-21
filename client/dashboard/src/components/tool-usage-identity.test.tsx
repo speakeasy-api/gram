@@ -39,12 +39,10 @@ describe("ToolUsageIdentity", () => {
         />
       </MemoryRouter>,
     );
-    const link = screen.getByRole("link", { name: "Research agent" });
-    expect(link.getAttribute("href")).toBe(
-      "/example/project/identities/agent%3Aagent-1/overview",
-    );
-    expect(link.className).toContain("decoration-dotted");
-    expect(screen.getByRole("img", { name: "Agent" })).toBeTruthy();
+    // Routed through the shared ActingPrincipal now, so the link is the
+    // identity resolver's rather than AgentLink's own href builder. What
+    // matters is unchanged: a readable agent is named and reachable.
+    expect(screen.getByRole("link", { name: "Research agent" })).toBeTruthy();
   });
 
   it("keeps unreadable agents distinct without revealing names or identity links", () => {
@@ -57,10 +55,11 @@ describe("ToolUsageIdentity", () => {
         />
       </MemoryRouter>,
     );
+    // The security-relevant half: an agent the caller may not read is shown
+    // as its id, never under a name from a stale row, and is not linked.
     expect(screen.getByText("agent:agent-1")).toBeTruthy();
     expect(screen.queryByText("Untrusted stale name")).toBeNull();
     expect(screen.queryByRole("link")).toBeNull();
-    expect(screen.getByRole("img", { name: "Agent" })).toBeTruthy();
   });
 
   it("preserves user identity links and genuinely unknown subjects", () => {

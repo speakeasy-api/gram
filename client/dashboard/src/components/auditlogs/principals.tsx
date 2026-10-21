@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
-import { AgentIcon, AgentLink } from "@/components/agent-link";
 import { IdentityLink } from "@/components/identity-link";
+import { ActingPrincipal } from "@/components/ui/ActingPrincipal";
 import {
   auditPrincipalLabel,
   type AuditPrincipal,
@@ -26,16 +26,23 @@ export function AuditPrincipalLink({
   if (!principal)
     return <span className={className}>{renderLabel(label)}</span>;
   if (principal.kind === "agent") {
-    const agent = identities.agents.get(principal.id);
+    // The shared renderer draws the agent's face and links it. The audit log
+    // records no authorizer, so this is the agent alone — deliberately, not
+    // for want of looking: substituting the agent's current owner would
+    // name someone who may not have been there at the time.
+    //
+    // Linked only once the agent resolved from the inventory the caller is
+    // allowed to read. An id off an audit row is not permission to open that
+    // agent, and linking one we could not read would offer a door that the
+    // next page refuses.
+    const readable = identities.agents.get(principal.id);
     return (
-      <span
-        className="inline-flex items-center gap-1 align-middle"
-        title={principal.urn}
-      >
-        <AgentIcon />
-        <AgentLink agentId={agent?.id} className={className}>
-          {renderLabel(label)}
-        </AgentLink>
+      <span className="align-middle" title={principal.urn}>
+        <ActingPrincipal
+          agent={{ id: principal.id, name: label, display: renderLabel(label) }}
+          linked={Boolean(readable)}
+          className={className}
+        />
       </span>
     );
   }

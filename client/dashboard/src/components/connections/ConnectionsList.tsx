@@ -1,5 +1,6 @@
 import { useSessionAgents } from "@/hooks/useSessionAgents";
-import { AgentIcon, AgentLink } from "@/components/agent-link";
+import { AgentIcon } from "@/components/agent-link";
+import { ActingPrincipal } from "@/components/ui/ActingPrincipal";
 import { IdentityLink } from "@/components/identity-link";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
@@ -307,6 +308,16 @@ function SubRowIcon({
 }): JSX.Element {
   if (!childIsPerson) return <ClientIcon label={label} />;
   if (session.workload) return <WorkloadIcon />;
+  // An agent subject is not a person. Under issuer, provider or client
+  // grouping the children are subjects, and an agent landed here with a
+  // person's avatar and initials struck from its own name.
+  if (session.subjectUrn.startsWith("agent:")) {
+    return (
+      <span className="text-muted-foreground flex size-6 items-center justify-center">
+        <AgentIcon />
+      </span>
+    );
+  }
   return (
     <PersonIcon label={label} photoUrl={session.subjectPhotoUrl ?? undefined} />
   );
@@ -603,12 +614,13 @@ function ConnectionGroupRow({
 
           <span className="flex min-w-0 items-center gap-2">
             {group.identity?.agentId ? (
-              <AgentLink
-                agentId={group.identity.agentId}
-                className="text-foreground truncate text-sm font-medium"
-              >
-                {group.label}
-              </AgentLink>
+              // No authorizer: a UserSession carries its subject and nothing
+              // about who approved it, so this names the agent alone rather
+              // than guessing at a person.
+              <ActingPrincipal
+                agent={{ id: group.identity.agentId, name: group.label }}
+                className="text-foreground text-sm font-medium"
+              />
             ) : group.identity?.urn ? (
               <IdentityLink
                 identifier={{ urn: group.identity.urn }}

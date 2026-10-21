@@ -47,6 +47,8 @@ import { useSlugs } from "@/contexts/Sdk";
 import { useLogsEnabledErrorCheck } from "@/hooks/useLogsEnabled";
 import { useObservabilityMcpConfig } from "@/hooks/useObservabilityMcpConfig";
 import { useServerNameMappings } from "@/hooks/useServerNameMappings";
+import { useReadableAgents } from "@/hooks/useReadableAgents";
+import { ToolUsageIdentity } from "@/components/tool-usage-identity";
 import { HooksEmptyState } from "@/pages/hooks/HooksEmptyState";
 import { AgentProviderIcon } from "@/components/agent-providers/AgentProviderIcon";
 import { hasAgentProviderIcon } from "@/components/agent-providers/agent-provider-icon-kind";
@@ -1481,6 +1483,8 @@ function LogsToolsTableContent({
   serverNameMappings: ReturnType<typeof useServerNameMappings>;
   from: Date;
   to: Date;
+  /** Resolved when this row's caller is an agent; its name is not on the row. */
+  agent?: { id: string; name: string };
 }) {
   if (error) {
     return (
@@ -1566,6 +1570,24 @@ function LogsToolsTableContent({
     }
   }
 
+  // Agent names are not on a trace — the row carries "agent:<uuid>" and
+  // nothing else — so they are read once here rather than per row. Asked for
+  // only when a trace on screen actually names an agent.
+  const agentRows = dayGroups.some((group) =>
+    group.traces.some((trace) => trace.userKind === "agent_id"),
+  );
+  const agents = useReadableAgents(agentRows);
+  const agentsById = useMemo(
+    () =>
+      new Map(
+        (agents.isError ? [] : (agents.data ?? [])).map((agent) => [
+          agent.id,
+          agent,
+        ]),
+      ),
+    [agents.data, agents.isError],
+  );
+
   return (
     <>
       {dayGroups.map((group) => (
@@ -1585,6 +1607,11 @@ function LogsToolsTableContent({
               serverNameMappings={serverNameMappings}
               from={from}
               to={to}
+              agent={
+                trace.userKind === "agent_id"
+                  ? agentsById.get(trace.userKey)
+                  : undefined
+              }
             />
           ))}
         </div>
@@ -1616,6 +1643,7 @@ function LogsToolsTraceRow({
   serverNameMappings,
   from,
   to,
+  agent,
 }: {
   trace: ToolUsageTraceSummary;
   isExpanded: boolean;
@@ -1625,6 +1653,8 @@ function LogsToolsTraceRow({
   serverNameMappings: ReturnType<typeof useServerNameMappings>;
   from: Date;
   to: Date;
+  /** Resolved when this row's caller is an agent; a trace carries no name. */
+  agent?: { id: string; name: string };
 }) {
   const routes = useRoutes();
   const [editDialogOpen, setEditDialogOpen] = useState(false);
@@ -1797,14 +1827,28 @@ function LogsToolsTraceRow({
           </span>
         </div>
 
+        {/* An agent is not a person: its own icon and its own link, never
+            a set of initials struck from the string "agent:<uuid>" beside a
+            label nothing can resolve. */}
         <div className="flex min-w-[180px] flex-1 items-center gap-2 text-xs">
-          <IdentityAvatar label={userLabel} />
-          <IdentityLink
-            identifier={identityRefForKind(trace.userKind, trace.userKey)}
-            className="text-muted-foreground min-w-0 truncate"
-          >
-            {userLabel || "—"}
-          </IdentityLink>
+          {trace.userKind === "agent_id" ? (
+            <ToolUsageIdentity
+              kind={trace.userKind}
+              identityKey={trace.userKey}
+              label={userLabel}
+              agent={agent}
+            />
+          ) : (
+            <>
+              <IdentityAvatar label={userLabel} />
+              <IdentityLink
+                identifier={identityRefForKind(trace.userKind, trace.userKey)}
+                className="text-muted-foreground min-w-0 truncate"
+              >
+                {userLabel || "—"}
+              </IdentityLink>
+            </>
+          )}
         </div>
 
         {/* The MCP client that made the call — the same dimension the Client

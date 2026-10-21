@@ -3,6 +3,12 @@ import { isAuditAction, staticActionPhrase } from "@/lib/audit-actions";
 import type { AuditLog } from "@gram/client/models/components/auditlog.js";
 
 export function getActorLabel(log: AuditLog): string {
+  // The server nulls the display name and slug for an agent actor, so
+  // without this every agent-made change read as "Someone". An agent is a
+  // named thing; saying so beats a word that suggests we lost the name.
+  if (log.actorType === "agent") {
+    return `Agent ${log.actorId.slice(0, 8)}`;
+  }
   return log.actorDisplayName || log.actorSlug || "Someone";
 }
 

@@ -13,6 +13,7 @@ import { buildProjectOverviewQuery } from "@/components/project/projectOverviewQ
 import { RequireScope } from "@/components/require-scope";
 import { CardContextMenu } from "@/components/card-context-menu";
 import { TableRowContextMenu } from "@/components/table-row-context-menu";
+import { ActingPrincipal } from "@/components/ui/ActingPrincipal";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -903,6 +904,12 @@ function ProjectRowActions({
 }
 
 function RecentActionBlock({ log }: { log: AuditLog | undefined }) {
+  // Resolved before the early return, because hooks cannot sit behind one.
+  // The same inventory the Recent activity card reads, so an agent actor is
+  // named here too rather than being left as "Agent 1a2b3c4d".
+  const logs = useMemo(() => (log ? [log] : []), [log]);
+  const identities = useAuditPrincipals(logs);
+
   if (!log) {
     return (
       <Text small muted className="truncate text-xs whitespace-nowrap">
@@ -910,7 +917,6 @@ function RecentActionBlock({ log }: { log: AuditLog | undefined }) {
       </Text>
     );
   }
-  const actor = getActorLabel(log);
   const verb = renderVerb(log);
 
   return (
@@ -929,7 +935,11 @@ function RecentActionBlock({ log }: { log: AuditLog | undefined }) {
                 includeTime: false,
               })}
               <span className="mx-1 opacity-60">·</span>
-              {actor}
+              <AuditPrincipalLink
+                principal={auditActorPrincipal(log)}
+                identities={identities}
+                fallback={getActorLabel(log)}
+              />
             </span>
           </span>
         </TooltipTrigger>
@@ -1137,6 +1147,14 @@ function CompactChallengeRow({ bucket }: { bucket: ChallengeBucket }) {
   const orgRoutes = useOrgRoutes();
   const label = shortenPrincipal(bucket);
   const isApiKey = bucket.principalType === "api_key";
+  // An agent is neither a key nor a person: the key icon claimed the first and
+  // a round avatar would claim the second. It goes to the shared renderer,
+  // which names it beside its own square face — and that face replaces the
+  // row's tile, because two marks side by side read as two actors.
+  const agentId =
+    bucket.principalType === "agent"
+      ? bucket.principalUrn.replace(/^agent:/, "")
+      : null;
   const lastSeen = new Date(bucket.lastSeen);
   const count = Number(bucket.challengeCount);
 
@@ -1144,26 +1162,38 @@ function CompactChallengeRow({ bucket }: { bucket: ChallengeBucket }) {
     <orgRoutes.access.challenges.Link className="hover:bg-muted/40 flex items-start gap-3 px-6 py-3 text-xs no-underline transition-colors hover:no-underline">
       {/* Sized to match the ActionIconTile in Recent activity below, so the two
           rail cards line up row for row. */}
-      <div className="bg-muted text-muted-foreground flex size-8 shrink-0 items-center justify-center rounded-full">
-        {isApiKey || !bucket.userEmail ? (
-          <KeyRound className="size-4" />
-        ) : (
-          <Avatar className="size-8">
-            {bucket.photoUrl ? (
-              <AvatarImage src={bucket.photoUrl} alt={label} />
-            ) : null}
-            <AvatarFallback className="bg-muted text-muted-foreground text-[11px] font-medium">
-              {getInitials(bucket.userEmail)}
-            </AvatarFallback>
-          </Avatar>
-        )}
-      </div>
+      {agentId === null && (
+        <div className="bg-muted text-muted-foreground flex size-8 shrink-0 items-center justify-center rounded-full">
+          {isApiKey || !bucket.userEmail ? (
+            <KeyRound className="size-4" />
+          ) : (
+            <Avatar className="size-8">
+              {bucket.photoUrl ? (
+                <AvatarImage src={bucket.photoUrl} alt={label} />
+              ) : null}
+              <AvatarFallback className="bg-muted text-muted-foreground text-[11px] font-medium">
+                {getInitials(bucket.userEmail)}
+              </AvatarFallback>
+            </Avatar>
+          )}
+        </div>
+      )}
       <div className="flex min-w-0 flex-1 flex-col gap-1">
         <Text small className="truncate leading-snug">
           <span className="text-destructive mr-1.5 font-mono text-[10px] font-medium uppercase">
             deny
           </span>
-          <span className="text-foreground font-medium">{label}</span>
+          {agentId === null ? (
+            <span className="text-foreground font-medium">{label}</span>
+          ) : (
+            // The whole row is one link already, so neither half adds its own:
+            // a nested anchor swallows the click the row wanted.
+            <ActingPrincipal
+              agent={{ id: agentId }}
+              linked={false}
+              className="text-foreground inline-flex align-middle font-medium"
+            />
+          )}
         </Text>
         <Text muted small className="truncate text-[11px]">
           <span className="font-mono">{bucket.scope}</span>

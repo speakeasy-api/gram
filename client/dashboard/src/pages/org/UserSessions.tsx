@@ -43,7 +43,7 @@ const USER_SESSION_FILTERS = defineFilters([
   // Unpinned to keep the bar on one line. Project and MCP server are the two
   // axes this page is read along; narrowing to one person is a follow-up
   // question, and the chip appears the moment it is answered.
-  { id: "subjectUrn", label: "User", kind: "select" },
+  { id: "subjectUrn", label: "Identity", kind: "select" },
 ]);
 
 const STATUS_TOOLBAR_OPTIONS = [

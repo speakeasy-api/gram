@@ -6,6 +6,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/Select";
+import { actingPrincipalText } from "@/components/ui/ActingPrincipal";
 import { SkeletonTable } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
 import { cn } from "@/lib/utils";
@@ -367,9 +368,16 @@ export function ChallengesTab(): JSX.Element {
     for (const bucket of rows) {
       const value = bucket.userEmail ?? bucket.principalUrn;
       if (!value) continue;
+      // An option is plain text, so an agent takes the shared wording rather
+      // than the urn the identity helper falls back to. Said in one place, so
+      // the dropdown and the rows below it name the same agent the same way.
       principals.set(
         value,
-        principalDisplayName(bucket.userEmail, bucket.principalUrn),
+        bucket.principalType === "agent"
+          ? actingPrincipalText({
+              id: bucket.principalUrn.replace(/^agent:/, ""),
+            })
+          : principalDisplayName(bucket.userEmail, bucket.principalUrn),
       );
     }
     return [...principals.entries()].sort((a, b) => a[1].localeCompare(b[1]));

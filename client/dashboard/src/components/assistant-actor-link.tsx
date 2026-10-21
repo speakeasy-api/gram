@@ -1,4 +1,4 @@
-import { IdentityLink } from "@/components/identity-link";
+import { ActingPrincipal } from "@/components/ui/ActingPrincipal";
 import { Icon } from "@/components/ui/Icon";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { useRoutes } from "@/routes";
@@ -35,16 +35,17 @@ export function AssistantActorLink({
   );
 
   if (chat.assistantAgentId) {
+    // The shared renderer, so an assistant acting as an agent carries the
+    // same face as the agent does everywhere else. No authorizer: a chat row
+    // records the assistant and its agent, not whoever approved the session.
     return (
       <SimpleTooltip tooltip="Agent identity this assistant acts as">
-        {wrap(
-          <IdentityLink
-            identifier={{ urn: `agent:${chat.assistantAgentId}` }}
-            className="block min-w-0 truncate"
-          >
-            {name}
-          </IdentityLink>,
-        )}
+        <span className={cn("inline-flex min-w-0", className)}>
+          <ActingPrincipal
+            agent={{ id: chat.assistantAgentId, name }}
+            className="text-sm"
+          />
+        </span>
       </SimpleTooltip>
     );
   }

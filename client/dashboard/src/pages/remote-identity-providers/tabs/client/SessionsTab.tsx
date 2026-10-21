@@ -20,6 +20,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/Dropdown";
+import { ActingPrincipal } from "@/components/ui/ActingPrincipal";
 import { Icon } from "@/components/ui/Icon";
 import { useQueryClient } from "@tanstack/react-query";
 import { MoreHorizontal } from "lucide-react";
@@ -125,29 +126,46 @@ export function SessionsTab({ clientId }: { clientId: string }): JSX.Element {
               >
                 <DotRow
                   icon={
-                    <Icon
-                      name="user"
-                      className="text-muted-foreground h-5 w-5"
-                    />
+                    // The agent rows draw their own face through
+                    // ActingPrincipal, so the row's icon slot stays empty for
+                    // them rather than stamping a person beside a machine.
+                    session.subjectUrn.startsWith("agent:") ? null : (
+                      <Icon
+                        name="user"
+                        className="text-muted-foreground h-5 w-5"
+                      />
+                    )
                   }
                 >
                   <td className="px-3 py-3">
                     <Text small as="div" className="break-all">
-                      <IdentityLink
-                        // Session subjects can also be anonymous, which names
-                        // no subject the identity resolver can address; those
-                        // stay plain text.
-                        identifier={
-                          session.subjectUrn.startsWith("user:") ||
-                          session.subjectUrn.startsWith("apikey:")
-                            ? { urn: session.subjectUrn }
-                            : null
-                        }
-                      >
-                        {session.subjectDisplayName ??
-                          session.subjectEmail ??
-                          session.subjectUrn}
-                      </IdentityLink>
+                      {session.subjectUrn.startsWith("agent:") ? (
+                        // No authorizer on a RemoteSession, so the agent
+                        // stands alone — but it is named and linked now,
+                        // where it used to fall through to a raw urn.
+                        <ActingPrincipal
+                          agent={{
+                            id: session.subjectUrn.slice("agent:".length),
+                            name: session.subjectDisplayName ?? undefined,
+                          }}
+                        />
+                      ) : (
+                        <IdentityLink
+                          // Session subjects can also be anonymous, which
+                          // names no subject the identity resolver can
+                          // address; those stay plain text.
+                          identifier={
+                            session.subjectUrn.startsWith("user:") ||
+                            session.subjectUrn.startsWith("apikey:")
+                              ? { urn: session.subjectUrn }
+                              : null
+                          }
+                        >
+                          {session.subjectDisplayName ??
+                            session.subjectEmail ??
+                            session.subjectUrn}
+                        </IdentityLink>
+                      )}
                     </Text>
                   </td>
                   <td className="px-3 py-3">
