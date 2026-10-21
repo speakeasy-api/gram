@@ -386,6 +386,18 @@ func (s *Service) authenticateTokenClient(
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth token client authentication rejected", clientID, presentedAuthMethod, grantType, reason)
 		return nil, writeTokenError(ctx, w, logger, http.StatusUnauthorized, "invalid_client", "client_id is required")
 	}
+	// Only a grant that resolves CIMD would fetch a client_id naming this
+	// endpoint. Refused ahead of admission and the fetch, as at /authorize.
+	if resolveMode == resolveClientCIMD {
+		namesEndpoint, err := s.clientIDNamesEndpoint(endpoint, baseURL, clientID)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "check client_id against endpoint URLs").LogError(ctx, logger)
+		}
+		if namesEndpoint {
+			logOAuthClientCredentialEvent(ctx, logger, r, "oauth token client authentication rejected", clientID, presentedAuthMethod, grantType, clientIDNamesEndpointReason)
+			return nil, writeTokenError(ctx, w, logger, http.StatusUnauthorized, oautherr.CodeInvalidClient, clientIDNamesEndpointDescription)
+		}
+	}
 	clientRow, err := s.resolveUserSessionClient(ctx, logger, endpoint, clientID, resolveMode)
 	if err != nil {
 		if admissionErr, ok := errors.AsType[*admission.DenialError](err); ok {
