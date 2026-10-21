@@ -144,6 +144,19 @@ func TestKeysService_KeyPolicy(t *testing.T) {
 		require.NoError(t, err)
 		require.Len(t, key.PolicyGrants, 1)
 		require.Equal(t, project, *key.PolicyGrants[0].Selector.ProjectID)
+
+		listed, err := ti.service.ListKeys(ctx, &gen.ListKeysPayload{})
+		require.NoError(t, err)
+		var stored *gen.Key
+		for _, candidate := range listed.Keys {
+			if candidate.ID == key.ID {
+				stored = candidate
+			}
+		}
+		require.NotNil(t, stored)
+		require.Len(t, stored.PolicyGrants, 1)
+		require.Equal(t, string(authz.ScopeMCPBlockedConnect), stored.PolicyGrants[0].Scope)
+		require.Equal(t, project, *stored.PolicyGrants[0].Selector.ProjectID)
 	})
 
 	t.Run("a policy needs a transport scope that reaches MCP", func(t *testing.T) {

@@ -32,7 +32,7 @@ func ValidateAPIKeyPolicyGrant(scope Scope, selector Selector) error {
 			return fmt.Errorf("%w: selector key %q does not apply to API keys", ErrInvalidAPIKeyGrant, key)
 		}
 	}
-	if _, owner := selector[SelectorKeyConnectionOwner]; owner {
+	if _, owner := selector[SelectorKeyConnectionOwner]; owner || selector[SelectorKeyClientType] == AuthClientTypeRemoteSession {
 		return fmt.Errorf("%w: an API key represents no user and cannot use personal connections", ErrInvalidAPIKeyGrant)
 	}
 	return nil
