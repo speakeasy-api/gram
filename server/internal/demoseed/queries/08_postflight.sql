@@ -350,6 +350,17 @@ SELECT count(*)
 FROM chats WHERE organization_id = @org_id::text
   AND (user_id IS NULL OR user_id = '' OR external_user_id IS NULL);
 
+-- name: PostflightCountAgentAttributedChats :one
+-- Channel sessions carry the agent that produced them; without that stamp the
+-- session list cannot name an actor for them at all, because they have no
+-- assistant record. The join to agents is what proves the stamp still resolves:
+-- an id pointing at an agent the seed no longer creates renders as a bare id.
+SELECT count(*)
+FROM chats c
+JOIN agents a ON a.id = c.agent_id AND a.organization_id = c.organization_id
+  AND a.deleted IS FALSE
+WHERE c.project_id = @project_id::uuid AND c.organization_id = @org_id::text;
+
 -- Every table that carries both the demo org id and a project id must agree
 -- with the demo constants: a mismatch means an insert escaped its scoping.
 

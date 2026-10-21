@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
@@ -38,6 +39,8 @@ var ErrMemberMCPStatusTargetNotFound = errors.New("member MCP status target not 
 type MemberMCPConnectionReader interface {
 	ListClients(ctx context.Context, projectID uuid.UUID, organizationID string, userSessionIssuerID uuid.UUID) ([]remotesessions.Client, error)
 	RemoteSessionStatuses(ctx context.Context, subject urn.SessionSubject, projectID uuid.UUID, organizationID string, userSessionIssuerID uuid.UUID) (map[uuid.UUID]remotesessions.RemoteSessionState, error)
+	ListAuthClientRegistrations(ctx context.Context, projectID uuid.UUID, organizationID string, ids []uuid.UUID) ([]remotesessions.Client, error)
+	AuthClientRemoteSessionStatuses(ctx context.Context, subject urn.SessionSubject, projectID uuid.UUID, organizationID string, clientIDs []uuid.UUID) (map[uuid.UUID]remotesessions.RemoteSessionState, error)
 }
 
 type GetMyMCPStatusInput struct {
@@ -163,11 +166,14 @@ func (s *PluginsService) GetMyMCPConnectionStatus(ctx context.Context, principal
 		return GetMyMCPConnectionStatusOutput{}, ErrUnavailable
 	}
 
-	clients, err := s.remoteSessions.ListClients(ctx, target.projectID, principal.OrganizationID, target.userSessionIssuerID)
+	// Where the auth client resolver serves the organization, a proxied
+	// server's registrations and the member's grants are read as the runtime
+	// reads them, without the sign-in link.
+	resolver := target.associatedClients != nil && feature.AuthClientResolver(ctx, s.authClientFlags, principal.OrganizationID) == feature.AuthClientResolverEnforced
+	clients, err := s.memberMCPConnectionClients(ctx, principal, target, resolver)
 	if err != nil {
-		return GetMyMCPConnectionStatusOutput{}, fmt.Errorf("list MCP authorization clients: %w", err)
+		return GetMyMCPConnectionStatusOutput{}, err
 	}
-	clients = memberMCPConnectionClients(clients, target)
 	if len(clients) > 1 {
 		output.State = MCPConnectionStateSetupRequired
 		output.Reason = "multiple_authorization_clients"
@@ -189,7 +195,13 @@ func (s *PluginsService) GetMyMCPConnectionStatus(ctx context.Context, principal
 		return output, nil
 	}
 	clientID := clients[0].ID
-	statuses, err := s.remoteSessions.RemoteSessionStatuses(ctx, urn.NewUserSubject(principal.UserID), target.projectID, principal.OrganizationID, target.userSessionIssuerID)
+	subject := urn.NewUserSubject(principal.UserID)
+	var statuses map[uuid.UUID]remotesessions.RemoteSessionState
+	if resolver {
+		statuses, err = s.remoteSessions.AuthClientRemoteSessionStatuses(ctx, subject, target.projectID, principal.OrganizationID, []uuid.UUID{clientID})
+	} else {
+		statuses, err = s.remoteSessions.RemoteSessionStatuses(ctx, subject, target.projectID, principal.OrganizationID, target.userSessionIssuerID)
+	}
 	if err != nil {
 		return GetMyMCPConnectionStatusOutput{}, fmt.Errorf("read MCP authorization status: %w", err)
 	}
@@ -365,7 +377,29 @@ func memberMCPAccessNextAction(requestAccessURL string) string {
 	return "request_access"
 }
 
-func memberMCPConnectionClients(clients []remotesessions.Client, target memberMCPStatusTarget) []remotesessions.Client {
+// memberMCPConnectionClients returns the clients that can serve the target:
+// those linked to its sign-in or, for the auth client resolver, its reachable
+// associated registrations.
+func (s *PluginsService) memberMCPConnectionClients(ctx context.Context, principal Principal, target memberMCPStatusTarget, resolver bool) ([]remotesessions.Client, error) {
+	if resolver {
+		ids := make([]uuid.UUID, 0, len(target.associatedClients))
+		for id := range target.associatedClients {
+			ids = append(ids, id)
+		}
+		clients, err := s.remoteSessions.ListAuthClientRegistrations(ctx, target.projectID, principal.OrganizationID, ids)
+		if err != nil {
+			return nil, fmt.Errorf("list MCP auth client registrations: %w", err)
+		}
+		return clients, nil
+	}
+	clients, err := s.remoteSessions.ListClients(ctx, target.projectID, principal.OrganizationID, target.userSessionIssuerID)
+	if err != nil {
+		return nil, fmt.Errorf("list MCP authorization clients: %w", err)
+	}
+	return matchTargetClients(clients, target), nil
+}
+
+func matchTargetClients(clients []remotesessions.Client, target memberMCPStatusTarget) []remotesessions.Client {
 	matched := make([]remotesessions.Client, 0, 1)
 	for _, client := range clients {
 		if target.associatedClients != nil && target.associatedClients[client.ID] ||

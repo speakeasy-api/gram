@@ -116,7 +116,7 @@ export function ComputedStatus({
 }): JSX.Element {
   if (setupValues.unavailableReason !== null) {
     return (
-      <Alert variant="info" alignTop>
+      <Alert variant="info">
         <div className="text-sm">{setupValues.unavailableReason}</div>
       </Alert>
     );

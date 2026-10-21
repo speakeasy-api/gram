@@ -286,6 +286,9 @@ func (s *Service) enumerateToolsetConsentInventory(ctx context.Context, endpoint
 	connectResourceID := endpoint.connectResourceID().String()
 	tools = []consentInventoryTool{}
 	for _, tool := range toolset.Tools {
+		if cerr := ctx.Err(); cerr != nil {
+			return nil, nil, fmt.Errorf("enumerate consent inventory: %w", cerr)
+		}
 		if tool == nil || conv.IsProxyTool(tool) {
 			continue
 		}

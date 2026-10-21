@@ -6,7 +6,7 @@ Gives every live hosted toolset (non-empty `mcp_slug`) created before eager wrap
 go run ./server/cmd/tools/migrations hosted-mcp-wrappers -h
 ```
 
-Flags: `-apply` (default is a dry run), `-project <PROJECT_ID>`, `-limit N`, `-cursor <TOOLSET_ID>`, `-report <path>`.
+Flags: `-apply` (default is a dry run), `-project <PROJECT_ID>` or `-all-projects` (one is required), `-limit N`, `-cursor <TOOLSET_ID>`, `-report <path>`.
 
 ## Precondition
 
@@ -44,8 +44,8 @@ Stdout carries the mode, phase, outcome counts, rows scanned, toolsets walked, w
 2. Dev: `-apply`; rerun `-apply` and confirm `writes` is 0 and every row is `already_complete` (or a repeated `dead_custom_domain` / `blocked_*`).
 3. Prod: dry run with `-report`. Review every `blocked_*` row and the `fresh_id_servers_present` count before going on.
 4. Prod canary: `-apply -project <PROJECT_ID>`; confirm the project's hosted servers still serve through their endpoints.
-5. Prod: `-apply -limit N` in batches, resuming with `-cursor` from the summary's `last_cursor`. Give each batch its own `-report` path: an `-apply` refuses an existing file.
-6. Prod: a final unfiltered `-apply` must report `writes: 0`.
+5. Prod: `-apply -all-projects -limit N` in batches, resuming with `-cursor` from the summary's `last_cursor`. Give each batch its own `-report` path: an `-apply` refuses an existing file.
+6. Prod: a final `-apply -all-projects` without `-limit` must report `writes: 0`.
 
 Failed runs exit nonzero; rows commit one toolset at a time, and an `-apply` run prints the resume cursor (a dry run commits nothing, so its cursor is never reused).
 

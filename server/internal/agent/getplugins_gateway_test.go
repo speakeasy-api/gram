@@ -13,6 +13,8 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/agent"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	featuresrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
@@ -36,6 +38,16 @@ func TestGetPlugins_IncludesAvailableOrganizationGatewayURL(t *testing.T) {
 	require.Nil(t, before.OrganizationGatewayURL)
 
 	createAgentGatewayIssuer(t, ctx, ti)
+	disabled, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: new(mockidp.MockUserEmail)})
+	require.NoError(t, err)
+	require.Nil(t, disabled.OrganizationGatewayURL)
+	require.Equal(t, before.Etag, disabled.Etag)
+	settings := featuresrepo.New(ti.conn)
+	flag := featuresrepo.EnableFeatureParams{OrganizationID: ti.orgID, FeatureName: string(productfeatures.FeatureOrganizationGatewayDisabled)}
+	_, err = settings.EnableFeature(ctx, flag)
+	require.NoError(t, err)
+	_, err = settings.DeleteFeature(ctx, featuresrepo.DeleteFeatureParams(flag))
+	require.NoError(t, err)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 

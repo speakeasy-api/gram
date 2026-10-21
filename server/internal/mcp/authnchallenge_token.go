@@ -1411,7 +1411,7 @@ func (s *Service) refreshNeedsUpstreamReconnect(ctx context.Context, logger *slo
 	// Where the auth client resolver serves the organization, a choice it
 	// cannot use sends the session to reconnect rather than refreshing into
 	// the same rejection.
-	if reconnect, decided, err := s.refreshNeedsAuthClientReconnect(ctx, endpoint, jti); err != nil {
+	if reconnect, decided, err := s.refreshNeedsAuthClientReconnect(ctx, endpoint, subject, jti); err != nil {
 		logger.WarnContext(ctx, "resolve auth client before refresh", attr.SlogError(err))
 	} else if decided {
 		return reconnect

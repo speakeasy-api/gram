@@ -52,8 +52,8 @@ const (
 	// FeatureSignalsIntelligence gates signals intelligence configuration access.
 	FeatureSignalsIntelligence Feature = "signals_intelligence"
 	// FeatureOrganizationGatewayDisabled turns the organization gateway off:
-	// while set, every gateway route answers 404. Stored inverted so the
-	// gateway stays on for every organization that never touched it.
+	// while set, every gateway route answers 404. Unconfigured organizations
+	// also default off; a soft-deleted flag records explicit opt-in.
 	FeatureOrganizationGatewayDisabled Feature = "organization_gateway_disabled"
 )
 
@@ -94,6 +94,9 @@ func (f FeatureCache) CacheKey() string {
 }
 
 func FeatureCacheKey(organizationID string, feature Feature) string {
+	if feature == FeatureOrganizationGatewayDisabled {
+		return fmt.Sprintf("feature:v2:%s:%s", organizationID, string(feature))
+	}
 	return fmt.Sprintf("feature:%s:%s", organizationID, string(feature))
 }
 

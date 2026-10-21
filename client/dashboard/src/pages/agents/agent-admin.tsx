@@ -78,40 +78,52 @@ export function AgentOwner({ agent }: { agent: ManagedAgent }): JSX.Element {
   );
 }
 
-export function AgentIdentityPanel({
+/**
+ * The durable facts, as one line rather than a card of six.
+ *
+ * Name and principal are not repeated: the page header above already carries
+ * both, and a reader comparing them was reading the same string twice. What
+ * is left is what nothing else on an agent's overview says — who answers for
+ * it, whether it may act at all, and since when.
+ */
+export function AgentIdentityFacts({
   agent,
 }: {
   agent: ManagedAgent;
 }): JSX.Element {
   return (
-    <div className="border-border space-y-4 border p-4">
-      <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-3 text-sm">
-        <dt className="text-muted-foreground">Name</dt>
-        <dd>{agent.name}</dd>
-        <dt className="text-muted-foreground">Principal</dt>
-        <dd className="font-mono text-xs">agent:{agent.id}</dd>
-        <dt className="text-muted-foreground">Owner</dt>
-        <dd>
-          <AgentOwner agent={agent} />
-        </dd>
-        <dt className="text-muted-foreground">Scope</dt>
-        <dd>
-          <AgentScopeLabel agent={agent} />
-        </dd>
-        <dt className="text-muted-foreground">Lifecycle</dt>
-        <dd>
-          <LifecycleBadge lifecycle={agent.lifecycle} />
-        </dd>
-        <dt className="text-muted-foreground">Registered</dt>
-        <dd>
-          <time
-            className="tabular-nums"
-            title={dateTimeFormatters.full.format(agent.createdAt)}
-            dateTime={agent.createdAt.toISOString()}
-          >
-            {dateTimeFormatters.day.format(agent.createdAt)}
-          </time>
-        </dd>
+    <div className="bg-card border-border space-y-3 border px-4 py-3">
+      <dl className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
+        <div className="flex items-center gap-2">
+          <dt className="text-muted-foreground">Owner</dt>
+          <dd>
+            <AgentOwner agent={agent} />
+          </dd>
+        </div>
+        <div className="flex items-center gap-2">
+          <dt className="text-muted-foreground">Project</dt>
+          <dd>
+            <AgentScopeLabel agent={agent} />
+          </dd>
+        </div>
+        <div className="flex items-center gap-2">
+          <dt className="text-muted-foreground">Status</dt>
+          <dd>
+            <LifecycleBadge lifecycle={agent.lifecycle} />
+          </dd>
+        </div>
+        <div className="flex items-center gap-2">
+          <dt className="text-muted-foreground">Registered</dt>
+          <dd>
+            <time
+              className="tabular-nums"
+              title={dateTimeFormatters.full.format(agent.createdAt)}
+              dateTime={agent.createdAt.toISOString()}
+            >
+              {dateTimeFormatters.day.format(agent.createdAt)}
+            </time>
+          </dd>
+        </div>
       </dl>
       {/* An agent waiting on a new owner cannot be issued keys. That is a
           fact about the identity, so it belongs here rather than only on the
@@ -124,10 +136,6 @@ export function AgentIdentityPanel({
             : "."}
         </Text>
       )}
-      <Text muted small>
-        The principal and the owner are durable. The name can change, and the
-        change is recorded in the organization audit log.
-      </Text>
     </div>
   );
 }
