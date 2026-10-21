@@ -22590,10 +22590,10 @@ func marshalAdminAdminDefaultAuthPermissionKindToAdminDefaultAuthPermissionKindR
 // value of type *admin.AdminDefaultAuthPermissionStatus.
 func marshalAdminAdminDefaultAuthPermissionStatusToAdminDefaultAuthPermissionStatusResponseBody(v *admin.AdminDefaultAuthPermissionStatus) *AdminDefaultAuthPermissionStatusResponseBody {
 	res := &AdminDefaultAuthPermissionStatusResponseBody{
-		Complete:      v.Complete,
-		InProgress:    v.InProgress,
-		PendingGrants: v.PendingGrants,
-		Error:         v.Error,
+		Complete:       v.Complete,
+		APIKeysWaiting: v.APIKeysWaiting,
+		PendingGrants:  v.PendingGrants,
+		Error:          v.Error,
 	}
 	if v.Kinds != nil {
 		res.Kinds = make([]*AdminDefaultAuthPermissionKindResponseBody, len(v.Kinds))

@@ -309,11 +309,25 @@ function PermissionStatus({
     );
   }
   const s = status.data;
-  if (s.inProgress) {
-    return <span className="text-muted-foreground">A run is in progress</span>;
-  }
   if (s.error) {
     return <span className="text-destructive">{s.error}</span>;
+  }
+  const waiting = s.apiKeysWaiting ? (
+    <div className="text-muted-foreground text-xs">
+      API key policies wait until the upstream OAuth migration records every
+      auth client.
+    </div>
+  ) : null;
+  if (s.pendingGrants === 0 && s.apiKeysWaiting) {
+    return (
+      <span className="inline-flex flex-col gap-1">
+        <span className="inline-flex items-center gap-1">
+          <CircleDashedIcon className="text-muted-foreground size-4" /> Waiting
+          for auth clients
+        </span>
+        {waiting}
+      </span>
+    );
   }
   if (s.complete) {
     return (
@@ -326,9 +340,12 @@ function PermissionStatus({
     .filter((k) => k.pending > 0)
     .map((k) => `${k.pending} ${KIND_LABELS[k.kind] ?? k.kind}`);
   return (
-    <span className="inline-flex items-center gap-1">
-      <CircleDashedIcon className="text-muted-foreground size-4" />
-      {s.pendingGrants} to grant: {parts.join(", ")}
+    <span className="inline-flex flex-col gap-1">
+      <span className="inline-flex items-center gap-1">
+        <CircleDashedIcon className="text-muted-foreground size-4" />
+        {s.pendingGrants} to grant: {parts.join(", ")}
+      </span>
+      {waiting}
     </span>
   );
 }

@@ -360,6 +360,10 @@ type Report struct {
 	// a rollback can find them.
 	APIKeysGranted []string `json:"api_keys_granted"`
 
+	// APIKeysWaiting means key policies were not planned because some auth
+	// clients are not recorded yet.
+	APIKeysWaiting bool `json:"api_keys_waiting"`
+
 	// PhaseErrors names each phase that failed and why. A failed phase's
 	// writes are rolled back and its records are not retired; the other
 	// phases still run.
@@ -428,6 +432,7 @@ func newReport(apply bool) Report {
 		PendingGrantsByKind:   map[GrantKind]int{},
 		GrantsWritten:         0,
 		APIKeysGranted:        []string{},
+		APIKeysWaiting:        false,
 		PhaseErrors:           map[string]string{},
 		Results:               []Result{},
 	}
@@ -477,6 +482,7 @@ func (r *Report) merge(o Report) {
 	}
 	r.GrantsWritten += o.GrantsWritten
 	r.APIKeysGranted = append(r.APIKeysGranted, o.APIKeysGranted...)
+	r.APIKeysWaiting = r.APIKeysWaiting || o.APIKeysWaiting
 	r.Results = append(r.Results, o.Results...)
 }
 
@@ -586,11 +592,18 @@ func RunGrants(ctx context.Context, db Acquirer, opts Options) (Report, error) {
 	})
 }
 
+// runGrantsPhase runs the grants phase alone. Key policies are written once,
+// so they wait until the organization's auth clients are all recorded.
 func runGrantsPhase(ctx context.Context, conn *pgxpool.Conn, opts Options) (Report, error) {
 	report := newReport(opts.Apply)
 	local := newReport(opts.Apply)
+	ready, err := clientsRecorded(ctx, conn, opts.OrganizationID)
+	if err != nil {
+		return report, fmt.Errorf("check recorded auth clients: %w", err)
+	}
+	report.APIKeysWaiting = !ready
 	p := phase{name: PhaseGrants, kind: "", run: func(ctx context.Context, tx pgx.Tx, local *Report) error {
-		return runGrants(ctx, tx, opts, local, true)
+		return runGrants(ctx, tx, opts, local, ready)
 	}}
 	if err := runPhase(ctx, conn, opts, p, &local); err != nil {
 		if ctxErr := ctx.Err(); ctxErr != nil {
@@ -604,6 +617,20 @@ func runGrantsPhase(ctx context.Context, conn *pgxpool.Conn, opts Options) (Repo
 }
 
 func runLocked(ctx context.Context, db TxStarter, opts Options, startedAt pgtype.Timestamptz) (Report, error) {
+	return runPhases(ctx, db, opts, startedAt, true)
+}
+
+// clientsRecorded reports whether a dry run finds every auth client, link
+// and header copy recorded, so key policies written now are complete.
+func clientsRecorded(ctx context.Context, db TxStarter, organizationID string) (bool, error) {
+	report, err := runPhases(ctx, db, Options{OrganizationID: organizationID, Apply: false, PageSize: 0}, pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false}, false)
+	if err != nil {
+		return false, err
+	}
+	return report.PendingClients == 0 && report.PendingLinks == 0 && report.PendingHeaders == 0 && len(report.PhaseErrors) == 0, nil
+}
+
+func runPhases(ctx context.Context, db TxStarter, opts Options, startedAt pgtype.Timestamptz, withGrants bool) (Report, error) {
 	pageSize := opts.PageSize
 	if pageSize <= 0 {
 		pageSize = defaultPageSize
@@ -649,10 +676,12 @@ func runLocked(ctx context.Context, db TxStarter, opts Options, startedAt pgtype
 		{name: PhaseMark, kind: "", run: func(ctx context.Context, tx pgx.Tx, local *Report) error {
 			return markRequiringUpstreamAuth(ctx, New(tx), opts, &report, local)
 		}},
-		{name: PhaseGrants, kind: "", run: func(ctx context.Context, tx pgx.Tx, local *Report) error {
+	}
+	if withGrants {
+		phases = append(phases, phase{name: PhaseGrants, kind: "", run: func(ctx context.Context, tx pgx.Tx, local *Report) error {
 			// Last, over every committed phase's auth clients.
 			return runGrants(ctx, tx, opts, local, len(report.PhaseErrors) == 0)
-		}},
+		}})
 	}
 	for _, p := range phases {
 		local := newReport(opts.Apply)

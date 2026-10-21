@@ -17,6 +17,10 @@ import {
  */
 export type AdminDefaultAuthPermissionStatus = {
   /**
+   * Whether API key policies are held back because some of the organization's auth clients are not recorded yet: a key policy is written once, so it waits for them. Run the upstream OAuth migration first.
+   */
+  apiKeysWaiting: boolean;
+  /**
    * Whether every default permission is granted and the check succeeded.
    */
   complete: boolean;
@@ -24,10 +28,6 @@ export type AdminDefaultAuthPermissionStatus = {
    * Why the check failed, when it did.
    */
   error?: string | undefined;
-  /**
-   * Whether a run for the organization is underway. The counts are then empty; check again when it finishes.
-   */
-  inProgress: boolean;
   /**
    * Pending permissions by kind.
    */
@@ -44,15 +44,15 @@ export const AdminDefaultAuthPermissionStatus$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
+    api_keys_waiting: z.boolean(),
     complete: z.boolean(),
     error: z.optional(z.string()),
-    in_progress: z.boolean(),
     kinds: z.array(AdminDefaultAuthPermissionKind$inboundSchema),
     pending_grants: z.int(),
   }),
   z.transform((v) => {
     return remap$(v, {
-      "in_progress": "inProgress",
+      "api_keys_waiting": "apiKeysWaiting",
       "pending_grants": "pendingGrants",
     });
   }),

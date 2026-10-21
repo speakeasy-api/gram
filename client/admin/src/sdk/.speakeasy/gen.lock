@@ -786,7 +786,7 @@ examples:
           organization_id: "<id>"
       responses:
         "200":
-          application/json: {"complete": false, "in_progress": false, "kinds": [{"kind": "<value>", "pending": 222814}], "pending_grants": 529650}
+          application/json: {"api_keys_waiting": false, "complete": false, "kinds": [{"kind": "<value>", "pending": 222814}], "pending_grants": 529650}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
@@ -1483,7 +1483,7 @@ examples:
         application/json: {"organization_id": "<id>"}
       responses:
         "200":
-          application/json: {"grants_written": 500255, "status": {"complete": true, "in_progress": false, "kinds": [], "pending_grants": 7321}}
+          application/json: {"grants_written": 500255, "status": {"api_keys_waiting": false, "complete": true, "kinds": [], "pending_grants": 7321}}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":

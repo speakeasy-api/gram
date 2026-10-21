@@ -2437,9 +2437,10 @@ type RunUpstreamOAuthMigrationResponseBody struct {
 type GetDefaultAuthPermissionStatusResponseBody struct {
 	// Whether every default permission is granted and the check succeeded.
 	Complete *bool `form:"complete,omitempty" json:"complete,omitempty" xml:"complete,omitempty"`
-	// Whether a run for the organization is underway. The counts are then empty;
-	// check again when it finishes.
-	InProgress *bool `form:"in_progress,omitempty" json:"in_progress,omitempty" xml:"in_progress,omitempty"`
+	// Whether API key policies are held back because some of the organization's
+	// auth clients are not recorded yet: a key policy is written once, so it waits
+	// for them. Run the upstream OAuth migration first.
+	APIKeysWaiting *bool `form:"api_keys_waiting,omitempty" json:"api_keys_waiting,omitempty" xml:"api_keys_waiting,omitempty"`
 	// Default permissions not yet granted.
 	PendingGrants *int64 `form:"pending_grants,omitempty" json:"pending_grants,omitempty" xml:"pending_grants,omitempty"`
 	// Pending permissions by kind.
@@ -22378,9 +22379,10 @@ type AdminDefaultAuthPermissionKindResponseBody struct {
 type AdminDefaultAuthPermissionStatusResponseBody struct {
 	// Whether every default permission is granted and the check succeeded.
 	Complete *bool `form:"complete,omitempty" json:"complete,omitempty" xml:"complete,omitempty"`
-	// Whether a run for the organization is underway. The counts are then empty;
-	// check again when it finishes.
-	InProgress *bool `form:"in_progress,omitempty" json:"in_progress,omitempty" xml:"in_progress,omitempty"`
+	// Whether API key policies are held back because some of the organization's
+	// auth clients are not recorded yet: a key policy is written once, so it waits
+	// for them. Run the upstream OAuth migration first.
+	APIKeysWaiting *bool `form:"api_keys_waiting,omitempty" json:"api_keys_waiting,omitempty" xml:"api_keys_waiting,omitempty"`
 	// Default permissions not yet granted.
 	PendingGrants *int64 `form:"pending_grants,omitempty" json:"pending_grants,omitempty" xml:"pending_grants,omitempty"`
 	// Pending permissions by kind.
@@ -39856,10 +39858,10 @@ func NewRunUpstreamOAuthMigrationGatewayError(body *RunUpstreamOAuthMigrationGat
 // "OK" response.
 func NewGetDefaultAuthPermissionStatusAdminDefaultAuthPermissionStatusOK(body *GetDefaultAuthPermissionStatusResponseBody) *admin.AdminDefaultAuthPermissionStatus {
 	v := &admin.AdminDefaultAuthPermissionStatus{
-		Complete:      *body.Complete,
-		InProgress:    *body.InProgress,
-		PendingGrants: *body.PendingGrants,
-		Error:         body.Error,
+		Complete:       *body.Complete,
+		APIKeysWaiting: *body.APIKeysWaiting,
+		PendingGrants:  *body.PendingGrants,
+		Error:          body.Error,
 	}
 	v.Kinds = make([]*admin.AdminDefaultAuthPermissionKind, len(body.Kinds))
 	for i, val := range body.Kinds {
@@ -42848,8 +42850,8 @@ func ValidateGetDefaultAuthPermissionStatusResponseBody(body *GetDefaultAuthPerm
 	if body.Complete == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("complete", "body"))
 	}
-	if body.InProgress == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("in_progress", "body"))
+	if body.APIKeysWaiting == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("api_keys_waiting", "body"))
 	}
 	if body.PendingGrants == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("pending_grants", "body"))
@@ -69185,8 +69187,8 @@ func ValidateAdminDefaultAuthPermissionStatusResponseBody(body *AdminDefaultAuth
 	if body.Complete == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("complete", "body"))
 	}
-	if body.InProgress == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("in_progress", "body"))
+	if body.APIKeysWaiting == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("api_keys_waiting", "body"))
 	}
 	if body.PendingGrants == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("pending_grants", "body"))

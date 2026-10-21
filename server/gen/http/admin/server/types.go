@@ -2445,9 +2445,10 @@ type RunUpstreamOAuthMigrationResponseBody struct {
 type GetDefaultAuthPermissionStatusResponseBody struct {
 	// Whether every default permission is granted and the check succeeded.
 	Complete bool `form:"complete" json:"complete" xml:"complete"`
-	// Whether a run for the organization is underway. The counts are then empty;
-	// check again when it finishes.
-	InProgress bool `form:"in_progress" json:"in_progress" xml:"in_progress"`
+	// Whether API key policies are held back because some of the organization's
+	// auth clients are not recorded yet: a key policy is written once, so it waits
+	// for them. Run the upstream OAuth migration first.
+	APIKeysWaiting bool `form:"api_keys_waiting" json:"api_keys_waiting" xml:"api_keys_waiting"`
 	// Default permissions not yet granted.
 	PendingGrants int64 `form:"pending_grants" json:"pending_grants" xml:"pending_grants"`
 	// Pending permissions by kind.
@@ -22350,9 +22351,10 @@ type AdminDefaultAuthPermissionKindResponseBody struct {
 type AdminDefaultAuthPermissionStatusResponseBody struct {
 	// Whether every default permission is granted and the check succeeded.
 	Complete bool `form:"complete" json:"complete" xml:"complete"`
-	// Whether a run for the organization is underway. The counts are then empty;
-	// check again when it finishes.
-	InProgress bool `form:"in_progress" json:"in_progress" xml:"in_progress"`
+	// Whether API key policies are held back because some of the organization's
+	// auth clients are not recorded yet: a key policy is written once, so it waits
+	// for them. Run the upstream OAuth migration first.
+	APIKeysWaiting bool `form:"api_keys_waiting" json:"api_keys_waiting" xml:"api_keys_waiting"`
 	// Default permissions not yet granted.
 	PendingGrants int64 `form:"pending_grants" json:"pending_grants" xml:"pending_grants"`
 	// Pending permissions by kind.
@@ -24676,10 +24678,10 @@ func NewRunUpstreamOAuthMigrationResponseBody(res *admin.AdminUpstreamOAuthMigra
 // "admin" service.
 func NewGetDefaultAuthPermissionStatusResponseBody(res *admin.AdminDefaultAuthPermissionStatus) *GetDefaultAuthPermissionStatusResponseBody {
 	body := &GetDefaultAuthPermissionStatusResponseBody{
-		Complete:      res.Complete,
-		InProgress:    res.InProgress,
-		PendingGrants: res.PendingGrants,
-		Error:         res.Error,
+		Complete:       res.Complete,
+		APIKeysWaiting: res.APIKeysWaiting,
+		PendingGrants:  res.PendingGrants,
+		Error:          res.Error,
 	}
 	if res.Kinds != nil {
 		body.Kinds = make([]*AdminDefaultAuthPermissionKindResponseBody, len(res.Kinds))
