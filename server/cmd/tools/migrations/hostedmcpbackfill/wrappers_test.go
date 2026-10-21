@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -330,18 +331,28 @@ func TestDeleteOrphanWrapperServersMatchesDeleteMcpServer(t *testing.T) {
 	t.Parallel()
 	pool, err := testInfra.CloneTestDatabase(t, "hostedmcpbackfill")
 	require.NoError(t, err)
-	seed := func() (*fixture, uuid.UUID) {
+	// roles names each seeded row by what it is, so two fixtures with different ids compare row by row.
+	seed := func() (*fixture, uuid.UUID, map[uuid.UUID]string) {
 		f := newFixtureIn(t, pool)
 		require.NoError(t, New(pool).SeedPluginGithubConnectionFixture(t.Context(), f.projectID))
 		toolsetID := f.seedWrappedToolset(t, "same-"+uuid.NewString()[:8])
 		server := f.seedExtraServer(t, toolsetID)
-		f.seedWrapperDependents(t, server)
-		f.seedUnservableLink(t, toolsetID)
+		deps := f.seedWrapperDependents(t, server)
+		unservable := f.seedUnservableLink(t, toolsetID)
 		f.deleteToolset(t, toolsetID)
-		return f, server
+		roles := map[uuid.UUID]string{
+			toolsetID: "canonical_server", server: "member_server", deps.membership: "gateway_membership",
+			deps.pluginMember: "plugin_member", deps.attachment: "assistant_attachment", deps.link: "session_client_link", unservable: "unservable_link",
+		}
+		for _, endpoint := range f.state(t).endpoints {
+			roles[endpoint.ID] = "endpoint_of_" + roles[endpoint.McpServerID.UUID]
+		}
+		return f, server, roles
 	}
-	app, appServer := seed()
-	tool, toolServer := seed()
+	app, appServer, appRoles := seed()
+	tool, _, toolRoles := seed()
+	appBefore := rowStates(t, app, appRoles)
+	require.Equal(t, appBefore, rowStates(t, tool, toolRoles), "both fixtures start identical")
 
 	logger, tracerProvider := testenv.NewLogger(t), testenv.NewTracerProvider(t)
 	engine := authz.NewEngine(logger, pool, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
@@ -354,32 +365,19 @@ func TestDeleteOrphanWrapperServersMatchesDeleteMcpServer(t *testing.T) {
 	opts.Publication = plugins.PublicationRequests{Enabled: true}
 	require.Equal(t, 1, tool.run(t, opts).Outcomes[OutcomeDeleted])
 
-	// summary reduces a project's state to per-table live, deleted and total counts, which ids cannot change.
-	summary := func(f *fixture, server uuid.UUID) map[string][3]int {
-		out := map[string][3]int{}
-		for k, image := range f.wrapperState(t) {
-			table := strings.SplitN(k, " ", 2)[0]
-			var row map[string]any
-			require.NoError(t, json.Unmarshal([]byte(image), &row))
-			counts := out[table]
-			if row["deleted_at"] != nil {
-				counts[1]++
-			} else {
-				counts[0]++
-			}
-			counts[2]++
-			out[table] = counts
-		}
-		return out
+	want := map[string]string{
+		"canonical_server":             "deleted_at=true deleted=true",
+		"member_server":                "deleted_at=true deleted=true",
+		"endpoint_of_canonical_server": "deleted_at=false deleted=false",
+		"gateway_membership":           "deleted_at=true deleted=true",
+		"plugin_member":                "deleted_at=true deleted=true",
+		"assistant_attachment":         "absent",
+		"session_client_link":          "absent",
+		"unservable_link":              "absent",
 	}
-	want := map[string][3]int{
-		"mcp_servers":             {0, 2, 2},
-		"mcp_endpoints":           {1, 0, 1},
-		"meta_mcp_server_members": {0, 1, 1},
-		"plugin_servers":          {0, 1, 1},
-	}
-	require.Equal(t, want, summary(app, appServer), "the app removes every dependent, both session client links and the attachment")
-	require.Equal(t, summary(app, appServer), summary(tool, toolServer))
+	require.Equal(t, "deleted_at=false deleted=false", appBefore["member_server"])
+	require.Equal(t, want, rowStates(t, app, appRoles), "the app removes every dependent, both session client links and the attachment")
+	require.Equal(t, want, rowStates(t, tool, toolRoles))
 	actions := func(f *fixture) []string {
 		out := []string{}
 		for _, entry := range f.state(t).audits {
@@ -387,12 +385,35 @@ func TestDeleteOrphanWrapperServersMatchesDeleteMcpServer(t *testing.T) {
 		}
 		return out
 	}
+	require.Contains(t, actions(app), string(audit.ActionMcpServerDelete))
 	require.ElementsMatch(t, actions(app), actions(tool))
 	for _, f := range []*fixture{app, tool} {
 		outbox, err := New(pool).CountOutboxFixture(t.Context(), f.orgID)
 		require.NoError(t, err)
 		require.EqualValues(t, 1, outbox)
 	}
+}
+
+// rowStates maps each seeded row's role to its deletion state, with timestamps reduced to set or unset; any other row fails.
+func rowStates(t *testing.T, f *fixture, roles map[uuid.UUID]string) map[string]string {
+	t.Helper()
+	out := make(map[string]string, len(roles))
+	for _, role := range roles {
+		out[role] = "absent"
+	}
+	for k, image := range f.wrapperState(t) {
+		id := uuid.MustParse(strings.SplitN(k, " ", 2)[1])
+		role, ok := roles[id]
+		require.True(t, ok, "unexpected row %s", k)
+		var row map[string]any
+		require.NoError(t, json.Unmarshal([]byte(image), &row))
+		state := fmt.Sprintf("deleted_at=%t", row["deleted_at"] != nil)
+		if deleted, ok := row["deleted"]; ok {
+			state += fmt.Sprintf(" deleted=%v", deleted)
+		}
+		out[role] = state
+	}
+	return out
 }
 
 // TestRestoreOrphanWrapperServersJQReplaysCommittedRows runs restore-orphan-wrapper-servers.jq against a real journal.

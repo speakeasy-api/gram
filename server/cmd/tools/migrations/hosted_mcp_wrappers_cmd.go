@@ -26,9 +26,6 @@ type hostedMCPWrappersConfig struct {
 	reportPath  string
 	journalPath string
 	options     hostedmcpbackfill.Options
-
-	// publicationEmitSet records -plugin-publication-emit or its environment default being given, so a resume repeats it.
-	publicationEmitSet bool
 }
 
 // Stdout carries counts and the resume cursor only, never slugs or names.
@@ -50,7 +47,8 @@ func parseHostedMCPWrappersFlags(args []string, getenv func(string) string, help
 	fs := flag.NewFlagSet("hosted-mcp-wrappers", flag.ContinueOnError)
 	fs.SetOutput(helpOut)
 	apply := fs.Bool("apply", false, "commit writes (default: dry run)")
-	project := fs.String("project", "", "project_id (uuid) to scope the run")
+	project := fs.String("project", "", "project_id (uuid) to scope the run; this or -all-projects is required")
+	allProjects := fs.Bool("all-projects", false, "run across every project; this or -project is required")
 	cursor := fs.String("cursor", "", "resume after this toolset id")
 	limit := fs.Int("limit", 0, "max toolsets to process; 0 means all")
 	reportPath := fs.String("report", "", "per-row JSON report path; -apply refuses an existing file, and -move-dependents, -cleanup-orphans, -rekey-removal-records, -delete-leftover-removal-records or -delete-orphan-wrapper-servers -apply also writes <report>.journal.jsonl")
@@ -74,6 +72,13 @@ func parseHostedMCPWrappersFlags(args []string, getenv func(string) string, help
 	}
 	if fs.NArg() != 0 {
 		return hostedMCPWrappersConfig{}, errors.New("unexpected positional arguments")
+	}
+	// Every phase writes on -apply, so neither a dry run nor an apply may fall back to every tenant by omission.
+	if *project != "" && *allProjects {
+		return hostedMCPWrappersConfig{}, errors.New("-project and -all-projects are mutually exclusive")
+	}
+	if *project == "" && !*allProjects {
+		return hostedMCPWrappersConfig{}, errors.New("pass -project <id> or -all-projects")
 	}
 	if *limit < 0 {
 		return hostedMCPWrappersConfig{}, errors.New("limit must be nonnegative")
@@ -111,13 +116,10 @@ func parseHostedMCPWrappersFlags(args []string, getenv func(string) string, help
 		return hostedMCPWrappersConfig{}, errors.New("-readers-cut-over only applies to -move-dependents")
 	}
 
-	emitFlagSet := false
-	fs.Visit(func(f *flag.Flag) { emitFlagSet = emitFlagSet || f.Name == "plugin-publication-emit" })
 	cfg := hostedMCPWrappersConfig{
-		dbURL:              getenv("GRAM_DATABASE_URL"),
-		reportPath:         *reportPath,
-		journalPath:        "",
-		publicationEmitSet: emitFlagSet || emitEnv != "",
+		dbURL:       getenv("GRAM_DATABASE_URL"),
+		reportPath:  *reportPath,
+		journalPath: "",
 		options: hostedmcpbackfill.Options{
 			ProjectID:              uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 			Cursor:                 uuid.Nil,
@@ -226,13 +228,18 @@ func runHostedMCPWrappers(args []string, stdout io.Writer, getenv func(string) s
 	return code
 }
 
-// hostedMCPWrappersResumeFlags adds the run's scope and publication choice to its mode flags.
+// hostedMCPWrappersResumeFlags adds the run's scope, limit and effective publication choice to its mode flags.
 func hostedMCPWrappersResumeFlags(cfg hostedMCPWrappersConfig) string {
 	flags := hostedMCPWrappersModeFlags(cfg.options)
 	if cfg.options.ProjectID.Valid {
 		flags += " -project " + cfg.options.ProjectID.UUID.String()
+	} else {
+		flags += " -all-projects"
 	}
-	if cfg.publicationEmitSet {
+	if cfg.options.Limit > 0 {
+		flags += " -limit " + strconv.Itoa(cfg.options.Limit)
+	}
+	if cfg.options.CleanupOrphans || cfg.options.DeleteOrphanWrappers {
 		flags += " -plugin-publication-emit=" + strconv.FormatBool(cfg.options.Publication.Enabled)
 	}
 	return flags

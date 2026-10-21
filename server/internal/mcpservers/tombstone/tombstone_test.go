@@ -15,11 +15,11 @@ func TestAuditActorPrefersTheUserOverActorSystem(t *testing.T) {
 
 	both := Input{ActorUserID: "user_1", ActorSystem: "cleanup"}
 	require.True(t, hasActor(t.Context(), both))
-	require.Equal(t, urn.NewPrincipal(urn.PrincipalTypeUser, "user_1"), auditActor(both))
+	require.Equal(t, urn.NewPrincipal(urn.PrincipalTypeUser, "user_1"), auditActor(t.Context(), both))
 
 	system := Input{ActorSystem: "cleanup"}
 	require.True(t, hasActor(t.Context(), system))
-	require.Equal(t, urn.NewSystemPrincipal("cleanup"), auditActor(system))
+	require.Equal(t, urn.NewSystemPrincipal("cleanup"), auditActor(t.Context(), system))
 }
 
 func TestEmptyActorSystemKeepsTheProductActor(t *testing.T) {
@@ -27,12 +27,18 @@ func TestEmptyActorSystemKeepsTheProductActor(t *testing.T) {
 
 	user := Input{ActorUserID: "user_1"}
 	require.True(t, hasActor(t.Context(), user))
-	require.Equal(t, urn.NewPrincipal(urn.PrincipalTypeUser, "user_1"), auditActor(user))
+	require.Equal(t, urn.NewPrincipal(urn.PrincipalTypeUser, "user_1"), auditActor(t.Context(), user))
 
 	require.False(t, hasActor(t.Context(), Input{}), "no user, agent or system actor is still rejected")
+}
+
+func TestAuditActorChoosesTheAuthenticatedAgent(t *testing.T) {
+	t.Parallel()
 
 	projectID := uuid.New()
-	agentCtx := contextvalues.WithAuthenticatedActor(t.Context(), &contextvalues.AuthContext{ProjectID: &projectID}, urn.NewPrincipal(urn.PrincipalTypeAgent, uuid.NewString()))
+	agent := urn.NewPrincipal(urn.PrincipalTypeAgent, uuid.NewString())
+	agentCtx := contextvalues.WithAuthenticatedActor(t.Context(), &contextvalues.AuthContext{ProjectID: &projectID}, agent)
 	require.True(t, hasActor(agentCtx, Input{}))
-	require.Equal(t, urn.NewPrincipal(urn.PrincipalTypeUser, ""), auditActor(Input{}), "the audit logger attributes agent writes")
+	require.Equal(t, agent, auditActor(agentCtx, Input{}))
+	require.Equal(t, agent, auditActor(agentCtx, Input{ActorSystem: "cleanup"}), "the audit logger records the agent over a system actor")
 }

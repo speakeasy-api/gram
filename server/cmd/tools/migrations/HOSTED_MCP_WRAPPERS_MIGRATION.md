@@ -6,7 +6,9 @@ Gives every live hosted toolset (non-empty `mcp_slug`) created before eager wrap
 go run ./server/cmd/tools/migrations hosted-mcp-wrappers -h
 ```
 
-Flags: `-apply` (default is a dry run), `-project <PROJECT_ID>`, `-limit N`, `-cursor <TOOLSET_ID>`, `-report <path>`, `-move-dependents`, `-readers-cut-over`, `-cleanup-orphans`, `-rekey-removal-records`, `-delete-orphan-wrapper-servers`, `-delete-leftover-removal-records`.
+Flags: `-apply` (default is a dry run), `-project <PROJECT_ID>`, `-all-projects`, `-limit N`, `-cursor <TOOLSET_ID>`, `-report <path>`, `-move-dependents`, `-readers-cut-over`, `-cleanup-orphans`, `-rekey-removal-records`, `-delete-orphan-wrapper-servers`, `-delete-leftover-removal-records`, `-plugin-publication-emit[=true|false]`.
+
+Every run, dry run or `-apply`, in every phase, needs an explicit scope: `-project <PROJECT_ID>` or `-all-projects`. They are mutually exclusive, and the command exits 2 with neither. The run book steps below leave the scope out for brevity.
 
 ## Precondition
 
@@ -45,7 +47,7 @@ Stdout carries the mode, phase, outcome counts, rows scanned, toolsets walked, w
 3. Prod: dry run with `-report`. Review every `blocked_*` row and the `fresh_id_servers_present` count before going on.
 4. Prod canary: `-apply -project <PROJECT_ID>`; confirm the project's hosted servers still serve through their endpoints.
 5. Prod: `-apply -limit N` in batches, resuming with `-cursor` from the summary's `last_cursor`. Give each batch its own `-report` path: an `-apply` refuses an existing file.
-6. Prod: a final unfiltered `-apply` must report `writes: 0`.
+6. Prod: a final `-apply -all-projects` must report `writes: 0`.
 
 Failed runs exit nonzero; rows commit one toolset at a time, and an `-apply` run prints the resume cursor (a dry run commits nothing, so its cursor is never reused).
 
@@ -118,7 +120,7 @@ Unaffected or already server-keyed: plugin membership probes, role delivery, Pla
 2. Prod dry run; review every `blocked_*`, `orphaned` and `would_move_collapsing_twin` row (the twin's contents are discarded).
 3. Prod canary on `<PROJECT_ID>`: download every plugin package in the project (`downloadPluginPackage`) and unpack it; `-apply -move-dependents -readers-cut-over -report <path> -project <PROJECT_ID>`; download and unpack again and diff. Any difference stops the rollout; roll the project back from its journal.
 4. Prod in batches with `-limit N`, resuming each batch with `-cursor` from the previous `last_cursor` and a new `-report` path; stuck toolsets stay listed, so restarting without a cursor repeats them.
-5. A final unfiltered apply must report `writes: 0`.
+5. A final `-all-projects` apply must report `writes: 0`.
 
 Keep every `-apply` report and journal: the journals are the exact list of moved rows and removed twins.
 
@@ -312,7 +314,7 @@ Run it in the same ops window as `-delete-leftover-removal-records`, before it.
 
 1. Dev: dry run with `-delete-orphan-wrapper-servers -report <path>`, then `-apply -delete-orphan-wrapper-servers -report <new path>`. Rerun and confirm `writes: 0`.
 2. Prod: dry run with `-report`. Expect about 10 `would_delete` rows (mostly private gateway member wrappers with no endpoint) and no `blocked_*` rows; review any that appear and each row's `detached` counts.
-3. Prod: `-apply -delete-orphan-wrapper-servers -report <path> -plugin-publication-emit` (match the app's `$GRAM_PLUGIN_PUBLICATION_EMIT_ENABLED`), optionally with a canary `-project <PROJECT_ID>` first. Resume a stopped run with the flags the stop message prints (they include `-project` and `-plugin-publication-emit` when set), `-cursor <last_cursor>` and a new `-report`.
+3. Prod: `-apply -delete-orphan-wrapper-servers -report <path> -plugin-publication-emit` (match the app's `$GRAM_PLUGIN_PUBLICATION_EMIT_ENABLED`), optionally with a canary `-project <PROJECT_ID>` first. Resume a stopped run with the flags the stop message prints (the scope, any `-limit`, and the effective `-plugin-publication-emit=<true|false>`), `-cursor <last_cursor>` and a new `-report`.
 4. A rerun must report `writes: 0`.
 5. Run `-delete-leftover-removal-records`: the records that were `blocked_live_wrapper` because of these servers (31 in prod) are now deleted as "toolset deleted".
 

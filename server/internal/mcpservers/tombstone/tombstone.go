@@ -71,7 +71,7 @@ type Input struct {
 	ActorUserID    string
 	ActorEmail     *string
 
-	// ActorSystem audits a write with no user behind it as system:<ActorSystem>; ActorUserID takes precedence.
+	// ActorSystem audits a write with no user or agent behind it as system:<ActorSystem>.
 	ActorSystem string
 
 	// TracerProvider traces the risk policy cleanup the delete runs.
@@ -91,7 +91,7 @@ func Tombstone(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, locked
 	if tx == nil || auditLogger == nil || input.TracerProvider == nil || input.OrganizationID == "" || input.ProjectID == uuid.Nil || !hasActor(ctx, input) {
 		return Result{}, errors.New("invalid MCP server tombstone input")
 	}
-	actor := auditActor(input)
+	actor := auditActor(ctx, input)
 	servers := repo.New(tx)
 
 	deleted, err := servers.DeleteMCPServer(ctx, repo.DeleteMCPServerParams{ID: locked.Server.ID, ProjectID: input.ProjectID})
@@ -189,8 +189,11 @@ func hasActor(ctx context.Context, input Input) bool {
 	return ActorPresent(ctx, input.ActorUserID) || input.ActorSystem != ""
 }
 
-// auditActor names the user, or system:<ActorSystem> only when there is no user id.
-func auditActor(input Input) urn.Principal {
+// auditActor names the principal the audit logger records: an authenticated agent, the user, then system:<ActorSystem>.
+func auditActor(ctx context.Context, input Input) urn.Principal {
+	if actor, ok := contextvalues.AuthenticatedActor(ctx); ok && actor.Type == urn.PrincipalTypeAgent {
+		return actor
+	}
 	if input.ActorUserID == "" && input.ActorSystem != "" {
 		return urn.NewSystemPrincipal(input.ActorSystem)
 	}
