@@ -463,6 +463,163 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Error'
+    /admin/defaultAuthPermissions.run:
+        post:
+            description: 'Grants one organization the default auth permissions it is missing: everyone''s and each agent''s use of their own personal connections, shared clients for whoever can connect to a server using them, and policies for legacy API keys. It only adds grants; rerunning restores any default since removed.'
+            operationId: adminRunDefaultAuthPermissions
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/RunDefaultAuthPermissionsRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminDefaultAuthPermissionRun'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - admin_auth_header_Authorization: []
+            summary: runDefaultAuthPermissions admin
+            tags:
+                - admin
+            x-speakeasy-name-override: runDefaultAuthPermissions
+    /admin/defaultAuthPermissions.status:
+        get:
+            description: Reports which default auth permissions one organization is missing, from a dry run that writes nothing.
+            operationId: adminGetDefaultAuthPermissionStatus
+            parameters:
+                - allowEmptyValue: true
+                  description: The organization ID.
+                  in: query
+                  name: organization_id
+                  required: true
+                  schema:
+                    description: The organization ID.
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminDefaultAuthPermissionStatus'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - admin_auth_header_Authorization: []
+            summary: getDefaultAuthPermissionStatus admin
+            tags:
+                - admin
+            x-speakeasy-name-override: getDefaultAuthPermissionStatus
     /admin/externalMcpMigration.listCandidates:
         get:
             description: Lists every live server across all organizations whose latest toolset version proxies an external MCP attachment on its project's active deployment, with the blockers that stop each one from migrating.
@@ -89742,6 +89899,58 @@ components:
             required:
                 - location
                 - cache_control
+        AdminDefaultAuthPermissionKind:
+            type: object
+            properties:
+                kind:
+                    type: string
+                    description: personal_default (everyone's and each agent's use of their own personal connections), shared_client (shared clients for whoever can connect to a server using them) or api_key (legacy API key policies).
+                pending:
+                    type: integer
+                    description: Permissions of this kind not yet granted.
+                    format: int64
+            required:
+                - kind
+                - pending
+        AdminDefaultAuthPermissionRun:
+            type: object
+            properties:
+                grants_written:
+                    type: integer
+                    description: Default permissions granted.
+                    format: int64
+                status:
+                    $ref: '#/components/schemas/AdminDefaultAuthPermissionStatus'
+            required:
+                - grants_written
+                - status
+        AdminDefaultAuthPermissionStatus:
+            type: object
+            properties:
+                complete:
+                    type: boolean
+                    description: Whether every default permission is granted and the check succeeded.
+                error:
+                    type: string
+                    description: Why the check failed, when it did.
+                in_progress:
+                    type: boolean
+                    description: Whether a run for the organization is underway. The counts are then empty; check again when it finishes.
+                kinds:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AdminDefaultAuthPermissionKind'
+                    description: Pending permissions by kind.
+                pending_grants:
+                    type: integer
+                    description: Default permissions not yet granted.
+                    format: int64
+            description: Where one organization stands in granting the default auth permissions the mandatory auth client check needs, from a dry run that writes nothing. Only clients already recorded are counted.
+            required:
+                - complete
+                - in_progress
+                - pending_grants
+                - kinds
         AdminDeviceAgentCell:
             type: object
             properties:
@@ -91899,6 +92108,10 @@ components:
                 auth_clients_written:
                     type: integer
                     description: Typed auth clients recorded.
+                    format: int64
+                auth_permission_grants_written:
+                    type: integer
+                    description: Default auth permissions granted for the clients just recorded. The default auth permissions page reports what is still missing.
                     format: int64
                 selections_written:
                     type: integer
@@ -115586,6 +115799,14 @@ components:
                 - id
                 - name
                 - key_prefix
+        RunDefaultAuthPermissionsRequestBody:
+            type: object
+            properties:
+                organization_id:
+                    type: string
+                    description: The organization ID.
+            required:
+                - organization_id
         RunUpstreamOAuthMigrationRequestBody:
             type: object
             properties:

@@ -337,6 +337,15 @@ type Service interface {
 	// client choice. Idempotent, so it is safe to run again; a server the
 	// configuration does not prove is reported and never guessed.
 	RunUpstreamOAuthMigration(context.Context, *RunUpstreamOAuthMigrationPayload) (res *AdminUpstreamOAuthMigrationRun, err error)
+	// Reports which default auth permissions one organization is missing, from a
+	// dry run that writes nothing.
+	GetDefaultAuthPermissionStatus(context.Context, *GetDefaultAuthPermissionStatusPayload) (res *AdminDefaultAuthPermissionStatus, err error)
+	// Grants one organization the default auth permissions it is missing:
+	// everyone's and each agent's use of their own personal connections, shared
+	// clients for whoever can connect to a server using them, and policies for
+	// legacy API keys. It only adds grants; rerunning restores any default since
+	// removed.
+	RunDefaultAuthPermissions(context.Context, *RunDefaultAuthPermissionsPayload) (res *AdminDefaultAuthPermissionRun, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -359,7 +368,7 @@ const ServiceName = "admin"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [95]string{"login", "callback", "logout", "getSession", "getOrganizationFeatures", "setOrganizationFeature", "getOrganizationChatAnalysisSettings", "setOrganizationChatAnalysisSettings", "triggerOrganizationChatAnalysis", "openOrganizationInDashboard", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listProjectMcpServers", "listOrganizationActivity", "listUsers", "listUserOrganizations", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "repairInferenceKey", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeCustomer", "setStripeCustomer", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription", "markEnterpriseTrialConverted", "createGlobalIssuer", "getGlobalIssuerDuplicatePreflight", "listGlobalIssuers", "getGlobalIssuer", "updateGlobalIssuer", "deleteGlobalIssuer", "fetchGlobalIssuerMetadata", "refreshGlobalIssuerMetadata", "listGlobalIssuerConvergenceCandidates", "getGlobalIssuerMigratePreflight", "migrateToGlobalIssuer", "uploadPlatformImage", "serveImage", "startTrial", "changeTrialEndDate", "getMeterUsage", "getSpendBreakdown", "getSupportMatrix", "updateSupportMatrix", "getSupportCoverage", "describeMcpServerHealth", "getMcpServerToolCalls", "getHookClients", "listExternalMcpMigrationCandidates", "previewExternalMcpMigration", "migrateExternalMcpServers", "getRegistryOktaCandidates", "listRegistryOktaUnmapped", "listRegistryEntries", "getRegistryEntry", "createRegistryEntry", "saveRegistryEntry", "setRegistryEntryPublished", "listOnboardingSteps", "getOnboardingStackOptions", "getOrganizationOnboardingStack", "setOrganizationOnboardingStack", "listOnboardingUseCases", "createOnboardingUseCase", "updateOnboardingUseCase", "deleteOnboardingUseCase", "listOnboardingPlaybooks", "createOnboardingPlaybook", "updateOnboardingPlaybook", "deleteOnboardingPlaybook", "cloneOnboardingPlaybook", "getOrganizationOnboardingPlaybook", "assignOrganizationOnboardingPlaybook", "listSignupOffers", "createSignupOffer", "updateSignupOffer", "getStripeSubscriptionCandidate", "setStripeSubscription", "listCustomerUsage", "listUpstreamOAuthMigrationOrganizations", "getUpstreamOAuthMigrationStatus", "runUpstreamOAuthMigration"}
+var MethodNames = [97]string{"login", "callback", "logout", "getSession", "getOrganizationFeatures", "setOrganizationFeature", "getOrganizationChatAnalysisSettings", "setOrganizationChatAnalysisSettings", "triggerOrganizationChatAnalysis", "openOrganizationInDashboard", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listProjectMcpServers", "listOrganizationActivity", "listUsers", "listUserOrganizations", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "repairInferenceKey", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeCustomer", "setStripeCustomer", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription", "markEnterpriseTrialConverted", "createGlobalIssuer", "getGlobalIssuerDuplicatePreflight", "listGlobalIssuers", "getGlobalIssuer", "updateGlobalIssuer", "deleteGlobalIssuer", "fetchGlobalIssuerMetadata", "refreshGlobalIssuerMetadata", "listGlobalIssuerConvergenceCandidates", "getGlobalIssuerMigratePreflight", "migrateToGlobalIssuer", "uploadPlatformImage", "serveImage", "startTrial", "changeTrialEndDate", "getMeterUsage", "getSpendBreakdown", "getSupportMatrix", "updateSupportMatrix", "getSupportCoverage", "describeMcpServerHealth", "getMcpServerToolCalls", "getHookClients", "listExternalMcpMigrationCandidates", "previewExternalMcpMigration", "migrateExternalMcpServers", "getRegistryOktaCandidates", "listRegistryOktaUnmapped", "listRegistryEntries", "getRegistryEntry", "createRegistryEntry", "saveRegistryEntry", "setRegistryEntryPublished", "listOnboardingSteps", "getOnboardingStackOptions", "getOrganizationOnboardingStack", "setOrganizationOnboardingStack", "listOnboardingUseCases", "createOnboardingUseCase", "updateOnboardingUseCase", "deleteOnboardingUseCase", "listOnboardingPlaybooks", "createOnboardingPlaybook", "updateOnboardingPlaybook", "deleteOnboardingPlaybook", "cloneOnboardingPlaybook", "getOrganizationOnboardingPlaybook", "assignOrganizationOnboardingPlaybook", "listSignupOffers", "createSignupOffer", "updateSignupOffer", "getStripeSubscriptionCandidate", "setStripeSubscription", "listCustomerUsage", "listUpstreamOAuthMigrationOrganizations", "getUpstreamOAuthMigrationStatus", "runUpstreamOAuthMigration", "getDefaultAuthPermissionStatus", "runDefaultAuthPermissions"}
 
 // AdminBulkUpdateAccountTypeResult is the result type of the admin service
 // bulkUpdateAccountType method.
@@ -438,6 +447,40 @@ type AdminCustomerUsageResponse struct {
 type AdminDashboardRedirect struct {
 	Location     string
 	CacheControl string
+}
+
+type AdminDefaultAuthPermissionKind struct {
+	// personal_default (everyone's and each agent's use of their own personal
+	// connections), shared_client (shared clients for whoever can connect to a
+	// server using them) or api_key (legacy API key policies).
+	Kind string
+	// Permissions of this kind not yet granted.
+	Pending int64
+}
+
+// AdminDefaultAuthPermissionRun is the result type of the admin service
+// runDefaultAuthPermissions method.
+type AdminDefaultAuthPermissionRun struct {
+	// Default permissions granted.
+	GrantsWritten int64
+	// The organization's status after the run.
+	Status *AdminDefaultAuthPermissionStatus
+}
+
+// AdminDefaultAuthPermissionStatus is the result type of the admin service
+// getDefaultAuthPermissionStatus method.
+type AdminDefaultAuthPermissionStatus struct {
+	// Whether every default permission is granted and the check succeeded.
+	Complete bool
+	// Whether a run for the organization is underway. The counts are then empty;
+	// check again when it finishes.
+	InProgress bool
+	// Default permissions not yet granted.
+	PendingGrants int64
+	// Pending permissions by kind.
+	Kinds []*AdminDefaultAuthPermissionKind
+	// Why the check failed, when it did.
+	Error *string
 }
 
 // One (organization, day, version) cell of the device agent grid.
@@ -1537,6 +1580,9 @@ type AdminUpstreamOAuthMigrationRun struct {
 	// Servers marked as needing upstream authentication because they offer a
 	// backfilled auth client.
 	ServersMarkedRequiringUpstreamAuth *int64
+	// Default auth permissions granted for the clients just recorded. The default
+	// auth permissions page reports what is still missing.
+	AuthPermissionGrantsWritten *int64
 	// Why recording typed auth clients failed, when it did. The upstream OAuth
 	// migration itself is unaffected.
 	AuthClientsError *string
@@ -1972,6 +2018,14 @@ type FetchGlobalIssuerMetadataPayload struct {
 	// Issuer URL to fetch metadata for (e.g. https://login.linear.com).
 	Issuer            string
 	AdminSessionToken *string
+}
+
+// GetDefaultAuthPermissionStatusPayload is the payload type of the admin
+// service getDefaultAuthPermissionStatus method.
+type GetDefaultAuthPermissionStatusPayload struct {
+	AdminSessionToken *string
+	// The organization ID.
+	OrganizationID string
 }
 
 // GetGlobalIssuerDuplicatePreflightPayload is the payload type of the admin
@@ -2707,6 +2761,14 @@ type RepairInferenceKeyPayload struct {
 type ResumeStripeSubscriptionPayload struct {
 	AdminSessionToken *string
 	OrganizationID    string
+}
+
+// RunDefaultAuthPermissionsPayload is the payload type of the admin service
+// runDefaultAuthPermissions method.
+type RunDefaultAuthPermissionsPayload struct {
+	AdminSessionToken *string
+	// The organization ID.
+	OrganizationID string
 }
 
 // RunUpstreamOAuthMigrationPayload is the payload type of the admin service

@@ -22856,6 +22856,475 @@ func DecodeRunUpstreamOAuthMigrationResponse(decoder func(*http.Response) goahtt
 	}
 }
 
+// BuildGetDefaultAuthPermissionStatusRequest instantiates a HTTP request
+// object with method and path set to call the "admin" service
+// "getDefaultAuthPermissionStatus" endpoint
+func (c *Client) BuildGetDefaultAuthPermissionStatusRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetDefaultAuthPermissionStatusAdminPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("admin", "getDefaultAuthPermissionStatus", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGetDefaultAuthPermissionStatusRequest returns an encoder for requests
+// sent to the admin getDefaultAuthPermissionStatus server.
+func EncodeGetDefaultAuthPermissionStatusRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*admin.GetDefaultAuthPermissionStatusPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("admin", "getDefaultAuthPermissionStatus", "*admin.GetDefaultAuthPermissionStatusPayload", v)
+		}
+		if p.AdminSessionToken != nil {
+			head := *p.AdminSessionToken
+			req.Header.Set("Authorization", head)
+		}
+		values := req.URL.Query()
+		values.Add("organization_id", p.OrganizationID)
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeGetDefaultAuthPermissionStatusResponse returns a decoder for responses
+// returned by the admin getDefaultAuthPermissionStatus endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeGetDefaultAuthPermissionStatusResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeGetDefaultAuthPermissionStatusResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body GetDefaultAuthPermissionStatusResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getDefaultAuthPermissionStatus", err)
+			}
+			err = ValidateGetDefaultAuthPermissionStatusResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getDefaultAuthPermissionStatus", err)
+			}
+			res := NewGetDefaultAuthPermissionStatusAdminDefaultAuthPermissionStatusOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body GetDefaultAuthPermissionStatusUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getDefaultAuthPermissionStatus", err)
+			}
+			err = ValidateGetDefaultAuthPermissionStatusUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getDefaultAuthPermissionStatus", err)
+			}
+			return nil, NewGetDefaultAuthPermissionStatusUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetDefaultAuthPermissionStatusForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getDefaultAuthPermissionStatus", err)
+			}
+			err = ValidateGetDefaultAuthPermissionStatusForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getDefaultAuthPermissionStatus", err)
+			}
+			return nil, NewGetDefaultAuthPermissionStatusForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetDefaultAuthPermissionStatusBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getDefaultAuthPermissionStatus", err)
+			}
+			err = ValidateGetDefaultAuthPermissionStatusBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getDefaultAuthPermissionStatus", err)
+			}
+			return nil, NewGetDefaultAuthPermissionStatusBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetDefaultAuthPermissionStatusNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getDefaultAuthPermissionStatus", err)
+			}
+			err = ValidateGetDefaultAuthPermissionStatusNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getDefaultAuthPermissionStatus", err)
+			}
+			return nil, NewGetDefaultAuthPermissionStatusNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetDefaultAuthPermissionStatusConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getDefaultAuthPermissionStatus", err)
+			}
+			err = ValidateGetDefaultAuthPermissionStatusConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getDefaultAuthPermissionStatus", err)
+			}
+			return nil, NewGetDefaultAuthPermissionStatusConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetDefaultAuthPermissionStatusUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getDefaultAuthPermissionStatus", err)
+			}
+			err = ValidateGetDefaultAuthPermissionStatusUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getDefaultAuthPermissionStatus", err)
+			}
+			return nil, NewGetDefaultAuthPermissionStatusUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetDefaultAuthPermissionStatusInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getDefaultAuthPermissionStatus", err)
+			}
+			err = ValidateGetDefaultAuthPermissionStatusInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getDefaultAuthPermissionStatus", err)
+			}
+			return nil, NewGetDefaultAuthPermissionStatusInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetDefaultAuthPermissionStatusInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "getDefaultAuthPermissionStatus", err)
+				}
+				err = ValidateGetDefaultAuthPermissionStatusInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "getDefaultAuthPermissionStatus", err)
+				}
+				return nil, NewGetDefaultAuthPermissionStatusInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetDefaultAuthPermissionStatusUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "getDefaultAuthPermissionStatus", err)
+				}
+				err = ValidateGetDefaultAuthPermissionStatusUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "getDefaultAuthPermissionStatus", err)
+				}
+				return nil, NewGetDefaultAuthPermissionStatusUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("admin", "getDefaultAuthPermissionStatus", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GetDefaultAuthPermissionStatusGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getDefaultAuthPermissionStatus", err)
+			}
+			err = ValidateGetDefaultAuthPermissionStatusGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getDefaultAuthPermissionStatus", err)
+			}
+			return nil, NewGetDefaultAuthPermissionStatusGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("admin", "getDefaultAuthPermissionStatus", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildRunDefaultAuthPermissionsRequest instantiates a HTTP request object
+// with method and path set to call the "admin" service
+// "runDefaultAuthPermissions" endpoint
+func (c *Client) BuildRunDefaultAuthPermissionsRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: RunDefaultAuthPermissionsAdminPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("admin", "runDefaultAuthPermissions", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeRunDefaultAuthPermissionsRequest returns an encoder for requests sent
+// to the admin runDefaultAuthPermissions server.
+func EncodeRunDefaultAuthPermissionsRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*admin.RunDefaultAuthPermissionsPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("admin", "runDefaultAuthPermissions", "*admin.RunDefaultAuthPermissionsPayload", v)
+		}
+		if p.AdminSessionToken != nil {
+			head := *p.AdminSessionToken
+			req.Header.Set("Authorization", head)
+		}
+		body := NewRunDefaultAuthPermissionsRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("admin", "runDefaultAuthPermissions", err)
+		}
+		return nil
+	}
+}
+
+// DecodeRunDefaultAuthPermissionsResponse returns a decoder for responses
+// returned by the admin runDefaultAuthPermissions endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeRunDefaultAuthPermissionsResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeRunDefaultAuthPermissionsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body RunDefaultAuthPermissionsResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "runDefaultAuthPermissions", err)
+			}
+			err = ValidateRunDefaultAuthPermissionsResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "runDefaultAuthPermissions", err)
+			}
+			res := NewRunDefaultAuthPermissionsAdminDefaultAuthPermissionRunOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body RunDefaultAuthPermissionsUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "runDefaultAuthPermissions", err)
+			}
+			err = ValidateRunDefaultAuthPermissionsUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "runDefaultAuthPermissions", err)
+			}
+			return nil, NewRunDefaultAuthPermissionsUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body RunDefaultAuthPermissionsForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "runDefaultAuthPermissions", err)
+			}
+			err = ValidateRunDefaultAuthPermissionsForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "runDefaultAuthPermissions", err)
+			}
+			return nil, NewRunDefaultAuthPermissionsForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body RunDefaultAuthPermissionsBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "runDefaultAuthPermissions", err)
+			}
+			err = ValidateRunDefaultAuthPermissionsBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "runDefaultAuthPermissions", err)
+			}
+			return nil, NewRunDefaultAuthPermissionsBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body RunDefaultAuthPermissionsNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "runDefaultAuthPermissions", err)
+			}
+			err = ValidateRunDefaultAuthPermissionsNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "runDefaultAuthPermissions", err)
+			}
+			return nil, NewRunDefaultAuthPermissionsNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body RunDefaultAuthPermissionsConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "runDefaultAuthPermissions", err)
+			}
+			err = ValidateRunDefaultAuthPermissionsConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "runDefaultAuthPermissions", err)
+			}
+			return nil, NewRunDefaultAuthPermissionsConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body RunDefaultAuthPermissionsUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "runDefaultAuthPermissions", err)
+			}
+			err = ValidateRunDefaultAuthPermissionsUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "runDefaultAuthPermissions", err)
+			}
+			return nil, NewRunDefaultAuthPermissionsUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body RunDefaultAuthPermissionsInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "runDefaultAuthPermissions", err)
+			}
+			err = ValidateRunDefaultAuthPermissionsInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "runDefaultAuthPermissions", err)
+			}
+			return nil, NewRunDefaultAuthPermissionsInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body RunDefaultAuthPermissionsInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "runDefaultAuthPermissions", err)
+				}
+				err = ValidateRunDefaultAuthPermissionsInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "runDefaultAuthPermissions", err)
+				}
+				return nil, NewRunDefaultAuthPermissionsInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body RunDefaultAuthPermissionsUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "runDefaultAuthPermissions", err)
+				}
+				err = ValidateRunDefaultAuthPermissionsUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "runDefaultAuthPermissions", err)
+				}
+				return nil, NewRunDefaultAuthPermissionsUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("admin", "runDefaultAuthPermissions", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body RunDefaultAuthPermissionsGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "runDefaultAuthPermissions", err)
+			}
+			err = ValidateRunDefaultAuthPermissionsGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "runDefaultAuthPermissions", err)
+			}
+			return nil, NewRunDefaultAuthPermissionsGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("admin", "runDefaultAuthPermissions", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // unmarshalAdminOrganizationMemberResponseBodyToAdminAdminOrganizationMember
 // builds a value of type *admin.AdminOrganizationMember from a value of type
 // *AdminOrganizationMemberResponseBody.
@@ -24534,6 +25003,40 @@ func unmarshalAdminUpstreamOAuthMigrationStatusResponseBodyToAdminAdminUpstreamO
 	}
 	if v.AuthClients != nil {
 		res.AuthClients = unmarshalAdminUpstreamOAuthMigrationAuthClientsResponseBodyToAdminAdminUpstreamOAuthMigrationAuthClients(v.AuthClients)
+	}
+
+	return res
+}
+
+// unmarshalAdminDefaultAuthPermissionKindResponseBodyToAdminAdminDefaultAuthPermissionKind
+// builds a value of type *admin.AdminDefaultAuthPermissionKind from a value of
+// type *AdminDefaultAuthPermissionKindResponseBody.
+func unmarshalAdminDefaultAuthPermissionKindResponseBodyToAdminAdminDefaultAuthPermissionKind(v *AdminDefaultAuthPermissionKindResponseBody) *admin.AdminDefaultAuthPermissionKind {
+	res := &admin.AdminDefaultAuthPermissionKind{
+		Kind:    *v.Kind,
+		Pending: *v.Pending,
+	}
+
+	return res
+}
+
+// unmarshalAdminDefaultAuthPermissionStatusResponseBodyToAdminAdminDefaultAuthPermissionStatus
+// builds a value of type *admin.AdminDefaultAuthPermissionStatus from a value
+// of type *AdminDefaultAuthPermissionStatusResponseBody.
+func unmarshalAdminDefaultAuthPermissionStatusResponseBodyToAdminAdminDefaultAuthPermissionStatus(v *AdminDefaultAuthPermissionStatusResponseBody) *admin.AdminDefaultAuthPermissionStatus {
+	res := &admin.AdminDefaultAuthPermissionStatus{
+		Complete:      *v.Complete,
+		InProgress:    *v.InProgress,
+		PendingGrants: *v.PendingGrants,
+		Error:         v.Error,
+	}
+	res.Kinds = make([]*admin.AdminDefaultAuthPermissionKind, len(v.Kinds))
+	for i, val := range v.Kinds {
+		if val == nil {
+			res.Kinds[i] = nil
+			continue
+		}
+		res.Kinds[i] = unmarshalAdminDefaultAuthPermissionKindResponseBodyToAdminAdminDefaultAuthPermissionKind(val)
 	}
 
 	return res

@@ -104,6 +104,13 @@ export const ADMIN_NAV_GROUPS = [
         icon: KeyRoundIcon,
       },
       {
+        to: "/default-auth-permissions",
+        label: "Default auth permissions",
+        keywords:
+          "auth clients mcp:auth grants api keys personal connections backfill",
+        icon: KeyRoundIcon,
+      },
+      {
         to: "/external-mcp-migration",
         label: "External MCP migration",
         keywords: "external mcp attachments remote servers migrate cutover",

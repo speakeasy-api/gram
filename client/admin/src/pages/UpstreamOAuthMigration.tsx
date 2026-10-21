@@ -100,7 +100,7 @@ export function UpstreamOAuthMigrationPage(): JSX.Element {
     const ok = await confirm({
       title: `Migrate ${org.name}?`,
       description:
-        "Records the upstream OAuth client associations its configuration proves, then each live credential's client choice, then a typed auth client for each upstream identity its servers use. Safe to run again.",
+        "Records the upstream OAuth client associations its configuration proves, then each live credential's client choice, then a typed auth client for each upstream identity its servers use, and grants the default auth permissions for them. Safe to run again; it only adds permissions, and restores any default since removed.",
       confirmLabel: "Migrate",
     });
     if (!ok) return;
