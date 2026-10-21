@@ -444,6 +444,16 @@ sql:
         omit_unused_structs: true
 
   - schema: schema.sql
+    queries: ../cmd/tools/migrations/assistantrolegrants/queries.sql
+    engine: postgresql
+    gen:
+      go:
+        package: "assistantrolegrants"
+        out: "../cmd/tools/migrations/assistantrolegrants"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true
+
+  - schema: schema.sql
     queries: ../cmd/tools/migrations/hostedmcpbackfill/queries.sql
     engine: postgresql
     gen:
