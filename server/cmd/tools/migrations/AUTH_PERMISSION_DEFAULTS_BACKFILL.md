@@ -32,6 +32,9 @@ GRAM_DATABASE_URL=... go run ./cmd/tools/migrations auth-permission-defaults \
 
 - `keys_waiting`: organizations whose legacy API key policies were held back because some auth clients are not recorded yet. Run the upstream OAuth migration for them, then rerun.
 - `failed`: organizations whose grants phase failed and rolled back. Rerun; a persistent failure needs investigation.
+- `busy`: organizations another run held, which were skipped. Rerun.
+
+The command exits non-zero when any organization failed or was busy.
 
 After applying, a preview should report zero kind counts apart from organizations still waiting or busy.
 
@@ -39,6 +42,7 @@ After applying, a preview should report zero kind counts apart from organization
 
 A rollback deletes the provisioned grants that are still live, then their ledger rows. It leaves:
 
+- personal defaults written when an organization was created (`kind = 'creation_default'`), not by this backfill,
 - grants an admin took over by writing them (`taken_over_at` set), and
 - every grant of an API key whose provisioned policy an admin took over in part. Removing the rest would leave the key a narrower policy than it had before the backfill.
 
@@ -56,6 +60,7 @@ JOIN auth_permission_provisions p
  AND g.scope = p.scope
  AND g.selectors = p.selectors
 WHERE p.taken_over_at IS NULL
+  AND p.kind <> 'creation_default'
   AND p.organization_id = '<ORG_ID>'
   AND NOT EXISTS (
     SELECT 1 FROM auth_permission_provisions t
@@ -72,6 +77,7 @@ WHERE g.organization_id = p.organization_id
   AND g.scope = p.scope
   AND g.selectors = p.selectors
   AND p.taken_over_at IS NULL
+  AND p.kind <> 'creation_default'
   AND p.organization_id = '<ORG_ID>'
   AND NOT EXISTS (
     SELECT 1 FROM auth_permission_provisions t
@@ -81,12 +87,14 @@ WHERE g.organization_id = p.organization_id
       AND t.taken_over_at IS NOT NULL
   );
 
-DELETE FROM auth_permission_provisions WHERE organization_id = '<ORG_ID>';
+DELETE FROM auth_permission_provisions
+WHERE organization_id = '<ORG_ID>'
+  AND kind <> 'creation_default';
 
 COMMIT;
 ```
 
-For every organization, drop the two `organization_id = '<ORG_ID>'` conditions and the `WHERE` on the last statement, together. Never scope one statement without the others.
+For every organization, drop the three `organization_id = '<ORG_ID>'` conditions together; never scope one statement without the others. One statement over every organization can deadlock with concurrent grant writes; if Postgres aborts it, roll back and run it again, or run it one organization at a time.
 
 ## Deploy and revert order
 
@@ -94,4 +102,4 @@ The migration adding `auth_permission_provisions` must be deployed before the se
 
 ## Known gap
 
-An admin adding a grant to a key's policy at the same moment the backfill tops it up can end up with both; a later run then leaves the policy alone.
+Nothing edits a key's policy after creation today. If that changes, an edit landing while the backfill tops the same policy up can interleave with it; a later run then leaves the policy alone.

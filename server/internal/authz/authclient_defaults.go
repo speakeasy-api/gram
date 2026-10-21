@@ -8,6 +8,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
+// AuthPermissionKindCreationDefault marks a default written when an
+// organization was created rather than by the backfill, so a backfill
+// rollback leaves it.
+const AuthPermissionKindCreationDefault = "creation_default"
+
 // PersonalAuthClientSelector is the default every organization grants
 // user:all: each caller may use personal (remote_session) clients only for
 // the connection its represented user owns.
@@ -73,7 +78,7 @@ func SeedPersonalAuthClientDefaultTx(ctx context.Context, dbtx repo.DBTX, organi
 		PrincipalUrn:   AllUsersPrincipal().String(),
 		Scope:          string(ScopeMCPAuth),
 		Selectors:      raw,
-		Kind:           "personal_default",
+		Kind:           AuthPermissionKindCreationDefault,
 	}); err != nil {
 		return fmt.Errorf("record personal auth client default: %w", err)
 	}
