@@ -41,6 +41,10 @@ type Client struct {
 	// the listDirectoryRoleMappings endpoint.
 	ListDirectoryRoleMappingsDoer goahttp.Doer
 
+	// ListDirectoryPeople Doer is the HTTP client used to make requests to the
+	// listDirectoryPeople endpoint.
+	ListDirectoryPeopleDoer goahttp.Doer
+
 	// SyncDirectoryGroups Doer is the HTTP client used to make requests to the
 	// syncDirectoryGroups endpoint.
 	SyncDirectoryGroupsDoer goahttp.Doer
@@ -175,6 +179,7 @@ func NewClient(
 		UpdateRoleDoer:                           doer,
 		DeleteRoleDoer:                           doer,
 		ListDirectoryRoleMappingsDoer:            doer,
+		ListDirectoryPeopleDoer:                  doer,
 		SyncDirectoryGroupsDoer:                  doer,
 		SetDirectoryRoleMappingDoer:              doer,
 		SetDirectoryRoleMappingsDoer:             doer,
@@ -349,6 +354,30 @@ func (c *Client) ListDirectoryRoleMappings() goa.Endpoint {
 		resp, err := c.ListDirectoryRoleMappingsDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("access", "listDirectoryRoleMappings", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListDirectoryPeople returns an endpoint that makes HTTP requests to the
+// access service listDirectoryPeople server.
+func (c *Client) ListDirectoryPeople() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListDirectoryPeopleRequest(c.encoder)
+		decodeResponse = DecodeListDirectoryPeopleResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListDirectoryPeopleRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListDirectoryPeopleDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("access", "listDirectoryPeople", err)
 		}
 		return decodeResponse(resp)
 	}

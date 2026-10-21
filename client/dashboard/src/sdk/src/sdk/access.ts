@@ -13,6 +13,7 @@ import { accessListAIDetectionUsers } from "../funcs/accessListAIDetectionUsers.
 import { accessListAudienceOptions } from "../funcs/accessListAudienceOptions.js";
 import { accessListChallengeBuckets } from "../funcs/accessListChallengeBuckets.js";
 import { accessListChallenges } from "../funcs/accessListChallenges.js";
+import { accessListDirectoryPeople } from "../funcs/accessListDirectoryPeople.js";
 import { accessListDirectoryRoleMappings } from "../funcs/accessListDirectoryRoleMappings.js";
 import { accessListEmployeeAIDetections } from "../funcs/accessListEmployeeAIDetections.js";
 import { accessListGrants } from "../funcs/accessListGrants.js";
@@ -43,6 +44,7 @@ import { ListAIDetectionUsersResult } from "../models/components/listaidetection
 import { ListAudienceOptionsResult } from "../models/components/listaudienceoptionsresult.js";
 import { ListChallengeBucketsResult } from "../models/components/listchallengebucketsresult.js";
 import { ListChallengesResult } from "../models/components/listchallengesresult.js";
+import { ListDirectoryPeopleResult } from "../models/components/listdirectorypeopleresult.js";
 import { ListDirectoryRoleMappingsResult } from "../models/components/listdirectoryrolemappingsresult.js";
 import { ListIdentityAccessResult } from "../models/components/listidentityaccessresult.js";
 import { ListMembersResult } from "../models/components/listmembersresult.js";
@@ -103,6 +105,10 @@ import {
   ListChallengesRequest,
   ListChallengesSecurity,
 } from "../models/operations/listchallenges.js";
+import {
+  ListDirectoryPeopleRequest,
+  ListDirectoryPeopleSecurity,
+} from "../models/operations/listdirectorypeople.js";
 import {
   ListDirectoryRoleMappingsRequest,
   ListDirectoryRoleMappingsSecurity,
@@ -392,6 +398,25 @@ export class Access extends ClientSDK {
     options?: RequestOptions,
   ): Promise<ListChallengesResult> {
     return unwrapAsync(accessListChallenges(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * listDirectoryPeople access
+   *
+   * @remarks
+   * List every live directory profile in the active organization with its name, groups and whether it belongs to a member. Requires an authenticated session authorized for org:read; API keys cannot enumerate it. Attribute values are not returned.
+   */
+  async listDirectoryPeople(
+    request?: ListDirectoryPeopleRequest | undefined,
+    security?: ListDirectoryPeopleSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<ListDirectoryPeopleResult> {
+    return unwrapAsync(accessListDirectoryPeople(
       this,
       request,
       security,

@@ -30,6 +30,11 @@ type Service interface {
 	// List the organization's directory groups and attribute values, and the roles
 	// mapped to them.
 	ListDirectoryRoleMappings(context.Context, *ListDirectoryRoleMappingsPayload) (res *ListDirectoryRoleMappingsResult, err error)
+	// List every live directory profile in the active organization with its name,
+	// groups and whether it belongs to a member. Requires an authenticated session
+	// authorized for org:read; API keys cannot enumerate it. Attribute values are
+	// not returned.
+	ListDirectoryPeople(context.Context, *ListDirectoryPeoplePayload) (res *ListDirectoryPeopleResult, err error)
 	// Fetch the organization's directory groups from WorkOS and save any that are
 	// new or changed.
 	SyncDirectoryGroups(context.Context, *SyncDirectoryGroupsPayload) (res *SyncDirectoryGroupsResult, err error)
@@ -163,7 +168,7 @@ const ServiceName = "access"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [33]string{"listRoles", "getRole", "createRole", "updateRole", "deleteRole", "listDirectoryRoleMappings", "syncDirectoryGroups", "setDirectoryRoleMapping", "setDirectoryRoleMappings", "deleteDirectoryRoleMapping", "listScopes", "listMembers", "listGrants", "updateMemberRoles", "listShadowMCPInventory", "getShadowMCPInventoryServer", "updateShadowMCPInventoryServerName", "listShadowMCPInventoryUsers", "listShadowMCPInventoryServersForUser", "resolveShadowMCPInventoryRequest", "listAIDetections", "listEmployeeAIDetections", "listAIDetectionUsers", "setAIToolDecision", "listResourceAudience", "setResourceAudience", "listAudienceOptions", "explainResourceAccess", "requestAccess", "listChallenges", "listChallengeBuckets", "resolveChallenge", "listIdentityAccess"}
+var MethodNames = [34]string{"listRoles", "getRole", "createRole", "updateRole", "deleteRole", "listDirectoryRoleMappings", "listDirectoryPeople", "syncDirectoryGroups", "setDirectoryRoleMapping", "setDirectoryRoleMappings", "deleteDirectoryRoleMapping", "listScopes", "listMembers", "listGrants", "updateMemberRoles", "listShadowMCPInventory", "getShadowMCPInventoryServer", "updateShadowMCPInventoryServerName", "listShadowMCPInventoryUsers", "listShadowMCPInventoryServersForUser", "resolveShadowMCPInventoryRequest", "listAIDetections", "listEmployeeAIDetections", "listAIDetectionUsers", "setAIToolDecision", "listResourceAudience", "setResourceAudience", "listAudienceOptions", "explainResourceAccess", "requestAccess", "listChallenges", "listChallengeBuckets", "resolveChallenge", "listIdentityAccess"}
 
 // One AI detection target aggregated across an organization's device-agent
 // scan reports.
@@ -456,6 +461,47 @@ type DirectoryGroupOption struct {
 	MemberCount int64
 }
 
+type DirectoryPeopleStateCounts struct {
+	// Profiles in the member state.
+	Member int64
+	// Profiles in the account_not_member state.
+	AccountNotMember int64
+	// Profiles in the not_signed_in state.
+	NotSignedIn int64
+	// Profiles in the ambiguous_email state.
+	AmbiguousEmail int64
+}
+
+type DirectoryPerson struct {
+	// Directory profile ID.
+	ID string
+	// Email the directory reports for the profile. Empty when the directory
+	// reports none.
+	Email string
+	// First name the directory reports, when it reports one.
+	FirstName *string
+	// Last name the directory reports, when it reports one.
+	LastName *string
+	// How the profile relates to Speakeasy accounts. member: linked to, or the
+	// only email match of, a member of this organization. account_not_member: an
+	// account exists but is not a member here. not_signed_in: no matching account.
+	// ambiguous_email: the email matches more than one profile or account, so it
+	// is never matched.
+	State string
+	// The matched Speakeasy user ID. Present only for member and
+	// account_not_member.
+	UserID *string
+	// Live directory groups the profile belongs to.
+	Groups []*DirectoryPersonGroup
+}
+
+type DirectoryPersonGroup struct {
+	// Directory group ID.
+	ID string
+	// Directory group name.
+	Name string
+}
+
 // DirectoryRoleMapping is the result type of the access service
 // setDirectoryRoleMapping method.
 type DirectoryRoleMapping struct {
@@ -694,6 +740,27 @@ type ListChallengesResult struct {
 	Challenges []*AuthzChallenge
 	// Total number of matching challenges for pagination.
 	Total int
+}
+
+// ListDirectoryPeoplePayload is the payload type of the access service
+// listDirectoryPeople method.
+type ListDirectoryPeoplePayload struct {
+	// Maximum number of people to return.
+	Limit int
+	// Cursor for the next page of results.
+	Cursor       *string
+	SessionToken *string
+}
+
+// ListDirectoryPeopleResult is the result type of the access service
+// listDirectoryPeople method.
+type ListDirectoryPeopleResult struct {
+	// One page of directory profiles, ordered by profile ID.
+	People []*DirectoryPerson
+	// Profiles per state across the whole organization, not just this page.
+	Counts *DirectoryPeopleStateCounts
+	// Cursor for the next page. Absent on the last page.
+	NextCursor *string
 }
 
 // ListDirectoryRoleMappingsPayload is the payload type of the access service

@@ -165,10 +165,12 @@ SELECT @organization_id::text, @group_prefix::text || replace(lower(t), ' ', '-'
 FROM (SELECT DISTINCT unnest(@teams::text[]) AS t) g;
 
 -- name: RolesInsertDirectoryUser :exec
+-- user_id is NULL for directory people who have not signed in yet.
 INSERT INTO directory_users
-  (organization_id, user_id, workos_directory_user_id, email, attributes,
-   workos_created_at, workos_updated_at)
-VALUES (@organization_id, @user_id::text, @workos_directory_user_id, @email::text,
+  (organization_id, user_id, workos_directory_user_id, email, first_name,
+   last_name, attributes, workos_created_at, workos_updated_at)
+VALUES (@organization_id, sqlc.narg(user_id)::text, @workos_directory_user_id,
+        @email::text, sqlc.narg(first_name)::text, sqlc.narg(last_name)::text,
         jsonb_build_object(
           'division_name', @division_name::text,
           'department_name', @department_name::text,

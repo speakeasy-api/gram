@@ -120,7 +120,7 @@ func UsageCommands() []string {
 		"external receive-work-os-webhook",
 		"killswitches (list-capabilities|list-mcp-servers|list|get|create|edit|lift|preview-overlaps|batch-user-badges)",
 		"about openapi",
-		"access (list-roles|get-role|create-role|update-role|delete-role|list-directory-role-mappings|sync-directory-groups|set-directory-role-mapping|set-directory-role-mappings|delete-directory-role-mapping|list-scopes|list-members|list-grants|update-member-roles|list-shadow-mcp-inventory|get-shadow-mcp-inventory-server|update-shadow-mcp-inventory-server-name|list-shadow-mcp-inventory-users|list-shadow-mcp-inventory-servers-for-user|resolve-shadow-mcp-inventory-request|list-ai-detections|list-employee-ai-detections|list-ai-detection-users|set-ai-tool-decision|list-resource-audience|set-resource-audience|list-audience-options|explain-resource-access|request-access|list-challenges|list-challenge-buckets|resolve-challenge|list-identity-access)",
+		"access (list-roles|get-role|create-role|update-role|delete-role|list-directory-role-mappings|list-directory-people|sync-directory-groups|set-directory-role-mapping|set-directory-role-mappings|delete-directory-role-mapping|list-scopes|list-members|list-grants|update-member-roles|list-shadow-mcp-inventory|get-shadow-mcp-inventory-server|update-shadow-mcp-inventory-server-name|list-shadow-mcp-inventory-users|list-shadow-mcp-inventory-servers-for-user|resolve-shadow-mcp-inventory-request|list-ai-detections|list-employee-ai-detections|list-ai-detection-users|set-ai-tool-decision|list-resource-audience|set-resource-audience|list-audience-options|explain-resource-access|request-access|list-challenges|list-challenge-buckets|resolve-challenge|list-identity-access)",
 		"agent (get-plugins|list-synced-users|get-configuration|update-configuration|list-ai-scan-targets|upsert-ai-scan-target|delete-ai-scan-target|get-session-meta|report-session-moved|report-ai-scan|create-session-handoff)",
 		"agents (list-sessions|revoke-session|list|create|get|rename|list-delegable-grants|list-policy-grants|create-policy-grant|update-policy-grant|delete-policy-grant|transfer|reassign|suspend|resume|revoke|delete)",
 		"ai-integrations (get-anthropic-inference-config|upsert-anthropic-inference-config|delete-anthropic-inference-config|get-config|upsert-config|delete-config|list-schedules|set-schedule-enabled|retry-schedule)",
@@ -314,6 +314,11 @@ func ParseEndpoint(
 		accessListDirectoryRoleMappingsFlags            = flag.NewFlagSet("list-directory-role-mappings", flag.ExitOnError)
 		accessListDirectoryRoleMappingsApikeyTokenFlag  = accessListDirectoryRoleMappingsFlags.String("apikey-token", "", "")
 		accessListDirectoryRoleMappingsSessionTokenFlag = accessListDirectoryRoleMappingsFlags.String("session-token", "", "")
+
+		accessListDirectoryPeopleFlags            = flag.NewFlagSet("list-directory-people", flag.ExitOnError)
+		accessListDirectoryPeopleLimitFlag        = accessListDirectoryPeopleFlags.String("limit", "500", "")
+		accessListDirectoryPeopleCursorFlag       = accessListDirectoryPeopleFlags.String("cursor", "", "")
+		accessListDirectoryPeopleSessionTokenFlag = accessListDirectoryPeopleFlags.String("session-token", "", "")
 
 		accessSyncDirectoryGroupsFlags            = flag.NewFlagSet("sync-directory-groups", flag.ExitOnError)
 		accessSyncDirectoryGroupsApikeyTokenFlag  = accessSyncDirectoryGroupsFlags.String("apikey-token", "", "")
@@ -5148,6 +5153,7 @@ func ParseEndpoint(
 	accessUpdateRoleFlags.Usage = accessUpdateRoleUsage
 	accessDeleteRoleFlags.Usage = accessDeleteRoleUsage
 	accessListDirectoryRoleMappingsFlags.Usage = accessListDirectoryRoleMappingsUsage
+	accessListDirectoryPeopleFlags.Usage = accessListDirectoryPeopleUsage
 	accessSyncDirectoryGroupsFlags.Usage = accessSyncDirectoryGroupsUsage
 	accessSetDirectoryRoleMappingFlags.Usage = accessSetDirectoryRoleMappingUsage
 	accessSetDirectoryRoleMappingsFlags.Usage = accessSetDirectoryRoleMappingsUsage
@@ -6495,6 +6501,9 @@ func ParseEndpoint(
 
 			case "list-directory-role-mappings":
 				epf = accessListDirectoryRoleMappingsFlags
+
+			case "list-directory-people":
+				epf = accessListDirectoryPeopleFlags
 
 			case "sync-directory-groups":
 				epf = accessSyncDirectoryGroupsFlags
@@ -9590,6 +9599,9 @@ func ParseEndpoint(
 			case "list-directory-role-mappings":
 				endpoint = c.ListDirectoryRoleMappings()
 				data, err = accessc.BuildListDirectoryRoleMappingsPayload(*accessListDirectoryRoleMappingsApikeyTokenFlag, *accessListDirectoryRoleMappingsSessionTokenFlag)
+			case "list-directory-people":
+				endpoint = c.ListDirectoryPeople()
+				data, err = accessc.BuildListDirectoryPeoplePayload(*accessListDirectoryPeopleLimitFlag, *accessListDirectoryPeopleCursorFlag, *accessListDirectoryPeopleSessionTokenFlag)
 			case "sync-directory-groups":
 				endpoint = c.SyncDirectoryGroups()
 				data, err = accessc.BuildSyncDirectoryGroupsPayload(*accessSyncDirectoryGroupsApikeyTokenFlag, *accessSyncDirectoryGroupsSessionTokenFlag)
@@ -12903,6 +12915,7 @@ func accessUsage() {
 	fmt.Fprintln(os.Stderr, `    update-role: Update an existing custom role.`)
 	fmt.Fprintln(os.Stderr, `    delete-role: Delete a custom role (system roles cannot be deleted).`)
 	fmt.Fprintln(os.Stderr, `    list-directory-role-mappings: List the organization's directory groups and attribute values, and the roles mapped to them.`)
+	fmt.Fprintln(os.Stderr, `    list-directory-people: List every live directory profile in the active organization with its name, groups and whether it belongs to a member. Requires an authenticated session authorized for org:read; API keys cannot enumerate it. Attribute values are not returned.`)
 	fmt.Fprintln(os.Stderr, `    sync-directory-groups: Fetch the organization's directory groups from WorkOS and save any that are new or changed.`)
 	fmt.Fprintln(os.Stderr, `    set-directory-role-mapping: Deprecated compatibility endpoint for older dashboard clients. Use setDirectoryRoleMappings. Rejects replacement when the source already grants multiple roles.`)
 	fmt.Fprintln(os.Stderr, `    set-directory-role-mappings: Replace the full set of roles granted by a directory group or attribute value. An empty role list removes all mappings for the source.`)
@@ -13060,6 +13073,28 @@ func accessListDirectoryRoleMappingsUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access list-directory-role-mappings --apikey-token \"abc123\" --session-token \"abc123\"")
+}
+
+func accessListDirectoryPeopleUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] access list-directory-people", os.Args[0])
+	fmt.Fprint(os.Stderr, " -limit INT")
+	fmt.Fprint(os.Stderr, " -cursor STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List every live directory profile in the active organization with its name, groups and whether it belongs to a member. Requires an authenticated session authorized for org:read; API keys cannot enumerate it. Attribute values are not returned.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -limit INT: `)
+	fmt.Fprintln(os.Stderr, `    -cursor STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access list-directory-people --limit 2 --cursor \"abc123\" --session-token \"abc123\"")
 }
 
 func accessSyncDirectoryGroupsUsage() {

@@ -426,23 +426,26 @@ func (q *Queries) RolesInsertDirectoryGroups(ctx context.Context, arg RolesInser
 
 const rolesInsertDirectoryUser = `-- name: RolesInsertDirectoryUser :exec
 INSERT INTO directory_users
-  (organization_id, user_id, workos_directory_user_id, email, attributes,
-   workos_created_at, workos_updated_at)
-VALUES ($1, $2::text, $3, $4::text,
+  (organization_id, user_id, workos_directory_user_id, email, first_name,
+   last_name, attributes, workos_created_at, workos_updated_at)
+VALUES ($1, $2::text, $3,
+        $4::text, $5::text, $6::text,
         jsonb_build_object(
-          'division_name', $5::text,
-          'department_name', $6::text,
-          'job_title', $7::text,
-          'employee_type', $8::text,
-          'cost_center_name', $9::text),
+          'division_name', $7::text,
+          'department_name', $8::text,
+          'job_title', $9::text,
+          'employee_type', $10::text,
+          'cost_center_name', $11::text),
         now(), now())
 `
 
 type RolesInsertDirectoryUserParams struct {
 	OrganizationID        string
-	UserID                string
+	UserID                pgtype.Text
 	WorkosDirectoryUserID string
 	Email                 string
+	FirstName             pgtype.Text
+	LastName              pgtype.Text
 	DivisionName          string
 	DepartmentName        string
 	JobTitle              string
@@ -450,12 +453,15 @@ type RolesInsertDirectoryUserParams struct {
 	CostCenterName        string
 }
 
+// user_id is NULL for directory people who have not signed in yet.
 func (q *Queries) RolesInsertDirectoryUser(ctx context.Context, arg RolesInsertDirectoryUserParams) error {
 	_, err := q.db.Exec(ctx, rolesInsertDirectoryUser,
 		arg.OrganizationID,
 		arg.UserID,
 		arg.WorkosDirectoryUserID,
 		arg.Email,
+		arg.FirstName,
+		arg.LastName,
 		arg.DivisionName,
 		arg.DepartmentName,
 		arg.JobTitle,

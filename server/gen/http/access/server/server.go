@@ -25,6 +25,7 @@ type Server struct {
 	UpdateRole                           http.Handler
 	DeleteRole                           http.Handler
 	ListDirectoryRoleMappings            http.Handler
+	ListDirectoryPeople                  http.Handler
 	SyncDirectoryGroups                  http.Handler
 	SetDirectoryRoleMapping              http.Handler
 	SetDirectoryRoleMappings             http.Handler
@@ -87,6 +88,7 @@ func New(
 			{"UpdateRole", "PUT", "/rpc/access.updateRole"},
 			{"DeleteRole", "DELETE", "/rpc/access.deleteRole"},
 			{"ListDirectoryRoleMappings", "GET", "/rpc/access.listDirectoryRoleMappings"},
+			{"ListDirectoryPeople", "GET", "/rpc/access.listDirectoryPeople"},
 			{"SyncDirectoryGroups", "POST", "/rpc/access.syncDirectoryGroups"},
 			{"SetDirectoryRoleMapping", "POST", "/rpc/access.setDirectoryRoleMapping"},
 			{"SetDirectoryRoleMappings", "POST", "/rpc/access.setDirectoryRoleMappings"},
@@ -121,6 +123,7 @@ func New(
 		UpdateRole:                           NewUpdateRoleHandler(e.UpdateRole, mux, decoder, encoder, errhandler, formatter),
 		DeleteRole:                           NewDeleteRoleHandler(e.DeleteRole, mux, decoder, encoder, errhandler, formatter),
 		ListDirectoryRoleMappings:            NewListDirectoryRoleMappingsHandler(e.ListDirectoryRoleMappings, mux, decoder, encoder, errhandler, formatter),
+		ListDirectoryPeople:                  NewListDirectoryPeopleHandler(e.ListDirectoryPeople, mux, decoder, encoder, errhandler, formatter),
 		SyncDirectoryGroups:                  NewSyncDirectoryGroupsHandler(e.SyncDirectoryGroups, mux, decoder, encoder, errhandler, formatter),
 		SetDirectoryRoleMapping:              NewSetDirectoryRoleMappingHandler(e.SetDirectoryRoleMapping, mux, decoder, encoder, errhandler, formatter),
 		SetDirectoryRoleMappings:             NewSetDirectoryRoleMappingsHandler(e.SetDirectoryRoleMappings, mux, decoder, encoder, errhandler, formatter),
@@ -162,6 +165,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.UpdateRole = m(s.UpdateRole)
 	s.DeleteRole = m(s.DeleteRole)
 	s.ListDirectoryRoleMappings = m(s.ListDirectoryRoleMappings)
+	s.ListDirectoryPeople = m(s.ListDirectoryPeople)
 	s.SyncDirectoryGroups = m(s.SyncDirectoryGroups)
 	s.SetDirectoryRoleMapping = m(s.SetDirectoryRoleMapping)
 	s.SetDirectoryRoleMappings = m(s.SetDirectoryRoleMappings)
@@ -202,6 +206,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountUpdateRoleHandler(mux, h.UpdateRole)
 	MountDeleteRoleHandler(mux, h.DeleteRole)
 	MountListDirectoryRoleMappingsHandler(mux, h.ListDirectoryRoleMappings)
+	MountListDirectoryPeopleHandler(mux, h.ListDirectoryPeople)
 	MountSyncDirectoryGroupsHandler(mux, h.SyncDirectoryGroups)
 	MountSetDirectoryRoleMappingHandler(mux, h.SetDirectoryRoleMapping)
 	MountSetDirectoryRoleMappingsHandler(mux, h.SetDirectoryRoleMappings)
@@ -532,6 +537,59 @@ func NewListDirectoryRoleMappingsHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "listDirectoryRoleMappings")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "access")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountListDirectoryPeopleHandler configures the mux to serve the "access"
+// service "listDirectoryPeople" endpoint.
+func MountListDirectoryPeopleHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/access.listDirectoryPeople", f)
+}
+
+// NewListDirectoryPeopleHandler creates a HTTP handler which loads the HTTP
+// request and calls the "access" service "listDirectoryPeople" endpoint.
+func NewListDirectoryPeopleHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeListDirectoryPeopleRequest(mux, decoder)
+		encodeResponse = EncodeListDirectoryPeopleResponse(encoder)
+		encodeError    = EncodeListDirectoryPeopleError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "listDirectoryPeople")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "access")
 		payload, err := decodeRequest(r)
 		if err != nil {

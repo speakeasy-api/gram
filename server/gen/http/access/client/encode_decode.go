@@ -1427,6 +1427,243 @@ func DecodeListDirectoryRoleMappingsResponse(decoder func(*http.Response) goahtt
 	}
 }
 
+// BuildListDirectoryPeopleRequest instantiates a HTTP request object with
+// method and path set to call the "access" service "listDirectoryPeople"
+// endpoint
+func (c *Client) BuildListDirectoryPeopleRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ListDirectoryPeopleAccessPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("access", "listDirectoryPeople", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeListDirectoryPeopleRequest returns an encoder for requests sent to the
+// access listDirectoryPeople server.
+func EncodeListDirectoryPeopleRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*access.ListDirectoryPeoplePayload)
+		if !ok {
+			return goahttp.ErrInvalidType("access", "listDirectoryPeople", "*access.ListDirectoryPeoplePayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		values := req.URL.Query()
+		values.Add("limit", fmt.Sprintf("%v", p.Limit))
+		if p.Cursor != nil {
+			values.Add("cursor", *p.Cursor)
+		}
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeListDirectoryPeopleResponse returns a decoder for responses returned
+// by the access listDirectoryPeople endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeListDirectoryPeopleResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeListDirectoryPeopleResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ListDirectoryPeopleResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listDirectoryPeople", err)
+			}
+			err = ValidateListDirectoryPeopleResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listDirectoryPeople", err)
+			}
+			res := NewListDirectoryPeopleResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ListDirectoryPeopleUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listDirectoryPeople", err)
+			}
+			err = ValidateListDirectoryPeopleUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listDirectoryPeople", err)
+			}
+			return nil, NewListDirectoryPeopleUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ListDirectoryPeopleForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listDirectoryPeople", err)
+			}
+			err = ValidateListDirectoryPeopleForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listDirectoryPeople", err)
+			}
+			return nil, NewListDirectoryPeopleForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ListDirectoryPeopleBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listDirectoryPeople", err)
+			}
+			err = ValidateListDirectoryPeopleBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listDirectoryPeople", err)
+			}
+			return nil, NewListDirectoryPeopleBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ListDirectoryPeopleNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listDirectoryPeople", err)
+			}
+			err = ValidateListDirectoryPeopleNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listDirectoryPeople", err)
+			}
+			return nil, NewListDirectoryPeopleNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ListDirectoryPeopleConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listDirectoryPeople", err)
+			}
+			err = ValidateListDirectoryPeopleConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listDirectoryPeople", err)
+			}
+			return nil, NewListDirectoryPeopleConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ListDirectoryPeopleUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listDirectoryPeople", err)
+			}
+			err = ValidateListDirectoryPeopleUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listDirectoryPeople", err)
+			}
+			return nil, NewListDirectoryPeopleUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ListDirectoryPeopleInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listDirectoryPeople", err)
+			}
+			err = ValidateListDirectoryPeopleInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listDirectoryPeople", err)
+			}
+			return nil, NewListDirectoryPeopleInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ListDirectoryPeopleInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("access", "listDirectoryPeople", err)
+				}
+				err = ValidateListDirectoryPeopleInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("access", "listDirectoryPeople", err)
+				}
+				return nil, NewListDirectoryPeopleInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ListDirectoryPeopleUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("access", "listDirectoryPeople", err)
+				}
+				err = ValidateListDirectoryPeopleUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("access", "listDirectoryPeople", err)
+				}
+				return nil, NewListDirectoryPeopleUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("access", "listDirectoryPeople", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ListDirectoryPeopleGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listDirectoryPeople", err)
+			}
+			err = ValidateListDirectoryPeopleGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listDirectoryPeople", err)
+			}
+			return nil, NewListDirectoryPeopleGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("access", "listDirectoryPeople", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildSyncDirectoryGroupsRequest instantiates a HTTP request object with
 // method and path set to call the "access" service "syncDirectoryGroups"
 // endpoint
@@ -8035,6 +8272,56 @@ func unmarshalDirectoryRoleMappingResponseBodyToAccessDirectoryRoleMapping(v *Di
 		RoleUrn:            *v.RoleUrn,
 		CreatedAt:          *v.CreatedAt,
 		UpdatedAt:          *v.UpdatedAt,
+	}
+
+	return res
+}
+
+// unmarshalDirectoryPersonResponseBodyToAccessDirectoryPerson builds a value
+// of type *access.DirectoryPerson from a value of type
+// *DirectoryPersonResponseBody.
+func unmarshalDirectoryPersonResponseBodyToAccessDirectoryPerson(v *DirectoryPersonResponseBody) *access.DirectoryPerson {
+	res := &access.DirectoryPerson{
+		ID:        *v.ID,
+		Email:     *v.Email,
+		FirstName: v.FirstName,
+		LastName:  v.LastName,
+		State:     *v.State,
+		UserID:    v.UserID,
+	}
+	res.Groups = make([]*access.DirectoryPersonGroup, len(v.Groups))
+	for i, val := range v.Groups {
+		if val == nil {
+			res.Groups[i] = nil
+			continue
+		}
+		res.Groups[i] = unmarshalDirectoryPersonGroupResponseBodyToAccessDirectoryPersonGroup(val)
+	}
+
+	return res
+}
+
+// unmarshalDirectoryPersonGroupResponseBodyToAccessDirectoryPersonGroup builds
+// a value of type *access.DirectoryPersonGroup from a value of type
+// *DirectoryPersonGroupResponseBody.
+func unmarshalDirectoryPersonGroupResponseBodyToAccessDirectoryPersonGroup(v *DirectoryPersonGroupResponseBody) *access.DirectoryPersonGroup {
+	res := &access.DirectoryPersonGroup{
+		ID:   *v.ID,
+		Name: *v.Name,
+	}
+
+	return res
+}
+
+// unmarshalDirectoryPeopleStateCountsResponseBodyToAccessDirectoryPeopleStateCounts
+// builds a value of type *access.DirectoryPeopleStateCounts from a value of
+// type *DirectoryPeopleStateCountsResponseBody.
+func unmarshalDirectoryPeopleStateCountsResponseBodyToAccessDirectoryPeopleStateCounts(v *DirectoryPeopleStateCountsResponseBody) *access.DirectoryPeopleStateCounts {
+	res := &access.DirectoryPeopleStateCounts{
+		Member:           *v.Member,
+		AccountNotMember: *v.AccountNotMember,
+		NotSignedIn:      *v.NotSignedIn,
+		AmbiguousEmail:   *v.AmbiguousEmail,
 	}
 
 	return res

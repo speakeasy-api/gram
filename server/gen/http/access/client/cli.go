@@ -274,6 +274,50 @@ func BuildListDirectoryRoleMappingsPayload(accessListDirectoryRoleMappingsApikey
 	return v, nil
 }
 
+// BuildListDirectoryPeoplePayload builds the payload for the access
+// listDirectoryPeople endpoint from CLI flags.
+func BuildListDirectoryPeoplePayload(accessListDirectoryPeopleLimit string, accessListDirectoryPeopleCursor string, accessListDirectoryPeopleSessionToken string) (*access.ListDirectoryPeoplePayload, error) {
+	var err error
+	var limit int
+	{
+		if accessListDirectoryPeopleLimit != "" {
+			var v int64
+			v, err = strconv.ParseInt(accessListDirectoryPeopleLimit, 10, strconv.IntSize)
+			limit = int(v)
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for limit, must be INT")
+			}
+			if limit < 1 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 1, true))
+			}
+			if limit > 1000 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 1000, false))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var cursor *string
+	{
+		if accessListDirectoryPeopleCursor != "" {
+			cursor = &accessListDirectoryPeopleCursor
+		}
+	}
+	var sessionToken *string
+	{
+		if accessListDirectoryPeopleSessionToken != "" {
+			sessionToken = &accessListDirectoryPeopleSessionToken
+		}
+	}
+	v := &access.ListDirectoryPeoplePayload{}
+	v.Limit = limit
+	v.Cursor = cursor
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
 // BuildSyncDirectoryGroupsPayload builds the payload for the access
 // syncDirectoryGroups endpoint from CLI flags.
 func BuildSyncDirectoryGroupsPayload(accessSyncDirectoryGroupsApikeyToken string, accessSyncDirectoryGroupsSessionToken string) (*access.SyncDirectoryGroupsPayload, error) {

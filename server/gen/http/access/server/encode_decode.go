@@ -1307,6 +1307,228 @@ func EncodeListDirectoryRoleMappingsError(encoder func(context.Context, http.Res
 	}
 }
 
+// EncodeListDirectoryPeopleResponse returns an encoder for responses returned
+// by the access listDirectoryPeople endpoint.
+func EncodeListDirectoryPeopleResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*access.ListDirectoryPeopleResult)
+		enc := encoder(ctx, w)
+		body := NewListDirectoryPeopleResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeListDirectoryPeopleRequest returns a decoder for requests sent to the
+// access listDirectoryPeople endpoint.
+func DecodeListDirectoryPeopleRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*access.ListDirectoryPeoplePayload, error) {
+	return func(r *http.Request) (*access.ListDirectoryPeoplePayload, error) {
+		var payload *access.ListDirectoryPeoplePayload
+		var (
+			limit        int
+			cursor       *string
+			sessionToken *string
+			err          error
+		)
+		qp := r.URL.Query()
+		{
+			limitRaw := qp.Get("limit")
+			if limitRaw == "" {
+				limit = 500
+			} else {
+				v, err2 := strconv.ParseInt(limitRaw, 10, strconv.IntSize)
+				if err2 != nil {
+					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("limit", limitRaw, "integer"))
+				}
+				limit = int(v)
+			}
+		}
+		if limit < 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 1, true))
+		}
+		if limit > 1000 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 1000, false))
+		}
+		cursorRaw := qp.Get("cursor")
+		if cursorRaw != "" {
+			cursor = &cursorRaw
+		}
+		sessionTokenRaw := r.Header.Get("Gram-Session")
+		if sessionTokenRaw != "" {
+			sessionToken = &sessionTokenRaw
+		}
+		if err != nil {
+			return payload, err
+		}
+		payload = NewListDirectoryPeoplePayload(limit, cursor, sessionToken)
+		if payload.SessionToken != nil {
+			if strings.Contains(*payload.SessionToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
+				payload.SessionToken = &cred
+			}
+		}
+
+		return payload, nil
+	}
+}
+
+// EncodeListDirectoryPeopleError returns an encoder for errors returned by the
+// listDirectoryPeople access endpoint.
+func EncodeListDirectoryPeopleError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unauthorized":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListDirectoryPeopleUnauthorizedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListDirectoryPeopleForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "bad_request":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListDirectoryPeopleBadRequestResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListDirectoryPeopleNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
+			return enc.Encode(body)
+		case "conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListDirectoryPeopleConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "unsupported_media":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListDirectoryPeopleUnsupportedMediaResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return enc.Encode(body)
+		case "invalid":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListDirectoryPeopleInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "invariant_violation":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListDirectoryPeopleInvariantViolationResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "unexpected":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListDirectoryPeopleUnexpectedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "gateway_error":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListDirectoryPeopleGatewayErrorResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadGateway)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
 // EncodeSyncDirectoryGroupsResponse returns an encoder for responses returned
 // by the access syncDirectoryGroups endpoint.
 func EncodeSyncDirectoryGroupsResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
@@ -7463,6 +7685,60 @@ func marshalAccessDirectoryRoleMappingToDirectoryRoleMappingResponseBody(v *acce
 		RoleUrn:            v.RoleUrn,
 		CreatedAt:          v.CreatedAt,
 		UpdatedAt:          v.UpdatedAt,
+	}
+
+	return res
+}
+
+// marshalAccessDirectoryPersonToDirectoryPersonResponseBody builds a value of
+// type *DirectoryPersonResponseBody from a value of type
+// *access.DirectoryPerson.
+func marshalAccessDirectoryPersonToDirectoryPersonResponseBody(v *access.DirectoryPerson) *DirectoryPersonResponseBody {
+	res := &DirectoryPersonResponseBody{
+		ID:        v.ID,
+		Email:     v.Email,
+		FirstName: v.FirstName,
+		LastName:  v.LastName,
+		State:     v.State,
+		UserID:    v.UserID,
+	}
+	if v.Groups != nil {
+		res.Groups = make([]*DirectoryPersonGroupResponseBody, len(v.Groups))
+		for i, val := range v.Groups {
+			if val == nil {
+				res.Groups[i] = nil
+				continue
+			}
+			res.Groups[i] = marshalAccessDirectoryPersonGroupToDirectoryPersonGroupResponseBody(val)
+		}
+	} else {
+		res.Groups = []*DirectoryPersonGroupResponseBody{}
+	}
+
+	return res
+}
+
+// marshalAccessDirectoryPersonGroupToDirectoryPersonGroupResponseBody builds a
+// value of type *DirectoryPersonGroupResponseBody from a value of type
+// *access.DirectoryPersonGroup.
+func marshalAccessDirectoryPersonGroupToDirectoryPersonGroupResponseBody(v *access.DirectoryPersonGroup) *DirectoryPersonGroupResponseBody {
+	res := &DirectoryPersonGroupResponseBody{
+		ID:   v.ID,
+		Name: v.Name,
+	}
+
+	return res
+}
+
+// marshalAccessDirectoryPeopleStateCountsToDirectoryPeopleStateCountsResponseBody
+// builds a value of type *DirectoryPeopleStateCountsResponseBody from a value
+// of type *access.DirectoryPeopleStateCounts.
+func marshalAccessDirectoryPeopleStateCountsToDirectoryPeopleStateCountsResponseBody(v *access.DirectoryPeopleStateCounts) *DirectoryPeopleStateCountsResponseBody {
+	res := &DirectoryPeopleStateCountsResponseBody{
+		Member:           v.Member,
+		AccountNotMember: v.AccountNotMember,
+		NotSignedIn:      v.NotSignedIn,
+		AmbiguousEmail:   v.AmbiguousEmail,
 	}
 
 	return res
