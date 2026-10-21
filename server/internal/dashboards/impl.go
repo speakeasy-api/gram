@@ -161,11 +161,58 @@ func (s *Service) ListDashboards(ctx context.Context, _ *gen.ListDashboardsPaylo
 		byDashboard[placement.DashboardID] = append(byDashboard[placement.DashboardID], placement)
 	}
 
-	result := &gen.ListDashboardsResult{Dashboards: make([]*gen.Dashboard, 0, len(rows)), BuiltIn: builtInViews()}
+	builtIn := make([]*gen.BuiltInDashboard, 0, len(builtIns))
+	for _, page := range builtIns {
+		readable, err := s.builtInReadable(ctx, authCtx, page)
+		if err != nil {
+			return nil, err
+		}
+		if readable {
+			builtIn = append(builtIn, page.view())
+		}
+	}
+
+	result := &gen.ListDashboardsResult{Dashboards: make([]*gen.Dashboard, 0, len(rows)), BuiltIn: builtIn}
 	for _, row := range rows {
 		result.Dashboards = append(result.Dashboards, mv.BuildDashboardView(row, byDashboard[row.ID]))
 	}
 	return result, nil
+}
+
+// builtInReadable says whether the caller may read every card of a built-in
+// dashboard. One they may not reads as one that does not exist, as on the
+// list.
+func (s *Service) builtInReadable(ctx context.Context, authCtx *contextvalues.AuthContext, page builtIn) (bool, error) {
+	checks := page.accessChecks(s.catalog, authCtx.ActiveOrganizationID)
+	if len(checks) == 0 {
+		return true, nil
+	}
+	allowed, err := s.authz.Evaluate(ctx, checks...)
+	if err != nil {
+		return false, oops.E(oops.CodeUnexpected, err, "check built-in dashboard access").LogError(ctx, s.logger)
+	}
+	return allowed, nil
+}
+
+// ReadBuiltInDashboard returns the built-in dashboard with this slug, if the
+// caller may read the project and every card of it.
+func (s *Service) ReadBuiltInDashboard(ctx context.Context, slug string) (*gen.BuiltInDashboard, error) {
+	authCtx, err := s.authorize(ctx, authz.ScopeProjectRead)
+	if err != nil {
+		return nil, err
+	}
+	page, ok := builtInBySlug(slug)
+	if !ok {
+		return nil, oops.E(oops.CodeNotFound, nil, "built-in dashboard not found")
+	}
+	readable, err := s.builtInReadable(ctx, authCtx, page)
+	if err != nil {
+		return nil, err
+	}
+	if !readable {
+		return nil, oops.E(oops.CodeNotFound, nil, "built-in dashboard not found")
+	}
+	return page.view(), nil
 }
 
 // GetDashboard returns one dashboard with its cards and saved filters.
@@ -568,6 +615,13 @@ func (s *Service) DuplicateBuiltInDashboardInTx(ctx context.Context, dbtx pgx.Tx
 	}
 	page, ok := builtInBySlug(slug)
 	if !ok {
+		return nil, oops.E(oops.CodeNotFound, nil, "built-in dashboard not found")
+	}
+	readable, err := s.builtInReadable(ctx, authCtx, page)
+	if err != nil {
+		return nil, err
+	}
+	if !readable {
 		return nil, oops.E(oops.CodeNotFound, nil, "built-in dashboard not found")
 	}
 

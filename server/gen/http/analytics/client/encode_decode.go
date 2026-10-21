@@ -858,6 +858,12 @@ func unmarshalAnalyticsDatasetResponseBodyToAnalyticsAnalyticsDataset(v *Analyti
 		Grain:       *v.Grain,
 		Description: *v.Description,
 	}
+	if v.AggregatesOnly != nil {
+		res.AggregatesOnly = *v.AggregatesOnly
+	}
+	if v.AggregatesOnly == nil {
+		res.AggregatesOnly = false
+	}
 	res.Fields = make([]*analytics.AnalyticsField, len(v.Fields))
 	for i, val := range v.Fields {
 		if val == nil {

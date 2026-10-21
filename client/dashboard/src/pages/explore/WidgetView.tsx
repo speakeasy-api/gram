@@ -119,6 +119,9 @@ export function WidgetView({
     );
   } else if (widget.invalidReason) {
     body = <WidgetBroken reason={widget.invalidReason} />;
+  } else if (describe.data?.restrictedDatasets?.includes(widget.dataset)) {
+    // The widget works; this viewer may not read what it asks.
+    body = <WidgetRestricted />;
   } else if (datasets === undefined || paged === null) {
     if (describe.isError) {
       body = <WidgetError text="The catalog did not load." />;
@@ -352,6 +355,15 @@ function WidgetNumber({
 
 function WidgetBroken({ reason }: { reason: string }): JSX.Element {
   return <WidgetError text={`This widget no longer works: ${reason}.`} />;
+}
+
+function WidgetRestricted(): JSX.Element {
+  return (
+    <p className="text-muted-foreground flex items-start gap-2 text-sm">
+      <Icon name="lock" className="mt-0.5 size-4 shrink-0" />
+      <span>Only org admins can see this.</span>
+    </p>
+  );
 }
 
 function WidgetError({ text }: { text: string }): JSX.Element {

@@ -265,7 +265,13 @@ function Sentence({
                 ),
               )
             }
-            onRemove={() => patch(withMeasures(removeAt(spec.measures, index)))}
+            onRemove={
+              // A dataset that answers aggregates only has no rows to fall
+              // back to, so its last measure stays.
+              dataset?.aggregatesOnly && spec.measures.length === 1
+                ? undefined
+                : () => patch(withMeasures(removeAt(spec.measures, index)))
+            }
           />
         ))}
         {spec.measures.length === 0 ? (
@@ -412,10 +418,11 @@ function MeasureCells({
   measure: MeasureDraft;
   onOp: (op: MeasureOp) => void;
   onField: (field: string) => void;
-  onRemove: () => void;
+  /** Absent when the measure cannot be removed. */
+  onRemove: (() => void) | undefined;
 }): JSX.Element {
   const targets = fieldsForOp(dataset, measure.op);
-  const remove = (
+  const remove = onRemove ? (
     <button
       type="button"
       aria-label="Remove measure"
@@ -424,7 +431,7 @@ function MeasureCells({
     >
       <XIcon className="size-3" />
     </button>
-  );
+  ) : null;
   return (
     <>
       <Select value={measure.op} onValueChange={(op) => onOp(op as MeasureOp)}>
@@ -446,7 +453,7 @@ function MeasureCells({
       {measure.op === "count" ? (
         <Cell tone="measure">
           all rows
-          <span className="ml-1.5 flex">{remove}</span>
+          {remove ? <span className="ml-1.5 flex">{remove}</span> : null}
         </Cell>
       ) : (
         <span className={cn("flex items-stretch", TONES.measure)}>

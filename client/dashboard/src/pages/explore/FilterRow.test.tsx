@@ -37,6 +37,7 @@ const dataset: AnalyticsDataset = {
   name: "tool_calls",
   kind: "event",
   grain: "tool call",
+  aggregatesOnly: false,
   description: "One row per tool call.",
   fields: [
     {

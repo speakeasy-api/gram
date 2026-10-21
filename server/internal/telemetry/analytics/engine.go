@@ -10,6 +10,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	hooksRepo "github.com/speakeasy-api/gram/server/internal/hooks/repo"
+	"github.com/speakeasy-api/gram/server/internal/risk"
+	riskRepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 )
 
 // Engine is the query path without its transport, shared by the analytics
@@ -25,6 +27,8 @@ type Engine struct {
 func NewEngine(db *pgxpool.Pool, ch Querier) (*Engine, error) {
 	catalog, err := Default.WithLoaders(map[string]LookupLoader{
 		MCPServerDisplayNamesLookup: mcpServerDisplayNames(hooksRepo.New(db)),
+		RiskPolicyNamesLookup:       riskPolicyLabels(riskRepo.New(db), riskPolicyName),
+		RiskPolicySeveritiesLookup:  riskPolicyLabels(riskRepo.New(db), riskPolicySeverity),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("bind catalog lookups: %w", err)
@@ -101,6 +105,49 @@ func mcpServerDisplayNames(hooks *hooksRepo.Queries) LookupLoader {
 		}
 		return names, nil
 	}
+}
+
+// riskPolicyLabels loads the project's risk policies, deleted ones included,
+// and maps each id to the label label gives it; an empty label leaves the
+// policy out, so its findings read as the field's fallback.
+func riskPolicyLabels(policies *riskRepo.Queries, label func(riskRepo.ListRiskPolicyAnalyticsLabelsRow) string) LookupLoader {
+	return func(ctx context.Context, tenant Tenant) (map[string]string, error) {
+		projectID, err := uuid.Parse(tenant.ProjectID)
+		if err != nil {
+			return nil, fmt.Errorf("parse project id: %w", err)
+		}
+		rows, err := policies.ListRiskPolicyAnalyticsLabels(ctx, riskRepo.ListRiskPolicyAnalyticsLabelsParams{
+			ProjectID:      projectID,
+			OrganizationID: tenant.OrganizationID,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("list risk policy labels: %w", err)
+		}
+		labels := make(map[string]string, len(rows))
+		for _, row := range rows {
+			if value := label(row); value != "" {
+				labels[row.ID.String()] = value
+			}
+		}
+		return labels, nil
+	}
+}
+
+func riskPolicyName(row riskRepo.ListRiskPolicyAnalyticsLabelsRow) string {
+	if row.Deleted {
+		return row.Name + " (deleted)"
+	}
+	return row.Name
+}
+
+// riskPolicySeverity is a live, scored policy's severity band. A deleted
+// policy contributes no score, as on the Watchdog page, so its findings take
+// their category's band.
+func riskPolicySeverity(row riskRepo.ListRiskPolicyAnalyticsLabelsRow) string {
+	if row.Deleted || row.Score <= 0 {
+		return ""
+	}
+	return risk.FindingSeverity(row.Score, "")
 }
 
 // UnixNano is undefined outside the years 1678 to 2262, so a bound is checked

@@ -2,6 +2,8 @@ package analytics
 
 import (
 	"github.com/Masterminds/squirrel"
+
+	"github.com/speakeasy-api/gram/server/internal/risk/chrepo"
 )
 
 // sq is the squirrel builder pre-configured for ClickHouse (? placeholders).
@@ -73,6 +75,9 @@ func (s Source) Observations(qc QueryContext) squirrel.SelectBuilder {
 // engine reads a table the way its ClickHouse engine family merges it.
 type engine interface {
 	rows(qc QueryContext, s Source) squirrel.SelectBuilder
+	// planSuffix names how a query is answered in its plan name, a stable
+	// diagnostic identifier rather than a table a client could depend on.
+	planSuffix() string
 }
 
 // mergeTree rows are facts as appended. Its fold must be idempotent, so a
@@ -84,10 +89,45 @@ type mergeTree struct{ table, time string }
 // up, so keys are picked by start and every row of those keys is merged.
 type aggregatingMergeTree struct{ table, start string }
 
+// latestCopy rows are an event log of copies per key, where a later copy
+// records a change of state, so each key reads as its winning copy under
+// order. shared are predicates every copy of a key agrees on, which may prune
+// the scan before the dedup; Source.Where applies to the winning copy, since
+// it can test state a later copy changed.
+type latestCopy struct {
+	table, time, order string
+	shared             []squirrel.Sqlizer
+}
+
 var (
 	agentEvents = mergeTree{table: "agent_events", time: "occurred_at_unix_nano"}
 	toolCalls   = aggregatingMergeTree{table: "tool_calls", start: "started_at_unix_nano"}
+	// riskFindings is the risk scanners' findings log, read the way every
+	// risk surface reads it: the winning copy per finding, with the shadow
+	// engine's comparison rows set aside.
+	riskFindings = latestCopy{
+		table:  "risk_findings",
+		time:   "created_at",
+		order:  chrepo.LatestCopyOrderSQL,
+		shared: []squirrel.Sqlizer{squirrel.Expr(chrepo.NotShadowCond)},
+	}
 )
+
+// The plan names of the agent_events datasets predate their move onto the
+// tool_calls table and stay as they were, being stable identifiers.
+func (mergeTree) planSuffix() string            { return "agent_events" }
+func (aggregatingMergeTree) planSuffix() string { return "agent_events" }
+func (t latestCopy) planSuffix() string         { return t.table }
+
+func (t latestCopy) rows(qc QueryContext, s Source) squirrel.SelectBuilder {
+	copies := sq.Select("*", "ROW_NUMBER() OVER (PARTITION BY "+s.Key+" ORDER BY "+t.order+") AS copy_rank").
+		From(t.table).
+		Where(tenant(qc)).
+		Where(t.time+" >= fromUnixTimestamp64Nano(toInt64(?), 'UTC')", qc.Window.FromUnixNano).
+		Where(t.time+" < fromUnixTimestamp64Nano(toInt64(?), 'UTC')", qc.Window.ToUnixNano)
+	copies = where(copies, t.shared)
+	return where(sq.Select(s.Columns...).FromSelect(copies, "copies").Where("copy_rank = 1"), s.Where)
+}
 
 func (t mergeTree) scan(qc QueryContext) squirrel.SelectBuilder {
 	return sq.Select("*").
@@ -166,4 +206,32 @@ var skillsSource = Source{
 	Key:     toolCallsSource.Key,
 	Columns: toolCallsSource.Columns,
 	Having:  "skill_name != ''",
+}
+
+// riskFindingsSource is one row per live finding: not suppressed, not marked
+// a false positive and not a could-not-analyze sentinel. It reads no matched
+// value, redacted or not, and no chat or message id, so nothing a dataset
+// declares over it can name what was found or where.
+var riskFindingsSource = Source{
+	Table: riskFindings,
+	Where: []squirrel.Sqlizer{
+		squirrel.Expr(chrepo.LiveStateCond),
+		squirrel.Expr(chrepo.NotDeadLetterCond),
+	},
+	Key: "id",
+	Columns: []string{
+		"organization_id",
+		"project_id",
+		"id",
+		"toUnixTimestamp64Nano(created_at) AS detected_at",
+		"category",
+		"rule_id",
+		"source",
+		"risk_policy_id",
+		"chat_source",
+		"team",
+		"if(user_email != '', user_email, external_user_id) AS user_label",
+		"toString(enforcement_outcome) AS enforcement_outcome",
+	},
+	Having: "",
 }

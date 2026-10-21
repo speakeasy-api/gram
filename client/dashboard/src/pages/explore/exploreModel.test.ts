@@ -24,6 +24,7 @@ import {
   parseLimit,
   queryBodyFromSpec,
   specForDataset,
+  specProblem,
   textCell,
   windowRange,
   type ExploreSpec,
@@ -33,6 +34,7 @@ const sessions: AnalyticsDataset = {
   name: "sessions",
   kind: "event",
   grain: "session",
+  aggregatesOnly: false,
   description: "One row per agent session.",
   fields: [
     {
@@ -72,6 +74,7 @@ const usage: AnalyticsDataset = {
   name: "usage",
   kind: "metric",
   grain: "reading",
+  aggregatesOnly: false,
   description: "One row per metric reading.",
   fields: [
     {
@@ -396,5 +399,27 @@ describe("longestWindow", () => {
   it("is undefined when nothing is a window", () => {
     expect(longestWindow([])).toBeUndefined();
     expect(longestWindow([undefined, "2h"])).toBeUndefined();
+  });
+});
+
+describe("a dataset that answers aggregates only", () => {
+  const findings: AnalyticsDataset = {
+    ...sessions,
+    name: "findings",
+    aggregatesOnly: true,
+  };
+
+  it("opens on a count, never on rows", () => {
+    expect(specForDataset(findings).measures).toEqual([
+      { op: "count", field: "" },
+    ]);
+  });
+
+  it("names a question with nothing measured as one it cannot answer", () => {
+    const spec = { ...specForDataset(findings), measures: [] };
+    expect(specProblem([findings], spec)).toBe(
+      "findings answers counts and other aggregates, never its rows",
+    );
+    expect(specProblem([sessions], { ...spec, dataset: "sessions" })).toBe("");
   });
 });

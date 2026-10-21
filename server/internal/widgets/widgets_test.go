@@ -718,3 +718,30 @@ func TestDeleteWidgetWaitsForALayoutHoldingTheWidget(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, left)
 }
+
+// TestRiskFindingsWidgetsAreForOrgAdmins: a widget over risk_findings is
+// saved by an org admin alone, since nobody else could see it answer.
+func TestRiskFindingsWidgetsAreForOrgAdmins(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+
+	riskQuery := map[string]any{
+		"window":     "7d",
+		"grain":      "none",
+		"dimensions": []any{"category"},
+		"measures":   []any{map[string]any{"op": "count"}},
+	}
+	payload := createPayload("Findings by category", riskQuery, chart(widgets.ChartRanked))
+	payload.Dataset = "risk_findings"
+
+	memberCtx := asMember(t, ctx, ti, "user_member_"+uuid.NewString())
+	_, err := ti.service.CreateWidget(memberCtx, payload)
+	requireOopsCode(t, err, oops.CodeForbidden)
+
+	created, err := ti.service.CreateWidget(ctx, payload)
+	require.NoError(t, err)
+	require.Equal(t, "risk_findings", created.Dataset)
+
+	_, err = ti.service.DuplicateWidget(memberCtx, &gen.DuplicateWidgetPayload{ID: created.ID, SessionToken: nil, ProjectSlugInput: nil})
+	requireOopsCode(t, err, oops.CodeForbidden)
+}

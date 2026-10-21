@@ -266,6 +266,11 @@ func (s *Service) DuplicateInTx(ctx context.Context, tx pgx.Tx, caller Caller, i
 	if err != nil {
 		return Snapshot{}, err
 	}
+	if ds, ok := s.catalog.Dataset(source.Dataset); ok {
+		if err := s.requireDataset(ctx, ds); err != nil {
+			return Snapshot{}, err
+		}
+	}
 	reason, err := s.problem(ctx, source.Dataset, source.Query, source.Visualization)
 	if err != nil {
 		return Snapshot{}, err

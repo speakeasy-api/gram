@@ -31,7 +31,7 @@ const (
 
 // Values of risk_findings.event_kind: what kind of copy a row is. Read-time
 // dedup resolves an id to one row by ranking state-change copies above finding
-// copies (latestCopyOrderSQL), then latest inserted_at within a rank — so an
+// copies (LatestCopyOrderSQL), then latest inserted_at within a rank — so an
 // at-least-once redelivery of the original scanner row can never clobber a
 // later dismissal. The empty string is a legacy row written before the column
 // existed and ranks as a finding copy.
@@ -47,16 +47,16 @@ const (
 )
 
 // stateRankSQL ranks explicit state-change copies of an id above its finding
-// copies when resolving the id to one row. Used inside latestCopyOrderSQL and
+// copies when resolving the id to one row. Used inside LatestCopyOrderSQL and
 // the window-function variant in overview/signals/retro queries.
 const stateRankSQL = "(event_kind IN ('" + EventKindSuppression + "', '" + EventKindUnsuppression + "'))"
 
-// latestCopyOrderSQL is the shared per-id resolution order: state-change
+// LatestCopyOrderSQL is the shared per-id resolution order: state-change
 // copies first, then the most recently inserted. Every dedup site (LIMIT 1 BY
 // id and ROW_NUMBER() OVER alike) must use this order — a site sorting on
 // inserted_at alone would let a redelivered scanner copy clobber a later
 // suppression or unsuppression copy.
-const latestCopyOrderSQL = stateRankSQL + " DESC, inserted_at DESC"
+const LatestCopyOrderSQL = stateRankSQL + " DESC, inserted_at DESC"
 
 // RiskFindingRow is a single row destined for the risk_findings table. The raw
 // matched value is never carried here: only its length, a redacted display

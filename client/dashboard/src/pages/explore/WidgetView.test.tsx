@@ -15,6 +15,8 @@ import {
 
 const testState = vi.hoisted(() => ({
   datasets: undefined as unknown[] | undefined,
+  /** Datasets describe says this viewer cannot read. */
+  restricted: [] as string[],
   describeError: false,
   /** Every body handed to the query hook; null is "nothing to run". */
   bodies: [] as (AnalyticsQueryPayload | null)[],
@@ -45,7 +47,10 @@ vi.mock("@gram/client/react-query/analyticsDescribe.js", () => ({
     data:
       testState.datasets === undefined
         ? undefined
-        : { datasets: testState.datasets },
+        : {
+            datasets: testState.datasets,
+            restrictedDatasets: testState.restricted,
+          },
   }),
 }));
 vi.mock("./useRunQuery", () => ({
@@ -69,6 +74,7 @@ const sessions: AnalyticsDataset = {
   name: "sessions",
   kind: "event",
   grain: "session",
+  aggregatesOnly: false,
   description: "One row per agent session.",
   fields: [
     {
@@ -127,6 +133,7 @@ function explored(): { widgetId: string | null; spec: ExploreSpec | null } {
 describe("WidgetView", () => {
   beforeEach(() => {
     testState.datasets = [sessions];
+    testState.restricted = [];
     testState.describeError = false;
     testState.bodies = [];
     testState.rows = undefined;
@@ -208,6 +215,19 @@ describe("WidgetView", () => {
     );
     expect(testState.bodies).toEqual([]);
     expect(screen.queryByRole("link")).toBeNull();
+  });
+
+  it("says a widget over a dataset this viewer cannot read is for org admins, and runs nothing", () => {
+    // Describe leaves the dataset out for this viewer and names it instead.
+    testState.datasets = [];
+    testState.restricted = ["sessions"];
+    renderView(widget());
+    expect(screen.getByText("Only org admins can see this.")).toBeTruthy();
+    expect(
+      screen.queryByRole("alert"),
+      "the widget works; it is not broken",
+    ).toBeNull();
+    expect(testState.bodies).toEqual([]);
   });
 
   it("says why when the catalog no longer has what it asks, and runs nothing", () => {

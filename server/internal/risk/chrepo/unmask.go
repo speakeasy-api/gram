@@ -98,7 +98,7 @@ var riskFindingRevealLatestColumns = append(slices.Clone(riskFindingRevealColumn
 	"dead_letter_reason",
 	"excluded_at",
 	"false_positive_at",
-	"ROW_NUMBER() OVER (PARTITION BY id ORDER BY "+latestCopyOrderSQL+") AS rn",
+	"ROW_NUMBER() OVER (PARTITION BY id ORDER BY "+LatestCopyOrderSQL+") AS rn",
 )
 
 // liveRiskFindingRevealQuery ranks each id's newest state before visibility gates.
@@ -108,7 +108,7 @@ func liveRiskFindingRevealQuery(organizationID, projectID, chatID string, ids []
 		From("risk_findings").
 		Where("organization_id = ?", organizationID).
 		Where("project_id = ?", projectID).
-		Where(notShadowCond)
+		Where(NotShadowCond)
 	if chatID != "" {
 		inner = inner.Where("chat_id = ?", chatID)
 	}

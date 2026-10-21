@@ -17,7 +17,7 @@ func TestDefaultCatalog(t *testing.T) {
 	for _, ds := range Default.Datasets() {
 		names = append(names, ds.Name)
 	}
-	require.Equal(t, []string{"tool_calls", "skills"}, names)
+	require.Equal(t, []string{"tool_calls", "skills", "risk_findings"}, names)
 
 	toolCalls, ok := Default.Dataset("tool_calls")
 	require.True(t, ok)
@@ -76,6 +76,7 @@ func TestNewCatalogRejectsHalfDeclaredDatasets(t *testing.T) {
 			Grain:       "one row per thing",
 			Description: "things",
 			TimeExpr:    "started_at",
+			Access:      AccessProject,
 			Fields: []Field{
 				{Name: "thing", Type: TypeString, Role: RoleDimension, Default: false, Unit: "", Operators: equalsIn, Aggregations: nil, Expr: "thing_id", Description: ""},
 			},
@@ -108,6 +109,8 @@ func TestNewCatalogRejectsHalfDeclaredDatasets(t *testing.T) {
 		{name: "it rejects a dataset with no grain", mutate: func(d *Dataset) { d.Grain = "" }, want: "no grain"},
 		{name: "it rejects an empty dataset name", mutate: func(d *Dataset) { d.Name = "" }, want: "empty name"},
 		{name: "it rejects a dataset with no time expression", mutate: func(d *Dataset) { d.TimeExpr = "" }, want: "no time expression"},
+		{name: "it rejects a dataset that does not say who may read it", mutate: func(d *Dataset) { d.Access = "" }, want: "unknown access"},
+		{name: "it rejects a lookup fallback with no lookup", mutate: func(d *Dataset) { d.Fields[0].LookupFallback = "''" }, want: "lookup fallback but no lookup"},
 		{name: "it rejects a dataset with no fields", mutate: func(d *Dataset) { d.Fields = nil }, want: "declares no fields"},
 		{name: "it rejects a field with an empty name", mutate: func(d *Dataset) { d.Fields[0].Name = "" }, want: "empty name or expression"},
 		{name: "it rejects a field with an empty expression", mutate: func(d *Dataset) { d.Fields[0].Expr = "" }, want: "empty name or expression"},
@@ -230,6 +233,7 @@ func TestRetentionLimitsMatchTheSchema(t *testing.T) {
 
 	require.Equal(t, MaxEventTimeRangeDays, ttl("agent_events"), "agent_events TTL drifted from the catalog's event limit")
 	require.Equal(t, MaxMetricTimeRangeDays, ttl("agent_metrics"), "agent_metrics TTL drifted from the catalog's metric limit")
+	require.Equal(t, RiskFindings.MaxTimeRangeDays(), ttl("risk_findings"), "risk_findings TTL drifted from the risk_findings dataset's limit")
 }
 
 // TestDimensionValuesSkipTheCollapse: a filter bar lists every dimension's
@@ -239,6 +243,11 @@ func TestDimensionValuesSkipTheCollapse(t *testing.T) {
 
 	tenant := Tenant{OrganizationID: "org", ProjectID: "proj"}
 	for _, ds := range Default.Datasets() {
+		// Only agent_events keeps raw observations to list from. A finding's
+		// later copies can withdraw it, so its values come from the live rows.
+		if ds.Source.Table.planSuffix() != "agent_events" {
+			continue
+		}
 		for _, field := range ds.Fields {
 			if field.Role != RoleDimension {
 				continue

@@ -23,9 +23,9 @@ func latestRiskFindingsByIDsSubquery(ids []uuid.UUID) (string, []any) {
 	for _, id := range ids {
 		args = append(args, id)
 	}
-	return `(SELECT *, ROW_NUMBER() OVER (PARTITION BY id ORDER BY ` + latestCopyOrderSQL + `) AS rn
+	return `(SELECT *, ROW_NUMBER() OVER (PARTITION BY id ORDER BY ` + LatestCopyOrderSQL + `) AS rn
 	FROM risk_findings
-	WHERE organization_id = ? AND project_id = ? AND ` + notShadowCond + `
+	WHERE organization_id = ? AND project_id = ? AND ` + NotShadowCond + `
 	  AND id IN (` + placeholders + `)) AS latest`, args
 }
 

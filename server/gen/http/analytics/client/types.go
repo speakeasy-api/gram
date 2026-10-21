@@ -69,7 +69,12 @@ type QueryResponseBody struct {
 // DescribeResponseBody is the type of the "analytics" service "describe"
 // endpoint HTTP response body.
 type DescribeResponseBody struct {
+	// The datasets the caller can read
 	Datasets []*AnalyticsDatasetResponseBody `form:"datasets,omitempty" json:"datasets,omitempty" xml:"datasets,omitempty"`
+	// Names of the datasets the caller cannot read, such as one only organization
+	// administrators can read, so a saved widget over one can say why it shows
+	// nothing rather than reading as broken
+	RestrictedDatasets []string `form:"restricted_datasets,omitempty" json:"restricted_datasets,omitempty" xml:"restricted_datasets,omitempty"`
 }
 
 // DimensionValuesResponseBody is the type of the "analytics" service
@@ -660,9 +665,12 @@ type AnalyticsDatasetResponseBody struct {
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	Kind *string `form:"kind,omitempty" json:"kind,omitempty" xml:"kind,omitempty"`
 	// What one row represents, as a noun
-	Grain       *string                       `form:"grain,omitempty" json:"grain,omitempty" xml:"grain,omitempty"`
-	Description *string                       `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
-	Fields      []*AnalyticsFieldResponseBody `form:"fields,omitempty" json:"fields,omitempty" xml:"fields,omitempty"`
+	Grain       *string `form:"grain,omitempty" json:"grain,omitempty" xml:"grain,omitempty"`
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// True when the dataset answers aggregates only, so an ungrouped query against
+	// it is refused
+	AggregatesOnly *bool                         `form:"aggregates_only,omitempty" json:"aggregates_only,omitempty" xml:"aggregates_only,omitempty"`
+	Fields         []*AnalyticsFieldResponseBody `form:"fields,omitempty" json:"fields,omitempty" xml:"fields,omitempty"`
 }
 
 // AnalyticsFieldResponseBody is used to define fields on response body types.
@@ -960,6 +968,12 @@ func NewDescribeAnalyticsDescribeResultOK(body *DescribeResponseBody) *analytics
 			continue
 		}
 		v.Datasets[i] = unmarshalAnalyticsDatasetResponseBodyToAnalyticsAnalyticsDataset(val)
+	}
+	if body.RestrictedDatasets != nil {
+		v.RestrictedDatasets = make([]string, len(body.RestrictedDatasets))
+		for i, val := range body.RestrictedDatasets {
+			v.RestrictedDatasets[i] = val
+		}
 	}
 
 	return v

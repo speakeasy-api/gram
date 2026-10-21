@@ -92645,6 +92645,10 @@ components:
         AnalyticsDataset:
             type: object
             properties:
+                aggregates_only:
+                    type: boolean
+                    description: True when the dataset answers aggregates only, so an ungrouped query against it is refused
+                    default: false
                 description:
                     type: string
                 fields:
@@ -92677,6 +92681,12 @@ components:
                     type: array
                     items:
                         $ref: '#/components/schemas/AnalyticsDataset'
+                    description: The datasets the caller can read
+                restricted_datasets:
+                    type: array
+                    items:
+                        type: string
+                    description: Names of the datasets the caller cannot read, such as one only organization administrators can read, so a saved widget over one can say why it shows nothing rather than reading as broken
             required:
                 - datasets
         AnalyticsDimensionValue:

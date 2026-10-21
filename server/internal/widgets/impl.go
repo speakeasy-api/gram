@@ -245,8 +245,12 @@ func (s *Service) requireOwnerOrWrite(ctx context.Context, authCtx *contextvalue
 // is stored, not a re-encoding of the decoded query, which would add zero
 // values the client reads as a different query.
 func (s *Service) checkWidget(ctx context.Context, dataset string, query, visualization map[string]any) ([]byte, []byte, error) {
-	if _, ok := s.catalog.Dataset(dataset); !ok {
+	ds, ok := s.catalog.Dataset(dataset)
+	if !ok {
 		return nil, nil, oops.E(oops.CodeBadRequest, nil, "unknown_dataset: dataset %q does not exist", dataset)
+	}
+	if err := s.requireDataset(ctx, ds); err != nil {
+		return nil, nil, err
 	}
 	encodedQuery, err := json.Marshal(query)
 	if err != nil {
@@ -264,6 +268,21 @@ func (s *Service) checkWidget(ctx context.Context, dataset string, query, visual
 		return nil, nil, oops.E(oops.CodeBadRequest, nil, "%s", reason)
 	}
 	return encodedQuery, encodedVisualization, nil
+}
+
+// requireDataset holds a save to what the dataset asks of its readers, so a
+// widget over a dataset only organization administrators may read is saved
+// by them alone; anyone else could save it but never see it answer.
+func (s *Service) requireDataset(ctx context.Context, ds *analytics.Dataset) error {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
+		return oops.C(oops.CodeUnauthorized)
+	}
+	check, restricted := ds.AccessCheck(authCtx.ActiveOrganizationID)
+	if !restricted {
+		return nil
+	}
+	return s.authz.Require(ctx, check)
 }
 
 // lowercaseChartType returns visualization with a string type lowercased, so

@@ -8,6 +8,8 @@ package analytics
 import (
 	"fmt"
 	"slices"
+
+	"github.com/speakeasy-api/gram/server/internal/authz"
 )
 
 // Kind is the shape of a dataset: occurrences or measurements.
@@ -16,6 +18,17 @@ type Kind string
 const (
 	KindEvent  Kind = "event"
 	KindMetric Kind = "metric"
+)
+
+// Access is who may read a dataset, beyond reading the project it belongs to.
+type Access string
+
+const (
+	// AccessProject admits anyone who can read the project.
+	AccessProject Access = "project"
+	// AccessOrgAdmin admits organization administrators only, for a dataset
+	// over data the rest of the product shows to them alone.
+	AccessOrgAdmin Access = "org_admin"
 )
 
 // Role is what a field is for: grouping and filtering, or aggregating.
@@ -140,6 +153,10 @@ type Field struct {
 	// Lookup names the lookup every read of this dimension folds Expr through;
 	// empty reads it as reported.
 	Lookup string
+	// LookupFallback is the SQL a value with no entry in the lookup reads as.
+	// Empty leaves such a value as reported, which suits a lookup of display
+	// names but not one that turns an id into a label.
+	LookupFallback string
 	// Typeahead is the agent_events column a dimension's values are listed
 	// from, read off Source.Observations. Empty lists them from Source.Rows.
 	Typeahead string
@@ -160,8 +177,24 @@ type Dataset struct {
 	// TimeExpr is the column of the source query's output that carries the
 	// row's event time, used for bucketing and for ordering row lists.
 	TimeExpr string
-	Fields   []Field
-	Source   Source
+	// Access is who may read the dataset. Describe, query and value listing
+	// all enforce it, and so does saving a widget over the dataset.
+	Access Access
+	// AggregatesOnly refuses ungrouped queries: the dataset answers counts
+	// and other aggregates, never its rows.
+	AggregatesOnly bool
+	Fields         []Field
+	Source         Source
+}
+
+// AccessCheck is the check a caller must pass to read the dataset, beyond
+// reading its project; ok is false when reading the project is enough.
+func (d *Dataset) AccessCheck(organizationID string) (check authz.Check, ok bool) {
+	if d.Access != AccessOrgAdmin {
+		var none authz.Check
+		return none, false
+	}
+	return authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: organizationID, Dimensions: nil}, true
 }
 
 // MaxTimeRangeDays is the longest window this dataset can answer honestly:
@@ -281,6 +314,11 @@ func (d *Dataset) validate(lookups map[string]struct{}) error {
 	if d.TimeExpr == "" {
 		return fmt.Errorf("catalog: dataset %q has no time expression", d.Name)
 	}
+	switch d.Access {
+	case AccessProject, AccessOrgAdmin:
+	default:
+		return fmt.Errorf("catalog: dataset %q has unknown access %q", d.Name, d.Access)
+	}
 	if d.Source.Key == "" || d.Source.Table == nil {
 		return fmt.Errorf("catalog: dataset %q has no source query", d.Name)
 	}
@@ -291,6 +329,9 @@ func (d *Dataset) validate(lookups map[string]struct{}) error {
 	for _, f := range d.Fields {
 		if f.Name == "" || f.Expr == "" {
 			return fmt.Errorf("catalog: dataset %q has a field with an empty name or expression", d.Name)
+		}
+		if f.LookupFallback != "" && f.Lookup == "" {
+			return fmt.Errorf("catalog: dataset %q field %q has a lookup fallback but no lookup", d.Name, f.Name)
 		}
 		if _, dup := names[f.Name]; dup {
 			return fmt.Errorf("catalog: dataset %q declares field %q twice", d.Name, f.Name)

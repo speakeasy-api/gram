@@ -514,6 +514,9 @@ export function specProblem(
 ): string {
   const dataset = findDataset(datasets, spec.dataset);
   if (!dataset) return `dataset "${spec.dataset}" does not exist`;
+  if (dataset.aggregatesOnly && spec.measures.length === 0) {
+    return `${spec.dataset} answers counts and other aggregates, never its rows`;
+  }
 
   const ops = opsForDataset(dataset);
   for (const measure of spec.measures) {

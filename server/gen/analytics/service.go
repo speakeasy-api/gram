@@ -59,13 +59,21 @@ type AnalyticsDataset struct {
 	// What one row represents, as a noun
 	Grain       string
 	Description string
-	Fields      []*AnalyticsField
+	// True when the dataset answers aggregates only, so an ungrouped query against
+	// it is refused
+	AggregatesOnly bool
+	Fields         []*AnalyticsField
 }
 
 // AnalyticsDescribeResult is the result type of the analytics service describe
 // method.
 type AnalyticsDescribeResult struct {
+	// The datasets the caller can read
 	Datasets []*AnalyticsDataset
+	// Names of the datasets the caller cannot read, such as one only organization
+	// administrators can read, so a saved widget over one can say why it shows
+	// nothing rather than reading as broken
+	RestrictedDatasets []string
 }
 
 type AnalyticsDimensionValue struct {

@@ -17,6 +17,7 @@ const sessions: AnalyticsDataset = {
   name: "sessions",
   kind: "event",
   grain: "session",
+  aggregatesOnly: false,
   description: "One row per agent session.",
   fields: [
     {
@@ -39,6 +40,7 @@ const toolCalls: AnalyticsDataset = {
   name: "tool_calls",
   kind: "event",
   grain: "tool call",
+  aggregatesOnly: false,
   description: "One row per tool call.",
   fields: [
     {

@@ -111,12 +111,16 @@ var DatasetType = Type("AnalyticsDataset", func() {
 	Attribute("kind", String, func() { Enum("event", "metric") })
 	Attribute("grain", String, "What one row represents, as a noun", func() { Example("tool call") })
 	Attribute("description", String)
+	Attribute("aggregates_only", Boolean, "True when the dataset answers aggregates only, so an ungrouped query against it is refused", func() {
+		Default(false)
+	})
 	Attribute("fields", ArrayOf(FieldType))
 	Required("name", "kind", "grain", "description", "fields")
 })
 
 var DescribeResult = Type("AnalyticsDescribeResult", func() {
-	Attribute("datasets", ArrayOf(DatasetType))
+	Attribute("datasets", ArrayOf(DatasetType), "The datasets the caller can read")
+	Attribute("restricted_datasets", ArrayOf(String), "Names of the datasets the caller cannot read, such as one only organization administrators can read, so a saved widget over one can say why it shows nothing rather than reading as broken")
 	Required("datasets")
 })
 

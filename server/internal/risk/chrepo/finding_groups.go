@@ -74,7 +74,7 @@ func groupRiskFindingsByChatQuery(p GroupRiskFindingsByChatParams) (squirrel.Sel
 	// LIMIT BY must precede LIMIT in ClickHouse; squirrel has no native
 	// support, so it renders through the suffix. The live-state gate follows
 	// the per-id dedup for the reason documented on listRiskFindingsBase.
-	inner = inner.OrderBy(latestCopyOrderSQL).Suffix("LIMIT 1 BY id")
+	inner = inner.OrderBy(LatestCopyOrderSQL).Suffix("LIMIT 1 BY id")
 	return sq.Select(
 		"chat_id",
 		"argMax(external_user_id, created_at) AS external_user_id",
@@ -82,7 +82,7 @@ func groupRiskFindingsByChatQuery(p GroupRiskFindingsByChatParams) (squirrel.Sel
 		"max(created_at) AS latest_detected",
 	).
 		FromSelect(inner, "latest").
-		Where(liveStateCond).
+		Where(LiveStateCond).
 		GroupBy("chat_id").
 		OrderBy("chat_id DESC").
 		Limit(p.Limit), nil

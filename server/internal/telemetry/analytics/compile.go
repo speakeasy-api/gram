@@ -23,6 +23,9 @@ const (
 	ErrLimitExceeded          ErrorCode = "limit_exceeded"
 	ErrTooManyDimensions      ErrorCode = "too_many_dimensions"
 	ErrUnsatisfiable          ErrorCode = "unsatisfiable"
+	// ErrAggregatesOnly is an ungrouped query against a dataset that answers
+	// aggregates alone.
+	ErrAggregatesOnly ErrorCode = "aggregates_only"
 )
 
 // Error is a request the compiler rejected. Field is the position in the
@@ -165,6 +168,9 @@ func Compile(catalog *Catalog, tenant Tenant, lookups LookupMaps, req Request) (
 	if !slices.Contains(timeGrains, grain) {
 		return nil, newError(ErrUnsupportedGrain, name, "grain", string(grain), fmt.Sprintf("grain %q is not one of none, hour, day, week, month", grain))
 	}
+	if req.Ungrouped && ds.AggregatesOnly {
+		return nil, newError(ErrAggregatesOnly, name, "ungrouped", "true", fmt.Sprintf("dataset %s answers counts and other aggregates, never its rows; group by dimensions instead", name))
+	}
 	if req.Ungrouped && grain != TimeGrainNone {
 		return nil, newError(ErrUnsatisfiable, name, "grain", string(grain), "an ungrouped query has no time buckets")
 	}
@@ -234,7 +240,7 @@ func Compile(catalog *Catalog, tenant Tenant, lookups LookupMaps, req Request) (
 
 	plan := &Plan{
 		Dataset: name,
-		Name:    name + ".agent_events",
+		Name:    name + "." + ds.Source.Table.planSuffix(),
 		SQL:     "",
 		Args:    nil,
 		Columns: nil,
@@ -422,16 +428,21 @@ func measureExpr(ds *Dataset, qc QueryContext, measure Measure, position string)
 }
 
 // readExpr is a field's expression, folded through its lookup's map when one
-// was loaded; transform leaves a value with no entry as reported.
+// was loaded; a value with no entry reads as the field's lookup fallback, or
+// as reported when it declares none.
 func readExpr(qc QueryContext, field *Field) (string, []any) {
 	if field.Lookup == "" {
 		return field.Expr, nil
 	}
+	fallback := field.Expr
+	if field.LookupFallback != "" {
+		fallback = field.LookupFallback
+	}
 	raws, targets := lookupPairs(qc.Lookups[field.Lookup])
 	if len(raws) == 0 {
-		return field.Expr, nil
+		return fallback, nil
 	}
-	return "transform(" + field.Expr + ", ?, ?, " + field.Expr + ")", []any{raws, targets}
+	return "transform(" + field.Expr + ", ?, ?, " + fallback + ")", []any{raws, targets}
 }
 
 // foldValues keeps each filter value and adds what the map folds it to, so
