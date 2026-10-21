@@ -396,9 +396,14 @@ it("keeps failure guidance visible and reveals dependent checks and HTTP details
   expect(
     screen.getByText(/Hostname was not found/).closest("details"),
   ).toBeNull();
-  const logs = screen.getByRole("link", { name: "View tool logs" });
-  expect(logs.getAttribute("href")).toBe("/logs?af=tunnel-filter");
-  expect(logs.querySelector("button")).toBeNull();
+  // A failing check is fixed where the agent is configured. Tool Logs records
+  // calls, not network checks, so it stays a separate link in Activity.
+  const setup = screen.getByRole("link", { name: "Review agent setup" });
+  expect(setup.getAttribute("href")).toBe("/settings");
+  expect(setup.querySelector("button")).toBeNull();
+  expect(screen.queryByRole("link", { name: "View tool logs" })).toBeNull();
+  const calls = screen.getByRole("link", { name: "View tool calls" });
+  expect(calls.getAttribute("href")).toBe("/logs?af=tunnel-filter");
   const details = screen.getByText("Connection details").closest("details")!;
   expect(details.open).toBe(false);
   expect(
@@ -491,7 +496,7 @@ it.each([
       within(status).queryByText("Unreachable", { exact: true }),
     ).toBeNull();
     expect(
-      within(status).getByRole("link", { name: "View tool logs" }),
+      within(status).getByRole("link", { name: "Review agent setup" }),
     ).toBeTruthy();
   },
 );

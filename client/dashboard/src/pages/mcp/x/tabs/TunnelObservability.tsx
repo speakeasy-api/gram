@@ -120,7 +120,6 @@ export function TunnelObservability({
         live={live}
         loading={loading}
         unavailable={unavailable}
-        logsHref={logsHref}
         agentSetupHref={agentSetupHref}
       />
       <div className="space-y-6">
@@ -134,11 +133,16 @@ export function TunnelObservability({
                 : ""}
             </p>
           </div>
-          <SegmentedControl
-            value={window}
-            onChange={setWindow}
-            options={[...windows]}
-          />
+          <div className="flex items-center gap-3">
+            <Button asChild variant="tertiary" size="sm">
+              <Link to={logsHref}>View tool calls</Link>
+            </Button>
+            <SegmentedControl
+              value={window}
+              onChange={setWindow}
+              options={[...windows]}
+            />
+          </div>
         </div>
         <ActivityHistory
           history={history.data}
@@ -164,7 +168,7 @@ type Status = {
 function tunnelStatus(
   live: TunneledMcpConnection[],
   unavailable: boolean,
-  links: { logsHref: string; agentSetupHref: string },
+  links: { agentSetupHref: string },
 ): Status {
   if (unavailable) {
     return {
@@ -193,13 +197,15 @@ function tunnelStatus(
   const failing = checked.filter(
     (c) => c.diagnostics?.targetState === "unreachable",
   ).length;
-  const logs = { label: "View tool logs", href: links.logsHref };
+  // A failing check is fixed where the agent's target is configured. Tool Logs
+  // cannot show these failures: it records calls, not network checks.
+  const setup = { label: "Review agent setup", href: links.agentSetupHref };
   if (failing && failing === live.length) {
     return {
       tone: "destructive",
       title: "Unreachable",
       detail: `${agents} connected, but none can reach the MCP server.`,
-      action: logs,
+      action: setup,
     };
   }
   if (failing && failing < checked.length) {
@@ -207,7 +213,7 @@ function tunnelStatus(
       tone: "warning",
       title: "Partially reachable",
       detail: `${failing} of ${agents} cannot reach the MCP server.`,
-      action: logs,
+      action: setup,
     };
   }
   if (failing) {
@@ -215,7 +221,7 @@ function tunnelStatus(
       tone: "warning",
       title: "Some checks failed",
       detail: `${failing} of ${agents} cannot reach the MCP server; the rest have not reported a check.`,
-      action: logs,
+      action: setup,
     };
   }
   if (checked.length === live.length) {
@@ -253,17 +259,15 @@ function TunnelStatus({
   live,
   loading,
   unavailable,
-  logsHref,
   agentSetupHref,
 }: {
   live: TunneledMcpConnection[];
   loading: boolean;
   unavailable: boolean;
-  logsHref: string;
   agentSetupHref: string;
 }) {
   if (loading) return <Skeleton className="h-36 w-full" />;
-  const status = tunnelStatus(live, unavailable, { logsHref, agentSetupHref });
+  const status = tunnelStatus(live, unavailable, { agentSetupHref });
   const sessions = live.reduce((n, c) => n + c.activeConsumerSessions, 0);
   const inFlight = live.reduce((n, c) => n + c.activeSubstreams, 0);
   return (
