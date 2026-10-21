@@ -1,6 +1,3 @@
-import { Input } from "@/components/ui/Input";
-import { useSensitiveContentRestricted } from "@/hooks/useSensitiveContentRestricted";
-import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { InsightsConfig } from "@/components/insights-dock";
 import { INSIGHTS_SUGGESTIONS } from "@/lib/insights-suggestions";
 import { EnableLoggingOverlay } from "@/components/EnableLoggingOverlay";
@@ -29,7 +26,7 @@ import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 import { useQueryClient } from "@tanstack/react-query";
-import { Lock, Pin } from "lucide-react";
+import { Pin } from "lucide-react";
 import {
   useState,
   useMemo,
@@ -205,7 +202,6 @@ function OwnSessionsNotice(): JSX.Element | null {
 }
 
 export function LogsAgentsContent(): JSX.Element {
-  const restricted = useSensitiveContentRestricted();
   const project = useProject();
   const { hasScope } = useRBAC();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -230,7 +226,6 @@ export function LogsAgentsContent(): JSX.Element {
 
   const handleDeleteChat = useCallback(
     (chatId: string) => {
-      if (restricted) return;
       deleteChatMutation.mutate(
         { request: { id: chatId } },
         {
@@ -249,7 +244,7 @@ export function LogsAgentsContent(): JSX.Element {
         },
       );
     },
-    [deleteChatMutation, queryClient, setSearchParams, restricted],
+    [deleteChatMutation, queryClient, setSearchParams],
   );
 
   const urlRange = searchParams.get("range");
@@ -306,7 +301,7 @@ export function LogsAgentsContent(): JSX.Element {
     return null;
   }, [urlFrom, urlTo]);
 
-  const searchQuery = restricted ? "" : (urlSearch ?? "");
+  const searchQuery = urlSearch ?? "";
   const assistantId = isUuid(urlAssistantId) ? urlAssistantId : "";
   const canReadAssistant =
     !!assistantId && hasScope("assistant:read", assistantId, project.id);
@@ -521,15 +516,15 @@ export function LogsAgentsContent(): JSX.Element {
     total > 0 ? offset + chats.length < total : chats.length === limit;
 
   const selectedChat = useMemo<ChatOverview | null>(() => {
-    if (restricted || !urlChatId) return null;
+    if (!urlChatId) return null;
     const fromList = chats.find((c) => c.id === urlChatId);
     if (fromList) return fromList;
     if (cachedChat?.id === urlChatId) return cachedChat;
     return null;
-  }, [urlChatId, chats, cachedChat, restricted]);
+  }, [urlChatId, chats, cachedChat]);
 
   useEffect(() => {
-    if (restricted || !urlChatId) {
+    if (!urlChatId) {
       if (cachedChat) setCachedChat(null);
       return;
     }
@@ -537,11 +532,10 @@ export function LogsAgentsContent(): JSX.Element {
     if (fromList && fromList !== cachedChat) {
       setCachedChat(fromList);
     }
-  }, [urlChatId, chats, cachedChat, restricted]);
+  }, [urlChatId, chats, cachedChat]);
 
   const setSelectedChat = useCallback(
     (chat: ChatOverview | null) => {
-      if (restricted && chat) return;
       setSearchParams((prev) => {
         const next = new URLSearchParams(prev);
         if (chat) {
@@ -553,7 +547,7 @@ export function LogsAgentsContent(): JSX.Element {
       });
       if (chat) setCachedChat(chat);
     },
-    [setSearchParams, restricted],
+    [setSearchParams],
   );
 
   // Open a chat by bare id — used by the detail panel's Linked-sessions rows,
@@ -561,14 +555,13 @@ export function LogsAgentsContent(): JSX.Element {
   // ChatOverview to hand to setSelectedChat. The panel loads by id.
   const openChatByID = useCallback(
     (chatID: string) => {
-      if (restricted) return;
       setSearchParams((prev) => {
         const next = new URLSearchParams(prev);
         next.set(AGENT_SESSION_CHAT_PARAM, chatID);
         return next;
       });
     },
-    [setSearchParams, restricted],
+    [setSearchParams],
   );
 
   const dateRangeContext = useMemo(() => {
@@ -628,7 +621,7 @@ export function LogsAgentsContent(): JSX.Element {
         setSortOrder={setSortOrder}
         chats={chats}
         selectedChat={selectedChat}
-        selectedChatId={restricted ? null : urlChatId}
+        selectedChatId={urlChatId}
         setSelectedChat={setSelectedChat}
         onOpenChat={openChatByID}
         isLoading={isLoading}
@@ -737,7 +730,6 @@ function AgentSessionsPageContent({
   total: number;
   onDeleteChat: (chatId: string) => void;
 }) {
-  const restricted = useSensitiveContentRestricted();
   if (isLogsDisabled) {
     return (
       <div className="min-h-0 w-full flex-1 space-y-6 overflow-y-auto p-8 pb-24">
@@ -764,20 +756,6 @@ function AgentSessionsPageContent({
             title="Agent Sessions"
             description="View and debug individual agent sessions captured for organization members in this project"
           />
-          {restricted && (
-            <div className="border-border bg-muted/30 text-muted-foreground flex items-start gap-3 border px-4 py-3 text-sm">
-              <Lock className="mt-0.5 size-4 shrink-0" aria-hidden />
-              <div>
-                <p className="text-foreground font-medium">
-                  Session content is protected
-                </p>
-                <p className="mt-1">
-                  Titles and transcripts are hidden during support access.
-                  Session metadata remains available.
-                </p>
-              </div>
-            </div>
-          )}
           {hasAssistantFilter && (
             <Badge
               variant="neutral"
@@ -801,25 +779,12 @@ function AgentSessionsPageContent({
             </Badge>
           )}
           <Page.Toolbar>
-            {restricted ? (
-              <SimpleTooltip tooltip="Session search is unavailable during support access because it searches protected titles. Use filters to find sessions.">
-                <span tabIndex={0}>
-                  <Input
-                    icon="search"
-                    disabled
-                    aria-label="Search sessions"
-                    placeholder="Search unavailable"
-                  />
-                </span>
-              </SimpleTooltip>
-            ) : (
-              <Page.Toolbar.Search
-                value={searchQuery}
-                onChange={setSearchQuery}
-                placeholder="Search by chat ID, user ID, user name, or title..."
-                debounceMs={500}
-              />
-            )}
+            <Page.Toolbar.Search
+              value={searchQuery}
+              onChange={setSearchQuery}
+              placeholder="Search by chat ID, user ID, user name, or title..."
+              debounceMs={500}
+            />
             <Page.Toolbar.Filters
               schema={SESSION_FILTERS}
               values={{
@@ -945,15 +910,13 @@ function AgentSessionsPageContent({
         </div>
       </div>
 
-      {!restricted && (
-        <ChatDetailSheet
-          chatId={selectedChatId ?? selectedChat?.id ?? null}
-          onClose={() => setSelectedChat(null)}
-          onDelete={onDeleteChat}
-          onOpenChat={onOpenChat}
-          dimNonRisk={hasRisk === "true" || minRiskScore !== undefined}
-        />
-      )}
+      <ChatDetailSheet
+        chatId={selectedChatId ?? selectedChat?.id ?? null}
+        onClose={() => setSelectedChat(null)}
+        onDelete={onDeleteChat}
+        onOpenChat={onOpenChat}
+        dimNonRisk={hasRisk === "true" || minRiskScore !== undefined}
+      />
     </>
   );
 }

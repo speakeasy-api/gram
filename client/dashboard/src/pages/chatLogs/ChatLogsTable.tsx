@@ -1,4 +1,3 @@
-import { useSensitiveContentRestricted } from "@/hooks/useSensitiveContentRestricted";
 import { useGramContext } from "@gram/client/react-query/_context.js";
 import { buildLoadChatOverviewQuery } from "@gram/client/react-query/loadChatOverview.js";
 import { buildListChatSessionLinksQuery } from "@gram/client/react-query/listChatSessionLinks.js";
@@ -31,7 +30,6 @@ import {
   CircleDashed,
   GitBranch,
   History,
-  Lock,
   Pin,
 } from "lucide-react";
 import { useCallback, useMemo, useState, type MouseEvent } from "react";
@@ -104,20 +102,16 @@ function SessionLineageIcons({
   onActivate,
 }: {
   summary?: LineageSummary;
-  onActivate?: () => void;
+  onActivate: () => void;
 }) {
   if (!summary) return null;
-  const Container = onActivate ? "button" : "span";
   return (
-    <Container
+    <button
       type="button"
       tabIndex={-1}
       onClick={onActivate}
-      aria-label={onActivate ? "Open session details" : "Session lineage"}
-      className={cn(
-        "text-muted-foreground pointer-events-auto mt-0.5 inline-flex shrink-0 items-center gap-1",
-        onActivate && "cursor-pointer",
-      )}
+      aria-label="Open session details"
+      className="text-muted-foreground pointer-events-auto mt-0.5 inline-flex shrink-0 cursor-pointer items-center gap-1"
     >
       {summary.continuedIn.length > 0 && (
         <SimpleTooltip
@@ -161,7 +155,7 @@ function SessionLineageIcons({
           />
         </SimpleTooltip>
       )}
-    </Container>
+    </button>
   );
 }
 
@@ -281,7 +275,6 @@ export function ChatLogsTable({
   error,
   emptyState,
 }: ChatLogsTableProps): JSX.Element {
-  const restricted = useSensitiveContentRestricted();
   const { user } = useSession();
   const { data: membersData } = useMembers();
 
@@ -301,9 +294,7 @@ export function ChatLogsTable({
   });
   const { data: ancestors } = useQuery({
     queryKey: ["chatSubsessionAncestors", chatIds, linksData?.links],
-    enabled:
-      !restricted &&
-      !!linksData?.links.some((link) => link.kind === "subagent"),
+    enabled: !!linksData?.links.some((link) => link.kind === "subagent"),
     retry: false,
     throwOnError: false,
     queryFn: async () => {
@@ -365,10 +356,10 @@ export function ChatLogsTable({
   const groupedChats = useMemo(
     () =>
       groupSubsessions(
-        [...chats, ...(!restricted ? (ancestors?.parents ?? []) : [])],
-        (!restricted ? ancestors?.links : undefined) ?? linksData?.links ?? [],
+        [...chats, ...(ancestors?.parents ?? [])],
+        ancestors?.links ?? linksData?.links ?? [],
       ),
-    [chats, linksData, ancestors, restricted],
+    [chats, linksData, ancestors],
   );
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   if (isLoading && chats.length === 0) {
@@ -425,7 +416,7 @@ export function ChatLogsTable({
     <>
       <div className="divide-border bg-card divide-y">
         {groupedChats.map(({ session: chat, depth }) => {
-          const isSelected = !restricted && selectedChatId === chat.id;
+          const isSelected = selectedChatId === chat.id;
           const source = chat.source;
           const riskCount = chat.riskFindingsCount ?? 0;
           const lastActivityTimestamp =
@@ -434,17 +425,13 @@ export function ChatLogsTable({
           return (
             <TableRowContextMenu
               key={chat.id}
-              actions={
-                restricted
-                  ? []
-                  : [
-                      {
-                        label: "Delete chat",
-                        destructive: true,
-                        onClick: () => setDeleteConfirmId(chat.id),
-                      },
-                    ]
-              }
+              actions={[
+                {
+                  label: "Delete chat",
+                  destructive: true,
+                  onClick: () => setDeleteConfirmId(chat.id),
+                },
+              ]}
             >
               {/* Stretched select control under content; pin/delete/copy sit above
                   it (z-20) so interactive controls are never nested in a button. */}
@@ -456,14 +443,12 @@ export function ChatLogsTable({
                   isSelected && "bg-primary/5",
                 )}
               >
-                {!restricted && (
-                  <button
-                    type="button"
-                    onClick={() => onSelectChat(chat)}
-                    aria-label={`Open session ${getTraceId(chat.id)}`}
-                    className="absolute inset-0 z-10 focus:outline-none"
-                  />
-                )}
+                <button
+                  type="button"
+                  onClick={() => onSelectChat(chat)}
+                  aria-label={`Open session ${getTraceId(chat.id)}`}
+                  className="absolute inset-0 z-10 focus:outline-none"
+                />
                 <div
                   className="pointer-events-none relative z-20 flex items-center gap-5"
                   style={{ paddingLeft: Math.min(depth, 8) * 24 }}
@@ -478,20 +463,7 @@ export function ChatLogsTable({
                     {/* Title — the scan target — with the lineage cluster */}
                     <div className="flex items-start gap-1.5">
                       <h3 className="text-foreground line-clamp-2 text-sm leading-snug font-medium">
-                        {restricted ? (
-                          <span className="inline-flex items-center gap-1.5">
-                            <Lock
-                              className="text-muted-foreground size-3.5"
-                              aria-hidden
-                            />
-                            Session · {getTraceId(chat.id)}
-                            <span className="pointer-events-auto">
-                              <CopyButton value={chat.id} label="Chat ID" />
-                            </span>
-                          </span>
-                        ) : (
-                          chat.title
-                        )}
+                        {chat.title}
                       </h3>
                       {depth > 0 && (
                         <span className="text-muted-foreground inline-flex shrink-0 items-center gap-1 self-center text-xs">
@@ -501,25 +473,19 @@ export function ChatLogsTable({
                       )}
                       <SessionLineageIcons
                         summary={lineageByChat.get(chat.id)}
-                        onActivate={
-                          restricted ? undefined : () => onSelectChat(chat)
-                        }
+                        onActivate={() => onSelectChat(chat)}
                       />
                     </div>
 
                     {/* Meta row — muted mono */}
                     <div className="text-muted-foreground mt-1.5 flex min-h-5 flex-wrap items-center gap-x-2 gap-y-1 font-mono text-xs">
-                      {!restricted && (
-                        <>
-                          <span className="inline-flex items-center gap-1">
-                            {getTraceId(chat.id)}
-                            <span className="pointer-events-auto">
-                              <CopyButton value={chat.id} label="Chat ID" />
-                            </span>
-                          </span>
-                          <span className="text-muted-foreground/40">·</span>
-                        </>
-                      )}
+                      <span className="inline-flex items-center gap-1">
+                        {getTraceId(chat.id)}
+                        <span className="pointer-events-auto">
+                          <CopyButton value={chat.id} label="Chat ID" />
+                        </span>
+                      </span>
+                      <span className="text-muted-foreground/40">·</span>
                       <span className="inline-flex items-center gap-1.5">
                         {/* An assistant session names its assistant; a channel
                             session has no assistant record, so it names the
@@ -673,31 +639,29 @@ export function ChatLogsTable({
                   </div>
 
                   {/* Right: Pin + Delete + Chevron */}
-                  {!restricted && (
-                    <div className="pointer-events-auto flex shrink-0 items-center gap-1">
-                      <SessionPinButton
-                        chatId={chat.id}
-                        pinned={Boolean(chat.pinned)}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setDeleteConfirmId(chat.id)}
-                        className="hover:bg-destructive/10 text-muted-foreground hover:text-destructive p-1 opacity-0 transition-all group-hover:opacity-100 focus-visible:opacity-100"
-                        aria-label="Delete chat"
-                      >
-                        <Icon name="trash-2" className="size-4" />
-                      </button>
-                      <Icon
-                        name="chevron-right"
-                        className={cn(
-                          "size-4 transition-colors",
-                          isSelected
-                            ? "text-foreground/60"
-                            : "text-muted-foreground/40",
-                        )}
-                      />
-                    </div>
-                  )}
+                  <div className="pointer-events-auto flex shrink-0 items-center gap-1">
+                    <SessionPinButton
+                      chatId={chat.id}
+                      pinned={Boolean(chat.pinned)}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setDeleteConfirmId(chat.id)}
+                      className="hover:bg-destructive/10 text-muted-foreground hover:text-destructive p-1 opacity-0 transition-all group-hover:opacity-100 focus-visible:opacity-100"
+                      aria-label="Delete chat"
+                    >
+                      <Icon name="trash-2" className="size-4" />
+                    </button>
+                    <Icon
+                      name="chevron-right"
+                      className={cn(
+                        "size-4 transition-colors",
+                        isSelected
+                          ? "text-foreground/60"
+                          : "text-muted-foreground/40",
+                      )}
+                    />
+                  </div>
                 </div>
               </div>
             </TableRowContextMenu>
@@ -706,7 +670,7 @@ export function ChatLogsTable({
       </div>
 
       <Dialog
-        open={!restricted && deleteConfirmId !== null}
+        open={deleteConfirmId !== null}
         onOpenChange={(open) => {
           void (!open && setDeleteConfirmId(null));
         }}
@@ -726,7 +690,7 @@ export function ChatLogsTable({
             <Button
               variant="destructive-primary"
               onClick={() => {
-                if (!restricted && deleteConfirmId) {
+                if (deleteConfirmId) {
                   onDeleteChat(deleteConfirmId);
                 }
                 setDeleteConfirmId(null);

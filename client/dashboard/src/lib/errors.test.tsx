@@ -3,12 +3,10 @@ import { toast } from "sonner";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { handleAPIError, handleError } from "./errors";
 
-vi.mock("sonner", () => ({
-  toast: Object.assign(vi.fn(), { error: vi.fn() }),
-}));
+vi.mock("sonner", () => ({ toast: { error: vi.fn() } }));
 
-function gramError(status: number, message = "request failed"): GramError {
-  return new GramError(message, {
+function gramError(status: number): GramError {
+  return new GramError("request failed", {
     response: new Response(null, { status }),
     request: new Request("https://app.getgram.ai/rpc/example"),
     body: "",
@@ -23,55 +21,7 @@ describe("handleError", () => {
   afterEach(() => {
     vi.restoreAllMocks();
     vi.mocked(toast.error).mockClear();
-    vi.mocked(toast).mockClear();
   });
-
-  it("presents an impersonation denial as a neutral privacy notice", () => {
-    handleError(
-      gramError(
-        403,
-        "sensitive content cannot be accessed while impersonating an organization",
-      ),
-      { title: "Request failed" },
-    );
-    expect(toast.error).not.toHaveBeenCalled();
-    expect(toast).toHaveBeenCalledWith(
-      "Evidence is protected",
-      expect.objectContaining({
-        description: "Raw evidence is hidden during support access.",
-        id: "sensitive-content-protected",
-        icon: expect.anything(),
-      }),
-    );
-    expect(console.warn).toHaveBeenCalledOnce();
-    expect(console.error).not.toHaveBeenCalled();
-  });
-
-  it("does not toast a silent privacy denial", () => {
-    handleError(
-      gramError(
-        403,
-        "sensitive content cannot be accessed while impersonating an organization",
-      ),
-      { silent: true },
-    );
-    expect(toast).not.toHaveBeenCalled();
-    expect(toast.error).not.toHaveBeenCalled();
-  });
-
-  it.each([401, 500])(
-    "does not relabel status %s as a privacy denial",
-    (status) => {
-      handleError(
-        gramError(
-          status,
-          "sensitive content cannot be accessed while impersonating an organization",
-        ),
-      );
-      expect(toast).not.toHaveBeenCalled();
-      expect(toast.error).toHaveBeenCalledOnce();
-    },
-  );
 
   // A 4xx is the API answering a request it understood; it belongs in the
   // toast, not in RUM's error count that pages on-call.

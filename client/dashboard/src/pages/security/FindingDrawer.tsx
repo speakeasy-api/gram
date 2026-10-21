@@ -1,4 +1,3 @@
-import { useSensitiveContentRestricted } from "@/hooks/useSensitiveContentRestricted";
 import { IdentityLink } from "@/components/identity-link";
 import { Button } from "@/components/ui/Button";
 import { CopyButton } from "@/components/ui/CopyButton";
@@ -156,7 +155,6 @@ export function FindingDrawer({
   onOpenTranscript,
   ...rest
 }: FindingDrawerProps): JSX.Element {
-  const restricted = useSensitiveContentRestricted();
   const loaded = findingId
     ? results.find((r) => r.id === findingId)
     : undefined;
@@ -219,7 +217,7 @@ export function FindingDrawer({
         {/* Nested in this sheet so closing it doesn't read as an outside
             click and close the drawer too. */}
         <ChatDetailSheet
-          chatId={open && !restricted ? transcriptChatId : null}
+          chatId={open ? transcriptChatId : null}
           focusedMessageId={result?.chatMessageId}
           onClose={() => onOpenTranscript(null)}
           onDelete={() => onOpenTranscript(null)}
@@ -330,12 +328,12 @@ function FindingDetail({
 }): JSX.Element {
   const routes = useRoutes();
   const { hasScope } = useRBAC();
-  const restricted = useSensitiveContentRestricted();
   const kind = findingKind(result);
   // Payload reveals need unrestricted chat:read; chat reveals follow the chat.
-  const canReveal =
-    !restricted &&
-    hasScope(REVEAL_SCOPE, kind === "mcp" ? "*" : (result.chatId ?? "*"));
+  const canReveal = hasScope(
+    REVEAL_SCOPE,
+    kind === "mcp" ? "*" : (result.chatId ?? "*"),
+  );
   const chatLike = isChatLikeKind(kind);
   const [revealed, setRevealed] = useDrawerReveal(result.id);
 
@@ -496,7 +494,7 @@ function FindingDetail({
               onCreateRule={() => onSetupExclusion(result)}
             />
           )}
-          {!restricted && (chatLike || kind === "shadow") && result.chatId && (
+          {(chatLike || kind === "shadow") && result.chatId && (
             <Button
               variant="secondary"
               onClick={() => onOpenTranscript(result.chatId ?? null)}
@@ -552,7 +550,7 @@ function FindingDetail({
           </DrawerSection>
         )}
 
-        {kind === "shadow" && result.matchRedacted && !restricted && (
+        {kind === "shadow" && result.matchRedacted && (
           <ShadowIdentifier
             identifier={result.matchRedacted}
             verbatim={shadowVerbatim}

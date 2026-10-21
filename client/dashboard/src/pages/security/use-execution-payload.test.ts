@@ -3,14 +3,7 @@ import { act, renderHook } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { useExecutionPayload } from "./use-execution-payload";
 
-const mutation = vi.hoisted(() => ({
-  isPending: false,
-  restricted: false,
-  mutate: vi.fn(),
-}));
-vi.mock("@/hooks/useSensitiveContentRestricted", () => ({
-  useSensitiveContentRestricted: () => mutation.restricted,
-}));
+const mutation = vi.hoisted(() => ({ isPending: false, mutate: vi.fn() }));
 
 vi.mock("@gram/client/react-query/riskRevealResultPayload.js", () => ({
   useRiskRevealResultPayloadMutation: () => ({
@@ -33,25 +26,6 @@ function finding(id: string, phase: string): RiskResult {
 }
 
 describe("useExecutionPayload", () => {
-  it("withholds cached payloads and ignores reveals during support access", () => {
-    mutation.isPending = false;
-    mutation.mutate.mockImplementation((_args, options) =>
-      options.onSuccess({ payload: "private" }),
-    );
-    const { result, rerender } = renderHook(() =>
-      useExecutionPayload(finding("a", "request")),
-    );
-    act(() => result.current.reveal());
-    expect(result.current.data).toBeDefined();
-    mutation.restricted = true;
-    mutation.mutate.mockClear();
-    rerender();
-    expect(result.current.data).toBeUndefined();
-    act(() => result.current.reveal());
-    expect(mutation.mutate).not.toHaveBeenCalled();
-    mutation.restricted = false;
-    mutation.mutate.mockReset();
-  });
   it("reports a pending reveal to a sibling sharing the payload", () => {
     const { result, rerender } = renderHook(
       ({ r }: { r: RiskResult }) => useExecutionPayload(r),

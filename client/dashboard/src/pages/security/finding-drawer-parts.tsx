@@ -1,9 +1,8 @@
-import { useSensitiveContentRestricted } from "@/hooks/useSensitiveContentRestricted";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/utils";
 import { Eye, EyeOff, Loader2, Lock } from "lucide-react";
 import type { ReactNode } from "react";
-import { REVEAL_DENIED_REASON, SUPPORT_EVIDENCE_REASON } from "./unmask";
+import { REVEAL_DENIED_REASON } from "./unmask";
 
 /** Mono 11px muted fine print under a drawer block. */
 export const DRAWER_FOOTNOTE = "text-muted-foreground font-mono text-[11px]";
@@ -41,13 +40,6 @@ export function RevealToggleButton({
   onToggle: () => void;
   revealLabel?: string;
 }): JSX.Element {
-  const restricted = useSensitiveContentRestricted();
-  if (restricted)
-    return (
-      <span className="text-muted-foreground" title={SUPPORT_EVIDENCE_REASON}>
-        <Lock aria-label={SUPPORT_EVIDENCE_REASON} className="size-3.5" />
-      </span>
-    );
   return (
     <Button variant="secondary" size="sm" onClick={onToggle}>
       <Button.LeftIcon>
@@ -63,14 +55,11 @@ export function RevealToggleButton({
 }
 
 export function NoRevealAccessNote(): JSX.Element {
-  const restricted = useSensitiveContentRestricted();
   return (
     <div className="text-muted-foreground flex items-center gap-1.5 text-xs">
       <Lock className="size-3 shrink-0" />
       <span>
-        {restricted
-          ? SUPPORT_EVIDENCE_REASON
-          : `${REVEAL_DENIED_REASON} Structure and surrounding context stay visible.`}
+        {REVEAL_DENIED_REASON} Structure and surrounding context stay visible.
       </span>
     </div>
   );

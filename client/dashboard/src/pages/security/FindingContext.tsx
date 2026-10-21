@@ -1,4 +1,3 @@
-import { useSensitiveContentRestricted } from "@/hooks/useSensitiveContentRestricted";
 import { Button } from "@/components/ui/Button";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { cn } from "@/lib/utils";
@@ -211,7 +210,7 @@ export function FindingContext({
   chatResults,
   chatResultsComplete,
   revealed,
-  canReveal: scopeCanReveal,
+  canReveal,
   rating,
   onToggleReveal,
   onRequestReveal,
@@ -229,13 +228,11 @@ export function FindingContext({
   onToggleReveal: () => void;
   onRequestReveal: () => void;
 }): JSX.Element {
-  const restricted = useSensitiveContentRestricted();
-  const canReveal = !restricted && scopeCanReveal;
   const chatId = result.chatId ?? "";
   const chatQuery = useLoadChat(
     { id: chatId, limit: CONTEXT_WINDOW_LIMIT, riskOnly: true },
     undefined,
-    { enabled: !restricted && Boolean(chatId), throwOnError: false },
+    { enabled: Boolean(chatId), throwOnError: false },
   );
   // Each audited reveal is recorded against this finding; the transcript text
   // itself already follows transcript access.
@@ -320,13 +317,6 @@ export function FindingContext({
 
   const forbidden =
     chatQuery.error instanceof GramError && chatQuery.error.statusCode === 403;
-
-  if (restricted)
-    return (
-      <DrawerSection label="Context">
-        <NoRevealAccessNote />
-      </DrawerSection>
-    );
 
   let body: ReactNode;
   if (!chatId) {
