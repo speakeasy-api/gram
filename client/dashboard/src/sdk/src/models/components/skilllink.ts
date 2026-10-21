@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
@@ -20,7 +21,7 @@ export const SkillLinkTargetKind = {
 /**
  * The kind of MCP surface that serves the skill.
  */
-export type SkillLinkTargetKind = ClosedEnum<typeof SkillLinkTargetKind>;
+export type SkillLinkTargetKind = OpenEnum<typeof SkillLinkTargetKind>;
 
 /**
  * A live link from a project skill to the MCP surface that serves it over MCP.
@@ -69,9 +70,10 @@ export type SkillLink = {
 };
 
 /** @internal */
-export const SkillLinkTargetKind$inboundSchema: z.ZodMiniEnum<
-  typeof SkillLinkTargetKind
-> = z.enum(SkillLinkTargetKind);
+export const SkillLinkTargetKind$inboundSchema: z.ZodMiniType<
+  SkillLinkTargetKind,
+  unknown
+> = openEnums.inboundSchema(SkillLinkTargetKind);
 
 /** @internal */
 export const SkillLink$inboundSchema: z.ZodMiniType<SkillLink, unknown> = z
