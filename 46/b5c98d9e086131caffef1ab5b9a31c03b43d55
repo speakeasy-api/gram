@@ -1,0 +1,31 @@
+client/dashboard/src/pages/team/Team.tsx
+  h_9630b74bdac540 400-401,403-406,493
+  s_ae50f19ebebaf2::t_d3f24348317c85 402
+client/dashboard/src/pages/identities/IdentitiesIndex.tsx
+  h_9630b74bdac540 538,649,654,657,1494
+  s_ae50f19ebebaf2::t_996ff80287a3cc 1517-1521
+client/dashboard/src/pages/identities/DirectoryPeopleSummary.tsx
+  h_9630b74bdac540 15-18,27,33-37,55-57,61-62
+  s_ae50f19ebebaf2::t_258831bb7a1c17 54,58-60
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "46b5c98d9e086131caffef1ab5b9a31c03b43d55",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  },
+  "sessions": {
+    "s_ae50f19ebebaf2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c2efbf08-c8d9-4707-9f87-ad6cbc101125",
+        "model": "unknown"
+      },
+      "human_author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}
