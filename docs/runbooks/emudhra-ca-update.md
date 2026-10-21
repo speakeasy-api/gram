@@ -48,10 +48,11 @@ images and are outside this update.
   updated NSS roots; it supersedes the initial 24.22.0 pin.
   Mise resolved Linux arm64-musl to a checksummed source build because the
   corresponding prebuilt archive is not yet available.
-- Pin workspace Python to **3.14.8** in `.python-version`. Python 3.15.0 was
-  attempted, but locked native dependencies lack 3.15 wheels (including cffi
-  and DuckDB), and the existing slim build has no compiler. Python's interpreter
-  update is independent of the CA fix.
+- Require **`>=3.14.8,<3.15`** in the workspace's Python manifests, allowing newer
+  3.14 patches without a `.python-version` file. Python 3.15.0 was attempted, but
+  locked native dependencies lack 3.15 wheels (including cffi and DuckDB), and
+  the existing slim build has no compiler. The production image pins 3.14.8 for
+  reproducibility. Python's interpreter update is independent of the CA fix.
 - uv → **0.13.4** in mise and the Python image builder.
   Both the Python builder and uv images are pinned to multi-platform digests.
 - golangci-lint → **2.14.0**, including the server custom-build pin. Version

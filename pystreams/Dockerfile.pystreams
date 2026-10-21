@@ -34,7 +34,7 @@ WORKDIR /app
 # self-contained and relocatable, so it can be lifted into a distroless runtime
 # that has no Python of its own. `only-managed` above forces every uv sync below
 # to build the venv against THIS interpreter, not the slim base's /usr/local one.
-# Keep in sync with the repository's .python-version.
+# Pin the image interpreter within the workspace's supported Python range.
 RUN uv python install 3.14.8
 
 # Layer 1: install ONLY the third-party dependencies of pystreams (and its
