@@ -182,11 +182,8 @@ func (q *Queries) CountAdvisoryLockWaitersFixture(ctx context.Context, key strin
 }
 
 const countAssistantAttachments = `-- name: CountAssistantAttachments :one
-SELECT
-  (SELECT count(*) FROM assistant_toolsets at
-   WHERE at.project_id = $1 AND at.assistant_id = $2) AS toolsets,
-  (SELECT count(*) FROM assistant_mcp_servers ams
-   WHERE ams.project_id = $1 AND ams.assistant_id = $2) AS mcp_servers
+SELECT count(*) AS mcp_servers FROM assistant_mcp_servers ams
+WHERE ams.project_id = $1 AND ams.assistant_id = $2
 `
 
 type CountAssistantAttachmentsParams struct {
@@ -194,17 +191,12 @@ type CountAssistantAttachmentsParams struct {
 	AssistantID uuid.UUID
 }
 
-type CountAssistantAttachmentsRow struct {
-	Toolsets   int64
-	McpServers int64
-}
-
 // Count stored attachments, including those whose targets are soft-deleted.
-func (q *Queries) CountAssistantAttachments(ctx context.Context, arg CountAssistantAttachmentsParams) (CountAssistantAttachmentsRow, error) {
+func (q *Queries) CountAssistantAttachments(ctx context.Context, arg CountAssistantAttachmentsParams) (int64, error) {
 	row := q.db.QueryRow(ctx, countAssistantAttachments, arg.ProjectID, arg.AssistantID)
-	var i CountAssistantAttachmentsRow
-	err := row.Scan(&i.Toolsets, &i.McpServers)
-	return i, err
+	var mcp_servers int64
+	err := row.Scan(&mcp_servers)
+	return mcp_servers, err
 }
 
 const countAttachmentAuditEventsFixture = `-- name: CountAttachmentAuditEventsFixture :one
@@ -370,7 +362,7 @@ const countMcpMetadataForBackendIDFixture = `-- name: CountMcpMetadataForBackend
 SELECT count(*)
 FROM mcp_metadata
 WHERE project_id = $1
-  AND (toolset_id = $2::uuid OR mcp_server_id = $2::uuid)
+  AND mcp_server_id = $2::uuid
 `
 
 type CountMcpMetadataForBackendIDFixtureParams struct {
@@ -3065,80 +3057,6 @@ INSERT INTO mcp_registries (id,name,url,source_type,auth_profile,enabled,certifi
 func (q *Queries) InsertRetainedLegacyCatalogSourceFixture(ctx context.Context, id uuid.UUID) error {
 	_, err := q.db.Exec(ctx, insertRetainedLegacyCatalogSourceFixture, id)
 	return err
-}
-
-const insertToolsetKeyedMcpMetadataFixture = `-- name: InsertToolsetKeyedMcpMetadataFixture :one
-INSERT INTO mcp_metadata (toolset_id, project_id, instructions, header_display_names, default_environment_id, external_documentation_url)
-VALUES ($1, $2, $3, COALESCE($4::jsonb, '{}'::jsonb), $5, $6)
-RETURNING id
-`
-
-type InsertToolsetKeyedMcpMetadataFixtureParams struct {
-	ToolsetID                uuid.NullUUID
-	ProjectID                uuid.UUID
-	Instructions             pgtype.Text
-	HeaderDisplayNames       []byte
-	DefaultEnvironmentID     uuid.NullUUID
-	ExternalDocumentationUrl pgtype.Text
-}
-
-// Plants a row under the toolset key, as pods from before the server-key writers wrote.
-func (q *Queries) InsertToolsetKeyedMcpMetadataFixture(ctx context.Context, arg InsertToolsetKeyedMcpMetadataFixtureParams) (uuid.UUID, error) {
-	row := q.db.QueryRow(ctx, insertToolsetKeyedMcpMetadataFixture,
-		arg.ToolsetID,
-		arg.ProjectID,
-		arg.Instructions,
-		arg.HeaderDisplayNames,
-		arg.DefaultEnvironmentID,
-		arg.ExternalDocumentationUrl,
-	)
-	var id uuid.UUID
-	err := row.Scan(&id)
-	return id, err
-}
-
-const insertToolsetKeyedPluginServerFixture = `-- name: InsertToolsetKeyedPluginServerFixture :one
-INSERT INTO plugin_servers (plugin_id, toolset_id, display_name, policy, sort_order, deleted_at)
-VALUES ($1, $2, $3, $4, $5, $6)
-RETURNING id, plugin_id, project_id, toolset_id, mcp_server_id, meta_mcp_server_id, display_name, policy, sort_order, created_at, updated_at, deleted_at, deleted
-`
-
-type InsertToolsetKeyedPluginServerFixtureParams struct {
-	PluginID    uuid.UUID
-	ToolsetID   uuid.NullUUID
-	DisplayName string
-	Policy      string
-	SortOrder   int32
-	DeletedAt   pgtype.Timestamptz
-}
-
-// Plants a plugin entry under the toolset key, as pods from before the server-key writers wrote.
-func (q *Queries) InsertToolsetKeyedPluginServerFixture(ctx context.Context, arg InsertToolsetKeyedPluginServerFixtureParams) (PluginServer, error) {
-	row := q.db.QueryRow(ctx, insertToolsetKeyedPluginServerFixture,
-		arg.PluginID,
-		arg.ToolsetID,
-		arg.DisplayName,
-		arg.Policy,
-		arg.SortOrder,
-		arg.DeletedAt,
-	)
-	var i PluginServer
-	err := row.Scan(
-		&i.ID,
-		&i.PluginID,
-		&i.ProjectID,
-		&i.ToolsetID,
-		&i.McpServerID,
-		&i.MetaMcpServerID,
-		&i.DisplayName,
-		&i.Policy,
-		&i.SortOrder,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.DeletedAt,
-		&i.Deleted,
-	)
-	return i, err
 }
 
 const insertToolsetVersionFixture = `-- name: InsertToolsetVersionFixture :exec

@@ -299,7 +299,7 @@ func (f *hostedFixture) pluginMemberships(t *testing.T, ctx context.Context) int
 	t.Helper()
 
 	var count int
-	err := f.ti.conn.QueryRow(ctx, `SELECT count(*) FROM plugin_servers WHERE deleted IS FALSE AND (toolset_id = $1 OR mcp_server_id = $1)`, f.toolset.ID).Scan(&count) //nolint:glint // notestingrawsql: counts memberships under either key
+	err := f.ti.conn.QueryRow(ctx, `SELECT count(*) FROM plugin_servers WHERE deleted IS FALSE AND mcp_server_id = $1`, f.toolset.ID).Scan(&count) //nolint:glint // notestingrawsql: counts live memberships
 	require.NoError(t, err)
 	return count
 }

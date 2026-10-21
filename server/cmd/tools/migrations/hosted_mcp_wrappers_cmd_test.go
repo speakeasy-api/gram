@@ -58,14 +58,8 @@ func TestParseHostedMCPWrappersFlagsRejectsBadInput(t *testing.T) {
 	require.ErrorContains(t, err, "invalid -cursor")
 	_, err = parseHostedMCPWrappersFlags([]string{"-limit=-1"}, hostedMCPWrappersGetenv, io.Discard)
 	require.ErrorContains(t, err, "nonnegative")
-	_, err = parseHostedMCPWrappersFlags([]string{"-readers-cut-over"}, hostedMCPWrappersGetenv, io.Discard)
-	require.ErrorContains(t, err, "only applies to -move-dependents")
-	_, err = parseHostedMCPWrappersFlags([]string{"-cleanup-orphans", "-move-dependents"}, hostedMCPWrappersGetenv, io.Discard)
-	require.ErrorContains(t, err, "separate phases")
-	_, err = parseHostedMCPWrappersFlags([]string{"-cleanup-orphans", "-apply"}, hostedMCPWrappersGetenv, io.Discard)
-	require.ErrorContains(t, err, "-cleanup-orphans -apply requires -report")
-	_, err = parseHostedMCPWrappersFlags([]string{"-cleanup-orphans", "-readers-cut-over"}, hostedMCPWrappersGetenv, io.Discard)
-	require.ErrorContains(t, err, "only applies to -move-dependents")
+	_, err = parseHostedMCPWrappersFlags([]string{"-move-dependents"}, hostedMCPWrappersGetenv, io.Discard)
+	require.Error(t, err)
 	_, err = parseHostedMCPWrappersFlags([]string{"extra"}, hostedMCPWrappersGetenv, io.Discard)
 	require.ErrorContains(t, err, "positional")
 }
@@ -120,86 +114,6 @@ func TestRunHostedMCPWrappersApplyRefusesAnExistingReport(t *testing.T) {
 	require.Equal(t, "previous batch", string(got))
 }
 
-func TestRunHostedMCPWrappersMoveApplyRefusesAnExistingJournal(t *testing.T) {
-	t.Parallel()
-
-	report := filepath.Join(t.TempDir(), "report.json")
-	journal := report + ".journal.jsonl"
-	require.NoError(t, os.WriteFile(journal, []byte("previous batch\n"), 0o600))
-	code := runHostedMCPWrappers([]string{"-move-dependents", "-apply", "-readers-cut-over", "-report", report}, io.Discard, hostedMCPWrappersGetenv)
-	require.Equal(t, 2, code, "an apply must not append to another batch's journal")
-	got, err := os.ReadFile(journal)
-	require.NoError(t, err)
-	require.Equal(t, "previous batch\n", string(got))
-	_, err = os.Stat(report)
-	require.ErrorIs(t, err, os.ErrNotExist, "the refused run leaves no report behind")
-}
-
-func TestParseHostedMCPWrappersFlagsCleanupOrphansJournalsOnApply(t *testing.T) {
-	t.Parallel()
-
-	dry, err := parseHostedMCPWrappersFlags([]string{"-cleanup-orphans", "-report=/tmp/r.json"}, hostedMCPWrappersGetenv, io.Discard)
-	require.NoError(t, err)
-	require.True(t, dry.options.CleanupOrphans)
-	require.Empty(t, dry.journalPath)
-	applied, err := parseHostedMCPWrappersFlags([]string{"-cleanup-orphans", "-apply", "-report=/tmp/r.json"}, hostedMCPWrappersGetenv, io.Discard)
-	require.NoError(t, err)
-	require.True(t, applied.options.Apply)
-	require.True(t, applied.options.CleanupOrphans)
-	require.Equal(t, "/tmp/r.json.journal.jsonl", applied.journalPath)
-	require.False(t, applied.options.Publication.Enabled)
-
-	emitEnv := func(key string) string {
-		if key == "GRAM_PLUGIN_PUBLICATION_EMIT_ENABLED" {
-			return "true"
-		}
-		return hostedMCPWrappersGetenv(key)
-	}
-	fromEnv, err := parseHostedMCPWrappersFlags([]string{"-cleanup-orphans"}, emitEnv, io.Discard)
-	require.NoError(t, err)
-	require.True(t, fromEnv.options.Publication.Enabled)
-	overridden, err := parseHostedMCPWrappersFlags([]string{"-cleanup-orphans", "-plugin-publication-emit=false"}, emitEnv, io.Discard)
-	require.NoError(t, err)
-	require.False(t, overridden.options.Publication.Enabled)
-	_, err = parseHostedMCPWrappersFlags([]string{"-cleanup-orphans"}, func(key string) string {
-		if key == "GRAM_PLUGIN_PUBLICATION_EMIT_ENABLED" {
-			return "yes"
-		}
-		return hostedMCPWrappersGetenv(key)
-	}, io.Discard)
-	require.ErrorContains(t, err, "GRAM_PLUGIN_PUBLICATION_EMIT_ENABLED")
-}
-
-func TestHostedMCPWrappersModeFlagsKeepTheResumeInItsPhase(t *testing.T) {
-	t.Parallel()
-
-	require.Equal(t, "-apply -cleanup-orphans", hostedMCPWrappersModeFlags(hostedmcpbackfill.Options{CleanupOrphans: true}))
-	require.Equal(t, "-apply -move-dependents -readers-cut-over", hostedMCPWrappersModeFlags(hostedmcpbackfill.Options{MoveDependents: true}))
-	require.Equal(t, "-apply", hostedMCPWrappersModeFlags(hostedmcpbackfill.Options{}))
-}
-
-func TestFileJournalAppendsOneLinePerRecord(t *testing.T) {
-	t.Parallel()
-
-	path := filepath.Join(t.TempDir(), "journal.jsonl")
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
-	require.NoError(t, err)
-	journal := hostedmcpbackfill.NewFileJournal(f)
-	rowID, toolsetID := uuid.New(), uuid.New()
-	require.NoError(t, journal.Append(hostedmcpbackfill.JournalRecord{Event: hostedmcpbackfill.JournalIntent, RowID: rowID, ToolsetID: toolsetID}))
-	require.NoError(t, journal.Append(hostedmcpbackfill.JournalRecord{Event: hostedmcpbackfill.JournalCommitted, RowID: rowID, ToolsetID: toolsetID}))
-	require.NoError(t, f.Close())
-
-	got, err := os.ReadFile(path)
-	require.NoError(t, err)
-	lines := bytes.Split(bytes.TrimSpace(got), []byte("\n"))
-	require.Len(t, lines, 2)
-	var first hostedmcpbackfill.JournalRecord
-	require.NoError(t, json.Unmarshal(lines[0], &first))
-	require.Equal(t, hostedmcpbackfill.JournalIntent, first.Event)
-	require.Equal(t, rowID, first.RowID)
-}
-
 func TestWriteHostedMCPWrappersReportReplacesPreviousContent(t *testing.T) {
 	t.Parallel()
 
@@ -238,50 +152,4 @@ func TestRunHostedMCPWrappersWritesReportEvenWhenSummaryFails(t *testing.T) {
 	require.NoError(t, err)
 	var decoded hostedmcpbackfill.Report
 	require.NoError(t, json.Unmarshal(got, &decoded), "the report must be written before the summary")
-}
-
-func TestParseHostedMCPWrappersFlagsMoveDependents(t *testing.T) {
-	t.Parallel()
-
-	cfg, err := parseHostedMCPWrappersFlags([]string{"-move-dependents"}, hostedMCPWrappersGetenv, io.Discard)
-	require.NoError(t, err)
-	require.True(t, cfg.options.MoveDependents)
-	require.False(t, cfg.options.Apply)
-
-	_, err = parseHostedMCPWrappersFlags([]string{"-move-dependents", "-apply"}, hostedMCPWrappersGetenv, io.Discard)
-	require.ErrorContains(t, err, "-readers-cut-over")
-
-	_, err = parseHostedMCPWrappersFlags([]string{"-move-dependents", "-apply", "-readers-cut-over"}, hostedMCPWrappersGetenv, io.Discard)
-	require.ErrorContains(t, err, "-report")
-
-	cfg, err = parseHostedMCPWrappersFlags([]string{"-move-dependents", "-apply", "-readers-cut-over", "-report=/tmp/r.json"}, hostedMCPWrappersGetenv, io.Discard)
-	require.NoError(t, err)
-	require.True(t, cfg.options.MoveDependents)
-	require.True(t, cfg.options.Apply)
-	require.Equal(t, "/tmp/r.json.journal.jsonl", cfg.journalPath)
-}
-
-func TestParseHostedMCPWrappersFlagsRekeyRemovalRecords(t *testing.T) {
-	t.Parallel()
-
-	dry, err := parseHostedMCPWrappersFlags([]string{"-rekey-removal-records"}, hostedMCPWrappersGetenv, io.Discard)
-	require.NoError(t, err)
-	require.True(t, dry.options.RekeyRemovals)
-	require.False(t, dry.options.Apply)
-	require.Empty(t, dry.journalPath)
-
-	_, err = parseHostedMCPWrappersFlags([]string{"-rekey-removal-records", "-apply"}, hostedMCPWrappersGetenv, io.Discard)
-	require.ErrorContains(t, err, "-rekey-removal-records -apply requires -report")
-	for _, other := range []string{"-move-dependents", "-cleanup-orphans"} {
-		_, err = parseHostedMCPWrappersFlags([]string{"-rekey-removal-records", other}, hostedMCPWrappersGetenv, io.Discard)
-		require.ErrorContains(t, err, "separate phases", other)
-	}
-	_, err = parseHostedMCPWrappersFlags([]string{"-rekey-removal-records", "-readers-cut-over"}, hostedMCPWrappersGetenv, io.Discard)
-	require.ErrorContains(t, err, "only applies to -move-dependents")
-
-	applied, err := parseHostedMCPWrappersFlags([]string{"-rekey-removal-records", "-apply", "-report=/tmp/r.json"}, hostedMCPWrappersGetenv, io.Discard)
-	require.NoError(t, err)
-	require.True(t, applied.options.Apply)
-	require.Equal(t, "/tmp/r.json.journal.jsonl", applied.journalPath)
-	require.Equal(t, "-apply -rekey-removal-records", hostedMCPWrappersModeFlags(applied.options))
 }

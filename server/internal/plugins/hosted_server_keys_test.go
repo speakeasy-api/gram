@@ -3,7 +3,6 @@ package plugins_test
 import (
 	"context"
 	"encoding/json"
-	"slices"
 	"testing"
 
 	"github.com/google/uuid"
@@ -155,7 +154,6 @@ func TestPluginsService_AddPluginServer_StoresToolsetsUnderTheirServer(t *testin
 	require.NoError(t, err)
 	require.Len(t, stored, 1)
 	require.Equal(t, uuid.NullUUID{UUID: byToolset.ID, Valid: true}, stored[0].McpServerID, "a wrapped toolset is stored under its canonical server")
-	require.False(t, stored[0].ToolsetID.Valid)
 	require.Equal(t, new(byToolset.ID.String()), added.ToolsetID)
 	require.Equal(t, new(byToolset.ID.String()), added.McpServerID)
 	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{PluginID: plugin.ID, McpServerID: conv.PtrEmpty(byToolset.ID.String()), DisplayName: conv.PtrEmpty("Twin"), Policy: "required"})
@@ -180,10 +178,14 @@ func TestPluginsService_AddPluginServer_StoresToolsetsUnderTheirServer(t *testin
 	require.NoError(t, err)
 	stored, err = pluginsrepo.New(ti.conn).ListPluginServers(ctx, uuid.MustParse(plugin.ID))
 	require.NoError(t, err)
-	idx := slices.IndexFunc(stored, func(row pluginsrepo.PluginServer) bool { return row.ID.String() == added.ID })
+	idx := -1
+	for i, row := range stored {
+		if row.ID.String() == added.ID {
+			idx = i
+		}
+	}
 	require.GreaterOrEqual(t, idx, 0)
 	require.Equal(t, uuid.NullUUID{UUID: disabled.ID, Valid: true}, stored[idx].McpServerID)
-	require.False(t, stored[idx].ToolsetID.Valid)
 }
 
 // A server that holds a toolset's id without being its canonical wrapper does not lend its metadata to the toolset environment.

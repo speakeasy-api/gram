@@ -48,7 +48,6 @@ func TestPluginsService_HostedEntriesReportBothIDs(t *testing.T) {
 	stored, err := pluginsrepo.New(ti.conn).ListPluginServers(ctx, uuid.MustParse(plugin.ID))
 	require.NoError(t, err)
 	require.Len(t, stored, 1)
-	require.False(t, stored[0].ToolsetID.Valid, "an mcp_server_id add stores the server key")
 	require.Equal(t, serverKeyed.ID.String(), conv.PtrValOr(added.ToolsetID, ""))
 	require.Equal(t, serverKeyed.ID.String(), conv.PtrValOr(added.McpServerID, ""))
 

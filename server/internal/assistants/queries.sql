@@ -163,24 +163,6 @@ WHERE project_id = @project_id
   AND slug = ANY(@slugs::TEXT[])
   AND deleted IS FALSE;
 
--- name: LoadAssistantToolsets :many
--- Test-only: legacy assistant_toolsets rows are no longer read or written; deletes still clear them until AIM-581.
-SELECT
-  at.assistant_id,
-  at.toolset_id,
-  t.slug AS toolset_slug,
-  t.mcp_enabled,
-  t.mcp_slug,
-  t.default_environment_slug,
-  at.environment_id,
-  e.slug AS environment_slug
-FROM assistant_toolsets at
-JOIN toolsets t ON t.id = at.toolset_id AND t.deleted IS FALSE
-LEFT JOIN environments e ON e.id = at.environment_id
-WHERE at.assistant_id = ANY(@assistant_ids::UUID[])
-  AND at.project_id = @project_id
-ORDER BY at.created_at;
-
 -- The active/resolvable distribution predicates in LoadAssistantSkills and
 -- LoadAttachedAssistantSkill must stay identical. ResolveAssistantTurnSkills
 -- intentionally omits distribution and pinning because turn-selected skills
@@ -345,26 +327,6 @@ WHERE t.project_id = @project_id
 ORDER BY so.seen_at DESC, so.id DESC
 LIMIT 1;
 
--- name: ClearAssistantToolsets :exec
--- Clears legacy toolset-keyed rows left behind.
-DELETE FROM assistant_toolsets
-WHERE assistant_id = @assistant_id
-  AND project_id = @project_id;
-
--- name: AddAssistantToolsets :copyfrom
--- Test-only, see LoadAssistantToolsets.
-INSERT INTO assistant_toolsets (
-  assistant_id,
-  toolset_id,
-  environment_id,
-  project_id
-) VALUES (
-  @assistant_id,
-  @toolset_id,
-  @environment_id,
-  @project_id
-);
-
 -- name: EnableMCPForToolsets :many
 -- Flips mcp_enabled to TRUE for the listed toolsets in a project. Newly
 -- attached toolsets are enabled so users don't have to do it separately; the
@@ -460,13 +422,6 @@ WHERE ms.project_id = @project_id
   AND ms.toolset_id = ms.id
   AND ms.deleted IS FALSE
   AND t.deleted IS FALSE;
-
--- name: ClearAssistantToolsetsForServers :exec
--- Clears legacy toolset-keyed rows left behind.
-DELETE FROM assistant_toolsets
-WHERE assistant_id = @assistant_id
-  AND project_id = @project_id
-  AND toolset_id = ANY(@mcp_server_ids::UUID[]);
 
 -- name: ClearAssistantMcpServersForServers :exec
 DELETE FROM assistant_mcp_servers

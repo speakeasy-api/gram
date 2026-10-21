@@ -642,7 +642,7 @@ func TestDeleteMcpServer_DetachesFromAssistants(t *testing.T) {
 		ProjectID: *authCtx.ProjectID, AssistantID: assistant.ID,
 	})
 	require.NoError(t, err)
-	require.EqualValues(t, 1, counts.McpServers, "deleted target must be physically detached")
+	require.EqualValues(t, 1, counts, "deleted target must be physically detached")
 	remaining, err := ar.LoadAssistantMcpServers(ctx, assistantsrepo.LoadAssistantMcpServersParams{
 		AssistantIds: []uuid.UUID{assistant.ID}, ProjectID: *authCtx.ProjectID,
 	})
