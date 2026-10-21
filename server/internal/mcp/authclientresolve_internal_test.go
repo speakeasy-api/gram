@@ -331,7 +331,7 @@ func (f *authClientFixture) resolve(selector *upstreamSelector) authClientResolu
 
 func (f *authClientFixture) serve(selector *upstreamSelector) authClientResolution {
 	f.t.Helper()
-	res, err := f.service.resolveAuthClientForServing(f.t.Context(), selector, f.serverID, urn.NewUserSubject("user_1"))
+	res, err := f.service.resolveAuthClientForServing(f.t.Context(), selector, f.serverID, f.projectID, urn.NewUserSubject("user_1"))
 	require.NoError(f.t, err)
 	return res
 }
@@ -470,7 +470,7 @@ func TestResolveAuthClientReadsTheRecordedChoice(t *testing.T) {
 
 		var buf bytes.Buffer
 		f.service.logger = slog.New(slog.NewJSONHandler(&buf, nil))
-		f.service.shadowAuthClient(ctx, selector, f.serverID, choice, choiceErr)
+		f.service.shadowAuthClient(ctx, selector, f.serverID, f.projectID, urn.NewUserSubject("user_1"), choice, choiceErr)
 		require.Empty(t, buf.String(), "shadow reports no mismatch")
 	})
 
@@ -696,7 +696,7 @@ func TestResolveAuthClientReadsTheRecordedChoice(t *testing.T) {
 		f.service.authClientPermitter = permitter
 		id := f.oauthClient(authClientTypeRemoteSession)
 		selector := f.choose(validUUID(id))
-		f.service.shadowAuthClient(ctx, selector, f.serverID, upstreamChoice{clientID: validUUID(f.registration), remoteSessionIssuerID: validUUID(f.issuerID)}, nil)
+		f.service.shadowAuthClient(ctx, selector, f.serverID, f.projectID, urn.NewUserSubject("user_1"), upstreamChoice{clientID: validUUID(f.registration), remoteSessionIssuerID: validUUID(f.issuerID)}, nil)
 		require.Empty(t, permitter.asked)
 	})
 
@@ -911,7 +911,7 @@ func TestShadowAuthClientCountsResolverFailures(t *testing.T) {
 	selector := f.choose(uuid.NullUUID{})
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
-	f.service.shadowAuthClient(ctx, selector, f.serverID, upstreamChoice{}, nil)
+	f.service.shadowAuthClient(ctx, selector, f.serverID, f.projectID, urn.NewUserSubject("user_1"), upstreamChoice{}, nil)
 	require.Equal(t, map[attribute.Set]int64{
 		attribute.NewSet(attr.AuthClientParityAgreed(false), attr.AuthClientOutcome(authClientParityError), attr.AuthClientLegacyOutcome(string(authClientNoAuth)), attr.AuthClientReason(authClientReasonNone)): 1,
 	}, parityPoints(t, reader))
@@ -954,7 +954,7 @@ func TestUpstreamClientChoiceServesMappedHeadersOnlyClients(t *testing.T) {
 			choice, choiceErr := selector.forServer(t.Context(), f.serverID)
 			var buf bytes.Buffer
 			f.service.logger = slog.New(slog.NewJSONHandler(&buf, nil))
-			f.service.shadowAuthClient(t.Context(), selector, f.serverID, choice, choiceErr)
+			f.service.shadowAuthClient(t.Context(), selector, f.serverID, f.projectID, urn.NewUserSubject("user_1"), choice, choiceErr)
 			require.Empty(t, buf.String())
 		})
 	}
