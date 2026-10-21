@@ -788,6 +788,7 @@ FROM principal_grants
 WHERE organization_id = $1
   AND principal_type = 'api_key'
 ORDER BY principal_urn, scope, id
+FOR UPDATE
 `
 
 type ListAPIKeyGrantRowsRow struct {
@@ -796,7 +797,9 @@ type ListAPIKeyGrantRowsRow struct {
 	Selectors    []byte
 }
 
-// Every key policy row, to tell provisioned policies from explicit ones.
+// Every key policy row, to tell provisioned policies from explicit ones. The
+// rows stay locked until the phase commits, so an admin edit to a key's policy
+// waits rather than interleaving with a top-up.
 func (q *Queries) ListAPIKeyGrantRows(ctx context.Context, organizationID string) ([]ListAPIKeyGrantRowsRow, error) {
 	rows, err := q.db.Query(ctx, listAPIKeyGrantRows, organizationID)
 	if err != nil {

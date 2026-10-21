@@ -3424,6 +3424,36 @@ func (q *Queries) LockResourceAudience(ctx context.Context, arg LockResourceAudi
 	return err
 }
 
+const markAuthPermissionTakenOver = `-- name: MarkAuthPermissionTakenOver :exec
+UPDATE auth_permission_provisions
+SET taken_over_at = clock_timestamp(), updated_at = clock_timestamp()
+WHERE organization_id = $1
+  AND principal_urn = $2
+  AND scope = $3
+  AND selectors = $4
+  AND taken_over_at IS NULL
+`
+
+type MarkAuthPermissionTakenOverParams struct {
+	OrganizationID string
+	PrincipalUrn   string
+	Scope          string
+	Selectors      []byte
+}
+
+// An explicit grant write takes the grant over from the default auth
+// permission backfill: a rollback leaves it, and a rerun still never writes it
+// again. Run after the write, so a grant provisioned meanwhile is seen.
+func (q *Queries) MarkAuthPermissionTakenOver(ctx context.Context, arg MarkAuthPermissionTakenOverParams) error {
+	_, err := q.db.Exec(ctx, markAuthPermissionTakenOver,
+		arg.OrganizationID,
+		arg.PrincipalUrn,
+		arg.Scope,
+		arg.Selectors,
+	)
+	return err
+}
+
 const markGlobalRoleDeleted = `-- name: MarkGlobalRoleDeleted :execrows
 UPDATE global_roles
 SET workos_deleted_at = $1,
@@ -3499,6 +3529,32 @@ func (q *Queries) MarkOrganizationRoleDeletedLocally(ctx context.Context, arg Ma
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const recordAuthPermissionDefault = `-- name: RecordAuthPermissionDefault :exec
+INSERT INTO auth_permission_provisions (organization_id, principal_urn, scope, selectors, kind)
+VALUES ($1, $2, $3, $4, $5)
+ON CONFLICT (organization_id, principal_urn, scope, selectors) DO NOTHING
+`
+
+type RecordAuthPermissionDefaultParams struct {
+	OrganizationID string
+	PrincipalUrn   string
+	Scope          string
+	Selectors      []byte
+	Kind           string
+}
+
+// Records a default grant written at organization creation.
+func (q *Queries) RecordAuthPermissionDefault(ctx context.Context, arg RecordAuthPermissionDefaultParams) error {
+	_, err := q.db.Exec(ctx, recordAuthPermissionDefault,
+		arg.OrganizationID,
+		arg.PrincipalUrn,
+		arg.Scope,
+		arg.Selectors,
+		arg.Kind,
+	)
+	return err
 }
 
 const repairOrganizationRoleAssignmentUserLink = `-- name: RepairOrganizationRoleAssignmentUserLink :execrows
@@ -3979,15 +4035,6 @@ func (q *Queries) UpsertOrganizationRoleWithRequests(ctx context.Context, arg Up
 }
 
 const upsertPrincipalGrant = `-- name: UpsertPrincipalGrant :one
-WITH taken_over AS (
-  UPDATE auth_permission_provisions
-  SET taken_over_at = clock_timestamp(), updated_at = clock_timestamp()
-  WHERE organization_id = $1
-    AND principal_urn = $2::text
-    AND scope = $3
-    AND selectors = $4
-    AND taken_over_at IS NULL
-)
 INSERT INTO principal_grants (organization_id, principal_urn, scope, selectors)
 VALUES ($1, $2, $3, $4)
 ON CONFLICT (organization_id, principal_urn, scope, selectors)
@@ -4015,9 +4062,7 @@ type UpsertPrincipalGrantRow struct {
 }
 
 // Creates or updates a single grant row. On conflict (same org/principal/scope/selectors),
-// the existing row is kept and its updated_at is bumped. An explicit write takes
-// the grant over from the default auth permission backfill, so a rollback of the
-// backfill leaves it alone and a rerun still never writes it again.
+// the existing row is kept and its updated_at is bumped.
 func (q *Queries) UpsertPrincipalGrant(ctx context.Context, arg UpsertPrincipalGrantParams) (UpsertPrincipalGrantRow, error) {
 	row := q.db.QueryRow(ctx, upsertPrincipalGrant,
 		arg.OrganizationID,

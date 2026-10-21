@@ -357,8 +357,8 @@ type Report struct {
 	// GrantsWritten counts default grants this run added.
 	GrantsWritten int `json:"grants_written"`
 
-	// APIKeysGranted lists the API keys this run added policy grants to, so
-	// a rollback can find them.
+	// APIKeysGranted lists the API keys this run added policy grants to, for
+	// the run's log.
 	APIKeysGranted []string `json:"api_keys_granted"`
 
 	// APIKeysWaiting means key policies were not planned because some auth

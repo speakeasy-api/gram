@@ -97,6 +97,9 @@ func (s *Service) createPolicyGrant(ctx context.Context, tx pgx.Tx, human HumanC
 	if err != nil {
 		return nil, mapWriteError(err, "agent policy grant already exists")
 	}
+	if err := authz.MarkAuthPermissionTakenOverTx(ctx, tx, human.Auth.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String()).String(), row.Scope, row.Selectors); err != nil {
+		return nil, err //nolint:wrapcheck // already wrapped
+	}
 	grantRow := policyGrantRow{ID: row.ID, Scope: row.Scope, Selectors: row.Selectors, CreatedAt: row.CreatedAt.Time, UpdatedAt: row.UpdatedAt.Time}
 	result, err := policyGrantView(grantRow)
 	if err != nil {
@@ -150,6 +153,9 @@ func (s *Service) UpdatePolicyGrant(ctx context.Context, payload *gen.UpdatePoli
 		})
 		if err != nil {
 			return mapWriteError(err, "agent policy grant already exists")
+		}
+		if err := authz.MarkAuthPermissionTakenOverTx(ctx, tx, human.Auth.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String()).String(), row.Scope, row.Selectors); err != nil {
+			return err //nolint:wrapcheck // already wrapped
 		}
 		after := policyGrantRow{ID: row.ID, Scope: row.Scope, Selectors: row.Selectors, CreatedAt: row.CreatedAt.Time, UpdatedAt: row.UpdatedAt.Time}
 		result, err = policyGrantView(after)

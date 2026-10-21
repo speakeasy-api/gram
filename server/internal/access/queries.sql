@@ -49,24 +49,31 @@ ORDER BY principal_urn;
 
 -- name: UpsertPrincipalGrant :one
 -- Creates or updates a single grant row. On conflict (same org/principal/scope/selectors),
--- the existing row is kept and its updated_at is bumped. An explicit write takes
--- the grant over from the default auth permission backfill, so a rollback of the
--- backfill leaves it alone and a rerun still never writes it again.
-WITH taken_over AS (
-  UPDATE auth_permission_provisions
-  SET taken_over_at = clock_timestamp(), updated_at = clock_timestamp()
-  WHERE organization_id = @organization_id
-    AND principal_urn = @principal_urn::text
-    AND scope = @scope
-    AND selectors = @selectors
-    AND taken_over_at IS NULL
-)
+-- the existing row is kept and its updated_at is bumped.
 INSERT INTO principal_grants (organization_id, principal_urn, scope, selectors)
 VALUES (@organization_id, @principal_urn, @scope, @selectors)
 ON CONFLICT (organization_id, principal_urn, scope, selectors)
 DO UPDATE SET
   updated_at = clock_timestamp()
 RETURNING id, organization_id, principal_urn, principal_type, scope, selectors, created_at, updated_at;
+
+-- name: MarkAuthPermissionTakenOver :exec
+-- An explicit grant write takes the grant over from the default auth
+-- permission backfill: a rollback leaves it, and a rerun still never writes it
+-- again. Run after the write, so a grant provisioned meanwhile is seen.
+UPDATE auth_permission_provisions
+SET taken_over_at = clock_timestamp(), updated_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND principal_urn = @principal_urn
+  AND scope = @scope
+  AND selectors = @selectors
+  AND taken_over_at IS NULL;
+
+-- name: RecordAuthPermissionDefault :exec
+-- Records a default grant written at organization creation.
+INSERT INTO auth_permission_provisions (organization_id, principal_urn, scope, selectors, kind)
+VALUES (@organization_id, @principal_urn, @scope, @selectors, @kind)
+ON CONFLICT (organization_id, principal_urn, scope, selectors) DO NOTHING;
 
 -- name: InsertPrincipalGrantIfAbsent :execrows
 -- Creates a single grant row and leaves an existing identical row untouched.

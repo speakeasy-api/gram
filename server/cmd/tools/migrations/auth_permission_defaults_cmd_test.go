@@ -42,22 +42,24 @@ func TestBackfillAuthPermissionDefaultsAggregates(t *testing.T) {
 		"b": report(map[authclientbackfill.GrantKind]int{authclientbackfill.GrantPersonalDefault: 0, authclientbackfill.GrantSharedClient: 4, authclientbackfill.GrantAPIKey: 0}, 4, true, false),
 		"c": report(nil, 0, false, true),
 	}
-	got, err := backfillAuthPermissionDefaults([]string{"a", "b", "c", "d"}, func(id string) (authclientbackfill.Report, error) {
+	results["e"] = report(map[authclientbackfill.GrantKind]int{authclientbackfill.GrantPersonalDefault: 1, authclientbackfill.GrantSharedClient: 0, authclientbackfill.GrantAPIKey: 0}, 1, true, false)
+	results["e"].PhaseErrors[authclientbackfill.PhaseEMA] = "readiness check failed"
+	got, err := backfillAuthPermissionDefaults([]string{"a", "b", "c", "d", "e"}, func(id string) (authclientbackfill.Report, error) {
 		if id == "d" {
 			return authclientbackfill.Report{}, authclientbackfill.ErrRunInProgress
 		}
 		return results[id], nil
-	})
+	}, func(int, int) {})
 	require.NoError(t, err)
-	require.Equal(t, 4, got.Organizations)
-	require.Equal(t, map[authclientbackfill.GrantKind]int{authclientbackfill.GrantPersonalDefault: 1, authclientbackfill.GrantAPIKey: 2, authclientbackfill.GrantSharedClient: 4}, got.Granted)
-	require.Equal(t, 7, got.Written)
-	require.Equal(t, 1, got.KeysWaiting)
+	require.Equal(t, 5, got.Organizations)
+	require.Equal(t, map[authclientbackfill.GrantKind]int{authclientbackfill.GrantPersonalDefault: 2, authclientbackfill.GrantAPIKey: 2, authclientbackfill.GrantSharedClient: 4}, got.Granted)
+	require.Equal(t, 8, got.Written, "a readiness-check error does not undo committed grants")
+	require.Equal(t, 2, got.KeysWaiting)
 	require.Equal(t, 1, got.Failed)
 	require.Equal(t, 1, got.Busy)
 
 	_, err = backfillAuthPermissionDefaults([]string{"a"}, func(string) (authclientbackfill.Report, error) {
 		return authclientbackfill.Report{}, errors.New("database down")
-	})
+	}, func(int, int) {})
 	require.Error(t, err)
 }

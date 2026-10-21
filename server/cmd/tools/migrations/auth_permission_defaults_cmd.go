@@ -20,9 +20,10 @@ import (
 const authPermissionDefaultsName = "auth-permission-defaults"
 
 type authPermissionDefaultsConfig struct {
-	dbURL       string
-	environment string
-	apply       bool
+	dbURL          string
+	environment    string
+	organizationID string
+	apply          bool
 }
 
 func parseAuthPermissionDefaultsFlags(args []string, getenv func(string) string) (authPermissionDefaultsConfig, error) {
@@ -33,6 +34,7 @@ func parseAuthPermissionDefaultsFlags(args []string, getenv func(string) string)
 	confirmEnvironment := fs.String("confirm-environment", "", "must exactly match environment for writes")
 	confirmTarget := fs.String("confirm-target", "", "must exactly match the parsed host, port, and database for writes")
 	confirmApply := fs.String("confirm-apply", "", "must equal "+authPermissionDefaultsName+" for writes")
+	organizationID := fs.String("organization", "", "run for this one organization id only")
 	if err := fs.Parse(args); err != nil || fs.NArg() != 0 {
 		return authPermissionDefaultsConfig{}, errors.New("invalid " + authPermissionDefaultsName + " flags")
 	}
@@ -57,7 +59,7 @@ func parseAuthPermissionDefaultsFlags(args []string, getenv func(string) string)
 	if *apply && *confirmApply != authPermissionDefaultsName {
 		return authPermissionDefaultsConfig{}, errors.New("writes require -confirm-apply=" + authPermissionDefaultsName)
 	}
-	return authPermissionDefaultsConfig{dbURL: dbURL, environment: *environment, apply: *apply}, nil
+	return authPermissionDefaultsConfig{dbURL: dbURL, environment: *environment, organizationID: *organizationID, apply: *apply}, nil
 }
 
 // authPermissionDefaultsReport aggregates every organization's run. It holds
@@ -75,12 +77,20 @@ func newAuthPermissionDefaultsReport() authPermissionDefaultsReport {
 	return authPermissionDefaultsReport{Organizations: 0, Granted: map[authclientbackfill.GrantKind]int{}, Written: 0, KeysWaiting: 0, Busy: 0, Failed: 0}
 }
 
+// authPermissionDefaultsProgressEvery is how many organizations pass between
+// progress lines.
+const authPermissionDefaultsProgressEvery = 100
+
 // backfillAuthPermissionDefaults runs the grants phase for each organization
-// in turn. An organization another run holds is skipped and counted; any other
-// failure stops the backfill, which is safe to rerun.
-func backfillAuthPermissionDefaults(organizationIDs []string, run func(organizationID string) (authclientbackfill.Report, error)) (authPermissionDefaultsReport, error) {
+// in turn. An organization another run holds, or whose grants phase rolled
+// back, is counted and skipped; an error that is not an organization's result
+// stops the backfill, which is safe to rerun.
+func backfillAuthPermissionDefaults(organizationIDs []string, run func(organizationID string) (authclientbackfill.Report, error), progress func(done, total int)) (authPermissionDefaultsReport, error) {
 	report := newAuthPermissionDefaultsReport()
-	for _, organizationID := range organizationIDs {
+	for i, organizationID := range organizationIDs {
+		if i > 0 && i%authPermissionDefaultsProgressEvery == 0 {
+			progress(i, len(organizationIDs))
+		}
 		report.Organizations++
 		result, err := run(organizationID)
 		switch {
@@ -90,7 +100,9 @@ func backfillAuthPermissionDefaults(organizationIDs []string, run func(organizat
 		case err != nil:
 			return report, fmt.Errorf("organization %d of %d: %w", report.Organizations, len(organizationIDs), err)
 		}
-		if len(result.PhaseErrors) > 0 {
+		// Other phase errors come from the readiness check and only hold
+		// key policies back; the grants themselves committed.
+		if _, failed := result.PhaseErrors[authclientbackfill.PhaseGrants]; failed {
 			report.Failed++
 			continue
 		}
@@ -119,10 +131,13 @@ func runAuthPermissionDefaults(args []string, stdout io.Writer, getenv func(stri
 		return 1
 	}
 	defer pool.Close()
-	organizationIDs, err := authclientbackfill.New(pool).ListOrganizationIDsForGrants(ctx)
-	if err != nil {
-		_, _ = fmt.Fprintln(stdout, "migration failed: list organizations")
-		return 1
+	organizationIDs := []string{cfg.organizationID}
+	if cfg.organizationID == "" {
+		organizationIDs, err = authclientbackfill.New(pool).ListOrganizationIDsForGrants(ctx)
+		if err != nil {
+			_, _ = fmt.Fprintln(stdout, "migration failed: list organizations")
+			return 1
+		}
 	}
 	report, err := backfillAuthPermissionDefaults(organizationIDs, func(organizationID string) (authclientbackfill.Report, error) {
 		result, err := authclientbackfill.RunGrants(ctx, pool, authclientbackfill.Options{OrganizationID: organizationID, Apply: cfg.apply, PageSize: 0})
@@ -130,6 +145,8 @@ func runAuthPermissionDefaults(args []string, stdout io.Writer, getenv func(stri
 			return result, fmt.Errorf("grant default auth permissions: %w", err)
 		}
 		return result, nil
+	}, func(done, total int) {
+		_, _ = fmt.Fprintf(stdout, "progress organizations=%d/%d\n", done, total)
 	})
 	mode := "dry-run"
 	if cfg.apply {
@@ -141,6 +158,10 @@ func runAuthPermissionDefaults(args []string, stdout io.Writer, getenv func(stri
 		report.Written, report.KeysWaiting, report.Busy, report.Failed)
 	if err != nil {
 		_, _ = fmt.Fprintf(stdout, "migration failed: %v\n", err)
+		return 1
+	}
+	if report.Failed > 0 {
+		_, _ = fmt.Fprintln(stdout, "migration incomplete: some organizations failed; rerun")
 		return 1
 	}
 	return 0
