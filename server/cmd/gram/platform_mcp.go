@@ -628,7 +628,7 @@ func attachShadowAI(reader *platformmcp.PostgresReader, config platformMCPConfig
 func platformMCPSetupResources(config platformMCPConfig) ([]platformmcp.SetupResource, error) {
 	// The redirect_uri a newly created client registers, derived the same way
 	// externalmcp, remotesessions, and the dashboard derive it.
-	callbackURL := remotesessions.RemoteLoginCallbackURL(config.CallbackOrigins.Outbound)
+	callbackURL := remotesessions.RemoteLoginCallbackURL(config.CallbackOrigins.ForNewClient(true))
 	if config.CallbackOrigins.OrganizationHosts != nil {
 		callbackURL = "{{organization_oauth_callback_url}}"
 	}
