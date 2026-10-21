@@ -23,7 +23,7 @@ const agent: ManagedAgent = {
 afterEach(() => vi.restoreAllMocks());
 
 describe("registeredAgentIdentity", () => {
-  it("maps inventory without inventing human enrollment, accounts, or activity", () => {
+  it("maps inventory without inventing a directory profile, membership, accounts, or activity", () => {
     const identity = registeredAgentIdentity(agent);
 
     expect(identity).toEqual({
@@ -32,7 +32,8 @@ describe("registeredAgentIdentity", () => {
       name: agent.name,
       email: "",
       role: "",
-      status: "not_enrolled",
+      inDirectory: false,
+      seen: false,
       tokenCount: 0,
       lastActivity: "—",
       lastActivityTimestamp: null,
@@ -170,41 +171,97 @@ describe("registeredAgentHref", () => {
 describe("matchesIdentityTelemetryFilters", () => {
   const inventory = registeredAgentIdentity(agent);
   it("keeps inventory visible without telemetry filters", () => {
-    expect(
-      matchesIdentityTelemetryFilters(inventory, undefined, undefined),
-    ).toBe(true);
+    expect(matchesIdentityTelemetryFilters(inventory, {}, undefined)).toBe(
+      true,
+    );
   });
-  it.each(["not_enrolled", "enrolled"])(
-    "excludes inventory from %s enrollment",
-    (enrollment) => {
-      expect(
-        matchesIdentityTelemetryFilters(inventory, enrollment, undefined),
-      ).toBe(false);
-    },
-  );
+  it.each([
+    { directory: "in_directory" },
+    { directory: "not_in_directory" },
+    { membership: "member" },
+    { membership: "not_member" },
+    { seen: "seen" },
+    { seen: "not_seen" },
+  ])("excludes inventory from the %j fact filter", (facts) => {
+    expect(matchesIdentityTelemetryFilters(inventory, facts, undefined)).toBe(
+      false,
+    );
+  });
   it.each(["never", "7d", "30d", "older"])(
     "excludes inventory from %s activity",
     (activity) => {
-      expect(
-        matchesIdentityTelemetryFilters(inventory, undefined, activity),
-      ).toBe(false);
+      expect(matchesIdentityTelemetryFilters(inventory, {}, activity)).toBe(
+        false,
+      );
     },
   );
-  it("preserves known non-inventory enrollment and activity filtering", () => {
-    const person = { ...inventory, registeredAgentId: undefined };
+  it("answers each fact on its own", () => {
+    // A member with a directory profile who has never been seen: the facts
+    // disagree, and each filter answers only its own.
+    const member = {
+      ...inventory,
+      registeredAgentId: undefined,
+      id: "user_1",
+      inDirectory: true,
+      seen: false,
+    };
     expect(
-      matchesIdentityTelemetryFilters(person, "not_enrolled", "never"),
+      matchesIdentityTelemetryFilters(
+        member,
+        { directory: "in_directory", membership: "member", seen: "not_seen" },
+        undefined,
+      ),
     ).toBe(true);
-    expect(matchesIdentityTelemetryFilters(person, "enrolled", undefined)).toBe(
-      false,
-    );
-    expect(matchesIdentityTelemetryFilters(person, undefined, "7d")).toBe(
-      false,
-    );
+    expect(
+      matchesIdentityTelemetryFilters(member, { seen: "seen" }, undefined),
+    ).toBe(false);
+    expect(
+      matchesIdentityTelemetryFilters(
+        member,
+        { directory: "not_in_directory" },
+        undefined,
+      ),
+    ).toBe(false);
+    expect(
+      matchesIdentityTelemetryFilters(
+        member,
+        { membership: "not_member" },
+        undefined,
+      ),
+    ).toBe(false);
+
+    // Unattributed usage: seen, but not a member and not in the directory.
+    const usage = {
+      ...member,
+      id: "usage:someone@example.com",
+      inDirectory: false,
+      seen: true,
+    };
+    expect(
+      matchesIdentityTelemetryFilters(
+        usage,
+        {
+          directory: "not_in_directory",
+          membership: "not_member",
+          seen: "seen",
+        },
+        undefined,
+      ),
+    ).toBe(true);
+    expect(
+      matchesIdentityTelemetryFilters(
+        usage,
+        { membership: "member" },
+        undefined,
+      ),
+    ).toBe(false);
+  });
+  it("preserves activity filtering for known identities", () => {
+    const person = { ...inventory, registeredAgentId: undefined };
+    expect(matchesIdentityTelemetryFilters(person, {}, "never")).toBe(true);
+    expect(matchesIdentityTelemetryFilters(person, {}, "7d")).toBe(false);
     const active = { ...person, lastActivityTimestamp: Date.now() };
-    expect(matchesIdentityTelemetryFilters(active, undefined, "7d")).toBe(true);
-    expect(matchesIdentityTelemetryFilters(active, undefined, "never")).toBe(
-      false,
-    );
+    expect(matchesIdentityTelemetryFilters(active, {}, "7d")).toBe(true);
+    expect(matchesIdentityTelemetryFilters(active, {}, "never")).toBe(false);
   });
 });

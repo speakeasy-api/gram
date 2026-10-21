@@ -1,4 +1,5 @@
 import type { Employee } from "@/components/observe/insightsEmployeesData";
+import { identityHasAccount } from "./identityKind";
 import type { Gram } from "@gram/client";
 import type { ManagedAgent } from "@gram/client/models/components/managedagent.js";
 import type { Lifecycle } from "@gram/client/models/operations/listagents.js";
@@ -128,7 +129,7 @@ export async function fetchRegisteredAgents(
   }
 }
 
-/** Inventory rows do not imply human enrollment or telemetry activity. */
+/** Inventory rows imply no directory profile, membership or telemetry activity. */
 export function registeredAgentIdentity(agent: ManagedAgent): Employee {
   return {
     id: `agent:${agent.id}`,
@@ -136,7 +137,8 @@ export function registeredAgentIdentity(agent: ManagedAgent): Employee {
     name: agent.name,
     email: "",
     role: "",
-    status: "not_enrolled",
+    inDirectory: false,
+    seen: false,
     tokenCount: 0,
     lastActivity: "—",
     lastActivityTimestamp: null,
@@ -160,14 +162,39 @@ export function registeredAgentHref(
   return `${path}?${params.toString()}`;
 }
 
-/** Inventory-only agents have no known enrollment or activity classification. */
+/**
+ * The identity-fact filters, each answered on its own: in the directory, a
+ * member of this organization, and seen working. Values are the option values
+ * offered by the list ("in_directory", "not_in_directory", and so on); an
+ * empty or absent value leaves that fact unfiltered.
+ */
+export type IdentityFactFilters = {
+  directory?: string;
+  membership?: string;
+  seen?: string;
+};
+
+/**
+ * Inventory-only agents have no known directory, membership or activity
+ * classification, so any of these filters leaves them out rather than
+ * answering "no" for them.
+ */
 export function matchesIdentityTelemetryFilters(
   identity: Employee,
-  enrollment: string | undefined,
+  facts: IdentityFactFilters,
   activity: string | undefined,
 ): boolean {
-  if (identity.registeredAgentId && (enrollment || activity)) return false;
-  if (enrollment && identity.status !== enrollment) return false;
+  const { directory, membership, seen } = facts;
+  if (
+    identity.registeredAgentId &&
+    (directory || membership || seen || activity)
+  )
+    return false;
+  if (directory && identity.inDirectory !== (directory === "in_directory"))
+    return false;
+  if (membership && identityHasAccount(identity) !== (membership === "member"))
+    return false;
+  if (seen && identity.seen !== (seen === "seen")) return false;
   return !activity || matchesActivity(identity, activity);
 }
 
