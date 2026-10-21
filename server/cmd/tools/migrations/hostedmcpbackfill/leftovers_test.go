@@ -51,6 +51,7 @@ type leftoverSeed struct {
 	plugin                       uuid.UUID
 	want                         map[uuid.UUID]Outcome
 	serverKeyed, liveServerKeyed uuid.UUID
+	gone                         uuid.UUID
 }
 
 // seedLeftovers seeds one toolset-keyed row per outcome, plus server-keyed rows the mode never lists.
@@ -104,7 +105,7 @@ func seedLeftovers(t *testing.T) leftoverSeed {
 	require.NoError(t, q.SoftDeleteProjectFixture(t.Context(), SoftDeleteProjectFixtureParams{ID: deletedProject.projectID, OrganizationID: deletedProject.orgID}))
 
 	return leftoverSeed{
-		f: f, deletedProject: deletedProject, plugin: plugin, serverKeyed: serverKeyed, liveServerKeyed: liveServerKeyed,
+		f: f, deletedProject: deletedProject, plugin: plugin, serverKeyed: serverKeyed, liveServerKeyed: liveServerKeyed, gone: gone,
 		want: map[uuid.UUID]Outcome{
 			gone: OutcomeDeleted, duplicate: OutcomeDeleted, projectGone: OutcomeDeleted,
 			needsRekey: OutcomeBlockedNeedsRekey, noCanonical: OutcomeBlockedNoWrapper, tombstonedRecord: OutcomeBlockedNoWrapper,
@@ -370,11 +371,30 @@ func TestRestoreLeftoverRemovalRecordsJQReplaysCommittedRows(t *testing.T) {
 	opts, journal := leftoverOptions(true)
 	require.Equal(t, 3, f.run(t, opts).Outcomes[OutcomeDeleted])
 
-	var lines bytes.Buffer
-	for _, record := range append(journal.records, JournalRecord{
+	// The gone row keeps only its intent, as when the journal write after its commit fails.
+	records := make([]JournalRecord, 0, len(journal.records)+2)
+	for _, record := range journal.records {
+		if record.Event == JournalCommitted && record.RowID == s.gone {
+			continue
+		}
+		records = append(records, record)
+	}
+	// An intent-only record for a row whose delete never committed; its stale image must not overwrite the row.
+	var stale map[string]any
+	require.NoError(t, json.Unmarshal([]byte(before[s.serverKeyed]), &stale))
+	stale["display_name"] = "stale"
+	staleRow, err := json.Marshal(stale)
+	require.NoError(t, err)
+	records = append(records, JournalRecord{
+		Event: JournalIntent, ProjectID: f.projectID, ToolsetID: uuid.New(), RowID: s.serverKeyed, Outcome: OutcomeDeleted,
+		From: RowKey{Table: tablePluginServers, Column: "toolset_id", ID: uuid.New()}, To: RowKey{Table: "", Column: "", ID: uuid.Nil},
+		CollapsedTwin: nil, Removed: &RowImage{Table: tablePluginServers, ID: s.serverKeyed, Deletion: "deleted", Row: staleRow, EnvironmentConfigs: nil, SoftDeletedAt: "", RekeyedUpdatedAt: ""}, Rekeyed: nil,
+	}, JournalRecord{
 		Event: JournalCommitUnknown, ProjectID: f.projectID, ToolsetID: uuid.New(), RowID: uuid.New(), Outcome: OutcomeCommitUnknown,
 		From: RowKey{Table: tablePluginServers, Column: "toolset_id", ID: uuid.New()}, To: RowKey{Table: "", Column: "", ID: uuid.Nil},
-	}) {
+	})
+	var lines bytes.Buffer
+	for _, record := range records {
 		line, err := json.Marshal(record)
 		require.NoError(t, err)
 		lines.Write(append(line, '\n'))
@@ -403,8 +423,11 @@ func TestRestoreLeftoverRemovalRecordsJQReplaysCommittedRows(t *testing.T) {
 
 	script := replay(f.projectID)
 	require.Contains(t, script, "-- commit_unknown: plugin_servers")
-	require.Equal(t, 2, strings.Count(script, "INSERT INTO plugin_servers"))
-	require.Equal(t, before, f.pluginServerImages(t), "the restore re-inserts exactly the deleted rows")
+	require.Contains(t, script, "-- no row image: plugin_servers")
+	require.Contains(t, script, "-- intent without outcome: plugin_servers "+s.gone.String()+"; check by hand\nINSERT INTO plugin_servers")
+	require.Contains(t, script, "-- intent without outcome: plugin_servers "+s.serverKeyed.String()+"; check by hand\nINSERT INTO plugin_servers")
+	require.Equal(t, 3, strings.Count(script, "INSERT INTO plugin_servers"))
+	require.Equal(t, before, f.pluginServerImages(t), "the restore re-inserts exactly the deleted rows, intent-only ones included, and leaves present rows alone")
 	require.Empty(t, s.deletedProject.pluginServerImages(t), "a project's restore leaves other projects alone")
 
 	require.Equal(t, 1, strings.Count(replay(s.deletedProject.projectID), "INSERT INTO plugin_servers"))
@@ -481,4 +504,59 @@ func TestDeletedDuplicateRemovalRecordStillBlocksRoleDeliveryReAdd(t *testing.T)
 	changed, members = populate(control)
 	require.True(t, changed)
 	require.Len(t, members, 1)
+}
+
+// The DELETE rechecks eligibility itself, so a state that changed after the caller's checks deletes nothing.
+func TestDeleteLeftoverRemovalRecordRechecksEligibility(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	q := New(f.pool)
+	plugin, otherPlugin := f.seedPlugin(t), f.seedPlugin(t)
+	del := func(id, toolsetID uuid.UUID, eligibility string) int64 {
+		n, err := q.DeleteLeftoverRemovalRecord(t.Context(), DeleteLeftoverRemovalRecordParams{ID: id, ProjectID: f.projectID, ToolsetID: toolsetID, Eligibility: eligibility})
+		require.NoError(t, err)
+		return n
+	}
+	liveServer := func(toolsetID uuid.UUID) uuid.UUID {
+		id := uuid.New()
+		slug := "late-" + uuid.NewString()[:8]
+		require.NoError(t, q.SeedServerFixture(t.Context(), SeedServerFixtureParams{
+			ID: id, ProjectID: f.projectID, Name: pgtype.Text{String: slug, Valid: true}, Slug: pgtype.Text{String: slug, Valid: true},
+			ToolsetID: key(toolsetID), Visibility: "public", DeletedAt: pgtype.Timestamptz{},
+		}))
+		return id
+	}
+
+	gone := f.seedWrappedToolset(t, "gone-"+uuid.NewString()[:8])
+	goneRecord := f.seedRemoval(t, plugin, key(gone), uuid.NullUUID{}, "gone")
+	f.deleteToolset(t, gone)
+	late := liveServer(gone)
+	require.Zero(t, del(goneRecord, gone, eligibilityToolsetDeleted), "a live wrapper appeared")
+	require.Zero(t, del(goneRecord, gone, eligibilityProjectDeleted), "the project is live")
+	require.Zero(t, del(goneRecord, gone, "unknown"))
+
+	distributedToolset := f.seedWrappedToolset(t, "distributed-"+uuid.NewString()[:8])
+	distributed := f.seedRemoval(t, plugin, key(distributedToolset), uuid.NullUUID{}, "distributed")
+	f.deleteToolset(t, distributedToolset)
+	require.NoError(t, q.SeedDistributionReferenceFixture(t.Context(), SeedDistributionReferenceFixtureParams{OrganizationID: f.orgID, ProjectID: f.projectID, PluginID: plugin, PluginServerID: key(distributed)}))
+	require.Zero(t, del(distributed, distributedToolset, eligibilityToolsetDeleted), "a distribution references the row")
+
+	dup := f.seedWrappedToolset(t, "duplicate-"+uuid.NewString()[:8])
+	dupRecord := f.seedRemoval(t, plugin, key(dup), uuid.NullUUID{}, "duplicate")
+	f.seedRemoval(t, otherPlugin, uuid.NullUUID{}, key(dup), "other plugin's canonical removal")
+	require.Zero(t, del(dupRecord, dup, eligibilityDuplicate), "only another plugin has a server-keyed removal")
+	f.seedRemoval(t, plugin, uuid.NullUUID{}, key(dup), "canonical removal")
+	lateDup := liveServer(dup)
+	require.Zero(t, del(dupRecord, dup, eligibilityDuplicate), "a live wrapper without a removal appeared")
+	require.Zero(t, del(dupRecord, dup, eligibilityToolsetDeleted), "the toolset's servers are live")
+
+	images := f.pluginServerImages(t)
+	require.Contains(t, images, goneRecord)
+	require.Contains(t, images, distributed)
+	require.Contains(t, images, dupRecord)
+
+	require.NoError(t, q.SoftDeleteServerFixture(t.Context(), SoftDeleteServerFixtureParams{ID: late, ProjectID: f.projectID}))
+	require.EqualValues(t, 1, del(goneRecord, gone, eligibilityToolsetDeleted))
+	f.seedRemoval(t, plugin, uuid.NullUUID{}, key(lateDup), "late wrapper removal")
+	require.EqualValues(t, 1, del(dupRecord, dup, eligibilityDuplicate))
 }

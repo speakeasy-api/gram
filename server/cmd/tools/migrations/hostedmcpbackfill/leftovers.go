@@ -22,6 +22,13 @@ const (
 	reasonDuplicateLiveWrapper      = "a live non-canonical wrapper server has no server-keyed removal record for this plugin"
 )
 
+// Eligibility cases DeleteLeftoverRemovalRecord rechecks.
+const (
+	eligibilityProjectDeleted = "project_deleted"
+	eligibilityToolsetDeleted = "toolset_deleted"
+	eligibilityDuplicate      = "duplicate"
+)
+
 // leftoversPhase walks the same rows as the removal re-key.
 func (r *Runner) leftoversPhase() dependentPhase[ListToolsetRemovalRecordsRow] {
 	phase := r.removalsPhase()
@@ -72,9 +79,10 @@ func (r *Runner) deleteLeftoverOne(ctx context.Context, toolsetID uuid.UUID, dep
 		return blocked(row, OutcomeBlockedLive, reasonLeftoverLive), nil
 	}
 
+	var eligibility string
 	switch {
 	case toolset.ProjectDeleted:
-		row.Reason = "project deleted"
+		row.Reason, eligibility = "project deleted", eligibilityProjectDeleted
 	default:
 		// Role delivery still lists live servers of a deleted toolset, so this record may be what keeps them out.
 		servers, err := q.LockLiveToolsetServers(ctx, LockLiveToolsetServersParams{ProjectID: toolset.ProjectID, ToolsetID: toolset.ID})
@@ -85,7 +93,7 @@ func (r *Runner) deleteLeftoverOne(ctx context.Context, toolsetID uuid.UUID, dep
 			if len(servers) > 0 {
 				return blocked(row, OutcomeBlockedLiveWrapper, reasonDeletedToolsetLiveWrapper), nil
 			}
-			row.Reason = "toolset deleted"
+			row.Reason, eligibility = "toolset deleted", eligibilityToolsetDeleted
 			break
 		}
 		wrapper, err := q.GetLiveCanonicalWrapper(ctx, GetLiveCanonicalWrapperParams{ToolsetID: toolset.ID, ProjectID: toolset.ProjectID})
@@ -115,7 +123,7 @@ func (r *Runner) deleteLeftoverOne(ctx context.Context, toolsetID uuid.UUID, dep
 				return row, fmt.Errorf("lock wrapper server-keyed removal record: %w", err)
 			}
 		}
-		row.Reason = reasonLeftoverDuplicate
+		row.Reason, eligibility = reasonLeftoverDuplicate, eligibilityDuplicate
 	}
 
 	// The FK is ON DELETE NO ACTION, so a referenced row would fail the delete; report it instead.
@@ -123,11 +131,13 @@ func (r *Runner) deleteLeftoverOne(ctx context.Context, toolsetID uuid.UUID, dep
 		return blocked(row, OutcomeBlockedDistributed, reasonDistributed), nil
 	}
 
-	deleted, err := q.DeleteLeftoverRemovalRecord(ctx, DeleteLeftoverRemovalRecordParams{ID: record.ID, ProjectID: toolset.ProjectID, ToolsetID: toolsetID})
-	if err != nil {
+	deleted, err := q.DeleteLeftoverRemovalRecord(ctx, DeleteLeftoverRemovalRecordParams{ID: record.ID, ProjectID: toolset.ProjectID, ToolsetID: toolsetID, Eligibility: eligibility})
+	switch {
+	case err != nil:
 		return row, fmt.Errorf("delete removal record: %w", err)
-	}
-	if deleted != 1 {
+	case deleted == 0:
+		return skipped(row, reasonRowChanged), nil
+	case deleted != 1:
 		return row, fmt.Errorf("delete removal record: %d rows deleted", deleted)
 	}
 

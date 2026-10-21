@@ -130,16 +130,55 @@ WHERE ps.id = $1
   AND ps.mcp_server_id IS NULL
   AND ps.meta_mcp_server_id IS NULL
   AND ps.deleted IS TRUE
+  AND NOT EXISTS (
+    SELECT 1
+    FROM platform_mcp_distributions AS d
+    WHERE d.project_id = pl.project_id AND d.plugin_server_id = ps.id
+  )
+  AND CASE $4::text
+    WHEN 'project_deleted' THEN EXISTS (
+      SELECT 1 FROM projects AS p WHERE p.id = pl.project_id AND p.deleted IS TRUE
+    )
+    WHEN 'toolset_deleted' THEN NOT EXISTS (
+      SELECT 1
+      FROM mcp_servers AS ms
+      WHERE ms.project_id = pl.project_id AND ms.toolset_id = ps.toolset_id AND ms.deleted IS FALSE
+    )
+    WHEN 'duplicate' THEN EXISTS (
+      SELECT 1
+      FROM mcp_servers AS ms
+      WHERE ms.id = ps.toolset_id AND ms.project_id = pl.project_id AND ms.toolset_id = ps.toolset_id AND ms.deleted IS FALSE
+    ) AND NOT EXISTS (
+      SELECT 1
+      FROM mcp_servers AS ms
+      WHERE ms.project_id = pl.project_id
+        AND ms.toolset_id = ps.toolset_id
+        AND ms.deleted IS FALSE
+        AND NOT EXISTS (
+          SELECT 1
+          FROM plugin_servers AS r
+          WHERE r.plugin_id = ps.plugin_id AND r.mcp_server_id = ms.id AND r.deleted IS TRUE
+        )
+    )
+    ELSE FALSE
+  END
 `
 
 type DeleteLeftoverRemovalRecordParams struct {
-	ID        uuid.UUID
-	ProjectID uuid.UUID
-	ToolsetID uuid.UUID
+	ID          uuid.UUID
+	ProjectID   uuid.UUID
+	ToolsetID   uuid.UUID
+	Eligibility string
 }
 
+// Repeats the caller's eligibility checks so a concurrent change deletes nothing.
 func (q *Queries) DeleteLeftoverRemovalRecord(ctx context.Context, arg DeleteLeftoverRemovalRecordParams) (int64, error) {
-	result, err := q.db.Exec(ctx, deleteLeftoverRemovalRecord, arg.ID, arg.ProjectID, arg.ToolsetID)
+	result, err := q.db.Exec(ctx, deleteLeftoverRemovalRecord,
+		arg.ID,
+		arg.ProjectID,
+		arg.ToolsetID,
+		arg.Eligibility,
+	)
 	if err != nil {
 		return 0, err
 	}
