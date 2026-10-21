@@ -1145,6 +1145,41 @@ func (q *Queries) LockDependentToolset(ctx context.Context, arg LockDependentToo
 	return i, err
 }
 
+const lockLiveToolsetServers = `-- name: LockLiveToolsetServers :many
+SELECT ms.id
+FROM mcp_servers AS ms
+WHERE ms.project_id = $1
+  AND ms.toolset_id = $2::uuid
+  AND ms.deleted IS FALSE
+ORDER BY ms.id
+FOR SHARE OF ms
+`
+
+type LockLiveToolsetServersParams struct {
+	ProjectID uuid.UUID
+	ToolsetID uuid.UUID
+}
+
+func (q *Queries) LockLiveToolsetServers(ctx context.Context, arg LockLiveToolsetServersParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, lockLiveToolsetServers, arg.ProjectID, arg.ToolsetID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const lockMetadataEnvironmentConfigs = `-- name: LockMetadataEnvironmentConfigs :many
 SELECT id, project_id, mcp_metadata_id, variable_name, header_display_name, provided_by, created_at, updated_at
 FROM mcp_environment_configs
@@ -1517,7 +1552,17 @@ func (q *Queries) LockToolsetKeyedPluginServer(ctx context.Context, arg LockTool
 }
 
 const lockToolsetKeyedRemovalRecord = `-- name: LockToolsetKeyedRemovalRecord :one
-SELECT ps.id, ps.plugin_id, ps.deleted, COALESCE(ps.deleted_at::text, '')::text AS deleted_at, to_jsonb(ps)::jsonb AS row_json
+SELECT
+  ps.id,
+  ps.plugin_id,
+  ps.deleted,
+  COALESCE(ps.deleted_at::text, '')::text AS deleted_at,
+  to_jsonb(ps)::jsonb AS row_json,
+  EXISTS (
+    SELECT 1
+    FROM platform_mcp_distributions AS d
+    WHERE d.project_id = pl.project_id AND d.plugin_server_id = ps.id
+  ) AS distributed
 FROM plugin_servers AS ps
 JOIN plugins AS pl ON pl.id = ps.plugin_id
 WHERE ps.id = $1
@@ -1535,13 +1580,15 @@ type LockToolsetKeyedRemovalRecordParams struct {
 }
 
 type LockToolsetKeyedRemovalRecordRow struct {
-	ID        uuid.UUID
-	PluginID  uuid.UUID
-	Deleted   bool
-	DeletedAt string
-	RowJson   []byte
+	ID          uuid.UUID
+	PluginID    uuid.UUID
+	Deleted     bool
+	DeletedAt   string
+	RowJson     []byte
+	Distributed bool
 }
 
+// distributed lets a caller report blocked_distributed rather than let the NO ACTION FK fail its delete and stop the run.
 func (q *Queries) LockToolsetKeyedRemovalRecord(ctx context.Context, arg LockToolsetKeyedRemovalRecordParams) (LockToolsetKeyedRemovalRecordRow, error) {
 	row := q.db.QueryRow(ctx, lockToolsetKeyedRemovalRecord, arg.ID, arg.ProjectID, arg.ToolsetID)
 	var i LockToolsetKeyedRemovalRecordRow
@@ -1551,6 +1598,7 @@ func (q *Queries) LockToolsetKeyedRemovalRecord(ctx context.Context, arg LockToo
 		&i.Deleted,
 		&i.DeletedAt,
 		&i.RowJson,
+		&i.Distributed,
 	)
 	return i, err
 }
@@ -1618,27 +1666,6 @@ func (q *Queries) MoveAssistantToolset(ctx context.Context, arg MoveAssistantToo
 		return 0, err
 	}
 	return result.RowsAffected(), nil
-}
-
-const pluginServerDistributed = `-- name: PluginServerDistributed :one
-SELECT EXISTS (
-  SELECT 1
-  FROM platform_mcp_distributions AS d
-  WHERE d.project_id = $1 AND d.plugin_server_id = $2::uuid
-)
-`
-
-type PluginServerDistributedParams struct {
-	ProjectID      uuid.UUID
-	PluginServerID uuid.UUID
-}
-
-// Any reference counts, including one the FK does not check because default_plugin_id is NULL.
-func (q *Queries) PluginServerDistributed(ctx context.Context, arg PluginServerDistributedParams) (bool, error) {
-	row := q.db.QueryRow(ctx, pluginServerDistributed, arg.ProjectID, arg.PluginServerID)
-	var exists bool
-	err := row.Scan(&exists)
-	return exists, err
 }
 
 const rekeyMetadata = `-- name: RekeyMetadata :one
@@ -2319,6 +2346,21 @@ type SoftDeleteProjectFixtureParams struct {
 
 func (q *Queries) SoftDeleteProjectFixture(ctx context.Context, arg SoftDeleteProjectFixtureParams) error {
 	_, err := q.db.Exec(ctx, softDeleteProjectFixture, arg.ID, arg.OrganizationID)
+	return err
+}
+
+const softDeleteServerFixture = `-- name: SoftDeleteServerFixture :exec
+UPDATE mcp_servers SET deleted_at = clock_timestamp()
+WHERE id = $1 AND project_id = $2
+`
+
+type SoftDeleteServerFixtureParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) SoftDeleteServerFixture(ctx context.Context, arg SoftDeleteServerFixtureParams) error {
+	_, err := q.db.Exec(ctx, softDeleteServerFixture, arg.ID, arg.ProjectID)
 	return err
 }
 

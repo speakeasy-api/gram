@@ -90,6 +90,8 @@ const (
 	OutcomeBlockedDuplicateRemoval Outcome = "blocked_duplicate_removal"
 	// OutcomeBlockedNeedsRekey is a removal record of a live toolset whose canonical server has no server-keyed copy; -rekey-removal-records moves it.
 	OutcomeBlockedNeedsRekey Outcome = "blocked_needs_rekey"
+	// OutcomeBlockedLiveWrapper is a removal record that may be the only thing keeping a live wrapper server of its toolset out of the plugin.
+	OutcomeBlockedLiveWrapper Outcome = "blocked_live_wrapper"
 )
 
 // Options controls one run.

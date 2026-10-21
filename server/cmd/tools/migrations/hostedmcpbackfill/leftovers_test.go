@@ -38,6 +38,14 @@ func (f *fixture) pluginServerImages(t *testing.T) map[uuid.UUID]string {
 	return out
 }
 
+// deleteToolset soft-deletes the toolset and its canonical server, as toolset deletion does.
+func (f *fixture) deleteToolset(t *testing.T, id uuid.UUID) {
+	t.Helper()
+	q := New(f.pool)
+	require.NoError(t, q.SoftDeleteToolsetFixture(t.Context(), SoftDeleteToolsetFixtureParams{ID: id, ProjectID: f.projectID}))
+	require.NoError(t, q.SoftDeleteServerFixture(t.Context(), SoftDeleteServerFixtureParams{ID: id, ProjectID: f.projectID}))
+}
+
 type leftoverSeed struct {
 	f, deletedProject            *fixture
 	plugin                       uuid.UUID
@@ -54,7 +62,7 @@ func seedLeftovers(t *testing.T) leftoverSeed {
 
 	deletedToolset := f.seedWrappedToolset(t, "gone-"+uuid.NewString()[:8])
 	gone := f.seedRemoval(t, plugin, key(deletedToolset), uuid.NullUUID{}, "gone")
-	require.NoError(t, q.SoftDeleteToolsetFixture(t.Context(), SoftDeleteToolsetFixtureParams{ID: deletedToolset, ProjectID: f.projectID}))
+	f.deleteToolset(t, deletedToolset)
 
 	duplicated := f.seedWrappedToolset(t, "duplicated-"+uuid.NewString()[:8])
 	duplicate := f.seedRemoval(t, plugin, key(duplicated), uuid.NullUUID{}, "duplicate")
@@ -83,7 +91,7 @@ func seedLeftovers(t *testing.T) leftoverSeed {
 
 	distributedToolset := f.seedWrappedToolset(t, "distributed-"+uuid.NewString()[:8])
 	distributed := f.seedRemoval(t, plugin, key(distributedToolset), uuid.NullUUID{}, "distributed")
-	require.NoError(t, q.SoftDeleteToolsetFixture(t.Context(), SoftDeleteToolsetFixtureParams{ID: distributedToolset, ProjectID: f.projectID}))
+	f.deleteToolset(t, distributedToolset)
 	require.NoError(t, q.SeedDistributionReferenceFixture(t.Context(), SeedDistributionReferenceFixtureParams{OrganizationID: f.orgID, ProjectID: f.projectID, PluginID: plugin, PluginServerID: key(distributed)}))
 
 	other := newFixtureIn(t, f.pool)
@@ -166,7 +174,7 @@ func TestDeleteLeftoverRemovalRecordsOutcomes(t *testing.T) {
 	}
 	require.ElementsMatch(t, []string{"toolset deleted", "project deleted", reasonLeftoverDuplicate}, byReason[OutcomeDeleted])
 	require.ElementsMatch(t, []string{reasonNeedsRekey}, byReason[OutcomeBlockedNeedsRekey])
-	require.ElementsMatch(t, []string{reasonNoCanonicalServer, reasonNoCanonicalServer, "toolset is not in the row's project"}, byReason[OutcomeBlockedNoWrapper])
+	require.ElementsMatch(t, []string{reasonLeftoverNoCanonical, reasonLeftoverNoCanonical, "toolset is not in the row's project"}, byReason[OutcomeBlockedNoWrapper])
 	require.ElementsMatch(t, []string{reasonLeftoverLive}, byReason[OutcomeBlockedLive])
 	require.ElementsMatch(t, []string{reasonDistributed}, byReason[OutcomeBlockedDistributed])
 
@@ -216,6 +224,81 @@ func TestDeleteLeftoverRemovalRecordsOutcomes(t *testing.T) {
 	require.Equal(t, after, f.pluginServerImages(t))
 }
 
+// A removal record may be all that keeps a live non-canonical wrapper of its toolset out, so it stays.
+func TestDeleteLeftoverRemovalRecordsLiveWrappers(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	q := New(f.pool)
+	plugin := f.seedPlugin(t)
+	wrapper := func(toolsetID uuid.UUID, deleted bool) uuid.UUID {
+		id := uuid.New()
+		slug := "extra-" + uuid.NewString()[:8]
+		require.NoError(t, q.SeedServerFixture(t.Context(), SeedServerFixtureParams{
+			ID: id, ProjectID: f.projectID, Name: pgtype.Text{String: slug, Valid: true}, Slug: pgtype.Text{String: slug, Valid: true},
+			ToolsetID: key(toolsetID), Visibility: "public", DeletedAt: pgtype.Timestamptz{Time: time.Now(), InfinityModifier: pgtype.Finite, Valid: deleted},
+		}))
+		return id
+	}
+
+	liveWrapperToolset := f.seedWrappedToolset(t, "live-wrapper-"+uuid.NewString()[:8])
+	wrapper(liveWrapperToolset, false)
+	deletedLiveWrapper := f.seedRemoval(t, plugin, key(liveWrapperToolset), uuid.NullUUID{}, "deleted toolset, live wrapper")
+	f.deleteToolset(t, liveWrapperToolset)
+
+	goneWrapperToolset := f.seedWrappedToolset(t, "gone-wrapper-"+uuid.NewString()[:8])
+	wrapper(goneWrapperToolset, true)
+	deletedGoneWrapper := f.seedRemoval(t, plugin, key(goneWrapperToolset), uuid.NullUUID{}, "deleted toolset, deleted wrapper")
+	f.deleteToolset(t, goneWrapperToolset)
+
+	uncovered := f.seedWrappedToolset(t, "uncovered-"+uuid.NewString()[:8])
+	wrapper(uncovered, false)
+	duplicateUncovered := f.seedRemoval(t, plugin, key(uncovered), uuid.NullUUID{}, "duplicate, uncovered wrapper")
+	f.seedRemoval(t, plugin, uuid.NullUUID{}, key(uncovered), "canonical removal")
+
+	covered := f.seedWrappedToolset(t, "covered-"+uuid.NewString()[:8])
+	coveredWrapper := wrapper(covered, false)
+	duplicateCovered := f.seedRemoval(t, plugin, key(covered), uuid.NullUUID{}, "duplicate, covered wrapper")
+	f.seedRemoval(t, plugin, uuid.NullUUID{}, key(covered), "canonical removal")
+	f.seedRemoval(t, plugin, uuid.NullUUID{}, key(coveredWrapper), "wrapper removal")
+
+	want := map[uuid.UUID]struct {
+		outcome Outcome
+		reason  string
+	}{
+		deletedLiveWrapper: {OutcomeBlockedLiveWrapper, reasonDeletedToolsetLiveWrapper},
+		deletedGoneWrapper: {OutcomeDeleted, "toolset deleted"},
+		duplicateUncovered: {OutcomeBlockedLiveWrapper, reasonDuplicateLiveWrapper},
+		duplicateCovered:   {OutcomeDeleted, reasonLeftoverDuplicate},
+	}
+	before := f.pluginServerImages(t)
+
+	dryOpts, _ := leftoverOptions(false)
+	dry := f.run(t, dryOpts)
+	require.Equal(t, 2, dry.Outcomes[OutcomeWouldDelete])
+	require.Equal(t, 2, dry.Outcomes[OutcomeBlockedLiveWrapper])
+	require.Equal(t, before, f.pluginServerImages(t))
+
+	opts, _ := leftoverOptions(true)
+	report := f.run(t, opts)
+	for id, w := range want {
+		got := dependentRowFor(t, report, id)
+		require.Equal(t, w.outcome, got.Outcome, id.String())
+		require.Equal(t, w.reason, got.Reason, id.String())
+	}
+	require.Equal(t, 2, report.Writes)
+	after := f.pluginServerImages(t)
+	require.Len(t, after, len(before)-2)
+	require.NotContains(t, after, deletedGoneWrapper)
+	require.NotContains(t, after, duplicateCovered)
+	require.Equal(t, before[deletedLiveWrapper], after[deletedLiveWrapper])
+	require.Equal(t, before[duplicateUncovered], after[duplicateUncovered])
+
+	rerunOpts, _ := leftoverOptions(true)
+	rerun := f.run(t, rerunOpts)
+	require.Zero(t, rerun.Writes)
+	require.Equal(t, 2, rerun.Outcomes[OutcomeBlockedLiveWrapper])
+}
+
 // After -rekey-removal-records, the blocked_needs_rekey row is re-keyed and its duplicates become deletable.
 func TestDeleteLeftoverRemovalRecordsAfterRekey(t *testing.T) {
 	t.Parallel()
@@ -246,18 +329,17 @@ func TestDeleteLeftoverRemovalRecordsAfterRekey(t *testing.T) {
 func TestDeleteLeftoverRemovalRecordsProjectFilterAndLimit(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
-	q := New(f.pool)
 	other := newFixtureIn(t, f.pool)
 	plugin := f.seedPlugin(t)
 	first, second := f.seedWrappedToolset(t, "first-"+uuid.NewString()[:8]), f.seedWrappedToolset(t, "second-"+uuid.NewString()[:8])
 	f.seedRemoval(t, plugin, key(first), uuid.NullUUID{}, "first")
 	f.seedRemoval(t, plugin, key(second), uuid.NullUUID{}, "second")
 	for _, id := range []uuid.UUID{first, second} {
-		require.NoError(t, q.SoftDeleteToolsetFixture(t.Context(), SoftDeleteToolsetFixtureParams{ID: id, ProjectID: f.projectID}))
+		f.deleteToolset(t, id)
 	}
 	elsewhere := other.seedWrappedToolset(t, "elsewhere-"+uuid.NewString()[:8])
 	other.seedRemoval(t, other.seedPlugin(t), key(elsewhere), uuid.NullUUID{}, "elsewhere")
-	require.NoError(t, q.SoftDeleteToolsetFixture(t.Context(), SoftDeleteToolsetFixtureParams{ID: elsewhere, ProjectID: other.projectID}))
+	other.deleteToolset(t, elsewhere)
 	otherBefore := other.pluginServerImages(t)
 	opts, _ := leftoverOptions(true)
 	opts.ProjectID = key(f.projectID)

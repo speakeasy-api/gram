@@ -14,9 +14,12 @@ import (
 )
 
 const (
-	reasonLeftoverLive      = "the toolset-keyed member is live; this mode only deletes removal records"
-	reasonNeedsRekey        = "the canonical server has no server-keyed removal record for this plugin; run -rekey-removal-records first"
-	reasonLeftoverDuplicate = "the plugin's server-keyed removal record for the canonical server keeps the server out"
+	reasonLeftoverLive              = "the toolset-keyed member is live; this mode only deletes removal records"
+	reasonNeedsRekey                = "the canonical server has no server-keyed removal record for this plugin; run -rekey-removal-records first"
+	reasonLeftoverDuplicate         = "the plugin's server-keyed removal record for the canonical server keeps the server out"
+	reasonLeftoverNoCanonical       = "toolset has no live canonical server whose removal record would keep it out"
+	reasonDeletedToolsetLiveWrapper = "deleted toolset still has a live wrapper server"
+	reasonDuplicateLiveWrapper      = "a live non-canonical wrapper server has no server-keyed removal record for this plugin"
 )
 
 // leftoversPhase walks the same rows as the removal re-key.
@@ -26,9 +29,7 @@ func (r *Runner) leftoversPhase() dependentPhase[ListToolsetRemovalRecordsRow] {
 	return phase
 }
 
-// deleteLeftoverOne hard-deletes one soft-deleted toolset-keyed plugin_servers row the re-key cannot move: its toolset or project
-// is deleted, or the plugin already has a server-keyed removal record for the canonical server.
-// A soft-deleted row is in no package or listing, so it is not audited and requests no publication.
+// deleteLeftoverOne hard-deletes one toolset-keyed removal record the re-key cannot move.
 func (r *Runner) deleteLeftoverOne(ctx context.Context, toolsetID uuid.UUID, dep ListToolsetRemovalRecordsRow) (RowReport, error) {
 	row := RowReport{
 		ToolsetID: toolsetID, Table: tablePluginServers, RowID: &dep.ID, ProjectID: dep.ProjectID, McpSlug: "", CustomDomainID: nil,
@@ -74,13 +75,23 @@ func (r *Runner) deleteLeftoverOne(ctx context.Context, toolsetID uuid.UUID, dep
 	switch {
 	case toolset.ProjectDeleted:
 		row.Reason = "project deleted"
-	case toolset.Deleted:
-		row.Reason = "toolset deleted"
 	default:
+		// Role delivery still lists live servers of a deleted toolset, so this record may be what keeps them out.
+		servers, err := q.LockLiveToolsetServers(ctx, LockLiveToolsetServersParams{ProjectID: toolset.ProjectID, ToolsetID: toolset.ID})
+		if err != nil {
+			return row, fmt.Errorf("lock live toolset servers: %w", err)
+		}
+		if toolset.Deleted {
+			if len(servers) > 0 {
+				return blocked(row, OutcomeBlockedLiveWrapper, reasonDeletedToolsetLiveWrapper), nil
+			}
+			row.Reason = "toolset deleted"
+			break
+		}
 		wrapper, err := q.GetLiveCanonicalWrapper(ctx, GetLiveCanonicalWrapperParams{ToolsetID: toolset.ID, ProjectID: toolset.ProjectID})
 		switch {
 		case errors.Is(err, pgx.ErrNoRows):
-			return blocked(row, OutcomeBlockedNoWrapper, reasonNoCanonicalServer), nil
+			return blocked(row, OutcomeBlockedNoWrapper, reasonLeftoverNoCanonical), nil
 		case err != nil:
 			return row, fmt.Errorf("load canonical server: %w", err)
 		}
@@ -92,15 +103,23 @@ func (r *Runner) deleteLeftoverOne(ctx context.Context, toolsetID uuid.UUID, dep
 		case err != nil:
 			return row, fmt.Errorf("lock server-keyed removal record: %w", err)
 		}
+		for _, server := range servers {
+			if server == wrapper.ID {
+				continue
+			}
+			_, err := q.LockServerKeyedRemovalRecord(ctx, LockServerKeyedRemovalRecordParams{PluginID: record.PluginID, ProjectID: toolset.ProjectID, McpServerID: server})
+			switch {
+			case errors.Is(err, pgx.ErrNoRows):
+				return blocked(row, OutcomeBlockedLiveWrapper, reasonDuplicateLiveWrapper), nil
+			case err != nil:
+				return row, fmt.Errorf("lock wrapper server-keyed removal record: %w", err)
+			}
+		}
 		row.Reason = reasonLeftoverDuplicate
 	}
 
 	// The FK is ON DELETE NO ACTION, so a referenced row would fail the delete; report it instead.
-	distributed, err := q.PluginServerDistributed(ctx, PluginServerDistributedParams{ProjectID: toolset.ProjectID, PluginServerID: record.ID})
-	if err != nil {
-		return row, fmt.Errorf("check platform distributions: %w", err)
-	}
-	if distributed {
+	if record.Distributed {
 		return blocked(row, OutcomeBlockedDistributed, reasonDistributed), nil
 	}
 

@@ -352,7 +352,18 @@ WHERE ps.toolset_id = @toolset_id::uuid
 ORDER BY ps.id;
 
 -- name: LockToolsetKeyedRemovalRecord :one
-SELECT ps.id, ps.plugin_id, ps.deleted, COALESCE(ps.deleted_at::text, '')::text AS deleted_at, to_jsonb(ps)::jsonb AS row_json
+-- distributed lets a caller report blocked_distributed rather than let the NO ACTION FK fail its delete and stop the run.
+SELECT
+  ps.id,
+  ps.plugin_id,
+  ps.deleted,
+  COALESCE(ps.deleted_at::text, '')::text AS deleted_at,
+  to_jsonb(ps)::jsonb AS row_json,
+  EXISTS (
+    SELECT 1
+    FROM platform_mcp_distributions AS d
+    WHERE d.project_id = pl.project_id AND d.plugin_server_id = ps.id
+  ) AS distributed
 FROM plugin_servers AS ps
 JOIN plugins AS pl ON pl.id = ps.plugin_id
 WHERE ps.id = @id
@@ -388,13 +399,14 @@ WHERE ps.id = @id
   AND ps.deleted IS TRUE
 RETURNING ps.deleted_at::text AS deleted_at, ps.updated_at::text AS updated_at;
 
--- name: PluginServerDistributed :one
--- Any reference counts, including one the FK does not check because default_plugin_id is NULL.
-SELECT EXISTS (
-  SELECT 1
-  FROM platform_mcp_distributions AS d
-  WHERE d.project_id = @project_id AND d.plugin_server_id = @plugin_server_id::uuid
-);
+-- name: LockLiveToolsetServers :many
+SELECT ms.id
+FROM mcp_servers AS ms
+WHERE ms.project_id = @project_id
+  AND ms.toolset_id = @toolset_id::uuid
+  AND ms.deleted IS FALSE
+ORDER BY ms.id
+FOR SHARE OF ms;
 
 -- name: DeleteLeftoverRemovalRecord :execrows
 DELETE FROM plugin_servers AS ps
@@ -506,6 +518,10 @@ VALUES (@id, @assistant_id, @toolset_id, @project_id, @environment_id);
 -- name: SeedAssistantMcpServerFixture :exec
 INSERT INTO assistant_mcp_servers (id, assistant_id, mcp_server_id, project_id)
 VALUES (@id, @assistant_id, @mcp_server_id, @project_id);
+
+-- name: SoftDeleteServerFixture :exec
+UPDATE mcp_servers SET deleted_at = clock_timestamp()
+WHERE id = @id AND project_id = @project_id;
 
 -- name: SoftDeleteToolsetFixture :exec
 UPDATE toolsets SET deleted_at = clock_timestamp()
