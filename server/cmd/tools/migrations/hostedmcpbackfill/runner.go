@@ -36,6 +36,7 @@ const (
 	phaseWrappers   = "wrappers"
 	phaseDependents = "dependents"
 	phaseOrphans    = "orphans"
+	phaseRemovals   = "removals"
 )
 
 // defaultPageSize bounds each candidate page; rows are processed one transaction at a time regardless.
@@ -79,6 +80,14 @@ const (
 	OutcomeBlockedDistributed Outcome = "blocked_distributed"
 	// OutcomeBlockedForeignConfig is orphan metadata with an env config in another project, which the delete would cascade to.
 	OutcomeBlockedForeignConfig Outcome = "blocked_foreign_config"
+
+	OutcomeWouldRekey Outcome = "would_rekey"
+	OutcomeRekeyed    Outcome = "rekeyed"
+	// OutcomeBlockedLive is a live toolset-keyed plugin member, which the removal re-key never touches.
+	OutcomeBlockedLive        Outcome = "blocked_live"
+	OutcomeSkippedToolsetGone Outcome = "skipped_toolset_gone"
+	OutcomeSkippedNoCanonical Outcome = "skipped_no_canonical"
+	OutcomeSkippedDuplicate   Outcome = "skipped_duplicate"
 )
 
 // Options controls one run.
@@ -104,10 +113,13 @@ type Options struct {
 	// CleanupOrphans removes toolset-keyed dependents whose toolset or project is deleted.
 	CleanupOrphans bool
 
+	// RekeyRemovals re-keys soft-deleted toolset-keyed plugin_servers rows onto the canonical server key.
+	RekeyRemovals bool
+
 	// Publication enqueues a plugin publication request when the cleanup removes a member of a live project.
 	Publication plugins.PublicationRequests
 
-	// Journal receives each dependent write before and after its commit; required to apply MoveDependents or CleanupOrphans.
+	// Journal receives each dependent write before and after its commit; required to apply MoveDependents, CleanupOrphans or RekeyRemovals.
 	Journal Journal
 
 	// LockTimeout bounds each dependent move's lock waits; 0 selects defaultLockTimeout.
@@ -210,15 +222,24 @@ func (r *Runner) Run(ctx context.Context) (Report, error) {
 		LastCursor:            r.options.Cursor,
 		Rows:                  nil,
 	}
+	modes := 0
+	for _, on := range []bool{r.options.MoveDependents, r.options.CleanupOrphans, r.options.RekeyRemovals} {
+		if on {
+			modes++
+		}
+	}
 	switch {
-	case r.options.MoveDependents && r.options.CleanupOrphans:
-		return report, errors.New("the dependent move and the orphan cleanup are separate phases")
+	case modes > 1:
+		return report, errors.New("the dependent move, the orphan cleanup and the removal re-key are separate phases")
 	case r.options.MoveDependents:
 		report.Phase = phaseDependents
 		return r.runDependents(ctx, report, r.moveOne)
 	case r.options.CleanupOrphans:
 		report.Phase = phaseOrphans
 		return r.runDependents(ctx, report, r.cleanupOne)
+	case r.options.RekeyRemovals:
+		report.Phase = phaseRemovals
+		return r.runDependents(ctx, report, r.rekeyRemovalOne)
 	}
 	after := r.options.Cursor
 	for {

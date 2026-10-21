@@ -110,6 +110,9 @@ type JournalRecord struct {
 
 	// Removed is the deleted orphan in a -cleanup-orphans journal, with its row image; To is then empty.
 	Removed *RowImage `json:"removed,omitempty"`
+
+	// Rekeyed is the removal record's row image before a -rekey-removal-records re-key.
+	Rekeyed *RowImage `json:"rekeyed,omitempty"`
 }
 
 // Journal records each dependent row's move durably around its commit.
@@ -156,13 +159,9 @@ func (r *Runner) runDependents(ctx context.Context, report Report, process depen
 	}
 	after := r.options.Cursor
 	for {
-		page, err := New(r.pool).ListDependentToolsets(ctx, ListDependentToolsetsParams{
-			ProjectID: r.options.ProjectID,
-			AfterID:   after,
-			PageSize:  conv.SafeInt32(r.options.PageSize),
-		})
+		page, err := r.listDependentToolsets(ctx, report.Phase, after)
 		if err != nil {
-			return report, fmt.Errorf("list dependent toolsets: %w", err)
+			return report, err
 		}
 		if len(page) == 0 {
 			return report, nil
@@ -171,9 +170,9 @@ func (r *Runner) runDependents(ctx context.Context, report Report, process depen
 			if r.options.Limit > 0 && report.Toolsets >= r.options.Limit {
 				return report, nil
 			}
-			deps, err := New(r.pool).ListToolsetDependents(ctx, ListToolsetDependentsParams{ToolsetID: toolsetID, ProjectID: r.options.ProjectID})
+			deps, err := r.listToolsetDependents(ctx, report.Phase, toolsetID)
 			if err != nil {
-				return report, fmt.Errorf("toolset %s: list dependents: %w", toolsetID, err)
+				return report, fmt.Errorf("toolset %s: %w", toolsetID, err)
 			}
 			for _, dep := range deps {
 				row, err := process(ctx, toolsetID, dep)
@@ -195,6 +194,40 @@ func (r *Runner) runDependents(ctx context.Context, report Report, process depen
 			after = toolsetID
 		}
 	}
+}
+
+func (r *Runner) listDependentToolsets(ctx context.Context, phase string, after uuid.UUID) ([]uuid.UUID, error) {
+	if phase == phaseRemovals {
+		page, err := New(r.pool).ListRemovalRecordToolsets(ctx, ListRemovalRecordToolsetsParams{ProjectID: r.options.ProjectID, AfterID: after, PageSize: conv.SafeInt32(r.options.PageSize)})
+		if err != nil {
+			return nil, fmt.Errorf("list removal record toolsets: %w", err)
+		}
+		return page, nil
+	}
+	page, err := New(r.pool).ListDependentToolsets(ctx, ListDependentToolsetsParams{ProjectID: r.options.ProjectID, AfterID: after, PageSize: conv.SafeInt32(r.options.PageSize)})
+	if err != nil {
+		return nil, fmt.Errorf("list dependent toolsets: %w", err)
+	}
+	return page, nil
+}
+
+func (r *Runner) listToolsetDependents(ctx context.Context, phase string, toolsetID uuid.UUID) ([]ListToolsetDependentsRow, error) {
+	if phase != phaseRemovals {
+		deps, err := New(r.pool).ListToolsetDependents(ctx, ListToolsetDependentsParams{ToolsetID: toolsetID, ProjectID: r.options.ProjectID})
+		if err != nil {
+			return nil, fmt.Errorf("list toolset dependents: %w", err)
+		}
+		return deps, nil
+	}
+	records, err := New(r.pool).ListToolsetRemovalRecords(ctx, ListToolsetRemovalRecordsParams{ToolsetID: toolsetID, ProjectID: r.options.ProjectID})
+	if err != nil {
+		return nil, fmt.Errorf("list toolset removal records: %w", err)
+	}
+	deps := make([]ListToolsetDependentsRow, 0, len(records))
+	for _, record := range records {
+		deps = append(deps, ListToolsetDependentsRow{TableName: tablePluginServers, ID: record.ID, ProjectID: record.ProjectID})
+	}
+	return deps, nil
 }
 
 type dependentMove struct {
@@ -304,7 +337,7 @@ func (r *Runner) moveOne(ctx context.Context, toolsetID uuid.UUID, dep ListTools
 	from, to := moveKeys(dep.TableName, toolsetID)
 	return r.commitJournaled(ctx, tx, row, JournalRecord{
 		Event: JournalIntent, ProjectID: toolset.ProjectID, ToolsetID: toolsetID, RowID: dep.ID, Outcome: row.Outcome,
-		From: from, To: to, CollapsedTwin: move.twin, Removed: nil,
+		From: from, To: to, CollapsedTwin: move.twin, Removed: nil, Rekeyed: nil,
 	})
 }
 

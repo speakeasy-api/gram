@@ -116,7 +116,7 @@ func (r *Runner) cleanupOne(ctx context.Context, toolsetID uuid.UUID, dep ListTo
 	return r.commitJournaled(ctx, tx, row, JournalRecord{
 		Event: JournalIntent, ProjectID: toolset.ProjectID, ToolsetID: toolsetID, RowID: dep.ID, Outcome: row.Outcome,
 		From: RowKey{Table: dep.TableName, Column: "toolset_id", ID: toolsetID}, To: RowKey{Table: "", Column: "", ID: uuid.Nil},
-		CollapsedTwin: nil, Removed: c.removed,
+		CollapsedTwin: nil, Removed: c.removed, Rekeyed: nil,
 	})
 }
 

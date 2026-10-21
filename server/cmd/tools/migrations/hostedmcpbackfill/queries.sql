@@ -328,6 +328,66 @@ FOR UPDATE OF a;
 DELETE FROM assistant_toolsets
 WHERE id = @id AND project_id = @project_id AND toolset_id = @toolset_id::uuid;
 
+-- name: ListRemovalRecordToolsets :many
+-- Live rows are listed too, so the run reports them as blocked_live.
+SELECT DISTINCT ps.toolset_id::uuid AS toolset_id
+FROM plugin_servers AS ps
+JOIN plugins AS pl ON pl.id = ps.plugin_id
+WHERE ps.toolset_id IS NOT NULL
+  AND ps.mcp_server_id IS NULL
+  AND ps.meta_mcp_server_id IS NULL
+  AND (sqlc.narg('project_id')::uuid IS NULL OR pl.project_id = sqlc.narg('project_id')::uuid)
+  AND ps.toolset_id > @after_id::uuid
+ORDER BY 1
+LIMIT @page_size::int;
+
+-- name: ListToolsetRemovalRecords :many
+SELECT ps.id, pl.project_id
+FROM plugin_servers AS ps
+JOIN plugins AS pl ON pl.id = ps.plugin_id
+WHERE ps.toolset_id = @toolset_id::uuid
+  AND ps.mcp_server_id IS NULL
+  AND ps.meta_mcp_server_id IS NULL
+  AND (sqlc.narg('project_id')::uuid IS NULL OR pl.project_id = sqlc.narg('project_id')::uuid)
+ORDER BY ps.id;
+
+-- name: LockToolsetKeyedRemovalRecord :one
+SELECT ps.id, ps.plugin_id, ps.deleted, COALESCE(ps.deleted_at::text, '')::text AS deleted_at, to_jsonb(ps)::jsonb AS row_json
+FROM plugin_servers AS ps
+JOIN plugins AS pl ON pl.id = ps.plugin_id
+WHERE ps.id = @id
+  AND pl.project_id = @project_id
+  AND ps.toolset_id = @toolset_id::uuid
+  AND ps.mcp_server_id IS NULL
+  AND ps.meta_mcp_server_id IS NULL
+FOR UPDATE OF ps;
+
+-- name: LockServerKeyedRemovalRecord :one
+SELECT ps.id
+FROM plugin_servers AS ps
+JOIN plugins AS pl ON pl.id = ps.plugin_id
+WHERE ps.plugin_id = @plugin_id
+  AND pl.project_id = @project_id
+  AND ps.mcp_server_id = @mcp_server_id::uuid
+  AND ps.deleted IS TRUE
+ORDER BY ps.id
+LIMIT 1
+FOR UPDATE OF ps;
+
+-- name: RekeyRemovalRecord :one
+-- Soft-deleted rows only: every partial unique index on plugin_servers covers live rows, so none applies.
+UPDATE plugin_servers AS ps
+SET toolset_id = NULL, mcp_server_id = @mcp_server_id::uuid, updated_at = clock_timestamp()
+FROM plugins AS pl
+WHERE ps.id = @id
+  AND pl.id = ps.plugin_id
+  AND pl.project_id = @project_id
+  AND ps.toolset_id = @mcp_server_id::uuid
+  AND ps.mcp_server_id IS NULL
+  AND ps.meta_mcp_server_id IS NULL
+  AND ps.deleted IS TRUE
+RETURNING ps.deleted_at::text AS deleted_at;
+
 -- TEST FIXTURE ONLY: every query below is for package tests and may create impossible states.
 
 -- name: SeedOrganizationFixture :exec
@@ -498,6 +558,17 @@ VALUES (@project_id, 1, 'owner', 'repo');
 UPDATE plugin_servers AS ps SET deleted_at = ps.deleted_at + interval '1 second'
 FROM plugins AS pl
 WHERE ps.id = @id AND pl.id = ps.plugin_id AND pl.project_id = @project_id;
+
+-- name: SeedRemovedPluginServerFixture :exec
+INSERT INTO plugin_servers (id, plugin_id, toolset_id, mcp_server_id, display_name, deleted_at)
+VALUES (@id, @plugin_id, @toolset_id, @mcp_server_id, @display_name, @deleted_at);
+
+-- name: ListPluginServerRemovalsFixture :many
+SELECT ps.id, ps.plugin_id, ps.toolset_id, ps.mcp_server_id, ps.deleted, COALESCE(ps.deleted_at::text, '')::text AS deleted_at
+FROM plugin_servers AS ps
+JOIN plugins AS pl ON pl.id = ps.plugin_id
+WHERE pl.project_id = @project_id
+ORDER BY ps.id;
 
 -- name: CountOutboxFixture :one
 SELECT count(*)
