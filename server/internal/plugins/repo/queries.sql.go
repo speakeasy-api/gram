@@ -169,6 +169,23 @@ func (q *Queries) AgeRoleSetupProjectFixture(ctx context.Context, id uuid.UUID) 
 	return err
 }
 
+const countLivePluginServersByMCPServerIDFixture = `-- name: CountLivePluginServersByMCPServerIDFixture :one
+SELECT count(*) FROM plugin_servers ps JOIN plugins p ON p.id = ps.plugin_id
+WHERE p.project_id = $1 AND ps.mcp_server_id = $2 AND ps.deleted IS FALSE
+`
+
+type CountLivePluginServersByMCPServerIDFixtureParams struct {
+	ProjectID   uuid.UUID
+	McpServerID uuid.NullUUID
+}
+
+func (q *Queries) CountLivePluginServersByMCPServerIDFixture(ctx context.Context, arg CountLivePluginServersByMCPServerIDFixtureParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countLivePluginServersByMCPServerIDFixture, arg.ProjectID, arg.McpServerID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createDefaultPlugin = `-- name: CreateDefaultPlugin :one
 INSERT INTO plugins (organization_id, project_id, name, slug, is_default)
 VALUES ($1, $2, 'Default', 'default', TRUE)
@@ -791,7 +808,7 @@ type GetPluginServerByBackendParams struct {
 	McpServerID    uuid.NullUUID
 }
 
-// Look up a live plugin server by its backend (toolset or mcp_server).
+// Look up a live plugin server by its mcp_server backend.
 // Used by AttachToDefaultPlugin to no-op on already-attached servers before
 // inserting: a duplicate insert can trip the (plugin_id, display_name)
 // unique index rather than a backend one, and either way the failed
@@ -2529,7 +2546,7 @@ func (q *Queries) ListRoleDeliveryProjects(ctx context.Context, organizationID s
 
 const listRoleDeliveryServers = `-- name: ListRoleDeliveryServers :many
 SELECT m.id, m.project_id, COALESCE(NULLIF(m.name, ''), NULLIF(m.slug, ''), m.id::text)::text AS name,
-  'mcp_server'::text AS backend_kind, COALESCE(m.toolset_id, m.id)::uuid AS resource_id, m.toolset_id AS legacy_toolset_id,
+  COALESCE(m.toolset_id, m.id)::uuid AS resource_id, m.toolset_id AS legacy_toolset_id,
   (m.visibility <> 'disabled' AND (m.toolset_id IS NULL OR backing.id IS NOT NULL) AND (m.unproxied_mcp_server_id IS NOT NULL OR EXISTS (
     SELECT 1 FROM mcp_endpoints e WHERE e.mcp_server_id = m.id AND e.project_id = p.id AND e.deleted IS FALSE
   )) AND NOT (m.toolset_id IS NOT NULL AND m.id <> m.toolset_id AND EXISTS (
@@ -2547,17 +2564,7 @@ LEFT JOIN LATERAL (
 ) latest ON true
 WHERE p.organization_id = $1 AND p.id = $2
   AND p.deleted IS FALSE AND m.deleted IS FALSE
-UNION ALL
-SELECT t.id, t.project_id, t.name, 'toolset'::text, t.id, t.id, FALSE::boolean, latest.tool_urns
-FROM toolsets t JOIN projects p ON p.id = t.project_id
-LEFT JOIN LATERAL (
-  SELECT v.tool_urns FROM toolset_versions v
-  WHERE v.toolset_id = t.id AND v.deleted IS FALSE
-  ORDER BY v.version DESC LIMIT 1
-) latest ON true
-WHERE p.organization_id = $1 AND p.id = $2
-  AND p.deleted IS FALSE AND t.deleted IS FALSE
-ORDER BY id
+ORDER BY m.id
 `
 
 type ListRoleDeliveryServersParams struct {
@@ -2569,7 +2576,6 @@ type ListRoleDeliveryServersRow struct {
 	ID              uuid.UUID
 	ProjectID       uuid.UUID
 	Name            string
-	BackendKind     string
 	ResourceID      uuid.UUID
 	LegacyToolsetID uuid.NullUUID
 	Eligible        bool
@@ -2581,7 +2587,6 @@ type ListRoleDeliveryServersRow struct {
 // Prefer the canonical wrapper, but allow fallback when it is enabled and endpointless.
 // A disabled canonical wrapper still blocks automatic delivery through alternatives.
 // A wrapper whose backing toolset is deleted is never delivered.
-// A toolset with no MCP server is a removal candidate only; it is never delivered.
 func (q *Queries) ListRoleDeliveryServers(ctx context.Context, arg ListRoleDeliveryServersParams) ([]ListRoleDeliveryServersRow, error) {
 	rows, err := q.db.Query(ctx, listRoleDeliveryServers, arg.OrganizationID, arg.ProjectID)
 	if err != nil {
@@ -2595,7 +2600,6 @@ func (q *Queries) ListRoleDeliveryServers(ctx context.Context, arg ListRoleDeliv
 			&i.ID,
 			&i.ProjectID,
 			&i.Name,
-			&i.BackendKind,
 			&i.ResourceID,
 			&i.LegacyToolsetID,
 			&i.Eligible,

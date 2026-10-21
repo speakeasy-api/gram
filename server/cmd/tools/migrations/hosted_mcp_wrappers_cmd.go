@@ -10,6 +10,8 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"strconv"
+	"strings"
 	"syscall"
 
 	"github.com/google/uuid"
@@ -140,12 +142,24 @@ func runHostedMCPWrappers(args []string, stdout io.Writer, getenv func(string) s
 	if runErr != nil {
 		code = 1
 		if cfg.options.Apply {
-			log.Printf("hosted-mcp-wrappers stopped early: %v; resume with -apply, -cursor %s and a new -report path", runErr, report.LastCursor)
+			log.Printf("hosted-mcp-wrappers stopped early: %v; resume with %s and a new -report path", runErr, hostedMCPWrappersResumeArgs(cfg.options, report.LastCursor))
 		} else {
 			log.Printf("hosted-mcp-wrappers stopped early: %v; dry-run cursors commit nothing, so rerun without -cursor", runErr)
 		}
 	}
 	return code
+}
+
+func hostedMCPWrappersResumeArgs(opts hostedmcpbackfill.Options, cursor uuid.UUID) string {
+	args := []string{"-apply"}
+	if opts.ProjectID.Valid {
+		args = append(args, "-project "+opts.ProjectID.UUID.String())
+	}
+	if opts.Limit > 0 {
+		args = append(args, "-limit "+strconv.Itoa(opts.Limit))
+	}
+	args = append(args, "-cursor "+cursor.String())
+	return strings.Join(args, " ")
 }
 
 func openHostedMCPWrappersOutput(path string, exclusive bool) (*os.File, error) {

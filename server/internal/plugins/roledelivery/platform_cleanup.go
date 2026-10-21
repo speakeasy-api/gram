@@ -111,7 +111,7 @@ func ContentChanged(ctx context.Context, tx pgx.Tx, org string, projectID, tools
 			return nil, err
 		}
 		for _, candidate := range candidates {
-			if candidate.BackendKind != "mcp_server" || candidate.LegacyToolsetID != target {
+			if candidate.LegacyToolsetID != target {
 				continue
 			}
 			if _, err := Eligible(ctx, tx, org, projectID, candidate.ID, guard); err != nil {

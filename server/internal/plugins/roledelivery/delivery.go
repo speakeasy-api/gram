@@ -99,7 +99,7 @@ func apply(ctx context.Context, tx pgx.Tx, org string, pluginID uuid.UUID, s ser
 		}
 		changed := false
 		for _, membership := range memberships {
-			if s.BackendKind != "mcp_server" || !membership.McpServerID.Valid || membership.McpServerID.UUID != s.ID {
+			if !membership.McpServerID.Valid || membership.McpServerID.UUID != s.ID {
 				continue
 			}
 			removed, err := pluginsrepo.New(tx).RemovePluginServer(ctx, pluginsrepo.RemovePluginServerParams{ID: membership.ID, PluginID: pluginID})
@@ -116,7 +116,7 @@ func apply(ctx context.Context, tx pgx.Tx, org string, pluginID uuid.UUID, s ser
 		}
 		return changed, nil
 	}
-	if !s.Eligible || s.BackendKind != "mcp_server" {
+	if !s.Eligible {
 		return false, nil
 	}
 	exists, err := pluginsrepo.New(tx).HasRoleDeliveryMembership(ctx, pluginsrepo.HasRoleDeliveryMembershipParams{PluginID: pluginID, OrganizationID: org, ProjectID: s.ProjectID, McpServerID: uuid.NullUUID{UUID: s.ID, Valid: true}, LegacyToolsetID: s.LegacyToolsetID, PreserveRemoval: preserveRemoval})

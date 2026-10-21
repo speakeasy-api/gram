@@ -47,6 +47,19 @@ func TestParseHostedMCPWrappersFlagsParsesScope(t *testing.T) {
 	require.Equal(t, "/tmp/r.json", cfg.reportPath)
 }
 
+func TestHostedMCPWrappersResumeArgsKeepScope(t *testing.T) {
+	t.Parallel()
+
+	project, cursor := uuid.New(), uuid.New()
+	cfg, err := parseHostedMCPWrappersFlags([]string{"-apply", "-project=" + project.String(), "-limit=5"}, hostedMCPWrappersGetenv, io.Discard)
+	require.NoError(t, err)
+	require.Equal(t, "-apply -project "+project.String()+" -limit 5 -cursor "+cursor.String(), hostedMCPWrappersResumeArgs(cfg.options, cursor))
+
+	cfg, err = parseHostedMCPWrappersFlags([]string{"-apply"}, hostedMCPWrappersGetenv, io.Discard)
+	require.NoError(t, err)
+	require.Equal(t, "-apply -cursor "+cursor.String(), hostedMCPWrappersResumeArgs(cfg.options, cursor))
+}
+
 func TestParseHostedMCPWrappersFlagsRejectsBadInput(t *testing.T) {
 	t.Parallel()
 
