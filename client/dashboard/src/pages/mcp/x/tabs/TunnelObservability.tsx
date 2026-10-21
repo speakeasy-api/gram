@@ -40,6 +40,7 @@ import { ChevronRight } from "lucide-react";
 import { useState } from "react";
 import { Line } from "react-chartjs-2";
 import { Link } from "react-router";
+import { liveTunnelConnections, tunnelStatus, type Tone } from "./tunnelStatus";
 
 ChartJS.register(
   CategoryScale,
@@ -85,8 +86,6 @@ function isolatedPointRadii(values: (number | null)[]): number[] {
   );
 }
 
-type Tone = "success" | "warning" | "destructive" | "neutral";
-
 export function TunnelObservability({
   id,
   connections,
@@ -109,8 +108,7 @@ export function TunnelObservability({
     refetchInterval: historyRefetchMs[window],
     refetchIntervalInBackground: false,
   });
-  const live = connections?.connections ?? [];
-  const unavailable = error || connections?.collectionState === "unavailable";
+  const { live, unavailable } = liveTunnelConnections(connections, error);
   return (
     <section
       className="mb-8 space-y-10"
@@ -153,92 +151,6 @@ export function TunnelObservability({
       </div>
     </section>
   );
-}
-
-type Status = {
-  tone: Tone;
-  title: string;
-  detail: string;
-  action?: { label: string; href: string };
-};
-
-// One sentence answers "is the tunnel working?"; the agent rows below explain
-// it. Only the reachability checks agents reported recently count, so a
-// legacy agent without diagnostics never reads as healthy or broken.
-function tunnelStatus(
-  live: TunneledMcpConnection[],
-  unavailable: boolean,
-  links: { agentSetupHref: string },
-): Status {
-  if (unavailable) {
-    return {
-      tone: "warning",
-      title: "Live status is unavailable",
-      detail:
-        "The latest connection status could not be loaded. Retrying automatically.",
-    };
-  }
-  if (!live.length) {
-    return {
-      tone: "neutral",
-      title: "No connected agents",
-      detail:
-        "Requests to this server fail until a tunnel agent connects from the network that hosts it.",
-      action: { label: "View agent setup", href: links.agentSetupHref },
-    };
-  }
-  const agents = `${live.length} ${live.length === 1 ? "agent" : "agents"}`;
-  const checked = live.filter(
-    (c) =>
-      c.diagnostics?.state === "available" &&
-      (c.diagnostics.targetState === "reachable" ||
-        c.diagnostics.targetState === "unreachable"),
-  );
-  const failing = checked.filter(
-    (c) => c.diagnostics?.targetState === "unreachable",
-  ).length;
-  // A failing check is fixed where the agent's target is configured. Tool Logs
-  // cannot show these failures: it records calls, not network checks.
-  const setup = { label: "Review agent setup", href: links.agentSetupHref };
-  if (failing && failing === live.length) {
-    return {
-      tone: "destructive",
-      title: "Unreachable",
-      detail: `${agents} connected, but none can reach the MCP server.`,
-      action: setup,
-    };
-  }
-  if (failing && failing < checked.length) {
-    return {
-      tone: "warning",
-      title: "Partially reachable",
-      detail: `${failing} of ${agents} cannot reach the MCP server.`,
-      action: setup,
-    };
-  }
-  if (failing) {
-    return {
-      tone: "warning",
-      title: "Some checks failed",
-      detail: `${failing} of ${agents} cannot reach the MCP server; the rest have not reported a check.`,
-      action: setup,
-    };
-  }
-  if (checked.length === live.length) {
-    return {
-      tone: "success",
-      title: "Reachable",
-      detail: `${agents} connected and can reach the MCP server's address on the network. Activity below shows whether MCP requests succeed.`,
-    };
-  }
-  const checksOff = live.every((c) => c.diagnostics?.state === "disabled");
-  return {
-    tone: "neutral",
-    title: checked.length ? "Checks incomplete" : "Not checked",
-    detail: checksOff
-      ? `${agents} connected. Checks are turned off, so reachability is not reported.`
-      : `${agents} connected. Reachability is reported once each agent runs its network checks.`,
-  };
 }
 
 const dotClass: Record<Tone, string> = {
