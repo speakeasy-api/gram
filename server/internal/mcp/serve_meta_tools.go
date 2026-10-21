@@ -375,26 +375,8 @@ func (s *Service) describeMemberToolset(
 	// toolsets filter per-tool mcp:connect with tools/call's dimensions, so
 	// describe never discloses a tool the member endpoint would hide.
 	if gate.authenticated && !toolset.McpIsPublic {
-		for name, entry := range catalog.byName {
-			if err := ctx.Err(); err != nil {
-				if errors.Is(err, context.DeadlineExceeded) {
-					return nil, &metaMemberError{message: fmt.Sprintf("server %q did not answer in time", member.slug)}
-				}
-				return nil, fmt.Errorf("filter meta tools by authz: %w", err)
-			}
-			err := s.authz.Require(ctx, authz.MCPToolCallCheck(toolset.ID.String(), authz.MCPToolCallDimensions{
-				Tool:        name,
-				Disposition: dispositionFromAnnotations(entry.Annotations),
-				ProjectID:   toolset.ProjectID.String(),
-			}))
-			if err != nil {
-				var oopsErr *oops.ShareableError
-				if errors.As(err, &oopsErr) && oopsErr.Code == oops.CodeForbidden {
-					delete(catalog.byName, name)
-					continue
-				}
-				return nil, oops.E(oops.CodeUnexpected, err, "check tool-level authz for describe").LogError(ctx, logger)
-			}
+		if err := filterCatalogByMCPConnect(ctx, logger, s.authz, toolset.ID.String(), toolset.ProjectID.String(), member.slug, catalog); err != nil {
+			return nil, err
 		}
 	}
 
@@ -646,4 +628,31 @@ func marshalMetaToolError(ctx context.Context, logger *slog.Logger, id mcpjsonrp
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize tools/call response").LogError(ctx, logger)
 	}
 	return bs, nil
+}
+
+// filterCatalogByMCPConnect drops the tools the caller may not connect to and
+// stops once the request is canceled or the member runs out of time.
+func filterCatalogByMCPConnect(ctx context.Context, logger *slog.Logger, authzEngine *authz.Engine, toolsetID string, projectID string, memberSlug string, catalog *memberCatalog) error {
+	for name, entry := range catalog.byName {
+		if err := ctx.Err(); err != nil {
+			if errors.Is(err, context.DeadlineExceeded) {
+				return &metaMemberError{message: fmt.Sprintf("server %q did not answer in time", memberSlug)}
+			}
+			return fmt.Errorf("filter meta tools by authz: %w", err)
+		}
+		err := authzEngine.Require(ctx, authz.MCPToolCallCheck(toolsetID, authz.MCPToolCallDimensions{
+			Tool:        name,
+			Disposition: dispositionFromAnnotations(entry.Annotations),
+			ProjectID:   projectID,
+		}))
+		if err != nil {
+			var oopsErr *oops.ShareableError
+			if errors.As(err, &oopsErr) && oopsErr.Code == oops.CodeForbidden {
+				delete(catalog.byName, name)
+				continue
+			}
+			return oops.E(oops.CodeUnexpected, err, "check tool-level authz for describe").LogError(ctx, logger)
+		}
+	}
+	return nil
 }
