@@ -25,8 +25,10 @@ type Service interface {
 	// workload:read.
 	List(context.Context, *ListPayload) (res *WorkloadIdentityPolicy, err error)
 	// List the platforms the catalog offers to trust without looking anything up,
-	// each with the guided setup that connects it. The same for every
-	// organization. Requires workload:read.
+	// each with the policy that trusting it writes: the issuer and signing keys it
+	// is recognised by, the values the operator supplies, and the access rule it
+	// produces. How the setup is explained belongs to the dashboard. The same for
+	// every organization. Requires workload:read.
 	ListPlatforms(context.Context, *ListPlatformsPayload) (res *WorkloadPlatformCatalog, err error)
 	// Get the forms for trusting a platform the catalog does not list and allowing
 	// its workloads: registering and editing a trusted platform, and allowing and
@@ -501,8 +503,9 @@ type WorkloadIdentityPolicy struct {
 	Admissions []*types.WorkloadAdmission
 }
 
-// A platform the catalog offers to trust, with what the operator supplies and
-// the guided setup that connects it.
+// A platform the catalog offers to trust, with what the operator supplies to
+// connect it. How the setup is explained belongs to the dashboard, not to this
+// policy.
 type WorkloadPlatform struct {
 	// Identifies the entry permanently.
 	Key string
@@ -523,36 +526,6 @@ type WorkloadPlatform struct {
 	Variables []*WorkloadPlatformVariable
 	// The access rule it produces.
 	Subject *WorkloadPlatformSubject
-	// The guided setup. Empty for a platform without one, which is listed as
-	// coming soon and cannot be opened.
-	Steps []*WorkloadPlatformStep
-}
-
-// One piece of a guided setup step. Which fields are set depends on type; the
-// rest are empty.
-type WorkloadPlatformBlock struct {
-	// The kind of content.
-	Type string
-	// A text block's Markdown, or what a checklist item without a value asks the
-	// operator to do. Raw HTML in it must not be rendered.
-	Markdown string
-	// An image's path on the dashboard's origin.
-	Src string
-	// An image's alternative text.
-	Alt string
-	// Shown under an image.
-	Caption string
-	// A link's https target.
-	Href string
-	// A link's or computed value's label, or the console field or control a
-	// checklist item names.
-	Label string
-	// The variable key a field collects.
-	Variable string
-	// The value a computed block or checklist item shows.
-	Value string
-	// Shown under a computed value or checklist item.
-	Help string
 }
 
 // WorkloadPlatformCatalog is the result type of the workloadIdentities service
@@ -568,19 +541,6 @@ type WorkloadPlatformConstant struct {
 	Value string
 	// Whether the operator sees the value.
 	Visibility string
-}
-
-// One screen of a guided setup.
-type WorkloadPlatformStep struct {
-	// Stable within the platform; used in the dashboard URL.
-	ID string
-	// Heads the step.
-	Title string
-	// collect steps gather values, the create step writes the rows, connect steps
-	// describe the platform's side.
-	Phase string
-	// Rendered in order.
-	Blocks []*WorkloadPlatformBlock
 }
 
 // The access rule a catalog platform produces.

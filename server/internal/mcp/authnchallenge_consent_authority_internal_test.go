@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
@@ -39,7 +40,7 @@ func TestConsentActionLiveAuthorityUnavailableMetric(t *testing.T) {
 			require.NoError(t, err)
 			pool.Close()
 			s.db = pool
-			endpoint := &ResolvedMcpEndpoint{OrganizationID: "test-organization", UserSessionIssuerID: uuid.New(), Slug: "test", RouteBase: "mcp"}
+			endpoint := &ResolvedMcpEndpoint{OrganizationID: "test-organization", UserSessionIssuerID: uuid.New(), Slug: "test", RouteBase: mcproute.MCP}
 			state := browserTestState()
 			state.CSRFToken = "known-form-token"
 			state.UserSessionIssuerID = endpoint.UserSessionIssuerID

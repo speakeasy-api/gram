@@ -3708,14 +3708,6 @@ func unmarshalWorkloadPlatformResponseBodyToWorkloadidentitiesWorkloadPlatform(v
 		res.Variables[i] = unmarshalWorkloadPlatformVariableResponseBodyToWorkloadidentitiesWorkloadPlatformVariable(val)
 	}
 	res.Subject = unmarshalWorkloadPlatformSubjectResponseBodyToWorkloadidentitiesWorkloadPlatformSubject(v.Subject)
-	res.Steps = make([]*workloadidentities.WorkloadPlatformStep, len(v.Steps))
-	for i, val := range v.Steps {
-		if val == nil {
-			res.Steps[i] = nil
-			continue
-		}
-		res.Steps[i] = unmarshalWorkloadPlatformStepResponseBodyToWorkloadidentitiesWorkloadPlatformStep(val)
-	}
 
 	return res
 }
@@ -3756,47 +3748,6 @@ func unmarshalWorkloadPlatformSubjectResponseBodyToWorkloadidentitiesWorkloadPla
 	res := &workloadidentities.WorkloadPlatformSubject{
 		Template: *v.Template,
 		Wildcard: *v.Wildcard,
-	}
-
-	return res
-}
-
-// unmarshalWorkloadPlatformStepResponseBodyToWorkloadidentitiesWorkloadPlatformStep
-// builds a value of type *workloadidentities.WorkloadPlatformStep from a value
-// of type *WorkloadPlatformStepResponseBody.
-func unmarshalWorkloadPlatformStepResponseBodyToWorkloadidentitiesWorkloadPlatformStep(v *WorkloadPlatformStepResponseBody) *workloadidentities.WorkloadPlatformStep {
-	res := &workloadidentities.WorkloadPlatformStep{
-		ID:    *v.ID,
-		Title: *v.Title,
-		Phase: *v.Phase,
-	}
-	res.Blocks = make([]*workloadidentities.WorkloadPlatformBlock, len(v.Blocks))
-	for i, val := range v.Blocks {
-		if val == nil {
-			res.Blocks[i] = nil
-			continue
-		}
-		res.Blocks[i] = unmarshalWorkloadPlatformBlockResponseBodyToWorkloadidentitiesWorkloadPlatformBlock(val)
-	}
-
-	return res
-}
-
-// unmarshalWorkloadPlatformBlockResponseBodyToWorkloadidentitiesWorkloadPlatformBlock
-// builds a value of type *workloadidentities.WorkloadPlatformBlock from a
-// value of type *WorkloadPlatformBlockResponseBody.
-func unmarshalWorkloadPlatformBlockResponseBodyToWorkloadidentitiesWorkloadPlatformBlock(v *WorkloadPlatformBlockResponseBody) *workloadidentities.WorkloadPlatformBlock {
-	res := &workloadidentities.WorkloadPlatformBlock{
-		Type:     *v.Type,
-		Markdown: *v.Markdown,
-		Src:      *v.Src,
-		Alt:      *v.Alt,
-		Caption:  *v.Caption,
-		Href:     *v.Href,
-		Label:    *v.Label,
-		Variable: *v.Variable,
-		Value:    *v.Value,
-		Help:     *v.Help,
 	}
 
 	return res

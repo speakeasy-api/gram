@@ -42,7 +42,7 @@ func newAuthenticationHostHarness(t *testing.T, ti *testInstance) authentication
 
 	authenticationHost, err := mcp.NewAuthenticationHost(testAuthenticationHostURL, ti.serverURL, "test")
 	require.NoError(t, err)
-	mcp.AttachAuthenticationHost(authenticationHost, ti.service)
+	mcp.AttachAuthenticationHost(authenticationHost, ti.service.Service)
 
 	passed := false
 	next := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {

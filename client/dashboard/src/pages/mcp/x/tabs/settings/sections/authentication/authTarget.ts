@@ -136,6 +136,7 @@ export function useToolsetAuthTarget(toolset: Toolset): AuthTarget {
         await Promise.all([
           invalidateAllToolset(queryClient, { refetchType: "all" }),
           invalidateAllListToolsets(queryClient, { refetchType: "all" }),
+          invalidateAllMcpServers(queryClient, { refetchType: "all" }),
         ]);
       },
     }),

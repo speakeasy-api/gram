@@ -105,33 +105,30 @@ func (q *Queries) AddPluginAssignment(ctx context.Context, arg AddPluginAssignme
 }
 
 const addPluginServer = `-- name: AddPluginServer :one
-INSERT INTO plugin_servers (plugin_id, toolset_id, mcp_server_id, display_name, policy, sort_order)
+INSERT INTO plugin_servers (plugin_id, mcp_server_id, display_name, policy, sort_order)
 VALUES (
   $1,
   $2,
   $3,
   $4,
-  $5,
-  $6
+  $5
 )
 RETURNING id, plugin_id, project_id, toolset_id, mcp_server_id, meta_mcp_server_id, display_name, policy, sort_order, created_at, updated_at, deleted_at, deleted
 `
 
 type AddPluginServerParams struct {
 	PluginID    uuid.UUID
-	ToolsetID   uuid.NullUUID
 	McpServerID uuid.NullUUID
 	DisplayName string
 	Policy      string
 	SortOrder   int32
 }
 
-// Legacy insert for toolset and MCP server backends only. Gateway attachments
-// must use AddGatewayPluginServer, which supplies the project scope explicitly.
+// MCP server backends only. Gateway attachments must use
+// AddGatewayPluginServer, which supplies the project scope explicitly.
 func (q *Queries) AddPluginServer(ctx context.Context, arg AddPluginServerParams) (PluginServer, error) {
 	row := q.db.QueryRow(ctx, addPluginServer,
 		arg.PluginID,
-		arg.ToolsetID,
 		arg.McpServerID,
 		arg.DisplayName,
 		arg.Policy,
@@ -783,8 +780,14 @@ WHERE plugin_id = $1
       AND plugins.project_id = $2
       AND plugins.organization_id = $3
   )
-  AND (toolset_id = COALESCE($4::uuid, $5::uuid)
-    OR mcp_server_id = COALESCE($5::uuid, $4::uuid))
+  AND (toolset_id = $4::uuid
+    OR mcp_server_id = $5::uuid
+    OR ((toolset_id = $5::uuid OR mcp_server_id = $4::uuid)
+      AND EXISTS (
+        SELECT 1 FROM mcp_servers c
+        WHERE c.id = COALESCE(plugin_servers.toolset_id, plugin_servers.mcp_server_id)
+          AND c.toolset_id = c.id AND c.project_id = $2
+      )))
   AND deleted IS FALSE
 ORDER BY created_at, id
 LIMIT 1
@@ -803,7 +806,8 @@ type GetPluginServerByBackendParams struct {
 // inserting: a duplicate insert can trip the (plugin_id, display_name)
 // unique index rather than a backend one, and either way the failed
 // statement aborts the caller's surrounding transaction. A toolset and its
-// canonical wrapper share one id, so either key finds the other's row.
+// canonical wrapper share one id, so either key finds the other's row; a
+// non-canonical server holding a toolset's id does not.
 func (q *Queries) GetPluginServerByBackend(ctx context.Context, arg GetPluginServerByBackendParams) (PluginServer, error) {
 	row := q.db.QueryRow(ctx, getPluginServerByBackend,
 		arg.PluginID,
@@ -982,7 +986,7 @@ const hasCanonicalWrapper = `-- name: HasCanonicalWrapper :one
 SELECT EXISTS (
   SELECT 1 FROM mcp_servers
   WHERE id = $1 AND toolset_id = $1 AND project_id = $2
-    AND deleted IS FALSE AND visibility <> 'disabled'
+    AND deleted IS FALSE
 )::bool
 `
 
@@ -991,7 +995,7 @@ type HasCanonicalWrapperParams struct {
 	ProjectID uuid.UUID
 }
 
-// A hosted entry is stored under its enabled canonical wrapper (same id); a drifted, disabled one keeps the toolset key.
+// A hosted entry is stored under its toolset's live canonical wrapper, which shares the toolset id.
 func (q *Queries) HasCanonicalWrapper(ctx context.Context, arg HasCanonicalWrapperParams) (bool, error) {
 	row := q.db.QueryRow(ctx, hasCanonicalWrapper, arg.ToolsetID, arg.ProjectID)
 	var column_1 bool
@@ -1288,7 +1292,7 @@ WITH intended AS (
         SELECT 1 FROM mcp_environment_configs ec
         WHERE ec.project_id = p.project_id AND ec.provided_by = 'user' AND ec.mcp_metadata_id = (
           SELECT m.id FROM mcp_metadata m
-          WHERE (m.toolset_id = lt.id OR m.mcp_server_id = lt.id) AND m.project_id = p.project_id
+          WHERE (m.toolset_id = lt.id OR (m.mcp_server_id = lt.id AND EXISTS (SELECT 1 FROM mcp_servers c WHERE c.id = lt.id AND c.toolset_id = c.id AND c.project_id = p.project_id))) AND m.project_id = p.project_id
           ORDER BY (m.toolset_id IS NOT NULL) DESC, m.updated_at DESC
           LIMIT 1
         )
@@ -1317,7 +1321,7 @@ WITH intended AS (
         SELECT 1 FROM mcp_environment_configs ec
         WHERE ec.project_id = p.project_id AND ec.provided_by = 'user' AND ec.mcp_metadata_id = (
           SELECT m.id FROM mcp_metadata m
-          WHERE (m.toolset_id = s.toolset_id OR m.mcp_server_id = s.toolset_id) AND m.project_id = p.project_id
+          WHERE (m.toolset_id = s.toolset_id OR (m.mcp_server_id = s.toolset_id AND EXISTS (SELECT 1 FROM mcp_servers c WHERE c.id = s.toolset_id AND c.toolset_id = c.id AND c.project_id = p.project_id))) AND m.project_id = p.project_id
           ORDER BY (m.toolset_id IS NOT NULL) DESC, m.updated_at DESC
           LIMIT 1
         )
@@ -1332,7 +1336,7 @@ WITH intended AS (
 		SELECT 1
 		FROM mcp_metadata md
 		JOIN mcp_environment_configs ec ON ec.mcp_metadata_id = md.id AND ec.project_id = p.project_id
-		WHERE (md.toolset_id = mts.id OR md.mcp_server_id = mts.id) AND md.project_id = p.project_id AND ec.provided_by = 'user'
+		WHERE (md.toolset_id = mts.id OR (md.mcp_server_id = mts.id AND EXISTS (SELECT 1 FROM mcp_servers c WHERE c.id = mts.id AND c.toolset_id = c.id AND c.project_id = p.project_id))) AND md.project_id = p.project_id AND ec.provided_by = 'user'
 	  ) THEN 'toolset_backing_requires_user_header'
       WHEN COALESCE(ps.mcp_server_id, hw.id) IS NOT NULL AND s.unproxied_mcp_server_id IS NOT NULL AND s.network_access_mode IN ('dual', 'private_only') THEN 'unproxied_private_network_unsupported'
       WHEN COALESCE(ps.mcp_server_id, hw.id) IS NOT NULL AND s.unproxied_mcp_server_id IS NOT NULL AND NOT EXISTS (
@@ -1717,9 +1721,10 @@ SELECT DISTINCT
 FROM plugin_servers ps
 JOIN plugins p ON p.id = ps.plugin_id AND p.deleted IS FALSE
 JOIN toolsets t ON t.id = COALESCE(ps.toolset_id, ps.mcp_server_id) AND t.project_id = p.project_id AND t.deleted IS FALSE
+  AND (ps.toolset_id IS NOT NULL OR EXISTS (SELECT 1 FROM mcp_servers c WHERE c.id = ps.mcp_server_id AND c.toolset_id = c.id AND c.project_id = p.project_id))
 JOIN LATERAL (
   SELECT m.id FROM mcp_metadata m
-  WHERE (m.toolset_id = t.id OR m.mcp_server_id = t.id) AND m.project_id = p.project_id
+  WHERE (m.toolset_id = t.id OR (m.mcp_server_id = t.id AND EXISTS (SELECT 1 FROM mcp_servers c WHERE c.id = t.id AND c.toolset_id = c.id AND c.project_id = p.project_id))) AND m.project_id = p.project_id
   ORDER BY (m.toolset_id IS NOT NULL) DESC, m.updated_at DESC
   LIMIT 1
 ) md ON TRUE
@@ -1744,7 +1749,8 @@ type ListPluginEnvironmentConfigsForProjectRow struct {
 
 // Batch companion to ListPluginsWithMcpServersForProject. A hosted entry's
 // environment comes from its toolset, keyed by toolset id or by the canonical
-// wrapper id (the same uuid), with metadata keyed either way.
+// wrapper id (the same uuid), with metadata keyed either way. A server-keyed
+// row counts only when that server is the toolset's canonical wrapper.
 func (q *Queries) ListPluginEnvironmentConfigsForProject(ctx context.Context, arg ListPluginEnvironmentConfigsForProjectParams) ([]ListPluginEnvironmentConfigsForProjectRow, error) {
 	rows, err := q.db.Query(ctx, listPluginEnvironmentConfigsForProject, arg.ProjectID, arg.PluginIds)
 	if err != nil {
@@ -2628,10 +2634,7 @@ LEFT JOIN LATERAL (
 WHERE p.organization_id = $1 AND p.id = $2
   AND p.deleted IS FALSE AND m.deleted IS FALSE
 UNION ALL
-SELECT t.id, t.project_id, t.name, 'toolset'::text, t.id, t.id,
-  (t.mcp_enabled AND COALESCE(t.mcp_slug, '') <> '' AND NOT EXISTS (
-    SELECT 1 FROM mcp_servers m WHERE m.toolset_id = t.id AND m.project_id = p.id AND m.deleted IS FALSE
-  ))::boolean, latest.tool_urns
+SELECT t.id, t.project_id, t.name, 'toolset'::text, t.id, t.id, FALSE::boolean, latest.tool_urns
 FROM toolsets t JOIN projects p ON p.id = t.project_id
 LEFT JOIN LATERAL (
   SELECT v.tool_urns FROM toolset_versions v
@@ -2663,6 +2666,7 @@ type ListRoleDeliveryServersRow struct {
 // Load latest live contents with the inventory for typed platform classification.
 // Prefer the canonical wrapper, but allow fallback when it is enabled and endpointless.
 // A disabled canonical wrapper still blocks automatic delivery through alternatives.
+// A toolset with no MCP server is a removal candidate only; it is never delivered.
 func (q *Queries) ListRoleDeliveryServers(ctx context.Context, arg ListRoleDeliveryServersParams) ([]ListRoleDeliveryServersRow, error) {
 	rows, err := q.db.Query(ctx, listRoleDeliveryServers, arg.OrganizationID, arg.ProjectID)
 	if err != nil {
@@ -3537,7 +3541,9 @@ FROM plugins p
 WHERE ps.plugin_id = p.id
   AND p.project_id = $2
   AND p.deleted IS FALSE
-  AND (ps.mcp_server_id = $3 OR ps.toolset_id = $3)
+  AND (ps.mcp_server_id = $3 OR (ps.toolset_id = $3 AND EXISTS (
+    SELECT 1 FROM mcp_servers c WHERE c.id = $3 AND c.toolset_id = c.id AND c.project_id = p.project_id
+  )))
   AND ps.display_name = $4
   AND ps.deleted IS FALSE
   AND NOT EXISTS (

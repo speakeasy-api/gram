@@ -58,9 +58,13 @@ func (s *Service) SetIdentityChainer(chainer identityChainer) {
 // interactive routing treats it; one without a derived issuer calls
 // anonymously and so never chains. A remote upstream is identified by its
 // resource.
-func (s *Service) identityChainingRequest(ctx context.Context, organizationID string, projectID, userSessionIssuerID uuid.UUID, upstreamResource string, tunneled bool, backendIssuerID uuid.NullUUID) (identitychaining.Request, bool) {
+//
+// chosenClientID is the client the caller's credential chose for the
+// upstream. Chaining only uses a binding for that client, so a credential
+// without one, a no-auth choice included, never chains.
+func (s *Service) identityChainingRequest(ctx context.Context, organizationID string, projectID, userSessionIssuerID uuid.UUID, upstreamResource string, tunneled bool, backendIssuerID, chosenClientID uuid.NullUUID) (identitychaining.Request, bool) {
 	var none identitychaining.Request
-	if s.identityChainer == nil {
+	if s.identityChainer == nil || !chosenClientID.Valid {
 		return none, false
 	}
 	identity, ok := mcpidentity.FromContext(ctx)
@@ -73,6 +77,7 @@ func (s *Service) identityChainingRequest(ctx context.Context, organizationID st
 	}
 	req, ok := identitychaining.NewRequest(organizationID, projectID, userSessionIssuerID, identity.UserID(), upstreamResource, tunneled, backendIssuerID)
 	req.UserSessionJTI = identity.SessionJTI()
+	req.RemoteSessionClientID = chosenClientID
 	return req, ok
 }
 
@@ -86,14 +91,27 @@ func (s *Service) identityChainingRequest(ctx context.Context, organizationID st
 func (s *Service) resolveDirectUpstreamToken(ctx context.Context, w http.ResponseWriter, logger *slog.Logger, authentication *issuerGateAuthentication, upstreamResource string, tunneled bool, backendIssuerID uuid.NullUUID) (remotesessions.UpstreamToken, error) {
 	var none remotesessions.UpstreamToken
 	endpoint := authentication.endpoint
-	req, chainable := s.identityChainingRequest(ctx, endpoint.OrganizationID, endpoint.ProjectID, endpoint.UserSessionIssuerID, upstreamResource, tunneled, backendIssuerID)
-	if !chainable {
+	// A credential's own choice for the server replaces the issuer derived
+	// for it: the chosen client's issuer is the one it routes and chains by.
+	choice, selected, err := s.directUpstreamChoice(ctx, w, authentication)
+	switch {
+	case err != nil:
+		return none, err
+	case selected && !choice.noAuth():
+		backendIssuerID = choice.remoteSessionIssuerID
+	}
+	req, chainable := s.identityChainingRequest(ctx, endpoint.OrganizationID, endpoint.ProjectID, endpoint.UserSessionIssuerID, upstreamResource, tunneled, backendIssuerID, authentication.chosenClient)
+	switch {
+	case !chainable && selected && choice.noAuth():
+		// The server has no client, so neither an interactive grant nor a
+		// chaining binding serves it, and it calls anonymously.
+		return none, nil
+	case !chainable:
 		return s.resolveStrictUpstreamToken(ctx, w, logger, authentication, upstreamResource, tunneled, backendIssuerID)
 	}
 
-	tokens, strictErr := s.remoteChallengeMgr.ResolveAccessTokens(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, authentication.subject)
+	tokens, strictErr := s.resolveAccessTokens(ctx, authentication, false)
 	unusable := errors.Is(strictErr, remotesessions.ErrNoValidToken)
-	var err error
 	switch {
 	case unusable:
 		// A linked upstream is unusable. Only an upstream chaining governs is
@@ -102,7 +120,12 @@ func (s *Service) resolveDirectUpstreamToken(ctx context.Context, w http.Respons
 		if !s.identityChainer.Governs(ctx, req) {
 			return none, s.rejectRemoteSession(ctx, w, authentication, strictErr)
 		}
-		tokens, err = s.remoteChallengeMgr.ResolveAvailableAccessTokens(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, authentication.subject)
+		tokens, err = s.resolveAccessTokens(ctx, authentication, true)
+		if errors.Is(err, remotesessions.ErrChosenClientUnbound) {
+			// The credential's chosen client is gone from the issuer; only
+			// reconnecting records a usable choice.
+			return none, s.rejectRemoteSession(ctx, w, authentication, err)
+		}
 		if err != nil {
 			return none, oops.E(oops.CodeUnexpected, err, "resolve remote session").LogError(ctx, logger)
 		}
@@ -231,7 +254,7 @@ func (s *Service) metaMemberChainer(gate *metaGateContext, member metaMember) fu
 		return nil
 	}
 	return func(ctx context.Context, upstreamResource string) (string, error) {
-		req, chainable := s.identityChainingRequest(ctx, gate.organizationID, member.projectID, gate.userSessionIssuerID, upstreamResource, member.tunneledServerID.Valid, member.remoteSessionIssuerID)
+		req, chainable := s.identityChainingRequest(ctx, gate.organizationID, member.projectID, gate.userSessionIssuerID, upstreamResource, member.tunneledServerID.Valid, member.remoteSessionIssuerID, member.chosenClientID)
 		if !chainable {
 			return "", nil
 		}
@@ -283,50 +306,62 @@ func (s *Service) consentChainingRequests(ctx context.Context, endpoint *Resolve
 	if endpoint.MetaMcpServerID.Valid {
 		return s.consentChainedMetaClients(ctx, endpoint, challengeState, clients, routing)
 	}
-	req, ok, err := s.directChainingRequest(ctx, endpoint, subject.ID, routing)
-	if err != nil || !ok {
+	if _, ok, err := s.consentDirectBackend(ctx, endpoint, routing); err != nil || !ok {
 		return nil
 	}
-	issuer, served := s.identityChainer.Serves(ctx, req)
-	if !served {
-		return nil
-	}
+	// The runtime chains only through the client a credential chose, so each
+	// card is judged with the request its client builds: restricted to that
+	// client's binding, and for a tunneled backend routed by its own issuer.
 	requests := make(map[uuid.UUID][]identitychaining.Request, len(clients))
 	for _, c := range clients {
-		if c.RemoteSessionIssuerID == issuer {
+		choice := upstreamChoice{clientID: uuid.NullUUID{UUID: c.ID, Valid: true}, remoteSessionIssuerID: uuid.NullUUID{UUID: c.RemoteSessionIssuerID, Valid: true}}
+		req, ok, err := s.directChainingRequest(ctx, endpoint, subject.ID, routing, choice)
+		if err != nil {
+			return nil
+		}
+		if !ok {
+			continue
+		}
+		if issuer, served := s.identityChainer.Serves(ctx, req); served && issuer == c.RemoteSessionIssuerID {
 			requests[c.ID] = []identitychaining.Request{req}
 		}
+	}
+	if len(requests) == 0 {
+		return nil
 	}
 	return requests
 }
 
 // directChainingRequest builds the request the runtime makes for userID on a
-// direct endpoint's upstream, reusing resolved routing when present. Consent
-// and refresh both judge chaining with it, so they ask what the runtime asks.
-// A failed backend read is an error, so a caller can tell an endpoint chaining
-// cannot apply to from one it could not judge.
-func (s *Service) directChainingRequest(ctx context.Context, endpoint *ResolvedMcpEndpoint, userID string, routing consentRouting) (identitychaining.Request, bool, error) {
+// direct endpoint's upstream through the credential's choice, reusing
+// resolved routing when present. Refresh judges chaining with it, so it asks
+// what the runtime asks: a tunneled backend chains by the chosen client's own
+// issuer, so without a chosen client it never chains, and a chosen client
+// restricts chaining to a binding for that client. A failed backend read is
+// an error, so a caller can tell an endpoint chaining cannot apply to from one
+// it could not judge.
+func (s *Service) directChainingRequest(ctx context.Context, endpoint *ResolvedMcpEndpoint, userID string, routing consentRouting, choice upstreamChoice) (identitychaining.Request, bool, error) {
 	var none identitychaining.Request
-	tunneled, tunnelIssuer, ok, err := s.consentDirectBackend(ctx, endpoint, routing)
+	tunneled, ok, err := s.consentDirectBackend(ctx, endpoint, routing)
 	if err != nil || !ok {
 		return none, false, err
 	}
-	req, ok := identitychaining.NewRequest(endpoint.OrganizationID, endpoint.ProjectID, endpoint.UserSessionIssuerID, userID, endpoint.UpstreamResource, tunneled, tunnelIssuer)
+	req, ok := identitychaining.NewRequest(endpoint.OrganizationID, endpoint.ProjectID, endpoint.UserSessionIssuerID, userID, endpoint.UpstreamResource, tunneled, choice.remoteSessionIssuerID)
+	req.RemoteSessionClientID = choice.clientID
 	return req, ok, nil
 }
 
 // consentDirectBackend reports whether a direct endpoint's backend is
-// tunneled and its derived issuer, reusing resolved routing when present.
-func (s *Service) consentDirectBackend(ctx context.Context, endpoint *ResolvedMcpEndpoint, routing consentRouting) (bool, uuid.NullUUID, bool, error) {
-	none := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+// tunneled, reusing resolved routing when present.
+func (s *Service) consentDirectBackend(ctx context.Context, endpoint *ResolvedMcpEndpoint, routing consentRouting) (bool, bool, error) {
 	if !endpoint.McpServerID.Valid || strings.TrimRight(endpoint.UpstreamResource, "/") == "" {
-		return false, none, false, nil
+		return false, false, nil
 	}
 	switch routing.backend {
 	case consentBackendRemote:
-		return false, none, true, nil
+		return false, true, nil
 	case consentBackendTunneled:
-		return true, routing.issuer, true, nil
+		return true, true, nil
 	case consentBackendNone, consentBackendMeta:
 	}
 	server, err := mcpservers_repo.New(s.db).GetMCPServerByIDAndProjectID(ctx, mcpservers_repo.GetMCPServerByIDAndProjectIDParams{
@@ -335,18 +370,18 @@ func (s *Service) consentDirectBackend(ctx context.Context, endpoint *ResolvedMc
 	})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		return false, none, false, nil
+		return false, false, nil
 	case err != nil:
 		s.logger.WarnContext(ctx, "load mcp server for identity chaining", attr.SlogError(err))
-		return false, none, false, fmt.Errorf("load mcp server for identity chaining: %w", err)
+		return false, false, fmt.Errorf("load mcp server for identity chaining: %w", err)
 	}
 	switch {
 	case server.RemoteMcpServerID.Valid:
-		return false, none, true, nil
+		return false, true, nil
 	case server.TunneledMcpServerID.Valid:
-		return true, tunneledBackendIssuer(&server), true, nil
+		return true, true, nil
 	}
-	return false, none, false, nil
+	return false, false, nil
 }
 
 // consentChainedMetaClients marks a gateway card chained only when chaining
@@ -387,6 +422,7 @@ func (s *Service) consentChainedMetaClients(ctx context.Context, endpoint *Resol
 				requests = nil
 				break
 			}
+			req.RemoteSessionClientID = uuid.NullUUID{UUID: c.ID, Valid: true}
 			answer, seen := served[req]
 			if !seen {
 				answer.issuer, answer.ok = s.identityChainer.Serves(ctx, req)

@@ -423,3 +423,15 @@ SELECT EXISTS (
         AND gateway.deleted IS FALSE
     )
 ) AS sole_consumer;
+
+-- name: ListServerAssociatedClients :many
+-- The live clients associated with each of the given servers, for consent to
+-- offer a server only its own clients.
+SELECT a.mcp_server_id, a.remote_session_client_id
+FROM mcp_server_remote_session_clients AS a
+JOIN remote_session_clients AS c
+  ON c.id = a.remote_session_client_id
+ AND c.deleted IS FALSE
+WHERE a.mcp_server_id = ANY(@mcp_server_ids::uuid[])
+  AND a.organization_id = @organization_id::text
+  AND a.deleted IS FALSE;

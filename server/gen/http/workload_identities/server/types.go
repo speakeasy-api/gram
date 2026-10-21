@@ -3220,9 +3220,6 @@ type WorkloadPlatformResponseBody struct {
 	Variables []*WorkloadPlatformVariableResponseBody `form:"variables" json:"variables" xml:"variables"`
 	// The access rule it produces.
 	Subject *WorkloadPlatformSubjectResponseBody `form:"subject" json:"subject" xml:"subject"`
-	// The guided setup. Empty for a platform without one, which is listed as
-	// coming soon and cannot be opened.
-	Steps []*WorkloadPlatformStepResponseBody `form:"steps" json:"steps" xml:"steps"`
 }
 
 // WorkloadPlatformConstantResponseBody is used to define fields on response
@@ -3261,47 +3258,6 @@ type WorkloadPlatformSubjectResponseBody struct {
 	Template string `form:"template" json:"template" xml:"template"`
 	// Whether the rule is the filled template followed by *.
 	Wildcard bool `form:"wildcard" json:"wildcard" xml:"wildcard"`
-}
-
-// WorkloadPlatformStepResponseBody is used to define fields on response body
-// types.
-type WorkloadPlatformStepResponseBody struct {
-	// Stable within the platform; used in the dashboard URL.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Heads the step.
-	Title string `form:"title" json:"title" xml:"title"`
-	// collect steps gather values, the create step writes the rows, connect steps
-	// describe the platform's side.
-	Phase string `form:"phase" json:"phase" xml:"phase"`
-	// Rendered in order.
-	Blocks []*WorkloadPlatformBlockResponseBody `form:"blocks" json:"blocks" xml:"blocks"`
-}
-
-// WorkloadPlatformBlockResponseBody is used to define fields on response body
-// types.
-type WorkloadPlatformBlockResponseBody struct {
-	// The kind of content.
-	Type string `form:"type" json:"type" xml:"type"`
-	// A text block's Markdown, or what a checklist item without a value asks the
-	// operator to do. Raw HTML in it must not be rendered.
-	Markdown string `form:"markdown" json:"markdown" xml:"markdown"`
-	// An image's path on the dashboard's origin.
-	Src string `form:"src" json:"src" xml:"src"`
-	// An image's alternative text.
-	Alt string `form:"alt" json:"alt" xml:"alt"`
-	// Shown under an image.
-	Caption string `form:"caption" json:"caption" xml:"caption"`
-	// A link's https target.
-	Href string `form:"href" json:"href" xml:"href"`
-	// A link's or computed value's label, or the console field or control a
-	// checklist item names.
-	Label string `form:"label" json:"label" xml:"label"`
-	// The variable key a field collects.
-	Variable string `form:"variable" json:"variable" xml:"variable"`
-	// The value a computed block or checklist item shows.
-	Value string `form:"value" json:"value" xml:"value"`
-	// Shown under a computed value or checklist item.
-	Help string `form:"help" json:"help" xml:"help"`
 }
 
 // WorkloadFormResponseBody is used to define fields on response body types.
