@@ -2,7 +2,6 @@ package identityproviderconnections_test
 
 import (
 	"context"
-	"errors"
 	"sync"
 	"testing"
 	"time"
@@ -19,7 +18,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/identityproviderconnections"
 	"github.com/speakeasy-api/gram/server/internal/identityproviderconnections/provisiontest"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -41,11 +39,9 @@ const (
 const testClientID = "0oaexampleclient00001"
 
 type serviceInstance struct {
-	svc   *identityproviderconnections.Service
-	conn  *testInstance
-	orgID string
-	// flags is nil when the service was built over a caller-supplied provider.
-	flags        *feature.InMemory
+	svc          *identityproviderconnections.Service
+	conn         *testInstance
+	orgID        string
 	oktaFakes    *okta.FakeFactory
 	syncTrigger  *fakeSyncTrigger
 	discovery    *fakeDiscovery
@@ -133,21 +129,6 @@ func (f *fakeSyncTrigger) Calls() int {
 	return f.calls
 }
 
-// errFlags is a feature provider whose evaluation always fails.
-type errFlags struct{}
-
-func (errFlags) IsFlagEnabled(context.Context, feature.Flag, string, map[string]string) (bool, error) {
-	return false, errors.New("posthog unreachable")
-}
-
-func (errFlags) IsFlagEnabledLocal(context.Context, feature.Flag, string, map[string]string, map[string]string) (bool, error) {
-	return false, errors.New("posthog unreachable")
-}
-
-func (errFlags) FlagPayload(context.Context, feature.Flag, string, map[string]string) ([]byte, error) {
-	return nil, errors.New("posthog unreachable")
-}
-
 func allScopes() []string {
 	return []string{"okta.apps.read", "okta.users.read", "okta.groups.read"}
 }
@@ -168,20 +149,15 @@ func oktaFixtures() map[string]okta.Fixtures {
 // org:admin for the organization.
 func newTestService(t *testing.T) (context.Context, *serviceInstance) {
 	t.Helper()
-	return newTestServiceWithFlags(t, nil)
+	return newTestServiceWithPoolLimit(t, 0)
 }
 
-func newTestServiceWithFlags(t *testing.T, features feature.Provider) (context.Context, *serviceInstance) {
+func newTestServiceWithPoolLimit(t *testing.T, maxConns int32) (context.Context, *serviceInstance) {
 	t.Helper()
-	return newTestServiceWithPoolLimit(t, features, 0)
+	return newTestServiceWithClientFactory(t, maxConns, nil)
 }
 
-func newTestServiceWithPoolLimit(t *testing.T, features feature.Provider, maxConns int32) (context.Context, *serviceInstance) {
-	t.Helper()
-	return newTestServiceWithClientFactory(t, features, maxConns, nil)
-}
-
-func newTestServiceWithClientFactory(t *testing.T, features feature.Provider, maxConns int32, wrap func(okta.ClientFactory) okta.ClientFactory) (context.Context, *serviceInstance) {
+func newTestServiceWithClientFactory(t *testing.T, maxConns int32, wrap func(okta.ClientFactory) okta.ClientFactory) (context.Context, *serviceInstance) {
 	t.Helper()
 
 	ctx, ti := newTestDB(t)
@@ -209,16 +185,6 @@ func newTestServiceWithClientFactory(t *testing.T, features feature.Provider, ma
 	authCtx.ActiveOrganizationID = ti.orgID
 	ctx = contextvalues.SetAuthContext(ctx, authCtx)
 
-	// flags is only the effective provider when the caller supplied none; a
-	// service built over another provider exposes nil so toggling it cannot
-	// silently do nothing.
-	var flags *feature.InMemory
-	if features == nil {
-		flags = &feature.InMemory{}
-		flags.SetFlag(feature.FlagOktaConnections, ti.orgID, true)
-		features = flags
-	}
-
 	credentialID := provisiontest.CreatePlatformSigningCredential(t, ctx, ti.conn)
 	provisioner := provisiontest.NewProvisioner(t, ti.conn, provisiontest.NewKMSClients(t).Factory, testServerURL, credentialID, "")
 	discovery := newFakeDiscovery()
@@ -241,7 +207,6 @@ func newTestServiceWithClientFactory(t *testing.T, features feature.Provider, ma
 			sessionManager,
 			authzEngine,
 			audit.NewLogger(),
-			features,
 			provisioner,
 			clients,
 			enc,
@@ -257,7 +222,6 @@ func newTestServiceWithClientFactory(t *testing.T, features feature.Provider, ma
 		svc:          build(provisioner),
 		conn:         ti,
 		orgID:        ti.orgID,
-		flags:        flags,
 		oktaFakes:    fakes,
 		syncTrigger:  syncTrigger,
 		discovery:    discovery,
@@ -290,7 +254,6 @@ func asOtherOrganization(t *testing.T, ctx context.Context, si *serviceInstance)
 	other := *si.authCtx
 	other.ActiveOrganizationID = otherOrgID
 	ctx = contextvalues.SetAuthContext(ctx, &other)
-	si.flags.SetFlag(feature.FlagOktaConnections, otherOrgID, true)
 	return authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgAdmin, otherOrgID)), otherOrgID
 }
 

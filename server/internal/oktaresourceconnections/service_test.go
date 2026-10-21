@@ -17,7 +17,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/identityproviderconnections"
 	"github.com/speakeasy-api/gram/server/internal/identityproviderconnections/provisiontest"
 	idprepo "github.com/speakeasy-api/gram/server/internal/identityproviderconnections/repo"
@@ -429,15 +428,8 @@ func TestResourceConnections_Guards(t *testing.T) {
 	recordAgent(t, ctx, si, "wlp1")
 	f := capableServer(t, ctx, si, "Epsilon")
 
-	// Flag off: confirm refused, reads still work.
-	si.flags.SetFlag(feature.FlagOktaConnections, si.orgID, false)
-	_, err := confirm(t, ctx, si, audience, nil, f.serverID)
-	requireOopsCode(t, err, oops.CodeForbidden)
-	require.Len(t, list(t, ctx, si, true).Servers, 1)
-	si.flags.SetFlag(feature.FlagOktaConnections, si.orgID, true)
-
 	// Support sessions read but never confirm.
-	_, err = confirm(t, asSupportSession(ctx, si), si, audience, nil, f.serverID)
+	_, err := confirm(t, asSupportSession(ctx, si), si, audience, nil, f.serverID)
 	requireOopsCode(t, err, oops.CodeForbidden)
 	require.Len(t, list(t, asSupportSession(ctx, si), si, true).Servers, 1)
 
@@ -459,9 +451,8 @@ func TestResourceConnections_Guards(t *testing.T) {
 	otherCtx := authztest.WithExactGrants(t, contextvalues.SetAuthContext(ctx, &other), authz.NewGrant(authz.ScopeOrgAdmin, otherOrg), authz.NewGrant(authz.ScopeMCPRead, authz.WildcardResource))
 	_, err = si.svc.List(otherCtx, &gen.ListPayload{SessionToken: nil, IncludeAll: true})
 	requireOopsCode(t, err, oops.CodeFailedPrecondition)
-	otherSi := &instance{svc: si.svc, conn: si.conn, q: si.q, orgID: otherOrg, connectionID: uuid.Nil, flags: si.flags, authCtx: &other}
+	otherSi := &instance{svc: si.svc, conn: si.conn, q: si.q, orgID: otherOrg, connectionID: uuid.Nil, authCtx: &other}
 	otherSi.connectionID = createConnection(t, otherCtx, otherSi)
-	si.flags.SetFlag(feature.FlagOktaConnections, otherOrg, true)
 	require.Empty(t, list(t, otherCtx, otherSi, true).Servers)
 	_, err = confirm(t, otherCtx, otherSi, audience, nil, f.serverID)
 	requireOopsCode(t, err, oops.CodeNotFound)

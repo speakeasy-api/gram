@@ -27,7 +27,7 @@ type Service interface {
 	// resource app is configured with. Servers that share an upstream share one
 	// Okta resource connection. Confirmation is the administrator's word;
 	// Speakeasy cannot check it. The connection must be verified or degraded.
-	// Requires org:admin and the okta-connections rollout.
+	// Requires org:admin.
 	Confirm(context.Context, *ConfirmPayload) (res *ConfirmOktaResourceConnectionsResult, err error)
 	// Delete the Okta resource connection for this server's upstream so it, and
 	// every server sharing that upstream, shows as pending again. Requires

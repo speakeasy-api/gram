@@ -163,10 +163,6 @@ const (
 	// can't strand it on stale hooks.
 	FlagHooksRollout Flag = "hooks-rollout"
 
-	// FlagOktaConnections gates the Okta integration while it is dogfooded:
-	// creating connections, resource connections and server suggestions.
-	FlagOktaConnections Flag = "okta-connections"
-
 	// FlagSignInEnforcement turns on, per organization (keyed by its id),
 	// linking MCP grants to sign-ins, sign-in evidence lookups, sign out
 	// everywhere, member sign-in revocation and revocation on deprovisioning.

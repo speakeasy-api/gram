@@ -30,9 +30,7 @@ import { StatusDot, type StatusDotTone } from "@/components/ui/StatusDot";
 import { Text } from "@/components/ui/Text";
 import { useOrganization, useProject } from "@/contexts/Auth";
 import { useProjectSlugForRequests } from "@/contexts/Sdk";
-import { useFeatureFlag } from "@/hooks/useFeatureFlag";
 import { useRBAC } from "@/hooks/useRBAC";
-import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { isKnownEnumValue } from "@/lib/enum";
 import { mapWithConcurrency } from "@/lib/bounded-concurrency";
 import { useRemoteSessionIssuersByIds } from "@/lib/remote-identity";
@@ -521,7 +519,6 @@ export function IdentityChainingField({
   const orgAdmin = hasScope("org:admin", organization.id);
   // Organization-wide acceptance is withheld from people who can't read the organization.
   const acceptanceKnown = orgAdmin || hasScope("org:read", organization.id);
-  const oktaView = useFeatureFlag(FEATURE_FLAGS.oktaConnections);
   const vendor = serviceName(vendorIssuer.data?.name, resource);
   const signIn = {
     name: trustedIssuerId
@@ -531,7 +528,6 @@ export function IdentityChainingField({
   };
   const oktaLookup =
     orgAdmin &&
-    oktaView.status === "enabled" &&
     listed.some(
       (provider) =>
         provider.kind === "external" && !!provider.remoteSessionIssuerId,
