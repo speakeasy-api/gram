@@ -260,3 +260,28 @@ func TestParseHostedMCPWrappersFlagsMoveDependents(t *testing.T) {
 	require.True(t, cfg.options.Apply)
 	require.Equal(t, "/tmp/r.json.journal.jsonl", cfg.journalPath)
 }
+
+func TestParseHostedMCPWrappersFlagsRekeyRemovalRecords(t *testing.T) {
+	t.Parallel()
+
+	dry, err := parseHostedMCPWrappersFlags([]string{"-rekey-removal-records"}, hostedMCPWrappersGetenv, io.Discard)
+	require.NoError(t, err)
+	require.True(t, dry.options.RekeyRemovals)
+	require.False(t, dry.options.Apply)
+	require.Empty(t, dry.journalPath)
+
+	_, err = parseHostedMCPWrappersFlags([]string{"-rekey-removal-records", "-apply"}, hostedMCPWrappersGetenv, io.Discard)
+	require.ErrorContains(t, err, "-rekey-removal-records -apply requires -report")
+	for _, other := range []string{"-move-dependents", "-cleanup-orphans"} {
+		_, err = parseHostedMCPWrappersFlags([]string{"-rekey-removal-records", other}, hostedMCPWrappersGetenv, io.Discard)
+		require.ErrorContains(t, err, "separate phases", other)
+	}
+	_, err = parseHostedMCPWrappersFlags([]string{"-rekey-removal-records", "-readers-cut-over"}, hostedMCPWrappersGetenv, io.Discard)
+	require.ErrorContains(t, err, "only applies to -move-dependents")
+
+	applied, err := parseHostedMCPWrappersFlags([]string{"-rekey-removal-records", "-apply", "-report=/tmp/r.json"}, hostedMCPWrappersGetenv, io.Discard)
+	require.NoError(t, err)
+	require.True(t, applied.options.Apply)
+	require.Equal(t, "/tmp/r.json.journal.jsonl", applied.journalPath)
+	require.Equal(t, "-apply -rekey-removal-records", hostedMCPWrappersModeFlags(applied.options))
+}

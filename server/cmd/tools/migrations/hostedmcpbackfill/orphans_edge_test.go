@@ -235,7 +235,7 @@ func TestRestoreOrphansJQReplaysCommittedRows(t *testing.T) {
 	for _, record := range append(journal.records, JournalRecord{
 		Event: JournalCommitUnknown, ProjectID: f.projectID, ToolsetID: uuid.New(), RowID: uuid.New(), Outcome: OutcomeCommitUnknown,
 		From: RowKey{Table: tablePluginServers, Column: "toolset_id", ID: uuid.New()}, To: RowKey{Table: "", Column: "", ID: uuid.Nil},
-		CollapsedTwin: nil, Removed: &RowImage{Table: tablePluginServers, ID: uuid.New(), Deletion: "soft_deleted", Row: nil, EnvironmentConfigs: nil, SoftDeletedAt: ""},
+		CollapsedTwin: nil, Removed: &RowImage{Table: tablePluginServers, ID: uuid.New(), Deletion: "soft_deleted", Row: nil, EnvironmentConfigs: nil, SoftDeletedAt: "", RekeyedUpdatedAt: ""},
 	}) {
 		line, err := json.Marshal(record)
 		require.NoError(t, err)
