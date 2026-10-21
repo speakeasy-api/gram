@@ -206,7 +206,24 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 		{byProj(s.q.PostflightIDServerClientAssociations), 4, "demo seed postflight: expected 4 MCP server upstream client associations, found %d"},
 		// One per server each seeded sign-in reaches: the Linear and Slack
 		// sign-ins on their own server, the gateway sign-ins on both members.
-		{byProj(s.q.PostflightIDUpstreamClientChoices), 8, "demo seed postflight: expected 8 upstream client choices, found %d"},
+		{func(ctx context.Context) (int64, error) {
+			return s.q.PostflightIDUpstreamClientChoices(ctx, repo.PostflightIDUpstreamClientChoicesParams{
+				ProjectID:        proj,
+				LinearSessionIds: []uuid.UUID{s.det("user-session-6"), s.det("user-session-7"), s.det("user-session-10"), s.det("user-session-11")},
+				SlackSessionIds:  []uuid.UUID{s.det("user-session-8"), s.det("user-session-9"), s.det("user-session-10"), s.det("user-session-11")},
+				LinearServerID:   s.det("mcpserver-linear"),
+				SlackServerID:    s.det("mcpserver-slack"),
+				LinearClientID:   s.det("remote-identity-client-linear"),
+			})
+		}, 8, "demo seed postflight: expected exactly 8 matching upstream client choices, found %d"},
+		{func(ctx context.Context) (int64, error) {
+			return s.q.PostflightIDMisassignedUpstreamClientChoices(ctx, repo.PostflightIDMisassignedUpstreamClientChoicesParams{
+				ProjectID:      proj,
+				LinearServerID: s.det("mcpserver-linear"),
+				LinearClientID: s.det("remote-identity-client-linear"),
+				SlackServerID:  s.det("mcpserver-slack"),
+			})
+		}, 0, "demo seed postflight: %d upstream client choices are not the intended Linear client or Slack no-auth choice"},
 		{byProj(s.q.PostflightIDServiceAccountHeaders), 1, "demo seed postflight: expected 1 Remote MCP Service Account header, found %d"},
 		// Managed-agent credentials are a separate surface from ordinary MCP
 		// connections, even though both fixtures belong to the same project.

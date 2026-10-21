@@ -1279,10 +1279,10 @@ INSERT INTO upstream_client_selections
    source)
 SELECT $1::uuid, $2::uuid, $3::text, $4::text,
        $5::uuid, $6::uuid, c.id, c.attachment_scope,
-       c.id IS NULL, $7::text
+       $7::uuid IS NULL, $8::text
 FROM (SELECT 1) AS one
 LEFT JOIN remote_session_clients AS c
-  ON c.id = $8::uuid
+  ON c.id = $7::uuid
 `
 
 type ServersInsertUpstreamClientChoiceParams struct {
@@ -1292,13 +1292,15 @@ type ServersInsertUpstreamClientChoiceParams struct {
 	CredentialKind        string
 	CredentialID          uuid.UUID
 	McpServerID           uuid.UUID
-	Source                string
 	RemoteSessionClientID uuid.NullUUID
+	Source                string
 }
 
 // One seeded credential's choice for one server, as issuance records it: the
 // client the credential uses there, or no-auth when the client is omitted.
-// The projects delete cascades these rows.
+// no_auth follows the parameter, so a client id that resolves to no client
+// fails the no-auth check instead of being recorded as no-auth. The projects
+// delete cascades these rows.
 func (q *Queries) ServersInsertUpstreamClientChoice(ctx context.Context, arg ServersInsertUpstreamClientChoiceParams) error {
 	_, err := q.db.Exec(ctx, serversInsertUpstreamClientChoice,
 		arg.ID,
@@ -1307,8 +1309,8 @@ func (q *Queries) ServersInsertUpstreamClientChoice(ctx context.Context, arg Ser
 		arg.CredentialKind,
 		arg.CredentialID,
 		arg.McpServerID,
-		arg.Source,
 		arg.RemoteSessionClientID,
+		arg.Source,
 	)
 	return err
 }
