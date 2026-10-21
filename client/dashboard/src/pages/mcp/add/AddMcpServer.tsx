@@ -130,7 +130,6 @@ export default function AddMcpServer(): JSX.Element {
   const { orgSlug } = useSlugs();
   const [gatewayDialogOpen, setGatewayDialogOpen] = useState(false);
   const [gatewayName, setGatewayName] = useState("");
-
   // Creation is two calls: the gateway, then its default address. The address
   // is best-effort (createDefaultGatewayEndpoint warns rather than throwing),
   // so a failure there still lands the user on a usable gateway page.
