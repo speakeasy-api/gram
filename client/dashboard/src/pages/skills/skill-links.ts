@@ -75,6 +75,8 @@ export function skillLinkTargetName(
       return link.targetName || "Unnamed gateway";
     case "mcp_server":
       return link.targetName || "Unnamed MCP server";
+    default:
+      return link.targetName || "Unknown MCP surface";
   }
 }
 
@@ -88,6 +90,8 @@ export function skillLinkTargetKindLabel(
       return "Gateway";
     case "mcp_server":
       return "MCP server";
+    default:
+      return "MCP surface";
   }
 }
 

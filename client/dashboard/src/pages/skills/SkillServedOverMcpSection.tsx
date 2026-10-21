@@ -273,7 +273,8 @@ function ServedByRow({
   );
 }
 
-function linkTarget(link: SkillLink): SkillLinkTarget {
+// Returns undefined for a target kind this dashboard doesn't know yet.
+function linkTarget(link: SkillLink): SkillLinkTarget | undefined {
   switch (link.targetKind) {
     case "mcp_server":
       return { kind: "mcp_server", mcpServerId: link.mcpServerId ?? "" };
@@ -284,5 +285,7 @@ function linkTarget(link: SkillLink): SkillLinkTarget {
       };
     case "organization_gateway":
       return { kind: "organization_gateway" };
+    default:
+      return undefined;
   }
 }
