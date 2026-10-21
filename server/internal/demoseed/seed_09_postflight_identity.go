@@ -176,7 +176,7 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 		{func(ctx context.Context) (int64, error) {
 			return s.q.PostflightIDRemoteIdentityClients(ctx, repo.PostflightIDRemoteIdentityClientsParams{ProjectID: proj, OrgID: org})
 		}, 1, "demo seed postflight: expected 1 Remote MCP identity client, found %d"},
-		{byProj(s.q.PostflightIDRemoteIdentityBindings), 2, "demo seed postflight: expected 2 Remote MCP User Identity bindings, found %d"},
+		{byProj(s.q.PostflightIDRemoteIdentityBindings), 3, "demo seed postflight: expected 3 Remote MCP User Identity bindings, found %d"},
 		// The stamp has to be what ResyncMCPServerRemoteSessionIssuers would
 		// derive: every live client bound to Linear's user session issuer names
 		// one remote issuer, and it is the stamped one. The query returns no
@@ -204,6 +204,9 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 		{byProj(s.q.PostflightIDLinearProtectedResource), 1, "demo seed postflight: expected Linear's protected resource pinned to read, found %d matching rows"},
 		// Linear's two clients, and each EMA service's own client.
 		{byProj(s.q.PostflightIDServerClientAssociations), 4, "demo seed postflight: expected 4 MCP server upstream client associations, found %d"},
+		// One per server each seeded sign-in reaches: the Linear and Slack
+		// sign-ins on their own server, the gateway sign-ins on both members.
+		{byProj(s.q.PostflightIDUpstreamClientChoices), 8, "demo seed postflight: expected 8 upstream client choices, found %d"},
 		{byProj(s.q.PostflightIDServiceAccountHeaders), 1, "demo seed postflight: expected 1 Remote MCP Service Account header, found %d"},
 		// Managed-agent credentials are a separate surface from ordinary MCP
 		// connections, even though both fixtures belong to the same project.

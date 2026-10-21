@@ -1272,6 +1272,47 @@ func (q *Queries) ServersInsertSupportDeskGrants(ctx context.Context, arg Server
 	return err
 }
 
+const serversInsertUpstreamClientChoice = `-- name: ServersInsertUpstreamClientChoice :exec
+INSERT INTO upstream_client_selections
+  (id, project_id, organization_id, credential_kind, credential_id,
+   mcp_server_id, remote_session_client_id, client_attachment_scope, no_auth,
+   source)
+SELECT $1::uuid, $2::uuid, $3::text, $4::text,
+       $5::uuid, $6::uuid, c.id, c.attachment_scope,
+       c.id IS NULL, $7::text
+FROM (SELECT 1) AS one
+LEFT JOIN remote_session_clients AS c
+  ON c.id = $8::uuid
+`
+
+type ServersInsertUpstreamClientChoiceParams struct {
+	ID                    uuid.UUID
+	ProjectID             uuid.UUID
+	OrgID                 string
+	CredentialKind        string
+	CredentialID          uuid.UUID
+	McpServerID           uuid.UUID
+	Source                string
+	RemoteSessionClientID uuid.NullUUID
+}
+
+// One seeded credential's choice for one server, as issuance records it: the
+// client the credential uses there, or no-auth when the client is omitted.
+// The projects delete cascades these rows.
+func (q *Queries) ServersInsertUpstreamClientChoice(ctx context.Context, arg ServersInsertUpstreamClientChoiceParams) error {
+	_, err := q.db.Exec(ctx, serversInsertUpstreamClientChoice,
+		arg.ID,
+		arg.ProjectID,
+		arg.OrgID,
+		arg.CredentialKind,
+		arg.CredentialID,
+		arg.McpServerID,
+		arg.Source,
+		arg.RemoteSessionClientID,
+	)
+	return err
+}
+
 const serversInsertUserSession = `-- name: ServersInsertUserSession :exec
 INSERT INTO user_sessions
   (id, project_id, organization_id, user_session_issuer_id, user_session_client_id,

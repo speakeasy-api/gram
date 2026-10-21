@@ -1165,6 +1165,18 @@ func (q *Queries) PostflightIDUnregisteredConnections(ctx context.Context, proje
 	return count, err
 }
 
+const postflightIDUpstreamClientChoices = `-- name: PostflightIDUpstreamClientChoices :one
+SELECT count(*) FROM upstream_client_selections
+WHERE project_id = $1::uuid AND deleted IS FALSE
+`
+
+func (q *Queries) PostflightIDUpstreamClientChoices(ctx context.Context, projectID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, postflightIDUpstreamClientChoices, projectID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const postflightIDUserOwnedUpstreamSessions = `-- name: PostflightIDUserOwnedUpstreamSessions :one
 SELECT count(*) FROM remote_sessions
 WHERE user_session_issuer_id IN

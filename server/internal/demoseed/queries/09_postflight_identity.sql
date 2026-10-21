@@ -221,6 +221,10 @@ WHERE project_id = @project_id::uuid AND deleted IS FALSE
 SELECT count(*) FROM mcp_server_remote_session_clients
 WHERE project_id = @project_id::uuid AND deleted IS FALSE;
 
+-- name: PostflightIDUpstreamClientChoices :one
+SELECT count(*) FROM upstream_client_selections
+WHERE project_id = @project_id::uuid AND deleted IS FALSE;
+
 -- name: PostflightIDServiceAccountHeaders :one
 SELECT count(*)
 FROM remote_mcp_server_headers header

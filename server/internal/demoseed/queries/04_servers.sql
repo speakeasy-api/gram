@@ -236,6 +236,21 @@ SELECT @id::uuid, @project_id::uuid, @org_id::text, @mcp_server_id::uuid,
 FROM remote_session_clients AS c
 WHERE c.id = @remote_session_client_id::uuid;
 
+-- One seeded credential's choice for one server, as issuance records it: the
+-- client the credential uses there, or no-auth when the client is omitted.
+-- The projects delete cascades these rows.
+-- name: ServersInsertUpstreamClientChoice :exec
+INSERT INTO upstream_client_selections
+  (id, project_id, organization_id, credential_kind, credential_id,
+   mcp_server_id, remote_session_client_id, client_attachment_scope, no_auth,
+   source)
+SELECT @id::uuid, @project_id::uuid, @org_id::text, @credential_kind::text,
+       @credential_id::uuid, @mcp_server_id::uuid, c.id, c.attachment_scope,
+       c.id IS NULL, @source::text
+FROM (SELECT 1) AS one
+LEFT JOIN remote_session_clients AS c
+  ON c.id = sqlc.narg(remote_session_client_id)::uuid;
+
 -- Linear's protected resource, read recently, with a scope pin for the server's scope panel.
 -- name: ServersUpsertLinearProtectedResource :exec
 INSERT INTO remote_protected_resources
