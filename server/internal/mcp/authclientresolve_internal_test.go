@@ -100,6 +100,8 @@ func TestDecideAuthClient(t *testing.T) {
 		{"a static credential on a tunneled server is served the old way", headersOnly(authClientTypeStaticCredential, func(r *upstreamclientsrepo.GetAuthClientSelectionRow) { r.Tunneled = true }), authClientLegacy, authClientReasonTunneledHeaders},
 		{"a pass-through on a tunneled server is served the old way", headersOnly(authClientTypePassThrough, func(r *upstreamclientsrepo.GetAuthClientSelectionRow) { r.Tunneled = true }), authClientLegacy, authClientReasonTunneledHeaders},
 		{"stale header copies are served the old way", headersOnly(authClientTypeStaticCredential, func(r *upstreamclientsrepo.GetAuthClientSelectionRow) { r.HeadersStale = true }), authClientLegacy, authClientReasonHeadersStale},
+		{"a personal connection's stale header copies are served the old way", with(authClientTypeRemoteSession, func(r *upstreamclientsrepo.GetAuthClientSelectionRow) { r.HeadersStale = true }), authClientLegacy, authClientReasonHeadersStale},
+		{"a service account's stale header copies are served the old way", with(authClientTypeServiceAccount, func(r *upstreamclientsrepo.GetAuthClientSelectionRow) { r.HeadersStale = true }), authClientLegacy, authClientReasonHeadersStale},
 		{"a headers-only client missing a server credential header is a setup gap", headersOnly(authClientTypePassThrough, func(r *upstreamclientsrepo.GetAuthClientSelectionRow) { r.CredentialHeadersUncovered = true }), authClientGap, authClientReasonSetup},
 		{"a pass-through requiring the inbound Authorization is a setup gap", headersOnly(authClientTypePassThrough, func(r *upstreamclientsrepo.GetAuthClientSelectionRow) { r.RequiresDeniedSource = true }), authClientGap, authClientReasonSetup},
 		{"no-auth on a server that explicitly needs none", noAuth(pgtype.Bool{Bool: false, Valid: true}, true), authClientNoAuth, ""},
@@ -546,6 +548,33 @@ func TestResolveAuthClientReadsTheRecordedChoice(t *testing.T) {
 		res := f.resolve(selector)
 		require.Equal(t, authClientLegacy, res.outcome)
 		require.Equal(t, authClientReasonHeadersStale, res.reason)
+	})
+
+	t.Run("an OAuth client never sends a stale auxiliary credential", func(t *testing.T) {
+		t.Parallel()
+		for _, change := range []string{"rotated", "removed", "remapped"} {
+			t.Run(change, func(t *testing.T) {
+				t.Parallel()
+				f := newAuthClientFixture(t, pool)
+				headerID := f.sourceHeader("X-Api-Key", true, text("sealed-v1"), pgtype.Text{})
+				id := f.oauthClient(authClientTypeServiceAccount)
+				f.copyHeader(id, "X-Api-Key", false, true, text("sealed-v1"), pgtype.Text{})
+				selector := f.choose(validUUID(id))
+				require.Equal(t, authClientResolved, f.resolve(selector).outcome)
+				switch change {
+				case "rotated":
+					require.NoError(t, f.q.UpdateRemoteHeaderFixture(ctx, authclientbackfill.UpdateRemoteHeaderFixtureParams{Name: "X-Api-Key", Value: text("sealed-v2"), ValueFromRequestHeader: pgtype.Text{}, IsSecret: true, ID: headerID}))
+				case "removed":
+					require.NoError(t, f.q.SoftDeleteRemoteHeaderFixture(ctx, headerID))
+				case "remapped":
+					require.NoError(t, f.q.UpdateRemoteHeaderFixture(ctx, authclientbackfill.UpdateRemoteHeaderFixtureParams{Name: "X-Api-Key", Value: pgtype.Text{}, ValueFromRequestHeader: text("X-Caller-Key"), IsSecret: true, ID: headerID}))
+				}
+				res := f.resolve(selector)
+				require.Equal(t, authClientLegacy, res.outcome)
+				require.Equal(t, authClientReasonHeadersStale, res.reason)
+				require.Empty(t, res.headers, "the stale copy is never sent")
+			})
+		}
 	})
 
 	t.Run("a deleted server header leaves the copy stale", func(t *testing.T) {

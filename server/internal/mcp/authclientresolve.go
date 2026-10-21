@@ -219,6 +219,13 @@ func decideAuthClient(row upstreamclientsrepo.GetAuthClientSelectionRow) authCli
 			res.reason = authClientReasonRegistration
 		case !row.RegistrationAttached:
 			res.reason = authClientReasonDetached
+		case row.HeadersStale && !row.Tunneled:
+			// The client's copies of the server's auxiliary credential
+			// headers no longer match it; the old path sends the current ones.
+			// A tunneled server is sent no client headers, so nothing stale
+			// reaches it.
+			res.outcome = authClientLegacy
+			res.reason = authClientReasonHeadersStale
 		case res.clientType == authClientTypeRemoteSession && row.RegistrationHasEma:
 			// The upstream client choice may chain an identity for this
 			// registration when its token is unusable; the resolver does not.
