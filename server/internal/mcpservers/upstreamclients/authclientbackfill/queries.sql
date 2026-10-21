@@ -1731,13 +1731,12 @@ FROM principal_grants
 WHERE organization_id = @organization_id
   AND scope = ANY(@scopes::text[]);
 
--- name: ListAPIKeyGrantRows :many
--- Every key policy row, to tell explicit policies from provisioned ones.
-SELECT principal_urn, scope, selectors
+-- name: ListAPIKeyPrincipalsWithGrants :many
+-- Keys that already hold a policy, which is never changed here.
+SELECT DISTINCT principal_urn
 FROM principal_grants
 WHERE organization_id = @organization_id
-  AND principal_type = 'api_key'
-ORDER BY principal_urn, scope, id;
+  AND principal_type = 'api_key';
 
 -- name: ListActiveLegacyAPIKeys :many
 -- Live legacy keys, matching admission's active predicate.

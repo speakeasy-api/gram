@@ -78,6 +78,10 @@ export function DefaultAuthPermissionsPage(): JSX.Element {
     queries: rows.map((org, index) => ({
       ...defaultAuthPermissionStatusQuery(org.id),
       enabled: index < settled + STATUS_CONCURRENCY,
+      // A cached status counts as settled, so refetching it on mount or focus
+      // would bypass the window above.
+      staleTime: Infinity,
+      refetchOnWindowFocus: false,
     })),
   });
   const statusByID = new Map(rows.map((org, i) => [org.id, statuses[i]]));
@@ -134,9 +138,11 @@ export function DefaultAuthPermissionsPage(): JSX.Element {
     if (!ok) return;
     setBulk({ done: 0, total: pending.length });
     let failed = 0;
+    let incomplete = 0;
     for (const org of pending) {
       try {
-        await grant(org);
+        const run = await grant(org);
+        if (!run.status.complete) incomplete++;
       } catch (e) {
         failed++;
         toast.error(`${org.name}: ${errorMessage(e)}`);
@@ -146,7 +152,11 @@ export function DefaultAuthPermissionsPage(): JSX.Element {
       );
     }
     setBulk(null);
-    if (failed === 0) {
+    if (incomplete > 0) {
+      toast.warning(
+        `${incomplete} ${incomplete === 1 ? "organization still needs" : "organizations still need"} attention`,
+      );
+    } else if (failed === 0) {
       toast.success(
         `Granted in ${pending.length} ${pending.length === 1 ? "organization" : "organizations"}`,
       );

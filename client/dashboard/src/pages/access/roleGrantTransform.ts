@@ -89,6 +89,9 @@ export function grantsFromRole(
 
   for (const g of role.grants) {
     const scope = g.scope as Scope;
+    // Auth client permissions are provisioned and not edited here; leaving
+    // them out of the form means a save never touches them.
+    if (scope === "mcp:auth" || scope === "mcp:blocked_auth") continue;
     const baseScope = baseScopeByBlocklist.get(scope) ?? scope;
     const effect: PolicyEffect = baseScopeByBlocklist.has(scope)
       ? "deny"

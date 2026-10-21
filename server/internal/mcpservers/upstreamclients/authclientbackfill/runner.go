@@ -565,25 +565,42 @@ func withOrganizationLock(ctx context.Context, db Acquirer, opts Options, fn fun
 	return fn(conn, lock.StartedAt)
 }
 
-// RunGrants runs only the grants phase, under the same organization lock as
-// Run, for organizations the rest of the backfill does not apply to.
+// RunGrants runs only the grants phase, for organizations the rest of the
+// backfill does not apply to. An apply holds the same organization lock as
+// Run; a dry run writes nothing and takes no lock, so checking never blocks a
+// run.
 func RunGrants(ctx context.Context, db Acquirer, opts Options) (Report, error) {
-	return withOrganizationLock(ctx, db, opts, func(conn *pgxpool.Conn, _ pgtype.Timestamptz) (Report, error) {
-		report := newReport(opts.Apply)
-		local := newReport(opts.Apply)
-		p := phase{name: PhaseGrants, kind: "", run: func(ctx context.Context, tx pgx.Tx, local *Report) error {
-			return runGrants(ctx, tx, opts, local)
-		}}
-		if err := runPhase(ctx, conn, opts, p, &local); err != nil {
-			if ctxErr := ctx.Err(); ctxErr != nil {
-				return report, fmt.Errorf("grants interrupted: %w", ctxErr)
-			}
-			report.PhaseErrors[PhaseGrants] = err.Error()
-			return report, nil
+	if !opts.Apply {
+		if opts.OrganizationID == "" {
+			return Report{}, errors.New("organization id is required")
 		}
-		report.merge(local)
-		return report, nil
+		conn, err := db.Acquire(ctx)
+		if err != nil {
+			return Report{}, fmt.Errorf("acquire connection: %w", err)
+		}
+		defer conn.Release()
+		return runGrantsPhase(ctx, conn, opts)
+	}
+	return withOrganizationLock(ctx, db, opts, func(conn *pgxpool.Conn, _ pgtype.Timestamptz) (Report, error) {
+		return runGrantsPhase(ctx, conn, opts)
 	})
+}
+
+func runGrantsPhase(ctx context.Context, conn *pgxpool.Conn, opts Options) (Report, error) {
+	report := newReport(opts.Apply)
+	local := newReport(opts.Apply)
+	p := phase{name: PhaseGrants, kind: "", run: func(ctx context.Context, tx pgx.Tx, local *Report) error {
+		return runGrants(ctx, tx, opts, local, true)
+	}}
+	if err := runPhase(ctx, conn, opts, p, &local); err != nil {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return report, fmt.Errorf("grants interrupted: %w", ctxErr)
+		}
+		report.PhaseErrors[PhaseGrants] = err.Error()
+		return report, nil
+	}
+	report.merge(local)
+	return report, nil
 }
 
 func runLocked(ctx context.Context, db TxStarter, opts Options, startedAt pgtype.Timestamptz) (Report, error) {
@@ -634,7 +651,7 @@ func runLocked(ctx context.Context, db TxStarter, opts Options, startedAt pgtype
 		}},
 		{name: PhaseGrants, kind: "", run: func(ctx context.Context, tx pgx.Tx, local *Report) error {
 			// Last, over every committed phase's auth clients.
-			return runGrants(ctx, tx, opts, local)
+			return runGrants(ctx, tx, opts, local, len(report.PhaseErrors) == 0)
 		}},
 	}
 	for _, p := range phases {

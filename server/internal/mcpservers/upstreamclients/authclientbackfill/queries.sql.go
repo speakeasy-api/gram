@@ -782,34 +782,27 @@ func (q *Queries) LinkSourceServer(ctx context.Context, arg LinkSourceServerPara
 	return result.RowsAffected(), nil
 }
 
-const listAPIKeyGrantRows = `-- name: ListAPIKeyGrantRows :many
-SELECT principal_urn, scope, selectors
+const listAPIKeyPrincipalsWithGrants = `-- name: ListAPIKeyPrincipalsWithGrants :many
+SELECT DISTINCT principal_urn
 FROM principal_grants
 WHERE organization_id = $1
   AND principal_type = 'api_key'
-ORDER BY principal_urn, scope, id
 `
 
-type ListAPIKeyGrantRowsRow struct {
-	PrincipalUrn urn.Principal
-	Scope        string
-	Selectors    []byte
-}
-
-// Every key policy row, to tell explicit policies from provisioned ones.
-func (q *Queries) ListAPIKeyGrantRows(ctx context.Context, organizationID string) ([]ListAPIKeyGrantRowsRow, error) {
-	rows, err := q.db.Query(ctx, listAPIKeyGrantRows, organizationID)
+// Keys that already hold a policy, which is never changed here.
+func (q *Queries) ListAPIKeyPrincipalsWithGrants(ctx context.Context, organizationID string) ([]urn.Principal, error) {
+	rows, err := q.db.Query(ctx, listAPIKeyPrincipalsWithGrants, organizationID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []ListAPIKeyGrantRowsRow
+	var items []urn.Principal
 	for rows.Next() {
-		var i ListAPIKeyGrantRowsRow
-		if err := rows.Scan(&i.PrincipalUrn, &i.Scope, &i.Selectors); err != nil {
+		var principal_urn urn.Principal
+		if err := rows.Scan(&principal_urn); err != nil {
 			return nil, err
 		}
-		items = append(items, i)
+		items = append(items, principal_urn)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err

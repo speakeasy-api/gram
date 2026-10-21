@@ -2,6 +2,7 @@ package authclientbackfill
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/google/uuid"
@@ -107,7 +108,8 @@ func TestRun_SharedClientGrantsMirrorServerAccess(t *testing.T) {
 
 	concrete := authz.AuthClientSelector(clientID.String(), "")
 	require.Contains(t, f.grantsOf(connects), authz.Grant{PrincipalUrn: connects.String(), Scope: authz.ScopeMCPAuth, Selector: concrete})
-	require.Contains(t, f.grantsOf(oneTool), authz.Grant{PrincipalUrn: oneTool.String(), Scope: authz.ScopeMCPAuth, Selector: concrete})
+	require.Contains(t, f.grantsOf(oneTool), authz.Grant{PrincipalUrn: oneTool.String(), Scope: authz.ScopeMCPAuth, Selector: authz.AuthClientTypeSelector(TypeServiceAccount, project)},
+		"a user never gets a concrete client grant, which would outrank inherited blocks")
 	require.Contains(t, f.grantsOf(writes), authz.Grant{PrincipalUrn: writes.String(), Scope: authz.ScopeMCPAuth, Selector: authz.AuthClientTypeSelector(TypeServiceAccount, project)},
 		"a wildcard grant is mirrored as a wildcard, never as a concrete client")
 	for _, grant := range f.grantsOf(elsewhere) {
@@ -165,10 +167,11 @@ func TestRun_GrantsStayInTheirOrganization(t *testing.T) {
 func TestRun_InferredGrantsNeverOutrankBlocks(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
-	_, clientID := f.sharedClient()
+	serverID, clientID := f.sharedClient()
 	user := urn.NewPrincipal(urn.PrincipalTypeUser, "user_blocked")
 	role := urn.NewPrincipal(urn.PrincipalTypeRole, "blocks")
 	f.grant(user, authz.ScopeMCPConnect, authz.ProjectServersSelector(f.projectID.String()))
+	f.grant(user, authz.ScopeMCPConnect, authz.Selector{authz.SelectorKeyResourceKind: authz.ResourceKindMCP, authz.SelectorKeyResourceID: serverID.String()})
 	f.grant(role, authz.ScopeMCPBlockedAuth, authz.AuthClientSelector(clientID.String(), ""))
 
 	f.run(true)
@@ -192,38 +195,40 @@ func TestRun_AgentsGetThePersonalDefault(t *testing.T) {
 	require.Contains(t, f.grantsOf(agent), authz.Grant{PrincipalUrn: agent.String(), Scope: authz.ScopeMCPAuth, Selector: authz.PersonalAuthClientSelector()})
 }
 
-func TestRun_ProvisionedKeyPoliciesGetLaterClients(t *testing.T) {
+func TestRun_KeyPoliciesAreWrittenOnce(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
 	key := f.apiKey(uuid.NullUUID{}, "consumer")
 	f.run(true)
 
+	// A later client is not added: a provisioned policy cannot be told from
+	// one an admin wrote with the same shape.
 	serverID, clientID := f.sharedClient()
 	ctx := contextvalues.WithLegacyAPIKeyAuthorization(t.Context(), &contextvalues.AuthContext{ActiveOrganizationID: f.orgID, APIKeyID: key.String(), AccountType: "enterprise"})
 	use := authz.MCPAuthClientCheck(clientID.String(), authz.MCPAuthClientDimensions{ClientType: TypeServiceAccount, ProjectID: f.projectID.String(), ConnectionOwner: ""})
-	require.True(t, mandatory(t, ctx, f, authz.MCPCheck(authz.ScopeMCPConnect, serverID.String(), f.projectID.String()), use).Allowed)
-	require.Zero(t, f.run(false).PendingGrants)
+	require.True(t, mandatory(t, ctx, f, authz.MCPCheck(authz.ScopeMCPConnect, serverID.String(), f.projectID.String())).Allowed)
+	require.False(t, mandatory(t, ctx, f, use).Allowed)
+	require.Zero(t, f.run(false).PendingGrantsByKind[GrantAPIKey])
 }
 
-func TestProvisionedKeyProjects(t *testing.T) {
-	t.Parallel()
-	project := uuid.NewString()
-	grant := func(scope authz.Scope, selector authz.Selector) authz.Grant {
-		return authz.Grant{PrincipalUrn: "", Scope: scope, Selector: selector}
+func TestRun_KeyPoliciesWaitForEveryClientPhase(t *testing.T) { //nolint:paralleltest // swaps a package seam
+	f := newFixture(t)
+	key := f.apiKey(uuid.NullUUID{}, "consumer")
+	original := beforePhase
+	beforePhase = func(name string) error {
+		if name == PhaseHeaders {
+			return errors.New("injected")
+		}
+		return nil
 	}
-	projects, ok := provisionedKeyProjects([]authz.Grant{
-		grant(authz.ScopeMCPConnect, authz.ProjectServersSelector(project)),
-		grant(authz.ScopeMCPAuth, authz.AuthClientSelector(uuid.NewString(), project)),
-	})
-	require.True(t, ok)
-	require.Equal(t, []string{project}, projects)
+	t.Cleanup(func() { beforePhase = original })
 
-	for name, explicit := range map[string]authz.Grant{
-		"one server":   grant(authz.ScopeMCPConnect, authz.Selector{authz.SelectorKeyResourceKind: authz.ResourceKindMCP, authz.SelectorKeyResourceID: uuid.NewString(), authz.SelectorKeyProjectID: project}),
-		"a block":      grant(authz.ScopeMCPBlockedConnect, authz.ProjectServersSelector(project)),
-		"a tool limit": grant(authz.ScopeMCPConnect, authz.Selector{authz.SelectorKeyResourceKind: authz.ResourceKindMCP, authz.SelectorKeyResourceID: "*", authz.SelectorKeyProjectID: project, authz.SelectorKeyTool: "t"}),
-	} {
-		_, ok := provisionedKeyProjects([]authz.Grant{grant(authz.ScopeMCPConnect, authz.ProjectServersSelector(project)), explicit})
-		require.False(t, ok, name)
-	}
+	report := f.run(true)
+	require.Contains(t, report.PhaseErrors, PhaseHeaders)
+	require.Zero(t, report.PendingGrantsByKind[GrantAPIKey], "no key policy from a run that missed clients")
+	require.Empty(t, f.grantsOf(urn.NewAPIKeyPrincipal(key)))
+
+	beforePhase = original
+	f.run(true)
+	require.NotEmpty(t, f.grantsOf(urn.NewAPIKeyPrincipal(key)))
 }

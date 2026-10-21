@@ -51,7 +51,7 @@ func TestDefaultAuthPermissions_RunRequiresStaff(t *testing.T) {
 	require.Equal(t, oops.CodeUnauthorized, shareable.Code)
 }
 
-func TestDefaultAuthPermissions_ReportsARunInProgress(t *testing.T) {
+func TestDefaultAuthPermissions_RefusesAConcurrentRun(t *testing.T) {
 	t.Parallel()
 	ctx, svc, db := newTestAdminService(t)
 	ctx = contextvalues.SetAdminAuthContext(ctx, &contextvalues.AdminAuthContext{OIDCSubject: "staff-test"})
@@ -64,7 +64,8 @@ func TestDefaultAuthPermissions_ReportsARunInProgress(t *testing.T) {
 
 	status, err := svc.GetDefaultAuthPermissionStatus(ctx, &gen.GetDefaultAuthPermissionStatusPayload{OrganizationID: org.id})
 	require.NoError(t, err)
-	require.True(t, status.InProgress)
+	require.False(t, status.InProgress, "checking takes no lock, so it never waits on or blocks a run")
+	require.Equal(t, int64(1), status.PendingGrants)
 
 	_, err = svc.RunDefaultAuthPermissions(ctx, &gen.RunDefaultAuthPermissionsPayload{OrganizationID: org.id})
 	var shareable *oops.ShareableError

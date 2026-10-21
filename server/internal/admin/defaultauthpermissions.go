@@ -42,7 +42,9 @@ func (s *Service) RunDefaultAuthPermissions(ctx context.Context, p *gen.RunDefau
 		return nil, oops.E(oops.CodeUnexpected, err, "grant default auth permissions").LogError(ctx, logger)
 	}
 	if phaseErr, failed := report.PhaseErrors[authclientbackfill.PhaseGrants]; failed {
-		logger.ErrorContext(detached, "grant default auth permissions", attr.SlogError(errors.New(phaseErr)))
+		logger.ErrorContext(detached, "grant default auth permissions", attr.SlogError(errors.New(phaseErr)),
+			attr.SlogAuditAction("default_auth_permissions:run"), attr.SlogAdminOIDCSubject(auth.OIDCSubject))
+		return nil, oops.E(oops.CodeUnexpected, errors.New(phaseErr), "granting default auth permissions failed; nothing was granted. Run again")
 	}
 	logger.InfoContext(detached, "default auth permissions granted",
 		attr.SlogAuditAction("default_auth_permissions:run"),
