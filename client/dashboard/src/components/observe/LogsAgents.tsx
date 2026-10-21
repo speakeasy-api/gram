@@ -42,6 +42,7 @@ import { useProject } from "@/contexts/Auth";
 import { useOrgRoutes } from "@/routes";
 import { ChatDetailSheet } from "@/pages/chatLogs/ChatDetailPanel";
 import { ChatLogsTable } from "@/pages/chatLogs/ChatLogsTable";
+import type { SortDescriptor } from "@/components/ui/Table";
 import {
   defineFilters,
   type FilterValue,
@@ -493,6 +494,28 @@ export function LogsAgentsContent({
     [updateSearchParams],
   );
 
+  // The column headers and the toolbar's own control are two ways of saying
+  // the same thing, so they write the same two parameters and the URL stays
+  // the single answer to "what order is this in" — which is also what makes
+  // an order shareable.
+  const sort = useMemo<SortDescriptor>(
+    () => ({ id: sortField, direction: sortOrder }),
+    [sortField, sortOrder],
+  );
+
+  const handleSortChange = useCallback(
+    (next: SortDescriptor | null) => {
+      // Only the two columns the API can order by are sortable, so anything
+      // else is a column id this page has no query for.
+      if (next?.id !== "chronological" && next?.id !== "messageCount") return;
+      updateSearchParams({
+        sort: next.id === "chronological" ? null : next.id,
+        order: next.direction === "desc" ? null : next.direction,
+      });
+    },
+    [updateSearchParams],
+  );
+
   const { data, isLoading, isFetching, error, refetch, isLogsDisabled } =
     useLogsEnabledErrorCheck(
       useListChats(
@@ -655,6 +678,8 @@ export function LogsAgentsContent({
         setSortField={setSortField}
         sortOrder={sortOrder}
         setSortOrder={setSortOrder}
+        sort={sort}
+        onSortChange={handleSortChange}
         chats={chats}
         selectedChat={selectedChat}
         selectedChatId={urlChatId}
@@ -717,6 +742,8 @@ function AgentSessionsPageContent({
   onRefresh,
   isRefreshing,
   hasMore,
+  sort,
+  onSortChange,
   offset,
   setOffset,
   limit,
@@ -762,6 +789,8 @@ function AgentSessionsPageContent({
   onRefresh: () => void;
   isRefreshing: boolean;
   hasMore: boolean;
+  sort: SortDescriptor;
+  onSortChange: (sort: SortDescriptor | null) => void;
   offset: number;
   setOffset: (offset: number) => void;
   limit: number;
@@ -912,6 +941,8 @@ function AgentSessionsPageContent({
             onDeleteChat={onDeleteChat}
             isLoading={isLoading}
             error={error}
+            sort={sort}
+            onSortChange={onSortChange}
             emptyState={
               sessionsView === "pinned"
                 ? {

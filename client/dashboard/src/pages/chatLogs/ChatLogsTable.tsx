@@ -22,7 +22,7 @@ import { useListChatSessionLinks } from "@gram/client/react-query/listChatSessio
 import { useMembers } from "@gram/client/react-query/members.js";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
-import { Table, type Column } from "@/components/ui/Table";
+import { Table, type Column, type SortDescriptor } from "@/components/ui/Table";
 import type { AccessMember } from "@gram/client/models/components/accessmember.js";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
@@ -60,6 +60,16 @@ interface ChatLogsTableProps {
     title: string;
     description: string;
   };
+  /**
+   * Which column the server ordered by, and which way.
+   *
+   * Owned by the page, not by this table: the ordering is a query parameter
+   * the API sorted on, so only the component that issues the query can honour
+   * a change to it. A table that sorted its own rows would reorder the page
+   * it happens to be showing and leave the rest of the result set behind it.
+   */
+  sort?: SortDescriptor | null;
+  onSortChange?: (sort: SortDescriptor | null) => void;
 }
 
 /** One table row: a session and how deeply it is nested under its parent. */
@@ -223,13 +233,20 @@ function Cell({
   secondary?: React.ReactNode;
   className?: string;
 }): JSX.Element {
+  // Every column starts at its own left edge, numbers included, so a value
+  // begins under the first letter of its header. Right-aligning the numeric
+  // columns put the digits against the next column's border instead, which
+  // read as belonging to it.
+  //
+  // `flex-1`, not `w-full`: the table's own `<td>` is itself a flex row with
+  // an indentation sibling, so a width percentage only shrink-wrapped.
   return (
-    <div className={cn("flex min-w-0 flex-col gap-0.5", className)}>
+    <div className={cn("flex min-w-0 flex-1 flex-col gap-0.5", className)}>
       {/* One size throughout: the rows mixed `text-sm` titles with `text-xs`
           everything-else, which made most of the table look like a footnote
           beside its own first column. The second line is distinguished by
           colour, not by shrinking it. */}
-      <div className="flex h-5 min-w-0 items-center gap-1.5 text-sm">
+      <div className="flex min-h-5 min-w-0 items-center gap-1.5 text-sm">
         {primary}
       </div>
       {secondary !== undefined && (
@@ -458,6 +475,8 @@ export function ChatLogsTable({
   isLoading,
   error,
   emptyState,
+  sort,
+  onSortChange,
 }: ChatLogsTableProps): JSX.Element {
   const { user } = useSession();
   const { data: membersData } = useMembers();
@@ -554,7 +573,7 @@ export function ChatLogsTable({
       // Capped. Without a width this column was the only flexible track, so
       // every pixel of a wide display landed between the title and the next
       // column instead of being shared out.
-      width: "34fr",
+      width: "30fr",
       render: ({ session: chat, depth }) => (
         // No indent for depth. Nesting only reads as nesting while the child
         // sits directly under its parent, and any sort breaks that, leaving a
@@ -564,7 +583,7 @@ export function ChatLogsTable({
           <Cell
             primary={
               <>
-                <span className="text-foreground min-w-0 truncate text-sm font-medium">
+                <span className="text-foreground line-clamp-3 min-w-0 text-sm font-medium">
                   {chat.title}
                 </span>
                 {depth > 0 && (
@@ -606,21 +625,35 @@ export function ChatLogsTable({
     {
       key: "surface",
       header: "Surface",
-      width: "16fr",
+      width: "20fr",
       render: ({ session: chat }) => <SurfaceCell chat={chat} />,
     },
     {
       key: "activity",
+      // `id` is what the sort descriptor carries, and this page puts that
+      // straight into `?sort=`, so it has to be the value the API already
+      // knows rather than the column's own key.
+      id: "chronological",
       header: "Activity",
-      width: "150px",
+      sortable: true,
+      // Ordered by the server, over the whole result set. `sortValue` is only
+      // here because the type demands it: the rows arrive already in order,
+      // and sorting this page in the browser would reorder 25 rows while
+      // claiming to have ordered all of them.
+      sortValue: ({ session: chat }) =>
+        chat.lastMessageTimestamp ?? chat.createdAt,
+      width: "170px",
       render: ({ session: chat }) => <ActivityCell chat={chat} />,
     },
     {
       key: "numMessages",
-      // Right over its own digits: a left-aligned header above a column of
-      // numbers points at nothing.
-      header: <span className="w-full text-right">Messages</span>,
-      width: "80px",
+      id: "messageCount",
+      header: "Messages",
+      sortable: true,
+      sortValue: ({ session: chat }) => chat.numMessages,
+      // Wide enough for the header itself: at 80px the uppercase label and
+      // its sort control truncated to "MES…", which names no column.
+      width: "120px",
       render: ({ session: chat }) => (
         <Cell
           primary={<span className="tabular-nums">{chat.numMessages}</span>}
@@ -629,13 +662,10 @@ export function ChatLogsTable({
     },
     {
       key: "totalCost",
-      // Right-aligned with its own numbers, so the header sits over the
-      // digits rather than over the empty left edge of the column.
-      header: <span className="w-full text-right">Cost</span>,
+      header: "Cost",
       width: "110px",
       render: ({ session: chat }) => (
         <Cell
-          className="items-end"
           primary={
             chat.totalCost !== undefined && chat.totalCost > 0 ? (
               <span className="tabular-nums">${chat.totalCost.toFixed(4)}</span>
@@ -734,8 +764,16 @@ export function ChatLogsTable({
         // this region, and the two together read as a frame inside a frame.
         className="bg-card border-none"
         columns={columns}
+        // Sorted here, not by the table: `Table` renders the sortable headers
+        // and reports the choice, and leaves the ordering to the caller.
+        //
+        // Only the rows already loaded. A subagent also stops sitting under
+        // its parent once any other column leads, which is why the row says
+        // "Subagent" beside the title instead of relying on its position.
         data={groupedChats}
         rowKey={(row) => row.session.id}
+        sort={sort}
+        onSortChange={onSortChange}
         onRowClick={(row) => onSelectChat(row.session)}
         renderRow={(row, rowElement) => (
           // The context menu needs one element that forwards refs, which the
