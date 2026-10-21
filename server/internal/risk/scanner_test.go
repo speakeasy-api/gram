@@ -962,6 +962,10 @@ func TestScanner_PubsubRoutesCustomRulesWithoutCallerMetering(t *testing.T) {
 		return enforcereply.Outcome{ByLane: map[enforcereply.Lane]*riskv1.EnforcementReply{lane: reply}, Complete: true}, nil
 	}}
 	publisher := gcp.NewMockPublisher[*meteringv1.MeterReading]()
+	published := make(chan struct{}, 1)
+	publisher.On("Publish", mock.Anything, mock.Anything).Return(gcp.NewSuccessPublishResult()).Run(func(mock.Arguments) {
+		published <- struct{}{}
+	})
 	scanner, err := risk.NewScannerWithEnforcementDispatcher(
 		testenv.NewLogger(t),
 		testenv.NewTracerProvider(t),
@@ -984,7 +988,7 @@ func TestScanner_PubsubRoutesCustomRulesWithoutCallerMetering(t *testing.T) {
 	require.Equal(t, "remote custom block", result.PolicyName)
 	require.Equal(t, risk_analysis.SourceCustom, result.Source)
 	require.Equal(t, "custom.acme_token", result.RuleID)
-	publisher.AssertNotCalled(t, "Publish", mock.Anything, mock.Anything)
+	require.Never(t, func() bool { return len(published) > 0 }, 100*time.Millisecond, time.Millisecond)
 }
 
 // TestScanner_ScanForEnforcement_BlockWinsOverWarn guards the block > warn
