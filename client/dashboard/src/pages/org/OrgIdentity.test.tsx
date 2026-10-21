@@ -20,6 +20,7 @@ const mocks = vi.hoisted(() => ({
     | undefined,
   ema: vi.fn(),
   slack: vi.fn(),
+  googleChat: vi.fn(),
   features: vi.fn(() => ({ data: {} as Record<string, boolean> })),
   onboarding: {
     domainVerified: false,
@@ -62,6 +63,12 @@ vi.mock("./slack-workspaces/SlackWorkspaces", () => ({
   SlackWorkspaces: () => {
     mocks.slack();
     return <div>Slack workspace connections</div>;
+  },
+}));
+vi.mock("./google-chat/GoogleChat", () => ({
+  GoogleChat: () => {
+    mocks.googleChat();
+    return <div>Google Chat connections</div>;
   },
 }));
 vi.mock("@/hooks/useFeatureFlag", () => ({
@@ -178,7 +185,11 @@ describe("identity top-level tabs", () => {
     show();
     expect(screen.getByRole("heading", { name: "IDP and SSO" })).toBeTruthy();
     const nav = screen.getByRole("navigation");
-    expect(nav.querySelectorAll("a")).toHaveLength(3);
+    expect(nav.querySelectorAll("a")).toHaveLength(4);
+    const googleChat = screen.getByRole("link", { name: "Google Chat" });
+    expect(googleChat.getAttribute("href")).toBe("?tab=google-chat");
+    expect(googleChat.getAttribute("data-stage")).toBe("preview");
+    expect(mocks.googleChat).not.toHaveBeenCalled();
     expect(
       screen.getByRole("link", { name: "Single sign-on" }).getAttribute("href"),
     ).toBe("?tab=sso");
@@ -496,6 +507,27 @@ describe("Slack workspaces tab", () => {
     show("?tab=slack-workspaces");
     expect(screen.queryByRole("link", { name: "Slack workspaces" })).toBeNull();
     expect(mocks.slack).not.toHaveBeenCalled();
+    expect(
+      screen
+        .getByRole("link", { name: "Single sign-on" })
+        .getAttribute("aria-current"),
+    ).toBe("page");
+  });
+});
+
+describe("Google Chat tab", () => {
+  it("mounts Google Chat only on its tab without fetching SSO features", () => {
+    show("?tab=google-chat");
+    expect(screen.getByText("Google Chat connections")).toBeTruthy();
+    expect(mocks.googleChat).toHaveBeenCalled();
+    expect(mocks.features).not.toHaveBeenCalled();
+  });
+
+  it("hides Google Chat from non-admins and falls back to SSO", () => {
+    mocks.admin = false;
+    show("?tab=google-chat");
+    expect(screen.queryByRole("link", { name: "Google Chat" })).toBeNull();
+    expect(mocks.googleChat).not.toHaveBeenCalled();
     expect(
       screen
         .getByRole("link", { name: "Single sign-on" })

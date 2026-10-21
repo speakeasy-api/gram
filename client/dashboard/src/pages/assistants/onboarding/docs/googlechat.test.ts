@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { getIntegrationDoc, listIntegrationDocs } from "./index";
 
 describe("Google Chat setup documentation", () => {
-  it("is discoverable and describes the shared tool/trigger environment contract", () => {
+  it("is discoverable and describes the native tool/trigger environment contract", () => {
     expect(listIntegrationDocs()).toContainEqual(
       expect.objectContaining({ slug: "googlechat", title: "Google Chat" }),
     );
@@ -44,20 +44,21 @@ describe("Google Chat setup documentation", () => {
     );
   });
 
-  it("distinguishes non-add-on ingress and approved on-demand history", () => {
+  it("uses hosted shared-space setup and app authority for messages", () => {
     const body = getIntegrationDoc("googlechat")?.body ?? "";
     for (const requirement of [
-      "Project Number",
-      "not a Google Workspace add-on",
-      "chat@system.gserviceaccount.com",
-      "Marketplace-compatible OAuth client",
-      "Individual + admin install",
+      "Org > Identity > Google Chat",
+      "Do not request service-account credentials or configure shared-space event delivery manually",
+      "configure_google_chat_space",
+      "mapped members can reply without repeating it",
       "chat.app.messages.readonly",
-      "Do not add `chat.bot`",
-      "unmentioned",
-      "No user OAuth",
+      "The user token is used for setup and membership sync",
+      "It is not used to read messages or renew event subscriptions",
+      "Google login alone cannot grant this app scope",
     ]) {
       expect(body).toContain(requirement);
     }
+    expect(body).not.toContain("workspace_events");
+    expect(body).not.toContain("auto_renew");
   });
 });
