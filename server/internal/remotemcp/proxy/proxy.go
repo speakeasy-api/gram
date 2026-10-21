@@ -350,6 +350,11 @@ type Proxy struct {
 	// skip this loop entirely.
 	ToolsCallResponseInterceptors []ToolsCallResponseInterceptor
 
+	// ToolsCallFailureInterceptors run once for a forwarded "tools/call"
+	// whose reply never reached ToolsCallResponseInterceptors. See
+	// [ToolsCallFailureInterceptor].
+	ToolsCallFailureInterceptors []ToolsCallFailureInterceptor
+
 	// ToolsListRequestInterceptors run for inbound "tools/list" JSON-RPC
 	// requests only, after the generic UserRequestInterceptors chain has
 	// completed. Non-tools/list requests skip this loop entirely.
@@ -605,7 +610,7 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 	toolsCallReq, toolsCallDecodeErr := toolsCallRequestFromUserRequest(userReq)
 	toolsCallPreflightReq := toolsCallReq
 	if toolsCallPreflightReq == nil && len(p.ToolsCallPreForwardInterceptors) > 0 && hasTopLevelJSONRPCMethod(userReq.body, methodToolsCall) {
-		toolsCallPreflightReq = &ToolsCallRequest{Params: nil, UserRequest: userReq}
+		toolsCallPreflightReq = &ToolsCallRequest{Params: nil, UserRequest: userReq, responded: false}
 		// The decoded method differs from an earlier tools/call member. Keep the
 		// synthetic request recognized after preflight so private proxies reject
 		// the ambiguous bytes instead of forwarding them past typed policy.
@@ -731,6 +736,18 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 			attr.SlogComponent("remotemcp.proxy"))
 	}
 
+	// A forwarded tools/call whose reply never reaches the typed response
+	// chain below still failed: the remote server was unreachable, answered
+	// with something other than a tools/call reply, or ended its stream
+	// first. A notification is owed no reply, and a call the user canceled
+	// did not fail.
+	toolsCallForwarded := toolsCallReq != nil && userReqID.IsValid()
+	defer func() {
+		if toolsCallForwarded && !toolsCallReq.responded && r.Context().Err() == nil {
+			p.runToolsCallFailureInterceptors(ctx, &ToolsCallFailure{Request: toolsCallReq, StatusCode: upstreamStatus, Err: err})
+		}
+	}()
+
 	validateUpstreamRequest := func(upstreamReq *http.Request) error {
 		if rejection := validateMirroredHeaders(upstreamReq, userReq); rejection != nil {
 			return rejection
@@ -741,6 +758,9 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 	upstreamReq, upstreamResp, err := p.forwardRequestWithRetry(ctx, r, userReq.BodyReader, validateUpstreamRequest)
 	if err != nil {
 		if rejection, ok := errors.AsType[*RejectError](err); ok {
+			// Refused before it was sent, like a request interceptor
+			// rejection: the remote server never saw the call.
+			toolsCallForwarded = false
 			responseBytes = p.writeRejection(ctx, w, span, userReqID, rejection)
 			return nil
 		}
@@ -1469,6 +1489,7 @@ func (p *Proxy) runToolsCallRequestInterceptorChain(ctx context.Context, call *T
 // ToolsCallResponseInterceptor in order, returning the first wrapped
 // rejection error or nil if all interceptors accept the response.
 func (p *Proxy) runToolsCallResponseInterceptors(ctx context.Context, call *ToolsCallResponse) error {
+	call.Request.responded = true
 	for _, interceptor := range p.ToolsCallResponseInterceptors {
 		iterCtx, span := p.Tracer.Start(ctx, "remotemcp.proxy.ToolsCallResponseInterceptor",
 			trace.WithAttributes(attr.RemoteMCPProxyInterceptor(interceptor.Name())))
@@ -1481,6 +1502,18 @@ func (p *Proxy) runToolsCallResponseInterceptors(ctx context.Context, call *Tool
 		span.End()
 	}
 	return nil
+}
+
+// runToolsCallFailureInterceptors invokes each configured
+// ToolsCallFailureInterceptor in order. They observe only, so there is
+// nothing to return.
+func (p *Proxy) runToolsCallFailureInterceptors(ctx context.Context, failure *ToolsCallFailure) {
+	for _, interceptor := range p.ToolsCallFailureInterceptors {
+		iterCtx, span := p.Tracer.Start(ctx, "remotemcp.proxy.ToolsCallFailureInterceptor",
+			trace.WithAttributes(attr.RemoteMCPProxyInterceptor(interceptor.Name())))
+		interceptor.InterceptToolsCallFailure(iterCtx, failure)
+		span.End()
+	}
 }
 
 // runToolsListRequestInterceptors invokes each configured

@@ -445,6 +445,9 @@ func (f *ProxyManager) BuildTarget(
 		ToolsCallPreForwardInterceptors: toolsCallPreForwardInterceptors,
 		ToolsCallRequestInterceptors:    toolsCallReqInterceptors,
 		ToolsCallResponseInterceptors:   toolsCallResponseInterceptors,
+		// Only the log row: a call that never got a reply has nothing to
+		// bill, scan, or record as a selected use.
+		ToolsCallFailureInterceptors: []proxy.ToolsCallFailureInterceptor{clickHouseLogInterceptor},
 		ToolsListRequestInterceptors: []proxy.ToolsListRequestInterceptor{
 			NewToolsListPostHogEventInterceptor(f.posthog, identity, logger),
 		},
