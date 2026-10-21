@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -24,8 +25,11 @@ func (s *recordingStaffClientStore) RegisterClient(_ context.Context, client sta
 }
 
 func (s *recordingStaffClientStore) GetClient(_ context.Context, id string) (staffOAuthClient, error) {
+	if s.err != nil {
+		return staffOAuthClient{}, s.err
+	}
 	if s.client.ID != id {
-		return staffOAuthClient{}, errors.New("not found")
+		return staffOAuthClient{}, pgx.ErrNoRows
 	}
 	return s.client, nil
 }

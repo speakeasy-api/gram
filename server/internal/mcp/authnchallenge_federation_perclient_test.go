@@ -105,7 +105,7 @@ func setIssuerResponseIssColumn(t *testing.T, ctx context.Context, f *federation
 	require.NoError(t, err)
 }
 
-// requireUnconsumedRejection asserts a 401 that left the callback state usable.
+// requireUnconsumedRejection asserts a 400 that left the callback state usable.
 func requireUnconsumedRejection(t *testing.T, ctx context.Context, p *perClientFederation, err error) {
 	t.Helper()
 	require.Error(t, err)
@@ -254,7 +254,7 @@ func TestFederatedLoginPerClientCallbackRejectsOtherRouteBase(t *testing.T) {
 	requireUnconsumedRejection(t, ctx, p, p.f.ti.service.HandleIDPCallback(httptest.NewRecorder(), p.callback(ctx, "/x/mcp/idp_callback/"+p.f.clientID.String(), p.f.clientID.String(), query)))
 }
 
-// Non-canonical spellings of the client id never match the recorded callback: 401 through the real mux, state intact.
+// Non-canonical spellings of the client id never match the recorded callback: 400 through the real mux, state intact.
 func TestFederatedLoginPerClientCallbackRejectsNonCanonicalClientIDThroughMux(t *testing.T) {
 	t.Parallel()
 	_, p := beginPerClientFederation(t, false)

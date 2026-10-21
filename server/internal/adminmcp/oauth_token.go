@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"goa.design/goa/v3/security"
 	"golang.org/x/crypto/bcrypt"
 
@@ -75,6 +76,10 @@ func (s *StaffOAuthTokens) TokenHandler() http.Handler {
 		}
 		client, err := s.authenticateClient(r.Context(), presented)
 		if err != nil {
+			if !errors.Is(err, errStaffGrant) {
+				staffOAuthError(w, http.StatusServiceUnavailable, oautherr.CodeTemporarilyUnavailable, "client authentication failed")
+				return
+			}
 			status, challenge := oauthwire.InvalidClientResponse(r.Header)
 			if challenge != "" {
 				w.Header().Set("WWW-Authenticate", challenge)
@@ -151,7 +156,13 @@ func staffClientCredentials(r *http.Request) (staffPresentedClient, string) {
 // client must present no credentials at all.
 func (s *StaffOAuthTokens) authenticateClient(ctx context.Context, presented staffPresentedClient) (staffOAuthClient, error) {
 	client, err := s.clients.GetClient(ctx, presented.ID)
-	if err != nil || (client.SecretExpiresAt != nil && !time.Now().Before(*client.SecretExpiresAt)) {
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return staffOAuthClient{}, errStaffGrant
+		}
+		return staffOAuthClient{}, fmt.Errorf("lookup staff OAuth client: %w", err)
+	}
+	if client.SecretExpiresAt != nil && !time.Now().Before(*client.SecretExpiresAt) {
 		return staffOAuthClient{}, errStaffGrant
 	}
 	if presented.Public {

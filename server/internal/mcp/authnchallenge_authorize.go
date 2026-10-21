@@ -21,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/identity"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
+	"github.com/speakeasy-api/gram/server/internal/networkingress"
 	"github.com/speakeasy-api/gram/server/internal/oautherr"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -225,6 +226,9 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 
 	endpointRef, err := endpoint.EndpointRef(ctx, s.db, baseURL)
 	if err != nil {
+		if errors.Is(err, networkingress.ErrAuthorityUnavailable) {
+			return oops.E(oops.CodeUnavailable, err, "capture OAuth endpoint authority").LogError(ctx, logger)
+		}
 		return oops.E(oops.CodeBadRequest, err, "capture OAuth endpoint authority").LogWarn(ctx, logger)
 	}
 	agentTarget, _ := agentAuthorizationTarget(endpoint)

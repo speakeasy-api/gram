@@ -1115,6 +1115,11 @@ func (s *OAuthHTTP) writeClientResolutionError(w http.ResponseWriter, ctx contex
 		writeOAuthError(w, http.StatusServiceUnavailable, "temporarily_unavailable", "failed to fetch client metadata document")
 		return
 	}
+	if !errors.Is(err, platformoauth.ErrNotFound) && !errors.Is(err, platformoauth.ErrRevoked) {
+		s.logger.ErrorContext(ctx, "resolve OAuth client", attr.SlogError(err))
+		writeOAuthError(w, http.StatusServiceUnavailable, oautherr.CodeTemporarilyUnavailable, "client lookup is temporarily unavailable")
+		return
+	}
 	writeOAuthError(w, http.StatusBadRequest, oautherr.CodeInvalidClient, "unknown client_id")
 }
 

@@ -648,3 +648,40 @@ func TestOAuthHTTPClientErrorResponses(t *testing.T) {
 		})
 	}
 }
+
+type clientLookupErrorStore struct {
+	platformoauth.Store
+	err error
+}
+
+func (s clientLookupErrorStore) GetClient(context.Context, string) (platformoauth.Client, error) {
+	return platformoauth.Client{}, s.err
+}
+
+func TestOAuthHTTPAuthorizeClientLookupErrors(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name   string
+		err    error
+		status int
+		code   string
+	}{
+		{name: "unknown", err: platformoauth.ErrNotFound, status: http.StatusBadRequest, code: "invalid_client"},
+		{name: "revoked", err: platformoauth.ErrRevoked, status: http.StatusBadRequest, code: "invalid_client"},
+		{name: "outage", err: errors.New("database unavailable"), status: http.StatusServiceUnavailable, code: "temporarily_unavailable"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			service := newTestOAuthHTTP(t)
+			service.store = clientLookupErrorStore{Store: service.store, err: tc.err}
+			request := httptest.NewRequest(http.MethodGet, "/platform-mcp/authorize?response_type=code&client_id=test-client&redirect_uri=http%3A%2F%2Flocalhost%2Fcallback&code_challenge="+strings.Repeat("a", 43)+"&code_challenge_method=S256", nil)
+			response := httptest.NewRecorder()
+			service.AuthorizeHandler().ServeHTTP(response, request)
+			require.Equal(t, tc.status, response.Code, response.Body.String())
+			require.Contains(t, response.Body.String(), `"error":"`+tc.code+`"`)
+			require.Empty(t, response.Header().Get("WWW-Authenticate"))
+			require.Empty(t, response.Header().Get("Location"))
+			require.NotContains(t, response.Body.String(), "database unavailable")
+		})
+	}
+}

@@ -3,6 +3,7 @@ package adminmcp
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"maps"
 	"net/http"
 	"net/http/httptest"
@@ -331,6 +332,32 @@ func TestStaffOAuthClientErrorResponses(t *testing.T) {
 			require.Equal(t, tc.code, body["error"])
 			require.Equal(t, tc.challenge, response.Header().Get("WWW-Authenticate"))
 			require.Equal(t, "no-store", response.Header().Get("Cache-Control"))
+			require.Zero(t, store.validate)
+		})
+	}
+}
+
+func TestStaffOAuthClientLookupUnavailable(t *testing.T) {
+	t.Parallel()
+	for _, basic := range []bool{false, true} {
+		name := "public"
+		if basic {
+			name = "basic"
+		}
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			tokens, store, _ := staffTokensFixture(t)
+			tokens.clients = &recordingStaffClientStore{err: errors.New("database unavailable")}
+			request := publicStaffTokenRequest("authorization_code", nil)
+			if basic {
+				request = staffTokenRequest("authorization_code", nil)
+			}
+			response := httptest.NewRecorder()
+			tokens.TokenHandler().ServeHTTP(response, request)
+			require.Equal(t, http.StatusServiceUnavailable, response.Code)
+			require.Contains(t, response.Body.String(), `"error":"temporarily_unavailable"`)
+			require.Empty(t, response.Header().Get("WWW-Authenticate"))
+			require.NotContains(t, response.Body.String(), "database unavailable")
 			require.Zero(t, store.validate)
 		})
 	}

@@ -326,6 +326,9 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 		idpUser, err := s.identityResolver.ExchangeCodeForTokens(ctx, code)
 		if err != nil {
 			s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageIDPCallback)
+			if !errors.Is(err, identity.ErrCodeRejected) {
+				return oops.E(oops.CodeUnavailable, err, "failed to exchange IDP code").LogError(ctx, logger)
+			}
 			return oops.E(oops.CodeBadRequest, err, "failed to exchange IDP code").LogWarn(ctx, logger)
 		}
 		login, err := s.identityResolver.CompleteIDPLogin(ctx, idpUser, identity.IDPLoginOptions{SkipMembershipSync: false})

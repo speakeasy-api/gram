@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
@@ -93,6 +94,33 @@ func TestConsentActionLiveAuthorityUnavailableMetric(t *testing.T) {
 				expectedCount = 1
 			}
 			require.Equal(t, expectedCount, count, "only transient authority failures count at consent stage")
+		})
+	}
+}
+
+func TestConsentActionCacheErrors(t *testing.T) {
+	t.Parallel()
+	for _, unavailable := range []bool{false, true} {
+		name := "missing"
+		if unavailable {
+			name = "unavailable"
+		}
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			service := browserTestService(t)
+			expected := oops.CodeBadRequest
+			if unavailable {
+				service.authnChallengeCache = cache.NewTypedObjectCache[AuthnChallengeState](service.logger, nil, cache.SuffixNone)
+				expected = oops.CodeUnavailable
+			}
+			request := httptest.NewRequest(http.MethodPost, "/mcp/test/connect/remote-session", strings.NewReader("state=unknown"))
+			request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			response := httptest.NewRecorder()
+			err := service.ServeConsentAction(response, request, &ResolvedMcpEndpoint{Slug: "test", RouteBase: mcproute.MCP})
+			var failure *oops.ShareableError
+			require.ErrorAs(t, err, &failure)
+			require.Equal(t, expected, failure.Code)
+			require.Empty(t, response.Header().Get("WWW-Authenticate"))
 		})
 	}
 }
