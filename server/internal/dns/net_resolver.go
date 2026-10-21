@@ -57,3 +57,7 @@ func (n *NetResolver) LookupSRV(ctx context.Context, service, proto, name string
 func (n *NetResolver) LookupTXT(ctx context.Context, name string) ([]string, error) {
 	return n.resolver.LookupTXT(ctx, name)
 }
+
+func (n *NetResolver) LookupCAA(ctx context.Context, name string) ([]CAA, error) {
+	return lookupCAA(ctx, n.resolver, name)
+}

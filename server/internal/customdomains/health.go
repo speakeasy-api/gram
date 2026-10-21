@@ -22,6 +22,7 @@ type HealthIssue string
 const (
 	HealthIssueDNSNotFound         HealthIssue = "dns_not_found"
 	HealthIssueDNSTargetMismatch   HealthIssue = "dns_target_mismatch"
+	HealthIssueCAAForbidden        HealthIssue = "caa_forbidden"
 	HealthIssueResourceMissing     HealthIssue = HealthIssue(k8s.CustomDomainInfrastructureIssueResourceMissing)
 	HealthIssueCertificateMissing  HealthIssue = HealthIssue(k8s.CustomDomainInfrastructureIssueCertificateMissing)
 	HealthIssueCertificateNotReady HealthIssue = HealthIssue(k8s.CustomDomainInfrastructureIssueCertificateNotReady)
@@ -95,6 +96,8 @@ func HealthIssueMessage(issue HealthIssue, remediation DNSRemediation) string {
 			return fmt.Sprintf("The domain's DNS no longer resolves to the expected target. Create %s.", record)
 		}
 		return "The domain's DNS no longer resolves to the expected target."
+	case HealthIssueCAAForbidden:
+		return `CAA records for this domain do not allow Let's Encrypt to issue a TLS certificate. Add a CAA record: 0 issue "letsencrypt.org".`
 	case HealthIssueResourceMissing:
 		return "The routing configuration for the domain is missing."
 	case HealthIssueCertificateMissing,
