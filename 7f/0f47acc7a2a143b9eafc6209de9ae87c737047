@@ -1,0 +1,18 @@
+server/internal/database/models.go
+  h_9630b74bdac540 1838-1843
+server/internal/directory/repo/models.go
+  h_9630b74bdac540 26-31
+server/internal/directory/repo/queries.sql.go
+  h_9630b74bdac540 428,444-445
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "7f0f47acc7a2a143b9eafc6209de9ae87c737047",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}
