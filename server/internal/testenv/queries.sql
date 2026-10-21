@@ -2185,3 +2185,10 @@ RETURNING id;
 INSERT INTO plugin_servers (plugin_id, toolset_id, display_name, policy, sort_order, deleted_at)
 VALUES (@plugin_id, @toolset_id, @display_name, @policy, @sort_order, sqlc.narg('deleted_at'))
 RETURNING *;
+
+-- name: ExpireAPIKeyFixture :exec
+-- Test-only fixture: puts a key's expiry in the past.
+UPDATE api_keys
+SET expires_at = clock_timestamp() - interval '1 minute'
+WHERE id = @id
+  AND organization_id = @organization_id;

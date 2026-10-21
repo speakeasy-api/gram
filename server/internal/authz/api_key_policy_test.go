@@ -14,6 +14,7 @@ import (
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
@@ -158,8 +159,7 @@ func TestAuthorizeMandatoryForLegacyAPIKeys(t *testing.T) {
 	expired := f.withKey(t, uuid.NullUUID{}, []string{"consumer"})
 	expired.grant(t, ScopeMCPConnect, projectConnectSelector(f.projectID))
 	requireMandatory(t, f.engine, expired.keyContext(t), MandatoryDecision{Allowed: true, Source: MandatoryPolicySourceAPIKey, Reason: MandatoryDenyReasonNone}, connect)
-	_, err = f.db.Exec(t.Context(), "UPDATE api_keys SET expires_at = clock_timestamp() - interval '1 minute' WHERE id = $1 AND organization_id = $2", expired.keyID, f.organizationID)
-	require.NoError(t, err)
+	require.NoError(t, testrepo.New(f.db).ExpireAPIKeyFixture(t.Context(), testrepo.ExpireAPIKeyFixtureParams{ID: expired.keyID, OrganizationID: f.organizationID}))
 	requireMandatory(t, f.engine, expired.keyContext(t), MandatoryDecision{Allowed: false, Source: MandatoryPolicySourceAPIKey, Reason: MandatoryDenyReasonAPIKeyInactive}, connect)
 
 	_, err = keysrepo.New(f.db).DeleteAPIKey(t.Context(), keysrepo.DeleteAPIKeyParams{ID: f.keyID, OrganizationID: f.organizationID})
