@@ -5948,7 +5948,7 @@ SELECT
     CASE
       WHEN ps.mcp_server_id IS NOT NULL THEN 'mcp_server'
       WHEN ps.meta_mcp_server_id IS NOT NULL THEN 'gateway'
-      -- Defensive: a live row always has one of the two backends.
+      -- A live toolset-only row lands here until AIM-581 drops plugin_servers.toolset_id.
       ELSE 'unresolved'
     END::text AS target_kind,
     COALESCE(ps.mcp_server_id, ps.meta_mcp_server_id) AS target_id,

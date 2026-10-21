@@ -25,6 +25,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/networkaccess"
 	oauthrepo "github.com/speakeasy-api/gram/server/internal/oauth/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/toolsets"
@@ -295,11 +296,10 @@ func TestUpdateMcpServerHostedWrapperIgnoresDeletedToolsetWithSameSlug(t *testin
 	require.Equal(t, "Hosted wrapper", deleted.Name, "the deleted twin is not rewritten")
 }
 
-func (f *hostedFixture) pluginMemberships(t *testing.T, ctx context.Context) int {
+func (f *hostedFixture) pluginMemberships(t *testing.T, ctx context.Context) int64 {
 	t.Helper()
 
-	var count int
-	err := f.ti.conn.QueryRow(ctx, `SELECT count(*) FROM plugin_servers WHERE deleted IS FALSE AND mcp_server_id = $1`, f.toolset.ID).Scan(&count) //nolint:glint // notestingrawsql: counts live memberships
+	count, err := pluginsrepo.New(f.ti.conn).CountLivePluginServersByMCPServerIDFixture(ctx, pluginsrepo.CountLivePluginServersByMCPServerIDFixtureParams{ProjectID: f.projectID, McpServerID: uuid.NullUUID{UUID: f.toolset.ID, Valid: true}})
 	require.NoError(t, err)
 	return count
 }
