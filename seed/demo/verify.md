@@ -134,11 +134,14 @@ remains hidden and the PAGES.md row stays `[~]`, not UI-verified.
 12a. **Organization Gateway** — after seeding, open **MCP**
 (`/<org>/projects/default/mcp`). The **Organization Gateway** card leads the
 unfiltered grid and table with an **Off** badge for organization admins.
-`organizations.getGateway` reports `available: false`. Open the card and use
+`organizations.getGateway` reports `available: false`. Open the card and confirm
+**MCP assignments** is visible for organization admins before enabling. Use
 the gateway switch to start the assignment review. Acknowledge the completed
 review and select **Enable Organization Gateway**. The same page then shows
 the endpoint `<server>/mcp/gateway/<org>` with a copy button and client install
-instructions. The gateway response reports `available: true` with that URL.
+instructions. **MCP assignments** remains visible on this page for organization
+admins after enabling, so they can inspect and edit access without turning the
+gateway off. The gateway response reports `available: true` with that URL.
 The old organization settings gateway URL redirects to this page.
 
 In **MCP Assignments**, confirm one row per role with stacked server icons under

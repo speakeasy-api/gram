@@ -2,7 +2,7 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { ReactNode } from "react";
 
-const state = vi.hoisted(() => ({ setOn: vi.fn(), error: false }));
+const state = vi.hoisted(() => ({ setOn: vi.fn(), error: false, on: false }));
 vi.mock("@/components/page-templates", () => ({
   SettingsPage: ({
     children,
@@ -30,7 +30,7 @@ vi.mock("@/components/mcp/useOrganizationGatewaySetting", () => ({
   useOrganizationGatewaySetting: () => ({
     features: { data: {}, error: state.error },
     gateway: { data: { available: false, unavailableReason: "turned_off" } },
-    on: false,
+    on: state.on,
     setOn: state.setOn,
     isPending: false,
   }),
@@ -48,14 +48,15 @@ vi.mock("@/pages/setup/components/platform-instrumentation-sheet", () => ({
   PlatformInstrumentationSheet: () => null,
 }));
 vi.mock("../access/MCPAssignments", () => ({
-  MCPAssignments: ({ onReady }: { onReady: (ready: boolean) => void }) => (
-    <button onClick={() => onReady(true)}>Assignments loaded</button>
+  MCPAssignments: ({ onReady }: { onReady?: (ready: boolean) => void }) => (
+    <button onClick={() => onReady?.(true)}>Assignments loaded</button>
   ),
 }));
 import OrganizationGateway from "./OrganizationGateway";
 afterEach(cleanup);
 beforeEach(() => {
   state.error = false;
+  state.on = false;
   vi.clearAllMocks();
 });
 
@@ -82,3 +83,20 @@ it("does not offer mutation when the gateway setting failed to load", () => {
   expect(screen.queryByRole("button", { name: "Turn on" })).toBeNull();
   expect(screen.getByText(/load the gateway setting/)).toBeDefined();
 });
+
+it.each([false, true])(
+  "shows assignments from the gateway card destination when enabled=%s",
+  (on) => {
+    state.on = on;
+    render(<OrganizationGateway />);
+    expect(
+      screen.getByRole("region", { name: "MCP assignments" }),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Assignments loaded" }),
+    ).toBeTruthy();
+    expect(
+      screen.queryByRole("button", { name: "Enable Organization Gateway" }),
+    ).toBeNull();
+  },
+);

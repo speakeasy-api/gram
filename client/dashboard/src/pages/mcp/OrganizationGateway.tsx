@@ -1,3 +1,4 @@
+import { MCPAssignments } from "../access/MCPAssignments";
 import { GatewayAccessReview } from "./GatewayAccessReview";
 import { SpeakeasyMark } from "@/components/mcp/OrganizationGatewayCard";
 import {
@@ -117,11 +118,19 @@ function OrganizationGatewayContent({
         </Alert>
       )}
       {!reviewing && (
-        <GatewayBody
-          gateway={gateway}
-          isOn={isOn}
-          serverName={organizationSlug}
-        />
+        <div className="space-y-8">
+          <GatewayBody
+            gateway={gateway}
+            isOn={isOn}
+            serverName={organizationSlug}
+          />
+          <RequireScope scope="org:admin" level="section">
+            <section aria-label="MCP assignments" className="space-y-4">
+              <Text variant="subheading">MCP assignments</Text>
+              <MCPAssignments />
+            </section>
+          </RequireScope>
+        </div>
       )}
     </SettingsPage>
   );
