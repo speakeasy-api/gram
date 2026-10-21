@@ -6,6 +6,7 @@ CREATE TABLE "auth_permission_provisions" (
   "scope" text NOT NULL,
   "selectors" jsonb NOT NULL,
   "kind" text NOT NULL,
+  "taken_over_at" timestamptz NULL,
   "created_at" timestamptz NOT NULL DEFAULT clock_timestamp(),
   "updated_at" timestamptz NOT NULL DEFAULT clock_timestamp(),
   PRIMARY KEY ("id"),
@@ -34,6 +35,9 @@ COMMENT ON COLUMN "auth_permission_provisions"."selectors" IS 'The grant''s sele
 @access: opaque-restricted';
 -- Set comment to column: "kind" on table: "auth_permission_provisions"
 COMMENT ON COLUMN "auth_permission_provisions"."kind" IS 'Which default the grant belongs to: personal_default, shared_client or api_key. Validated in application code.
+@access: confidential';
+-- Set comment to column: "taken_over_at" on table: "auth_permission_provisions"
+COMMENT ON COLUMN "auth_permission_provisions"."taken_over_at" IS 'When an admin wrote the same grant, making it theirs: a rollback leaves it. NULL while it is still provisioned.
 @access: confidential';
 -- Set comment to column: "created_at" on table: "auth_permission_provisions"
 COMMENT ON COLUMN "auth_permission_provisions"."created_at" IS '@access: confidential';

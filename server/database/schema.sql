@@ -9346,8 +9346,9 @@ ON principal_grants
 USING GIN (selectors);
 
 -- Grants the default auth permission backfill wrote, kept after the grant is
--- deleted: a rerun never restores what an admin removed, a rollback deletes
--- exactly these, and an admin writing the same grant takes it over.
+-- deleted: a rerun never restores what an admin removed, and a rollback
+-- deletes exactly these, except those an admin since took over by writing the
+-- same grant.
 CREATE TABLE IF NOT EXISTS auth_permission_provisions (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   organization_id TEXT NOT NULL,
@@ -9355,6 +9356,7 @@ CREATE TABLE IF NOT EXISTS auth_permission_provisions (
   scope TEXT NOT NULL CHECK (scope <> ''),
   selectors JSONB NOT NULL,
   kind TEXT NOT NULL CHECK (kind <> ''),
+  taken_over_at timestamptz,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -9374,6 +9376,8 @@ COMMENT ON COLUMN auth_permission_provisions.scope IS 'The granted scope, mcp:au
 COMMENT ON COLUMN auth_permission_provisions.selectors IS 'The grant''s selector, as in principal_grants.selectors.
 @access: opaque-restricted';
 COMMENT ON COLUMN auth_permission_provisions.kind IS 'Which default the grant belongs to: personal_default, shared_client or api_key. Validated in application code.
+@access: confidential';
+COMMENT ON COLUMN auth_permission_provisions.taken_over_at IS 'When an admin wrote the same grant, making it theirs: a rollback leaves it. NULL while it is still provisioned.
 @access: confidential';
 COMMENT ON COLUMN auth_permission_provisions.created_at IS '@access: confidential';
 COMMENT ON COLUMN auth_permission_provisions.updated_at IS '@access: confidential';
