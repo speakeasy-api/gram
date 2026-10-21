@@ -53,7 +53,7 @@ export const SIGNAL_FILTERS = defineFilters([
     debounceMs: 0,
     label: "Filter attribute",
     kind: "text",
-    placeholder: "model_provider",
+    placeholder: "inference_provider",
   },
   {
     id: "comparison",

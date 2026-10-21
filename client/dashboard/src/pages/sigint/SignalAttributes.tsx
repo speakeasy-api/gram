@@ -43,7 +43,7 @@ export function SignalAttributes({
     ...new Set([
       "department",
       "model_family",
-      "model_provider",
+      "inference_provider",
       "model_name",
       ...(query.data?.values.map((item) => item.value) ?? []),
       value,
@@ -52,7 +52,7 @@ export function SignalAttributes({
   const names: Record<string, string> = {
     department: "Department",
     model_family: "Model vendor",
-    model_provider: "Model provider",
+    inference_provider: "Inference provider",
     model_name: "Model",
     environment: "Environment",
     region: "Region",
