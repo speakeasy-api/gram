@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"slices"
-	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -41,8 +40,13 @@ type grantPlan struct {
 	// existing holds every grant already held or ever provisioned, so a
 	// grant an admin removed is never written again.
 	existing map[string]bool
-	// provisioned holds the grants this backfill wrote, live or removed.
+	// provisioned holds the grants this backfill wrote, live or removed, that
+	// no admin has taken over.
 	provisioned map[string]bool
+	// history counts, per principal, the grants ever provisioned to it, and
+	// taken those an admin took over.
+	history map[string]int
+	taken   map[string]int
 	missing     map[urn.Principal][]*authz.RoleGrant
 	kinds       map[urn.Principal][]GrantKind
 	order       []urn.Principal
@@ -81,7 +85,7 @@ func (p *grantPlan) want(kind GrantKind, principal urn.Principal, scope authz.Sc
 // allow. It only ever adds grants.
 func runGrants(ctx context.Context, tx pgx.Tx, opts Options, report *Report, withKeys bool) error {
 	q := New(tx)
-	plan := &grantPlan{existing: map[string]bool{}, provisioned: map[string]bool{}, missing: map[urn.Principal][]*authz.RoleGrant{}, kinds: map[urn.Principal][]GrantKind{}, order: nil, counts: map[GrantKind]int{}}
+	plan := &grantPlan{existing: map[string]bool{}, provisioned: map[string]bool{}, history: map[string]int{}, taken: map[string]int{}, missing: map[urn.Principal][]*authz.RoleGrant{}, kinds: map[urn.Principal][]GrantKind{}, order: nil, counts: map[GrantKind]int{}}
 
 	held, err := q.ListAuthClientGrantRows(ctx, ListAuthClientGrantRowsParams{
 		OrganizationID: opts.OrganizationID,
@@ -117,6 +121,11 @@ func runGrants(ctx context.Context, tx pgx.Tx, opts Options, report *Report, wit
 			return err
 		}
 		plan.existing[key] = true
+		plan.history[row.PrincipalUrn]++
+		if row.TakenOver {
+			plan.taken[row.PrincipalUrn]++
+			continue
+		}
 		plan.provisioned[key] = true
 	}
 
@@ -278,21 +287,14 @@ func reachesServer(grant authz.Grant, use ListSharedAuthClientServersRow) bool {
 }
 
 // keyReach returns the projects a key's policy should cover. A key with no
-// policy and no provisioning history gets its full reach. A key whose live
-// policy is entirely provisioned keeps the projects it covers and gets clients
-// recorded since. A key holding any grant an admin wrote, or whose provisioned
-// policy was removed, is left alone.
+// policy and no provisioning history gets its full reach. A key whose policy is
+// exactly what was provisioned, with nothing removed or taken over, keeps the
+// projects it covers and gets clients recorded since. Any other key is left
+// alone.
 func (p *grantPlan) keyReach(principal urn.Principal, policy []authz.Grant, keyProject uuid.NullUUID, projects []uuid.UUID) ([]string, bool) {
-	history := false
-	prefix := principal.String() + "|"
-	for key := range p.provisioned {
-		if strings.HasPrefix(key, prefix) {
-			history = true
-			break
-		}
-	}
+	urnString := principal.String()
 	if len(policy) == 0 {
-		if history {
+		if p.history[urnString] > 0 {
 			return nil, false
 		}
 		var reach []string
@@ -303,9 +305,14 @@ func (p *grantPlan) keyReach(principal urn.Principal, policy []authz.Grant, keyP
 		}
 		return reach, true
 	}
+	// Only a policy that is exactly what was provisioned, untouched since,
+	// is topped up.
+	if p.taken[urnString] > 0 || p.history[urnString] != len(policy) {
+		return nil, false
+	}
 	var reach []string
 	for _, grant := range policy {
-		key, err := grantKey(principal.String(), grant.Scope, grant.Selector)
+		key, err := grantKey(urnString, grant.Scope, grant.Selector)
 		if err != nil || !p.provisioned[key] {
 			return nil, false
 		}

@@ -1167,7 +1167,7 @@ func (q *Queries) ListAuthClientsFixture(ctx context.Context, organizationID str
 }
 
 const listAuthPermissionProvisions = `-- name: ListAuthPermissionProvisions :many
-SELECT principal_urn, scope, selectors
+SELECT principal_urn, scope, selectors, (taken_over_at IS NOT NULL)::boolean AS taken_over
 FROM auth_permission_provisions
 WHERE organization_id = $1
 `
@@ -1176,10 +1176,11 @@ type ListAuthPermissionProvisionsRow struct {
 	PrincipalUrn string
 	Scope        string
 	Selectors    []byte
+	TakenOver    bool
 }
 
 // Every grant the backfill provisioned in the organization, live or since
-// removed.
+// removed, and whether an admin since took it over.
 func (q *Queries) ListAuthPermissionProvisions(ctx context.Context, organizationID string) ([]ListAuthPermissionProvisionsRow, error) {
 	rows, err := q.db.Query(ctx, listAuthPermissionProvisions, organizationID)
 	if err != nil {
@@ -1189,7 +1190,12 @@ func (q *Queries) ListAuthPermissionProvisions(ctx context.Context, organization
 	var items []ListAuthPermissionProvisionsRow
 	for rows.Next() {
 		var i ListAuthPermissionProvisionsRow
-		if err := rows.Scan(&i.PrincipalUrn, &i.Scope, &i.Selectors); err != nil {
+		if err := rows.Scan(
+			&i.PrincipalUrn,
+			&i.Scope,
+			&i.Selectors,
+			&i.TakenOver,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -1201,7 +1207,7 @@ func (q *Queries) ListAuthPermissionProvisions(ctx context.Context, organization
 }
 
 const listAuthPermissionProvisionsFixture = `-- name: ListAuthPermissionProvisionsFixture :many
-SELECT principal_urn, scope, selectors, kind
+SELECT principal_urn, scope, selectors, kind, (taken_over_at IS NOT NULL)::boolean AS taken_over
 FROM auth_permission_provisions
 WHERE organization_id = $1
 ORDER BY principal_urn, scope
@@ -1212,6 +1218,7 @@ type ListAuthPermissionProvisionsFixtureRow struct {
 	Scope        string
 	Selectors    []byte
 	Kind         string
+	TakenOver    bool
 }
 
 func (q *Queries) ListAuthPermissionProvisionsFixture(ctx context.Context, organizationID string) ([]ListAuthPermissionProvisionsFixtureRow, error) {
@@ -1228,6 +1235,7 @@ func (q *Queries) ListAuthPermissionProvisionsFixture(ctx context.Context, organ
 			&i.Scope,
 			&i.Selectors,
 			&i.Kind,
+			&i.TakenOver,
 		); err != nil {
 			return nil, err
 		}

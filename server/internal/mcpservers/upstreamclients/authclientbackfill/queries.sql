@@ -1766,8 +1766,8 @@ ORDER BY id;
 
 -- name: ListAuthPermissionProvisions :many
 -- Every grant the backfill provisioned in the organization, live or since
--- removed.
-SELECT principal_urn, scope, selectors
+-- removed, and whether an admin since took it over.
+SELECT principal_urn, scope, selectors, (taken_over_at IS NOT NULL)::boolean AS taken_over
 FROM auth_permission_provisions
 WHERE organization_id = @organization_id;
 
@@ -1778,7 +1778,7 @@ VALUES (@organization_id, @principal_urn, @scope, @selectors, @kind)
 ON CONFLICT (organization_id, principal_urn, scope, selectors) DO NOTHING;
 
 -- name: ListAuthPermissionProvisionsFixture :many
-SELECT principal_urn, scope, selectors, kind
+SELECT principal_urn, scope, selectors, kind, (taken_over_at IS NOT NULL)::boolean AS taken_over
 FROM auth_permission_provisions
 WHERE organization_id = @organization_id
 ORDER BY principal_urn, scope;

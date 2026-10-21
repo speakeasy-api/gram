@@ -3980,11 +3980,13 @@ func (q *Queries) UpsertOrganizationRoleWithRequests(ctx context.Context, arg Up
 
 const upsertPrincipalGrant = `-- name: UpsertPrincipalGrant :one
 WITH taken_over AS (
-  DELETE FROM auth_permission_provisions
+  UPDATE auth_permission_provisions
+  SET taken_over_at = clock_timestamp(), updated_at = clock_timestamp()
   WHERE organization_id = $1
     AND principal_urn = $2::text
     AND scope = $3
     AND selectors = $4
+    AND taken_over_at IS NULL
 )
 INSERT INTO principal_grants (organization_id, principal_urn, scope, selectors)
 VALUES ($1, $2, $3, $4)
@@ -4015,7 +4017,7 @@ type UpsertPrincipalGrantRow struct {
 // Creates or updates a single grant row. On conflict (same org/principal/scope/selectors),
 // the existing row is kept and its updated_at is bumped. An explicit write takes
 // the grant over from the default auth permission backfill, so a rollback of the
-// backfill leaves it alone.
+// backfill leaves it alone and a rerun still never writes it again.
 func (q *Queries) UpsertPrincipalGrant(ctx context.Context, arg UpsertPrincipalGrantParams) (UpsertPrincipalGrantRow, error) {
 	row := q.db.QueryRow(ctx, upsertPrincipalGrant,
 		arg.OrganizationID,
