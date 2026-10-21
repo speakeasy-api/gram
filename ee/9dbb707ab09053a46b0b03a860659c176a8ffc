@@ -1,0 +1,38 @@
+pystreams/src/pystreams/risk/enforce_handler.py
+  s_ad2d0c24ceb8da::t_a74e6f641d9204 46-48,188-192,194-196,212,252-253
+pystreams/tests/test_risk_enforce.py
+  s_ad2d0c24ceb8da::t_133ea7767eb68e 657,659,661-663,667,675
+server/internal/scanners/gitleaks/enforce_handler.go
+  s_ad2d0c24ceb8da::t_6fdbcedf4d1d40 23,29-32,44-46,51-55,57-60,84-86,92-96,98-101,135,141-142,145,147,191-192
+server/internal/feature/flags.go
+  h_e404c1a6a54184 22
+server/internal/risk/prompt_policy_scanner_test.go
+  h_e404c1a6a54184 15,23,71,73,76,104,137-189
+server/internal/risk/scanner.go
+  h_e404c1a6a54184 599-604,613-614,627,629-630,635,645-646,648-649,654,657-658,660-661,666,669-678,700,881-884,890-891,897,984-1009,1033-1057,1151-1153,1167-1168,1200-1201,1276-1296,1298,1429,1432-1436,1451-1456,1458-1464,1466,1472,1477,1486-1497,1499-1500,1505,1513-1515,1519-1520,1524,1527-1530,1536-1537,1542,1548-1549,1552,1555-1562,1566,1568,1572,1575-1580,1596-1668,2125,2127-2128
+server/internal/risk/scanner_llm_test.go
+  h_e404c1a6a54184 446-449,462-464,474-475,477-478
+server/internal/risk/scanner_test.go
+  h_e404c1a6a54184 343,348-366,389,679-681,690,727,919-989
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ee9dbb707ab09053a46b0b03a860659c176a8ffc",
+  "prompts": {},
+  "humans": {
+    "h_e404c1a6a54184": {
+      "author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  },
+  "sessions": {
+    "s_ad2d0c24ceb8da": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "fcc6e428-0421-4f38-87ca-9d1950a637de",
+        "model": "unknown"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
