@@ -127,6 +127,24 @@ func TestSourceRetriesRecoveryConflictFromSamePosition(t *testing.T) {
 	require.Equal(t, uuid.Nil, (*calls)[1].args[7])
 }
 
+func TestSourceGapFillRejectsCursorOutsideScopedProjects(t *testing.T) {
+	t.Parallel()
+
+	source, calls := scriptedSource(func() ([]SourceRow, error) { return nil, nil })
+	stale := uuid.New()
+	out := make(chan SourceRow, 1)
+	err := source.Read(t.Context(), pipeline.Criteria{
+		CriteriaGapFill:       true,
+		CriteriaOrgID:         "org_test",
+		CriteriaProjectID:     uuid.New(),
+		CriteriaGapFillCursor: GapFillCursor{ProjectID: stale, CreatedAt: time.Now().UTC(), ID: uuid.New()},
+		CriteriaBatchSize:     2,
+	}, out)
+
+	require.ErrorContains(t, err, "gap-fill cursor project "+stale.String()+" is not in the organization's project list")
+	require.Empty(t, *calls)
+}
+
 func TestSourceGivesUpAfterRepeatedRecoveryConflicts(t *testing.T) {
 	t.Parallel()
 

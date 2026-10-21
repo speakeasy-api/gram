@@ -32,7 +32,7 @@ func TestMatchKeyIgnoresSpanOffsetsOnlyForJudgeSources(t *testing.T) {
 				RiskPolicyVersion: 2,
 				Source:            tt.source,
 				RuleID:            "rule",
-				StartPos:          0,
+				StartPos:          12,
 				EndPos:            316,
 			}
 			clickHouse := findingMatchKey{
@@ -41,8 +41,8 @@ func TestMatchKeyIgnoresSpanOffsetsOnlyForJudgeSources(t *testing.T) {
 				riskPolicyVersion: 2,
 				source:            tt.source,
 				ruleID:            "rule",
-				startPos:          0,
-				endPos:            0,
+				startPos:          40,
+				endPos:            290,
 			}.normalized()
 
 			require.Equal(t, tt.ignoreOffsets, postgres.matchKey() == clickHouse)

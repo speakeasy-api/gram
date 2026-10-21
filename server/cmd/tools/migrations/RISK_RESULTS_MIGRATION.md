@@ -226,6 +226,11 @@ created_at)` indexes drive each page. A page that a read replica cancels with
 a recovery conflict (SQLSTATE `40001`) is retried from the same position up
 to four times before the run fails.
 
+An organization-wide gap-fill lists the organization's projects once at the
+start, so projects created during the run are not covered, and resuming with
+`-gap-fill-cursor` can skip projects added since the original run. If projects
+may have been added, re-run without the cursor; matching is idempotent.
+
 1. Run a gap-fill dry run:
 
    ```bash

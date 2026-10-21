@@ -5,12 +5,12 @@
 package riskfindings
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"log"
 	"maps"
+	"slices"
 	"strings"
 	"time"
 
@@ -116,34 +116,6 @@ type SourceRow struct {
 // mark in its own Nullable column and every read query filters
 // false_positive_at IS NULL, so backfilling them preserves pre-cutover marks
 // (the live FP mutation path — PR 3 — is deferred) without inflating counts.
-//
-// The LEFT JOINs denormalize attribution the same way the live writer's
-// lookups do (risk/queries.sql):
-//
-// Message-anchored rows mirror GetChatMessageAttribution: chat id plus
-// resolved user ids, message-level values winning over chat-level ones, the
-// message event time, and the chat's most recent live assistant_threads link —
-// everything collapsing to ” (and message_created_at to the finding's own
-// created_at, matching the ClickHouse column DEFAULT) when the message or chat
-// is gone. The message's chat must sit in the finding's own project — the
-// live query's chat/project guard, checked here against the finding's project
-// (not the message's own denormalized project_id, which historical rows may
-// lack) so a message pointing at a foreign-project chat is rejected outright
-// rather than attributed.
-//
-// Content-part-anchored rows mirror GetChatContentPartAttribution: the part
-// resolves its chat and, parent-message-first, its user ids. The guards are
-// the live ones — the part must be live (deleted IS FALSE), its project must
-// match the finding's (a NULL project, i.e. deleted project, is unverifiable),
-// its chat must sit in the part's own project (nothing in the schema ties a
-// part's project to its chat's, so a part pointing at a foreign-project chat
-// is rejected outright rather than attributed), and the parent message must
-// sit in the part's own chat (a stale or forged parent id must not hand
-// another chat's user ids to this row). A part failing any guard keeps fully
-// empty attribution, exactly like the live writer's project re-check. Beyond
-// the live part lookup (which resolves no event time or assistant), the
-// backfill also takes the parent message's created_at when present and the
-// part chat's assistant link, since it has the joins at hand.
 const selectPage = selectRiskResultsWithAttribution + `WHERE ($1::text IS NULL OR r.organization_id = $1)
   AND ($2::uuid IS NULL OR r.project_id = $2)
   AND ($3::uuid IS NULL OR r.risk_policy_id = $3)
@@ -182,7 +154,35 @@ LIMIT $9
 const selectOrgProjects = `SELECT id FROM projects WHERE organization_id = $1 ORDER BY id`
 
 // selectRiskResultsWithAttribution is the SELECT list and attribution joins
-// shared by both page queries; the joins are documented on selectPage.
+// shared by both page queries.
+//
+// The LEFT JOINs denormalize attribution the same way the live writer's
+// lookups do (risk/queries.sql):
+//
+// Message-anchored rows mirror GetChatMessageAttribution: chat id plus
+// resolved user ids, message-level values winning over chat-level ones, the
+// message event time, and the chat's most recent live assistant_threads link,
+// everything collapsing to ” (and message_created_at to the finding's own
+// created_at, matching the ClickHouse column DEFAULT) when the message or chat
+// is gone. The message's chat must sit in the finding's own project, the
+// live query's chat/project guard. It is checked against the finding's project
+// rather than the message's own denormalized project_id, which historical rows
+// may lack, so a message pointing at a foreign-project chat is rejected
+// outright rather than attributed.
+//
+// Content-part-anchored rows mirror GetChatContentPartAttribution: the part
+// resolves its chat and, parent-message-first, its user ids. The guards are
+// the live ones: the part must be live (deleted IS FALSE), its project must
+// match the finding's (a NULL project, i.e. deleted project, is unverifiable),
+// its chat must sit in the part's own project (nothing in the schema ties a
+// part's project to its chat's, so a part pointing at a foreign-project chat
+// is rejected outright rather than attributed), and the parent message must
+// sit in the part's own chat (a stale or forged parent id must not hand
+// another chat's user ids to this row). A part failing any guard keeps fully
+// empty attribution, exactly like the live writer's project re-check. Beyond
+// the live part lookup (which resolves no event time or assistant), the
+// backfill also takes the parent message's created_at when present and the
+// part chat's assistant link, since it has the joins at hand.
 const selectRiskResultsWithAttribution = `
 SELECT r.id, r.created_at, r.organization_id, r.project_id, r.risk_policy_id,
        r.risk_policy_version, r.chat_message_id, r.chat_content_part_id, r.source, r.found,
@@ -341,7 +341,7 @@ func (s *Source) Read(ctx context.Context, criteria pipeline.Criteria, out chan<
 	// Exact time bounds via created_at (nil disables the predicate). These are
 	// independent of the cursor and always apply when set: the cursor decides
 	// where to resume, -from/-to decide window membership. Applying both is safe —
-	// rows flow in id order, so every in-window pending row has id > cursor, and
+	// rows flow in cursor order, so every in-window pending row sorts after the cursor, and
 	// applying created_at >= from cannot drop it while it does exclude an
 	// out-of-window row that uuidv7/created_at skew placed past the cursor.
 	filters := sourceFilters{org: nil, project: nil, policy: nil, sources: nil, from: nil, to: nil}
@@ -420,6 +420,13 @@ func (s *Source) readByProject(ctx context.Context, criteria pipeline.Criteria, 
 		}
 		projects = listed
 	}
+	if !cursor.IsZero() {
+		i := slices.Index(projects, cursor.ProjectID)
+		if i < 0 {
+			return fmt.Errorf("gap-fill cursor project %s is not in the organization's project list", cursor.ProjectID)
+		}
+		projects = projects[i:]
+	}
 
 	start := time.Time{}
 	if from, ok := filters.from.(time.Time); ok {
@@ -428,14 +435,8 @@ func (s *Source) readByProject(ctx context.Context, criteria pipeline.Criteria, 
 
 	for _, projectID := range projects {
 		pos := GapFillCursor{ProjectID: projectID, CreatedAt: start, ID: uuid.Nil}
-		if !cursor.IsZero() {
-			cmp := bytes.Compare(projectID[:], cursor.ProjectID[:])
-			if cmp < 0 {
-				continue
-			}
-			if cmp == 0 {
-				pos = cursor
-			}
+		if !cursor.IsZero() && projectID == cursor.ProjectID {
+			pos = cursor
 		}
 
 		for {

@@ -154,7 +154,11 @@ func (s *Sink) Run(ctx context.Context) error {
 				s.lastCommittedGapFill = GapFillCursor{ProjectID: projectID, CreatedAt: last.CreatedAt, ID: last.sourceID}
 			}
 		}
-		log.Printf("sink: flushed batch=%d inserted=%d committed=%s", len(buf), s.inserted, s.lastCommitted)
+		committed := s.lastCommitted.String()
+		if s.gapFill {
+			committed = s.lastCommittedGapFill.String()
+		}
+		log.Printf("sink: flushed batch=%d inserted=%d committed=%s", len(buf), s.inserted, committed)
 		buf = buf[:0]
 		return nil
 	}
