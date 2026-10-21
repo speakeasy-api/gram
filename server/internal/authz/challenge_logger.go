@@ -70,7 +70,13 @@ func (l challengeLogger) Log(ctx context.Context, dbtx database.DBTX, logger *sl
 		return
 	}
 
-	enabled, err := isEnabled(ctx, authCtx.ActiveOrganizationID)
+	// Request cancellation must not drop the challenge once the authorization
+	// decision has completed. Keep it bounded so challenge logging cannot hold
+	// up the request indefinitely during a database outage.
+	detachedCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), challengeOutboxTimeout)
+	defer cancel()
+
+	enabled, err := isEnabled(detachedCtx, authCtx.ActiveOrganizationID)
 	if err != nil {
 		logger.WarnContext(ctx, "failed to check authz challenge logging feature flag",
 			attr.SlogError(err),
@@ -186,18 +192,12 @@ func (l challengeLogger) Log(ctx context.Context, dbtx database.DBTX, logger *sl
 		FilterAllowedCount:   &l.FilterAllowedCount,
 	}.Build()
 
-	// Request cancellation must not abort the durable enqueue after the
-	// authorization decision has completed. Keep it bounded so challenge
-	// logging cannot hold up the request indefinitely during a database outage.
-	enqueueCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), challengeOutboxTimeout)
-	defer cancel()
-
-	if _, err := outbox.Publish(enqueueCtx, dbtx, authCtx.ActiveOrganizationID, outbox.Message{
+	if _, err := outbox.Publish(detachedCtx, dbtx, authCtx.ActiveOrganizationID, outbox.Message{
 		Proto:      message,
 		PublicID:   challengeID,
 		Attributes: nil,
 	}); err != nil {
-		logger.WarnContext(enqueueCtx, "failed to enqueue authz challenge",
+		logger.WarnContext(detachedCtx, "failed to enqueue authz challenge",
 			attr.SlogError(err),
 		)
 		return

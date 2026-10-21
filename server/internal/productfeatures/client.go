@@ -82,7 +82,11 @@ func (c *Client) IsFeatureEnabled(ctx context.Context, organizationID string, fe
 		_ = c.storeFeatureCache(ctx, organizationID, feature, enabled, "failed to cache feature flag state")
 		return nil
 	})
-	if err != nil {
+	switch {
+	case errors.Is(err, context.Canceled):
+		// Same as a canceled query above: report disabled without caching.
+		return false, nil
+	case err != nil:
 		return false, err
 	}
 	return enabled, nil

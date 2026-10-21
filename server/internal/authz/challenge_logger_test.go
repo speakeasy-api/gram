@@ -1,6 +1,7 @@
 package authz
 
 import (
+	"context"
 	"testing"
 
 	"github.com/google/uuid"
@@ -110,6 +111,38 @@ func TestChallengeLogger_publishesUserPrincipal(t *testing.T) {
 	require.Equal(t, "project", message.GetResourceKind())
 	require.Equal(t, "proj_user", message.GetResourceId())
 	require.Equal(t, uint32(1), message.GetEvaluatedGrantCount())
+}
+
+func TestChallengeLogger_publishesAfterRequestCanceled(t *testing.T) {
+	t.Parallel()
+
+	orgID := "org_" + uuid.NewString()
+	ctx := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{
+		ActiveOrganizationID: orgID,
+		UserID:               "user_canceled",
+		AccountType:          "enterprise",
+	})
+	conn := newTestDB(t)
+	seedOrganization(t, ctx, conn, orgID)
+
+	ctx, cancel := context.WithCancel(ctx)
+	cancel()
+
+	check := Check{Scope: ScopeProjectRead, ResourceID: "proj_canceled"}
+	challengeLogger{
+		Operation: authzrepo.OperationRequire,
+		Outcome:   authzrepo.OutcomeAllow,
+		Reason:    authzrepo.ReasonGrantMatched,
+		Checks:    []Check{check},
+		Focus:     &check,
+	}.Log(ctx, conn, testenv.NewLogger(t), func(ctx context.Context, _ string) (bool, error) {
+		if err := ctx.Err(); err != nil {
+			return false, err
+		}
+		return true, nil
+	})
+
+	require.Len(t, listChallengeOutboxRows(t, conn), 1)
 }
 
 func TestChallengeLogger_publishesAPIKeyPrincipal(t *testing.T) {
