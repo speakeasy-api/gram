@@ -24,7 +24,8 @@ vi.mock("@gram/client/react-query/directoryRoleMappings.js", () => ({
     options: { enabled?: boolean },
   ) => {
     directory.enabled(options.enabled);
-    return { data: options.enabled ? directory.data : undefined };
+    // Like react-query, a disabled query still returns what it cached.
+    return { data: directory.data };
   },
 }));
 
@@ -647,10 +648,28 @@ describe("directory sources on role rows", () => {
     expect(screen.queryByRole("link", { name: "Review" })).toBeNull();
   });
 
-  it("does not read the mappings for someone who is not an administrator", () => {
+  it("does not read or show the mappings for someone who is not an administrator", () => {
     permission.admin = false;
     renderList([role]);
     expect(directory.enabled).toHaveBeenCalledWith(false);
+    expect(screen.queryByText(/Via directory/)).toBeNull();
+  });
+
+  it("hides cached mappings immediately after permission downgrade", () => {
+    const { rerender } = renderList([role]);
+    expect(screen.getByText(/Via directory/)).toBeDefined();
+    permission.admin = false;
+    rerender(
+      <TooltipProvider>
+        <ManageAccess
+          resourceId="server-1"
+          resourceName="Acme Ops"
+          entries={[role]}
+          version="v1"
+          isLoading={false}
+        />
+      </TooltipProvider>,
+    );
     expect(screen.queryByText(/Via directory/)).toBeNull();
   });
 });

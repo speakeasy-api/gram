@@ -173,11 +173,14 @@ export function ManageAccess({
   );
   const sourcesFor = useMemo(() => {
     const members = membersData?.members ?? [];
+    // Disabling the query keeps cached data, so a lost admin scope hides it
+    // here too rather than waiting for the cache to go.
+    const data = canManage ? mappingsData : undefined;
     return (row: AccessRow): RoleDirectorySource[] =>
-      mappingsData && row.kind === "role"
-        ? roleDirectorySources(mappingsData, members, row)
+      data && row.kind === "role"
+        ? roleDirectorySources(data, members, row)
         : [];
-  }, [mappingsData, membersData]);
+  }, [canManage, mappingsData, membersData]);
 
   const direct = useMemo(() => ownRules(entries), [entries]);
   const rows = useMemo(() => buildAccessRows(entries), [entries]);
