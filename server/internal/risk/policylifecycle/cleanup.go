@@ -124,10 +124,13 @@ func (c *Cleaner) SoftDeleteForMCPServer(
 		if err != nil {
 			return ServerCleanup{}, fmt.Errorf("remove server from risk policy %s scope: %w", policy.ID, err)
 		}
-		// An unscoped policy applies everywhere, so one that only named dead servers goes instead.
-		if policycore.DecodeMCPScope(scope) == nil {
+		switch scopeOutcome(policy.McpScope, scope) {
+		case scopeKeep:
+			continue
+		case scopeDelete:
 			emptied = append(emptied, policy)
 			continue
+		case scopePrune:
 		}
 		updated, err := queries.PruneRiskPolicyMCPScope(ctx, repo.PruneRiskPolicyMCPScopeParams{
 			McpScope:  scope,
@@ -165,6 +168,31 @@ func (c *Cleaner) SoftDeleteForMCPServer(
 
 	span.SetAttributes(attr.DBDeletedRowsCount(int64(len(deleted))))
 	return ServerCleanup{Deleted: deleted, ScopeEdits: edits}, nil
+}
+
+type scopeAction int
+
+const (
+	scopePrune scopeAction = iota
+	scopeKeep
+	scopeDelete
+)
+
+// scopeOutcome never widens enforcement: a scope that matched nothing stays as
+// it is, and one the prune would leave unscoped (applying everywhere) is deleted.
+func scopeOutcome(before, after []byte) scopeAction {
+	if matchesNothing(policycore.DecodeMCPScope(before)) {
+		return scopeKeep
+	}
+	if policycore.DecodeMCPScope(after) == nil {
+		return scopeDelete
+	}
+	return scopePrune
+}
+
+// matchesNothing is the decoder's fail-closed scope.
+func matchesNothing(scope *policycore.MCPScope) bool {
+	return scope != nil && !scope.AllServers && len(scope.Servers) == 0
 }
 
 // withoutServer drops serverID's entries from a scope's servers and keeps everything else.

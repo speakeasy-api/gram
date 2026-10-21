@@ -5,8 +5,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
-
-	"github.com/speakeasy-api/gram/server/internal/risk/policycore"
 )
 
 func TestWithoutServer(t *testing.T) {
@@ -17,15 +15,15 @@ func TestWithoutServer(t *testing.T) {
 	deadEntry := `{"mcp_server_id": "` + dead.String() + `"}`
 
 	tests := []struct {
-		name     string
-		scope    string
-		want     string
-		unscoped bool
+		name    string
+		scope   string
+		want    string
+		outcome scopeAction
 	}{
 		{
 			name:  "keeps other servers and their tools",
-			scope: `{"servers": [` + deadEntry + `, {"mcp_server_id": "` + live + `", "tools": ["search"]}], "tool_annotations": ["read_only"]}`,
-			want:  `{"servers": [{"mcp_server_id": "` + live + `", "tools": ["search"]}], "tool_annotations": ["read_only"]}`,
+			scope: `{"servers": [` + deadEntry + `, {"mcp_server_id": "` + live + `", "tools": ["search"]}], "tool_annotations": ["readOnlyHint"]}`,
+			want:  `{"servers": [{"mcp_server_id": "` + live + `", "tools": ["search"]}], "tool_annotations": ["readOnlyHint"]}`,
 		},
 		{
 			name:  "drops every duplicate entry",
@@ -33,15 +31,16 @@ func TestWithoutServer(t *testing.T) {
 			want:  `{"servers": [{"mcp_server_id": "` + live + `"}]}`,
 		},
 		{
-			name:  "keeps entries it cannot read",
-			scope: `{"servers": [` + deadEntry + `, "opaque", {"mcp_server_id": 7}]}`,
-			want:  `{"servers": ["opaque", {"mcp_server_id": 7}]}`,
+			name:    "keeps entries it cannot read, and such a scope already matched nothing",
+			scope:   `{"servers": [` + deadEntry + `, "opaque", {"mcp_server_id": 7}]}`,
+			want:    `{"servers": ["opaque", {"mcp_server_id": 7}]}`,
+			outcome: scopeKeep,
 		},
 		{
-			name:     "a scope left naming nothing would apply everywhere",
-			scope:    `{"servers": [` + deadEntry + `, ` + deadEntry + `]}`,
-			want:     `{"servers": []}`,
-			unscoped: true,
+			name:    "a scope left naming nothing would apply everywhere",
+			scope:   `{"servers": [` + deadEntry + `, ` + deadEntry + `]}`,
+			want:    `{"servers": []}`,
+			outcome: scopeDelete,
 		},
 		{
 			name:  "json true all_servers stays scoped",
@@ -49,15 +48,22 @@ func TestWithoutServer(t *testing.T) {
 			want:  `{"all_servers": true, "servers": []}`,
 		},
 		{
-			name:     "null all_servers reads as false and would apply everywhere",
-			scope:    `{"all_servers": null, "servers": [` + deadEntry + `]}`,
-			want:     `{"all_servers": null, "servers": []}`,
-			unscoped: true,
+			name:    "null all_servers reads as false and would apply everywhere",
+			scope:   `{"all_servers": null, "servers": [` + deadEntry + `]}`,
+			want:    `{"all_servers": null, "servers": []}`,
+			outcome: scopeDelete,
 		},
 		{
-			name:  "string all_servers still fails closed",
-			scope: `{"all_servers": "true", "servers": [` + deadEntry + `]}`,
-			want:  `{"all_servers": "true", "servers": []}`,
+			name:    "string all_servers matched nothing and stays as it was",
+			scope:   `{"all_servers": "true", "servers": [` + deadEntry + `]}`,
+			want:    `{"all_servers": "true", "servers": []}`,
+			outcome: scopeKeep,
+		},
+		{
+			name:    "removing the entry that failed closed must not switch the policy on",
+			scope:   `{"all_servers": true, "servers": [{"mcp_server_id": "` + dead.String() + `", "tools": []}]}`,
+			want:    `{"all_servers": true, "servers": []}`,
+			outcome: scopeKeep,
 		},
 	}
 	for _, tt := range tests {
@@ -66,7 +72,7 @@ func TestWithoutServer(t *testing.T) {
 			got, err := withoutServer([]byte(tt.scope), dead)
 			require.NoError(t, err)
 			require.JSONEq(t, tt.want, string(got))
-			require.Equal(t, tt.unscoped, policycore.DecodeMCPScope(got) == nil)
+			require.Equal(t, tt.outcome, scopeOutcome([]byte(tt.scope), got))
 		})
 	}
 }
