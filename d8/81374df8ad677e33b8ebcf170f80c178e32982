@@ -1,0 +1,18 @@
+server/database/schema.sql
+  h_9630b74bdac540 8727-8831
+server/migrations/20260925233248_admin-mcp-write-proposals.sql
+  h_9630b74bdac540 1-74
+server/migrations/atlas.sum
+  h_9630b74bdac540 1,439
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d881374df8ad677e33b8ebcf170f80c178e32982",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

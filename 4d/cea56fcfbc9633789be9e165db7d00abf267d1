@@ -1,0 +1,891 @@
+client/dashboard/src/pages/org/PlatformMCP.tsx
+  h_9630b74bdac540 651,671,683-686,690,694
+  h_9630b74bdac540 652-670,691-693
+.agents/skills/authoring-platform-mcp-skills/SKILL.md
+  h_9630b74bdac540 44
+.changeset/admin-support-matrix.md
+  h_9630b74bdac540 3,6
+.changeset/existing-mcp-setup.md
+  h_9630b74bdac540 6
+.changeset/okta-dpop-followup.md
+  h_9630b74bdac540 5
+.changeset/restore-sources-functionality.md
+  h_9630b74bdac540 5
+.github/filters.yaml
+  h_9630b74bdac540 140-149
+.github/workflows/pr.yaml
+  h_9630b74bdac540 4,48,2472-2567
+.mise-tasks/demo/agent-activity.sh
+  h_9630b74bdac540 1-574
+.mise-tasks/hooks/test.sh
+  h_9630b74bdac540 9-10,22-29,131-137,144-160,250-252,258-260,264
+.speakeasy/out.admin.openapi.yaml
+  h_9630b74bdac540 3830-3977,6023-6157,6300-6311
+.speakeasy/out.openapi.yaml
+  h_9630b74bdac540 32389,56131-56342,72031-72034,76143-76164,76183,76197-76201,76228,76235-76244,76265-76267,76273-76283,76314-76323,76365-76366,79728-79732,81809-81816,81826-81831,81835-81836,90648-90740,90851-90854,90866-90869,90902-90903,90963-90970,91005-91006,91037-91045,91144-91145,92007-92020,93086-93088,94567-94570
+client/admin/CHANGELOG.md
+  h_9630b74bdac540 3-8
+client/admin/package.json
+  h_9630b74bdac540 4
+client/admin/src/components/app-sidebar.test.tsx
+  h_9630b74bdac540 205
+client/admin/src/lib/adminNav.ts
+  h_9630b74bdac540 16,49-54
+client/admin/src/lib/gramAdminApi.ts
+  h_9630b74bdac540 135
+client/admin/src/pages/coverage/CoverageEditor.tsx
+  h_9630b74bdac540 1-248
+client/admin/src/pages/coverage/ImportCsvDialog.test.tsx
+  h_9630b74bdac540 1-152
+client/admin/src/pages/coverage/ImportCsvDialog.tsx
+  h_9630b74bdac540 1-215
+client/admin/src/pages/coverage/IntegrationCoverage.tsx
+  h_9630b74bdac540 1-269
+client/admin/src/pages/coverage/IntegrationRequirements.test.tsx
+  h_9630b74bdac540 1-70
+client/admin/src/pages/coverage/IntegrationRequirements.tsx
+  h_9630b74bdac540 1-157
+client/admin/src/pages/coverage/MatrixExplorer.tsx
+  h_9630b74bdac540 1-630
+client/admin/src/pages/coverage/api.ts
+  h_9630b74bdac540 1-27
+client/admin/src/pages/coverage/catalogContext.ts
+  h_9630b74bdac540 1-9
+client/admin/src/pages/coverage/csv.ts
+  h_9630b74bdac540 1-34
+client/admin/src/pages/coverage/importCsv.test.ts
+  h_9630b74bdac540 1-185
+client/admin/src/pages/coverage/importCsv.ts
+  h_9630b74bdac540 1-229
+client/admin/src/pages/coverage/matrixCell.ts
+  h_9630b74bdac540 1-57
+client/admin/src/pages/coverage/model.test.ts
+  h_9630b74bdac540 1-181
+client/admin/src/pages/coverage/model.ts
+  h_9630b74bdac540 1-170
+client/admin/src/pages/coverage/platform-headers.css
+  h_9630b74bdac540 1-56
+client/admin/src/pages/coverage/request.test.ts
+  h_9630b74bdac540 1-68
+client/admin/src/pages/coverage/request.ts
+  h_9630b74bdac540 1-26
+client/admin/src/pages/coverage/requirements.test.ts
+  h_9630b74bdac540 1-137
+client/admin/src/pages/coverage/requirements.ts
+  h_9630b74bdac540 1-98
+client/admin/src/routeTree.gen.ts
+  h_9630b74bdac540 13,40-44,160,184,204,230,254,273,298,314-320,556
+client/admin/src/routes/integration-coverage.tsx
+  h_9630b74bdac540 1-7
+client/admin/src/sdk/.speakeasy/gen.lock
+  h_9630b74bdac540 59,81,157-163,167,236-237,267,283-302,652-660,943-953
+client/admin/src/sdk/src/funcs/adminGetSupportMatrix.ts
+  h_9630b74bdac540 1-154
+client/admin/src/sdk/src/funcs/adminUpdateSupportMatrix.ts
+  h_9630b74bdac540 1-177
+client/admin/src/sdk/src/models/components/supportcapability.ts
+  h_9630b74bdac540 1-34
+client/admin/src/sdk/src/models/components/supportdraft.ts
+  h_9630b74bdac540 1-65
+client/admin/src/sdk/src/models/components/supportfact.ts
+  h_9630b74bdac540 1-71
+client/admin/src/sdk/src/models/components/supportmapping.ts
+  h_9630b74bdac540 1-74
+client/admin/src/sdk/src/models/components/supportmatrix.ts
+  h_9630b74bdac540 1-48
+client/admin/src/sdk/src/models/components/supportmethod.ts
+  h_9630b74bdac540 1-39
+client/admin/src/sdk/src/models/components/supportplatform.ts
+  h_9630b74bdac540 1-38
+client/admin/src/sdk/src/models/components/updatesupportmatrixrequestbody.ts
+  h_9630b74bdac540 1-40
+client/admin/src/sdk/src/react-query/adminGetSupportMatrix.core.ts
+  h_9630b74bdac540 1-66
+client/admin/src/sdk/src/react-query/adminGetSupportMatrix.ts
+  h_9630b74bdac540 1-117
+client/admin/src/sdk/src/react-query/adminUpdateSupportMatrix.ts
+  h_9630b74bdac540 1-111
+client/admin/src/sdk/src/sdk/admin.ts
+  h_9630b74bdac540 30,52,99,103,843-874
+client/dashboard/CHANGELOG.md
+  h_9630b74bdac540 3-50
+client/dashboard/package.json
+  h_9630b74bdac540 4,28,126
+client/dashboard/src/App.css
+  h_9630b74bdac540 12
+client/dashboard/src/components/OpenApiSourceInput.tsx
+  h_9630b74bdac540 13,20-21,30,35-37,155,163
+client/dashboard/src/components/agent-providers/agent-provider-icon-kind.ts
+  h_9630b74bdac540 26-34
+client/dashboard/src/components/ai-tools/ai-tool-icon-sources.ts
+  h_9630b74bdac540 17
+client/dashboard/src/components/auditlogs/feed.tsx
+  h_9630b74bdac540 28-35
+client/dashboard/src/components/chart/ChartNoData.tsx
+  h_9630b74bdac540 1-19
+client/dashboard/src/components/chart/StackedTimeBarChart.tsx
+  h_9630b74bdac540 1-201
+client/dashboard/src/components/chart/chartTheme.ts
+  h_9630b74bdac540 1-60
+client/dashboard/src/components/chart/useChartZoom.ts
+  h_9630b74bdac540 30-34
+client/dashboard/src/components/identity-avatar.tsx
+  h_9630b74bdac540 1,4-21,23-33,35-37,40-49
+client/dashboard/src/components/mcp-server-x-sidebar-nav.tsx
+  h_9630b74bdac540 15-18,33,49-79,102-124,204-218,338-356,358-367,372-376,383-397
+client/dashboard/src/components/mcp/RemoveMcpSourceDialog.tsx
+  h_9630b74bdac540 1-203
+client/dashboard/src/components/observe/InsightsTools.tsx
+  h_9630b74bdac540 24-25,51,54-55,85,114,130-132,135-137,200-201,204,236-239,242-243,252,263-264,269,275,283,340,347,408-410,450-452,487-489,604,634-653
+client/dashboard/src/components/observe/InsightsToolsTimeSeries.test.ts
+  h_9630b74bdac540 159,161,165-168,175
+client/dashboard/src/components/observe/LoggingPageHeader.tsx
+  h_9630b74bdac540 55
+client/dashboard/src/components/observe/LogsFacetRail.tsx
+  h_9630b74bdac540 1-286
+client/dashboard/src/components/observe/LogsTimelineStrip.tsx
+  h_9630b74bdac540 1-238
+client/dashboard/src/components/observe/LogsTools.tsx
+  h_9630b74bdac540 18-20,22,34,36-45,52-53,67-68,72-73,83,90-91,144,149,151-152,167-170,172-187,190-198,200-202,205-210,213-224,227-239,260-581,595-611,624,629-632,642-644,654-691,694,751-753,756-757,759,810-818,823,832,862-1010,1021,1030,1053-1061,1072,1084,1107-1115,1118-1153,1157-1163,1165,1172-1192,1202-1215,1217-1282,1284-1297,1299-1301,1303-1325,1327-1353,1355-1360,1363-1383,1385-1424,1426-1436,1464,1478,1503-1505,1507-1508,1510,1513,1516-1521,1550-1568,1571-1590,1593-1603,1697-1701,1703-1714,1717-1721,1724-1744,1747-1764,1780-1793,1795-1797,1800-1801,1810-1817,1819-1833,1887-1891,1897-1899,1904-1906,1911-1913,1918-1920,1925-1927,1933-1936,1945,1948-1958,1962-1965,1967,1969,1973,1982-1983
+client/dashboard/src/components/observe/ObserveFilterBar.tsx
+  h_9630b74bdac540 1,67-74,90,155,190-196,411,439-445,447,463-465,467
+client/dashboard/src/components/observe/insights/InsightCard.tsx
+  h_9630b74bdac540 1-138
+client/dashboard/src/components/observe/insights/InsightsGrid.tsx
+  h_9630b74bdac540 1-425
+client/dashboard/src/components/observe/insights/RankedList.tsx
+  h_9630b74bdac540 1-200
+client/dashboard/src/components/observe/insights/insightsPalette.ts
+  h_9630b74bdac540 1-55
+client/dashboard/src/components/observe/observeDeepLink.test.ts
+  h_9630b74bdac540 1-176
+client/dashboard/src/components/observe/observeDeepLink.ts
+  h_9630b74bdac540 1-152
+client/dashboard/src/components/observe/observeTargetFilters.ts
+  h_9630b74bdac540 12,15,62-63,65-74
+client/dashboard/src/components/observe/toolUsagePayload.ts
+  h_9630b74bdac540 1-168
+client/dashboard/src/components/observe/useObserveFilters.ts
+  h_9630b74bdac540 4,184-193,198-209,478
+client/dashboard/src/components/page-templates/workbench-page.tsx
+  h_9630b74bdac540 15,42-44
+client/dashboard/src/components/project-guide/useMcpGuideOperations.test.tsx
+  h_9630b74bdac540 256-257
+client/dashboard/src/components/project-guide/useMcpGuideOperations.ts
+  h_9630b74bdac540 1
+client/dashboard/src/components/sources/RemoveSourceDialog.tsx
+  h_9630b74bdac540 1-218
+client/dashboard/src/components/sources/SourceActivityPanel.tsx
+  h_9630b74bdac540 1-210
+client/dashboard/src/components/sources/SourceDangerZone.tsx
+  h_9630b74bdac540 1-95
+client/dashboard/src/components/sources/SourceDetailPanel.tsx
+  h_9630b74bdac540 7,11-12,20-21,257-258,261,289-303,315-324,377-379,418,490,495-503
+client/dashboard/src/components/sources/SourceSectionError.tsx
+  h_9630b74bdac540 1-31
+client/dashboard/src/components/sources/SourceToolEditFields.tsx
+  h_9630b74bdac540 1-126
+client/dashboard/src/components/sources/SourceToolsSection.tsx
+  h_9630b74bdac540 1-378
+client/dashboard/src/components/sources/SourceUploadVersionButton.tsx
+  h_9630b74bdac540 1-40
+client/dashboard/src/components/sources/SourceVersionsSection.tsx
+  h_9630b74bdac540 1-165
+client/dashboard/src/components/sources/removeSourceExclusions.test.ts
+  h_9630b74bdac540 1-71
+client/dashboard/src/components/sources/removeSourceExclusions.ts
+  h_9630b74bdac540 1,3-40
+client/dashboard/src/components/sources/source-grid.tsx
+  h_9630b74bdac540 1,4,10,16-17,24-25,31-34,39,41-61,63-95,100,102-103,105,107,109-140
+client/dashboard/src/components/sources/source-list-actions.ts
+  h_9630b74bdac540 1-102
+client/dashboard/src/components/sources/source-list-download.ts
+  h_9630b74bdac540 1-41
+client/dashboard/src/components/sources/source-list-failures.ts
+  h_9630b74bdac540 1-48
+client/dashboard/src/components/sources/source-list-filters.test.ts
+  h_9630b74bdac540 1-160
+client/dashboard/src/components/sources/source-list-filters.ts
+  h_9630b74bdac540 1-169
+client/dashboard/src/components/sources/source-list-notices.tsx
+  h_9630b74bdac540 1-79
+client/dashboard/src/components/sources/source-list.test.ts
+  h_9630b74bdac540 20-22,26,31,49-54,57-62,87-122
+client/dashboard/src/components/sources/source-list.ts
+  h_9630b74bdac540 2-3,20-30,38-49,54-61,64-71,75-77,83-85,92-94,97,99-105
+client/dashboard/src/components/sources/source-table-row.tsx
+  h_9630b74bdac540 1,4,6,9-22,27,33-34,40-42,45,47-98
+client/dashboard/src/components/sources/sourceDetailSections.test.ts
+  h_9630b74bdac540 1-30
+client/dashboard/src/components/sources/sourceDetailSections.ts
+  h_9630b74bdac540 1-31
+client/dashboard/src/components/sources/sourceDownload.ts
+  h_9630b74bdac540 1-77
+client/dashboard/src/components/sources/sourceTelemetrySummary.test.ts
+  h_9630b74bdac540 1-92
+client/dashboard/src/components/sources/sourceTelemetrySummary.ts
+  h_9630b74bdac540 1-53
+client/dashboard/src/components/sources/sourceVersions.test.ts
+  h_9630b74bdac540 1-28
+client/dashboard/src/components/sources/sourceVersions.ts
+  h_9630b74bdac540 1-27
+client/dashboard/src/components/sources/useFailedDeploymentSources.ts
+  h_9630b74bdac540 25-29,76-83,108
+client/dashboard/src/components/sources/useSourceQueries.ts
+  h_9630b74bdac540 1-60
+client/dashboard/src/components/sources/useSourceToolActions.tsx
+  h_9630b74bdac540 1-298
+client/dashboard/src/components/upload-asset/deploy-step.test.tsx
+  h_9630b74bdac540 1-687
+client/dashboard/src/components/upload-asset/deploy-step.tsx
+  h_9630b74bdac540 6-7,11,16,18-23,33-43,58-96,98-102,106,110-111,118,126,132,135-136,140-142,153,156-200,203-216,223-238,243-253,263,266-274,276-282,307-310,314-316,322-325,331-371,503-505,508,511,517,519-538,555,559-560,563-574,576
+client/dashboard/src/components/upload-asset/name-deployment-step.tsx
+  h_9630b74bdac540 11-51,55,97-110,146-147
+client/dashboard/src/components/upload-asset/stepper/context.tsx
+  h_9630b74bdac540 2-6,13-14,17-29,32,39-41,86,88
+client/dashboard/src/components/upload-asset/stepper/use-stepper.ts
+  h_9630b74bdac540 8-18,24
+client/dashboard/src/components/upload-asset/upload-file-step.tsx
+  h_9630b74bdac540 90-93
+client/dashboard/src/contexts/Auth.tsx
+  h_9630b74bdac540 184-187,200
+client/dashboard/src/hooks/usePrivateMcpServerUrls.test.ts
+  h_9630b74bdac540 1-242
+client/dashboard/src/hooks/usePrivateMcpServerUrls.ts
+  h_9630b74bdac540 1-159
+client/dashboard/src/lib/shell.test.ts
+  h_9630b74bdac540 1-22
+client/dashboard/src/lib/shell.ts
+  h_9630b74bdac540 1-9
+client/dashboard/src/pages/data-exports/ConfigureExportSheet.tsx
+  h_9630b74bdac540 43,127
+client/dashboard/src/pages/data-exports/DataExports.test.tsx
+  h_9630b74bdac540 2,63-68,74,80,85,89,98,122-146,151-156
+client/dashboard/src/pages/data-exports/DataExports.tsx
+  h_9630b74bdac540 35-36,52,55-57,68-114,149-154,157-160,164-167,302-312,314,317,543-547,695,712,743,773,781,789
+client/dashboard/src/pages/deployments/deployment/Deployment.tsx
+  h_9630b74bdac540 159
+client/dashboard/src/pages/deployments/deployment/FailedSourcesSection.tsx
+  h_9630b74bdac540 32-46,67,72-73,81,84
+client/dashboard/src/pages/hooks/HooksSetupDialog.tsx
+  h_9630b74bdac540 13
+client/dashboard/src/pages/logs/LogDetailSheet.tsx
+  h_9630b74bdac540 2-5,18-26,123,165-177,179-200,206-232,234-275,306-309,314,324,333,336-363,365,367-369,373-394,400-403,405-406,414-575,615-619,623,625,641-648,653-657,663-673,771,779-785,795,810
+client/dashboard/src/pages/logs/LogFilterBar.tsx
+  h_9630b74bdac540 573,578,591
+client/dashboard/src/pages/logs/log-filter-url.ts
+  h_9630b74bdac540 27-37,48-49,60-61
+client/dashboard/src/pages/logs/useAttributeSearchParams.test.tsx
+  h_9630b74bdac540 1-76
+client/dashboard/src/pages/logs/useAttributeSearchParams.ts
+  h_9630b74bdac540 1-87
+client/dashboard/src/pages/mcp/add/CreateFromSource.test.tsx
+  h_9630b74bdac540 1-114
+client/dashboard/src/pages/mcp/add/CreateFromSource.tsx
+  h_9630b74bdac540 1-3,21,35-36,52-59,114,119-127,132,138,144-151,175-202,204-248,250,252-278,289-291,298-304,309-312
+client/dashboard/src/pages/mcp/add/GatewayCreationFlows.test.tsx
+  h_9630b74bdac540 1-379
+client/dashboard/src/pages/mcp/add/LegacyRedirects.tsx
+  h_9630b74bdac540 1-2,4-8,10-15,41-63,66-132
+client/dashboard/src/pages/mcp/add/legacySourceRedirect.test.ts
+  h_9630b74bdac540 1-192
+client/dashboard/src/pages/mcp/add/legacySourceRedirect.ts
+  h_9630b74bdac540 1-168
+client/dashboard/src/pages/mcp/gateway/GatewayAttachmentStatus.test.tsx
+  h_9630b74bdac540 1-49
+client/dashboard/src/pages/mcp/gateway/GatewayAttachmentStatus.tsx
+  h_9630b74bdac540 1-28
+client/dashboard/src/pages/mcp/gateway/GatewayMembersSection.integration.test.tsx
+  h_9630b74bdac540 1-393
+client/dashboard/src/pages/mcp/gateway/GatewayMembersSection.test.tsx
+  h_9630b74bdac540 1-844
+client/dashboard/src/pages/mcp/gateway/GatewayMembersSection.tsx
+  h_9630b74bdac540 7,9-20,46-47,49-52,59,67-73,78-81,228-236,240-247,250-270,312,317-324,326-327,329-393,395-400,402-405,407-409,411-412,502,519,536,543-549,560,576,593-594,596-598,600-601,603-608,610-612,625,631,654,663,668-669,671-672,674,678,684-685,687-688,690-691,694,696-707,709-714,716-717,719-898,900-905,907-926,928-929,931,934-937,939-1013,1015-1081,1083-1085,1087-1188
+client/dashboard/src/pages/mcp/gateway/ensureToolsetWrapper.test.ts
+  h_9630b74bdac540 1-47
+client/dashboard/src/pages/mcp/gateway/ensureToolsetWrapper.ts
+  h_9630b74bdac540 1-33
+client/dashboard/src/pages/mcp/gateway/memberRows.test.ts
+  h_9630b74bdac540 269-437
+client/dashboard/src/pages/mcp/gateway/memberRows.ts
+  h_9630b74bdac540 142-145,149,154-240
+client/dashboard/src/pages/mcp/gateway/useGatewayCreation.test.tsx
+  h_9630b74bdac540 1-207
+client/dashboard/src/pages/mcp/gateway/useGatewayCreation.ts
+  h_9630b74bdac540 1-104
+client/dashboard/src/pages/mcp/gateway/useGatewayMemberRows.test.ts
+  h_9630b74bdac540 1-142
+client/dashboard/src/pages/mcp/gateway/useGatewayMemberRows.ts
+  h_9630b74bdac540 5-10,21-24,26-36,38-45,54-100
+client/dashboard/src/pages/mcp/sources/SourceDetail.tsx
+  h_9630b74bdac540 1-2,4,9-16,20,22,26-35,42-45,49,60-72,94-154,159-160,163-164,171,174-176,180,187
+client/dashboard/src/pages/mcp/sources/Sources.tsx
+  h_9630b74bdac540 2-5,11-21,29,31,33,41-65,71-72,77-78,81-114,126,132-150,160-168,177,179-181,192-198,201-205,213,219-220,229-230,232-240,252-253,257-264
+client/dashboard/src/pages/mcp/x/MCPServerDetails.tsx
+  h_9630b74bdac540 6,30-31,43-44,46,128-131,133,265,340-343,378,382,384,415,423-433
+client/dashboard/src/pages/mcp/x/tabs/OverviewTab.tsx
+  h_9630b74bdac540 1-51
+client/dashboard/src/pages/mcp/x/tabs/TunneledMcpConnectionsPanel.tsx
+  h_9630b74bdac540 1-229
+client/dashboard/src/pages/mcp/x/tabs/settings/SettingsTab.tsx
+  h_9630b74bdac540 10-21,26-29,31-40,42-62,64-67,72,83,96-139,141-144,148-159,166,175,179-190,192-197
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/AgentSetupSection.tsx
+  h_9630b74bdac540 1-35
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/DangerZoneSection.tsx
+  h_9630b74bdac540 4,6,19-22,34-40,96-135,139-140,144-156,161-182,269-273,284-285,287-291,295,306-328,339-359,441
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/DeleteSourceBackedServerDialogContent.tsx
+  h_9630b74bdac540 1-67
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/EditableSourceFieldSection.tsx
+  h_9630b74bdac540 1-119
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/HeadersSection.tsx
+  h_9630b74bdac540 32,205-209,212-213,216-219,224,226-234,236,269,315,318,408,412-417,420,423,457,475,489-493,516-520,548,553,601-617
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/NetworkAccessSection.test.tsx
+  h_9630b74bdac540 39-44,255-268,318-331
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/NetworkAccessSection.tsx
+  h_9630b74bdac540 7,19-22,122-124,188-194,314-338
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/PublicAccessSection.tsx
+  h_9630b74bdac540 1-248
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/PublicRateLimitsSection.tsx
+  h_9630b74bdac540 9,11,14,16-17,163,188-200
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/ResourceIdentifierSection.tsx
+  h_9630b74bdac540 1-47
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/ServerUrlSection.tsx
+  h_9630b74bdac540 1-8,26-28,31-32,34-41,43-44,46-47,49-53,84,90,96-104,202-203,248-302
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/SourceNameSection.tsx
+  h_9630b74bdac540 1-95
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/TunnelKeySection.tsx
+  h_9630b74bdac540 1-210
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/UpstreamUrlSection.tsx
+  h_9630b74bdac540 1-131
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/authentication/useProtectedResourceMetadata.ts
+  h_9630b74bdac540 3-18,44
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/sourceDelete.test.ts
+  h_9630b74bdac540 1-248
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/sourceDelete.ts
+  h_9630b74bdac540 1-198
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/sourceInvalidation.ts
+  h_9630b74bdac540 1-54
+client/dashboard/src/pages/onboarding/FunctionsOnboarding.tsx
+  h_9630b74bdac540 1-4,14-16,23-30,50-70
+client/dashboard/src/pages/onboarding/UploadOpenAPI.test.tsx
+  h_9630b74bdac540 1-210
+client/dashboard/src/pages/onboarding/UploadOpenAPI.tsx
+  h_9630b74bdac540 1-2,4-6,14,20,22-50,54-70,73-76,78-79,82-123,125-134,136-148,150-170,190,195-199,205,207,216-217
+client/dashboard/src/pages/onboarding/gateway-flows.test.tsx
+  h_9630b74bdac540 1-219
+client/dashboard/src/pages/org/PrivateNetworkSection.test.tsx
+  h_9630b74bdac540 18-25,71-79,103,134-135,201-262
+client/dashboard/src/pages/org/PrivateNetworkSection.tsx
+  h_9630b74bdac540 24,52-120,313-314,330-335
+client/dashboard/src/pages/setup/components/add-existing-mcp-servers.test.tsx
+  h_9630b74bdac540 1-236
+client/dashboard/src/pages/setup/components/add-existing-mcp-servers.tsx
+  h_9630b74bdac540 1-125
+client/dashboard/src/pages/setup/components/step-container.test.tsx
+  h_9630b74bdac540 5,29-61
+client/dashboard/src/pages/setup/components/step-container.tsx
+  h_9630b74bdac540 8,12-16,78-82,91,94-96,124,126-128
+client/dashboard/src/pages/setup/components/steps/platform-mcp-journey.test.tsx
+  h_9630b74bdac540 1-163
+client/dashboard/src/pages/setup/components/steps/platform-mcp-setup-step.test.tsx
+  h_9630b74bdac540 2,6-7,9-19,22-47,50-52,56-99
+client/dashboard/src/pages/setup/components/steps/platform-mcp-setup-step.tsx
+  h_9630b74bdac540 3-6,18-23,25-36,38
+client/dashboard/src/pages/sources/remote-mcp/CreateRemoteMcp.tsx
+  h_9630b74bdac540 1-2,32-33,69,82,104-108,129-133,135,137-149,151-183,185-210,212-216,218-229,244-246,271,280-283
+client/dashboard/src/pages/sources/remote-mcp/VerifyRemoteMcpUrlButton.tsx
+  h_9630b74bdac540 1,3,6-42
+client/dashboard/src/pages/sources/remote-mcp/hooks.ts
+  h_9630b74bdac540 3-7,21,127-180
+client/dashboard/src/pages/sources/tunneled-mcp/CreateTunneledMcp.tsx
+  h_9630b74bdac540 1-2,54-55,65-67,71,100,120-165,185-189,191-218,220-239,241-250,271-274
+client/dashboard/src/pages/sources/tunneled-mcp/TunneledMcpSetupTabs.tsx
+  h_9630b74bdac540 1
+client/dashboard/src/pages/sources/tunneled-mcp/hooks.ts
+  h_9630b74bdac540 2-6,14-15,106-206
+client/dashboard/src/pages/sources/unproxied-mcp/hooks.ts
+  h_9630b74bdac540 1,4-8,11-12,98-159
+client/dashboard/src/pages/toolsets/ServerTab.tsx
+  h_9630b74bdac540 1,3,5,7-8,10-11,17-105,109-120,139-145,164,166,168,170,172-182
+client/dashboard/src/sdk/.speakeasy/gen.lock
+  h_9630b74bdac540 595-596,1005-1006,1580-1582,1610,2007-2008,2715-2718,6283,6809-6830,6837,6845,6848,6856,6867,6878,6889,6892,6900,6911,6922,8768
+client/dashboard/src/sdk/src/funcs/organizationRemoteSessionClientsGetDeletePreflight.ts
+  h_9630b74bdac540 45
+client/dashboard/src/sdk/src/funcs/telemetryGetToolUsageClientToolBreakdown.ts
+  h_9630b74bdac540 1-225
+client/dashboard/src/sdk/src/funcs/telemetryGetToolUsageClients.ts
+  h_9630b74bdac540 1-224
+client/dashboard/src/sdk/src/models/components/createorganizationusersessionissuerform.ts
+  h_9630b74bdac540 37-40,57,71,78
+client/dashboard/src/sdk/src/models/components/gettoolusageclientsresult.ts
+  h_9630b74bdac540 1-40
+client/dashboard/src/sdk/src/models/components/gettoolusageclienttoolbreakdownresult.ts
+  h_9630b74bdac540 1-51
+client/dashboard/src/sdk/src/models/components/gettoolusagefilteroptionspayload.ts
+  h_9630b74bdac540 17
+client/dashboard/src/sdk/src/models/components/gettoolusagefilteroptionsresult.ts
+  h_9630b74bdac540 10-13,35-38,63
+client/dashboard/src/sdk/src/models/components/gettoolusagesummarypayload.ts
+  h_9630b74bdac540 8-12,19-32,57-64,81-84,89-92,107-111,119-120,125,127,140-141,146,148,156
+client/dashboard/src/sdk/src/models/components/gettoolusagesummaryresult.ts
+  h_9630b74bdac540 10-17,51-58,95-98,111
+client/dashboard/src/sdk/src/models/components/listtoolusagetracespayload.ts
+  h_9630b74bdac540 36,45-47,75-78,122,143-145,156,180,191-193,203
+client/dashboard/src/sdk/src/models/components/organizationclientdeletepreflight.ts
+  h_9630b74bdac540 8,11-14,17-28,31-38,47-50,53-57,64-65,68-70,74-75,78
+client/dashboard/src/sdk/src/models/components/toolusageclientfilteroption.ts
+  h_9630b74bdac540 1-56
+client/dashboard/src/sdk/src/models/components/toolusageclientsummary.ts
+  h_9630b74bdac540 1-80
+client/dashboard/src/sdk/src/models/components/toolusageclienttoolbreakdownrow.ts
+  h_9630b74bdac540 1-80
+client/dashboard/src/sdk/src/models/components/toolusagetargettimeseriespoint.ts
+  h_9630b74bdac540 49-52,65-68,105,109,117,121
+client/dashboard/src/sdk/src/models/components/toolusagetotals.ts
+  h_9630b74bdac540 15-22,59-60,71-72
+client/dashboard/src/sdk/src/models/components/toolusagetracesummary.ts
+  h_9630b74bdac540 93-104,215-217,243-245
+client/dashboard/src/sdk/src/models/components/trustedclientusersessionissuerreference.ts
+  h_9630b74bdac540 1-45
+client/dashboard/src/sdk/src/models/components/updateorganizationusersessionissuerform.ts
+  h_9630b74bdac540 67-70,98,118,126
+client/dashboard/src/sdk/src/models/components/usersessionissuer.ts
+  h_9630b74bdac540 61-64,95,110
+client/dashboard/src/sdk/src/models/operations/gettoolusageclients.ts
+  h_9630b74bdac540 1-182
+client/dashboard/src/sdk/src/models/operations/gettoolusageclienttoolbreakdown.ts
+  h_9630b74bdac540 1-192
+client/dashboard/src/sdk/src/react-query/getToolUsageClientToolBreakdown.core.ts
+  h_9630b74bdac540 1-94
+client/dashboard/src/sdk/src/react-query/getToolUsageClientToolBreakdown.ts
+  h_9630b74bdac540 1-165
+client/dashboard/src/sdk/src/react-query/getToolUsageClients.core.ts
+  h_9630b74bdac540 1-88
+client/dashboard/src/sdk/src/react-query/getToolUsageClients.ts
+  h_9630b74bdac540 1-159
+client/dashboard/src/sdk/src/react-query/organizationRemoteSessionClientDeletePreflight.ts
+  h_9630b74bdac540 62,93
+client/dashboard/src/sdk/src/sdk/organizationremotesessionclients.ts
+  h_9630b74bdac540 192
+client/dashboard/src/sdk/src/sdk/telemetry.ts
+  h_9630b74bdac540 13-14,49-50,108-115,368-405
+compose.shared.yml
+  h_9630b74bdac540 157-169,180-183
+docs/pubsub-topology.md
+  h_9630b74bdac540 215-216
+infra/gen/gram/metering/v1/meter_reading.pb.go
+  h_9630b74bdac540 633,664-665
+infra/gen/gram/metering/v1/meter_reading_ch_writer.pb.go
+  h_9630b74bdac540 71-72
+infra/gen/gram/metering/v1/meter_reading_stripe_exporter.pb.go
+  h_9630b74bdac540 71-72
+infra/gen/kcc.yaml
+  h_9630b74bdac540 1216,1230,1628,1639
+infra/gen_py/gram/metering/v1/meter_reading_ch_writer_pb2.py
+  h_9630b74bdac540 28,37,39
+infra/gen_py/gram/metering/v1/meter_reading_pb2.py
+  h_9630b74bdac540 28,39,41
+infra/gen_py/gram/metering/v1/meter_reading_stripe_exporter_pb2.py
+  h_9630b74bdac540 28,37,39
+infra/proto/gram/metering/v1/meter_reading.proto
+  h_9630b74bdac540 58
+infra/proto/gram/metering/v1/meter_reading_ch_writer.proto
+  h_9630b74bdac540 14
+infra/proto/gram/metering/v1/meter_reading_stripe_exporter.proto
+  h_9630b74bdac540 14
+local/otel/gram-demo-forward.yaml
+  h_9630b74bdac540 1-94
+mise.toml
+  h_9630b74bdac540 225-229
+pnpm-lock.yaml
+  h_9630b74bdac540 10-11,37-38,50,52,207-208,211,238,319,496-497,500,650-651,653-654,691-692,703-708,715-720,725-730,1409-1410,1412-1413,1415,1529,4386-4387,7072-7073,7743,7745-7746,7758-7765,7775-7783,7788,7790-7797,7810,7814,8536,8538,8540,8696,8698,11302,11304-11306,14372,14376,14378
+pnpm-workspace.yaml
+  h_9630b74bdac540 17,26,47-48
+server/CHANGELOG.md
+  h_9630b74bdac540 3-70
+server/clickhouse/local/golang_migrate/20260916125627_add-mcp-client-attribution.down.sql
+  h_9630b74bdac540 1-10
+server/clickhouse/local/golang_migrate/20260916125627_add-mcp-client-attribution.up.sql
+  h_9630b74bdac540 1-14
+server/clickhouse/local/golang_migrate/atlas.sum
+  h_9630b74bdac540 1,113
+server/clickhouse/migrations/20260916125600_add-mcp-client-attribution.sql
+  h_9630b74bdac540 1-14
+server/clickhouse/migrations/atlas.sum
+  h_9630b74bdac540 1,118
+server/clickhouse/schema.sql
+  h_9630b74bdac540 65-67,103,240-246,298-300
+server/cmd/gram/admin.go
+  h_9630b74bdac540 449-451
+server/cmd/gram/start.go
+  h_9630b74bdac540 294,297-304,1120-1125,1711-1716,1914-1915
+server/cmd/gram/start_network_ingress_test.go
+  h_9630b74bdac540 31,34,59-86
+server/database/schema.sql
+  h_9630b74bdac540 1945-1975,2002-2004,2014-2021,2024-2027,2075-2077,2085-2087,2090-2093,2246-2251,2403-2410,2506-2509,2516-2521,2560-2633,8921-9043
+server/design/admin/design.go
+  h_9630b74bdac540 1109-1110
+server/design/admin/supportmatrix.go
+  h_9630b74bdac540 1-83
+server/design/remotesessionclients/admin.go
+  h_9630b74bdac540 62-74,77,81-85,87
+server/design/remotesessionclients/design.go
+  h_9630b74bdac540 435
+server/design/telemetry/design.go
+  h_9630b74bdac540 655,747-804,2512,2532,2534-2541,2556-2557,2559,2580-2591,2633,2688-2690,2692,2732,2734,2777-2786,2794-2795,2800,2834-2847,2858-2862,2864,2912-2925
+server/design/usersessionissuers/design.go
+  h_9630b74bdac540 395-397,404,426-428
+server/gen/admin/client.go
+  h_9630b74bdac540 70-71,75,127-128,1282-1327
+server/gen/admin/endpoints.go
+  h_9630b74bdac540 70-71,147-148,204-205,1318-1363
+server/gen/admin/service.go
+  h_9630b74bdac540 200-203,226,878-883,1309-1357,1466-1473
+server/gen/http/admin/client/cli.go
+  h_9630b74bdac540 1727-1786
+server/gen/http/admin/client/client.go
+  h_9630b74bdac540 219-226,297-298,1511-1558
+server/gen/http/admin/client/encode_decode.go
+  h_9630b74bdac540 12187-12651,12996-13246
+server/gen/http/admin/client/paths.go
+  h_9630b74bdac540 259-268
+server/gen/http/admin/client/types.go
+  h_9630b74bdac540 12,362-368,1488-1507,11165-11531,11874-11939,12318-12329,21240-21609,22936-23029,23054-23560,23582-23584,23606-23608,23630-23632,23654-23656,23678-23680,23702-23704,23726-23728,23750-23752,23774-23776,23798-23800,23822-23824,23846-23848,23870-23872,23894-23896,23918-23920,23942-23944,23966-23968,23990-23992,24014-24016,24038-24040,24062-24064,24086-24088,24110-24113,24135-24137,24159-24162,24184-24186,24208-24210,24232-24234,24256-24258,24280-24282,24304-24306,24328-24330,24352-24354,24376-24378,24400-24403,24425-24427,24449-24451,24473-24476,24498-24501,24523-24526,24548-24551,24573-24576,24598-24601,24623,24625-24626,24648-24651,24673,24675-24676,24698-24701,24723-24726,24748-24751,24773-24776,24798-24801,24823-24826,24848-24851,24873-24876,24898-24901,24923,24925-24926,24948-24951,24973-24976,24998,25000-25001,25023,25025-25026,25048,25050-25051,25073-25075,25097,25099-25100,25122-25124,25146-25149,25171-25174,25196,25198-25199,25221-25223,25245-25247,25269-25271,25293-25295,25317-25319,25341,25343-25344,25366-25368,25390,25392-25393,25415-25417,25439,25441-25442,25464-25466,25488-25490,25512-25514,25536-25538,25560-25562,25584-25586,25608-25610,25632-25634,25656-25658,25680-25682,25704-25706,25728-25730,25752-25754,25776-25778,25800-25802,25824-25826,25848-25850,25872-25874,25896-25898,25920-25922,25944-25946,25968-25970,25992-25994,26016-26018,26040-26042,26064-26066,26088-26090,26112-26115,26137-26139,26161-26163,26185-26187,26209-26211,26233-26235,26257-26259,26281-26283,26305-26307,26329-26331,26353-26355,26377-26379,26401-26403,26425-26427,26449-26451,26473-26475,26497-26499,26521-26523,26545-26547,26569-26571,26593-26595,26617-26619,26641-26643,26665-26667,26689-26691,26713-26715,26737-26739,26761-26763,26785-26787,26809-26811,26833-26835,26857-26859,26881-26883,26905-26907,26929-26931,26953-26955,26977-26979,27001-27003,27025-27028,27050-27052,27074-27077,27099-27101,27123-27125,27147-27149,27171-27173,27195-27197,27219-27221,27243-27245,27267-27270,27292-27294,27316-27319,27341-27343,27365-27367,27389-27391,27413-27415,27437-27439,27461-27463,27485-27487,27509-27512,27534-27536,27558-27561,27583-27585,27607-27609,27631-27633,27655-27657,27679-27681,27703-27705,27727-27729,27751-27753,27775-27777,27799-27801,27823-27825,27847-27849,27871-27873,27895-27897,27919-27921,27943-27945,27967-27969,27991-27993,28015-28017,28039-28041,28063-28065,28087-28089,28111-28113,28135-28137,28159-28161,28183-28185,28207-28209,28231-28233,28255-28257,28279-28281,28303-28305,28327-28329,28351-28353,28375-28377,28399-28401,28423-28425,28447-28449,28471-28473,28495-28497,28519-28521,28543-28545,28567-28569,28591-28593,28615-28617,28639-28641,28663-28665,28687-28689,28711-28713,28735-28737,28759-28761,28783-28785,28807-28809,28831-28833,28855-28857,28879-28881,28903-28905,28927-28929,28951-28953,28975-28977,28999-29001,29023-29025,29047-29049,29071-29073,29095-29097,29119-29121,29143-29145,29167-29169,29191-29194,29216-29218,29240-29243,29265-29267,29289-29292,29314-29316,29338-29340,29362-29364,29386-29388,29410-29412,29434-29437,29459-29461,29483-29486,29508-29510,29532-29534,29556-29558,29580-29582,29604-29606,29628-29630,29652-29654,29676-29678,29700-29702,29724-29726,29748,29750-29751,29773-29775,29797-29799,29821-29823,29845-29847,29869-29871,29893-29895,29917-29919,29941-29943,29965-29967,29989-29991,30013-30015,30037-30039,30061-30063,30085-30087,30109-30111,30133-30135,30157-30159,30181-30183,30205-30207,30229-30231,30253-30255,30277-30279,30301-30303,30325-30327,30349-30351,30373-30375,30397-30399,30421-30447,30469-30471,30493-30495,30517-30519,30541-30544,30566-30568,30590-30592,30614-30616,30638-30640,30662-30664,30686-30688,30710-30712,30734-30736,30758-30761,30783-30785,30807-30810,30832-30834,30856-30858,30880-30882,30904-30906,30928-30930,30952-30954,30976-30978,31000-31002,31024-31027,31049-31051,31073,31075-31076,31098-31100,31122-31124,31146-31149,31171-31173,31195-31197,31219-31221,31243-31245,31267,31269-31270,31292-31294,31316,31318-31319,31341-31343,31365-31368,31390-31392,31414-31416,31438-31440,31462-31464,31486-31488,31510-31512,31534-31536,31558-31560,31582-31584,31606-31608,31630-31632,31654,31656-31657,31679-31682,31704-31707,31729-31732,31754-31757,31779,31781-31782,31804-31807,31829,31831-31832,31854-31857,31879,31881-31882,31904-31907,31929-31931,31953-31955,31977-31979,32001-32003,32025-32027,32049-32051,32073-32075,32097-32099,32121-32123,32145-32147,32169-32171,32193-32195,32217-32219,32241-32243,32265-32267,32289-32291,32313-32315,32337-32339,32361-32363,32385-32387,32409-32411,32433-32435,32457-32459,32481-32483,32505-32507,32529-32531,32553-32555,32577-32579,32601-32603,32625-32627,32649-32651,32673-32675,32697-32699,32721-32723,32745-32747,32769-32771,32793-32795,32817-32819,32841-32843,32865-32867,32889-32891,32913-32915,32937-32939,32961-32963,32985-32987,33009-33011,33033-33035,33057-33059,33081-33083,33105-33107,33129-33132,33154-33156,33178-33181,33203-33205,33227-33229,33251-33253,33275-33277,33299-33301,33323-33325,33347-33349,33371-33373,33395-33398,33420-33422,33444-33447,33469-33471,33493-33496,33518-33521,33543-33546,33568-33571,33593-33596,33618-33621,33643,33645-33646,33668-33671,33693,33695-33696,33718-33721,33743-33746,33768-33771,33793-33796,33818-33821,33843-33846,33868-33871,33893,33895-33896,33918-33920,33942,33944-33945,33967-33969,33991-33994,34016-34019,34041-34044,34066-34068,34090-34092,34114-34116,34138-34140,34162-34164,34186-34188,34210-34212,34234-34236,34258-34261,34283-34285,34307-34309,34331-34333,34355-34357,34379-34381,34403-34405,34427-34429,34451-34453,34475-34477,34499-34501,34523-34525,34547-34549,34571-34573,34595-34597,34619-34621,34643-34645,34667-34669,34691-34693,34715-34717,34739-34741,34763-34765,34787-34789,34811-34813,34835-34837,34859-34861,34883-34885,34907-34909,34931-34933,34955-34957,34979-34981,35003-35005,35027-35029,35051-35053,35075-35077,35099-35101,35123-35125,35147-35149,35171-35173,35195-35197,35219-35221,35243-35245,35267-35269,35291-35293,35315-35317,35339-35341,35363-35365,35387-35389,35411-35413,35435-35437,35459-35461,35483-35485,35507-35509,35531-35533,35555-35557,35579-35581,35603-35605,35627-35629,35651-35653,35675-35677,35699-35701,35723-35725,35747-35749,35771-35773,35795-35797,35819-35821,35843-35845,35867-35869,35891-35893,35915-35917,35939-35941,35963-35965,35987-35989,36011-36013,36035-36037,36059-36061,36510-36720
+server/gen/http/admin/server/encode_decode.go
+  h_9630b74bdac540 10816-11221,11578-11761
+server/gen/http/admin/server/paths.go
+  h_9630b74bdac540 259-268
+server/gen/http/admin/server/server.go
+  h_9630b74bdac540 74-75,155-156,208-209,268-269,327-328,3039-3144
+server/gen/http/admin/server/types.go
+  h_9630b74bdac540 362-368,1496-1515,11173-11178,11180-11188,11191-11194,11196-11206,11209-11224,11227-11230,11232-11242,11245-11260,11263-11279,11282-11285,11287-11297,11300-11316,11319-11707,11882-11947,12845-13052,13057-13061,13063-13070,13073,13075-13085,13087-13089,13091,13094,13097-13100,13105-13109,13111-13113,13115,13118,13121,13123-13130,13133,13135-13137,13139,13142,13145-13330,13335-13344,13349-13358,13363-13372,13377-13386,13391-13400,13402-13414,13419-13422,13433-13436,13447-13450,13461-13464,13475-13478,13489-13492,13503-13506,13517-13520,13531-13534,13545-13548,13559-13562,13573-13576,13587-13590,13601-13604,13615-13618,13629-13632,13643-13646,13657-13660,13671-13674,13685-13688,13699-13702,13713-13717,13728-13732,13743-13747,13758-13762,13773-13777,13788-13792,13803-13807,13818-13822,13833-13837,13848-13852,13863-13867,13878-13882,13893-13897,13908-13912,13923-13927,13938-13942,13953-13957,13968-13972,13983-13987,13994-14002,14013-14017,14028-14032,14043-14047,14058-14062,14073-14077,14088-14092,14103-14107,14118-14122,14133-14137,14148-14152,14163-14167,14178-14182,14193-14197,14208-14212,14223-14227,14238-14242,14253-14257,14268-14272,14283-14287,14298,14300-14302,14313-14314,14316-14317,14328-14329,14331-14332,14343-14344,14346-14347,14358-14359,14361-14362,14373-14377,14388-14389,14391-14392,14403-14407,14418-14419,14421-14422,14433-14437,14448-14452,14463-14467,14478-14482,14493-14497,14508-14512,14523-14527,14538-14542,14553-14557,14568-14572,14583-14587,14598-14602,14613-14616,14627-14630,14641-14644,14655-14658,14669-14672,14683-14686,14697-14700,14711-14714,14725-14728,14739-14742,14753-14756,14767-14770,14777-14784,14795-14798,14809-14812,14823-14827,14838-14841,14852-14856,14867-14870,14881-14884,14895-14899,14910-14914,14925-14929,14940-14944,14955-14959,14970-14974,14985-14989,15000-15004,15015-15019,15030-15034,15045-15048,15059-15062,15073-15076,15087-15090,15101-15104,15115-15119,15130-15133,15144-15148,15159-15162,15173-15176,15187-15190,15201-15204,15215-15218,15229-15232,15243-15246,15257-15258,15260-15261,15272-15275,15286-15287,15289-15290,15301-15304,15315-15318,15329-15332,15343-15346,15357-15360,15371-15374,15385-15388,15399-15402,15413-15416,15427-15431,15442-15445,15456-15459,15470-15474,15485-15489,15500-15504,15515-15519,15530-15531,15533-15534,15545-15549,15560-15561,15563-15564,15575-15579,15590-15594,15605-15624,15635-15639,15650-15654,15665-15669,15680-15684,15695-15699,15710-15714,15725-15729,15740-15744,15755-15759,15770-15771,15773-15774,15785-15786,15788-15789,15800-15801,15803-15804,15815-15819,15830-15834,15845-15846,15848-15849,15860-15861,15863-15864,15875-15876,15878-15879,15890-15891,15893-15894,15905-15906,15908-15909,15920-15923,15934-15937,15948-15951,15962-15965,15976-15979,15990-15994,16005-16008,16019-16023,16031-16037,16048-16051,16062-16065,16076-16079,16090-16093,16104-16107,16118-16121,16132-16135,16146-16149,16160-16163,16174-16177,16188-16191,16202-16205,16216-16219,16230-16233,16244-16247,16258-16261,16272-16273,16275-16276,16287-16290,16301-16302,16304-16305,16316-16319,16330-16333,16344-16347,16358-16361,16372-16375,16386-16389,16400-16403,16414-16417,16428-16431,16442-16445,16454-16459,16470-16473,16484-16488,16499-16503,16514-16518,16529-16533,16544-16548,16559-16560,16562-16563,16574-16578,16589-16593,16604-16608,16619-16623,16634-16637,16648-16651,16662-16665,16676-16679,16690-16693,16704-16708,16719-16722,16733-16737,16748-16751,16762-16765,16776-16780,16791-16795,16806-16810,16821-16825,16836-16840,16851-16855,16866-16870,16881-16885,16896-16900,16911-16915,16926-16930,16941-16945,16956-16960,16971-16975,16986-16990,17001-17005,17016-17020,17031-17035,17046-17050,17061-17065,17076-17080,17091-17095,17106-17110,17121-17125,17136-17140,17151-17155,17166-17167,17169-17170,17181-17185,17196-17200,17211-17215,17226-17230,17241-17244,17255-17258,17266-17272,17283-17286,17297-17300,17311-17314,17325-17329,17340-17343,17354-17358,17369-17372,17383-17386,17397-17400,17411-17414,17425-17428,17439-17442,17453-17456,17467-17470,17481-17485,17496-17499,17510-17511,17513-17514,17525-17528,17539-17542,17553-17557,17568-17572,17583-17587,17598-17602,17613-17614,17616-17617,17628-17632,17643-17647,17658-17662,17673-17677,17688-17692,17703-17707,17718-17722,17733-17737,17748-17752,17763-17767,17778-17782,17793-17797,17808-17812,17823-17827,17838-17842,17853-17857,17868-17872,17883-17887,17898-17902,17913-17917,17928-17932,17943-17944,17946-17947,17958-17962,17973-17977,17988-17989,17991-17992,18003-18007,18018-18019,18021-18022,18033-18034,18036-18037,18048-18052,18063-18067,18078-18082,18093-18094,18096-18097,18108-18112,18123-18127,18138-18142,18153-18157,18168-18172,18183-18187,18198-18201,18212-18215,18226-18229,18240-18243,18254-18257,18268-18271,18282-18283,18285-18286,18297-18300,18311-18315,18326-18329,18340-18343,18354-18358,18369-18373,18384-18388,18399-18403,18414-18418,18429-18433,18444-18448,18459-18463,18470-18478,18489-18493,18504-18508,18519-18522,18533-18536,18547-18550,18561-18564,18575-18578,18589-18592,18603-18604,18606-18607,18618-18621,18632-18636,18647-18650,18661-18664,18675-18678,18689-18692,18703-18706,18717-18720,18731-18734,18745-18748,18759-18762,18773-18776,18787-18791,18802-18805,18816-18819,18830-18833,18844-18847,18858-18861,18872-18875,18886-18889,18900-18903,18914-18915,18917-18918,18929-18932,18943-18947,18958-18961,18972-18975,18986-18989,19000-19003,19014-19017,19028-19031,19042-19045,19056-19059,19070-19071,19073-19074,19085-19088,19099-19103,19114-19117,19128-19131,19142-19146,19157-19161,19172-19176,19187-19191,19202-19206,19217-19221,19232-19236,19247-19251,19262-19266,19277-19281,19292-19296,19307-19311,19322-19326,19337-19341,19352-19356,19367-19371,19382-19386,19397-19401,19412-19416,19427-19431,19442-19446,19457-19461,19472-19476,19487-19491,19502-19506,19517-19521,19532-19536,19547-19551,19562-19566,19577-19581,19592-19596,19607-19611,19622-19626,19637-19641,19652-19656,19667-19671,19682-19686,19697-19701,19709-19716,19727-19731,19742-19746,19757-19761,19772-19776,19787-19791,19802-19806,19817-19821,19832-19836,19847-19851,19862-19866,19877-19881,19892-19896,19907-19911,19922-19926,19937-19941,19952-19956,19967-19970,19981-19984,19995-19998,20009-20012,20023-20026,20037-20040,20051-20055,20066-20069,20080-20084,20095-20098,20109-20112,20123-20126,20137-20140,20151-20154,20165-20168,20179-20182,20193-20196,20207-20210,20221-20224,20235-20238,20249-20252,20263-20266,20277-20280,20291-20294,20305-20308,20319-20322,20333-20336,20347-20350,20361-20364,20375-20378,20389-20392,20403-20406,20417-20420,20431-20434,20445-20448,20459-20462,20473-20476,20487-20491,20502-20505,20513-20520,20531-20534,20545-20548,20559-20562,20573-20576,20587-20590,20601-20604,20615-20618,20629-20632,20643-20646,20657-20660,20671-20674,20685-20688,20699-20702,20713-20716,20727-20730,20741-20744,20755-20758,20769-20772,20783-20787,20798-20801,20812-20816,20827-20830,20841-20844,20855-20858,20869-20872,20883-20886,20897-20900,20911-20914,20925-20929,20940-20943,20954-20958,20969-20972,20983-20986,21702-21722,22125-22236
+server/gen/http/cli/gram/cli.go
+  h_9630b74bdac540 174,183,3367-3378,3992-3998,4923-4924,5064-5065,7286-7291,7691-7696,9858-9863,10265-10270,20021,20093,23938-23939,24467,24491,24515,24539-24587,24611,24635,24659,24683,24707,26384-26385,27440-27477,27998,28060
+server/gen/http/openapi3.yaml
+  h_9630b74bdac540 3881-4032,36468,59982,59984-59985,60012,60019,60080,60083,60085,60087,60089-60090,60124,60185,60188,60190,60192,60194-60195,60222,60229,60290,60293,60295,60297,60299-60300,60334,60395,60398,60400,60402,60404-60405,60439,60500,60503,60505,60507,60509-60510,60544,60605,60608,60610,60612,60614-60615,60649,60710,60713,60715,60717,60719-60720,60754,60815,60818,60820,60822,60824-60825,60859,60920,60923,60925,60927,60929-61140,76614-76617,80963-80984,81003,81017-81021,81048,81055-81064,81085-81087,81093-81103,81134-81143,81185-81186,84743-84747,86855-86862,86872-86877,86881-86882,95390-95524,96239-96331,96442-96445,96457-96460,96493-96494,96554-96561,96596-96597,96628-96636,96735-96736,97605-97618,98851-98853,99589-99600,100516-100519
+server/gen/http/organization_remote_session_clients/client/encode_decode.go
+  h_9630b74bdac540 2949-2961
+server/gen/http/organization_remote_session_clients/client/types.go
+  h_9630b74bdac540 190-196,2885-2893,3364-3366,3372-3379,5267-5284,8746-8760
+server/gen/http/organization_remote_session_clients/server/encode_decode.go
+  h_9630b74bdac540 2761-2773
+server/gen/http/organization_remote_session_clients/server/types.go
+  h_9630b74bdac540 192-198,2887-2895,2976-2978,2988-2999
+server/gen/http/organization_user_session_issuers/client/cli.go
+  h_9630b74bdac540 27,32-34,56,139,174
+server/gen/http/organization_user_session_issuers/client/encode_decode.go
+  h_9630b74bdac540 2365
+server/gen/http/organization_user_session_issuers/client/types.go
+  h_9630b74bdac540 22-24,41-44,100-102,143-145,178-180,2163-2165,2205,2218,2251,2590,2760,3942-3944,4011-4013,4064-4066,6623-6625
+server/gen/http/organization_user_session_issuers/server/encode_decode.go
+  h_9630b74bdac540 2128
+server/gen/http/organization_user_session_issuers/server/types.go
+  h_9630b74bdac540 22-24,41-44,100-102,143-145,178-180,2163-2165,2212,2252,2271,3868,3904,3995-3997
+server/gen/http/telemetry/client/cli.go
+  h_9630b74bdac540 1270,1286-1297,1324,1366-1387,1403,1419-1430,1457,1499-1520,1536,1552-1563,1590,1632-1653,1669,1685-1696,1723-1989,2031-2052,2068,2084-2095,2122,2164-2185,2201,2217-2228,2255,2297-2318,2334,2350-2361,2388,2430-2451,2467,2483-2494,2521,2563-2584,2600,2708-2713,2762-2763
+server/gen/http/telemetry/client/client.go
+  h_9630b74bdac540 119-126,204-205,822-869
+server/gen/http/telemetry/client/encode_decode.go
+  h_9630b74bdac540 6068-6555,9602-9603,9661-9662,9722-9755,9782-9784,9855-9867
+server/gen/http/telemetry/client/paths.go
+  h_9630b74bdac540 135-144
+server/gen/http/telemetry/client/types.go
+  h_9630b74bdac540 376-378,381-388,412-414,417-424,448-450,453-460,484-558,561-568,592-594,597-604,628-630,633-640,664-666,669-676,700-702,705-712,736-738,1023-1026,1050-1063,1112-1113,5808-5811,5827-5830,5846-5849,5865-5868,5884-5887,5903-5906,5922-5925,5941-5944,5960-5963,5979-5982,5998-6001,6017-6020,6036-6039,6055-6058,6074-6077,6093-6096,6112-6115,6131-6134,6150-6153,6169-6172,6188-6191,6207-6210,6226-6229,6245-6248,6264-6267,6283-6286,6302-6305,6321-6324,6340-6343,6359-6362,6378-6381,6397-6400,6416-6419,6435-6438,6454-6457,6473-6476,6492-6495,6511-6514,6530-6533,6549-6552,6568-6571,6587-6590,6606-6609,6625-6626,6628,6644-6647,6663-6666,6682-6685,6701-6704,6720-6723,6739-6742,6758-6761,6777-6780,6796-6799,6815-6818,6834-6837,6853-6856,6872-6875,6891-6894,6910-6913,6929-6932,6948-6949,6951,6967-6968,6970,6986-6987,6989,7005-7006,7008,7024-7027,7043-7044,7046,7062-7063,7065,7081-7082,7084,7100-7101,7103,7119-7120,7122,7138-7141,7157-7160,7176-7179,7195-7198,7214-7217,7233-7236,7252-7255,7271-7274,7290-7293,7309-7312,7328-7344,7347-7353,7355-7363,7366-7370,7372-7382,7385-7401,7404-7420,7423-7439,7442-7458,7461-7477,7480-7496,7499-7505,7507-7515,7518-7534,7537-7552,7555-7558,7560-7570,7573-7578,7580-7588,7591-7596,7598-7606,7609-7625,7628-7643,7646-7662,7665-7680,7683-7699,7702-7712,7715-7733,7735-7748,7751-7774,7777-7782,7785-7799,7802-7819,7822-7835,7838-7865,7868-7888,7891-7905,7907,7909,7915-7918,7921-7932,7935-7944,7947-7952,7955-7974,7977-7993,7995-7996,7999-8005,8007,8009,8011-8017,8019-8054,8057-8061,8065,8067-8078,8081-8092,8094,8098,8100-8128,8131-8175,8177-8180,8183,8185-8193,8196,8198-8206,8209,8211-8232,8235-8242,8245-8250,8253-8258,8261,8263-8267,8270,8272-8278,8281-8289,8292,8294-8298,8301-8399,8401-8431,8433-8812,8820-9198,9201-9218,9221-9238,9241-9258,9261-9294,9297-9305,9308-9340,9343-9388,9391-9450,9462-9472,9474-9477,9480-9533,9539-9546,9548-9552,9554-9643,9646-9653,9656-9660,9662-9666,9668-9671,9674-9681,9687-9694,9696-9700,9702-9705,9708-9711,9714-9717,9720-9727,9730-9733,9736-9740,9742-9745,9748-9756,9761-9769,9771-9775,9777-9781,9783-9786,9789-9793,9795-9803,9805-9809,9811-9815,9817-9830,9836-9837,9839-9844,9846-9849,9852-9856,9858-9861,9864-9868,9870-9872,9874,9877,9880-9883,9886-9889,9892-9896,9899,9905,9911-9915,9918-9919,9921-9925,9927-9971,9986-9990,9994,10036-10057,10061-10065,10069,10111-10132,10136-10139,10143-10146,10188-10373,10376-10385,10387-10400,10402-10415,10417-10430,10432-10445,10447-10460,10462-10463,10466-10470,10472-10476,10478,10480-10493,10495-10508,10510-10523,10525-10538,10540-10553,10555-10556,10559-10568,10570-10583,10585-10598,10600-10613,10615-10628,10630-10638,10640-10644,10646,10648-10649,10652-10661,10663-10676,10678-10691,10693-10706,10708-10721,10723-10736,10738-10751,10753-10754,10757-10766,10768-10781,10783-10796,10798-10806,10808-10812,10814,10816-10818,10820,10823,10826-10839,10841-10842,10845-10854,10856-10869,10871-10884,10886-10899,10901-10914,10916-10929,10931-10944,10946-10959,10961-10974,10976-10984,10986-10999,11001-11002,11005-11014,11016-11029,11031-11032,11035-11044,11046-11059,11061-11062,11065-11074,11076-11089,11091-11104,11106-11119,11121-11134,11136-11137,11140-11144,11149-11151,11164-11166,11179-11181,11194-11196,11209-11211,11224-11226,11239-11241,11254-11256,11269-11271,11284-11286,11299-11303,11308-11310,11323-11325,11338-11340,11353-11355,11368-11370,11383-11385,11398-11400,11413-11415,11428-11430,11443-11445,11458-11468,11470-11471,11473,11476,11482-11484,11497-11499,11512-11514,11527-11529,11542-11544,11557-11559,11572-11574,11587-11589,11602-11604,11617-11619,11632-11636,11638-11641,11643,11646,11648-11660,11662,11668-11670,11683-11685,11698-11700,11713-11715,11728-11730,11743-11745,11758-11760,11773-11775,11788-11790,11803-11805,11818-11829,11835-11837,11850-11852,11865-11867,11880-11882,11895-11897,11910-11912,11925-11927,11940-11942,11955-11957,11970-11972,11985-11992,11997-11999,12012-12014,12027-12029,12042-12044,12057-12059,12072-12074,12087-12089,12102-12104,12117-12119,12132-12134,12147-12158,12163-12165,12178-12180,12193-12195,12208-12210,12223-12225,12238-12240,12253-12255,12268-12270,12283-12285,12298-12300,12313-12317,12319-12320,12322,12325,12331-12333,12346-12348,12361-12363,12376-12378,12391-12393,12406-12408,12421-12423,12436-12438,12451-12453,12466-12468,12481-12485,12487-12488,12490,12493,12499-12501,12514-12516,12529-12531,12544-12546,12559-12561,12574-12576,12589-12591,12604-12606,12619-12621,12634-12636,12649-12656,12658,12661,12667-12669,12682-12684,12697-12699,12712-12714,12727-12729,12742-12744,12757-12759,12772-12774,12787-12789,12802-12804,12817-12838,12844-12846,12859-12860,12873-12875,12888-12889,12902-12903,12916-12918,12931-12932,12945-12947,12960-12962,12975-12977,12990-12997,12999,13002-13011,13017-13019,13032-13034,13047-13049,13062-13064,13077-13079,13092-13094,13107-13109,13122-13124,13137-13139,13152-13154,13167-13170,13173-13174,13176,13179,13185-13187,13200-13202,13215-13217,13230-13232,13245-13247,13260-13262,13275-13277,13290-13292,13305-13307,13320-13322,13335-13340,13342,13345,13351-13353,13366-13368,13381-13383,13396-13398,13411-13413,13426-13428,13441-13443,13456-13458,13471-13473,13486-13488,13501-13507,13513-13515,13528-13530,13543-13545,13558-13560,13573-13575,13588-13590,13603-13605,13618-13620,13633-13635,13648-13650,13659-13708,13710-13711,13713,13716,13718-13719,13721,13724,13730-13732,13745-13747,13760-13762,13775-13777,13790-13792,13805-13807,13820-13822,13835-13837,13850-13852,13865-13867,13880-13891,13893-13894,13896,13899,13901-13902,13904,13907-13947,13953-13955,13968-13970,13983-13985,13998-14000,14013-14015,14028-14030,14043,14045,14058-14060,14073-14075,14088-14090,14103-14107,14112-14114,14127-14129,14142-14144,14157-14159,14172-14174,14187-14189,14202-14204,14217-14219,14232-14234,14247-14249,14262-14267,14269,14272,14278-14280,14293-14295,14308-14310,14323-14325,14338-14340,14353-14355,14368,14370,14383-14385,14398-14400,14413-14415,14428-14438,14444-14446,14459,14461,14474,14476,14489,14491,14504,14506,14519-14521,14534,14536,14549-14551,14560-14573,14575-14599,14601,14604,14610-14612,14625-14627,14640-14642,14655-14657,14670-14672,14685-14687,14700,14702,14715-14717,14730-14732,14745-14747,14760-14765,14767,14770,14776-14778,14791-14793,14806-14808,14821-14823,14836-14838,14851-14853,14866-14868,14881-14883,14896-14898,14911-14913,14926-14937,14942-14944,14957-14959,14972-14974,14987-14989,15002-15004,15017-15019,15032-15034,15047-15049,15062-15064,15077-15079,15092-15097,15099,15102,15108-15110,15123-15125,15138-15140,15153-15155,15168-15170,15183-15185,15198-15200,15213-15215,15228-15230,15243-15245,15258-15263,15265,15268,15274-15276,15289-15291,15304-15306,15319-15321,15334-15336,15349-15351,15364-15366,15379-15381,15394-15396,15409-15411,15424-15429,15431,15434,15440-15442,15455-15457,15470-15472,15485-15487,15500-15502,15515-15517,15530-15532,15545-15547,15560-15562,15575-15577,15590-15597,15599,15602,15608-15610,15623-15625,15638-15640,15653-15655,15668-15670,15683-15685,15698-15700,15713-15715,15728-15730,15743-15745,15758-15763,15765,15768-15800,15806-15808,15821-15823,15836-15838,15851-15853,15866-15868,15881-15883,15896-15898,15911-15913,15926-15928,15941-15943,15956-15964,15966,15969,15975-15977,15990-15992,16005-16007,16020-16022,16035-16037,16050-16052,16065-16067,16080-16082,16095-16097,16110-16112,16125-16128,16131,16137,16143-16145,16158-16160,16173-16175,16188-16190,16203-16205,16218-16220,16233,16235,16248-16250,16263-16265,16278-16280,16293-16303,16306-16520,16523-16525,16528-16530,16533,16536-16540,16542-16547,16549,16552-16556,16558-16563,16565,16568-16572,16574-16579,16581,16584-16588,16590-16595,16597,16600-16603,16605-16628,16631-16656,16658-16665,16668-16672,16674-16678,16681,16684-16688,16690-16695,16697,16700-16704,16706,16709-16713,16715-16716,16718-16719,16721-16722,16724-16725,16727-16728,16730-16786,16788,16791-16795,16797-16823,16826-16831,16833-16838,16840-16845,16847-16852,16854-16859,16861-16866,16868-16873,16875-16880,16882,16885-16889,16891-16894,16896,16899-16903,16905,16907,16915-16919,16921,16923,16931-16935,16937,16939,16947-16951,16953,16955,16960-16969,16971,16979-16983,16985-16989,16995-16999,17001-17005,17011-17015,17017,17019,17024-17033,17035,17043-17047,17049-17050,17052-17053,17055-17056,17058-17059,17061-17066,17068-17072,17075-17079,17082,17084,17089,17091,17096-17111,17113,17121-17125,17127-17174,17176-17177,17179-17180,17185-17189,17191-17192,17194-17195,17197-17198,17200-17201,17203-17204,17209-17213,17215-17216,17218-17219,17221-17222,17224-17225,17227-17228,17233-17237,17239-17252,17257-17261,17263-17264,17266-17267,17269-17270,17272-17273,17275-17276,17281-17285,17287-17288,17290-17291,17293-17294,17296-17297,17299-17300,17305-17309,17311-17312,17314-17315,17317-17324,17329-17333,17335-17336,17338-17339,17341-17342,17344-17345,17347-17348,17350-17357,17359-17360,17362-17363,17365-17366,17368-17369,17371-17372,17374-17381,17383-17384,17386-17387,17389-17390,17392-17396,17401-17405,17407-17408,17410-17411,17413-17414,17416-17417,17419-17420,17422-17429,17431-17432,17434-17435,17437-17438,17440-17441,17443-17444,17449-17453,17455-17456,17458-17459,17461-17468,17473-17477,17479-17480,17482-17483,17485-17486,17488-17489,17491-17492,17497-17501,17503-17504,17506-17507,17509-17516,17521-17525,17527-17540,17545-17549,17551-17552,17554-17555,17557-17558,17560-17561,17563-17564,17569-17573,17575-17576,17578-17579,17581-17588,17593-17597,17599-17612,17617-17619,17641-17643,17664-17667,17689-17691,17713-17715,17737-17739,17761-17763,17785-17787,17809-17811,17833-17835,17857-17859,17881-17883,17905-17907,17929-17931,17953-17955,17977-17979,18001-18003,18025-18027,18049-18051,18073-18075,18097-18099,18121-18123,18145-18147,18169-18171,18193-18195,18217-18219,18241-18243,18265-18267,18289-18291,18313-18315,18337-18339,18361-18363,18385-18387,18409-18411,18433-18435,18457-18460,18482-18484,18506-18509,18531-18533,18555-18557,18579-18581,18603-18605,18627-18629,18651-18653,18675-18677,18699-18701,18723-18725,18747-18750,18772-18774,18796-18798,18820-18822,18844-18846,18868-18870,18892-18894,18916-18918,18940,18942-18943,18965-18967,18989,18991-18992,19014-19016,19038-19040,19062-19064,19086-19088,19110-19112,19134-19136,19158-19160,19182-19185,19207-19209,19231,19233-19234,19256-19258,19280-19282,19304-19306,19328-19330,19352-19354,19376-19378,19400-19402,19424-19426,19448-19450,19472,19474-19475,19497-19499,19521-19523,19545-19547,19569-19571,19593-19595,19617-19619,19641-19643,19665-19667,19688-19691,19713-19715,19737-19739,19761-19763,19785-19787,19809-19811,19833-19835,19857-19859,19881-19883,19905-19908,19930-19932,19954,19956-19957,19979-19981,20003-20005,20027-20030,20052-20054,20076-20079,20101-20103,20125-20127,20149-20152,20174-20176,20198-20201,20223-20226,20248-20251,20273-20276,20298-20300,20322-20325,20347-20349,20371-20373,20395,20397-20398,20420-20422,20444-20447,20469-20472,20494-20497,20519,20521-20522,20544-20547,20569,20571-20572,20594-20597,20619-20622,20641-20647,20669-20671,20693,20695-20696,20718,20720-20721,20743,20745-20746,20768-20770,20792-20794,20816-20818,20840-20842,20864-20866,20888-20890,20912-20914,20936-20938,20960-20962,20984-20986,21008-21010,21032-21034,21056-21058,21080-21082,21104-21106,21128-21130,21152-21154,21176-21178,21200-21202,21224-21226,21248-21250,21272-21274,21296-21298,21320-21322,21344-21346,21368-21370,21392-21394,21416-21418,21440-21442,21464-21466,21488-21490,21512-21514,21536-21538,21560-21562,21584-21586,21608-21610,21632-21634,21656-21658,21680-21682,21704-21706,21728-21730,21752-21754,21776-21778,21800-21802,21824-21826,21848-21850,21872-21874,21896-21898,21920-21922,21944-21946,21968-21970,21992-21994,22016-22018,22040-22042,22064-22066,22088-22090,22112-22114,22136-22138,22160-22162,22184-22186,22208-22210,22232-22234,22256-22258,22280-22282,22304-22306,22328-22330,22352-22354,22376-22378,22400-22402,22424-22426,22448-22450,22472-22474,22496-22498,22520-22522,22544-22546,22568-22570,22592-22594,22616-22618,22640-22642,22664-22666,22688-22690,22712-22714,22736-22738,22760-22762,22784-22786,22808-22810,22832-22834,22856-22858,22880-22882,22904-22906,22928-22930,22952-22954,22976-22978,23000-23002,23024-23026,23048-23050,23072-23074,23096-23098,23120-23122,23144-23146,23168-23170,23192-23194,23216-23218,23240-23242,23264-23266,23288-23290,23312-23314,23336-23338,23360-23362,23384-23386,23408-23411,23433-23436,23458-23461,23483-23486,23508-23510,23532-23535,23557-23559,23581-23584,23606-23609,23631-23634,26845-26850,26965-26970,27104-27157,27203-27208,27319-27333
+server/gen/http/telemetry/server/encode_decode.go
+  h_9630b74bdac540 5888-6361,9245-9246,9304-9305,9365-9398,9425-9427,9500-9512
+server/gen/http/telemetry/server/paths.go
+  h_9630b74bdac540 135-144
+server/gen/http/telemetry/server/server.go
+  h_9630b74bdac540 47-48,111-112,147-148,190-191,232-233,1569-1675
+server/gen/http/telemetry/server/types.go
+  h_9630b74bdac540 376-378,381-388,412-414,417-424,448-450,453-460,484-558,561-568,592-594,597-604,628-630,633-640,664-666,669-676,700-702,705-712,736-738,1023-1026,1050-1063,1112-1113,5808-5811,5827-5830,5846-5849,5865-5868,5884-5887,5903-5906,5922-5925,5941-5944,5960-5963,5979-5982,5998-6001,6017-6020,6036-6039,6055-6058,6074-6077,6093-6096,6112-6115,6131-6134,6150-6153,6169-6172,6188-6191,6207-6210,6226-6229,6245-6248,6264-6267,6283-6666,8462-8465,8536-8540,8607-8645,8697-8703,8760-8770,9570-9593,9634-9673,9676,9679,9838-9849,13437-13737,13748-13752,13763-13767,13778-13782,13793-13797,13808-13812,13823-13827,15534,15576-15597,15612,15654-15675,15690,15732-15753,15768-15924,15966-15987,16002,16044-16065,16080,16122-16143,16158,16200-16221,16236,16278-16299,16363-16368,17090-17101,17132-17143,17174-17185,17216-17311,17342-17353,17384-17395,17426-17437,17468-17479,17556-17557
+server/gen/http/user_session_issuers/client/encode_decode.go
+  h_9630b74bdac540 1249
+server/gen/http/user_session_issuers/client/types.go
+  h_9630b74bdac540 74-76,109-111,152-154,1137-1139,1182,1352,1690,2039-2041,2092-2094,2161-2163,3421-3423
+server/gen/http/user_session_issuers/server/encode_decode.go
+  h_9630b74bdac540 1212
+server/gen/http/user_session_issuers/server/types.go
+  h_9630b74bdac540 74-76,109-111,152-154,1137-1139,1157,1177,1219
+server/gen/organization_remote_session_clients/service.go
+  h_9630b74bdac540 30-32,256-262,315-323
+server/gen/organization_user_session_issuers/service.go
+  h_9630b74bdac540 90-92,223-226
+server/gen/telemetry/client.go
+  h_9630b74bdac540 43-44,56,83-84,665-710
+server/gen/telemetry/endpoints.go
+  h_9630b74bdac540 44-45,86-87,126-127,1518-1635
+server/gen/telemetry/service.go
+  h_9630b74bdac540 93-96,140,449-540,566-567,594-596,599-606,626-629,656-658,661-668,702-704,707-714,748-750,753-760,794-796,799-806,840-842,845-852,886-888,891-898,932-934,937-944,1316-1318,2076-2122,2201-2205,2243-2246,2316-2322
+server/gen/types/user_session_issuer.go
+  h_9630b74bdac540 38-40
+server/internal/admin/impl.go
+  h_9630b74bdac540 394-395
+server/internal/admin/queries.sql
+  h_9630b74bdac540 532-610
+server/internal/admin/repo/queries.sql.go
+  h_9630b74bdac540 1002-1178
+server/internal/admin/supportmatrix.go
+  h_9630b74bdac540 1-191
+server/internal/admin/supportmatrix/catalog.json
+  h_9630b74bdac540 1-984
+server/internal/admin/supportmatrix_test.go
+  h_9630b74bdac540 1-127
+server/internal/agent/aitargets/aitargets_test.go
+  h_9630b74bdac540 18
+server/internal/agent/aitargets/gatewaycaller_test.go
+  h_9630b74bdac540 329-330,336-342
+server/internal/agent/aitargets/organization.go
+  h_9630b74bdac540 30-34
+server/internal/agent/aitargets/organization_test.go
+  h_9630b74bdac540 113-119,122-126,128,131-139,141,144-153,156-186
+server/internal/aivendors/registry.go
+  h_9630b74bdac540 158,160,162-166,168-171,173-175,177,180,205-254
+server/internal/attr/conventions.go
+  h_9630b74bdac540 374-388,2418-2425
+server/internal/audit/usersessionissuers.go
+  h_9630b74bdac540 30-32,37-40,58
+server/internal/cache/cache.go
+  h_9630b74bdac540 27-34
+server/internal/cache/noop.go
+  h_9630b74bdac540 14
+server/internal/cache/noop_test.go
+  h_9630b74bdac540 1-16
+server/internal/contextvalues/context.go
+  h_9630b74bdac540 264,361-388
+server/internal/database/models.go
+  h_9630b74bdac540 857-869,1126-1138,1159-1168,1559-1581,2358,2393,2973-3068
+server/internal/demoseed/clickhouse.sql
+  h_9630b74bdac540 119,121-125,147-156,184-213,216-261,525-539,573-577,617-687,823-837,982-989,1004-1013,1015-1026,1587-1591,1608-1624,1663-1667,1701-1714,1747-1751,1774-1784
+server/internal/dpop/dpop.go
+  h_9630b74bdac540 1-323
+server/internal/dpop/dpop_test.go
+  h_9630b74bdac540 1-412
+server/internal/externalkeys/repo/models.go
+  h_9630b74bdac540 21-33
+server/internal/externalkeys/repo/queries.sql.go
+  h_9630b74bdac540 55,86,173,204,250,281,297,368,389,420,474,495,513,549
+server/internal/gateway/proxy_test.go
+  h_9630b74bdac540 12,1337,1379,1526,1549,1555-1557,1598-1600,1751,1782,1788
+server/internal/gateway/toolcall_metrics_test.go
+  h_9630b74bdac540 7,83,88,152
+server/internal/hooks/otel.go
+  h_9630b74bdac540 6,52-61,73,205,778-784,802
+server/internal/hooks/otel_sink.go
+  h_9630b74bdac540 1-117
+server/internal/hooks/otel_sink_test.go
+  h_9630b74bdac540 1-180
+server/internal/instances/impl.go
+  h_9630b74bdac540 50,73,129,375-395
+server/internal/instances/risk_scan_test.go
+  h_9630b74bdac540 1-67
+server/internal/instances/setup_test.go
+  h_9630b74bdac540 1-58
+server/internal/jsonwebkeysets/repo/models.go
+  h_9630b74bdac540 13-25,48-57
+server/internal/jsonwebkeysets/repo/queries.sql.go
+  h_9630b74bdac540 209,227,276,342,396,418,458,481,601,632,783,800,859,883
+server/internal/k8s/tailscale_network_ingress_provisioner.go
+  h_9630b74bdac540 42-43,332-360,362-364,373-375,384-386,395-402,405,424-426,435-437,446-448,468-470,557-570,759,773-774
+server/internal/k8s/tailscale_network_ingress_provisioner_test.go
+  h_9630b74bdac540 33-43,47-55,103-105,338,545-547,558-593,602-605,607-609
+server/internal/mcp/export_test.go
+  h_9630b74bdac540 15,161-165
+server/internal/mcp/externalmcp_proxy_test.go
+  h_9630b74bdac540 17,23,265-266,293-300,385-408
+server/internal/mcp/impl.go
+  h_9630b74bdac540 69,112,331-337,403,431,1284,1651,1655,1661,1918
+server/internal/mcp/risk_scan_test.go
+  h_9630b74bdac540 1-365
+server/internal/mcp/rpc_prompt_get.go
+  h_9630b74bdac540 9,30,49-67
+server/internal/mcp/rpc_resources_read.go
+  h_9630b74bdac540 27,67,207-222
+server/internal/mcp/rpc_tools_call.go
+  h_9630b74bdac540 41,107,424,442-462
+server/internal/mcp/serve_meta.go
+  h_9630b74bdac540 187-194,235,340,351-359
+server/internal/mcp/serve_meta_proxy.go
+  h_9630b74bdac540 605-617
+server/internal/mcp/serve_meta_telemetry_test.go
+  h_9630b74bdac540 4,70-114
+server/internal/mcp/serve_meta_tools.go
+  h_9630b74bdac540 270,465
+server/internal/mcp/serve_platform.go
+  h_9630b74bdac540 26,480-491
+server/internal/mcp/serve_platform_test.go
+  h_9630b74bdac540 24,32,423,472-483
+server/internal/mcp/sessionclientinfo.go
+  h_9630b74bdac540 27-49,67,114
+server/internal/mcp/setup_test.go
+  h_9630b74bdac540 37-38,76,146-147,331,344-345,496-518
+server/internal/mcp/types.go
+  h_9630b74bdac540 104-113
+server/internal/mcpmetadata/impl.go
+  h_9630b74bdac540 60,212,260,928-933,971-976,981-1002,1042-1044,1077-1136,1151-1152,1159-1164,1187-1192,1206-1211,1215-1230,1419-1421,1485-1489,1530-1534
+server/internal/mcpmetadata/serve_install_page_test.go
+  h_9630b74bdac540 19,33-34,1961-2052,2149-2150,2152-2155,2235-2294
+server/internal/mcpriskscan/scan.go
+  h_9630b74bdac540 1-150
+server/internal/mcpriskscan/scan_test.go
+  h_9630b74bdac540 1-143
+server/internal/metamcp/addmetamcpmember_test.go
+  h_9630b74bdac540 16,652-693
+server/internal/metamcp/impl.go
+  h_9630b74bdac540 643-646
+server/internal/networkingress/admission.go
+  h_9630b74bdac540 7,25,30-38,90
+server/internal/networkingress/admission_test.go
+  h_9630b74bdac540 65-74
+server/internal/networkingress/impl.go
+  h_9630b74bdac540 129-133
+server/internal/networkingress/impl_test.go
+  h_9630b74bdac540 84-90
+server/internal/otel/hooks_sink.go
+  h_9630b74bdac540 1-211
+server/internal/otel/hooks_sink_test.go
+  h_9630b74bdac540 1-432
+server/internal/otel/impl.go
+  h_9630b74bdac540 46,74
+server/internal/otel/impl_logs.go
+  h_9630b74bdac540 19-20,30-35,40-46,49,54-55,57
+server/internal/otel/impl_metrics.go
+  h_9630b74bdac540 19-20,30-35,40-45,48,53-62,64
+server/internal/platformmcp/onboarding_integration_test.go
+  h_9630b74bdac540 203-275
+server/internal/platformtools/logs/tool_get_tool_usage_summary.go
+  h_9630b74bdac540 27,65,90-95
+server/internal/plugins/generate_test.go
+  h_9630b74bdac540 3024-3159
+server/internal/plugins/platform_mcp_public_test.go
+  h_9630b74bdac540 25-26
+server/internal/plugins/platform_mcp_skills/add-existing-mcp-servers/SKILL.md
+  h_9630b74bdac540 1-70
+server/internal/remotemcp/proxymanager.go
+  h_9630b74bdac540 17,71,129,289-303
+server/internal/remotemcp/proxymanager_identity_coverage_test.go
+  h_9630b74bdac540 8,16
+server/internal/remotemcp/tools_call_clickhouse_log_interceptor.go
+  h_9630b74bdac540 177-181
+server/internal/remotemcp/tools_call_risk_scan_interceptor.go
+  h_9630b74bdac540 1-38
+server/internal/remotemcp/tools_call_risk_scan_interceptor_test.go
+  h_9630b74bdac540 1-223
+server/internal/remotesessions/adminhandlers.go
+  h_9630b74bdac540 377-382,427-432,613-615,634-639
+server/internal/remotesessions/challenge_synthetic_expiry_test.go
+  h_9630b74bdac540 241-242,251-254,369
+server/internal/remotesessions/clientassertion.go
+  h_9630b74bdac540 22
+server/internal/remotesessions/issuerhandlers.go
+  h_9630b74bdac540 293-295,613-615
+server/internal/remotesessions/issuermetadatarefresh.go
+  h_9630b74bdac540 57-58,412-415,443-446,561-563,591-593
+server/internal/remotesessions/issuermetadatarefresh_test.go
+  h_9630b74bdac540 607-665
+server/internal/remotesessions/organizationclienthandlers.go
+  h_9630b74bdac540 172-195,198-202,581-597,612-614,643-660,742-745,790-805,813
+server/internal/remotesessions/organizationclienthandlers_test.go
+  h_9630b74bdac540 234-264,274-278,288-348
+server/internal/remotesessions/organizationissuerhandlers.go
+  h_9630b74bdac540 496-509,517-519,584-589,716-718,748-753,799-811
+server/internal/remotesessions/organizationissuerhandlers_test.go
+  h_9630b74bdac540 182-205,270-313
+server/internal/remotesessions/queries.sql
+  h_9630b74bdac540 549-568,699-700,715,2730-2735,2812-2822,2834-2900,3636-3651
+server/internal/remotesessions/repo/models.go
+  h_9630b74bdac540 67,78
+server/internal/remotesessions/repo/queries.sql.go
+  h_9630b74bdac540 532-548,644,688,770,831,865,920,1018,1116,1214,1244,1257,1267,1328-1334,1373,1386,1402,1458,1493,1528,1543,1601,1615,2115,2150,2160,2175,2228,2246,2300,2349,2405,2447,2530,2584,2595,2628,2681,2712,2887,2942,2999,3053,3328,3367,3420,3457,3510,3534,3587,3607,3660,3689,3834,3861,3914,3938,4043-4159,4161,4184,4356,4409,4428,4501,4564,4608,4791,4910,4932,5007,5281-5322,5368,5437,5456,5537,5835,5899,5959,6014,6325,6400,6462-6530,6826-6839,6841,6871-7065,7303,7306,7318,7328-7329,7342,7369,7393,7428,7658,7700,7720,7766,7780,7801,7936,7986,8278-8311,8534-8544,8558,8607,8705,8783,8863,8916,9019,9101,9173,9226,9247,9299,9575,9664,9760,9890
+server/internal/remotesessions/rotateclient_test.go
+  h_9630b74bdac540 15,27-31,42,48-130
+server/internal/remotesessions/rotation.go
+  h_9630b74bdac540 71-74,85-90,200-203,208-213,223-227,230,234-299,344,366-372,396,403-410,429,435,446-466,499-503
+server/internal/remotesessions/rotation_test.go
+  h_9630b74bdac540 198-200,232-234,404,427
+server/internal/remotesessions/setup_test.go
+  h_9630b74bdac540 105,125-132,337-359,371-378,577-613
+server/internal/remotesessions/tokenservice.go
+  h_9630b74bdac540 55,111
+server/internal/remotesessions/tokenservice_credentials_internal_test.go
+  h_9630b74bdac540 17-18,90
+server/internal/remotesessions/trustedclient.go
+  h_9630b74bdac540 1-70
+server/internal/remotesessions/trustedclient_test.go
+  h_9630b74bdac540 1-89
+server/internal/risk/scanner.go
+  h_9630b74bdac540 1016-1017
+server/internal/risk/scanner_pubsub_degradation_test.go
+  h_9630b74bdac540 1-114
+server/internal/telemetry/attribute_recorder.go
+  h_9630b74bdac540 143-155
+server/internal/telemetry/get_tool_usage_summary_test.go
+  h_9630b74bdac540 408-411,486-493,511-518,875-1065
+server/internal/telemetry/impl.go
+  h_9630b74bdac540 3339,3341-3343,3369,3371-3389,3464,3466-3473,3476,3479-3480,3495,3497-3499,3524,3526-3528,3553,3555-3557,3571-3628,3640,3642-3644,3669,3671-3673,3698,3700-3702,3727,3729-3731,3814,4198-4200,4212,4219,4290-4300,4306,4310,4312,4325-4326,4330,4343-4344,4397-4398,4455-4486,4497-4498,4510-4511
+server/internal/telemetry/list_tool_usage_traces_test.go
+  h_9630b74bdac540 909-976
+server/internal/telemetry/repo/materialized_columns_gen.go
+  h_9630b74bdac540 33-34
+server/internal/telemetry/repo/queries.sql.go
+  h_9630b74bdac540 4065-4069,4076-4077,4093,4113-4114,4140-4142,4161,4207-4212,4218-4219,4248-4257,4266-4267,4303-4312,4315,4355-4364,4388,4396-4403,4430-4434,4474-4476,4512-4517,4601-4605,4631-4632,4721,4730-4736,4876-4976,4988-4989,5277-5315,5420-5425,5429-5447,5451-5474,5607-5608,5749-5750,5775-5778,5789-5790,5859-5860,6080-6082,6146-6149,6157-6230,6232-6238,6260-6268,6281-6282,6307,6310-6311,6389-6390,6393-6396,6406-6407,6522-6525,6528-6532
+server/internal/thirdparty/okta/client.go
+  h_9630b74bdac540 1-876
+server/internal/thirdparty/okta/client_regression_test.go
+  h_9630b74bdac540 1-191
+server/internal/thirdparty/okta/client_test.go
+  h_9630b74bdac540 1-1565
+server/internal/thirdparty/okta/factory.go
+  h_9630b74bdac540 1-130
+server/internal/thirdparty/okta/fake.go
+  h_9630b74bdac540 1-182
+server/internal/thirdparty/okta/setup_test.go
+  h_9630b74bdac540 1-958
+server/internal/thirdparty/okta/types.go
+  h_9630b74bdac540 1-195
+server/internal/thirdparty/okta/wire.go
+  h_9630b74bdac540 1-66
+server/internal/thirdparty/posthog/posthog.go
+  h_9630b74bdac540 9,51,71-86,124-127,134-152,155-157,159-162
+server/internal/thirdparty/posthog/posthog_test.go
+  h_9630b74bdac540 17-22,26,31-32,40-41,46-47,50,53-71,78,98-100,103
+server/internal/thirdparty/posthog/sdk_logger.go
+  h_9630b74bdac540 1-56
+server/internal/thirdparty/posthog/sdk_logger_test.go
+  h_9630b74bdac540 1-138
+server/internal/usersessions/assertion/privatekeyjwt/assertion.go
+  h_9630b74bdac540 7,12
+server/internal/usersessions/issuerhandlers.go
+  h_9630b74bdac540 83-90,432
+server/internal/usersessions/oauthwire/oauthwire.go
+  h_9630b74bdac540 41-44,57-60
+server/internal/usersessions/organizationissuerhandlers.go
+  h_9630b74bdac540 24,46-50,53,56,59-63,68-101,120-137,158-164,173-184,186,196,203-210,311-327,335-337,339,348-368,370-373,383-389,397
+server/internal/usersessions/organizationissuerhandlers_test.go
+  h_9630b74bdac540 6,25,28,41,50-70,82-83,90,94-100,109,121-122,126,130,135-168,174,178,183,190,194,198-199,203,218-219,223,235-333,408-439
+server/internal/usersessions/queries.sql
+  h_9630b74bdac540 33-34,43-44,128-132,165
+server/internal/usersessions/repo/queries.sql.go
+  h_9630b74bdac540 159-160,169-170,181,191,2355,2369,2371-2389,2940-2944,2946,2948,2959,2971
+server/migrations/20260917175605_add_support_matrix.sql
+  h_9630b74bdac540 1-139
+server/migrations/20260917200501_identity_provider_connections.sql
+  h_9630b74bdac540 1-95
+server/migrations/atlas.sum
+  h_9630b74bdac540 1,417-418
+server/package.json
+  h_9630b74bdac540 3
+ts-framework/functions/package.json
+  h_9630b74bdac540 59-60
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "4dcea56fcfbc9633789be9e165db7d00abf267d1",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

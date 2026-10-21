@@ -1,0 +1,14 @@
+client/dashboard/src/pages/org/platform-mcp-setup-sheet.test.tsx
+  h_9630b74bdac540 59-60,74-75
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "8822dfa504d5a272c9902afd6b2b0646c921ce8f",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

@@ -1,0 +1,27 @@
+client/dashboard/src/pages/org/identity-provider/DirectoryRoleMappings.tsx
+  h_9630b74bdac540 812-814,817
+  s_db37e835cbcb6e::t_16bc63c995b807 815-816,818
+.changeset/directory-role-chip-width.md
+  h_9630b74bdac540 1-5
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "cd5de31e0f20d56cbcc4e2c6fb649105b90736e5",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  },
+  "sessions": {
+    "s_db37e835cbcb6e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2dc61672-34c5-4e2f-b146-9e6de92bc777",
+        "model": "unknown"
+      },
+      "human_author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

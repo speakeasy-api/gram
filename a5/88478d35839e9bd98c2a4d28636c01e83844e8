@@ -1,0 +1,31 @@
+server/internal/adminmcp/tool_write_feature.go
+  h_9630b74bdac540 110,113,116,120,123,126,130,135,138,142,146,150,154,156,159-178,180-185,187,222,226
+server/cmd/gram/admin.go
+  h_9630b74bdac540 533
+server/internal/adminmcp/proposal_store_test.go
+  h_9630b74bdac540 82
+server/internal/adminmcp/write_tools.go
+  h_9630b74bdac540 1-207
+server/internal/adminmcp/write_guard.go
+  h_9630b74bdac540 143-154,166
+server/internal/adminmcp/proposal_approval_test.go
+  h_9630b74bdac540 4,14,24-33,75,93-94,139
+server/internal/adminmcp/proposal_approval.go
+  h_9630b74bdac540 46-48,52,55-106,188-189,197-199,213,217,223,249-250,259
+  h_9630b74bdac540 200-201,214-216,218-222
+server/internal/adminmcp/tool_write_feature_test.go
+  h_9630b74bdac540 33,70,76,81-82,88,103,107-110,116,146,149
+server/internal/adminmcp/write_tools_test.go
+  h_9630b74bdac540 1-104
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a588478d35839e9bd98c2a4d28636c01e83844e8",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

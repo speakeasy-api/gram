@@ -1,0 +1,26 @@
+server/internal/platformmcp/tool_directory_review_test.go
+  h_9630b74bdac540 1-175
+server/internal/platformmcp/access_reads.go
+  h_9630b74bdac540 208-210,215,230-231
+server/internal/platformmcp/tools.go
+  h_9630b74bdac540 477
+server/internal/access/directory_review.go
+  h_9630b74bdac540 6,189
+server/cmd/gram/start.go
+  h_9630b74bdac540 1882
+server/internal/platformmcp/tool_directory_review.go
+  h_9630b74bdac540 1-300
+server/cmd/gram/platform_mcp.go
+  h_9630b74bdac540 100-102,467-469,1115-1117
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "26ad36e70f6d6dbc53772f0d0ef1651e04cf00f9",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

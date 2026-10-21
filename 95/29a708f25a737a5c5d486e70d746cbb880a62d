@@ -1,0 +1,18 @@
+server/database/schema.sql
+  h_9630b74bdac540 8335,8377,8407,8412-8416
+server/migrations/20260923145321_admin_mcp_refresh_lineage.sql
+  h_9630b74bdac540 1-6
+server/migrations/atlas.sum
+  h_9630b74bdac540 1,431
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "9529a708f25a737a5c5d486e70d746cbb880a62d",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

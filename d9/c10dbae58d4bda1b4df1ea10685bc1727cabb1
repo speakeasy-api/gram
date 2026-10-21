@@ -1,0 +1,16 @@
+client/admin/vite.config.ts
+  h_9630b74bdac540 55-69,125-126,131,136,141
+server/internal/middleware/admin_security_test.go
+  h_9630b74bdac540 161-167
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d9c10dbae58d4bda1b4df1ea10685bc1727cabb1",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

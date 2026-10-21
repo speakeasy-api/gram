@@ -1,0 +1,21 @@
+client/dashboard/src/hooks/useNetworkIngressRollout.ts
+  h_9630b74bdac540 5-6
+  h_9630b74bdac540 7-9
+client/dashboard/src/pages/org/networkAccessPageVisibility.test.ts
+  h_9630b74bdac540 1-21
+client/dashboard/src/pages/org/OrgDomains.tsx
+  h_9630b74bdac540 55,60,625-634
+client/dashboard/src/pages/org/networkAccessPageVisibility.ts
+  h_9630b74bdac540 1-9
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "3701d0fa09f1ddf255726ddf77339632b8e07b95",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

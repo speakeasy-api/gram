@@ -1,0 +1,66 @@
+server/internal/platformmcp/connection_settings.go
+  h_9630b74bdac540 5-6,62,86-88,133,136,138-162
+  h_9630b74bdac540 109,137
+server/internal/platformmcp/connection_mutation.go
+  h_9630b74bdac540 1-436
+server/internal/mcpendpoints/address_command.go
+  h_9630b74bdac540 1-245
+server/internal/plugins/publish_signal.go
+  h_9630b74bdac540 5,24-38
+server/internal/mcpendpoints/impl.go
+  h_9630b74bdac540 39,153-154,485-487,703-705,836-846
+  h_9630b74bdac540 847-848
+server/internal/plugins/platform_mcp_skills/configure-private-mcp-access/SKILL.md
+  h_9630b74bdac540 1-19
+server/internal/platformmcp/tool_connection_mutation.go
+  h_9630b74bdac540 1-84
+server/internal/metamcp/impl.go
+  h_9630b74bdac540 339-340,466-509
+  h_9630b74bdac540 341
+server/internal/mcpservers/lifecycle.go
+  h_9630b74bdac540 21,50-93
+  h_9630b74bdac540 94
+server/internal/platformmcp/tools.go
+  h_9630b74bdac540 175,203-206,209,242
+server/cmd/gram/platform_mcp.go
+  h_9630b74bdac540 36,39,83-85,436,594-605,884
+  h_9630b74bdac540 606-607
+server/internal/metamcp/updatemetamcpserver_test.go
+  h_9630b74bdac540 1,5,11,25,31-56
+  h_9630b74bdac540 57
+server/internal/mcpservers/updatemcpserver_test.go
+  h_9630b74bdac540 1,19-20,22,25,33-67
+  h_9630b74bdac540 68
+server/internal/mcpendpoints/queries.sql
+  h_9630b74bdac540 109-118
+server/internal/platformmcp/tool_connection_settings.go
+  h_9630b74bdac540 18
+server/internal/platformmcp/connection_settings_test.go
+  h_9630b74bdac540 45-50
+server/internal/platformmcp/runtime.go
+  h_9630b74bdac540 139,143
+server/internal/mcpendpoints/address_command_test.go
+  h_9630b74bdac540 1-195
+server/internal/platformmcp/tool_connection_mutation_test.go
+  h_9630b74bdac540 1-30
+server/internal/plugins/generate_test.go
+  h_9630b74bdac540 3024-3040
+server/cmd/gram/start.go
+  h_9630b74bdac540 1743-1745
+server/internal/plugins/publication_requests_test.go
+  h_9630b74bdac540 4,16-49
+  h_9630b74bdac540 50
+server/internal/mcpendpoints/repo/queries.sql.go
+  h_9630b74bdac540 1104-1147
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "8107a2dabf9c296f1ae8219377f94d89c922f3f0",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

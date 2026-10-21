@@ -1,0 +1,43 @@
+server/internal/access/directory_role_setup.go
+  h_9630b74bdac540 206-208,211,264-266,283-288,290-294
+  s_1e72c4e28c390d::t_9329ed5ea3950a 289
+server/design/access/design.go
+  h_9630b74bdac540 2037
+client/dashboard/src/pages/org/identity-provider/DirectoryRoleSetupDialog.tsx
+  h_9630b74bdac540 162-164
+server/internal/access/directory_role_setup_test.go
+  h_9630b74bdac540 204-206,219-224,240-242
+.speakeasy/out.openapi.yaml
+  h_9630b74bdac540 88122
+client/dashboard/src/sdk/src/models/components/directoryrolesetuppreviewitem.ts
+  h_9630b74bdac540 21
+server/gen/access/service.go
+  h_9630b74bdac540 585-588
+server/gen/http/access/client/types.go
+  h_9630b74bdac540 7254-7257
+server/gen/http/access/server/types.go
+  h_9630b74bdac540 7232-7235
+server/gen/http/openapi3.yaml
+  h_9630b74bdac540 98103
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "fb3672da2f49f39d1510697899e62ce88655b821",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  },
+  "sessions": {
+    "s_1e72c4e28c390d": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "0066100b-bbc2-42f1-b544-be60dcc16019",
+        "model": "unknown"
+      },
+      "human_author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

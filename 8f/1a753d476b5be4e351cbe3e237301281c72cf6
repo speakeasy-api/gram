@@ -1,0 +1,59 @@
+server/internal/networkingress/admission_test.go
+  h_9630b74bdac540 18,21,23-24,26-27,33,53,73
+server/cmd/gram/mcp.go
+  h_9630b74bdac540 310
+client/dashboard/src/pages/org/PrivateNetworkSection.tsx
+  h_9630b74bdac540 302,310,319-320,359
+  h_9630b74bdac540 306
+client/admin/src/pages/organization/Features.test.tsx
+  h_9630b74bdac540 107-110
+  h_9630b74bdac540 106
+seed/demo/verify.md
+  h_9630b74bdac540 32,35
+  h_9630b74bdac540 33-34,36
+server/cmd/gram/private_ingress_runtime.go
+  h_9630b74bdac540 257
+server/cmd/gram/start.go
+  h_9630b74bdac540 1126
+client/admin/src/pages/organization/Features.tsx
+  h_9630b74bdac540 78-84
+client/dashboard/src/hooks/usePrivateMcpServerUrls.ts
+  h_9630b74bdac540 126
+  h_9630b74bdac540 130,155
+server/internal/networkingress/impl_test.go
+  h_9630b74bdac540 26
+  h_9630b74bdac540 109
+server/internal/networkingress/rollout_test.go
+  h_9630b74bdac540 23
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/NetworkAccessSection.tsx
+  h_9630b74bdac540 61-62,64
+server/internal/networkingress/admission.go
+  h_9630b74bdac540 16-17
+  h_9630b74bdac540 24-25,40
+server/internal/networkingress/setup_test.go
+  h_9630b74bdac540 142
+  h_9630b74bdac540 138
+client/dashboard/src/pages/org/PrivateNetworkSection.test.tsx
+  h_9630b74bdac540 56,132-133,136
+  h_9630b74bdac540 134-135
+client/dashboard/src/hooks/usePrivateMcpServerUrls.test.ts
+  h_9630b74bdac540 198-212
+client/dashboard/src/hooks/useNetworkIngressRollout.ts
+  h_9630b74bdac540 1-2,10,12-17
+.changeset/staff-tailscale-access.md
+  h_9630b74bdac540 1-7
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/NetworkAccessSection.test.tsx
+  h_9630b74bdac540 207-208,216-231
+  h_9630b74bdac540 209-215
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "8f1a753d476b5be4e351cbe3e237301281c72cf6",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

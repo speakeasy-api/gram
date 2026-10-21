@@ -1,0 +1,24 @@
+server/internal/platformmcp/registration_integration_test.go
+  h_9630b74bdac540 188-209
+server/internal/platformmcp/tools.go
+  h_9630b74bdac540 60
+server/internal/mcp/setup_test.go
+  h_9630b74bdac540 460
+server/internal/platformmcp/adapters.go
+  h_9630b74bdac540 433-438
+server/internal/mcp/serve_platform_test.go
+  h_9630b74bdac540 417,456-469
+server/internal/platformmcp/tool_list_projects.go
+  h_9630b74bdac540 15
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "3f0d60084456960b9f73dd09cae15330a673177a",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

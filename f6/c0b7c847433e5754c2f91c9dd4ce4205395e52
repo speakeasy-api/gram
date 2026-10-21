@@ -1,0 +1,31 @@
+server/internal/demoseed/postgres.sql
+  h_9630b74bdac540 365-366,374-375,868-869,875,3883-3893
+.changeset/directory-role-set-controls.md
+  h_9630b74bdac540 1-5
+client/dashboard/src/pages/org/identity-provider/DirectoryRoleMappings.tsx
+  h_9630b74bdac540 55,63-64,75-76,79,87,102-108,129,137-139,141-147,151-152,160-161,163,180-183,208-210,228-229,245,253,265-266,274,378,386,402,448-453,469,555,562-565,567-572,597,603-637,642,648,650-651,687-688,691-692,696,700,702-703
+  h_9630b74bdac540 61,65,140,148-150,153-159,162,184,207,230,403-404,566,595-596,598,638-641,643-647,649,705
+seed/demo/PAGES.md
+  h_9630b74bdac540 275-283
+client/dashboard/src/pages/org/identity-provider/invalidateDirectoryMappingAccess.ts
+  h_9630b74bdac540 1-26
+client/dashboard/src/pages/org/identity-provider/directoryMappingFlow.test.ts
+  h_9630b74bdac540 12-13,53-98
+  h_9630b74bdac540 99-100
+client/dashboard/src/pages/org/identity-provider/directoryMappingFlow.ts
+  h_9630b74bdac540 1,98,103-112,117-118
+  h_9630b74bdac540 113-116,119
+client/dashboard/src/pages/org/identity-provider/DirectoryRoleMappings.test.tsx
+  h_9630b74bdac540 1-157
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f6c0b7c847433e5754c2f91c9dd4ce4205395e52",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

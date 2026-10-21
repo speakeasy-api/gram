@@ -1,0 +1,18 @@
+server/internal/access/directory_role_inventory.go
+  h_9630b74bdac540 34,51,56
+server/cmd/directory-roles/README.md
+  h_9630b74bdac540 3-4,38,136,143,146-147,150
+server/internal/access/directory_role_inventory_test.go
+  h_9630b74bdac540 106,130
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d55c4536e6a57a5e6409d7878346ae7354e7b945",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

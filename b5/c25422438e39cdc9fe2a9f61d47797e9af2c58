@@ -1,0 +1,32 @@
+server/internal/access/resolve_challenge_test.go
+  h_9630b74bdac540 137,151,158
+server/design/access/design.go
+  h_9630b74bdac540 1402
+client/dashboard/src/pages/access/Access.tsx
+  h_9630b74bdac540 14-15,18-19,21-23,80,87,156
+client/dashboard/src/pages/access/CreateRoleDialog.tsx
+  h_9630b74bdac540 324,385,435,452
+client/dashboard/src/pages/access/GrantAccessDialog.tsx
+  h_9630b74bdac540 11-12,17-18,20-21,30-31,53,78-79
+server/internal/access/impl.go
+  h_9630b74bdac540 1243,1569-1571,1580-1589
+client/dashboard/src/pages/access/roleSuggestions.ts
+  h_9630b74bdac540 44,48-49,51,53-56,75-76,111-114
+client/dashboard/src/pages/access/CreateRoleDialog.test.tsx
+  h_9630b74bdac540 3-4,6,78,85,97-120
+client/dashboard/src/pages/access/roleSuggestions.test.ts
+  h_9630b74bdac540 2-5,25-72
+server/internal/access/requestaccess_test.go
+  h_9630b74bdac540 22,24-25,46-47,52-80
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "b5c25422438e39cdc9fe2a9f61d47797e9af2c58",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

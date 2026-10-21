@@ -1,0 +1,66 @@
+.speakeasy/out.openapi.yaml
+  h_2620cc60cfd1e9 8010-8036,8049,92802-92813
+client/dashboard/src/pages/agents/AgentPolicy.test.tsx
+  h_2620cc60cfd1e9 176
+client/dashboard/src/pages/agents/Agents.test.tsx
+  h_2620cc60cfd1e9 1-8,25-37,46-47,52-53,56-69,110-111,179,273-277,283-296,526,528,560-765,778,785-786,790,795
+client/dashboard/src/pages/agents/Agents.tsx
+  h_2620cc60cfd1e9 15-24,49-55,262-266,287-294,296-319,325-326,328-332,334-338,403-478,484,489,499
+client/dashboard/src/sdk/.speakeasy/gen.lock
+  h_2620cc60cfd1e9 1328,8805-8807,8810
+client/dashboard/src/sdk/src/funcs/agentsListEligibleOwners.ts
+  h_2620cc60cfd1e9 7,16-18,54,82,110-115,155,182,193
+client/dashboard/src/sdk/src/models/components/listeligibleownersresponsebody.ts
+  h_2620cc60cfd1e9 1-47
+client/dashboard/src/sdk/src/models/operations/listagenteligibleowners.ts
+  h_2620cc60cfd1e9 13-24,63-65,75-77
+client/dashboard/src/sdk/src/react-query/agentEligibleOwners.core.ts
+  h_2620cc60cfd1e9 14,20,52-54,82-87
+client/dashboard/src/sdk/src/react-query/agentEligibleOwners.ts
+  h_2620cc60cfd1e9 115-122,133-138
+client/dashboard/src/sdk/src/sdk/agents.ts
+  h_2620cc60cfd1e9 26,230
+docs/rbac.md
+  h_2620cc60cfd1e9 83-85
+server/cmd/tools/migrations/ADMIN_AGENT_CREATION_BACKFILL.md
+  h_2620cc60cfd1e9 13
+server/design/agents/design.go
+  h_2620cc60cfd1e9 142-152,156-158
+server/gen/agents/client.go
+  h_2620cc60cfd1e9 116,122
+server/gen/agents/service.go
+  h_2620cc60cfd1e9 26,231-244
+server/gen/http/agents/client/cli.go
+  h_2620cc60cfd1e9 110-155,163-165
+server/gen/http/agents/client/encode_decode.go
+  h_2620cc60cfd1e9 509-517,554,561,565,4242-4245
+server/gen/http/agents/client/types.go
+  h_2620cc60cfd1e9 136-143,3623-3625,4248-4255,4257,4260,6885-6900,11803-11805
+server/gen/http/agents/server/encode_decode.go
+  h_2620cc60cfd1e9 17,469,483-485,487,489-525,530-533,3877-3878,3880-3881
+server/gen/http/agents/server/types.go
+  h_2620cc60cfd1e9 138-142,3635-3637,3829-3840,3842-3843,6670,6672-6674
+server/gen/http/cli/gram/cli.go
+  h_2620cc60cfd1e9 528-530,9578,13802-13804,13813-13815,13820
+server/gen/http/openapi3.yaml
+  h_2620cc60cfd1e9 15074-15100,15113,101734-101745
+server/internal/agentmanagement/eligible_owners.go
+  h_2620cc60cfd1e9 7,11,16-26,29,39-48,52-64,66-91,93,96,101
+server/internal/agentmanagement/eligible_owners_test.go
+  h_2620cc60cfd1e9 4-6,22-162,197-198,203
+server/internal/organizations/queries.sql
+  h_2620cc60cfd1e9 198-211
+server/internal/organizations/repo/queries.sql.go
+  h_2620cc60cfd1e9 1634-1689
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f6f487e7e270e2d7a59e123f7dee9b941ffa868d",
+  "prompts": {},
+  "humans": {
+    "h_2620cc60cfd1e9": {
+      "author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

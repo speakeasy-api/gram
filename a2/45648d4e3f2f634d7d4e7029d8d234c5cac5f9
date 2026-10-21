@@ -1,0 +1,14 @@
+server/internal/networkingress/reconcile_test.go
+  h_9630b74bdac540 218-221
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a245648d4e3f2f634d7d4e7029d8d234c5cac5f9",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

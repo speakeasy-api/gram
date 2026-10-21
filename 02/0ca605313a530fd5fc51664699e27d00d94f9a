@@ -1,0 +1,70 @@
+client/dashboard/src/pages/access/directorySourcesForRole.test.ts
+  h_9630b74bdac540 84-124
+  h_9630b74bdac540 125-128
+client/dashboard/src/pages/access/directorySourcesForRole.ts
+  h_9630b74bdac540 2,18-22,62,72,80-83,88,92-93,95
+server/internal/demoseed/queries/09_postflight_identity.sql
+  h_9630b74bdac540 417-423
+client/dashboard/src/pages/org/identity-provider/DirectoryRoleMappings.test.tsx
+  h_9630b74bdac540 83,87,89,93,222-268
+  h_9630b74bdac540 91-92,94-95,269-270
+client/dashboard/src/pages/team/Team.tsx
+  h_9630b74bdac540 80-83,93-94,99,103-104,114-115,118-121,676-679,690-692
+  s_789c1541f46f83::t_a85191acc463ab 79,84,680-681,693
+client/dashboard/src/pages/access/ChangeRoleDialog.tsx
+  h_9630b74bdac540 26,208-212,216,218-219
+  s_1acb688620fbeb::t_0d2dd79d780d3b 213-215,217
+client/dashboard/src/lib/member-roles.test.ts
+  h_9630b74bdac540 1-7,20-110
+  s_1acb688620fbeb::t_7eb38be2bd74cd 111-112
+server/internal/demoseed/seed_09_postflight_identity.go
+  h_9630b74bdac540 293-296
+seed/demo/PAGES.md
+  h_9630b74bdac540 303-305
+server/internal/demoseed/seed_02_roles.go
+  h_9630b74bdac540 443-459
+.changeset/directory-mapping-read-labels.md
+  h_9630b74bdac540 1-5
+server/internal/demoseed/queries/02_roles.sql
+  h_9630b74bdac540 167-176
+client/dashboard/src/lib/member-roles.ts
+  h_9630b74bdac540 14-121
+client/dashboard/src/pages/access/RolesTab.tsx
+  h_9630b74bdac540 38,135-139,182-194
+client/dashboard/src/pages/org/identity-provider/DirectoryRoleMappings.tsx
+  h_9630b74bdac540 61,112-117,120-126,147,151-155,160,163-165,167-180,193,197,203-205,212,312-319,324,327-329,342-344,470-472,474,490-492,758-761,770,774-777,1002-1014,1047-1049
+  h_9630b74bdac540 71,148-150,469,473,493-494,762-769,771-773
+server/internal/demoseed/repo/02_roles.sql.go
+  h_9630b74bdac540 327-354
+server/internal/demoseed/repo/09_postflight_identity.sql.go
+  h_9630b74bdac540 276-290
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "020ca605313a530fd5fc51664699e27d00d94f9a",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  },
+  "sessions": {
+    "s_1acb688620fbeb": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "247064e3-eaac-47e4-bf0e-8e72487a6b52",
+        "model": "unknown"
+      },
+      "human_author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    },
+    "s_789c1541f46f83": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "953f0d4b-b5ea-4d90-9654-8aa61c3181f6",
+        "model": "unknown"
+      },
+      "human_author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

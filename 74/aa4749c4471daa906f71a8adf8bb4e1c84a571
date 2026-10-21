@@ -1,0 +1,18 @@
+server/internal/admin/session_handler_test.go
+  h_9630b74bdac540 6,19-20,195-219,221-251
+  h_9630b74bdac540 220,252-253
+server/internal/admin/impl.go
+  h_9630b74bdac540 391,424-450
+  h_9630b74bdac540 451-452
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "74aa4749c4471daa906f71a8adf8bb4e1c84a571",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

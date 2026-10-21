@@ -1,0 +1,44 @@
+server/internal/plugins/publication_requests_test.go
+  h_9630b74bdac540 8,10,39-68,101-117
+server/internal/networkingress/reconcile_delivery_test.go
+  h_9630b74bdac540 40,49
+server/internal/mcpendpoints/plugin_publication_request.go
+  h_9630b74bdac540 1-31
+server/cmd/gram/flags_plugin_publication.go
+  h_9630b74bdac540 5-9,12,20
+server/internal/networkingress/setup_test.go
+  h_9630b74bdac540 110,113
+server/cmd/gram/network_ingress_worker.go
+  h_9630b74bdac540 201
+server/internal/mcpservers/impl.go
+  h_9630b74bdac540 881,1259
+server/cmd/gram/start.go
+  h_9630b74bdac540 1555
+server/internal/plugins/plugin_write_test.go
+  h_9630b74bdac540 163,170,172,217,225,227
+server/internal/mcpendpoints/plugin_publish.go
+  h_9630b74bdac540 5,26-28,30-32,34-36,41,43,46,53,55,58,61
+  h_9630b74bdac540 29,33
+server/internal/plugins/publish_signal.go
+  h_9630b74bdac540 31-33
+server/cmd/gram/flags_plugin_publication_test.go
+  h_9630b74bdac540 1-26
+server/cmd/gram/streams.go
+  h_9630b74bdac540 638
+server/internal/mcpendpoints/impl.go
+  h_9630b74bdac540 256,264,611,617,745,751
+server/internal/networkingress/reconcile.go
+  h_9630b74bdac540 228-230,293-295
+  h_9630b74bdac540 227,231,292,296
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d461a280eaeddc056ded75d54e491292da9058a1",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

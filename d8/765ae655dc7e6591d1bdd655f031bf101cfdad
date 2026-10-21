@@ -1,0 +1,27 @@
+client/dashboard/src/pages/mcp/access/ManageAccess.tsx
+  h_9630b74bdac540 176-178,180-181,183
+client/dashboard/src/pages/mcp/access/ManageAccess.test.tsx
+  h_9630b74bdac540 27-28,651,657-672
+  s_75dc1081bf48e6::t_c0436dfbcf6fe7 673-674
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d8765ae655dc7e6591d1bdd655f031bf101cfdad",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  },
+  "sessions": {
+    "s_75dc1081bf48e6": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "03332a0a-de59-4221-be9c-b9beb7f8d612",
+        "model": "unknown"
+      },
+      "human_author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

@@ -1,0 +1,14 @@
+client/dashboard/src/pages/org/identity-provider/DirectoryReviewPanel.tsx
+  h_9630b74bdac540 327
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "dd0b7e844222ca1a3992f8e68c62529c08d55a93",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

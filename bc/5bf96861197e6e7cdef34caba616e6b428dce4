@@ -1,0 +1,28 @@
+server/internal/adminmcp/organization_filters_test.go
+  h_9630b74bdac540 5,46-59,68-72
+server/internal/adminmcp/tool_organizations.go
+  h_9630b74bdac540 30
+server/internal/adminmcp/tool_billing_detail_test.go
+  h_9630b74bdac540 43,50
+server/internal/admin/members_page.go
+  h_9630b74bdac540 26,33-36
+server/internal/adminmcp/tool_organization_detail.go
+  h_9630b74bdac540 135
+server/internal/adminmcp/tool_registry_test.go
+  h_9630b74bdac540 122,127,168-175,196-219
+server/internal/adminmcp/tool_registry.go
+  h_9630b74bdac540 142,145-149,229
+server/internal/adminmcp/organization_filters.go
+  h_9630b74bdac540 10,28-29,32,48,95
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "bc5bf96861197e6e7cdef34caba616e6b428dce4",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

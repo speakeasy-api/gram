@@ -1,0 +1,14 @@
+server/internal/mcp/serveendpoint.go
+  h_2620cc60cfd1e9 820,852,855,873,876,879,892-893,906-910,912
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "6138db7c1764c5ca2b09030239b72360076fb594",
+  "prompts": {},
+  "humans": {
+    "h_2620cc60cfd1e9": {
+      "author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

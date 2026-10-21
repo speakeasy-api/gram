@@ -1,0 +1,40 @@
+server/internal/mcp/authnchallenge_consent_meta_shared_issuer_test.go
+  h_9630b74bdac540 95
+server/internal/mcp/authnchallenge_consent_action_test.go
+  h_9630b74bdac540 76
+server/internal/metamcp/queries.sql
+  h_9630b74bdac540 318-319,328-334,345-348,353-354
+server/internal/mcp/serve_meta_proxy_internal_test.go
+  h_9630b74bdac540 112-122
+server/internal/remotesessions/tokenservice.go
+  h_9630b74bdac540 289,376-381,472,474-477,485-487,521-523,527
+  s_92113ee0df267b::t_add43e46a8714c 524
+server/internal/mcp/authnchallenge_consent_meta_resource_test.go
+  h_9630b74bdac540 81-83,85-88,105
+  h_9630b74bdac540 84
+server/internal/mcp/serve_meta_tools_internal_test.go
+  h_9630b74bdac540 36-38
+server/internal/metamcp/repo/queries.sql.go
+  h_9630b74bdac540 813-819,830-833,838-839,899-900
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "6c7db6e6454bbdfe662a1118f04e283ef0b4265c",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  },
+  "sessions": {
+    "s_92113ee0df267b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "3769f342-128b-4ccb-a59a-f1c7dcd3609e",
+        "model": "unknown"
+      },
+      "human_author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

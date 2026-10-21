@@ -1,0 +1,28 @@
+CLAUDE.md
+  h_9630b74bdac540 119-122
+.agents/skills/maintaining-platform-mcp/SKILL.md
+  h_9630b74bdac540 1-91
+cubic.yaml
+  h_9630b74bdac540 61-64
+REVIEW.md
+  h_9630b74bdac540 113-127
+.claude/skills/maintaining-platform-mcp
+  h_9630b74bdac540 1
+.codex/skills/maintaining-platform-mcp
+  h_9630b74bdac540 1
+.cursor/skills/maintaining-platform-mcp
+  h_9630b74bdac540 1
+.opencode/skills/maintaining-platform-mcp
+  h_9630b74bdac540 1
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "014c7e5f1762afc04ff11d368a39efa538a6a5e4",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

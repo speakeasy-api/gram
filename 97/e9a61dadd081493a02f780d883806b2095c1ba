@@ -1,0 +1,27 @@
+client/dashboard/src/pages/org/identity-provider/DirectoryReviewPanel.tsx
+  h_9630b74bdac540 139,148-150,180-190,195,208-209,211,230,233
+client/dashboard/src/pages/org/identity-provider/DirectoryReviewPanel.test.tsx
+  h_9630b74bdac540 193-228
+  s_96086364103803::t_e3391dc98362a2 229-231
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "97e9a61dadd081493a02f780d883806b2095c1ba",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  },
+  "sessions": {
+    "s_96086364103803": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "5fdffb42-2120-48a5-8fef-98afb3d1b259",
+        "model": "unknown"
+      },
+      "human_author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

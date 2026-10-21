@@ -1,0 +1,197 @@
+server/internal/access/directory_role_mappings.go
+  h_9630b74bdac540 248-254,258-259,261-262,264-268,270,281
+  h_9630b74bdac540 260
+.changeset/device-agent-workload-tokens.md
+  h_9630b74bdac540 1-5
+.speakeasy/openapi-hooks.yaml
+  h_9630b74bdac540 737-740,761
+.speakeasy/out.admin.openapi.yaml
+  h_9630b74bdac540 11676-11679
+.speakeasy/out.openapi.yaml
+  h_9630b74bdac540 6933,24832-24833,24941-24942,25352,25433-25434,25443,25524-25525,114164-114167,114188
+client/admin/package.json
+  h_9630b74bdac540 57
+client/dashboard/package.json
+  h_9630b74bdac540 108-110,123,125
+client/dashboard/src/sdk/src/funcs/agentGetPlugins.ts
+  h_9630b74bdac540 143-149
+client/dashboard/src/sdk/src/funcs/hooksHooksNumberCodex.ts
+  h_9630b74bdac540 133-144,149,154
+client/dashboard/src/sdk/src/funcs/hooksHooksNumberCursor.ts
+  h_9630b74bdac540 133-144,149,154
+client/dashboard/src/sdk/src/funcs/hooksHooksNumberLogs.ts
+  h_9630b74bdac540 41,119-130,135,140
+client/dashboard/src/sdk/src/funcs/hooksHooksNumberMetrics.ts
+  h_9630b74bdac540 41,121-132,137,142
+client/dashboard/src/sdk/src/models/operations/getagentplugins.ts
+  h_9630b74bdac540 9,42,52,57-58
+client/dashboard/src/sdk/src/models/operations/hooksnumbercodex.ts
+  h_9630b74bdac540 13-22,24-25,48-114,117-118,127-132,136-137
+client/dashboard/src/sdk/src/models/operations/hooksnumbercursor.ts
+  h_9630b74bdac540 13-22,24-25,48-114,117-118,127-132,136-137
+client/dashboard/src/sdk/src/models/operations/hooksnumberlogs.ts
+  h_9630b74bdac540 13-22,24-25,40-106,109-110,119-124,128-129
+client/dashboard/src/sdk/src/models/operations/hooksnumbermetrics.ts
+  h_9630b74bdac540 13-22,24-25,40-106,109-110,119-124,128-129
+client/dashboard/src/sdk/src/react-query/hooksHooksNumberLogs.ts
+  h_9630b74bdac540 56
+client/dashboard/src/sdk/src/react-query/hooksHooksNumberMetrics.ts
+  h_9630b74bdac540 56
+client/dashboard/src/sdk/src/sdk/hooks.ts
+  h_9630b74bdac540 148,167
+pnpm-lock.yaml
+  h_9630b74bdac540 206,208-209,461-462,464-465,467-468,504,506-507,512-513,2163-2164,2168-2169,2173-2174,2178-2179,2183-2184,2188-2189,4048-4049,4052,4057-4058,4060,4062-4063,4065,4076-4077,4083,4090-4091,4095,4102-4103,4109,7034-7035,7729-7730,9804,9807,9810,9813,9816,9819,11587,11591,11595,11599,11601,11604,11606,11616,11622,11624,11628-11629,11636,11644,11647,11654,14897,14899-14904,14906,14908,15807
+server/cmd/directory-roles/README.md
+  h_9630b74bdac540 1-156
+server/cmd/directory-roles/main.go
+  h_9630b74bdac540 1-166
+server/cmd/directory-roles/main_test.go
+  h_9630b74bdac540 1-105
+server/cmd/gram/start.go
+  h_9630b74bdac540 49,1093,1474,1528
+server/design/agent/design.go
+  h_9630b74bdac540 13,27-30,36,93
+server/design/hooks/design.go
+  h_9630b74bdac540 356,363,374-377,384,395,406-409,416,427,438-440,450,458,523,525-528,535,545,553,555-558,565,575
+server/design/security/device_agent_token.go
+  h_9630b74bdac540 1-23
+server/gen/agent/endpoints.go
+  h_9630b74bdac540 37,68,72-75,77-92
+server/gen/agent/service.go
+  h_9630b74bdac540 22-26,112-113,356-357
+server/gen/hooks/endpoints.go
+  h_9630b74bdac540 36-37,41-42,71,75-78,80-82,84,89,97-120,130,134-137,139-141,143,148,156-179,268,272-275,277-279,281,286,294-317,327,331-334,336-338,340,345,353-376
+server/gen/hooks/service.go
+  h_9630b74bdac540 37-38,41-42,51-52,99-101,162,212,523-525,545,554
+server/gen/http/agent/client/cli.go
+  h_9630b74bdac540 21,28-33,66
+server/gen/http/agent/client/encode_decode.go
+  h_9630b74bdac540 16,46-53
+server/gen/http/agent/server/encode_decode.go
+  h_9630b74bdac540 41-47,53-56,77-84
+server/gen/http/agent/server/types.go
+  h_9630b74bdac540 4207,4210
+server/gen/http/cli/gram/cli.go
+  h_9630b74bdac540 224,477-484,1521,1529,1537,1545,1563,1569,9652,10349,10352,10355,10358,10367,10370,13688,13710,13724,13733,18446-18447,18457,18470,18478,18485,18498,18506,18513,18526,18534,18541,18554,18562,18613,18620,18624,18630,18637,18644,18648,18654
+server/gen/http/hooks/client/cli.go
+  h_9630b74bdac540 22,37-42,97,108,117-122,185,196,211-216,263,274,302-307,353,461,470-475,499,508,517-522,546
+server/gen/http/hooks/client/encode_decode.go
+  h_9630b74bdac540 17,46-49,292-299,542-549,792-795,1493-1500,1726-1733
+server/gen/http/hooks/server/encode_decode.go
+  h_9630b74bdac540 61,67-70,87,287,293-296,313-315,317-318,328-334,534,540-543,560-562,564-565,575-581,781,787-790,816,1457,1461-1464,1473-1475,1477-1478,1488-1494,1691,1695-1698,1707-1709,1711-1712,1722-1728
+server/gen/http/hooks/server/types.go
+  h_9630b74bdac540 3593,3624,3634,3673,3683,3706,3716,3729,3768,3780,3788,3800
+server/gen/http/openapi3.yaml
+  h_9630b74bdac540 14665,32369-32370,32477-32478,32884,32965-32966,32974,33055-33056,125331-125334,125355
+server/internal/access/directory_role_inventory.go
+  h_9630b74bdac540 1-392
+server/internal/access/directory_role_inventory_test.go
+  h_9630b74bdac540 1-365
+server/internal/access/queries.sql
+  h_9630b74bdac540 1774-1809
+server/internal/access/repo/queries.sql.go
+  h_9630b74bdac540 16-28,516-528,2045-2153
+server/internal/agent/getplugins_workload_test.go
+  h_9630b74bdac540 1-249
+server/internal/agent/impl.go
+  h_9630b74bdac540 31,73-76,98,102-115,123-126,133-139,162-198,231-234
+server/internal/agent/setup_test.go
+  h_9630b74bdac540 23,31,85-86,118,133-134,137-144
+server/internal/auth/deviceagenttoken/deviceagenttoken.go
+  h_9630b74bdac540 1-363
+server/internal/auth/deviceagenttoken/deviceagenttoken_test.go
+  h_9630b74bdac540 1-183
+server/internal/auth/sessions/support_command.go
+  h_9630b74bdac540 1-43
+server/internal/authz/checks.go
+  h_9630b74bdac540 46-52
+server/internal/authz/principal.go
+  h_9630b74bdac540 14,27-36
+server/internal/authz/selector.go
+  h_9630b74bdac540 112-113,132-137,142-143,175
+server/internal/authz/selector_test.go
+  h_9630b74bdac540 464-489
+server/internal/authz/workload_admission.go
+  h_9630b74bdac540 9,55-61
+server/internal/constants/auth.go
+  h_9630b74bdac540 27-29
+server/internal/contextvalues/context.go
+  h_9630b74bdac540 180-206
+server/internal/contextvalues/context_test.go
+  h_9630b74bdac540 141-166
+server/internal/hooks/agent_actor.go
+  h_9630b74bdac540 14,38-39,41-42,45-68,77-82,174-176,254-255,292,305-306,339-343,366-368,372-374,376-378,380-399
+server/internal/hooks/agent_unbound_key_test.go
+  h_9630b74bdac540 1-81
+server/internal/hooks/ahp.go
+  h_9630b74bdac540 426
+server/internal/hooks/claude_hooks.go
+  h_9630b74bdac540 25,248-263,717-721,725-767
+server/internal/hooks/codex_otel.go
+  h_9630b74bdac540 80,88,115,123
+server/internal/hooks/impl.go
+  h_9630b74bdac540 12,29,111-114,292,326,331-350,355,359-392,398-401,403-429,436-444
+server/internal/hooks/ingest_hooks.go
+  h_9630b74bdac540 145,198-205
+server/internal/hooks/otel_decode_test.go
+  h_9630b74bdac540 326,379
+server/internal/hooks/otel_sink.go
+  h_9630b74bdac540 98,119
+server/internal/hooks/setup_test.go
+  h_9630b74bdac540 27,35-36,252,287-300
+server/internal/hooks/workload_actor_test.go
+  h_9630b74bdac540 1-425
+server/internal/hooks/workload_plugin_hooks_test.go
+  h_9630b74bdac540 1-201
+server/internal/litellm/impl.go
+  h_9630b74bdac540 183,315
+server/internal/litellm/setup_test.go
+  h_9630b74bdac540 175
+server/internal/mcp/authnchallenge_workloadgrant_deviceagent.go
+  h_9630b74bdac540 1-194
+server/internal/mcp/authnchallenge_workloadgrant_deviceagent_agent_test.go
+  h_9630b74bdac540 1-61
+server/internal/mcp/authnchallenge_workloadgrant_deviceagent_test.go
+  h_9630b74bdac540 1-415
+server/internal/mcp/authnchallenge_workloadgrant_test.go
+  h_9630b74bdac540 5,41-42,50-52,70-77,81,87,109,115,121
+server/internal/mcp/impl.go
+  h_9630b74bdac540 39,188,563,745
+server/internal/mcp/remote_session_recheck_test.go
+  h_9630b74bdac540 406
+server/internal/mcp/setup_test.go
+  h_9630b74bdac540 232,416,430,447-449,453,469,503-507,676,897
+server/internal/mcp/tunnel_caller_assertion_test.go
+  h_9630b74bdac540 393
+server/internal/mcpauthz/mcpauthztest/issuer.go
+  h_9630b74bdac540 1-39
+server/internal/otel/hooks_sink.go
+  h_9630b74bdac540 95,106
+server/internal/risk/policy_bypass_evaluator.go
+  h_9630b74bdac540 144-146
+server/internal/risk/scanner.go
+  h_9630b74bdac540 816-818
+server/internal/risk/workload_audience_test.go
+  h_9630b74bdac540 1-160
+server/internal/workloadidentity/deviceissuer.go
+  h_9630b74bdac540 1-63
+server/internal/workloadidentity/deviceissuer_test.go
+  h_9630b74bdac540 1-62
+server/internal/workloadpolicy/devices.go
+  h_9630b74bdac540 392
+server/internal/workloadpolicy/devices_test.go
+  h_9630b74bdac540 31,92,443
+server/internal/workloadpolicy/impl.go
+  h_9630b74bdac540 470
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "3f090790a6e040b668100c0bfc18ef04d2673963",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

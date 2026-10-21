@@ -1,0 +1,45 @@
+server/internal/platformmcp/plugins_integration_test.go
+  h_9630b74bdac540 27,29,32,158-161,250,483-490,500-504,513-515,522-604
+server/internal/platformmcp/plugins.go
+  h_9630b74bdac540 9,141,149-152,159-161,221-222,238-241,264-265,267-345,351,406-408,410,742-747,750-783,821,828-863
+  h_9630b74bdac540 162,219-220,409,411-412,827
+server/internal/plugins/publication_evidence_test.go
+  h_9630b74bdac540 1-71
+server/internal/plugins/publication_evidence.go
+  h_9630b74bdac540 1-132
+server/internal/platformmcp/connection_settings_test.go
+  h_9630b74bdac540 1-57
+server/internal/platformmcp/tools.go
+  h_9630b74bdac540 204,236
+server/internal/plugins/publication_requests_test.go
+  h_9630b74bdac540 26-28,37-39,64,66
+  h_9630b74bdac540 65
+server/internal/platformmcp/install_instructions.go
+  h_9630b74bdac540 50
+server/internal/plugins/publication_requests.go
+  h_9630b74bdac540 19-28,30-36,38,41,49,52,64,66
+server/internal/platformmcp/tool_plugins.go
+  h_9630b74bdac540 67
+server/internal/platformmcp/connection_settings.go
+  h_9630b74bdac540 1-144
+server/internal/platformmcp/tool_connection_settings.go
+  h_9630b74bdac540 1-55
+server/internal/platformmcp/queries.sql
+  h_9630b74bdac540 3026-3108,3166-3167,3214-3295
+  h_9630b74bdac540 3296-3297
+server/cmd/gram/platform_mcp.go
+  h_9630b74bdac540 355-357,788-790
+server/internal/platformmcp/repo/queries.sql.go
+  h_9630b74bdac540 2279-2397,3088-3113,5632-5768,5835-5836
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a7a3e4cae14c422264783eb8026bad398c729235",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

@@ -1,0 +1,21 @@
+server/internal/adminmcp/runtime.go
+  h_9630b74bdac540 96
+server/internal/adminmcp/tool_write_organization_whitelist_test.go
+  h_9630b74bdac540 241,245,249-253,262-268,272,284,286-289,293,297-300,302-303,306,308-311,316,322-324
+  h_9630b74bdac540 290-292,294-296,301,312-315,317-321
+server/internal/adminmcp/tool_write_organization_whitelist.go
+  h_9630b74bdac540 21,23,70,72,74-75,89,203
+.changeset/admin-mcp-organization-whitelist.md
+  h_9630b74bdac540 5
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "768447ca25c17b7afd9fb61dad7dd6cbdaa6403b",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

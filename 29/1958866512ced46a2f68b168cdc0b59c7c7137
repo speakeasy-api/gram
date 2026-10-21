@@ -1,0 +1,48 @@
+server/cmd/gram/mcp.go
+  h_9630b74bdac540 383
+server/internal/remotesessions/queries.sql
+  h_9630b74bdac540 3129-3137,3149-3152,3165,3167-3183
+server/internal/remotesessions/clienthandlers.go
+  h_9630b74bdac540 79-81,107,114,116-117,814-829,831
+server/internal/metamcp/impl.go
+  h_9630b74bdac540 389-392,443,726
+server/internal/usersessions/organizationissuermigration.go
+  h_9630b74bdac540 272-276,282,368-371,376
+  s_fbbac0a08d168e::t_58fb33f897b1c8 277-278
+server/internal/usersessions/organizationissuermigration_test.go
+  h_9630b74bdac540 646
+server/internal/remotesessions/gatewaymembercredentials_test.go
+  h_9630b74bdac540 213-247
+server/internal/metamcp/membercredentials_test.go
+  h_9630b74bdac540 284-328
+server/internal/metamcp/queries.sql
+  h_9630b74bdac540 555-557,561-567,596-605
+server/internal/metamcp/membercredentials.go
+  h_9630b74bdac540 5,16,33-47,64-69,139-144,164-166,170,212-241
+  s_fbbac0a08d168e::t_756b612b7a7186 167-168,242
+server/internal/metamcp/repo/queries.sql.go
+  h_9630b74bdac540 236-258,596-602,632-637,641-645
+server/internal/remotesessions/repo/queries.sql.go
+  h_9630b74bdac540 16-91
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "291958866512ced46a2f68b168cdc0b59c7c7137",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  },
+  "sessions": {
+    "s_fbbac0a08d168e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "d2da6e3f-1d9e-46a9-af53-e7d46f332402",
+        "model": "unknown"
+      },
+      "human_author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

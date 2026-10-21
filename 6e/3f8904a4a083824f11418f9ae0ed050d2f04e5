@@ -1,0 +1,57 @@
+server/internal/plugins/platform_mcp_private_access_skill_test.go
+  h_9630b74bdac540 1-22
+server/design/telemetry/design.go
+  h_9630b74bdac540 2979-2980,2983
+server/internal/mcp/serve_meta.go
+  h_9630b74bdac540 75-79,90
+server/internal/mcp/network_traffic.go
+  h_9630b74bdac540 38-44,54
+server/internal/mcp/network_traffic_test.go
+  h_9630b74bdac540 1-24
+server/internal/platformmcp/tool_network_traffic.go
+  h_9630b74bdac540 1-171
+seed/demo/verify.md
+  h_9630b74bdac540 38-44
+server/internal/plugins/platform_mcp_skills/configure-private-mcp-access/SKILL.md
+  h_9630b74bdac540 14
+server/internal/platformmcp/adapters.go
+  h_9630b74bdac540 347-348,372-373
+  h_9630b74bdac540 335-346,349-355,360-371,374-380
+server/internal/telemetry/mcp_network_traffic.go
+  h_9630b74bdac540 50,54-56,85,89,95,97,100,102-106,108,113,118,120,122
+server/cmd/gram/platform_mcp.go
+  h_9630b74bdac540 125,396,836
+server/cmd/gram/start.go
+  h_9630b74bdac540 1787
+server/internal/platformmcp/tools.go
+  h_9630b74bdac540 250-254,273
+server/internal/platformmcp/tool_network_traffic_test.go
+  h_9630b74bdac540 1-86
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/NetworkTrafficChart.tsx
+  h_9630b74bdac540 2-6,12,27,79-80,104-105,114-115,123,137-138,151,153,155,160-161,165
+  h_9630b74bdac540 134-136,139,152,154,156
+server/internal/telemetry/mcp_network_traffic_test.go
+  h_9630b74bdac540 13,36
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/NetworkTrafficPanel.tsx
+  h_9630b74bdac540 7-8,10,25-29,31-33,36
+  h_9630b74bdac540 34-35
+server/gen/http/openapi3.yaml
+  h_9630b74bdac540 86101,86105,86113
+server/gen/http/telemetry/client/types.go
+  h_9630b74bdac540 196,198
+server/gen/http/telemetry/server/types.go
+  h_9630b74bdac540 196,198
+server/gen/telemetry/service.go
+  h_9630b74bdac540 314,316
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "6e3f8904a4a083824f11418f9ae0ed050d2f04e5",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

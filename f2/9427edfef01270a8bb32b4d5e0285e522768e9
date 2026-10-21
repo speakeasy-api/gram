@@ -1,0 +1,36 @@
+server/internal/demoseed/seed_09_postflight_identity.go
+  h_9630b74bdac540 299-301
+.changeset/directory-review-notifications.md
+  h_9630b74bdac540 1-5
+server/internal/demoseed/queries/02_roles.sql
+  h_9630b74bdac540 159-161,163-164
+server/internal/demoseed/queries/09_postflight_identity.sql
+  h_9630b74bdac540 421-424
+.changeset/directory-review-email-toggle.md
+  h_9630b74bdac540 1-5
+server/internal/demoseed/repo/02_roles.sql.go
+  s_5e3b32e1790ee3::t_4831cb38e01738 523-524,528-530
+server/internal/demoseed/repo/09_postflight_identity.sql.go
+  s_5e3b32e1790ee3::t_ac107532171ad3 291-302
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f29427edfef01270a8bb32b4d5e0285e522768e9",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  },
+  "sessions": {
+    "s_5e3b32e1790ee3": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ccc44d79-93f4-4862-a01c-68391f7619f9",
+        "model": "unknown"
+      },
+      "human_author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

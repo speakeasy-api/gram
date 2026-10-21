@@ -1,0 +1,14 @@
+server/internal/platformmcp/access_reads_integration_test.go
+  h_9630b74bdac540 342,346
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "925d0ce3ac337c65a0551b0d0aaa1ab37e4e7a0f",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

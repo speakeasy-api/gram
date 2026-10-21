@@ -1,0 +1,14 @@
+server/internal/adminmcp/tool_write_feature_entitlements_test.go
+  h_9630b74bdac540 124-129,153-157
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f02bade3b844e88c1a509482d873e49e2a4b406d",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

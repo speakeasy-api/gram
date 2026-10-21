@@ -1,0 +1,90 @@
+client/dashboard/src/pages/org/identity-provider/directoryMappingContract.test.ts
+  h_9630b74bdac540 62
+server/internal/access/directory_role_mappings_test.go
+  h_9630b74bdac540 154-214
+server/internal/access/listmembers_test.go
+  h_9630b74bdac540 239-348
+client/dashboard/src/pages/org/identity-provider/directoryMappingFlow.test.ts
+  h_9630b74bdac540 70,137
+server/internal/access/role_manager.go
+  h_9630b74bdac540 154-155,157-158,163-176,197-201,218-228,977-979,992-994,1152-1154
+  s_15424a3bf076c3::t_0f0ac7f5f9b1a6 195-196,229-230,967-976,982-991,1142-1151
+server/design/access/design.go
+  h_9630b74bdac540 1321-1323,1326-1349,1862,1876-1879
+  s_08f8b2adf28896::t_f7bcc9d014e317 1324-1325
+server/internal/access/directory_role_mappings.go
+  h_9630b74bdac540 33-38,100-103,111,435-436,440
+  s_08f8b2adf28896::t_79fe17ba2a32b4 441
+client/dashboard/src/pages/org/identity-provider/DirectoryRoleMappings.test.tsx
+  h_9630b74bdac540 115
+.changeset/directory-mapping-read-status.md
+  h_9630b74bdac540 1-5
+client/dashboard/src/pages/access/directorySourcesForRole.test.ts
+  h_9630b74bdac540 15
+server/internal/access/queries.sql
+  h_9630b74bdac540 583-587,611-613,1507-1577,1653-1669
+  s_08f8b2adf28896::t_f0361c16e1d5cd 610,1578
+client/dashboard/src/sdk/.speakeasy/gen.lock
+  s_15424a3bf076c3::t_ff4d008f21fe33 851-852,9211,12058
+server/gen/http/access/client/encode_decode.go
+  s_2072e07af4b0b9::t_cd21c56cb46068 8035,8055,8091,8107-8158
+server/gen/http/access/client/types.go
+  s_2072e07af4b0b9::t_8af6edbff0881a 292-296,349-358,6796-6800,6821-6825,6875-6906,8847,9830,9846-9865,13453-13455,13476-13480,13565-13578,22134-22136,22157-22161,22180-22182,22203-22207,22285-22339
+server/gen/http/access/server/types.go
+  s_2072e07af4b0b9::t_c3876a3600da0a 294-298,355-364,6776-6780,6801-6805,6855-6886,7599,7690,7714-7733
+server/gen/http/openapi3.yaml
+  s_2072e07af4b0b9::t_7395c230ec6e57 87476-87480,87486-87490,87502-87504,87531-87569,96705-96710,96717
+.speakeasy/out.openapi.yaml
+  h_9630b74bdac540 80548-80552,80558-80562,80574-80576,80603-80641,87301-87306,87313
+client/dashboard/src/sdk/src/models/components/accessmember.ts
+  h_9630b74bdac540 10-17,24-27,32-35,48-51,79-81,83-85,89,101,103-104
+client/dashboard/src/sdk/src/models/components/accessmemberdirectorygroup.ts
+  h_9630b74bdac540 1-41
+client/dashboard/src/sdk/src/models/components/accessmemberdirectoryrolesource.ts
+  h_9630b74bdac540 1-83
+client/dashboard/src/sdk/src/models/components/directoryrolemapping.ts
+  h_9630b74bdac540 26-37,68-71,80-83,101,116
+server/gen/access/service.go
+  h_9630b74bdac540 244-275,506-510
+server/gen/http/access/server/encode_decode.go
+  h_9630b74bdac540 7463,7483,7519,7543-7594
+server/internal/access/repo/queries.sql.go
+  h_9630b74bdac540 984-1090,1104-1108,1131-1134,1212-1214,1236-1238,2027-2043,2063,2085
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "fac5f60a3cb3308c3cacb1144714afe6545481b2",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  },
+  "sessions": {
+    "s_08f8b2adf28896": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ce9838d7-6a25-4f3c-9b5c-c9498c97e67b",
+        "model": "unknown"
+      },
+      "human_author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    },
+    "s_15424a3bf076c3": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "d3bc33c6-aca1-497d-a194-5f844fe3f216",
+        "model": "unknown"
+      },
+      "human_author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    },
+    "s_2072e07af4b0b9": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7ee9196f-fb22-4503-9e7a-ced8e6538f98",
+        "model": "unknown"
+      },
+      "human_author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

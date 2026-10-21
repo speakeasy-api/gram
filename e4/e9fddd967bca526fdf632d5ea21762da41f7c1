@@ -1,0 +1,38 @@
+.changeset/platform-mcp-gateway-tools.md
+  h_9630b74bdac540 1-5
+server/cmd/gram/platform_mcp.go
+  h_9630b74bdac540 507,814-834,1131
+server/internal/metamcp/impl.go
+  h_9630b74bdac540 111-147,150,200,204,207,801-803,805,807,809,818,820,851,862,874-875,877,914,925,937-938,940,949
+server/internal/metamcp/membership.go
+  h_9630b74bdac540 1-433
+server/internal/platformmcp/adapters.go
+  h_9630b74bdac540 386,425,450-458
+server/internal/platformmcp/descriptor_test.go
+  h_9630b74bdac540 450-453
+server/internal/platformmcp/feedback.go
+  h_9630b74bdac540 418-419
+server/internal/platformmcp/gateways.go
+  h_9630b74bdac540 1-614
+server/internal/platformmcp/gateways_integration_test.go
+  h_9630b74bdac540 1-282
+server/internal/platformmcp/operation_budget.go
+  h_9630b74bdac540 56-57,149-155
+server/internal/platformmcp/tool_gateways.go
+  h_9630b74bdac540 1-96
+server/internal/platformmcp/tools.go
+  h_9630b74bdac540 287,336
+server/migrations/atlas.sum
+  h_9630b74bdac540 1,478
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "e4e9fddd967bca526fdf632d5ea21762da41f7c1",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

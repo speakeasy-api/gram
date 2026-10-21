@@ -1,0 +1,30 @@
+client/dashboard/src/pages/org/identity-provider/DirectoryRoleSetupDialog.tsx
+  h_9630b74bdac540 22,83-85,88
+client/dashboard/src/pages/org/identity-provider/directoryRoleSetup.ts
+  h_9630b74bdac540 57-79,89,107
+  s_a1834ae64427e4::t_248621c2eba7f9 80-81,88
+client/dashboard/src/pages/org/identity-provider/directoryRoleSetup.test.ts
+  h_9630b74bdac540 98-152
+  s_a1834ae64427e4::t_9c9f29871b8454 153
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "74864a1e537fff15cb924ef8451c352eac1be2ef",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  },
+  "sessions": {
+    "s_a1834ae64427e4": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "d8e1c1bb-57b4-435e-97c6-5930360cdb7a",
+        "model": "unknown"
+      },
+      "human_author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

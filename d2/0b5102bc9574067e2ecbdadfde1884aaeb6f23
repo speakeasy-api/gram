@@ -1,0 +1,48 @@
+server/internal/adminmcp/tool_support_matrix_entry_test.go
+  h_9630b74bdac540 4-9,12,16,19-191,213-222,224-234,236,238-239
+  h_9630b74bdac540 223,235,237
+server/internal/adminmcp/tool_write_support_matrix.go
+  h_9630b74bdac540 299,303,312-347,400
+server/internal/adminmcp/tool_write_support_matrix_test.go
+  h_9630b74bdac540 71-74,215-256
+  h_9630b74bdac540 257-258
+client/dashboard/src/lib/audit-actions.ts
+  h_9630b74bdac540 138-139,589-592
+server/internal/adminmcp/tool_write_chat_analysis_test.go
+  h_9630b74bdac540 101-102
+server/internal/adminmcp/tool_support_matrix_entry.go
+  h_9630b74bdac540 54,65-107
+  h_9630b74bdac540 108-109
+server/internal/adminmcp/tool_write_organization_access_test.go
+  h_9630b74bdac540 116-138
+  h_9630b74bdac540 74,139-140
+client/dashboard/src/lib/audit-actions.test.ts
+  h_9630b74bdac540 44-54
+server/internal/adminmcp/organization_filters_test.go
+  h_9630b74bdac540 5,46-59,68-72
+server/internal/adminmcp/tool_organizations.go
+  h_9630b74bdac540 30
+server/internal/adminmcp/tool_billing_detail_test.go
+  h_9630b74bdac540 43,50
+server/internal/admin/members_page.go
+  h_9630b74bdac540 26,33-36
+server/internal/adminmcp/tool_organization_detail.go
+  h_9630b74bdac540 135
+server/internal/adminmcp/tool_registry_test.go
+  h_9630b74bdac540 122,127,168-175,196-219
+server/internal/adminmcp/tool_registry.go
+  h_9630b74bdac540 142,145-149,229
+server/internal/adminmcp/organization_filters.go
+  h_9630b74bdac540 10,28-29,32,48,95
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d20b5102bc9574067e2ecbdadfde1884aaeb6f23",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

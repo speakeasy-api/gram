@@ -1,0 +1,16 @@
+server/internal/directoryreview/review_test.go
+  h_9630b74bdac540 1-432
+server/internal/directoryreview/review.go
+  h_9630b74bdac540 161-164,183-184,187-189,191-192
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ff3ac4c63324bcd94bcc7a1c46229259d2a20c1b",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

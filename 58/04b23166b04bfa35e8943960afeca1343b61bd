@@ -1,0 +1,39 @@
+client/dashboard/src/pages/org/identity-provider/directoryRoleSetup.test.ts
+  h_9630b74bdac540 1-175
+client/dashboard/src/pages/org/identity-provider/invalidateDirectoryMappingAccess.ts
+  h_9630b74bdac540 5,18
+client/dashboard/src/pages/org/identity-provider/directoryRoleSetup.ts
+  h_9630b74bdac540 1-162
+.changeset/directory-role-bulk-setup-ui.md
+  h_9630b74bdac540 1-5
+.changeset/directory-role-bulk-setup-api.md
+  h_9630b74bdac540 1-5
+client/dashboard/src/pages/org/identity-provider/DirectoryRoleSetupDialog.test.tsx
+  h_9630b74bdac540 1-166
+client/dashboard/src/pages/org/identity-provider/DirectoryRoleSetupDialog.tsx
+  h_9630b74bdac540 1-404
+client/dashboard/src/pages/org/identity-provider/DirectoryRoleMappings.tsx
+  h_9630b74bdac540 14,92,246,359-372,376-381,880-882,885
+  s_f890939e16ed24::t_0b6dbebc2c994d 883-884,886
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "5804b23166b04bfa35e8943960afeca1343b61bd",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  },
+  "sessions": {
+    "s_f890939e16ed24": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "198392cb-332a-44c1-b19c-637ce62d38e6",
+        "model": "unknown"
+      },
+      "human_author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

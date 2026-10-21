@@ -1,0 +1,76 @@
+.changeset/command-palette-projects.md
+  h_9630b74bdac540 5
+.changeset/project-agent-lifecycle-review.md
+  h_9630b74bdac540 2,6
+client/admin/CHANGELOG.md
+  h_9630b74bdac540 3-8
+client/admin/package.json
+  h_9630b74bdac540 4
+client/dashboard/CHANGELOG.md
+  h_9630b74bdac540 3-55
+client/dashboard/package.json
+  h_9630b74bdac540 4
+client/dashboard/src/components/command-palette/CommandPalette.test.tsx
+  h_9630b74bdac540 1,4,13-18,23,31-33,37-41,46-49,67-88
+client/dashboard/src/components/command-palette/CommandPalette.tsx
+  h_9630b74bdac540 23-27,45-46,177-179,228-236
+client/dashboard/src/components/command-palette/ResourceResults.test.tsx
+  h_9630b74bdac540 19-22,26-27,71-81,83-98,137-141,183-203,211-214,218-219,500-669
+client/dashboard/src/components/command-palette/ResourceResults.tsx
+  h_9630b74bdac540 24,27,530-609
+client/dashboard/src/pages/access/CreateRoleDialog.test.tsx
+  h_9630b74bdac540 144-148
+client/dashboard/src/pages/access/CreateRoleDialog.tsx
+  h_9630b74bdac540 732
+client/dashboard/src/pages/agents/Agents.test.tsx
+  h_9630b74bdac540 222,488-490,500-516,537-547
+client/dashboard/src/pages/agents/Agents.tsx
+  h_9630b74bdac540 161,166-169,203
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/NetworkAccessSection.test.tsx
+  h_9630b74bdac540 316-324
+client/dashboard/src/pages/org/OrgDomains.test.tsx
+  h_9630b74bdac540 1-129
+client/dashboard/src/pages/org/OrgDomains.tsx
+  h_9630b74bdac540 60,617-622,853-854,858-863
+client/dashboard/src/pages/org/PrivateNetworkSection.test.tsx
+  h_9630b74bdac540 17,170-181
+server/CHANGELOG.md
+  h_9630b74bdac540 3-44
+server/database/schema.sql
+  h_9630b74bdac540 6393,6397-6398,6401,6413,6421,6423-6426,6428-6431,6449-6455
+server/internal/agentmanagement/create_project_test.go
+  h_9630b74bdac540 6,179-221
+server/internal/agentmanagement/service.go
+  h_9630b74bdac540 161,163
+server/internal/database/models.go
+  h_9630b74bdac540 2260-2272
+server/internal/plugins/repo/models.go
+  h_9630b74bdac540 52-64
+server/internal/plugins/repo/queries.sql.go
+  h_9630b74bdac540 61,89,92,490,514,517,1112,1131,1134,1154,1184,1187,1709,1725,1728,1919,1928-1942,1963,1966,2087,2110,2113
+server/internal/remotesessions/token_response.go
+  h_9630b74bdac540 8,38-73,90
+server/internal/remotesessions/token_response_test.go
+  h_9630b74bdac540 5,13-73
+server/migrations/20260923183736_scope_gateway_plugin_membership.sql
+  h_9630b74bdac540 1-12
+server/migrations/atlas.sum
+  h_9630b74bdac540 1,432-433
+server/package.json
+  h_9630b74bdac540 3
+tunnel/CHANGELOG.md
+  h_9630b74bdac540 3-8
+tunnel/package.json
+  h_9630b74bdac540 3
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "91123035580231f128813877a9bc7fa54f596d2a",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

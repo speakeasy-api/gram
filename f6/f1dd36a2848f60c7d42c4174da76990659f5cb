@@ -1,0 +1,458 @@
+.changeset/admin-demo-org-nav-link.md
+  h_9630b74bdac540 1-5
+.changeset/aim-42-version-aware-mcp-dispatch.md
+  h_9630b74bdac540 5
+.changeset/assistant-thread-subscriptions.md
+  h_9630b74bdac540 6
+.changeset/mcp-scope-empty-tools-wildcard.md
+  h_9630b74bdac540 2,6
+.changeset/mcp-scope-picker-focus-after-deselect.md
+  h_9630b74bdac540 1-5
+.changeset/meta-mcp-sdk-client.md
+  h_9630b74bdac540 1-5
+.changeset/okta-checklist-key-order.md
+  h_9630b74bdac540 1-6
+.changeset/remote-mcp-probe-dual-era.md
+  h_9630b74bdac540 1-5
+.changeset/remote-mcp-readiness-probe-diagnostics.md
+  h_9630b74bdac540 1-5
+.speakeasy/out.openapi.yaml
+  h_9630b74bdac540 83801,93098,99733-99739,102157-102163
+client/admin/src/components/app-sidebar.test.tsx
+  h_9630b74bdac540 1,3,6-7,9,207-211,251,253-260
+client/admin/src/components/app-sidebar.tsx
+  h_9630b74bdac540 5,85-87
+client/admin/src/components/demo-organization-nav-item.tsx
+  h_9630b74bdac540 1-23
+client/admin/src/components/record-nav.tsx
+  h_9630b74bdac540 2,10-11,15,25,28-29,326-340
+client/admin/src/lib/adminNav.ts
+  h_9630b74bdac540 16-17,62-67
+client/admin/src/pages/admin-mcp/AdminMcpSetup.test.tsx
+  h_9630b74bdac540 1-71
+client/admin/src/pages/admin-mcp/AdminMcpSetup.tsx
+  h_9630b74bdac540 1-173
+client/admin/src/routeTree.gen.ts
+  h_9630b74bdac540 14,48-52,181,208,231,260,287,309,337,360-366,621
+client/admin/src/routes/mcp-setup.tsx
+  h_9630b74bdac540 1-7
+client/dashboard/CHANGELOG.md
+  h_9630b74bdac540 3-14
+client/dashboard/package.json
+  h_9630b74bdac540 4
+client/dashboard/src/components/observe/InsightsAgents.tsx
+  h_9630b74bdac540 1,542-553
+client/dashboard/src/components/setup-empty-state.test.tsx
+  h_9630b74bdac540 1-78
+client/dashboard/src/components/setup-empty-state.tsx
+  h_9630b74bdac540 1-122
+client/dashboard/src/components/shadow-ai/AIToolsTable.test.tsx
+  h_9630b74bdac540 8-11
+client/dashboard/src/components/shadow-ai/AIToolsTable.tsx
+  h_9630b74bdac540 1,87
+client/dashboard/src/components/shadow-mcp/ShadowMCPInventoryTable.test.tsx
+  h_9630b74bdac540 30-33
+client/dashboard/src/components/shadow-mcp/ShadowMCPInventoryTable.tsx
+  h_9630b74bdac540 1,95-98
+client/dashboard/src/hooks/useToolsetUrl.test.ts
+  h_9630b74bdac540 1-21
+client/dashboard/src/hooks/useToolsetUrl.ts
+  h_9630b74bdac540 81-90,94-95
+client/dashboard/src/lib/utils.test.ts
+  h_9630b74bdac540 2-58
+client/dashboard/src/lib/utils.ts
+  h_9630b74bdac540 99-115,122-125
+client/dashboard/src/pages/assistants/onboarding/AssistantTriggersList.tsx
+  h_9630b74bdac540 16,99-102,124-128
+client/dashboard/src/pages/assistants/onboarding/SlackReplyModeOptions.tsx
+  h_9630b74bdac540 1-64
+client/dashboard/src/pages/assistants/onboarding/docs/slack.ts
+  h_9630b74bdac540 18,22-34,47,55,60,63,67,76,80,88-90,101
+client/dashboard/src/pages/assistants/onboarding/slackCapabilities.ts
+  h_9630b74bdac540 151-158,163-165,167-168,170,173-174,176,178-214
+client/dashboard/src/pages/assistants/onboarding/systemPrompt.ts
+  h_9630b74bdac540 63
+client/dashboard/src/pages/assistants/onboarding/tools/components.tsx
+  h_9630b74bdac540 29,32-34,36,494-496,508,616,628,889-890,898,910-1021,1031-1034,1048-1050,1054,1056,1058,1060,1066,1068-1072,1074,1080,1094-1095,1110-1111,1116,1119-1124,1127-1134,1136-1147,1155-1263
+client/dashboard/src/pages/assistants/onboarding/tools/useOnboardingTools.tsx
+  h_9630b74bdac540 21-23,30,2009-2113,2117-2118,2128,2140-2151,2188,2211,2284,2288,2295-2302,2312,2409,2455
+client/dashboard/src/pages/costs/CostsExplorer.tsx
+  h_9630b74bdac540 1,1362-1379
+client/dashboard/src/pages/identities/IdentitiesIndex.test.tsx
+  h_9630b74bdac540 40,159-163
+client/dashboard/src/pages/identities/IdentitiesIndex.tsx
+  h_9630b74bdac540 1,481,485,705-707
+client/dashboard/src/pages/mcp/MCPDetails.tsx
+  h_9630b74bdac540 113,1598-1599
+client/dashboard/src/pages/mcp/x/MCPServerDetails.tsx
+  h_9630b74bdac540 6-12,86-96,198
+client/dashboard/src/pages/mcp/x/tabs/InspectTab.tsx
+  h_9630b74bdac540 1-4,47-49
+client/dashboard/src/pages/mcp/x/tabs/RemoteMcpToolsSection.test.tsx
+  h_9630b74bdac540 1-123
+client/dashboard/src/pages/mcp/x/tabs/RemoteMcpToolsSection.tsx
+  h_9630b74bdac540 18-24,67-74,83,85-86,159-161,163,178-183,190-193,196-201,240-245,292-293,307-308,317-318,328,332-345,559-580
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/NetworkAccessSection.test.tsx
+  h_9630b74bdac540 2-8,14,43,46-49,64-69,209,231-252,290-297,351,354-357,362,368-464
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/NetworkAccessSection.tsx
+  h_9630b74bdac540 27,42-43,49-50,67-72,77-85,92,97-99,114-115,121-138,143,147,150-152,160-165,169-170,288,300-304,316-343,372,386,453,477,479,487,506
+client/dashboard/src/pages/org/UserSessions.test.tsx
+  h_9630b74bdac540 3,14-19,89-96,110-114
+client/dashboard/src/pages/org/UserSessions.tsx
+  h_9630b74bdac540 1,172-175,177-179,181-182
+client/dashboard/src/pages/org/identity-provider/tabs/setup/ConnectionChecklist.test.tsx
+  h_9630b74bdac540 34-43,250-279
+client/dashboard/src/pages/org/identity-provider/tabs/setup/ConnectionChecklist.tsx
+  h_9630b74bdac540 34-51,97,105,137-139
+client/dashboard/src/pages/org/identity-provider/tabs/setup/OktaConnectionForms.test.tsx
+  h_9630b74bdac540 5,109,112,138
+client/dashboard/src/pages/org/identity-provider/tabs/setup/OktaConnectionForms.tsx
+  h_9630b74bdac540 128,167-213
+client/dashboard/src/pages/org/identity-provider/tabs/setup/OktaConnectionTab.tsx
+  h_9630b74bdac540 19,173,175-177
+client/dashboard/src/pages/org/identity-provider/tabs/setup/checklistAffordances.tsx
+  h_9630b74bdac540 6,8,36-39
+client/dashboard/src/pages/playground/PlaygroundProxiedChat.tsx
+  h_9630b74bdac540 49,53-62
+client/dashboard/src/pages/playground/useProxiedMcpConnection.ts
+  h_9630b74bdac540 99-104
+client/dashboard/src/pages/security/PolicyDetail.scope-rows.test.tsx
+  h_9630b74bdac540 84-92,136-140,467-625,719-722
+client/dashboard/src/pages/security/PolicyMCPScopePicker.tsx
+  h_9630b74bdac540 16,49,193-204,228-232,261,269,288,294-298,304-320,337,567-573,706-711,718-722,809,845
+client/dashboard/src/pages/security/RiskEvents.tsx
+  h_9630b74bdac540 1,521-532,612,624,670
+client/dashboard/src/pages/security/policy-mcp-scope.ts
+  h_9630b74bdac540 10-12
+client/dashboard/src/pages/security/watchdog/Watchdog.tsx
+  h_9630b74bdac540 1,453-458,714,722,740
+client/dashboard/src/pages/triggers/Triggers.tsx
+  h_9630b74bdac540 33-37,342-410,431-439,451-453
+client/dashboard/src/sdk/src/models/components/identityproviderconnectionchecklistitem.ts
+  h_9630b74bdac540 60
+client/dashboard/src/sdk/src/models/components/riskmcpserverscope.ts
+  h_9630b74bdac540 17
+client/dashboard/src/sdk/src/models/components/toolset.ts
+  h_9630b74bdac540 8,43-57,108-111,180-184,208,243
+client/dashboard/src/sdk/src/models/components/updatetoolsetrequestbody.ts
+  h_9630b74bdac540 7-22,53-56,75-80,90,110-112,125
+docs/pubsub-topology.md
+  h_9630b74bdac540 62-63,97,145-150,202-203,208-273,324-325,364
+infra/gen/gram/telemetry/v1/session_observed.pb.go
+  h_9630b74bdac540 1-320
+infra/gen/gram/telemetry/v1/session_observed_ch_writer.pb.go
+  h_9630b74bdac540 1-111
+infra/gen/kcc.yaml
+  h_9630b74bdac540 1319-1336,1857-1874,2287-2303
+infra/gen_py/gram/telemetry/v1/session_observed_ch_writer_pb2.py
+  h_9630b74bdac540 1-40
+infra/gen_py/gram/telemetry/v1/session_observed_ch_writer_pb2.pyi
+  h_9630b74bdac540 1-10
+infra/gen_py/gram/telemetry/v1/session_observed_pb2.py
+  h_9630b74bdac540 1-40
+infra/gen_py/gram/telemetry/v1/session_observed_pb2.pyi
+  h_9630b74bdac540 1-22
+infra/pkg/topics/topics_gen.go
+  h_9630b74bdac540 76-77,108,162-163,223-224
+infra/proto/gram/telemetry/v1/session_observed.proto
+  h_9630b74bdac540 1-24
+infra/proto/gram/telemetry/v1/session_observed_ch_writer.proto
+  h_9630b74bdac540 1-21
+seed/demo/PAGES.md
+  h_9630b74bdac540 188
+server/CHANGELOG.md
+  h_9630b74bdac540 3-15
+server/clickhouse/local/golang_migrate/20260928161107_imported_session_observations.down.sql
+  h_9630b74bdac540 1-6
+server/clickhouse/local/golang_migrate/20260928161107_imported_session_observations.up.sql
+  h_9630b74bdac540 1-4
+server/clickhouse/local/golang_migrate/atlas.sum
+  h_9630b74bdac540 1,118
+server/clickhouse/migrations/20260928161103_imported_session_observations.sql
+  h_9630b74bdac540 1-4
+server/clickhouse/migrations/atlas.sum
+  h_9630b74bdac540 1,123
+server/clickhouse/schema.sql
+  h_9630b74bdac540 738,795,861-864,1135,1154,1220-1221,1223
+server/cmd/gram/deps.go
+  h_9630b74bdac540 1150,1183
+server/cmd/gram/mcp.go
+  h_9630b74bdac540 291
+server/cmd/gram/private_ingress_runtime.go
+  h_9630b74bdac540 213
+server/cmd/gram/replaysessions.go
+  h_9630b74bdac540 1-74
+server/cmd/gram/root.go
+  h_9630b74bdac540 53
+server/cmd/gram/start.go
+  h_9630b74bdac540 1073,1619
+server/cmd/gram/streams.go
+  h_9630b74bdac540 77,404-409,412,637-646,670-671
+server/cmd/gram/worker.go
+  h_9630b74bdac540 736
+server/database/schema.sql
+  h_9630b74bdac540 1656-1695,9743-9809
+server/design/identityproviderconnections/design.go
+  h_9630b74bdac540 22
+server/design/shared/risk.go
+  h_9630b74bdac540 138
+server/design/shared/toolset.go
+  h_9630b74bdac540 92
+server/design/toolsets/design.go
+  h_9630b74bdac540 460
+server/gen/http/cli/gram/cli.go
+  h_9630b74bdac540 27106
+server/gen/http/identity_provider_connections/client/types.go
+  h_9630b74bdac540 2273-2275
+server/gen/http/identity_provider_connections/server/types.go
+  h_9630b74bdac540 2273-2275
+server/gen/http/openapi3.yaml
+  h_9630b74bdac540 89150,98718,105960-105966,108592-108598,108654-108660
+server/gen/http/risk/client/types.go
+  h_9630b74bdac540 10943-10944,10989-10990
+server/gen/http/risk/server/types.go
+  h_9630b74bdac540 10947-10948,11642-11643
+server/gen/http/toolsets/client/cli.go
+  h_9630b74bdac540 149,167-171,221-224
+server/gen/http/toolsets/client/types.go
+  h_9630b74bdac540 57-58,147-148,235-236,309-310,411-412,485-486,559-560,633-634,707-708,781-782,4338-4341,4431-4434,5033-5036,5453-5456,6217-6220,6487-6490,6757-6760,7027-7030,7297-7300,7567-7570,7937-7941,8130-8134,8291-8295,8500-8504,8661-8665,8822-8826,8983-8987,9144-9148,9305-9309
+server/gen/http/toolsets/server/types.go
+  h_9630b74bdac540 57-58,147-148,235-236,309-310,411-412,485-486,559-560,633-634,707-708,781-782,4319-4322,4498-4501,4639-4642,4835-4838,4976-4979,5118-5121,5259-5262,5400-5403,5541-5544,7900-7903,8110-8114
+server/gen/identity_provider_connections/service.go
+  h_9630b74bdac540 158-160
+server/gen/toolsets/service.go
+  h_9630b74bdac540 312-313
+server/gen/types/risk_mcp_server_scope.go
+  h_9630b74bdac540 13-14
+server/gen/types/toolset.go
+  h_9630b74bdac540 57-58
+server/internal/assistants/impl_test.go
+  h_9630b74bdac540 195-199,222-224,248-252,289-291
+server/internal/assistants/queries.sql
+  h_9630b74bdac540 82-89
+server/internal/assistants/repo/queries.sql.go
+  h_9630b74bdac540 3470-3503
+server/internal/assistants/service.go
+  h_9630b74bdac540 1126-1138
+server/internal/assistants/source_adapter_slack.go
+  h_9630b74bdac540 7,40-60,106-110,126-128,177,182-212
+server/internal/assistants/source_adapter_test.go
+  h_9630b74bdac540 45,83-124
+server/internal/background/triggers/app.go
+  h_9630b74bdac540 24,154-155,204,226-227,753,934-943,950-951,954,962-968,1033-1036
+server/internal/background/triggers/definitions.go
+  h_9630b74bdac540 92-95,480-487,517
+server/internal/background/triggers/routing.go
+  h_9630b74bdac540 1-435
+server/internal/background/triggers/routing_test.go
+  h_9630b74bdac540 1-270
+server/internal/background/triggers/slack.go
+  h_9630b74bdac540 12,21-22,25-29,35-53,59-129,532-533,595-620,664-667,670,708,837-838
+server/internal/background/triggers/slack_backfill.go
+  h_9630b74bdac540 1-113
+server/internal/background/triggers/slack_backfill_test.go
+  h_9630b74bdac540 1-84
+server/internal/background/triggers/slack_identity.go
+  h_9630b74bdac540 1-70
+server/internal/chat/message_store.go
+  h_9630b74bdac540 20,29,713-722
+server/internal/chat/queries.sql
+  h_9630b74bdac540 144-171
+server/internal/chat/repo/queries.sql.go
+  h_9630b74bdac540 1133-1199,2881-2931
+server/internal/database/models.go
+  h_9630b74bdac540 2610-2634,3531-3545
+server/internal/demoseed/clickhouse.sql
+  h_9630b74bdac540 108-144,2515-2516
+server/internal/identityproviderconnections/checklist.go
+  h_9630b74bdac540 40-43,95,177-183,204-206,208,234-236,245-247,263-264,272
+server/internal/identityproviderconnections/checklist_test.go
+  h_9630b74bdac540 24,43,182,184-187
+server/internal/identityproviderconnections/service_test.go
+  h_9630b74bdac540 137-140
+server/internal/identityproviderconnections/views.go
+  h_9630b74bdac540 90
+server/internal/identityproviderconnections/views_internal_test.go
+  h_9630b74bdac540 87,102-103
+server/internal/mcp/authnchallenge_consent_mcp_endpoint.go
+  h_9630b74bdac540 68-71,224-228,236,240,243,245,589-591
+server/internal/mcp/authnchallenge_consent_probe.go
+  h_9630b74bdac540 22-23,36,58
+server/internal/mcp/authnchallenge_consent_validate.go
+  h_9630b74bdac540 266,281
+server/internal/mcp/authnchallenge_consent_validate_internal_test.go
+  h_9630b74bdac540 44,51
+server/internal/mcp/authnchallenge_consent_validate_test.go
+  h_9630b74bdac540 23,87-93,98-103,111,139-141,144-145,149-155,157,204-207,216-219,229,268,754,1309-1348
+server/internal/mcp/impl.go
+  h_9630b74bdac540 24-25,349-355,1117,1275,1323-1324,1561-1574,1693-1696,1698,1700-1705,1707,1709,1712,1714,1716,1718,1720,1723,1880,1952
+server/internal/mcp/lifecycle_version_test.go
+  h_9630b74bdac540 1,6-9,13,15-40
+server/internal/mcp/mcprequests/method.go
+  h_9630b74bdac540 3-4,12-15,24-33,38
+server/internal/mcp/mcpversions/mcpversions.go
+  h_9630b74bdac540 56-57,105-116,119-129,132-135,137
+server/internal/mcp/mcpversions/mcpversions_test.go
+  h_9630b74bdac540 101-109,115,126,137-139,147-148,359-384
+server/internal/mcp/mcpversions/methods.go
+  h_9630b74bdac540 1-149
+server/internal/mcp/mcpversions/methods_test.go
+  h_9630b74bdac540 1-75
+server/internal/mcp/member_client.go
+  h_9630b74bdac540 1-353
+server/internal/mcp/member_client_internal_test.go
+  h_9630b74bdac540 1-389
+server/internal/mcp/metamcp/server_discover.go
+  h_9630b74bdac540 5-6,8-15
+server/internal/mcp/method_policy.go
+  h_9630b74bdac540 1-52
+server/internal/mcp/method_policy_internal_test.go
+  h_9630b74bdac540 1-202
+server/internal/mcp/protocolversion_gate.go
+  h_9630b74bdac540 7,98-106,113-124
+server/internal/mcp/resolved_mcp_endpoint.go
+  h_9630b74bdac540 630,666
+server/internal/mcp/rpc_initialize.go
+  h_9630b74bdac540 59,74-80,116,122
+server/internal/mcp/rpc_initialize_test.go
+  h_9630b74bdac540 10,144,150,163,167
+server/internal/mcp/rpc_server_discover.go
+  h_9630b74bdac540 1-35
+server/internal/mcp/rpc_server_discover_internal_test.go
+  h_9630b74bdac540 1-169
+server/internal/mcp/serve_meta.go
+  h_9630b74bdac540 105,108-110,112-114,224,264-267,269,271,273-275,277,279,282,307,344,396-397
+server/internal/mcp/serve_meta_config.go
+  h_9630b74bdac540 7-9,12
+server/internal/mcp/serve_meta_handshake_test.go
+  h_9630b74bdac540 5,9,14,18,23-34,46,49,51-54,66-70,74,81-92,100-109,111-114,136,140-148,200-201,204-216,220-221,224,227,238,251-352
+server/internal/mcp/serve_meta_internal_test.go
+  h_9630b74bdac540 12,28
+server/internal/mcp/serve_meta_proxied_test.go
+  h_9630b74bdac540 320-322
+server/internal/mcp/serve_meta_proxy.go
+  h_9630b74bdac540 20,30,334-338,340,342-347,390,392,394,405,407,409-411
+server/internal/mcp/serve_meta_proxy_internal_test.go
+  h_9630b74bdac540 183,190-192,194
+server/internal/mcp/serve_meta_test.go
+  h_9630b74bdac540 212-214,216,236,240,251,253,255-256,258-260,262-265,279,317,365,396,419,429,440,463,497,521,592
+server/internal/mcp/serve_meta_tools.go
+  h_9630b74bdac540 22,261,468-469
+server/internal/mcp/serve_platform.go
+  h_9630b74bdac540 213-216,218,220-222,224,226,228,231,250-253,260-261
+server/internal/mcp/serveendpoint.go
+  h_9630b74bdac540 295-297
+server/internal/mcp/servepublic_test.go
+  h_9630b74bdac540 41,528,633,916,1026,1093,1110
+server/internal/mcp/servepublic_tunneled_test.go
+  h_9630b74bdac540 141-148,163
+server/internal/mcp/server_description.go
+  h_9630b74bdac540 1-101
+server/internal/mcp/sessionclientinfo.go
+  h_9630b74bdac540 145-148
+server/internal/mcp/tunnelpublic.go
+  h_9630b74bdac540 41,579
+server/internal/mcp/types.go
+  h_9630b74bdac540 115-116
+server/internal/mcpendpoints/address_command.go
+  h_9630b74bdac540 72-74,197-199
+server/internal/mcpendpoints/address_command_test.go
+  h_9630b74bdac540 19,24-80
+server/internal/mcpendpoints/impl.go
+  h_9630b74bdac540 190-192,535-537,727-729,778-794
+server/internal/mcpendpoints/resolve.go
+  h_9630b74bdac540 23,191-202
+server/internal/mcpmetadata/impl.go
+  h_9630b74bdac540 1200-1207,1882-1890
+server/internal/mcpservers/impl.go
+  h_9630b74bdac540 372-375,665-667,713-715,1021-1022,1025-1027,1065-1067
+server/internal/mcpservers/lifecycle.go
+  h_9630b74bdac540 73-75
+server/internal/mv/toolset.go
+  h_9630b74bdac540 27-28,624-631,814
+server/internal/networkaccess/mode.go
+  h_9630b74bdac540 22
+server/internal/platformmcp/catalog_readiness.go
+  h_9630b74bdac540 11-12,21,24,35-39,179-181,183,185,187,192-234,280-283,301-303
+server/internal/platformmcp/catalog_readiness_unit_test.go
+  h_9630b74bdac540 4,6-7,9-10,13,15-17,99-146
+server/internal/platformmcp/connection_mutation.go
+  h_9630b74bdac540 26,34,240-252
+server/internal/platformmcp/connection_mutation_hosted_test.go
+  h_9630b74bdac540 1-109
+server/internal/platformtools/registry.go
+  h_9630b74bdac540 57-61
+server/internal/platformtools/runtime/service.go
+  h_9630b74bdac540 145-149,154
+server/internal/platformtools/slack/tool_send_message.go
+  h_9630b74bdac540 5-6,9-10,18-32,41-46,49-51,63-65,73,77-83,89-108,134-140,143-190
+server/internal/platformtools/slack/tool_send_message_test.go
+  h_9630b74bdac540 5,7,13,15-17,38,40,79,81,105-164
+server/internal/platformtools/triggers/thread_tools.go
+  h_9630b74bdac540 1-79
+server/internal/plugins/platform_mcp_skills/configure-private-mcp-access/SKILL.md
+  h_9630b74bdac540 8,11,13
+server/internal/remotemcp/probeurl.go
+  h_9630b74bdac540 12,16,25-26,31-34,69-71,81-84,87,107-131,133-135,137-146,148-158,160-186,188-212,216-218,222,228,230,232-233,236-237,239-240,242-247
+server/internal/remotemcp/probeurl_test.go
+  h_9630b74bdac540 4,7,13-14,21,142-188,190-195,197-257,262-268,271,273-277,282,285,287-333,336-376,383-407,409-411,414,417,419-430,432-461,465,473-477,479,489,511-548,618-645,670-671,733-735,737-750,756-758,764-767,769-773,777,784-786,788-789,791,796,812,823,832,835,838,881
+server/internal/risk/mcp_scope_api_test.go
+  h_9630b74bdac540 232-276
+server/internal/risk/policycore/types.go
+  h_9630b74bdac540 27-28,34-49,80-82
+server/internal/risk/policycore/types_test.go
+  h_9630b74bdac540 65-81
+server/internal/risk/policycore/validation.go
+  h_9630b74bdac540 116-117,119-140,142
+server/internal/risk/policycore/validation_test.go
+  h_9630b74bdac540 52,56-70,77-91
+server/internal/telemetry/SESSION_OBSERVATIONS.md
+  h_9630b74bdac540 1-36
+server/internal/telemetry/repo/sessions.go
+  h_9630b74bdac540 14-15,124,181
+server/internal/telemetry/session_observed.go
+  h_9630b74bdac540 1-128
+server/internal/telemetry/session_observed_test.go
+  h_9630b74bdac540 1-107
+server/internal/thirdparty/slack/client/client.go
+  h_9630b74bdac540 107-188
+server/internal/toolsets/hosted_network_access.go
+  h_9630b74bdac540 1-250
+server/internal/toolsets/hosted_network_access_test.go
+  h_9630b74bdac540 1-233
+server/internal/toolsets/impl.go
+  h_9630b74bdac540 43-44,50,59-76,96-113,117-121,469-492,499-509,522-523,657-659,740-749,757-762,776-777,797-799
+server/internal/toolsets/set_user_session_issuer.go
+  h_9630b74bdac540 16,19,59-64,76,80-81,87-89
+server/internal/triggers/repo/models.go
+  h_9630b74bdac540 29-43
+server/internal/triggers/repo/queries.sql
+  h_9630b74bdac540 165-262
+server/internal/triggers/repo/queries.sql.go
+  h_9630b74bdac540 15-50,335-376,548-617,698-732,799-865
+server/internal/triggers/repo/queries_test.go
+  h_9630b74bdac540 121-187
+server/internal/triggers/setup_test.go
+  h_9630b74bdac540 112
+server/migrations/20260927185929_trigger-thread-routes.sql
+  h_9630b74bdac540 1-28
+server/migrations/20260928165815_remote-session-ema-credentials.sql
+  h_9630b74bdac540 1-47
+server/migrations/20260928221953_admin-mcp-write-proposals.sql
+  h_9630b74bdac540 36,70,73-74
+server/migrations/atlas.sum
+  h_9630b74bdac540 1,439-441
+server/package.json
+  h_9630b74bdac540 3
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f6f1dd36a2848f60c7d42c4174da76990659f5cb",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

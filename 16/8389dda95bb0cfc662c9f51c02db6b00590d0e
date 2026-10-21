@@ -1,0 +1,20 @@
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/NetworkAccessSection.test.tsx
+  h_9630b74bdac540 34-37,44-49,168,171,174-179,182-183,209,276-279,281,646-648,651,671-698
+  h_9630b74bdac540 180-181
+client/dashboard/src/pages/mcp/gateway/GatewaySettingsTab.test.tsx
+  h_9630b74bdac540 114-115,117-118
+  h_9630b74bdac540 116
+.changeset/gateway-private-network-access.md
+  h_9630b74bdac540 1-5
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "168389dda95bb0cfc662c9f51c02db6b00590d0e",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

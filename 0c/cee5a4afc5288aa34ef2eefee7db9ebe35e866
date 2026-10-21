@@ -1,0 +1,17 @@
+client/admin/src/pages/admin-mcp/AdminMcpSetup.tsx
+  h_9630b74bdac540 9-24,26
+client/admin/src/pages/admin-mcp/AdminMcpSetup.test.tsx
+  h_9630b74bdac540 7-9,11-14,18,43,45,47-49,51,58-69
+  h_9630b74bdac540 10,44,46,70
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "0ccee5a4afc5288aa34ef2eefee7db9ebe35e866",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

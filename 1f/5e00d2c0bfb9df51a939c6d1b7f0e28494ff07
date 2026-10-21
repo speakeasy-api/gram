@@ -1,0 +1,50 @@
+server/internal/adminmcp/tool_organizations.go
+  h_9630b74bdac540 19-20,22-51,67-72,103,110-112,117,139-145
+server/internal/adminmcp/tool_registry_test.go
+  h_9630b74bdac540 1-202
+server/internal/adminmcp/tool_registry.go
+  h_9630b74bdac540 1-347
+server/internal/admin/members_page_test.go
+  h_9630b74bdac540 1-65
+server/internal/usage/meter_usage_test.go
+  h_9630b74bdac540 188,192,207,211,219,222
+server/internal/adminmcp/runtime.go
+  h_9630b74bdac540 112-116,127-129
+.changeset/admin-mcp-readonly-parity.md
+  h_9630b74bdac540 1-5
+server/internal/adminmcp/tool_billing_detail_test.go
+  h_9630b74bdac540 1-184
+server/internal/adminmcp/organization_filters.go
+  h_9630b74bdac540 1-130
+server/internal/adminmcp/tool_context.go
+  h_9630b74bdac540 19,64-75
+server/internal/adminmcp/tool_billing_detail.go
+  h_9630b74bdac540 1-402
+server/internal/adminmcp/tool_organization_detail_test.go
+  h_9630b74bdac540 1-122
+server/internal/adminmcp/tool_organization_detail.go
+  h_9630b74bdac540 1-192
+server/internal/admin/members_page.go
+  h_9630b74bdac540 1-76
+server/internal/admin/queries.sql
+  h_9630b74bdac540 535-560
+server/internal/usage/meter_usage.go
+  h_9630b74bdac540 62,87-89
+server/internal/adminmcp/organization_filters_test.go
+  h_9630b74bdac540 1-78
+server/internal/usage/spend_breakdown.go
+  h_9630b74bdac540 76
+server/internal/admin/repo/queries.sql.go
+  h_9630b74bdac540 345-366,545-604
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "1f5e00d2c0bfb9df51a939c6d1b7f0e28494ff07",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

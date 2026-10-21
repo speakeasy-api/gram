@@ -1,0 +1,36 @@
+client/dashboard/src/pages/org/identity-provider/DirectoryReviewPanel.tsx
+  h_9630b74bdac540 3,8-15,169-188,202,216-224,231,266-269,273,277-278,281-307,312-316,328-330,336
+  s_0c78b3f8e91151::t_570f2c48fc8ffb 232-233,279,308-311,331-334,338-344
+client/dashboard/src/pages/org/identity-provider/DirectoryReviewPanel.test.tsx
+  h_9630b74bdac540 3,7-8,184,224,233-253
+  s_d878474f2ae7d5::t_b33419cb90dd25 183,185,254-257
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "3fc4c59631c01e957baeea0a8648a5cbd6068e66",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  },
+  "sessions": {
+    "s_0c78b3f8e91151": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e427a80d-5598-4067-9dee-7c52ff86f4f1",
+        "model": "unknown"
+      },
+      "human_author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    },
+    "s_d878474f2ae7d5": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "0f03029c-c1c8-45f8-bec4-4a0616355c79",
+        "model": "unknown"
+      },
+      "human_author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

@@ -1,0 +1,95 @@
+client/dashboard/src/pages/org/identity-provider/directoryMappingFlow.ts
+  h_9630b74bdac540 2,19,97,101
+server/internal/access/queries.sql
+  h_9630b74bdac540 1595,1610,1627-1628,1640,1643-1671
+  h_9630b74bdac540 1672
+server/internal/access/listmembers_test.go
+  h_9630b74bdac540 211-212,216,220,223
+client/dashboard/src/pages/org/identity-provider/DirectoryRoleMappings.tsx
+  h_9630b74bdac540 54,68,87,198,208,556,627
+  h_9630b74bdac540 626,628
+server/internal/access/explain_access_test.go
+  h_9630b74bdac540 105-106,109,172-196
+server/design/access/design.go
+  h_9630b74bdac540 204-223,230,235,238,244-246,1893-1897,1900-1901,1915
+  s_c325a36a83eeb3::t_c9e6cba685a746 1898-1899
+server/internal/access/updatememberrole_test.go
+  h_9630b74bdac540 384-385,389
+client/dashboard/src/pages/org/identity-provider/directoryMappingFlow.test.ts
+  h_9630b74bdac540 43
+overlays/dashboard-sdk.yaml
+  h_9630b74bdac540 7-9
+server/internal/access/directory_role_mappings_test.go
+  h_9630b74bdac540 25,28-54,146,150,164,167,170-173,175,178,181-182,194-200,210,214,225,229,234,238,241-242,249-432,436,441,444,449-504,508,518,522,526,529,538,547,550,557,565,572,608,624,628,693,706,709,727,739,743,766,780,784,805,826,830,839,851,855
+  h_9630b74bdac540 55
+.changeset/directory-role-set-contract.md
+  h_9630b74bdac540 1-6
+server/internal/access/directory_role_mappings.go
+  h_9630b74bdac540 6,9,11,34,163,165-181,221-237,241-243,250,260-264,274-275,280,286-287,290-291,294-298,300-303,305,307-310,314-346,350,352-359,363,365-371,413-430
+  h_9630b74bdac540 247,292-293,304,347-349,351,364,431-432
+.speakeasy/out.openapi.yaml
+  s_c325a36a83eeb3::t_fc12c4383b2671 2947,2949-2950,2970,2977-2979,3039,3042,3044,100434,100449-100453,100462
+client/dashboard/src/sdk/.speakeasy/gen.lock
+  h_9630b74bdac540 63,1682,2620,3632,11656-11666
+client/dashboard/src/sdk/src/funcs/accessSetDirectoryRoleMappings.ts
+  h_9630b74bdac540 34-37,42,45,47,49-50,54,76-77,82,98,105,109,144,188,199
+client/dashboard/src/sdk/src/models/components/setdirectoryrolemappingsform.ts
+  h_9630b74bdac540 12,19-20,23,37,39,43,47-49,53,57,62-64,70-71,78,84-85,88-89
+client/dashboard/src/sdk/src/models/operations/setdirectoryrolemappings.ts
+  h_9630b74bdac540 8-11,13,18,27,31,37-39,53-54,57-58,64,67,71-73,78,84,89-90,93-94
+client/dashboard/src/sdk/src/react-query/setDirectoryRoleMappings.ts
+  h_9630b74bdac540 11,27-29,34-36,40,42,54,57,59,61-63,66-68,72,77-78,81,87-88,91-92,96,109
+client/dashboard/src/sdk/src/sdk/access.ts
+  h_9630b74bdac540 31,167-169,688,691,693-695,697-698
+server/gen/access/client.go
+  h_9630b74bdac540 26,54,64,267-289
+server/gen/access/endpoints.go
+  h_9630b74bdac540 27,67,105,412-446
+server/gen/access/service.go
+  h_9630b74bdac540 35-37,39-41,165,1105,1109-1126
+server/gen/http/access/client/cli.go
+  h_9630b74bdac540 354-418
+server/gen/http/access/client/client.go
+  h_9630b74bdac540 52-55,180,405-428
+server/gen/http/access/client/encode_decode.go
+  h_9630b74bdac540 20,1903-2147,8030-8048
+server/gen/http/access/client/paths.go
+  h_9630b74bdac540 50-54
+server/gen/http/access/client/types.go
+  h_9630b74bdac540 64,68-83,2003-2192,6775-6794,7414-7433,8872-9039,9052-9054,9067-9069,15756-15997,21967-22004
+server/gen/http/access/server/encode_decode.go
+  h_9630b74bdac540 1739-1963,7461-7479
+server/gen/http/access/server/paths.go
+  h_9630b74bdac540 50-54
+server/gen/http/access/server/server.go
+  h_9630b74bdac540 30,92,126,167,207,665-718
+server/gen/http/access/server/types.go
+  h_9630b74bdac540 66,70-85,296-299,2009-2198,6755-6774,7524-7538,9193-9342,12994-13012,13407-13436
+server/gen/http/cli/gram/cli.go
+  h_9630b74bdac540 121,323-327,4927,6230-6232,9193-9195,12370-12371,12558,12570-12591
+server/gen/http/openapi3.yaml
+  h_9630b74bdac540 9992-9995,9997-10085,10105,10112-10114,10173,10176,10178,109621,109631-109659
+server/internal/access/repo/queries.sql.go
+  h_9630b74bdac540 539-564,867-956,2008-2117
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "bb2df94755f6bdf3eb5b6f170533ee44bd4f6fa7",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  },
+  "sessions": {
+    "s_c325a36a83eeb3": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a118e3-b3fc-72f3-b4ca-2cd899b1f840",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

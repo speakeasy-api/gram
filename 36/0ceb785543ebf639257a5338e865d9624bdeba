@@ -1,0 +1,42 @@
+server/internal/users/queries.sql
+  h_9630b74bdac540 80
+server/internal/platformmcp/plugins_test.go
+  h_9630b74bdac540 83-84
+server/internal/platformmcp/tool_plugins.go
+  h_9630b74bdac540 86,117-127
+  h_9630b74bdac540 128-129
+client/dashboard/src/pages/org/PlatformMCP.tsx
+  h_9630b74bdac540 171,173-175,303-305,367,383,397,407,584,594-595,1086,1090-1091,1093-1094,1098,1112,1122,1128,1143,1175-1176,1183-1184,1191-1193,1237,1352-1356
+  h_9630b74bdac540 302,306,1089,1092,1095,1190,1357
+server/internal/platformmcp/install_instructions.go
+  h_9630b74bdac540 39-40,59,61,64-65,70,75-79,81,83,85
+  h_9630b74bdac540 66-67,80
+server/internal/platformmcp/plugins_integration_test.go
+  h_9630b74bdac540 188,191,205-215,232-234,240-241,255-279
+  h_9630b74bdac540 280-281
+server/internal/platformmcp/queries.sql
+  h_9630b74bdac540 2789-2802,2836-2851,2879-2909
+  h_9630b74bdac540 2910
+server/internal/platformmcp/plugins.go
+  h_9630b74bdac540 454,520,877,879-880
+  h_9630b74bdac540 878,881
+server/internal/platformmcp/management.go
+  h_9630b74bdac540 366-367,369-378
+server/internal/agent/impl.go
+  h_9630b74bdac540 335-338
+server/internal/platformmcp/repo/queries.sql.go
+  h_9630b74bdac540 2427-2478,4409-4422,4464-4465,4496-4497,6571-6586,6623-6629,6653,6655-6656
+server/internal/users/repo/queries.sql.go
+  h_9630b74bdac540 55
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "360ceb785543ebf639257a5338e865d9624bdeba",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

@@ -1,0 +1,29 @@
+server/internal/access/directory_role_setup_test.go
+  h_9630b74bdac540 194-236
+server/internal/access/directory_role_setup.go
+  h_9630b74bdac540 348-367,405-408
+  s_d68879a68aba48::t_3bb2a129f38fe5 368-369,409
+.changeset/directory-role-cap.md
+  h_9630b74bdac540 5
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "eb52158ed3f87f47e3531ac4690f46416de1682f",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  },
+  "sessions": {
+    "s_d68879a68aba48": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "4a8244fd-b365-44a2-b6bc-b5207a2017cc",
+        "model": "unknown"
+      },
+      "human_author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

@@ -1,0 +1,17 @@
+server/internal/platformmcp/tool_skills.go
+  h_9630b74bdac540 10,227-229,232
+  h_9630b74bdac540 230-231
+server/internal/plugins/publication_evidence_authorization_test.go
+  h_9630b74bdac540 6,9,14,27-43
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "8fe74f507a584cf9546a322ff506fec55d239b0a",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

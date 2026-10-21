@@ -1,0 +1,20 @@
+client/dashboard/src/hooks/usePrivateMcpServerUrls.test.ts
+  h_9630b74bdac540 21-25,110,192,229,239
+server/internal/mcpmetadata/impl.go
+  h_9630b74bdac540 1116-1118,1151-1152,1215-1228
+  h_9630b74bdac540 1229-1230
+server/internal/mcpmetadata/serve_install_page_test.go
+  h_9630b74bdac540 34,2020-2023,2149-2150,2152-2155,2235-2294
+  h_9630b74bdac540 2044
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "6e3d7e00ba01b5318549c17c61a5142b67e3a5d8",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

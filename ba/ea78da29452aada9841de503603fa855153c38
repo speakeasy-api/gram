@@ -1,0 +1,21 @@
+server/internal/platformmcp/inventory_test.go
+  s_fc4a57d3a07893::t_90611d40099d68 302-324
+server/internal/platformmcp/adapters.go
+  s_fc4a57d3a07893::t_08726ead9b661e 391-415,630-632,729-731
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "baea78da29452aada9841de503603fa855153c38",
+  "prompts": {},
+  "sessions": {
+    "s_fc4a57d3a07893": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c8a2fba3-9438-400d-9886-62fdc8005ae9",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Alex Martin <alex.martin@speakeasy.com>"
+    }
+  }
+}

@@ -1,0 +1,52 @@
+server/internal/background/worker_test.go
+  h_9630b74bdac540 142
+server/internal/background/activities.go
+  s_0965ac444c2f66::t_4fca9e3479a4c3 147,441
+server/internal/background/activities/directory_review_emails.go
+  s_0965ac444c2f66::t_c8d1ee1c39806d 1-199
+server/internal/background/activities/directory_review_emails_test.go
+  s_0965ac444c2f66::t_00a9e04922174c 1-117
+server/internal/background/directory_review_emails.go
+  s_0965ac444c2f66::t_436abc48a13383 1-106
+server/internal/background/directory_review_emails_test.go
+  s_0965ac444c2f66::t_d72b540547c419 1-58
+server/internal/background/worker.go
+  s_0965ac444c2f66::t_39fdd0ff44e443 631,771,946-949
+server/internal/directoryreview/queries.sql
+  s_0965ac444c2f66::t_b117182327dccc 428-497
+server/internal/directoryreview/repo/queries.sql.go
+  s_0965ac444c2f66::t_4b1b16b52e86fc 47-60,81-95,267-335,534-555,916-954,1006-1030
+server/internal/email/loops/directory_review_pending.lmx
+  s_0965ac444c2f66::t_77b2a631b3e67a 1-18
+server/internal/email/loops/manifest.json
+  s_0965ac444c2f66::t_015994720cfa32 30-44
+server/internal/email/template_directory_review_pending.go
+  s_0965ac444c2f66::t_25771363734962 1-45
+server/internal/email/template_directory_review_pending_test.go
+  s_0965ac444c2f66::t_7708aee145c53d 1-33
+server/internal/email/templates.go
+  s_0965ac444c2f66::t_74e58a713d9f49 41,128
+server/internal/email/templates_test.go
+  s_0965ac444c2f66::t_9076e34c82289e 37-38
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "bc47d95fccac78630f62ae69171e0ae88de27602",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  },
+  "sessions": {
+    "s_0965ac444c2f66": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "92632747-3033-4c9b-b411-d1bf26566430",
+        "model": "unknown"
+      },
+      "human_author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

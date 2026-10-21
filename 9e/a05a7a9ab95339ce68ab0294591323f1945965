@@ -1,0 +1,97 @@
+infra/proto/gram/plugins/v1/publication_scheduler.proto
+  h_9630b74bdac540 1-20
+server/internal/plugins/impl.go
+  h_9630b74bdac540 177,220,225-229,256,431-433,589-591,685-687,823-825,1026-1028,1165-1167,1240-1242
+server/internal/plugins/publication_requests.go
+  h_9630b74bdac540 1-71
+server/internal/customdomains/impl.go
+  h_9630b74bdac540 52,97,103-111,614-618,791-795
+  h_9630b74bdac540 44-51
+infra/proto/gram/plugins/v1/publication_requested.proto
+  h_9630b74bdac540 1-17
+server/cmd/gram/start.go
+  h_9630b74bdac540 320,1555,1557,1616-1620,1623,1626,1628,1787,1992
+server/internal/mcpendpoints/impl.go
+  h_9630b74bdac540 57,85,89-93,256-258,264,611-613,617-619,747-749,753-754
+  h_9630b74bdac540 755
+server/internal/plugins/publication_handler.go
+  h_9630b74bdac540 1-98
+server/cmd/gram/network_ingress_runtime.go
+  h_9630b74bdac540 16,32-33
+server/cmd/gram/streams.go
+  h_9630b74bdac540 35,61,256,638-644
+server/internal/networkingress/reconcile_requests.go
+  h_9630b74bdac540 18-23
+server/internal/networkingress/impl.go
+  h_9630b74bdac540 55,63-68,80,259-261,321-324,435,476-487
+  h_9630b74bdac540 46-54,56,71-79,81,325,436-437,488-489
+server/internal/networkingress/reconcile_delivery_test.go
+  h_9630b74bdac540 26-37,47-76
+  h_9630b74bdac540 77-78
+server/internal/plugins/publish_signal.go
+  h_9630b74bdac540 9,32-40,42
+server/cmd/gram/network_ingress_worker.go
+  h_9630b74bdac540 27,29,109,200-204
+server/internal/plugins/publication_requests_test.go
+  h_9630b74bdac540 1-75
+infra/proto/gram/plugins/v1/organization_publication_requested.proto
+  h_9630b74bdac540 1-17
+server/internal/mcpservers/impl.go
+  h_9630b74bdac540 80,116,120-124,859-861,881,1253-1255,1259
+server/internal/metamcp/impl.go
+  h_9630b74bdac540 62,91,100-104,463-465,668-670,899-901,1005-1007,1126-1128
+server/internal/networkingress/reconcile.go
+  h_9630b74bdac540 37-43,126,134,159,191,248,284-292,294-303,305,313-319
+  h_9630b74bdac540 293,320
+server/internal/plugins/organization_publication_handler.go
+  h_9630b74bdac540 1-128
+infra/proto/gram/plugins/v1/organization_publication_scheduler.proto
+  h_9630b74bdac540 1-20
+server/internal/networkingress/setup_test.go
+  h_9630b74bdac540 113,140-144
+server/internal/networkingress/reconcile_test.go
+  h_9630b74bdac540 115-146
+server/cmd/gram/flags_plugin_publication.go
+  h_9630b74bdac540 1-19
+docs/pubsub-topology.md
+  h_9630b74bdac540 43-46,81-82,108-125,127-143,175-178,199-262,294-297,337-338
+infra/gen/gram/plugins/v1/organization_publication_requested.pb.go
+  h_9630b74bdac540 1-213
+infra/gen/gram/plugins/v1/organization_publication_scheduler.pb.go
+  h_9630b74bdac540 1-111
+infra/gen/gram/plugins/v1/publication_requested.pb.go
+  h_9630b74bdac540 1-214
+infra/gen/gram/plugins/v1/publication_scheduler.pb.go
+  h_9630b74bdac540 1-111
+infra/gen/kcc.yaml
+  h_9630b74bdac540 847-872,1619-1654,2079-2112
+infra/gen_py/gram/plugins/v1/organization_publication_requested_pb2.py
+  h_9630b74bdac540 1-40
+infra/gen_py/gram/plugins/v1/organization_publication_requested_pb2.pyi
+  h_9630b74bdac540 1-16
+infra/gen_py/gram/plugins/v1/organization_publication_scheduler_pb2.py
+  h_9630b74bdac540 1-40
+infra/gen_py/gram/plugins/v1/organization_publication_scheduler_pb2.pyi
+  h_9630b74bdac540 1-10
+infra/gen_py/gram/plugins/v1/publication_requested_pb2.py
+  h_9630b74bdac540 1-40
+infra/gen_py/gram/plugins/v1/publication_requested_pb2.pyi
+  h_9630b74bdac540 1-16
+infra/gen_py/gram/plugins/v1/publication_scheduler_pb2.py
+  h_9630b74bdac540 1-40
+infra/gen_py/gram/plugins/v1/publication_scheduler_pb2.pyi
+  h_9630b74bdac540 1-10
+infra/pkg/topics/topics_gen.go
+  h_9630b74bdac540 16,50-53,93-94,133-136,192-195
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "9ea05a7a9ab95339ce68ab0294591323f1945965",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

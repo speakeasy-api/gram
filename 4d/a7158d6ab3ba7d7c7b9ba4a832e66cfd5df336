@@ -1,0 +1,16 @@
+server/design/access/design.go
+  h_9630b74bdac540 1317-1319
+server/internal/access/role_manager.go
+  h_9630b74bdac540 157-166
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "4da7158d6ab3ba7d7c7b9ba4a832e66cfd5df336",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

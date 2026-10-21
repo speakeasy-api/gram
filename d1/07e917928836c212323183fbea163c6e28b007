@@ -1,0 +1,28 @@
+client/admin/src/routes/mcp-setup.tsx
+  h_9630b74bdac540 1-7
+client/admin/src/components/app-sidebar.test.tsx
+  h_9630b74bdac540 1,3,6-7,9,207,247,249
+client/admin/src/lib/adminNav.ts
+  h_9630b74bdac540 16-17,62-66
+  h_9630b74bdac540 67
+client/admin/src/pages/admin-mcp/AdminMcpSetup.test.tsx
+  h_9630b74bdac540 1-50
+client/admin/src/components/record-nav.tsx
+  h_9630b74bdac540 9-10,14,24,27-28,325-334
+  h_9630b74bdac540 335-338
+client/admin/src/pages/admin-mcp/AdminMcpSetup.tsx
+  h_9630b74bdac540 1-160
+client/admin/src/routeTree.gen.ts
+  h_9630b74bdac540 14,48-52,181,208,231,260,287,309,337,360-366,621
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d107e917928836c212323183fbea163c6e28b007",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

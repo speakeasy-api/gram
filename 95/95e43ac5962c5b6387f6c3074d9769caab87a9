@@ -1,0 +1,36 @@
+client/dashboard/src/pages/mcp/access/roleDirectorySourceText.test.ts
+  h_9630b74bdac540 1-37
+client/dashboard/src/pages/mcp/access/ManageAccess.tsx
+  h_9630b74bdac540 32,35-38,167-180,407-408,547-548,563-566,610-613
+  s_4842454bff9a6b::t_a1235dd634c5ff 34,181
+client/dashboard/src/pages/mcp/access/ManageAccess.test.tsx
+  h_9630b74bdac540 7,12-27,112,139,574-656
+  h_9630b74bdac540 8-11,28
+client/dashboard/src/pages/mcp/access/RoleDirectorySourceLine.tsx
+  h_9630b74bdac540 1-39
+.changeset/mcp-access-directory-sources.md
+  h_9630b74bdac540 1-5
+client/dashboard/src/pages/mcp/access/roleDirectorySourceText.ts
+  h_9630b74bdac540 1-16
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "9595e43ac5962c5b6387f6c3074d9769caab87a9",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  },
+  "sessions": {
+    "s_4842454bff9a6b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "087d10c3-1609-4045-b3c3-ee3384cec6e5",
+        "model": "unknown"
+      },
+      "human_author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

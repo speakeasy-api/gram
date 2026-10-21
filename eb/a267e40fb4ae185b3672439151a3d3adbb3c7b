@@ -1,0 +1,27 @@
+server/internal/access/inventory_projection.go
+  h_9630b74bdac540 8,22-25,34
+server/internal/access/directory_role_mappings.go
+  h_9630b74bdac540 228,420
+server/design/access/design.go
+  h_9630b74bdac540 215
+server/internal/authz/requested_organization.go
+  h_9630b74bdac540 6,16-21,43,48
+server/internal/access/explain_access_test.go
+  h_9630b74bdac540 191
+server/internal/access/directory_role_mappings_test.go
+  h_9630b74bdac540 20,25,415-440
+  h_9630b74bdac540 441-442
+server/gen/http/openapi3.yaml
+  h_9630b74bdac540 10079
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "eba267e40fb4ae185b3672439151a3d3adbb3c7b",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

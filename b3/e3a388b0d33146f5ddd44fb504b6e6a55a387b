@@ -1,0 +1,34 @@
+.speakeasy/out.openapi.yaml
+  h_2620cc60cfd1e9 8112-8119
+client/dashboard/src/pages/agents/AgentPolicy.test.tsx
+  h_2620cc60cfd1e9 176
+client/dashboard/src/pages/agents/Agents.test.tsx
+  h_2620cc60cfd1e9 294,620-622,626-629,635-637,653,669-671,674-676,699-701,704,733-735,737-739
+client/dashboard/src/pages/agents/Agents.tsx
+  h_2620cc60cfd1e9 306-307,311-313
+client/dashboard/src/sdk/src/funcs/agentsListEligibleOwners.ts
+  h_2620cc60cfd1e9 32-33,38-43,57-70,88-101,113,171,183,191-192,203-205,212-216,219-265
+client/dashboard/src/sdk/src/models/operations/listagenteligibleowners.ts
+  h_2620cc60cfd1e9 7-13,38-41,107-131
+client/dashboard/src/sdk/src/react-query/agentEligibleOwners.core.ts
+  h_2620cc60cfd1e9 16,20-32,51-70,113-162,173-189
+client/dashboard/src/sdk/src/react-query/agentEligibleOwners.ts
+  h_2620cc60cfd1e9 6,9-11,14-15,36,38,43-44,46,49,51,54-55,57,60,62,131-216
+client/dashboard/src/sdk/src/sdk/agents.ts
+  h_2620cc60cfd1e9 53,230-233
+server/design/agents/design.go
+  h_2620cc60cfd1e9 138
+server/gen/http/openapi3.yaml
+  h_2620cc60cfd1e9 15175-15182
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b3e3a388b0d33146f5ddd44fb504b6e6a55a387b",
+  "prompts": {},
+  "humans": {
+    "h_2620cc60cfd1e9": {
+      "author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

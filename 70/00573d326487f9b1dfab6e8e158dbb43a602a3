@@ -1,0 +1,26 @@
+server/internal/metamcp/queries.sql
+  h_9630b74bdac540 335,350
+server/internal/metamcp/repo/queries.sql.go
+  s_b5893c50016ea0::t_480fb30622aba2 820,835
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "7000573d326487f9b1dfab6e8e158dbb43a602a3",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  },
+  "sessions": {
+    "s_b5893c50016ea0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "04d7a2c0-768d-430c-be67-3b51071d8683",
+        "model": "unknown"
+      },
+      "human_author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

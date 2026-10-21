@@ -1,0 +1,23 @@
+server/database/schema.sql
+  s_7d53e62d74a0c4::t_c019547cc7fe39 4028-4032
+server/migrations/20261007090035_assistant-threads-add-chat-id-index.sql
+  s_7d53e62d74a0c4::t_a5e709e71dd3f5 1-4
+server/migrations/atlas.sum
+  s_7d53e62d74a0c4::t_a5e709e71dd3f5 1,464
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "148b734f69c149ae83ebdb5b131a6c5e0a752a40",
+  "prompts": {},
+  "sessions": {
+    "s_7d53e62d74a0c4": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "bee6cd2a-1426-49fb-b3db-0867fb2f36ae",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

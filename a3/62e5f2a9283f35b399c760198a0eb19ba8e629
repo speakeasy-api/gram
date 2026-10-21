@@ -1,0 +1,34 @@
+.changeset/workload-owner-boundary.md
+  h_2620cc60cfd1e9 1-5
+docs/rbac.md
+  h_2620cc60cfd1e9 51-60
+server/internal/agents/runtimepolicy/workload_admission.go
+  h_2620cc60cfd1e9 20-24,108,120-123,130
+server/internal/agents/runtimepolicy/workload_admission_test.go
+  h_2620cc60cfd1e9 1-245
+server/internal/assistants/execution_authorization_test.go
+  h_2620cc60cfd1e9 140-167
+server/internal/authz/workload_admission.go
+  h_2620cc60cfd1e9 14-15,20-21,23,26,29-31,39,55
+server/internal/authz/workload_admission_test.go
+  h_2620cc60cfd1e9 29,48-79
+server/internal/mcp/authnchallenge_workload_session_challenge_test.go
+  h_2620cc60cfd1e9 41,174,214
+server/internal/mcp/authnchallenge_workload_session_test.go
+  h_2620cc60cfd1e9 15,31-45,160,191-217,224,266,298,331
+server/internal/mcp/authnchallenge_workloadgrant_catalog_test.go
+  h_2620cc60cfd1e9 64
+server/internal/mcp/authnchallenge_workloadgrant_test.go
+  h_2620cc60cfd1e9 74
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a362e5f2a9283f35b399c760198a0eb19ba8e629",
+  "prompts": {},
+  "humans": {
+    "h_2620cc60cfd1e9": {
+      "author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

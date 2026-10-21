@@ -1,0 +1,25 @@
+server/internal/background/activities/directory_source_lifecycle_test.go
+  h_9630b74bdac540 6,169-182,222-277
+  s_f02be454537ad4::t_c5435927831c5c 278-279
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "0b148e115e0253dd3cd86ef2f554803bea0777a0",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  },
+  "sessions": {
+    "s_f02be454537ad4": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b2c11eb9-0dee-4b0d-9078-0350fd448795",
+        "model": "unknown"
+      },
+      "human_author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

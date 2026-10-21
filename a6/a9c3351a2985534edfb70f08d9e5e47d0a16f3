@@ -1,0 +1,25 @@
+server/internal/access/directory_role_inventory.go
+  h_9630b74bdac540 340-341,344
+  s_8ebfc8deec97c2::t_cf020d12e75657 345
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a6a9c3351a2985534edfb70f08d9e5e47d0a16f3",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  },
+  "sessions": {
+    "s_8ebfc8deec97c2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "cf020d22-ba3c-4887-b5ee-6bf3216e3cc9",
+        "model": "unknown"
+      },
+      "human_author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

@@ -1,0 +1,52 @@
+.changeset/directory-people-identities.md
+  h_9630b74bdac540 1-5
+client/dashboard/src/pages/identities/IdentitiesIndex.tsx
+  h_9630b74bdac540 62-69,133-138,286-294,399-408,646-657,668,684,688-690,698,744-755,806-807,826,844,847,873-879,881,945,1292,1496-1520
+  s_097803ea3aa9f0::t_65a6acd17fa615 139,295,409,658,685-687,880
+client/dashboard/src/components/observe/insightsEmployeesData.ts
+  h_9630b74bdac540 4,36-40
+client/dashboard/src/pages/team/Team.tsx
+  h_9630b74bdac540 5,50-51,400-404,1038-1039
+  s_038c0732f21667::t_c40856e6144d37 1040
+client/dashboard/src/pages/identities/directoryPeople.test.ts
+  h_9630b74bdac540 1-159
+  h_9630b74bdac540 160-169
+client/dashboard/src/pages/identities/DirectoryPeopleSummary.tsx
+  h_9630b74bdac540 1-55
+client/dashboard/src/pages/identities/directoryPeople.ts
+  h_9630b74bdac540 1-169
+client/dashboard/src/pages/org/OrgIdentity.tsx
+  h_9630b74bdac540 25-26,515-518,530-531
+  s_038c0732f21667::t_279ae7ccde0290 519-529
+client/dashboard/src/pages/org/OrgIdentity.test.tsx
+  h_9630b74bdac540 49-51
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ff174e2892180d3cb1f2e949ffebfb1e6e65465d",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  },
+  "sessions": {
+    "s_038c0732f21667": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7aa4d278-52df-4b7c-b7c8-b2d39fb3a1da",
+        "model": "unknown"
+      },
+      "human_author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    },
+    "s_097803ea3aa9f0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "448cd1b6-f464-4300-982a-da50457c246a",
+        "model": "unknown"
+      },
+      "human_author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

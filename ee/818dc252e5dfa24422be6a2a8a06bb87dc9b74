@@ -1,0 +1,32 @@
+server/internal/adminmcp/tool_support_matrix_entry_test.go
+  h_9630b74bdac540 4-9,12,16,19-191,213-222,224-234,236,238-239
+  h_9630b74bdac540 223,235,237
+server/internal/adminmcp/tool_write_support_matrix.go
+  h_9630b74bdac540 299,303,312-347,400
+server/internal/adminmcp/tool_write_support_matrix_test.go
+  h_9630b74bdac540 71-74,215-256
+  h_9630b74bdac540 257-258
+client/dashboard/src/lib/audit-actions.ts
+  h_9630b74bdac540 138-139,586-589
+server/internal/adminmcp/tool_write_chat_analysis_test.go
+  h_9630b74bdac540 101-102
+server/internal/adminmcp/tool_support_matrix_entry.go
+  h_9630b74bdac540 54,65-107
+  h_9630b74bdac540 108-109
+server/internal/adminmcp/tool_write_organization_access_test.go
+  h_9630b74bdac540 116-138
+  h_9630b74bdac540 74,139-140
+client/dashboard/src/lib/audit-actions.test.ts
+  h_9630b74bdac540 44-54
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ee818dc252e5dfa24422be6a2a8a06bb87dc9b74",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

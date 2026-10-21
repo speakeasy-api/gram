@@ -1,0 +1,14 @@
+server/internal/platformmcp/shadow_distribution_read_integration_test.go
+  h_9630b74bdac540 49
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "cb3a8b29f703b32e9ad5725e5e425a5c80244ccd",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

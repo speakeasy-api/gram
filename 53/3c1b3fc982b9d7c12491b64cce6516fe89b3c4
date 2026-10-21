@@ -1,0 +1,22 @@
+server/internal/mcp/proxy_backend_tier_internal_test.go
+  h_2620cc60cfd1e9 1-69
+server/internal/mcp/serveendpoint.go
+  h_2620cc60cfd1e9 18,34,907,913
+server/internal/mv/organization.go
+  h_2620cc60cfd1e9 33-68,73,76,79-80,82-83,86
+server/internal/mv/organization_test.go
+  h_2620cc60cfd1e9 5,27-89
+server/internal/remotemcp/server_context_internal_test.go
+  h_2620cc60cfd1e9 6,9,15,26-37,55-66
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "533c1b3fc982b9d7c12491b64cce6516fe89b3c4",
+  "prompts": {},
+  "humans": {
+    "h_2620cc60cfd1e9": {
+      "author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

@@ -1,0 +1,24 @@
+server/internal/plugins/generate_test.go
+  s_fc4a57d3a07893::t_a3a17fe4a22ae9 3153-3154
+server/internal/platformmcp/adapters.go
+  s_fc4a57d3a07893::t_688373ce8bec81 705-709,730
+  s_fc4a57d3a07893::t_86f02001bff256 686,702
+server/internal/plugins/platform_mcp_skills/add-existing-mcp-servers/SKILL.md
+  s_fc4a57d3a07893::t_a3a17fe4a22ae9 82,94-96
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "7ddd00441b622d69b6f14b255bdfc5f038e65b14",
+  "prompts": {},
+  "sessions": {
+    "s_fc4a57d3a07893": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c8a2fba3-9438-400d-9886-62fdc8005ae9",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Alex Martin <alex.martin@speakeasy.com>"
+    }
+  }
+}

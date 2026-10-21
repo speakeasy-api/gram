@@ -1,0 +1,29 @@
+server/internal/adminmcp/queries.sql
+  h_9630b74bdac540 140-329,357-359
+  h_9630b74bdac540 360-362
+server/internal/adminmcp/authenticator.go
+  h_9630b74bdac540 13,108,112-123
+server/internal/adminmcp/oauth_token_store.go
+  h_9630b74bdac540 15-17,55,62-63,69-80,91-92,99-100,103,107,122-132,143,150,153-154,166-167,174,177,196-197,204-206,215,218,221
+server/internal/adminmcp/oauth_authorization_store.go
+  h_9630b74bdac540 10-12,28-29,36-43,47-56
+server/internal/adminmcp/oauth_clients.go
+  h_9630b74bdac540 18,49-54,65,72-78
+server/internal/adminmcp/oauth_store_integration_test.go
+  h_9630b74bdac540 15,75-77
+server/internal/adminmcp/repo/models.go
+  h_9630b74bdac540 12-29
+server/internal/adminmcp/repo/queries.sql.go
+  h_9630b74bdac540 93-109,152-263,312-339,441-543,634-724,744-761,806-908,1045-1066,1133-1155,1169-1188,1206-1248
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "7181c24f2a912955542474862945037cf49ce3e5",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

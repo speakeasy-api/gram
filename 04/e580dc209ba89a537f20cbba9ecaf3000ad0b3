@@ -1,0 +1,26 @@
+server/internal/platformmcp/queries.sql
+  h_9630b74bdac540 811-839
+server/internal/platformmcp/adapters.go
+  h_9630b74bdac540 502,629-638,642-643
+  h_9630b74bdac540 644
+server/internal/platformmcp/registration_integration_test.go
+  h_9630b74bdac540 191-205,232-233
+  h_9630b74bdac540 234
+server/internal/testenv/queries.sql
+  h_9630b74bdac540 1027-1037
+server/internal/platformmcp/repo/queries.sql.go
+  h_9630b74bdac540 4690-4758
+server/internal/testenv/testrepo/queries.sql.go
+  h_9630b74bdac540 248-283
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "04e580dc209ba89a537f20cbba9ecaf3000ad0b3",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

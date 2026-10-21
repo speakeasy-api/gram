@@ -1,0 +1,16 @@
+server/internal/mcpservers/updatemcpserver_test.go
+  h_9630b74bdac540 70-100
+server/internal/mcpservers/lifecycle.go
+  h_9630b74bdac540 211-212,215-218
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "5627020fcc875962907a6be2f4b1b558e67779fd",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

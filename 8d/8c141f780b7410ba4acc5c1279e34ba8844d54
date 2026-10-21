@@ -1,0 +1,31 @@
+server/internal/access/directory_role_inventory.go
+  h_9630b74bdac540 40-42,55-58,62-64,68-75,78-83,113,121,235-238,252,255-259,264,275-282,285-286,355-383
+  h_9630b74bdac540 76-77,384
+server/internal/access/directory_role_inventory_test.go
+  h_9630b74bdac540 40,225-227,238-272,281
+  h_9630b74bdac540 228
+server/cmd/directory-roles/README.md
+  h_9630b74bdac540 21,32-35,104-127,136,143
+  s_d3041fbd25a916::t_f280764b7ff69c 103
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "8d8c141f780b7410ba4acc5c1279e34ba8844d54",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  },
+  "sessions": {
+    "s_d3041fbd25a916": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "fd32e4f8-f842-4887-a0d1-2f4a19dcee39",
+        "model": "unknown"
+      },
+      "human_author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

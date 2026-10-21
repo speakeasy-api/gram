@@ -1,0 +1,25 @@
+server/internal/background/worker.go
+  h_9630b74bdac540 779-783,787-789,793,797-801,812-825
+  h_9630b74bdac540 784-786,790-792,794-796,802-811
+server/internal/background/worker_test.go
+  h_9630b74bdac540 20,63-69,107-110,113-128,133
+  h_9630b74bdac540 70-71,129-132
+.changeset/scope-temporal-schedules-per-queue.md
+  h_9630b74bdac540 1-5
+.agents/skills/gram-temporal/SKILL.md
+  h_9630b74bdac540 40,86
+server/internal/background/schedule_policy.go
+  h_9630b74bdac540 12-13,16-18
+  h_9630b74bdac540 19
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "96ad54ff915f2b2bcfd35248ca467306c5a25aae",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

@@ -1,0 +1,29 @@
+server/internal/directoryreview/queries.sql
+  h_9630b74bdac540 113-117,138,158-165
+  s_a41829f825d7c7::t_66264f76d92794 155-157,166
+server/internal/directoryreview/review_test.go
+  h_9630b74bdac540 346-374
+server/internal/directoryreview/repo/queries.sql.go
+  h_9630b74bdac540 457,474-485,511-515
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "e690403011d0ecb69ac7ed6c5e4d9b73d8afd390",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  },
+  "sessions": {
+    "s_a41829f825d7c7": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c5ed3418-3a48-4ff2-b789-77115e261e9a",
+        "model": "unknown"
+      },
+      "human_author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

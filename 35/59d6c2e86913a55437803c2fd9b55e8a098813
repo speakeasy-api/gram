@@ -1,0 +1,14 @@
+server/internal/remotesessions/clienthandlers.go
+  h_9630b74bdac540 823-827
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "3559d6c2e86913a55437803c2fd9b55e8a098813",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

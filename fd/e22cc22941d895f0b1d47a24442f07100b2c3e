@@ -1,0 +1,37 @@
+server/internal/access/directory_role_mappings.go
+  h_9630b74bdac540 48-53,56-63,365-367,510
+  s_6f39a21ccee563::t_b2a52cb8c8ae86 64
+server/internal/audit/directoryrolemappings.go
+  h_9630b74bdac540 20-22,24,36,43,89
+  s_6f39a21ccee563::t_afa601c8e5a6da 34-35
+server/internal/access/directory_role_setup_test.go
+  h_9630b74bdac540 207-210,213-216
+server/internal/access/directory_role_setup.go
+  h_9630b74bdac540 298-300,306,313,320-321
+  s_6f39a21ccee563::t_65295964fb5aca 322
+.changeset/directory-role-cap.md
+  h_9630b74bdac540 1-5
+server/internal/access/directory_role_mappings_test.go
+  h_9630b74bdac540 550-585
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "fde22cc22941d895f0b1d47a24442f07100b2c3e",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  },
+  "sessions": {
+    "s_6f39a21ccee563": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "d6d486cf-e735-45ba-b8c3-18bf581d2d26",
+        "model": "unknown"
+      },
+      "human_author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

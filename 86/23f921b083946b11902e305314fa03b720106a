@@ -1,0 +1,22 @@
+server/internal/adminmcp/tool_write_feature_refresh_test.go
+  h_9630b74bdac540 1-178
+server/internal/adminmcp/tool_write_feature_test.go
+  h_9630b74bdac540 46,59-62,65,107-108,110-111
+  h_9630b74bdac540 109
+.changeset/admin-mcp-remote-session-refresh.md
+  h_9630b74bdac540 1-5
+server/internal/adminmcp/tool_write_feature.go
+  h_9630b74bdac540 22-25,29,40,55-58,94-100,102,121-123,147,165-166,264
+  h_9630b74bdac540 27-28,101,167
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "8623f921b083946b11902e305314fa03b720106a",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

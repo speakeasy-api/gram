@@ -1,0 +1,16 @@
+.agents/skills/maintaining-platform-mcp/SKILL.md
+  h_9630b74bdac540 58,66,75
+REVIEW.md
+  h_9630b74bdac540 117,124
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "bbedc3f08a4fc8f8b2a550fe82668711c2d4fcd0",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}
