@@ -4,6 +4,7 @@ import { ActingPrincipal } from "@/components/ui/ActingPrincipal";
 import { IdentityAvatar } from "@/components/identity-avatar";
 import { IdentityLink } from "@/components/identity-link";
 import { identityRefForKind } from "@/lib/identity-urn";
+import { useReadableAgents } from "@/hooks/useReadableAgents";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/Sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/Tabs";
 import { cn } from "@/lib/utils";
@@ -183,6 +184,13 @@ function LogDetailContent({
       name: getNestedValue(attrs, "gram.authorization.actor.name") || undefined,
     };
   })();
+  // The id is off a telemetry row, which is not permission to open that
+  // agent, so the name links only once it resolved through the inventory this
+  // reader is allowed to read.
+  const agents = useReadableAgents(Boolean(actingAgent));
+  const agentIsReadable =
+    !agents.isError &&
+    (agents.data ?? []).some((agent) => agent.id === actingAgent?.id);
   const authorizerUserID = attrs
     ? getNestedValue(attrs, "gram.authorization.authorizer_user_id")
     : "";
@@ -288,11 +296,17 @@ function LogDetailContent({
             <div className="flex items-center gap-2.5 pt-1.5 text-sm">
               <ActingPrincipal
                 agent={actingAgent}
+                linked={agentIsReadable}
                 authorizer={
                   // The address is the better label when the log carries
-                  // one; the bare id is all there is otherwise.
+                  // one; the bare id is all there is otherwise. This one is
+                  // a Speakeasy user id, so it also addresses an identity.
                   authorizerUserID
-                    ? { id: authorizerUserID, name: caller?.label }
+                    ? {
+                        id: authorizerUserID,
+                        name: caller?.label,
+                        identity: { userId: authorizerUserID },
+                      }
                     : undefined
                 }
                 className="truncate"

@@ -39,14 +39,17 @@ vi.mock("@/components/identity-link", () => ({
     children,
   }: {
     // An agent is addressed by its urn, a person by their user id; the
-    // shared renderer now sends both through this one link.
+    // shared renderer now sends both through this one link. A urn carries a
+    // colon, which the real href builder escapes, so this one does too.
     identifier: { userId?: string; urn?: string };
     projectSlug?: string;
     children: React.ReactNode;
   }) => (
     <a
       data-project={projectSlug}
-      href={`/identities/${identifier.urn ?? identifier.userId}`}
+      href={`/identities/${encodeURIComponent(
+        identifier.urn ?? identifier.userId ?? "",
+      )}`}
     >
       {children}
     </a>
@@ -239,7 +242,7 @@ describe("audit principals", () => {
     // through AgentLink's own /agents address.
     expect(
       screen.getByRole("link", { name: "Readable Agent" }).getAttribute("href"),
-    ).toBe("/identities/agent:a");
+    ).toBe("/identities/agent%3Aa");
     mocks.agents.mockReturnValue({
       data: [{ id: "a", name: "Private Name" }],
       isError: true,

@@ -208,7 +208,7 @@ export interface ErrorAlertProps {
 /** An {@link Alert} pre-wired to render a thrown `Error` or an error string. */
 export function ErrorAlert({
   error,
-  title = "Error",
+  title,
   onDismiss,
   className,
 }: ErrorAlertProps): React.JSX.Element {
@@ -219,7 +219,11 @@ export function ErrorAlert({
       dismissible={Boolean(onDismiss)}
       onDismiss={onDismiss}
     >
-      <AlertTitle>{title}</AlertTitle>
+      {/* No default heading: the alert's own severity line already says
+          "Error", and the two together said it twice. A caller's title is a
+          headline rather than a severity, so it stays in the body under that
+          line instead of replacing it. */}
+      {title !== undefined && <AlertTitle>{title}</AlertTitle>}
       <AlertDescription>
         {typeof error === "string" ? error : error.message}
       </AlertDescription>

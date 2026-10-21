@@ -29,7 +29,8 @@ export function ActingPrincipal({
   agent,
   authorizer,
   className,
-  linked = true,
+  linked = false,
+  projectSlug,
 }: {
   agent: {
     id: string;
@@ -49,11 +50,25 @@ export function ActingPrincipal({
   authorizer?: Principal | Principal[] | undefined;
   className?: string;
   /**
-   * Whether each half links to its identity page. Off inside something that
-   * is already a link or a row-level click target, where a nested link
-   * swallows the outer one.
+   * Whether each half links to its identity page.
+   *
+   * Off by default, because only the caller knows the reader may open these
+   * pages: an id read off a telemetry row, a chat row or an audit entry is
+   * not permission to open that agent, so a caller turns this on once the id
+   * resolved through an inventory it is allowed to read. A default that
+   * linked meant every new call site silently offered a door the next page
+   * might refuse. It also stays off inside something that is already a link
+   * or a row-level click target, where a nested link swallows the outer one.
    */
   linked?: boolean;
+  /**
+   * Project both identity pages open in, for a surface that picks its project
+   * through a filter rather than through the address — the destination is a
+   * project-level page, and a caller that knows its project says so rather
+   * than letting the link fall back to whichever project its requests use.
+   * See `useIdentityHrefBuilder`.
+   */
+  projectSlug?: string;
 }): React.JSX.Element {
   // The id is a true label when the name has not resolved; an empty span is
   // not. Agents are renamable, so the id is also the stable one.
@@ -72,6 +87,7 @@ export function ActingPrincipal({
         {linked ? (
           <IdentityLink
             identifier={{ urn: `agent:${agent.id}` }}
+            projectSlug={projectSlug}
             className="min-w-0 truncate"
           >
             {agent.display ?? agentLabel}
@@ -103,9 +119,13 @@ export function ActingPrincipal({
             ))}
           </span>
           {people.length === 1 ? (
-            linked ? (
+            // `first.id` is not an identity reference: a chat participant is
+            // keyed "slack:U123", a provider handle the resolver cannot
+            // address. Only the ref the caller carried links.
+            linked && first.identity ? (
               <IdentityLink
-                identifier={{ userId: first.id }}
+                identifier={first.identity}
+                projectSlug={projectSlug}
                 className="min-w-0 truncate"
               >
                 {first.name || first.id}
@@ -133,17 +153,18 @@ export function ActingPrincipal({
  * Square, so an agent never reads as one of the round faces beside it.
  *
  * Draws the glyph rather than reusing `AgentIcon`, which is itself a round
- * 24px disc carrying its own `role="img"` label: nesting it put a circle
- * inside this square and a labelled image inside an `aria-hidden` parent,
- * which a screen reader would have announced twice or not at all.
+ * 24px disc: nesting it put a circle inside this square. It carries the same
+ * label, because nothing else in the rendered name says a machine acted —
+ * hiding it left a screen reader with a bare name.
  */
 function AgentFace(): React.JSX.Element {
   return (
     <span
-      aria-hidden="true"
+      role="img"
+      aria-label="Agent"
       className="bg-muted text-muted-foreground flex size-5 shrink-0 items-center justify-center"
     >
-      <Bot className="size-3" />
+      <Bot aria-hidden="true" className="size-3" />
     </span>
   );
 }

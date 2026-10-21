@@ -2,6 +2,7 @@ import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router";
 import type { ReactNode } from "react";
+import { identityUrnFor, type IdentityRef } from "@/lib/identity-urn";
 import { ToolUsageIdentity } from "./tool-usage-identity";
 
 vi.mock("@/routes", () => ({
@@ -15,15 +16,21 @@ vi.mock("@/routes", () => ({
     },
   }),
 }));
+// The href carries the identifier the component asked for, so these tests
+// assert which identity a link points at rather than only that one rendered.
 vi.mock("@/components/identity-link", () => ({
   IdentityLink: ({
     children,
     identifier,
   }: {
     children: ReactNode;
-    identifier: unknown;
+    identifier: IdentityRef | null | undefined;
   }) =>
-    identifier ? <a href="/identity">{children}</a> : <span>{children}</span>,
+    identifier ? (
+      <a href={`/identity/${identityUrnFor(identifier)}`}>{children}</a>
+    ) : (
+      <span>{children}</span>
+    ),
 }));
 afterEach(cleanup);
 
@@ -41,8 +48,11 @@ describe("ToolUsageIdentity", () => {
     );
     // Routed through the shared ActingPrincipal now, so the link is the
     // identity resolver's rather than AgentLink's own href builder. What
-    // matters is unchanged: a readable agent is named and reachable.
-    expect(screen.getByRole("link", { name: "Research agent" })).toBeTruthy();
+    // matters is unchanged: a readable agent is named, and the link lands on
+    // that agent's identity rather than on whatever the row happened to hold.
+    expect(
+      screen.getByRole("link", { name: "Research agent" }).getAttribute("href"),
+    ).toBe("/identity/agent:agent-1");
   });
 
   it("keeps unreadable agents distinct without revealing names or identity links", () => {
@@ -79,7 +89,7 @@ describe("ToolUsageIdentity", () => {
     );
     expect(
       screen.getByRole("link", { name: "Example User" }).getAttribute("href"),
-    ).toBe("/identity");
+    ).toBe("/identity/user:user-1");
     expect(screen.getByText("Unknown").closest("a")).toBeNull();
     expect(screen.queryByRole("img", { name: "Agent" })).toBeNull();
   });

@@ -18,6 +18,7 @@ import { CodeSnippet } from "@/components/ui/CodeSnippet";
 import { ConfigContext } from "@/components/ui/context/config";
 import type { Theme } from "@/components/ui/context/theme";
 import { WizardStepHeader } from "./WizardChrome";
+import { isCredentialSafe } from "./gateway";
 
 /**
  * The step that hands the runtime its credential. One command for a machine
@@ -114,6 +115,12 @@ export function StepInstall({
   serverCount: number | "all";
 }): JSX.Element {
   const [tab, setTab] = useState("one-line");
+  // Every recipe here puts a bearer key on the wire, and the key itself is on
+  // screen beside them, so a plaintext endpoint would hand it to anyone on
+  // the path. Loopback is exempt: it never leaves the machine, and local
+  // development runs there. Empty means no agent exists yet, which has no
+  // endpoint to judge — the panel below is covered in that case anyway.
+  const unsafeTransport = gatewayURL !== "" && !isCredentialSafe(gatewayURL);
   // Counting is not available for a wildcard, and a count taken from today's
   // inventory would be a number that quietly changes behind the endpoint.
   const reachPhrase =
@@ -161,19 +168,42 @@ export function StepInstall({
     `const tools = await mcp.getTools();`,
   ].join("\n");
 
+  // Connected and handed to an agent, not just constructed: the server is
+  // only a description of the endpoint until a session is open on it, so a
+  // block that stops at the constructor copies into code that does nothing.
   const python = [
     `import os`,
+    `from agents import Agent, Runner`,
     `from agents.mcp import MCPServerStreamableHttp`,
     ``,
-    `server = MCPServerStreamableHttp(`,
+    `async with MCPServerStreamableHttp(`,
     `    params={`,
     `        "url": "${gatewayURL}",`,
     `        "headers": {`,
     `            "Authorization": f"Bearer {os.environ['${KEY_ENV}']}"`,
     `        },`,
     `    },`,
-    `)`,
+    `) as server:`,
+    `    agent = Agent(name="Assistant", mcp_servers=[server])`,
+    `    result = await Runner.run(agent, "What tools do you have?")`,
+    `    print(result.final_output)`,
   ].join("\n");
+
+  if (unsafeTransport) {
+    return (
+      <div className="space-y-5">
+        <WizardStepHeader
+          title="Connect the agent"
+          description="This deployment cannot carry an agent key."
+        />
+        <Text role="alert">
+          MCP is served over plaintext HTTP at {gatewayURL}. Connection
+          instructions are withheld because they would send the agent key
+          unencrypted. Configure an HTTPS server URL and reload.
+        </Text>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-5">

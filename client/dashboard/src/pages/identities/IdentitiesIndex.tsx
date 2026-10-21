@@ -1573,6 +1573,9 @@ function IdentityCell({ identity }: { identity: Employee }): JSX.Element {
     return (
       <ActingPrincipal
         agent={{ id: agentId, name: identity.name }}
+        // The roster is authorization-filtered, so every agent listed here is
+        // one this reader may open.
+        linked
         className="font-medium"
       />
     );

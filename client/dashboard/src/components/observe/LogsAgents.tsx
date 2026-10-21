@@ -238,6 +238,34 @@ export function LogsAgentsContent({
 }: {
   scope?: Scope | Scope[];
 }): JSX.Element {
+  const { hasAnyScope, isLoading } = useRBAC();
+  const scopes = scope == null ? [] : Array.isArray(scope) ? scope : [scope];
+  // The gate goes above the content, not inside the template the content
+  // renders: the chat, assistant, MCP and Insights reads all fire from the
+  // hooks below, so a refusal applied further down still paid for them. The
+  // template keeps the `scope` prop and draws the refusal itself, inside the
+  // page frame and breadcrumbs — and renders nothing while grants load,
+  // which is why loading takes this branch too.
+  if (scopes.length > 0 && (isLoading || !hasAnyScope(scopes))) {
+    return (
+      <ResourceListPage
+        scope={scope}
+        title={AGENT_SESSIONS_TITLE}
+        description={AGENT_SESSIONS_DESCRIPTION}
+        hideToolbar
+      >
+        {null}
+      </ResourceListPage>
+    );
+  }
+  return <AgentSessionsContent scope={scope} />;
+}
+
+function AgentSessionsContent({
+  scope,
+}: {
+  scope?: Scope | Scope[];
+}): JSX.Element {
   const project = useProject();
   const { hasScope } = useRBAC();
   const [searchParams, setSearchParams] = useSearchParams();

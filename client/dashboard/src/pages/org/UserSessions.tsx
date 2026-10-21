@@ -43,7 +43,9 @@ const USER_SESSION_FILTERS = defineFilters([
   // Unpinned to keep the bar on one line. Project and MCP server are the two
   // axes this page is read along; narrowing to one person is a follow-up
   // question, and the chip appears the moment it is answered.
-  { id: "subjectUrn", label: "Identity", kind: "select" },
+  // "User", not "Identity": the facets endpoint lists only `user:` subjects,
+  // so the wider label offered agents and keys the filter cannot select.
+  { id: "subjectUrn", label: "User", kind: "select" },
 ]);
 
 const STATUS_TOOLBAR_OPTIONS = [

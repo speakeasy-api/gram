@@ -220,9 +220,12 @@ export function AgentIdentityProfile({
           <IdentityPanel
             title="Sessions"
             handoffLabel="all sessions"
+            // Carries the query across: the date range lives in the URL, so a
+            // bare path silently put the reader back on the default window
+            // when they came back to the overview.
             handoffHref={`${routes.identities.detail.sessions.href(
               encodeIdentityUrn(`agent:${agent.id}`),
-            )}`}
+            )}${params.toString() ? `?${params}` : ""}`}
           >
             <ManagedAgentSessions agent={agent} variant="bare" limit={3} />
           </IdentityPanel>

@@ -98,8 +98,18 @@ function ActingPrincipalCell({
   // faces, so this cell no longer has a facepile branch of its own that
   // short-circuited before the agent was ever named.
   const participants = (chat.participants ?? []).map((participant) => ({
-    id: `${participant.provider}:${participant.providerUserId}`,
+    // The mapped Speakeasy person when capture resolved one — that is the id
+    // an identity link can key on. Without one the whole provider identity
+    // stands in: `provider:user` alone collides between workspaces, which a
+    // shared channel puts in the same conversation.
+    id:
+      participant.userId ??
+      `${participant.provider}:${participant.providerTeamId ?? ""}:${participant.providerUserId}`,
     name: participant.displayName ?? participant.providerUserId,
+    // Only a participant capture resolved to a person has an identity page;
+    // the rest are provider handles the resolver cannot address, and they
+    // render as a named face rather than a link to nothing.
+    identity: participant.userId ? { userId: participant.userId } : undefined,
   }));
 
   if (chat.assistantName && participants.length > 0) {
@@ -115,19 +125,16 @@ function ActingPrincipalCell({
   // A channel session with no assistant on the row: the people are all there
   // is to name.
   if (participants.length > 0) {
-    return (
-      <span
-        className="flex shrink-0 -space-x-1"
-        aria-label="Conversation participants"
-      >
-        {participants.slice(0, 5).map((person) => (
-          <PersonFace key={person.id} person={person} />
-        ))}
-      </span>
-    );
+    return <ParticipantFacepile people={participants} />;
   }
 
-  if (chat.assistantName && chat.userId) {
+  // The person an assistant acted for, by whichever id the session carries.
+  // An assistant reached over a federated surface reports only the external
+  // id, and guarding on `userId` alone dropped the person from those rows
+  // entirely rather than naming them.
+  const authorizerId = chat.userId ?? chat.externalUserId;
+
+  if (chat.assistantName && authorizerId) {
     return (
       // No account-type icon: ActingPrincipal draws the agent's own face,
       // and the two marks side by side read as two actors.
@@ -141,13 +148,19 @@ function ActingPrincipalCell({
           // without one the urn resolves to nothing.
           linked={Boolean(chat.assistantAgentId)}
           authorizer={{
-            id: chat.userId,
+            id: authorizerId,
             name: chatOwnerLabel(
               members,
               chat,
               currentUser,
               personalAccountEmail(chat),
             ),
+            // Keyed on whichever id the session holds: an external id is a
+            // reference of its own kind, and sending it as a member id would
+            // link to a person who does not exist.
+            identity: chat.userId
+              ? { userId: chat.userId }
+              : { externalUserId: authorizerId },
           }}
         />
       </div>
@@ -183,6 +196,76 @@ function ActingPrincipalCell({
         />
       </span>
     </span>
+  );
+}
+
+/**
+ * Everyone in a conversation, as overlapped faces.
+ *
+ * Each face carries its own name: `PersonFace` is `aria-hidden`, so a bare
+ * row of them says nothing to a screen reader and nothing to a mouse either.
+ * The people past the fifth are counted rather than dropped — five faces and
+ * no marker reads as the whole room.
+ */
+function ParticipantFacepile({
+  people,
+}: {
+  people: { id: string; name: string }[];
+}): JSX.Element {
+  const overflow = people.slice(5);
+  return (
+    <span
+      role="list"
+      aria-label="Conversation participants"
+      className="flex shrink-0 -space-x-1"
+    >
+      {people.slice(0, 5).map((person) => (
+        <SimpleTooltip key={person.id} tooltip={person.name}>
+          <span role="listitem" className="flex">
+            <PersonFace person={person} />
+            <span className="sr-only">{person.name}</span>
+          </span>
+        </SimpleTooltip>
+      ))}
+      {overflow.length > 0 && (
+        <SimpleTooltip
+          tooltip={overflow.map((person) => person.name).join(", ")}
+        >
+          <span
+            role="listitem"
+            className="bg-card text-muted-foreground flex size-4 shrink-0 items-center justify-center rounded-full text-[8px]"
+          >
+            +{overflow.length}
+            <span className="sr-only">{overflow.length} more participants</span>
+          </span>
+        </SimpleTooltip>
+      )}
+    </span>
+  );
+}
+
+/**
+ * How many risk findings a session has, beside its title.
+ *
+ * Beside the title rather than in a column of its own: every column is
+ * already at its minimum width, and a risk column stands empty on every row
+ * of an organization that runs no policies. Drawn only when the count is
+ * non-zero — the fact worth seeing on a scan is that a session has any, and
+ * a column of zeroes buries it.
+ */
+function SessionRiskMarker({ count }: { count: number }): JSX.Element {
+  const label = `${count} risk finding${count === 1 ? "" : "s"} on this session`;
+  return (
+    <SimpleTooltip tooltip={label}>
+      <span
+        role="img"
+        aria-label={label}
+        className="text-destructive inline-flex shrink-0 items-center gap-0.5 tabular-nums"
+      >
+        <Icon name="triangle-alert" className="size-3.5" />
+        {count}
+      </span>
+    </SimpleTooltip>
   );
 }
 
@@ -586,6 +669,9 @@ export function ChatLogsTable({
                 <span className="text-foreground line-clamp-3 min-w-0 text-sm font-medium">
                   {chat.title}
                 </span>
+                {(chat.riskFindingsCount ?? 0) > 0 && (
+                  <SessionRiskMarker count={chat.riskFindingsCount!} />
+                )}
                 {depth > 0 && (
                   <span className="text-muted-foreground inline-flex shrink-0 items-center gap-1">
                     <GitBranch className="size-3" aria-hidden />

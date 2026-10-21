@@ -3,15 +3,27 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router";
 import { GramCore } from "@gram/client/core.js";
 import { GramProvider } from "@gram/client/react-query/_context.js";
+import {
+  queryKeyGrants,
+  type GrantsQueryData,
+} from "@gram/client/react-query/grants.js";
 import { ActingPrincipal } from ".";
 
-// Both halves link to an identity page, and building that href goes through
-// RBAC, which reads the SDK. Nothing here calls the network — the client
-// exists so the hooks have something to hold.
+// Both halves link to an identity page, and building the person's href goes
+// through RBAC, which reads the SDK. Nothing here calls the network — the
+// client exists so the hooks have something to hold, and the grants the gate
+// reads are seeded instead of fetched. Without the seed every "linked" story
+// rendered plain text, since a disabled query is idle rather than loading and
+// an empty grant list holds no org:read.
 const client = new GramCore();
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: false, enabled: false } },
 });
+// The session is empty outside the app's auth provider, which is the session
+// the grants query keys on here.
+queryClient.setQueryData(queryKeyGrants({ gramSession: "" }), {
+  grants: [{ scope: "org:read" }],
+} satisfies GrantsQueryData);
 
 const meta: Meta<typeof ActingPrincipal> = {
   title: "Design System/ActingPrincipal",
@@ -49,7 +61,13 @@ export const OnBehalfOf: Story = {
       id: "00000000-0000-4000-a000-000000000001",
       name: "Release assistant",
     },
-    authorizer: { id: "user_locl_amara", name: "Amara Okafor" },
+    authorizer: {
+      id: "user_locl_amara",
+      name: "Amara Okafor",
+      identity: { userId: "user_locl_amara" },
+    },
+    // Linking is opt-in, so a story showing it has to ask for it.
+    linked: true,
   },
 };
 
@@ -60,6 +78,7 @@ export const AgentAlone: Story = {
       id: "00000000-0000-4000-a000-000000000001",
       name: "Release assistant",
     },
+    linked: true,
   },
 };
 
@@ -67,7 +86,11 @@ export const AgentAlone: Story = {
 export const UnresolvedNames: Story = {
   args: {
     agent: { id: "00000000-0000-4000-a000-000000000001" },
-    authorizer: { id: "user_locl_amara" },
+    authorizer: {
+      id: "user_locl_amara",
+      identity: { userId: "user_locl_amara" },
+    },
+    linked: true,
   },
 };
 
@@ -93,7 +116,9 @@ export const Truncating: Story = {
     authorizer: {
       id: "user_locl_amara",
       name: "Amara Okafor-Lindqvist",
+      identity: { userId: "user_locl_amara" },
     },
+    linked: true,
   },
   decorators: [
     (Story) => (

@@ -1,13 +1,10 @@
-import {
-  hashKey,
-  useInfiniteQuery,
-  useQueryClient,
-} from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { useOrganization } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import type { ManagedAgent } from "@gram/client/models/components/managedagent.js";
 import { useMembers } from "@gram/client/react-query/members.js";
 import { AgentSessionsSection } from "./AgentSessions";
+import { useAgentSessionList } from "./useAgentSessionList";
 
 export function ManagedAgentSessions({
   agent,
@@ -26,45 +23,31 @@ export function ManagedAgentSessions({
   const sdk = useSdkClient();
   const organization = useOrganization();
   const queryClient = useQueryClient();
-  const queryKey = ["managed-agent-sessions", organization.id, agent.id];
-  // Both list and revoke require the server's ownership-or-authorize decision.
-  // agent:read alone does not grant access to credentials.
-  const canManage = agent.permissions.authorize;
+  const sessions = useAgentSessionList(agent);
+  const canManage = sessions.canManage;
   // A session carries its authorizer's id and nothing else, so the name
   // comes from the member list. A failed read leaves the id, which still
-  // identifies them and still links.
-  const members = useMembers(undefined, undefined, { throwOnError: false });
-  const sessions = useInfiniteQuery({
-    queryKey,
-    queryKeyHashFn: hashKey,
-    initialPageParam: undefined as string | undefined,
-    queryFn: async ({ pageParam, signal }) => {
-      const page = await sdk.agents.listSessions(
-        { agentId: agent.id, cursor: pageParam, limit: 50 },
-        undefined,
-        { signal },
-      );
-      return page.result;
-    },
-    getNextPageParam: (page) => page.nextCursor || undefined,
+  // identifies them and still links. Not read at all by someone who may not
+  // see the sessions: the org roster is a separate, often-refused request.
+  const members = useMembers(undefined, undefined, {
     enabled: canManage,
     throwOnError: false,
-    retry: false,
   });
 
   return (
     <AgentSessionsSection
       key={`${organization.id}-${agent.id}`}
       variant={variant}
-      sessions={(() => {
-        const all = sessions.data?.pages.flatMap((page) => page.items) ?? [];
-        return limit === undefined ? all : all.slice(0, limit);
-      })()}
+      sessions={
+        limit === undefined
+          ? sessions.sessions
+          : sessions.sessions.slice(0, limit)
+      }
       isLoading={sessions.isLoading}
       isError={sessions.isError && !sessions.isFetchNextPageError}
       canRead={canManage}
       canRevoke={canManage}
-      onRetry={() => void sessions.refetch()}
+      onRetry={sessions.refetch}
       authorizerName={(userId) =>
         members.data?.members.find((member) => member.id === userId)?.name
       }
@@ -72,7 +55,7 @@ export function ManagedAgentSessions({
       hasMore={limit === undefined && sessions.hasNextPage}
       isLoadingMore={limit === undefined && sessions.isFetchingNextPage}
       loadMoreError={limit === undefined && sessions.isFetchNextPageError}
-      onLoadMore={() => void sessions.fetchNextPage()}
+      onLoadMore={sessions.fetchNextPage}
       onRevoke={async (session) => {
         if (!canManage) throw new Error("Agent credential permission required");
         await sdk.agents.revokeSession({
@@ -81,7 +64,7 @@ export function ManagedAgentSessions({
             sessionId: session.id,
           },
         });
-        await queryClient.invalidateQueries({ queryKey });
+        await queryClient.invalidateQueries({ queryKey: sessions.queryKey });
       }}
     />
   );

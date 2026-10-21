@@ -3,6 +3,7 @@ import {
   useAuditPrincipals,
 } from "@/components/auditlogs/audit-principals";
 import { AuditPrincipalLink } from "@/components/auditlogs/principals";
+import type { AuditLog } from "@gram/client/models/components/auditlog.js";
 import type { ManagedAgent } from "@gram/client/models/components/managedagent.js";
 import { useAuditLogs } from "@gram/client/react-query/auditLogs.js";
 import { useChallenges } from "@gram/client/react-query/challenges.js";
@@ -14,6 +15,9 @@ import {
   IdentityPanelEmpty,
   IdentityPanelRow,
 } from "./IdentityPanel";
+
+/** Shared so the "no principals to resolve" case is a stable reference. */
+const NO_LOGS: AuditLog[] = [];
 
 export function AgentIdentityAudit({
   agent,
@@ -38,7 +42,11 @@ export function AgentIdentityAudit({
   // The server nulls the display name for an agent actor, so a change one
   // agent made to another showed as a bare uuid. The audit log's own renderer
   // resolves the name and draws the agent's face.
-  const identities = useAuditPrincipals(rows);
+  //
+  // Only the subject feed names an actor; the actions feed names the subject
+  // from the row itself. Resolving in both modes paid for the agent and
+  // member inventories to fill a column that mode does not render.
+  const identities = useAuditPrincipals(subject ? rows : NO_LOGS);
   return (
     <IdentityPanel
       title={

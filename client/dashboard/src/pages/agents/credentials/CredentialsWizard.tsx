@@ -24,7 +24,11 @@ import {
 } from "../agent-policy-grants";
 import { buildRequestedGrants } from "../agent-api-key-grants";
 import { discoverKeyServerGrants } from "../agent-key-discovery";
-import { agentGatewayURL, mintInstallCommand } from "./gateway";
+import {
+  agentGatewayURL,
+  isCredentialSafe,
+  mintInstallCommand,
+} from "./gateway";
 import { StepInstall } from "./StepInstall";
 import { StepServers, type ServerSelection } from "./StepServers";
 import { StepVerify, type VerifyState } from "./StepVerify";
@@ -37,6 +41,7 @@ import {
   grantedServers,
   wildcardConnectGrant,
   type GrantedServer,
+  type WildcardConnectGrant,
 } from "@/pages/agents/agentPolicyEdit";
 import { useAgentsCreatePolicyGrantMutation } from "@gram/client/react-query/agentsCreatePolicyGrant.js";
 import { useAgentsDeletePolicyGrantMutation } from "@gram/client/react-query/agentsDeletePolicyGrant.js";
@@ -266,6 +271,10 @@ export function CredentialsWizard({
   // The grants as the save last knew them, so a retry after a partial save
   // writes what is still missing rather than creating a grant a second time.
   const applied = useRef(new Map<string, GrantedServer>());
+  // The wildcard as the save last knew it, for the same reason: `grants` is
+  // the answer the query gave before the save started, so a retry reading it
+  // would create a second wildcard or ask for an id that is already gone.
+  const appliedWildcard = useRef<WildcardConnectGrant | undefined>(undefined);
   useEffect(() => {
     if (reconciled || grants === undefined) return;
     if (inventory.isLoading || inventory.isError) return;
@@ -276,9 +285,11 @@ export function CredentialsWizard({
         .filter((server) => granted.has(server.resourceId))
         .map((server) => ({ server })),
     );
+    const wildcard = wildcardConnectGrant(grants);
+    appliedWildcard.current = wildcard;
     // The wildcard is the broader claim, so it wins the display: an agent
     // holding one reaches every server whatever else its policy lists.
-    setAllServers(wildcardConnectGrant(grants) !== undefined);
+    setAllServers(wildcard !== undefined);
     setReconciled(true);
   }, [
     grants,
@@ -341,6 +352,25 @@ export function CredentialsWizard({
   const scopeName = scopedProjectID
     ? projectName(scopedProjectID)
     : organization.name;
+  // What "All servers" covers. An agent that already holds a wildcard keeps
+  // that wildcard's own scope: re-issuing a key must not quietly narrow an
+  // organization-wide grant down to the project the agent is labelled with.
+  // The reach is named on screen from the same value, so a wildcard wider
+  // than its agent reads as what it is rather than as the agent's project.
+  const allServersProjectID = wildcardReach
+    ? wildcardReach.projectId || undefined
+    : scopedProjectID;
+  const allServersScopeName = allServersProjectID
+    ? projectName(allServersProjectID)
+    : organization.name;
+  // The rows the picker offers. Under "All servers" they are the ones that
+  // wildcard reaches, so an organization-wide one shows every project's;
+  // otherwise it is the project the agent is bound to.
+  const listedProjectID = allServers ? allServersProjectID : scopedProjectID;
+  const listedServers = inventory.servers.filter(
+    (server) =>
+      listedProjectID === undefined || server.projectId === listedProjectID,
+  );
 
   const gatewayURL = agentID ? agentGatewayURL(agentID) : "";
   const platform = catalog.entries.find((entry) => entry.key === platformKey);
@@ -375,6 +405,15 @@ export function CredentialsWizard({
   }, [step, agentID, verify, sdk, verifyPollMs]);
 
   const regenerate = (key: string, url: string) => {
+    // Minting authenticates with the key, so a plaintext endpoint would hand
+    // it to anyone on the path. Loopback is exempt: it never reaches a
+    // network. The same rule withholds the instructions on the step itself.
+    if (!isCredentialSafe(url)) {
+      setCommandError(
+        `This deployment serves MCP over plaintext HTTP at ${url}, so a setup command is not prepared: it would send the agent key unencrypted. Configure an HTTPS server URL and reload.`,
+      );
+      return;
+    }
     setMinting(true);
     setCommandError(null);
     lastSelfUse.current = Date.now();
@@ -398,24 +437,29 @@ export function CredentialsWizard({
     // against it rather than rewriting what it may ever be delegated.
     if (agent) return agent.id;
     if (agentID) return agentID;
+    // A new agent belongs to the project it is created in, so there is
+    // nothing to create until that project has resolved. An empty id is a
+    // context still loading, not an organization-wide agent: creating on it
+    // would leave the agent bound to no project and, under "All servers", a
+    // wildcard with no project on it — the whole organization, by accident.
+    const projectID = project.id;
+    if (!projectID) {
+      throw new Error("This project is still loading. Try again in a moment.");
+    }
     // "All servers" is one wildcard selector rather than today's inventory
-    // listed out, so it covers the servers added after this is saved.
-    //
-    // Written as an explicit selector, not the draft's bare `null`: `null`
-    // means unrestricted and produces a wildcard with no project on it,
-    // which would reach every project while the agent itself belongs to one.
-    // Only an agent with no project of its own gets the unscoped form.
+    // listed out, so it covers the servers added after this is saved. Scoped
+    // to the project, never the draft's bare `null`: `null` means
+    // unrestricted and produces a wildcard with no project on it, which would
+    // reach every project while the agent itself belongs to one.
     const draft: AgentPolicyDraft = {
       "mcp:connect": allServers
-        ? scopedProjectID
-          ? [
-              {
-                resourceKind: "mcp" as const,
-                resourceId: "*",
-                projectId: scopedProjectID,
-              },
-            ]
-          : null
+        ? [
+            {
+              resourceKind: "mcp" as const,
+              resourceId: "*",
+              projectId: projectID,
+            },
+          ]
         : selected.map((entry) => ({
             resourceKind: "mcp" as const,
             resourceId: entry.server.resourceId,
@@ -425,7 +469,7 @@ export function CredentialsWizard({
     const created = await sdk.agents.create({
       createAgentForm: {
         name: name.trim(),
-        ...(scopedProjectID ? { projectId: scopedProjectID } : {}),
+        projectId: projectID,
         policyGrants: agentPolicyGrantsFromDraft(draft),
       },
     });
@@ -487,8 +531,8 @@ export function CredentialsWizard({
       // The wildcard goes in before the named grants it supersedes come out,
       // so no moment of this save leaves the agent reaching less than both the
       // old policy and the new one allow.
-      if (allServers && wildcardReach === undefined) {
-        await createGrant.mutateAsync({
+      if (allServers && appliedWildcard.current === undefined) {
+        const created = await createGrant.mutateAsync({
           request: {
             createAgentPolicyGrantForm: {
               agentId: agent.id,
@@ -505,6 +549,12 @@ export function CredentialsWizard({
             },
           },
         });
+        // Recorded as the write lands, so a failure further down this save
+        // does not make the next attempt create a second wildcard.
+        appliedWildcard.current = {
+          projectId: scopedProjectID ?? "",
+          grantIds: [created.id],
+        };
       }
       for (const server of changes.add) {
         const created = await createGrant.mutateAsync({
@@ -534,7 +584,7 @@ export function CredentialsWizard({
       // already granted by the time the wildcard goes.
       const removals = allServers
         ? changes.remove
-        : [...changes.remove, ...(wildcardReach?.grantIds ?? [])];
+        : [...changes.remove, ...(appliedWildcard.current?.grantIds ?? [])];
       for (const grantId of removals) {
         await deleteGrant.mutateAsync({
           request: { agentPolicyGrantIDForm: { agentId: agent.id, grantId } },
@@ -545,6 +595,14 @@ export function CredentialsWizard({
           // the list once the last of them is gone.
           if (left.length === 0) applied.current.delete(resourceId);
           else applied.current.set(resourceId, { ...server, grantIds: left });
+        }
+        // Same for the wildcard rows: a retry after a later failure asks for
+        // the ones still standing rather than for an id already deleted.
+        const wildcard = appliedWildcard.current;
+        if (wildcard !== undefined) {
+          const left = wildcard.grantIds.filter((id) => id !== grantId);
+          appliedWildcard.current =
+            left.length === 0 ? undefined : { ...wildcard, grantIds: left };
         }
       }
       // The agent's own page reads its servers from these, and it is where
@@ -653,8 +711,8 @@ export function CredentialsWizard({
         ? inventory.servers
             .filter(
               (server) =>
-                scopedProjectID === undefined ||
-                server.projectId === scopedProjectID,
+                allServersProjectID === undefined ||
+                server.projectId === allServersProjectID,
             )
             // Each of these needs an account attached to the agent before a
             // key can call it, which this flow has no step for.
@@ -871,15 +929,11 @@ export function CredentialsWizard({
         return (
           <div className="space-y-5">
             <StepServers
-              servers={inventory.servers.filter(
-                (server) =>
-                  scopedProjectID === undefined ||
-                  server.projectId === scopedProjectID,
-              )}
+              servers={listedServers}
               isLoading={inventory.isLoading}
               isError={inventory.isError}
               onRetry={inventory.refetch}
-              scopeLabel={scopeName}
+              scopeLabel={allServersScopeName}
               allServers={allServers}
               onAllServersChange={(next) => {
                 setAllServers(next);
@@ -1001,7 +1055,16 @@ export function CredentialsWizard({
       : step === 1
         ? !allServers && selected.length === 0
           ? "Select at least one MCP server."
-          : null
+          : // A key names servers one by one, and a server that authorizes
+            // each person separately is not one a key can name. So "all
+            // servers" with none of them left is a key that would reach
+            // nothing — said here rather than after the agent is created.
+            allServers &&
+              !inventory.isLoading &&
+              !inventory.isError &&
+              listedServers.every((server) => server.issuerId)
+            ? "No server here can be reached with a key yet."
+            : null
         : null;
 
   const footer = () => {
@@ -1119,11 +1182,18 @@ export function CredentialsWizard({
             note={
               existing
                 ? "Issuing a key is recorded in the organization audit log."
-                : "Creating the agent is recorded in the organization audit log."
+                : !project.id
+                  ? "Reading the project this agent will belong to…"
+                  : "Creating the agent is recorded in the organization audit log."
             }
             onBack={() => setStep(1)}
             primary={
-              <Button disabled={provisioning} onClick={() => void provision()}>
+              <Button
+                // An agent belongs to the project it is made in, so there is
+                // nothing to create until that project has resolved.
+                disabled={provisioning || (!existing && !project.id)}
+                onClick={() => void provision()}
+              >
                 {provisioning
                   ? existing
                     ? "Issuing…"
@@ -1171,7 +1241,11 @@ export function CredentialsWizard({
                 ? existing
                   ? "This agent's identity is settled; this flow issues it a key."
                   : "You can rename it later."
-                : `${selected.length} of ${inventory.servers.length} servers selected.`)
+                : allServers
+                  ? // Not a count: the choice is deliberately not a list, and
+                    // naming today's would be a number that changes behind it.
+                    "All servers selected."
+                  : `${selected.length} of ${listedServers.length} servers selected.`)
             }
             onBack={step > 0 ? () => setStep(step - 1) : undefined}
             primary={

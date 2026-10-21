@@ -6,6 +6,7 @@ import { DotTable } from "@/components/ui/DotTable";
 import type { Action } from "@/components/ui/MoreActions";
 import { Text } from "@/components/ui/Text";
 import { useRBAC } from "@/hooks/useRBAC";
+import { useReadableAgents } from "@/hooks/useReadableAgents";
 import type { RemoteSession } from "@gram/client/models/components/remotesession.js";
 import {
   invalidateAllOrganizationRemoteSessionClientSessions,
@@ -24,7 +25,7 @@ import { ActingPrincipal } from "@/components/ui/ActingPrincipal";
 import { Icon } from "@/components/ui/Icon";
 import { useQueryClient } from "@tanstack/react-query";
 import { MoreHorizontal } from "lucide-react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { RevokeAllSessionsDialog } from "../../clientDialogs";
 import { formatTimestamp } from "./formatTimestamp";
@@ -39,6 +40,21 @@ export function SessionsTab({ clientId }: { clientId: string }): JSX.Element {
     });
   const sessionItems = data?.result.items ?? [];
   const [showRevokeAll, setShowRevokeAll] = useState(false);
+  // An agent id off a session is not permission to open that agent, so the
+  // roster the management API is willing to return decides which rows link.
+  const agents = useReadableAgents(
+    sessionItems.some((session) => session.subjectUrn.startsWith("agent:")),
+  );
+  const agentsByUrn = useMemo(
+    () =>
+      new Map(
+        (agents.isError ? [] : (agents.data ?? [])).map((agent) => [
+          `agent:${agent.id}`,
+          agent,
+        ]),
+      ),
+    [agents.data, agents.isError],
+  );
 
   const revoke = useRevokeOrganizationRemoteSessionMutation({
     onSuccess: async () => {
@@ -142,12 +158,19 @@ export function SessionsTab({ clientId }: { clientId: string }): JSX.Element {
                       {session.subjectUrn.startsWith("agent:") ? (
                         // No authorizer on a RemoteSession, so the agent
                         // stands alone — but it is named and linked now,
-                        // where it used to fall through to a raw urn.
+                        // where it used to fall through to a raw urn. Linked
+                        // only once the roster returns it: an agent the
+                        // viewer may not read would offer a page they
+                        // cannot open.
                         <ActingPrincipal
                           agent={{
                             id: session.subjectUrn.slice("agent:".length),
-                            name: session.subjectDisplayName ?? undefined,
+                            name:
+                              agentsByUrn.get(session.subjectUrn)?.name ??
+                              session.subjectDisplayName ??
+                              undefined,
                           }}
+                          linked={agentsByUrn.has(session.subjectUrn)}
                         />
                       ) : (
                         <IdentityLink

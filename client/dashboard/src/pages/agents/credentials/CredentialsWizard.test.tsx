@@ -39,7 +39,12 @@ vi.mock("@/contexts/Auth", () => ({
     id: "org_example",
     name: "Example Org",
     slug: "example",
-    projects: [{ id: "project_one", name: "Project one", slug: "project-one" }],
+    // Two, so a wildcard that names no project can be told apart from one
+    // scoped to the project the agent is labelled with.
+    projects: [
+      { id: "project_one", name: "Project one", slug: "project-one" },
+      { id: "project_two", name: "Project two", slug: "project-two" },
+    ],
   }),
   useProject: () => ({
     id: mocks.projectId,
@@ -490,9 +495,10 @@ describe("Agent project", () => {
     expect(form.projectId).toBe("project_one");
   });
 
-  it("sends no binding until a project resolves", async () => {
-    // useProject yields an empty id first. Binding to it would send an empty
-    // id, which the server reads as "omitted" rather than rejecting.
+  it("creates nothing until a project resolves", async () => {
+    // useProject yields an empty id first. Creating on it would bind the
+    // agent to no project — and under All servers write a wildcard with no
+    // project on it, which reaches the whole organization.
     mocks.projectId = "";
     setup();
     fireEvent.change(screen.getByLabelText("Name"), {
@@ -501,13 +507,28 @@ describe("Agent project", () => {
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     fireEvent.click(await screen.findByRole("checkbox", { name: "GitHub" }));
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    const create = (await screen.findByRole("button", {
+      name: "Create agent",
+    })) as HTMLButtonElement;
+    expect(create.disabled).toBe(true);
+    fireEvent.click(create);
+
+    expect(mocks.createAgent).not.toHaveBeenCalled();
+  });
+
+  it("reports All servers rather than a count of the rows", async () => {
+    setup();
+    fireEvent.change(screen.getByLabelText("Name"), {
+      target: { value: "Everything here" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     fireEvent.click(
-      await screen.findByRole("button", { name: "Create agent" }),
+      await screen.findByRole("checkbox", { name: "All servers" }),
     );
 
-    await waitFor(() => expect(mocks.createAgent).toHaveBeenCalledTimes(1));
-    const form = mocks.createAgent.mock.calls[0]![0].createAgentForm;
-    expect("projectId" in form).toBe(false);
+    // The individual rows are not the choice, so counting them would read as
+    // "0 of 1 servers selected" beside a toggle that reaches every one.
+    expect(screen.getByText("All servers selected.")).toBeTruthy();
   });
 
   it("gives All servers the project, so it does not reach past the agent", async () => {
@@ -806,6 +827,105 @@ describe("Editing an agent that already exists", () => {
       resourceId: "*",
       projectId: "project_one",
     });
+  });
+
+  const WILDCARD_TWO = { ...WILDCARD, id: "grant_all_two" };
+
+  it("keeps an organization-wide wildcard's reach when a key is issued", async () => {
+    // The agent is labelled with one project but its wildcard carries none,
+    // so it reaches every project. Issuing a key must not quietly narrow it.
+    mocks.mcpServers.mockResolvedValue({
+      mcpServers: [
+        {
+          id: "server_one",
+          name: "GitHub",
+          slug: "github",
+          projectId: "project_one",
+          toolsetId: "toolset_one",
+          visibility: "private",
+          networkAccessMode: "dual",
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+        {
+          id: "server_two",
+          name: "Linear",
+          slug: "linear",
+          projectId: "project_two",
+          toolsetId: "toolset_two",
+          visibility: "private",
+          networkAccessMode: "dual",
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      ],
+    });
+    editing({ grants: [WILDCARD] });
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    const all = await screen.findByRole("checkbox", { name: "All servers" });
+    await waitFor(() => expect(all.getAttribute("data-state")).toBe("checked"));
+    // "All servers" names the reach it actually has, not the agent's project.
+    expect(screen.getByText(/Every server in Example Org/)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: /Credential/ }));
+    fireEvent.click(await screen.findByRole("button", { name: "Issue key" }));
+
+    await waitFor(() =>
+      expect(mocks.listDelegableGrants).toHaveBeenCalledTimes(1),
+    );
+    expect(mocks.listDelegableGrants.mock.calls[0]?.[0]?.toolsetIds).toEqual([
+      "toolset_one",
+      "toolset_two",
+    ]);
+  });
+
+  it("creates the wildcard once when a later removal fails", async () => {
+    // The wildcard goes in first, so a failed removal after it must not make
+    // the retry write a second one.
+    mocks.deleteGrant.mockRejectedValueOnce(new Error("Grant is locked"));
+    mocks.createGrant.mockResolvedValue({ id: "grant_all_new" });
+    editing();
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    fireEvent.click(
+      await screen.findByRole("checkbox", { name: "All servers" }),
+    );
+    const save = screen.getByRole("button", { name: "Save changes and exit" });
+    fireEvent.click(save);
+    expect(await screen.findByText("Grant is locked")).toBeTruthy();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Save changes and exit" }),
+    );
+    await waitFor(() => expect(mocks.deleteGrant).toHaveBeenCalledTimes(2));
+    expect(mocks.createGrant).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not re-delete a wildcard a failed save already removed", async () => {
+    // Two wildcard rows, the second delete failing: the retry asks for the
+    // one still standing rather than for an id that is already gone.
+    mocks.deleteGrant
+      .mockResolvedValueOnce({})
+      .mockRejectedValueOnce(new Error("Grant is locked"));
+    editing({ grants: [WILDCARD, WILDCARD_TWO] });
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    fireEvent.click(
+      await screen.findByRole("checkbox", { name: "All servers" }),
+    );
+    fireEvent.click(screen.getByRole("checkbox", { name: "GitHub" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Save changes and exit" }),
+    );
+    expect(await screen.findByText("Grant is locked")).toBeTruthy();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Save changes and exit" }),
+    );
+    await waitFor(() => expect(mocks.deleteGrant).toHaveBeenCalledTimes(3));
+    expect(
+      mocks.deleteGrant.mock.calls.map(
+        (call) => call[0]?.request?.agentPolicyGrantIDForm?.grantId,
+      ),
+    ).toEqual(["grant_all", "grant_all_two", "grant_all_two"]);
   });
 
   it("will not save while the server list has not loaded", async () => {

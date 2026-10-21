@@ -1,6 +1,7 @@
 import { ActingPrincipal } from "@/components/ui/ActingPrincipal";
 import { Icon } from "@/components/ui/Icon";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
+import { useReadableAgents } from "@/hooks/useReadableAgents";
 import { useRoutes } from "@/routes";
 import { cn } from "@/lib/utils";
 import type { JSX } from "react";
@@ -24,6 +25,14 @@ export function AssistantActorLink({
   className?: string;
 }): JSX.Element | null {
   const routes = useRoutes();
+  // A chat row carries the agent's id, which is not permission to open that
+  // agent: a reader who may read the chat may not be allowed the agent. One
+  // cached inventory request serves every row, and an agent missing from it
+  // stays plain text rather than offering a door the next page refuses.
+  const agents = useReadableAgents(Boolean(chat.assistantAgentId));
+  const readable =
+    !agents.isError &&
+    (agents.data ?? []).some((agent) => agent.id === chat.assistantAgentId);
   if (!chat.assistantName) return null;
 
   const name = chat.assistantName;
@@ -43,6 +52,7 @@ export function AssistantActorLink({
         <span className={cn("inline-flex min-w-0", className)}>
           <ActingPrincipal
             agent={{ id: chat.assistantAgentId, name }}
+            linked={readable}
             className="text-sm"
           />
         </span>

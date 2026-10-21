@@ -1,5 +1,18 @@
+import type { IdentityRef } from "@/lib/identity-urn";
+
 /** A person an agent acted for. */
-export type Principal = { id: string; name?: string; photoUrl?: string };
+export type Principal = {
+  id: string;
+  name?: string;
+  photoUrl?: string;
+  /**
+   * The reference their identity page is keyed on, for a caller that holds
+   * one. `id` is not it: a chat participant is keyed by the provider handle
+   * the room reported ("slack:U123"), which names no identity here, so a
+   * person links only when the caller says which identity they are.
+   */
+  identity?: IdentityRef;
+};
 
 /**
  * The same relation `ActingPrincipal` renders, as plain text, for a tooltip,

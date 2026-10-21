@@ -7,7 +7,13 @@ export function getActorLabel(log: AuditLog): string {
   // without this every agent-made change read as "Someone". An agent is a
   // named thing; saying so beats a word that suggests we lost the name.
   if (log.actorType === "agent") {
-    return `Agent ${log.actorId.slice(0, 8)}`;
+    // Some writers prefix the actor id with its type, as the principal
+    // parser already allows for. Shortening that gives "Agent agent:ab":
+    // the type twice and two characters of the id.
+    const id = log.actorId.startsWith("agent:")
+      ? log.actorId.slice("agent:".length)
+      : log.actorId;
+    return `Agent ${id.slice(0, 8)}`;
   }
   return log.actorDisplayName || log.actorSlug || "Someone";
 }

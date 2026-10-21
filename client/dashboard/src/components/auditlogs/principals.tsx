@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { IdentityLink } from "@/components/identity-link";
 import { ActingPrincipal } from "@/components/ui/ActingPrincipal";
+import { cn } from "@/lib/utils";
 import {
   auditPrincipalLabel,
   type AuditPrincipal,
@@ -41,7 +42,10 @@ export function AuditPrincipalLink({
         <ActingPrincipal
           agent={{ id: principal.id, name: label, display: renderLabel(label) }}
           linked={Boolean(readable)}
-          className={className}
+          // Inline, because an audit row is a sentence: the renderer's own
+          // block root broke the actor onto a line of its own, away from the
+          // verb and the subject it belongs to.
+          className={cn("inline-flex", className)}
         />
       </span>
     );

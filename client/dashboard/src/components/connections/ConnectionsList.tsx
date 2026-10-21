@@ -271,6 +271,10 @@ function GroupIcon({
   group: ConnectionGroup;
   grouping: ConnectionGrouping;
 }): JSX.Element {
+  // An agent-identity row names itself through `ActingPrincipal`, which draws
+  // the agent's own face. A mark in this slot as well put two faces on one
+  // row, which reads as two actors.
+  if (group.identity?.agentId) return <span className="size-6 shrink-0" />;
   if (group.workload) return <WorkloadIcon />;
   if (grouping === "subject" && group.sessions[0]?.subjectType === "agent") {
     return <AgentIcon />;
@@ -619,6 +623,10 @@ function ConnectionGroupRow({
               // than guessing at a person.
               <ActingPrincipal
                 agent={{ id: group.identity.agentId, name: group.label }}
+                // The group is built from this project's own sessions, so the
+                // agent is one the reader already reached.
+                linked
+                projectSlug={project?.slug}
                 className="text-foreground text-sm font-medium"
               />
             ) : group.identity?.urn ? (

@@ -201,6 +201,14 @@ it("excludes anonymous identities until they are asked for", async () => {
   expect(screen.getByTestId("filters").textContent).toContain("anonymous");
 });
 
+it("includes anonymous identities when the filter asks for them", async () => {
+  // The opt-in path, not just the default exclusion: a link written to show
+  // exactly these rows has to land on them.
+  setup("?anonymous=included", "person");
+  await waitFor(() => expect(rowsText()).toContain("unknown_subject"));
+  expect(rowsText()).toContain("human@example.com");
+});
+
 it.each(["unknown", "unknown,agent"])(
   "preserves legacy kind=%s and exposes a clearable filter",
   async (kind) => {

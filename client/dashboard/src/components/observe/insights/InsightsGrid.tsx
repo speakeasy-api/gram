@@ -383,8 +383,11 @@ export function InsightsGrid({
           />
         </InsightCard>
 
+        {/* "Callers", not "people": `uniqueUsers` counts distinct calling
+            identities, and an agent is one of them. The old title reported
+            a machine as a member of staff. */}
         <InsightCard
-          title="People"
+          title="Callers"
           href={logsLink()}
           loading={status.totals.pending}
           error={status.totals.error}
@@ -392,7 +395,7 @@ export function InsightsGrid({
           <MetricSpark
             value={(Number(totals?.uniqueUsers) || 0).toLocaleString()}
             series={[]}
-            caption="active in this window"
+            caption="people and agents active in this window"
           />
         </InsightCard>
       </div>

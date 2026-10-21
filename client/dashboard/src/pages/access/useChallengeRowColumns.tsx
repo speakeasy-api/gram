@@ -32,6 +32,13 @@ export function useChallengeRowColumns(
   onToggleBucket?: (bucketId: string) => void,
   expandedChildIds?: Set<string>,
   recentlyResolvedIds?: Set<string>,
+  /**
+   * Readable agents by id. A challenge row carries only the urn, so without
+   * this every agent reads as `agent:<uuid>` — and an id off a challenge is
+   * not permission to open the agent, so a row outside this map is named by
+   * its id and does not link.
+   */
+  agentsById?: Map<string, { name: string }>,
 ): Column<ChallengeBucket>[] {
   const { orgSlug } = useSlugs();
   const { organization } = useSession();
@@ -133,13 +140,17 @@ export function useChallengeRowColumns(
           // delegation this row knows nothing about.
           if (row.principalType === "agent") {
             const agentId = row.principalUrn.replace(/^agent:/, "");
+            const agent = agentsById?.get(agentId);
             return (
               <Tooltip>
                 <TooltipTrigger asChild>
                   <div
                     className={cn("min-w-0 text-sm font-medium", rowFade(row))}
                   >
-                    <ActingPrincipal agent={{ id: agentId }} />
+                    <ActingPrincipal
+                      agent={{ id: agentId, name: agent?.name }}
+                      linked={agent !== undefined}
+                    />
                   </div>
                 </TooltipTrigger>
                 {row.roleSlugs.length > 0 && (
@@ -308,6 +319,7 @@ export function useChallengeRowColumns(
     toolsetMap,
     mcpServerMap,
     memberMap,
+    agentsById,
     animatingOutIds,
     outcomeFilter,
     onToggleBucket,

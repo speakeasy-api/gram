@@ -5,7 +5,10 @@ import { ActingPrincipal } from ".";
 import { actingPrincipalText } from "./text";
 
 vi.mock("@/lib/useIdentityHref", () => ({
-  useIdentityHrefBuilder: () => () => "/identities/x",
+  // Echoes the project back, since that is the argument the real builder
+  // turns into the project segment of the href.
+  useIdentityHrefBuilder: (_section: string, projectSlug?: string) => () =>
+    `/${projectSlug ?? "current"}/identities/x`,
 }));
 
 afterEach(cleanup);
@@ -32,6 +35,8 @@ describe("ActingPrincipal", () => {
     // stands behind the call. "on behalf of unknown" would imply a person we
     // failed to look up.
     setup(<ActingPrincipal agent={{ id: "a1", name: "Release assistant" }} />);
+    // Named, not blank: the absence check alone passes on an empty render.
+    expect(screen.getByText("Release assistant")).toBeTruthy();
     expect(screen.queryByText(/on behalf of/)).toBeNull();
   });
 
@@ -41,6 +46,44 @@ describe("ActingPrincipal", () => {
     );
     expect(screen.getByText("agent:a1")).toBeTruthy();
     expect(screen.getByText("user_x")).toBeTruthy();
+  });
+
+  it("links a person only by the reference the caller carried", () => {
+    // A chat participant is keyed by the handle the room reported, which
+    // names no identity here.
+    setup(
+      <ActingPrincipal
+        agent={{ id: "a1", name: "Release assistant" }}
+        authorizer={{ id: "slack:U123", name: "Amara Okafor" }}
+        linked
+      />,
+    );
+    expect(
+      screen.getByRole("link", { name: "Release assistant" }),
+    ).toBeTruthy();
+    expect(screen.queryByRole("link", { name: "Amara Okafor" })).toBeNull();
+  });
+
+  it("opens both halves in the project the caller named", () => {
+    // A surface that picks its project through a filter has it in neither its
+    // path nor its requests, so it has to send the choice with the link.
+    setup(
+      <ActingPrincipal
+        agent={{ id: "a1", name: "Release assistant" }}
+        authorizer={{
+          id: "u1",
+          name: "Amara Okafor",
+          identity: { userId: "u1" },
+        }}
+        projectSlug="other-project"
+        linked
+      />,
+    );
+    for (const name of ["Release assistant", "Amara Okafor"]) {
+      expect(screen.getByRole("link", { name }).getAttribute("href")).toBe(
+        "/other-project/identities/x",
+      );
+    }
   });
 
   it("gives the same relation as plain text", () => {

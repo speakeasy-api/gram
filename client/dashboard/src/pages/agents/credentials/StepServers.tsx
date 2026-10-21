@@ -48,9 +48,9 @@ export function StepServers({
   allServers: boolean;
   onAllServersChange: (next: boolean) => void;
   /**
-   * What "all" covers, named: the agent's project, or the organization for
-   * one of the older agents that was never bound to a project. Nothing here
-   * chooses it — it is where the agent lives.
+   * What "all" covers, named: the agent's project, or the organization where
+   * the agent already holds a wildcard that reaches every one of them.
+   * Nothing here chooses it — it is the reach the grant carries.
    */
   scopeLabel: string;
   selected: ServerSelection[];
@@ -93,6 +93,9 @@ export function StepServers({
   // find it and be told why, not find nothing.
   const shown = matches.filter((server) => !needsAccount(server));
   const blockedServers = matches.filter(needsAccount);
+  // Counted across the whole scope rather than the filtered rows: it is told
+  // beside "All servers", which is about the scope and not about the search.
+  const perUserCount = servers.filter(needsAccount).length;
 
   const toggle = (server: InventoryServer) => {
     onChange(
@@ -190,9 +193,14 @@ export function StepServers({
               <span className="block">All servers</span>
               {/* Names the scope, because "all" means a different set under
                   each one and the answer is a grant that outlives this
-                  screen. */}
+                  screen. And names the gap, because the grant covers every
+                  server while the key this flow issues cannot: a key names
+                  servers one by one, and one that authorizes each person
+                  separately is not one it can name. */}
               <span className="text-muted-foreground block text-xs">
                 Every server in {scopeLabel}, including ones added later.
+                {perUserCount > 0 &&
+                  ` The ${perUserCount} below that authorize each person separately stay out of the key: the agent reaches them once an account is connected.`}
               </span>
             </span>
           </label>

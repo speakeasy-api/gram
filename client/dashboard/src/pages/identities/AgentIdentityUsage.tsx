@@ -9,8 +9,7 @@ import { telemetryGetToolUsageTotals } from "@gram/client/funcs/telemetryGetTool
 import { useGramContext } from "@gram/client/react-query/_context.js";
 import { useMembers } from "@gram/client/react-query/members.js";
 import { unwrapAsync } from "@gram/client/types/fp";
-import { useSdkClient } from "@/contexts/Sdk";
-import { useOrganization } from "@/contexts/Auth";
+import { useAgentSessionList } from "@/pages/agents/useAgentSessionList";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import {
@@ -116,13 +115,19 @@ export function AgentIdentityUsage({
         title="Tool calls"
         footer={
           calls > 0
-            ? `${calls.toLocaleString()} calls in this period, by server`
+            ? `${calls.toLocaleString()} calls in this period, by source`
             : undefined
         }
-        loading={series.isPending}
-        error={series.isError && points.length === 0}
-        refreshFailed={series.isError && points.length > 0}
-        onRetry={() => void series.refetch()}
+        // The footer's count comes from `totals`, so its failure has to reach
+        // the panel too: reporting only `series` left the count silently
+        // missing with nothing to retry.
+        loading={series.isPending || totals.isPending}
+        error={(series.isError || totals.isError) && points.length === 0}
+        refreshFailed={(series.isError || totals.isError) && points.length > 0}
+        onRetry={() => {
+          void series.refetch();
+          void totals.refetch();
+        }}
         loadingVariant="block"
       >
         {points.length === 0 ? (
@@ -142,21 +147,26 @@ export function AgentIdentityUsage({
         )}
       </IdentityPanel>
 
+      {/* "Sources", not "servers": the endpoint ranks every target a call
+          can name, and a local tool set and a skill are both targets and
+          neither is a server. Called one of those, an agent read its own
+          activity as a mislabelled server row — or, using nothing else, as
+          having called no server at all. */}
       <IdentityPanel
-        title="Top servers"
+        title="Top sources"
         loading={targets.isPending}
         error={targets.isError && rows.length === 0}
         refreshFailed={targets.isError && rows.length > 0}
         onRetry={() => void targets.refetch()}
         footer={
           rows.length > 5
-            ? `Top 5 of ${rows.length} servers this agent called`
+            ? `Top 5 of ${rows.length} sources this agent called`
             : undefined
         }
       >
         {rows.length === 0 ? (
           <IdentityPanelEmpty>
-            This agent called no servers in this period.
+            This agent called no tools in this period.
           </IdentityPanelEmpty>
         ) : (
           rows
@@ -190,34 +200,21 @@ export function AgentIdentityUsage({
  * recorded together.
  */
 function AgentAuthorizers({ agent }: { agent: ManagedAgent }): JSX.Element {
-  const sdk = useSdkClient();
-  const organization = useOrganization();
+  // The same read the sessions table makes, under the same key, and followed
+  // to the last page: a count over one page of fifty names the wrong people
+  // for any agent busier than that.
+  const sessions = useAgentSessionList(agent, { all: true });
+  const canManage = sessions.canManage;
   // A session carries the authorizer's id and nothing else, so the name comes
   // from the member list. A failed read leaves the id, which is still true.
-  const members = useMembers(undefined, undefined, { throwOnError: false });
-  const nameFor = (id: string) =>
-    members.data?.members.find((member) => member.id === id)?.name || id;
-  // Listing sessions is the same decision as revoking one: agent:read alone
-  // does not reach an agent's credentials.
-  const canManage = agent.permissions.authorize;
-  const sessions = useQuery({
-    queryKey: ["agent-authorizers", organization.id, agent.id],
-    queryFn: async ({ signal }) => {
-      const page = await sdk.agents.listSessions(
-        { agentId: agent.id, limit: 50 },
-        undefined,
-        { signal },
-      );
-      return page.result;
-    },
+  // Not read at all without permission to see the sessions it names.
+  const members = useMembers(undefined, undefined, {
     enabled: canManage,
     throwOnError: false,
-    retry: false,
   });
-  // Memoised rather than defaulted inline: a bare `?? []` is a new array on
-  // every render, which made the ranking below recompute each time.
-  const items = sessions.data?.items;
-  const all = useMemo(() => items ?? [], [items]);
+  const nameFor = (id: string) =>
+    members.data?.members.find((member) => member.id === id)?.name || id;
+  const all = sessions.sessions;
   // Counted per authorizer, so a name that appears once does not outrank one
   // that appears daily, and the most recent session is kept beside it.
   const ranked = useMemo(() => {
@@ -242,11 +239,13 @@ function AgentAuthorizers({ agent }: { agent: ManagedAgent }): JSX.Element {
       loading={canManage && sessions.isPending}
       error={sessions.isError && all.length === 0}
       refreshFailed={sessions.isError && all.length > 0}
-      onRetry={() => void sessions.refetch()}
+      onRetry={sessions.refetch}
       footer={
-        ranked.length > 0
-          ? "Counted from this agent's sessions. A tool call records the agent, not the person who authorized it."
-          : undefined
+        ranked.length === 0
+          ? undefined
+          : // Says what is held back, the way Top sources does: five rows
+            // under a panel that reads as complete is a count of its own.
+            `${ranked.length > 5 ? `Top 5 of ${ranked.length} people. ` : ""}Counted from this agent's sessions. A tool call records the agent, not the person who authorized it.`
       }
     >
       {!canManage ? (
