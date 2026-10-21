@@ -4,9 +4,7 @@ import { CodeBlock } from "@/components/code";
 import { FormPage } from "@/components/page-templates";
 import { Input } from "@/components/ui/Input";
 import { Text } from "@/components/ui/Text";
-import { useTelemetry } from "@/contexts/Telemetry";
 import { mcpServerRouteParam, tunneledMcpRouteParam } from "@/lib/sources";
-import { TUNNELED_MCP_FEATURE_FLAG } from "@/lib/tunneledMcp";
 import { useRoutes } from "@/routes";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
@@ -15,7 +13,6 @@ import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import type { TunneledMcpServer } from "@gram/client/models/components/tunneledmcpserver.js";
 import { AlertCircle, Loader2 } from "lucide-react";
 import { useState } from "react";
-import { Navigate } from "react-router";
 import { toast } from "sonner";
 import { NewServerGuardrailSection } from "@/pages/security/server-guardrails/NewServerGuardrailSection";
 import {
@@ -44,25 +41,7 @@ type CreatedState = {
   mcpServer: McpServer;
 };
 
-export default function CreateTunneledMcp(): JSX.Element | null {
-  const routes = useRoutes();
-  const telemetry = useTelemetry();
-  const isTunneledMcpEnabled = telemetry.isFeatureEnabled(
-    TUNNELED_MCP_FEATURE_FLAG,
-  );
-
-  if (isTunneledMcpEnabled === undefined) {
-    return null;
-  }
-
-  if (!isTunneledMcpEnabled) {
-    return <Navigate to={routes.mcp.add.href()} replace />;
-  }
-
-  return <CreateTunneledMcpForm />;
-}
-
-function CreateTunneledMcpForm() {
+export default function CreateTunneledMcp() {
   const flow = useGatewayCreation();
   const creationLocked = flow.createdServerId !== null || flow.isAttaching;
   const routes = useRoutes();

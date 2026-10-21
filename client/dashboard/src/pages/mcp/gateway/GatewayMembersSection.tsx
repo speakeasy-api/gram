@@ -13,8 +13,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/Dropdown";
 import { useRBAC } from "@/hooks/useRBAC";
-import { useTelemetry } from "@/contexts/Telemetry";
-import { TUNNELED_MCP_FEATURE_FLAG } from "@/lib/tunneledMcp";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
 import {
   ServerPickerSheet,
@@ -692,7 +690,6 @@ export function AddServersSheet({
 }): JSX.Element {
   const routes = useRoutes();
   const navigate = useNavigate();
-  const telemetry = useTelemetry();
   const { hasScope, isLoading: permissionsLoading } = useRBAC();
   const canWrite = !permissionsLoading && hasScope("mcp:write", gatewayId);
   const canCreate = !permissionsLoading && hasScope("mcp:write", projectId);
@@ -781,22 +778,18 @@ export function AddServersSheet({
         encodeURIComponent(gatewayId),
       allowed: canCreate,
     },
-    ...(telemetry.isFeatureEnabled(TUNNELED_MCP_FEATURE_FLAG)
-      ? [
-          {
-            label: "Reachable through a tunnel",
-            description:
-              "Connect a server running inside your own network through a tunnel.",
-            Icon: Cable,
-            group: "Recommended",
-            href:
-              routes.mcp.add.tunneled.href() +
-              "?attachToGateway=" +
-              encodeURIComponent(gatewayId),
-            allowed: canCreate,
-          },
-        ]
-      : []),
+    {
+      label: "Reachable through a tunnel",
+      description:
+        "Connect a server running inside your own network through a tunnel.",
+      Icon: Cable,
+      group: "Recommended",
+      href:
+        routes.mcp.add.tunneled.href() +
+        "?attachToGateway=" +
+        encodeURIComponent(gatewayId),
+      allowed: canCreate,
+    },
     {
       label: "From your API",
       description: "Upload an OpenAPI document to generate tools.",
