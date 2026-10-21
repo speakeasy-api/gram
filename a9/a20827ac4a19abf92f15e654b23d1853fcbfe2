@@ -1,0 +1,16 @@
+server/internal/risk/enforcereply/dispatch.go
+  h_e404c1a6a54184 42-43,47,278,281-282,286-289
+server/internal/risk/enforcereply/dispatch_test.go
+  h_e404c1a6a54184 733,742-744,746,748-751,762-766
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a9a20827ac4a19abf92f15e654b23d1853fcbfe2",
+  "prompts": {},
+  "humans": {
+    "h_e404c1a6a54184": {
+      "author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
