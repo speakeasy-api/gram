@@ -63,4 +63,22 @@ func TestRekeyedRemovalRecordStillBlocksRoleDeliveryReAdd(t *testing.T) {
 	removed, delivered = eligible()
 	require.Empty(t, removed, "the server-keyed removal keeps the server out")
 	require.Len(t, delivered, 1)
+
+	// populate runs setup delivery for one plugin in a transaction it rolls back and returns its live members.
+	populate := func(plugin uuid.UUID) (bool, []pluginsrepo.PluginServer) {
+		tx, err := f.pool.Begin(ctx) //nolint:glint // notestingrawsql: transaction boundary for the role-delivery setup under test.
+		require.NoError(t, err)
+		defer func() { _ = tx.Rollback(context.Background()) }()
+		changed, err := roledelivery.Populate(ctx, tx, f.orgID, f.projectID, plugin, role, nil)
+		require.NoError(t, err)
+		members, err := pluginsrepo.New(tx).ListPluginServers(ctx, plugin)
+		require.NoError(t, err)
+		return changed, members
+	}
+	changed, members := populate(removedFrom)
+	require.False(t, changed, "setup delivery honours the server-keyed removal")
+	require.Empty(t, members)
+	changed, members = populate(control)
+	require.True(t, changed)
+	require.Len(t, members, 1)
 }

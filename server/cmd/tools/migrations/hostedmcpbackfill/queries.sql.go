@@ -658,7 +658,7 @@ func (q *Queries) ListMetadataFixture(ctx context.Context, projectID uuid.UUID) 
 }
 
 const listPluginServerRemovalsFixture = `-- name: ListPluginServerRemovalsFixture :many
-SELECT ps.id, ps.plugin_id, ps.toolset_id, ps.mcp_server_id, ps.deleted, COALESCE(ps.deleted_at::text, '')::text AS deleted_at
+SELECT ps.id, ps.plugin_id, ps.toolset_id, ps.mcp_server_id, ps.deleted, COALESCE(ps.deleted_at::text, '')::text AS deleted_at, ps.updated_at::text AS updated_at
 FROM plugin_servers AS ps
 JOIN plugins AS pl ON pl.id = ps.plugin_id
 WHERE pl.project_id = $1
@@ -672,6 +672,7 @@ type ListPluginServerRemovalsFixtureRow struct {
 	McpServerID uuid.NullUUID
 	Deleted     bool
 	DeletedAt   string
+	UpdatedAt   string
 }
 
 func (q *Queries) ListPluginServerRemovalsFixture(ctx context.Context, projectID uuid.UUID) ([]ListPluginServerRemovalsFixtureRow, error) {
@@ -690,6 +691,7 @@ func (q *Queries) ListPluginServerRemovalsFixture(ctx context.Context, projectID
 			&i.McpServerID,
 			&i.Deleted,
 			&i.DeletedAt,
+			&i.UpdatedAt,
 		); err != nil {
 			return nil, err
 		}

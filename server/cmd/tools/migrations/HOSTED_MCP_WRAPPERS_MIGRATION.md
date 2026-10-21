@@ -222,32 +222,48 @@ Constraints: every unique index on `plugin_servers` that the re-key touches (`pl
 
 Nothing visible to users changes: a soft-deleted member is not in any plugin package or listing. So the re-key writes no audit rows and requests no plugin publication. The journal is the record.
 
-| Outcome                   | Meaning                                                                                                                             |
-| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| `would_rekey` / `rekeyed` | The removal record now carries the canonical server key; `deleted_at` is unchanged.                                                 |
-| `skipped_toolset_gone`    | The toolset or its project is deleted; `reason` says which. Left for AIM-581.                                                       |
-| `skipped_no_canonical`    | The toolset is live but has no live canonical server (`id = toolset_id`, same project). Left for AIM-581.                           |
-| `skipped_duplicate`       | The plugin already has a soft-deleted server-keyed row for the canonical server, which already blocks the re-add. Left for AIM-581. |
-| `blocked_live`            | A live toolset-keyed member; this mode never touches it.                                                                            |
-| `blocked_no_wrapper`      | The toolset is not in the plugin's project; left untouched.                                                                         |
-| `skipped`                 | The row changed concurrently; rerun.                                                                                                |
-| `commit_unknown`          | The commit errored after the server may have committed; the run stops. The journal covers the row either way.                       |
+| Outcome                     | Meaning                                                                                                                                                                                          |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `would_rekey` / `rekeyed`   | The removal record now carries the canonical server key; `deleted_at` is unchanged.                                                                                                              |
+| `orphaned`                  | The toolset or its project is deleted; `reason` is "toolset deleted" or "project deleted". Left for AIM-581.                                                                                       |
+| `blocked_no_wrapper`        | The toolset is not in the plugin's project ("toolset is not in the row's project"), or it is live but has no live canonical server (`id = toolset_id`, same project). Left for AIM-581.         |
+| `blocked_duplicate_removal` | The plugin already has a soft-deleted server-keyed row for the canonical server, or an earlier row of this run re-keys one, and that row already blocks the re-add. Left for AIM-581.            |
+| `blocked_live`              | A live toolset-keyed member; this mode never touches it.                                                                                                                                         |
+| `skipped`                   | The row changed concurrently; rerun.                                                                                                                                                             |
+| `commit_unknown`            | The commit errored after the server may have committed; the run stops. The journal covers the row either way.                                                                                    |
 
-`-rekey-removal-records -apply` requires `-report` and writes `<report>.journal.jsonl` (mode 0600): an `intent` record before each commit and a `committed` (or `commit_unknown`) record after. Each record carries `from` (`toolset_id`), `to` (`mcp_server_id`) and `rekeyed`, which holds the row's full image from before the re-key (`to_jsonb`) and its `soft_deleted_at`. The report, whether from a dry run or an apply, carries only table, row id, outcome and reason.
+The run tracks the (plugin, canonical server) pairs it re-keys, or in a dry run would re-key, so a dry run reports the same `blocked_duplicate_removal` rows as the apply.
+
+`-rekey-removal-records -apply` requires `-report` and writes `<report>.journal.jsonl` (mode 0600): an `intent` record before each commit and a `committed` (or `commit_unknown`) record after. Each record carries `from` (`toolset_id`), `to` (`mcp_server_id`) and `rekeyed`, which holds the row's full image from before the re-key (`to_jsonb`) and its `soft_deleted_at`. The report, whether from a dry run or an apply, carries ids, slugs, outcomes, reasons; never names.
 
 ### Run book
 
+Precondition: run after the wrapper phase and `-move-dependents`, and before AIM-581's column drop.
+
 1. Dev: dry run with `-rekey-removal-records -report <path>`, then `-apply -rekey-removal-records -report <new path>`. Rerun and confirm `writes: 0`.
-2. Prod: dry run with `-report`. Check the `would_rekey` count against the soft-deleted toolset-keyed rows, and review the `skipped_*` and `blocked_*` rows.
-3. Prod: `-apply -rekey-removal-records -report <path>`, optionally with a canary `-project <PROJECT_ID>` first.
-4. A rerun must report `writes: 0`. Rows still listed are the skipped and blocked ones, which AIM-581 handles.
+2. Prod: dry run with `-report`. Count the soft-deleted toolset-keyed rows (add `JOIN plugins AS pl ON pl.id = ps.plugin_id` and `pl.project_id = '<PROJECT_ID>'` for a `-project` run):
+
+   ```sql
+   SELECT count(*) FROM plugin_servers AS ps
+   WHERE ps.deleted IS TRUE AND ps.toolset_id IS NOT NULL AND ps.mcp_server_id IS NULL AND ps.meta_mcp_server_id IS NULL;
+   ```
+
+   It must equal the report's row count minus `blocked_live`. Review every `orphaned`, `blocked_no_wrapper` and `blocked_duplicate_removal` row; `would_rekey` is the rest.
+
+3. Prod: `-apply -rekey-removal-records -report <path>`, optionally with a canary `-project <PROJECT_ID>` first. Resume a stopped run with `-cursor <last_cursor>` and a new `-report`, which writes a new journal.
+4. A rerun must report `writes: 0`. Rows still listed are the `orphaned`, `blocked_*` and `skipped` ones, which AIM-581 handles.
 
 ### Rollback
 
-While `plugin_servers.toolset_id` still exists, [`hostedmcpbackfill/restore-removal-records.jq`](hostedmcpbackfill/restore-removal-records.jq) turns a journal into restore SQL for one project:
+While `plugin_servers.toolset_id` still exists, [`hostedmcpbackfill/restore-removal-records.jq`](hostedmcpbackfill/restore-removal-records.jq) turns a journal into restore SQL for one project. A run spans many projects, and a resumed run writes one journal per batch, so generate a file for every project of every journal. The files hold row images, so keep them 0600 and outside the repo, next to their journal:
 
 ```
-jq -r -s --arg p <PROJECT_ID> -f server/cmd/tools/migrations/hostedmcpbackfill/restore-removal-records.jq <journal> > restore-removal-records-<PROJECT_ID>.sql
+umask 077
+for journal in <newest journal> ... <oldest journal>; do
+  for p in $(jq -r -s 'map(.project_id) | unique[]' "$journal"); do
+    jq -r -s --arg p "$p" -f server/cmd/tools/migrations/hostedmcpbackfill/restore-removal-records.jq "$journal" > "$journal.restore-$p.sql"
+  done
+done
 ```
 
-Review it, then run it in one transaction. It replays only rows with a `committed` record, newest first. `commit_unknown` rows, and intents with no outcome record, are printed as `--` comments to check by hand. Each statement puts the row back under its toolset key, along with its recorded `updated_at`. It applies only while the row is still server-keyed and its `deleted_at` matches the journal, so a replay is a no-op and a row someone changed since is left alone. `TestRestoreRemovalRecordsJQReplaysCommittedRows` runs this program against a real journal.
+Review each file, then run each in its own transaction (`psql -v ON_ERROR_STOP=1 --single-transaction -f <file>`), replaying every journal from every resumed batch, newest batch first. Each file replays only rows with a `committed` record, newest first. `commit_unknown` rows, and intents with no outcome record, are printed as `--` comments to check by hand. Each statement puts the row back under its toolset key, along with its recorded `updated_at`. It applies only while the row is still server-keyed and its `deleted_at` matches the journal, so a replay is a no-op and a row someone changed since is left alone. `TestRestoreRemovalRecordsJQReplaysCommittedRows` runs this program against a real journal.

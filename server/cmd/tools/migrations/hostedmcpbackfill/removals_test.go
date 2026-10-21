@@ -141,8 +141,8 @@ func TestRekeyRemovalRecordsOutcomes(t *testing.T) {
 	report := f.run(t, opts)
 
 	want := map[uuid.UUID]Outcome{
-		rekeyed: OutcomeRekeyed, gone: OutcomeSkippedToolsetGone, noCanonical: OutcomeSkippedNoCanonical, tombstonedRecord: OutcomeSkippedNoCanonical,
-		duplicate: OutcomeSkippedDuplicate, live: OutcomeBlockedLive, projectGone: OutcomeSkippedToolsetGone, crossProject: OutcomeBlockedNoWrapper,
+		rekeyed: OutcomeRekeyed, gone: OutcomeOrphaned, noCanonical: OutcomeBlockedNoWrapper, tombstonedRecord: OutcomeBlockedNoWrapper,
+		duplicate: OutcomeBlockedDuplicateRemoval, live: OutcomeBlockedLive, projectGone: OutcomeOrphaned, crossProject: OutcomeBlockedNoWrapper,
 	}
 	for id, outcome := range want {
 		require.Equal(t, outcome, dependentRowFor(t, report, id).Outcome, id.String())
@@ -151,6 +151,8 @@ func TestRekeyRemovalRecordsOutcomes(t *testing.T) {
 	require.Equal(t, 1, report.Writes)
 	require.Equal(t, "toolset deleted", dependentRowFor(t, report, gone).Reason)
 	require.Equal(t, "project deleted", dependentRowFor(t, report, projectGone).Reason)
+	require.Equal(t, reasonNoCanonicalServer, dependentRowFor(t, report, noCanonical).Reason)
+	require.Equal(t, reasonNoCanonicalServer, dependentRowFor(t, report, tombstonedRecord).Reason)
 	require.Equal(t, reasonDuplicateRemoval, dependentRowFor(t, report, duplicate).Reason)
 	require.Equal(t, reasonLiveMember, dependentRowFor(t, report, live).Reason)
 	require.Equal(t, "toolset is not in the row's project", dependentRowFor(t, report, crossProject).Reason)
@@ -158,7 +160,8 @@ func TestRekeyRemovalRecordsOutcomes(t *testing.T) {
 	after := f.removals(t)
 	moved := removalFor(t, after, rekeyed)
 	original := removalFor(t, before, rekeyed)
-	require.Equal(t, ListPluginServerRemovalsFixtureRow{ID: rekeyed, PluginID: plugin, ToolsetID: uuid.NullUUID{}, McpServerID: key(wrapped), Deleted: true, DeletedAt: original.DeletedAt}, moved)
+	require.NotEqual(t, original.UpdatedAt, moved.UpdatedAt)
+	require.Equal(t, ListPluginServerRemovalsFixtureRow{ID: rekeyed, PluginID: plugin, ToolsetID: uuid.NullUUID{}, McpServerID: key(wrapped), Deleted: true, DeletedAt: original.DeletedAt, UpdatedAt: moved.UpdatedAt}, moved)
 	for _, row := range before {
 		if row.ID != rekeyed {
 			require.Equal(t, row, removalFor(t, after, row.ID), "only the re-keyed record changes")
@@ -196,6 +199,44 @@ func TestRekeyRemovalRecordsOutcomes(t *testing.T) {
 	require.Zero(t, rerun.Writes)
 	require.Zero(t, rerun.Outcomes[OutcomeRekeyed])
 	require.Empty(t, rerunJournal.records)
+	require.Equal(t, after, f.removals(t))
+}
+
+// Two removal records of one plugin and toolset: the dry run reports the second as the duplicate the apply finds.
+func TestRekeyRemovalRecordsDuplicatePairMatchesAcrossModes(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	plugin := f.seedPlugin(t)
+	toolsetID := f.seedWrappedToolset(t, "twice-"+uuid.NewString()[:8])
+	f.seedRemoval(t, plugin, key(toolsetID), uuid.NullUUID{}, "first")
+	f.seedRemoval(t, plugin, key(toolsetID), uuid.NullUUID{}, "second")
+	before := f.removals(t)
+	first, second := before[0].ID, before[1].ID
+
+	dryOpts, _ := rekeyOptions(false)
+	dry := f.run(t, dryOpts)
+	require.Equal(t, map[Outcome]int{OutcomeWouldRekey: 1, OutcomeBlockedDuplicateRemoval: 1}, dry.Outcomes)
+	require.Equal(t, 1, dry.Writes)
+	require.Equal(t, OutcomeWouldRekey, dependentRowFor(t, dry, first).Outcome)
+	require.Equal(t, reasonDuplicateInThisRun, dependentRowFor(t, dry, second).Reason)
+	require.Equal(t, before, f.removals(t))
+
+	applyOpts, journal := rekeyOptions(true)
+	applied := f.run(t, applyOpts)
+	require.Equal(t, map[Outcome]int{OutcomeRekeyed: 1, OutcomeBlockedDuplicateRemoval: 1}, applied.Outcomes)
+	require.Equal(t, dry.Writes, applied.Writes)
+	require.Equal(t, OutcomeRekeyed, dependentRowFor(t, applied, first).Outcome)
+	require.Equal(t, dependentRowFor(t, dry, second), dependentRowFor(t, applied, second))
+	require.Len(t, journal.records, 2)
+
+	after := f.removals(t)
+	require.Equal(t, key(toolsetID), removalFor(t, after, first).McpServerID)
+	require.Equal(t, removalFor(t, before, second), removalFor(t, after, second))
+
+	rerunOpts, _ := rekeyOptions(true)
+	rerun := f.run(t, rerunOpts)
+	require.Zero(t, rerun.Writes)
+	require.Equal(t, reasonDuplicateRemoval, dependentRowFor(t, rerun, second).Reason)
 	require.Equal(t, after, f.removals(t))
 }
 

@@ -150,16 +150,47 @@ func moveKeys(table string, key uuid.UUID) (RowKey, RowKey) {
 	return RowKey{Table: table, Column: "toolset_id", ID: key}, RowKey{Table: table, Column: "mcp_server_id", ID: key}
 }
 
-type dependentProcessor func(ctx context.Context, toolsetID uuid.UUID, dep ListToolsetDependentsRow) (RowReport, error)
+// dependentPhase lists a phase's toolsets and their rows and processes each row.
+type dependentPhase[D dependentRow] struct {
+	listToolsets   func(ctx context.Context, after uuid.UUID) ([]uuid.UUID, error)
+	listDependents func(ctx context.Context, toolsetID uuid.UUID) ([]D, error)
+	process        func(ctx context.Context, toolsetID uuid.UUID, dep D) (RowReport, error)
+}
 
-// runDependents walks toolsets that still have toolset-keyed dependents; Limit and the cursor count toolsets.
-func (r *Runner) runDependents(ctx context.Context, report Report, process dependentProcessor) (Report, error) {
+type dependentRow interface {
+	label() string
+}
+
+func (d ListToolsetDependentsRow) label() string { return d.TableName + " " + d.ID.String() }
+
+func (r *Runner) dependentsPhase(process func(context.Context, uuid.UUID, ListToolsetDependentsRow) (RowReport, error)) dependentPhase[ListToolsetDependentsRow] {
+	return dependentPhase[ListToolsetDependentsRow]{
+		listToolsets: func(ctx context.Context, after uuid.UUID) ([]uuid.UUID, error) {
+			page, err := New(r.pool).ListDependentToolsets(ctx, ListDependentToolsetsParams{ProjectID: r.options.ProjectID, AfterID: after, PageSize: conv.SafeInt32(r.options.PageSize)})
+			if err != nil {
+				return nil, fmt.Errorf("list dependent toolsets: %w", err)
+			}
+			return page, nil
+		},
+		listDependents: func(ctx context.Context, toolsetID uuid.UUID) ([]ListToolsetDependentsRow, error) {
+			deps, err := New(r.pool).ListToolsetDependents(ctx, ListToolsetDependentsParams{ToolsetID: toolsetID, ProjectID: r.options.ProjectID})
+			if err != nil {
+				return nil, fmt.Errorf("list dependents: %w", err)
+			}
+			return deps, nil
+		},
+		process: process,
+	}
+}
+
+// runDependents walks toolsets that still have toolset-keyed rows; Limit and the cursor count toolsets.
+func runDependents[D dependentRow](ctx context.Context, r *Runner, report Report, phase dependentPhase[D]) (Report, error) {
 	if r.options.Apply && r.options.Journal == nil {
 		return report, fmt.Errorf("applying the %s phase requires a journal", report.Phase)
 	}
 	after := r.options.Cursor
 	for {
-		page, err := r.listDependentToolsets(ctx, report.Phase, after)
+		page, err := phase.listToolsets(ctx, after)
 		if err != nil {
 			return report, err
 		}
@@ -170,14 +201,14 @@ func (r *Runner) runDependents(ctx context.Context, report Report, process depen
 			if r.options.Limit > 0 && report.Toolsets >= r.options.Limit {
 				return report, nil
 			}
-			deps, err := r.listToolsetDependents(ctx, report.Phase, toolsetID)
+			deps, err := phase.listDependents(ctx, toolsetID)
 			if err != nil {
 				return report, fmt.Errorf("toolset %s: %w", toolsetID, err)
 			}
 			for _, dep := range deps {
-				row, err := process(ctx, toolsetID, dep)
+				row, err := phase.process(ctx, toolsetID, dep)
 				if err != nil && row.Outcome == "" {
-					return report, fmt.Errorf("toolset %s: %s %s: %w", toolsetID, dep.TableName, dep.ID, err)
+					return report, fmt.Errorf("toolset %s: %s: %w", toolsetID, dep.label(), err)
 				}
 				report.Scanned++
 				report.Outcomes[row.Outcome]++
@@ -186,7 +217,7 @@ func (r *Runner) runDependents(ctx context.Context, report Report, process depen
 				}
 				report.Rows = append(report.Rows, row)
 				if err != nil {
-					return report, fmt.Errorf("toolset %s: %s %s: %w", toolsetID, dep.TableName, dep.ID, err)
+					return report, fmt.Errorf("toolset %s: %s: %w", toolsetID, dep.label(), err)
 				}
 			}
 			report.Toolsets++
@@ -194,40 +225,6 @@ func (r *Runner) runDependents(ctx context.Context, report Report, process depen
 			after = toolsetID
 		}
 	}
-}
-
-func (r *Runner) listDependentToolsets(ctx context.Context, phase string, after uuid.UUID) ([]uuid.UUID, error) {
-	if phase == phaseRemovals {
-		page, err := New(r.pool).ListRemovalRecordToolsets(ctx, ListRemovalRecordToolsetsParams{ProjectID: r.options.ProjectID, AfterID: after, PageSize: conv.SafeInt32(r.options.PageSize)})
-		if err != nil {
-			return nil, fmt.Errorf("list removal record toolsets: %w", err)
-		}
-		return page, nil
-	}
-	page, err := New(r.pool).ListDependentToolsets(ctx, ListDependentToolsetsParams{ProjectID: r.options.ProjectID, AfterID: after, PageSize: conv.SafeInt32(r.options.PageSize)})
-	if err != nil {
-		return nil, fmt.Errorf("list dependent toolsets: %w", err)
-	}
-	return page, nil
-}
-
-func (r *Runner) listToolsetDependents(ctx context.Context, phase string, toolsetID uuid.UUID) ([]ListToolsetDependentsRow, error) {
-	if phase != phaseRemovals {
-		deps, err := New(r.pool).ListToolsetDependents(ctx, ListToolsetDependentsParams{ToolsetID: toolsetID, ProjectID: r.options.ProjectID})
-		if err != nil {
-			return nil, fmt.Errorf("list toolset dependents: %w", err)
-		}
-		return deps, nil
-	}
-	records, err := New(r.pool).ListToolsetRemovalRecords(ctx, ListToolsetRemovalRecordsParams{ToolsetID: toolsetID, ProjectID: r.options.ProjectID})
-	if err != nil {
-		return nil, fmt.Errorf("list toolset removal records: %w", err)
-	}
-	deps := make([]ListToolsetDependentsRow, 0, len(records))
-	for _, record := range records {
-		deps = append(deps, ListToolsetDependentsRow{TableName: tablePluginServers, ID: record.ID, ProjectID: record.ProjectID})
-	}
-	return deps, nil
 }
 
 type dependentMove struct {
