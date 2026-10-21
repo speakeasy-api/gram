@@ -14005,7 +14005,9 @@ func (q *Queries) SoftDeleteRemoteSessionClientFixture(ctx context.Context, id u
 const softDeleteRemoteSessionConsentedInOtherOrganization = `-- name: SoftDeleteRemoteSessionConsentedInOtherOrganization :execrows
 UPDATE remote_sessions AS s
 SET deleted_at = clock_timestamp(),
-    -- Tombstones keep credentials for upstream revocation but no identity.
+    -- The credentials are not revoked upstream: the re-consent replaces this
+    -- user's grant at the same upstream, and revoking the old token there can
+    -- revoke the new consent too. No identity is kept.
     upstream_subject = NULL,
     upstream_email = NULL,
     upstream_display_name = NULL,

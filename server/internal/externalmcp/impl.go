@@ -30,6 +30,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/externalmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 )
 
 type Service struct {
@@ -42,9 +43,8 @@ type Service struct {
 	sessions       *sessions.Manager
 	registryClient *RegistryClient
 	catalog        *CatalogService
-	// callbackOrigin is the origin of the redirect_uri a newly created remote
-	// session client registers, shown in setup guides.
-	callbackOrigin *url.URL
+	// callbackOrigins resolves new-client redirect URIs shown in setup guides.
+	callbackOrigins remotesessions.CallbackOrigins
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -54,16 +54,16 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 	logger = logger.With(attr.SlogComponent("external_mcp"))
 
 	return &Service{
-		tracer:         tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/externalmcp"),
-		logger:         logger,
-		db:             db,
-		repo:           repo.New(db),
-		auth:           auth.New(logger, db, sessions, authzEngine),
-		authz:          authzEngine,
-		sessions:       sessions,
-		registryClient: registryClient,
-		catalog:        catalog,
-		callbackOrigin: callbackOrigin,
+		tracer:          tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/externalmcp"),
+		logger:          logger,
+		db:              db,
+		repo:            repo.New(db),
+		auth:            auth.New(logger, db, sessions, authzEngine),
+		authz:           authzEngine,
+		sessions:        sessions,
+		registryClient:  registryClient,
+		catalog:         catalog,
+		callbackOrigins: remotesessions.DefaultCallbackOrigins(callbackOrigin),
 	}
 }
 
@@ -260,6 +260,10 @@ func (s *Service) GetServerDetails(ctx context.Context, payload *gen.GetServerDe
 	}, nil
 }
 
+func (s *Service) SetCallbackOrigins(origins remotesessions.CallbackOrigins) {
+	s.callbackOrigins = origins
+}
+
 func (s *Service) GetSetupDocs(ctx context.Context, payload *gen.GetSetupDocsPayload) (*gen.GetSetupDocsResult, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
@@ -278,7 +282,11 @@ func (s *Service) GetSetupDocs(ctx context.Context, payload *gen.GetSetupDocsPay
 
 	// The redirect_uri a newly created client registers, for every provider
 	// and slug. remotesessions and the dashboard derive it the same way.
-	callbackURL := s.callbackOrigin.JoinPath("mcp", "remote_login_callback").String()
+	base, err := s.callbackOrigins.ResolveNewClientBaseURL(ctx, s.db, authCtx.ActiveOrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "resolve organization callback origin").LogError(ctx, s.logger)
+	}
+	callbackURL := remotesessions.RemoteLoginCallbackURL(s.callbackOrigins.ForClient(base))
 
 	return &gen.GetSetupDocsResult{
 		Guides: resolveSetupGuides(registrySpecifier, serverURL, callbackURL),

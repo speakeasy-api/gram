@@ -151,7 +151,9 @@ func (m *ChallengeManager) resolveAuthorizerUpstreamToken(ctx context.Context, l
 	if authorizerUserID == "" {
 		return zero, nil
 	}
-	selected, err := tenantUserRemoteSession(ctx, remotesessions_repo.New(m.db), lookup, urn.NewUserSubject(authorizerUserID), clientID, projectID, organizationID, userSessionIssuerID)
+	q := remotesessions_repo.New(m.db)
+	authorizer := urn.NewUserSubject(authorizerUserID)
+	selected, err := tenantUserRemoteSession(ctx, q, lookup, authorizer, clientID, projectID, organizationID, userSessionIssuerID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return zero, nil
 	}
@@ -161,6 +163,17 @@ func (m *ChallengeManager) resolveAuthorizerUpstreamToken(ctx context.Context, l
 	resolved, err := m.resolveCredentialToken(ctx, selected, resource)
 	if err != nil || resolved.Token == "" {
 		return resolved, err
+	}
+	// Recheck after a possibly blocking refresh, without adopting a reconnected grant.
+	current, err := tenantUserRemoteSession(ctx, q, lookup, authorizer, clientID, projectID, organizationID, userSessionIssuerID)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return zero, nil
+	case err != nil:
+		return zero, fmt.Errorf("recheck authorizing user credential: %w", err)
+	}
+	if current.ID != selected.ID || current.GrantGeneration != selected.GrantGeneration {
+		return zero, nil
 	}
 	m.touchResolvedCredential(ctx, selected)
 	return resolved, nil
