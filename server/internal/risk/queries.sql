@@ -253,6 +253,29 @@ WHERE project_id = @project_id
   )
 ORDER BY id;
 
+-- name: ListRiskPoliciesScopingMCPServerForUpdate :many
+-- Containment never raises on a malformed scope; a non-array servers value just does not match.
+SELECT *
+FROM risk_policies
+WHERE project_id = @project_id
+  AND deleted IS FALSE
+  AND mcp_scope @> jsonb_build_object(
+    'servers',
+    jsonb_build_array(jsonb_build_object('mcp_server_id', @mcp_server_id::text))
+  )
+ORDER BY id
+FOR UPDATE;
+
+-- name: SetRiskPolicyMCPScope :one
+-- Keeps version: a deleted server gets no traffic, so dropping it changes nothing the policy evaluates.
+UPDATE risk_policies
+SET mcp_scope = @mcp_scope::jsonb
+  , updated_at = clock_timestamp()
+WHERE id = @id
+  AND project_id = @project_id
+  AND deleted IS FALSE
+RETURNING *;
+
 -- name: ListProjectIDsWithOrphanedLifecycleBoundRiskPolicies :many
 SELECT DISTINCT policy.project_id
 FROM risk_policies AS policy

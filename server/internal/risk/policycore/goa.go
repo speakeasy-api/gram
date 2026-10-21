@@ -1,13 +1,13 @@
-package risk
+package policycore
 
 import (
 	"time"
 
 	"github.com/speakeasy-api/gram/server/gen/types"
-	"github.com/speakeasy-api/gram/server/internal/risk/policycore"
 )
 
-func policyToGoa(policy policycore.Policy) *types.RiskPolicy {
+// ToGoa maps a policy to its API shape, which audit snapshots also use.
+func ToGoa(policy Policy) *types.RiskPolicy {
 	detectionScopes := make([]*types.RiskDetectionScope, 0, len(policy.DetectionScopes))
 	for _, scope := range policy.DetectionScopes {
 		detectionScopes = append(detectionScopes, &types.RiskDetectionScope{
