@@ -37,6 +37,9 @@ var googleChatWorkspaceSubscription = regexp.MustCompile(`^subscriptions/[A-Za-z
 // googlechatWorkspaceConfig authorizes one space's message stream and limits
 // which participants can invoke the assistant. No field contains credentials.
 type googlechatWorkspaceConfig struct {
+	// AutoRenew lets the shared worker renew this subscription while the trigger is active.
+	AutoRenew bool `json:"auto_renew,omitempty"`
+
 	// Subscription is the exact Pub/Sub push subscription delivering messages.
 	Subscription string `json:"subscription"`
 

@@ -46,7 +46,7 @@ func newClient(httpClient *guardian.HTTPClient) *client {
 	return &client{http: &safe}
 }
 
-func (c *client) call(ctx context.Context, env toolconfig.ToolCallEnv, scope, method, resource string, query url.Values, body any) ([]byte, error) {
+func (c *client) callAPI(ctx context.Context, env toolconfig.ToolCallEnv, scope, api, method, resource string, query url.Values, body any) ([]byte, error) {
 	if c.http == nil {
 		return nil, errors.New("google chat HTTP client not configured")
 	}
@@ -77,7 +77,7 @@ func (c *client) call(ctx context.Context, env toolconfig.ToolCallEnv, scope, me
 			return nil, errors.New("cannot encode Google Chat request")
 		}
 	}
-	endpoint := apiURL + resource
+	endpoint := api + resource
 	if len(query) > 0 {
 		endpoint += "?" + query.Encode()
 	}

@@ -569,6 +569,7 @@ func (s *seeder) seedDeploymentAssistants(ctx context.Context) error {
 	chatConfig, err := json.Marshal(map[string]any{
 		"space_names": []string{"spaces/" + s.det("googlechat-space").String()},
 		"workspace_events": map[string]any{
+			"auto_renew":             true,
 			"subscription":           "projects/example-project/subscriptions/demo-" + s.det("googlechat-push").String(),
 			"workspace_subscription": "subscriptions/" + s.det("googlechat-subscription").String(),
 			"audience":               "https://example.invalid/" + s.det("googlechat-audience").String(),

@@ -105,6 +105,7 @@ The assistant remains generic: configure its instructions and MCP access normall
    {
      "space_names": ["spaces/<SPACE_ID>"],
      "workspace_events": {
+       "auto_renew": true,
        "subscription": "projects/<PROJECT_ID>/subscriptions/<PUSH_SUBSCRIPTION_ID>",
        "workspace_subscription": "subscriptions/<WORKSPACE_SUBSCRIPTION_ID>",
        "audience": "https://<PUBLIC_HOST>/<UNIQUE_PUSH_AUDIENCE>",
@@ -124,19 +125,16 @@ This mode replaces native interaction delivery **for this trigger**. Do not conf
 
 Pub/Sub receives all subscribed message creations, including unselected participants' messages; the backend filters before invoking the assistant. Bot messages, edits, deletes, and subscription lifecycle notifications never invoke it. Google may batch message creations automatically; each human message is filtered, deduplicated, and routed to its own thread, with only that message's payload attached to the assistant event. MCP authorization continues to use the configured assistant identity, not the external sender's credentials.
 
-### Keep the subscription alive
+### Automatic subscription renewal
 
-Workspace Events subscriptions expire. With resource data included, use the expiration returned by Google rather than assuming a permanent subscription. Before enabling a durable workflow, configure an independent renewal job under the **same approved app identity** to call:
+Set `workspace_events.auto_renew` to `true` to have Speakeasy maintain the already-created subscription. No Cloud Scheduler job or assistant task is required. Automatic renewal is opt-in; omitting the field preserves manually managed subscriptions.
 
-```http
-PATCH https://workspaceevents.googleapis.com/v1/subscriptions/<WORKSPACE_SUBSCRIPTION_ID>?updateMask=ttl
-Content-Type: application/json
+The shared worker checks opted-in, active Google Chat triggers hourly. When a subscription has two hours or less remaining, it renews the lease to four hours using `GOOGLE_CHAT_SERVICE_ACCOUNT_JSON` from that trigger's environment. It checks the exact subscription name, space, active state, message-created event type, and resource-data setting before changing only the TTL, and reads the provider state back to verify expiry advanced. Credentials never enter the workflow's input or history. Successful renewals and failures appear in the trigger event history; one failing subscription does not prevent others from renewing.
 
-{"ttl":"14400s"}
-```
+Paused or deleted triggers are excluded from renewal. If a trigger remains paused until its subscription expires, resuming the trigger does not recreate the subscription: recreate it and update `workspace_subscription` first. Revoked approval, missing app membership, a suspended subscription, or an expired/deleted subscription needs operator attention. Check trigger event history after resolving the cause. Speakeasy does not silently create a new subscription or change its destination.
 
-For example, an hourly Cloud Scheduler HTTP job can obtain an OAuth access token for that service account with the `https://www.googleapis.com/auth/chat.app.messages.readonly` scope and renew the four-hour subscription. Renewals must not run through an LLM or depend on a successful digest. Verify the returned operation completes and expiration advances, and monitor renewal failures and Workspace subscription lifecycle notifications. An expired subscription must be recreated, and the trigger's `workspace_subscription` updated to its new identity. Pausing a Speakeasy trigger does not delete the customer-managed Cloud subscription; retiring the integration requires deleting its renewal job and subscriptions too.
+The recurring renewal job runs only on the shared worker, not PR-preview workers, because preview databases can contain copied integration configuration. A preview test therefore still needs a live subscription for its short test window. Provider setup and Workspace administrator approval remain one-time operator steps.
 
-The backend accepts authenticated events; it does not provision or renew customer-managed Cloud resources. Existing native trigger tools expose this configuration through their discovered schema. No Platform MCP setup tool is added: provisioning and credential entry still require the operator-controlled setup described above. No new Temporal schedule or polling loop is introduced by this transport.
+No Platform MCP setup tool is added: existing native trigger tools expose the `auto_renew` option through the discovered configuration schema, while credential entry retains the secure onboarding flow. The single hourly workflow processes subscriptions in a paginated activity; it does not run an LLM or create a workflow per subscription.
 
 References: [Workspace event subscriptions](https://developers.google.com/workspace/events/guides/create-subscription), [event format and expiration](https://developers.google.com/workspace/events), [subscription renewal](https://developers.google.com/workspace/events/guides/update-subscription), [authenticated Pub/Sub push](https://cloud.google.com/pubsub/docs/authenticate-push-subscriptions), and [external-member restrictions](https://knowledge.workspace.google.com/admin/chat/chatting-with-external-users).

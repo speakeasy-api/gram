@@ -212,7 +212,7 @@ func (t *chatTool) Call(ctx context.Context, env toolconfig.ToolCallEnv, payload
 	default:
 		return errors.New("unknown Google Chat tool")
 	}
-	data, err := t.client.call(ctx, env, scope, method, resource, q, body)
+	data, err := t.client.callAPI(ctx, env, scope, apiURL, method, resource, q, body)
 	if err != nil {
 		return err
 	}

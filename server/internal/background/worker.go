@@ -594,6 +594,7 @@ func NewTemporalWorker(
 	// Trigger related activities
 	temporalWorker.RegisterActivity(activities.DispatchTrigger)
 	temporalWorker.RegisterActivity(activities.ProcessScheduledTrigger)
+	temporalWorker.RegisterActivity(activities.RenewGoogleChatSubscriptions)
 	temporalWorker.RegisterActivity(activities.MarkTriggerFired)
 	// Risk analysis activities — AnalyzeBatch on the dedicated worker.
 	temporalWorker.RegisterActivity(activities.FetchUnanalyzedMessages)
@@ -734,6 +735,7 @@ func NewTemporalWorker(
 	// Trigger workflows
 	temporalWorker.RegisterWorkflow(TriggerCronWorkflow)
 	temporalWorker.RegisterWorkflow(TriggerDispatchWorkflow)
+	temporalWorker.RegisterWorkflow(GoogleChatSubscriptionRenewalWorkflow)
 	temporalWorker.RegisterWorkflow(TriggerWakeWorkflow)
 	// Risk analysis coordinator workflow
 	temporalWorker.RegisterWorkflow(RiskAnalysisCoordinatorWorkflow)
@@ -865,6 +867,10 @@ func (w *Workers) registerSchedules(ctx context.Context) {
 	if env.Queue() != sharedTaskQueue {
 		logger.InfoContext(ctx, "skipping fleet-wide schedules on non-shared task queue")
 		return
+	}
+
+	if err := AddGoogleChatSubscriptionRenewalSchedule(ctx, env); err != nil {
+		logger.ErrorContext(ctx, "register Google Chat subscription renewal", attr.SlogError(err))
 	}
 
 	// The sweep disables KMS versions. Preview databases clone dev's keys,

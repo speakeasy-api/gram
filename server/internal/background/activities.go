@@ -155,6 +155,7 @@ type Activities struct {
 	listToolsetsForIndexing          *activities.ListToolsetsForIndexing
 	dispatchTrigger                  *activities.DispatchTrigger
 	processScheduledTrigger          *activities.ProcessScheduledTrigger
+	renewGoogleChatSubscriptions     *activities.RenewGoogleChatSubscriptions
 	markTriggerFired                 *activities.MarkTriggerFired
 	segmentChat                      *resolution_activities.SegmentChat
 	deleteChatResolutions            *resolution_activities.DeleteChatResolutions
@@ -448,6 +449,7 @@ func NewActivities(
 		listToolsetsForIndexing:          activities.NewListToolsetsForIndexing(db),
 		dispatchTrigger:                  activities.NewDispatchTrigger(triggerApp),
 		processScheduledTrigger:          activities.NewProcessScheduledTrigger(triggerApp),
+		renewGoogleChatSubscriptions:     activities.NewRenewGoogleChatSubscriptions(triggerApp, guardianPolicy),
 		markTriggerFired:                 activities.NewMarkTriggerFired(triggerApp),
 		segmentChat:                      resolution_activities.NewSegmentChat(logger, db, chatClient),
 		deleteChatResolutions:            resolution_activities.NewDeleteChatResolutions(db),
@@ -1182,4 +1184,11 @@ func (a *Activities) FinalizeOktaApplicationSync(ctx context.Context, input acti
 		return fmt.Errorf("finalize okta application sync: %w", err)
 	}
 	return nil
+}
+
+func (a *Activities) RenewGoogleChatSubscriptions(ctx context.Context, now time.Time) error {
+	if a.renewGoogleChatSubscriptions == nil {
+		return fmt.Errorf("google chat subscription renewal is not configured")
+	}
+	return a.renewGoogleChatSubscriptions.Do(ctx, now)
 }

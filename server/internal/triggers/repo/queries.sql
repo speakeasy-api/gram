@@ -268,3 +268,14 @@ WHERE project_id = @project_id
   AND target_ref = @target_ref
   AND correlation_id = @correlation_id
   AND deleted IS FALSE;
+
+-- name: ListAutoRenewGoogleChatTriggers :many
+SELECT * FROM trigger_instances
+WHERE definition_slug = 'googlechat'
+  AND status = 'active'
+  AND deleted IS FALSE
+  AND environment_id IS NOT NULL
+  AND config_json @> '{"workspace_events":{"auto_renew":true}}'::jsonb
+  AND id > @after_id::uuid
+ORDER BY id
+LIMIT @page_size;
