@@ -510,6 +510,8 @@ describe("ProjectGuide", () => {
       "confirming",
     );
     expect(activity.textContent).toContain("Linear mcp server is now setup");
+    expect(screen.getByText("server ready")).toBeTruthy();
+    expect(screen.getByText("0 of 4 done")).toBeTruthy();
 
     await act(() =>
       vi.advanceTimersByTime(MCP_SETUP_CONFIRMATION_DELAY_MS - 1),
