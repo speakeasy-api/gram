@@ -1307,7 +1307,7 @@ describe("ProjectGuide", () => {
     render(<ProjectGuide />);
 
     fireEvent.click(
-      screen.getByRole("button", { name: /Govern a third-party MCP/ }),
+      screen.getByRole("button", { name: /Deploy an MCP gateway/ }),
     );
 
     expect(screen.queryByRole("link", { name: "Open tool logs" })).toBeNull();

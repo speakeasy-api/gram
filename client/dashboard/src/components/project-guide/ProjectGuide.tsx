@@ -1663,7 +1663,7 @@ function JourneyGraphicPlate({
       <span
         className={cn(
           plate.icon === "agents"
-            ? "flex items-center gap-3"
+            ? "flex flex-col items-start gap-3 sm:flex-row sm:items-center"
             : "grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-2 gap-y-1",
         )}
       >
@@ -1699,7 +1699,7 @@ function JourneyGraphicPlate({
         <span
           className={
             plate.icon === "agents"
-              ? "flex min-w-0 flex-1 flex-col gap-1"
+              ? "flex w-full min-w-0 flex-col gap-1 sm:w-auto sm:flex-1"
               : "contents"
           }
         >
@@ -1719,7 +1719,7 @@ function JourneyGraphicPlate({
               initial={false}
               animate={offOpacity}
               transition={offTransition}
-              className="col-start-1 row-start-1 block truncate"
+              className={`col-start-1 row-start-1 block truncate ${plate.icon === "agents" ? "max-sm:whitespace-normal" : ""}`}
             >
               {offName}
             </motion.span>
@@ -1727,14 +1727,14 @@ function JourneyGraphicPlate({
               initial={false}
               animate={liveOpacity}
               transition={liveTransition}
-              className="col-start-1 row-start-1 block truncate"
+              className={`col-start-1 row-start-1 block truncate ${plate.icon === "agents" ? "max-sm:whitespace-normal" : ""}`}
             >
               {plate.name}
             </motion.span>
           </span>
         </span>
         <span
-          className={`text-eyebrow relative mt-0 mb-auto grid min-w-0 text-right ${plate.icon === "agents" ? "flex-[0_1_35%]" : "col-span-2 col-start-1 row-start-3 mt-1"}`}
+          className={`text-eyebrow relative mt-0 mb-auto grid min-w-0 text-right ${plate.icon === "agents" ? "w-full sm:w-auto sm:flex-[0_1_35%]" : "col-span-2 col-start-1 row-start-3 mt-1"}`}
         >
           <motion.span
             initial={false}
