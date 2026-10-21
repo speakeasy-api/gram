@@ -1202,9 +1202,10 @@ SELECT COALESCE((SELECT pid FROM pg_catalog.pg_stat_activity WHERE datname = cur
 -- Load latest live contents with the inventory for typed platform classification.
 -- Prefer the canonical wrapper, but allow fallback when it is enabled and endpointless.
 -- A disabled canonical wrapper still blocks automatic delivery through alternatives.
+-- A wrapper whose backing toolset is deleted is never delivered.
 SELECT m.id, m.project_id, COALESCE(NULLIF(m.name, ''), NULLIF(m.slug, ''), m.id::text)::text AS name,
   'mcp_server'::text AS backend_kind, COALESCE(m.toolset_id, m.id)::uuid AS resource_id, m.toolset_id AS legacy_toolset_id,
-  (m.visibility <> 'disabled' AND (m.unproxied_mcp_server_id IS NOT NULL OR EXISTS (
+  (m.visibility <> 'disabled' AND (m.toolset_id IS NULL OR backing.id IS NOT NULL) AND (m.unproxied_mcp_server_id IS NOT NULL OR EXISTS (
     SELECT 1 FROM mcp_endpoints e WHERE e.mcp_server_id = m.id AND e.project_id = p.id AND e.deleted IS FALSE
   )) AND NOT (m.toolset_id IS NOT NULL AND m.id <> m.toolset_id AND EXISTS (
     SELECT 1 FROM mcp_servers canonical WHERE canonical.id = m.toolset_id AND canonical.project_id = p.id AND canonical.deleted IS FALSE
