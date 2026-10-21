@@ -21829,41 +21829,93 @@ type AdminUpstreamOAuthMigrationServerResponseBody struct {
 // AdminUpstreamOAuthMigrationAuthClientsResponseBody is used to define fields
 // on response body types.
 type AdminUpstreamOAuthMigrationAuthClientsResponseBody struct {
-	// Whether every association has its auth client and server link recorded, no
-	// backfilled record is left to retire, and no server offering one is left
-	// undecided.
+	// Whether every configured identity has its auth client, server links and
+	// header copies recorded, no backfilled record is left to retire, no server
+	// offering one is left undecided, and no phase failed.
 	Complete *bool `form:"complete,omitempty" json:"complete,omitempty" xml:"complete,omitempty"`
-	// Live server to upstream OAuth client associations decided.
+	// Whether a run is recording typed auth clients for the organization right
+	// now. The other counts are then empty; check again when it finishes.
+	InProgress *bool `form:"in_progress,omitempty" json:"in_progress,omitempty" xml:"in_progress,omitempty"`
+	// Servers offering a backfilled auth client whose need for upstream
+	// authentication is still undecided, not yet marked as needing it.
+	PendingMarkedServers *int64 `form:"pending_marked_servers,omitempty" json:"pending_marked_servers,omitempty" xml:"pending_marked_servers,omitempty"`
+	// Configured identities and server links decided.
 	Associations *int64 `form:"associations,omitempty" json:"associations,omitempty" xml:"associations,omitempty"`
 	// Auth clients not yet recorded.
 	PendingClients *int64 `form:"pending_clients,omitempty" json:"pending_clients,omitempty" xml:"pending_clients,omitempty"`
 	// Server to auth client links not yet recorded.
 	PendingLinks *int64 `form:"pending_links,omitempty" json:"pending_links,omitempty" xml:"pending_links,omitempty"`
-	// Backfilled auth clients and server links whose association or upstream
-	// client is gone, not yet retired.
+	// Header copies and EMA scope sets not yet up to date.
+	PendingHeaders *int64 `form:"pending_headers,omitempty" json:"pending_headers,omitempty" xml:"pending_headers,omitempty"`
+	// Backfilled auth clients and server links the configuration no longer yields,
+	// not yet retired.
 	PendingRetirements *int64 `form:"pending_retirements,omitempty" json:"pending_retirements,omitempty" xml:"pending_retirements,omitempty"`
-	// Servers offering a backfilled auth client whose need for upstream
-	// authentication is still undecided, not yet marked as needing it.
-	PendingMarkedServers *int64 `form:"pending_marked_servers,omitempty" json:"pending_marked_servers,omitempty" xml:"pending_marked_servers,omitempty"`
-	// Associations whose client cannot be typed and need attention.
+	// Configured identities that cannot be recorded without a guess and need
+	// attention.
 	Unresolved *int64 `form:"unresolved,omitempty" json:"unresolved,omitempty" xml:"unresolved,omitempty"`
-	// The associations counted in unresolved.
+	// The configuration counted in unresolved.
 	UnresolvedAssociations []*AdminUpstreamOAuthMigrationUnresolvedAssociationResponseBody `form:"unresolved_associations,omitempty" json:"unresolved_associations,omitempty" xml:"unresolved_associations,omitempty"`
+	// Configuration worth a look that needs no action and does not hold back
+	// complete, such as a server at an identity chaining upstream's origin that
+	// only live discovery could confirm.
+	Warnings []*AdminUpstreamOAuthMigrationUnresolvedAssociationResponseBody `form:"warnings,omitempty" json:"warnings,omitempty" xml:"warnings,omitempty"`
+	// The same counts for each kind of configured identity.
+	Kinds []*AdminUpstreamOAuthMigrationAuthClientKindResponseBody `form:"kinds,omitempty" json:"kinds,omitempty" xml:"kinds,omitempty"`
+	// Phases whose check failed: oauth, headers, ema, reconcile or mark. The
+	// counts cover the other phases.
+	FailedPhases []string `form:"failed_phases,omitempty" json:"failed_phases,omitempty" xml:"failed_phases,omitempty"`
 }
 
 // AdminUpstreamOAuthMigrationUnresolvedAssociationResponseBody is used to
 // define fields on response body types.
 type AdminUpstreamOAuthMigrationUnresolvedAssociationResponseBody struct {
-	// The server to upstream OAuth client association ID.
+	// What was decided: oauth, header or ema.
+	Kind *string `form:"kind,omitempty" json:"kind,omitempty" xml:"kind,omitempty"`
+	// Why it cannot be recorded: unknown_owner, type_mismatch, project_mismatch,
+	// multiple_authorization_headers, duplicate_header_names, denied_source,
+	// mixed_credential_headers, oauth_client_shared_across_sources,
+	// conflicting_scopes, resource_variants, resource_not_matched,
+	// issuer_not_allowed or registration_out_of_reach; for a warning,
+	// server_not_matched.
+	Reason *string `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
+	// The association, source, upstream OAuth client or first binding decided.
+	SubjectID *string `form:"subject_id,omitempty" json:"subject_id,omitempty" xml:"subject_id,omitempty"`
+	// The server to upstream OAuth client association ID, for an oauth association.
 	AssociationID *string `form:"association_id,omitempty" json:"association_id,omitempty" xml:"association_id,omitempty"`
-	// The MCP server ID.
+	// The MCP server ID, when one server is concerned.
 	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
-	// The server's project ID.
+	// The project the configuration belongs to.
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
-	// The upstream OAuth client ID.
+	// The upstream OAuth client ID, for oauth and ema.
 	RemoteSessionClientID *string `form:"remote_session_client_id,omitempty" json:"remote_session_client_id,omitempty" xml:"remote_session_client_id,omitempty"`
-	// The auth client already recorded for the client, if any.
+	// Every identity chaining binding decided together, for ema.
+	BindingIds []string `form:"binding_ids,omitempty" json:"binding_ids,omitempty" xml:"binding_ids,omitempty"`
+	// The sources concerned, for an upstream OAuth client shared across sources.
+	SourceIds []string `form:"source_ids,omitempty" json:"source_ids,omitempty" xml:"source_ids,omitempty"`
+	// The servers concerned, for an upstream OAuth client shared across sources.
+	ServerIds []string `form:"server_ids,omitempty" json:"server_ids,omitempty" xml:"server_ids,omitempty"`
+	// The auth client already recorded, if any.
 	AuthClientID *string `form:"auth_client_id,omitempty" json:"auth_client_id,omitempty" xml:"auth_client_id,omitempty"`
+}
+
+// AdminUpstreamOAuthMigrationAuthClientKindResponseBody is used to define
+// fields on response body types.
+type AdminUpstreamOAuthMigrationAuthClientKindResponseBody struct {
+	// The kind: oauth, header or ema.
+	Kind *string `form:"kind,omitempty" json:"kind,omitempty" xml:"kind,omitempty"`
+	// Configuration and server links decided.
+	Decided *int64 `form:"decided,omitempty" json:"decided,omitempty" xml:"decided,omitempty"`
+	// Auth clients not yet recorded.
+	PendingClients *int64 `form:"pending_clients,omitempty" json:"pending_clients,omitempty" xml:"pending_clients,omitempty"`
+	// Server to auth client links not yet recorded.
+	PendingLinks *int64 `form:"pending_links,omitempty" json:"pending_links,omitempty" xml:"pending_links,omitempty"`
+	// Header copies and EMA scope sets not yet up to date.
+	PendingHeaders *int64 `form:"pending_headers,omitempty" json:"pending_headers,omitempty" xml:"pending_headers,omitempty"`
+	// Backfilled auth clients and server links the configuration no longer yields,
+	// not yet retired.
+	PendingRetirements *int64 `form:"pending_retirements,omitempty" json:"pending_retirements,omitempty" xml:"pending_retirements,omitempty"`
+	// Configuration that cannot be recorded without a guess.
+	Unresolved *int64 `form:"unresolved,omitempty" json:"unresolved,omitempty" xml:"unresolved,omitempty"`
 }
 
 // AdminUpstreamOAuthMigrationStatusResponseBody is used to define fields on
@@ -67604,6 +67656,9 @@ func ValidateAdminUpstreamOAuthMigrationAuthClientsResponseBody(body *AdminUpstr
 	if body.Complete == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("complete", "body"))
 	}
+	if body.InProgress == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("in_progress", "body"))
+	}
 	if body.Associations == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("associations", "body"))
 	}
@@ -67612,6 +67667,9 @@ func ValidateAdminUpstreamOAuthMigrationAuthClientsResponseBody(body *AdminUpstr
 	}
 	if body.PendingLinks == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("pending_links", "body"))
+	}
+	if body.PendingHeaders == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("pending_headers", "body"))
 	}
 	if body.PendingRetirements == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("pending_retirements", "body"))
@@ -67625,9 +67683,32 @@ func ValidateAdminUpstreamOAuthMigrationAuthClientsResponseBody(body *AdminUpstr
 	if body.UnresolvedAssociations == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("unresolved_associations", "body"))
 	}
+	if body.Warnings == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("warnings", "body"))
+	}
+	if body.Kinds == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("kinds", "body"))
+	}
+	if body.FailedPhases == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("failed_phases", "body"))
+	}
 	for _, e := range body.UnresolvedAssociations {
 		if e != nil {
 			if err2 := ValidateAdminUpstreamOAuthMigrationUnresolvedAssociationResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.Warnings {
+		if e != nil {
+			if err2 := ValidateAdminUpstreamOAuthMigrationUnresolvedAssociationResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.Kinds {
+		if e != nil {
+			if err2 := ValidateAdminUpstreamOAuthMigrationAuthClientKindResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -67639,6 +67720,15 @@ func ValidateAdminUpstreamOAuthMigrationAuthClientsResponseBody(body *AdminUpstr
 // the validations defined on
 // AdminUpstreamOAuthMigrationUnresolvedAssociationResponseBody
 func ValidateAdminUpstreamOAuthMigrationUnresolvedAssociationResponseBody(body *AdminUpstreamOAuthMigrationUnresolvedAssociationResponseBody) (err error) {
+	if body.Kind == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("kind", "body"))
+	}
+	if body.Reason == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("reason", "body"))
+	}
+	if body.SubjectID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("subject_id", "body"))
+	}
 	if body.AssociationID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("association_id", "body"))
 	}
@@ -67650,6 +67740,18 @@ func ValidateAdminUpstreamOAuthMigrationUnresolvedAssociationResponseBody(body *
 	}
 	if body.RemoteSessionClientID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("remote_session_client_id", "body"))
+	}
+	if body.BindingIds == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("binding_ids", "body"))
+	}
+	if body.SourceIds == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("source_ids", "body"))
+	}
+	if body.ServerIds == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("server_ids", "body"))
+	}
+	if body.SubjectID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.subject_id", *body.SubjectID, goa.FormatUUID))
 	}
 	if body.AssociationID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.association_id", *body.AssociationID, goa.FormatUUID))
@@ -67663,8 +67765,44 @@ func ValidateAdminUpstreamOAuthMigrationUnresolvedAssociationResponseBody(body *
 	if body.RemoteSessionClientID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.remote_session_client_id", *body.RemoteSessionClientID, goa.FormatUUID))
 	}
+	for _, e := range body.BindingIds {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.binding_ids[*]", e, goa.FormatUUID))
+	}
+	for _, e := range body.SourceIds {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.source_ids[*]", e, goa.FormatUUID))
+	}
+	for _, e := range body.ServerIds {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.server_ids[*]", e, goa.FormatUUID))
+	}
 	if body.AuthClientID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.auth_client_id", *body.AuthClientID, goa.FormatUUID))
+	}
+	return
+}
+
+// ValidateAdminUpstreamOAuthMigrationAuthClientKindResponseBody runs the
+// validations defined on AdminUpstreamOAuthMigrationAuthClientKindResponseBody
+func ValidateAdminUpstreamOAuthMigrationAuthClientKindResponseBody(body *AdminUpstreamOAuthMigrationAuthClientKindResponseBody) (err error) {
+	if body.Kind == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("kind", "body"))
+	}
+	if body.Decided == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("decided", "body"))
+	}
+	if body.PendingClients == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("pending_clients", "body"))
+	}
+	if body.PendingLinks == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("pending_links", "body"))
+	}
+	if body.PendingHeaders == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("pending_headers", "body"))
+	}
+	if body.PendingRetirements == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("pending_retirements", "body"))
+	}
+	if body.Unresolved == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("unresolved", "body"))
 	}
 	return
 }

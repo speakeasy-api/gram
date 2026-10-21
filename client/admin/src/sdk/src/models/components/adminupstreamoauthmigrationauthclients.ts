@@ -8,26 +8,46 @@ import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
+  AdminUpstreamOAuthMigrationAuthClientKind,
+  AdminUpstreamOAuthMigrationAuthClientKind$inboundSchema,
+} from "./adminupstreamoauthmigrationauthclientkind.js";
+import {
   AdminUpstreamOAuthMigrationUnresolvedAssociation,
   AdminUpstreamOAuthMigrationUnresolvedAssociation$inboundSchema,
 } from "./adminupstreamoauthmigrationunresolvedassociation.js";
 
 /**
- * Where one organization stands in recording a typed auth client for every upstream OAuth client its servers are associated with, and in retiring backfilled records whose association or client is gone. Nothing reads these records yet.
+ * Where one organization stands in recording a typed auth client for every upstream identity its servers are configured with (upstream OAuth clients, source credential headers and identity chaining upstreams), and in retiring backfilled records the configuration no longer yields. Nothing reads these records yet.
  */
 export type AdminUpstreamOAuthMigrationAuthClients = {
   /**
-   * Live server to upstream OAuth client associations decided.
+   * Configured identities and server links decided.
    */
   associations: number;
   /**
-   * Whether every association has its auth client and server link recorded, no backfilled record is left to retire, and no server offering one is left undecided.
+   * Whether every configured identity has its auth client, server links and header copies recorded, no backfilled record is left to retire, no server offering one is left undecided, and no phase failed.
    */
   complete: boolean;
+  /**
+   * Phases whose check failed: oauth, headers, ema, reconcile or mark. The counts cover the other phases.
+   */
+  failedPhases: Array<string>;
+  /**
+   * Whether a run is recording typed auth clients for the organization right now. The other counts are then empty; check again when it finishes.
+   */
+  inProgress: boolean;
+  /**
+   * The same counts for each kind of configured identity.
+   */
+  kinds: Array<AdminUpstreamOAuthMigrationAuthClientKind>;
   /**
    * Auth clients not yet recorded.
    */
   pendingClients: number;
+  /**
+   * Header copies and EMA scope sets not yet up to date.
+   */
+  pendingHeaders: number;
   /**
    * Server to auth client links not yet recorded.
    */
@@ -37,19 +57,23 @@ export type AdminUpstreamOAuthMigrationAuthClients = {
    */
   pendingMarkedServers: number;
   /**
-   * Backfilled auth clients and server links whose association or upstream client is gone, not yet retired.
+   * Backfilled auth clients and server links the configuration no longer yields, not yet retired.
    */
   pendingRetirements: number;
   /**
-   * Associations whose client cannot be typed and need attention.
+   * Configured identities that cannot be recorded without a guess and need attention.
    */
   unresolved: number;
   /**
-   * The associations counted in unresolved.
+   * The configuration counted in unresolved.
    */
   unresolvedAssociations: Array<
     AdminUpstreamOAuthMigrationUnresolvedAssociation
   >;
+  /**
+   * Configuration worth a look that needs no action and does not hold back complete, such as a server at an identity chaining upstream's origin that only live discovery could confirm.
+   */
+  warnings: Array<AdminUpstreamOAuthMigrationUnresolvedAssociation>;
 };
 
 /** @internal */
@@ -58,7 +82,11 @@ export const AdminUpstreamOAuthMigrationAuthClients$inboundSchema:
     z.object({
       associations: z.int(),
       complete: z.boolean(),
+      failed_phases: z.array(z.string()),
+      in_progress: z.boolean(),
+      kinds: z.array(AdminUpstreamOAuthMigrationAuthClientKind$inboundSchema),
       pending_clients: z.int(),
+      pending_headers: z.int(),
       pending_links: z.int(),
       pending_marked_servers: z.int(),
       pending_retirements: z.int(),
@@ -66,10 +94,16 @@ export const AdminUpstreamOAuthMigrationAuthClients$inboundSchema:
       unresolved_associations: z.array(
         AdminUpstreamOAuthMigrationUnresolvedAssociation$inboundSchema,
       ),
+      warnings: z.array(
+        AdminUpstreamOAuthMigrationUnresolvedAssociation$inboundSchema,
+      ),
     }),
     z.transform((v) => {
       return remap$(v, {
+        "failed_phases": "failedPhases",
+        "in_progress": "inProgress",
         "pending_clients": "pendingClients",
+        "pending_headers": "pendingHeaders",
         "pending_links": "pendingLinks",
         "pending_marked_servers": "pendingMarkedServers",
         "pending_retirements": "pendingRetirements",

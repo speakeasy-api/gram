@@ -9,29 +9,53 @@ import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 /**
- * A server to upstream OAuth client association the typed auth client backfill cannot decide: the client's owner is unknown, or the auth client already recorded for it has another type or belongs to another project.
+ * Configuration the typed auth client backfill cannot record without a guess, and why. ID fields that do not apply to its kind are the nil UUID.
  */
 export type AdminUpstreamOAuthMigrationUnresolvedAssociation = {
   /**
-   * The server to upstream OAuth client association ID.
+   * The server to upstream OAuth client association ID, for an oauth association.
    */
   associationId: string;
   /**
-   * The auth client already recorded for the client, if any.
+   * The auth client already recorded, if any.
    */
   authClientId?: string | undefined;
   /**
-   * The MCP server ID.
+   * Every identity chaining binding decided together, for ema.
+   */
+  bindingIds: Array<string>;
+  /**
+   * What was decided: oauth, header or ema.
+   */
+  kind: string;
+  /**
+   * The MCP server ID, when one server is concerned.
    */
   mcpServerId: string;
   /**
-   * The server's project ID.
+   * The project the configuration belongs to.
    */
   projectId: string;
   /**
-   * The upstream OAuth client ID.
+   * Why it cannot be recorded: unknown_owner, type_mismatch, project_mismatch, multiple_authorization_headers, duplicate_header_names, denied_source, mixed_credential_headers, oauth_client_shared_across_sources, conflicting_scopes, resource_variants, resource_not_matched, issuer_not_allowed or registration_out_of_reach; for a warning, server_not_matched.
+   */
+  reason: string;
+  /**
+   * The upstream OAuth client ID, for oauth and ema.
    */
   remoteSessionClientId: string;
+  /**
+   * The servers concerned, for an upstream OAuth client shared across sources.
+   */
+  serverIds: Array<string>;
+  /**
+   * The sources concerned, for an upstream OAuth client shared across sources.
+   */
+  sourceIds: Array<string>;
+  /**
+   * The association, source, upstream OAuth client or first binding decided.
+   */
+  subjectId: string;
 };
 
 /** @internal */
@@ -41,17 +65,27 @@ export const AdminUpstreamOAuthMigrationUnresolvedAssociation$inboundSchema:
       z.object({
         association_id: z.string(),
         auth_client_id: z.optional(z.string()),
+        binding_ids: z.array(z.string()),
+        kind: z.string(),
         mcp_server_id: z.string(),
         project_id: z.string(),
+        reason: z.string(),
         remote_session_client_id: z.string(),
+        server_ids: z.array(z.string()),
+        source_ids: z.array(z.string()),
+        subject_id: z.string(),
       }),
       z.transform((v) => {
         return remap$(v, {
           "association_id": "associationId",
           "auth_client_id": "authClientId",
+          "binding_ids": "bindingIds",
           "mcp_server_id": "mcpServerId",
           "project_id": "projectId",
           "remote_session_client_id": "remoteSessionClientId",
+          "server_ids": "serverIds",
+          "source_ids": "sourceIds",
+          "subject_id": "subjectId",
         });
       }),
     );

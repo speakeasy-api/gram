@@ -222,6 +222,7 @@ trackedFiles:
   src/models/components/adminstripecustomer.ts: {}
   src/models/components/adminstripesubscription.ts: {}
   src/models/components/adminstripesubscriptioncandidate.ts: {}
+  src/models/components/adminupstreamoauthmigrationauthclientkind.ts: {}
   src/models/components/adminupstreamoauthmigrationauthclients.ts: {}
   src/models/components/adminupstreamoauthmigrationorganization.ts: {}
   src/models/components/adminupstreamoauthmigrationorganizations.ts: {}

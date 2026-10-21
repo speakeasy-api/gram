@@ -21,7 +21,7 @@ import {
  */
 export type AdminUpstreamOAuthMigrationStatus = {
   /**
-   * Where one organization stands in recording a typed auth client for every upstream OAuth client its servers are associated with, and in retiring backfilled records whose association or client is gone. Nothing reads these records yet.
+   * Where one organization stands in recording a typed auth client for every upstream identity its servers are configured with (upstream OAuth clients, source credential headers and identity chaining upstreams), and in retiring backfilled records the configuration no longer yields. Nothing reads these records yet.
    */
   authClients?: AdminUpstreamOAuthMigrationAuthClients | undefined;
   /**

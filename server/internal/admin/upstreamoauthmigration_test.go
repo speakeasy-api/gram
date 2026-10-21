@@ -223,4 +223,42 @@ func TestUpstreamOAuthMigration_RecordsAuthClientsWithoutGatingMigrated(t *testi
 	require.True(t, status.Migrated)
 	require.False(t, status.AuthClients.Complete)
 	require.Equal(t, int64(1), status.AuthClients.PendingLinks)
+	require.Empty(t, status.AuthClients.FailedPhases)
+	byKind := map[string]*gen.AdminUpstreamOAuthMigrationAuthClientKind{}
+	for _, kind := range status.AuthClients.Kinds {
+		byKind[kind.Kind] = kind
+	}
+	require.Len(t, byKind, 3, "every kind is reported")
+	require.Equal(t, int64(1), byKind["oauth"].PendingLinks)
+	require.Zero(t, byKind["header"].PendingLinks)
+	require.Zero(t, byKind["ema"].PendingLinks)
+}
+
+func TestUpstreamOAuthMigration_ReportsAnAuthClientRunInProgress(t *testing.T) {
+	t.Parallel()
+	ctx, svc, db := newTestAdminService(t)
+	ctx = contextvalues.SetAdminAuthContext(ctx, &contextvalues.AdminAuthContext{OIDCSubject: "staff-test"})
+	org := newMigrationOrg(t, ctx, db, "auth-clients-in-progress")
+
+	tx, err := db.Begin(ctx) //nolint:glint // notestingrawsql: transaction boundary only; the lock uses a generated SQLc method.
+	require.NoError(t, err)
+	defer func() { _ = tx.Rollback(context.WithoutCancel(ctx)) }()
+	require.NoError(t, authclientbackfill.New(tx).LockOrganizationBackfill(ctx, org.id))
+
+	status, err := svc.GetUpstreamOAuthMigrationStatus(ctx, &gen.GetUpstreamOAuthMigrationStatusPayload{OrganizationID: org.id})
+	require.NoError(t, err)
+	require.NotNil(t, status.AuthClients)
+	require.True(t, status.AuthClients.InProgress)
+	require.False(t, status.AuthClients.Complete)
+
+	run, err := svc.RunUpstreamOAuthMigration(ctx, &gen.RunUpstreamOAuthMigrationPayload{OrganizationID: org.id})
+	require.NoError(t, err)
+	require.NotNil(t, run.AuthClientsError)
+	require.Contains(t, *run.AuthClientsError, "already in progress")
+
+	require.NoError(t, tx.Rollback(ctx))
+	status, err = svc.GetUpstreamOAuthMigrationStatus(ctx, &gen.GetUpstreamOAuthMigrationStatusPayload{OrganizationID: org.id})
+	require.NoError(t, err)
+	require.False(t, status.AuthClients.InProgress)
+	require.Empty(t, status.AuthClients.Warnings)
 }

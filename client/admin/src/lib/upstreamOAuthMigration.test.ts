@@ -23,13 +23,18 @@ function status(
         ? undefined
         : {
             complete: authClientsComplete,
+            inProgress: false,
             associations: 1,
             pendingClients: authClientsComplete ? 0 : 1,
             pendingLinks: 0,
+            pendingHeaders: 0,
             pendingRetirements: 0,
             pendingMarkedServers: 0,
             unresolved,
             unresolvedAssociations: [],
+            warnings: [],
+            kinds: [],
+            failedPhases: [],
           },
   };
 }
@@ -60,6 +65,25 @@ describe("needsMigrationRun", () => {
       s.authClients.pendingMarkedServers = 1;
     }
     expect(needsMigrationRun(s)).toBe(true);
+  });
+
+  it("includes an organization with headers to update or a failed phase", () => {
+    const headers = status(true, false);
+    const failed = status(true, false);
+    if (headers.authClients && failed.authClients) {
+      headers.authClients.pendingClients = 0;
+      headers.authClients.pendingHeaders = 1;
+      failed.authClients.pendingClients = 0;
+      failed.authClients.failedPhases = ["ema"];
+    }
+    expect(needsMigrationRun(headers)).toBe(true);
+    expect(needsMigrationRun(failed)).toBe(true);
+  });
+
+  it("skips an organization whose auth clients a run is recording", () => {
+    const s = status(true, false);
+    if (s.authClients) s.authClients.inProgress = true;
+    expect(needsMigrationRun(s)).toBe(false);
   });
 
   it("decides on the migration alone when auth clients could not be checked", () => {

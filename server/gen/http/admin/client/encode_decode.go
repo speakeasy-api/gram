@@ -24422,11 +24422,13 @@ func unmarshalAdminUpstreamOAuthMigrationAuthClientsResponseBodyToAdminAdminUpst
 	}
 	res := &admin.AdminUpstreamOAuthMigrationAuthClients{
 		Complete:             *v.Complete,
+		InProgress:           *v.InProgress,
+		PendingMarkedServers: *v.PendingMarkedServers,
 		Associations:         *v.Associations,
 		PendingClients:       *v.PendingClients,
 		PendingLinks:         *v.PendingLinks,
+		PendingHeaders:       *v.PendingHeaders,
 		PendingRetirements:   *v.PendingRetirements,
-		PendingMarkedServers: *v.PendingMarkedServers,
 		Unresolved:           *v.Unresolved,
 	}
 	res.UnresolvedAssociations = make([]*admin.AdminUpstreamOAuthMigrationUnresolvedAssociation, len(v.UnresolvedAssociations))
@@ -24436,6 +24438,26 @@ func unmarshalAdminUpstreamOAuthMigrationAuthClientsResponseBodyToAdminAdminUpst
 			continue
 		}
 		res.UnresolvedAssociations[i] = unmarshalAdminUpstreamOAuthMigrationUnresolvedAssociationResponseBodyToAdminAdminUpstreamOAuthMigrationUnresolvedAssociation(val)
+	}
+	res.Warnings = make([]*admin.AdminUpstreamOAuthMigrationUnresolvedAssociation, len(v.Warnings))
+	for i, val := range v.Warnings {
+		if val == nil {
+			res.Warnings[i] = nil
+			continue
+		}
+		res.Warnings[i] = unmarshalAdminUpstreamOAuthMigrationUnresolvedAssociationResponseBodyToAdminAdminUpstreamOAuthMigrationUnresolvedAssociation(val)
+	}
+	res.Kinds = make([]*admin.AdminUpstreamOAuthMigrationAuthClientKind, len(v.Kinds))
+	for i, val := range v.Kinds {
+		if val == nil {
+			res.Kinds[i] = nil
+			continue
+		}
+		res.Kinds[i] = unmarshalAdminUpstreamOAuthMigrationAuthClientKindResponseBodyToAdminAdminUpstreamOAuthMigrationAuthClientKind(val)
+	}
+	res.FailedPhases = make([]string, len(v.FailedPhases))
+	for i, val := range v.FailedPhases {
+		res.FailedPhases[i] = val
 	}
 
 	return res
@@ -24447,11 +24469,43 @@ func unmarshalAdminUpstreamOAuthMigrationAuthClientsResponseBodyToAdminAdminUpst
 // *AdminUpstreamOAuthMigrationUnresolvedAssociationResponseBody.
 func unmarshalAdminUpstreamOAuthMigrationUnresolvedAssociationResponseBodyToAdminAdminUpstreamOAuthMigrationUnresolvedAssociation(v *AdminUpstreamOAuthMigrationUnresolvedAssociationResponseBody) *admin.AdminUpstreamOAuthMigrationUnresolvedAssociation {
 	res := &admin.AdminUpstreamOAuthMigrationUnresolvedAssociation{
+		Kind:                  *v.Kind,
+		Reason:                *v.Reason,
+		SubjectID:             *v.SubjectID,
 		AssociationID:         *v.AssociationID,
 		McpServerID:           *v.McpServerID,
 		ProjectID:             *v.ProjectID,
 		RemoteSessionClientID: *v.RemoteSessionClientID,
 		AuthClientID:          v.AuthClientID,
+	}
+	res.BindingIds = make([]string, len(v.BindingIds))
+	for i, val := range v.BindingIds {
+		res.BindingIds[i] = val
+	}
+	res.SourceIds = make([]string, len(v.SourceIds))
+	for i, val := range v.SourceIds {
+		res.SourceIds[i] = val
+	}
+	res.ServerIds = make([]string, len(v.ServerIds))
+	for i, val := range v.ServerIds {
+		res.ServerIds[i] = val
+	}
+
+	return res
+}
+
+// unmarshalAdminUpstreamOAuthMigrationAuthClientKindResponseBodyToAdminAdminUpstreamOAuthMigrationAuthClientKind
+// builds a value of type *admin.AdminUpstreamOAuthMigrationAuthClientKind from
+// a value of type *AdminUpstreamOAuthMigrationAuthClientKindResponseBody.
+func unmarshalAdminUpstreamOAuthMigrationAuthClientKindResponseBodyToAdminAdminUpstreamOAuthMigrationAuthClientKind(v *AdminUpstreamOAuthMigrationAuthClientKindResponseBody) *admin.AdminUpstreamOAuthMigrationAuthClientKind {
+	res := &admin.AdminUpstreamOAuthMigrationAuthClientKind{
+		Kind:               *v.Kind,
+		Decided:            *v.Decided,
+		PendingClients:     *v.PendingClients,
+		PendingLinks:       *v.PendingLinks,
+		PendingHeaders:     *v.PendingHeaders,
+		PendingRetirements: *v.PendingRetirements,
+		Unresolved:         *v.Unresolved,
 	}
 
 	return res
