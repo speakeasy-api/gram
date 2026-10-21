@@ -222,15 +222,15 @@ Constraints: every unique index on `plugin_servers` that the re-key touches (`pl
 
 Nothing visible to users changes: a soft-deleted member is not in any plugin package or listing. So the re-key writes no audit rows and requests no plugin publication. The journal is the record.
 
-| Outcome                     | Meaning                                                                                                                                                                                          |
-| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `would_rekey` / `rekeyed`   | The removal record now carries the canonical server key; `deleted_at` is unchanged.                                                                                                              |
-| `orphaned`                  | The toolset or its project is deleted; `reason` is "toolset deleted" or "project deleted". Left for AIM-581.                                                                                       |
-| `blocked_no_wrapper`        | The toolset is not in the plugin's project ("toolset is not in the row's project"), or it is live but has no live canonical server (`id = toolset_id`, same project). Left for AIM-581.         |
-| `blocked_duplicate_removal` | The plugin already has a soft-deleted server-keyed row for the canonical server, or an earlier row of this run re-keys one, and that row already blocks the re-add. Left for AIM-581.            |
-| `blocked_live`              | A live toolset-keyed member; this mode never touches it.                                                                                                                                         |
-| `skipped`                   | The row changed concurrently; rerun.                                                                                                                                                             |
-| `commit_unknown`            | The commit errored after the server may have committed; the run stops. The journal covers the row either way.                                                                                    |
+| Outcome                     | Meaning                                                                                                                                                                                 |
+| --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `would_rekey` / `rekeyed`   | The removal record now carries the canonical server key; `deleted_at` is unchanged.                                                                                                     |
+| `orphaned`                  | The toolset or its project is deleted; `reason` is "toolset deleted" or "project deleted". Left for AIM-581.                                                                            |
+| `blocked_no_wrapper`        | The toolset is not in the plugin's project ("toolset is not in the row's project"), or it is live but has no live canonical server (`id = toolset_id`, same project). Left for AIM-581. |
+| `blocked_duplicate_removal` | The plugin already has a soft-deleted server-keyed row for the canonical server, or an earlier row of this run re-keys one, and that row already blocks the re-add. Left for AIM-581.   |
+| `blocked_live`              | A live toolset-keyed member; this mode never touches it.                                                                                                                                |
+| `skipped`                   | The row changed concurrently; rerun.                                                                                                                                                    |
+| `commit_unknown`            | The commit errored after the server may have committed; the run stops. The journal covers the row either way.                                                                           |
 
 The run tracks the (plugin, canonical server) pairs it re-keys, or in a dry run would re-key, so a dry run reports the same `blocked_duplicate_removal` rows as the apply.
 
