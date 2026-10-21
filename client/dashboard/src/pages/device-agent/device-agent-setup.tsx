@@ -1207,7 +1207,11 @@ function IdentityStep({ os }: { os: OsKey }) {
             value="personal"
             icon="user"
             title="Personal / PoC"
-            desc="Sign in once with the agent CLI."
+            desc={
+              os === "linux"
+                ? "Sign in once with the agent CLI."
+                : "Sign in once in the agent app."
+            }
           />
         </TabsList>
         <TabsContent value="fleet" className="pt-2">
