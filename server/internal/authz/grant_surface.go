@@ -29,6 +29,8 @@ var scopeGrantSurfaces = map[Scope]GrantSurface{
 	ScopeMCPBlockedWrite:         GrantSurfaceAccess,
 	ScopeMCPConnect:              GrantSurfaceAccess,
 	ScopeMCPBlockedConnect:       GrantSurfaceAccess,
+	ScopeMCPAuth:                 GrantSurfaceAccess,
+	ScopeMCPBlockedAuth:          GrantSurfaceAccess,
 	ScopeEnvironmentRead:         GrantSurfaceAccess,
 	ScopeEnvironmentBlockedRead:  GrantSurfaceAccess,
 	ScopeEnvironmentWrite:        GrantSurfaceAccess,

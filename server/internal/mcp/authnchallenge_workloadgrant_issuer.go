@@ -67,7 +67,7 @@ func (s *Service) handleIssuerWorkloadAssertionGrant(ctx context.Context, w http
 	if _, _, err := subject.Workload(); err != nil {
 		return s.writeWorkloadGrantRefusal(ctx, w, logger, presented, refuseWorkloadGrant("assertion_subject_invalid", err))
 	}
-	version := runtimepolicy.CurrentDelegatedPolicyVersion
+	version := runtimepolicy.IssuedDelegatedPolicyVersion
 	delegatedGrants, err := encodeIssuerWorkloadSessionPolicy(shared.projectID, version)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "encode issuer workload session policy").LogError(ctx, logger)

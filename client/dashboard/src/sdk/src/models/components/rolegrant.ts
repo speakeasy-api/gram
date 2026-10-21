@@ -33,6 +33,8 @@ export const Scope = {
   McpBlockedWrite: "mcp:blocked_write",
   McpConnect: "mcp:connect",
   McpBlockedConnect: "mcp:blocked_connect",
+  McpAuth: "mcp:auth",
+  McpBlockedAuth: "mcp:blocked_auth",
   EnvironmentRead: "environment:read",
   EnvironmentBlockedRead: "environment:blocked_read",
   EnvironmentWrite: "environment:write",
