@@ -730,7 +730,7 @@ func TestDispatchRejectsLLMLaneWithPolicyID(t *testing.T) {
 	require.Empty(t, llmPub.messages)
 }
 
-func TestDispatchHonorsFlagLimitForContentBodyAndToolCalls(t *testing.T) {
+func TestDispatchHonorsWholeMessageBudgetInPriorityOrder(t *testing.T) {
 	t.Parallel()
 
 	te := setupInboxTest(t, "replica-dispatch-request-limit")
@@ -739,13 +739,16 @@ func TestDispatchHonorsFlagLimitForContentBodyAndToolCalls(t *testing.T) {
 	const limit = 2048
 	dispatcher := testLLMDispatcher(te, llmPub, DispatcherConfig{WaitTimeout: time.Second, LaneWaitTimeout: nil, Flags: contentLimitFlags(t, limit)})
 
-	expectedContent := strings.Repeat("c", limit)
-	expectedBody := strings.Repeat("b", limit-1)
+	expectedContent := strings.Repeat("c", 1024)
+	expectedBody := strings.Repeat("b", 1023)
+	expectedArguments := strings.Repeat("a", 256)
 	request := llmDispatchRequest([]Lane{llmLane}, testOrigins(llmLane))
-	request.Content = expectedContent + "tail"
+	request.Content = expectedContent
 	request.Body = expectedBody + "€tail"
-	expectedArguments := strings.Repeat("a", limit)
-	request.ToolCalls = []ToolCall{{ID: "toolu_1", Name: "bash", Arguments: expectedArguments + "tail"}}
+	request.ToolCalls = []ToolCall{
+		{ID: "toolu_1", Name: "bash", Arguments: expectedArguments + "tail"},
+		{ID: "toolu_2", Name: "read_file", Arguments: `{"path":".env"}`},
+	}
 
 	outcome, err := dispatcher.Dispatch(t.Context(), request)
 	require.NoError(t, err)
@@ -756,8 +759,11 @@ func TestDispatchHonorsFlagLimitForContentBodyAndToolCalls(t *testing.T) {
 	require.Equal(t, expectedContent, message.GetContent())
 	require.Equal(t, expectedBody, message.GetBody())
 	require.True(t, utf8.ValidString(message.GetBody()))
-	require.Len(t, message.GetToolCalls(), 1)
-	require.Equal(t, expectedArguments, message.GetToolCalls()[0].GetArguments())
+	require.Len(t, message.GetToolCalls(), 2)
+	require.Equal(t, expectedArguments[:1], message.GetToolCalls()[0].GetArguments())
+	require.Empty(t, message.GetToolCalls()[1].GetArguments())
+	require.Equal(t, limit, len(message.GetContent())+len(message.GetBody())+len(message.GetToolCalls()[0].GetArguments())+len(message.GetToolCalls()[1].GetArguments()))
+	require.Equal(t, expectedArguments+"tail", request.ToolCalls[0].Arguments)
 	require.True(t, message.GetContentTruncated())
 	var metrics metricdata.ResourceMetrics
 	require.NoError(t, te.reader.Collect(t.Context(), &metrics))

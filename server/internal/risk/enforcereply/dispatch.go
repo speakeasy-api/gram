@@ -39,12 +39,12 @@ const (
 	// below the LLMEnforcer subscription's 30 s ack deadline.
 	DefaultLLMAnalyzerWaitTimeout = 20 * time.Second
 
-	// DefaultMaxContentBytes is the enforcement dispatch limit when callers do
-	// not provide one.
+	// DefaultMaxContentBytes is the combined enforcement payload-field budget
+	// when callers do not provide one.
 	DefaultMaxContentBytes = 50 * 1024
 
 	// MaxContentBytes is the hard ceiling below Pub/Sub's transport limit.
-	// It applies independently to Content and to the LLM lane's Body.
+	// Content, Body, and tool-call arguments share this budget.
 	MaxContentBytes = 1 * 1024 * 1024
 
 	// contentLimitDistinctID keys the global content limit flag; the flag
@@ -275,14 +275,18 @@ func (d *Dispatcher) Dispatch(ctx context.Context, request DispatchRequest) (Out
 		return Outcome{ByLane: map[Lane]*riskv1.EnforcementReply{}, Failed: map[Lane]error{}, Complete: true, Deadline: false, Truncated: false}, nil
 	}
 	limit := d.contentLimit(ctx)
+	remaining := limit
 	truncated := false
 	truncate := func(field string, value string) string {
-		if len(value) <= limit {
+		if len(value) <= remaining {
+			remaining -= len(value)
 			return value
 		}
 		truncated = true
-		d.logger.WarnContext(ctx, "truncating oversized enforcement "+field, attr.SlogRiskScanTextSize(len(value)), attr.SlogRiskScanLimitBytes(limit))
-		return truncateAtRuneBoundary(value, limit)
+		d.logger.WarnContext(ctx, "truncating oversized enforcement "+field, attr.SlogRiskScanTextSize(len(value)), attr.SlogRiskScanLimitBytes(remaining))
+		value = truncateAtRuneBoundary(value, remaining)
+		remaining -= len(value)
+		return value
 	}
 	request.Content = truncate("content", request.Content)
 	request.Body = truncate("body", request.Body)
