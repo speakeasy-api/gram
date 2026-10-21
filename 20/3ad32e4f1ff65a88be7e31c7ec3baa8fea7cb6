@@ -1,0 +1,53 @@
+server/internal/directory/queries.sql
+  h_9630b74bdac540 397,405,725
+server/design/access/design.go
+  h_9630b74bdac540 178
+server/internal/directory/names.go
+  h_9630b74bdac540 47,63-68
+server/internal/access/directory_people.go
+  h_9630b74bdac540 25-27,33,55-56,64-76,83,86-89
+server/cmd/directory-id-backfill/README.md
+  h_9630b74bdac540 27-40
+server/internal/directory/names_test.go
+  h_9630b74bdac540 103-114
+server/internal/access/directory_people_test.go
+  h_9630b74bdac540 24,83,146,173-179,181,185,188-200,202-204
+  s_23cdbdfc1bf02a::t_0e5f174209cdbf 201
+.speakeasy/out.openapi.yaml
+  h_9630b74bdac540 1672
+client/dashboard/src/sdk/src/funcs/accessListDirectoryPeople.ts
+  h_9630b74bdac540 45
+client/dashboard/src/sdk/src/react-query/directoryPeople.ts
+  h_9630b74bdac540 62,88
+client/dashboard/src/sdk/src/sdk/access.ts
+  h_9630b74bdac540 485
+server/gen/access/service.go
+  h_9630b74bdac540 35-36
+server/gen/http/cli/gram/cli.go
+  h_9630b74bdac540 12987,13163
+server/gen/http/openapi3.yaml
+  h_9630b74bdac540 9590
+server/internal/directory/repo/queries.sql.go
+  h_9630b74bdac540 351,1007,1015
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "203ad32e4f1ff65a88be7e31c7ec3baa8fea7cb6",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  },
+  "sessions": {
+    "s_23cdbdfc1bf02a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7790bdcf-35e7-462a-a665-3cbb80e88213",
+        "model": "unknown"
+      },
+      "human_author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}
