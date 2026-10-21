@@ -44,9 +44,6 @@ export function OverviewTab({
       // For tunneled servers the marketplace banner sits above the tunnel
       // status, so the usage dashboard must not show it a second time.
       showPluginBanner={!tunneled}
-      // Tool Logs does not mark MCP errors from tunneled servers as failed;
-      // tunnel Activity counts them, so show failures only there.
-      failuresTracked={!tunneled}
       // Tool Logs cannot currently filter a tunneled target by id. Treating
       // it as hosted or shadow would silently show the wrong server's calls.
       logsTarget={tunneled ? null : { type: "hosted", id: mcpServer.slug }}
