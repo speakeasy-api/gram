@@ -81,7 +81,8 @@ type CreateAuthClientParams struct {
 // still being live and in that organization's reach, the client owned as
 // decided and associated with a live server of a live project there. A
 // self-owned client is never platform-global. A concurrent run recording the
-// same client fails the type's unique key. The id is stable for the
+// same client either fails the type's unique key or, under the same id, finds
+// it live and returns no row. The id is stable for the
 // organization, registration and type, so a client retired when its last
 // association went away is revived under the same id when one returns; only
 // its deletion is undone.
@@ -2225,9 +2226,10 @@ WITH retired AS (
     AND NOT EXISTS (
       SELECT 1
       FROM mcp_server_auth_clients AS l
-      JOIN mcp_servers AS s ON s.id = l.mcp_server_id AND s.project_id = l.project_id
+      JOIN mcp_servers AS s ON s.id = l.mcp_server_id AND s.project_id = l.project_id AND s.deleted IS FALSE
       WHERE l.auth_client_id = ac.id
         AND l.organization_id = ac.organization_id
+        AND l.deleted IS FALSE
         AND (
           EXISTS (
             SELECT 1 FROM remote_mcp_server_headers AS h
