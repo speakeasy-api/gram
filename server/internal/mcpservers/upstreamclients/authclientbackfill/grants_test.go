@@ -24,6 +24,13 @@ func (f *fixture) grant(principal urn.Principal, scope authz.Scope, selector aut
 	require.NoError(f.t, err)
 }
 
+func (f *fixture) provisions() []ListAuthPermissionProvisionsFixtureRow {
+	f.t.Helper()
+	rows, err := f.q.ListAuthPermissionProvisionsFixture(f.t.Context(), f.orgID)
+	require.NoError(f.t, err)
+	return rows
+}
+
 func (f *fixture) grantsOf(principal urn.Principal) []authz.Grant {
 	f.t.Helper()
 	grants, err := authz.LoadGrants(f.t.Context(), f.pool, f.orgID, []urn.Principal{principal})
@@ -195,20 +202,73 @@ func TestRun_AgentsGetThePersonalDefault(t *testing.T) {
 	require.Contains(t, f.grantsOf(agent), authz.Grant{PrincipalUrn: agent.String(), Scope: authz.ScopeMCPAuth, Selector: authz.PersonalAuthClientSelector()})
 }
 
-func TestRun_KeyPoliciesAreWrittenOnce(t *testing.T) {
+func TestRun_ProvisionedKeyPoliciesGetLaterClients(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
 	key := f.apiKey(uuid.NullUUID{}, "consumer")
 	f.run(true)
 
-	// A later client is not added: a provisioned policy cannot be told from
-	// one an admin wrote with the same shape.
 	serverID, clientID := f.sharedClient()
 	ctx := contextvalues.WithLegacyAPIKeyAuthorization(t.Context(), &contextvalues.AuthContext{ActiveOrganizationID: f.orgID, APIKeyID: key.String(), AccountType: "enterprise"})
 	use := authz.MCPAuthClientCheck(clientID.String(), authz.MCPAuthClientDimensions{ClientType: TypeServiceAccount, ProjectID: f.projectID.String(), ConnectionOwner: ""})
-	require.True(t, mandatory(t, ctx, f, authz.MCPCheck(authz.ScopeMCPConnect, serverID.String(), f.projectID.String())).Allowed)
-	require.False(t, mandatory(t, ctx, f, use).Allowed)
-	require.Zero(t, f.run(false).PendingGrantsByKind[GrantAPIKey])
+	require.True(t, mandatory(t, ctx, f, authz.MCPCheck(authz.ScopeMCPConnect, serverID.String(), f.projectID.String()), use).Allowed,
+		"a policy the backfill wrote gets clients recorded since")
+	require.Zero(t, f.run(false).PendingGrants)
+}
+
+func TestRun_ExplicitAndTakenOverKeyPoliciesStayPut(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	explicit := f.apiKey(uuid.NullUUID{}, "consumer")
+	f.grant(urn.NewAPIKeyPrincipal(explicit), authz.ScopeMCPConnect, authz.ProjectServersSelector(f.projectID.String()))
+	adopted := f.apiKey(uuid.NullUUID{}, "consumer")
+	f.run(true)
+
+	// An admin writing the provisioned grant takes it over.
+	require.NoError(t, authz.PatchPrincipalGrants(t.Context(), f.pool, f.orgID, urn.NewAPIKeyPrincipal(adopted),
+		[]*authz.RoleGrant{{Scope: string(authz.ScopeMCPConnect), Selectors: []authz.Selector{authz.ProjectServersSelector(f.projectID.String())}}}, nil))
+	for _, row := range f.provisions() {
+		require.NotEqual(t, urn.NewAPIKeyPrincipal(adopted).String(), row.PrincipalUrn, "the admin's grant is no longer provisioned")
+	}
+
+	_, clientID := f.sharedClient()
+	for _, key := range []uuid.UUID{explicit, adopted} {
+		for _, grant := range f.grantsOf(urn.NewAPIKeyPrincipal(key)) {
+			require.NotEqual(t, authz.AuthClientSelector(clientID.String(), f.projectID.String()), grant.Selector, "an admin's policy is never widened")
+		}
+	}
+}
+
+func TestRun_NeverRestoresARemovedDefault(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	key := f.apiKey(uuid.NullUUID{}, "consumer")
+	f.run(true)
+	require.NotEmpty(t, f.provisions())
+
+	personal := []*authz.RoleGrant{{Scope: string(authz.ScopeMCPAuth), Selectors: []authz.Selector{authz.PersonalAuthClientSelector()}}}
+	require.NoError(t, authz.PatchPrincipalGrants(t.Context(), f.pool, f.orgID, authz.AllUsersPrincipal(), nil, personal))
+	keyPolicy := []*authz.RoleGrant{{Scope: string(authz.ScopeMCPConnect), Selectors: []authz.Selector{authz.ProjectServersSelector(f.projectID.String())}}}
+	require.NoError(t, authz.PatchPrincipalGrants(t.Context(), f.pool, f.orgID, urn.NewAPIKeyPrincipal(key), nil, keyPolicy))
+
+	again := f.run(true)
+	require.Zero(t, again.GrantsWritten)
+	require.Empty(t, f.grantsOf(authz.AllUsersPrincipal()), "a removed default stays removed")
+	require.Empty(t, f.grantsOf(urn.NewAPIKeyPrincipal(key)), "a removed key policy stays removed")
+}
+
+func TestRun_RecordsWhatItProvisions(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	f.apiKey(uuid.NullUUID{}, "consumer")
+	report := f.run(true)
+
+	kinds := map[string]int{}
+	for _, row := range f.provisions() {
+		kinds[row.Kind]++
+	}
+	require.Equal(t, map[string]int{string(GrantPersonalDefault): 1, string(GrantAPIKey): 1}, kinds)
+	require.Equal(t, 2, report.GrantsWritten)
 }
 
 func TestRun_KeyPoliciesWaitForEveryClientPhase(t *testing.T) { //nolint:paralleltest // swaps a package seam

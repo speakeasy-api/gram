@@ -116,8 +116,6 @@ type Server struct {
 	ListUpstreamOAuthMigrationOrganizations http.Handler
 	GetUpstreamOAuthMigrationStatus         http.Handler
 	RunUpstreamOAuthMigration               http.Handler
-	GetDefaultAuthPermissionStatus          http.Handler
-	RunDefaultAuthPermissions               http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -242,8 +240,6 @@ func New(
 			{"ListUpstreamOAuthMigrationOrganizations", "GET", "/admin/upstreamOAuthMigration.organizations"},
 			{"GetUpstreamOAuthMigrationStatus", "GET", "/admin/upstreamOAuthMigration.status"},
 			{"RunUpstreamOAuthMigration", "POST", "/admin/upstreamOAuthMigration.run"},
-			{"GetDefaultAuthPermissionStatus", "GET", "/admin/defaultAuthPermissions.status"},
-			{"RunDefaultAuthPermissions", "POST", "/admin/defaultAuthPermissions.run"},
 		},
 		Login:                                   NewLoginHandler(e.Login, mux, decoder, encoder, errhandler, formatter),
 		Callback:                                NewCallbackHandler(e.Callback, mux, decoder, encoder, errhandler, formatter),
@@ -340,8 +336,6 @@ func New(
 		ListUpstreamOAuthMigrationOrganizations: NewListUpstreamOAuthMigrationOrganizationsHandler(e.ListUpstreamOAuthMigrationOrganizations, mux, decoder, encoder, errhandler, formatter),
 		GetUpstreamOAuthMigrationStatus:         NewGetUpstreamOAuthMigrationStatusHandler(e.GetUpstreamOAuthMigrationStatus, mux, decoder, encoder, errhandler, formatter),
 		RunUpstreamOAuthMigration:               NewRunUpstreamOAuthMigrationHandler(e.RunUpstreamOAuthMigration, mux, decoder, encoder, errhandler, formatter),
-		GetDefaultAuthPermissionStatus:          NewGetDefaultAuthPermissionStatusHandler(e.GetDefaultAuthPermissionStatus, mux, decoder, encoder, errhandler, formatter),
-		RunDefaultAuthPermissions:               NewRunDefaultAuthPermissionsHandler(e.RunDefaultAuthPermissions, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -445,8 +439,6 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.ListUpstreamOAuthMigrationOrganizations = m(s.ListUpstreamOAuthMigrationOrganizations)
 	s.GetUpstreamOAuthMigrationStatus = m(s.GetUpstreamOAuthMigrationStatus)
 	s.RunUpstreamOAuthMigration = m(s.RunUpstreamOAuthMigration)
-	s.GetDefaultAuthPermissionStatus = m(s.GetDefaultAuthPermissionStatus)
-	s.RunDefaultAuthPermissions = m(s.RunDefaultAuthPermissions)
 }
 
 // MethodNames returns the methods served.
@@ -549,8 +541,6 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountListUpstreamOAuthMigrationOrganizationsHandler(mux, h.ListUpstreamOAuthMigrationOrganizations)
 	MountGetUpstreamOAuthMigrationStatusHandler(mux, h.GetUpstreamOAuthMigrationStatus)
 	MountRunUpstreamOAuthMigrationHandler(mux, h.RunUpstreamOAuthMigration)
-	MountGetDefaultAuthPermissionStatusHandler(mux, h.GetDefaultAuthPermissionStatus)
-	MountRunDefaultAuthPermissionsHandler(mux, h.RunDefaultAuthPermissions)
 }
 
 // Mount configures the mux to serve the admin endpoints.
@@ -5648,114 +5638,6 @@ func NewRunUpstreamOAuthMigrationHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "runUpstreamOAuthMigration")
-		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
-		payload, err := decodeRequest(r)
-		if err != nil {
-			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-			return
-		}
-		res, err := endpoint(ctx, payload)
-		if err != nil {
-			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-			return
-		}
-		if err := encodeResponse(ctx, w, res); err != nil {
-			if errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-		}
-	})
-}
-
-// MountGetDefaultAuthPermissionStatusHandler configures the mux to serve the
-// "admin" service "getDefaultAuthPermissionStatus" endpoint.
-func MountGetDefaultAuthPermissionStatusHandler(mux goahttp.Muxer, h http.Handler) {
-	f, ok := h.(http.HandlerFunc)
-	if !ok {
-		f = func(w http.ResponseWriter, r *http.Request) {
-			h.ServeHTTP(w, r)
-		}
-	}
-	mux.Handle("GET", "/admin/defaultAuthPermissions.status", f)
-}
-
-// NewGetDefaultAuthPermissionStatusHandler creates a HTTP handler which loads
-// the HTTP request and calls the "admin" service
-// "getDefaultAuthPermissionStatus" endpoint.
-func NewGetDefaultAuthPermissionStatusHandler(
-	endpoint goa.Endpoint,
-	mux goahttp.Muxer,
-	decoder func(*http.Request) goahttp.Decoder,
-	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
-	errhandler func(context.Context, http.ResponseWriter, error),
-	formatter func(ctx context.Context, err error) goahttp.Statuser,
-) http.Handler {
-	var (
-		decodeRequest  = DecodeGetDefaultAuthPermissionStatusRequest(mux, decoder)
-		encodeResponse = EncodeGetDefaultAuthPermissionStatusResponse(encoder)
-		encodeError    = EncodeGetDefaultAuthPermissionStatusError(encoder, formatter)
-	)
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
-		ctx = context.WithValue(ctx, goa.MethodKey, "getDefaultAuthPermissionStatus")
-		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
-		payload, err := decodeRequest(r)
-		if err != nil {
-			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-			return
-		}
-		res, err := endpoint(ctx, payload)
-		if err != nil {
-			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-			return
-		}
-		if err := encodeResponse(ctx, w, res); err != nil {
-			if errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-		}
-	})
-}
-
-// MountRunDefaultAuthPermissionsHandler configures the mux to serve the
-// "admin" service "runDefaultAuthPermissions" endpoint.
-func MountRunDefaultAuthPermissionsHandler(mux goahttp.Muxer, h http.Handler) {
-	f, ok := h.(http.HandlerFunc)
-	if !ok {
-		f = func(w http.ResponseWriter, r *http.Request) {
-			h.ServeHTTP(w, r)
-		}
-	}
-	mux.Handle("POST", "/admin/defaultAuthPermissions.run", f)
-}
-
-// NewRunDefaultAuthPermissionsHandler creates a HTTP handler which loads the
-// HTTP request and calls the "admin" service "runDefaultAuthPermissions"
-// endpoint.
-func NewRunDefaultAuthPermissionsHandler(
-	endpoint goa.Endpoint,
-	mux goahttp.Muxer,
-	decoder func(*http.Request) goahttp.Decoder,
-	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
-	errhandler func(context.Context, http.ResponseWriter, error),
-	formatter func(ctx context.Context, err error) goahttp.Statuser,
-) http.Handler {
-	var (
-		decodeRequest  = DecodeRunDefaultAuthPermissionsRequest(mux, decoder)
-		encodeResponse = EncodeRunDefaultAuthPermissionsResponse(encoder)
-		encodeError    = EncodeRunDefaultAuthPermissionsError(encoder, formatter)
-	)
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
-		ctx = context.WithValue(ctx, goa.MethodKey, "runDefaultAuthPermissions")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
 		payload, err := decodeRequest(r)
 		if err != nil {

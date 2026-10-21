@@ -1733,12 +1733,13 @@ FROM principal_grants
 WHERE organization_id = @organization_id
   AND scope = ANY(@scopes::text[]);
 
--- name: ListAPIKeyPrincipalsWithGrants :many
--- Keys that already hold a policy, which is never changed here.
-SELECT DISTINCT principal_urn
+-- name: ListAPIKeyGrantRows :many
+-- Every key policy row, to tell provisioned policies from explicit ones.
+SELECT principal_urn, scope, selectors
 FROM principal_grants
 WHERE organization_id = @organization_id
-  AND principal_type = 'api_key';
+  AND principal_type = 'api_key'
+ORDER BY principal_urn, scope, id;
 
 -- name: ListActiveLegacyAPIKeys :many
 -- Live legacy keys, matching admission's active predicate.
@@ -1756,6 +1757,31 @@ FROM projects
 WHERE organization_id = @organization_id
   AND deleted IS FALSE
 ORDER BY id;
+
+-- name: ListOrganizationIDsForGrants :many
+-- Every organization, for the offline default auth permission backfill.
+SELECT id
+FROM organization_metadata
+ORDER BY id;
+
+-- name: ListAuthPermissionProvisions :many
+-- Every grant the backfill provisioned in the organization, live or since
+-- removed.
+SELECT principal_urn, scope, selectors
+FROM auth_permission_provisions
+WHERE organization_id = @organization_id;
+
+-- name: RecordAuthPermissionProvision :exec
+-- Records one grant the backfill wrote.
+INSERT INTO auth_permission_provisions (organization_id, principal_urn, scope, selectors, kind)
+VALUES (@organization_id, @principal_urn, @scope, @selectors, @kind)
+ON CONFLICT (organization_id, principal_urn, scope, selectors) DO NOTHING;
+
+-- name: ListAuthPermissionProvisionsFixture :many
+SELECT principal_urn, scope, selectors, kind
+FROM auth_permission_provisions
+WHERE organization_id = @organization_id
+ORDER BY principal_urn, scope;
 
 -- name: SeedUpstreamSelectionFixture :exec
 INSERT INTO upstream_client_selections (project_id, organization_id, credential_kind, credential_id, mcp_server_id, no_auth, source, auth_client_id, auth_client_attachment_scope)

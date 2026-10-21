@@ -233,10 +233,6 @@ describe("AppSidebar", () => {
             href: "/upstream-oauth-migration",
           },
           {
-            label: "Default auth permissions",
-            href: "/default-auth-permissions",
-          },
-          {
             label: "External MCP migration",
             href: "/external-mcp-migration",
           },

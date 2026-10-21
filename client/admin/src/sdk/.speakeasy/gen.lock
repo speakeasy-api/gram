@@ -51,7 +51,6 @@ trackedFiles:
   src/funcs/adminEnableOrganization.ts: {}
   src/funcs/adminExtendTrial.ts: {}
   src/funcs/adminFetchGlobalIssuerMetadata.ts: {}
-  src/funcs/adminGetDefaultAuthPermissionStatus.ts: {}
   src/funcs/adminGetGlobalIssuer.ts: {}
   src/funcs/adminGetGlobalIssuerDuplicatePreflight.ts: {}
   src/funcs/adminGetGlobalIssuerMigratePreflight.ts: {}
@@ -106,7 +105,6 @@ trackedFiles:
   src/funcs/adminRefreshGlobalIssuerMetadata.ts: {}
   src/funcs/adminRepairInferenceKey.ts: {}
   src/funcs/adminResumeStripeSubscription.ts: {}
-  src/funcs/adminRunDefaultAuthPermissions.ts: {}
   src/funcs/adminRunUpstreamOAuthMigration.ts: {}
   src/funcs/adminSaveRegistryEntry.ts: {}
   src/funcs/adminServeImage.ts: {}
@@ -149,9 +147,6 @@ trackedFiles:
   src/models/components/admincustomerusage.ts: {}
   src/models/components/admincustomerusageproductcost.ts: {}
   src/models/components/admincustomerusageresponse.ts: {}
-  src/models/components/admindefaultauthpermissionkind.ts: {}
-  src/models/components/admindefaultauthpermissionrun.ts: {}
-  src/models/components/admindefaultauthpermissionstatus.ts: {}
   src/models/components/admindeviceagentcell.ts: {}
   src/models/components/adminexternalmcpmigrationcandidate.ts: {}
   src/models/components/adminexternalmcpmigrationoutcome.ts: {}
@@ -282,7 +277,6 @@ trackedFiles:
   src/models/components/repairinferencekeyrequestbody.ts: {}
   src/models/components/resumestripesubscriptionrequestbody.ts: {}
   src/models/components/riskidrequestbody.ts: {}
-  src/models/components/rundefaultauthpermissionsrequestbody.ts: {}
   src/models/components/runupstreamoauthmigrationrequestbody.ts: {}
   src/models/components/saveregistryentryrequestbody.ts: {}
   src/models/components/setinferencekeymonthlylimitrequestbody.ts: {}
@@ -321,7 +315,6 @@ trackedFiles:
   src/models/errors/serviceerror.ts: {}
   src/models/operations/admindeleteglobalissuer.ts: {}
   src/models/operations/admindescribemcpserverhealth.ts: {}
-  src/models/operations/admingetdefaultauthpermissionstatus.ts: {}
   src/models/operations/admingetglobalissuer.ts: {}
   src/models/operations/admingetglobalissuerduplicatepreflight.ts: {}
   src/models/operations/admingetglobalissuermigratepreflight.ts: {}
@@ -374,8 +367,6 @@ trackedFiles:
   src/react-query/adminEnableOrganization.ts: {}
   src/react-query/adminExtendTrial.ts: {}
   src/react-query/adminFetchGlobalIssuerMetadata.ts: {}
-  src/react-query/adminGetDefaultAuthPermissionStatus.core.ts: {}
-  src/react-query/adminGetDefaultAuthPermissionStatus.ts: {}
   src/react-query/adminGetGlobalIssuer.core.ts: {}
   src/react-query/adminGetGlobalIssuer.ts: {}
   src/react-query/adminGetGlobalIssuerDuplicatePreflight.core.ts: {}
@@ -475,7 +466,6 @@ trackedFiles:
   src/react-query/adminRefreshGlobalIssuerMetadata.ts: {}
   src/react-query/adminRepairInferenceKey.ts: {}
   src/react-query/adminResumeStripeSubscription.ts: {}
-  src/react-query/adminRunDefaultAuthPermissions.ts: {}
   src/react-query/adminRunUpstreamOAuthMigration.ts: {}
   src/react-query/adminSaveRegistryEntry.ts: {}
   src/react-query/adminServeImage.core.ts: {}
@@ -779,18 +769,6 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
-  adminGetDefaultAuthPermissionStatus:
-    speakeasy-default-admin-get-default-auth-permission-status:
-      parameters:
-        query:
-          organization_id: "<id>"
-      responses:
-        "200":
-          application/json: {"api_keys_waiting": false, "complete": false, "kinds": [{"kind": "<value>", "pending": 222814}], "pending_grants": 529650}
-        "400":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
-        "500":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   adminGetGlobalIssuer:
     speakeasy-default-admin-get-global-issuer:
       parameters:
@@ -1477,17 +1455,6 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
-  adminRunDefaultAuthPermissions:
-    speakeasy-default-admin-run-default-auth-permissions:
-      requestBody:
-        application/json: {"organization_id": "<id>"}
-      responses:
-        "200":
-          application/json: {"grants_written": 500255, "status": {"api_keys_waiting": false, "complete": true, "kinds": [], "pending_grants": 7321}}
-        "400":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
-        "500":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   adminRunUpstreamOAuthMigration:
     speakeasy-default-admin-run-upstream-O-auth-migration:
       requestBody:

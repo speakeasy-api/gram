@@ -202,7 +202,7 @@ func UsageCommands() []string {
 		"tunneled-mcp (create-server|list-servers|get-server|list-server-connections|get-server-metrics|update-server|rotate-server-key|delete-server)",
 		"unproxied-mcp (create-server|list-servers|get-server|delete-server)",
 		"usage (get-period-usage|get-meter-usage|get-spend-breakdown|get-tokens-under-management|set-billing-metadata|get-billing-email|set-billing-email|set-spend-cap|get-inference-spend-caps|get-usage-tiers|create-customer-session|create-checkout|create-stripe-checkout|get-stripe-subscription|get-payg-billing-summary|create-stripe-portal-session|cancel-stripe-subscription|resume-stripe-subscription|create-top-up-checkout)",
-		"admin (login|callback|logout|get-session|get-organization-features|set-organization-feature|get-organization-chat-analysis-settings|set-organization-chat-analysis-settings|trigger-organization-chat-analysis|open-organization-in-dashboard|get-project|update-organization|bulk-update-account-type|disable-organization|enable-organization|get-organization|list-organization-members|list-organization-projects|list-project-mcp-servers|list-organization-activity|list-users|list-user-organizations|list-organizations|extend-trial|create-organization|rearm-trial|get-organization-stats|repair-inference-key|get-inference-keys|set-inference-key-monthly-limit|get-inference-spend-history|get-payg-billing-summary|get-stripe-customer|set-stripe-customer|get-stripe-subscription|cancel-stripe-subscription|resume-stripe-subscription|mark-enterprise-trial-converted|create-global-issuer|get-global-issuer-duplicate-preflight|list-global-issuers|get-global-issuer|update-global-issuer|delete-global-issuer|fetch-global-issuer-metadata|refresh-global-issuer-metadata|list-global-issuer-convergence-candidates|get-global-issuer-migrate-preflight|migrate-to-global-issuer|upload-platform-image|serve-image|start-trial|change-trial-end-date|get-meter-usage|get-spend-breakdown|get-support-matrix|update-support-matrix|get-support-coverage|describe-mcp-server-health|get-mcp-server-tool-calls|get-hook-clients|list-external-mcp-migration-candidates|preview-external-mcp-migration|migrate-external-mcp-servers|get-registry-okta-candidates|list-registry-okta-unmapped|list-registry-entries|get-registry-entry|create-registry-entry|save-registry-entry|set-registry-entry-published|list-onboarding-steps|get-onboarding-stack-options|get-organization-onboarding-stack|set-organization-onboarding-stack|list-onboarding-use-cases|create-onboarding-use-case|update-onboarding-use-case|delete-onboarding-use-case|list-onboarding-playbooks|create-onboarding-playbook|update-onboarding-playbook|delete-onboarding-playbook|clone-onboarding-playbook|get-organization-onboarding-playbook|assign-organization-onboarding-playbook|list-signup-offers|create-signup-offer|update-signup-offer|get-stripe-subscription-candidate|set-stripe-subscription|list-customer-usage|list-upstreamoauth-migration-organizations|get-upstreamoauth-migration-status|run-upstreamoauth-migration|get-default-auth-permission-status|run-default-auth-permissions)",
+		"admin (login|callback|logout|get-session|get-organization-features|set-organization-feature|get-organization-chat-analysis-settings|set-organization-chat-analysis-settings|trigger-organization-chat-analysis|open-organization-in-dashboard|get-project|update-organization|bulk-update-account-type|disable-organization|enable-organization|get-organization|list-organization-members|list-organization-projects|list-project-mcp-servers|list-organization-activity|list-users|list-user-organizations|list-organizations|extend-trial|create-organization|rearm-trial|get-organization-stats|repair-inference-key|get-inference-keys|set-inference-key-monthly-limit|get-inference-spend-history|get-payg-billing-summary|get-stripe-customer|set-stripe-customer|get-stripe-subscription|cancel-stripe-subscription|resume-stripe-subscription|mark-enterprise-trial-converted|create-global-issuer|get-global-issuer-duplicate-preflight|list-global-issuers|get-global-issuer|update-global-issuer|delete-global-issuer|fetch-global-issuer-metadata|refresh-global-issuer-metadata|list-global-issuer-convergence-candidates|get-global-issuer-migrate-preflight|migrate-to-global-issuer|upload-platform-image|serve-image|start-trial|change-trial-end-date|get-meter-usage|get-spend-breakdown|get-support-matrix|update-support-matrix|get-support-coverage|describe-mcp-server-health|get-mcp-server-tool-calls|get-hook-clients|list-external-mcp-migration-candidates|preview-external-mcp-migration|migrate-external-mcp-servers|get-registry-okta-candidates|list-registry-okta-unmapped|list-registry-entries|get-registry-entry|create-registry-entry|save-registry-entry|set-registry-entry-published|list-onboarding-steps|get-onboarding-stack-options|get-organization-onboarding-stack|set-organization-onboarding-stack|list-onboarding-use-cases|create-onboarding-use-case|update-onboarding-use-case|delete-onboarding-use-case|list-onboarding-playbooks|create-onboarding-playbook|update-onboarding-playbook|delete-onboarding-playbook|clone-onboarding-playbook|get-organization-onboarding-playbook|assign-organization-onboarding-playbook|list-signup-offers|create-signup-offer|update-signup-offer|get-stripe-subscription-candidate|set-stripe-subscription|list-customer-usage|list-upstreamoauth-migration-organizations|get-upstreamoauth-migration-status|run-upstreamoauth-migration)",
 		"user-session-clients (list-user-session-clients|get-user-session-client|refresh-user-session-client-cimd|revoke-user-session-client)",
 		"user-session-consents (list-user-session-consents|revoke-user-session-consent)",
 		"user-session-issuers-cimd-clients (list-presets|create-user-session-issuer-cimd-client|verify-url|list-user-session-issuer-cimd-clients|get-user-session-issuer-cimd-client|delete-user-session-issuer-cimd-client)",
@@ -4805,14 +4805,6 @@ func ParseEndpoint(
 		adminRunUpstreamOAuthMigrationBodyFlag              = adminRunUpstreamOAuthMigrationFlags.String("body", "REQUIRED", "")
 		adminRunUpstreamOAuthMigrationAdminSessionTokenFlag = adminRunUpstreamOAuthMigrationFlags.String("admin-session-token", "", "")
 
-		adminGetDefaultAuthPermissionStatusFlags                 = flag.NewFlagSet("get-default-auth-permission-status", flag.ExitOnError)
-		adminGetDefaultAuthPermissionStatusOrganizationIDFlag    = adminGetDefaultAuthPermissionStatusFlags.String("organization-id", "REQUIRED", "")
-		adminGetDefaultAuthPermissionStatusAdminSessionTokenFlag = adminGetDefaultAuthPermissionStatusFlags.String("admin-session-token", "", "")
-
-		adminRunDefaultAuthPermissionsFlags                 = flag.NewFlagSet("run-default-auth-permissions", flag.ExitOnError)
-		adminRunDefaultAuthPermissionsBodyFlag              = adminRunDefaultAuthPermissionsFlags.String("body", "REQUIRED", "")
-		adminRunDefaultAuthPermissionsAdminSessionTokenFlag = adminRunDefaultAuthPermissionsFlags.String("admin-session-token", "", "")
-
 		userSessionClientsFlags = flag.NewFlagSet("user-session-clients", flag.ContinueOnError)
 
 		userSessionClientsListUserSessionClientsFlags                   = flag.NewFlagSet("list-user-session-clients", flag.ExitOnError)
@@ -6187,8 +6179,6 @@ func ParseEndpoint(
 	adminListUpstreamOAuthMigrationOrganizationsFlags.Usage = adminListUpstreamOAuthMigrationOrganizationsUsage
 	adminGetUpstreamOAuthMigrationStatusFlags.Usage = adminGetUpstreamOAuthMigrationStatusUsage
 	adminRunUpstreamOAuthMigrationFlags.Usage = adminRunUpstreamOAuthMigrationUsage
-	adminGetDefaultAuthPermissionStatusFlags.Usage = adminGetDefaultAuthPermissionStatusUsage
-	adminRunDefaultAuthPermissionsFlags.Usage = adminRunDefaultAuthPermissionsUsage
 
 	userSessionClientsFlags.Usage = userSessionClientsUsage
 	userSessionClientsListUserSessionClientsFlags.Usage = userSessionClientsListUserSessionClientsUsage
@@ -9363,12 +9353,6 @@ func ParseEndpoint(
 			case "run-upstreamoauth-migration":
 				epf = adminRunUpstreamOAuthMigrationFlags
 
-			case "get-default-auth-permission-status":
-				epf = adminGetDefaultAuthPermissionStatusFlags
-
-			case "run-default-auth-permissions":
-				epf = adminRunDefaultAuthPermissionsFlags
-
 			}
 
 		case "user-session-clients":
@@ -12516,12 +12500,6 @@ func ParseEndpoint(
 			case "run-upstreamoauth-migration":
 				endpoint = c.RunUpstreamOAuthMigration()
 				data, err = adminc.BuildRunUpstreamOAuthMigrationPayload(*adminRunUpstreamOAuthMigrationBodyFlag, *adminRunUpstreamOAuthMigrationAdminSessionTokenFlag)
-			case "get-default-auth-permission-status":
-				endpoint = c.GetDefaultAuthPermissionStatus()
-				data, err = adminc.BuildGetDefaultAuthPermissionStatusPayload(*adminGetDefaultAuthPermissionStatusOrganizationIDFlag, *adminGetDefaultAuthPermissionStatusAdminSessionTokenFlag)
-			case "run-default-auth-permissions":
-				endpoint = c.RunDefaultAuthPermissions()
-				data, err = adminc.BuildRunDefaultAuthPermissionsPayload(*adminRunDefaultAuthPermissionsBodyFlag, *adminRunDefaultAuthPermissionsAdminSessionTokenFlag)
 			}
 		case "user-session-clients":
 			c := usersessionclientsc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -31426,8 +31404,6 @@ func adminUsage() {
 	fmt.Fprintln(os.Stderr, `    list-upstreamoauth-migration-organizations: Lists every organization the upstream OAuth migration applies to, so staff can check and migrate them one by one.`)
 	fmt.Fprintln(os.Stderr, `    get-upstreamoauth-migration-status: Reports where one organization stands in the upstream OAuth migration from a dry run that writes nothing.`)
 	fmt.Fprintln(os.Stderr, `    run-upstreamoauth-migration: Migrates one organization's upstream OAuth configuration: records the server to client associations its configuration proves, then each live credential's client choice. Idempotent, so it is safe to run again; a server the configuration does not prove is reported and never guessed.`)
-	fmt.Fprintln(os.Stderr, `    get-default-auth-permission-status: Reports which default auth permissions one organization is missing, from a dry run that writes nothing.`)
-	fmt.Fprintln(os.Stderr, `    run-default-auth-permissions: Grants one organization the default auth permissions it is missing: everyone's and each agent's use of their own personal connections, shared clients for whoever can connect to a server using them, and policies for legacy API keys. It only adds grants; rerunning restores any default since removed.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s admin COMMAND --help\n", os.Args[0])
@@ -33402,46 +33378,6 @@ func adminRunUpstreamOAuthMigrationUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin run-upstreamoauth-migration --body '{\n      \"organization_id\": \"abc123\"\n   }' --admin-session-token \"abc123\"")
-}
-
-func adminGetDefaultAuthPermissionStatusUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] admin get-default-auth-permission-status", os.Args[0])
-	fmt.Fprint(os.Stderr, " -organization-id STRING")
-	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Reports which default auth permissions one organization is missing, from a dry run that writes nothing.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -organization-id STRING: `)
-	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin get-default-auth-permission-status --organization-id \"abc123\" --admin-session-token \"abc123\"")
-}
-
-func adminRunDefaultAuthPermissionsUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] admin run-default-auth-permissions", os.Args[0])
-	fmt.Fprint(os.Stderr, " -body JSON")
-	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Grants one organization the default auth permissions it is missing: everyone's and each agent's use of their own personal connections, shared clients for whoever can connect to a server using them, and policies for legacy API keys. It only adds grants; rerunning restores any default since removed.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -body JSON: `)
-	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin run-default-auth-permissions --body '{\n      \"organization_id\": \"abc123\"\n   }' --admin-session-token \"abc123\"")
 }
 
 // userSessionClientsUsage displays the usage of the user-session-clients

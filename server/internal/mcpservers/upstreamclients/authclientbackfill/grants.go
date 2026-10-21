@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -37,24 +38,28 @@ var serverAccessScopes = []string{string(authz.ScopeMCPConnect), string(authz.Sc
 
 // grantPlan collects the grants an organization is missing, per principal.
 type grantPlan struct {
+	// existing holds every grant already held or ever provisioned, so a
+	// grant an admin removed is never written again.
 	existing map[string]bool
-	missing  map[urn.Principal][]*authz.RoleGrant
-	kinds    map[urn.Principal][]GrantKind
-	order    []urn.Principal
-	counts   map[GrantKind]int
+	// provisioned holds the grants this backfill wrote, live or removed.
+	provisioned map[string]bool
+	missing     map[urn.Principal][]*authz.RoleGrant
+	kinds       map[urn.Principal][]GrantKind
+	order       []urn.Principal
+	counts      map[GrantKind]int
 }
 
-func grantKey(principal urn.Principal, scope authz.Scope, selector authz.Selector) (string, error) {
+func grantKey(principalURN string, scope authz.Scope, selector authz.Selector) (string, error) {
 	raw, err := selector.MarshalJSON()
 	if err != nil {
 		return "", fmt.Errorf("marshal selector: %w", err)
 	}
-	return principal.String() + "|" + string(scope) + "|" + string(raw), nil
+	return principalURN + "|" + string(scope) + "|" + string(raw), nil
 }
 
 // want records grant as missing unless principal already holds it.
 func (p *grantPlan) want(kind GrantKind, principal urn.Principal, scope authz.Scope, selector authz.Selector) error {
-	key, err := grantKey(principal, scope, selector)
+	key, err := grantKey(principal.String(), scope, selector)
 	if err != nil {
 		return err
 	}
@@ -76,7 +81,7 @@ func (p *grantPlan) want(kind GrantKind, principal urn.Principal, scope authz.Sc
 // allow. It only ever adds grants.
 func runGrants(ctx context.Context, tx pgx.Tx, opts Options, report *Report, withKeys bool) error {
 	q := New(tx)
-	plan := &grantPlan{existing: map[string]bool{}, missing: map[urn.Principal][]*authz.RoleGrant{}, kinds: map[urn.Principal][]GrantKind{}, order: nil, counts: map[GrantKind]int{}}
+	plan := &grantPlan{existing: map[string]bool{}, provisioned: map[string]bool{}, missing: map[urn.Principal][]*authz.RoleGrant{}, kinds: map[urn.Principal][]GrantKind{}, order: nil, counts: map[GrantKind]int{}}
 
 	held, err := q.ListAuthClientGrantRows(ctx, ListAuthClientGrantRowsParams{
 		OrganizationID: opts.OrganizationID,
@@ -91,11 +96,28 @@ func runGrants(ctx context.Context, tx pgx.Tx, opts Options, report *Report, wit
 			// A row the engine cannot read grants nothing either.
 			continue
 		}
+		key, err := grantKey(row.PrincipalUrn.String(), authz.Scope(row.Scope), selector)
+		if err != nil {
+			return err
+		}
+		plan.existing[key] = true
+	}
+
+	provisions, err := q.ListAuthPermissionProvisions(ctx, opts.OrganizationID)
+	if err != nil {
+		return fmt.Errorf("list provisioned grants: %w", err)
+	}
+	for _, row := range provisions {
+		selector, err := authz.SelectorFromRow(row.Selectors)
+		if err != nil {
+			continue
+		}
 		key, err := grantKey(row.PrincipalUrn, authz.Scope(row.Scope), selector)
 		if err != nil {
 			return err
 		}
 		plan.existing[key] = true
+		plan.provisioned[key] = true
 	}
 
 	if err := plan.want(GrantPersonalDefault, authz.AllUsersPrincipal(), authz.ScopeMCPAuth, authz.PersonalAuthClientSelector()); err != nil {
@@ -125,12 +147,33 @@ func runGrants(ctx context.Context, tx pgx.Tx, opts Options, report *Report, wit
 		return nil
 	}
 	for _, principal := range plan.order {
-		inserted, err := authz.InsertPrincipalGrantsIfAbsentTx(ctx, tx, opts.OrganizationID, principal, plan.missing[principal])
-		if err != nil {
-			return fmt.Errorf("grant %s: %w", principal.String(), err)
+		granted := false
+		for i, grant := range plan.missing[principal] {
+			inserted, err := authz.InsertPrincipalGrantsIfAbsentTx(ctx, tx, opts.OrganizationID, principal, []*authz.RoleGrant{grant})
+			if err != nil {
+				return fmt.Errorf("grant %s: %w", principal.String(), err)
+			}
+			// A grant someone else wrote meanwhile stays theirs.
+			if inserted == 0 {
+				continue
+			}
+			raw, err := grant.Selectors[0].MarshalJSON()
+			if err != nil {
+				return fmt.Errorf("marshal selector: %w", err)
+			}
+			if err := q.RecordAuthPermissionProvision(ctx, RecordAuthPermissionProvisionParams{
+				OrganizationID: opts.OrganizationID,
+				PrincipalUrn:   principal.String(),
+				Scope:          grant.Scope,
+				Selectors:      raw,
+				Kind:           string(plan.kinds[principal][i]),
+			}); err != nil {
+				return fmt.Errorf("record provisioned grant: %w", err)
+			}
+			report.GrantsWritten++
+			granted = true
 		}
-		report.GrantsWritten += int(inserted)
-		if inserted > 0 && principal.Type == urn.PrincipalTypeAPIKey {
+		if granted && principal.Type == urn.PrincipalTypeAPIKey {
 			report.APIKeysGranted = append(report.APIKeysGranted, principal.ID)
 		}
 	}
@@ -234,25 +277,71 @@ func reachesServer(grant authz.Grant, use ListSharedAuthClientServersRow) bool {
 	})
 }
 
+// keyReach returns the projects a key's policy should cover. A key with no
+// policy and no provisioning history gets its full reach. A key whose live
+// policy is entirely provisioned keeps the projects it covers and gets clients
+// recorded since. A key holding any grant an admin wrote, or whose provisioned
+// policy was removed, is left alone.
+func (p *grantPlan) keyReach(principal urn.Principal, policy []authz.Grant, keyProject uuid.NullUUID, projects []uuid.UUID) ([]string, bool) {
+	history := false
+	prefix := principal.String() + "|"
+	for key := range p.provisioned {
+		if strings.HasPrefix(key, prefix) {
+			history = true
+			break
+		}
+	}
+	if len(policy) == 0 {
+		if history {
+			return nil, false
+		}
+		var reach []string
+		for _, project := range projects {
+			if !keyProject.Valid || keyProject.UUID == project {
+				reach = append(reach, project.String())
+			}
+		}
+		return reach, true
+	}
+	var reach []string
+	for _, grant := range policy {
+		key, err := grantKey(principal.String(), grant.Scope, grant.Selector)
+		if err != nil || !p.provisioned[key] {
+			return nil, false
+		}
+		if grant.Scope == authz.ScopeMCPConnect {
+			reach = append(reach, grant.Selector[authz.SelectorKeyProjectID])
+		}
+	}
+	return reach, len(reach) > 0
+}
+
 type keyGrant struct {
 	scope    authz.Scope
 	selector authz.Selector
 }
 
-// planAPIKeyGrants gives each live legacy key that reaches MCP and has no
-// policy what it can reach today: every server in its project, or in every
-// project for an organization-wide key, and those servers' shared clients. A
-// key with any policy is left alone: without provenance, a policy this
-// backfill wrote cannot be told from one an admin wrote. EMA clients act for
-// a user, which a key never represents, so keys never get them.
+// planAPIKeyGrants gives each live legacy key that reaches MCP what it can
+// reach today, as keyReach decides: every server in its project, or in every
+// project for an organization-wide key, and those servers' shared clients.
+// EMA clients act for a user, which a key never represents, so keys never get
+// them.
 func planAPIKeyGrants(ctx context.Context, q *Queries, opts Options, uses []ListSharedAuthClientServersRow, plan *grantPlan) error {
 	keys, err := q.ListActiveLegacyAPIKeys(ctx, opts.OrganizationID)
 	if err != nil {
 		return fmt.Errorf("list api keys: %w", err)
 	}
-	withPolicy, err := q.ListAPIKeyPrincipalsWithGrants(ctx, opts.OrganizationID)
+	rows, err := q.ListAPIKeyGrantRows(ctx, opts.OrganizationID)
 	if err != nil {
 		return fmt.Errorf("list api key policies: %w", err)
+	}
+	policies := map[urn.Principal][]authz.Grant{}
+	for _, row := range rows {
+		selector, err := authz.SelectorFromRow(row.Selectors)
+		if err != nil {
+			selector = authz.Selector{}
+		}
+		policies[row.PrincipalUrn] = append(policies[row.PrincipalUrn], authz.Grant{PrincipalUrn: row.PrincipalUrn.String(), Scope: authz.Scope(row.Scope), Selector: selector})
 	}
 	projects, err := q.ListLiveProjects(ctx, opts.OrganizationID)
 	if err != nil {
@@ -263,14 +352,9 @@ func planAPIKeyGrants(ctx context.Context, q *Queries, opts Options, uses []List
 		if !authz.APIKeyReachesMCP(key.Scopes) {
 			continue
 		}
-		if slices.Contains(withPolicy, principal) {
+		reach, ok := plan.keyReach(principal, policies[principal], key.ProjectID, projects)
+		if !ok {
 			continue
-		}
-		var reach []string
-		for _, project := range projects {
-			if !key.ProjectID.Valid || key.ProjectID.UUID == project {
-				reach = append(reach, project.String())
-			}
 		}
 		for _, project := range reach {
 			wants := []keyGrant{{scope: authz.ScopeMCPConnect, selector: authz.ProjectServersSelector(project)}}

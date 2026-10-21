@@ -481,13 +481,3 @@ func GetUpstreamOAuthMigrationStatusAdminPath() string {
 func RunUpstreamOAuthMigrationAdminPath() string {
 	return "/admin/upstreamOAuthMigration.run"
 }
-
-// GetDefaultAuthPermissionStatusAdminPath returns the URL path to the admin service getDefaultAuthPermissionStatus HTTP endpoint.
-func GetDefaultAuthPermissionStatusAdminPath() string {
-	return "/admin/defaultAuthPermissions.status"
-}
-
-// RunDefaultAuthPermissionsAdminPath returns the URL path to the admin service runDefaultAuthPermissions HTTP endpoint.
-func RunDefaultAuthPermissionsAdminPath() string {
-	return "/admin/defaultAuthPermissions.run"
-}

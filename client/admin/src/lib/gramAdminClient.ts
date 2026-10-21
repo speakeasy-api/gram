@@ -2,12 +2,8 @@ import type { AdminInferenceKey } from "@gram/admin-client/models/components/adm
 import { buildAdminGetUpstreamOAuthMigrationStatusQuery } from "@gram/admin-client/react-query/adminGetUpstreamOAuthMigrationStatus.core";
 import { buildAdminListUpstreamOAuthMigrationOrganizationsQuery } from "@gram/admin-client/react-query/adminListUpstreamOAuthMigrationOrganizations.core";
 import { buildAdminRunUpstreamOAuthMigrationMutation } from "@gram/admin-client/react-query/adminRunUpstreamOAuthMigration";
-import { buildAdminGetDefaultAuthPermissionStatusQuery } from "@gram/admin-client/react-query/adminGetDefaultAuthPermissionStatus.core";
-import { buildAdminRunDefaultAuthPermissionsMutation } from "@gram/admin-client/react-query/adminRunDefaultAuthPermissions";
 import type { AdminUpstreamOAuthMigrationOrganizations } from "@gram/admin-client/models/components/adminupstreamoauthmigrationorganizations";
 import type { AdminUpstreamOAuthMigrationRun } from "@gram/admin-client/models/components/adminupstreamoauthmigrationrun";
-import type { AdminDefaultAuthPermissionStatus } from "@gram/admin-client/models/components/admindefaultauthpermissionstatus";
-import type { AdminDefaultAuthPermissionRun } from "@gram/admin-client/models/components/admindefaultauthpermissionrun";
 import type { AdminUpstreamOAuthMigrationStatus } from "@gram/admin-client/models/components/adminupstreamoauthmigrationstatus";
 import { buildAdminGetInferenceKeysQuery } from "@gram/admin-client/react-query/adminGetInferenceKeys.core";
 import type { AdminInferenceKeyRepairResult } from "@gram/admin-client/models/components/admininferencekeyrepairresult";
@@ -1123,36 +1119,6 @@ export function runUpstreamOAuthMigration(
 ): Promise<AdminUpstreamOAuthMigrationRun> {
   return redirecting(
     generatedRunUpstreamOAuthMigrationMutation.mutationFn({
-      request: { organizationId: organizationID },
-    }),
-  );
-}
-
-export function defaultAuthPermissionStatusQuery(
-  organizationID: string,
-): UseQueryOptions<AdminDefaultAuthPermissionStatus> {
-  const generated = buildAdminGetDefaultAuthPermissionStatusQuery(
-    redirectingClient,
-    { organizationId: organizationID },
-    { retries: { strategy: "none" } },
-  );
-  return queryOptions({
-    ...generated,
-    queryFn: (context) => redirecting(generated.queryFn(context)),
-    retry: false,
-  });
-}
-
-const generatedRunDefaultAuthPermissionsMutation =
-  buildAdminRunDefaultAuthPermissionsMutation(redirectingClient, {
-    retries: { strategy: "none" },
-  });
-
-export function runDefaultAuthPermissions(
-  organizationID: string,
-): Promise<AdminDefaultAuthPermissionRun> {
-  return redirecting(
-    generatedRunDefaultAuthPermissionsMutation.mutationFn({
       request: { organizationId: organizationID },
     }),
   );
