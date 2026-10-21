@@ -8,6 +8,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/agent"
 	"github.com/speakeasy-api/gram/server/internal/agent/aitargets"
 	"github.com/speakeasy-api/gram/server/internal/agent/repo"
+	"github.com/speakeasy-api/gram/server/internal/aivendors/catalogseed"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -60,6 +61,41 @@ func chatgptDesktopPayload() *gen.UpsertAiScanTargetPayload {
 		},
 		VersionPlistKey: nil,
 	}
+}
+
+// TestUpsertAiScanTargetUnlinksAProductReference: a decision-only row can
+// outlive its built-in in the registry while still referencing the catalog
+// product. Writing an organization's own definition under that id makes the
+// row the organization's target, so the reference must not survive.
+func TestUpsertAiScanTargetUnlinksAProductReference(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestAgentService(t)
+	ctx = authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgAdmin, ti.orgID))
+	require.NoError(t, catalogseed.EnsureCatalog(ctx, ti.conn))
+
+	// "claude" is a catalog product that is not a scanned built-in, standing
+	// in for a built-in since removed from the registry.
+	_, isBuiltin := aitargets.DefaultByID("claude")
+	require.False(t, isBuiltin)
+	q := repo.New(ti.conn)
+	_, err := q.SetAIScanTargetStatus(ctx, repo.SetAIScanTargetStatusParams{
+		OrganizationID: ti.orgID,
+		ID:             "claude",
+		AiProductID:    conv.ToPGText("claude"),
+		Status:         "unreviewed",
+		Rationale:      conv.ToPGTextEmpty(""),
+	})
+	require.NoError(t, err)
+
+	payload := chatgptDesktopPayload()
+	payload.ID = "claude"
+	_, err = ti.service.UpsertAiScanTarget(ctx, payload)
+	require.NoError(t, err)
+
+	rows, err := q.ListAIScanTargets(ctx, ti.orgID)
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.False(t, rows[0].AiProductID.Valid, "an organization's own definition carries no product reference")
 }
 
 // defaultPayload builds an upsert payload from a compiled-in default, the

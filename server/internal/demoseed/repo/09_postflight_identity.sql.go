@@ -597,6 +597,20 @@ func (q *Queries) PostflightIDLinearStampedServers(ctx context.Context, arg Post
 	return count, err
 }
 
+const postflightIDLinkedAITools = `-- name: PostflightIDLinkedAITools :one
+SELECT count(*) FROM ai_scan_targets t
+JOIN ai_products p ON p.id = t.ai_product_id
+WHERE t.organization_id = $1::text AND t.ai_product_id = t.id
+  AND t.id IN ('claude-code', 'codex', 'hermes-agent', 'zed', 'goose')
+`
+
+func (q *Queries) PostflightIDLinkedAITools(ctx context.Context, orgID string) (int64, error) {
+	row := q.db.QueryRow(ctx, postflightIDLinkedAITools, orgID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const postflightIDMessageParticipants = `-- name: PostflightIDMessageParticipants :one
 SELECT count(*) FROM chat_message_participants WHERE project_id = $1::uuid
 `
