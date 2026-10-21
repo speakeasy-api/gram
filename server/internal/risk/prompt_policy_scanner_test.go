@@ -3,6 +3,7 @@ package risk_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -18,6 +19,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/metering"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	featurerepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy"
@@ -212,14 +215,22 @@ func TestScanner_PromptBasedPolicyDisabledWhenFlagOff(t *testing.T) {
 	require.Equal(t, int32(0), judge.calls.Load(), "judge must not run while gram-prompt-policies is disabled")
 }
 
+func setRiskEnforcementFailClosed(t *testing.T, ti *testInstance, ctx context.Context) {
+	t.Helper()
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	_, err := featurerepo.New(ti.conn).EnableFeature(ctx, featurerepo.EnableFeatureParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		FeatureName:    string(productfeatures.FeatureRiskEnforcementFailClosed),
+	})
+	require.NoError(t, err)
+}
+
 func TestScanner_PromptBasedPolicyFailClosedWhenJudgeUnavailable(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestRiskService(t)
 
-	failClosed := false
-	modelConfig, err := json.Marshal(map[string]any{"fail_open": failClosed})
-	require.NoError(t, err)
-	insertPromptBasedBlockPolicyWithConfig(t, ti, ctx, "no-deletes", "Block destructive deletes", modelConfig)
+	insertPromptBasedBlockPolicy(t, ti, ctx, "no-deletes", "Block destructive deletes")
+	setRiskEnforcementFailClosed(t, ti, ctx)
 
 	scanner, err := risk.NewScanner(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), ti.conn, newTestCustomRuleAnalyzer(t, ti.conn), nil, nil, nil, promptPoliciesFlag(ctx), testCELEngine(t), metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
 	require.NoError(t, err)
@@ -230,5 +241,52 @@ func TestScanner_PromptBasedPolicyFailClosedWhenJudgeUnavailable(t *testing.T) {
 	require.NotNil(t, res)
 	require.Equal(t, promptpolicy.Source, res.Source)
 	require.Equal(t, promptpolicy.Rule, res.RuleID)
-	require.Contains(t, res.Description, "fail-closed")
+	require.Contains(t, res.Description, "organization fails closed")
+}
+
+// TestScanner_PromptBasedPolicyJudgeErrorFollowsOrganizationFailureMode
+// verifies a judge error during enforcement follows the organization's risk
+// failure mode, and that a fail_open key stored on the policy before the
+// setting moved to the organization no longer decides it.
+func TestScanner_PromptBasedPolicyJudgeErrorFollowsOrganizationFailureMode(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name           string
+		storedFailOpen bool
+		orgFailsClosed bool
+		wantBlocked    bool
+	}{
+		{name: "fail-open org ignores stored fail-closed policy", storedFailOpen: false, orgFailsClosed: false, wantBlocked: false},
+		{name: "fail-closed org ignores stored fail-open policy", storedFailOpen: true, orgFailsClosed: true, wantBlocked: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ctx, ti := newTestRiskService(t)
+
+			modelConfig, err := json.Marshal(map[string]any{"fail_open": tc.storedFailOpen})
+			require.NoError(t, err)
+			insertPromptBasedBlockPolicyWithConfig(t, ti, ctx, "no-deletes", "Block destructive deletes", modelConfig)
+			if tc.orgFailsClosed {
+				setRiskEnforcementFailClosed(t, ti, ctx)
+			}
+			judge := &fakePromptJudge{verdict: nil, err: errors.New("judge timed out")}
+
+			scanner, err := risk.NewScanner(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), ti.conn, newTestCustomRuleAnalyzer(t, ti.conn), nil, nil, promptpolicy.NewScanner(testenv.NewLogger(t), judge.Evaluate), promptPoliciesFlag(ctx), testCELEngine(t), metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
+			require.NoError(t, err)
+
+			authCtx, _ := contextvalues.GetAuthContext(ctx)
+			res, err := scanner.ScanForEnforcement(ctx, realtimeScanRequest(authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID, "rm -rf /data", message.ToolRequest, ""))
+			require.NoError(t, err)
+			require.Equal(t, int32(1), judge.calls.Load())
+			require.Equal(t, tc.orgFailsClosed, judge.lastInput().Config.FailClosed)
+			if !tc.wantBlocked {
+				require.Nil(t, res)
+				return
+			}
+			require.NotNil(t, res)
+			require.Equal(t, "block", res.Action)
+			require.Equal(t, promptpolicy.Source, res.Source)
+		})
+	}
 }

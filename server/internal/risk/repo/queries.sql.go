@@ -2656,6 +2656,23 @@ func (q *Queries) IsOrganizationHooksFailOpenEnabled(ctx context.Context, organi
 	return enabled, err
 }
 
+const isOrganizationRiskEnforcementFailClosed = `-- name: IsOrganizationRiskEnforcementFailClosed :one
+SELECT EXISTS (
+  SELECT 1
+  FROM organization_features
+  WHERE organization_id = $1
+    AND feature_name = 'risk_enforcement_fail_closed'
+    AND deleted IS FALSE
+) AS enabled
+`
+
+func (q *Queries) IsOrganizationRiskEnforcementFailClosed(ctx context.Context, organizationID string) (bool, error) {
+	row := q.db.QueryRow(ctx, isOrganizationRiskEnforcementFailClosed, organizationID)
+	var enabled bool
+	err := row.Scan(&enabled)
+	return enabled, err
+}
+
 const linkChatUserAccountForTest = `-- name: LinkChatUserAccountForTest :exec
 UPDATE chats
 SET user_account_id = $1
@@ -3527,6 +3544,46 @@ func (q *Queries) ListMetaMCPServerIDsContainingMCPServer(ctx context.Context, a
 			return nil, err
 		}
 		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listOrganizationsWithFailClosedPromptPolicies = `-- name: ListOrganizationsWithFailClosedPromptPolicies :many
+SELECT
+  organization_id,
+  BOOL_OR(COALESCE(model_config ->> 'fail_open', 'true') <> 'false')::boolean AS has_fail_open_policy
+FROM risk_policies
+WHERE policy_type = 'prompt_based'
+  AND deleted IS FALSE
+GROUP BY organization_id
+HAVING BOOL_OR(model_config ->> 'fail_open' = 'false')
+ORDER BY organization_id
+`
+
+type ListOrganizationsWithFailClosedPromptPoliciesRow struct {
+	OrganizationID    string
+	HasFailOpenPolicy bool
+}
+
+// Organizations with a live prompt_based policy that stored fail_open = false
+// before the failure mode moved to the organization, and whether the same
+// organization also has prompt_based policies that failed open.
+func (q *Queries) ListOrganizationsWithFailClosedPromptPolicies(ctx context.Context) ([]ListOrganizationsWithFailClosedPromptPoliciesRow, error) {
+	rows, err := q.db.Query(ctx, listOrganizationsWithFailClosedPromptPolicies)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListOrganizationsWithFailClosedPromptPoliciesRow
+	for rows.Next() {
+		var i ListOrganizationsWithFailClosedPromptPoliciesRow
+		if err := rows.Scan(&i.OrganizationID, &i.HasFailOpenPolicy); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err

@@ -130,10 +130,11 @@ type DetectionScope struct {
 	ScopeExempt  *string
 }
 
-// ModelConfig is the persisted prompt-policy model configuration.
+// ModelConfig is the persisted prompt-policy model configuration. A
+// fail_open key stored before the failure mode moved to the organization is
+// ignored.
 type ModelConfig struct {
 	Temperature *float64 `json:"temperature,omitempty"`
-	FailOpen    *bool    `json:"fail_open,omitempty"`
 }
 
 // AuditSnapshot strips policy content that must not enter audit or outbox

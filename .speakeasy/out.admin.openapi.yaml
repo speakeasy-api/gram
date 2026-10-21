@@ -11075,6 +11075,9 @@ components:
         remote_session_auto_refresh_enforced_enabled:
           type: boolean
           description: 'Whether automatic remote-session refresh is enforced as the organization default: forced on for every user, shown locked on consent screens, and applied by the keepalive regardless of per-session preference'
+        risk_enforcement_fail_closed:
+          type: boolean
+          description: 'Whether risk enforcement fails closed for the organization: when a prompt policy judge times out or errors while enforcing, the message is blocked instead of allowed'
         scim_enabled:
           type: boolean
           description: Whether SCIM/directory sync setup is enabled for the organization
@@ -11120,6 +11123,7 @@ components:
         - network_ingress_enabled
         - signals_intelligence_enabled
         - organization_gateway_disabled
+        - risk_enforcement_fail_closed
         - device_agent
     RearmTrialRequestBody:
       type: object
@@ -11623,6 +11627,7 @@ components:
             - network_ingress
             - signals_intelligence
             - organization_gateway_disabled
+            - risk_enforcement_fail_closed
           maxLength: 60
         organization_id:
           type: string

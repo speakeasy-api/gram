@@ -167,8 +167,7 @@ func TestProjectPreservesPolicyReadSemantics(t *testing.T) {
 	require.NotNil(t, got.ModelConfig)
 	require.NotNil(t, got.ModelConfig.Temperature)
 	require.InDelta(t, 0.2, *got.ModelConfig.Temperature, 0)
-	require.NotNil(t, got.ModelConfig.FailOpen)
-	require.False(t, *got.ModelConfig.FailOpen)
+	require.Equal(t, ModelConfig{Temperature: got.ModelConfig.Temperature}, *got.ModelConfig, "a persisted fail_open key must not surface")
 }
 
 func TestAuditSnapshotRemovesPrompt(t *testing.T) {

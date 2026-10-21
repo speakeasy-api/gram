@@ -55,6 +55,11 @@ const (
 	// while set, every gateway route answers 404. Stored inverted so the
 	// gateway stays on for every organization that never touched it.
 	FeatureOrganizationGatewayDisabled Feature = "organization_gateway_disabled"
+	// FeatureRiskEnforcementFailClosed is the organization's risk failure
+	// mode: while set, a prompt policy judge that times out or errors during
+	// enforcement blocks the message. Stored inverted so organizations that
+	// never touched it keep failing open.
+	FeatureRiskEnforcementFailClosed Feature = "risk_enforcement_fail_closed"
 )
 
 // RequiresPlatformAdmin reports whether toggling f through productFeatures.set
@@ -62,7 +67,7 @@ const (
 // organization. The org-settable cases are the toggles organization admins
 // manage themselves through the dashboard's organization settings (Logs,
 // Skills content upload, Platform MCP access, the
-// organization gateway); every
+// organization gateway, the risk failure mode); every
 // other settable feature is a staff-managed entitlement, and features missing
 // a case fail closed so a new feature cannot silently become self-serve.
 func (f Feature) RequiresPlatformAdmin() bool {
@@ -74,7 +79,8 @@ func (f Feature) RequiresPlatformAdmin() bool {
 		FeatureHooksFailOpen,
 		FeatureSkillCaptureMetadataOnly,
 		FeaturePlatformMCP,
-		FeatureOrganizationGatewayDisabled:
+		FeatureOrganizationGatewayDisabled,
+		FeatureRiskEnforcementFailClosed:
 		return false
 	default:
 		return true

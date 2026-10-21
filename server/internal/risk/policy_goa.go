@@ -24,7 +24,7 @@ func policyToGoa(policy policycore.Policy) *types.RiskPolicy {
 	if policy.ModelConfig != nil {
 		modelConfig = &types.RiskPolicyModelConfig{
 			Temperature: policy.ModelConfig.Temperature,
-			FailOpen:    policy.ModelConfig.FailOpen,
+			FailOpen:    nil,
 		}
 	}
 

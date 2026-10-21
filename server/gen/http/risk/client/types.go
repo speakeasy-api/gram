@@ -11553,8 +11553,8 @@ type RiskPolicyModelConfigRequestBody struct {
 	// Sampling temperature for the judge. Defaults to a low value for
 	// deterministic verdicts.
 	Temperature *float64 `form:"temperature,omitempty" json:"temperature,omitempty" xml:"temperature,omitempty"`
-	// When the judge errors or times out: true allows the message (fail-open),
-	// false blocks it (fail-closed). Defaults to fail-open.
+	// Deprecated: ignored. A judge error or timeout follows the organization's
+	// risk_enforcement_fail_closed product feature.
 	FailOpen *bool `form:"fail_open,omitempty" json:"fail_open,omitempty" xml:"fail_open,omitempty"`
 }
 
@@ -11599,8 +11599,8 @@ type RiskPolicyModelConfigResponseBody struct {
 	// Sampling temperature for the judge. Defaults to a low value for
 	// deterministic verdicts.
 	Temperature *float64 `form:"temperature,omitempty" json:"temperature,omitempty" xml:"temperature,omitempty"`
-	// When the judge errors or times out: true allows the message (fail-open),
-	// false blocks it (fail-closed). Defaults to fail-open.
+	// Deprecated: ignored. A judge error or timeout follows the organization's
+	// risk_enforcement_fail_closed product feature.
 	FailOpen *bool `form:"fail_open,omitempty" json:"fail_open,omitempty" xml:"fail_open,omitempty"`
 }
 

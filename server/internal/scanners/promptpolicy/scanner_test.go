@@ -32,7 +32,7 @@ func TestScannerScanMatchedReturnsFinding(t *testing.T) {
 		}, nil
 	})
 
-	result := scanner.Scan(t.Context(), "org", "proj", "user-1", "flag deletes", Config{Temperature: nil, FailOpen: true}, judgemessage.New(message.User, "", "delete prod"))
+	result := scanner.Scan(t.Context(), "org", "proj", "user-1", "flag deletes", Config{Temperature: nil, FailClosed: false}, judgemessage.New(message.User, "", "delete prod"))
 	require.Len(t, result.Findings, 1)
 	require.Equal(t, Source, result.Findings[0].Source)
 	require.Equal(t, Rule, result.Findings[0].RuleID)
@@ -61,7 +61,7 @@ func TestScannerScanUnmatchedReturnsNoFindings(t *testing.T) {
 		}, nil
 	})
 
-	result := scanner.Scan(t.Context(), "org", "proj", "", "flag deletes", Config{Temperature: nil, FailOpen: true}, judgemessage.New(message.User, "", "hello"))
+	result := scanner.Scan(t.Context(), "org", "proj", "", "flag deletes", Config{Temperature: nil, FailClosed: false}, judgemessage.New(message.User, "", "hello"))
 	require.Empty(t, result.Findings)
 }
 
@@ -72,7 +72,7 @@ func TestScannerScanErrorFailOpenReturnsNoFindings(t *testing.T) {
 		return nil, errors.New("judge failed")
 	})
 
-	result := scanner.Scan(t.Context(), "org", "proj", "", "flag deletes", Config{Temperature: nil, FailOpen: true}, judgemessage.New(message.User, "", "delete prod"))
+	result := scanner.Scan(t.Context(), "org", "proj", "", "flag deletes", Config{Temperature: nil, FailClosed: false}, judgemessage.New(message.User, "", "delete prod"))
 	require.Empty(t, result.Findings)
 }
 
@@ -83,9 +83,9 @@ func TestScannerScanErrorFailClosedReturnsFinding(t *testing.T) {
 		return nil, errors.New("judge failed")
 	})
 
-	result := scanner.Scan(t.Context(), "org", "proj", "", "flag deletes", Config{Temperature: nil, FailOpen: false}, judgemessage.New(message.User, "", "delete prod"))
+	result := scanner.Scan(t.Context(), "org", "proj", "", "flag deletes", Config{Temperature: nil, FailClosed: true}, judgemessage.New(message.User, "", "delete prod"))
 	require.Len(t, result.Findings, 1)
-	require.Equal(t, "Policy judge was unavailable; flagged by fail-closed policy.", result.Findings[0].Description)
+	require.Equal(t, "Policy judge was unavailable; flagged because the organization fails closed.", result.Findings[0].Description)
 	require.False(t, result.Completed)
 	require.Zero(t, result.STokens)
 }
@@ -95,8 +95,8 @@ func TestScannerScanBlankPromptFailClosedReturnsFinding(t *testing.T) {
 
 	scanner := NewScanner(nil, nil)
 
-	result := scanner.Scan(t.Context(), "org", "proj", "", "   ", Config{Temperature: nil, FailOpen: false}, judgemessage.New(message.User, "", "delete prod"))
+	result := scanner.Scan(t.Context(), "org", "proj", "", "   ", Config{Temperature: nil, FailClosed: true}, judgemessage.New(message.User, "", "delete prod"))
 	require.Len(t, result.Findings, 1)
-	require.Equal(t, "Policy judge was unavailable; flagged by fail-closed policy.", result.Findings[0].Description)
+	require.Equal(t, "Policy judge was unavailable; flagged because the organization fails closed.", result.Findings[0].Description)
 	require.False(t, result.Completed)
 }

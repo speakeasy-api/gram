@@ -45,8 +45,8 @@ func capturingMeterPub(t *testing.T) (*gcp.MockPublisher[*meteringv1.MeterReadin
 }
 
 func newRequest(content string) *riskv1.PromptPolicyAnalysis {
-	// Keeps a legacy `model` key: the judge model is fixed, so the key must be
-	// ignored without disturbing fail_open.
+	// Keeps legacy `model` and `fail_open` keys: both are inert, so the
+	// analysis handler judges with the default fail-open config.
 	modelConfig := []byte(`{"model":"openai/gpt-4.1-mini","fail_open":false}`)
 	return riskv1.PromptPolicyAnalysis_builder{
 		RequestId:               new("req-1"),
@@ -80,7 +80,7 @@ func TestHandle_PublishesPromptPolicyFinding(t *testing.T) {
 		require.Equal(t, "user-1", in.UserID)
 		require.Equal(t, "block unsafe requests", in.Prompt)
 		require.Equal(t, "delete production", in.Message.Body)
-		require.False(t, in.Config.FailOpen)
+		require.False(t, in.Config.FailClosed)
 		return &promptpolicy.Verdict{
 			Matched:          true,
 			Confidence:       0.88,

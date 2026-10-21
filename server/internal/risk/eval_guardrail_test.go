@@ -276,6 +276,40 @@ func TestEvaluatePromptGuardrail_FailClosedFallback(t *testing.T) {
 	ti.judge.evaluate = func(in promptpolicy.Input) (*promptpolicy.Verdict, error) {
 		return nil, errors.New("judge unavailable")
 	}
+	setRiskEnforcementFailClosed(t, ti, ctx)
+	res, err := ti.service.EvaluatePromptGuardrail(ctx, &gen.EvaluatePromptGuardrailPayload{
+		ChatID: chatID.String(),
+		Prompt: "Flag destructive production changes.",
+		ModelConfig: &types.RiskPolicyModelConfig{
+			Temperature: nil,
+			FailOpen:    nil,
+		},
+	})
+	require.NoError(t, err)
+	require.True(t, res.Flagged)
+	require.Len(t, res.Verdicts, 1)
+	require.True(t, res.Verdicts[0].Matched)
+	require.Equal(t, "Policy judge was unavailable; flagged because the organization fails closed.", res.Verdicts[0].Rationale)
+}
+
+// TestEvaluatePromptGuardrail_IgnoresDeprecatedFailOpen verifies the replay
+// follows the organization's failure mode rather than a fail_open sent by an
+// older client: a fail-open organization shows a judge error as unmatched.
+func TestEvaluatePromptGuardrail_IgnoresDeprecatedFailOpen(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	ctx = withExactAccessGrants(t, ctx, ti.conn,
+		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)},
+	)
+
+	chatID, _ := seedChatTranscript(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID, [][2]string{
+		{"user", "please delete production database"},
+	})
+	ti.judge.evaluate = func(in promptpolicy.Input) (*promptpolicy.Verdict, error) {
+		return nil, errors.New("judge unavailable")
+	}
 	failOpen := false
 	res, err := ti.service.EvaluatePromptGuardrail(ctx, &gen.EvaluatePromptGuardrailPayload{
 		ChatID: chatID.String(),
@@ -286,10 +320,9 @@ func TestEvaluatePromptGuardrail_FailClosedFallback(t *testing.T) {
 		},
 	})
 	require.NoError(t, err)
-	require.True(t, res.Flagged)
+	require.False(t, res.Flagged)
 	require.Len(t, res.Verdicts, 1)
-	require.True(t, res.Verdicts[0].Matched)
-	require.Equal(t, "Policy judge was unavailable; flagged by fail-closed policy.", res.Verdicts[0].Rationale)
+	require.False(t, res.Verdicts[0].Matched)
 }
 
 func TestEvaluatePromptGuardrail_CELScopeExemptSkipsToolCall(t *testing.T) {

@@ -68,9 +68,9 @@ type Verdict struct {
 // FailClosedVerdict builds the canonical verdict used when a degraded judge
 // call is treated as a policy match.
 func FailClosedVerdict(err error) Verdict {
-	rationale := "Policy judge was unavailable; flagged by fail-closed policy."
+	rationale := "Policy judge was unavailable; flagged because the organization fails closed."
 	if errors.Is(err, ErrRateLimited) {
-		rationale = "Policy judge was rate limited; flagged by fail-closed policy."
+		rationale = "Policy judge was rate limited; flagged because the organization fails closed."
 	}
 	return Verdict{
 		Matched:          true,
@@ -87,37 +87,35 @@ func FailClosedVerdict(err error) Verdict {
 	}
 }
 
-// Config is the per-policy judge model configuration parsed from a
-// prompt_based policy's model_config JSONB column.
+// Config is one judge evaluation's configuration: the policy's model settings
+// from its model_config JSONB column plus the failure mode the caller applies.
 type Config struct {
 	// Temperature overrides the default judge temperature when non-nil.
 	Temperature *float64
-	// FailOpen decides the verdict when the judge call fails: true => allow
-	// (no finding), false => treat as matched. Defaults to true.
-	FailOpen bool
+	// FailClosed treats a failed or unavailable judge call as a match. The
+	// zero value fails open (no finding). Enforcing callers set it from the
+	// organization's risk failure mode; analysis that only flags leaves it
+	// false, so an outage never surfaces as a finding.
+	FailClosed bool
 }
 
 // ParseConfig decodes a prompt_based policy's model_config JSONB into a
-// Config. Missing or unparseable config defaults to fail-open with the default
-// temperature. A `model` key persisted before the judge model was fixed is
-// ignored rather than migrated away: it is inert, and dropping it on the next
-// policy write is enough.
+// Config that fails open. Missing or unparseable config keeps the default
+// temperature. Keys persisted before they moved off the policy - `model`
+// (the judge model is fixed) and `fail_open` (the failure mode is the
+// organization's) - are inert and ignored rather than migrated away.
 func ParseConfig(raw []byte) Config {
-	cfg := Config{Temperature: nil, FailOpen: true}
+	cfg := Config{Temperature: nil, FailClosed: false}
 	if len(raw) == 0 {
 		return cfg
 	}
 	var parsed struct {
 		Temperature *float64 `json:"temperature"`
-		FailOpen    *bool    `json:"fail_open"`
 	}
 	if err := json.Unmarshal(raw, &parsed); err != nil {
 		return cfg
 	}
 	cfg.Temperature = parsed.Temperature
-	if parsed.FailOpen != nil {
-		cfg.FailOpen = *parsed.FailOpen
-	}
 	return cfg
 }
 

@@ -10,7 +10,9 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 export type RiskPolicyModelConfig = {
   /**
-   * When the judge errors or times out: true allows the message (fail-open), false blocks it (fail-closed). Defaults to fail-open.
+   * Deprecated: ignored. A judge error or timeout follows the organization's risk_enforcement_fail_closed product feature.
+   *
+   * @deprecated field: Set the organization's risk_enforcement_fail_closed product feature instead.
    */
   failOpen?: boolean | undefined;
   /**

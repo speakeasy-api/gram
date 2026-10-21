@@ -27,6 +27,7 @@ export const FeatureName = {
   NetworkIngress: "network_ingress",
   SignalsIntelligence: "signals_intelligence",
   OrganizationGatewayDisabled: "organization_gateway_disabled",
+  RiskEnforcementFailClosed: "risk_enforcement_fail_closed",
 } as const;
 export type FeatureName = ClosedEnum<typeof FeatureName>;
 

@@ -110657,6 +110657,9 @@ components:
                 remote_session_auto_refresh_enforced_enabled:
                     type: boolean
                     description: 'Whether automatic remote-session refresh is enforced as the organization default: forced on for every user, shown locked on consent screens, and applied by the keepalive regardless of per-session preference'
+                risk_enforcement_fail_closed:
+                    type: boolean
+                    description: 'Whether risk enforcement fails closed for the organization: when a prompt policy judge times out or errors while enforcing, the message is blocked instead of allowed'
                 scim_enabled:
                     type: boolean
                     description: Whether SCIM/directory sync setup is enabled for the organization
@@ -110702,6 +110705,7 @@ components:
                 - network_ingress_enabled
                 - signals_intelligence_enabled
                 - organization_gateway_disabled
+                - risk_enforcement_fail_closed
                 - device_agent
         Project:
             type: object
@@ -114103,8 +114107,9 @@ components:
             type: object
             properties:
                 fail_open:
+                    description: 'Deprecated: ignored. A judge error or timeout follows the organization''s risk_enforcement_fail_closed product feature.'
                     type: boolean
-                    description: 'When the judge errors or times out: true allows the message (fail-open), false blocks it (fail-closed). Defaults to fail-open.'
+                    x-speakeasy-deprecation-message: Set the organization's risk_enforcement_fail_closed product feature instead
                 temperature:
                     type: number
                     description: Sampling temperature for the judge. Defaults to a low value for deterministic verdicts.
@@ -116733,6 +116738,7 @@ components:
                         - network_ingress
                         - signals_intelligence
                         - organization_gateway_disabled
+                        - risk_enforcement_fail_closed
                     maxLength: 60
                 organization_id:
                     type: string
@@ -116847,6 +116853,7 @@ components:
                         - network_ingress
                         - signals_intelligence
                         - organization_gateway_disabled
+                        - risk_enforcement_fail_closed
                     maxLength: 60
                 organization_id:
                     type: string
