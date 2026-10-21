@@ -178,10 +178,10 @@ func TestRiskListingSessionTitles(t *testing.T) {
 						copied.IsAdmin = true
 						copied.SupportOrganizationID = orgID
 						sessionCtx = contextvalues.WithValidatedSupportSession(ctx, &copied)
-						expected = "Session hidden during impersonation"
+						expected = "Session " + chatID.String()[:8]
 					case "workos":
 						sessionCtx = contextvalues.WithValidatedGramSession(ctx, &copied, true)
-						expected = "Session hidden during impersonation"
+						expected = "Session " + chatID.String()[:8]
 					}
 					for _, filterChat := range []bool{false, true} {
 						var chatFilter *string

@@ -71,7 +71,7 @@ func TestChatSensitiveContentAccess(t *testing.T) {
 					if allowed {
 						require.Contains(t, []string{"private own title", "private other title"}, chat.Title)
 					} else {
-						require.Equal(t, "Session hidden during impersonation", chat.Title)
+						require.Equal(t, "Session "+chat.ID[:8], chat.Title)
 					}
 				}
 			})
@@ -101,7 +101,7 @@ func TestChatSensitiveContentAccess(t *testing.T) {
 				require.Len(t, result.Links, 1)
 				parent, child := "private own title", "private other title"
 				if !allowed {
-					parent, child = "Session hidden during impersonation", "Session hidden during impersonation"
+					parent, child = "Session "+own.String()[:8], "Session "+other.String()[:8]
 				}
 				require.NotNil(t, result.Links[0].ParentTitle)
 				require.NotNil(t, result.Links[0].ChildTitle)

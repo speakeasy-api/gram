@@ -478,7 +478,7 @@ func (s *Service) chatOverviews(ctx context.Context, authCtx *contextvalues.Auth
 			Source:               conv.FromPGText[string](row.Source),
 			OriginatingClient:    conv.PtrEmpty(row.OriginatingClient),
 			LitellmProxied:       conv.PtrEmpty(row.LitellmProxied),
-			Title:                authz.RedactSessionTitle(ctx, row.Title.String),
+			Title:                authz.RedactSessionTitle(ctx, row.Title.String, new(row.ID.String())),
 			NumMessages:          int(row.NumMessages),
 			CreatedAt:            row.CreatedAt.Time.Format(time.RFC3339),
 			UpdatedAt:            row.UpdatedAt.Time.Format(time.RFC3339),
@@ -903,10 +903,10 @@ func (s *Service) ListSessionLinks(ctx context.Context, payload *gen.ListSession
 			CreatedAt:      row.CreatedAt.Time.Format(time.RFC3339),
 		}
 		if link.ParentTitle != nil {
-			link.ParentTitle = new(authz.RedactSessionTitle(ctx, *link.ParentTitle))
+			link.ParentTitle = new(authz.RedactSessionTitle(ctx, *link.ParentTitle, new(row.ParentChatID.String())))
 		}
 		if link.ChildTitle != nil {
-			link.ChildTitle = new(authz.RedactSessionTitle(ctx, *link.ChildTitle))
+			link.ChildTitle = new(authz.RedactSessionTitle(ctx, *link.ChildTitle, conv.FromNullableUUID(row.ChildChatID)))
 		}
 		if unrestricted || row.ParentCaptured {
 			link.ParentChatID = conv.PtrEmpty(row.ParentChatID.String())

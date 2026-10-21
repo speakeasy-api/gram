@@ -24,9 +24,16 @@ func CheckSensitiveContentAccess(ctx context.Context) error {
 
 // RedactSessionTitle keeps session metadata navigable without exposing prose
 // while impersonating. The demo exception follows the content access policy.
-func RedactSessionTitle(ctx context.Context, title string) string {
+func RedactSessionTitle(ctx context.Context, title string, sessionID *string) string {
 	if CheckSensitiveContentAccess(ctx) != nil {
-		return "Session hidden during impersonation"
+		if sessionID == nil || *sessionID == "" {
+			return "Session"
+		}
+		id := *sessionID
+		if len(id) > 8 {
+			id = id[:8]
+		}
+		return "Session " + id
 	}
 	return title
 }

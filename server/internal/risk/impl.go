@@ -1323,7 +1323,7 @@ func (s *Service) ListRiskResults(ctx context.Context, payload *gen.ListRiskResu
 
 	for _, r := range raw.Results {
 		if r.ChatTitle != nil {
-			r.ChatTitle = new(authz.RedactSessionTitle(ctx, *r.ChatTitle))
+			r.ChatTitle = new(authz.RedactSessionTitle(ctx, *r.ChatTitle, r.ChatID))
 		}
 	}
 
@@ -1561,7 +1561,7 @@ func (s *Service) ListRiskResultsForAgent(ctx context.Context, payload *gen.List
 	redacted := make([]*types.RiskResultRedacted, 0, len(base.Results))
 	for _, r := range base.Results {
 		if r.ChatTitle != nil {
-			r.ChatTitle = new(authz.RedactSessionTitle(ctx, *r.ChatTitle))
+			r.ChatTitle = new(authz.RedactSessionTitle(ctx, *r.ChatTitle, r.ChatID))
 		}
 		redacted = append(redacted, redactRiskResult(r, authCtx.ActiveOrganizationID))
 	}
@@ -1720,7 +1720,7 @@ func (s *Service) ListRiskResultsByChat(ctx context.Context, payload *gen.ListRi
 	}
 	for _, chat := range result.Chats {
 		if chat.ChatTitle != nil {
-			chat.ChatTitle = new(authz.RedactSessionTitle(ctx, *chat.ChatTitle))
+			chat.ChatTitle = new(authz.RedactSessionTitle(ctx, *chat.ChatTitle, new(chat.ChatID)))
 		}
 	}
 	return result, nil
