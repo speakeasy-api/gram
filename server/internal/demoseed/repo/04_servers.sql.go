@@ -1192,6 +1192,38 @@ func (q *Queries) ServersInsertRoleServerMemberships(ctx context.Context, arg Se
 	return result.RowsAffected(), nil
 }
 
+const serversInsertServerClientAssociation = `-- name: ServersInsertServerClientAssociation :exec
+INSERT INTO mcp_server_remote_session_clients
+  (id, project_id, organization_id, mcp_server_id, remote_session_client_id,
+   client_attachment_scope)
+SELECT $1::uuid, $2::uuid, $3::text, $4::uuid,
+       c.id, c.attachment_scope
+FROM remote_session_clients AS c
+WHERE c.id = $5::uuid
+`
+
+type ServersInsertServerClientAssociationParams struct {
+	ID                    uuid.UUID
+	ProjectID             uuid.UUID
+	OrgID                 string
+	McpServerID           uuid.UUID
+	RemoteSessionClientID uuid.UUID
+}
+
+// One server's upstream OAuth client association. The app records it when
+// User Identity is configured on the server, or when the server is the only
+// consumer of its user session issuer; the seed writes it directly.
+func (q *Queries) ServersInsertServerClientAssociation(ctx context.Context, arg ServersInsertServerClientAssociationParams) error {
+	_, err := q.db.Exec(ctx, serversInsertServerClientAssociation,
+		arg.ID,
+		arg.ProjectID,
+		arg.OrgID,
+		arg.McpServerID,
+		arg.RemoteSessionClientID,
+	)
+	return err
+}
+
 const serversInsertSlackIdentityHeader = `-- name: ServersInsertSlackIdentityHeader :exec
 INSERT INTO remote_mcp_server_headers
   (id, remote_mcp_server_id, name, description, is_required, is_secret, value)
@@ -1237,6 +1269,49 @@ type ServersInsertSupportDeskGrantsParams struct {
 // names the toolset), Slack only for tools annotated read-only.
 func (q *Queries) ServersInsertSupportDeskGrants(ctx context.Context, arg ServersInsertSupportDeskGrantsParams) error {
 	_, err := q.db.Exec(ctx, serversInsertSupportDeskGrants, arg.OrgID, arg.Toolset1, arg.SlackServerID)
+	return err
+}
+
+const serversInsertUpstreamClientChoice = `-- name: ServersInsertUpstreamClientChoice :exec
+INSERT INTO upstream_client_selections
+  (id, project_id, organization_id, credential_kind, credential_id,
+   mcp_server_id, remote_session_client_id, client_attachment_scope, no_auth,
+   source)
+SELECT $1::uuid, $2::uuid, $3::text, $4::text,
+       $5::uuid, $6::uuid, c.id, c.attachment_scope,
+       $7::uuid IS NULL, $8::text
+FROM (SELECT 1) AS one
+LEFT JOIN remote_session_clients AS c
+  ON c.id = $7::uuid
+`
+
+type ServersInsertUpstreamClientChoiceParams struct {
+	ID                    uuid.UUID
+	ProjectID             uuid.UUID
+	OrgID                 string
+	CredentialKind        string
+	CredentialID          uuid.UUID
+	McpServerID           uuid.UUID
+	RemoteSessionClientID uuid.NullUUID
+	Source                string
+}
+
+// One seeded credential's choice for one server, as issuance records it: the
+// client the credential uses there, or no-auth when the client is omitted.
+// no_auth follows the parameter, so a client id that resolves to no client
+// fails the no-auth check instead of being recorded as no-auth. The projects
+// delete cascades these rows.
+func (q *Queries) ServersInsertUpstreamClientChoice(ctx context.Context, arg ServersInsertUpstreamClientChoiceParams) error {
+	_, err := q.db.Exec(ctx, serversInsertUpstreamClientChoice,
+		arg.ID,
+		arg.ProjectID,
+		arg.OrgID,
+		arg.CredentialKind,
+		arg.CredentialID,
+		arg.McpServerID,
+		arg.RemoteSessionClientID,
+		arg.Source,
+	)
 	return err
 }
 

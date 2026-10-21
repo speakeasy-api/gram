@@ -64,7 +64,10 @@ function PageBody({
       <div
         className={cn(
           "@container/main flex w-full flex-col gap-4",
-          noPadding ? "p-0" : "p-8",
+          // Less room above the eyebrow than beside it: the page header
+          // already sits under a bar, so a full 32px on top read as a gap
+          // rather than as margin.
+          noPadding ? "p-0" : "px-8 pt-5",
           !noPadding && "pb-24",
           !fullWidth && "mx-auto max-w-7xl",
           fullHeight && "h-full",

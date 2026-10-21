@@ -1,7 +1,13 @@
+import { unrecognized } from "@gram/client/types/unrecognized.js";
 import type { ToolSelectionTool } from "@/components/tool-selection/ToolSelectionPanel";
 import type { ResourceAudienceEntry } from "@gram/client/models/components/resourceaudienceentry.js";
 import { describe, expect, it } from "vitest";
-import { blockingRules, effectiveReach } from "./serverAudience";
+import {
+  audienceIcon,
+  blockingRules,
+  effectiveReach,
+  narrowingLabel,
+} from "./serverAudience";
 
 function entry(
   overrides: Partial<ResourceAudienceEntry> & { principalUrn: string },
@@ -197,4 +203,104 @@ describe("effective tool counts with direct overrides", () => {
     );
     expect(reach?.reachableTools).toEqual(["search"]);
   });
+});
+
+describe("unknown audience values", () => {
+  const known = entry({
+    principalUrn: "user:known",
+    displayName: "Known grant",
+    level: "use",
+    tools: ["Search"],
+  });
+
+  it.each(["future_level", "__proto__", "constructor"])(
+    "shows access as unknown for %s without inferring grants or blocks",
+    (level) => {
+      const unknown = entry({
+        principalUrn: "user:future",
+        displayName: "Future grant",
+        level: unrecognized(level),
+        tools: ["Delete"],
+      });
+      for (const rules of [
+        [known, unknown],
+        [unknown],
+        [gtmGrant, adminBlock, unknown],
+      ]) {
+        expect(effectiveReach(rules)).toEqual({
+          toolsLabel: "Access unknown",
+          capabilities: [],
+          scopedLevels: [],
+          excluded: [],
+          grantedBy: [],
+          reachableTools: [],
+        });
+        expect(blockingRules(rules)).toEqual([]);
+      }
+    },
+  );
+
+  it("does not claim known access survives an unknown block level", () => {
+    const unknown = entry({
+      principalUrn: "user:future",
+      level: unrecognized("future_block"),
+    });
+    expect(effectiveReach([known, unknown])?.toolsLabel).toBe("Access unknown");
+  });
+
+  it.each(["future_kind", "__proto__", "constructor"])(
+    "uses the neutral icon for unknown principal kind %s",
+    (kind) => {
+      expect(audienceIcon(kind)).toBe(audienceIcon("unknown"));
+    },
+  );
+});
+
+it("does not infer access from an unknown applicability", () => {
+  expect(
+    effectiveReach([
+      entry({
+        principalUrn: "user:example",
+        appliesTo: unrecognized("future_applicability"),
+      }),
+    ])?.toolsLabel,
+  ).toBe("Access unknown");
+});
+
+it("deduplicates generic unknown annotation labels", () => {
+  expect(
+    narrowingLabel({
+      dispositions: [
+        "future_one",
+        "read_only",
+        "future_two",
+        "constructor",
+        "read_only",
+      ],
+    }),
+  ).toBe("unknown annotation, read-only tools");
+});
+
+it("does not infer access for an unsupported principal kind", () => {
+  expect(
+    effectiveReach([
+      entry({
+        principalUrn: "group:future",
+        kind: unrecognized("future_group"),
+      }),
+    ])?.toolsLabel,
+  ).toBe("Access unknown");
+});
+
+it("counts distinct tools when multiple grants contribute to a summary", () => {
+  expect(narrowingLabel({ tools: ["search", "search"] })).toBe("search");
+  expect(narrowingLabel({ tools: ["search", "fetch", "search"] })).toBe(
+    "2 tools",
+  );
+  expect(
+    narrowingLabel({
+      tools: ["search", "search"],
+      dispositions: ["future_one", "future_two"],
+    }),
+  ).toBe("unknown annotation tools and search");
 });

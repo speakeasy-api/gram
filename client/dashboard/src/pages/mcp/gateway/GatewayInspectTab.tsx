@@ -1,3 +1,4 @@
+import { enumPresentation } from "@/lib/enum";
 import { ReleaseStageBadge } from "@/components/release-stage-badge";
 import { Page } from "@/components/page-layout";
 import { Badge } from "@/components/ui/Badge";
@@ -183,8 +184,11 @@ export function GatewayInspectTab({
                 <SelectContent>
                   <SelectItem value="default">
                     Use gateway default (
-                    {discoveryModeLabels[metaMcpServer.discoveryMode ?? ""] ??
-                      "Progressive"}
+                    {enumPresentation(
+                      discoveryModeLabels,
+                      metaMcpServer.discoveryMode,
+                      "Unknown",
+                    )}
                     )
                   </SelectItem>
                   <SelectItem value="progressive">Progressive</SelectItem>

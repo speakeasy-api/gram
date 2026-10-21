@@ -9,6 +9,7 @@ import {
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { toast } from "sonner";
 import { MemoryRouter } from "react-router";
+import { TooltipProvider } from "@/components/ui/Tooltip";
 import type { ToolsetEntry } from "@gram/client/models/components/toolsetentry.js";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 
@@ -21,7 +22,6 @@ const permissions = vi.hoisted(() => ({
     "project:write:project",
   ]),
   tunnel: true,
-  functions: true,
   navigate: vi.fn(),
 }));
 vi.mock("react-router", async (importOriginal) => ({
@@ -45,11 +45,7 @@ vi.mock("@/hooks/useRBAC", () => ({
 vi.mock("@/contexts/Telemetry", () => ({
   useTelemetry: () => ({
     isFeatureEnabled: (flag: string) =>
-      flag === TUNNELED_MCP_FEATURE_FLAG
-        ? permissions.tunnel
-        : flag === "gram-functions"
-          ? permissions.functions
-          : false,
+      flag === TUNNELED_MCP_FEATURE_FLAG ? permissions.tunnel : false,
   }),
 }));
 vi.mock("@/routes", () => ({
@@ -76,7 +72,6 @@ afterEach(() => {
     "project:write:project",
   ]);
   permissions.tunnel = true;
-  permissions.functions = true;
   permissions.navigate.mockClear();
 });
 const servers = [
@@ -91,23 +86,25 @@ function setup(
     { key: "server-b", name: "Beta", error: "Try again" },
   ]);
   render(
-    <MemoryRouter>
-      <AddServersSheet
-        open
-        onOpenChange={() => {}}
-        servers={servers}
-        toolsets={[]}
-        isLoading={false}
-        loadFailed={false}
-        onRetryLoad={() => {}}
-        memberServerIds={new Set()}
-        onAdd={onAdd}
-        adding={false}
-        projectId="project"
-        gatewayId="gateway"
-        {...overrides}
-      />
-    </MemoryRouter>,
+    <TooltipProvider>
+      <MemoryRouter>
+        <AddServersSheet
+          open
+          onOpenChange={() => {}}
+          servers={servers}
+          toolsets={[]}
+          isLoading={false}
+          loadFailed={false}
+          onRetryLoad={() => {}}
+          memberServerIds={new Set()}
+          onAdd={onAdd}
+          adding={false}
+          projectId="project"
+          gatewayId="gateway"
+          {...overrides}
+        />
+      </MemoryRouter>
+    </TooltipProvider>,
   );
   return { onAdd };
 }
@@ -428,9 +425,11 @@ describe("Add servers sheet", () => {
       wrappers,
     };
     const view = render(
-      <MemoryRouter>
-        <AddServersSheet {...props} servers={[]} />
-      </MemoryRouter>,
+      <TooltipProvider>
+        <MemoryRouter>
+          <AddServersSheet {...props} servers={[]} />
+        </MemoryRouter>
+      </TooltipProvider>,
     );
     fireEvent.click(screen.getByRole("checkbox", { name: "Hosted" }));
     fireEvent.click(
@@ -438,22 +437,29 @@ describe("Add servers sheet", () => {
     );
     await screen.findByText("Hosted: Try again");
     view.rerender(
-      <MemoryRouter>
-        <AddServersSheet
-          {...props}
-          servers={
-            [
-              { id: "other", name: "Other", slug: "other", toolsetId: "tools" },
-              {
-                id: "created",
-                name: "Hosted",
-                slug: "hosted",
-                toolsetId: "tools",
-              },
-            ] as McpServer[]
-          }
-        />
-      </MemoryRouter>,
+      <TooltipProvider>
+        <MemoryRouter>
+          <AddServersSheet
+            {...props}
+            servers={
+              [
+                {
+                  id: "other",
+                  name: "Other",
+                  slug: "other",
+                  toolsetId: "tools",
+                },
+                {
+                  id: "created",
+                  name: "Hosted",
+                  slug: "hosted",
+                  toolsetId: "tools",
+                },
+              ] as McpServer[]
+            }
+          />
+        </MemoryRouter>
+      </TooltipProvider>,
     );
     fireEvent.click(
       screen.getByRole("button", { name: "Add selected servers" }),
@@ -647,16 +653,10 @@ describe("Add servers sheet", () => {
     expect(permissions.navigate).toHaveBeenCalledWith(href);
   });
 
-  it.each([
-    [false, false],
-    [true, false],
-    [false, true],
-    [true, true],
-  ])(
-    "gates tunnel (%s) and function (%s) creation independently",
-    (tunnel, functions) => {
+  it.each([false, true])(
+    "offers function creation when tunnel creation is %s",
+    (tunnel) => {
       permissions.tunnel = tunnel;
-      permissions.functions = functions;
       setup();
       fireEvent.pointerDown(screen.getByRole("button", { name: "Add new" }), {
         button: 0,
@@ -670,10 +670,8 @@ describe("Add servers sheet", () => {
       ).toBe(tunnel);
       expect(
         screen.queryByRole("menuitem", { name: /^Write custom code/ }) !== null,
-      ).toBe(functions);
-      expect(screen.getAllByRole("menuitem")).toHaveLength(
-        4 + Number(tunnel) + Number(functions),
-      );
+      ).toBe(true);
+      expect(screen.getAllByRole("menuitem")).toHaveLength(5 + Number(tunnel));
     },
   );
 

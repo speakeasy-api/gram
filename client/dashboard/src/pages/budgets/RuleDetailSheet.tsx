@@ -1,3 +1,4 @@
+import { enumPresentation } from "@/lib/enum";
 import { IdentityLink } from "@/components/identity-link";
 import type { IdentityRef } from "@/lib/identity-urn";
 import { Button } from "@/components/ui/Button";
@@ -15,6 +16,7 @@ import { useCallback, useEffect, useMemo, useState, type JSX } from "react";
 import { EventTypeBadge, RuleActionBadge, UsageBar } from "./budget-shared";
 import {
   WINDOW_LABELS,
+  isSupportedRuleTarget,
   formatUsd,
   parseRuleUrn,
   sortEventsByRecency,
@@ -25,7 +27,11 @@ import {
   type SpendRuleActorUsage,
   type SpendRuleUsage,
 } from "./budgets-data";
-import { useBudgetEvents, usePreviewBudgetRule } from "./budgets-queries";
+import {
+  useActorAttributes,
+  useBudgetEvents,
+  usePreviewBudgetRule,
+} from "./budgets-queries";
 
 /** Read-only drill-down for one rule: live budget state, which people are
  *  driving the spend, and the rule's lifecycle events. */
@@ -125,7 +131,13 @@ function RuleDetail({
   });
   const events = useMemo(() => sortEventsByRecency(ruleEvents), [ruleEvents]);
 
+  const {
+    attributes,
+    isLoading: attributesLoading,
+    isError: attributesError,
+  } = useActorAttributes();
   const actors = preview?.actors ?? [];
+  const knownWindow = Object.hasOwn(WINDOW_LABELS, rule.windowKind);
 
   return (
     <>
@@ -156,9 +168,12 @@ function RuleDetail({
               Budget
             </Text>
             <span className="text-muted-foreground text-xs">
-              {WINDOW_LABELS[rule.windowKind]} window · resets in{" "}
-              {timeUntilWindowReset(rule.windowKind)} · warns at{" "}
-              {rule.warnAtPct}%
+              {enumPresentation(WINDOW_LABELS, rule.windowKind, "Unknown")}{" "}
+              window
+              {knownWindow && (
+                <> · resets in {timeUntilWindowReset(rule.windowKind)}</>
+              )}{" "}
+              · warns at {rule.warnAtPct}%
             </span>
           </div>
           {usage ? (
@@ -184,13 +199,33 @@ function RuleDetail({
         </section>
 
         {/* Who is driving the spend */}
-        <PeopleSection
-          actors={actors}
-          matchedCount={preview?.matchedCount ?? 0}
-          loading={actorsLoading}
-          error={actorsError}
-          onRetry={retryActors}
-        />
+        {!knownWindow ? (
+          <p className="text-muted-foreground text-xs">
+            Usage preview is unavailable for this window. Refresh the page for
+            updated support.
+          </p>
+        ) : attributesLoading ? (
+          <Text muted small>
+            Loading target attributes…
+          </Text>
+        ) : attributesError ? (
+          <Text muted small>
+            Could not load target attributes. Refresh the page to preview usage.
+          </Text>
+        ) : !isSupportedRuleTarget(rule.target, attributes) ? (
+          <p className="text-muted-foreground text-xs">
+            Usage preview is unavailable for this target condition. Refresh the
+            page for updated support.
+          </p>
+        ) : (
+          <PeopleSection
+            actors={actors}
+            matchedCount={preview?.matchedCount ?? 0}
+            loading={actorsLoading}
+            error={actorsError}
+            onRetry={retryActors}
+          />
+        )}
 
         {/* Lifecycle events */}
         <section className="space-y-2">

@@ -11,7 +11,7 @@ export type AdminGetHookClientsRequest = {
    */
   windowDays?: number | undefined;
   /**
-   * Skip the one-hour cache and read ClickHouse now.
+   * Skip the cache and read ClickHouse now.
    */
   refresh?: boolean | undefined;
 };

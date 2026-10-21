@@ -2,8 +2,8 @@ lockVersion: 2.0.0
 id: f77ef720-de44-40b6-8dc1-f16f936ef992
 management:
   docVersion: 0.0.1
-  speakeasyVersion: 1.796.1
-  generationVersion: 2.933.0
+  speakeasyVersion: 1.803.0
+  generationVersion: 2.950.2
   releaseVersion: 0.33.8
 features:
   typescript:
@@ -26,18 +26,20 @@ features:
     pagination: 2.83.2
     reactQueryHooks: 0.3.0
     responseFormat: 0.3.0
-    retries: 2.83.1
+    retries: 2.83.2
     sdkHooks: 0.4.0
-    unions: 2.86.5
+    unions: 2.86.8
     uploadStreams: 0.1.1
 trackedFiles:
   FUNCTIONS.md: {}
   REACT_QUERY.md: {}
   src/core.ts: {}
+  src/funcs/accessApplyDirectoryRoleSetup.ts: {}
   src/funcs/accessCreateRole.ts: {}
   src/funcs/accessDeleteDirectoryRoleMapping.ts: {}
   src/funcs/accessDeleteRole.ts: {}
   src/funcs/accessExplainResourceAccess.ts: {}
+  src/funcs/accessGetDirectoryReviewSettings.ts: {}
   src/funcs/accessGetRole.ts: {}
   src/funcs/accessGetShadowMCPInventoryServer.ts: {}
   src/funcs/accessListAIDetectionUsers.ts: {}
@@ -45,6 +47,7 @@ trackedFiles:
   src/funcs/accessListAudienceOptions.ts: {}
   src/funcs/accessListChallengeBuckets.ts: {}
   src/funcs/accessListChallenges.ts: {}
+  src/funcs/accessListDirectoryReviewItems.ts: {}
   src/funcs/accessListDirectoryRoleMappings.ts: {}
   src/funcs/accessListEmployeeAIDetections.ts: {}
   src/funcs/accessListGrants.ts: {}
@@ -56,13 +59,16 @@ trackedFiles:
   src/funcs/accessListShadowMCPInventory.ts: {}
   src/funcs/accessListShadowMCPInventoryServersForUser.ts: {}
   src/funcs/accessListShadowMCPInventoryUsers.ts: {}
+  src/funcs/accessPreviewDirectoryRoleSetup.ts: {}
   src/funcs/accessRequestAccess.ts: {}
   src/funcs/accessResolveChallenge.ts: {}
+  src/funcs/accessResolveDirectoryReviewItem.ts: {}
   src/funcs/accessResolveShadowMCPInventoryRequest.ts: {}
   src/funcs/accessSetAIToolDecision.ts: {}
   src/funcs/accessSetDirectoryRoleMappings.ts: {}
   src/funcs/accessSetResourceAudience.ts: {}
   src/funcs/accessSyncDirectoryGroups.ts: {}
+  src/funcs/accessUpdateDirectoryReviewSettings.ts: {}
   src/funcs/accessUpdateMemberRoles.ts: {}
   src/funcs/accessUpdateRole.ts: {}
   src/funcs/accessUpdateShadowMCPInventoryServerName.ts: {}
@@ -574,9 +580,11 @@ trackedFiles:
   src/funcs/remoteSessionsCommitServerIdentityConfiguration.ts: {}
   src/funcs/remoteSessionsCount.ts: {}
   src/funcs/remoteSessionsDetachBinding.ts: {}
+  src/funcs/remoteSessionsDetachServerClientAssociation.ts: {}
   src/funcs/remoteSessionsGetServerIdentityImpact.ts: {}
   src/funcs/remoteSessionsList.ts: {}
   src/funcs/remoteSessionsListBindings.ts: {}
+  src/funcs/remoteSessionsListServerClientAssociations.ts: {}
   src/funcs/remoteSessionsRevoke.ts: {}
   src/funcs/resourcesList.ts: {}
   src/funcs/riskBlocksGet.ts: {}
@@ -850,6 +858,8 @@ trackedFiles:
   src/models/components/accessiblemcpserver.ts: {}
   src/models/components/accessibleskill.ts: {}
   src/models/components/accessmember.ts: {}
+  src/models/components/accessmemberdirectorygroup.ts: {}
+  src/models/components/accessmemberdirectoryrolesource.ts: {}
   src/models/components/acknowledgeriskpolicychallengerequestbody.ts: {}
   src/models/components/acknowledgeriskpolicychallengeresponsebody.ts: {}
   src/models/components/activateprescriptionrequestbody.ts: {}
@@ -871,6 +881,7 @@ trackedFiles:
   src/models/components/agentdelegatedpolicy.ts: {}
   src/models/components/agentidform.ts: {}
   src/models/components/agentmarketplace.ts: {}
+  src/models/components/agentmcpserver.ts: {}
   src/models/components/agentownerassignmentform.ts: {}
   src/models/components/agentownerprofile.ts: {}
   src/models/components/agentpermissions.ts: {}
@@ -907,6 +918,10 @@ trackedFiles:
   src/models/components/analyticsquerypayload.ts: {}
   src/models/components/analyticsqueryresult.ts: {}
   src/models/components/anthropicinferenceconfig.ts: {}
+  src/models/components/applydirectoryrolesetupform.ts: {}
+  src/models/components/applydirectoryrolesetupitem.ts: {}
+  src/models/components/applydirectoryrolesetupresult.ts: {}
+  src/models/components/applydirectoryrolesetuprole.ts: {}
   src/models/components/approvaldecision.ts: {}
   src/models/components/approvalrequestdetail.ts: {}
   src/models/components/approvalrequester.ts: {}
@@ -1069,6 +1084,7 @@ trackedFiles:
     pristine_git_object: 9f408bfae0fc457c23380d8317f36f1be06ead9d
   src/models/components/destination.ts: {}
   src/models/components/detachbindingrequestbody.ts: {}
+  src/models/components/detachserverclientassociationrequestbody.ts: {}
   src/models/components/deviceagentconfiguration.ts: {}
   src/models/components/deviceintegrationconfig.ts: {}
   src/models/components/deviceintegrationcoverage.ts: {}
@@ -1080,7 +1096,15 @@ trackedFiles:
   src/models/components/dimensionvaluesrequestbody.ts: {}
   src/models/components/directoryattributeoption.ts: {}
   src/models/components/directorygroupoption.ts: {}
+  src/models/components/directoryreviewitem.ts: {}
+  src/models/components/directoryreviewsettings.ts: {}
   src/models/components/directoryrolemapping.ts: {}
+  src/models/components/directoryrolesetuphiddenattributekey.ts: {}
+  src/models/components/directoryrolesetuppreviewitem.ts: {}
+  src/models/components/directoryrolesetuppreviewresult.ts: {}
+  src/models/components/directoryrolesetupproposedrole.ts: {}
+  src/models/components/directoryrolesetupsideeffect.ts: {}
+  src/models/components/directoryrolesetupsource.ts: {}
   src/models/components/disableopenrouterkeyrequestbody.ts: {}
   src/models/components/disconnectslackdirectoryconnectionrequestbody.ts: {}
   src/models/components/discoverprotectedresourcemetadatarequestbody.ts: {}
@@ -1295,6 +1319,7 @@ trackedFiles:
   src/models/components/launchercontext.ts: {}
   src/models/components/launcherjudgment.ts: {}
   src/models/components/listactorattributesresult.ts: {}
+  src/models/components/listagentsresult.ts: {}
   src/models/components/listaidetectionsresult.ts: {}
   src/models/components/listaidetectionusersresult.ts: {}
   src/models/components/listaiintegrationschedulesresult.ts: {}
@@ -1329,6 +1354,7 @@ trackedFiles:
   src/models/components/listdestinationsresult.ts: {}
   src/models/components/listdeviceintegrationprovidersresult.ts: {}
   src/models/components/listdeviceintegrationschedulesresult.ts: {}
+  src/models/components/listdirectoryreviewitemsresult.ts: {}
   src/models/components/listdirectoryrolemappingsresult.ts: {}
   src/models/components/listdistributionpluginsresult.ts: {}
   src/models/components/listemaservicesresult.ts: {}
@@ -1391,6 +1417,7 @@ trackedFiles:
   src/models/components/listrolesresult.ts: {}
   src/models/components/listrootmcpserversresponsebody.ts: {}
   src/models/components/listscopesresult.ts: {}
+  src/models/components/listserverclientassociationsresult.ts: {}
   src/models/components/listserverheadersresult.ts: {}
   src/models/components/listserversresult.ts: {}
   src/models/components/listsessionlinksresult.ts: {}
@@ -1638,6 +1665,8 @@ trackedFiles:
   src/models/components/resetoktaresourceconnectionrequestbody.ts: {}
   src/models/components/resolvechallengeform.ts: {}
   src/models/components/resolvechallengesresult.ts: {}
+  src/models/components/resolvedirectoryreviewitemform.ts: {}
+  src/models/components/resolvedirectoryreviewitemresult.ts: {}
   src/models/components/resolveshadowmcpinventoryrequestform.ts: {}
   src/models/components/resource.ts: {}
   src/models/components/resourceaudienceentry.ts: {}
@@ -1731,6 +1760,7 @@ trackedFiles:
   src/models/components/sendmessageattachment.ts: {}
   src/models/components/sendmessagerequestbody.ts: {}
   src/models/components/sendmessageresult.ts: {}
+  src/models/components/serverclientassociation.ts: {}
   src/models/components/serveridentityclientconfiguration.ts: {}
   src/models/components/serveridentityimpactresult.ts: {}
   src/models/components/serveridentityimpactserver.ts: {}
@@ -2046,10 +2076,8 @@ trackedFiles:
   src/models/components/workloadidentitypolicy.ts: {}
   src/models/components/workloadissuer.ts: {}
   src/models/components/workloadplatform.ts: {}
-  src/models/components/workloadplatformblock.ts: {}
   src/models/components/workloadplatformcatalog.ts: {}
   src/models/components/workloadplatformconstant.ts: {}
-  src/models/components/workloadplatformstep.ts: {}
   src/models/components/workloadplatformsubject.ts: {}
   src/models/components/workloadplatformvariable.ts: {}
   src/models/components/workloadtokenendpoint.ts: {}
@@ -2079,6 +2107,7 @@ trackedFiles:
   src/models/operations/analyticsdescribe.ts: {}
   src/models/operations/analyticsdimensionvalues.ts: {}
   src/models/operations/analyticsquery.ts: {}
+  src/models/operations/applydirectoryrolesetup.ts: {}
   src/models/operations/approveallskillsuggestions.ts: {}
   src/models/operations/approveriskpolicybypassrequest.ts: {}
   src/models/operations/approveskillsuggestion.ts: {}
@@ -2237,6 +2266,7 @@ trackedFiles:
   src/models/operations/detachbinding.ts: {}
   src/models/operations/detachorganizationremotesessionclientkeyset.ts: {}
   src/models/operations/detachremotesessionclientkeyset.ts: {}
+  src/models/operations/detachserverclientassociation.ts: {}
   src/models/operations/detachusersessionissuer.ts: {}
   src/models/operations/disableadminopenrouterkey.ts: {}
   src/models/operations/disablewebhooks.ts: {}
@@ -2295,6 +2325,7 @@ trackedFiles:
   src/models/operations/getdeviceagentconfiguration.ts: {}
   src/models/operations/getdeviceintegrationconfig.ts: {}
   src/models/operations/getdeviceintegrationcoverage.ts: {}
+  src/models/operations/getdirectoryreviewsettings.ts: {}
   src/models/operations/getdistributionplugin.ts: {}
   src/models/operations/getdomain.ts: {}
   src/models/operations/getemployeedataflowgraph.ts: {}
@@ -2475,6 +2506,7 @@ trackedFiles:
   src/models/operations/listdeployments.ts: {}
   src/models/operations/listdeviceintegrationproviders.ts: {}
   src/models/operations/listdeviceintegrationschedules.ts: {}
+  src/models/operations/listdirectoryreviewitems.ts: {}
   src/models/operations/listdirectoryrolemappings.ts: {}
   src/models/operations/listdismissedriskresults.ts: {}
   src/models/operations/listdistributionplugins.ts: {}
@@ -2549,6 +2581,7 @@ trackedFiles:
   src/models/operations/listroles.ts: {}
   src/models/operations/listrootmcpservers.ts: {}
   src/models/operations/listscopes.ts: {}
+  src/models/operations/listserverclientassociations.ts: {}
   src/models/operations/listservernameoverrides.ts: {}
   src/models/operations/listsessionquarantines.ts: {}
   src/models/operations/listsessions.ts: {}
@@ -2617,6 +2650,7 @@ trackedFiles:
   src/models/operations/platformkillswitchesnumberlistdefinitions.ts: {}
   src/models/operations/platformkillswitchesnumberlistprescriptions.ts: {}
   src/models/operations/prepareema.ts: {}
+  src/models/operations/previewdirectoryrolesetup.ts: {}
   src/models/operations/previewspendrule.ts: {}
   src/models/operations/proberemotemcpurl.ts: {}
   src/models/operations/promotemcpapprovalrequest.ts: {}
@@ -2663,6 +2697,7 @@ trackedFiles:
   src/models/operations/requestaccess.ts: {}
   src/models/operations/resetoktaresourceconnection.ts: {}
   src/models/operations/resolvechallenge.ts: {}
+  src/models/operations/resolvedirectoryreviewitem.ts: {}
   src/models/operations/resolveidentity.ts: {}
   src/models/operations/resolveshadowmcpinventoryrequest.ts: {}
   src/models/operations/restoreoktaserversuggestion.ts: {}
@@ -2783,6 +2818,7 @@ trackedFiles:
   src/models/operations/updatedataexportdestination.ts: {}
   src/models/operations/updatedataexportroute.ts: {}
   src/models/operations/updatedeviceagentconfiguration.ts: {}
+  src/models/operations/updatedirectoryreviewsettings.ts: {}
   src/models/operations/updatedomain.ts: {}
   src/models/operations/updateenvironment.ts: {}
   src/models/operations/updateexternaloauthserver.ts: {}
@@ -2913,6 +2949,7 @@ trackedFiles:
   src/react-query/analyticsQuery.ts: {}
   src/react-query/anthropicInferenceConfig.core.ts: {}
   src/react-query/anthropicInferenceConfig.ts: {}
+  src/react-query/applyDirectoryRoleSetup.ts: {}
   src/react-query/approveAllSkillSuggestions.ts: {}
   src/react-query/approveSkillSuggestion.ts: {}
   src/react-query/archiveSkill.ts: {}
@@ -3093,6 +3130,7 @@ trackedFiles:
   src/react-query/deploymentLogs.ts: {}
   src/react-query/detachOrganizationRemoteSessionClientKeySet.ts: {}
   src/react-query/detachRemoteSessionClientKeySet.ts: {}
+  src/react-query/detachServerClientAssociation.ts: {}
   src/react-query/detachUserSessionIssuer.ts: {}
   src/react-query/deviceAgentConfiguration.core.ts: {}
   src/react-query/deviceAgentConfiguration.ts: {}
@@ -3104,8 +3142,14 @@ trackedFiles:
   src/react-query/deviceIntegrationProviders.ts: {}
   src/react-query/deviceIntegrationSchedules.core.ts: {}
   src/react-query/deviceIntegrationSchedules.ts: {}
+  src/react-query/directoryReviewItems.core.ts: {}
+  src/react-query/directoryReviewItems.ts: {}
+  src/react-query/directoryReviewSettings.core.ts: {}
+  src/react-query/directoryReviewSettings.ts: {}
   src/react-query/directoryRoleMappings.core.ts: {}
   src/react-query/directoryRoleMappings.ts: {}
+  src/react-query/directoryRoleSetupPreview.core.ts: {}
+  src/react-query/directoryRoleSetupPreview.ts: {}
   src/react-query/disableAdminOpenRouterKey.ts: {}
   src/react-query/disableWebhooks.ts: {}
   src/react-query/disconnectSlackDirectoryConnection.ts: {}
@@ -3622,6 +3666,7 @@ trackedFiles:
   src/react-query/requestAccess.ts: {}
   src/react-query/resetOktaResourceConnection.ts: {}
   src/react-query/resolveChallenge.ts: {}
+  src/react-query/resolveDirectoryReviewItem.ts: {}
   src/react-query/resolveShadowMCPInventoryRequest.ts: {}
   src/react-query/resourceAudience.core.ts: {}
   src/react-query/resourceAudience.ts: {}
@@ -3756,6 +3801,8 @@ trackedFiles:
   src/react-query/serveImage.ts: {}
   src/react-query/serveOpenAPIv3.core.ts: {}
   src/react-query/serveOpenAPIv3.ts: {}
+  src/react-query/serverClientAssociations.core.ts: {}
+  src/react-query/serverClientAssociations.ts: {}
   src/react-query/serverIdentityImpact.core.ts: {}
   src/react-query/serverIdentityImpact.ts: {}
   src/react-query/sessionInfo.core.ts: {}
@@ -3895,6 +3942,7 @@ trackedFiles:
   src/react-query/updateDataExportDestination.ts: {}
   src/react-query/updateDataExportRoute.ts: {}
   src/react-query/updateDeviceAgentConfiguration.ts: {}
+  src/react-query/updateDirectoryReviewSettings.ts: {}
   src/react-query/updateDomain.ts: {}
   src/react-query/updateEnvironment.ts: {}
   src/react-query/updateExternalOAuthServer.ts: {}
@@ -4296,6 +4344,17 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  applyDirectoryRoleSetup:
+    speakeasy-default-apply-directory-role-setup:
+      requestBody:
+        application/json: {"items": [{"roles": [], "source": {"source_kind": "group"}, "version": "<value>"}]}
+      responses:
+        "200":
+          application/json: {"created_roles": [{"created_at": "2025-08-29T21:51:36.033Z", "description": "corrupt intent beard blah gah drat whether while", "grants": [], "id": "<id>", "is_system": true, "member_count": 529092, "name": "<value>", "principal_urn": "<value>", "slug": "<value>", "updated_at": "2025-10-08T23:52:20.589Z"}], "mappings": [{"created_at": "2024-04-10T07:44:56.899Z", "id": "6fd49bd7-721f-4a33-a7d0-afd44474151d", "role_urn": "<value>", "source_kind": "attribute", "source_status": "missing", "updated_at": "2024-11-19T23:42:36.224Z"}], "side_effects": []}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   approveAllSkillSuggestions:
     speakeasy-default-approve-all-skill-suggestions:
       requestBody:
@@ -5390,7 +5449,7 @@ examples:
   createTemplate:
     speakeasy-default-create-template:
       requestBody:
-        application/json: {"engine": "mustache", "kind": "higher_order_tool", "name": "<value>", "prompt": "<value>"}
+        application/json: {"engine": "mustache", "kind": "prompt", "name": "<value>", "prompt": "<value>"}
       responses:
         "200":
           application/json: {"template": {"canonical_name": "<value>", "created_at": "2024-07-17T03:17:12.882Z", "description": "immense extent aboard strident", "engine": "mustache", "history_id": "<id>", "id": "<id>", "kind": "higher_order_tool", "name": "<value>", "project_id": "<id>", "prompt": "<value>", "schema": "<value>", "tool_urn": "<value>", "tools_hint": [], "updated_at": "2024-01-27T21:04:32.774Z"}}
@@ -6247,6 +6306,15 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  detachServerClientAssociation:
+    speakeasy-default-detach-server-client-association:
+      requestBody:
+        application/json: {"mcp_server_id": "f68bc275-7fdd-40e5-bf22-221e46318f4f", "remote_session_client_id": "7736a6db-5343-499c-a718-41a6ce5f9823"}
+      responses:
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   detachServerFromCollection:
     speakeasy-default-detach-server-from-collection:
       requestBody:
@@ -6787,7 +6855,7 @@ examples:
           Gram-Device-Environment: "ephemeral"
       responses:
         "200":
-          application/json: {"etag": "<value>", "marketplaces": [], "plugins": []}
+          application/json: {"etag": "<value>", "marketplaces": [], "mcp_servers": [], "plugins": []}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -6999,6 +7067,15 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  getDirectoryReviewSettings:
+    speakeasy-default-get-directory-review-settings:
+      responses:
+        "200":
+          application/json: {"emails_enabled": true}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   getDistributionPlugin:
     speakeasy-default-get-distribution-plugin:
       parameters:
@@ -8840,9 +8917,14 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   listAgents:
     speakeasy-default-list-agents:
+      parameters:
+        query:
+          limit: 50
+          sort_order: "asc"
+          name_order: "asc"
       responses:
         "200":
-          application/json: [{"created_at": "2025-07-13T11:18:49.503Z", "id": "cc0734d8-9269-4221-a313-a6aa6ca11e63", "lifecycle": "active", "name": "<value>", "owner_user_id": "<id>", "permissions": {"authorize": true, "read": true, "transfer": true, "write": false}, "updated_at": "2025-05-03T03:30:57.286Z"}]
+          application/json: {"items": [{"created_at": "2026-04-07T04:18:32.790Z", "id": "c0734d89-2692-4213-813a-6aa6ca11e63b", "lifecycle": "suspended", "name": "<value>", "owner_user_id": "<id>", "permissions": {"authorize": true, "read": true, "transfer": false, "write": true}, "updated_at": "2026-06-22T07:22:36.166Z"}]}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -9223,11 +9305,20 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  listDirectoryReviewItems:
+    speakeasy-default-list-directory-review-items:
+      responses:
+        "200":
+          application/json: {"items": []}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   listDirectoryRoleMappings:
     speakeasy-default-list-directory-role-mappings:
       responses:
         "200":
-          application/json: {"attributes": [], "groups": [], "mappings": [{"created_at": "2026-06-08T20:39:17.479Z", "id": "beeb6442-b41b-4e3a-b4c4-ec7a9ac9bc83", "role_urn": "<value>", "source_kind": "group", "updated_at": "2024-12-11T16:06:03.477Z"}]}
+          application/json: {"attributes": [], "groups": [], "mappings": [{"created_at": "2026-06-08T20:39:17.479Z", "id": "beeb6442-b41b-4e3a-b4c4-ec7a9ac9bc83", "role_urn": "<value>", "source_kind": "group", "source_status": "active", "updated_at": "2024-12-11T16:06:03.477Z"}]}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
@@ -10024,6 +10115,18 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  listServerClientAssociations:
+    speakeasy-default-list-server-client-associations:
+      parameters:
+        query:
+          mcp_server_id: "9fe4eeb2-ab23-422d-8b3c-8f84188e6522"
+      responses:
+        "200":
+          application/json: {"associations": []}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   listServerNameOverrides:
     speakeasy-default-list-server-name-overrides:
       responses:
@@ -10866,6 +10969,15 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  previewDirectoryRoleSetup:
+    speakeasy-default-preview-directory-role-setup:
+      responses:
+        "200":
+          application/json: {"hidden_attribute_keys": [], "items": [], "max_values_per_attribute_key": 226355}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   previewSpendRule:
     speakeasy-default-preview-spend-rule:
       requestBody:
@@ -11300,7 +11412,7 @@ examples:
   renderTemplate:
     speakeasy-default-render-template:
       requestBody:
-        application/json: {"arguments": {"key": "<value>"}, "engine": "mustache", "kind": "higher_order_tool", "prompt": "<value>"}
+        application/json: {"arguments": {"key": "<value>"}, "engine": "mustache", "kind": "prompt", "prompt": "<value>"}
       responses:
         "200":
           application/json: {"prompt": "<value>"}
@@ -11415,6 +11527,17 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  resolveDirectoryReviewItem:
+    speakeasy-default-resolve-directory-review-item:
+      requestBody:
+        application/json: {"decision": "dismiss", "id": "59abec0f-0870-4fa4-a5a7-ee307d6a80ca"}
+      responses:
+        "200":
+          application/json: {"created_roles": [], "mappings": [{"created_at": "2025-08-21T15:58:44.799Z", "id": "163c457b-ab1e-48a5-834e-92f9a7bb8f6b", "role_urn": "<value>", "source_kind": "group", "source_status": "missing", "updated_at": "2025-07-27T19:39:45.809Z"}], "side_effects": [], "state": "dismissed"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   resolveIdentity:
     speakeasy-default-resolve-identity:
       parameters:
@@ -12085,7 +12208,7 @@ examples:
         application/json: {"role_urns": ["<value 1>", "<value 2>", "<value 3>"], "source_kind": "group"}
       responses:
         "200":
-          application/json: [{"created_at": "2024-09-29T00:04:10.995Z", "id": "8fbf3700-9b0c-4ce9-833c-21f6146f35e9", "role_urn": "<value>", "source_kind": "attribute", "updated_at": "2024-09-15T11:23:43.947Z"}]
+          application/json: [{"created_at": "2024-09-29T00:04:10.995Z", "id": "8fbf3700-9b0c-4ce9-833c-21f6146f35e9", "role_urn": "<value>", "source_kind": "attribute", "source_status": "missing", "updated_at": "2024-09-15T11:23:43.947Z"}]
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -12798,6 +12921,17 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  updateDirectoryReviewSettings:
+    speakeasy-default-update-directory-review-settings:
+      requestBody:
+        application/json: {"emails_enabled": true}
+      responses:
+        "200":
+          application/json: {"emails_enabled": true}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   updateDomain:
     speakeasy-default-update-domain:
       requestBody:

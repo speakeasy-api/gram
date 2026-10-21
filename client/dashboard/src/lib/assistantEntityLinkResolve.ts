@@ -97,7 +97,9 @@ export function resolveEntityLink(
     case "prompt":
       return newTab(`${proj}/prompts/${enc(rest)}`);
     case "custom_tool":
-      return newTab(`${proj}/custom-tools/${enc(rest)}`);
+      // Existing assistant responses may still reference these removed pages.
+      // Render the reference as plain text rather than linking to a dead route.
+      return UNRESOLVABLE;
     case "catalog":
       return newTab(`${proj}/catalog/${enc(rest)}`);
     case "assistant":

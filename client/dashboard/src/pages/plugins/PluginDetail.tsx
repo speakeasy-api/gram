@@ -529,6 +529,16 @@ function PluginDetailContent({
     return map;
   }, [toolsets]);
 
+  // Hosted toolsets with a canonical MCP server (same id); undefined until servers load.
+  const canonicalToolsetIds = useMemo(() => {
+    if (!mcpServersData?.mcpServers) return undefined;
+    return new Set(
+      mcpServersData.mcpServers
+        .filter((s) => s.toolsetId === s.id)
+        .map((s) => s.id),
+    );
+  }, [mcpServersData]);
+
   const mcpServerById = useMemo(() => {
     const map = new Map<string, McpServer>();
     for (const s of mcpServers) map.set(s.id, s);
@@ -597,6 +607,12 @@ function PluginDetailContent({
       // Mirrors AddPluginServer: a hosted server needs MCP on and an MCP slug.
       const mcpOff = !!toolset && !toolset.mcpEnabled;
       const noMcpAddress = !!toolset && !mcpOff && !toolset.mcpSlug;
+      const noMcpServer =
+        !!toolset &&
+        !mcpOff &&
+        !noMcpAddress &&
+        !!canonicalToolsetIds &&
+        !canonicalToolsetIds.has(toolset.id);
       return {
         value: serverOptionKey(o.kind, o.id),
         label: o.name,
@@ -614,13 +630,21 @@ function PluginDetailContent({
         ),
         slug,
         kindLabel,
-        badge: mcpOff ? "MCP off" : noMcpAddress ? "No MCP address" : undefined,
+        badge: mcpOff
+          ? "MCP off"
+          : noMcpAddress
+            ? "No MCP address"
+            : noMcpServer
+              ? "No MCP server"
+              : undefined,
         description: mcpOff
           ? "Turn on MCP for this server before adding it to a plugin."
           : noMcpAddress
             ? "Set an MCP address for this server before adding it to a plugin."
-            : `${slug ?? "No slug"} · ${kindLabel}`,
-        disabled: mcpOff || noMcpAddress,
+            : noMcpServer
+              ? "This toolset has no MCP server yet, so it cannot be added to a plugin."
+              : `${slug ?? "No slug"} · ${kindLabel}`,
+        disabled: mcpOff || noMcpAddress || noMcpServer,
       };
     });
 

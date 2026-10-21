@@ -262,7 +262,8 @@ func TestMemberMCPConnectionStatusReportsIdentityChaining(t *testing.T) {
 	ctx = authz.GrantsToContext(ctx, []authz.Grant{authz.NewGrant(authz.ScopeMCPConnect, mcpID.String())})
 	serverURL, err := url.Parse("https://gram.example.test")
 	require.NoError(t, err)
-	clientID := uuid.New()
+	clientID := associateMemberMCPClient(t, ctx, conn, principal.OrganizationID, project.ID, mcpID, remoteIssuer.ID)
+	secondClientID := associateMemberMCPClient(t, ctx, conn, principal.OrganizationID, project.ID, mcpID, remoteIssuer.ID)
 	clients := []remotesessions.Client{{ID: clientID, RemoteSessionIssuerID: remoteIssuer.ID}}
 	input := GetMyMCPStatusInput{ProjectID: project.ID.String(), MCPID: mcpID.String()}
 	rejected := map[uuid.UUID]remotesessions.RemoteSessionState{clientID: {Status: remotesessions.RemoteSessionActive, ValidationStatus: remotesessions.ValidationOutcomeInactive}}
@@ -282,9 +283,10 @@ func TestMemberMCPConnectionStatusReportsIdentityChaining(t *testing.T) {
 		nextAction string
 		consulted  bool
 	}{
-		{name: "no issuer usable credential", noIssuer: true, serves: true, usable: true, state: MCPConnectionStateActive, reason: MCPConnectionReasonIdentityChaining, nextAction: "use_mcp", consulted: true},
-		{name: "no issuer configured without credential", noIssuer: true, serves: true, state: MCPConnectionStateNotConnected, reason: ReadinessEvidenceIdentityChainingConfigured, nextAction: "use_mcp", consulted: true},
-		{name: "no issuer not chained", noIssuer: true, state: MCPConnectionStateNotApplicable, reason: "authorization_not_required", nextAction: "use_mcp", consulted: true},
+		// Chaining serves a server only through the client a sign-in chooses,
+		// so without exactly one usable client it is never consulted.
+		{name: "no issuer chaining configured", noIssuer: true, serves: true, usable: true, state: MCPConnectionStateNotApplicable, reason: "authorization_not_required", nextAction: "use_mcp", consulted: false},
+		{name: "no issuer not chained", noIssuer: true, state: MCPConnectionStateNotApplicable, reason: "authorization_not_required", nextAction: "use_mcp", consulted: false},
 		{name: "no session usable credential", serves: true, usable: true, state: MCPConnectionStateActive, reason: MCPConnectionReasonIdentityChaining, nextAction: "use_mcp", consulted: true},
 		{name: "expired session usable credential", serves: true, usable: true, statuses: expired, state: MCPConnectionStateActive, reason: MCPConnectionReasonIdentityChaining, nextAction: "use_mcp", consulted: true},
 		{name: "no session configured without credential", serves: true, state: MCPConnectionStateNotConnected, reason: ReadinessEvidenceIdentityChainingConfigured, nextAction: "use_mcp", consulted: true},
@@ -294,12 +296,10 @@ func TestMemberMCPConnectionStatusReportsIdentityChaining(t *testing.T) {
 		{name: "rejected session wins over usable credential", serves: true, usable: true, statuses: rejected, state: MCPConnectionStateReauthorizationRequired, reason: "authorization_rejected", nextAction: "reconnect", consulted: false},
 		{name: "rejected session not chained", statuses: rejected, state: MCPConnectionStateReauthorizationRequired, reason: "authorization_rejected", nextAction: "reconnect", consulted: false},
 		{name: "interactive session wins", serves: true, usable: true, statuses: active, state: MCPConnectionStateActive, nextAction: "use_mcp", consulted: false},
-		{name: "no client usable credential", noClient: true, serves: true, usable: true, state: MCPConnectionStateActive, reason: MCPConnectionReasonIdentityChaining, nextAction: "use_mcp", consulted: true},
-		{name: "no client configured without credential", noClient: true, serves: true, state: MCPConnectionStateNotConnected, reason: ReadinessEvidenceIdentityChainingConfigured, nextAction: "use_mcp", consulted: true},
-		{name: "no client not chained", noClient: true, state: MCPConnectionStateSetupRequired, reason: "upstream_authorization_not_configured", nextAction: "ask_administrator", consulted: true},
-		{name: "multiple clients usable credential", multi: true, serves: true, usable: true, state: MCPConnectionStateActive, reason: MCPConnectionReasonIdentityChaining, nextAction: "use_mcp", consulted: true},
-		{name: "multiple clients configured without credential", multi: true, serves: true, state: MCPConnectionStateNotConnected, reason: ReadinessEvidenceIdentityChainingConfigured, nextAction: "use_mcp", consulted: true},
-		{name: "multiple clients not chained", multi: true, state: MCPConnectionStateSetupRequired, reason: "multiple_authorization_clients", nextAction: "ask_administrator", consulted: true},
+		{name: "no client chaining configured", noClient: true, serves: true, usable: true, state: MCPConnectionStateSetupRequired, reason: "upstream_authorization_not_configured", nextAction: "ask_administrator", consulted: false},
+		{name: "no client not chained", noClient: true, state: MCPConnectionStateSetupRequired, reason: "upstream_authorization_not_configured", nextAction: "ask_administrator", consulted: false},
+		{name: "multiple clients chaining configured", multi: true, serves: true, usable: true, state: MCPConnectionStateSetupRequired, reason: "multiple_authorization_clients", nextAction: "ask_administrator", consulted: false},
+		{name: "multiple clients not chained", multi: true, state: MCPConnectionStateSetupRequired, reason: "multiple_authorization_clients", nextAction: "ask_administrator", consulted: false},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			issuer := conv.ToNullUUID(remoteIssuer.ID)
@@ -311,12 +311,29 @@ func TestMemberMCPConnectionStatusReportsIdentityChaining(t *testing.T) {
 			})
 			require.NoError(t, err)
 			require.EqualValues(t, 1, stamped)
+			// A server with no derived issuer has no client configured for it.
+			require.NoError(t, testrepo.New(conn).ClearMCPServerRemoteSessionClientsFixture(ctx, mcpID))
+			associated := []uuid.UUID{clientID}
+			switch {
+			case test.noIssuer, test.noClient:
+				associated = nil
+			case test.multi:
+				associated = append(associated, secondClientID)
+			}
+			for _, id := range associated {
+				require.NoError(t, testrepo.New(conn).InsertMCPServerRemoteSessionClientFixture(ctx, testrepo.InsertMCPServerRemoteSessionClientFixtureParams{
+					ProjectID:             project.ID,
+					OrganizationID:        principal.OrganizationID,
+					McpServerID:           mcpID,
+					RemoteSessionClientID: id,
+				}))
+			}
 			readerClients := clients
 			if test.noClient {
 				readerClients = nil
 			}
 			if test.multi {
-				readerClients = append(append([]remotesessions.Client(nil), clients...), remotesessions.Client{ID: uuid.New(), RemoteSessionIssuerID: remoteIssuer.ID})
+				readerClients = append(append([]remotesessions.Client(nil), clients...), remotesessions.Client{ID: secondClientID, RemoteSessionIssuerID: remoteIssuer.ID})
 			}
 			governor := &recordingGovernor{issuer: remoteIssuer.ID, serves: test.serves, usable: test.usable}
 			service := NewPluginsService(conn, allowBudget(), "member-chained-status-key").
@@ -341,6 +358,7 @@ func TestMemberMCPConnectionStatusReportsIdentityChaining(t *testing.T) {
 			require.NotEqual(t, uuid.Nil, req.UserSessionIssuerID)
 			require.Equal(t, "https://cohort.example.test/mcp", req.UpstreamResource)
 			require.False(t, req.RemoteSessionIssuerID.Valid)
+			require.Equal(t, uuid.NullUUID{UUID: clientID, Valid: true}, req.RemoteSessionClientID, "chaining is judged through the one client the sign-in chooses")
 		})
 	}
 }

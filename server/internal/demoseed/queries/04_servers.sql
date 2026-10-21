@@ -224,6 +224,35 @@ SET remote_session_issuer_id = @remote_session_issuer_id::uuid
 WHERE id = @mcp_server_id::uuid
   AND project_id = @project_id::uuid;
 
+-- One server's upstream OAuth client association. The app records it when
+-- User Identity is configured on the server, or when the server is the only
+-- consumer of its user session issuer; the seed writes it directly.
+-- name: ServersInsertServerClientAssociation :exec
+INSERT INTO mcp_server_remote_session_clients
+  (id, project_id, organization_id, mcp_server_id, remote_session_client_id,
+   client_attachment_scope)
+SELECT @id::uuid, @project_id::uuid, @org_id::text, @mcp_server_id::uuid,
+       c.id, c.attachment_scope
+FROM remote_session_clients AS c
+WHERE c.id = @remote_session_client_id::uuid;
+
+-- One seeded credential's choice for one server, as issuance records it: the
+-- client the credential uses there, or no-auth when the client is omitted.
+-- no_auth follows the parameter, so a client id that resolves to no client
+-- fails the no-auth check instead of being recorded as no-auth. The projects
+-- delete cascades these rows.
+-- name: ServersInsertUpstreamClientChoice :exec
+INSERT INTO upstream_client_selections
+  (id, project_id, organization_id, credential_kind, credential_id,
+   mcp_server_id, remote_session_client_id, client_attachment_scope, no_auth,
+   source)
+SELECT @id::uuid, @project_id::uuid, @org_id::text, @credential_kind::text,
+       @credential_id::uuid, @mcp_server_id::uuid, c.id, c.attachment_scope,
+       sqlc.narg(remote_session_client_id)::uuid IS NULL, @source::text
+FROM (SELECT 1) AS one
+LEFT JOIN remote_session_clients AS c
+  ON c.id = sqlc.narg(remote_session_client_id)::uuid;
+
 -- Linear's protected resource, read recently, with a scope pin for the server's scope panel.
 -- name: ServersUpsertLinearProtectedResource :exec
 INSERT INTO remote_protected_resources

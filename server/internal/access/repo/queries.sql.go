@@ -1007,19 +1007,132 @@ func (q *Queries) InsertPrincipalGrantIfAbsent(ctx context.Context, arg InsertPr
 	return result.RowsAffected(), nil
 }
 
+const listAccessMemberDirectoryRoleSources = `-- name: ListAccessMemberDirectoryRoleSources :many
+WITH members AS (
+  SELECT u.id, u.email
+  FROM users AS u
+  JOIN organization_user_relationships AS our
+    ON our.user_id = u.id
+    AND our.organization_id = $1
+    AND our.deleted IS FALSE
+  WHERE u.deleted_at IS NULL
+),
+profiles AS (
+  SELECT members.id AS user_id, p.id AS directory_user_id, p.attributes
+  FROM members
+  CROSS JOIN LATERAL (
+    SELECT d.id, d.attributes
+    FROM directory_users AS d
+    WHERE d.organization_id = $1
+      AND d.deleted IS FALSE
+      AND d.workos_deleted IS FALSE
+      AND (d.user_id = members.id OR (d.user_id IS NULL AND LOWER(d.email) = LOWER(members.email)))
+    ORDER BY (d.user_id = members.id) DESC NULLS LAST, d.workos_updated_at DESC, d.id
+    LIMIT 1
+  ) AS p
+)
+SELECT
+  profiles.user_id::text AS user_id,
+  COALESCE(mapped_org_role.id::text, mapped_global_role.id::text)::text AS role_id,
+  drm.id AS mapping_id,
+  drm.source_kind,
+  drm.directory_group_id
+FROM directory_role_mappings AS drm
+JOIN profiles
+  ON (
+    drm.source_kind = 'group'
+    AND EXISTS (
+      SELECT 1
+      FROM directory_user_group_memberships AS m
+      JOIN directory_groups AS dg
+        ON dg.id = m.directory_group_id
+        AND dg.organization_id = drm.organization_id
+        AND dg.deleted IS FALSE
+        AND dg.workos_deleted IS FALSE
+      WHERE m.directory_user_id = profiles.directory_user_id
+        AND m.directory_group_id = drm.directory_group_id
+        AND m.deleted IS FALSE
+    )
+  )
+  OR (
+    drm.source_kind = 'attribute'
+    AND profiles.attributes ->> drm.attribute_key = drm.attribute_value
+  )
+LEFT JOIN organization_roles AS mapped_org_role
+  ON drm.role_urn = 'role:organization:' || mapped_org_role.id::text
+  AND mapped_org_role.organization_id = drm.organization_id
+  AND mapped_org_role.deleted IS FALSE
+  AND mapped_org_role.workos_deleted IS FALSE
+LEFT JOIN global_roles AS mapped_global_role
+  ON drm.role_urn = 'role:global:' || mapped_global_role.id::text
+  AND mapped_global_role.deleted IS FALSE
+  AND mapped_global_role.workos_deleted IS FALSE
+WHERE drm.organization_id = $1
+  AND drm.deleted IS FALSE
+  AND COALESCE(mapped_org_role.id, mapped_global_role.id) IS NOT NULL
+ORDER BY profiles.user_id, role_id, drm.source_kind, drm.id
+`
+
+type ListAccessMemberDirectoryRoleSourcesRow struct {
+	UserID           string
+	RoleID           string
+	MappingID        uuid.UUID
+	SourceKind       string
+	DirectoryGroupID uuid.NullUUID
+}
+
+// For every active member, the directory role mappings that currently give
+// them a role: one row per member and matching mapping, so a role reached
+// through two groups is listed twice. This is the batch form of
+// ListUserDirectoryRoleMappingSources: each member's directory profile is
+// chosen and matched the same way as in ListUserRolePrincipals, and mappings
+// that point at a deleted role are skipped, as in the mapped half of
+// ListAccessMembers.
+func (q *Queries) ListAccessMemberDirectoryRoleSources(ctx context.Context, organizationID string) ([]ListAccessMemberDirectoryRoleSourcesRow, error) {
+	rows, err := q.db.Query(ctx, listAccessMemberDirectoryRoleSources, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAccessMemberDirectoryRoleSourcesRow
+	for rows.Next() {
+		var i ListAccessMemberDirectoryRoleSourcesRow
+		if err := rows.Scan(
+			&i.UserID,
+			&i.RoleID,
+			&i.MappingID,
+			&i.SourceKind,
+			&i.DirectoryGroupID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listAccessMembers = `-- name: ListAccessMembers :many
+WITH members AS (
 SELECT
   users.id,
   users.display_name,
   users.email,
   users.photo_url,
-  COALESCE(organization_roles.id::text, global_roles.id::text, '')::text AS role_id,
-  COALESCE(ora.created_at, our.created_at)::timestamptz AS joined_at,
+  COALESCE(direct_roles.role_ids, '{}'::text[])::text[] AS role_ids,
+  COALESCE(direct_roles.joined_at, our.created_at)::timestamptz AS joined_at,
   -- The member's identity-provider profile, when the directory has synced one.
   -- A member with no directory row, or one whose provider does not report the
   -- attribute, comes back as an empty string.
   COALESCE(du.attributes ->> 'department_name', '')::text AS department,
   COALESCE(dg_names.group_names, '{}'::text[])::text[] AS group_names,
+  -- The same groups by stable ID. group_ids and group_id_names are parallel
+  -- arrays: entry i of each describes the same group.
+  COALESCE(dg_names.group_ids, '{}'::uuid[])::uuid[] AS group_ids,
+  COALESCE(dg_names.group_id_names, '{}'::text[])::text[] AS group_id_names,
+  (du.id IS NOT NULL)::boolean AS in_directory,
   COALESCE(mapped_roles.role_ids, '{}'::text[])::text[] AS directory_role_ids
 FROM organization_user_relationships AS our
 JOIN users
@@ -1042,7 +1155,10 @@ LEFT JOIN LATERAL (
   LIMIT 1
 ) du ON TRUE
 LEFT JOIN LATERAL (
-  SELECT ARRAY_AGG(DISTINCT dg.name) AS group_names
+  SELECT
+    ARRAY_AGG(DISTINCT dg.name) AS group_names,
+    ARRAY_AGG(dg.id ORDER BY dg.name, dg.id) AS group_ids,
+    ARRAY_AGG(dg.name ORDER BY dg.name, dg.id) AS group_id_names
   FROM directory_user_group_memberships m
   INNER JOIN directory_groups dg
     ON dg.id = m.directory_group_id
@@ -1092,39 +1208,91 @@ LEFT JOIN LATERAL (
       )
     )
 ) mapped_roles ON TRUE
-LEFT JOIN organization_role_assignments AS ora
-  ON ora.organization_id = our.organization_id
-  AND ora.workos_user_id = users.workos_id
-  AND ora.deleted_at IS NULL
-LEFT JOIN organization_roles
-  ON ora.role_urn = 'role:organization:' || organization_roles.id::text
-  AND organization_roles.organization_id = our.organization_id
-  AND organization_roles.deleted IS FALSE
-  AND organization_roles.workos_deleted IS FALSE
-LEFT JOIN global_roles
-  ON ora.role_urn = 'role:global:' || global_roles.id::text
-  AND global_roles.deleted IS FALSE
-  AND global_roles.workos_deleted IS FALSE
-WHERE our.organization_id = $1
+LEFT JOIN LATERAL (
+  SELECT
+    ARRAY_AGG(DISTINCT COALESCE(organization_roles.id::text, global_roles.id::text))
+      FILTER (WHERE COALESCE(organization_roles.id, global_roles.id) IS NOT NULL) AS role_ids,
+    MIN(ora.created_at) AS joined_at
+  FROM organization_role_assignments AS ora
+  LEFT JOIN organization_roles
+    ON ora.role_urn = 'role:organization:' || organization_roles.id::text
+    AND organization_roles.organization_id = our.organization_id
+    AND organization_roles.deleted IS FALSE
+    AND organization_roles.workos_deleted IS FALSE
+  LEFT JOIN global_roles
+    ON ora.role_urn = 'role:global:' || global_roles.id::text
+    AND global_roles.deleted IS FALSE
+    AND global_roles.workos_deleted IS FALSE
+  WHERE ora.organization_id = our.organization_id
+    AND ora.workos_user_id = users.workos_id
+    AND ora.deleted_at IS NULL
+) direct_roles ON TRUE
+WHERE our.organization_id = $2
   AND our.deleted IS FALSE
   AND users.deleted_at IS NULL
-ORDER BY users.email, users.id
+), matched AS (
+  SELECT members.id, members.display_name, members.email, members.photo_url, members.role_ids, members.joined_at, members.department, members.group_names, members.group_ids, members.group_id_names, members.in_directory, members.directory_role_ids,
+    ($3::text <> '' AND
+      LOWER(BTRIM(REGEXP_REPLACE(email, '[[:space:]]+', ' ', 'g'))) = $3) AS exact_email_match
+  FROM members
+  WHERE ($4::text = '' OR $4 = ANY(role_ids || directory_role_ids))
+    AND (
+      $3::text = ''
+      OR STRPOS(LOWER(BTRIM(REGEXP_REPLACE(display_name, '[[:space:]]+', ' ', 'g'))), $3) > 0
+      OR STRPOS(LOWER(BTRIM(REGEXP_REPLACE(email, '[[:space:]]+', ' ', 'g'))), $3) > 0
+      OR EXISTS (
+        SELECT 1 FROM organization_roles AS role
+        WHERE role.organization_id = $2
+          AND role.id::text = ANY(role_ids || directory_role_ids)
+          AND STRPOS(LOWER(BTRIM(REGEXP_REPLACE(role.workos_name, '[[:space:]]+', ' ', 'g'))), $3) > 0
+      )
+      OR EXISTS (
+        SELECT 1 FROM global_roles AS role
+        WHERE role.id::text = ANY(role_ids || directory_role_ids)
+          AND STRPOS(LOWER(BTRIM(REGEXP_REPLACE(role.workos_name, '[[:space:]]+', ' ', 'g'))), $3) > 0
+      )
+    )
+)
+SELECT matched.id, matched.display_name, matched.email, matched.photo_url, matched.role_ids, matched.joined_at, matched.department, matched.group_names, matched.group_ids, matched.group_id_names, matched.in_directory, matched.directory_role_ids, matched.exact_email_match,
+  COUNT(*) OVER () AS total_matches,
+  COUNT(*) FILTER (WHERE exact_email_match) OVER () AS exact_email_matches
+FROM matched
+ORDER BY exact_email_match DESC, email, id
+LIMIT NULLIF($1::int, 0)
 `
 
-type ListAccessMembersRow struct {
-	ID               string
-	DisplayName      string
-	Email            string
-	PhotoUrl         pgtype.Text
-	RoleID           string
-	JoinedAt         pgtype.Timestamptz
-	Department       string
-	GroupNames       []string
-	DirectoryRoleIds []string
+type ListAccessMembersParams struct {
+	LimitValue     int32
+	OrganizationID string
+	QueryText      string
+	RoleID         string
 }
 
-func (q *Queries) ListAccessMembers(ctx context.Context, organizationID string) ([]ListAccessMembersRow, error) {
-	rows, err := q.db.Query(ctx, listAccessMembers, organizationID)
+type ListAccessMembersRow struct {
+	ID                string
+	DisplayName       string
+	Email             string
+	PhotoUrl          pgtype.Text
+	RoleIds           []string
+	JoinedAt          pgtype.Timestamptz
+	Department        string
+	GroupNames        []string
+	GroupIds          []uuid.UUID
+	GroupIDNames      []string
+	InDirectory       bool
+	DirectoryRoleIds  []string
+	ExactEmailMatch   pgtype.Bool
+	TotalMatches      int64
+	ExactEmailMatches int64
+}
+
+func (q *Queries) ListAccessMembers(ctx context.Context, arg ListAccessMembersParams) ([]ListAccessMembersRow, error) {
+	rows, err := q.db.Query(ctx, listAccessMembers,
+		arg.LimitValue,
+		arg.OrganizationID,
+		arg.QueryText,
+		arg.RoleID,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -1137,11 +1305,17 @@ func (q *Queries) ListAccessMembers(ctx context.Context, organizationID string) 
 			&i.DisplayName,
 			&i.Email,
 			&i.PhotoUrl,
-			&i.RoleID,
+			&i.RoleIds,
 			&i.JoinedAt,
 			&i.Department,
 			&i.GroupNames,
+			&i.GroupIds,
+			&i.GroupIDNames,
+			&i.InDirectory,
 			&i.DirectoryRoleIds,
+			&i.ExactEmailMatch,
+			&i.TotalMatches,
+			&i.ExactEmailMatches,
 		); err != nil {
 			return nil, err
 		}
@@ -2038,6 +2212,23 @@ SELECT
   dg.name AS directory_group_name,
   drm.attribute_key,
   drm.attribute_value,
+  -- A missing source matches nobody: a group mapping whose group is gone or
+  -- tombstoned, or an attribute mapping no live directory user carries. The
+  -- group name is still returned so the mapping can be recognised.
+  (
+    CASE
+      WHEN drm.source_kind = 'group' THEN
+        dg.id IS NULL OR dg.deleted OR dg.workos_deleted
+      ELSE NOT EXISTS (
+        SELECT 1
+        FROM directory_users AS du
+        WHERE du.organization_id = drm.organization_id
+          AND du.deleted IS FALSE
+          AND du.workos_deleted IS FALSE
+          AND du.attributes ->> drm.attribute_key = drm.attribute_value
+      )
+    END
+  )::boolean AS source_missing,
   drm.role_urn,
   drm.created_at,
   drm.updated_at
@@ -2057,6 +2248,7 @@ type ListDirectoryRoleMappingsRow struct {
 	DirectoryGroupName pgtype.Text
 	AttributeKey       pgtype.Text
 	AttributeValue     pgtype.Text
+	SourceMissing      bool
 	RoleUrn            string
 	CreatedAt          pgtype.Timestamptz
 	UpdatedAt          pgtype.Timestamptz
@@ -2078,6 +2270,7 @@ func (q *Queries) ListDirectoryRoleMappings(ctx context.Context, organizationID 
 			&i.DirectoryGroupName,
 			&i.AttributeKey,
 			&i.AttributeValue,
+			&i.SourceMissing,
 			&i.RoleUrn,
 			&i.CreatedAt,
 			&i.UpdatedAt,

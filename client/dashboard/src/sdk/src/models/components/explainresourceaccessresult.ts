@@ -4,7 +4,8 @@
 
 import * as z from "zod/v4-mini";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
@@ -23,7 +24,7 @@ export const Visibility = {
 /**
  * Who may connect without a rule. public: connecting is not checked against rules. private: rules decide. disabled: nobody can connect.
  */
-export type Visibility = ClosedEnum<typeof Visibility>;
+export type Visibility = OpenEnum<typeof Visibility>;
 
 export type ExplainResourceAccessResult = {
   /**
@@ -37,8 +38,8 @@ export type ExplainResourceAccessResult = {
 };
 
 /** @internal */
-export const Visibility$inboundSchema: z.ZodMiniEnum<typeof Visibility> = z
-  .enum(Visibility);
+export const Visibility$inboundSchema: z.ZodMiniType<Visibility, unknown> =
+  openEnums.inboundSchema(Visibility);
 
 /** @internal */
 export const ExplainResourceAccessResult$inboundSchema: z.ZodMiniType<
