@@ -6,6 +6,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/stretchr/testify/require"
@@ -33,7 +34,7 @@ func TestConsentGatewayModeChoices(t *testing.T) {
 	require.Error(t, err)
 	_, err = service.consentGatewayPolicy(ctx, endpoint, AuthnChallengeState{}, "", "unsupported", nil)
 	require.Error(t, err)
-	organizationGateway := &ResolvedMcpEndpoint{MetaMcpServerID: endpoint.MetaMcpServerID, OrganizationID: "org_test", RouteBase: organizationGatewayRouteBase}
+	organizationGateway := &ResolvedMcpEndpoint{MetaMcpServerID: endpoint.MetaMcpServerID, OrganizationID: "org_test", RouteBase: mcproute.OrganizationGateway}
 	policy, err = service.consentGatewayPolicy(ctx, organizationGateway, AuthnChallengeState{}, "", "direct", nil)
 	require.NoError(t, err, "organization gateway connections choose their own mode")
 	require.Equal(t, metamcp.DiscoveryModeDirect, *policy.Gateway.DiscoveryMode)

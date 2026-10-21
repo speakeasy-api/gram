@@ -150,48 +150,70 @@ func (r *RoleManager) GetRoleByIDTx(ctx context.Context, tx pgx.Tx, gramOrgID, i
 	return roleViewFromLocalRoleAndGrants(role, view), nil
 }
 
+// MemberListFilter selects members before applying the result limit.
+type MemberListFilter struct {
+	// Query matches normalized identity text or an effective role name.
+	Query string
+
+	// RoleID selects members holding a role directly or through the directory.
+	RoleID string
+
+	// Limit bounds the returned members; zero returns every matching member.
+	Limit int32
+}
+
+// MemberListPage counts all matching members, including those beyond the limit.
+type MemberListPage struct {
+	// Members contains complete direct and directory role IDs for each member.
+	Members []*gen.AccessMember
+
+	// TotalMatches counts distinct members before limiting the result.
+	TotalMatches int64
+
+	// ExactEmailMatches counts normalized email matches before limiting.
+	ExactEmailMatches int64
+}
+
 // ListMembers returns locally known organization members with their directly
 // assigned role IDs and the role IDs they hold through directory role mappings.
 func (r *RoleManager) ListMembers(ctx context.Context, gramOrgID string) (*gen.ListMembersResult, error) {
-	rows, err := repo.New(r.db).ListAccessMembers(ctx, gramOrgID)
+	page, err := r.ListMembersFiltered(ctx, gramOrgID, MemberListFilter{Query: "", RoleID: "", Limit: 0})
+	if err != nil {
+		return nil, err
+	}
+	return &gen.ListMembersResult{Members: page.Members}, nil
+}
+
+// ListMembersFiltered uses the dashboard member query with optional filtering
+// and a limit. Exact email matches sort first, then members sort by email and ID.
+func (r *RoleManager) ListMembersFiltered(ctx context.Context, gramOrgID string, filter MemberListFilter) (*MemberListPage, error) {
+	rows, err := repo.New(r.db).ListAccessMembers(ctx, repo.ListAccessMembersParams{
+		OrganizationID: gramOrgID,
+		QueryText:      strings.ToLower(strings.Join(strings.Fields(filter.Query), " ")),
+		RoleID:         filter.RoleID,
+		LimitValue:     filter.Limit,
+	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list members").LogError(ctx, r.logger)
 	}
-
-	memberMap := make(map[string]*gen.AccessMember, len(rows))
-	var order []string
+	page := &MemberListPage{Members: make([]*gen.AccessMember, 0, len(rows)), TotalMatches: 0, ExactEmailMatches: 0}
 	for _, row := range rows {
-		m, exists := memberMap[row.ID]
-		if !exists {
-			m = &gen.AccessMember{
-				ID:           row.ID,
-				PrincipalUrn: urn.NewPrincipal(urn.PrincipalTypeUser, row.ID).String(),
-				Name:         conv.Default(row.DisplayName, row.Email),
-				Email:        row.Email,
-				PhotoURL:     conv.FromPGText[string](row.PhotoUrl),
-				RoleIds:      nil,
-				// Every row for a member carries the same mapped roles.
-				DirectoryRoleIds: row.DirectoryRoleIds,
-				JoinedAt:         conv.FromPGTimestamptz(row.JoinedAt),
-				// Null when no directory row was matched, or when the row
-				// reports no non-empty department — the query collapses both
-				// to an empty string, so the two cannot be told apart here.
-				Department: conv.PtrEmpty(row.Department),
-				Groups:     row.GroupNames,
-			}
-			memberMap[row.ID] = m
-			order = append(order, row.ID)
-		}
-		if row.RoleID != "" {
-			m.RoleIds = append(m.RoleIds, row.RoleID)
-		}
+		page.TotalMatches = row.TotalMatches
+		page.ExactEmailMatches = row.ExactEmailMatches
+		page.Members = append(page.Members, &gen.AccessMember{
+			ID:               row.ID,
+			PrincipalUrn:     urn.NewPrincipal(urn.PrincipalTypeUser, row.ID).String(),
+			Name:             conv.Default(row.DisplayName, row.Email),
+			Email:            row.Email,
+			PhotoURL:         conv.FromPGText[string](row.PhotoUrl),
+			RoleIds:          row.RoleIds,
+			DirectoryRoleIds: row.DirectoryRoleIds,
+			JoinedAt:         conv.FromPGTimestamptz(row.JoinedAt),
+			Department:       conv.PtrEmpty(row.Department),
+			Groups:           row.GroupNames,
+		})
 	}
-	result := make([]*gen.AccessMember, 0, len(order))
-	for _, id := range order {
-		result = append(result, memberMap[id])
-	}
-
-	return &gen.ListMembersResult{Members: result}, nil
+	return page, nil
 }
 
 // memberRoleIDs returns every role a member holds, assigned directly or

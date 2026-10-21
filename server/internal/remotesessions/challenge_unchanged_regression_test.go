@@ -3,6 +3,7 @@
 package remotesessions_test
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/base64"
 	"net/http"
@@ -438,4 +439,114 @@ func TestRemoteLoginCallback_Unchanged_LegacyLoginStateCompletes(t *testing.T) {
 	require.Empty(t, session.Scopes, "a pre-#6109 state has no requested set to record")
 
 	require.Error(t, adapter.Get(ctx, "remoteLogin:"+stateID+":", &decoded), "the state is single-use")
+}
+
+// storeRetiredRouteLoginState caches a login state minted on the retired /x/mcp surface.
+func storeRetiredRouteLoginState(t *testing.T, ctx context.Context, env syntheticExpiryEnv, slug string, mutate func(*retiredRouteLoginState)) (string, urn.SessionSubject) {
+	t.Helper()
+
+	subject := urn.NewUserSubject("retired-route-subject-" + slug)
+	state := retiredRouteLoginState{
+		legacyRemoteLoginState: legacyRemoteLoginState{
+			ID:                    uuid.NewString(),
+			ParentChallengeID:     uuid.NewString(),
+			ProjectID:             env.projectID,
+			OrganizationID:        env.organizationID,
+			UserSessionIssuerID:   env.session.UserSessionIssuerID,
+			RemoteSessionClientID: env.clientID,
+			TokenEndpoint:         "",
+			RedirectURI:           authorizeQuery(t, env.authURL).Get("redirect_uri"),
+			CodeVerifier:          "retired-verifier",
+			Resource:              unchangedResource,
+			Subject:               &subject,
+			McpSlug:               "synthetic-mcp-" + slug,
+			RouteBase:             "x/mcp",
+			FinalRedirectURI:      "",
+			AutoRefresh:           nil,
+			CreatedAt:             time.Now(),
+		},
+		ConsentURL: "",
+	}
+	if mutate != nil {
+		mutate(&state)
+	}
+	redisClient, err := infra.NewRedisClient(t, 0)
+	require.NoError(t, err)
+	adapter := cache.NewRedisCacheAdapter(redisClient)
+	require.NoError(t, adapter.Set(ctx, "remoteLogin:"+state.ID+":", state, 10*time.Minute))
+	return state.ID, subject
+}
+
+type retiredRouteLoginState struct {
+	legacyRemoteLoginState
+	ConsentURL string `json:"consent_url,omitempty"`
+}
+
+// A state cached on the retired /x/mcp surface fails closed before its code is exchanged.
+func TestRemoteLoginCallback_RetiredRouteBaseFailsClosed(t *testing.T) {
+	t.Parallel()
+
+	const slug = "retired-route-state"
+	spy := &exchangeSpy{}
+	ctx, env := newSyntheticExpiryEnv(t, slug, spy.handler(), withResource(unchangedResource))
+	require.Equal(t, 1, spy.count())
+	stateID, subject := storeRetiredRouteLoginState(t, ctx, env, slug, nil)
+
+	w, err := env.callback(t, "code=retired-code&state="+url.QueryEscape(stateID))
+	require.Error(t, err)
+	var shareable *oops.ShareableError
+	require.ErrorAs(t, err, &shareable)
+	require.Equal(t, oops.CodeUnauthorized, shareable.Code)
+	require.Equal(t, "remote login state not found or expired", shareable.Error())
+	require.Empty(t, w.Header().Get("Location"))
+	require.Equal(t, 1, spy.count(), "no code is exchanged for a retired route")
+
+	_, err = env.q.GetActiveRemoteSession(ctx, repo.GetActiveRemoteSessionParams{
+		SubjectUrn:            subject,
+		RemoteSessionClientID: env.clientID,
+	})
+	require.ErrorIs(t, err, pgx.ErrNoRows)
+}
+
+// A provider denial on a retired-route state is still reported as a denial.
+func TestRemoteLoginCallback_RetiredRouteBaseDenialStillDenied(t *testing.T) {
+	t.Parallel()
+
+	const slug = "retired-route-denied"
+	spy := &exchangeSpy{}
+	ctx, env := newSyntheticExpiryEnv(t, slug, spy.handler(), withResource(unchangedResource))
+	stateID, _ := storeRetiredRouteLoginState(t, ctx, env, slug, nil)
+
+	_, err := env.callback(t, "error=access_denied&state="+url.QueryEscape(stateID))
+	require.Error(t, err)
+	var shareable *oops.ShareableError
+	require.ErrorAs(t, err, &shareable)
+	require.Equal(t, "remote authn challenge denied: access_denied", shareable.Error())
+	require.Equal(t, 1, spy.count())
+}
+
+// A login whose consent page is overridden never builds a URL from its route base.
+func TestRemoteLoginCallback_RetiredRouteBaseIgnoredWithConsentURL(t *testing.T) {
+	t.Parallel()
+
+	const slug = "retired-route-consent-url"
+	spy := &exchangeSpy{}
+	ctx, env := newSyntheticExpiryEnv(t, slug, spy.handler(), withResource(unchangedResource))
+	issuer, err := env.q.GetRemoteSessionIssuerByID(ctx, repo.GetRemoteSessionIssuerByIDParams{
+		ID:                    env.issuerID,
+		ProjectID:             conv.ToNullUUID(env.projectID),
+		OrganizationID:        conv.ToPGText(env.organizationID),
+		IncludeOrganizational: true,
+		IncludeGlobal:         true,
+	})
+	require.NoError(t, err)
+	const consentURL = "http://localhost/mcp/shared/connect?state=parent"
+	stateID, _ := storeRetiredRouteLoginState(t, ctx, env, slug, func(s *retiredRouteLoginState) {
+		s.TokenEndpoint = issuer.TokenEndpoint.String
+		s.ConsentURL = consentURL
+	})
+
+	w, err := env.callback(t, "code=retired-code&state="+url.QueryEscape(stateID))
+	require.NoError(t, err)
+	require.Equal(t, consentURL, w.Header().Get("Location"))
 }

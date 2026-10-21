@@ -2,7 +2,6 @@ package anthropicinference
 
 import (
 	"encoding/json"
-	"errors"
 	"testing"
 
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
@@ -11,20 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestServiceArchivesBeforeCheckpointLoadFailure(t *testing.T) {
-	t.Parallel()
-	loadErr := errors.New("checkpoint unavailable")
-	store := &memoryStore{loadErr: loadErr}
-	scanner := &recordingScanner{}
-	service := &Service{logger: testenv.NewLogger(t), store: store, scanner: scanner}
-	_, err := service.Process(t.Context(), Config{}, exampleFrame())
-	require.ErrorIs(t, err, loadErr)
-	require.Len(t, store.saved, 1)
-	require.Empty(t, scanner.inputs)
-	require.Empty(t, store.accepted)
-}
-
-func TestServiceOperationIDsStableAcrossAcceptedMultiBlockHistory(t *testing.T) {
+func TestServiceOperationIDsStableAcrossRedeliveries(t *testing.T) {
 	t.Parallel()
 	store := &memoryStore{}
 	scanner := &recordingScanner{}
@@ -37,12 +23,12 @@ func TestServiceOperationIDsStableAcrossAcceptedMultiBlockHistory(t *testing.T) 
 	}
 	_, err := service.Process(t.Context(), Config{}, frame)
 	require.NoError(t, err)
-	require.Len(t, scanner.operationIDs, 4)
-	original := scanner.operationIDs[3]
+	original := scanner.operationIDs
+	require.Len(t, original, 2, "only the latest exchange is scanned")
 	scanner.reset()
 	_, err = service.Process(t.Context(), Config{}, frame)
 	require.NoError(t, err)
-	require.Equal(t, []string{original}, scanner.operationIDs)
+	require.Equal(t, original, scanner.operationIDs)
 }
 
 func TestStoreAlignsEqualTimestampMessagesBySequence(t *testing.T) {

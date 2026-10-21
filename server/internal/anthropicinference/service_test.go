@@ -28,11 +28,9 @@ import (
 )
 
 type memoryStore struct {
-	accepted [][]byte
-	saved    []Frame
-	userID   string
-	err      error
-	loadErr  error
+	saved  []Frame
+	userID string
+	err    error
 }
 
 func (s *memoryStore) ResolveConversation(_ context.Context, config Config, frame Frame) (uuid.UUID, string, error) {
@@ -43,27 +41,9 @@ func (s *memoryStore) ResolveActor(_ context.Context, _ Config, _ Frame) (string
 	return s.userID, nil
 }
 
-func (s *memoryStore) Save(_ context.Context, _ Config, frame Frame, _ string) (int, error) {
+func (s *memoryStore) Save(_ context.Context, _ Config, frame Frame, _ string) error {
 	s.saved = append(s.saved, frame)
-	return 0, s.err
-}
-
-func (s *memoryStore) Begin(context.Context, Config, Frame, string) (checkpointSession, error) {
-	return &memoryCheckpoint{store: s}, nil
-}
-
-type memoryCheckpoint struct{ store *memoryStore }
-
-func (s *memoryCheckpoint) Load(context.Context) ([][]byte, error) {
-	return s.store.accepted, s.store.loadErr
-}
-
-func (s *memoryCheckpoint) Accept(ctx context.Context, hashes [][]byte) error {
-	if err := ctx.Err(); err != nil {
-		return fmt.Errorf("checkpoint context: %w", err)
-	}
-	s.store.accepted = hashes
-	return nil
+	return s.err
 }
 
 type recordingScanner struct {
@@ -116,11 +96,13 @@ func (s *recordingScanner) reset() {
 }
 
 // fakeScanner finishes each input after delay. The stall input only ends with
-// its context, and the fail input returns an error.
+// its context, the fail input returns an error, and the block input matches a
+// blocking policy.
 type fakeScanner struct {
 	delay  time.Duration
 	stall  string
 	fail   string
+	block  string
 	result *risk.ScanResult
 	calls  atomic.Int32
 }
@@ -134,11 +116,16 @@ func (s *fakeScanner) ScanForInferenceEnforcement(ctx context.Context, request r
 	case s.fail != "" && request.Text == s.fail:
 		return nil, errors.New("scanner unavailable")
 	}
+	result := s.result
+	if s.block != "" && request.Text == s.block {
+		result = new(risk.ScanResult)
+		result.Action = "block"
+	}
 	select {
 	case <-ctx.Done():
 		return nil, fmt.Errorf("scan deadline: %w", ctx.Err())
 	case <-wait:
-		return &risk.InferenceScanOutcome{Result: s.result, Complete: true}, nil
+		return &risk.InferenceScanOutcome{Result: result, Complete: true}, nil
 	}
 }
 
@@ -282,17 +269,7 @@ func TestServicePreservesRawToolInvocationIDs(t *testing.T) {
 	}, scanner.inputs)
 }
 
-type deltaStore struct {
-	memoryStore
-	newStart int
-}
-
-func (s *deltaStore) Save(ctx context.Context, config Config, frame Frame, userID string) (int, error) {
-	_, err := s.memoryStore.Save(ctx, config, frame, userID)
-	return s.newStart, err
-}
-
-func TestServiceScansOnlyNewMessagesAndTheCurrentTurn(t *testing.T) {
+func TestServiceScansOnlyTheLatestExchange(t *testing.T) {
 	t.Parallel()
 	frame := exampleFrame()
 	frame.Messages = []Message{
@@ -300,38 +277,59 @@ func TestServiceScansOnlyNewMessagesAndTheCurrentTurn(t *testing.T) {
 		textMessage("user", "second prompt"), textMessage("assistant", "second reply"),
 		textMessage("user", "new prompt"),
 	}
-	scanner := &recordingScanner{inputs: nil, userIDs: nil, result: nil, err: nil}
-	service := &Service{logger: testenv.NewLogger(t), store: &deltaStore{memoryStore: memoryStore{accepted: transcriptHashes(frame.Messages[:4]), saved: nil, userID: "", err: nil}, newStart: 4}, scanner: scanner}
-	_, err := service.Process(t.Context(), Config{}, frame)
+	scanner := &recordingScanner{}
+	service := &Service{logger: testenv.NewLogger(t), store: &memoryStore{}, scanner: scanner}
+	verdict, err := service.Process(t.Context(), Config{}, frame)
 	require.NoError(t, err)
-	require.Len(t, scanner.inputs, 1)
-	require.Equal(t, "new prompt", scanner.inputs[0].text)
-
-	// A frame that adds an assistant reply and a tool result is judged from the
-	// first new message, which precedes the current turn.
-	scanner.reset()
-	service.store = &deltaStore{memoryStore: memoryStore{accepted: transcriptHashes(frame.Messages[:3]), saved: nil, userID: "", err: nil}, newStart: 3}
-	_, err = service.Process(t.Context(), Config{}, frame)
-	require.NoError(t, err)
+	require.Equal(t, "allow", verdict.Action)
+	require.Equal(t, []string{"second reply", "new prompt"}, []string{scanner.inputs[0].text, scanner.inputs[1].text})
 	require.Len(t, scanner.inputs, 2)
-	require.Equal(t, "second reply", scanner.inputs[0].text)
-	require.Equal(t, "new prompt", scanner.inputs[1].text)
 }
 
 func TestServiceStillDeniesRedeliveredCurrentTurn(t *testing.T) {
 	t.Parallel()
 	frame := exampleFrame()
 	frame.Messages = []Message{textMessage("user", "old prompt"), textMessage("assistant", "old reply"), textMessage("user", "blocked prompt")}
-	result := new(risk.ScanResult)
-	result.Action = "block"
-	scanner := &recordingScanner{inputs: nil, userIDs: nil, result: result, err: nil}
-	// Everything in the frame is already stored and accepted, as after a redelivery.
-	service := &Service{logger: testenv.NewLogger(t), store: &deltaStore{memoryStore: memoryStore{accepted: transcriptHashes(frame.Messages), saved: nil, userID: "", err: nil}, newStart: 3}, scanner: scanner}
+	service := &Service{logger: testenv.NewLogger(t), store: &memoryStore{}, scanner: &fakeScanner{block: "blocked prompt"}}
+	for range 2 {
+		verdict, err := service.Process(t.Context(), Config{}, frame)
+		require.NoError(t, err)
+		require.Equal(t, "deny", verdict.Action)
+	}
+}
+
+func TestServiceStillDeniesRetriedToolCall(t *testing.T) {
+	t.Parallel()
+	frame := exampleFrame()
+	frame.Messages = []Message{
+		textMessage("user", "prompt"),
+		{Role: "assistant", Content: json.RawMessage(`[{"type":"tool_use","id":"call-1","tool_name":"bash","input":{"cmd":"blocked"}}]`)},
+		{Role: "user", Content: json.RawMessage(`[{"type":"tool_result","tool_use_id":"call-1","tool_name":"bash","content":"output"}]`)},
+	}
+	service := &Service{logger: testenv.NewLogger(t), store: &memoryStore{}, scanner: &fakeScanner{block: `{"cmd":"blocked"}`}}
+	for range 2 {
+		verdict, err := service.Process(t.Context(), Config{}, frame)
+		require.NoError(t, err)
+		require.Equal(t, "deny", verdict.Action)
+	}
+}
+
+func TestServiceDenialDoesNotOutliveItsTurn(t *testing.T) {
+	t.Parallel()
+	frame := exampleFrame()
+	frame.Messages = []Message{textMessage("user", "blocked prompt")}
+	service := &Service{logger: testenv.NewLogger(t), store: &memoryStore{}, scanner: &fakeScanner{block: "blocked prompt"}}
 	verdict, err := service.Process(t.Context(), Config{}, frame)
 	require.NoError(t, err)
 	require.Equal(t, "deny", verdict.Action)
-	require.Len(t, scanner.inputs, 1)
-	require.Equal(t, "blocked prompt", scanner.inputs[0].text)
+
+	// The conversation moves on past the denied prompt.
+	for turn := range 3 {
+		frame.Messages = append(frame.Messages, textMessage("assistant", fmt.Sprintf("reply %d", turn)), textMessage("user", fmt.Sprintf("benign prompt %d", turn)))
+		verdict, err := service.Process(t.Context(), Config{}, frame)
+		require.NoError(t, err)
+		require.Equal(t, "allow", verdict.Action, "turn %d", turn)
+	}
 }
 
 func TestServiceEvaluatesInputsConcurrently(t *testing.T) {
@@ -342,166 +340,33 @@ func TestServiceEvaluatesInputsConcurrently(t *testing.T) {
 		for i := range 2 * scanConcurrency {
 			frame.Messages = append(frame.Messages, textMessage("user", fmt.Sprintf("prompt %d", i)))
 		}
-		store := &memoryStore{}
-		service := &Service{logger: testenv.NewLogger(t), store: store, scanner: &fakeScanner{delay: time.Second}}
+		service := &Service{logger: testenv.NewLogger(t), store: &memoryStore{}, scanner: &fakeScanner{delay: time.Second}}
 		start := time.Now()
 		verdict, err := service.Process(t.Context(), Config{}, frame)
 		require.NoError(t, err)
 		require.Equal(t, "allow", verdict.Action)
 		require.Equal(t, 2*time.Second, time.Since(start))
-		require.Equal(t, transcriptHashes(frame.Messages), store.accepted)
 	})
 }
 
-func TestServiceAcceptsCleanPrefixWhenBudgetExhausted(t *testing.T) {
+func TestServiceDeniesWhenTheLatestExchangeOutrunsTheBudget(t *testing.T) {
 	t.Parallel()
 	synctest.Test(t, func(t *testing.T) {
 		frame := exampleFrame()
-		frame.Messages = []Message{textMessage("user", "first"), textMessage("assistant", "reply"), textMessage("user", "stall"), textMessage("user", "last")}
-		store := &memoryStore{}
-		scanner := &fakeScanner{delay: time.Second, stall: "stall"}
-		service := &Service{logger: testenv.NewLogger(t), store: store, scanner: scanner}
+		frame.Messages = []Message{textMessage("user", "first"), textMessage("assistant", "reply"), textMessage("user", "stall")}
+		service := &Service{logger: testenv.NewLogger(t), store: &memoryStore{}, scanner: &fakeScanner{delay: time.Second, stall: "stall"}}
 		start := time.Now()
 		verdict, err := service.Process(t.Context(), Config{}, frame)
 		require.NoError(t, err)
 		require.Equal(t, verdictBudget, time.Since(start))
-		// Every input was attempted; only the stalled one was cut off.
-		require.EqualValues(t, len(frame.Messages), scanner.calls.Load())
 		require.Equal(t, Verdict{Action: "deny", DenyReason: unavailableDenyReason, ReferenceID: ""}, verdict)
-		require.Equal(t, transcriptHashes(frame.Messages[:2]), store.accepted)
-
-		// The redelivery picks up where the budget ran out.
-		retry := &recordingScanner{}
-		service.scanner = retry
-		verdict, err = service.Process(t.Context(), Config{}, frame)
-		require.NoError(t, err)
-		require.Equal(t, "allow", verdict.Action)
-		require.Len(t, retry.inputs, 2)
-		require.Equal(t, "stall", retry.inputs[0].text)
-		require.Equal(t, transcriptHashes(frame.Messages), store.accepted)
 	})
 }
 
-func backlogFrame() Frame {
-	frame := exampleFrame()
-	frame.Messages = []Message{
-		textMessage("user", "old prompt"), textMessage("assistant", "old reply"),
-		textMessage("user", "stall"), textMessage("assistant", "second reply"),
-		textMessage("user", "new prompt"),
-	}
-	return frame
-}
-
-func TestServiceDoesNotWaitOnUnacceptedBacklog(t *testing.T) {
-	t.Parallel()
-	synctest.Test(t, func(t *testing.T) {
-		frame := backlogFrame()
-		// Archived but never accepted, as after timed-out deliveries.
-		store := &deltaStore{memoryStore: memoryStore{}, newStart: 4}
-		service := &Service{logger: testenv.NewLogger(t), store: store, scanner: &fakeScanner{delay: 100 * time.Millisecond, stall: "stall"}}
-		start := time.Now()
-		verdict, err := service.Process(t.Context(), Config{}, frame)
-		require.NoError(t, err)
-		require.Equal(t, "allow", verdict.Action)
-		require.Equal(t, backlogBudget, time.Since(start))
-		require.Equal(t, transcriptHashes(frame.Messages[:2]), store.accepted)
-
-		retry := &recordingScanner{}
-		service.scanner = retry
-		verdict, err = service.Process(t.Context(), Config{}, frame)
-		require.NoError(t, err)
-		require.Equal(t, "allow", verdict.Action)
-		require.Equal(t, []string{"stall", "second reply", "new prompt"}, []string{retry.inputs[0].text, retry.inputs[1].text, retry.inputs[2].text})
-		require.Equal(t, transcriptHashes(frame.Messages), store.accepted)
-	})
-}
-
-func TestServiceBacklogWindowStartsAfterLiveInputs(t *testing.T) {
-	t.Parallel()
-	synctest.Test(t, func(t *testing.T) {
-		frame := exampleFrame()
-		frame.Messages = []Message{textMessage("user", "old prompt"), textMessage("assistant", "old reply")}
-		// A current turn with more inputs than scan slots.
-		for i := range scanConcurrency + 2 {
-			frame.Messages = append(frame.Messages, textMessage("user", fmt.Sprintf("new prompt %d", i)))
-		}
-		store := &deltaStore{memoryStore: memoryStore{}, newStart: 2}
-		service := &Service{logger: testenv.NewLogger(t), store: store, scanner: &fakeScanner{delay: 600 * time.Millisecond}}
-		verdict, err := service.Process(t.Context(), Config{}, frame)
-		require.NoError(t, err)
-		require.Equal(t, "allow", verdict.Action)
-		require.Equal(t, transcriptHashes(frame.Messages), store.accepted)
-	})
-}
-
-func TestServiceBacklogScannerErrorsDoNotFailTheVerdict(t *testing.T) {
-	t.Parallel()
-	synctest.Test(t, func(t *testing.T) {
-		frame := backlogFrame()
-		store := &deltaStore{memoryStore: memoryStore{}, newStart: 4}
-		service := &Service{logger: testenv.NewLogger(t), store: store, scanner: &fakeScanner{delay: 100 * time.Millisecond, fail: "old reply"}}
-		verdict, err := service.Process(t.Context(), Config{}, frame)
-		require.NoError(t, err)
-		require.Equal(t, "allow", verdict.Action)
-		require.Equal(t, transcriptHashes(frame.Messages[:1]), store.accepted)
-	})
-}
-
-func TestServiceDeniesBacklogMatch(t *testing.T) {
-	t.Parallel()
-	result := new(risk.ScanResult)
-	result.Action = "block"
-	scanner := &recordingScanner{result: result}
-	frame := backlogFrame()
-	store := &deltaStore{memoryStore: memoryStore{}, newStart: 4}
-	service := &Service{logger: testenv.NewLogger(t), store: store, scanner: scanner}
-	verdict, err := service.Process(t.Context(), Config{}, frame)
-	require.NoError(t, err)
-	require.Equal(t, "deny", verdict.Action)
-	require.NotEqual(t, unavailableDenyReason, verdict.DenyReason)
-	require.Empty(t, store.accepted, "denied content is never accepted")
-}
-
-func TestServiceStillDeniesUnscannedCurrentTurn(t *testing.T) {
-	t.Parallel()
-	synctest.Test(t, func(t *testing.T) {
-		frame := backlogFrame()
-		store := &deltaStore{memoryStore: memoryStore{}, newStart: 4}
-		service := &Service{logger: testenv.NewLogger(t), store: store, scanner: &fakeScanner{delay: 100 * time.Millisecond, stall: "new prompt"}}
-		verdict, err := service.Process(t.Context(), Config{}, frame)
-		require.NoError(t, err)
-		require.Equal(t, Verdict{Action: "deny", DenyReason: unavailableDenyReason, ReferenceID: ""}, verdict)
-		require.Equal(t, transcriptHashes(frame.Messages[:4]), store.accepted)
-	})
-}
-
-// checkpointHeadroomStore exercises the checkpoint window after evaluation expires.
-type checkpointHeadroomStore struct {
-	memoryStore
-	t *testing.T
-}
-
-func (s *checkpointHeadroomStore) Begin(context.Context, Config, Frame, string) (checkpointSession, error) {
-	return &checkpointHeadroomSession{memoryCheckpoint: memoryCheckpoint{store: &s.memoryStore}, t: s.t}, nil
-}
-
-type checkpointHeadroomSession struct {
-	memoryCheckpoint
-	t *testing.T
-}
-
-func (s *checkpointHeadroomSession) Accept(ctx context.Context, hashes [][]byte) error {
-	deadline, ok := ctx.Deadline()
-	require.True(s.t, ok)
-	require.Equal(s.t, checkpointBudget, time.Until(deadline))
-	<-time.After(checkpointBudget - time.Millisecond)
-	return s.memoryCheckpoint.Accept(ctx, hashes)
-}
-
-func TestServiceReservesCheckpointAndResponseHeadroom(t *testing.T) {
+func TestServiceReservesResponseHeadroom(t *testing.T) {
 	t.Parallel()
 	// Pin the requested evaluation cap separately from behavioral assertions.
-	require.Equal(t, 3750*time.Millisecond, verdictBudget)
+	require.Equal(t, 4250*time.Millisecond, verdictBudget)
 	require.Less(t, requestBudget, 5*time.Second)
 	for _, elapsed := range []time.Duration{0, time.Second} {
 		t.Run(elapsed.String(), func(t *testing.T) {
@@ -512,15 +377,11 @@ func TestServiceReservesCheckpointAndResponseHeadroom(t *testing.T) {
 				// Account for configuration/body work before Process starts.
 				<-time.After(elapsed)
 				frame := exampleFrame()
-				frame.Messages = []Message{textMessage("user", "first"), textMessage("assistant", "reply"), textMessage("user", "stall")}
-				store := &checkpointHeadroomStore{t: t}
-				service := &Service{logger: testenv.NewLogger(t), store: store, scanner: &fakeScanner{delay: time.Second, stall: "stall"}}
-				start := time.Now()
+				frame.Messages = []Message{textMessage("user", "stall")}
+				service := &Service{logger: testenv.NewLogger(t), store: &memoryStore{}, scanner: &fakeScanner{stall: "stall"}}
 				verdict, err := service.Process(ctx, Config{}, frame)
 				require.NoError(t, err)
 				require.Equal(t, "deny", verdict.Action)
-				require.Equal(t, verdictBudget-elapsed+checkpointBudget-time.Millisecond, time.Since(start))
-				require.Equal(t, transcriptHashes(frame.Messages[:2]), store.accepted)
 				deadline, ok := ctx.Deadline()
 				require.True(t, ok)
 				require.GreaterOrEqual(t, time.Until(deadline), responseBudget)
@@ -537,27 +398,4 @@ func TestMetricApplicationIsBounded(t *testing.T) {
 	require.Equal(t, "anthropic-inference", metricApplication(""))
 	require.Equal(t, "other", metricApplication("some-future-product"))
 	require.Equal(t, "anthropic-inference", metricApplication("  "), "whitespace trims to the absent application")
-}
-
-func TestNewScanRange(t *testing.T) {
-	t.Parallel()
-	// Five messages; the current turn is the last one.
-	messages := backlogFrame().Messages
-	for _, tc := range []struct {
-		name            string
-		accepted, fresh int
-		start, live     int
-	}{
-		{name: "nothing stored", accepted: 0, fresh: 0, start: 0, live: 0},
-		{name: "all stored, nothing accepted", accepted: 0, fresh: 4, start: 0, live: 4},
-		{name: "accepted through the archive", accepted: 4, fresh: 4, start: 4, live: 4},
-		{name: "new reply before the current turn", accepted: 3, fresh: 3, start: 3, live: 3},
-		{name: "redelivery still scans the current turn", accepted: 5, fresh: 5, start: 4, live: 4},
-		{name: "partial backlog", accepted: 2, fresh: 4, start: 2, live: 4},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			require.Equal(t, scanRange{start: tc.start, live: tc.live}, newScanRange(messages, tc.accepted, tc.fresh))
-		})
-	}
 }

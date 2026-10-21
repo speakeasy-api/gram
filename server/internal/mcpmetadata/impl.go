@@ -45,7 +45,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	customdomains_repo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	environments_repo "github.com/speakeasy-api/gram/server/internal/environments/repo"
-	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/hostedmcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/httpheaders"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
@@ -238,7 +238,6 @@ type Service struct {
 	// publishing is not configured.
 	publicationRequests plugins.PublicationRequests
 	publisher           plugins.PluginPublishSignaler
-	features            feature.Provider
 
 	// Hosted install page script (embedded and served with cache-busting hash)
 	installPageScriptHash string
@@ -290,7 +289,6 @@ func NewService(
 		metaInstallAdmission:  metaInstallAdmission,
 		publicationRequests:   plugins.PublicationRequests{Enabled: false},
 		publisher:             nil,
-		features:              nil,
 		installPageScriptHash: scriptHashStr,
 		installPageScriptData: hostedPageScriptData,
 	}
@@ -299,12 +297,6 @@ func NewService(
 func (s *Service) WithPluginPublication(publicationRequests bool, publisher plugins.PluginPublishSignaler) *Service {
 	s.publicationRequests.Enabled = publicationRequests
 	s.publisher = publisher
-	return s
-}
-
-// WithFeatureProvider sets the hosted MCP write rollout gate; without one, saves keep phase A row keys.
-func (s *Service) WithFeatureProvider(provider feature.Provider) *Service {
-	s.features = provider
 	return s
 }
 
@@ -338,7 +330,7 @@ func (s *Service) GetMcpMetadata(ctx context.Context, payload *gen.GetMcpMetadat
 		return nil, err
 	}
 
-	record, err := s.repo.GetMetadataByBackendID(ctx, repo.GetMetadataByBackendIDParams{ProjectID: *authCtx.ProjectID, BackendID: backend.backendID()})
+	record, err := s.repo.GetMetadataByBackendID(ctx, repo.GetMetadataByBackendIDParams{ProjectID: *authCtx.ProjectID, BackendID: backend.backendID(), ToolsetBackend: backend.toolset != nil})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		return nil, oops.E(oops.CodeNotFound, err, "no MCP install page metadata for this backend")
@@ -388,12 +380,6 @@ func (s *Service) SetMcpMetadata(ctx context.Context, payload *gen.SetMcpMetadat
 		}
 	}
 
-	// Resolved before the transaction so flag latency never holds its locks.
-	serverKeyWrites, err := feature.HostedMCPServerKeyWrites(ctx, s.features, authCtx.ActiveOrganizationID, authCtx.OrganizationSlug)
-	if err != nil {
-		logger.WarnContext(ctx, "evaluate hosted mcp server key writes; keeping the toolset key", attr.SlogError(err))
-	}
-
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "access mcp server metadata").LogError(ctx, logger)
@@ -425,7 +411,14 @@ func (s *Service) SetMcpMetadata(ctx context.Context, payload *gen.SetMcpMetadat
 	if err := mcpr.AcquireMetadataBackendLock(ctx, repo.AcquireMetadataBackendLockParams{ProjectID: *authCtx.ProjectID, BackendID: backend.backendID()}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "lock MCP server metadata").LogError(ctx, logger)
 	}
-	rows, err := mcpr.LockMetadataByBackendID(ctx, repo.LockMetadataByBackendIDParams{ProjectID: *authCtx.ProjectID, BackendID: backend.backendID()})
+	wrapperID, err := backend.canonicalWrapperID(ctx, tr, msr, *authCtx.ProjectID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "fetch canonical MCP server").LogError(ctx, logger)
+	}
+	if backend.toolset != nil && !wrapperID.Valid {
+		return nil, oops.E(oops.CodeBadRequest, nil, hostedmcp.NoServerMessage).LogWarn(ctx, logger)
+	}
+	rows, err := mcpr.LockMetadataByBackendID(ctx, repo.LockMetadataByBackendIDParams{ProjectID: *authCtx.ProjectID, BackendID: backend.backendID(), ToolsetBackend: backend.toolset != nil})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "fetch existing MCP server metadata").LogError(ctx, logger)
 	}
@@ -436,18 +429,9 @@ func (s *Service) SetMcpMetadata(ctx context.Context, payload *gen.SetMcpMetadat
 			logger.ErrorContext(ctx, "convert existing MCP server metadata", attr.SlogError(err))
 		}
 	}
-
-	wrapperID, err := backend.canonicalWrapperID(ctx, tr, msr, *authCtx.ProjectID)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "fetch canonical MCP server").LogError(ctx, logger)
-	}
-	// Until the server-key rollout is on, saves keep phase A row keys; responses still report both ids.
-	writeWrapperID := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
-	if serverKeyWrites && wrapperID.Valid {
-		writeWrapperID = wrapperID
-		if err := rekeyMetadataOntoWrapper(ctx, mcpr, *authCtx.ProjectID, wrapperID.UUID, rows); err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "move MCP server metadata onto its server").LogError(ctx, logger)
-		}
+	// Toolset-keyed rows only match a canonical id, so they move onto that wrapper in place and the save below updates them.
+	if err := rekeyMetadataOntoWrapper(ctx, mcpr, *authCtx.ProjectID, backend.backendID(), rows); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "move MCP server metadata onto its server").LogError(ctx, logger)
 	}
 
 	var logoID uuid.NullUUID
@@ -510,74 +494,28 @@ func (s *Service) SetMcpMetadata(ctx context.Context, payload *gen.SetMcpMetadat
 		defaultEnvironmentID = existingRow.DefaultEnvironmentID
 	}
 
-	toolsetKey, serverKey := backend.writeKey(existingRow, writeWrapperID)
-
-	// A toolset-keyed row created beside a server-keyed one wins every read, so it takes over the env configs and header aliases.
-	takeOver := existingRow != nil && toolsetKey.Valid && !existingRow.ToolsetID.Valid
-	environmentConfigs := payload.EnvironmentConfigs
-	if environmentConfigs == nil && takeOver {
-		entries, err := mcpr.ListEnvironmentConfigs(ctx, existingRow.ID)
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "list existing environment configs").LogError(ctx, logger)
-		}
-		environmentConfigs = make([]*types.McpEnvironmentConfigInput, 0, len(entries))
-		for _, entry := range entries {
-			environmentConfigs = append(environmentConfigs, &types.McpEnvironmentConfigInput{
-				VariableName:      entry.VariableName,
-				HeaderDisplayName: conv.FromPGText[string](entry.HeaderDisplayName),
-				ProvidedBy:        entry.ProvidedBy,
-			})
-		}
-	}
-
-	var result repo.McpMetadatum
-	switch {
-	case toolsetKey.Valid:
-		result, err = mcpr.UpsertMetadata(ctx, repo.UpsertMetadataParams{
-			ToolsetID:                 toolsetKey,
-			ProjectID:                 *authCtx.ProjectID,
-			ExternalDocumentationUrl:  externalDocURL,
-			ExternalDocumentationText: externalDocText,
-			LogoID:                    logoID,
-			Instructions:              instructions,
-			DefaultEnvironmentID:      defaultEnvironmentID,
-			InstallationOverrideUrl:   installationOverrideURL,
-		})
-	default:
-		result, err = mcpr.UpsertMetadataByMcpServerID(ctx, repo.UpsertMetadataByMcpServerIDParams{
-			McpServerID:               serverKey,
-			ProjectID:                 *authCtx.ProjectID,
-			ExternalDocumentationUrl:  externalDocURL,
-			ExternalDocumentationText: externalDocText,
-			LogoID:                    logoID,
-			Instructions:              instructions,
-			DefaultEnvironmentID:      defaultEnvironmentID,
-			InstallationOverrideUrl:   installationOverrideURL,
-		})
-	}
+	result, err := mcpr.UpsertMetadataByMcpServerID(ctx, repo.UpsertMetadataByMcpServerIDParams{
+		McpServerID:               uuid.NullUUID{UUID: backend.backendID(), Valid: true},
+		ProjectID:                 *authCtx.ProjectID,
+		ExternalDocumentationUrl:  externalDocURL,
+		ExternalDocumentationText: externalDocText,
+		LogoID:                    logoID,
+		Instructions:              instructions,
+		DefaultEnvironmentID:      defaultEnvironmentID,
+		InstallationOverrideUrl:   installationOverrideURL,
+	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "upsert MCP server metadata").LogError(ctx, logger)
 	}
 
-	if takeOver {
-		result, err = mcpr.SetHeaderDisplayNames(ctx, repo.SetHeaderDisplayNamesParams{
-			HeaderDisplayNames: existingRow.HeaderDisplayNames,
-			ID:                 result.ID,
-			ProjectID:          *authCtx.ProjectID,
-		})
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "copy MCP server header display names").LogError(ctx, logger)
-		}
-	}
-
 	// Update environment entries
-	if environmentConfigs != nil {
+	if payload.EnvironmentConfigs != nil {
 		// Delete all existing entries
 		if err := mcpr.DeleteAllEnvironmentConfigs(ctx, result.ID); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "delete existing environment configs").LogError(ctx, logger)
 		}
 
-		for _, config := range environmentConfigs {
+		for _, config := range payload.EnvironmentConfigs {
 			var headerDisplayName pgtype.Text
 			if config.HeaderDisplayName != nil {
 				headerDisplayName = conv.ToPGText(*config.HeaderDisplayName)
@@ -699,7 +637,7 @@ func (s *Service) ExportMcpMetadata(ctx context.Context, payload *gen.ExportMcpM
 	var metadataRecord repo.McpMetadatum
 	metadataErr := pgx.ErrNoRows
 	for _, backendID := range metadataBackendIDs {
-		metadataRecord, metadataErr = s.repo.GetMetadataByBackendID(ctx, repo.GetMetadataByBackendIDParams{ProjectID: *authCtx.ProjectID, BackendID: backendID})
+		metadataRecord, metadataErr = s.repo.GetMetadataByBackendID(ctx, repo.GetMetadataByBackendIDParams{ProjectID: *authCtx.ProjectID, BackendID: backendID, ToolsetBackend: true})
 		if !errors.Is(metadataErr, pgx.ErrNoRows) {
 			break
 		}
@@ -971,20 +909,6 @@ func rekeyMetadataOntoWrapper(ctx context.Context, mcpr *repo.Queries, projectID
 		return fmt.Errorf("rekey toolset metadata: %d rows moved", moved)
 	}
 	return nil
-}
-
-// writeKey stores a wrapped backend under its wrapper; otherwise toolset_slug keeps the toolset key and mcp_server_id the row it read.
-func (b *resolvedMetadataBackend) writeKey(existing *repo.McpMetadatum, wrapperID uuid.NullUUID) (toolsetKey, serverKey uuid.NullUUID) {
-	switch {
-	case wrapperID.Valid:
-		return uuid.NullUUID{UUID: uuid.Nil, Valid: false}, wrapperID
-	case b.toolset != nil:
-		return uuid.NullUUID{UUID: b.toolset.ID, Valid: true}, uuid.NullUUID{UUID: uuid.Nil, Valid: false}
-	case existing != nil:
-		return existing.ToolsetID, existing.McpServerID
-	default:
-		return uuid.NullUUID{UUID: uuid.Nil, Valid: false}, uuid.NullUUID{UUID: b.mcpServer.ID, Valid: true}
-	}
 }
 
 func isCanonicalWrapper(server *mcpservers_repo.McpServer) bool {
@@ -1640,7 +1564,7 @@ func (s *Service) lookupInstallOrganization(ctx context.Context, toolset *toolse
 // can distinguish "no branding configured" from a real lookup failure.
 func (s *Service) loadInstallPageMetadata(ctx context.Context, ic *installContext) (*repo.McpMetadatum, error) {
 	if ic.mcpServer != nil {
-		rec, err := s.repo.GetMetadataByBackendID(ctx, repo.GetMetadataByBackendIDParams{ProjectID: ic.mcpServer.ProjectID, BackendID: ic.mcpServer.ID})
+		rec, err := s.repo.GetMetadataByBackendID(ctx, repo.GetMetadataByBackendIDParams{ProjectID: ic.mcpServer.ProjectID, BackendID: ic.mcpServer.ID, ToolsetBackend: false})
 		switch {
 		case errors.Is(err, pgx.ErrNoRows):
 			// Fall through to the backing toolset's metadata.
@@ -1651,7 +1575,7 @@ func (s *Service) loadInstallPageMetadata(ctx context.Context, ic *installContex
 		}
 	}
 	if ic.toolset != nil && (ic.mcpServer == nil || ic.mcpServer.ID != ic.toolset.ID) {
-		rec, err := s.repo.GetMetadataByBackendID(ctx, repo.GetMetadataByBackendIDParams{ProjectID: ic.toolset.ProjectID, BackendID: ic.toolset.ID})
+		rec, err := s.repo.GetMetadataByBackendID(ctx, repo.GetMetadataByBackendIDParams{ProjectID: ic.toolset.ProjectID, BackendID: ic.toolset.ID, ToolsetBackend: true})
 		switch {
 		case errors.Is(err, pgx.ErrNoRows):
 			return nil, pgx.ErrNoRows

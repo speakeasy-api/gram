@@ -1,6 +1,10 @@
 import type { Employee } from "@/components/observe/insightsEmployeesData";
 import type { Gram } from "@gram/client";
 import type { ManagedAgent } from "@gram/client/models/components/managedagent.js";
+import type { Lifecycle } from "@gram/client/models/operations/listagents.js";
+
+/** The lifecycle values the agent roster filter may send. */
+export type AgentLifecycleFilter = Lifecycle;
 import { GramError } from "@gram/client/models/errors/gramerror.js";
 import { telemetrySearchUsers } from "@gram/client/funcs/telemetrySearchUsers";
 import { Source } from "@gram/client/models/components/searchuserspayload.js";
@@ -61,15 +65,65 @@ export async function fetchIdentityRoster(
   return users;
 }
 
-/** Agent management is org-scoped and returns 404 when its rollout is off. */
+/** One server-ordered page of the agent inventory. */
+export type RegisteredAgentPage = {
+  items: ManagedAgent[];
+  /** Absent once the inventory is exhausted. */
+  nextCursor?: string;
+};
+
+export type RegisteredAgentPageRequest = {
+  cursor?: string;
+  limit?: number;
+  /** Case-insensitive substring match on the agent name, applied by the server. */
+  search?: string;
+  /** Name order, which is the only order the inventory offers. */
+  sortOrder?: "asc" | "desc";
+  /** Lifecycle states to keep; empty means every state. */
+  lifecycle?: Lifecycle[];
+  /** Owners to keep; empty means every owner. */
+  ownerUserIds?: string[];
+  /** Registration window, as the server compares it. */
+  after?: Date;
+  before?: Date;
+};
+
+/**
+ * Agent management is org-scoped and returns 404 when its rollout is off.
+ *
+ * The page is decided by the server: ordering, searching and the cursor all
+ * belong to the same query, so narrowing or reordering in the browser would
+ * describe a different list than the one the cursor walks.
+ */
 export async function fetchRegisteredAgents(
   client: Gram,
+  request: RegisteredAgentPageRequest = {},
   signal?: AbortSignal,
-): Promise<ManagedAgent[]> {
+): Promise<RegisteredAgentPage> {
   try {
-    return await client.agents.list(undefined, undefined, { signal });
+    const page = await client.agents.list(
+      {
+        cursor: request.cursor,
+        limit: request.limit,
+        search: request.search?.trim() || undefined,
+        nameOrder: request.sortOrder,
+        lifecycle: request.lifecycle?.length ? request.lifecycle : undefined,
+        ownerUserIds: request.ownerUserIds?.length
+          ? request.ownerUserIds
+          : undefined,
+        registeredAfter: request.after,
+        registeredBefore: request.before,
+      },
+      undefined,
+      { signal },
+    );
+    return {
+      items: page.result.items,
+      nextCursor: page.result.nextCursor,
+    };
   } catch (error) {
-    if (error instanceof GramError && error.statusCode === 404) return [];
+    if (error instanceof GramError && error.statusCode === 404)
+      return { items: [] };
     throw error;
   }
 }
