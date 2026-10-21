@@ -718,6 +718,8 @@ github.com/speakeasy-api/jsonpath v0.6.3 h1:c+QPwzAOdrWvzycuc9HFsIZcxKIaWcNpC+xh
 github.com/speakeasy-api/jsonpath v0.6.3/go.mod h1:2cXloNuQ+RSXi5HTRaeBh7JEmjRXTiaKpFTdZiL7URI=
 github.com/speakeasy-api/mcp-setup-docs/go v0.3.8 h1:N7eyngncssSkECt5z+wmEH7ZCP1wN18c8Emgf4kJpmQ=
 github.com/speakeasy-api/mcp-setup-docs/go v0.3.8/go.mod h1:AwRshgM3gDjtRKcGHiasariP+pcP78LEf4CVITWa7YY=
+github.com/speakeasy-api/mcp-setup-docs/go v0.3.9 h1:NTwh5LwZnbmiHCCJZFoMtUmFU68LqhT/L2E4d+RrfHs=
+github.com/speakeasy-api/mcp-setup-docs/go v0.3.9/go.mod h1:AwRshgM3gDjtRKcGHiasariP+pcP78LEf4CVITWa7YY=
 github.com/speakeasy-api/openapi v1.24.0 h1:opoD27rupX7zBVPq1HkIGLeMOzNNA7JalhYP8q34i04=
 github.com/speakeasy-api/openapi v1.24.0/go.mod h1:g3+dIMe0AYgbbGvnlQZqesmjAVWSm9BmsjLevnefQrg=
 github.com/spf13/afero v1.15.0 h1:b/YBCLWAJdFWJTN9cLhiXXcD7mzKn9Dm86dNnfyQw1I=
