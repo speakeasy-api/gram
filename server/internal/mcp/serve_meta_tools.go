@@ -377,6 +377,9 @@ func (s *Service) describeMemberToolset(
 	if gate.authenticated && !toolset.McpIsPublic {
 		for name, entry := range catalog.byName {
 			if err := ctx.Err(); err != nil {
+				if errors.Is(err, context.DeadlineExceeded) {
+					return nil, &metaMemberError{message: fmt.Sprintf("server %q did not answer in time", member.slug)}
+				}
 				return nil, fmt.Errorf("filter meta tools by authz: %w", err)
 			}
 			err := s.authz.Require(ctx, authz.MCPToolCallCheck(toolset.ID.String(), authz.MCPToolCallDimensions{
