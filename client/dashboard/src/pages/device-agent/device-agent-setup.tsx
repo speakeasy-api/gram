@@ -1113,6 +1113,31 @@ function MacInstallStep() {
   );
 }
 
+// MenuBarPreview shows a healthy menu bar panel, so people know what to look
+// for. The images are the device agent's own UI rendered with fixture data
+// (03-healthy.png from TestRenderShots in device-agent's cmd/speakeasy-ui),
+// one per theme.
+function MenuBarPreview() {
+  return (
+    <figure className="border-border w-64 overflow-hidden border">
+      <img
+        src="/setup/device-agent-menu-bar-light.png"
+        alt="The Speakeasy Agent menu bar panel: All checks passed, the organization's plugins, and a Device card with the user's email and Provisioned by IT."
+        width={360}
+        height={711}
+        className="block h-auto w-full dark:hidden"
+      />
+      <img
+        src="/setup/device-agent-menu-bar-dark.png"
+        alt="The Speakeasy Agent menu bar panel: All checks passed, the organization's plugins, and a Device card with the user's email and Provisioned by IT."
+        width={360}
+        height={711}
+        className="hidden h-auto w-full dark:block"
+      />
+    </figure>
+  );
+}
+
 // MacVerifyStep checks the install from the menu bar app, which shows the
 // sign-in state, so it comes after the identity step. The terminal checks
 // stay available but collapsed. The pkg deliberately doesn't add the CLI to
@@ -1125,19 +1150,20 @@ function MacVerifyStep() {
   return (
     <div className="flex flex-col gap-4">
       <Text muted>
-        Click the Speakeasy icon in the menu bar. It shows{" "}
-        <strong className="font-medium">Signed in as</strong> your email, or{" "}
-        <strong className="font-medium">Provisioned by IT</strong> on a Mac that
-        received <code>managed.json</code>.{" "}
-        <strong className="font-medium">Agent not reachable</strong> means the
-        background service isn&apos;t running.
+        The pkg starts the Speakeasy menu bar app right away and at every login.
+        Click its icon in the menu bar: the panel should say{" "}
+        <strong className="font-medium">All checks passed</strong>, and the{" "}
+        <strong className="font-medium">Device</strong> card should show this
+        Mac with the user&apos;s email.
       </Text>
+      <MenuBarPreview />
       <Text small muted>
-        In System Settings → General → Login Items, Speakeasy should be switched
-        on under{" "}
-        <strong className="font-medium">Allow in the Background</strong>. With
-        the Managed Login Items payload, the switch is dimmed so it can&apos;t
-        be turned off. To check a whole fleet, see{" "}
+        <strong className="font-medium">Provisioned by IT</strong> means the
+        email came from <code>managed.json</code>. If the panel says{" "}
+        <strong className="font-medium">The agent isn&apos;t running</strong>,
+        check that Speakeasy is switched on in System Settings → General → Login
+        Items. With the Managed Login Items payload, that switch is dimmed so it
+        can&apos;t be turned off. To check a whole fleet, see{" "}
         <ExternalLink
           href={`${DOCS_MDM}#verify-the-rollout-with-agent-coverage`}
           target="_blank"
