@@ -135,8 +135,7 @@ CREATE TABLE "mcp_auth_client_headers" (
   PRIMARY KEY ("id"),
   CONSTRAINT "mcp_auth_client_headers_auth_client_fkey" FOREIGN KEY ("auth_client_id", "organization_id") REFERENCES "mcp_auth_clients" ("id", "organization_id") ON UPDATE NO ACTION ON DELETE CASCADE,
   CONSTRAINT "mcp_auth_client_headers_name_check" CHECK (name <> ''::text),
-  CONSTRAINT "mcp_auth_client_headers_value_from_request_header_check" CHECK ((value_from_request_header IS NULL) OR (value_from_request_header <> ''::text)),
-  CONSTRAINT "mcp_auth_client_headers_value_source_check" CHECK ((value IS NULL) <> (value_from_request_header IS NULL))
+  CONSTRAINT "mcp_auth_client_headers_value_from_request_header_check" CHECK ((value_from_request_header IS NULL) OR (value_from_request_header <> ''::text))
 );
 -- Create index "mcp_auth_client_headers_auth_client_id_name_key" to table: "mcp_auth_client_headers"
 CREATE UNIQUE INDEX "mcp_auth_client_headers_auth_client_id_name_key" ON "mcp_auth_client_headers" ("auth_client_id", "name") WHERE (deleted IS FALSE);

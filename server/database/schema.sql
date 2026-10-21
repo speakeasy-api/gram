@@ -9907,6 +9907,8 @@ ON mcp_auth_clients (project_id)
 WHERE deleted IS FALSE;
 
 -- Headers an auth client sends upstream, same shape as remote_mcp_server_headers.
+-- Exactly one of value and value_from_request_header is set; the writer
+-- validates it.
 CREATE TABLE IF NOT EXISTS mcp_auth_client_headers (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   auth_client_id uuid NOT NULL,
@@ -9924,8 +9926,7 @@ CREATE TABLE IF NOT EXISTS mcp_auth_client_headers (
   deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
 
   CONSTRAINT mcp_auth_client_headers_pkey PRIMARY KEY (id),
-  CONSTRAINT mcp_auth_client_headers_auth_client_fkey FOREIGN KEY (auth_client_id, organization_id) REFERENCES mcp_auth_clients (id, organization_id) ON DELETE CASCADE,
-  CONSTRAINT mcp_auth_client_headers_value_source_check CHECK ((value IS NULL) != (value_from_request_header IS NULL))
+  CONSTRAINT mcp_auth_client_headers_auth_client_fkey FOREIGN KEY (auth_client_id, organization_id) REFERENCES mcp_auth_clients (id, organization_id) ON DELETE CASCADE
 );
 
 COMMENT ON COLUMN mcp_auth_client_headers.id IS '@access: confidential';
