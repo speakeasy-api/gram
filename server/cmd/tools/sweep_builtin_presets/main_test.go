@@ -234,30 +234,34 @@ func TestSweepClickHouseDisabledRulesSkipsDismissedAndShadowAndIncludesUnsuppres
 	require.Equal(t, "disabled_rule:custom.disabled", detail)
 }
 
-func TestSweepClickHouseHonorsBuiltinPresetToggleAndSkipsMissingPolicy(t *testing.T) {
+func TestSweepClickHouseHonorsBuiltinPresetToggleAndReportsUnavailablePolicies(t *testing.T) {
 	t.Parallel()
 	fixture := newSweepFixture(t)
 	enabledPolicy := fixture.newPolicy(t, uuid.Must(uuid.NewV7()), true, nil, nil)
-	disabledPolicy := fixture.newPolicy(t, uuid.Must(uuid.NewV7()), true, []byte(`{"builtin_presets":{"enabled":false}}`), nil)
+	presetDisabledPolicy := fixture.newPolicy(t, uuid.Must(uuid.NewV7()), true, []byte(`{"builtin_presets":{"enabled":false}}`), nil)
 	createdAt := time.Now().UTC().Truncate(time.Microsecond).Add(-time.Hour)
 	const card = "4111111111111111"
 	enabled := fixture.newFinding(t, enabledPolicy, createdAt, "presidio", "pii.credit_card", card)
-	disabled := fixture.newFinding(t, disabledPolicy, createdAt, "presidio", "pii.credit_card", card)
+	presetDisabled := fixture.newFinding(t, presetDisabledPolicy, createdAt, "presidio", "pii.credit_card", card)
 	missing := fixture.newFinding(t, uuid.New(), createdAt, "presidio", "pii.credit_card", card)
+	malformed := fixture.newFinding(t, uuid.New(), createdAt, "presidio", "pii.credit_card", card)
+	malformed.RiskPolicyID = "not-a-uuid"
 
 	conn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
-	require.NoError(t, chrepo.New(conn).InsertRiskFindings(t.Context(), []chrepo.RiskFindingRow{enabled, disabled, missing}))
+	require.NoError(t, chrepo.New(conn).InsertRiskFindings(t.Context(), []chrepo.RiskFindingRow{enabled, presetDisabled, missing, malformed}))
 
 	rep := runCHSweep(t, fixture, createdAt.Add(-time.Hour), createdAt.Add(time.Hour), false, 10, nil)
-	require.EqualValues(t, 3, rep.scanned)
+	require.EqualValues(t, 4, rep.scanned)
 	require.EqualValues(t, 1, rep.flagged)
 	require.EqualValues(t, 1, rep.updated)
-	require.EqualValues(t, 1, rep.skippedPolicy)
+	require.EqualValues(t, 2, rep.missingPolicy)
+	require.Zero(t, rep.disabledPolicy)
 	require.EqualValues(t, 1, rep.byFilter[filterBuiltinPreset])
 	require.True(t, findingState(t, fixture, enabled.ID).Dismissed)
-	require.False(t, findingState(t, fixture, disabled.ID).Dismissed)
+	require.False(t, findingState(t, fixture, presetDisabled.ID).Dismissed)
 	require.False(t, findingState(t, fixture, missing.ID).Dismissed)
+	require.False(t, findingState(t, fixture, malformed.ID).Dismissed)
 }
 
 func TestSweepClickHouseDryRunWritesNothingAndRerunChangesNothing(t *testing.T) {
@@ -298,7 +302,8 @@ func TestSweepClickHouseLeavesDisabledPolicyFindingsLive(t *testing.T) {
 
 	rep := runCHSweep(t, fixture, createdAt.Add(-time.Hour), createdAt.Add(time.Hour), false, 10, nil)
 	require.EqualValues(t, 1, rep.scanned)
-	require.EqualValues(t, 1, rep.skippedPolicy)
+	require.EqualValues(t, 1, rep.disabledPolicy)
+	require.Zero(t, rep.missingPolicy)
 	require.Zero(t, rep.flagged)
 	require.False(t, findingState(t, fixture, finding.ID).Dismissed)
 }
@@ -348,16 +353,19 @@ func TestLoadPolicySweepFiltersRetriesMissingPolicyOnNextPage(t *testing.T) {
 
 	filters, err := loadPolicySweepFilters(t.Context(), fixture.pool, cache, firstPageMissing, fixture.projectID, policyID.String())
 	require.NoError(t, err)
+	require.False(t, filters.found)
 	require.False(t, filters.enabled)
 	require.Contains(t, firstPageMissing, policyID)
 
 	fixture.newPolicy(t, policyID, true, nil, nil)
 	filters, err = loadPolicySweepFilters(t.Context(), fixture.pool, cache, firstPageMissing, fixture.projectID, policyID.String())
 	require.NoError(t, err)
+	require.False(t, filters.found)
 	require.False(t, filters.enabled)
 
 	filters, err = loadPolicySweepFilters(t.Context(), fixture.pool, cache, make(map[uuid.UUID]struct{}), fixture.projectID, policyID.String())
 	require.NoError(t, err)
+	require.True(t, filters.found)
 	require.True(t, filters.enabled)
 }
 

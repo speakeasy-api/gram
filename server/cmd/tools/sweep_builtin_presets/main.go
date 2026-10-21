@@ -97,7 +97,8 @@ type report struct {
 	scanned           int64
 	flagged           int64
 	updated           int64
-	skippedPolicy     int64
+	missingPolicy     int64
+	disabledPolicy    int64
 	unreconstructable int64
 	redactionMismatch int64
 	bySource          map[string]int64
@@ -109,6 +110,7 @@ type report struct {
 type policySweepFilters struct {
 	disabledRules         risk_analysis.DisabledRuleSet
 	builtinPresetsEnabled bool
+	found                 bool
 	enabled               bool
 }
 
@@ -116,6 +118,7 @@ func emptyPolicySweepFilters() policySweepFilters {
 	return policySweepFilters{
 		disabledRules:         risk_analysis.NewDisabledRuleSet(nil),
 		builtinPresetsEnabled: false,
+		found:                 false,
 		enabled:               false,
 	}
 }
@@ -346,7 +349,8 @@ func sweep(ctx context.Context, pool *pgxpool.Pool, ch *chrepo.Queries, cfg conf
 		scanned:           0,
 		flagged:           0,
 		updated:           0,
-		skippedPolicy:     0,
+		missingPolicy:     0,
+		disabledPolicy:    0,
 		unreconstructable: 0,
 		redactionMismatch: 0,
 		bySource:          map[string]int64{},
@@ -494,8 +498,12 @@ func sweepClickHouse(ctx context.Context, pool *pgxpool.Pool, ch *chrepo.Queries
 			if err != nil {
 				return rep, err
 			}
+			if !filters.found {
+				rep.missingPolicy++
+				continue
+			}
 			if !filters.enabled {
-				rep.skippedPolicy++
+				rep.disabledPolicy++
 				continue
 			}
 
@@ -582,6 +590,7 @@ func loadPolicySweepFilters(
 	filters := policySweepFilters{
 		disabledRules:         risk_analysis.NewDisabledRuleSet(policy.DisabledRules),
 		builtinPresetsEnabled: risk_analysis.BuiltinPresetsEnabledFromConfig(policy.AnalyzerConfig),
+		found:                 true,
 		enabled:               policy.Enabled,
 	}
 	cache[policyID] = filters
@@ -618,8 +627,8 @@ func applyBatch(ctx context.Context, pool *pgxpool.Pool, ch *chrepo.Queries, cfg
 }
 
 func logProgress(cfg config, rep report) {
-	log.Printf("candidates=%s scanned=%d flagged=%d updated=%d skipped_policy=%d unreconstructable=%d redaction_mismatch=%d cursor=%s",
-		cfg.candidates, rep.scanned, rep.flagged, rep.updated, rep.skippedPolicy, rep.unreconstructable, rep.redactionMismatch, rep.lastCursor)
+	log.Printf("candidates=%s scanned=%d flagged=%d updated=%d missing_policy=%d disabled_policy=%d unreconstructable=%d redaction_mismatch=%d cursor=%s",
+		cfg.candidates, rep.scanned, rep.flagged, rep.updated, rep.missingPolicy, rep.disabledPolicy, rep.unreconstructable, rep.redactionMismatch, rep.lastCursor)
 }
 
 func printReport(cfg config, rep report, lib *presetlib.Library) {
@@ -643,7 +652,8 @@ func printReport(cfg config, rep report, lib *presetlib.Library) {
 	fmt.Printf("  scanned:             %d\n", rep.scanned)
 	fmt.Printf("  flagged:             %d\n", rep.flagged)
 	fmt.Printf("  updated:             %d\n", rep.updated)
-	fmt.Printf("  skipped policy:      %d\n", rep.skippedPolicy)
+	fmt.Printf("  missing policy:      %d\n", rep.missingPolicy)
+	fmt.Printf("  disabled policy:     %d\n", rep.disabledPolicy)
 	fmt.Printf("  unreconstructable:   %d\n", rep.unreconstructable)
 	fmt.Printf("  redaction mismatch:  %d\n", rep.redactionMismatch)
 	fmt.Printf("  last cursor:         %s\n", rep.lastCursor)

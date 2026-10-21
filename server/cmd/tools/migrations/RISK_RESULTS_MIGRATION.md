@@ -247,24 +247,31 @@ id and version, source, rule id, and span offsets.
        -from <FROM_RFC3339> -to <TO_RFC3339>
    ```
 
-   Review `scanned`, `skipped policy`, `unreconstructable`, `redaction
-   mismatch`, and the per-source and per-filter counts. Missing, deleted, and
-   disabled policies are skipped. ClickHouse mode honors each enabled policy's
-   disabled rules and built-in preset toggle. `-assets-backend` and
-   `-assets-uri` default to `GRAM_ASSETS_BACKEND` and `GRAM_ASSETS_URI`; provide
-   both whenever the window may contain content-part findings. Without asset
-   storage, those built-in candidates are counted as `unreconstructable` and
-   left live. A `redaction mismatch` means reconstructed bytes did not reproduce
-   the finding's stored display mask, so the candidate is also left live.
+   Review `scanned`, `missing policy`, `disabled policy`,
+   `unreconstructable`, `redaction mismatch`, and the per-source and per-filter
+   counts. Candidates with a missing, deleted, or malformed policy reference
+   are counted under `missing policy`; candidates for a present but disabled
+   policy are counted separately under `disabled policy`. Both are skipped.
+   ClickHouse mode honors each enabled policy's disabled rules and built-in
+   preset toggle. `-assets-backend` and `-assets-uri` default to
+   `GRAM_ASSETS_BACKEND` and `GRAM_ASSETS_URI`; provide both whenever the window
+   may contain content-part findings. Without asset storage, those built-in
+   candidates are counted as `unreconstructable` and left live. A `redaction
+   mismatch` means reconstructed bytes did not reproduce the finding's stored
+   display mask, so the candidate is also left live.
 
 6. Repeat the sweep with `-dry-run=false`, preserving every scope flag. Run the
-   dry run once more and confirm `flagged` is zero.
+   dry run once more and confirm `flagged`, `unreconstructable`, and `redaction
+   mismatch` are all zero. If either residual counter cannot be reduced to
+   zero, review the remaining candidates individually and record the explicit
+   decision to accept each residual before cutover.
 7. Validate per-source counts over the same half-open time window. Expand
    Postgres spans with
    `SUM(GREATEST(COALESCE(jsonb_array_length(spans), 1), 1))`. In ClickHouse,
    resolve the latest copy per id and compare `uniqExact(id)` grouped by
    `source`. State copies do not change `uniqExact(id)`.
-8. Enable `risk-findings-clickhouse-cutover` only after the validation passes.
+8. Enable `risk-findings-clickhouse-cutover` only after the validation passes
+   and the residual acceptance criteria in step 6 are satisfied.
 
 Rows matched under a live ClickHouse id keep that id. Missing Postgres
 exclusion or dismissal state is appended as a suppression copy of the latest
