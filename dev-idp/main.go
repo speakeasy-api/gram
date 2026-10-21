@@ -1,4 +1,4 @@
-// Package main is the dev-idp binary entrypoint. Boots an HTTP server on
+// Package main is the dev-idp binary entrypoint. Boots an HTTP(S) server on
 // GRAM_DEVIDP_ADDRESS that mounts:
 //
 //   - the Goa management API (under /rpc/...) for /users, /organizations,
@@ -86,6 +86,8 @@ func main() {
 func run() error {
 	address := flag.String("address", envOr("GRAM_DEVIDP_ADDRESS", "127.0.0.1:35291"), "HTTP listener address")
 	controlAddress := flag.String("control-address", envOr("GRAM_DEVIDP_CONTROL_ADDRESS", "127.0.0.1:35292"), "HTTP listener address for the health/control server")
+	sslCertFile := flag.String("ssl-cert-file", os.Getenv("GRAM_SSL_CERT_FILE"), "TLS certificate file for the public listener (requires --ssl-key-file)")
+	sslKeyFile := flag.String("ssl-key-file", os.Getenv("GRAM_SSL_KEY_FILE"), "TLS private key file for the public listener (requires --ssl-cert-file)")
 	externalURL := flag.String("external-url", os.Getenv("GRAM_DEVIDP_EXTERNAL_URL"), "Public base URL for discovery docs / redirect URIs (defaults from --address)")
 	dbSpec := flag.String("db", os.Getenv("GRAM_DEVIDP_DB"), "SQLite location: 'memory' or 'file:<path>' (default file:local/devidp/devidp.db)")
 	rsaKey := flag.String("rsa-private-key", os.Getenv("GRAM_DEVIDP_RSA_PRIVATE_KEY"), "PEM-encoded RSA private key (omit to generate a fresh ephemeral key)")
@@ -96,6 +98,11 @@ func run() error {
 	emaAudienceAliases := flag.String("ema-audience-aliases", os.Getenv("GRAM_DEVIDP_EMA_AUDIENCE_ALIASES"), "Extra ID-JAG audiences per resource AS as slug=aud[,slug=aud...]; an aliased assertion may omit the resource claim")
 	workosUpstream := flag.String("workos-upstream-url", envOr("GRAM_DEVIDP_WORKOS_UPSTREAM_URL", "https://api.workos.com"), "Real WorkOS API base URL proxied to when --backend=workos")
 	flag.Parse()
+
+	scheme, err := listenerScheme(*sslCertFile, *sslKeyFile)
+	if err != nil {
+		return err
+	}
 
 	logger := plog.NewLogger(os.Stderr).With(slog.String("component", "dev-idp"))
 	slog.SetDefault(logger)
@@ -133,7 +140,7 @@ func run() error {
 
 	pubURL := *externalURL
 	if pubURL == "" {
-		pubURL = deriveExternalURL(*address)
+		pubURL = deriveExternalURL(*address, scheme)
 	}
 
 	var tp trace.TracerProvider = tracenoop.NewTracerProvider()
@@ -258,8 +265,14 @@ func run() error {
 		slog.String("address", *address),
 		slog.String("external_url", pubURL),
 	)
-	if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-		return fmt.Errorf("dev-idp server: %w", err)
+	var serveErr error
+	if scheme == "https" {
+		serveErr = srv.ListenAndServeTLS(*sslCertFile, *sslKeyFile)
+	} else {
+		serveErr = srv.ListenAndServe()
+	}
+	if serveErr != nil && !errors.Is(serveErr, http.ErrServerClosed) {
+		return fmt.Errorf("dev-idp server: %w", serveErr)
 	}
 	return nil
 }
@@ -273,17 +286,27 @@ func controlMux() http.Handler {
 	return mux
 }
 
-// deriveExternalURL turns a listener address ("host:port" or ":port") into
-// an externally usable base URL.
-func deriveExternalURL(addr string) string {
+func listenerScheme(certFile, keyFile string) (string, error) {
+	if certFile == "" && keyFile == "" {
+		return "http", nil
+	}
+	if certFile == "" || keyFile == "" {
+		return "", errors.New("ssl-cert-file and ssl-key-file must be provided together")
+	}
+	return "https", nil
+}
+
+// deriveExternalURL turns a listener address ("host:port" or ":port") and
+// its serving scheme into an externally usable base URL.
+func deriveExternalURL(addr, scheme string) string {
 	host, port, err := net.SplitHostPort(addr)
 	if err != nil {
-		return "http://" + strings.TrimPrefix(addr, "http://")
+		return scheme + "://" + strings.TrimPrefix(addr, scheme+"://")
 	}
 	if host == "" || host == "0.0.0.0" || host == "::" {
 		host = "localhost"
 	}
-	return "http://" + net.JoinHostPort(host, port)
+	return scheme + "://" + net.JoinHostPort(host, port)
 }
 
 func envOr(key, fallback string) string {

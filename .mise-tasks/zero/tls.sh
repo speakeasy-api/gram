@@ -44,13 +44,14 @@ is_https() {
 }
 
 detect_tls() {
-  is_https "$GRAM_SERVER_URL" || is_https "$GRAM_SITE_URL"
+  is_https "$GRAM_SERVER_URL" || is_https "$GRAM_SITE_URL" || is_https "${GRAM_DEVIDP_EXTERNAL_URL:-}"
 }
 
 show_urls() {
-  printf "\t%s: %s\n\t%s: %s\n" \
+  printf "\t%s: %s\n" \
     GRAM_SERVER_URL "$GRAM_SERVER_URL" \
-    GRAM_SITE_URL "$GRAM_SITE_URL" >&2;
+    GRAM_SITE_URL "$GRAM_SITE_URL" \
+    GRAM_DEVIDP_EXTERNAL_URL "${GRAM_DEVIDP_EXTERNAL_URL:-}" >&2
 }
 
 turn_off_tls() {
@@ -86,6 +87,7 @@ trust_local_ca() {
       echo "Quick recommendation: for fast local development, switch to HTTP to avoid browser certificate warnings:" >&2
       echo "  mise set --file mise.local.toml GRAM_SERVER_URL=http://localhost:8080" >&2
       echo "  mise set --file mise.local.toml GRAM_SITE_URL=http://localhost:5173" >&2
+      echo "  mise set --file mise.local.toml GRAM_DEVIDP_EXTERNAL_URL=http://localhost:${GRAM_DEVIDP_PORT:-35291}" >&2
       echo "Then re-run ./zero and use http://localhost:5173 in your browser." >&2
       echo "" >&2
     fi
@@ -206,9 +208,10 @@ NODE
 }
 
 cert_names() {
-  local site_host server_host extra_hosts
+  local site_host server_host devidp_host extra_hosts
   site_host="$(extract_hostname "$GRAM_SITE_URL")"
   server_host="$(extract_hostname "$GRAM_SERVER_URL")"
+  devidp_host="$(extract_hostname "${GRAM_DEVIDP_EXTERNAL_URL:-}")"
   extra_hosts="$(extra_cert_names)" || return 1
 
   # host.docker.internal lets local assistant runtime containers dial the
@@ -217,6 +220,7 @@ cert_names() {
     printf "%s\n" \
       "$site_host" \
       "$server_host" \
+      "$devidp_host" \
       "localhost" \
       "host.docker.internal" \
       "127.0.0.1" \
