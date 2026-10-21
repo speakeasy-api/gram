@@ -42,10 +42,8 @@ vi.mock("@tanstack/react-query", async (importOriginal) => ({
   useQueryClient: () => ({}),
 }));
 
-import {
-  JudgeFailureModeCard,
-  useJudgeFailureMode,
-} from "./judge-failure-mode";
+import { JudgeFailureModeCard } from "./judge-failure-mode";
+import { useJudgeFailureMode } from "./useJudgeFailureMode";
 
 function Harness(): JSX.Element {
   return <JudgeFailureModeCard mode={useJudgeFailureMode()} />;

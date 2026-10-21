@@ -111,10 +111,8 @@ import {
   type ShadowMCPDisposition,
 } from "./policy-shadow-mcp-setup";
 import { SupersedeDecisionsDialog } from "./SupersedeDecisionsDialog";
-import {
-  JudgeFailureModeCard,
-  useJudgeFailureMode,
-} from "./judge-failure-mode";
+import { JudgeFailureModeCard } from "./judge-failure-mode";
+import { useJudgeFailureMode } from "./useJudgeFailureMode";
 import { PolicyMCPScopePicker } from "./PolicyMCPScopePicker";
 import { PolicyScopeModeCards } from "./PolicyScopeModeCards";
 import { Skeleton } from "@/components/ui/Skeleton";
