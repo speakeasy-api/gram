@@ -71,6 +71,9 @@ type Input struct {
 	ActorUserID    string
 	ActorEmail     *string
 
+	// ActorSystem audits a write with no user behind it as system:<ActorSystem>; ActorUserID takes precedence.
+	ActorSystem string
+
 	// TracerProvider traces the risk policy cleanup the delete runs.
 	TracerProvider trace.TracerProvider
 }
@@ -85,10 +88,13 @@ type Result struct {
 
 // Tombstone soft-deletes a locked server and its attachments; the caller audits the server delete.
 func Tombstone(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, locked Locked, input Input) (Result, error) {
-	if tx == nil || auditLogger == nil || input.TracerProvider == nil || input.OrganizationID == "" || input.ProjectID == uuid.Nil || !ActorPresent(ctx, input.ActorUserID) {
+	if tx == nil || auditLogger == nil || input.TracerProvider == nil || input.OrganizationID == "" || input.ProjectID == uuid.Nil || (!ActorPresent(ctx, input.ActorUserID) && input.ActorSystem == "") {
 		return Result{}, errors.New("invalid MCP server tombstone input")
 	}
 	actor := urn.NewPrincipal(urn.PrincipalTypeUser, input.ActorUserID)
+	if input.ActorUserID == "" && input.ActorSystem != "" {
+		actor = urn.NewSystemPrincipal(input.ActorSystem)
+	}
 	servers := repo.New(tx)
 
 	deleted, err := servers.DeleteMCPServer(ctx, repo.DeleteMCPServerParams{ID: locked.Server.ID, ProjectID: input.ProjectID})

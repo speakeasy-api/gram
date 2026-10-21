@@ -38,6 +38,7 @@ const (
 	phaseOrphans    = "orphans"
 	phaseRemovals   = "removals"
 	phaseLeftovers  = "leftover_removals"
+	phaseWrapperDel = "orphan_wrappers"
 )
 
 // defaultPageSize bounds each candidate page; rows are processed one transaction at a time regardless.
@@ -92,6 +93,13 @@ const (
 	OutcomeBlockedNeedsRekey Outcome = "blocked_needs_rekey"
 	// OutcomeBlockedLiveWrapper is a removal record that may be the only thing keeping a live wrapper server of its toolset out of the plugin.
 	OutcomeBlockedLiveWrapper Outcome = "blocked_live_wrapper"
+
+	// OutcomeBlockedLiveEndpoint is a server of a deleted toolset that is still addressable through a live endpoint.
+	OutcomeBlockedLiveEndpoint Outcome = "blocked_live_endpoint"
+	// OutcomeBlockedSessionIssuer is a server that owns a user session issuer, whose cascade this tool does not run.
+	OutcomeBlockedSessionIssuer Outcome = "blocked_session_issuer"
+	// OutcomeBlockedRiskPolicy is a server that is the only target of a risk policy the delete would remove.
+	OutcomeBlockedRiskPolicy Outcome = "blocked_risk_policy"
 )
 
 // Options controls one run.
@@ -123,7 +131,10 @@ type Options struct {
 	// DeleteLeftoverRemovals hard-deletes soft-deleted toolset-keyed plugin_servers rows the re-key cannot move.
 	DeleteLeftoverRemovals bool
 
-	// Publication enqueues a plugin publication request when the cleanup removes a member of a live project.
+	// DeleteOrphanWrappers soft-deletes live non-canonical servers of deleted toolsets through the app's server delete.
+	DeleteOrphanWrappers bool
+
+	// Publication enqueues a plugin publication request when the cleanup removes a member of a live project, or a server is deleted.
 	Publication plugins.PublicationRequests
 
 	// Journal receives each dependent write before and after its commit; required to apply any dependent phase.
@@ -172,6 +183,9 @@ type RowReport struct {
 
 	// PublicationRequested reports a plugin publication request enqueued with an applied cleanup.
 	PublicationRequested bool `json:"publication_requested,omitempty"`
+
+	// Detached counts the rows a -delete-orphan-wrapper-servers delete removed with the server.
+	Detached *WrapperDetached `json:"detached,omitempty"`
 }
 
 // Report summarizes a run.
@@ -230,14 +244,14 @@ func (r *Runner) Run(ctx context.Context) (Report, error) {
 		Rows:                  nil,
 	}
 	modes := 0
-	for _, on := range []bool{r.options.MoveDependents, r.options.CleanupOrphans, r.options.RekeyRemovals, r.options.DeleteLeftoverRemovals} {
+	for _, on := range []bool{r.options.MoveDependents, r.options.CleanupOrphans, r.options.RekeyRemovals, r.options.DeleteLeftoverRemovals, r.options.DeleteOrphanWrappers} {
 		if on {
 			modes++
 		}
 	}
 	switch {
 	case modes > 1:
-		return report, errors.New("the dependent move, the orphan cleanup, the removal re-key and the leftover removal delete are separate phases")
+		return report, errors.New("the dependent move, the orphan cleanup, the removal re-key, the leftover removal delete and the orphan wrapper delete are separate phases")
 	case r.options.MoveDependents:
 		report.Phase = phaseDependents
 		return runDependents(ctx, r, report, r.dependentsPhase(r.moveOne))
@@ -250,6 +264,9 @@ func (r *Runner) Run(ctx context.Context) (Report, error) {
 	case r.options.DeleteLeftoverRemovals:
 		report.Phase = phaseLeftovers
 		return runDependents(ctx, r, report, r.leftoversPhase())
+	case r.options.DeleteOrphanWrappers:
+		report.Phase = phaseWrapperDel
+		return runDependents(ctx, r, report, r.orphanWrappersPhase())
 	}
 	after := r.options.Cursor
 	for {
@@ -313,7 +330,7 @@ func loadCanonical(ctx context.Context, tx pgx.Tx, toolset toolsetsrepo.Toolset)
 func (r *Runner) processOne(ctx context.Context, candidate ListCandidateToolsetsRow) (RowReport, error) {
 	row := RowReport{
 		ToolsetID: candidate.ID, Table: "", RowID: nil, ProjectID: candidate.ProjectID, McpSlug: "", CustomDomainID: nil, Outcome: "", Reason: "",
-		Wrote: false, LiveEndpoints: 0, FreshIDServers: 0, DomainsToReconcile: nil, CollapsedTwin: nil, Removed: nil, PublicationRequested: false,
+		Wrote: false, LiveEndpoints: 0, FreshIDServers: 0, DomainsToReconcile: nil, CollapsedTwin: nil, Removed: nil, PublicationRequested: false, Detached: nil,
 	}
 
 	tx, err := r.pool.Begin(ctx)

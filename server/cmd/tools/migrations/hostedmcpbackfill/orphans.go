@@ -38,7 +38,7 @@ type orphanCleanup struct {
 func (r *Runner) cleanupOne(ctx context.Context, toolsetID uuid.UUID, dep ListToolsetDependentsRow) (RowReport, error) {
 	row := RowReport{
 		ToolsetID: toolsetID, Table: dep.TableName, RowID: &dep.ID, ProjectID: dep.ProjectID, McpSlug: "", CustomDomainID: nil,
-		Outcome: "", Reason: "", Wrote: false, LiveEndpoints: 0, FreshIDServers: 0, DomainsToReconcile: nil, CollapsedTwin: nil, Removed: nil, PublicationRequested: false,
+		Outcome: "", Reason: "", Wrote: false, LiveEndpoints: 0, FreshIDServers: 0, DomainsToReconcile: nil, CollapsedTwin: nil, Removed: nil, PublicationRequested: false, Detached: nil,
 	}
 
 	tx, err := r.pool.Begin(ctx)
@@ -116,7 +116,7 @@ func (r *Runner) cleanupOne(ctx context.Context, toolsetID uuid.UUID, dep ListTo
 	return r.commitJournaled(ctx, tx, row, JournalRecord{
 		Event: JournalIntent, ProjectID: toolset.ProjectID, ToolsetID: toolsetID, RowID: dep.ID, Outcome: row.Outcome,
 		From: RowKey{Table: dep.TableName, Column: "toolset_id", ID: toolsetID}, To: RowKey{Table: "", Column: "", ID: uuid.Nil},
-		CollapsedTwin: nil, Removed: c.removed, Rekeyed: nil,
+		CollapsedTwin: nil, Removed: c.removed, Rekeyed: nil, Dependents: nil,
 	})
 }
 

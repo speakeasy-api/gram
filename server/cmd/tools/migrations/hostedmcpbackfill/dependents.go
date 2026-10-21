@@ -116,6 +116,9 @@ type JournalRecord struct {
 
 	// Rekeyed is the removal record's row image before a -rekey-removal-records re-key.
 	Rekeyed *RowImage `json:"rekeyed,omitempty"`
+
+	// Dependents are the rows a -delete-orphan-wrapper-servers delete changed with the server in Removed.
+	Dependents *WrapperDependents `json:"dependents,omitempty"`
 }
 
 // Journal records each dependent row's move durably around its commit.
@@ -256,7 +259,7 @@ func (m *dependentMove) loadWrapper(ctx context.Context, q *Queries) (Outcome, s
 func (r *Runner) moveOne(ctx context.Context, toolsetID uuid.UUID, dep ListToolsetDependentsRow) (RowReport, error) {
 	row := RowReport{
 		ToolsetID: toolsetID, Table: dep.TableName, RowID: &dep.ID, ProjectID: dep.ProjectID, McpSlug: "", CustomDomainID: nil,
-		Outcome: "", Reason: "", Wrote: false, LiveEndpoints: 0, FreshIDServers: 0, DomainsToReconcile: nil, CollapsedTwin: nil, Removed: nil, PublicationRequested: false,
+		Outcome: "", Reason: "", Wrote: false, LiveEndpoints: 0, FreshIDServers: 0, DomainsToReconcile: nil, CollapsedTwin: nil, Removed: nil, PublicationRequested: false, Detached: nil,
 	}
 
 	tx, err := r.pool.Begin(ctx)
@@ -337,7 +340,7 @@ func (r *Runner) moveOne(ctx context.Context, toolsetID uuid.UUID, dep ListTools
 	from, to := moveKeys(dep.TableName, toolsetID)
 	return r.commitJournaled(ctx, tx, row, JournalRecord{
 		Event: JournalIntent, ProjectID: toolset.ProjectID, ToolsetID: toolsetID, RowID: dep.ID, Outcome: row.Outcome,
-		From: from, To: to, CollapsedTwin: move.twin, Removed: nil, Rekeyed: nil,
+		From: from, To: to, CollapsedTwin: move.twin, Removed: nil, Rekeyed: nil, Dependents: nil,
 	})
 }
 

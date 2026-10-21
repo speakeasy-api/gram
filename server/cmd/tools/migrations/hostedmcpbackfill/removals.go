@@ -56,7 +56,7 @@ func (r *Runner) removalsPhase() dependentPhase[ListToolsetRemovalRecordsRow] {
 func (r *Runner) rekeyRemovalOne(ctx context.Context, toolsetID uuid.UUID, dep ListToolsetRemovalRecordsRow, rekeyed map[removalPair]struct{}) (RowReport, error) {
 	row := RowReport{
 		ToolsetID: toolsetID, Table: tablePluginServers, RowID: &dep.ID, ProjectID: dep.ProjectID, McpSlug: "", CustomDomainID: nil,
-		Outcome: "", Reason: "", Wrote: false, LiveEndpoints: 0, FreshIDServers: 0, DomainsToReconcile: nil, CollapsedTwin: nil, Removed: nil, PublicationRequested: false,
+		Outcome: "", Reason: "", Wrote: false, LiveEndpoints: 0, FreshIDServers: 0, DomainsToReconcile: nil, CollapsedTwin: nil, Removed: nil, PublicationRequested: false, Detached: nil,
 	}
 
 	tx, err := r.pool.Begin(ctx)
@@ -138,7 +138,8 @@ func (r *Runner) rekeyRemovalOne(ctx context.Context, toolsetID uuid.UUID, dep L
 	row, err = r.commitJournaled(ctx, tx, row, JournalRecord{
 		Event: JournalIntent, ProjectID: toolset.ProjectID, ToolsetID: toolsetID, RowID: record.ID, Outcome: row.Outcome,
 		From: from, To: to, CollapsedTwin: nil, Removed: nil,
-		Rekeyed: &RowImage{Table: tablePluginServers, ID: record.ID, Deletion: "soft_deleted", Row: record.RowJson, EnvironmentConfigs: nil, SoftDeletedAt: record.DeletedAt, RekeyedUpdatedAt: updated.UpdatedAt},
+		Rekeyed:    &RowImage{Table: tablePluginServers, ID: record.ID, Deletion: "soft_deleted", Row: record.RowJson, EnvironmentConfigs: nil, SoftDeletedAt: record.DeletedAt, RekeyedUpdatedAt: updated.UpdatedAt},
+		Dependents: nil,
 	})
 	if err == nil {
 		rekeyed[pair] = struct{}{}

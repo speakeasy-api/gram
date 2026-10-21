@@ -1,0 +1,490 @@
+package hostedmcpbackfill
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/stretchr/testify/require"
+
+	gen "github.com/speakeasy-api/gram/server/gen/mcp_servers"
+	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
+	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
+	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/authztest"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers"
+	"github.com/speakeasy-api/gram/server/internal/networkaccess"
+	"github.com/speakeasy-api/gram/server/internal/plugins"
+	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
+	"github.com/speakeasy-api/gram/server/internal/plugins/roledelivery"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
+	"github.com/speakeasy-api/gram/server/internal/urn"
+)
+
+func wrapperOptions(apply bool) (Options, *memJournal) {
+	journal := &memJournal{}
+	return Options{ProjectID: uuid.NullUUID{}, Cursor: uuid.Nil, Limit: 0, PageSize: 0, Apply: apply, DeleteOrphanWrappers: true, Journal: journal}, journal
+}
+
+// wrapperState is every row the delete can change in the project, keyed by table and id.
+func (f *fixture) wrapperState(t *testing.T) map[string]string {
+	t.Helper()
+	rows, err := New(f.pool).ListWrapperStateFixture(t.Context(), f.projectID)
+	require.NoError(t, err)
+	out := make(map[string]string, len(rows))
+	for _, row := range rows {
+		out[row.TableName+" "+row.ID.String()] = row.RowText
+	}
+	return out
+}
+
+// seedExtraServer seeds a live non-canonical server of the toolset, as a gateway member wrapper.
+func (f *fixture) seedExtraServer(t *testing.T, toolsetID uuid.UUID) uuid.UUID {
+	t.Helper()
+	id := uuid.New()
+	slug := "member-" + uuid.NewString()[:8]
+	f.seedServer(t, id, toolsetID, slug, slug, "private")
+	return id
+}
+
+type wrapperDependents struct {
+	membership, pluginMember, attachment, link uuid.UUID
+}
+
+// seedWrapperDependents gives the server a gateway membership, a plugin member, an assistant attachment and a servable session client link.
+func (f *fixture) seedWrapperDependents(t *testing.T, serverID uuid.UUID) wrapperDependents {
+	t.Helper()
+	ctx := t.Context()
+	q := New(f.pool)
+	issuer, gateway, client := uuid.New(), uuid.New(), uuid.New()
+	require.NoError(t, q.SeedUserSessionIssuerFixture(ctx, SeedUserSessionIssuerFixtureParams{ID: issuer, ProjectID: key(f.projectID), OrganizationID: pgtype.Text{String: f.orgID, Valid: true}, Slug: "issuer-" + uuid.NewString()[:8]}))
+	require.NoError(t, q.SeedGatewayFixture(ctx, SeedGatewayFixtureParams{ID: gateway, OrganizationID: f.orgID, ProjectID: f.projectID, UserSessionIssuerID: key(issuer), Name: "gateway"}))
+	d := wrapperDependents{membership: uuid.New(), pluginMember: uuid.New(), attachment: uuid.New(), link: uuid.New()}
+	require.NoError(t, q.SeedGatewayMemberFixture(ctx, SeedGatewayMemberFixtureParams{ID: d.membership, ProjectID: f.projectID, MetaMcpServerID: gateway, McpServerID: serverID}))
+	require.NoError(t, q.SeedPluginServerFixture(ctx, SeedPluginServerFixtureParams{ID: d.pluginMember, PluginID: f.seedPlugin(t), ToolsetID: uuid.NullUUID{}, McpServerID: key(serverID), DisplayName: "member"}))
+	assistant := uuid.New()
+	require.NoError(t, q.SeedAssistantFixture(ctx, SeedAssistantFixtureParams{ID: assistant, ProjectID: f.projectID, OrganizationID: f.orgID, Name: "assistant-" + uuid.NewString()[:8]}))
+	require.NoError(t, q.SeedAssistantMcpServerFixture(ctx, SeedAssistantMcpServerFixtureParams{ID: d.attachment, AssistantID: assistant, McpServerID: serverID, ProjectID: f.projectID}))
+	require.NoError(t, q.SeedSessionClientFixture(ctx, SeedSessionClientFixtureParams{ID: client, ProjectID: f.projectID, Slug: "rs-" + uuid.NewString()[:8]}))
+	require.NoError(t, q.SeedSessionClientIssuerLinkFixture(ctx, SeedSessionClientIssuerLinkFixtureParams{RemoteSessionClientID: client, UserSessionIssuerID: issuer}))
+	require.NoError(t, q.SeedSessionClientLinkFixture(ctx, SeedSessionClientLinkFixtureParams{ID: d.link, ProjectID: f.projectID, OrganizationID: f.orgID, McpServerID: serverID, RemoteSessionClientID: client, ClientAttachmentScope: "project:" + f.projectID.String()}))
+	return d
+}
+
+// seedUnservableLink gives a live server a link no issuer serves, which any server delete's resync prunes.
+func (f *fixture) seedUnservableLink(t *testing.T, serverID uuid.UUID) uuid.UUID {
+	t.Helper()
+	q := New(f.pool)
+	client, link := uuid.New(), uuid.New()
+	require.NoError(t, q.SeedSessionClientFixture(t.Context(), SeedSessionClientFixtureParams{ID: client, ProjectID: f.projectID, Slug: "rs-" + uuid.NewString()[:8]}))
+	require.NoError(t, q.SeedSessionClientLinkFixture(t.Context(), SeedSessionClientLinkFixtureParams{ID: link, ProjectID: f.projectID, OrganizationID: f.orgID, McpServerID: serverID, RemoteSessionClientID: client, ClientAttachmentScope: "project:" + f.projectID.String()}))
+	return link
+}
+
+type wrapperSeed struct {
+	f                         *fixture
+	eligible                  uuid.UUID
+	deps                      wrapperDependents
+	staleLink                 uuid.UUID
+	want                      map[uuid.UUID]Outcome
+	liveToolsetServer         uuid.UUID
+	deletedProject, elsewhere *fixture
+}
+
+// seedOrphanWrappers seeds one server per outcome, plus servers the mode never lists.
+func seedOrphanWrappers(t *testing.T) wrapperSeed {
+	t.Helper()
+	f := newFixture(t)
+	q := New(f.pool)
+	ctx := t.Context()
+
+	gone := f.seedWrappedToolset(t, "gone-"+uuid.NewString()[:8])
+	eligible := f.seedExtraServer(t, gone)
+	deps := f.seedWrapperDependents(t, eligible)
+	addressable := f.seedExtraServer(t, gone)
+	f.seedEndpoint(t, addressable, uuid.NullUUID{}, "addressable-"+uuid.NewString()[:8])
+	issuerOwner := f.seedExtraServer(t, gone)
+	issuer := uuid.New()
+	require.NoError(t, q.SeedUserSessionIssuerFixture(ctx, SeedUserSessionIssuerFixtureParams{ID: issuer, ProjectID: key(f.projectID), OrganizationID: pgtype.Text{String: f.orgID, Valid: true}, Slug: "owned-" + uuid.NewString()[:8]}))
+	require.NoError(t, q.SetServerIssuerFixture(ctx, SetServerIssuerFixtureParams{UserSessionIssuerID: key(issuer), ID: issuerOwner, ProjectID: f.projectID}))
+	policyTarget := f.seedExtraServer(t, gone)
+	require.NoError(t, q.SeedServerRiskPolicyFixture(ctx, SeedServerRiskPolicyFixtureParams{ID: uuid.New(), ProjectID: f.projectID, OrganizationID: f.orgID, McpServerID: policyTarget.String()}))
+	f.deleteToolset(t, gone)
+
+	// A deleted toolset whose canonical server was never tombstoned.
+	canonicalKept := f.seedWrappedToolset(t, "kept-"+uuid.NewString()[:8])
+	require.NoError(t, q.SoftDeleteToolsetFixture(ctx, SoftDeleteToolsetFixtureParams{ID: canonicalKept, ProjectID: f.projectID}))
+
+	liveToolset := f.seedWrappedToolset(t, "live-"+uuid.NewString()[:8])
+	liveToolsetServer := f.seedExtraServer(t, liveToolset)
+	staleLink := f.seedUnservableLink(t, liveToolset)
+
+	deletedProject := newFixtureIn(t, f.pool)
+	inDeletedProject := deletedProject.seedWrappedToolset(t, "in-deleted-project-"+uuid.NewString()[:8])
+	deletedProject.seedExtraServer(t, inDeletedProject)
+	deletedProject.deleteToolset(t, inDeletedProject)
+	require.NoError(t, q.SoftDeleteProjectFixture(ctx, SoftDeleteProjectFixtureParams{ID: deletedProject.projectID, OrganizationID: deletedProject.orgID}))
+
+	elsewhere := newFixtureIn(t, f.pool)
+	elsewhereToolset := elsewhere.seedWrappedToolset(t, "elsewhere-"+uuid.NewString()[:8])
+	elsewhere.seedExtraServer(t, elsewhereToolset)
+	elsewhere.deleteToolset(t, elsewhereToolset)
+
+	return wrapperSeed{
+		f: f, eligible: eligible, deps: deps, staleLink: staleLink, liveToolsetServer: liveToolsetServer, deletedProject: deletedProject, elsewhere: elsewhere,
+		want: map[uuid.UUID]Outcome{
+			eligible: OutcomeDeleted, addressable: OutcomeBlockedLiveEndpoint, issuerOwner: OutcomeBlockedSessionIssuer,
+			policyTarget: OutcomeBlockedRiskPolicy, canonicalKept: OutcomeSkipped,
+		},
+	}
+}
+
+func (s wrapperSeed) projectOptions(apply bool) (Options, *memJournal) {
+	opts, journal := wrapperOptions(apply)
+	opts.ProjectID = key(s.f.projectID)
+	return opts, journal
+}
+
+func TestDeleteOrphanWrapperServersDryRunWritesNothing(t *testing.T) {
+	t.Parallel()
+	s := seedOrphanWrappers(t)
+	before, audits := s.f.wrapperState(t), s.f.state(t).audits
+	opts, journal := s.projectOptions(false)
+
+	report := s.f.run(t, opts)
+
+	require.Equal(t, "dry-run", report.Mode)
+	require.Equal(t, phaseWrapperDel, report.Phase)
+	require.Equal(t, 1, report.Outcomes[OutcomeWouldDelete])
+	require.Equal(t, 1, report.Writes)
+	for id, outcome := range s.want {
+		if outcome == OutcomeDeleted {
+			outcome = OutcomeWouldDelete
+		}
+		require.Equal(t, outcome, dependentRowFor(t, report, id).Outcome, id.String())
+	}
+	row := dependentRowFor(t, report, s.eligible)
+	require.Equal(t, &WrapperDetached{GatewayMemberships: 1, PluginMembers: 1, AssistantAttachments: 1, SessionClientLinks: 2}, row.Detached)
+	require.Equal(t, before, s.f.wrapperState(t))
+	require.Equal(t, audits, s.f.state(t).audits)
+	require.Empty(t, journal.records)
+}
+
+func TestDeleteOrphanWrapperServersApplyRequiresJournal(t *testing.T) {
+	t.Parallel()
+	s := seedOrphanWrappers(t)
+	before := s.f.wrapperState(t)
+	opts, _ := s.projectOptions(true)
+	opts.Journal = nil
+
+	_, err := NewRunner(s.f.pool, opts).Run(t.Context())
+	require.ErrorContains(t, err, "journal")
+	require.Equal(t, before, s.f.wrapperState(t))
+}
+
+func TestDeleteOrphanWrapperServersOutcomes(t *testing.T) {
+	t.Parallel()
+	s := seedOrphanWrappers(t)
+	f := s.f
+	require.NoError(t, New(f.pool).SeedPluginGithubConnectionFixture(t.Context(), f.projectID))
+	before, elsewhereBefore, deletedProjectBefore := f.wrapperState(t), s.elsewhere.wrapperState(t), s.deletedProject.wrapperState(t)
+	opts, journal := s.projectOptions(true)
+	opts.Publication = plugins.PublicationRequests{Enabled: true}
+
+	report := f.run(t, opts)
+	unfilteredOpts, _ := wrapperOptions(false)
+	for _, row := range f.run(t, unfilteredOpts).Rows {
+		require.NotEqual(t, s.liveToolsetServer, *row.RowID, "a live toolset's server is never listed")
+		require.NotEqual(t, s.deletedProject.projectID, row.ProjectID, "a deleted project is never listed")
+	}
+	require.Equal(t, deletedProjectBefore, s.deletedProject.wrapperState(t))
+
+	require.Equal(t, phaseWrapperDel, report.Phase)
+	require.Len(t, report.Rows, len(s.want), "live toolsets and deleted projects are never listed")
+	for id, outcome := range s.want {
+		require.Equal(t, outcome, dependentRowFor(t, report, id).Outcome, id.String())
+	}
+	byReason := map[Outcome][]string{}
+	for _, row := range report.Rows {
+		byReason[row.Outcome] = append(byReason[row.Outcome], row.Reason)
+	}
+	require.Equal(t, []string{"toolset deleted"}, byReason[OutcomeDeleted])
+	require.Equal(t, []string{reasonCanonicalServer}, byReason[OutcomeSkipped])
+	require.Equal(t, []string{reasonLiveEndpoint}, byReason[OutcomeBlockedLiveEndpoint])
+	require.Equal(t, []string{reasonSessionIssuer}, byReason[OutcomeBlockedSessionIssuer])
+	require.Equal(t, []string{reasonRiskPolicy}, byReason[OutcomeBlockedRiskPolicy])
+	require.Equal(t, 1, report.Writes)
+	deleted := dependentRowFor(t, report, s.eligible)
+	require.Equal(t, &WrapperDetached{GatewayMemberships: 1, PluginMembers: 1, AssistantAttachments: 1, SessionClientLinks: 2}, deleted.Detached)
+	require.True(t, deleted.PublicationRequested)
+
+	after := f.wrapperState(t)
+	changed := map[string]bool{
+		"mcp_servers " + s.eligible.String():                        true,
+		"meta_mcp_server_members " + s.deps.membership.String():     true,
+		"plugin_servers " + s.deps.pluginMember.String():            true,
+		"assistant_mcp_servers " + s.deps.attachment.String():       true,
+		"mcp_server_remote_session_clients " + s.deps.link.String(): true,
+		"mcp_server_remote_session_clients " + s.staleLink.String(): true,
+	}
+	for k, image := range before {
+		if !changed[k] {
+			require.Equal(t, image, after[k], "untouched: "+k)
+		}
+	}
+	for _, k := range []string{"mcp_servers " + s.eligible.String(), "meta_mcp_server_members " + s.deps.membership.String(), "plugin_servers " + s.deps.pluginMember.String()} {
+		var image map[string]any
+		require.NoError(t, json.Unmarshal([]byte(after[k]), &image))
+		require.NotNil(t, image["deleted_at"], k)
+	}
+	for _, k := range []string{"assistant_mcp_servers " + s.deps.attachment.String(), "mcp_server_remote_session_clients " + s.deps.link.String(), "mcp_server_remote_session_clients " + s.staleLink.String()} {
+		require.NotContains(t, after, k)
+	}
+	require.Len(t, after, len(before)-3)
+	require.Equal(t, elsewhereBefore, s.elsewhere.wrapperState(t), "the -project filter leaves other projects alone")
+
+	actions := []string{}
+	for _, entry := range f.state(t).audits {
+		require.Equal(t, WrapperCleanupActorComponent, entry.ActorID)
+		require.Equal(t, string(urn.PrincipalTypeSystem), entry.ActorType)
+		actions = append(actions, entry.Action)
+	}
+	require.ElementsMatch(t, []string{string(audit.ActionMcpServerDelete), string(audit.ActionMetaMcpServerRemoveMember), string(audit.ActionPluginServerRemove)}, actions)
+	outbox, err := New(f.pool).CountOutboxFixture(t.Context(), f.orgID)
+	require.NoError(t, err)
+	require.EqualValues(t, 1, outbox)
+
+	committed := journal.committed()
+	require.Len(t, journal.records, 2)
+	record := committed[s.eligible]
+	require.Equal(t, OutcomeDeleted, record.Outcome)
+	require.Equal(t, RowKey{Table: tableMcpServers, Column: "toolset_id", ID: record.ToolsetID}, record.From)
+	require.Equal(t, tableMcpServers, record.Removed.Table)
+	require.NotEmpty(t, record.Removed.SoftDeletedAt)
+	require.NotEmpty(t, record.Removed.Row)
+	require.Len(t, record.Dependents.GatewayMemberships, 1)
+	require.Len(t, record.Dependents.PluginMembers, 1)
+	require.Len(t, record.Dependents.AssistantAttachments, 1)
+	require.Len(t, record.Dependents.SessionClientLinks, 2)
+	require.NotEmpty(t, record.Dependents.PluginMembers[0].SoftDeletedAt)
+	encoded, err := json.Marshal(report)
+	require.NoError(t, err)
+	require.NotContains(t, string(encoded), "display_name", "the report carries no row images")
+
+	rerunOpts, rerunJournal := s.projectOptions(true)
+	rerun := f.run(t, rerunOpts)
+	require.Zero(t, rerun.Writes)
+	require.Zero(t, rerun.Outcomes[OutcomeDeleted])
+	require.Empty(t, rerunJournal.records)
+	require.Equal(t, after, f.wrapperState(t))
+}
+
+func TestDeleteOrphanWrapperServersProjectFilterAndLimit(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	first, second := f.seedWrappedToolset(t, "first-"+uuid.NewString()[:8]), f.seedWrappedToolset(t, "second-"+uuid.NewString()[:8])
+	for _, id := range []uuid.UUID{first, second} {
+		f.seedExtraServer(t, id)
+		f.deleteToolset(t, id)
+	}
+	other := newFixtureIn(t, f.pool)
+	elsewhere := other.seedWrappedToolset(t, "elsewhere-"+uuid.NewString()[:8])
+	other.seedExtraServer(t, elsewhere)
+	other.deleteToolset(t, elsewhere)
+	otherBefore := other.wrapperState(t)
+	opts, _ := wrapperOptions(true)
+	opts.ProjectID = key(f.projectID)
+	opts.Limit = 1
+
+	report := f.run(t, opts)
+	require.Equal(t, 1, report.Toolsets)
+	require.Equal(t, 1, report.Outcomes[OutcomeDeleted])
+
+	opts, _ = wrapperOptions(true)
+	opts.ProjectID = key(f.projectID)
+	opts.Cursor = report.LastCursor
+	resumed := f.run(t, opts)
+	require.Equal(t, 1, resumed.Outcomes[OutcomeDeleted])
+	require.Equal(t, otherBefore, other.wrapperState(t))
+}
+
+// The mode and the app's DeleteMcpServer leave identical fixtures in the same state, apart from the audit actor.
+func TestDeleteOrphanWrapperServersMatchesDeleteMcpServer(t *testing.T) {
+	t.Parallel()
+	pool, err := testInfra.CloneTestDatabase(t, "hostedmcpbackfill")
+	require.NoError(t, err)
+	seed := func() (*fixture, uuid.UUID) {
+		f := newFixtureIn(t, pool)
+		require.NoError(t, New(pool).SeedPluginGithubConnectionFixture(t.Context(), f.projectID))
+		toolsetID := f.seedWrappedToolset(t, "same-"+uuid.NewString()[:8])
+		server := f.seedExtraServer(t, toolsetID)
+		f.seedWrapperDependents(t, server)
+		f.seedUnservableLink(t, toolsetID)
+		f.deleteToolset(t, toolsetID)
+		return f, server
+	}
+	app, appServer := seed()
+	tool, toolServer := seed()
+
+	logger, tracerProvider := testenv.NewLogger(t), testenv.NewTracerProvider(t)
+	engine := authz.NewEngine(logger, pool, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	svc := mcpservers.NewService(logger, tracerProvider, pool, &sessions.Manager{}, engine, audit.NewLogger(audit.WithoutOutbox()), nil, nil, false, nil, nil, networkaccess.DenyAllChecker{}).WithPublicationRequests(true)
+	ctx := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{ActiveOrganizationID: app.orgID, UserID: "user_fixture", ProjectID: &app.projectID})
+	require.NoError(t, svc.DeleteMcpServer(ctx, &gen.DeleteMcpServerPayload{ID: appServer.String()}))
+
+	opts, _ := wrapperOptions(true)
+	opts.ProjectID = key(tool.projectID)
+	opts.Publication = plugins.PublicationRequests{Enabled: true}
+	require.Equal(t, 1, tool.run(t, opts).Outcomes[OutcomeDeleted])
+
+	// summary reduces a project's state to per-table live, deleted and total counts, which ids cannot change.
+	summary := func(f *fixture, server uuid.UUID) map[string][3]int {
+		out := map[string][3]int{}
+		for k, image := range f.wrapperState(t) {
+			table := strings.SplitN(k, " ", 2)[0]
+			var row map[string]any
+			require.NoError(t, json.Unmarshal([]byte(image), &row))
+			counts := out[table]
+			if row["deleted_at"] != nil {
+				counts[1]++
+			} else {
+				counts[0]++
+			}
+			counts[2]++
+			out[table] = counts
+		}
+		return out
+	}
+	want := map[string][3]int{
+		"mcp_servers":             {0, 2, 2},
+		"mcp_endpoints":           {1, 0, 1},
+		"meta_mcp_server_members": {0, 1, 1},
+		"plugin_servers":          {0, 1, 1},
+	}
+	require.Equal(t, want, summary(app, appServer), "the app removes every dependent, both session client links and the attachment")
+	require.Equal(t, summary(app, appServer), summary(tool, toolServer))
+	actions := func(f *fixture) []string {
+		out := []string{}
+		for _, entry := range f.state(t).audits {
+			out = append(out, entry.Action)
+		}
+		return out
+	}
+	require.ElementsMatch(t, actions(app), actions(tool))
+	for _, f := range []*fixture{app, tool} {
+		outbox, err := New(pool).CountOutboxFixture(t.Context(), f.orgID)
+		require.NoError(t, err)
+		require.EqualValues(t, 1, outbox)
+	}
+}
+
+// TestRestoreOrphanWrapperServersJQReplaysCommittedRows runs restore-orphan-wrapper-servers.jq against a real journal.
+func TestRestoreOrphanWrapperServersJQReplaysCommittedRows(t *testing.T) {
+	t.Parallel()
+	jq, err := exec.LookPath("jq")
+	require.NoError(t, err, "jq is a mise tool; run the tests through mise")
+	f := newFixture(t)
+	toolsetID := f.seedWrappedToolset(t, "restore-"+uuid.NewString()[:8])
+	committedServer, intentServer := f.seedExtraServer(t, toolsetID), f.seedExtraServer(t, toolsetID)
+	f.seedWrapperDependents(t, committedServer)
+	f.seedWrapperDependents(t, intentServer)
+	f.seedUnservableLink(t, f.seedWrappedToolset(t, "neighbour-"+uuid.NewString()[:8]))
+	f.deleteToolset(t, toolsetID)
+	before := f.wrapperState(t)
+	opts, journal := wrapperOptions(true)
+	require.Equal(t, 2, f.run(t, opts).Outcomes[OutcomeDeleted])
+	deleted := f.wrapperState(t)
+
+	// The intent server keeps only its intent, as when the journal write after its commit fails.
+	var lines bytes.Buffer
+	for _, record := range journal.records {
+		if record.Event == JournalCommitted && record.RowID == intentServer {
+			continue
+		}
+		line, err := json.Marshal(record)
+		require.NoError(t, err)
+		lines.Write(append(line, '\n'))
+	}
+	journalPath := filepath.Join(t.TempDir(), "journal.jsonl")
+	require.NoError(t, os.WriteFile(journalPath, lines.Bytes(), 0o600))
+
+	replay := func(project uuid.UUID) string {
+		out, err := exec.CommandContext(t.Context(), jq, "-r", "-s", "--arg", "p", project.String(), "-f", "restore-orphan-wrapper-servers.jq", journalPath).Output() // #nosec G204 -- fixed jq program and test paths
+		require.NoError(t, err)
+		script := string(out)
+		for range 2 {
+			tx, err := f.pool.Begin(t.Context()) //nolint:glint // notestingrawsql: executes the runbook's generated restore SQL, which is the code under test.
+			require.NoError(t, err)
+			for statement := range strings.SplitSeq(strings.TrimSpace(script), "\n") {
+				if statement == "" || strings.HasPrefix(statement, "--") {
+					continue
+				}
+				_, err := tx.Exec(t.Context(), statement) //nolint:glint // notestingrawsql: the runbook's generated restore SQL is the code under test.
+				require.NoError(t, err, statement)
+			}
+			require.NoError(t, tx.Commit(t.Context()))
+		}
+		return script
+	}
+
+	require.Empty(t, strings.TrimSpace(replay(uuid.New())), "another project's restore is empty")
+	require.Equal(t, deleted, f.wrapperState(t))
+	script := replay(f.projectID)
+	require.Contains(t, script, "-- intent without outcome: mcp_servers "+intentServer.String()+"; check by hand\nUPDATE mcp_servers")
+	require.Equal(t, 2, strings.Count(script, "UPDATE mcp_servers"))
+	require.Equal(t, before, f.wrapperState(t), "the restore brings back every changed row, and a second replay is a no-op")
+}
+
+// Deleting the wrapper first lets the leftover delete remove the record that was blocked_live_wrapper, and role delivery re-adds nothing.
+func TestDeleteOrphanWrapperServersUnblocksLeftoverRemovalRecords(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	ctx := t.Context()
+	toolsetID := f.seedWrappedToolset(t, "unblock-"+uuid.NewString()[:8])
+	f.seedExtraServer(t, toolsetID)
+	removedFrom, control := f.seedPlugin(t), f.seedPlugin(t)
+	record := f.seedRemoval(t, removedFrom, key(toolsetID), uuid.NullUUID{}, "removed")
+	f.deleteToolset(t, toolsetID)
+
+	role := "role:organization:" + uuid.NewString()
+	principal, err := urn.ParsePrincipal(role)
+	require.NoError(t, err)
+	selectors, err := authz.NewSelector(authz.ScopeMCPConnect, toolsetID.String()).MarshalJSON()
+	require.NoError(t, err)
+	_, err = accessrepo.New(f.pool).UpsertPrincipalGrant(ctx, accessrepo.UpsertPrincipalGrantParams{OrganizationID: f.orgID, PrincipalUrn: principal, Scope: string(authz.ScopeMCPConnect), Selectors: selectors})
+	require.NoError(t, err)
+
+	leftoverOpts, _ := leftoverOptions(true)
+	require.Equal(t, OutcomeBlockedLiveWrapper, dependentRowFor(t, f.run(t, leftoverOpts), record).Outcome)
+
+	wrapperOpts, _ := wrapperOptions(true)
+	require.Equal(t, 1, f.run(t, wrapperOpts).Outcomes[OutcomeDeleted])
+
+	leftoverOpts, _ = leftoverOptions(true)
+	leftovers := f.run(t, leftoverOpts)
+	require.Equal(t, OutcomeDeleted, dependentRowFor(t, leftovers, record).Outcome)
+	require.Equal(t, "toolset deleted", dependentRowFor(t, leftovers, record).Reason)
+	require.Empty(t, f.removals(t))
+
+	for _, plugin := range []uuid.UUID{removedFrom, control} {
+		tx, err := f.pool.Begin(ctx) //nolint:glint // notestingrawsql: transaction boundary for the role-delivery setup under test.
+		require.NoError(t, err)
+		changed, err := roledelivery.Populate(ctx, tx, f.orgID, f.projectID, plugin, role, nil)
+		require.NoError(t, err)
+		require.False(t, changed, "no live server of the toolset is left to deliver")
+		members, err := pluginsrepo.New(tx).ListPluginServers(ctx, plugin)
+		require.NoError(t, err)
+		require.Empty(t, members)
+		require.NoError(t, tx.Rollback(context.Background()))
+	}
+}

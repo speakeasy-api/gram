@@ -40,7 +40,7 @@ func (r *Runner) leftoversPhase() dependentPhase[ListToolsetRemovalRecordsRow] {
 func (r *Runner) deleteLeftoverOne(ctx context.Context, toolsetID uuid.UUID, dep ListToolsetRemovalRecordsRow) (RowReport, error) {
 	row := RowReport{
 		ToolsetID: toolsetID, Table: tablePluginServers, RowID: &dep.ID, ProjectID: dep.ProjectID, McpSlug: "", CustomDomainID: nil,
-		Outcome: "", Reason: "", Wrote: false, LiveEndpoints: 0, FreshIDServers: 0, DomainsToReconcile: nil, CollapsedTwin: nil, Removed: nil, PublicationRequested: false,
+		Outcome: "", Reason: "", Wrote: false, LiveEndpoints: 0, FreshIDServers: 0, DomainsToReconcile: nil, CollapsedTwin: nil, Removed: nil, PublicationRequested: false, Detached: nil,
 	}
 
 	tx, err := r.pool.Begin(ctx)
@@ -151,6 +151,6 @@ func (r *Runner) deleteLeftoverOne(ctx context.Context, toolsetID uuid.UUID, dep
 	return r.commitJournaled(ctx, tx, row, JournalRecord{
 		Event: JournalIntent, ProjectID: toolset.ProjectID, ToolsetID: toolsetID, RowID: record.ID, Outcome: row.Outcome,
 		From: RowKey{Table: tablePluginServers, Column: "toolset_id", ID: toolsetID}, To: RowKey{Table: "", Column: "", ID: uuid.Nil},
-		CollapsedTwin: nil, Removed: removed, Rekeyed: nil,
+		CollapsedTwin: nil, Removed: removed, Rekeyed: nil, Dependents: nil,
 	})
 }

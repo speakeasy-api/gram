@@ -452,6 +452,96 @@ WHERE ps.id = @id
     ELSE FALSE
   END;
 
+-- name: ListOrphanWrapperToolsets :many
+-- Deleted toolsets of live projects that still back a live server; canonical rows are listed so the run reports them.
+SELECT DISTINCT ms.toolset_id::uuid AS toolset_id
+FROM mcp_servers AS ms
+JOIN toolsets AS t ON t.id = ms.toolset_id AND t.project_id = ms.project_id
+JOIN projects AS p ON p.id = ms.project_id AND p.organization_id = t.organization_id
+WHERE ms.deleted IS FALSE
+  AND t.deleted IS TRUE
+  AND p.deleted IS FALSE
+  AND (sqlc.narg('project_id')::uuid IS NULL OR ms.project_id = sqlc.narg('project_id')::uuid)
+  AND ms.toolset_id > @after_id::uuid
+ORDER BY 1
+LIMIT @page_size::int;
+
+-- name: ListToolsetOrphanWrappers :many
+SELECT ms.id, ms.project_id
+FROM mcp_servers AS ms
+WHERE ms.toolset_id = @toolset_id::uuid
+  AND ms.deleted IS FALSE
+  AND (sqlc.narg('project_id')::uuid IS NULL OR ms.project_id = sqlc.narg('project_id')::uuid)
+ORDER BY ms.id;
+
+-- name: CountLiveServerEndpoints :one
+SELECT count(*)
+FROM mcp_endpoints AS e
+WHERE e.mcp_server_id = @mcp_server_id::uuid AND e.project_id = @project_id AND e.deleted IS FALSE;
+
+-- name: WrapperServerImage :one
+SELECT to_jsonb(ms)::jsonb AS row_json
+FROM mcp_servers AS ms
+WHERE ms.id = @id AND ms.project_id = @project_id;
+
+-- name: WrapperServerDeletedAt :one
+SELECT COALESCE(ms.deleted_at::text, '')::text AS deleted_at
+FROM mcp_servers AS ms
+WHERE ms.id = @id AND ms.project_id = @project_id;
+
+-- name: LockWrapperMemberships :many
+SELECT m.id, to_jsonb(m)::jsonb AS row_json
+FROM meta_mcp_server_members AS m
+WHERE m.mcp_server_id = @mcp_server_id AND m.project_id = @project_id AND m.deleted IS FALSE
+ORDER BY m.id
+FOR UPDATE OF m;
+
+-- name: WrapperMembershipsDeletedAt :many
+SELECT m.id, COALESCE(m.deleted_at::text, '')::text AS deleted_at
+FROM meta_mcp_server_members AS m
+WHERE m.id = ANY(@ids::uuid[]) AND m.project_id = @project_id
+ORDER BY m.id;
+
+-- name: LockWrapperPluginMembers :many
+SELECT ps.id, to_jsonb(ps)::jsonb AS row_json
+FROM plugin_servers AS ps
+JOIN plugins AS pl ON pl.id = ps.plugin_id
+WHERE ps.mcp_server_id = @mcp_server_id::uuid AND pl.project_id = @project_id AND ps.deleted IS FALSE
+ORDER BY ps.id
+FOR UPDATE OF ps;
+
+-- name: WrapperPluginMembersDeletedAt :many
+SELECT ps.id, COALESCE(ps.deleted_at::text, '')::text AS deleted_at
+FROM plugin_servers AS ps
+JOIN plugins AS pl ON pl.id = ps.plugin_id
+WHERE ps.id = ANY(@ids::uuid[]) AND pl.project_id = @project_id
+ORDER BY ps.id;
+
+-- name: LockWrapperAssistantAttachments :many
+SELECT a.id, to_jsonb(a)::jsonb AS row_json
+FROM assistant_mcp_servers AS a
+WHERE a.mcp_server_id = @mcp_server_id AND a.project_id = @project_id
+ORDER BY a.id
+FOR UPDATE OF a;
+
+-- name: CountWrapperAssistantAttachments :one
+SELECT count(*)
+FROM assistant_mcp_servers AS a
+WHERE a.id = ANY(@ids::uuid[]) AND a.project_id = @project_id;
+
+-- name: ListProjectSessionClientLinks :many
+-- The issuer resync prunes project-wide, so every live link is imaged before it.
+SELECT c.id, to_jsonb(c)::jsonb AS row_json
+FROM mcp_server_remote_session_clients AS c
+WHERE c.project_id = @project_id AND c.deleted IS FALSE
+ORDER BY c.id;
+
+-- name: ListLiveSessionClientLinkIDs :many
+SELECT c.id
+FROM mcp_server_remote_session_clients AS c
+WHERE c.id = ANY(@ids::uuid[]) AND c.project_id = @project_id AND c.deleted IS FALSE
+ORDER BY c.id;
+
 -- TEST FIXTURE ONLY: every query below is for package tests and may create impossible states.
 
 -- name: SeedOrganizationFixture :exec
@@ -620,7 +710,7 @@ WHERE id = @id AND organization_id = @organization_id;
 
 -- name: SeedPluginGithubConnectionFixture :exec
 INSERT INTO plugin_github_connections (project_id, installation_id, repo_owner, repo_name)
-VALUES (@project_id, 1, 'owner', 'repo');
+VALUES (@project_id::uuid, 1, 'owner', 'repo-' || (@project_id::uuid)::text);
 
 -- name: BumpPluginServerDeletedAtFixture :exec
 UPDATE plugin_servers AS ps SET deleted_at = ps.deleted_at + interval '1 second'
@@ -654,3 +744,59 @@ FROM plugin_servers AS ps
 JOIN plugins AS pl ON pl.id = ps.plugin_id
 WHERE pl.project_id = @project_id
 ORDER BY ps.id;
+
+-- name: SeedUserSessionIssuerFixture :exec
+INSERT INTO user_session_issuers (id, project_id, organization_id, slug, authn_challenge_mode, session_duration)
+VALUES (@id, @project_id, @organization_id, @slug, 'interactive', interval '1 hour');
+
+-- name: SetServerIssuerFixture :exec
+UPDATE mcp_servers SET user_session_issuer_id = @user_session_issuer_id
+WHERE id = @id AND project_id = @project_id;
+
+-- name: SeedGatewayFixture :exec
+INSERT INTO meta_mcp_servers (id, organization_id, project_id, user_session_issuer_id, name)
+VALUES (@id, @organization_id, @project_id, @user_session_issuer_id, @name);
+
+-- name: SeedGatewayMemberFixture :exec
+INSERT INTO meta_mcp_server_members (id, project_id, meta_mcp_server_id, mcp_server_id)
+VALUES (@id, @project_id, @meta_mcp_server_id, @mcp_server_id);
+
+-- name: SeedSessionClientFixture :exec
+WITH issuer AS (
+  INSERT INTO remote_session_issuers (project_id, slug, issuer)
+  VALUES (@project_id::uuid, @slug::text, 'https://issuer.example.test/' || @slug::text)
+  RETURNING id
+)
+INSERT INTO remote_session_clients (id, project_id, remote_session_issuer_id, client_id)
+SELECT @id::uuid, @project_id::uuid, issuer.id, 'client-' || @slug::text
+FROM issuer;
+
+-- name: SeedSessionClientIssuerLinkFixture :exec
+INSERT INTO remote_session_client_user_session_issuers (remote_session_client_id, user_session_issuer_id)
+VALUES (@remote_session_client_id, @user_session_issuer_id);
+
+-- name: SeedSessionClientLinkFixture :exec
+INSERT INTO mcp_server_remote_session_clients (id, project_id, organization_id, mcp_server_id, remote_session_client_id, client_attachment_scope)
+VALUES (@id, @project_id, @organization_id, @mcp_server_id, @remote_session_client_id, @client_attachment_scope);
+
+-- name: SeedServerRiskPolicyFixture :exec
+INSERT INTO risk_policies (id, project_id, organization_id, name, sources, version, mcp_scope)
+VALUES (@id, @project_id, @organization_id, 'policy', ARRAY['fixture']::text[], 1,
+  jsonb_build_object('all_servers', false, 'servers', jsonb_build_array(jsonb_build_object('mcp_server_id', @mcp_server_id::text))));
+
+-- name: ListWrapperStateFixture :many
+-- Every row the wrapper delete can change in a project, as text.
+SELECT 'mcp_servers'::text AS table_name, ms.id, to_jsonb(ms)::text AS row_text FROM mcp_servers AS ms WHERE ms.project_id = @project_id
+UNION ALL
+SELECT 'mcp_endpoints', e.id, to_jsonb(e)::text FROM mcp_endpoints AS e WHERE e.project_id = @project_id
+UNION ALL
+SELECT 'meta_mcp_server_members', m.id, to_jsonb(m)::text FROM meta_mcp_server_members AS m WHERE m.project_id = @project_id
+UNION ALL
+SELECT 'plugin_servers', ps.id, to_jsonb(ps)::text FROM plugin_servers AS ps JOIN plugins AS pl ON pl.id = ps.plugin_id WHERE pl.project_id = @project_id
+UNION ALL
+SELECT 'assistant_mcp_servers', a.id, to_jsonb(a)::text FROM assistant_mcp_servers AS a WHERE a.project_id = @project_id
+UNION ALL
+SELECT 'mcp_server_remote_session_clients', c.id, to_jsonb(c)::text FROM mcp_server_remote_session_clients AS c WHERE c.project_id = @project_id
+UNION ALL
+SELECT 'risk_policies', r.id, to_jsonb(r)::text FROM risk_policies AS r WHERE r.project_id = @project_id
+ORDER BY 1, 2;
