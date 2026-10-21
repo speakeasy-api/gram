@@ -43,6 +43,16 @@ func AssistantCheck(scope Scope, resourceID, projectID string) Check {
 	return Check{Scope: scope, ResourceKind: "", ResourceID: resourceID, Dimensions: map[string]string{SelectorKeyProjectID: projectID}, selectorMatch: selectorMatchNormal, representedUser: ""}
 }
 
+// EnvironmentCheck builds a Check for an environment scope. resourceID is the
+// environment ID for operations on one environment, or the project ID for
+// project-level operations that have no concrete environment (create, or a
+// slug that did not resolve). projectID is always injected as a dimension, so a
+// project-wide grant ({"resource_id":"*","project_id":P}) covers every
+// environment in P, while a grant naming one environment covers only that one.
+func EnvironmentCheck(scope Scope, resourceID, projectID string) Check {
+	return Check{Scope: scope, ResourceKind: "", ResourceID: resourceID, Dimensions: map[string]string{SelectorKeyProjectID: projectID}, selectorMatch: selectorMatchNormal}
+}
+
 // HooksIngestCheck builds the org:hooks_ingest check for projectID. It always
 // carries the project, because matching skips grant keys a check omits, which
 // would let a project-bounded grant through for any project.

@@ -462,6 +462,83 @@ func TestEnvironments_RBAC_SetSourceLink_DeniedWithProjectWriteOnly(t *testing.T
 	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
 }
 
+// A grant naming one environment authorizes linking that environment and no
+// other: the link check targets the selected environment, not the project.
+func TestEnvironments_RBAC_SetSourceLink_SingleEnvironmentGrantCoversOnlyThatEnvironment(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestEnvironmentService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx)
+
+	ctx = authztest.WithExactGrants(t, ctx, envGrant(authz.ScopeEnvironmentWrite, authCtx.ProjectID.String()))
+	granted, err := ti.service.CreateEnvironment(ctx, &gen.CreateEnvironmentPayload{
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		OrganizationID:   "",
+		Name:             "rbac-link-granted-env",
+		Description:      nil,
+		Entries:          []*gen.EnvironmentEntryInput{},
+	})
+	require.NoError(t, err)
+	other, err := ti.service.CreateEnvironment(ctx, &gen.CreateEnvironmentPayload{
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		OrganizationID:   "",
+		Name:             "rbac-link-other-env",
+		Description:      nil,
+		Entries:          []*gen.EnvironmentEntryInput{},
+	})
+	require.NoError(t, err)
+
+	ctx = authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeEnvironmentRead, granted.ID))
+
+	_, err = ti.service.SetSourceEnvironmentLink(ctx, &gen.SetSourceEnvironmentLinkPayload{
+		SourceKind:       gen.SourceKind("http"),
+		SourceSlug:       "rbac-source-granted",
+		EnvironmentID:    granted.ID,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+
+	_, err = ti.service.SetSourceEnvironmentLink(ctx, &gen.SetSourceEnvironmentLinkPayload{
+		SourceKind:       gen.SourceKind("http"),
+		SourceSlug:       "rbac-source-other",
+		EnvironmentID:    other.ID,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+	})
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
+}
+
+func TestEnvironments_RBAC_SetSourceLink_MissingEnvironmentNotFoundWithEnvironmentRead(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestEnvironmentService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx)
+
+	ctx = authztest.WithExactGrants(t, ctx, envGrant(authz.ScopeEnvironmentRead, authCtx.ProjectID.String()))
+
+	_, err := ti.service.SetSourceEnvironmentLink(ctx, &gen.SetSourceEnvironmentLinkPayload{
+		SourceKind:       gen.SourceKind("http"),
+		SourceSlug:       "rbac-source",
+		EnvironmentID:    uuid.NewString(),
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+	})
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeNotFound, oopsErr.Code)
+}
+
 func TestEnvironments_RBAC_DeleteSourceLink_AllowedWithEnvironmentRead(t *testing.T) {
 	t.Parallel()
 
