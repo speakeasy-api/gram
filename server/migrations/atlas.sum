@@ -1,4 +1,4 @@
-h1:9ewSjkV2D/WbST7sWV26MD6O1W9GOCb/iqtje+onRVI=
+h1:z+R4DwAYdyjr3uKpyVNHrcMT0MEka8O+VKyPpPGcWAQ=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -489,4 +489,4 @@ h1:9ewSjkV2D/WbST7sWV26MD6O1W9GOCb/iqtje+onRVI=
 20261021141713_ai-products-and-cimd-documents.sql h1:0pJy9SJGp89UBDpPVS62WgikHGWcDuJoVx8y0n9T8DI=
 20261021141731_ai-scan-targets-ai-product-id.sql h1:kt+GA0vQESukxZpp/tZgFN144N8Zt81L5UQV4t6Y+Ns=
 20261021161050_chats-add-agent-id.sql h1:+01omxeacIcLAy/dHZQgi54MjhYLyqwUrg14T8i6VxM=
-20261021222856_auth-permission-provisions.sql h1:cblV8kxGGknGR3tIqqqFtLonID6pvQyu39UXkco0ryA=
+20261021230752_auth-permission-provisions.sql h1:zBQW5gi2p9wki94ZIQDMGXAya+AZ0lG01IvR1c3Gu/E=

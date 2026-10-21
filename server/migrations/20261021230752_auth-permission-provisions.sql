@@ -19,7 +19,7 @@ CREATE TABLE "auth_permission_provisions" (
 -- Create index "auth_permission_provisions_org_principal_scope_selector_key" to table: "auth_permission_provisions"
 CREATE UNIQUE INDEX "auth_permission_provisions_org_principal_scope_selector_key" ON "auth_permission_provisions" ("organization_id", "principal_urn", "scope", "selectors");
 -- Set comment to table: "auth_permission_provisions"
-COMMENT ON TABLE "auth_permission_provisions" IS 'Default auth permission grants the backfill provisioned, one row per grant, kept after the grant itself is deleted.';
+COMMENT ON TABLE "auth_permission_provisions" IS 'Default auth permission grants provisioned by the backfill or at organization creation, one row per grant, kept after the grant itself is deleted.';
 -- Set comment to column: "id" on table: "auth_permission_provisions"
 COMMENT ON COLUMN "auth_permission_provisions"."id" IS '@access: confidential';
 -- Set comment to column: "organization_id" on table: "auth_permission_provisions"
@@ -35,7 +35,7 @@ COMMENT ON COLUMN "auth_permission_provisions"."scope" IS 'The granted scope, mc
 COMMENT ON COLUMN "auth_permission_provisions"."selectors" IS 'The grant''s selector, as in principal_grants.selectors.
 @access: opaque-restricted';
 -- Set comment to column: "kind" on table: "auth_permission_provisions"
-COMMENT ON COLUMN "auth_permission_provisions"."kind" IS 'Which default the grant belongs to: personal_default, shared_client or api_key. Validated in application code.
+COMMENT ON COLUMN "auth_permission_provisions"."kind" IS 'Which default the grant belongs to: personal_default, shared_client or api_key from the backfill, or creation_default for the personal default written when the organization was created. Validated in application code.
 @access: confidential';
 -- Set comment to column: "taken_over_at" on table: "auth_permission_provisions"
 COMMENT ON COLUMN "auth_permission_provisions"."taken_over_at" IS 'When an admin wrote the same grant, making it theirs: a rollback leaves it. NULL while it is still provisioned.
