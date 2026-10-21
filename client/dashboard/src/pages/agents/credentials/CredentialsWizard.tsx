@@ -1,4 +1,3 @@
-import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
@@ -26,7 +25,7 @@ import {
 import { buildRequestedGrants } from "../agent-api-key-grants";
 import { discoverKeyServerGrants } from "../agent-key-discovery";
 import { agentGatewayURL, mintInstallCommand } from "./gateway";
-import { StepProvision } from "./StepProvision";
+import { StepInstall } from "./StepInstall";
 import { StepServers, type ServerSelection } from "./StepServers";
 import { StepVerify, type VerifyState } from "./StepVerify";
 import { StepWorkload, WorkloadPlatformPicker } from "./StepWorkload";
@@ -62,16 +61,16 @@ import {
  * watch for the first call.
  *
  * The identity is created at the end of the choices, not the start: everything
- * before Provision is still a draft the user can abandon without leaving a
+ * before Install is still a draft the user can abandon without leaving a
  * half-made agent behind.
  */
 
 /** Each step's name, and the one or two words it shrinks to in a full row. */
 const STEPS = [
-  { label: "Name & scope", short: "Name" },
+  { label: "Name", short: "Name" },
   { label: "Server selection", short: "Servers" },
   { label: "Credential", short: "Credential" },
-  { label: "Provision", short: "Provision" },
+  { label: "Install", short: "Install" },
   { label: "Verify", short: "Verify" },
 ];
 
@@ -108,9 +107,7 @@ function freeName(base: string, taken: Set<string>): string {
   return numbered(suffix);
 }
 
-type Scope = "project" | "organization";
-
-export function ProvisionWizard({
+export function CredentialsWizard({
   agent,
   initialPlatformKey,
   editing = false,
@@ -215,9 +212,7 @@ export function ProvisionWizard({
   );
   const [name, setName] = useState(agent?.name ?? "");
   // null until the person picks, so the default can follow the project as it
-  // resolves. A useState initializer would run once, before useProject has an
-  // id, and strand the form on organization scope.
-  const [chosenScope, setChosenScope] = useState<Scope | null>(null);
+
   const [selected, setSelected] = useState<ServerSelection[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [provisioning, setProvisioning] = useState(false);
@@ -281,6 +276,9 @@ export function ProvisionWizard({
         .filter((server) => granted.has(server.resourceId))
         .map((server) => ({ server })),
     );
+    // The wildcard is the broader claim, so it wins the display: an agent
+    // holding one reaches every server whatever else its policy lists.
+    setAllServers(wildcardConnectGrant(grants) !== undefined);
     setReconciled(true);
   }, [
     grants,
@@ -295,6 +293,11 @@ export function ProvisionWizard({
   // reach the organization's other projects.
   const wildcardReach =
     editing && grants !== undefined ? wildcardConnectGrant(grants) : undefined;
+  // "Every server, including ones added later" as a choice the picker can
+  // hold, rather than a state it can only describe. A wildcard grant is what
+  // it saves to, so an agent that already has one opens with it on and the
+  // list reads as what the policy actually allows.
+  const [allServers, setAllServers] = useState(false);
 
   // What provisioning produced. The secret is held only while this page is
   // open; nothing writes it to storage or to the query cache.
@@ -319,25 +322,17 @@ export function ProvisionWizard({
     onBusy?.(provisioning || minting || saving);
   }, [provisioning, minting, saving, onBusy]);
 
-  // Project leads once one is available; an explicit pick always wins. Until
-  // a project resolves, project scope would send an empty id, which the server
-  // reads as "omitted" — an organization-wide agent created on behalf of
-  // someone who asked for a project one.
-  // An existing agent's scope is its own and is stored on it: the project
-  // being browsed is not necessarily the one it was bound to, and an
-  // organization-wide agent holds grants in projects this one is not.
-  const scope: Scope = existing
-    ? agent.projectId
-      ? "project"
-      : "organization"
-    : (chosenScope ?? (project.id ? "project" : "organization"));
-  // The project the servers on offer belong to, and the binding a new agent
-  // is created with. Undefined reaches every project in the organization.
-  const scopedProjectID = existing
-    ? agent.projectId
-    : scope === "project"
-      ? project.id
-      : undefined;
+  // Where the agent lives, not a question anyone is asked: a new agent
+  // belongs to the project it is being created in. It was offered as a
+  // choice, which was the same question the server list answers and a second
+  // place for the two to disagree — `project_id` narrows nothing on its own,
+  // and the grants below decide the whole of what the agent can reach.
+  //
+  // An existing agent's is its own and is stored on it: the project being
+  // browsed is not necessarily the one it was bound to. Agents from before
+  // the column existed hold NULL, which is "not yet scoped" rather than
+  // "organization", so they keep being offered every project's servers.
+  const scopedProjectID = existing ? agent.projectId : project.id || undefined;
   // Falls back to the id, not the browsed project: an agent bound to a project
   // the caller cannot see would otherwise be labelled with the wrong one.
   const projectName = (id: string): string =>
@@ -403,12 +398,29 @@ export function ProvisionWizard({
     // against it rather than rewriting what it may ever be delegated.
     if (agent) return agent.id;
     if (agentID) return agentID;
+    // "All servers" is one wildcard selector rather than today's inventory
+    // listed out, so it covers the servers added after this is saved.
+    //
+    // Written as an explicit selector, not the draft's bare `null`: `null`
+    // means unrestricted and produces a wildcard with no project on it,
+    // which would reach every project while the agent itself belongs to one.
+    // Only an agent with no project of its own gets the unscoped form.
     const draft: AgentPolicyDraft = {
-      "mcp:connect": selected.map((entry) => ({
-        resourceKind: "mcp" as const,
-        resourceId: entry.server.resourceId,
-        projectId: entry.server.projectId,
-      })),
+      "mcp:connect": allServers
+        ? scopedProjectID
+          ? [
+              {
+                resourceKind: "mcp" as const,
+                resourceId: "*",
+                projectId: scopedProjectID,
+              },
+            ]
+          : null
+        : selected.map((entry) => ({
+            resourceKind: "mcp" as const,
+            resourceId: entry.server.resourceId,
+            projectId: entry.server.projectId,
+          })),
     };
     const created = await sdk.agents.create({
       createAgentForm: {
@@ -457,17 +469,43 @@ export function ProvisionWizard({
       const offered = new Set(
         inventory.servers.map((server) => server.resourceId),
       );
-      const changes = grantChanges(
-        new Map(
-          [...applied.current].filter(([resourceId]) =>
-            offered.has(resourceId),
-          ),
-        ),
-        selected.map((entry) => ({
-          resourceId: entry.server.resourceId,
-          projectId: entry.server.projectId,
-        })),
+      const known = new Map(
+        [...applied.current].filter(([resourceId]) => offered.has(resourceId)),
       );
+      // Under "All servers" the per-server rows say nothing the wildcard does
+      // not already say, so the chosen list is empty and every named grant it
+      // replaces is withdrawn. Otherwise it is the ticked list as it stands.
+      const changes = grantChanges(
+        known,
+        allServers
+          ? []
+          : selected.map((entry) => ({
+              resourceId: entry.server.resourceId,
+              projectId: entry.server.projectId,
+            })),
+      );
+      // The wildcard goes in before the named grants it supersedes come out,
+      // so no moment of this save leaves the agent reaching less than both the
+      // old policy and the new one allow.
+      if (allServers && wildcardReach === undefined) {
+        await createGrant.mutateAsync({
+          request: {
+            createAgentPolicyGrantForm: {
+              agentId: agent.id,
+              effect: "allow",
+              scope: CONNECT_SCOPE,
+              selector: {
+                resourceKind: "mcp",
+                resourceId: "*",
+                // Scoped where the agent is, so "all servers" means all the
+                // ones this agent could ever be pointed at, not the whole
+                // organization's.
+                ...(scopedProjectID ? { projectId: scopedProjectID } : {}),
+              },
+            },
+          },
+        });
+      }
       for (const server of changes.add) {
         const created = await createGrant.mutateAsync({
           request: {
@@ -491,7 +529,13 @@ export function ProvisionWizard({
           projectId: server.projectId,
         });
       }
-      for (const grantId of changes.remove) {
+      // Last, so a failure part-way through leaves the agent reaching more
+      // than intended rather than less: the servers it is meant to keep are
+      // already granted by the time the wildcard goes.
+      const removals = allServers
+        ? changes.remove
+        : [...changes.remove, ...(wildcardReach?.grantIds ?? [])];
+      for (const grantId of removals) {
         await deleteGrant.mutateAsync({
           request: { agentPolicyGrantIDForm: { agentId: agent.id, grantId } },
         });
@@ -597,13 +641,32 @@ export function ProvisionWizard({
       const target = { id: await ensureAgent() };
 
       const controller = new AbortController();
+      // A key names servers one by one — there is no wildcard in a key, only
+      // in the agent's policy. So "all servers" is issued as every server in
+      // the agent's reach today, and the agent's own wildcard grant is what
+      // carries the ones added after this key was cut.
+      //
+      // Without this the key asks for nothing: `selected` is empty under
+      // "all servers", and discovery rightly answers that nothing can be
+      // delegated.
+      const reach = allServers
+        ? inventory.servers
+            .filter(
+              (server) =>
+                scopedProjectID === undefined ||
+                server.projectId === scopedProjectID,
+            )
+            // Each of these needs an account attached to the agent before a
+            // key can call it, which this flow has no step for.
+            .filter((server) => !server.issuerId)
+        : selected.map((entry) => entry.server);
       const delegable = await discoverKeyServerGrants(
         sdk.agents,
         target.id,
-        selected.map((entry) => ({
-          resourceId: entry.server.resourceId,
-          projectId: entry.server.projectId,
-          kind: entry.server.kind,
+        reach.map((server) => ({
+          resourceId: server.resourceId,
+          projectId: server.projectId,
+          kind: server.kind,
         })),
         controller.signal,
       );
@@ -621,19 +684,29 @@ export function ProvisionWizard({
             `${grant.selector.projectId ?? ""}:${grant.selector.resourceId}`,
         ),
       );
-      const excluded = selected.filter(
-        (entry) =>
-          !reachable.has(
-            `${entry.server.projectId}:${entry.server.resourceId}`,
-          ),
+      const excluded = reach.filter(
+        (server) => !reachable.has(`${server.projectId}:${server.resourceId}`),
       );
       if (excluded.length > 0 || requestedGrants.length === 0) {
+        // A key is the overlap of three permissions: the agent's, its
+        // owner's, and the caller's. The owner's are what a reader never
+        // thinks to check — the agent's own page looks right up until the
+        // moment its owner loses the server.
+        //
+        // The caller is almost always the owner, so naming all three as
+        // equals would send people looking for a difference that is not
+        // there. It is said last, and only as the case where it applies.
+        const because =
+          "A key cannot give more access than the agent's owner has, so check the agent's permissions and that its owner can still reach them." +
+          (agent && agent.ownerUserId !== user.id
+            ? " You do not own this agent, so it is limited by your own access too."
+            : "");
         throw new Error(
-          excluded.length === selected.length
+          excluded.length === reach.length
             ? existing
-              ? "Nothing on these servers can be delegated to this agent. Check its permissions, or choose other servers."
-              : "The agent was created, but nothing on these servers could be delegated to it. Open the agent to review its permissions."
-            : `Nothing on ${excluded.map((entry) => entry.server.name).join(", ")} can be delegated to this agent, so a key would not reach ${excluded.length === 1 ? "it" : "them"}. Deselect ${excluded.length === 1 ? "that server" : "those servers"}, or check the agent's permissions.`,
+              ? `This key would reach none of these servers. ${because}`
+              : `The agent was created, but a key for it would reach none of these servers. ${because}`
+            : `This key would not reach ${excluded.map((server) => server.name).join(", ")}. ${because} Deselect ${excluded.length === 1 ? "that server" : "those servers"} to issue a key for the rest.`,
         );
       }
 
@@ -664,7 +737,7 @@ export function ProvisionWizard({
         conflict ??
           (failure instanceof Error
             ? failure.message
-            : "Could not provision this agent. Try again."),
+            : "Could not set this agent up. Try again."),
       );
     } finally {
       setProvisioning(false);
@@ -679,7 +752,7 @@ export function ProvisionWizard({
       rows={[
         { label: "Owner", value: user.displayName || user.email },
         {
-          label: "Scope",
+          label: "Project",
           value: scopeName,
         },
         {
@@ -733,11 +806,17 @@ export function ProvisionWizard({
           : []),
       ]}
       highlight={highlight}
-      servers={selected.map((entry) => ({
-        id: entry.server.id,
-        name: entry.server.name,
-        detail: "all tools",
-      }))}
+      // One line rather than every server listed: the rail would otherwise
+      // name today's inventory for a choice that is deliberately not a list.
+      servers={
+        allServers
+          ? [{ id: "all", name: "All servers", detail: "and ones added later" }]
+          : selected.map((entry) => ({
+              id: entry.server.id,
+              name: entry.server.name,
+              detail: "all tools",
+            }))
+      }
     />
   );
 
@@ -759,8 +838,8 @@ export function ProvisionWizard({
         return (
           <div className="space-y-6">
             <WizardStepHeader
-              title="Name and scope"
-              description="What this identity is called, and how far it may reach."
+              title="Name"
+              description="Every call this agent makes is recorded under this name. Pick one that says whose work it is doing, so an audit log entry or a live session is recognisable without looking the agent up."
             />
             <div className="max-w-xl space-y-2">
               <Label htmlFor="agent-name">Name</Label>
@@ -786,82 +865,11 @@ export function ProvisionWizard({
                   : "Shown in audit logs and session lists. You can rename it later."}
               </Text>
             </div>
-            {/* Folded away: almost every agent is scoped to the project it
-                is created in, and the choice is undone by the server list on
-                the next step anyway. */}
-            <details className="group">
-              <summary className="text-muted-foreground hover:text-foreground cursor-pointer text-sm">
-                Advanced settings
-              </summary>
-              <div className="bg-muted/40 border-muted-foreground/30 mt-2 space-y-2 border p-4">
-                <Label>Scope</Label>
-                <Text muted small>
-                  {existing
-                    ? "Set when the agent was created. Which of its servers this key reaches is the next step."
-                    : "Scope decides whether this agent can reach servers in every project or only this one. You narrow the list itself in the next step."}
-                </Text>
-                <RadioCardGroup
-                  value={scope}
-                  onValueChange={(value) => {
-                    const next = value as Scope;
-                    setChosenScope(next);
-                    // Narrowing to the project takes the other projects'
-                    // servers off the next step. A selection made before the
-                    // switch would otherwise stay in the draft and be granted
-                    // without ever being shown again.
-                    if (next === "project")
-                      setSelected((current) =>
-                        current.filter(
-                          (entry) => entry.server.projectId === project.id,
-                        ),
-                      );
-                  }}
-                  disabled={existing}
-                  // The density the design system defines for a choice that
-                  // is one field of a step rather than a section of its own.
-                  size="sm"
-                  className="sm:grid-cols-2"
-                >
-                  {/* One line each: the choice is a scope, not a paragraph. */}
-                  <RadioCard
-                    value="project"
-                    title="Project"
-                    // Offered only once there is a project to bind to.
-                    disabled={!project.id}
-                  >
-                    <Text muted small>
-                      Servers in {project.name}.
-                    </Text>
-                  </RadioCard>
-                  <RadioCard value="organization" title="Organization">
-                    <Text muted small>
-                      Servers in every {organization.name} project.
-                    </Text>
-                  </RadioCard>
-                </RadioCardGroup>
-              </div>
-            </details>
           </div>
         );
       case 1:
         return (
           <div className="space-y-5">
-            {/* A wildcard grant is not a server anyone picked, so the list
-                below leaves it out — and a save writes only the servers that
-                changed, so it stays. Without this the reader would read an
-                unticked list as the agent's whole reach. */}
-            {wildcardReach && (
-              <Alert variant="warning" alignTop>
-                <span>
-                  {wildcardReach.projectId
-                    ? `This agent reaches every MCP server in ${projectName(wildcardReach.projectId)} through a wildcard grant, which the list below does not show.`
-                    : "This agent reaches every MCP server through a wildcard grant, which the list below does not show."}{" "}
-                  Saving a narrower list leaves that grant in place, so the
-                  agent keeps reaching all of them. Remove it from the
-                  agent&rsquo;s permissions first.
-                </span>
-              </Alert>
-            )}
             <StepServers
               servers={inventory.servers.filter(
                 (server) =>
@@ -871,6 +879,12 @@ export function ProvisionWizard({
               isLoading={inventory.isLoading}
               isError={inventory.isError}
               onRetry={inventory.refetch}
+              scopeLabel={scopeName}
+              allServers={allServers}
+              onAllServersChange={(next) => {
+                setAllServers(next);
+                setHighlight(next ? "server:all" : null);
+              }}
               selected={selected}
               onChange={(next) => {
                 setSelected(next);
@@ -907,8 +921,8 @@ export function ProvisionWizard({
             >
               <RadioCard value="api-key" title="API key" className="p-3">
                 <Text muted small>
-                  A scoped key, delivered by a one-line setup script or copied
-                  by hand. Works in any runtime.
+                  A key, delivered by a one-line setup script or copied by hand.
+                  Works in any runtime.
                 </Text>
                 <span className="text-muted-foreground mt-1 block font-mono text-xs">
                   Long-lived · revocable
@@ -954,16 +968,18 @@ export function ProvisionWizard({
         );
       case 3:
         return (
-          <StepProvision
+          <StepInstall
             command={command}
             commandError={commandError}
             minting={minting}
             onRegenerate={() => {
               if (secret && gatewayURL) regenerate(secret, gatewayURL);
             }}
+            onIssue={() => void provision()}
+            issuing={provisioning || minting}
             secret={secret}
             gatewayURL={gatewayURL}
-            serverCount={selected.length}
+            serverCount={allServers ? "all" : selected.length}
           />
         );
       default:
@@ -983,7 +999,7 @@ export function ProvisionWizard({
         ? "Name this agent."
         : null
       : step === 1
-        ? selected.length === 0
+        ? !allServers && selected.length === 0
           ? "Select at least one MCP server."
           : null
         : null;
@@ -1154,7 +1170,7 @@ export function ProvisionWizard({
               (step === 0
                 ? existing
                   ? "This agent's identity is settled; this flow issues it a key."
-                  : "Name and scope can be changed later."
+                  : "You can rename it later."
                 : `${selected.length} of ${inventory.servers.length} servers selected.`)
             }
             onBack={step > 0 ? () => setStep(step - 1) : undefined}

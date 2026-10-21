@@ -13,7 +13,7 @@ import {
 import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { invalidateAgentPolicy } from "../agent-policy-grants";
-import { ProvisionWizard } from "./ProvisionWizard";
+import { CredentialsWizard } from "./CredentialsWizard";
 
 const mocks = vi.hoisted(() => ({
   createAgent: vi.fn(),
@@ -156,7 +156,7 @@ function setup(initialPlatformKey?: string) {
   const view = render(
     <MemoryRouter>
       <QueryClientProvider client={client}>
-        <ProvisionWizard
+        <CredentialsWizard
           initialPlatformKey={initialPlatformKey}
           onDone={(id) => {
             onDone(id);
@@ -469,16 +469,15 @@ describe("Federating a platform's own tokens", () => {
   });
 });
 
-describe("Agent scope", () => {
-  it("defaults to the active project and binds the agent to it", async () => {
+describe("Agent project", () => {
+  it("binds a new agent to the project it is created in", async () => {
+    // Not a choice any more: an agent belongs where it is made. It was once
+    // a radio on this step, which asked the same question the server list
+    // answers and gave the two somewhere to disagree.
     setup();
     fireEvent.change(screen.getByLabelText("Name"), {
       target: { value: "Project bound" },
     });
-    // Checked before the step is left behind: the control only exists here.
-    expect(
-      screen.getByRole("radio", { name: /Project/ }).getAttribute("data-state"),
-    ).toBe("checked");
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     fireEvent.click(await screen.findByRole("checkbox", { name: "GitHub" }));
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
@@ -491,12 +490,14 @@ describe("Agent scope", () => {
     expect(form.projectId).toBe("project_one");
   });
 
-  it("sends no project binding when organization scope is chosen", async () => {
+  it("sends no binding until a project resolves", async () => {
+    // useProject yields an empty id first. Binding to it would send an empty
+    // id, which the server reads as "omitted" rather than rejecting.
+    mocks.projectId = "";
     setup();
     fireEvent.change(screen.getByLabelText("Name"), {
-      target: { value: "Org wide" },
+      target: { value: "No project yet" },
     });
-    fireEvent.click(screen.getByRole("radio", { name: /Organization/ }));
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     fireEvent.click(await screen.findByRole("checkbox", { name: "GitHub" }));
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
@@ -506,26 +507,38 @@ describe("Agent scope", () => {
 
     await waitFor(() => expect(mocks.createAgent).toHaveBeenCalledTimes(1));
     const form = mocks.createAgent.mock.calls[0]![0].createAgentForm;
-    // Omitted rather than blank: the server reads a missing binding as
-    // organization-wide.
     expect("projectId" in form).toBe(false);
   });
 
-  it("withholds project scope until a project resolves", () => {
-    // useProject yields an empty id before a project resolves. Binding to it
-    // would send an empty id, which the server reads as "omitted" — silently
-    // creating an organization-wide agent after the user asked for a project
-    // one.
-    mocks.projectId = "";
+  it("gives All servers the project, so it does not reach past the agent", async () => {
+    // A wildcard with no project on it reaches every project. The agent
+    // belongs to one, so the grant has to say which.
     setup();
+    fireEvent.change(screen.getByLabelText("Name"), {
+      target: { value: "Everything here" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    fireEvent.click(
+      await screen.findByRole("checkbox", { name: "All servers" }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Create agent" }),
+    );
 
-    const projectOption = screen.getByRole("radio", { name: /Project/ });
-    expect(projectOption.getAttribute("data-disabled")).not.toBeNull();
-    expect(
-      screen
-        .getByRole("radio", { name: /Organization/ })
-        .getAttribute("data-state"),
-    ).toBe("checked");
+    await waitFor(() => expect(mocks.createAgent).toHaveBeenCalledTimes(1));
+    const form = mocks.createAgent.mock.calls[0]![0].createAgentForm;
+    expect(form.policyGrants).toEqual([
+      {
+        effect: "allow",
+        scope: "mcp:connect",
+        selector: {
+          resourceKind: "mcp",
+          resourceId: "*",
+          projectId: "project_one",
+        },
+      },
+    ]);
   });
 });
 
@@ -534,6 +547,9 @@ describe("Editing an agent that already exists", () => {
     id: "agent_one",
     name: "Release Bot",
     lifecycle: "active",
+    // Bound to a project, like every agent made since the binding stopped
+    // being optional. The grants written for it have to name it.
+    projectId: "project_one",
     permissions: { write: true, authorize: true },
   } as never;
 
@@ -560,7 +576,7 @@ describe("Editing an agent that already exists", () => {
     const view = render(
       <MemoryRouter>
         <QueryClientProvider client={client}>
-          <ProvisionWizard
+          <CredentialsWizard
             agent={agent}
             editing
             grants={(over.grants ?? grants) as never}
@@ -592,7 +608,7 @@ describe("Editing an agent that already exists", () => {
     expect(credential.textContent).not.toContain("Current");
     // The step the reader is on keeps its place even though everything from
     // the credential on is settled.
-    const current = screen.getByRole("button", { name: /Name & scope/ });
+    const current = screen.getByRole("button", { name: /Name/ });
     expect(current.getAttribute("aria-current")).toBe("step");
     expect(current.textContent).toContain("Current");
   });
@@ -703,26 +719,93 @@ describe("Editing an agent that already exists", () => {
     expect(mocks.createAgent).not.toHaveBeenCalled();
   });
 
-  it("says so when a wildcard grant already reaches every server", async () => {
-    // The list leaves the wildcard out on purpose, and a save would not
-    // remove it, so an unticked list is not this agent's reach.
-    editing({
-      grants: [
-        {
-          id: "grant_all",
-          effect: "allow",
-          scope: "mcp:connect",
-          selector: { resourceKind: "mcp", resourceId: "*" },
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        },
-      ],
-    });
+  const WILDCARD = {
+    id: "grant_all",
+    effect: "allow",
+    scope: "mcp:connect",
+    selector: { resourceKind: "mcp", resourceId: "*" },
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+
+  it("opens on All servers when a wildcard grant already reaches every one", async () => {
+    // The picker says what the policy allows rather than coming up empty
+    // beside a grant that reaches all of them.
+    editing({ grants: [WILDCARD] });
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
-    await screen.findByRole("checkbox", { name: "GitHub" });
+    const all = (await screen.findByRole("checkbox", {
+      name: "All servers",
+    })) as HTMLInputElement;
+    await waitFor(() => expect(all.getAttribute("data-state")).toBe("checked"));
+    // Every row reads as reached, because it is, and none of them is the
+    // thing to change while the wildcard stands.
+    const github = screen.getByRole("checkbox", {
+      name: "GitHub",
+    }) as HTMLInputElement;
+    expect(github.getAttribute("data-state")).toBe("checked");
+    expect(github.hasAttribute("disabled")).toBe(true);
+  });
+
+  it("keeps the wildcard grant when All servers is left on", async () => {
+    const { onDone } = editing({ grants: [WILDCARD] });
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await screen.findByRole("checkbox", { name: "All servers" });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Save changes and exit" }),
+    );
+
+    await waitFor(() => expect(onDone).toHaveBeenCalled());
+    // Nothing to write: the stored reach and the chosen one are the same.
+    expect(mocks.deleteGrant).not.toHaveBeenCalled();
+    expect(mocks.createGrant).not.toHaveBeenCalled();
+  });
+
+  it("replaces the wildcard grant with the list when All servers is turned off", async () => {
+    editing({ grants: [WILDCARD] });
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    fireEvent.click(
+      await screen.findByRole("checkbox", { name: "All servers" }),
+    );
+    fireEvent.click(screen.getByRole("checkbox", { name: "GitHub" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Save changes and exit" }),
+    );
+
+    await waitFor(() => expect(mocks.deleteGrant).toHaveBeenCalledTimes(1));
     expect(
-      screen.getByText(/reaches every MCP server through a wildcard grant/),
-    ).toBeTruthy();
+      mocks.deleteGrant.mock.calls[0]?.[0]?.request?.agentPolicyGrantIDForm,
+    ).toEqual({ agentId: "agent_one", grantId: "grant_all" });
+    // The chosen server is granted before the wildcard goes, so a failure
+    // between the two leaves too much reach rather than too little.
+    expect(mocks.createGrant).toHaveBeenCalledTimes(1);
+    expect(mocks.createGrant.mock.invocationCallOrder[0] ?? 0).toBeLessThan(
+      mocks.deleteGrant.mock.invocationCallOrder[0] ?? 0,
+    );
+  });
+
+  it("writes a wildcard grant when All servers is turned on", async () => {
+    // One grant, not one per server: the list it would otherwise name is
+    // today's inventory, and the promise covers servers added later.
+    editing({ grants: [] });
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    fireEvent.click(
+      await screen.findByRole("checkbox", { name: "All servers" }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Save changes and exit" }),
+    );
+
+    await waitFor(() => expect(mocks.createGrant).toHaveBeenCalledTimes(1));
+    // Carries the agent's project: a wildcard with no project on it reaches
+    // every project, which is wider than the agent it belongs to.
+    expect(
+      mocks.createGrant.mock.calls[0]?.[0]?.request?.createAgentPolicyGrantForm
+        ?.selector,
+    ).toEqual({
+      resourceKind: "mcp",
+      resourceId: "*",
+      projectId: "project_one",
+    });
   });
 
   it("will not save while the server list has not loaded", async () => {
