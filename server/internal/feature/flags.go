@@ -6,7 +6,6 @@ const (
 	// FlagGramMCPCatalog temporarily selects the Speakeasy MCP catalog per organization.
 	FlagGramMCPCatalog Flag = "gram-mcp-catalog"
 
-	FlagAssistants Flag = "assistants"
 	// FlagPromptPolicies gates the natural-language / LLM-judge ("prompt
 	// based") risk policy MVP. While set, only opted-in organizations can
 	// create or update nl-type risk policies and have them enforced. The
@@ -69,12 +68,6 @@ const (
 	// like FlagBudgets. Evaluated server-side only; removed once the toolset
 	// is GA.
 	FlagAssistantPlatformMCP Flag = "assistant-platform-mcp"
-	// FlagHostedMCPServerKeyWrites switches hosted MCP writers (plugin entries,
-	// install page metadata, assistant attachments) to the canonical MCP server
-	// key (AIM-16 phase B). Evaluated server-side; targeted by PostHog
-	// organization group (org slug), rolled out to everyone once no phase A pods
-	// remain. Fails closed to the toolset key. Removed once the AIM-507 move ships.
-	FlagHostedMCPServerKeyWrites Flag = "hosted-mcp-server-key-writes"
 	// FlagRiskWatchdog gates the Watchdog signals endpoint (risk.getSignals).
 	// Key matches the dashboard's page-level flag so a single PostHog flag
 	// controls both the UI and the API surface.

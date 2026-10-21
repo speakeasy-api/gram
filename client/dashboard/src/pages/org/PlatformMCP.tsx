@@ -1,3 +1,4 @@
+import { enumPresentation } from "@/lib/enum";
 import {
   Alert,
   AlertDescription,
@@ -897,14 +898,7 @@ function PlatformMCPReconnect({
   isMutating,
   onReconnect,
 }: {
-  reason:
-    | ""
-    | "idle_expired"
-    | "authorization_expired"
-    | "refresh_invalidated"
-    | "authorization_changed"
-    | "revoked"
-    | "security_reset";
+  reason: string;
   isMutating: boolean;
   onReconnect: () => void;
 }): JSX.Element {
@@ -929,7 +923,9 @@ function PlatformMCPReconnect({
       <div className="flex flex-1 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <AlertTitle>Reconnect Platform MCP</AlertTitle>
-          <AlertDescription>{messages[reason]}</AlertDescription>
+          <AlertDescription>
+            {enumPresentation(messages, reason, messages[""])}
+          </AlertDescription>
         </div>
         <Button
           className="shrink-0 self-start"

@@ -1,3 +1,5 @@
+import { isKnownEnumValue } from "@/lib/enum";
+import { UpdateRiskExclusionRequestBodyMatchType as KnownUpdateRiskExclusionRequestBodyMatchType } from "@gram/client/models/components/updateriskexclusionrequestbody.js";
 import { Badge } from "@/components/ui/Badge";
 import { TableRowContextMenu } from "@/components/table-row-context-menu";
 import type { Action } from "@/components/ui/MoreActions";
@@ -59,6 +61,13 @@ export function ExclusionsTab({
   });
 
   const handleToggle = (exclusion: RiskExclusion, enabled: boolean) => {
+    if (
+      !isKnownEnumValue(
+        KnownUpdateRiskExclusionRequestBodyMatchType,
+        exclusion.matchType,
+      )
+    )
+      return;
     updateMutation.mutate({
       request: {
         updateRiskExclusionRequestBody: {
@@ -74,10 +83,24 @@ export function ExclusionsTab({
     });
   };
 
+  const editExclusion = (exclusion: RiskExclusion) => {
+    if (
+      isKnownEnumValue(
+        KnownUpdateRiskExclusionRequestBodyMatchType,
+        exclusion.matchType,
+      )
+    )
+      onSheetChange({ mode: "edit", exclusion });
+  };
+
   const exclusionActions = (exclusion: RiskExclusion): Action[] => [
     {
       label: "Edit",
-      onClick: () => onSheetChange({ mode: "edit", exclusion }),
+      disabled: !isKnownEnumValue(
+        KnownUpdateRiskExclusionRequestBodyMatchType,
+        exclusion.matchType,
+      ),
+      onClick: () => editExclusion(exclusion),
     },
     {
       label: "Delete",
@@ -124,6 +147,12 @@ export function ExclusionsTab({
       render: (exclusion) => (
         <div onClick={(e) => e.stopPropagation()}>
           <Switch
+            disabled={
+              !isKnownEnumValue(
+                KnownUpdateRiskExclusionRequestBodyMatchType,
+                exclusion.matchType,
+              )
+            }
             checked={exclusion.enabled}
             onCheckedChange={(checked) => handleToggle(exclusion, checked)}
           />
@@ -167,7 +196,7 @@ export function ExclusionsTab({
         columns={columns}
         data={exclusions}
         rowKey={(exclusion) => exclusion.id}
-        onRowClick={(exclusion) => onSheetChange({ mode: "edit", exclusion })}
+        onRowClick={editExclusion}
         renderRow={(exclusion, rowElement) => (
           <TableRowContextMenu
             key={exclusion.id}
@@ -183,6 +212,18 @@ export function ExclusionsTab({
   return (
     <>
       <BuiltinLibrary />
+      {exclusions.some(
+        (exclusion) =>
+          !isKnownEnumValue(
+            KnownUpdateRiskExclusionRequestBodyMatchType,
+            exclusion.matchType,
+          ),
+      ) && (
+        <Text small muted>
+          Some exclusions cannot be edited with this version. Refresh the page
+          before editing them.
+        </Text>
+      )}
       {body}
       <ExclusionSheet
         state={sheet}

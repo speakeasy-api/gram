@@ -4,7 +4,8 @@
 
 import * as z from "zod/v4-mini";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
@@ -41,7 +42,7 @@ export const MeterUsageBreakdownDimension = {
 /**
  * Selected family-compatible breakdown dimension
  */
-export type MeterUsageBreakdownDimension = ClosedEnum<
+export type MeterUsageBreakdownDimension = OpenEnum<
   typeof MeterUsageBreakdownDimension
 >;
 
@@ -57,9 +58,10 @@ export type MeterUsageBreakdown = {
 };
 
 /** @internal */
-export const MeterUsageBreakdownDimension$inboundSchema: z.ZodMiniEnum<
-  typeof MeterUsageBreakdownDimension
-> = z.enum(MeterUsageBreakdownDimension);
+export const MeterUsageBreakdownDimension$inboundSchema: z.ZodMiniType<
+  MeterUsageBreakdownDimension,
+  unknown
+> = openEnums.inboundSchema(MeterUsageBreakdownDimension);
 
 /** @internal */
 export const MeterUsageBreakdown$inboundSchema: z.ZodMiniType<
