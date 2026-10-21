@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
@@ -21,7 +22,7 @@ export const TunnelDiagnosticStepState = {
 /**
  * Probe state
  */
-export type TunnelDiagnosticStepState = ClosedEnum<
+export type TunnelDiagnosticStepState = OpenEnum<
   typeof TunnelDiagnosticStepState
 >;
 
@@ -41,9 +42,10 @@ export type TunnelDiagnosticStep = {
 };
 
 /** @internal */
-export const TunnelDiagnosticStepState$inboundSchema: z.ZodMiniEnum<
-  typeof TunnelDiagnosticStepState
-> = z.enum(TunnelDiagnosticStepState);
+export const TunnelDiagnosticStepState$inboundSchema: z.ZodMiniType<
+  TunnelDiagnosticStepState,
+  unknown
+> = openEnums.inboundSchema(TunnelDiagnosticStepState);
 
 /** @internal */
 export const TunnelDiagnosticStep$inboundSchema: z.ZodMiniType<

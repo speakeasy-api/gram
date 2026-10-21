@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
@@ -31,7 +32,7 @@ export const TunnelDiagnosticsState = {
 /**
  * Diagnostic collection state
  */
-export type TunnelDiagnosticsState = ClosedEnum<typeof TunnelDiagnosticsState>;
+export type TunnelDiagnosticsState = OpenEnum<typeof TunnelDiagnosticsState>;
 
 /**
  * Reachable means transport only, not MCP success.
@@ -45,7 +46,7 @@ export const TunnelDiagnosticsTargetState = {
 /**
  * Reachable means transport only, not MCP success.
  */
-export type TunnelDiagnosticsTargetState = ClosedEnum<
+export type TunnelDiagnosticsTargetState = OpenEnum<
   typeof TunnelDiagnosticsTargetState
 >;
 
@@ -101,14 +102,16 @@ export type TunnelDiagnostics = {
 };
 
 /** @internal */
-export const TunnelDiagnosticsState$inboundSchema: z.ZodMiniEnum<
-  typeof TunnelDiagnosticsState
-> = z.enum(TunnelDiagnosticsState);
+export const TunnelDiagnosticsState$inboundSchema: z.ZodMiniType<
+  TunnelDiagnosticsState,
+  unknown
+> = openEnums.inboundSchema(TunnelDiagnosticsState);
 
 /** @internal */
-export const TunnelDiagnosticsTargetState$inboundSchema: z.ZodMiniEnum<
-  typeof TunnelDiagnosticsTargetState
-> = z.enum(TunnelDiagnosticsTargetState);
+export const TunnelDiagnosticsTargetState$inboundSchema: z.ZodMiniType<
+  TunnelDiagnosticsTargetState,
+  unknown
+> = openEnums.inboundSchema(TunnelDiagnosticsTargetState);
 
 /** @internal */
 export const TunnelDiagnostics$inboundSchema: z.ZodMiniType<
