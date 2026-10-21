@@ -80,6 +80,9 @@ vi.mock("./invalidateDirectoryMappingAccess", () => ({
 vi.mock("./DirectoryReviewPanel", () => ({
   DirectoryReviewPanel: () => null,
 }));
+vi.mock("./DirectoryReviewEmailSetting", () => ({
+  DirectoryReviewEmailSetting: () => null,
+}));
 vi.mock("@/components/ui/Combobox", () => ({
   Combobox: ({
     items,

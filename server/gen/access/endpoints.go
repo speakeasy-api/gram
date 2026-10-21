@@ -30,6 +30,8 @@ type Endpoints struct {
 	ApplyDirectoryRoleSetup              goa.Endpoint
 	ListDirectoryReviewItems             goa.Endpoint
 	ResolveDirectoryReviewItem           goa.Endpoint
+	GetDirectoryReviewSettings           goa.Endpoint
+	UpdateDirectoryReviewSettings        goa.Endpoint
 	ListScopes                           goa.Endpoint
 	ListMembers                          goa.Endpoint
 	ListGrants                           goa.Endpoint
@@ -74,6 +76,8 @@ func NewEndpoints(s Service) *Endpoints {
 		ApplyDirectoryRoleSetup:              NewApplyDirectoryRoleSetupEndpoint(s, a.APIKeyAuth),
 		ListDirectoryReviewItems:             NewListDirectoryReviewItemsEndpoint(s, a.APIKeyAuth),
 		ResolveDirectoryReviewItem:           NewResolveDirectoryReviewItemEndpoint(s, a.APIKeyAuth),
+		GetDirectoryReviewSettings:           NewGetDirectoryReviewSettingsEndpoint(s, a.APIKeyAuth),
+		UpdateDirectoryReviewSettings:        NewUpdateDirectoryReviewSettingsEndpoint(s, a.APIKeyAuth),
 		ListScopes:                           NewListScopesEndpoint(s, a.APIKeyAuth),
 		ListMembers:                          NewListMembersEndpoint(s, a.APIKeyAuth),
 		ListGrants:                           NewListGrantsEndpoint(s, a.APIKeyAuth),
@@ -116,6 +120,8 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.ApplyDirectoryRoleSetup = m(e.ApplyDirectoryRoleSetup)
 	e.ListDirectoryReviewItems = m(e.ListDirectoryReviewItems)
 	e.ResolveDirectoryReviewItem = m(e.ResolveDirectoryReviewItem)
+	e.GetDirectoryReviewSettings = m(e.GetDirectoryReviewSettings)
+	e.UpdateDirectoryReviewSettings = m(e.UpdateDirectoryReviewSettings)
 	e.ListScopes = m(e.ListScopes)
 	e.ListMembers = m(e.ListMembers)
 	e.ListGrants = m(e.ListGrants)
@@ -628,6 +634,76 @@ func NewResolveDirectoryReviewItemEndpoint(s Service, authAPIKeyFn security.Auth
 			return nil, err
 		}
 		return s.ResolveDirectoryReviewItem(ctx, p)
+	}
+}
+
+// NewGetDirectoryReviewSettingsEndpoint returns an endpoint function that
+// calls the method "getDirectoryReviewSettings" of service "access".
+func NewGetDirectoryReviewSettingsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetDirectoryReviewSettingsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+			RequiredScopes: []string{"producer"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.SessionToken != nil {
+				key = *p.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.GetDirectoryReviewSettings(ctx, p)
+	}
+}
+
+// NewUpdateDirectoryReviewSettingsEndpoint returns an endpoint function that
+// calls the method "updateDirectoryReviewSettings" of service "access".
+func NewUpdateDirectoryReviewSettingsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*UpdateDirectoryReviewSettingsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+			RequiredScopes: []string{"producer"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.SessionToken != nil {
+				key = *p.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.UpdateDirectoryReviewSettings(ctx, p)
 	}
 }
 

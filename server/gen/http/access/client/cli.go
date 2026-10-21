@@ -651,6 +651,60 @@ func BuildResolveDirectoryReviewItemPayload(accessResolveDirectoryReviewItemBody
 	return v, nil
 }
 
+// BuildGetDirectoryReviewSettingsPayload builds the payload for the access
+// getDirectoryReviewSettings endpoint from CLI flags.
+func BuildGetDirectoryReviewSettingsPayload(accessGetDirectoryReviewSettingsApikeyToken string, accessGetDirectoryReviewSettingsSessionToken string) (*access.GetDirectoryReviewSettingsPayload, error) {
+	var apikeyToken *string
+	{
+		if accessGetDirectoryReviewSettingsApikeyToken != "" {
+			apikeyToken = &accessGetDirectoryReviewSettingsApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if accessGetDirectoryReviewSettingsSessionToken != "" {
+			sessionToken = &accessGetDirectoryReviewSettingsSessionToken
+		}
+	}
+	v := &access.GetDirectoryReviewSettingsPayload{}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildUpdateDirectoryReviewSettingsPayload builds the payload for the access
+// updateDirectoryReviewSettings endpoint from CLI flags.
+func BuildUpdateDirectoryReviewSettingsPayload(accessUpdateDirectoryReviewSettingsBody string, accessUpdateDirectoryReviewSettingsApikeyToken string, accessUpdateDirectoryReviewSettingsSessionToken string) (*access.UpdateDirectoryReviewSettingsPayload, error) {
+	var err error
+	var body UpdateDirectoryReviewSettingsRequestBody
+	{
+		err = json.Unmarshal([]byte(accessUpdateDirectoryReviewSettingsBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"emails_enabled\": false\n   }'")
+		}
+	}
+	var apikeyToken *string
+	{
+		if accessUpdateDirectoryReviewSettingsApikeyToken != "" {
+			apikeyToken = &accessUpdateDirectoryReviewSettingsApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if accessUpdateDirectoryReviewSettingsSessionToken != "" {
+			sessionToken = &accessUpdateDirectoryReviewSettingsSessionToken
+		}
+	}
+	v := &access.UpdateDirectoryReviewSettingsPayload{
+		EmailsEnabled: body.EmailsEnabled,
+	}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
 // BuildListScopesPayload builds the payload for the access listScopes endpoint
 // from CLI flags.
 func BuildListScopesPayload(accessListScopesApikeyToken string, accessListScopesSessionToken string) (*access.ListScopesPayload, error) {

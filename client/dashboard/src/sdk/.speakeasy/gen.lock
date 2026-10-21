@@ -39,6 +39,7 @@ trackedFiles:
   src/funcs/accessDeleteDirectoryRoleMapping.ts: {}
   src/funcs/accessDeleteRole.ts: {}
   src/funcs/accessExplainResourceAccess.ts: {}
+  src/funcs/accessGetDirectoryReviewSettings.ts: {}
   src/funcs/accessGetRole.ts: {}
   src/funcs/accessGetShadowMCPInventoryServer.ts: {}
   src/funcs/accessListAIDetectionUsers.ts: {}
@@ -67,6 +68,7 @@ trackedFiles:
   src/funcs/accessSetDirectoryRoleMappings.ts: {}
   src/funcs/accessSetResourceAudience.ts: {}
   src/funcs/accessSyncDirectoryGroups.ts: {}
+  src/funcs/accessUpdateDirectoryReviewSettings.ts: {}
   src/funcs/accessUpdateMemberRoles.ts: {}
   src/funcs/accessUpdateRole.ts: {}
   src/funcs/accessUpdateShadowMCPInventoryServerName.ts: {}
@@ -1095,6 +1097,7 @@ trackedFiles:
   src/models/components/directoryattributeoption.ts: {}
   src/models/components/directorygroupoption.ts: {}
   src/models/components/directoryreviewitem.ts: {}
+  src/models/components/directoryreviewsettings.ts: {}
   src/models/components/directoryrolemapping.ts: {}
   src/models/components/directoryrolesetuphiddenattributekey.ts: {}
   src/models/components/directoryrolesetuppreviewitem.ts: {}
@@ -2321,6 +2324,7 @@ trackedFiles:
   src/models/operations/getdeviceagentconfiguration.ts: {}
   src/models/operations/getdeviceintegrationconfig.ts: {}
   src/models/operations/getdeviceintegrationcoverage.ts: {}
+  src/models/operations/getdirectoryreviewsettings.ts: {}
   src/models/operations/getdistributionplugin.ts: {}
   src/models/operations/getdomain.ts: {}
   src/models/operations/getemployeedataflowgraph.ts: {}
@@ -2813,6 +2817,7 @@ trackedFiles:
   src/models/operations/updatedataexportdestination.ts: {}
   src/models/operations/updatedataexportroute.ts: {}
   src/models/operations/updatedeviceagentconfiguration.ts: {}
+  src/models/operations/updatedirectoryreviewsettings.ts: {}
   src/models/operations/updatedomain.ts: {}
   src/models/operations/updateenvironment.ts: {}
   src/models/operations/updateexternaloauthserver.ts: {}
@@ -3138,6 +3143,8 @@ trackedFiles:
   src/react-query/deviceIntegrationSchedules.ts: {}
   src/react-query/directoryReviewItems.core.ts: {}
   src/react-query/directoryReviewItems.ts: {}
+  src/react-query/directoryReviewSettings.core.ts: {}
+  src/react-query/directoryReviewSettings.ts: {}
   src/react-query/directoryRoleMappings.core.ts: {}
   src/react-query/directoryRoleMappings.ts: {}
   src/react-query/directoryRoleSetupPreview.core.ts: {}
@@ -3934,6 +3941,7 @@ trackedFiles:
   src/react-query/updateDataExportDestination.ts: {}
   src/react-query/updateDataExportRoute.ts: {}
   src/react-query/updateDeviceAgentConfiguration.ts: {}
+  src/react-query/updateDirectoryReviewSettings.ts: {}
   src/react-query/updateDomain.ts: {}
   src/react-query/updateEnvironment.ts: {}
   src/react-query/updateExternalOAuthServer.ts: {}
@@ -7058,6 +7066,15 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  getDirectoryReviewSettings:
+    speakeasy-default-get-directory-review-settings:
+      responses:
+        "200":
+          application/json: {"emails_enabled": true}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   getDistributionPlugin:
     speakeasy-default-get-distribution-plugin:
       parameters:
@@ -12903,6 +12920,17 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  updateDirectoryReviewSettings:
+    speakeasy-default-update-directory-review-settings:
+      requestBody:
+        application/json: {"emails_enabled": true}
+      responses:
+        "200":
+          application/json: {"emails_enabled": true}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   updateDomain:
     speakeasy-default-update-domain:
       requestBody:

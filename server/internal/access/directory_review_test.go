@@ -13,6 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/directoryreview"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/outbox/events"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
@@ -105,6 +106,9 @@ func TestService_ResolveDirectoryReviewItem_ApproveCreatesRoleAndMapping(t *test
 	after, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionDirectoryReviewItemApprove)
 	require.NoError(t, err)
 	require.Equal(t, before+1, after)
+	resolvedWebhooks, err := testrepo.New(ti.conn).CountOutboxEntriesByEventType(ctx, string(events.DirectoryReviewResolvedV1.EventType()))
+	require.NoError(t, err)
+	require.EqualValues(t, 1, resolvedWebhooks, "the decision is announced once")
 
 	// Resolving it again is a conflict, even when the stale request would
 	// also fail validation.
@@ -112,6 +116,47 @@ func TestService_ResolveDirectoryReviewItem_ApproveCreatesRoleAndMapping(t *test
 	requireOopsCode(t, err, oops.CodeConflict)
 	_, err = ti.service.ResolveDirectoryReviewItem(ctx, &gen.ResolveDirectoryReviewItemPayload{ID: item.ID, Decision: directoryReviewDecisionApprove})
 	requireOopsCode(t, err, oops.CodeConflict)
+}
+
+func TestService_DirectoryReviewSettings_TogglesEmails(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	seedMappingAdministrator(t, ctx, ti)
+
+	settings, err := ti.service.GetDirectoryReviewSettings(ctx, &gen.GetDirectoryReviewSettingsPayload{})
+	require.NoError(t, err)
+	require.True(t, settings.EmailsEnabled, "emails are on by default")
+
+	before, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionDirectoryReviewSettingsUpdate)
+	require.NoError(t, err)
+
+	settings, err = ti.service.UpdateDirectoryReviewSettings(ctx, &gen.UpdateDirectoryReviewSettingsPayload{EmailsEnabled: false})
+	require.NoError(t, err)
+	require.False(t, settings.EmailsEnabled)
+	settings, err = ti.service.GetDirectoryReviewSettings(ctx, &gen.GetDirectoryReviewSettingsPayload{})
+	require.NoError(t, err)
+	require.False(t, settings.EmailsEnabled)
+
+	// Repeating the same setting changes and records nothing.
+	_, err = ti.service.UpdateDirectoryReviewSettings(ctx, &gen.UpdateDirectoryReviewSettingsPayload{EmailsEnabled: false})
+	require.NoError(t, err)
+	after, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionDirectoryReviewSettingsUpdate)
+	require.NoError(t, err)
+	require.Equal(t, before+1, after)
+
+	record, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionDirectoryReviewSettingsUpdate)
+	require.NoError(t, err)
+	beforeSnapshot, err := audittest.DecodeAuditData(record.BeforeSnapshot)
+	require.NoError(t, err)
+	afterSnapshot, err := audittest.DecodeAuditData(record.AfterSnapshot)
+	require.NoError(t, err)
+	require.Equal(t, true, beforeSnapshot["emails_enabled"])
+	require.Equal(t, false, afterSnapshot["emails_enabled"])
+
+	settings, err = ti.service.UpdateDirectoryReviewSettings(ctx, &gen.UpdateDirectoryReviewSettingsPayload{EmailsEnabled: true})
+	require.NoError(t, err)
+	require.True(t, settings.EmailsEnabled)
 }
 
 func TestService_ResolveDirectoryReviewItem_StaleVersionChangesNothing(t *testing.T) {

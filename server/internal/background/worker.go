@@ -628,6 +628,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.CleanupTrustedDelegationCredentials)
 	temporalWorker.RegisterActivity(activities.CleanupMCPFindingEvidence)
 	temporalWorker.RegisterActivity(activities.SweepDirectoryReviews)
+	temporalWorker.RegisterActivity(activities.SendDirectoryReviewEmails)
 	// Publish outbox relay activities
 	temporalWorker.RegisterActivity(activities.DrainPublishOutbox)
 	temporalWorker.RegisterActivity(activities.GCPublishOutboxDeadLetters)
@@ -767,6 +768,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(TrustedDelegationCleanupWorkflow)
 	temporalWorker.RegisterWorkflow(MCPFindingEvidenceCleanupWorkflow)
 	temporalWorker.RegisterWorkflow(DirectoryReviewSweepWorkflow)
+	temporalWorker.RegisterWorkflow(DirectoryReviewEmailsWorkflow)
 	// Publish outbox -> Pub/Sub workflow and dead letter GC
 	temporalWorker.RegisterWorkflow(PublishOutboxWorkflow)
 	temporalWorker.RegisterWorkflow(PublishOutboxGCWorkflow)
@@ -939,6 +941,10 @@ func (w *Workers) registerSchedules(ctx context.Context) {
 
 	if err := AddDirectoryReviewSweepSchedule(ctx, env); err != nil {
 		logger.ErrorContext(ctx, "failed to add directory review sweep schedule", attr.SlogError(err))
+	}
+
+	if err := AddDirectoryReviewEmailsSchedule(ctx, env); err != nil {
+		logger.ErrorContext(ctx, "failed to add directory review emails schedule", attr.SlogError(err))
 	}
 
 	if err := AddKillswitchMaintenanceSchedule(ctx, env); err != nil {

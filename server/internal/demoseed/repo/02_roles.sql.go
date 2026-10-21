@@ -520,12 +520,14 @@ func (q *Queries) RolesInsertDirectoryReviewGroupItem(ctx context.Context, arg R
 }
 
 const rolesInsertDirectoryReviewOrgState = `-- name: RolesInsertDirectoryReviewOrgState :exec
-INSERT INTO directory_review_org_states (organization_id, baseline_at)
-VALUES ($1::text, clock_timestamp())
+INSERT INTO directory_review_org_states (organization_id, baseline_at, emails_disabled_at)
+VALUES ($1::text, clock_timestamp(), clock_timestamp())
 `
 
 // Starts directory review now: groups created before this are offered in
-// bulk setup, groups created after it are raised for review.
+// bulk setup, groups created after it are raised for review. Review emails
+// are off: the seeded items are recreated on every reseed, so they would
+// otherwise email the organization's admins each day.
 func (q *Queries) RolesInsertDirectoryReviewOrgState(ctx context.Context, organizationID string) error {
 	_, err := q.db.Exec(ctx, rolesInsertDirectoryReviewOrgState, organizationID)
 	return err

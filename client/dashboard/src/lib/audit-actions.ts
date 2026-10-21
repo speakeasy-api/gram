@@ -84,6 +84,7 @@ export const AUDIT_ACTIONS = [
   "directory_review_item:approve",
   "directory_review_item:dismiss",
   "directory_review_item:opt_out",
+  "directory_review_settings:update",
   "directory_role_mapping:delete",
   "directory_role_mapping:set",
   "environment:create",
@@ -572,6 +573,8 @@ export function staticActionPhrase(action: AuditAction): string {
       return "dismissed directory change";
     case "directory_review_item:opt_out":
       return "stopped review of new attribute values";
+    case "directory_review_settings:update":
+      return "updated directory review emails";
 
     case "directory_role_mapping:set":
       return "set directory role mapping";

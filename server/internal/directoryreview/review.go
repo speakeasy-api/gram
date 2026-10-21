@@ -3,7 +3,8 @@
 // of an attribute key that already has mappings, and a mapped group or
 // attribute value that has gone. Every function here runs on the caller's
 // transaction, so an item is written or settled together with the directory
-// or mapping change that caused it. Nothing here writes a mapping.
+// or mapping change that caused it, along with the webhook events announcing
+// it. Nothing here writes a mapping.
 package directoryreview
 
 import (
@@ -84,7 +85,15 @@ func items[T ~struct {
 
 // ReconcileGroup settles and opens the items for one group after a change to
 // the group or its mappings.
-func ReconcileGroup(ctx context.Context, dbtx database.DBTX, organizationID string, groupID uuid.UUID) (Changes, error) {
+func ReconcileGroup(ctx context.Context, dbtx DBTX, organizationID string, groupID uuid.UUID) (Changes, error) {
+	changes, err := reconcileGroup(ctx, dbtx, organizationID, groupID)
+	if err != nil {
+		return changes, err
+	}
+	return changes, publishChanges(ctx, dbtx, organizationID, changes)
+}
+
+func reconcileGroup(ctx context.Context, dbtx database.DBTX, organizationID string, groupID uuid.UUID) (Changes, error) {
 	q := repo.New(dbtx)
 	group := uuid.NullUUID{UUID: groupID, Valid: true}
 	var changes Changes
@@ -116,8 +125,12 @@ func ReconcileGroup(ctx context.Context, dbtx database.DBTX, organizationID stri
 // change to its mappings, and opens a missing-source item if it has mappings
 // and nobody carries it. It does not raise new_attribute_value: a value is
 // only new when a directory event gives it to its first holder.
-func ReconcileAttributeValue(ctx context.Context, dbtx database.DBTX, organizationID, key, value string) (Changes, error) {
-	return reconcileAttributeValue(ctx, dbtx, organizationID, key, value, false)
+func ReconcileAttributeValue(ctx context.Context, dbtx DBTX, organizationID, key, value string) (Changes, error) {
+	changes, err := reconcileAttributeValue(ctx, dbtx, organizationID, key, value, false)
+	if err != nil {
+		return changes, err
+	}
+	return changes, publishChanges(ctx, dbtx, organizationID, changes)
 }
 
 func reconcileAttributeValue(ctx context.Context, dbtx database.DBTX, organizationID, key, value string, allowRecurrence bool) (Changes, error) {
@@ -145,14 +158,15 @@ func reconcileAttributeValue(ctx context.Context, dbtx database.DBTX, organizati
 
 // SupersedeAttributeKey settles the pending items for every value of a key,
 // such as after the key is opted out of new-value decisions.
-func SupersedeAttributeKey(ctx context.Context, dbtx database.DBTX, organizationID, key string) (Changes, error) {
+func SupersedeAttributeKey(ctx context.Context, dbtx DBTX, organizationID, key string) (Changes, error) {
 	superseded, err := repo.New(dbtx).SupersedeDirectoryReviewItems(ctx, repo.SupersedeDirectoryReviewItemsParams{
 		OrganizationID: organizationID, DirectoryGroupID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, AttributeKey: conv.ToPGText(key), AttributeValue: pgtype.Text{String: "", Valid: false},
 	})
 	if err != nil {
 		return Changes{}, fmt.Errorf("supersede attribute key review items: %w", err)
 	}
-	return Changes{Opened: nil, Superseded: items(superseded)}, nil
+	changes := Changes{Opened: nil, Superseded: items(superseded)}
+	return changes, publishChanges(ctx, dbtx, organizationID, changes)
 }
 
 // UserAttributes is a directory user's attribute values, as access evaluation
@@ -196,7 +210,15 @@ func LoadUserAttributes(ctx context.Context, dbtx database.DBTX, organizationID,
 // changed one user's attributes or liveness. before and after are the user's
 // attributes on either side of the event, nil when the user was or is not
 // live. Only keys with mappings can matter, so others are skipped.
-func ReconcileUserChange(ctx context.Context, dbtx database.DBTX, organizationID, workosDirectoryUserID string, before, after UserAttributes) (Changes, error) {
+func ReconcileUserChange(ctx context.Context, dbtx DBTX, organizationID, workosDirectoryUserID string, before, after UserAttributes) (Changes, error) {
+	changes, err := reconcileUserChange(ctx, dbtx, organizationID, workosDirectoryUserID, before, after)
+	if err != nil {
+		return changes, err
+	}
+	return changes, publishChanges(ctx, dbtx, organizationID, changes)
+}
+
+func reconcileUserChange(ctx context.Context, dbtx database.DBTX, organizationID, workosDirectoryUserID string, before, after UserAttributes) (Changes, error) {
 	q := repo.New(dbtx)
 	var changes Changes
 
@@ -291,7 +313,15 @@ func sweepOrganization(ctx context.Context, db *pgxpool.Pool, organizationID str
 // current state, as the sweep does. On the first run it records the
 // organization's baseline, so groups that already exist then are offered in
 // bulk setup rather than raised as new.
-func ReconcileOrganization(ctx context.Context, dbtx database.DBTX, organizationID string) (Changes, error) {
+func ReconcileOrganization(ctx context.Context, dbtx DBTX, organizationID string) (Changes, error) {
+	changes, err := reconcileOrganization(ctx, dbtx, organizationID)
+	if err != nil {
+		return changes, err
+	}
+	return changes, publishChanges(ctx, dbtx, organizationID, changes)
+}
+
+func reconcileOrganization(ctx context.Context, dbtx database.DBTX, organizationID string) (Changes, error) {
 	q := repo.New(dbtx)
 	var changes Changes
 

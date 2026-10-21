@@ -384,6 +384,59 @@ var _ = Service("access", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ResolveDirectoryReviewItem", "type": "mutation"}`)
 	})
 
+	Method("getDirectoryReviewSettings", func() {
+		Description("Get the organization's directory review settings: whether its admins are emailed when directory changes are waiting for a decision.")
+		Security(security.ByKey, func() {
+			Scope("producer")
+		})
+		Security(security.Session)
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+		})
+
+		Result(DirectoryReviewSettingsModel)
+
+		HTTP(func() {
+			GET("/rpc/access.getDirectoryReviewSettings")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getDirectoryReviewSettings")
+		Meta("openapi:extension:x-speakeasy-name-override", "getDirectoryReviewSettings")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DirectoryReviewSettings"}`)
+	})
+
+	Method("updateDirectoryReviewSettings", func() {
+		Description("Turn the organization's directory review emails on or off. Pending items stay listed in the dashboard either way, and webhooks are unaffected.")
+		Security(security.ByKey, func() {
+			Scope("producer")
+		})
+		Security(security.Session)
+
+		Payload(func() {
+			Extend(DirectoryReviewSettingsModel)
+			security.ByKeyPayload()
+			security.SessionPayload()
+		})
+
+		Result(DirectoryReviewSettingsModel)
+
+		HTTP(func() {
+			POST("/rpc/access.updateDirectoryReviewSettings")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "updateDirectoryReviewSettings")
+		Meta("openapi:extension:x-speakeasy-name-override", "updateDirectoryReviewSettings")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UpdateDirectoryReviewSettings", "type": "mutation"}`)
+	})
+
 	Method("listScopes", func() {
 		Description("List all available scopes and their resource types.")
 		Security(security.ByKey, func() {
@@ -2200,4 +2253,10 @@ var ResolveDirectoryReviewItemResult = Type("ResolveDirectoryReviewItemResult", 
 	Attribute("created_roles", ArrayOf(RoleModel), "Roles the approval created.")
 	Attribute("mappings", ArrayOf(DirectoryRoleMappingModel), "The mappings an approval of a new source wrote. Empty for every other decision.")
 	Attribute("side_effects", ArrayOf(DirectoryRoleSetupSideEffectModel), "Work requested after commit.")
+})
+
+var DirectoryReviewSettingsModel = Type("DirectoryReviewSettings", func() {
+	Required("emails_enabled")
+
+	Attribute("emails_enabled", Boolean, "Whether organization admins are emailed when directory changes are waiting for a decision. On by default.")
 })

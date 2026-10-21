@@ -422,6 +422,10 @@ WHERE organization_id = @org_id::text AND deleted IS FALSE;
 SELECT count(*) FROM directory_review_items
 WHERE organization_id = @org_id::text AND state = 'pending';
 
+-- name: PostflightIDDirectoryReviewEmailsEnabled :one
+SELECT count(*) FROM directory_review_org_states
+WHERE organization_id = @org_id::text AND emails_disabled_at IS NULL;
+
 -- name: PostflightIDDeletedGroupMappings :one
 SELECT count(*) FROM directory_role_mappings drm
 JOIN directory_groups dg ON dg.id = drm.directory_group_id
