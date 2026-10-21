@@ -716,8 +716,6 @@ github.com/speakeasy-api/agenthooks v0.7.3 h1:NjSq1NOhSTiVMw2mrVqXe+A5ILt0m47ZNO
 github.com/speakeasy-api/agenthooks v0.7.3/go.mod h1:AQgUKnaUl6icJT5IPp0tDinkEiwohfb1R2QWEwdNgBs=
 github.com/speakeasy-api/jsonpath v0.6.3 h1:c+QPwzAOdrWvzycuc9HFsIZcxKIaWcNpC+xhOW9rJxU=
 github.com/speakeasy-api/jsonpath v0.6.3/go.mod h1:2cXloNuQ+RSXi5HTRaeBh7JEmjRXTiaKpFTdZiL7URI=
-github.com/speakeasy-api/mcp-setup-docs/go v0.3.8 h1:N7eyngncssSkECt5z+wmEH7ZCP1wN18c8Emgf4kJpmQ=
-github.com/speakeasy-api/mcp-setup-docs/go v0.3.8/go.mod h1:AwRshgM3gDjtRKcGHiasariP+pcP78LEf4CVITWa7YY=
 github.com/speakeasy-api/mcp-setup-docs/go v0.3.9 h1:NTwh5LwZnbmiHCCJZFoMtUmFU68LqhT/L2E4d+RrfHs=
 github.com/speakeasy-api/mcp-setup-docs/go v0.3.9/go.mod h1:AwRshgM3gDjtRKcGHiasariP+pcP78LEf4CVITWa7YY=
 github.com/speakeasy-api/openapi v1.24.0 h1:opoD27rupX7zBVPq1HkIGLeMOzNNA7JalhYP8q34i04=
