@@ -600,6 +600,15 @@ candidate_chats AS (
       OR u.email ILIKE '%' || @search || '%'
       OR ua.email ILIKE '%' || @search || '%'
     )
+    -- Eager runtime warmup persists a blank chat, not a user session.
+    -- Apply this outside the optional assistant filter for ordinary lists too.
+    AND NOT EXISTS (
+      SELECT 1 FROM assistant_threads warmup
+      WHERE warmup.chat_id = c.id
+        AND warmup.project_id = c.project_id
+        AND warmup.deleted IS FALSE
+        AND warmup.source_kind = 'warmup'
+    )
     AND (
       @assistant_id = ''
       OR EXISTS (
@@ -608,8 +617,6 @@ candidate_chats AS (
           AND at.project_id = @project_id
           AND at.assistant_id = @assistant_id::uuid
           AND at.deleted IS FALSE
-          -- Eager runtime warmup persists a blank chat, not a user session.
-          AND at.source_kind <> 'warmup'
           -- Optional source-kind dimension so setup/onboarding and runtime
           -- threads for the same assistant don't pollute each other's listing.
           -- @source_kind keeps only threads of that kind (onboarding passes
@@ -761,6 +768,15 @@ candidate_chats AS (
       OR u.email ILIKE '%' || @search || '%'
       OR ua.email ILIKE '%' || @search || '%'
     )
+    -- Eager runtime warmup persists a blank chat, not a user session.
+    -- Apply this outside the optional assistant filter for ordinary lists too.
+    AND NOT EXISTS (
+      SELECT 1 FROM assistant_threads warmup
+      WHERE warmup.chat_id = c.id
+        AND warmup.project_id = c.project_id
+        AND warmup.deleted IS FALSE
+        AND warmup.source_kind = 'warmup'
+    )
     AND (
       @assistant_id = ''
       OR EXISTS (
@@ -769,8 +785,6 @@ candidate_chats AS (
           AND at.project_id = @project_id
           AND at.assistant_id = @assistant_id::uuid
           AND at.deleted IS FALSE
-          -- Eager runtime warmup persists a blank chat, not a user session.
-          AND at.source_kind <> 'warmup'
           -- Optional source-kind dimension so setup/onboarding and runtime
           -- threads for the same assistant don't pollute each other's listing.
           -- @source_kind keeps only threads of that kind (onboarding passes
