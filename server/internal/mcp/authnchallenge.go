@@ -983,6 +983,11 @@ type issuerGateAuthentication struct {
 	// chosenNoAuth reports that the credential chose no upstream
 	// authentication for the endpoint's server, so nothing is resolved.
 	chosenNoAuth bool
+
+	// authClient is the typed auth client resolution that governs the
+	// endpoint when the resolver is authoritative for the organization; nil
+	// keeps the upstream client choice.
+	authClient *authClientResolution
 }
 
 // authenticateIssuerGate runs the issuer-gated authentication branch shared by
@@ -1112,6 +1117,7 @@ func (s *Service) authenticateIssuerGate(
 		refreshableUserSession: refreshableUserSession,
 		chosenClient:           uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		chosenNoAuth:           false,
+		authClient:             nil,
 	}, toolSelection, nil
 }
 

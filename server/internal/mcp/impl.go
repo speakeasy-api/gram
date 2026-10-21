@@ -113,8 +113,11 @@ type IdentityResolver interface {
 }
 
 type Service struct {
-	federatedLoginConsumer    FederatedLoginConsumer
-	identityChainer           identityChainer
+	federatedLoginConsumer FederatedLoginConsumer
+	identityChainer        identityChainer
+	// authClientPermitter decides whether the caller may use a resolved typed
+	// auth client; nil keeps the connect-equivalent rule (connectPermitter).
+	authClientPermitter       authClientPermitter
 	logger                    *slog.Logger
 	tracer                    trace.Tracer
 	metrics                   *mcpmetrics.Metrics
@@ -512,6 +515,7 @@ func NewService(
 		replayLiveness:            nil,
 		federatedLoginConsumer:    nil,
 		identityChainer:           nil,
+		authClientPermitter:       connectPermitter{},
 		consentBindings:           nil,
 		logger:                    logger,
 		tracer:                    tracer,

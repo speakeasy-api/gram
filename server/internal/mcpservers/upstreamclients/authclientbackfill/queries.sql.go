@@ -2421,6 +2421,24 @@ func (q *Queries) SeedAssociationFixture(ctx context.Context, arg SeedAssociatio
 	return id, err
 }
 
+const seedAuthClientEMAFixture = `-- name: SeedAuthClientEMAFixture :exec
+INSERT INTO mcp_auth_client_emas (auth_client_id, organization_id, remote_session_client_id, remote_session_issuer_id, resource)
+SELECT ac.id, ac.organization_id, ac.remote_session_client_id, c.remote_session_issuer_id, $1::text
+FROM mcp_auth_clients AS ac
+JOIN remote_session_clients AS c ON c.id = ac.remote_session_client_id
+WHERE ac.id = $2::uuid
+`
+
+type SeedAuthClientEMAFixtureParams struct {
+	Resource     string
+	AuthClientID uuid.UUID
+}
+
+func (q *Queries) SeedAuthClientEMAFixture(ctx context.Context, arg SeedAuthClientEMAFixtureParams) error {
+	_, err := q.db.Exec(ctx, seedAuthClientEMAFixture, arg.Resource, arg.AuthClientID)
+	return err
+}
+
 const seedAuthClientFixture = `-- name: SeedAuthClientFixture :one
 INSERT INTO mcp_auth_clients (organization_id, project_id, client_type, source, name, remote_session_client_id, client_attachment_scope)
 VALUES (
@@ -2449,6 +2467,34 @@ func (q *Queries) SeedAuthClientFixture(ctx context.Context, arg SeedAuthClientF
 	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err
+}
+
+const seedAuthClientHeaderFixture = `-- name: SeedAuthClientHeaderFixture :exec
+INSERT INTO mcp_auth_client_headers (auth_client_id, organization_id, name, is_required, is_secret, value, value_from_request_header)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
+`
+
+type SeedAuthClientHeaderFixtureParams struct {
+	AuthClientID           uuid.UUID
+	OrganizationID         string
+	Name                   string
+	IsRequired             bool
+	IsSecret               bool
+	Value                  pgtype.Text
+	ValueFromRequestHeader pgtype.Text
+}
+
+func (q *Queries) SeedAuthClientHeaderFixture(ctx context.Context, arg SeedAuthClientHeaderFixtureParams) error {
+	_, err := q.db.Exec(ctx, seedAuthClientHeaderFixture,
+		arg.AuthClientID,
+		arg.OrganizationID,
+		arg.Name,
+		arg.IsRequired,
+		arg.IsSecret,
+		arg.Value,
+		arg.ValueFromRequestHeader,
+	)
+	return err
 }
 
 const seedEMABindingFixture = `-- name: SeedEMABindingFixture :one
@@ -2641,6 +2687,32 @@ func (q *Queries) SeedRemoteSessionIssuerFixture(ctx context.Context, arg SeedRe
 	return err
 }
 
+const seedServerAuthClientLinkFixture = `-- name: SeedServerAuthClientLinkFixture :exec
+INSERT INTO mcp_server_auth_clients (project_id, organization_id, mcp_server_id, auth_client_id, client_attachment_scope, source)
+VALUES (
+    $1, $2, $3, $4,
+    (SELECT ac.attachment_scope FROM mcp_auth_clients AS ac WHERE ac.id = $4),
+    'admin'
+)
+`
+
+type SeedServerAuthClientLinkFixtureParams struct {
+	ProjectID      uuid.UUID
+	OrganizationID string
+	McpServerID    uuid.UUID
+	AuthClientID   uuid.UUID
+}
+
+func (q *Queries) SeedServerAuthClientLinkFixture(ctx context.Context, arg SeedServerAuthClientLinkFixtureParams) error {
+	_, err := q.db.Exec(ctx, seedServerAuthClientLinkFixture,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.McpServerID,
+		arg.AuthClientID,
+	)
+	return err
+}
+
 const seedToolsetFixture = `-- name: SeedToolsetFixture :exec
 INSERT INTO toolsets (id, organization_id, project_id, name, slug) VALUES ($1, $2, $3, $4, $5)
 `
@@ -2736,6 +2808,36 @@ func (q *Queries) SeedTunneledSourceFixture(ctx context.Context, arg SeedTunnele
 	return err
 }
 
+const seedUpstreamSelectionFixture = `-- name: SeedUpstreamSelectionFixture :exec
+INSERT INTO upstream_client_selections (project_id, organization_id, credential_kind, credential_id, mcp_server_id, no_auth, source, auth_client_id, auth_client_attachment_scope)
+VALUES (
+    $1, $2, 'user_session', $3, $4, $5, 'issuance',
+    $6,
+    (SELECT ac.attachment_scope FROM mcp_auth_clients AS ac WHERE ac.id = $6)
+)
+`
+
+type SeedUpstreamSelectionFixtureParams struct {
+	ProjectID      uuid.UUID
+	OrganizationID string
+	CredentialID   uuid.UUID
+	McpServerID    uuid.UUID
+	NoAuth         bool
+	AuthClientID   uuid.NullUUID
+}
+
+func (q *Queries) SeedUpstreamSelectionFixture(ctx context.Context, arg SeedUpstreamSelectionFixtureParams) error {
+	_, err := q.db.Exec(ctx, seedUpstreamSelectionFixture,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.CredentialID,
+		arg.McpServerID,
+		arg.NoAuth,
+		arg.AuthClientID,
+	)
+	return err
+}
+
 const seedUserSessionIssuerFixture = `-- name: SeedUserSessionIssuerFixture :exec
 INSERT INTO user_session_issuers (id, project_id, slug, authn_challenge_mode, session_duration)
 VALUES ($1, $2, $3, 'interactive', '1 day')
@@ -2776,6 +2878,20 @@ func (q *Queries) SeedValidProtectedResourceFixture(ctx context.Context, arg See
 	return err
 }
 
+const setAuthClientEnabledFixture = `-- name: SetAuthClientEnabledFixture :exec
+UPDATE mcp_auth_clients SET enabled = $1 WHERE id = $2
+`
+
+type SetAuthClientEnabledFixtureParams struct {
+	Enabled bool
+	ID      uuid.UUID
+}
+
+func (q *Queries) SetAuthClientEnabledFixture(ctx context.Context, arg SetAuthClientEnabledFixtureParams) error {
+	_, err := q.db.Exec(ctx, setAuthClientEnabledFixture, arg.Enabled, arg.ID)
+	return err
+}
+
 const setEMAStoredScopesFixture = `-- name: SetEMAStoredScopesFixture :exec
 UPDATE mcp_auth_client_emas SET requested_scopes = $1 WHERE auth_client_id = $2
 `
@@ -2787,6 +2903,20 @@ type SetEMAStoredScopesFixtureParams struct {
 
 func (q *Queries) SetEMAStoredScopesFixture(ctx context.Context, arg SetEMAStoredScopesFixtureParams) error {
 	_, err := q.db.Exec(ctx, setEMAStoredScopesFixture, arg.RequestedScopes, arg.AuthClientID)
+	return err
+}
+
+const setRemoteHeaderRequiredFixture = `-- name: SetRemoteHeaderRequiredFixture :exec
+UPDATE remote_mcp_server_headers SET is_required = $1 WHERE id = $2
+`
+
+type SetRemoteHeaderRequiredFixtureParams struct {
+	IsRequired bool
+	ID         uuid.UUID
+}
+
+func (q *Queries) SetRemoteHeaderRequiredFixture(ctx context.Context, arg SetRemoteHeaderRequiredFixtureParams) error {
+	_, err := q.db.Exec(ctx, setRemoteHeaderRequiredFixture, arg.IsRequired, arg.ID)
 	return err
 }
 

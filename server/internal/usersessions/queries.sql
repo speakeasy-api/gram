@@ -2522,18 +2522,21 @@ WHERE upstream_client_selections.no_auth
 -- One credential's choice for one MCP server, with whether it can still be
 -- used: a chosen client must be live, still associated with the server, and
 -- still bound to the credential's user session issuer, and a no-auth choice
--- holds only while the server has no associated client.
+-- holds only while the server has no associated client. A choice naming a
+-- static_credential or pass_through auth client reads as no-auth, as it did
+-- before the choice was mapped onto auth clients, whatever that client's
+-- state: the typed resolver fails closed on it, this path does not.
 -- An unusable choice is reported as such rather than replaced, so the caller
 -- fails closed instead of switching clients.
 -- ListUpstreamClientSelections repeats the usable expression; the two must
 -- stay identical.
 SELECT sel.remote_session_client_id,
        chosen.remote_session_issuer_id AS remote_session_issuer_id,
-       sel.no_auth,
+       (sel.no_auth OR headers_only.id IS NOT NULL)::boolean AS no_auth,
        sel.source,
        (
          CASE
-           WHEN sel.no_auth THEN NOT EXISTS (
+           WHEN sel.no_auth OR headers_only.id IS NOT NULL THEN NOT EXISTS (
              SELECT 1
              FROM mcp_server_remote_session_clients AS a
              WHERE a.mcp_server_id = sel.mcp_server_id
@@ -2557,6 +2560,12 @@ SELECT sel.remote_session_client_id,
 FROM upstream_client_selections AS sel
 LEFT JOIN remote_session_clients AS chosen
   ON chosen.id = sel.remote_session_client_id
+LEFT JOIN mcp_auth_clients AS headers_only
+  ON headers_only.id = sel.auth_client_id
+ AND sel.remote_session_client_id IS NULL
+ AND headers_only.organization_id = sel.organization_id
+ AND (headers_only.project_id IS NULL OR headers_only.project_id = sel.project_id)
+ AND headers_only.client_type IN ('static_credential', 'pass_through')
 WHERE sel.credential_kind = @credential_kind::text
   AND sel.credential_id = @credential_id::uuid
   AND sel.mcp_server_id = @mcp_server_id::uuid
@@ -2571,11 +2580,11 @@ WHERE sel.credential_kind = @credential_kind::text
 SELECT sel.mcp_server_id,
        sel.remote_session_client_id,
        chosen.remote_session_issuer_id AS remote_session_issuer_id,
-       sel.no_auth,
+       (sel.no_auth OR headers_only.id IS NOT NULL)::boolean AS no_auth,
        sel.source,
        (
          CASE
-           WHEN sel.no_auth THEN NOT EXISTS (
+           WHEN sel.no_auth OR headers_only.id IS NOT NULL THEN NOT EXISTS (
              SELECT 1
              FROM mcp_server_remote_session_clients AS a
              WHERE a.mcp_server_id = sel.mcp_server_id
@@ -2599,6 +2608,12 @@ SELECT sel.mcp_server_id,
 FROM upstream_client_selections AS sel
 LEFT JOIN remote_session_clients AS chosen
   ON chosen.id = sel.remote_session_client_id
+LEFT JOIN mcp_auth_clients AS headers_only
+  ON headers_only.id = sel.auth_client_id
+ AND sel.remote_session_client_id IS NULL
+ AND headers_only.organization_id = sel.organization_id
+ AND (headers_only.project_id IS NULL OR headers_only.project_id = sel.project_id)
+ AND headers_only.client_type IN ('static_credential', 'pass_through')
 WHERE sel.credential_kind = @credential_kind::text
   AND sel.credential_id = @credential_id::uuid
   AND sel.mcp_server_id = ANY(@mcp_server_ids::uuid[])

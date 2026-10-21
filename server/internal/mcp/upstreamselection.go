@@ -27,6 +27,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcpidentity"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
 	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
@@ -141,12 +142,21 @@ func (s *Service) refreshUpstreamChoice(ctx context.Context, endpoint *ResolvedM
 	if !endpoint.McpServerID.Valid {
 		return none, errUpstreamSelectionMissing
 	}
+	selector, err := s.refreshSelector(ctx, endpoint, jti)
+	if err != nil {
+		return none, err
+	}
+	return selector.forServer(ctx, endpoint.McpServerID.UUID)
+}
+
+// refreshSelector reads the choices of the credential a refreshed session
+// belongs to.
+func (s *Service) refreshSelector(ctx context.Context, endpoint *ResolvedMcpEndpoint, jti string) (*upstreamSelector, error) {
 	policy, err := s.loadSessionPolicy(ctx, endpoint, jti)
 	if err != nil {
-		return none, fmt.Errorf("load session credential: %w", err)
+		return nil, fmt.Errorf("load session credential: %w", err)
 	}
-	selector := &upstreamSelector{service: s, organizationID: endpoint.OrganizationID, userSessionIssuerID: endpoint.UserSessionIssuerID, credentialID: policy.credentialID}
-	return selector.forServer(ctx, endpoint.McpServerID.UUID)
+	return &upstreamSelector{service: s, organizationID: endpoint.OrganizationID, userSessionIssuerID: endpoint.UserSessionIssuerID, credentialID: policy.credentialID}, nil
 }
 
 // serverChoices is one credential's recorded choices for a set of servers.
@@ -205,7 +215,17 @@ func (s *Service) directUpstreamChoice(ctx context.Context, w http.ResponseWrite
 	if selector == nil {
 		return none, false, nil
 	}
+	mode := s.authClientMode(ctx, endpoint.OrganizationID)
+	if mode == feature.AuthClientResolverEnforced {
+		choice, handled, err := s.enforceAuthClient(ctx, w, authentication, selector)
+		if handled || err != nil {
+			return choice, true, err
+		}
+	}
 	choice, err := selector.forServer(ctx, endpoint.McpServerID.UUID)
+	if mode == feature.AuthClientResolverShadow {
+		s.shadowAuthClient(ctx, selector, endpoint.McpServerID.UUID, choice, err)
+	}
 	switch {
 	case errors.Is(err, errUpstreamSelectionMissing), errors.Is(err, errUpstreamSelectionUnusable):
 		s.recordRemoteSessionRejection(ctx, authentication, "mcp issuer gate rejected: "+err.Error(), issuerGateReasonUpstreamSelectionUnavailable)
