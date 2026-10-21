@@ -303,6 +303,7 @@ The seeded directory is marked active. On the SSO tab, Infra grants both Collabo
 - Check Team, Roles and Check Access include both effective roles. Hovering a mapped role on Team names the group that grants it, and says "Assigned directly, and also granted by ..." when the member also holds it directly.
 - Legacy Platform is a directory group the directory has deleted. It still has an Analyst mapping, so it is listed after the unmapped groups with "Deleted from the directory", a red warning mark and a disabled add control; the Analyst chip can still be removed. The panel's summary says "1 deleted group still has roles mapped".
 - On Roles, a role held partly through directory mappings shows "N direct · M via directory" beside its faces.
+- Above the table, "3 directory changes to review" lists Field Engineering as a new group (2 directory people, proposing a new role of the same name), Platform Engineering as a new `department_name` value, and Legacy Platform as a deleted group still mapped to Analyst. Map the new group, stop asking about `department_name`, and keep Legacy Platform's roles; each decision removes its row and the list disappears once all three are decided. A reseed brings them back.
 
 ### [~] Plugins: initial role audiences
 

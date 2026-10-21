@@ -296,6 +296,8 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 		// One mapping's group was deleted from the directory, so the mappings
 		// page has a missing source to show.
 		{byOrg(s.q.PostflightIDDeletedGroupMappings), 1, "demo seed postflight: expected 1 mapping on a deleted directory group, found %d"},
+		// One directory change of each kind waits on the SSO tab's review list.
+		{byOrg(s.q.PostflightIDPendingDirectoryReviewItems), 3, "demo seed postflight: expected 3 pending directory review items, found %d"},
 		// One group grants a set of roles, so the mapping page shows two role
 		// chips on a single source.
 		{byOrg(s.q.PostflightIDInfraGroupMappedRoles), 2, "demo seed postflight: expected 2 roles for Infra, found %d"},

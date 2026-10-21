@@ -2079,6 +2079,68 @@ FROM sign_in_revocation_deliveries
 WHERE organization_id = @organization_id
 ORDER BY created_at, id;
 
+-- name: SetDirectoryGroupWorkOSDeletedFixture :exec
+-- Deletes a directory group as a WorkOS deletion does, setting both markers,
+-- or with deleted false brings it back by clearing them.
+UPDATE directory_groups
+SET workos_deleted_at = CASE WHEN @deleted::boolean THEN clock_timestamp() END,
+    deleted_at = CASE WHEN @deleted::boolean THEN clock_timestamp() END
+WHERE id = @id;
+
+-- name: SetDirectoryUserAttributesFixture :exec
+UPDATE directory_users
+SET attributes = @attributes::jsonb
+WHERE workos_directory_user_id = @workos_directory_user_id;
+
+-- name: SetDirectoryUserWorkOSDeletedFixture :exec
+-- Deletes a directory user as a WorkOS deletion does, setting both markers.
+UPDATE directory_users
+SET workos_deleted_at = clock_timestamp(),
+    deleted_at = clock_timestamp()
+WHERE workos_directory_user_id = @workos_directory_user_id;
+
+-- name: SoftDeleteDirectoryGroupRoleMappingsFixture :exec
+UPDATE directory_role_mappings
+SET deleted_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND directory_group_id = @directory_group_id
+  AND deleted IS FALSE;
+
+-- name: ListDirectoryReviewItemsFixture :many
+-- Every review item of an organization, oldest first, with its source as a
+-- group's WorkOS ID or key=value.
+SELECT
+  i.kind,
+  COALESCE(dg.workos_directory_group_id, i.attribute_key || '=' || i.attribute_value)::text AS source,
+  i.occurrence,
+  i.state
+FROM directory_review_items AS i
+LEFT JOIN directory_groups AS dg ON dg.id = i.directory_group_id
+WHERE i.organization_id = @organization_id
+ORDER BY i.created_at, i.id;
+
+-- name: SetPendingDirectoryReviewItemsStateFixture :exec
+-- Resolves an organization's pending items of one kind, as an admin would.
+UPDATE directory_review_items
+SET state = @state, resolved_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND kind = @kind
+  AND state = 'pending';
+
+-- name: GetDirectoryReviewItemStateFixture :one
+SELECT state FROM directory_review_items WHERE id = @id;
+
+-- name: ListDirectoryReviewOrgStateIDsFixture :many
+SELECT organization_id FROM directory_review_org_states ORDER BY organization_id;
+
+-- name: DirectoryReviewAttributeOptedOutFixture :one
+SELECT EXISTS (
+  SELECT 1 FROM directory_review_attribute_opt_outs
+  WHERE organization_id = @organization_id
+    AND attribute_key = @attribute_key
+    AND deleted IS FALSE
+);
+
 -- name: InsertMCPServerRemoteSessionClientFixture :exec
 -- Test-only fixture: inserts an MCP server upstream client association with
 -- no application checks, so a test can prove the schema itself refuses a

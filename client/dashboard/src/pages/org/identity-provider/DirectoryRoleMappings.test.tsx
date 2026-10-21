@@ -76,6 +76,10 @@ vi.mock("@gram/client/react-query/syncDirectoryGroups.js", () => ({
 vi.mock("./invalidateDirectoryMappingAccess", () => ({
   invalidateDirectoryMappingAccess: vi.fn(),
 }));
+// The review panel has its own tests; with nothing to review it renders nothing.
+vi.mock("./DirectoryReviewPanel", () => ({
+  DirectoryReviewPanel: () => null,
+}));
 vi.mock("@/components/ui/Combobox", () => ({
   Combobox: ({
     items,

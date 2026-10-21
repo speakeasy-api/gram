@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	directoryrepo "github.com/speakeasy-api/gram/server/internal/directory/repo"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -80,32 +81,11 @@ func (s *Service) PreviewDirectoryRoleSetup(ctx context.Context, _ *gen.PreviewD
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list unmappable directory attribute keys").LogError(ctx, s.logger)
 	}
-	mappingRows, err := repo.New(s.db).ListDirectoryRoleMappings(ctx, orgID)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list directory role mappings").LogError(ctx, s.logger)
-	}
-	roles, err := s.roleMgr.ListRoles(ctx, orgID)
+	index, err := s.directorySourceRoleIndex(ctx, orgID)
 	if err != nil {
 		return nil, err
 	}
-
-	existing := make(map[directorySourceKey][]string, len(mappingRows))
-	for _, row := range mappingRows {
-		var key directorySourceKey
-		if row.DirectoryGroupID.Valid {
-			key.groupID = row.DirectoryGroupID.UUID
-		} else {
-			key.key = row.AttributeKey.String
-			key.value = row.AttributeValue.String
-		}
-		existing[key] = append(existing[key], row.RoleUrn)
-	}
-	roleByURN := make(map[string]*gen.Role, len(roles.Roles))
-	roleBySlug := make(map[string]*gen.Role, len(roles.Roles))
-	for _, role := range roles.Roles {
-		roleByURN[role.PrincipalUrn] = role
-		roleBySlug[role.Slug] = role
-	}
+	existing, roleByURN, roleBySlug := index.existing, index.roleByURN, index.roleBySlug
 
 	items := make([]*gen.DirectoryRoleSetupPreviewItem, 0, len(groupRows)+len(attributeRows))
 	for _, row := range groupRows {
@@ -155,6 +135,45 @@ func (s *Service) PreviewDirectoryRoleSetup(ctx context.Context, _ *gen.PreviewD
 		HiddenAttributeKeys:      hidden,
 		MaxValuesPerAttributeKey: maxDirectoryAttributeOptionsPerKey,
 	}, nil
+}
+
+// directorySourceRoles indexes an organization's live mappings by source and
+// its roles by URN and slug, for building proposals.
+type directorySourceRoles struct {
+	existing   map[directorySourceKey][]string
+	roleByURN  map[string]*gen.Role
+	roleBySlug map[string]*gen.Role
+}
+
+func (s *Service) directorySourceRoleIndex(ctx context.Context, orgID string) (directorySourceRoles, error) {
+	var index directorySourceRoles
+	mappingRows, err := repo.New(s.db).ListDirectoryRoleMappings(ctx, orgID)
+	if err != nil {
+		return index, oops.E(oops.CodeUnexpected, err, "list directory role mappings").LogError(ctx, s.logger)
+	}
+	roles, err := s.roleMgr.ListRoles(ctx, orgID)
+	if err != nil {
+		return index, err
+	}
+
+	index.existing = make(map[directorySourceKey][]string, len(mappingRows))
+	for _, row := range mappingRows {
+		var key directorySourceKey
+		if row.DirectoryGroupID.Valid {
+			key.groupID = row.DirectoryGroupID.UUID
+		} else {
+			key.key = row.AttributeKey.String
+			key.value = row.AttributeValue.String
+		}
+		index.existing[key] = append(index.existing[key], row.RoleUrn)
+	}
+	index.roleByURN = make(map[string]*gen.Role, len(roles.Roles))
+	index.roleBySlug = make(map[string]*gen.Role, len(roles.Roles))
+	for _, role := range roles.Roles {
+		index.roleByURN[role.PrincipalUrn] = role
+		index.roleBySlug[role.Slug] = role
+	}
+	return index, nil
 }
 
 // proposeDirectorySourceRoles returns a mapped source's current roles, or for
@@ -303,19 +322,56 @@ func (s *Service) ApplyDirectoryRoleSetup(ctx context.Context, payload *gen.Appl
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
-	// One fixed order, so two overlapping batches cannot deadlock.
-	sortedKeys := slices.Clone(lockKeys)
-	slices.Sort(sortedKeys)
-	queries := repo.New(dbtx)
-	for _, lockKey := range sortedKeys {
-		if err := queries.LockDirectoryRoleMappingSource(ctx, lockKey); err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "lock directory role mapping source").LogError(ctx, s.logger)
-		}
+	if err := s.lockDirectoryRoleSources(ctx, dbtx, lockKeys); err != nil {
+		return nil, err
 	}
 	if err := s.requireLiveOrgAdminWithDBTX(ctx, ac, dbtx); err != nil {
 		return nil, err
 	}
 
+	applied, err := s.applyDirectoryRoleSetupTx(ctx, dbtx, ac, workosOrgID, items, payload.GrantSet)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := dbtx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "commit directory role setup").LogError(ctx, s.logger)
+	}
+
+	return &gen.ApplyDirectoryRoleSetupResult{
+		CreatedRoles: applied.createdRoles,
+		Mappings:     applied.mappings,
+		SideEffects:  s.reconcileDirectorySetupRoles(ctx, applied),
+	}, nil
+}
+
+// lockDirectoryRoleSources takes the sources' advisory locks in one fixed
+// order, so two overlapping batches cannot deadlock.
+func (s *Service) lockDirectoryRoleSources(ctx context.Context, dbtx pgx.Tx, lockKeys []string) error {
+	sortedKeys := slices.Clone(lockKeys)
+	slices.Sort(sortedKeys)
+	queries := repo.New(dbtx)
+	for _, lockKey := range sortedKeys {
+		if err := queries.LockDirectoryRoleMappingSource(ctx, lockKey); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "lock directory role mapping source").LogError(ctx, s.logger)
+		}
+	}
+	return nil
+}
+
+// directoryRoleSetupApplied is what applyDirectoryRoleSetupTx wrote.
+type directoryRoleSetupApplied struct {
+	createdRoles    []*gen.Role
+	mappings        []*gen.DirectoryRoleMapping
+	reconciliations []RoleReconciliation
+}
+
+// applyDirectoryRoleSetupTx checks each item's version, creates the requested
+// roles and replaces each source's role set on dbtx. The caller holds every
+// item's source lock, has checked the actor is a live organization admin, and
+// commits, then calls reconcileDirectorySetupRoles.
+func (s *Service) applyDirectoryRoleSetupTx(ctx context.Context, dbtx pgx.Tx, ac *contextvalues.AuthContext, workosOrgID string, items []directoryRoleSetupItem, grantSet []*gen.RoleGrant) (*directoryRoleSetupApplied, error) {
+	orgID := ac.ActiveOrganizationID
 	for _, planned := range items {
 		version, err := s.directorySourceVersionTx(ctx, dbtx, orgID, planned.groupID, planned.item.Source.AttributeKey, planned.item.Source.AttributeValue)
 		if err != nil {
@@ -326,7 +382,6 @@ func (s *Service) ApplyDirectoryRoleSetup(ctx context.Context, payload *gen.Appl
 		}
 	}
 
-	grantSet := payload.GrantSet
 	if grantSet == nil {
 		grantSet = []*gen.RoleGrant{}
 	}
@@ -384,25 +439,21 @@ func (s *Service) ApplyDirectoryRoleSetup(ctx context.Context, payload *gen.Appl
 		mappings = append(mappings, written...)
 	}
 
-	if err := dbtx.Commit(ctx); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "commit directory role setup").LogError(ctx, s.logger)
-	}
+	return &directoryRoleSetupApplied{createdRoles: createdRoles, mappings: mappings, reconciliations: reconciliations}, nil
+}
 
-	// WorkOS learns about new roles after commit, best effort, as for any
-	// role creation. Creating roles sets up no plugin distribution.
-	sideEffects := make([]*gen.DirectoryRoleSetupSideEffect, 0, len(createdRoles))
-	for i, reconciliation := range reconciliations {
+// reconcileDirectorySetupRoles tells WorkOS about new roles after commit, best
+// effort, as for any role creation. Creating roles sets up no plugin
+// distribution.
+func (s *Service) reconcileDirectorySetupRoles(ctx context.Context, applied *directoryRoleSetupApplied) []*gen.DirectoryRoleSetupSideEffect {
+	sideEffects := make([]*gen.DirectoryRoleSetupSideEffect, 0, len(applied.createdRoles))
+	for i, reconciliation := range applied.reconciliations {
 		s.roleMgr.ReconcileRole(ctx, reconciliation)
 		sideEffects = append(sideEffects, &gen.DirectoryRoleSetupSideEffect{
-			Kind: "workos_role_sync", RoleID: createdRoles[i].ID, RequestStatus: "requested",
+			Kind: "workos_role_sync", RoleID: applied.createdRoles[i].ID, RequestStatus: "requested",
 		})
 	}
-
-	return &gen.ApplyDirectoryRoleSetupResult{
-		CreatedRoles: createdRoles,
-		Mappings:     mappings,
-		SideEffects:  sideEffects,
-	}, nil
+	return sideEffects
 }
 
 // directorySourceVersionTx recomputes a source's preview version on dbtx.

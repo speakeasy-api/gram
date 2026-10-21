@@ -89,6 +89,7 @@ import {
 
 import { invalidateDirectoryMappingAccess } from "./invalidateDirectoryMappingAccess";
 import { visibleChipCount } from "./chipOverflow";
+import { DirectoryReviewPanel } from "./DirectoryReviewPanel";
 import { DirectoryRoleSetupDialog } from "./DirectoryRoleSetupDialog";
 
 const CREATE_ROLE = "__create_role";
@@ -379,6 +380,10 @@ export function DirectoryRoleMappings({
           onClose={() => setSettingUp(false)}
         />
       )}
+      <DirectoryReviewPanel
+        roles={roles}
+        rolesLoaded={rolesData !== undefined}
+      />
 
       <Collapsible>
         {isPending && <SkeletonTable />}

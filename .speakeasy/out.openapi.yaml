@@ -1577,6 +1577,96 @@ paths:
       x-speakeasy-name-override: listChallenges
       x-speakeasy-react-hook:
         name: Challenges
+  /rpc/access.listDirectoryReviewItems:
+    get:
+      description: 'List the directory changes waiting for an admin decision, oldest first: a directory group first seen after review started, with no mapping; a new value of an attribute key that already has mappings; and a mapped group or attribute value that has gone from the directory. Each item carries the same proposal and version as previewDirectoryRoleSetup, for resolveDirectoryReviewItem. Nothing is written.'
+      operationId: listDirectoryReviewItems
+      parameters:
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListDirectoryReviewItemsResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+        - session_header_Gram-Session: []
+        - {}
+      summary: listDirectoryReviewItems access
+      tags:
+        - access
+      x-speakeasy-name-override: listDirectoryReviewItems
+      x-speakeasy-react-hook:
+        name: DirectoryReviewItems
   /rpc/access.listDirectoryRoleMappings:
     get:
       description: List the organization's directory groups and attribute values, and the roles mapped to them.
@@ -2953,6 +3043,103 @@ paths:
       x-speakeasy-name-override: resolveChallenge
       x-speakeasy-react-hook:
         name: ResolveChallenge
+  /rpc/access.resolveDirectoryReviewItem:
+    post:
+      description: Decide one pending directory review item. approve on a new group or attribute value maps it to the given role set, creating new roles as applyDirectoryRoleSetup does; approve on a missing source removes its mappings. dismiss leaves a new source unmapped, or keeps a missing source's mappings. opt_out_key dismisses a new attribute value and stops raising new values of its key. approve checks version as applyDirectoryRoleSetup does and returns conflict if the source changed. An item that is no longer pending returns conflict.
+      operationId: resolveDirectoryReviewItem
+      parameters:
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResolveDirectoryReviewItemForm'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResolveDirectoryReviewItemResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+        - session_header_Gram-Session: []
+        - {}
+      summary: resolveDirectoryReviewItem access
+      tags:
+        - access
+      x-speakeasy-name-override: resolveDirectoryReviewItem
+      x-speakeasy-react-hook:
+        name: ResolveDirectoryReviewItem
+        type: mutation
   /rpc/access.resolveShadowMCPInventoryRequest:
     post:
       description: Review the latest pending Shadow MCP URL request and resolve all pending requests for that URL.
@@ -88053,6 +88240,36 @@ components:
         - id
         - name
         - member_count
+    DirectoryReviewItem:
+      type: object
+      properties:
+        created_at:
+          type: string
+          description: When the item was raised.
+          format: date-time
+        id:
+          type: string
+          description: The review item.
+          format: uuid
+        item:
+          $ref: '#/components/schemas/DirectoryRoleSetupPreviewItem'
+        kind:
+          type: string
+          description: 'new_group: an unmapped group first seen after review started. new_attribute_value: a new value of an attribute key that has mappings. source_missing: a mapped group or attribute value that has gone.'
+          enum:
+            - new_group
+            - new_attribute_value
+            - source_missing
+        occurrence:
+          type: integer
+          description: 1 the first time a source is raised for this kind, then one more each time it recurs.
+          format: int32
+      required:
+        - id
+        - kind
+        - occurrence
+        - created_at
+        - item
     DirectoryRoleMapping:
       type: object
       properties:
@@ -93931,6 +94148,16 @@ components:
         - organization_id
         - provider
         - schedules
+    ListDirectoryReviewItemsResult:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/DirectoryReviewItem'
+          description: Pending items, oldest first.
+      required:
+        - items
     ListDirectoryRoleMappingsResult:
       type: object
       properties:
@@ -101910,6 +102137,65 @@ components:
           description: The created resolution records.
       required:
         - resolutions
+    ResolveDirectoryReviewItemForm:
+      type: object
+      properties:
+        decision:
+          type: string
+          description: approve, dismiss, or opt_out_key (new attribute values only).
+          enum:
+            - approve
+            - dismiss
+            - opt_out_key
+        grant_set:
+          type: array
+          items:
+            $ref: '#/components/schemas/RoleGrant'
+          description: Optional grants given to every role the approval creates. Existing roles are never changed.
+        id:
+          type: string
+          description: The review item.
+          format: uuid
+        roles:
+          type: array
+          items:
+            $ref: '#/components/schemas/ApplyDirectoryRoleSetupRole'
+          description: The role set to map a new source to. Required and non-empty to approve a new source; must be empty or omitted otherwise.
+        version:
+          type: string
+          description: The item version from listDirectoryReviewItems. Required to approve.
+      required:
+        - id
+        - decision
+    ResolveDirectoryReviewItemResult:
+      type: object
+      properties:
+        created_roles:
+          type: array
+          items:
+            $ref: '#/components/schemas/Role'
+          description: Roles the approval created.
+        mappings:
+          type: array
+          items:
+            $ref: '#/components/schemas/DirectoryRoleMapping'
+          description: The mappings an approval of a new source wrote. Empty for every other decision.
+        side_effects:
+          type: array
+          items:
+            $ref: '#/components/schemas/DirectoryRoleSetupSideEffect'
+          description: Work requested after commit.
+        state:
+          type: string
+          description: The item's state after the decision.
+          enum:
+            - approved
+            - dismissed
+      required:
+        - state
+        - created_roles
+        - mappings
+        - side_effects
     ResolveShadowMCPInventoryRequestForm:
       type: object
       properties:

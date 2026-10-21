@@ -19,6 +19,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/database"
 	directoryrepo "github.com/speakeasy-api/gram/server/internal/directory/repo"
+	"github.com/speakeasy-api/gram/server/internal/directoryreview"
+	directoryreviewrepo "github.com/speakeasy-api/gram/server/internal/directoryreview/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
@@ -54,7 +56,9 @@ type workosDirectoryGroupMembershipEventPayload struct {
 	Group workosDirectoryGroupEventPayload `json:"group"`
 }
 
-// handleDirectoryUserEvent applies a dsync.user.* event.
+// handleDirectoryUserEvent applies a dsync.user.* event, then raises and
+// settles the directory review decisions the change causes, in the same
+// transaction.
 func handleDirectoryUserEvent(ctx context.Context, logger *slog.Logger, dbtx pgx.Tx, event events.Event) (postCommitEffects, error) {
 	var none postCommitEffects
 
@@ -65,6 +69,88 @@ func handleDirectoryUserEvent(ctx context.Context, logger *slog.Logger, dbtx pgx
 	if payload.ID == "" {
 		return none, oops.Permanent(oops.E(oops.CodeBadRequest, nil, "invalid directory user event payload missing ID"))
 	}
+
+	// Review is scoped to the organization the event names. An event without
+	// one, or for an organization we don't know, is left to the hourly sweep.
+	organizationID, err := directoryReviewOrganizationID(ctx, dbtx, payload.OrganizationID)
+	if err != nil {
+		return none, err
+	}
+	var before directoryreview.UserAttributes
+	if organizationID != "" {
+		if before, err = directoryUserReviewSnapshot(ctx, dbtx, organizationID, payload.ID); err != nil {
+			return none, err
+		}
+	}
+	effects, err := applyDirectoryUserEvent(ctx, logger, dbtx, event, payload)
+	if err != nil {
+		return none, err
+	}
+	if organizationID == "" {
+		return effects, nil
+	}
+	after, err := directoryUserReviewSnapshot(ctx, dbtx, organizationID, payload.ID)
+	if err != nil {
+		return none, err
+	}
+	if _, err := directoryreview.ReconcileUserChange(ctx, dbtx, organizationID, payload.ID, before, after); err != nil {
+		return none, oops.E(oops.CodeUnexpected, err, "review directory user change")
+	}
+	return effects, nil
+}
+
+// directoryReviewOrganizationID resolves the organization a directory event
+// names, or "" when the event names none or an unknown one.
+func directoryReviewOrganizationID(ctx context.Context, dbtx database.DBTX, workosOrganizationID string) (string, error) {
+	if workosOrganizationID == "" {
+		return "", nil
+	}
+	org, err := organizationsrepo.New(dbtx).GetOrganizationByWorkosID(ctx, conv.ToPGText(workosOrganizationID))
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return "", nil
+	case err != nil:
+		return "", oops.E(oops.CodeUnexpected, err, "get organization for directory review")
+	}
+	return org.ID, nil
+}
+
+// directoryUserReviewSnapshot reads an organization's directory user's
+// attributes, nil when the user is missing or not live.
+func directoryUserReviewSnapshot(ctx context.Context, dbtx database.DBTX, organizationID, workosDirectoryUserID string) (directoryreview.UserAttributes, error) {
+	attributes, err := directoryreview.LoadUserAttributes(ctx, dbtx, organizationID, workosDirectoryUserID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "read directory user attributes for review")
+	}
+	return attributes, nil
+}
+
+// reviewDirectoryGroup raises and settles the directory review decisions for
+// a group an event created, changed or deleted, within the organization the
+// event names.
+func reviewDirectoryGroup(ctx context.Context, dbtx database.DBTX, workosOrganizationID, workosDirectoryGroupID string) error {
+	organizationID, err := directoryReviewOrganizationID(ctx, dbtx, workosOrganizationID)
+	if err != nil || organizationID == "" {
+		return err
+	}
+	groupID, err := directoryreviewrepo.New(dbtx).GetDirectoryGroupIDForReview(ctx, directoryreviewrepo.GetDirectoryGroupIDForReviewParams{
+		OrganizationID:         organizationID,
+		WorkosDirectoryGroupID: workosDirectoryGroupID,
+	})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return nil
+	case err != nil:
+		return oops.E(oops.CodeUnexpected, err, "get directory group for review")
+	}
+	if _, err := directoryreview.ReconcileGroup(ctx, dbtx, organizationID, groupID); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "review directory group change")
+	}
+	return nil
+}
+
+func applyDirectoryUserEvent(ctx context.Context, logger *slog.Logger, dbtx pgx.Tx, event events.Event, payload workosDirectoryUserEventPayload) (postCommitEffects, error) {
+	var none postCommitEffects
 
 	switch workos.EventKind(event.Event) {
 	case workos.EventKindDirectorySyncUserCreated, workos.EventKindDirectorySyncUserUpdated:
@@ -128,12 +214,17 @@ func handleDirectoryGroupEvent(ctx context.Context, logger *slog.Logger, dbtx da
 
 	switch workos.EventKind(event.Event) {
 	case workos.EventKindDirectorySyncGroupCreated, workos.EventKindDirectorySyncGroupUpdated:
-		return upsertDirectoryGroup(ctx, logger, dbtx, event, payload)
+		if err := upsertDirectoryGroup(ctx, logger, dbtx, event, payload); err != nil {
+			return err
+		}
 	case workos.EventKindDirectorySyncGroupDeleted:
-		return deleteDirectoryGroup(ctx, logger, dbtx, event, payload)
+		if err := deleteDirectoryGroup(ctx, logger, dbtx, event, payload); err != nil {
+			return err
+		}
 	default:
 		return nil
 	}
+	return reviewDirectoryGroup(ctx, dbtx, payload.OrganizationID, payload.ID)
 }
 
 func handleDirectoryGroupMembershipEvent(ctx context.Context, logger *slog.Logger, dbtx database.DBTX, event events.Event) error {
@@ -506,6 +597,9 @@ func createDirectoryGroupFromMembership(ctx context.Context, logger *slog.Logger
 	}
 
 	if err := upsertDirectoryGroup(ctx, logger, dbtx, event, group); err != nil {
+		return uuid.Nil, err
+	}
+	if err := reviewDirectoryGroup(ctx, dbtx, group.OrganizationID, group.ID); err != nil {
 		return uuid.Nil, err
 	}
 

@@ -97,6 +97,23 @@ type ApplyDirectoryRoleSetupRequestBody struct {
 	GrantSet []*RoleGrantRequestBody `form:"grant_set,omitempty" json:"grant_set,omitempty" xml:"grant_set,omitempty"`
 }
 
+// ResolveDirectoryReviewItemRequestBody is the type of the "access" service
+// "resolveDirectoryReviewItem" endpoint HTTP request body.
+type ResolveDirectoryReviewItemRequestBody struct {
+	// The review item.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// approve, dismiss, or opt_out_key (new attribute values only).
+	Decision *string `form:"decision,omitempty" json:"decision,omitempty" xml:"decision,omitempty"`
+	// The item version from listDirectoryReviewItems. Required to approve.
+	Version *string `form:"version,omitempty" json:"version,omitempty" xml:"version,omitempty"`
+	// The role set to map a new source to. Required and non-empty to approve a new
+	// source; must be empty or omitted otherwise.
+	Roles []*ApplyDirectoryRoleSetupRoleRequestBody `form:"roles,omitempty" json:"roles,omitempty" xml:"roles,omitempty"`
+	// Optional grants given to every role the approval creates. Existing roles are
+	// never changed.
+	GrantSet []*RoleGrantRequestBody `form:"grant_set,omitempty" json:"grant_set,omitempty" xml:"grant_set,omitempty"`
+}
+
 // UpdateMemberRolesRequestBody is the type of the "access" service
 // "updateMemberRoles" endpoint HTTP request body.
 type UpdateMemberRolesRequestBody struct {
@@ -335,6 +352,27 @@ type ApplyDirectoryRoleSetupResponseBody struct {
 	// Roles this request created.
 	CreatedRoles []*RoleResponseBody `form:"created_roles" json:"created_roles" xml:"created_roles"`
 	// The resulting mappings of every source in the request.
+	Mappings []*DirectoryRoleMappingResponseBody `form:"mappings" json:"mappings" xml:"mappings"`
+	// Work requested after commit.
+	SideEffects []*DirectoryRoleSetupSideEffectResponseBody `form:"side_effects" json:"side_effects" xml:"side_effects"`
+}
+
+// ListDirectoryReviewItemsResponseBody is the type of the "access" service
+// "listDirectoryReviewItems" endpoint HTTP response body.
+type ListDirectoryReviewItemsResponseBody struct {
+	// Pending items, oldest first.
+	Items []*DirectoryReviewItemResponseBody `form:"items" json:"items" xml:"items"`
+}
+
+// ResolveDirectoryReviewItemResponseBody is the type of the "access" service
+// "resolveDirectoryReviewItem" endpoint HTTP response body.
+type ResolveDirectoryReviewItemResponseBody struct {
+	// The item's state after the decision.
+	State string `form:"state" json:"state" xml:"state"`
+	// Roles the approval created.
+	CreatedRoles []*RoleResponseBody `form:"created_roles" json:"created_roles" xml:"created_roles"`
+	// The mappings an approval of a new source wrote. Empty for every other
+	// decision.
 	Mappings []*DirectoryRoleMappingResponseBody `form:"mappings" json:"mappings" xml:"mappings"`
 	// Work requested after commit.
 	SideEffects []*DirectoryRoleSetupSideEffectResponseBody `form:"side_effects" json:"side_effects" xml:"side_effects"`
@@ -2812,6 +2850,386 @@ type ApplyDirectoryRoleSetupUnexpectedResponseBody struct {
 // service "applyDirectoryRoleSetup" endpoint HTTP response body for the
 // "gateway_error" error.
 type ApplyDirectoryRoleSetupGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListDirectoryReviewItemsUnauthorizedResponseBody is the type of the "access"
+// service "listDirectoryReviewItems" endpoint HTTP response body for the
+// "unauthorized" error.
+type ListDirectoryReviewItemsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListDirectoryReviewItemsForbiddenResponseBody is the type of the "access"
+// service "listDirectoryReviewItems" endpoint HTTP response body for the
+// "forbidden" error.
+type ListDirectoryReviewItemsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListDirectoryReviewItemsBadRequestResponseBody is the type of the "access"
+// service "listDirectoryReviewItems" endpoint HTTP response body for the
+// "bad_request" error.
+type ListDirectoryReviewItemsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListDirectoryReviewItemsNotFoundResponseBody is the type of the "access"
+// service "listDirectoryReviewItems" endpoint HTTP response body for the
+// "not_found" error.
+type ListDirectoryReviewItemsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListDirectoryReviewItemsConflictResponseBody is the type of the "access"
+// service "listDirectoryReviewItems" endpoint HTTP response body for the
+// "conflict" error.
+type ListDirectoryReviewItemsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListDirectoryReviewItemsUnsupportedMediaResponseBody is the type of the
+// "access" service "listDirectoryReviewItems" endpoint HTTP response body for
+// the "unsupported_media" error.
+type ListDirectoryReviewItemsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListDirectoryReviewItemsInvalidResponseBody is the type of the "access"
+// service "listDirectoryReviewItems" endpoint HTTP response body for the
+// "invalid" error.
+type ListDirectoryReviewItemsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListDirectoryReviewItemsInvariantViolationResponseBody is the type of the
+// "access" service "listDirectoryReviewItems" endpoint HTTP response body for
+// the "invariant_violation" error.
+type ListDirectoryReviewItemsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListDirectoryReviewItemsUnexpectedResponseBody is the type of the "access"
+// service "listDirectoryReviewItems" endpoint HTTP response body for the
+// "unexpected" error.
+type ListDirectoryReviewItemsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListDirectoryReviewItemsGatewayErrorResponseBody is the type of the "access"
+// service "listDirectoryReviewItems" endpoint HTTP response body for the
+// "gateway_error" error.
+type ListDirectoryReviewItemsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ResolveDirectoryReviewItemUnauthorizedResponseBody is the type of the
+// "access" service "resolveDirectoryReviewItem" endpoint HTTP response body
+// for the "unauthorized" error.
+type ResolveDirectoryReviewItemUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ResolveDirectoryReviewItemForbiddenResponseBody is the type of the "access"
+// service "resolveDirectoryReviewItem" endpoint HTTP response body for the
+// "forbidden" error.
+type ResolveDirectoryReviewItemForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ResolveDirectoryReviewItemBadRequestResponseBody is the type of the "access"
+// service "resolveDirectoryReviewItem" endpoint HTTP response body for the
+// "bad_request" error.
+type ResolveDirectoryReviewItemBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ResolveDirectoryReviewItemNotFoundResponseBody is the type of the "access"
+// service "resolveDirectoryReviewItem" endpoint HTTP response body for the
+// "not_found" error.
+type ResolveDirectoryReviewItemNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ResolveDirectoryReviewItemConflictResponseBody is the type of the "access"
+// service "resolveDirectoryReviewItem" endpoint HTTP response body for the
+// "conflict" error.
+type ResolveDirectoryReviewItemConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ResolveDirectoryReviewItemUnsupportedMediaResponseBody is the type of the
+// "access" service "resolveDirectoryReviewItem" endpoint HTTP response body
+// for the "unsupported_media" error.
+type ResolveDirectoryReviewItemUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ResolveDirectoryReviewItemInvalidResponseBody is the type of the "access"
+// service "resolveDirectoryReviewItem" endpoint HTTP response body for the
+// "invalid" error.
+type ResolveDirectoryReviewItemInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ResolveDirectoryReviewItemInvariantViolationResponseBody is the type of the
+// "access" service "resolveDirectoryReviewItem" endpoint HTTP response body
+// for the "invariant_violation" error.
+type ResolveDirectoryReviewItemInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ResolveDirectoryReviewItemUnexpectedResponseBody is the type of the "access"
+// service "resolveDirectoryReviewItem" endpoint HTTP response body for the
+// "unexpected" error.
+type ResolveDirectoryReviewItemUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ResolveDirectoryReviewItemGatewayErrorResponseBody is the type of the
+// "access" service "resolveDirectoryReviewItem" endpoint HTTP response body
+// for the "gateway_error" error.
+type ResolveDirectoryReviewItemGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -7293,6 +7711,26 @@ type DirectoryRoleSetupSideEffectResponseBody struct {
 	RequestStatus string `form:"request_status" json:"request_status" xml:"request_status"`
 }
 
+// DirectoryReviewItemResponseBody is used to define fields on response body
+// types.
+type DirectoryReviewItemResponseBody struct {
+	// The review item.
+	ID string `form:"id" json:"id" xml:"id"`
+	// new_group: an unmapped group first seen after review started.
+	// new_attribute_value: a new value of an attribute key that has mappings.
+	// source_missing: a mapped group or attribute value that has gone.
+	Kind string `form:"kind" json:"kind" xml:"kind"`
+	// 1 the first time a source is raised for this kind, then one more each time
+	// it recurs.
+	Occurrence int32 `form:"occurrence" json:"occurrence" xml:"occurrence"`
+	// When the item was raised.
+	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
+	// The source with its current roles, proposal and version. For a missing
+	// source, directory_people is 0 and proposed_roles are the roles approving
+	// would remove.
+	Item *DirectoryRoleSetupPreviewItemResponseBody `form:"item" json:"item" xml:"item"`
+}
+
 // ScopeDefinitionResponseBody is used to define fields on response body types.
 type ScopeDefinitionResponseBody struct {
 	// Unique scope identifier.
@@ -8175,6 +8613,72 @@ func NewPreviewDirectoryRoleSetupResponseBody(res *access.DirectoryRoleSetupPrev
 // the result of the "applyDirectoryRoleSetup" endpoint of the "access" service.
 func NewApplyDirectoryRoleSetupResponseBody(res *access.ApplyDirectoryRoleSetupResult) *ApplyDirectoryRoleSetupResponseBody {
 	body := &ApplyDirectoryRoleSetupResponseBody{}
+	if res.CreatedRoles != nil {
+		body.CreatedRoles = make([]*RoleResponseBody, len(res.CreatedRoles))
+		for i, val := range res.CreatedRoles {
+			if val == nil {
+				body.CreatedRoles[i] = nil
+				continue
+			}
+			body.CreatedRoles[i] = marshalAccessRoleToRoleResponseBody(val)
+		}
+	} else {
+		body.CreatedRoles = []*RoleResponseBody{}
+	}
+	if res.Mappings != nil {
+		body.Mappings = make([]*DirectoryRoleMappingResponseBody, len(res.Mappings))
+		for i, val := range res.Mappings {
+			if val == nil {
+				body.Mappings[i] = nil
+				continue
+			}
+			body.Mappings[i] = marshalAccessDirectoryRoleMappingToDirectoryRoleMappingResponseBody(val)
+		}
+	} else {
+		body.Mappings = []*DirectoryRoleMappingResponseBody{}
+	}
+	if res.SideEffects != nil {
+		body.SideEffects = make([]*DirectoryRoleSetupSideEffectResponseBody, len(res.SideEffects))
+		for i, val := range res.SideEffects {
+			if val == nil {
+				body.SideEffects[i] = nil
+				continue
+			}
+			body.SideEffects[i] = marshalAccessDirectoryRoleSetupSideEffectToDirectoryRoleSetupSideEffectResponseBody(val)
+		}
+	} else {
+		body.SideEffects = []*DirectoryRoleSetupSideEffectResponseBody{}
+	}
+	return body
+}
+
+// NewListDirectoryReviewItemsResponseBody builds the HTTP response body from
+// the result of the "listDirectoryReviewItems" endpoint of the "access"
+// service.
+func NewListDirectoryReviewItemsResponseBody(res *access.ListDirectoryReviewItemsResult) *ListDirectoryReviewItemsResponseBody {
+	body := &ListDirectoryReviewItemsResponseBody{}
+	if res.Items != nil {
+		body.Items = make([]*DirectoryReviewItemResponseBody, len(res.Items))
+		for i, val := range res.Items {
+			if val == nil {
+				body.Items[i] = nil
+				continue
+			}
+			body.Items[i] = marshalAccessDirectoryReviewItemToDirectoryReviewItemResponseBody(val)
+		}
+	} else {
+		body.Items = []*DirectoryReviewItemResponseBody{}
+	}
+	return body
+}
+
+// NewResolveDirectoryReviewItemResponseBody builds the HTTP response body from
+// the result of the "resolveDirectoryReviewItem" endpoint of the "access"
+// service.
+func NewResolveDirectoryReviewItemResponseBody(res *access.ResolveDirectoryReviewItemResult) *ResolveDirectoryReviewItemResponseBody {
+	body := &ResolveDirectoryReviewItemResponseBody{
+		State: res.State,
+	}
 	if res.CreatedRoles != nil {
 		body.CreatedRoles = make([]*RoleResponseBody, len(res.CreatedRoles))
 		for i, val := range res.CreatedRoles {
@@ -10499,6 +11003,306 @@ func NewApplyDirectoryRoleSetupUnexpectedResponseBody(res *goa.ServiceError) *Ap
 // "access" service.
 func NewApplyDirectoryRoleSetupGatewayErrorResponseBody(res *goa.ServiceError) *ApplyDirectoryRoleSetupGatewayErrorResponseBody {
 	body := &ApplyDirectoryRoleSetupGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListDirectoryReviewItemsUnauthorizedResponseBody builds the HTTP response
+// body from the result of the "listDirectoryReviewItems" endpoint of the
+// "access" service.
+func NewListDirectoryReviewItemsUnauthorizedResponseBody(res *goa.ServiceError) *ListDirectoryReviewItemsUnauthorizedResponseBody {
+	body := &ListDirectoryReviewItemsUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListDirectoryReviewItemsForbiddenResponseBody builds the HTTP response
+// body from the result of the "listDirectoryReviewItems" endpoint of the
+// "access" service.
+func NewListDirectoryReviewItemsForbiddenResponseBody(res *goa.ServiceError) *ListDirectoryReviewItemsForbiddenResponseBody {
+	body := &ListDirectoryReviewItemsForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListDirectoryReviewItemsBadRequestResponseBody builds the HTTP response
+// body from the result of the "listDirectoryReviewItems" endpoint of the
+// "access" service.
+func NewListDirectoryReviewItemsBadRequestResponseBody(res *goa.ServiceError) *ListDirectoryReviewItemsBadRequestResponseBody {
+	body := &ListDirectoryReviewItemsBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListDirectoryReviewItemsNotFoundResponseBody builds the HTTP response
+// body from the result of the "listDirectoryReviewItems" endpoint of the
+// "access" service.
+func NewListDirectoryReviewItemsNotFoundResponseBody(res *goa.ServiceError) *ListDirectoryReviewItemsNotFoundResponseBody {
+	body := &ListDirectoryReviewItemsNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListDirectoryReviewItemsConflictResponseBody builds the HTTP response
+// body from the result of the "listDirectoryReviewItems" endpoint of the
+// "access" service.
+func NewListDirectoryReviewItemsConflictResponseBody(res *goa.ServiceError) *ListDirectoryReviewItemsConflictResponseBody {
+	body := &ListDirectoryReviewItemsConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListDirectoryReviewItemsUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "listDirectoryReviewItems" endpoint of
+// the "access" service.
+func NewListDirectoryReviewItemsUnsupportedMediaResponseBody(res *goa.ServiceError) *ListDirectoryReviewItemsUnsupportedMediaResponseBody {
+	body := &ListDirectoryReviewItemsUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListDirectoryReviewItemsInvalidResponseBody builds the HTTP response body
+// from the result of the "listDirectoryReviewItems" endpoint of the "access"
+// service.
+func NewListDirectoryReviewItemsInvalidResponseBody(res *goa.ServiceError) *ListDirectoryReviewItemsInvalidResponseBody {
+	body := &ListDirectoryReviewItemsInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListDirectoryReviewItemsInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "listDirectoryReviewItems" endpoint of
+// the "access" service.
+func NewListDirectoryReviewItemsInvariantViolationResponseBody(res *goa.ServiceError) *ListDirectoryReviewItemsInvariantViolationResponseBody {
+	body := &ListDirectoryReviewItemsInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListDirectoryReviewItemsUnexpectedResponseBody builds the HTTP response
+// body from the result of the "listDirectoryReviewItems" endpoint of the
+// "access" service.
+func NewListDirectoryReviewItemsUnexpectedResponseBody(res *goa.ServiceError) *ListDirectoryReviewItemsUnexpectedResponseBody {
+	body := &ListDirectoryReviewItemsUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListDirectoryReviewItemsGatewayErrorResponseBody builds the HTTP response
+// body from the result of the "listDirectoryReviewItems" endpoint of the
+// "access" service.
+func NewListDirectoryReviewItemsGatewayErrorResponseBody(res *goa.ServiceError) *ListDirectoryReviewItemsGatewayErrorResponseBody {
+	body := &ListDirectoryReviewItemsGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewResolveDirectoryReviewItemUnauthorizedResponseBody builds the HTTP
+// response body from the result of the "resolveDirectoryReviewItem" endpoint
+// of the "access" service.
+func NewResolveDirectoryReviewItemUnauthorizedResponseBody(res *goa.ServiceError) *ResolveDirectoryReviewItemUnauthorizedResponseBody {
+	body := &ResolveDirectoryReviewItemUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewResolveDirectoryReviewItemForbiddenResponseBody builds the HTTP response
+// body from the result of the "resolveDirectoryReviewItem" endpoint of the
+// "access" service.
+func NewResolveDirectoryReviewItemForbiddenResponseBody(res *goa.ServiceError) *ResolveDirectoryReviewItemForbiddenResponseBody {
+	body := &ResolveDirectoryReviewItemForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewResolveDirectoryReviewItemBadRequestResponseBody builds the HTTP response
+// body from the result of the "resolveDirectoryReviewItem" endpoint of the
+// "access" service.
+func NewResolveDirectoryReviewItemBadRequestResponseBody(res *goa.ServiceError) *ResolveDirectoryReviewItemBadRequestResponseBody {
+	body := &ResolveDirectoryReviewItemBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewResolveDirectoryReviewItemNotFoundResponseBody builds the HTTP response
+// body from the result of the "resolveDirectoryReviewItem" endpoint of the
+// "access" service.
+func NewResolveDirectoryReviewItemNotFoundResponseBody(res *goa.ServiceError) *ResolveDirectoryReviewItemNotFoundResponseBody {
+	body := &ResolveDirectoryReviewItemNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewResolveDirectoryReviewItemConflictResponseBody builds the HTTP response
+// body from the result of the "resolveDirectoryReviewItem" endpoint of the
+// "access" service.
+func NewResolveDirectoryReviewItemConflictResponseBody(res *goa.ServiceError) *ResolveDirectoryReviewItemConflictResponseBody {
+	body := &ResolveDirectoryReviewItemConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewResolveDirectoryReviewItemUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "resolveDirectoryReviewItem" endpoint
+// of the "access" service.
+func NewResolveDirectoryReviewItemUnsupportedMediaResponseBody(res *goa.ServiceError) *ResolveDirectoryReviewItemUnsupportedMediaResponseBody {
+	body := &ResolveDirectoryReviewItemUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewResolveDirectoryReviewItemInvalidResponseBody builds the HTTP response
+// body from the result of the "resolveDirectoryReviewItem" endpoint of the
+// "access" service.
+func NewResolveDirectoryReviewItemInvalidResponseBody(res *goa.ServiceError) *ResolveDirectoryReviewItemInvalidResponseBody {
+	body := &ResolveDirectoryReviewItemInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewResolveDirectoryReviewItemInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "resolveDirectoryReviewItem" endpoint
+// of the "access" service.
+func NewResolveDirectoryReviewItemInvariantViolationResponseBody(res *goa.ServiceError) *ResolveDirectoryReviewItemInvariantViolationResponseBody {
+	body := &ResolveDirectoryReviewItemInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewResolveDirectoryReviewItemUnexpectedResponseBody builds the HTTP response
+// body from the result of the "resolveDirectoryReviewItem" endpoint of the
+// "access" service.
+func NewResolveDirectoryReviewItemUnexpectedResponseBody(res *goa.ServiceError) *ResolveDirectoryReviewItemUnexpectedResponseBody {
+	body := &ResolveDirectoryReviewItemUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewResolveDirectoryReviewItemGatewayErrorResponseBody builds the HTTP
+// response body from the result of the "resolveDirectoryReviewItem" endpoint
+// of the "access" service.
+func NewResolveDirectoryReviewItemGatewayErrorResponseBody(res *goa.ServiceError) *ResolveDirectoryReviewItemGatewayErrorResponseBody {
+	body := &ResolveDirectoryReviewItemGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -14084,6 +14888,50 @@ func NewApplyDirectoryRoleSetupPayload(body *ApplyDirectoryRoleSetupRequestBody,
 	return v
 }
 
+// NewListDirectoryReviewItemsPayload builds a access service
+// listDirectoryReviewItems endpoint payload.
+func NewListDirectoryReviewItemsPayload(apikeyToken *string, sessionToken *string) *access.ListDirectoryReviewItemsPayload {
+	v := &access.ListDirectoryReviewItemsPayload{}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+
+	return v
+}
+
+// NewResolveDirectoryReviewItemPayload builds a access service
+// resolveDirectoryReviewItem endpoint payload.
+func NewResolveDirectoryReviewItemPayload(body *ResolveDirectoryReviewItemRequestBody, apikeyToken *string, sessionToken *string) *access.ResolveDirectoryReviewItemPayload {
+	v := &access.ResolveDirectoryReviewItemPayload{
+		ID:       *body.ID,
+		Decision: *body.Decision,
+		Version:  body.Version,
+	}
+	if body.Roles != nil {
+		v.Roles = make([]*access.ApplyDirectoryRoleSetupRole, len(body.Roles))
+		for i, val := range body.Roles {
+			if val == nil {
+				v.Roles[i] = nil
+				continue
+			}
+			v.Roles[i] = unmarshalApplyDirectoryRoleSetupRoleRequestBodyToAccessApplyDirectoryRoleSetupRole(val)
+		}
+	}
+	if body.GrantSet != nil {
+		v.GrantSet = make([]*access.RoleGrant, len(body.GrantSet))
+		for i, val := range body.GrantSet {
+			if val == nil {
+				v.GrantSet[i] = nil
+				continue
+			}
+			v.GrantSet[i] = unmarshalRoleGrantRequestBodyToAccessRoleGrant(val)
+		}
+	}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+
+	return v
+}
+
 // NewListScopesPayload builds a access service listScopes endpoint payload.
 func NewListScopesPayload(apikeyToken *string, sessionToken *string) *access.ListScopesPayload {
 	v := &access.ListScopesPayload{}
@@ -14517,6 +15365,40 @@ func ValidateApplyDirectoryRoleSetupRequestBody(body *ApplyDirectoryRoleSetupReq
 	for _, e := range body.Items {
 		if e != nil {
 			if err2 := ValidateApplyDirectoryRoleSetupItemRequestBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.GrantSet {
+		if e != nil {
+			if err2 := ValidateRoleGrantRequestBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateResolveDirectoryReviewItemRequestBody runs the validations defined
+// on ResolveDirectoryReviewItemRequestBody
+func ValidateResolveDirectoryReviewItemRequestBody(body *ResolveDirectoryReviewItemRequestBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Decision == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("decision", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if body.Decision != nil {
+		if !(*body.Decision == "approve" || *body.Decision == "dismiss" || *body.Decision == "opt_out_key") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.decision", *body.Decision, []any{"approve", "dismiss", "opt_out_key"}))
+		}
+	}
+	for _, e := range body.Roles {
+		if e != nil {
+			if err2 := ValidateApplyDirectoryRoleSetupRoleRequestBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}

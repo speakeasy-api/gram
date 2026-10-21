@@ -57,6 +57,22 @@ type Service interface {
 	// for new roles is requested after commit and reported as requested, not done.
 	// Creating roles sets up no plugin distribution.
 	ApplyDirectoryRoleSetup(context.Context, *ApplyDirectoryRoleSetupPayload) (res *ApplyDirectoryRoleSetupResult, err error)
+	// List the directory changes waiting for an admin decision, oldest first: a
+	// directory group first seen after review started, with no mapping; a new
+	// value of an attribute key that already has mappings; and a mapped group or
+	// attribute value that has gone from the directory. Each item carries the same
+	// proposal and version as previewDirectoryRoleSetup, for
+	// resolveDirectoryReviewItem. Nothing is written.
+	ListDirectoryReviewItems(context.Context, *ListDirectoryReviewItemsPayload) (res *ListDirectoryReviewItemsResult, err error)
+	// Decide one pending directory review item. approve on a new group or
+	// attribute value maps it to the given role set, creating new roles as
+	// applyDirectoryRoleSetup does; approve on a missing source removes its
+	// mappings. dismiss leaves a new source unmapped, or keeps a missing source's
+	// mappings. opt_out_key dismisses a new attribute value and stops raising new
+	// values of its key. approve checks version as applyDirectoryRoleSetup does
+	// and returns conflict if the source changed. An item that is no longer
+	// pending returns conflict.
+	ResolveDirectoryReviewItem(context.Context, *ResolveDirectoryReviewItemPayload) (res *ResolveDirectoryReviewItemResult, err error)
 	// List all available scopes and their resource types.
 	ListScopes(context.Context, *ListScopesPayload) (res *ListScopesResult, err error)
 	// List all team members with their role assignments.
@@ -178,7 +194,7 @@ const ServiceName = "access"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [35]string{"listRoles", "getRole", "createRole", "updateRole", "deleteRole", "listDirectoryRoleMappings", "syncDirectoryGroups", "setDirectoryRoleMapping", "setDirectoryRoleMappings", "deleteDirectoryRoleMapping", "previewDirectoryRoleSetup", "applyDirectoryRoleSetup", "listScopes", "listMembers", "listGrants", "updateMemberRoles", "listShadowMCPInventory", "getShadowMCPInventoryServer", "updateShadowMCPInventoryServerName", "listShadowMCPInventoryUsers", "listShadowMCPInventoryServersForUser", "resolveShadowMCPInventoryRequest", "listAIDetections", "listEmployeeAIDetections", "listAIDetectionUsers", "setAIToolDecision", "listResourceAudience", "setResourceAudience", "listAudienceOptions", "explainResourceAccess", "requestAccess", "listChallenges", "listChallengeBuckets", "resolveChallenge", "listIdentityAccess"}
+var MethodNames = [37]string{"listRoles", "getRole", "createRole", "updateRole", "deleteRole", "listDirectoryRoleMappings", "syncDirectoryGroups", "setDirectoryRoleMapping", "setDirectoryRoleMappings", "deleteDirectoryRoleMapping", "previewDirectoryRoleSetup", "applyDirectoryRoleSetup", "listDirectoryReviewItems", "resolveDirectoryReviewItem", "listScopes", "listMembers", "listGrants", "updateMemberRoles", "listShadowMCPInventory", "getShadowMCPInventoryServer", "updateShadowMCPInventoryServerName", "listShadowMCPInventoryUsers", "listShadowMCPInventoryServersForUser", "resolveShadowMCPInventoryRequest", "listAIDetections", "listEmployeeAIDetections", "listAIDetectionUsers", "setAIToolDecision", "listResourceAudience", "setResourceAudience", "listAudienceOptions", "explainResourceAccess", "requestAccess", "listChallenges", "listChallengeBuckets", "resolveChallenge", "listIdentityAccess"}
 
 // One AI detection target aggregated across an organization's device-agent
 // scan reports.
@@ -545,6 +561,24 @@ type DirectoryGroupOption struct {
 	MemberCount int64
 }
 
+type DirectoryReviewItem struct {
+	// The review item.
+	ID string
+	// new_group: an unmapped group first seen after review started.
+	// new_attribute_value: a new value of an attribute key that has mappings.
+	// source_missing: a mapped group or attribute value that has gone.
+	Kind string
+	// 1 the first time a source is raised for this kind, then one more each time
+	// it recurs.
+	Occurrence int32
+	// When the item was raised.
+	CreatedAt string
+	// The source with its current roles, proposal and version. For a missing
+	// source, directory_people is 0 and proposed_roles are the roles approving
+	// would remove.
+	Item *DirectoryRoleSetupPreviewItem
+}
+
 // DirectoryRoleMapping is the result type of the access service
 // setDirectoryRoleMapping method.
 type DirectoryRoleMapping struct {
@@ -863,6 +897,20 @@ type ListChallengesResult struct {
 	Total int
 }
 
+// ListDirectoryReviewItemsPayload is the payload type of the access service
+// listDirectoryReviewItems method.
+type ListDirectoryReviewItemsPayload struct {
+	ApikeyToken  *string
+	SessionToken *string
+}
+
+// ListDirectoryReviewItemsResult is the result type of the access service
+// listDirectoryReviewItems method.
+type ListDirectoryReviewItemsResult struct {
+	// Pending items, oldest first.
+	Items []*DirectoryReviewItem
+}
+
 // ListDirectoryRoleMappingsPayload is the payload type of the access service
 // listDirectoryRoleMappings method.
 type ListDirectoryRoleMappingsPayload struct {
@@ -1101,6 +1149,39 @@ type ResolveChallengePayload struct {
 type ResolveChallengesResult struct {
 	// The created resolution records.
 	Resolutions []*ChallengeResolution
+}
+
+// ResolveDirectoryReviewItemPayload is the payload type of the access service
+// resolveDirectoryReviewItem method.
+type ResolveDirectoryReviewItemPayload struct {
+	ApikeyToken  *string
+	SessionToken *string
+	// The review item.
+	ID string
+	// approve, dismiss, or opt_out_key (new attribute values only).
+	Decision string
+	// The item version from listDirectoryReviewItems. Required to approve.
+	Version *string
+	// The role set to map a new source to. Required and non-empty to approve a new
+	// source; must be empty or omitted otherwise.
+	Roles []*ApplyDirectoryRoleSetupRole
+	// Optional grants given to every role the approval creates. Existing roles are
+	// never changed.
+	GrantSet []*RoleGrant
+}
+
+// ResolveDirectoryReviewItemResult is the result type of the access service
+// resolveDirectoryReviewItem method.
+type ResolveDirectoryReviewItemResult struct {
+	// The item's state after the decision.
+	State string
+	// Roles the approval created.
+	CreatedRoles []*Role
+	// The mappings an approval of a new source wrote. Empty for every other
+	// decision.
+	Mappings []*DirectoryRoleMapping
+	// Work requested after commit.
+	SideEffects []*DirectoryRoleSetupSideEffect
 }
 
 // ResolveShadowMCPInventoryRequestPayload is the payload type of the access

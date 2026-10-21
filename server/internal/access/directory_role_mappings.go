@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgtype"
 	"go.opentelemetry.io/otel/trace"
 
 	gen "github.com/speakeasy-api/gram/server/gen/access"
@@ -21,6 +22,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/directory"
 	directoryrepo "github.com/speakeasy-api/gram/server/internal/directory/repo"
+	"github.com/speakeasy-api/gram/server/internal/directoryreview"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
@@ -502,7 +504,32 @@ func (s *Service) writeDirectoryRoleSetTx(ctx context.Context, dbtx pgx.Tx, ac *
 		})
 	}
 
+	if err := s.reviewDirectorySourceTx(ctx, dbtx, ac.ActiveOrganizationID, groupID, conv.PtrToPGText(payload.AttributeKey), conv.PtrToPGText(payload.AttributeValue)); err != nil {
+		return nil, err
+	}
+
 	return mappings, nil
+}
+
+// reviewDirectorySourceTx settles the review items a mapping change resolves
+// for one source, such as a new group an admin has now mapped, in the
+// mapping change's transaction.
+func (s *Service) reviewDirectorySourceTx(ctx context.Context, dbtx pgx.Tx, organizationID string, groupID uuid.NullUUID, attributeKey, attributeValue pgtype.Text) error {
+	if groupID.Valid {
+		if _, err := directoryreview.ReconcileGroup(ctx, dbtx, organizationID, groupID.UUID); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "review directory group mappings").LogError(ctx, s.logger)
+		}
+		return nil
+	}
+	// A key's first or last mapping changes whether its other values are
+	// decisions at all, so settle the whole key, then the value itself.
+	if _, err := directoryreview.SupersedeAttributeKey(ctx, dbtx, organizationID, attributeKey.String); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "review directory attribute mappings").LogError(ctx, s.logger)
+	}
+	if _, err := directoryreview.ReconcileAttributeValue(ctx, dbtx, organizationID, attributeKey.String, attributeValue.String); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "review directory attribute mappings").LogError(ctx, s.logger)
+	}
+	return nil
 }
 
 func isLegacyDirectoryMappingConflict(err error) bool {
@@ -609,6 +636,10 @@ func (s *Service) DeleteDirectoryRoleMapping(ctx context.Context, payload *gen.D
 		RoleURN:          mapping.RoleUrn,
 	}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "log directory role mapping delete").LogError(ctx, s.logger)
+	}
+
+	if err := s.reviewDirectorySourceTx(ctx, dbtx, ac.ActiveOrganizationID, mapping.DirectoryGroupID, mapping.AttributeKey, mapping.AttributeValue); err != nil {
+		return err
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {

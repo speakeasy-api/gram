@@ -608,6 +608,18 @@ func (q *Queries) PostflightIDOrgUserSessionIssuers(ctx context.Context, orgID s
 	return count, err
 }
 
+const postflightIDPendingDirectoryReviewItems = `-- name: PostflightIDPendingDirectoryReviewItems :one
+SELECT count(*) FROM directory_review_items
+WHERE organization_id = $1::text AND state = 'pending'
+`
+
+func (q *Queries) PostflightIDPendingDirectoryReviewItems(ctx context.Context, orgID string) (int64, error) {
+	row := q.db.QueryRow(ctx, postflightIDPendingDirectoryReviewItems, orgID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const postflightIDProjectAgentSessions = `-- name: PostflightIDProjectAgentSessions :one
 SELECT count(*) FROM user_sessions
 WHERE project_id = $1::uuid AND deleted IS FALSE

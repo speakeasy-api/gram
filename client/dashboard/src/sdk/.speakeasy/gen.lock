@@ -46,6 +46,7 @@ trackedFiles:
   src/funcs/accessListAudienceOptions.ts: {}
   src/funcs/accessListChallengeBuckets.ts: {}
   src/funcs/accessListChallenges.ts: {}
+  src/funcs/accessListDirectoryReviewItems.ts: {}
   src/funcs/accessListDirectoryRoleMappings.ts: {}
   src/funcs/accessListEmployeeAIDetections.ts: {}
   src/funcs/accessListGrants.ts: {}
@@ -60,6 +61,7 @@ trackedFiles:
   src/funcs/accessPreviewDirectoryRoleSetup.ts: {}
   src/funcs/accessRequestAccess.ts: {}
   src/funcs/accessResolveChallenge.ts: {}
+  src/funcs/accessResolveDirectoryReviewItem.ts: {}
   src/funcs/accessResolveShadowMCPInventoryRequest.ts: {}
   src/funcs/accessSetAIToolDecision.ts: {}
   src/funcs/accessSetDirectoryRoleMappings.ts: {}
@@ -1092,6 +1094,7 @@ trackedFiles:
   src/models/components/dimensionvaluesrequestbody.ts: {}
   src/models/components/directoryattributeoption.ts: {}
   src/models/components/directorygroupoption.ts: {}
+  src/models/components/directoryreviewitem.ts: {}
   src/models/components/directoryrolemapping.ts: {}
   src/models/components/directoryrolesetuphiddenattributekey.ts: {}
   src/models/components/directoryrolesetuppreviewitem.ts: {}
@@ -1347,6 +1350,7 @@ trackedFiles:
   src/models/components/listdestinationsresult.ts: {}
   src/models/components/listdeviceintegrationprovidersresult.ts: {}
   src/models/components/listdeviceintegrationschedulesresult.ts: {}
+  src/models/components/listdirectoryreviewitemsresult.ts: {}
   src/models/components/listdirectoryrolemappingsresult.ts: {}
   src/models/components/listdistributionpluginsresult.ts: {}
   src/models/components/listemaservicesresult.ts: {}
@@ -1657,6 +1661,8 @@ trackedFiles:
   src/models/components/resetoktaresourceconnectionrequestbody.ts: {}
   src/models/components/resolvechallengeform.ts: {}
   src/models/components/resolvechallengesresult.ts: {}
+  src/models/components/resolvedirectoryreviewitemform.ts: {}
+  src/models/components/resolvedirectoryreviewitemresult.ts: {}
   src/models/components/resolveshadowmcpinventoryrequestform.ts: {}
   src/models/components/resource.ts: {}
   src/models/components/resourceaudienceentry.ts: {}
@@ -2495,6 +2501,7 @@ trackedFiles:
   src/models/operations/listdeployments.ts: {}
   src/models/operations/listdeviceintegrationproviders.ts: {}
   src/models/operations/listdeviceintegrationschedules.ts: {}
+  src/models/operations/listdirectoryreviewitems.ts: {}
   src/models/operations/listdirectoryrolemappings.ts: {}
   src/models/operations/listdismissedriskresults.ts: {}
   src/models/operations/listdistributionplugins.ts: {}
@@ -2685,6 +2692,7 @@ trackedFiles:
   src/models/operations/requestaccess.ts: {}
   src/models/operations/resetoktaresourceconnection.ts: {}
   src/models/operations/resolvechallenge.ts: {}
+  src/models/operations/resolvedirectoryreviewitem.ts: {}
   src/models/operations/resolveidentity.ts: {}
   src/models/operations/resolveshadowmcpinventoryrequest.ts: {}
   src/models/operations/restoreoktaserversuggestion.ts: {}
@@ -3128,6 +3136,8 @@ trackedFiles:
   src/react-query/deviceIntegrationProviders.ts: {}
   src/react-query/deviceIntegrationSchedules.core.ts: {}
   src/react-query/deviceIntegrationSchedules.ts: {}
+  src/react-query/directoryReviewItems.core.ts: {}
+  src/react-query/directoryReviewItems.ts: {}
   src/react-query/directoryRoleMappings.core.ts: {}
   src/react-query/directoryRoleMappings.ts: {}
   src/react-query/directoryRoleSetupPreview.core.ts: {}
@@ -3648,6 +3658,7 @@ trackedFiles:
   src/react-query/requestAccess.ts: {}
   src/react-query/resetOktaResourceConnection.ts: {}
   src/react-query/resolveChallenge.ts: {}
+  src/react-query/resolveDirectoryReviewItem.ts: {}
   src/react-query/resolveShadowMCPInventoryRequest.ts: {}
   src/react-query/resourceAudience.core.ts: {}
   src/react-query/resourceAudience.ts: {}
@@ -9276,6 +9287,15 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  listDirectoryReviewItems:
+    speakeasy-default-list-directory-review-items:
+      responses:
+        "200":
+          application/json: {"items": []}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   listDirectoryRoleMappings:
     speakeasy-default-list-directory-role-mappings:
       responses:
@@ -11489,6 +11509,17 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  resolveDirectoryReviewItem:
+    speakeasy-default-resolve-directory-review-item:
+      requestBody:
+        application/json: {"decision": "dismiss", "id": "59abec0f-0870-4fa4-a5a7-ee307d6a80ca"}
+      responses:
+        "200":
+          application/json: {"created_roles": [], "mappings": [{"created_at": "2025-08-21T15:58:44.799Z", "id": "163c457b-ab1e-48a5-834e-92f9a7bb8f6b", "role_urn": "<value>", "source_kind": "group", "source_status": "missing", "updated_at": "2025-07-27T19:39:45.809Z"}], "side_effects": [], "state": "dismissed"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   resolveIdentity:
     speakeasy-default-resolve-identity:
       parameters:

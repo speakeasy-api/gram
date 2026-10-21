@@ -331,6 +331,59 @@ var _ = Service("access", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ApplyDirectoryRoleSetup", "type": "mutation"}`)
 	})
 
+	Method("listDirectoryReviewItems", func() {
+		Description("List the directory changes waiting for an admin decision, oldest first: a directory group first seen after review started, with no mapping; a new value of an attribute key that already has mappings; and a mapped group or attribute value that has gone from the directory. Each item carries the same proposal and version as previewDirectoryRoleSetup, for resolveDirectoryReviewItem. Nothing is written.")
+		Security(security.ByKey, func() {
+			Scope("producer")
+		})
+		Security(security.Session)
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+		})
+
+		Result(ListDirectoryReviewItemsResult)
+
+		HTTP(func() {
+			GET("/rpc/access.listDirectoryReviewItems")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listDirectoryReviewItems")
+		Meta("openapi:extension:x-speakeasy-name-override", "listDirectoryReviewItems")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DirectoryReviewItems"}`)
+	})
+
+	Method("resolveDirectoryReviewItem", func() {
+		Description("Decide one pending directory review item. approve on a new group or attribute value maps it to the given role set, creating new roles as applyDirectoryRoleSetup does; approve on a missing source removes its mappings. dismiss leaves a new source unmapped, or keeps a missing source's mappings. opt_out_key dismisses a new attribute value and stops raising new values of its key. approve checks version as applyDirectoryRoleSetup does and returns conflict if the source changed. An item that is no longer pending returns conflict.")
+		Security(security.ByKey, func() {
+			Scope("producer")
+		})
+		Security(security.Session)
+
+		Payload(func() {
+			Extend(ResolveDirectoryReviewItemForm)
+			security.ByKeyPayload()
+			security.SessionPayload()
+		})
+
+		Result(ResolveDirectoryReviewItemResult)
+
+		HTTP(func() {
+			POST("/rpc/access.resolveDirectoryReviewItem")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "resolveDirectoryReviewItem")
+		Meta("openapi:extension:x-speakeasy-name-override", "resolveDirectoryReviewItem")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ResolveDirectoryReviewItem", "type": "mutation"}`)
+	})
+
 	Method("listScopes", func() {
 		Description("List all available scopes and their resource types.")
 		Security(security.ByKey, func() {
@@ -2099,5 +2152,52 @@ var ApplyDirectoryRoleSetupResult = Type("ApplyDirectoryRoleSetupResult", func()
 
 	Attribute("created_roles", ArrayOf(RoleModel), "Roles this request created.")
 	Attribute("mappings", ArrayOf(DirectoryRoleMappingModel), "The resulting mappings of every source in the request.")
+	Attribute("side_effects", ArrayOf(DirectoryRoleSetupSideEffectModel), "Work requested after commit.")
+})
+
+var DirectoryReviewItemModel = Type("DirectoryReviewItem", func() {
+	Required("id", "kind", "occurrence", "created_at", "item")
+
+	Attribute("id", String, "The review item.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("kind", String, "new_group: an unmapped group first seen after review started. new_attribute_value: a new value of an attribute key that has mappings. source_missing: a mapped group or attribute value that has gone.", func() {
+		Enum("new_group", "new_attribute_value", "source_missing")
+	})
+	Attribute("occurrence", Int32, "1 the first time a source is raised for this kind, then one more each time it recurs.")
+	Attribute("created_at", String, "When the item was raised.", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("item", DirectoryRoleSetupPreviewItemModel, "The source with its current roles, proposal and version. For a missing source, directory_people is 0 and proposed_roles are the roles approving would remove.")
+})
+
+var ListDirectoryReviewItemsResult = Type("ListDirectoryReviewItemsResult", func() {
+	Required("items")
+
+	Attribute("items", ArrayOf(DirectoryReviewItemModel), "Pending items, oldest first.")
+})
+
+var ResolveDirectoryReviewItemForm = Type("ResolveDirectoryReviewItemForm", func() {
+	Required("id", "decision")
+
+	Attribute("id", String, "The review item.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("decision", String, "approve, dismiss, or opt_out_key (new attribute values only).", func() {
+		Enum("approve", "dismiss", "opt_out_key")
+	})
+	Attribute("version", String, "The item version from listDirectoryReviewItems. Required to approve.")
+	Attribute("roles", ArrayOf(ApplyDirectoryRoleSetupRoleModel), "The role set to map a new source to. Required and non-empty to approve a new source; must be empty or omitted otherwise.")
+	Attribute("grant_set", ArrayOf(RoleGrantModel), "Optional grants given to every role the approval creates. Existing roles are never changed.")
+})
+
+var ResolveDirectoryReviewItemResult = Type("ResolveDirectoryReviewItemResult", func() {
+	Required("state", "created_roles", "mappings", "side_effects")
+
+	Attribute("state", String, "The item's state after the decision.", func() {
+		Enum("approved", "dismissed")
+	})
+	Attribute("created_roles", ArrayOf(RoleModel), "Roles the approval created.")
+	Attribute("mappings", ArrayOf(DirectoryRoleMappingModel), "The mappings an approval of a new source wrote. Empty for every other decision.")
 	Attribute("side_effects", ArrayOf(DirectoryRoleSetupSideEffectModel), "Work requested after commit.")
 })

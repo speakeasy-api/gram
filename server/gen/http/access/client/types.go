@@ -97,6 +97,23 @@ type ApplyDirectoryRoleSetupRequestBody struct {
 	GrantSet []*RoleGrantRequestBody `form:"grant_set,omitempty" json:"grant_set,omitempty" xml:"grant_set,omitempty"`
 }
 
+// ResolveDirectoryReviewItemRequestBody is the type of the "access" service
+// "resolveDirectoryReviewItem" endpoint HTTP request body.
+type ResolveDirectoryReviewItemRequestBody struct {
+	// The review item.
+	ID string `form:"id" json:"id" xml:"id"`
+	// approve, dismiss, or opt_out_key (new attribute values only).
+	Decision string `form:"decision" json:"decision" xml:"decision"`
+	// The item version from listDirectoryReviewItems. Required to approve.
+	Version *string `form:"version,omitempty" json:"version,omitempty" xml:"version,omitempty"`
+	// The role set to map a new source to. Required and non-empty to approve a new
+	// source; must be empty or omitted otherwise.
+	Roles []*ApplyDirectoryRoleSetupRoleRequestBody `form:"roles,omitempty" json:"roles,omitempty" xml:"roles,omitempty"`
+	// Optional grants given to every role the approval creates. Existing roles are
+	// never changed.
+	GrantSet []*RoleGrantRequestBody `form:"grant_set,omitempty" json:"grant_set,omitempty" xml:"grant_set,omitempty"`
+}
+
 // UpdateMemberRolesRequestBody is the type of the "access" service
 // "updateMemberRoles" endpoint HTTP request body.
 type UpdateMemberRolesRequestBody struct {
@@ -331,6 +348,27 @@ type ApplyDirectoryRoleSetupResponseBody struct {
 	// Roles this request created.
 	CreatedRoles []*RoleResponseBody `form:"created_roles,omitempty" json:"created_roles,omitempty" xml:"created_roles,omitempty"`
 	// The resulting mappings of every source in the request.
+	Mappings []*DirectoryRoleMappingResponseBody `form:"mappings,omitempty" json:"mappings,omitempty" xml:"mappings,omitempty"`
+	// Work requested after commit.
+	SideEffects []*DirectoryRoleSetupSideEffectResponseBody `form:"side_effects,omitempty" json:"side_effects,omitempty" xml:"side_effects,omitempty"`
+}
+
+// ListDirectoryReviewItemsResponseBody is the type of the "access" service
+// "listDirectoryReviewItems" endpoint HTTP response body.
+type ListDirectoryReviewItemsResponseBody struct {
+	// Pending items, oldest first.
+	Items []*DirectoryReviewItemResponseBody `form:"items,omitempty" json:"items,omitempty" xml:"items,omitempty"`
+}
+
+// ResolveDirectoryReviewItemResponseBody is the type of the "access" service
+// "resolveDirectoryReviewItem" endpoint HTTP response body.
+type ResolveDirectoryReviewItemResponseBody struct {
+	// The item's state after the decision.
+	State *string `form:"state,omitempty" json:"state,omitempty" xml:"state,omitempty"`
+	// Roles the approval created.
+	CreatedRoles []*RoleResponseBody `form:"created_roles,omitempty" json:"created_roles,omitempty" xml:"created_roles,omitempty"`
+	// The mappings an approval of a new source wrote. Empty for every other
+	// decision.
 	Mappings []*DirectoryRoleMappingResponseBody `form:"mappings,omitempty" json:"mappings,omitempty" xml:"mappings,omitempty"`
 	// Work requested after commit.
 	SideEffects []*DirectoryRoleSetupSideEffectResponseBody `form:"side_effects,omitempty" json:"side_effects,omitempty" xml:"side_effects,omitempty"`
@@ -2808,6 +2846,386 @@ type ApplyDirectoryRoleSetupUnexpectedResponseBody struct {
 // service "applyDirectoryRoleSetup" endpoint HTTP response body for the
 // "gateway_error" error.
 type ApplyDirectoryRoleSetupGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListDirectoryReviewItemsUnauthorizedResponseBody is the type of the "access"
+// service "listDirectoryReviewItems" endpoint HTTP response body for the
+// "unauthorized" error.
+type ListDirectoryReviewItemsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListDirectoryReviewItemsForbiddenResponseBody is the type of the "access"
+// service "listDirectoryReviewItems" endpoint HTTP response body for the
+// "forbidden" error.
+type ListDirectoryReviewItemsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListDirectoryReviewItemsBadRequestResponseBody is the type of the "access"
+// service "listDirectoryReviewItems" endpoint HTTP response body for the
+// "bad_request" error.
+type ListDirectoryReviewItemsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListDirectoryReviewItemsNotFoundResponseBody is the type of the "access"
+// service "listDirectoryReviewItems" endpoint HTTP response body for the
+// "not_found" error.
+type ListDirectoryReviewItemsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListDirectoryReviewItemsConflictResponseBody is the type of the "access"
+// service "listDirectoryReviewItems" endpoint HTTP response body for the
+// "conflict" error.
+type ListDirectoryReviewItemsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListDirectoryReviewItemsUnsupportedMediaResponseBody is the type of the
+// "access" service "listDirectoryReviewItems" endpoint HTTP response body for
+// the "unsupported_media" error.
+type ListDirectoryReviewItemsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListDirectoryReviewItemsInvalidResponseBody is the type of the "access"
+// service "listDirectoryReviewItems" endpoint HTTP response body for the
+// "invalid" error.
+type ListDirectoryReviewItemsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListDirectoryReviewItemsInvariantViolationResponseBody is the type of the
+// "access" service "listDirectoryReviewItems" endpoint HTTP response body for
+// the "invariant_violation" error.
+type ListDirectoryReviewItemsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListDirectoryReviewItemsUnexpectedResponseBody is the type of the "access"
+// service "listDirectoryReviewItems" endpoint HTTP response body for the
+// "unexpected" error.
+type ListDirectoryReviewItemsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListDirectoryReviewItemsGatewayErrorResponseBody is the type of the "access"
+// service "listDirectoryReviewItems" endpoint HTTP response body for the
+// "gateway_error" error.
+type ListDirectoryReviewItemsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ResolveDirectoryReviewItemUnauthorizedResponseBody is the type of the
+// "access" service "resolveDirectoryReviewItem" endpoint HTTP response body
+// for the "unauthorized" error.
+type ResolveDirectoryReviewItemUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ResolveDirectoryReviewItemForbiddenResponseBody is the type of the "access"
+// service "resolveDirectoryReviewItem" endpoint HTTP response body for the
+// "forbidden" error.
+type ResolveDirectoryReviewItemForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ResolveDirectoryReviewItemBadRequestResponseBody is the type of the "access"
+// service "resolveDirectoryReviewItem" endpoint HTTP response body for the
+// "bad_request" error.
+type ResolveDirectoryReviewItemBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ResolveDirectoryReviewItemNotFoundResponseBody is the type of the "access"
+// service "resolveDirectoryReviewItem" endpoint HTTP response body for the
+// "not_found" error.
+type ResolveDirectoryReviewItemNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ResolveDirectoryReviewItemConflictResponseBody is the type of the "access"
+// service "resolveDirectoryReviewItem" endpoint HTTP response body for the
+// "conflict" error.
+type ResolveDirectoryReviewItemConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ResolveDirectoryReviewItemUnsupportedMediaResponseBody is the type of the
+// "access" service "resolveDirectoryReviewItem" endpoint HTTP response body
+// for the "unsupported_media" error.
+type ResolveDirectoryReviewItemUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ResolveDirectoryReviewItemInvalidResponseBody is the type of the "access"
+// service "resolveDirectoryReviewItem" endpoint HTTP response body for the
+// "invalid" error.
+type ResolveDirectoryReviewItemInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ResolveDirectoryReviewItemInvariantViolationResponseBody is the type of the
+// "access" service "resolveDirectoryReviewItem" endpoint HTTP response body
+// for the "invariant_violation" error.
+type ResolveDirectoryReviewItemInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ResolveDirectoryReviewItemUnexpectedResponseBody is the type of the "access"
+// service "resolveDirectoryReviewItem" endpoint HTTP response body for the
+// "unexpected" error.
+type ResolveDirectoryReviewItemUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ResolveDirectoryReviewItemGatewayErrorResponseBody is the type of the
+// "access" service "resolveDirectoryReviewItem" endpoint HTTP response body
+// for the "gateway_error" error.
+type ResolveDirectoryReviewItemGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -7349,6 +7767,26 @@ type DirectoryRoleSetupSideEffectResponseBody struct {
 	RequestStatus *string `form:"request_status,omitempty" json:"request_status,omitempty" xml:"request_status,omitempty"`
 }
 
+// DirectoryReviewItemResponseBody is used to define fields on response body
+// types.
+type DirectoryReviewItemResponseBody struct {
+	// The review item.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// new_group: an unmapped group first seen after review started.
+	// new_attribute_value: a new value of an attribute key that has mappings.
+	// source_missing: a mapped group or attribute value that has gone.
+	Kind *string `form:"kind,omitempty" json:"kind,omitempty" xml:"kind,omitempty"`
+	// 1 the first time a source is raised for this kind, then one more each time
+	// it recurs.
+	Occurrence *int32 `form:"occurrence,omitempty" json:"occurrence,omitempty" xml:"occurrence,omitempty"`
+	// When the item was raised.
+	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	// The source with its current roles, proposal and version. For a missing
+	// source, directory_people is 0 and proposed_roles are the roles approving
+	// would remove.
+	Item *DirectoryRoleSetupPreviewItemResponseBody `form:"item,omitempty" json:"item,omitempty" xml:"item,omitempty"`
+}
+
 // ScopeDefinitionResponseBody is used to define fields on response body types.
 type ScopeDefinitionResponseBody struct {
 	// Unique scope identifier.
@@ -8054,6 +8492,38 @@ func NewApplyDirectoryRoleSetupRequestBody(p *access.ApplyDirectoryRoleSetupPayl
 		}
 	} else {
 		body.Items = []*ApplyDirectoryRoleSetupItemRequestBody{}
+	}
+	if p.GrantSet != nil {
+		body.GrantSet = make([]*RoleGrantRequestBody, len(p.GrantSet))
+		for i, val := range p.GrantSet {
+			if val == nil {
+				body.GrantSet[i] = nil
+				continue
+			}
+			body.GrantSet[i] = marshalAccessRoleGrantToRoleGrantRequestBody(val)
+		}
+	}
+	return body
+}
+
+// NewResolveDirectoryReviewItemRequestBody builds the HTTP request body from
+// the payload of the "resolveDirectoryReviewItem" endpoint of the "access"
+// service.
+func NewResolveDirectoryReviewItemRequestBody(p *access.ResolveDirectoryReviewItemPayload) *ResolveDirectoryReviewItemRequestBody {
+	body := &ResolveDirectoryReviewItemRequestBody{
+		ID:       p.ID,
+		Decision: p.Decision,
+		Version:  p.Version,
+	}
+	if p.Roles != nil {
+		body.Roles = make([]*ApplyDirectoryRoleSetupRoleRequestBody, len(p.Roles))
+		for i, val := range p.Roles {
+			if val == nil {
+				body.Roles[i] = nil
+				continue
+			}
+			body.Roles[i] = marshalAccessApplyDirectoryRoleSetupRoleToApplyDirectoryRoleSetupRoleRequestBody(val)
+		}
 	}
 	if p.GrantSet != nil {
 		body.GrantSet = make([]*RoleGrantRequestBody, len(p.GrantSet))
@@ -10214,6 +10684,356 @@ func NewApplyDirectoryRoleSetupUnexpected(body *ApplyDirectoryRoleSetupUnexpecte
 // NewApplyDirectoryRoleSetupGatewayError builds a access service
 // applyDirectoryRoleSetup endpoint gateway_error error.
 func NewApplyDirectoryRoleSetupGatewayError(body *ApplyDirectoryRoleSetupGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListDirectoryReviewItemsResultOK builds a "access" service
+// "listDirectoryReviewItems" endpoint result from a HTTP "OK" response.
+func NewListDirectoryReviewItemsResultOK(body *ListDirectoryReviewItemsResponseBody) *access.ListDirectoryReviewItemsResult {
+	v := &access.ListDirectoryReviewItemsResult{}
+	v.Items = make([]*access.DirectoryReviewItem, len(body.Items))
+	for i, val := range body.Items {
+		if val == nil {
+			v.Items[i] = nil
+			continue
+		}
+		v.Items[i] = unmarshalDirectoryReviewItemResponseBodyToAccessDirectoryReviewItem(val)
+	}
+
+	return v
+}
+
+// NewListDirectoryReviewItemsUnauthorized builds a access service
+// listDirectoryReviewItems endpoint unauthorized error.
+func NewListDirectoryReviewItemsUnauthorized(body *ListDirectoryReviewItemsUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListDirectoryReviewItemsForbidden builds a access service
+// listDirectoryReviewItems endpoint forbidden error.
+func NewListDirectoryReviewItemsForbidden(body *ListDirectoryReviewItemsForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListDirectoryReviewItemsBadRequest builds a access service
+// listDirectoryReviewItems endpoint bad_request error.
+func NewListDirectoryReviewItemsBadRequest(body *ListDirectoryReviewItemsBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListDirectoryReviewItemsNotFound builds a access service
+// listDirectoryReviewItems endpoint not_found error.
+func NewListDirectoryReviewItemsNotFound(body *ListDirectoryReviewItemsNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListDirectoryReviewItemsConflict builds a access service
+// listDirectoryReviewItems endpoint conflict error.
+func NewListDirectoryReviewItemsConflict(body *ListDirectoryReviewItemsConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListDirectoryReviewItemsUnsupportedMedia builds a access service
+// listDirectoryReviewItems endpoint unsupported_media error.
+func NewListDirectoryReviewItemsUnsupportedMedia(body *ListDirectoryReviewItemsUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListDirectoryReviewItemsInvalid builds a access service
+// listDirectoryReviewItems endpoint invalid error.
+func NewListDirectoryReviewItemsInvalid(body *ListDirectoryReviewItemsInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListDirectoryReviewItemsInvariantViolation builds a access service
+// listDirectoryReviewItems endpoint invariant_violation error.
+func NewListDirectoryReviewItemsInvariantViolation(body *ListDirectoryReviewItemsInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListDirectoryReviewItemsUnexpected builds a access service
+// listDirectoryReviewItems endpoint unexpected error.
+func NewListDirectoryReviewItemsUnexpected(body *ListDirectoryReviewItemsUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListDirectoryReviewItemsGatewayError builds a access service
+// listDirectoryReviewItems endpoint gateway_error error.
+func NewListDirectoryReviewItemsGatewayError(body *ListDirectoryReviewItemsGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewResolveDirectoryReviewItemResultOK builds a "access" service
+// "resolveDirectoryReviewItem" endpoint result from a HTTP "OK" response.
+func NewResolveDirectoryReviewItemResultOK(body *ResolveDirectoryReviewItemResponseBody) *access.ResolveDirectoryReviewItemResult {
+	v := &access.ResolveDirectoryReviewItemResult{
+		State: *body.State,
+	}
+	v.CreatedRoles = make([]*access.Role, len(body.CreatedRoles))
+	for i, val := range body.CreatedRoles {
+		if val == nil {
+			v.CreatedRoles[i] = nil
+			continue
+		}
+		v.CreatedRoles[i] = unmarshalRoleResponseBodyToAccessRole(val)
+	}
+	v.Mappings = make([]*access.DirectoryRoleMapping, len(body.Mappings))
+	for i, val := range body.Mappings {
+		if val == nil {
+			v.Mappings[i] = nil
+			continue
+		}
+		v.Mappings[i] = unmarshalDirectoryRoleMappingResponseBodyToAccessDirectoryRoleMapping(val)
+	}
+	v.SideEffects = make([]*access.DirectoryRoleSetupSideEffect, len(body.SideEffects))
+	for i, val := range body.SideEffects {
+		if val == nil {
+			v.SideEffects[i] = nil
+			continue
+		}
+		v.SideEffects[i] = unmarshalDirectoryRoleSetupSideEffectResponseBodyToAccessDirectoryRoleSetupSideEffect(val)
+	}
+
+	return v
+}
+
+// NewResolveDirectoryReviewItemUnauthorized builds a access service
+// resolveDirectoryReviewItem endpoint unauthorized error.
+func NewResolveDirectoryReviewItemUnauthorized(body *ResolveDirectoryReviewItemUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewResolveDirectoryReviewItemForbidden builds a access service
+// resolveDirectoryReviewItem endpoint forbidden error.
+func NewResolveDirectoryReviewItemForbidden(body *ResolveDirectoryReviewItemForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewResolveDirectoryReviewItemBadRequest builds a access service
+// resolveDirectoryReviewItem endpoint bad_request error.
+func NewResolveDirectoryReviewItemBadRequest(body *ResolveDirectoryReviewItemBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewResolveDirectoryReviewItemNotFound builds a access service
+// resolveDirectoryReviewItem endpoint not_found error.
+func NewResolveDirectoryReviewItemNotFound(body *ResolveDirectoryReviewItemNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewResolveDirectoryReviewItemConflict builds a access service
+// resolveDirectoryReviewItem endpoint conflict error.
+func NewResolveDirectoryReviewItemConflict(body *ResolveDirectoryReviewItemConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewResolveDirectoryReviewItemUnsupportedMedia builds a access service
+// resolveDirectoryReviewItem endpoint unsupported_media error.
+func NewResolveDirectoryReviewItemUnsupportedMedia(body *ResolveDirectoryReviewItemUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewResolveDirectoryReviewItemInvalid builds a access service
+// resolveDirectoryReviewItem endpoint invalid error.
+func NewResolveDirectoryReviewItemInvalid(body *ResolveDirectoryReviewItemInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewResolveDirectoryReviewItemInvariantViolation builds a access service
+// resolveDirectoryReviewItem endpoint invariant_violation error.
+func NewResolveDirectoryReviewItemInvariantViolation(body *ResolveDirectoryReviewItemInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewResolveDirectoryReviewItemUnexpected builds a access service
+// resolveDirectoryReviewItem endpoint unexpected error.
+func NewResolveDirectoryReviewItemUnexpected(body *ResolveDirectoryReviewItemUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewResolveDirectoryReviewItemGatewayError builds a access service
+// resolveDirectoryReviewItem endpoint gateway_error error.
+func NewResolveDirectoryReviewItemGatewayError(body *ResolveDirectoryReviewItemGatewayErrorResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -14460,6 +15280,66 @@ func ValidateApplyDirectoryRoleSetupResponseBody(body *ApplyDirectoryRoleSetupRe
 	return
 }
 
+// ValidateListDirectoryReviewItemsResponseBody runs the validations defined on
+// ListDirectoryReviewItemsResponseBody
+func ValidateListDirectoryReviewItemsResponseBody(body *ListDirectoryReviewItemsResponseBody) (err error) {
+	if body.Items == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("items", "body"))
+	}
+	for _, e := range body.Items {
+		if e != nil {
+			if err2 := ValidateDirectoryReviewItemResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateResolveDirectoryReviewItemResponseBody runs the validations defined
+// on ResolveDirectoryReviewItemResponseBody
+func ValidateResolveDirectoryReviewItemResponseBody(body *ResolveDirectoryReviewItemResponseBody) (err error) {
+	if body.State == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("state", "body"))
+	}
+	if body.CreatedRoles == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("created_roles", "body"))
+	}
+	if body.Mappings == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("mappings", "body"))
+	}
+	if body.SideEffects == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("side_effects", "body"))
+	}
+	if body.State != nil {
+		if !(*body.State == "approved" || *body.State == "dismissed") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.state", *body.State, []any{"approved", "dismissed"}))
+		}
+	}
+	for _, e := range body.CreatedRoles {
+		if e != nil {
+			if err2 := ValidateRoleResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.Mappings {
+		if e != nil {
+			if err2 := ValidateDirectoryRoleMappingResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.SideEffects {
+		if e != nil {
+			if err2 := ValidateDirectoryRoleSetupSideEffectResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
 // ValidateListScopesResponseBody runs the validations defined on
 // ListScopesResponseBody
 func ValidateListScopesResponseBody(body *ListScopesResponseBody) (err error) {
@@ -17839,6 +18719,490 @@ func ValidateApplyDirectoryRoleSetupUnexpectedResponseBody(body *ApplyDirectoryR
 // ValidateApplyDirectoryRoleSetupGatewayErrorResponseBody runs the validations
 // defined on applyDirectoryRoleSetup_gateway_error_response_body
 func ValidateApplyDirectoryRoleSetupGatewayErrorResponseBody(body *ApplyDirectoryRoleSetupGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListDirectoryReviewItemsUnauthorizedResponseBody runs the
+// validations defined on listDirectoryReviewItems_unauthorized_response_body
+func ValidateListDirectoryReviewItemsUnauthorizedResponseBody(body *ListDirectoryReviewItemsUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListDirectoryReviewItemsForbiddenResponseBody runs the validations
+// defined on listDirectoryReviewItems_forbidden_response_body
+func ValidateListDirectoryReviewItemsForbiddenResponseBody(body *ListDirectoryReviewItemsForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListDirectoryReviewItemsBadRequestResponseBody runs the validations
+// defined on listDirectoryReviewItems_bad_request_response_body
+func ValidateListDirectoryReviewItemsBadRequestResponseBody(body *ListDirectoryReviewItemsBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListDirectoryReviewItemsNotFoundResponseBody runs the validations
+// defined on listDirectoryReviewItems_not_found_response_body
+func ValidateListDirectoryReviewItemsNotFoundResponseBody(body *ListDirectoryReviewItemsNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListDirectoryReviewItemsConflictResponseBody runs the validations
+// defined on listDirectoryReviewItems_conflict_response_body
+func ValidateListDirectoryReviewItemsConflictResponseBody(body *ListDirectoryReviewItemsConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListDirectoryReviewItemsUnsupportedMediaResponseBody runs the
+// validations defined on
+// listDirectoryReviewItems_unsupported_media_response_body
+func ValidateListDirectoryReviewItemsUnsupportedMediaResponseBody(body *ListDirectoryReviewItemsUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListDirectoryReviewItemsInvalidResponseBody runs the validations
+// defined on listDirectoryReviewItems_invalid_response_body
+func ValidateListDirectoryReviewItemsInvalidResponseBody(body *ListDirectoryReviewItemsInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListDirectoryReviewItemsInvariantViolationResponseBody runs the
+// validations defined on
+// listDirectoryReviewItems_invariant_violation_response_body
+func ValidateListDirectoryReviewItemsInvariantViolationResponseBody(body *ListDirectoryReviewItemsInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListDirectoryReviewItemsUnexpectedResponseBody runs the validations
+// defined on listDirectoryReviewItems_unexpected_response_body
+func ValidateListDirectoryReviewItemsUnexpectedResponseBody(body *ListDirectoryReviewItemsUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListDirectoryReviewItemsGatewayErrorResponseBody runs the
+// validations defined on listDirectoryReviewItems_gateway_error_response_body
+func ValidateListDirectoryReviewItemsGatewayErrorResponseBody(body *ListDirectoryReviewItemsGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateResolveDirectoryReviewItemUnauthorizedResponseBody runs the
+// validations defined on resolveDirectoryReviewItem_unauthorized_response_body
+func ValidateResolveDirectoryReviewItemUnauthorizedResponseBody(body *ResolveDirectoryReviewItemUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateResolveDirectoryReviewItemForbiddenResponseBody runs the validations
+// defined on resolveDirectoryReviewItem_forbidden_response_body
+func ValidateResolveDirectoryReviewItemForbiddenResponseBody(body *ResolveDirectoryReviewItemForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateResolveDirectoryReviewItemBadRequestResponseBody runs the
+// validations defined on resolveDirectoryReviewItem_bad_request_response_body
+func ValidateResolveDirectoryReviewItemBadRequestResponseBody(body *ResolveDirectoryReviewItemBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateResolveDirectoryReviewItemNotFoundResponseBody runs the validations
+// defined on resolveDirectoryReviewItem_not_found_response_body
+func ValidateResolveDirectoryReviewItemNotFoundResponseBody(body *ResolveDirectoryReviewItemNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateResolveDirectoryReviewItemConflictResponseBody runs the validations
+// defined on resolveDirectoryReviewItem_conflict_response_body
+func ValidateResolveDirectoryReviewItemConflictResponseBody(body *ResolveDirectoryReviewItemConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateResolveDirectoryReviewItemUnsupportedMediaResponseBody runs the
+// validations defined on
+// resolveDirectoryReviewItem_unsupported_media_response_body
+func ValidateResolveDirectoryReviewItemUnsupportedMediaResponseBody(body *ResolveDirectoryReviewItemUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateResolveDirectoryReviewItemInvalidResponseBody runs the validations
+// defined on resolveDirectoryReviewItem_invalid_response_body
+func ValidateResolveDirectoryReviewItemInvalidResponseBody(body *ResolveDirectoryReviewItemInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateResolveDirectoryReviewItemInvariantViolationResponseBody runs the
+// validations defined on
+// resolveDirectoryReviewItem_invariant_violation_response_body
+func ValidateResolveDirectoryReviewItemInvariantViolationResponseBody(body *ResolveDirectoryReviewItemInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateResolveDirectoryReviewItemUnexpectedResponseBody runs the
+// validations defined on resolveDirectoryReviewItem_unexpected_response_body
+func ValidateResolveDirectoryReviewItemUnexpectedResponseBody(body *ResolveDirectoryReviewItemUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateResolveDirectoryReviewItemGatewayErrorResponseBody runs the
+// validations defined on resolveDirectoryReviewItem_gateway_error_response_body
+func ValidateResolveDirectoryReviewItemGatewayErrorResponseBody(body *ResolveDirectoryReviewItemGatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -23850,6 +25214,43 @@ func ValidateDirectoryRoleSetupSideEffectResponseBody(body *DirectoryRoleSetupSi
 	if body.RequestStatus != nil {
 		if !(*body.RequestStatus == "requested") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.request_status", *body.RequestStatus, []any{"requested"}))
+		}
+	}
+	return
+}
+
+// ValidateDirectoryReviewItemResponseBody runs the validations defined on
+// DirectoryReviewItemResponseBody
+func ValidateDirectoryReviewItemResponseBody(body *DirectoryReviewItemResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Kind == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("kind", "body"))
+	}
+	if body.Occurrence == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("occurrence", "body"))
+	}
+	if body.CreatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
+	}
+	if body.Item == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("item", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if body.Kind != nil {
+		if !(*body.Kind == "new_group" || *body.Kind == "new_attribute_value" || *body.Kind == "source_missing") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.kind", *body.Kind, []any{"new_group", "new_attribute_value", "source_missing"}))
+		}
+	}
+	if body.CreatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
+	}
+	if body.Item != nil {
+		if err2 := ValidateDirectoryRoleSetupPreviewItemResponseBody(body.Item); err2 != nil {
+			err = goa.MergeErrors(err, err2)
 		}
 	}
 	return

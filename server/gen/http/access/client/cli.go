@@ -554,6 +554,103 @@ func BuildApplyDirectoryRoleSetupPayload(accessApplyDirectoryRoleSetupBody strin
 	return v, nil
 }
 
+// BuildListDirectoryReviewItemsPayload builds the payload for the access
+// listDirectoryReviewItems endpoint from CLI flags.
+func BuildListDirectoryReviewItemsPayload(accessListDirectoryReviewItemsApikeyToken string, accessListDirectoryReviewItemsSessionToken string) (*access.ListDirectoryReviewItemsPayload, error) {
+	var apikeyToken *string
+	{
+		if accessListDirectoryReviewItemsApikeyToken != "" {
+			apikeyToken = &accessListDirectoryReviewItemsApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if accessListDirectoryReviewItemsSessionToken != "" {
+			sessionToken = &accessListDirectoryReviewItemsSessionToken
+		}
+	}
+	v := &access.ListDirectoryReviewItemsPayload{}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildResolveDirectoryReviewItemPayload builds the payload for the access
+// resolveDirectoryReviewItem endpoint from CLI flags.
+func BuildResolveDirectoryReviewItemPayload(accessResolveDirectoryReviewItemBody string, accessResolveDirectoryReviewItemApikeyToken string, accessResolveDirectoryReviewItemSessionToken string) (*access.ResolveDirectoryReviewItemPayload, error) {
+	var err error
+	var body ResolveDirectoryReviewItemRequestBody
+	{
+		err = json.Unmarshal([]byte(accessResolveDirectoryReviewItemBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"decision\": \"dismiss\",\n      \"grant_set\": [\n         {\n            \"scope\": \"org:blocked_read\",\n            \"selectors\": [\n               {\n                  \"disposition\": \"destructive\",\n                  \"project_id\": \"abc123\",\n                  \"resource_id\": \"abc123\",\n                  \"resource_kind\": \"mcp\",\n                  \"server_url\": \"https://example.com/foo\",\n                  \"tool\": \"abc123\"\n               }\n            ]\n         }\n      ],\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"roles\": [\n         {\n            \"create_name\": \"aa\",\n            \"role_urn\": \"abc123\"\n         }\n      ],\n      \"version\": \"abc123\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
+		if !(body.Decision == "approve" || body.Decision == "dismiss" || body.Decision == "opt_out_key") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.decision", body.Decision, []any{"approve", "dismiss", "opt_out_key"}))
+		}
+		for _, e := range body.Roles {
+			if e != nil {
+				if err2 := ValidateApplyDirectoryRoleSetupRoleRequestBody(e); err2 != nil {
+					err = goa.MergeErrors(err, err2)
+				}
+			}
+		}
+		for _, e := range body.GrantSet {
+			if e != nil {
+				if err2 := ValidateRoleGrantRequestBody(e); err2 != nil {
+					err = goa.MergeErrors(err, err2)
+				}
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var apikeyToken *string
+	{
+		if accessResolveDirectoryReviewItemApikeyToken != "" {
+			apikeyToken = &accessResolveDirectoryReviewItemApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if accessResolveDirectoryReviewItemSessionToken != "" {
+			sessionToken = &accessResolveDirectoryReviewItemSessionToken
+		}
+	}
+	v := &access.ResolveDirectoryReviewItemPayload{
+		ID:       body.ID,
+		Decision: body.Decision,
+		Version:  body.Version,
+	}
+	if body.Roles != nil {
+		v.Roles = make([]*access.ApplyDirectoryRoleSetupRole, len(body.Roles))
+		for i, val := range body.Roles {
+			if val == nil {
+				v.Roles[i] = nil
+				continue
+			}
+			v.Roles[i] = marshalApplyDirectoryRoleSetupRoleRequestBodyToAccessApplyDirectoryRoleSetupRole(val)
+		}
+	}
+	if body.GrantSet != nil {
+		v.GrantSet = make([]*access.RoleGrant, len(body.GrantSet))
+		for i, val := range body.GrantSet {
+			if val == nil {
+				v.GrantSet[i] = nil
+				continue
+			}
+			v.GrantSet[i] = marshalRoleGrantRequestBodyToAccessRoleGrant(val)
+		}
+	}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
 // BuildListScopesPayload builds the payload for the access listScopes endpoint
 // from CLI flags.
 func BuildListScopesPayload(accessListScopesApikeyToken string, accessListScopesSessionToken string) (*access.ListScopesPayload, error) {

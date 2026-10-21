@@ -31,6 +31,7 @@ var All = []outbox.EventRegistration{
 	DataExportRouteV1,
 	DeploymentV1,
 	DeviceIntegrationV1,
+	DirectoryReviewItemV1,
 	DirectoryRoleMappingV1,
 	EnvironmentV1,
 	GcpIamCredentialV1,

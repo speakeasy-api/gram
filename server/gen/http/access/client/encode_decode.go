@@ -2845,6 +2845,480 @@ func DecodeApplyDirectoryRoleSetupResponse(decoder func(*http.Response) goahttp.
 	}
 }
 
+// BuildListDirectoryReviewItemsRequest instantiates a HTTP request object with
+// method and path set to call the "access" service "listDirectoryReviewItems"
+// endpoint
+func (c *Client) BuildListDirectoryReviewItemsRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ListDirectoryReviewItemsAccessPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("access", "listDirectoryReviewItems", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeListDirectoryReviewItemsRequest returns an encoder for requests sent
+// to the access listDirectoryReviewItems server.
+func EncodeListDirectoryReviewItemsRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*access.ListDirectoryReviewItemsPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("access", "listDirectoryReviewItems", "*access.ListDirectoryReviewItemsPayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		return nil
+	}
+}
+
+// DecodeListDirectoryReviewItemsResponse returns a decoder for responses
+// returned by the access listDirectoryReviewItems endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeListDirectoryReviewItemsResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeListDirectoryReviewItemsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ListDirectoryReviewItemsResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listDirectoryReviewItems", err)
+			}
+			err = ValidateListDirectoryReviewItemsResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listDirectoryReviewItems", err)
+			}
+			res := NewListDirectoryReviewItemsResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ListDirectoryReviewItemsUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listDirectoryReviewItems", err)
+			}
+			err = ValidateListDirectoryReviewItemsUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listDirectoryReviewItems", err)
+			}
+			return nil, NewListDirectoryReviewItemsUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ListDirectoryReviewItemsForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listDirectoryReviewItems", err)
+			}
+			err = ValidateListDirectoryReviewItemsForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listDirectoryReviewItems", err)
+			}
+			return nil, NewListDirectoryReviewItemsForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ListDirectoryReviewItemsBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listDirectoryReviewItems", err)
+			}
+			err = ValidateListDirectoryReviewItemsBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listDirectoryReviewItems", err)
+			}
+			return nil, NewListDirectoryReviewItemsBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ListDirectoryReviewItemsNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listDirectoryReviewItems", err)
+			}
+			err = ValidateListDirectoryReviewItemsNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listDirectoryReviewItems", err)
+			}
+			return nil, NewListDirectoryReviewItemsNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ListDirectoryReviewItemsConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listDirectoryReviewItems", err)
+			}
+			err = ValidateListDirectoryReviewItemsConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listDirectoryReviewItems", err)
+			}
+			return nil, NewListDirectoryReviewItemsConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ListDirectoryReviewItemsUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listDirectoryReviewItems", err)
+			}
+			err = ValidateListDirectoryReviewItemsUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listDirectoryReviewItems", err)
+			}
+			return nil, NewListDirectoryReviewItemsUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ListDirectoryReviewItemsInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listDirectoryReviewItems", err)
+			}
+			err = ValidateListDirectoryReviewItemsInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listDirectoryReviewItems", err)
+			}
+			return nil, NewListDirectoryReviewItemsInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ListDirectoryReviewItemsInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("access", "listDirectoryReviewItems", err)
+				}
+				err = ValidateListDirectoryReviewItemsInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("access", "listDirectoryReviewItems", err)
+				}
+				return nil, NewListDirectoryReviewItemsInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ListDirectoryReviewItemsUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("access", "listDirectoryReviewItems", err)
+				}
+				err = ValidateListDirectoryReviewItemsUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("access", "listDirectoryReviewItems", err)
+				}
+				return nil, NewListDirectoryReviewItemsUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("access", "listDirectoryReviewItems", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ListDirectoryReviewItemsGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listDirectoryReviewItems", err)
+			}
+			err = ValidateListDirectoryReviewItemsGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listDirectoryReviewItems", err)
+			}
+			return nil, NewListDirectoryReviewItemsGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("access", "listDirectoryReviewItems", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildResolveDirectoryReviewItemRequest instantiates a HTTP request object
+// with method and path set to call the "access" service
+// "resolveDirectoryReviewItem" endpoint
+func (c *Client) BuildResolveDirectoryReviewItemRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ResolveDirectoryReviewItemAccessPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("access", "resolveDirectoryReviewItem", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeResolveDirectoryReviewItemRequest returns an encoder for requests sent
+// to the access resolveDirectoryReviewItem server.
+func EncodeResolveDirectoryReviewItemRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*access.ResolveDirectoryReviewItemPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("access", "resolveDirectoryReviewItem", "*access.ResolveDirectoryReviewItemPayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		body := NewResolveDirectoryReviewItemRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("access", "resolveDirectoryReviewItem", err)
+		}
+		return nil
+	}
+}
+
+// DecodeResolveDirectoryReviewItemResponse returns a decoder for responses
+// returned by the access resolveDirectoryReviewItem endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeResolveDirectoryReviewItemResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeResolveDirectoryReviewItemResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ResolveDirectoryReviewItemResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "resolveDirectoryReviewItem", err)
+			}
+			err = ValidateResolveDirectoryReviewItemResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "resolveDirectoryReviewItem", err)
+			}
+			res := NewResolveDirectoryReviewItemResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ResolveDirectoryReviewItemUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "resolveDirectoryReviewItem", err)
+			}
+			err = ValidateResolveDirectoryReviewItemUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "resolveDirectoryReviewItem", err)
+			}
+			return nil, NewResolveDirectoryReviewItemUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ResolveDirectoryReviewItemForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "resolveDirectoryReviewItem", err)
+			}
+			err = ValidateResolveDirectoryReviewItemForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "resolveDirectoryReviewItem", err)
+			}
+			return nil, NewResolveDirectoryReviewItemForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ResolveDirectoryReviewItemBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "resolveDirectoryReviewItem", err)
+			}
+			err = ValidateResolveDirectoryReviewItemBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "resolveDirectoryReviewItem", err)
+			}
+			return nil, NewResolveDirectoryReviewItemBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ResolveDirectoryReviewItemNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "resolveDirectoryReviewItem", err)
+			}
+			err = ValidateResolveDirectoryReviewItemNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "resolveDirectoryReviewItem", err)
+			}
+			return nil, NewResolveDirectoryReviewItemNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ResolveDirectoryReviewItemConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "resolveDirectoryReviewItem", err)
+			}
+			err = ValidateResolveDirectoryReviewItemConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "resolveDirectoryReviewItem", err)
+			}
+			return nil, NewResolveDirectoryReviewItemConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ResolveDirectoryReviewItemUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "resolveDirectoryReviewItem", err)
+			}
+			err = ValidateResolveDirectoryReviewItemUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "resolveDirectoryReviewItem", err)
+			}
+			return nil, NewResolveDirectoryReviewItemUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ResolveDirectoryReviewItemInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "resolveDirectoryReviewItem", err)
+			}
+			err = ValidateResolveDirectoryReviewItemInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "resolveDirectoryReviewItem", err)
+			}
+			return nil, NewResolveDirectoryReviewItemInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ResolveDirectoryReviewItemInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("access", "resolveDirectoryReviewItem", err)
+				}
+				err = ValidateResolveDirectoryReviewItemInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("access", "resolveDirectoryReviewItem", err)
+				}
+				return nil, NewResolveDirectoryReviewItemInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ResolveDirectoryReviewItemUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("access", "resolveDirectoryReviewItem", err)
+				}
+				err = ValidateResolveDirectoryReviewItemUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("access", "resolveDirectoryReviewItem", err)
+				}
+				return nil, NewResolveDirectoryReviewItemUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("access", "resolveDirectoryReviewItem", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ResolveDirectoryReviewItemGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "resolveDirectoryReviewItem", err)
+			}
+			err = ValidateResolveDirectoryReviewItemGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "resolveDirectoryReviewItem", err)
+			}
+			return nil, NewResolveDirectoryReviewItemGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("access", "resolveDirectoryReviewItem", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildListScopesRequest instantiates a HTTP request object with method and
 // path set to call the "access" service "listScopes" endpoint
 func (c *Client) BuildListScopesRequest(ctx context.Context, v any) (*http.Request, error) {
@@ -8722,6 +9196,21 @@ func unmarshalDirectoryRoleSetupSideEffectResponseBodyToAccessDirectoryRoleSetup
 		RoleID:        *v.RoleID,
 		RequestStatus: *v.RequestStatus,
 	}
+
+	return res
+}
+
+// unmarshalDirectoryReviewItemResponseBodyToAccessDirectoryReviewItem builds a
+// value of type *access.DirectoryReviewItem from a value of type
+// *DirectoryReviewItemResponseBody.
+func unmarshalDirectoryReviewItemResponseBodyToAccessDirectoryReviewItem(v *DirectoryReviewItemResponseBody) *access.DirectoryReviewItem {
+	res := &access.DirectoryReviewItem{
+		ID:         *v.ID,
+		Kind:       *v.Kind,
+		Occurrence: *v.Occurrence,
+		CreatedAt:  *v.CreatedAt,
+	}
+	res.Item = unmarshalDirectoryRoleSetupPreviewItemResponseBodyToAccessDirectoryRoleSetupPreviewItem(v.Item)
 
 	return res
 }
