@@ -1825,7 +1825,7 @@ COMMENT ON COLUMN ai_products.process_names IS 'Process names checked for the ru
 COMMENT ON COLUMN ai_products.version_plist_key IS 'Info.plist key read for the version on a bundle match; null means CFBundleShortVersionString.
 @access: confidential';
 COMMENT ON COLUMN ai_products.client_info_names IS 'Names the product reports at MCP initialize. Attribution only, never enforcement: they are self-reported, so any client can claim any name.
-@access: confidential';
+@access: opaque-confidential';
 COMMENT ON COLUMN ai_products.created_by IS 'Subject URN of the staff member who created the row; null for seeded rows.
 @access: confidential-pii';
 COMMENT ON COLUMN ai_products.updated_by IS 'Subject URN of the staff member who last changed the row; null for seeded rows.
@@ -1910,12 +1910,6 @@ ON ai_product_cimd_documents (ai_product_id);
 CREATE TABLE IF NOT EXISTS ai_scan_targets (
   organization_id TEXT NOT NULL,
   id TEXT NOT NULL,
-  -- The catalog product a built-in's row records a decision about, equal to
-  -- id; null for a target the organization added. It makes a row's kind
-  -- durable rather than inferred from whether id happens to match a product.
-  -- Deleting a referenced product is refused rather than nulling this, which
-  -- would silently turn the decision into an empty target of the
-  -- organization's own.
   ai_product_id TEXT,
 
   display_name TEXT,
@@ -1961,7 +1955,8 @@ CREATE TABLE IF NOT EXISTS ai_scan_targets (
 
 COMMENT ON COLUMN ai_scan_targets.organization_id IS '@access: confidential';
 COMMENT ON COLUMN ai_scan_targets.id IS '@access: confidential';
-COMMENT ON COLUMN ai_scan_targets.ai_product_id IS '@access: confidential';
+COMMENT ON COLUMN ai_scan_targets.ai_product_id IS 'The catalog product a built-in''s row records a decision about, equal to id; null for a target the organization added. Makes a row''s kind durable rather than inferred from whether id happens to match a product. Deleting a referenced product is refused rather than nulling this, which would silently turn the decision into an empty target of the organization''s own.
+@access: confidential';
 COMMENT ON COLUMN ai_scan_targets.display_name IS '@access: confidential';
 COMMENT ON COLUMN ai_scan_targets.category IS '@access: confidential';
 COMMENT ON COLUMN ai_scan_targets.bundle_ids IS '@access: confidential';

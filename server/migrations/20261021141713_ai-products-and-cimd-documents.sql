@@ -51,7 +51,7 @@ COMMENT ON COLUMN "ai_products"."version_plist_key" IS 'Info.plist key read for 
 @access: confidential';
 -- Set comment to column: "client_info_names" on table: "ai_products"
 COMMENT ON COLUMN "ai_products"."client_info_names" IS 'Names the product reports at MCP initialize. Attribution only, never enforcement: they are self-reported, so any client can claim any name.
-@access: confidential';
+@access: opaque-confidential';
 -- Set comment to column: "created_by" on table: "ai_products"
 COMMENT ON COLUMN "ai_products"."created_by" IS 'Subject URN of the staff member who created the row; null for seeded rows.
 @access: confidential-pii';

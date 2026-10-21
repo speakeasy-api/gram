@@ -391,7 +391,7 @@ type AiProduct struct {
 	// @access: confidential
 	VersionPlistKey pgtype.Text
 	// Names the product reports at MCP initialize. Attribution only, never enforcement: they are self-reported, so any client can claim any name.
-	// @access: confidential
+	// @access: opaque-confidential
 	ClientInfoNames []string
 	// Subject URN of the staff member who created the row; null for seeded rows.
 	// @access: confidential-pii
@@ -454,6 +454,7 @@ type AiScanTarget struct {
 	OrganizationID string
 	// @access: confidential
 	ID string
+	// The catalog product a built-in's row records a decision about, equal to id; null for a target the organization added. Makes a row's kind durable rather than inferred from whether id happens to match a product. Deleting a referenced product is refused rather than nulling this, which would silently turn the decision into an empty target of the organization's own.
 	// @access: confidential
 	AiProductID pgtype.Text
 	// @access: confidential
