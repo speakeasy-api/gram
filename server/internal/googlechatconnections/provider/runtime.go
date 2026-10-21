@@ -40,8 +40,11 @@ func (r *Runtime) Token(ctx context.Context, env toolconfig.ToolCallEnv, scope, 
 	}
 	space := strings.Join(parts[:2], "/")
 	_, err = repo.New(r.DB).ResolveChatBinding(ctx, repo.ResolveChatBindingParams{ChatID: chat, SpaceName: space})
-	if err != nil {
+	if errors.Is(err, pgx.ErrNoRows) {
 		return "", false, nil
+	}
+	if err != nil {
+		return "", false, fmt.Errorf("resolve hosted Google credential binding: %w", err)
 	}
 	if scope == "https://www.googleapis.com/auth/chat.bot" {
 		token, err := r.Client.AppToken(ctx, false)

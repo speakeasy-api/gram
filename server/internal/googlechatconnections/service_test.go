@@ -128,3 +128,18 @@ func TestPostedTriageThreadResumesOriginatingChat(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "active", untouched.Status, "invalid actions must not pause a trigger before returning an error")
 }
+
+func TestHostedTokenLookupFailsClosedOnDatabaseError(t *testing.T) {
+	t.Parallel()
+	ctx, f := newService(t)
+	runtime := &provider.Runtime{DB: f.db}
+	env := toolconfig.ToolCallEnv{GramChatID: uuid.NewString()}
+	token, managed, err := runtime.Token(ctx, env, "https://www.googleapis.com/auth/chat.bot", "spaces/test")
+	require.NoError(t, err)
+	require.Empty(t, token)
+	require.False(t, managed, "a confirmed absent binding allows the native integration")
+	f.db.Close()
+	token, _, err = runtime.Token(ctx, env, "https://www.googleapis.com/auth/chat.bot", "spaces/test")
+	require.ErrorContains(t, err, "resolve hosted Google credential binding")
+	require.Empty(t, token, "database failures must not fall back to environment credentials")
+}
