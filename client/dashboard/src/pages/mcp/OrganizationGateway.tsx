@@ -69,7 +69,8 @@ function OrganizationGatewayContent({
   } = useOrganizationGatewaySetting({ organizationId, isCurrentOrganization });
 
   const [reviewing, setReviewing] = useState(false);
-  const [tab, setTab] = useState("install");
+  const [selectedTab, setTab] = useState<string>();
+  const tab = selectedTab ?? (isOn === false ? "assignments" : "install");
   const endpointUrl =
     isOn && gateway.data?.available ? gateway.data.url : undefined;
 

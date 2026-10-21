@@ -4,7 +4,11 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { ReactNode } from "react";
 
-const state = vi.hoisted(() => ({ setOn: vi.fn(), error: false, on: false }));
+const state = vi.hoisted(() => ({
+  setOn: vi.fn(),
+  error: false,
+  on: false as boolean | undefined,
+}));
 vi.mock("@/components/page-templates", () => ({
   SettingsPage: ({
     children,
@@ -100,8 +104,10 @@ it.each([false, true])(
     state.on = on;
     render(<OrganizationGateway />);
     expect(
-      screen.queryByRole("button", { name: "Assignments loaded" }),
-    ).toBeNull();
+      screen
+        .getByRole("tab", { name: on ? "Install" : "View assignments" })
+        .getAttribute("aria-selected"),
+    ).toBe("true");
     await userEvent.click(
       screen.getByRole("tab", { name: "View assignments" }),
     );
@@ -127,4 +133,21 @@ it("keeps the copyable endpoint above both tabs", async () => {
     screen.getByText("https://api.example.test/mcp/gateway/test"),
   ).toBeTruthy();
   expect(screen.queryByRole("heading", { name: "Install" })).toBeNull();
+});
+
+it("selects assignments after a disabled setting loads, preserving an explicit tab choice", async () => {
+  state.on = undefined;
+  const { rerender } = render(<OrganizationGateway />);
+  state.on = false;
+  rerender(<OrganizationGateway />);
+  expect(
+    screen
+      .getByRole("tab", { name: "View assignments" })
+      .getAttribute("aria-selected"),
+  ).toBe("true");
+  await userEvent.click(screen.getByRole("tab", { name: "Install" }));
+  rerender(<OrganizationGateway />);
+  expect(
+    screen.getByRole("tab", { name: "Install" }).getAttribute("aria-selected"),
+  ).toBe("true");
 });
