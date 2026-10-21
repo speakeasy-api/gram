@@ -1,0 +1,24 @@
+client/dashboard/src/pages/identities/directoryPeople.ts
+  s_4103da898f1856::t_4453e4165a05b8 33
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "056bb987ada463375be1b311369e6e45915c10d3",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  },
+  "sessions": {
+    "s_4103da898f1856": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "d7407df2-5c59-414c-9360-bac2dc59464b",
+        "model": "unknown"
+      },
+      "human_author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}
