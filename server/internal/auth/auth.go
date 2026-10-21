@@ -200,9 +200,43 @@ func (s *Auth) checkProjectAccess(ctx context.Context, logger *slog.Logger, proj
 	return ctx, nil
 }
 
-func (s *Auth) CheckProjectAccess(ctx context.Context, logger *slog.Logger, projectID uuid.UUID) error {
+// AuthorizeProjectRead authorizes the caller to read a project it selected in
+// the request payload. The project must belong to the active organization and
+// match the project the credential is bound to, if any (project-scoped API
+// keys, chat session tokens, or a project resolved from the Gram-Project
+// header). RBAC-enforced principals must also hold project:read on it.
+func (s *Auth) AuthorizeProjectRead(ctx context.Context, logger *slog.Logger, projectID uuid.UUID) error {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok {
+	if !ok || authCtx == nil {
+		return oops.E(oops.CodeUnauthorized, nil, "no session found")
+	}
+
+	if authCtx.ProjectID != nil && *authCtx.ProjectID != projectID {
+		return oops.C(oops.CodeForbidden).LogWarn(ctx, logger,
+			attr.SlogOrganizationID(authCtx.ActiveOrganizationID),
+			attr.SlogProjectID(projectID.String()),
+		)
+	}
+
+	if err := s.CheckProjectInOrganization(ctx, logger, projectID); err != nil {
+		return err
+	}
+
+	return s.authz.Require(ctx, authz.Check{
+		Scope:        authz.ScopeProjectRead,
+		ResourceKind: "",
+		ResourceID:   projectID.String(),
+		Dimensions:   nil,
+	})
+}
+
+// CheckProjectInOrganization verifies only that the project belongs to the
+// caller's active organization. It ignores credential project binding and RBAC
+// grants, so callers must authorize the operation separately (for example with
+// org:admin). Use AuthorizeProjectRead to authorize access to project data.
+func (s *Auth) CheckProjectInOrganization(ctx context.Context, logger *slog.Logger, projectID uuid.UUID) error {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil {
 		return oops.E(oops.CodeUnauthorized, nil, "no session found")
 	}
 
