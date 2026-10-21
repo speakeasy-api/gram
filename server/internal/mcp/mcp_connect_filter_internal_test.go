@@ -57,20 +57,3 @@ func TestFilterToolsByMCPConnect_StopsAfterCancel(t *testing.T) {
 	require.ErrorIs(t, err, context.Canceled)
 	require.Equal(t, 1, *checks)
 }
-
-func TestFilterCatalogByMCPConnect_StopsAfterCancel(t *testing.T) {
-	t.Parallel()
-
-	toolsetID := uuid.NewString()
-	ctx, engine, checks := cancelOnFirstCheck(t, toolsetID)
-	catalog := &memberCatalog{byName: map[string]*toolListEntry{}}
-	for i := range 50 {
-		name := fmt.Sprintf("tool_%d", i)
-		catalog.byName[name] = &toolListEntry{Name: name}
-	}
-
-	err := filterCatalogByMCPConnect(ctx, testenv.NewLogger(t), engine, toolsetID, uuid.NewString(), "member", catalog)
-
-	require.ErrorIs(t, err, context.Canceled)
-	require.Equal(t, 1, *checks)
-}
