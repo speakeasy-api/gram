@@ -5,6 +5,7 @@ import { useMemo } from "react";
 import type { LauncherCandidate } from "./types";
 import { useAccessRequestCandidates } from "./useAccessRequestCandidates";
 import { useActionCandidates } from "./useActionCandidates";
+import { useAgentIdentityCandidates } from "./useAgentIdentityCandidates";
 import { useAssistantCandidates } from "./useAssistantCandidates";
 import { useCatalogCandidates } from "./useCatalogCandidates";
 import { useDeploymentCandidates } from "./useDeploymentCandidates";
@@ -17,6 +18,7 @@ import { usePolicyCandidates } from "./usePolicyCandidates";
 import { useProjectCandidates } from "./useProjectCandidates";
 import { useRecentCandidates } from "./useRecentCandidates";
 import { useRuleCandidates } from "./useRuleCandidates";
+import { useSkillCandidates } from "./useSkillCandidates";
 import { useSourceCandidates } from "./useSourceCandidates";
 
 /**
@@ -75,6 +77,8 @@ export function useLauncherCandidates({
   const canBrowseCatalog = hasScope("project:read", project.id);
   const canReadAssistants = hasScope("assistant:read", undefined, project.id);
 
+  const canReadSkills = hasScope("skill:read", project.id);
+
   const projectEnabled = enabled && inProject;
 
   const actions = useActionCandidates();
@@ -97,6 +101,10 @@ export function useLauncherCandidates({
   const assistants = useAssistantCandidates({
     enabled: projectEnabled && canReadAssistants,
   });
+  const skills = useSkillCandidates({
+    enabled: projectEnabled && canReadSkills,
+  });
+  const agentIdentities = useAgentIdentityCandidates({ enabled });
   const environments = useEnvironmentCandidates({ enabled: projectEnabled });
   const sources = useSourceCandidates({
     enabled: projectEnabled && canListMcp,
@@ -128,6 +136,8 @@ export function useLauncherCandidates({
       ...(inProject && canBrowseCatalog ? catalog : []),
       ...(inProject && canListPlugins ? plugins : []),
       ...(inProject && canReadAssistants ? assistants : []),
+      ...(inProject && canReadSkills ? skills : []),
+      ...agentIdentities,
       ...projectOnly(environments),
       ...(inProject && canListMcp ? sources : []),
       ...projectOnly(deployments),
@@ -146,6 +156,9 @@ export function useLauncherCandidates({
     canListPlugins,
     canBrowseCatalog,
     canReadAssistants,
+    canReadSkills,
+    skills,
+    agentIdentities,
     actions,
     recents,
     marketplace,
