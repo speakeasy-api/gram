@@ -44,6 +44,9 @@ const (
 // to judge the content, and the freshness signal that decides whether it is
 // served at all.
 type SetupResource struct {
+	// Render personalizes reviewed text for the authenticated organization.
+	Render func(context.Context, string) (string, error)
+
 	URI         string
 	Name        string
 	Title       string
@@ -190,7 +193,6 @@ func registerSetupResources(reg *Registrar, resources []SetupResource, now func(
 			Title:       resource.Title,
 			Description: resource.Description,
 			MIMEType:    "text/markdown",
-			Size:        int64(len(resource.Text)),
 		}, ResourceMeta{
 			Authorization: ExternalAuthorizationMember,
 			// Both audiences: a reviewed guide carries no connection-scoped or
@@ -198,7 +200,15 @@ func registerSetupResources(reg *Registrar, resources []SetupResource, now func(
 			// external client reads. Anything less would leave the resource
 			// links in a search result dangling on the assistant surface.
 			Audiences: bothAudiences,
-		}, func(_ context.Context) (string, error) {
+		}, func(ctx context.Context) (string, error) {
+			text := resource.Text
+			if resource.staleness(now()) != setupWithheld && resource.Render != nil {
+				var err error
+				text, err = resource.Render(ctx, text)
+				if err != nil {
+					return "", reg.failSafe(ctx, resource.URI, err)
+				}
+			}
 			switch resource.staleness(now()) {
 			case setupWithheld:
 				// The reader loses the guide, not the sources behind it: the
@@ -206,11 +216,11 @@ func registerSetupResources(reg *Registrar, resources []SetupResource, now func(
 				// when content is withheld, so they travel with the refusal.
 				return "", resource.unavailableError()
 			case setupStale:
-				return resource.staleWarning() + resource.Text, nil
+				return resource.staleWarning() + text, nil
 			case setupFresh:
-				return resource.Text, nil
+				return text, nil
 			default:
-				return resource.Text, nil
+				return text, nil
 			}
 		})
 	}
@@ -262,4 +272,25 @@ func setupResourceURIFromURI(uri string) string {
 		return ""
 	}
 	return SetupResourceURI(parts[0], parts[1])
+}
+
+// WithSetupCallbackResolver resolves the placeholder only after authentication.
+func WithSetupCallbackResolver(resources []SetupResource, placeholder string, resolve func(context.Context, string) (string, error)) []SetupResource {
+	for i := range resources {
+		resources[i].Render = func(ctx context.Context, text string) (string, error) {
+			if !strings.Contains(text, placeholder) {
+				return text, nil
+			}
+			principal, err := principalFromToolContext(ctx)
+			if err != nil {
+				return "", err
+			}
+			callback, err := resolve(ctx, principal.OrganizationID)
+			if err != nil {
+				return "", err
+			}
+			return strings.ReplaceAll(text, placeholder, callback), nil
+		}
+	}
+	return resources
 }
