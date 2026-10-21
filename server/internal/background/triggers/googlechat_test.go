@@ -12,6 +12,7 @@ import (
 	"github.com/coreos/go-oidc/v3/oidc"
 	jose "github.com/go-jose/go-jose/v4"
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -206,4 +207,13 @@ func TestGoogleChatRenewalRejectsMissingRuntime(t *testing.T) {
 	t.Parallel()
 	app := &App{}
 	require.ErrorContains(t, app.RenewManagedGoogleChat(t.Context(), time.Now()), "not configured")
+}
+
+func TestGoogleChatToolsRejectMissingRuntime(t *testing.T) {
+	t.Parallel()
+	for _, app := range []*App{nil, {}} {
+		_, _, err := app.ResolveGoogleChatToken(t.Context(), toolconfig.ToolCallEnv{}, "", "")
+		require.ErrorContains(t, err, "not configured")
+		require.ErrorContains(t, app.RecordGoogleChatReply(t.Context(), toolconfig.ToolCallEnv{}, nil), "not configured")
+	}
 }

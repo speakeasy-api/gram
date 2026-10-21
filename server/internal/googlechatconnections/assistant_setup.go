@@ -6,13 +6,13 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	assistantgen "github.com/speakeasy-api/gram/server/gen/assistants"
 	toolsetgen "github.com/speakeasy-api/gram/server/gen/toolsets"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/assistantidentity"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/googlechatconnections/repo"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	projectrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 )
 
@@ -52,7 +52,7 @@ func (s *Service) setupAssistant(ctx context.Context, b repo.GoogleChatBinding) 
 	name := "google-chat-" + b.ID.String()
 	toolset, err := s.setup.Toolsets.GetToolset(ctx, &toolsetgen.GetToolsetPayload{Slug: name, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: &slug})
 	if err != nil {
-		if !errors.Is(err, pgx.ErrNoRows) {
+		if failure, ok := errors.AsType[*oops.ShareableError](err); !ok || failure.Code != oops.CodeNotFound {
 			return fmt.Errorf("read Google Chat toolset: %w", err)
 		}
 		toolset, err = s.setup.Toolsets.CreateToolset(ctx, &toolsetgen.CreateToolsetPayload{SessionToken: nil, ApikeyToken: nil, Name: name, Description: nil, ToolUrns: []string{"tools:platform:googlechat:send_message", "tools:platform:googlechat:reply_to_thread", "tools:platform:googlechat:get_message", "tools:platform:googlechat:list_messages"}, ResourceUrns: nil, DefaultEnvironmentSlug: nil, Origin: nil, ProjectSlugInput: &slug})

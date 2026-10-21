@@ -8,7 +8,7 @@ import { Text } from "@/components/ui/Text";
 import { Button } from "@/components/ui/Button";
 import { Alert } from "@/components/ui/Alert";
 import { Input } from "@/components/ui/Input";
-import { GoogleChatPicker as Combobox } from "./GoogleChatPicker";
+import { GoogleChatPicker } from "./GoogleChatPicker";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { ApiErrorAlert } from "@/components/api-error-alert";
 import { DEMO_ORG_SLUG } from "@/lib/demo";
@@ -121,14 +121,18 @@ function GoogleChatContent(): JSX.Element {
       {connection && (
         <>
           <div className="flex flex-wrap items-center gap-3">
-            <Combobox
+            <GoogleChatPicker
               id="google-connection"
               label="Google account"
               selected={connection.id}
               items={connections.map((c) => ({ value: c.id, label: c.email }))}
               onSelectionChange={(item) => setSelected(item.value)}
             />
-            <Button variant="secondary" onClick={() => setRemove(connection)}>
+            <Button
+              variant="secondary"
+              disabled={org.slug === DEMO_ORG_SLUG || disconnect.isPending}
+              onClick={() => setRemove(connection)}
+            >
               <Button.Text>Disconnect</Button.Text>
             </Button>
           </div>
@@ -240,7 +244,7 @@ function AddGoogleChatSpace({
     <div className="border border-border p-5 space-y-4">
       <Heading variant="h4">Add an assistant to a space</Heading>
       <div className="grid gap-4 md:grid-cols-2">
-        <Combobox
+        <GoogleChatPicker
           id="google-project"
           label="Project"
           selected={projectId}
@@ -255,7 +259,7 @@ function AddGoogleChatSpace({
             setAssistant("");
           }}
         />
-        <Combobox
+        <GoogleChatPicker
           id="google-assistant"
           label="Assistant"
           selected={assistant}
@@ -267,7 +271,7 @@ function AddGoogleChatSpace({
           }
           onSelectionChange={(item) => setAssistant(item.value)}
         />
-        <Combobox
+        <GoogleChatPicker
           id="google-space"
           label="Space"
           selected={space}

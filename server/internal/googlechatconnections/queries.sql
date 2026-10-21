@@ -51,7 +51,7 @@ JOIN google_chat_connections c ON c.id=b.connection_id AND c.organization_id=b.o
 WHERE t.chat_id = @chat_id AND t.deleted IS FALSE AND b.status='active' AND c.status='connected' AND b.space_name = @space_name;
 -- name: ListRenewableBindings :many
 SELECT b.* FROM google_chat_bindings b JOIN google_chat_connections c ON c.id=b.connection_id AND c.organization_id=b.organization_id
-WHERE b.status='active' AND c.status='connected' AND b.id > @after_id ORDER BY b.id LIMIT 100;
+WHERE b.status='active' AND c.status='connected' AND b.id > @after_id ORDER BY b.id LIMIT @page_size;
 -- name: GetManagedBinding :one
 SELECT b.* FROM google_chat_bindings b JOIN google_chat_connections c ON c.id=b.connection_id AND c.organization_id=b.organization_id
 WHERE b.id = @id AND b.project_id = @project_id AND b.status='active' AND c.status='connected';

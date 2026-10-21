@@ -840,7 +840,7 @@ func (a *App) ProcessWebhook(ctx context.Context, instanceID uuid.UUID, body []b
 			if event == nil {
 				return nil, fmt.Errorf("webhook returned a nil batch event")
 			}
-			if _, err := a.processWebhookEvent(ctx, instance, envMap, body, event); err != nil {
+			if _, err := a.processWebhookEvent(ctx, instance, config, envMap, body, event); err != nil {
 				return nil, err
 			}
 		}
@@ -849,7 +849,7 @@ func (a *App) ProcessWebhook(ctx context.Context, instanceID uuid.UUID, body []b
 	if result.Event == nil {
 		return result, nil
 	}
-	result.Task, err = a.processWebhookEvent(ctx, instance, envMap, body, result.Event)
+	result.Task, err = a.processWebhookEvent(ctx, instance, config, envMap, body, result.Event)
 	if err != nil {
 		return nil, err
 	}
@@ -858,55 +858,7 @@ func (a *App) ProcessWebhook(ctx context.Context, instanceID uuid.UUID, body []b
 
 // processWebhookEvent independently filters, deduplicates, and routes each post,
 // including posts from different threads in a single provider delivery.
-func (a *App) processWebhookEvent(ctx context.Context, instance triggerrepo.TriggerInstance, envMap map[string]string, body []byte, event *EventEnvelope) (*Task, error) {
-	if value, ok := event.Event.(googlechatTriggerEvent); ok && value.ManagedBindingID != "" {
-		// Check routing before identity notices so unrelated conversation stays quiet.
-		raw, err := configJSONToMap(instance.ConfigJson)
-		if err != nil {
-			return nil, err
-		}
-		definition, _ := GetDefinition(DefinitionSlugGoogleChat)
-		cfg, err := definition.DecodeConfig(raw)
-		if err != nil {
-			return nil, err
-		}
-		matches, err := cfg.Filter(value)
-		if err != nil {
-			return nil, fmt.Errorf("filter Google event: %w", err)
-		}
-		if !matches {
-			return nil, nil
-		}
-		preview := *event
-		preview.CorrelationID = scopeGoogleChatCorrelation(instance.ID.String(), event.CorrelationID)
-		// This read only evaluates routing. A rejected sender must not subscribe a thread.
-		routed, ok := cfg.(RoutedConfig)
-		if !ok {
-			return nil, fmt.Errorf("google Chat routing is unavailable")
-		}
-		facts, _ := routed.RoutingFacts(value)
-		var existing *triggerrepo.TriggerThreadRoute
-		row, routeErr := a.repo.GetTriggerThreadRoute(ctx, triggerrepo.GetTriggerThreadRouteParams{ProjectID: instance.ProjectID, TargetKind: instance.TargetKind, TargetRef: instance.TargetRef, CorrelationID: boundAssistantKey(preview.CorrelationID)})
-		if routeErr == nil {
-			existing = &row
-		} else if !errors.Is(routeErr, pgx.ErrNoRows) {
-			return nil, fmt.Errorf("read Google thread route: %w", routeErr)
-		}
-		if decideRoute(routeInput{policy: routed.RoutingPolicy(), facts: facts, route: existing}).action == routeSkip {
-			return nil, nil
-		}
-		gate, ok := a.managedGoogleChat.(GoogleChatParticipantGate)
-		if !ok {
-			return nil, fmt.Errorf("managed Google participant gate is unavailable")
-		}
-		allowed, err := gate.Admit(ctx, instance.ProjectID, value.ManagedBindingID, value.UserName, value.SpaceName, value.ThreadName, value.MessageName)
-		if err != nil {
-			return nil, fmt.Errorf("check Google participant: %w", err)
-		}
-		if !allowed {
-			return nil, nil
-		}
-	}
+func (a *App) processWebhookEvent(ctx context.Context, instance triggerrepo.TriggerInstance, config Config, envMap map[string]string, body []byte, event *EventEnvelope) (*Task, error) {
 	event.Event = a.withSlackBotIdentity(ctx, instance, envMap, event.Event)
 	event.TriggerInstanceID = instance.ID.String()
 	event.DefinitionSlug = instance.DefinitionSlug
@@ -931,7 +883,7 @@ func (a *App) processWebhookEvent(ctx context.Context, instance triggerrepo.Trig
 	// out and return a nil task).
 	a.unfurlSlackGramLinks(ctx, instance, envMap, body, *event)
 
-	task, err := a.ProcessEvent(ctx, instance, *event)
+	task, err := a.processEvent(ctx, instance, config, *event)
 	if err != nil {
 		a.clearSlackThreadStatus(ctx, instance, envMap, *event)
 		return nil, fmt.Errorf("process event: %w", err)
@@ -1072,6 +1024,10 @@ func (a *App) ProcessEvent(ctx context.Context, instance triggerrepo.TriggerInst
 		return nil, fmt.Errorf("validate trigger instance: %w", err)
 	}
 
+	return a.processEvent(ctx, instance, config, envelope)
+}
+
+func (a *App) processEvent(ctx context.Context, instance triggerrepo.TriggerInstance, config Config, envelope EventEnvelope) (*Task, error) {
 	if instance.Status != StatusActive {
 		a.deliveryLogger.LogTriggerDelivery(ctx, instance, envelope, DeliveryStatusSkipped, "trigger is paused", nil)
 		return nil, nil
@@ -1368,52 +1324,41 @@ func (a *App) RenewManagedGoogleChat(ctx context.Context, now time.Time) error {
 	return nil
 }
 
-// ManagedGoogleChat validates hosted bindings and maintains their provider leases.
+// GoogleChatSender identifies the participant and conversation to admit.
+type GoogleChatSender struct {
+	Binding string
+	User    string
+	Space   string
+	Thread  string
+}
+
+// ManagedGoogleChat provides the hosted connection's complete runtime contract.
 type ManagedGoogleChat interface {
 	Validate(context.Context, uuid.UUID, string) error
 	Renew(context.Context, time.Time) error
-}
-
-// GoogleChatParticipantGate checks membership and replies to unmapped senders.
-type GoogleChatParticipantGate interface {
-	Admit(context.Context, uuid.UUID, string, string, string, string, string) (bool, error)
-}
-
-// GoogleChatTokenSource resolves a hosted tool credential within the caller's chat.
-type GoogleChatTokenSource interface {
+	Admit(context.Context, uuid.UUID, GoogleChatSender) (bool, error)
 	Token(context.Context, toolconfig.ToolCallEnv, string, string) (string, bool, error)
+	RecordReply(context.Context, toolconfig.ToolCallEnv, []byte) error
 }
 
 // ResolveGoogleChatToken shares hosted credentials with the MCP execution path.
 func (a *App) ResolveGoogleChatToken(ctx context.Context, env toolconfig.ToolCallEnv, scope, resource string) (string, bool, error) {
-	if a == nil {
-		return "", false, nil
+	if a == nil || a.managedGoogleChat == nil {
+		return "", false, fmt.Errorf("hosted Google Chat is not configured")
 	}
-	source, ok := a.managedGoogleChat.(GoogleChatTokenSource)
-	if !ok {
-		return "", false, nil
-	}
-	token, managed, err := source.Token(ctx, env, scope, resource)
+	token, managed, err := a.managedGoogleChat.Token(ctx, env, scope, resource)
 	if err != nil {
 		return "", managed, fmt.Errorf("resolve hosted Google token: %w", err)
 	}
 	return token, managed, nil
 }
 
-// GoogleChatReplyRecorder persists routing after a successful assistant post.
-type GoogleChatReplyRecorder interface {
-	RecordReply(context.Context, toolconfig.ToolCallEnv, []byte) error
-}
-
+// RecordGoogleChatReply persists routing after a successful assistant post.
 func (a *App) RecordGoogleChatReply(ctx context.Context, env toolconfig.ToolCallEnv, response []byte) error {
-	if a == nil {
-		return nil
+	if a == nil || a.managedGoogleChat == nil {
+		return fmt.Errorf("hosted Google Chat is not configured")
 	}
-	recorder, ok := a.managedGoogleChat.(GoogleChatReplyRecorder)
-	if !ok {
-		return nil
-	}
-	if err := recorder.RecordReply(ctx, env, response); err != nil {
+	if err := a.managedGoogleChat.RecordReply(ctx, env, response); err != nil {
 		return fmt.Errorf("record Google thread route: %w", err)
 	}
 	return nil

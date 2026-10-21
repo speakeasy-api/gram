@@ -4,7 +4,7 @@ import { Heading } from "@/components/ui/Heading";
 import { Text } from "@/components/ui/Text";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
-import { GoogleChatPicker as Combobox } from "./GoogleChatPicker";
+import { GoogleChatPicker } from "./GoogleChatPicker";
 import { ApiErrorAlert } from "@/components/api-error-alert";
 import {
   useGoogleChatMembers,
@@ -154,7 +154,7 @@ export function GoogleChatBindingPanel({
                   {!member.active ? " · No longer in space" : ""}
                 </Text>
               </div>
-              <Combobox
+              <GoogleChatPicker
                 id={`google-member-${member.id}`}
                 label="Speakeasy identity"
                 selected={member.userId ?? "unmapped"}

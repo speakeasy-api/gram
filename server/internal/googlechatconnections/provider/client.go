@@ -133,8 +133,8 @@ func (c *Client) AppToken(ctx context.Context, cloud bool) (string, error) {
 	return c.appToken(ctx, scope)
 }
 
-// HistoryToken obtains app authority for message events and history.
-func (c *Client) HistoryToken(ctx context.Context) (string, error) {
+// AppMessageToken obtains app authority for message events and history.
+func (c *Client) AppMessageToken(ctx context.Context) (string, error) {
 	return c.appToken(ctx, "https://www.googleapis.com/auth/chat.app.messages.readonly", "https://www.googleapis.com/auth/chat.bot")
 }
 func (c *Client) appToken(ctx context.Context, requestedScopes ...string) (string, error) {

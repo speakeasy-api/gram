@@ -13,10 +13,13 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/speakeasy-api/gram/server/internal/background/triggers"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/googlechatconnections/repo"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 )
+
+const googleChatRenewalPageSize = 100
 
 // Runtime resolves connection secrets only after a server-selected chat and space match.
 type Runtime struct {
@@ -44,7 +47,7 @@ func (r *Runtime) Token(ctx context.Context, env toolconfig.ToolCallEnv, scope, 
 		token, err := r.Client.AppToken(ctx, false)
 		return token, true, err
 	}
-	token, err := r.Client.HistoryToken(ctx)
+	token, err := r.Client.AppMessageToken(ctx)
 	return token, true, err
 }
 func (r *Runtime) Validate(ctx context.Context, project uuid.UUID, binding string) error {
@@ -62,7 +65,7 @@ func (r *Runtime) Renew(ctx context.Context, now time.Time) error {
 	cursor := uuid.Nil
 	failures := 0
 	for {
-		rows, err := repo.New(r.DB).ListRenewableBindings(ctx, cursor)
+		rows, err := repo.New(r.DB).ListRenewableBindings(ctx, repo.ListRenewableBindingsParams{AfterID: cursor, PageSize: googleChatRenewalPageSize})
 		if err != nil {
 			return fmt.Errorf("list managed Google subscriptions: %w", err)
 		}
@@ -77,7 +80,7 @@ func (r *Runtime) Renew(ctx context.Context, now time.Time) error {
 				failures++
 			}
 		}
-		if len(rows) < 100 {
+		if len(rows) < googleChatRenewalPageSize {
 			break
 		}
 		cursor = rows[len(rows)-1].ID
@@ -91,7 +94,7 @@ func (r *Runtime) renew(ctx context.Context, b repo.GoogleChatBinding, now time.
 	if !b.SubscriptionName.Valid {
 		return errors.New("google subscription is missing")
 	}
-	token, err := r.Client.HistoryToken(ctx)
+	token, err := r.Client.AppMessageToken(ctx)
 	if err != nil {
 		return err
 	}
@@ -119,16 +122,16 @@ func (r *Runtime) renew(ctx context.Context, b repo.GoogleChatBinding, now time.
 }
 
 // Admit checks the current mapping before a Chat command enters the assistant.
-func (r *Runtime) Admit(ctx context.Context, project uuid.UUID, binding, user, space, thread, message string) (bool, error) {
-	id, err := uuid.Parse(binding)
+func (r *Runtime) Admit(ctx context.Context, project uuid.UUID, sender triggers.GoogleChatSender) (bool, error) {
+	id, err := uuid.Parse(sender.Binding)
 	if err != nil {
 		return false, errors.New("invalid Google binding")
 	}
 	b, err := repo.New(r.DB).GetManagedBinding(ctx, repo.GetManagedBindingParams{ID: id, ProjectID: project})
-	if err != nil || b.SpaceName != space {
+	if err != nil || b.SpaceName != sender.Space {
 		return false, errors.New("inactive Google space")
 	}
-	_, err = repo.New(r.DB).ResolveMappedUser(ctx, repo.ResolveMappedUserParams{OrganizationID: b.OrganizationID, ProjectID: project, BindingID: b.ID, AssistantID: b.AssistantID, GoogleUserName: user})
+	_, err = repo.New(r.DB).ResolveMappedUser(ctx, repo.ResolveMappedUserParams{OrganizationID: b.OrganizationID, ProjectID: project, BindingID: b.ID, AssistantID: b.AssistantID, GoogleUserName: sender.User})
 	if err == nil {
 		return true, nil
 	}
@@ -139,7 +142,7 @@ func (r *Runtime) Admit(ctx context.Context, project uuid.UUID, binding, user, s
 		if err := r.RefreshMembers(ctx, project, id); err != nil {
 			return false, fmt.Errorf("refresh Google participants: %w", err)
 		}
-		_, err = repo.New(r.DB).ResolveMappedUser(ctx, repo.ResolveMappedUserParams{OrganizationID: b.OrganizationID, ProjectID: project, BindingID: b.ID, AssistantID: b.AssistantID, GoogleUserName: user})
+		_, err = repo.New(r.DB).ResolveMappedUser(ctx, repo.ResolveMappedUserParams{OrganizationID: b.OrganizationID, ProjectID: project, BindingID: b.ID, AssistantID: b.AssistantID, GoogleUserName: sender.User})
 		if err == nil {
 			return true, nil
 		}
@@ -147,9 +150,9 @@ func (r *Runtime) Admit(ctx context.Context, project uuid.UUID, binding, user, s
 			return false, fmt.Errorf("resolve refreshed Google participant: %w", err)
 		}
 	}
-	digest := sha256.Sum256([]byte(binding + "|" + thread + "|" + user))
+	digest := sha256.Sum256([]byte(sender.Binding + "|" + sender.Thread + "|" + sender.User))
 	messageID := "client-map-" + hex.EncodeToString(digest[:16])
-	if err := r.Client.NotifyUnmapped(ctx, space, thread, messageID); err != nil {
+	if err := r.Client.NotifyUnmapped(ctx, sender.Space, sender.Thread, messageID); err != nil {
 		return false, fmt.Errorf("notify unmapped Google participant: %w", err)
 	}
 	return false, nil

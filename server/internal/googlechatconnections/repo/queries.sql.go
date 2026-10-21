@@ -401,11 +401,16 @@ func (q *Queries) ListMembers(ctx context.Context, arg ListMembersParams) ([]Goo
 
 const listRenewableBindings = `-- name: ListRenewableBindings :many
 SELECT b.id, b.organization_id, b.project_id, b.connection_id, b.assistant_id, b.trigger_id, b.space_name, b.display_name, b.prefix, b.subscription_name, b.status, b.last_error, b.revision, b.created_at, b.updated_at FROM google_chat_bindings b JOIN google_chat_connections c ON c.id=b.connection_id AND c.organization_id=b.organization_id
-WHERE b.status='active' AND c.status='connected' AND b.id > $1 ORDER BY b.id LIMIT 100
+WHERE b.status='active' AND c.status='connected' AND b.id > $1 ORDER BY b.id LIMIT $2
 `
 
-func (q *Queries) ListRenewableBindings(ctx context.Context, afterID uuid.UUID) ([]GoogleChatBinding, error) {
-	rows, err := q.db.Query(ctx, listRenewableBindings, afterID)
+type ListRenewableBindingsParams struct {
+	AfterID  uuid.UUID
+	PageSize int32
+}
+
+func (q *Queries) ListRenewableBindings(ctx context.Context, arg ListRenewableBindingsParams) ([]GoogleChatBinding, error) {
+	rows, err := q.db.Query(ctx, listRenewableBindings, arg.AfterID, arg.PageSize)
 	if err != nil {
 		return nil, err
 	}

@@ -461,7 +461,7 @@ func (s *Service) provision(ctx context.Context, ac *contextvalues.AuthContext, 
 	cfg := s.provider.Config
 	pushName := strings.Split(cfg.Topic, "/topics/")[0] + "/subscriptions/chat-" + b.ID.String()
 	audience := strings.TrimRight(cfg.ServerURL, "/") + "/google-chat/" + b.ID.String()
-	appToken, err := s.provider.HistoryToken(ctx)
+	appToken, err := s.provider.AppMessageToken(ctx)
 	if err != nil {
 		return fmt.Errorf("authorize Google Chat events: %w", err)
 	}
@@ -633,6 +633,11 @@ func (s *Service) MapMember(ctx context.Context, p *gen.MapMemberPayload) (*gen.
 	return viewMember(row), nil
 }
 func (s *Service) UpdateBinding(ctx context.Context, p *gen.UpdateBindingPayload) (*gen.GoogleChatBinding, error) {
+	switch p.Action {
+	case "pause", "resume", "repair", "delete":
+	default:
+		return nil, oops.E(oops.CodeBadRequest, nil, "Choose pause, resume, repair, or delete")
+	}
 	ctx, cancel := context.WithTimeout(ctx, 90*time.Second)
 	defer cancel()
 	ac, err := s.authorize(ctx, true)
@@ -679,7 +684,7 @@ func (s *Service) UpdateBinding(ctx context.Context, p *gen.UpdateBindingPayload
 			s.logger.WarnContext(ctx, "remove deleted Google delivery", attr.SlogError(err))
 		}
 		if b.SubscriptionName.Valid {
-			token, err := s.provider.HistoryToken(ctx)
+			token, err := s.provider.AppMessageToken(ctx)
 			if err == nil {
 				err = s.provider.DeleteSubscription(ctx, token, b.SubscriptionName.String)
 			}
@@ -742,7 +747,7 @@ func (s *Service) Disconnect(ctx context.Context, p *gen.DisconnectPayload) erro
 			s.logger.WarnContext(ctx, "remove disconnected Google delivery", attr.SlogError(err))
 		}
 		if binding.SubscriptionName.Valid {
-			token, err := s.provider.HistoryToken(ctx)
+			token, err := s.provider.AppMessageToken(ctx)
 			if err == nil {
 				err = s.provider.DeleteSubscription(ctx, token, binding.SubscriptionName.String)
 			}

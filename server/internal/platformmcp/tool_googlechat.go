@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	gen "github.com/speakeasy-api/gram/server/gen/google_chat_connections"
 	"github.com/speakeasy-api/gram/server/internal/googlechatconnections"
@@ -13,7 +14,7 @@ type googleChatListInput struct{}
 type googleChatBindingInput struct {
 	BindingID string `json:"binding_id"`
 	Revision  int64  `json:"revision"`
-	Action    string `json:"action"`
+	Action    string `json:"action" jsonschema:"Operation to perform on the exact space binding"`
 	Confirmed bool   `json:"confirmed"`
 }
 type googleChatMappingInput struct {
@@ -69,7 +70,17 @@ func registerGoogleChatTools(reg *Registrar, service *googlechatconnections.Serv
 		}
 		return nil, googleChatToolOutput{Status: "ok", Connections: result, Members: nil, Binding: nil, Member: nil}, nil
 	})
-	addTool(reg, &mcp.Tool{Meta: nil, InputSchema: nil, OutputSchema: nil, Title: "", Icons: nil, Name: "manage_google_chat_space", Description: "Inspect participants or pause, resume, repair, or delete an exact Google Chat binding. Pass action inspect to read members. Mutations require its latest revision and confirmed=true after the user approves the exact space and action. Unconfirmed mutations make no changes.", Annotations: &mcp.ToolAnnotations{DestructiveHint: new(true), ReadOnlyHint: false, IdempotentHint: false, OpenWorldHint: new(true), Title: ""}}, meta, func(ctx context.Context, _ *mcp.CallToolRequest, input googleChatBindingInput) (*mcp.CallToolResult, googleChatToolOutput, error) {
+	manageSchema := &jsonschema.Schema{
+		Type: "object",
+		Properties: map[string]*jsonschema.Schema{
+			"binding_id": uuidSchema("Exact Google Chat binding ID."),
+			"revision":   {Type: "integer", Description: "Latest binding revision."},
+			"action":     enumSchema("inspect", "pause", "resume", "repair", "delete"),
+			"confirmed":  {Type: "boolean", Description: "True only after approval of the exact mutation."},
+		},
+		Required: []string{"binding_id", "revision", "action", "confirmed"},
+	}
+	addTool(reg, &mcp.Tool{Meta: nil, InputSchema: manageSchema, OutputSchema: nil, Title: "", Icons: nil, Name: "manage_google_chat_space", Description: "Inspect participants or pause, resume, repair, or delete an exact Google Chat binding. Pass action inspect to read members. Mutations require its latest revision and confirmed=true after the user approves the exact space and action. Unconfirmed mutations make no changes.", Annotations: &mcp.ToolAnnotations{DestructiveHint: new(true), ReadOnlyHint: false, IdempotentHint: false, OpenWorldHint: new(true), Title: ""}}, meta, func(ctx context.Context, _ *mcp.CallToolRequest, input googleChatBindingInput) (*mcp.CallToolResult, googleChatToolOutput, error) {
 		if service == nil {
 			return nil, googleChatToolOutput{}, ErrUnavailable
 		}

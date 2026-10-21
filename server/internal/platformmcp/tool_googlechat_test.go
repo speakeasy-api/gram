@@ -1,6 +1,7 @@
 package platformmcp
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -25,4 +26,18 @@ func TestGoogleChatToolsKeepAdminOnlyContractWhenUnavailable(t *testing.T) {
 		require.NotContains(t, string(a.InputSchema), "client_secret")
 		require.NotContains(t, string(a.InputSchema), "service_account_json")
 	}
+}
+
+func TestGoogleChatManagementActionSchema(t *testing.T) {
+	t.Parallel()
+	reg := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "test", Version: "1"}, nil))
+	registerGoogleChatTools(reg, nil)
+	descriptor := descriptorByName(t, reg, "manage_google_chat_space")
+	var schema struct {
+		Properties map[string]struct {
+			Enum []string `json:"enum"`
+		} `json:"properties"`
+	}
+	require.NoError(t, json.Unmarshal(descriptor.InputSchema, &schema))
+	require.Equal(t, []string{"inspect", "pause", "resume", "repair", "delete"}, schema.Properties["action"].Enum)
 }

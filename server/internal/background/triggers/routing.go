@@ -290,6 +290,22 @@ func (a *App) routeEvent(ctx context.Context, instance triggerrepo.TriggerInstan
 		return nil, decision.reason, nil
 	}
 
+	// Admit only routed messages, before persisting any subscription or cursor.
+	if value, ok := envelope.Event.(googlechatTriggerEvent); ok && value.ManagedBindingID != "" {
+		if a.managedGoogleChat == nil {
+			return nil, "", fmt.Errorf("hosted Google Chat is not configured")
+		}
+		allowed, err := a.managedGoogleChat.Admit(ctx, instance.ProjectID, GoogleChatSender{
+			Binding: value.ManagedBindingID, User: value.UserName, Space: value.SpaceName, Thread: value.ThreadName,
+		})
+		if err != nil {
+			return nil, "", fmt.Errorf("check Google participant: %w", err)
+		}
+		if !allowed {
+			return nil, "Google Chat participant is not mapped", nil
+		}
+	}
+
 	if decision.record != nil {
 		row, err := a.repo.UpsertTriggerThreadRouteState(ctx, triggerrepo.UpsertTriggerThreadRouteStateParams{
 			ProjectID:      instance.ProjectID,

@@ -122,4 +122,9 @@ func TestPostedTriageThreadResumesOriginatingChat(t *testing.T) {
 	unchanged, err := triggerrepo.New(f.db).GetTriggerThreadRoute(ctx, triggerrepo.GetTriggerThreadRouteParams{ProjectID: b.ProjectID, TargetKind: "assistant", TargetRef: assistant.ID.String(), CorrelationID: route.CorrelationID})
 	require.NoError(t, err)
 	require.Equal(t, "github:issue:123", unchanged.RouteToCorrelationID.String, "posting again must not take over an existing conversation")
+	_, err = f.service.UpdateBinding(ctx, &gen.UpdateBindingPayload{BindingID: b.ID.String(), Revision: b.Revision, Action: "unsupported"})
+	require.Error(t, err)
+	untouched, err := triggerrepo.New(f.db).GetTriggerInstanceByIDPublic(ctx, trigger.ID)
+	require.NoError(t, err)
+	require.Equal(t, "active", untouched.Status, "invalid actions must not pause a trigger before returning an error")
 }
