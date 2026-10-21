@@ -25,6 +25,7 @@ import (
 	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -514,17 +515,17 @@ func Run(ctx context.Context, db Acquirer, opts Options) (Report, error) {
 		}
 		conn.Release()
 	}()
-	locked, err := New(conn).TryLockOrganizationBackfill(ctx, opts.OrganizationID)
+	lock, err := New(conn).TryLockOrganizationBackfill(ctx, opts.OrganizationID)
 	switch {
 	case err != nil:
 		return Report{}, fmt.Errorf("lock organization backfill: %w", err)
-	case !locked:
+	case !lock.Locked:
 		return Report{}, ErrRunInProgress
 	}
-	return runLocked(ctx, conn, opts)
+	return runLocked(ctx, conn, opts, lock.StartedAt)
 }
 
-func runLocked(ctx context.Context, db TxStarter, opts Options) (Report, error) {
+func runLocked(ctx context.Context, db TxStarter, opts Options, startedAt pgtype.Timestamptz) (Report, error) {
 	pageSize := opts.PageSize
 	if pageSize <= 0 {
 		pageSize = defaultPageSize
@@ -548,7 +549,7 @@ func runLocked(ctx context.Context, db TxStarter, opts Options) (Report, error) 
 			return runEMA(ctx, tx, opts, &report, local, want)
 		}},
 		{name: PhaseReconcile, kind: "", run: func(ctx context.Context, tx pgx.Tx, local *Report) error {
-			return reconcileDerived(ctx, New(tx), opts, local, want, failed)
+			return reconcileDerived(ctx, New(tx), opts, local, want, failed, startedAt)
 		}},
 		{name: PhaseMark, kind: "", run: func(ctx context.Context, tx pgx.Tx, local *Report) error {
 			// Last, over every committed phase's servers.
@@ -790,6 +791,7 @@ func recordAuthClient(ctx context.Context, tx pgx.Tx, row ListAuthClientBackfill
 	err := inSavepoint(ctx, tx, func(sp pgx.Tx) error {
 		var err error
 		id, err = New(sp).CreateAuthClient(ctx, CreateAuthClientParams{
+			ID:                    OAuthClientID(row.OrganizationID, row.RemoteSessionClientID, clientType),
 			OrganizationID:        row.OrganizationID,
 			ProjectID:             row.ClientProjectID,
 			ClientType:            clientType,

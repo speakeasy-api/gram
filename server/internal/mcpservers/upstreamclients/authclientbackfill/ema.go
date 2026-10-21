@@ -259,6 +259,7 @@ func decideEMA(ctx context.Context, tx pgx.Tx, q *Queries, opts Options, key ema
 			err := inSavepoint(ctx, tx, func(sp pgx.Tx) error {
 				var err error
 				id, err = New(sp).CreateEMAAuthClient(ctx, CreateEMAAuthClientParams{
+					ID:                    EMAClientID(opts.OrganizationID, key.issuerID, key.clientID, first.ExactResource),
 					RemoteSessionIssuerID: key.issuerID,
 					Resource:              first.ExactResource,
 					RequestedScopes:       scopes,

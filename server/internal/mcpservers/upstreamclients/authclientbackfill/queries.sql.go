@@ -13,20 +13,20 @@ import (
 )
 
 const createAuthClient = `-- name: CreateAuthClient :one
-INSERT INTO mcp_auth_clients (organization_id, project_id, client_type, source, name, remote_session_client_id, client_attachment_scope)
-SELECT $1::text, $2::uuid, $3::text, 'backfill', $4::text, c.id, c.attachment_scope
+INSERT INTO mcp_auth_clients (id, organization_id, project_id, client_type, source, name, remote_session_client_id, client_attachment_scope)
+SELECT $1::uuid, $2::text, $3::uuid, $4::text, 'backfill', $5::text, c.id, c.attachment_scope
 FROM remote_session_clients AS c
 JOIN remote_session_issuers AS rsi
   ON rsi.id = c.remote_session_issuer_id
  AND rsi.deleted IS FALSE
- AND (rsi.organization_id IS NULL OR rsi.organization_id = $1::text)
-WHERE c.id = $5::uuid
+ AND (rsi.organization_id IS NULL OR rsi.organization_id = $2::text)
+WHERE c.id = $6::uuid
   AND c.deleted IS FALSE
-  AND c.credential_owner = CASE $3::text WHEN 'service_account' THEN 'self' ELSE 'subject' END
-  AND $3::text IN ('remote_session', 'service_account')
-  AND (c.project_id = $2::uuid
-       OR (c.project_id IS NULL AND c.organization_id = $1::text)
-       OR (c.project_id IS NULL AND c.organization_id IS NULL AND $3::text = 'remote_session'))
+  AND c.credential_owner = CASE $4::text WHEN 'service_account' THEN 'self' ELSE 'subject' END
+  AND $4::text IN ('remote_session', 'service_account')
+  AND (c.project_id = $3::uuid
+       OR (c.project_id IS NULL AND c.organization_id = $2::text)
+       OR (c.project_id IS NULL AND c.organization_id IS NULL AND $4::text = 'remote_session'))
   AND EXISTS (
     SELECT 1
     FROM mcp_server_remote_session_clients AS a
@@ -40,14 +40,22 @@ WHERE c.id = $5::uuid
      AND s.deleted IS FALSE
     WHERE a.remote_session_client_id = c.id
       AND a.client_attachment_scope = c.attachment_scope
-      AND a.organization_id = $1::text
+      AND a.organization_id = $2::text
       AND a.deleted IS FALSE
       AND (rsi.project_id IS NULL OR rsi.project_id = a.project_id)
   )
+ON CONFLICT (id) DO UPDATE
+SET deleted_at = NULL, updated_at = clock_timestamp()
+WHERE mcp_auth_clients.deleted
+  AND mcp_auth_clients.source = 'backfill'
+  AND mcp_auth_clients.organization_id = EXCLUDED.organization_id
+  AND mcp_auth_clients.client_type = EXCLUDED.client_type
+  AND mcp_auth_clients.remote_session_client_id = EXCLUDED.remote_session_client_id
 RETURNING id
 `
 
 type CreateAuthClientParams struct {
+	ID                    uuid.UUID
 	OrganizationID        string
 	ProjectID             uuid.NullUUID
 	ClientType            string
@@ -60,9 +68,14 @@ type CreateAuthClientParams struct {
 // still being live and in that organization's reach, the client owned as
 // decided and associated with a live server of a live project there. A
 // self-owned client is never platform-global. A concurrent run recording the
-// same client fails the type's unique key.
+// same client either fails the type's unique key or, under the same id, finds
+// it live and returns no row. The id is stable for the
+// organization, registration and type, so a client retired when its last
+// association went away is revived under the same id when one returns; only
+// its deletion is undone.
 func (q *Queries) CreateAuthClient(ctx context.Context, arg CreateAuthClientParams) (uuid.UUID, error) {
 	row := q.db.QueryRow(ctx, createAuthClient,
+		arg.ID,
 		arg.OrganizationID,
 		arg.ProjectID,
 		arg.ClientType,
@@ -76,25 +89,25 @@ func (q *Queries) CreateAuthClient(ctx context.Context, arg CreateAuthClientPara
 
 const createEMAAuthClient = `-- name: CreateEMAAuthClient :one
 WITH base AS (
-  INSERT INTO mcp_auth_clients (organization_id, project_id, client_type, source, name, remote_session_client_id, client_attachment_scope)
-  SELECT $4::text, c.project_id, 'ema', 'backfill', $5::text, c.id, c.attachment_scope
+  INSERT INTO mcp_auth_clients (id, organization_id, project_id, client_type, source, name, remote_session_client_id, client_attachment_scope)
+  SELECT $4::uuid, $5::text, c.project_id, 'ema', 'backfill', $6::text, c.id, c.attachment_scope
   FROM remote_session_clients AS c
   JOIN remote_session_issuers AS rsi
     ON rsi.id = c.remote_session_issuer_id
    AND rsi.deleted IS FALSE
-  WHERE c.id = $6::uuid
+  WHERE c.id = $7::uuid
     AND c.remote_session_issuer_id = $1::uuid
     AND c.deleted IS FALSE
     AND ((c.project_id IS NOT NULL AND EXISTS (
            SELECT 1 FROM projects AS p
-           WHERE p.id = c.project_id AND p.organization_id = $4::text AND p.deleted IS FALSE
+           WHERE p.id = c.project_id AND p.organization_id = $5::text AND p.deleted IS FALSE
          ))
-         OR (c.project_id IS NULL AND c.organization_id = $4::text)
+         OR (c.project_id IS NULL AND c.organization_id = $5::text)
          OR (c.project_id IS NULL AND c.organization_id IS NULL))
     AND EXISTS (
       SELECT 1 FROM remote_session_ema_bindings AS b
       JOIN projects AS bp ON bp.id = b.project_id AND bp.organization_id = b.organization_id AND bp.deleted IS FALSE
-      WHERE b.organization_id = $4::text
+      WHERE b.organization_id = $5::text
         AND b.remote_session_issuer_id = c.remote_session_issuer_id
         AND b.remote_session_client_id = c.id
         AND b.resource = $2::text
@@ -107,11 +120,23 @@ WITH base AS (
              OR (rsi.project_id IS NULL AND rsi.organization_id IS NULL))
         AND ARRAY(SELECT DISTINCT btrim(x) COLLATE "C" FROM unnest(b.requested_scopes) AS x WHERE btrim(x) <> '' ORDER BY 1) = $3::text[]
     )
+  ON CONFLICT (id) DO UPDATE
+  SET deleted_at = NULL, updated_at = clock_timestamp()
+  WHERE mcp_auth_clients.deleted
+    AND mcp_auth_clients.source = 'backfill'
+    AND mcp_auth_clients.organization_id = EXCLUDED.organization_id
+    AND mcp_auth_clients.client_type = 'ema'
+    AND mcp_auth_clients.remote_session_client_id = EXCLUDED.remote_session_client_id
   RETURNING id, organization_id, remote_session_client_id
 )
 INSERT INTO mcp_auth_client_emas (auth_client_id, organization_id, remote_session_client_id, remote_session_issuer_id, resource, requested_scopes)
 SELECT base.id, base.organization_id, base.remote_session_client_id, $1::uuid, $2::text, $3::text[]
 FROM base
+ON CONFLICT (auth_client_id) DO UPDATE
+SET deleted_at = NULL, requested_scopes = EXCLUDED.requested_scopes, updated_at = clock_timestamp()
+WHERE mcp_auth_client_emas.deleted
+  AND mcp_auth_client_emas.remote_session_issuer_id = EXCLUDED.remote_session_issuer_id
+  AND mcp_auth_client_emas.resource = EXCLUDED.resource
 RETURNING auth_client_id
 `
 
@@ -119,6 +144,7 @@ type CreateEMAAuthClientParams struct {
 	RemoteSessionIssuerID uuid.UUID
 	Resource              string
 	RequestedScopes       []string
+	ID                    uuid.UUID
 	OrganizationID        string
 	Name                  string
 	RemoteSessionClientID uuid.UUID
@@ -128,12 +154,15 @@ type CreateEMAAuthClientParams struct {
 // statement, conditional on the registration still being live, naming a live
 // issuer and in the organization's reach, and a ready binding of the
 // organization still naming that upstream with those scopes. A project
-// registration's client belongs to that project.
+// registration's client belongs to that project. The id is stable for the
+// organization, issuer, registration and resource, so a client retired while
+// its bindings were gone is revived under the same id, EMA details included.
 func (q *Queries) CreateEMAAuthClient(ctx context.Context, arg CreateEMAAuthClientParams) (uuid.UUID, error) {
 	row := q.db.QueryRow(ctx, createEMAAuthClient,
 		arg.RemoteSessionIssuerID,
 		arg.Resource,
 		arg.RequestedScopes,
+		arg.ID,
 		arg.OrganizationID,
 		arg.Name,
 		arg.RemoteSessionClientID,
@@ -2163,6 +2192,15 @@ func (q *Queries) PlanClientHeaders(ctx context.Context, arg PlanClientHeadersPa
 	return items, nil
 }
 
+const restoreRemoteHeaderFixture = `-- name: RestoreRemoteHeaderFixture :exec
+UPDATE remote_mcp_server_headers SET deleted_at = NULL, updated_at = clock_timestamp() WHERE id = $1
+`
+
+func (q *Queries) RestoreRemoteHeaderFixture(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, restoreRemoteHeaderFixture, id)
+	return err
+}
+
 const retireBackfillClient = `-- name: RetireBackfillClient :execrows
 WITH retired AS (
   UPDATE mcp_auth_clients AS ac
@@ -2172,6 +2210,39 @@ WITH retired AS (
     AND ac.source = 'backfill'
     AND ac.client_type = ANY($3::text[])
     AND ac.deleted IS FALSE
+    AND NOT EXISTS (
+      SELECT 1
+      FROM mcp_server_auth_clients AS l
+      JOIN mcp_servers AS s ON s.id = l.mcp_server_id AND s.project_id = l.project_id AND s.deleted IS FALSE
+      WHERE l.auth_client_id = ac.id
+        AND l.organization_id = ac.organization_id
+        AND l.deleted IS FALSE
+        AND (
+          EXISTS (
+            SELECT 1 FROM remote_mcp_server_headers AS h
+            JOIN remote_mcp_servers AS r ON r.id = h.remote_mcp_server_id AND r.project_id = s.project_id
+            WHERE h.remote_mcp_server_id = s.remote_mcp_server_id
+              AND GREATEST(h.created_at, h.updated_at, h.deleted_at) >= $4::timestamptz
+          )
+          OR EXISTS (
+            SELECT 1 FROM tunneled_mcp_server_headers AS h
+            JOIN tunneled_mcp_servers AS t ON t.id = h.tunneled_mcp_server_id AND t.project_id = s.project_id
+            WHERE h.tunneled_mcp_server_id = s.tunneled_mcp_server_id
+              AND GREATEST(h.created_at, h.updated_at, h.deleted_at) >= $4::timestamptz
+          )
+        )
+    )
+    AND NOT EXISTS (
+      SELECT 1
+      FROM mcp_auth_client_emas AS e
+      JOIN remote_session_ema_bindings AS b
+        ON b.organization_id = e.organization_id
+       AND b.remote_session_issuer_id = e.remote_session_issuer_id
+       AND b.remote_session_client_id = e.remote_session_client_id
+       AND rtrim(b.resource, '/') = rtrim(e.resource, '/')
+      WHERE e.auth_client_id = ac.id
+        AND GREATEST(b.created_at, b.updated_at) >= $4::timestamptz
+    )
   RETURNING ac.id
 ), details AS (
   UPDATE mcp_auth_client_emas AS e
@@ -2197,12 +2268,21 @@ type RetireBackfillClientParams struct {
 	ID             uuid.UUID
 	OrganizationID string
 	ClientTypes    []string
+	EvidenceSince  pgtype.Timestamptz
 }
 
 // Soft-deletes one live backfilled auth client of the given types, with its
-// EMA details and header copies.
+// EMA details and header copies, unless the configuration it was derived from
+// changed since the run began: a header of a source one of its servers is on,
+// or a binding naming its EMA upstream. The run decided from evidence read
+// earlier, so a change since then is left for the next run.
 func (q *Queries) RetireBackfillClient(ctx context.Context, arg RetireBackfillClientParams) (int64, error) {
-	result, err := q.db.Exec(ctx, retireBackfillClient, arg.ID, arg.OrganizationID, arg.ClientTypes)
+	result, err := q.db.Exec(ctx, retireBackfillClient,
+		arg.ID,
+		arg.OrganizationID,
+		arg.ClientTypes,
+		arg.EvidenceSince,
+	)
 	if err != nil {
 		return 0, err
 	}
@@ -3018,17 +3098,24 @@ func (q *Queries) SoftDeleteServerAuthClientLinksFixture(ctx context.Context, mc
 }
 
 const tryLockOrganizationBackfill = `-- name: TryLockOrganizationBackfill :one
-SELECT pg_try_advisory_lock(hashtext('authclientbackfill:' || $1::text))::boolean AS locked
+SELECT pg_try_advisory_lock(hashtext('authclientbackfill:' || $1::text))::boolean AS locked,
+       clock_timestamp()::timestamptz AS started_at
 `
+
+type TryLockOrganizationBackfillRow struct {
+	Locked    bool
+	StartedAt pgtype.Timestamptz
+}
 
 // Takes the organization's backfill lock for the session's life without
 // waiting, so one run holds it across all its phases; false means another run
-// holds it.
-func (q *Queries) TryLockOrganizationBackfill(ctx context.Context, organizationID string) (bool, error) {
+// holds it. started_at is the database's clock as the run begins, against
+// which retirement checks for configuration changed since.
+func (q *Queries) TryLockOrganizationBackfill(ctx context.Context, organizationID string) (TryLockOrganizationBackfillRow, error) {
 	row := q.db.QueryRow(ctx, tryLockOrganizationBackfill, organizationID)
-	var locked bool
-	err := row.Scan(&locked)
-	return locked, err
+	var i TryLockOrganizationBackfillRow
+	err := row.Scan(&i.Locked, &i.StartedAt)
+	return i, err
 }
 
 const unlockOrganizationBackfill = `-- name: UnlockOrganizationBackfill :exec
