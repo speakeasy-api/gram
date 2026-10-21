@@ -376,6 +376,9 @@ func (s *Service) describeMemberToolset(
 	// describe never discloses a tool the member endpoint would hide.
 	if gate.authenticated && !toolset.McpIsPublic {
 		for name, entry := range catalog.byName {
+			if err := ctx.Err(); err != nil {
+				return nil, err
+			}
 			err := s.authz.Require(ctx, authz.MCPToolCallCheck(toolset.ID.String(), authz.MCPToolCallDimensions{
 				Tool:        name,
 				Disposition: dispositionFromAnnotations(entry.Annotations),

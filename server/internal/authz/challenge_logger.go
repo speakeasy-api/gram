@@ -44,7 +44,7 @@ type challengeLogger struct {
 	FilterAllowedCount   uint32
 }
 
-const challengeOutboxTimeout = 10 * time.Second
+const challengeLogStepTimeout = 10 * time.Second
 
 // Log enqueues the challenge for asynchronous ingestion into ClickHouse. The
 // enqueue is gated behind the ChallengeLoggingEnabled feature check — if the
@@ -70,15 +70,13 @@ func (l challengeLogger) Log(ctx context.Context, dbtx database.DBTX, logger *sl
 		return
 	}
 
-	// Request cancellation must not drop the challenge once the authorization
-	// decision has completed. Keep it bounded so challenge logging cannot hold
-	// up the request indefinitely during a database outage.
-	detachedCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), challengeOutboxTimeout)
-	defer cancel()
+	// Detached and bounded: a client cancel must not drop a completed decision.
+	checkCtx, cancelCheck := context.WithTimeout(context.WithoutCancel(ctx), challengeLogStepTimeout)
+	defer cancelCheck()
 
-	enabled, err := isEnabled(detachedCtx, authCtx.ActiveOrganizationID)
+	enabled, err := isEnabled(checkCtx, authCtx.ActiveOrganizationID)
 	if err != nil {
-		logger.WarnContext(ctx, "failed to check authz challenge logging feature flag",
+		logger.WarnContext(checkCtx, "failed to check authz challenge logging feature flag",
 			attr.SlogError(err),
 			attr.SlogOrganizationID(authCtx.ActiveOrganizationID),
 		)
@@ -192,12 +190,15 @@ func (l challengeLogger) Log(ctx context.Context, dbtx database.DBTX, logger *sl
 		FilterAllowedCount:   &l.FilterAllowedCount,
 	}.Build()
 
-	if _, err := outbox.Publish(detachedCtx, dbtx, authCtx.ActiveOrganizationID, outbox.Message{
+	enqueueCtx, cancelEnqueue := context.WithTimeout(context.WithoutCancel(ctx), challengeLogStepTimeout)
+	defer cancelEnqueue()
+
+	if _, err := outbox.Publish(enqueueCtx, dbtx, authCtx.ActiveOrganizationID, outbox.Message{
 		Proto:      message,
 		PublicID:   challengeID,
 		Attributes: nil,
 	}); err != nil {
-		logger.WarnContext(detachedCtx, "failed to enqueue authz challenge",
+		logger.WarnContext(enqueueCtx, "failed to enqueue authz challenge",
 			attr.SlogError(err),
 		)
 		return

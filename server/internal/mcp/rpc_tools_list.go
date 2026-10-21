@@ -168,6 +168,9 @@ func handleToolsList(
 	if payload.authenticated && authzEngine != nil && payload.effectiveMCPPrivate(toolset.McpIsPublic) {
 		allowed := make([]*toolListEntry, 0, len(tools))
 		for _, t := range tools {
+			if err := ctx.Err(); err != nil {
+				return nil, err
+			}
 			disposition := dispositionFromAnnotations(t.Annotations)
 			if err := authzEngine.Require(ctx, authz.MCPToolCallCheck(payload.mcpConnectResourceID(toolset.ID), authz.MCPToolCallDimensions{
 				Tool:        t.Name,

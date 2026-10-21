@@ -139,6 +139,8 @@ func TestChallengeLogger_publishesAfterRequestCanceled(t *testing.T) {
 		if err := ctx.Err(); err != nil {
 			return false, err
 		}
+		_, bounded := ctx.Deadline()
+		require.True(t, bounded)
 		return true, nil
 	})
 
