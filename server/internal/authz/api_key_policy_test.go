@@ -155,6 +155,13 @@ func TestAuthorizeMandatoryForLegacyAPIKeys(t *testing.T) {
 	f.grant(t, ScopeMCPBlockedAuth, Selector{SelectorKeyResourceKind: ResourceKindMCPAuthClient, SelectorKeyResourceID: "client_a"})
 	requireMandatory(t, f.engine, ctx, MandatoryDecision{Allowed: false, Source: MandatoryPolicySourceAPIKey, Reason: MandatoryDenyReasonBlocked}, clientA)
 
+	expired := f.withKey(t, uuid.NullUUID{}, []string{"consumer"})
+	expired.grant(t, ScopeMCPConnect, projectConnectSelector(f.projectID))
+	requireMandatory(t, f.engine, expired.keyContext(t), MandatoryDecision{Allowed: true, Source: MandatoryPolicySourceAPIKey, Reason: MandatoryDenyReasonNone}, connect)
+	_, err = f.db.Exec(t.Context(), "UPDATE api_keys SET expires_at = clock_timestamp() - interval '1 minute' WHERE id = $1 AND organization_id = $2", expired.keyID, f.organizationID)
+	require.NoError(t, err)
+	requireMandatory(t, f.engine, expired.keyContext(t), MandatoryDecision{Allowed: false, Source: MandatoryPolicySourceAPIKey, Reason: MandatoryDenyReasonAPIKeyInactive}, connect)
+
 	_, err = keysrepo.New(f.db).DeleteAPIKey(t.Context(), keysrepo.DeleteAPIKeyParams{ID: f.keyID, OrganizationID: f.organizationID})
 	require.NoError(t, err)
 	requireMandatory(t, f.engine, ctx, MandatoryDecision{Allowed: false, Source: MandatoryPolicySourceAPIKey, Reason: MandatoryDenyReasonAPIKeyInactive}, connect)

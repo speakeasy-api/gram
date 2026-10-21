@@ -236,8 +236,8 @@ func (u *Principal) UnmarshalText(text []byte) error {
 // validate checks that the principal has a known type and a well-formed ID.
 // For user and role principals the ID is intentionally permissive (any
 // non-empty string up to maxSegmentLength) because IDs come from external
-// systems (WorkOS) and do not follow the slug pattern. Agent IDs must be
-// canonical UUIDs. Email IDs must be bare, lowercase RFC 5321 addresses so two
+// systems (WorkOS) and do not follow the slug pattern. Agent and api_key IDs
+// must be canonical UUIDs. Email IDs must be bare, lowercase RFC 5321 addresses so two
 // assignments to the same person collapse to one row.
 func (u *Principal) validate() error {
 	if u.checked {
