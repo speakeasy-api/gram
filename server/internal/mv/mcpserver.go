@@ -7,6 +7,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/networkaccess"
+	"github.com/speakeasy-api/gram/server/internal/platformtools"
 )
 
 // BuildMcpServerView converts a repo mcp_servers row into the API response
@@ -57,7 +58,7 @@ func BuildMcpServerToolsetSummaryView(row repo.ListToolsetSummariesByIDsRow) *ty
 		Slug:                  row.Slug,
 		Name:                  row.Name,
 		Description:           conv.FromPGText[string](row.Description),
-		ToolCount:             int(row.ToolCount),
+		ToolCount:             int(row.ToolCount) + len(platformtools.FindToolEntries(row.PlatformToolUrns)),
 		ToolSelectionMode:     row.ToolSelectionMode,
 		ExternalMcpSlugs:      slugs,
 		ExternalMcpProxyOnly:  row.ExternalMcpProxyOnly,
