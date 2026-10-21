@@ -32,22 +32,7 @@ type AddGatewayPluginServerParams struct {
 	ProjectID       uuid.UUID
 }
 
-type AddGatewayPluginServerRow struct {
-	ID              uuid.UUID
-	PluginID        uuid.UUID
-	ProjectID       uuid.NullUUID
-	McpServerID     uuid.NullUUID
-	MetaMcpServerID uuid.NullUUID
-	DisplayName     string
-	Policy          string
-	SortOrder       int32
-	CreatedAt       pgtype.Timestamptz
-	UpdatedAt       pgtype.Timestamptz
-	DeletedAt       pgtype.Timestamptz
-	Deleted         bool
-}
-
-func (q *Queries) AddGatewayPluginServer(ctx context.Context, arg AddGatewayPluginServerParams) (AddGatewayPluginServerRow, error) {
+func (q *Queries) AddGatewayPluginServer(ctx context.Context, arg AddGatewayPluginServerParams) (PluginServer, error) {
 	row := q.db.QueryRow(ctx, addGatewayPluginServer,
 		arg.MetaMcpServerID,
 		arg.DisplayName,
@@ -56,7 +41,7 @@ func (q *Queries) AddGatewayPluginServer(ctx context.Context, arg AddGatewayPlug
 		arg.PluginID,
 		arg.ProjectID,
 	)
-	var i AddGatewayPluginServerRow
+	var i PluginServer
 	err := row.Scan(
 		&i.ID,
 		&i.PluginID,
@@ -138,24 +123,9 @@ type AddPluginServerParams struct {
 	SortOrder   int32
 }
 
-type AddPluginServerRow struct {
-	ID              uuid.UUID
-	PluginID        uuid.UUID
-	ProjectID       uuid.NullUUID
-	McpServerID     uuid.NullUUID
-	MetaMcpServerID uuid.NullUUID
-	DisplayName     string
-	Policy          string
-	SortOrder       int32
-	CreatedAt       pgtype.Timestamptz
-	UpdatedAt       pgtype.Timestamptz
-	DeletedAt       pgtype.Timestamptz
-	Deleted         bool
-}
-
 // MCP server backends only. Gateway attachments must use
 // AddGatewayPluginServer, which supplies the project scope explicitly.
-func (q *Queries) AddPluginServer(ctx context.Context, arg AddPluginServerParams) (AddPluginServerRow, error) {
+func (q *Queries) AddPluginServer(ctx context.Context, arg AddPluginServerParams) (PluginServer, error) {
 	row := q.db.QueryRow(ctx, addPluginServer,
 		arg.PluginID,
 		arg.McpServerID,
@@ -163,7 +133,7 @@ func (q *Queries) AddPluginServer(ctx context.Context, arg AddPluginServerParams
 		arg.Policy,
 		arg.SortOrder,
 	)
-	var i AddPluginServerRow
+	var i PluginServer
 	err := row.Scan(
 		&i.ID,
 		&i.PluginID,
@@ -821,34 +791,19 @@ type GetPluginServerByBackendParams struct {
 	McpServerID    uuid.NullUUID
 }
 
-type GetPluginServerByBackendRow struct {
-	ID              uuid.UUID
-	PluginID        uuid.UUID
-	ProjectID       uuid.NullUUID
-	McpServerID     uuid.NullUUID
-	MetaMcpServerID uuid.NullUUID
-	DisplayName     string
-	Policy          string
-	SortOrder       int32
-	CreatedAt       pgtype.Timestamptz
-	UpdatedAt       pgtype.Timestamptz
-	DeletedAt       pgtype.Timestamptz
-	Deleted         bool
-}
-
 // Look up a live plugin server by its backend (toolset or mcp_server).
 // Used by AttachToDefaultPlugin to no-op on already-attached servers before
 // inserting: a duplicate insert can trip the (plugin_id, display_name)
 // unique index rather than a backend one, and either way the failed
 // statement aborts the caller's surrounding transaction.
-func (q *Queries) GetPluginServerByBackend(ctx context.Context, arg GetPluginServerByBackendParams) (GetPluginServerByBackendRow, error) {
+func (q *Queries) GetPluginServerByBackend(ctx context.Context, arg GetPluginServerByBackendParams) (PluginServer, error) {
 	row := q.db.QueryRow(ctx, getPluginServerByBackend,
 		arg.PluginID,
 		arg.ProjectID,
 		arg.OrganizationID,
 		arg.McpServerID,
 	)
-	var i GetPluginServerByBackendRow
+	var i PluginServer
 	err := row.Scan(
 		&i.ID,
 		&i.PluginID,
@@ -1856,30 +1811,15 @@ WHERE plugin_id = $1
 ORDER BY sort_order ASC, created_at ASC
 `
 
-type ListPluginServersRow struct {
-	ID              uuid.UUID
-	PluginID        uuid.UUID
-	ProjectID       uuid.NullUUID
-	McpServerID     uuid.NullUUID
-	MetaMcpServerID uuid.NullUUID
-	DisplayName     string
-	Policy          string
-	SortOrder       int32
-	CreatedAt       pgtype.Timestamptz
-	UpdatedAt       pgtype.Timestamptz
-	DeletedAt       pgtype.Timestamptz
-	Deleted         bool
-}
-
-func (q *Queries) ListPluginServers(ctx context.Context, pluginID uuid.UUID) ([]ListPluginServersRow, error) {
+func (q *Queries) ListPluginServers(ctx context.Context, pluginID uuid.UUID) ([]PluginServer, error) {
 	rows, err := q.db.Query(ctx, listPluginServers, pluginID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []ListPluginServersRow
+	var items []PluginServer
 	for rows.Next() {
-		var i ListPluginServersRow
+		var i PluginServer
 		if err := rows.Scan(
 			&i.ID,
 			&i.PluginID,
@@ -1919,34 +1859,19 @@ type ListPluginServersByPluginIDsParams struct {
 	ProjectID uuid.UUID
 }
 
-type ListPluginServersByPluginIDsRow struct {
-	ID              uuid.UUID
-	PluginID        uuid.UUID
-	ProjectID       uuid.NullUUID
-	McpServerID     uuid.NullUUID
-	MetaMcpServerID uuid.NullUUID
-	DisplayName     string
-	Policy          string
-	SortOrder       int32
-	CreatedAt       pgtype.Timestamptz
-	UpdatedAt       pgtype.Timestamptz
-	DeletedAt       pgtype.Timestamptz
-	Deleted         bool
-}
-
 // Batch variant of ListPluginServers for callers that need every server for
 // a set of plugins (e.g. ListPlugins) without one round-trip per plugin.
 // Joins plugins and scopes by project_id as defense-in-depth, so this stays
 // safe even if a future caller passes plugin IDs it hasn't already scoped.
-func (q *Queries) ListPluginServersByPluginIDs(ctx context.Context, arg ListPluginServersByPluginIDsParams) ([]ListPluginServersByPluginIDsRow, error) {
+func (q *Queries) ListPluginServersByPluginIDs(ctx context.Context, arg ListPluginServersByPluginIDsParams) ([]PluginServer, error) {
 	rows, err := q.db.Query(ctx, listPluginServersByPluginIDs, arg.PluginIds, arg.ProjectID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []ListPluginServersByPluginIDsRow
+	var items []PluginServer
 	for rows.Next() {
-		var i ListPluginServersByPluginIDsRow
+		var i PluginServer
 		if err := rows.Scan(
 			&i.ID,
 			&i.PluginID,
@@ -3037,30 +2962,15 @@ type RemovePlatformCleanupMembershipParams struct {
 	ProjectID      uuid.UUID
 }
 
-type RemovePlatformCleanupMembershipRow struct {
-	ID              uuid.UUID
-	PluginID        uuid.UUID
-	ProjectID       uuid.NullUUID
-	McpServerID     uuid.NullUUID
-	MetaMcpServerID uuid.NullUUID
-	DisplayName     string
-	Policy          string
-	SortOrder       int32
-	CreatedAt       pgtype.Timestamptz
-	UpdatedAt       pgtype.Timestamptz
-	DeletedAt       pgtype.Timestamptz
-	Deleted         bool
-}
-
 // Reassert tenant scope on the write after cleanup's scoped reads and row locks.
-func (q *Queries) RemovePlatformCleanupMembership(ctx context.Context, arg RemovePlatformCleanupMembershipParams) (RemovePlatformCleanupMembershipRow, error) {
+func (q *Queries) RemovePlatformCleanupMembership(ctx context.Context, arg RemovePlatformCleanupMembershipParams) (PluginServer, error) {
 	row := q.db.QueryRow(ctx, removePlatformCleanupMembership,
 		arg.ID,
 		arg.PluginID,
 		arg.OrganizationID,
 		arg.ProjectID,
 	)
-	var i RemovePlatformCleanupMembershipRow
+	var i PluginServer
 	err := row.Scan(
 		&i.ID,
 		&i.PluginID,
@@ -3093,26 +3003,11 @@ type RemovePluginServerParams struct {
 	PluginID uuid.UUID
 }
 
-type RemovePluginServerRow struct {
-	ID              uuid.UUID
-	PluginID        uuid.UUID
-	ProjectID       uuid.NullUUID
-	McpServerID     uuid.NullUUID
-	MetaMcpServerID uuid.NullUUID
-	DisplayName     string
-	Policy          string
-	SortOrder       int32
-	CreatedAt       pgtype.Timestamptz
-	UpdatedAt       pgtype.Timestamptz
-	DeletedAt       pgtype.Timestamptz
-	Deleted         bool
-}
-
 // Soft-deletes a plugin server and returns the removed row so the caller can
 // record the correct backend (toolset vs mcp_server) in the audit log.
-func (q *Queries) RemovePluginServer(ctx context.Context, arg RemovePluginServerParams) (RemovePluginServerRow, error) {
+func (q *Queries) RemovePluginServer(ctx context.Context, arg RemovePluginServerParams) (PluginServer, error) {
 	row := q.db.QueryRow(ctx, removePluginServer, arg.ID, arg.PluginID)
-	var i RemovePluginServerRow
+	var i PluginServer
 	err := row.Scan(
 		&i.ID,
 		&i.PluginID,
@@ -3582,22 +3477,7 @@ type UpdatePluginServerParams struct {
 	PluginID    uuid.UUID
 }
 
-type UpdatePluginServerRow struct {
-	ID              uuid.UUID
-	PluginID        uuid.UUID
-	ProjectID       uuid.NullUUID
-	McpServerID     uuid.NullUUID
-	MetaMcpServerID uuid.NullUUID
-	DisplayName     string
-	Policy          string
-	SortOrder       int32
-	CreatedAt       pgtype.Timestamptz
-	UpdatedAt       pgtype.Timestamptz
-	DeletedAt       pgtype.Timestamptz
-	Deleted         bool
-}
-
-func (q *Queries) UpdatePluginServer(ctx context.Context, arg UpdatePluginServerParams) (UpdatePluginServerRow, error) {
+func (q *Queries) UpdatePluginServer(ctx context.Context, arg UpdatePluginServerParams) (PluginServer, error) {
 	row := q.db.QueryRow(ctx, updatePluginServer,
 		arg.DisplayName,
 		arg.Policy,
@@ -3605,7 +3485,7 @@ func (q *Queries) UpdatePluginServer(ctx context.Context, arg UpdatePluginServer
 		arg.ID,
 		arg.PluginID,
 	)
-	var i UpdatePluginServerRow
+	var i PluginServer
 	err := row.Scan(
 		&i.ID,
 		&i.PluginID,

@@ -5862,35 +5862,6 @@ COMMENT ON COLUMN assistant_dashboard_messages.created_at IS '@access: confident
 -- (chat_id, seq) is the stable cursor for incremental polling.
 CREATE INDEX IF NOT EXISTS assistant_dashboard_messages_chat_id_seq_idx ON assistant_dashboard_messages (chat_id, seq);
 
-CREATE TABLE IF NOT EXISTS assistant_toolsets (
-  id uuid NOT NULL DEFAULT generate_uuidv7(),
-  assistant_id uuid NOT NULL,
-  toolset_id uuid NOT NULL,
-  environment_id uuid,
-  project_id uuid NOT NULL,
-
-  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-
-  CONSTRAINT assistant_toolsets_pkey PRIMARY KEY (id),
-  CONSTRAINT assistant_toolsets_assistant_id_fkey FOREIGN KEY (assistant_id) REFERENCES assistants (id) ON DELETE CASCADE,
-  CONSTRAINT assistant_toolsets_toolset_id_fkey FOREIGN KEY (toolset_id) REFERENCES toolsets (id) ON DELETE CASCADE,
-  CONSTRAINT assistant_toolsets_environment_id_fkey FOREIGN KEY (environment_id) REFERENCES environments (id) ON DELETE SET NULL,
-  CONSTRAINT assistant_toolsets_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
-  CONSTRAINT assistant_toolsets_assistant_id_toolset_id_key UNIQUE (assistant_id, toolset_id)
-);
-
-COMMENT ON COLUMN assistant_toolsets.id IS '@access: confidential';
-COMMENT ON COLUMN assistant_toolsets.assistant_id IS '@access: confidential';
-COMMENT ON COLUMN assistant_toolsets.toolset_id IS '@access: confidential';
-COMMENT ON COLUMN assistant_toolsets.environment_id IS '@access: confidential';
-COMMENT ON COLUMN assistant_toolsets.project_id IS '@access: confidential';
-COMMENT ON COLUMN assistant_toolsets.created_at IS '@access: confidential';
-COMMENT ON COLUMN assistant_toolsets.updated_at IS '@access: confidential';
-
-CREATE INDEX IF NOT EXISTS assistant_toolsets_assistant_id_idx ON assistant_toolsets (assistant_id);
-CREATE INDEX IF NOT EXISTS assistant_toolsets_toolset_id_idx ON assistant_toolsets (toolset_id);
-
 CREATE TABLE IF NOT EXISTS assistant_threads (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   assistant_id uuid NOT NULL,
@@ -10296,7 +10267,6 @@ CREATE UNIQUE INDEX IF NOT EXISTS organization_mcp_collection_server_attachments
 
 CREATE TABLE IF NOT EXISTS mcp_metadata (
   id UUID NOT NULL DEFAULT generate_uuidv7(),
-  toolset_id UUID,
   mcp_server_id UUID,
   project_id UUID NOT NULL,
   external_documentation_url TEXT,
@@ -10312,16 +10282,13 @@ CREATE TABLE IF NOT EXISTS mcp_metadata (
 
   CONSTRAINT mcp_metadata_pkey PRIMARY KEY (id),
   CONSTRAINT mcp_metadata_logo_id FOREIGN KEY (logo_id) REFERENCES assets (id) ON DELETE SET NULL,
-  CONSTRAINT mcp_metadata_toolset_id FOREIGN KEY (toolset_id) REFERENCES toolsets (id) ON DELETE CASCADE,
   CONSTRAINT mcp_metadata_mcp_server_id_fkey FOREIGN KEY (mcp_server_id) REFERENCES mcp_servers (id) ON DELETE CASCADE,
   CONSTRAINT mcp_metadata_project_id FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
   CONSTRAINT mcp_metadata_default_environment_id_fkey FOREIGN KEY (default_environment_id) REFERENCES environments (id) ON DELETE SET NULL,
-  -- Exactly one backend must be set: either a toolset or an MCP server.
-  CONSTRAINT mcp_metadata_backend_exclusivity_check CHECK ((toolset_id IS NULL) != (mcp_server_id IS NULL))
+  CONSTRAINT mcp_metadata_mcp_server_id_check CHECK (mcp_server_id IS NOT NULL)
 );
 
 COMMENT ON COLUMN mcp_metadata.id IS '@access: confidential';
-COMMENT ON COLUMN mcp_metadata.toolset_id IS '@access: confidential';
 COMMENT ON COLUMN mcp_metadata.mcp_server_id IS '@access: confidential';
 COMMENT ON COLUMN mcp_metadata.project_id IS '@access: confidential';
 COMMENT ON COLUMN mcp_metadata.external_documentation_url IS '@access: restricted';
@@ -10333,10 +10300,6 @@ COMMENT ON COLUMN mcp_metadata.default_environment_id IS '@access: confidential'
 COMMENT ON COLUMN mcp_metadata.installation_override_url IS '@access: restricted';
 COMMENT ON COLUMN mcp_metadata.created_at IS '@access: confidential';
 COMMENT ON COLUMN mcp_metadata.updated_at IS '@access: confidential';
-
-CREATE UNIQUE INDEX IF NOT EXISTS mcp_metadata_toolset_id_key
-ON mcp_metadata (toolset_id)
-WHERE toolset_id IS NOT NULL;
 
 CREATE UNIQUE INDEX IF NOT EXISTS mcp_metadata_mcp_server_id_key
 ON mcp_metadata (mcp_server_id)
@@ -10439,12 +10402,8 @@ CREATE UNIQUE INDEX IF NOT EXISTS mcp_endpoints_custom_domain_id_root_key
 ON mcp_endpoints (custom_domain_id)
 WHERE is_domain_root IS TRUE AND deleted IS FALSE;
 
--- MCP servers attached directly to an assistant. The legacy toolset
--- attachment path lives in assistant_toolsets; this table covers
--- mcp_servers-modelled backends (remote, tunnelled) that have no toolsets
--- row and so cannot be attached there. resolveAssistantMCPServers merges
--- both into the runtime MCP set. Replace-on-write like assistant_toolsets,
--- so no soft-delete column.
+-- MCP servers attached directly to an assistant. Replace-on-write, so no
+-- soft-delete column.
 CREATE TABLE IF NOT EXISTS assistant_mcp_servers (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   assistant_id uuid NOT NULL,
@@ -10619,13 +10578,12 @@ CREATE UNIQUE INDEX IF NOT EXISTS mcp_server_tool_metadata_mcp_server_id_tool_na
 ON mcp_server_tool_metadata (mcp_server_id, tool_name)
 WHERE deleted IS FALSE;
 
--- Links a plugin to a toolset, MCP server, or gateway (exactly one live backend).
+-- Links a plugin to an MCP server or gateway (exactly one live backend).
 CREATE TABLE IF NOT EXISTS plugin_servers (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   plugin_id uuid NOT NULL,
   -- Only gateway memberships set project_id, preserving legacy insert paths.
   project_id uuid,
-  toolset_id uuid,
   mcp_server_id uuid,
   meta_mcp_server_id uuid,
   display_name TEXT NOT NULL CHECK (display_name <> ''),
@@ -10641,13 +10599,8 @@ CREATE TABLE IF NOT EXISTS plugin_servers (
   CONSTRAINT plugin_servers_plugin_id_fkey FOREIGN KEY (plugin_id) REFERENCES plugins (id) ON DELETE CASCADE,
   CONSTRAINT plugin_servers_project_id_plugin_id_fkey FOREIGN KEY (project_id, plugin_id) REFERENCES plugins (project_id, id) ON DELETE CASCADE,
   -- RESTRICT is intentional: CASCADE would silently destroy rows.
-  -- Toolsets use soft deletes so RESTRICT only blocks manual hard deletes.
-  -- If a hard-delete path is added later, it must purge soft-deleted
-  -- plugin_servers referencing the target first.
-  CONSTRAINT plugin_servers_toolset_id_fkey FOREIGN KEY (toolset_id) REFERENCES toolsets (id) ON DELETE RESTRICT,
-  -- RESTRICT mirrors the toolset_id FK above (not the CASCADE used by the
-  -- collections attachment table): mcp_servers soft-delete, so RESTRICT only
-  -- blocks manual hard deletes. A live plugin member cannot lose its backend.
+  -- mcp_servers soft-delete, so RESTRICT only blocks manual hard deletes.
+  -- A live plugin member cannot lose its backend.
   CONSTRAINT plugin_servers_mcp_server_id_fkey FOREIGN KEY (mcp_server_id) REFERENCES mcp_servers (id) ON DELETE RESTRICT,
   -- Gateways must be detached before deletion. A hard delete can clear the
   -- reference only after the plugin member has been soft-deleted.
@@ -10655,15 +10608,14 @@ CREATE TABLE IF NOT EXISTS plugin_servers (
   CONSTRAINT plugin_servers_gateway_project_check CHECK (meta_mcp_server_id IS NULL OR project_id IS NOT NULL),
   CONSTRAINT plugin_servers_policy_check CHECK (policy IN ('required', 'optional')),
   CONSTRAINT plugin_servers_backend_exclusivity_check CHECK (
-    num_nonnulls(toolset_id, mcp_server_id, meta_mcp_server_id) = 1
-    OR (deleted_at IS NOT NULL AND num_nonnulls(toolset_id, mcp_server_id, meta_mcp_server_id) = 0)
+    num_nonnulls(mcp_server_id, meta_mcp_server_id) = 1
+    OR (deleted_at IS NOT NULL AND num_nonnulls(mcp_server_id, meta_mcp_server_id) = 0)
   )
 );
 
 COMMENT ON COLUMN plugin_servers.id IS '@access: confidential';
 COMMENT ON COLUMN plugin_servers.plugin_id IS '@access: confidential';
 COMMENT ON COLUMN plugin_servers.project_id IS '@access: confidential';
-COMMENT ON COLUMN plugin_servers.toolset_id IS '@access: confidential';
 COMMENT ON COLUMN plugin_servers.mcp_server_id IS '@access: confidential';
 COMMENT ON COLUMN plugin_servers.meta_mcp_server_id IS '@access: confidential';
 COMMENT ON COLUMN plugin_servers.display_name IS '@access: confidential';
@@ -10679,10 +10631,6 @@ CREATE UNIQUE INDEX IF NOT EXISTS plugin_servers_plugin_id_id_key
 
 CREATE UNIQUE INDEX IF NOT EXISTS plugin_servers_plugin_id_display_name_key
   ON plugin_servers (plugin_id, display_name)
-  WHERE deleted IS FALSE;
-
-CREATE UNIQUE INDEX IF NOT EXISTS plugin_servers_plugin_id_toolset_id_key
-  ON plugin_servers (plugin_id, toolset_id)
   WHERE deleted IS FALSE;
 
 CREATE UNIQUE INDEX IF NOT EXISTS plugin_servers_plugin_id_mcp_server_id_key
