@@ -75,11 +75,13 @@ var Kinds = []Kind{KindOAuth, KindHeader, KindEMA}
 
 // Phase names, as reported in PhaseErrors.
 const (
-	PhaseOAuth     = "oauth"
-	PhaseHeaders   = "headers"
-	PhaseEMA       = "ema"
-	PhaseReconcile = "reconcile"
-	PhaseMark      = "mark"
+	PhaseOAuth   = "oauth"
+	PhaseHeaders = "headers"
+	PhaseEMA     = "ema"
+	// PhaseEMAWarnings reports same-origin servers no client covers.
+	PhaseEMAWarnings = "ema_warnings"
+	PhaseReconcile   = "reconcile"
+	PhaseMark        = "mark"
 )
 
 // Outcome classifies one decision.
@@ -159,6 +161,11 @@ const (
 	// credential headers: copying them onto the shared client would send one
 	// source's credentials from the others' servers.
 	ReasonOAuthClientSharedAcrossSources Reason = "oauth_client_shared_across_sources"
+
+	// ReasonEMAClientSharedAcrossSources is an ema client offered by servers
+	// on more than one source with credential headers, so no one source's
+	// headers can be copied onto it.
+	ReasonEMAClientSharedAcrossSources Reason = "ema_client_shared_across_sources"
 
 	// ReasonConflictingScopes is identity chaining bindings for one upstream
 	// requesting different scopes.
@@ -534,6 +541,8 @@ func runLocked(ctx context.Context, db TxStarter, opts Options, startedAt pgtype
 	size := int32(pageSize) // #nosec G115 -- bounded by defaultPageSize or an operator flag
 	want := newExpected()
 	failed := map[Kind]bool{}
+	// Set by the EMA phase when it succeeds.
+	var ema *emaPlan
 	phases := []phase{
 		{name: PhaseOAuth, kind: KindOAuth, run: func(ctx context.Context, tx pgx.Tx, local *Report) error {
 			q := New(tx)
@@ -542,11 +551,26 @@ func runLocked(ctx context.Context, db TxStarter, opts Options, startedAt pgtype
 			}
 			return reconcile(ctx, q, opts, local)
 		}},
-		{name: PhaseHeaders, kind: KindHeader, run: func(ctx context.Context, tx pgx.Tx, local *Report) error {
-			return runHeaders(ctx, tx, opts, size, local, want)
-		}},
+		// EMA before headers, so a server an ema client serves gets its
+		// credential headers on that client.
 		{name: PhaseEMA, kind: KindEMA, run: func(ctx context.Context, tx pgx.Tx, local *Report) error {
-			return runEMA(ctx, tx, opts, &report, local, want)
+			plan := newEMAPlan()
+			if err := runEMA(ctx, tx, opts, local, want, plan); err != nil {
+				return err
+			}
+			ema = plan
+			return nil
+		}},
+		{name: PhaseHeaders, kind: KindHeader, run: func(ctx context.Context, tx pgx.Tx, local *Report) error {
+			return runHeaders(ctx, tx, opts, size, local, want, ema)
+		}},
+		{name: PhaseEMAWarnings, kind: "", run: func(ctx context.Context, tx pgx.Tx, local *Report) error {
+			// After every phase that records clients, so a server any of them
+			// covers draws no warning.
+			if ema == nil {
+				return nil
+			}
+			return reportEMAWarnings(ctx, New(tx), opts, ema, &report, local)
 		}},
 		{name: PhaseReconcile, kind: "", run: func(ctx context.Context, tx pgx.Tx, local *Report) error {
 			return reconcileDerived(ctx, New(tx), opts, local, want, failed, startedAt)
@@ -567,6 +591,10 @@ func runLocked(ctx context.Context, db TxStarter, opts Options, startedAt pgtype
 			report.PhaseErrors[p.name] = err.Error()
 			if p.kind != "" {
 				failed[p.kind] = true
+			}
+			if p.name == PhaseEMA {
+				// Its decisions were rolled back with it.
+				ema = nil
 			}
 		default:
 			report.merge(local)

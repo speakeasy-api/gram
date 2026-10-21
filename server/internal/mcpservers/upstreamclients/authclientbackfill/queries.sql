@@ -567,8 +567,8 @@ WHERE c.rank > 1 OR NOT EXISTS (SELECT 1 FROM desired AS d WHERE d.lname = c.lna
 -- the organization as stored, ciphertext included, conditional on the header
 -- and its source being live in a live project of the organization, in the
 -- auth client's project when the client has one, and, for an upstream OAuth
--- client's auth client, that client still being used only on the header's
--- source. Zero rows means the evidence changed or a copy with
+-- client's auth client or a required auth client, that client still being
+-- used on the header's source and only there. Zero rows means the evidence changed or a copy with
 -- that name already exists.
 INSERT INTO mcp_auth_client_headers (auth_client_id, organization_id, name, description, is_required, is_secret, value, value_from_request_header)
 SELECT ac.id, ac.organization_id, src.name, src.description, src.is_required, src.is_secret, src.value, src.value_from_request_header
@@ -606,12 +606,44 @@ WHERE TRUE
         FALSE
       )
   ))
+  AND (sqlc.narg('required_auth_client_id')::uuid IS NULL OR (
+    EXISTS (
+      SELECT 1
+      FROM mcp_server_auth_clients AS l
+      JOIN mcp_servers AS s3 ON s3.id = l.mcp_server_id AND s3.project_id = l.project_id AND s3.deleted IS FALSE
+      WHERE l.auth_client_id = sqlc.narg('required_auth_client_id')::uuid
+        AND l.organization_id = @organization_id::text
+        AND l.deleted IS FALSE
+        AND s3.project_id = src.project_id
+        AND COALESCE(
+          (src.source_kind = 'remote' AND s3.remote_mcp_server_id = src.source_id)
+          OR (src.source_kind = 'tunneled' AND s3.tunneled_mcp_server_id = src.source_id),
+          FALSE
+        )
+    )
+    AND NOT EXISTS (
+      SELECT 1
+      FROM mcp_server_auth_clients AS l
+      JOIN mcp_servers AS s3 ON s3.id = l.mcp_server_id AND s3.project_id = l.project_id AND s3.deleted IS FALSE
+      WHERE l.auth_client_id = sqlc.narg('required_auth_client_id')::uuid
+        AND l.organization_id = @organization_id::text
+        AND l.deleted IS FALSE
+        AND NOT COALESCE(
+          s3.project_id = src.project_id
+          AND ((src.source_kind = 'remote' AND s3.remote_mcp_server_id = src.source_id)
+               OR (src.source_kind = 'tunneled' AND s3.tunneled_mcp_server_id = src.source_id)),
+          FALSE
+        )
+    )
+  ))
 ON CONFLICT (auth_client_id, name) WHERE deleted IS FALSE DO NOTHING;
 
 -- name: UpdateHeaderCopy :execrows
 -- Brings one live header copy in line with its source header, conditional on
 -- the source header still being live and named the same in any letter case,
--- and in the auth client's project when the client has one.
+-- and in the auth client's project when the client has one; with a required
+-- upstream OAuth client or auth client, that client still being used on the
+-- header's source and only there.
 UPDATE mcp_auth_client_headers AS c
 SET name = src.name,
     description = src.description,
@@ -657,6 +689,36 @@ WHERE c.id = @copy_id::uuid
         OR (src.source_kind = 'tunneled' AND s2.tunneled_mcp_server_id = src.source_id),
         FALSE
       )
+  ))
+  AND (sqlc.narg('required_auth_client_id')::uuid IS NULL OR (
+    EXISTS (
+      SELECT 1
+      FROM mcp_server_auth_clients AS l
+      JOIN mcp_servers AS s3 ON s3.id = l.mcp_server_id AND s3.project_id = l.project_id AND s3.deleted IS FALSE
+      WHERE l.auth_client_id = sqlc.narg('required_auth_client_id')::uuid
+        AND l.organization_id = @organization_id::text
+        AND l.deleted IS FALSE
+        AND s3.project_id = src.project_id
+        AND COALESCE(
+          (src.source_kind = 'remote' AND s3.remote_mcp_server_id = src.source_id)
+          OR (src.source_kind = 'tunneled' AND s3.tunneled_mcp_server_id = src.source_id),
+          FALSE
+        )
+    )
+    AND NOT EXISTS (
+      SELECT 1
+      FROM mcp_server_auth_clients AS l
+      JOIN mcp_servers AS s3 ON s3.id = l.mcp_server_id AND s3.project_id = l.project_id AND s3.deleted IS FALSE
+      WHERE l.auth_client_id = sqlc.narg('required_auth_client_id')::uuid
+        AND l.organization_id = @organization_id::text
+        AND l.deleted IS FALSE
+        AND NOT COALESCE(
+          s3.project_id = src.project_id
+          AND ((src.source_kind = 'remote' AND s3.remote_mcp_server_id = src.source_id)
+               OR (src.source_kind = 'tunneled' AND s3.tunneled_mcp_server_id = src.source_id)),
+          FALSE
+        )
+    )
   ));
 
 -- name: RetireHeaderCopy :execrows
@@ -670,8 +732,9 @@ WHERE id = @copy_id::uuid
 -- name: LinkSourceServer :execrows
 -- Records that a live server offers a live backfilled auth client,
 -- conditional on the server still being backed by the source the decision
--- read and, when required_has_oauth is set, its upstream OAuth association
--- state being the one the decision used.
+-- read and, when required_has_oauth is set, its upstream identity state being
+-- the one the decision used: an upstream OAuth association or a live
+-- backfilled EMA client.
 INSERT INTO mcp_server_auth_clients (project_id, organization_id, mcp_server_id, auth_client_id, client_attachment_scope, source)
 SELECT s.project_id, p.organization_id, s.id, ac.id, ac.attachment_scope, 'backfill'
 FROM mcp_servers AS s
@@ -690,7 +753,7 @@ WHERE s.id = @mcp_server_id::uuid
         ELSE FALSE
       END
   AND (sqlc.narg('required_has_oauth')::boolean IS NULL
-       OR sqlc.narg('required_has_oauth')::boolean = EXISTS (
+       OR sqlc.narg('required_has_oauth')::boolean = (EXISTS (
          SELECT 1 FROM mcp_server_remote_session_clients AS a
          JOIN remote_session_clients AS c
            ON c.id = a.remote_session_client_id
@@ -703,8 +766,79 @@ WHERE s.id = @mcp_server_id::uuid
                OR (rsi.project_id IS NULL AND rsi.organization_id = a.organization_id)
                OR (rsi.project_id IS NULL AND rsi.organization_id IS NULL))
          WHERE a.mcp_server_id = s.id AND a.organization_id = p.organization_id AND a.deleted IS FALSE
-       ))
+       ) OR EXISTS (
+         SELECT 1 FROM mcp_server_auth_clients AS el
+         JOIN mcp_auth_clients AS ec
+           ON ec.id = el.auth_client_id
+          AND ec.organization_id = el.organization_id
+          AND ec.client_type = 'ema'
+          AND ec.source = 'backfill'
+          AND ec.deleted IS FALSE
+         WHERE el.mcp_server_id = s.id AND el.organization_id = p.organization_id AND el.deleted IS FALSE
+       )))
 ON CONFLICT (mcp_server_id, auth_client_id) WHERE deleted IS FALSE DO NOTHING;
+
+-- name: ListEMAClientLiveServers :many
+-- The live servers a backfilled ema client is linked to.
+SELECT s.id
+FROM mcp_server_auth_clients AS l
+JOIN mcp_auth_clients AS ac
+  ON ac.id = l.auth_client_id
+ AND ac.organization_id = l.organization_id
+ AND ac.client_type = 'ema'
+ AND ac.source = 'backfill'
+JOIN mcp_servers AS s ON s.id = l.mcp_server_id AND s.project_id = l.project_id AND s.deleted IS FALSE
+WHERE l.auth_client_id = @auth_client_id::uuid
+  AND l.organization_id = @organization_id::text
+  AND l.deleted IS FALSE
+ORDER BY s.id;
+
+-- name: ListServerCredentialSources :many
+-- The sources of the given live servers in the organization, each with those
+-- servers, its non-Authorization credential headers, and whether two of them
+-- differ only in letter case. A server with no remote or tunneled source is a
+-- source of its own with no headers.
+WITH used AS (
+  SELECT CASE WHEN s.remote_mcp_server_id IS NOT NULL THEN 'remote'
+              WHEN s.tunneled_mcp_server_id IS NOT NULL THEN 'tunneled'
+              ELSE 'none' END AS source_kind,
+         COALESCE(s.remote_mcp_server_id, s.tunneled_mcp_server_id, s.id) AS source_id,
+         s.id AS server_id
+  FROM mcp_servers AS s
+  JOIN projects AS p ON p.id = s.project_id AND p.organization_id = @organization_id::text AND p.deleted IS FALSE
+  WHERE s.id = ANY(@mcp_server_ids::uuid[])
+    AND s.deleted IS FALSE
+), grouped AS (
+  SELECT source_kind, source_id, array_agg(DISTINCT server_id ORDER BY server_id) AS server_ids
+  FROM used
+  GROUP BY source_kind, source_id
+)
+SELECT g.source_kind::text AS source_kind,
+       g.source_id::uuid AS source_id,
+       g.server_ids::uuid[] AS server_ids,
+       COALESCE(h.ids, ARRAY[]::uuid[])::uuid[] AS header_ids,
+       COALESCE(h.duplicate, FALSE)::boolean AS has_duplicate_names,
+       COALESCE(h.forwarded, ARRAY[]::text[])::text[] AS forwarded_sources
+FROM grouped AS g
+LEFT JOIN LATERAL (
+  SELECT array_agg(x.id ORDER BY x.id) AS ids,
+         COUNT(DISTINCT lower(x.name)) < COUNT(*) AS duplicate,
+         array_agg(DISTINCT x.forwarded) FILTER (WHERE x.forwarded IS NOT NULL) AS forwarded
+  FROM (
+    SELECT h.id, h.name, h.value_from_request_header AS forwarded FROM remote_mcp_server_headers AS h
+    JOIN remote_mcp_servers AS r ON r.id = h.remote_mcp_server_id AND r.deleted IS FALSE
+    JOIN projects AS sp ON sp.id = r.project_id AND sp.organization_id = @organization_id::text AND sp.deleted IS FALSE
+    WHERE g.source_kind = 'remote' AND h.remote_mcp_server_id = g.source_id AND h.deleted IS FALSE
+      AND lower(h.name) <> 'authorization' AND (h.value_from_request_header IS NOT NULL OR h.is_secret)
+    UNION ALL
+    SELECT h.id, h.name, h.value_from_request_header FROM tunneled_mcp_server_headers AS h
+    JOIN tunneled_mcp_servers AS t ON t.id = h.tunneled_mcp_server_id AND t.deleted IS FALSE
+    JOIN projects AS sp ON sp.id = t.project_id AND sp.organization_id = @organization_id::text AND sp.deleted IS FALSE
+    WHERE g.source_kind = 'tunneled' AND h.tunneled_mcp_server_id = g.source_id AND h.deleted IS FALSE
+      AND lower(h.name) <> 'authorization' AND (h.value_from_request_header IS NOT NULL OR h.is_secret)
+  ) AS x
+) AS h ON TRUE
+ORDER BY g.source_id;
 
 -- name: ListOAuthClientSources :many
 -- Each upstream OAuth client the organization's live associations name, per
