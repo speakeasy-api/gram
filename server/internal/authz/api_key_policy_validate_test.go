@@ -22,6 +22,7 @@ func TestValidateAPIKeyPolicyGrant(t *testing.T) {
 		"mcp write":       {ScopeMCPWrite, NewSelector(ScopeMCPWrite, "*")},
 		"any client":      {ScopeMCPAuth, Selector{SelectorKeyResourceKind: ResourceKindMCPAuthClient, SelectorKeyResourceID: WildcardResource}},
 		"personal owner":  {ScopeMCPAuth, Selector{SelectorKeyResourceKind: ResourceKindMCPAuthClient, SelectorKeyResourceID: "client_a", SelectorKeyClientType: AuthClientTypeRemoteSession, SelectorKeyConnectionOwner: SelectorValueRepresentedUser}},
+		"remote session":  {ScopeMCPAuth, Selector{SelectorKeyResourceKind: ResourceKindMCPAuthClient, SelectorKeyResourceID: "client_a", SelectorKeyClientType: AuthClientTypeRemoteSession}},
 		"invalid sel":     {ScopeMCPConnect, Selector{SelectorKeyResourceKind: ResourceKindMCPAuthClient, SelectorKeyResourceID: "*"}},
 		"root":            {ScopeRoot, Selector{SelectorKeyResourceKind: WildcardResource, SelectorKeyResourceID: WildcardResource}},
 		"hooks ingestion": {ScopeOrgHooksIngest, NewSelector(ScopeOrgHooksIngest, "org")},
