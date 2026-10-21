@@ -16,14 +16,8 @@ extract_hostname() {
   url="${url#*://}"
   # Remove everything after the first slash (path)
   url="${url%%/*}"
-  # IPv6 authorities carry brackets; certificate IP SANs do not.
-  case "$url" in
-    \[*\]*)
-      url="${url#\[}"
-      url="${url%%\]*}"
-      ;;
-    *) url="${url%%:*}" ;;
-  esac
+  # Remove port number
+  url="${url%%:*}"
   echo "$url"
 }
 
@@ -44,41 +38,9 @@ ensure_dir() {
 
 is_https() {
   case "$1" in
-    [hH][tT][tT][pP][sS]://*) return 0 ;;
+    https://*) return 0 ;;
     *) return 1 ;;
   esac
-}
-
-validate_devidp_url() {
-  [ -n "${GRAM_DEVIDP_EXTERNAL_URL:-}" ] || return 0
-  check_command node
-  node --input-type=module - "$GRAM_DEVIDP_EXTERNAL_URL" <<'NODE'
-import { BlockList, isIP } from "node:net";
-const raw = process.argv[2];
-let url;
-try {
-  if (!/^https?:\/\//i.test(raw)) throw new Error("invalid scheme");
-  url = new URL(raw);
-  if (!url.hostname || url.username || url.password) throw new Error("invalid authority");
-} catch {
-  console.error("GRAM_DEVIDP_EXTERNAL_URL must be an absolute HTTP(S) URL without credentials.");
-  process.exit(1);
-}
-if (raw.includes("?") || raw.includes("#")) {
-  console.error("GRAM_DEVIDP_EXTERNAL_URL must not contain a query or fragment.");
-  process.exit(1);
-}
-const host = url.hostname.replace(/^\[|\]$/g, "");
-const loopback = new BlockList();
-loopback.addSubnet("127.0.0.0", 8, "ipv4");
-loopback.addAddress("::1", "ipv6");
-const family = isIP(host);
-const isLoopback = host === "localhost" || (family !== 0 && loopback.check(host, family === 4 ? "ipv4" : "ipv6"));
-if (url.protocol === "http:" && !isLoopback) {
-  console.error("GRAM_DEVIDP_EXTERNAL_URL must use HTTPS unless its host is loopback.");
-  process.exit(1);
-}
-NODE
 }
 
 detect_tls() {
@@ -296,7 +258,6 @@ gen_keypair() {
 
 main() {
   local hosts
-  validate_devidp_url
   if ! detect_tls; then turn_off_tls && exit 0; fi
 
   check_command mkcert

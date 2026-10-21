@@ -116,58 +116,14 @@ for (const value of ["flag.example.com", ""]) {
   });
 }
 
-test("extra hosts do not enable TLS for HTTP-only endpoints", (t) => {
-  const f = fixture(t);
-  const calls = f.run({
-    GRAM_SERVER_URL: "http://localhost:8080",
-    GRAM_SITE_URL: "http://localhost:5173",
-    GRAM_DEVIDP_EXTERNAL_URL: "http://localhost:35291",
-    GRAM_SSL_EXTRA_HOSTS: "dev-machine.example.ts.net,100.64.0.1",
-  });
-  assert.equal(
-    calls.some((call) => call.name === "mkcert"),
-    false,
-  );
-});
-
-for (const host of [
-  "idp.example.ts.net",
-  "100.64.0.1",
-  "[fd7a:115c:a1e0::1]",
-  "localhost.example.com",
-  "127.0.0.1.example.com",
-]) {
-  for (const scheme of ["http", "https"]) {
-    test(`non-loopback HTTP dev-idp URL fails before TLS changes (${host}, ${scheme} app URLs)`, (t) => {
-      const f = fixture(t);
-      const { result, calls } = f.runResult({
-        GRAM_SERVER_URL: `${scheme}://localhost:8080`,
-        GRAM_SITE_URL: `${scheme}://localhost:5173`,
-        GRAM_DEVIDP_EXTERNAL_URL: `http://${host}:35291`,
-      });
-      assert.notEqual(result.status, 0);
-      assert.match(result.stderr, /GRAM_DEVIDP_EXTERNAL_URL.*HTTPS.*loopback/);
-      assert.equal(
-        calls.some((call) => call.name === "mise" || call.name === "mkcert"),
-        false,
-      );
-    });
-  }
-}
-
-for (const host of [
-  "localhost",
-  "127.0.0.1",
-  "127.255.255.255",
-  "[::1]",
-  "[::ffff:127.0.0.1]",
-]) {
-  test(`loopback HTTP dev-idp URL permits the all-HTTP opt-out (${host})`, (t) => {
+for (const host of ["localhost", "dev-machine.example.ts.net"]) {
+  test(`HTTP-only development endpoints disable TLS (${host})`, (t) => {
     const f = fixture(t);
     const calls = f.run({
-      GRAM_SERVER_URL: "http://localhost:8080",
-      GRAM_SITE_URL: "http://localhost:5173",
+      GRAM_SERVER_URL: `http://${host}:8080`,
+      GRAM_SITE_URL: `http://${host}:5173`,
       GRAM_DEVIDP_EXTERNAL_URL: `http://${host}:35291`,
+      GRAM_SSL_EXTRA_HOSTS: "dev-machine.example.ts.net,100.64.0.1",
     });
     assert.equal(
       calls.some((call) => call.name === "mkcert"),
@@ -188,56 +144,6 @@ for (const host of [
     }
   });
 }
-
-for (const url of [
-  "not-a-url",
-  "http:localhost:35291",
-  "https://",
-  "ftp://idp.example.ts.net",
-  "https://user@idp.example.ts.net",
-]) {
-  test(`invalid dev-idp URL fails before TLS changes (${url})`, (t) => {
-    const f = fixture(t);
-    const { result, calls } = f.runResult({ GRAM_DEVIDP_EXTERNAL_URL: url });
-    assert.notEqual(result.status, 0);
-    assert.match(result.stderr, /GRAM_DEVIDP_EXTERNAL_URL/);
-    assert.equal(
-      calls.some((call) => call.name === "mise" || call.name === "mkcert"),
-      false,
-    );
-  });
-}
-
-for (const base of [
-  "https://idp.example.ts.net:35291",
-  "http://localhost:35291",
-]) {
-  for (const suffix of ["?x=1", "?", "#fragment", "#", "?x=1#fragment"]) {
-    test(`dev-idp URL query or fragment fails before TLS changes (${base}${suffix})`, (t) => {
-      const f = fixture(t);
-      const { result, calls } = f.runResult({
-        GRAM_DEVIDP_EXTERNAL_URL: `${base}/${suffix}`,
-      });
-      assert.notEqual(result.status, 0);
-      assert.match(
-        result.stderr,
-        /GRAM_DEVIDP_EXTERNAL_URL.*query or fragment/,
-      );
-      assert.equal(
-        calls.some((call) => call.name === "mise" || call.name === "mkcert"),
-        false,
-      );
-    });
-  }
-}
-
-test("dev-idp URL validation permits escaped path delimiters", (t) => {
-  const f = fixture(t);
-  f.run({
-    GRAM_DEVIDP_EXTERNAL_URL:
-      "https://idp.example.ts.net:35291/tenant%3Fname%23id",
-  });
-});
 
 test("dev-idp HTTPS enables TLS when the server and dashboard URLs use HTTP", (t) => {
   const f = fixture(t);
@@ -264,21 +170,6 @@ test("dev-idp HTTPS enables TLS when the server and dashboard URLs use HTTP", (t
   assert.ok(generated.args.slice(4).includes("idp.example.ts.net"));
 });
 
-test("dev-idp HTTPS detection accepts case-insensitive URL schemes", (t) => {
-  const f = fixture(t);
-  const calls = f.run({
-    GRAM_SERVER_URL: "http://localhost:8080",
-    GRAM_SITE_URL: "http://localhost:5173",
-    GRAM_DEVIDP_EXTERNAL_URL: "hTtPs://idp.example.ts.net:35291",
-  });
-  assert.ok(
-    calls.some(
-      (call) =>
-        call.name === "mise" && call.args.includes("GRAM_HTTP_SCHEME=https"),
-    ),
-  );
-});
-
 test("mkcert includes a separately configured dev-idp hostname", (t) => {
   const f = fixture(t);
   const calls = f.run({
@@ -296,30 +187,6 @@ test("mkcert includes a separately configured dev-idp hostname", (t) => {
     "::1",
   ]);
 });
-
-for (const name of [
-  "GRAM_SERVER_URL",
-  "GRAM_SITE_URL",
-  "GRAM_DEVIDP_EXTERNAL_URL",
-]) {
-  for (const host of ["::1", "fd7a:115c:a1e0::1"]) {
-    test(`mkcert includes bare IPv6 SANs (${name}, ${host})`, (t) => {
-      const f = fixture(t);
-      const calls = f.run({ [name]: `https://[${host}]:35291/path` });
-      const generated = calls.find(
-        (call) => call.name === "mkcert" && call.args[0] === "-cert-file",
-      );
-      assert.ok(generated);
-      const names = generated.args.slice(4);
-      assert.ok(names.includes(host));
-      assert.equal(
-        names.some((name) => /[\[\]]/.test(name)),
-        false,
-      );
-      assert.equal(names.filter((name) => name === host).length, 1);
-    });
-  }
-}
 
 test("TLS setup also works without a dev-idp URL", (t) => {
   const f = fixture(t);
