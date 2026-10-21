@@ -19,13 +19,13 @@ pin = true
 # Installed as speakeasy-sdks, not speakeasy: the AI Control Plane CLI built
 # from cli/ is also called speakeasy, and the repo pin would otherwise shadow
 # it in every worktree. Tasks call speakeasy-sdks.
-"github:speakeasy-api/speakeasy" = { version = "1.796.1", rename_exe = "speakeasy-sdks" }
+"github:speakeasy-api/speakeasy" = { version = "1.803.0", rename_exe = "speakeasy-sdks" }
 "github:FiloSottile/mkcert" = "1.4.4"
 apko = "1.2.31"
 flyctl = "0.4.77"
 gh = "2.100.0"
-go = "1.27.1"
-golangci-lint = "2.13.2"
+go = "1.27.3"
+golangci-lint = "2.14.0"
 gomigrate = "4.19.1"
 gum = "0.17.0"
 jq = "1.8.2"
@@ -34,7 +34,7 @@ melange = "0.56.5"
 # Authoritative Node pin. `.node-version` mirrors it and must be kept in sync:
 # aube resolves its own runtime and cannot read this file, so without that
 # mirror it falls through to whatever `node` is first on PATH.
-nodejs = "24.16.0"
+nodejs = "24.22.1"
 aube = "2.8.0"
 # Kept for `changeset publish` only. Changesets v3 asks manypkg for the
 # workspace tool, which answers pnpm because pnpm-workspace.yaml is present.
@@ -46,7 +46,7 @@ aube = "2.8.0"
 # npm would ship verbatim.
 "github:pnpm/pnpm" = "11.19.0"
 watchexec = "2.5.1"
-uv = "0.12.1"
+uv = "0.13.4"
 yq = "4.53.3"
 hk = "1.56.1"
 zizmor = "1.30.1"

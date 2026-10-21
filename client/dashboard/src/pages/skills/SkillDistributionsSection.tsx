@@ -50,7 +50,7 @@ export function SkillDistributionsSection({
   const handleUndistribute = async (
     distribution: PluginSkillDistribution,
   ): Promise<void> => {
-    if (!canWritePlugin) return;
+    if (!canWritePlugin || distribution.channel !== "plugin") return;
     try {
       await undistribute.mutateAsync({
         request: {
@@ -110,6 +110,12 @@ export function SkillDistributionsSection({
                 >
                   Distributed <HumanizeDateTime date={distribution.createdAt} />
                 </Text>
+                {distribution.channel !== "plugin" && (
+                  <Text small muted className="block text-xs">
+                    Refresh the page before changing this unsupported
+                    distribution channel.
+                  </Text>
+                )}
               </div>
               <div className="flex shrink-0 items-center gap-2">
                 <SkillDistributionVersionBadge
@@ -123,7 +129,10 @@ export function SkillDistributionsSection({
                     tooltip="Remove from plugin"
                     aria-label={`Remove from ${distribution.pluginName}`}
                     className="hover:text-destructive"
-                    disabled={undistribute.isPending}
+                    disabled={
+                      undistribute.isPending ||
+                      distribution.channel !== "plugin"
+                    }
                     onClick={() => void handleUndistribute(distribution)}
                   >
                     <Trash2 className="h-4 w-4" />

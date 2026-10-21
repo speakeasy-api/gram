@@ -176,6 +176,19 @@ type PageHeaderBreadcrumbsProps = {
   substitutions?: Record<string, string | undefined>;
   skipSegments?: string[];
   stage?: ReleaseStage;
+  /**
+   * A crumb the path cannot carry, inserted after the named segment.
+   *
+   * An identity's page sits beside the list it was opened from rather than
+   * under it, so its trail jumped from Identities straight to the identity
+   * and never named which list that was.
+   */
+  insertAfter?: { segment: string; display: string; url: string };
+  /**
+   * Where a crumb should point, when its own path is not a page. Keyed by
+   * the crumb's path relative to the org or project root.
+   */
+  urlSubstitutions?: Record<string, string>;
 };
 
 type PageHeaderBreadcrumbsTrailProps = PageHeaderBreadcrumbsProps & {
@@ -229,6 +242,8 @@ function PageHeaderBreadcrumbsTrail({
   substitutions = {}, // Any segment and how it should be displayed, for example toolset slug -> toolset name
   skipSegments = [], // Segments to skip/hide from breadcrumbs
   stage,
+  insertAfter,
+  urlSubstitutions = {},
   rootCrumbs = true,
 }: PageHeaderBreadcrumbsTrailProps) {
   const params = useParams();
@@ -297,7 +312,11 @@ function PageHeaderBreadcrumbsTrail({
       }
 
       return {
-        url: baseUrl + (breadcrumbUrlSubstitutions[relativeUrl] ?? relativeUrl),
+        url:
+          baseUrl +
+          (urlSubstitutions[relativeUrl] ??
+            breadcrumbUrlSubstitutions[relativeUrl] ??
+            relativeUrl),
         display,
         pending,
         isCurrentPage: location.pathname.endsWith(relativeUrl),
@@ -336,8 +355,20 @@ function PageHeaderBreadcrumbsTrail({
     }
   }
 
-  // 3. Page segments
-  visibleElements.push(...pageElements);
+  // 3. Page segments, plus any crumb the path itself cannot carry
+  for (const element of pageElements) {
+    visibleElements.push(element);
+    if (
+      insertAfter !== undefined &&
+      element.url.endsWith(`/${insertAfter.segment}`)
+    ) {
+      visibleElements.push({
+        url: insertAfter.url,
+        display: insertAfter.display,
+        isCurrentPage: false,
+      });
+    }
+  }
 
   return (
     <div className="flex w-full items-center justify-between gap-2">

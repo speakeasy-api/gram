@@ -2407,6 +2407,26 @@ func marshalAgentAgentPollingPrincipalToAgentPollingPrincipalResponseBody(v *age
 	return res
 }
 
+// marshalAgentAgentMCPServerToAgentMCPServerResponseBody builds a value of
+// type *AgentMCPServerResponseBody from a value of type *agent.AgentMCPServer.
+func marshalAgentAgentMCPServerToAgentMCPServerResponseBody(v *agent.AgentMCPServer) *AgentMCPServerResponseBody {
+	res := &AgentMCPServerResponseBody{
+		Name:          v.Name,
+		URL:           v.URL,
+		TokenEndpoint: v.TokenEndpoint,
+		Audience:      v.Audience,
+		Resource:      v.Resource,
+	}
+	if v.Tools != nil {
+		res.Tools = make([]string, len(v.Tools))
+		for i, val := range v.Tools {
+			res.Tools[i] = val
+		}
+	}
+
+	return res
+}
+
 // marshalAgentSyncedAgentUserToSyncedAgentUserResponseBody builds a value of
 // type *SyncedAgentUserResponseBody from a value of type
 // *agent.SyncedAgentUser.

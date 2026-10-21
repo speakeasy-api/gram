@@ -58,8 +58,7 @@ function GatewayMemberIcons({
   );
 }
 
-// GatewayCard renders a meta MCP server (Gateway Endpoint) inside the /mcp
-// listing grid, alongside MCPCard (toolsets) and MCPServerCard (mcp_servers).
+// GatewayCard renders a meta MCP server (Gateway Endpoint) in the /mcp grid, beside MCPServerCard.
 export function GatewayCard({
   gateway,
 }: {

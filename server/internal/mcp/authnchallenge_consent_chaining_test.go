@@ -130,7 +130,8 @@ func TestConsentPage_IdentityChainedServiceIsManagedWithFallback(t *testing.T) {
 		UserID:                fx.subject.ID,
 		UpstreamResource:      consentChainedUpstream,
 		RemoteSessionIssuerID: uuid.NullUUID{},
-	}, reqs[0], "a direct upstream is judged with the runtime's issuer-free request")
+		RemoteSessionClientID: uuid.NullUUID{UUID: fx.clientA, Valid: true},
+	}, reqs[0], "a direct upstream is judged with the runtime's issuer-free request, through its client")
 }
 
 func TestConsentPage_UngovernedServiceStillConnectsInteractively(t *testing.T) {
@@ -244,7 +245,8 @@ func TestConsentPage_DirectTunneledServiceIsManaged(t *testing.T) {
 		UserID:                fx.subject.ID,
 		UpstreamResource:      identifier,
 		RemoteSessionIssuerID: uuid.NullUUID{UUID: issuer, Valid: true},
-	}, reqs[0], "a tunneled upstream is judged with its own derived issuer")
+		RemoteSessionClientID: uuid.NullUUID{UUID: fx.clientA, Valid: true},
+	}, reqs[0], "a tunneled upstream is judged with its own derived issuer, through its client")
 }
 
 func (g *consentGovernor) CheckConsent(ctx context.Context, req identitychaining.Request, _ uuid.UUID) identitychaining.Outcome {

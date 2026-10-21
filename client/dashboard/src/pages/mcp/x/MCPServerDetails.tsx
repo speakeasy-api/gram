@@ -1,4 +1,11 @@
-import { invalidateAllResourceAudience } from "@gram/client/react-query/resourceAudience.js";
+import { isKnownEnumValue } from "@/lib/enum";
+import { UpdateMcpServerFormVisibility as KnownUpdateMcpServerFormVisibility } from "@gram/client/models/components/updatemcpserverform.js";
+import {
+  invalidateMcpServerQueries,
+  mcpServerVisibilityToast,
+  mcpServerVisibilityUpdateForm,
+} from "@/lib/mcp-server-visibility";
+import { handleError } from "@/lib/errors";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { AttachedUserSessions } from "@/components/sessions/AttachedUserSessions";
@@ -19,16 +26,10 @@ import type {
   McpServer,
   McpServerVisibility,
 } from "@gram/client/models/components/mcpserver.js";
-import {
-  invalidateAllGetMcpServer,
-  useGetMcpServer,
-} from "@gram/client/react-query/getMcpServer.js";
+import { useGetMcpServer } from "@gram/client/react-query/getMcpServer.js";
 import { useMcpEndpoints } from "@gram/client/react-query/mcpEndpoints.js";
-import { invalidateAllMcpServers } from "@gram/client/react-query/mcpServers.js";
 import { useGetTunneledMcpServer } from "@gram/client/react-query/getTunneledMcpServer.js";
 import { getTunneledMcpServerArgs } from "@/lib/sources";
-import { invalidateAllPlugins } from "@gram/client/react-query/plugins";
-import { invalidateAllPublishStatus } from "@gram/client/react-query/publishStatus";
 import { useUpdateMcpServerMutation } from "@gram/client/react-query/updateMcpServer.js";
 import {
   DropdownMenu,
@@ -346,6 +347,11 @@ const PUBLIC_VISIBILITY_OPTION: VisibilityOption = {
   hoverDotClass: "group-hover:bg-green-400",
 };
 
+const ALL_VISIBILITY_OPTIONS = [
+  ...VISIBILITY_OPTIONS,
+  PUBLIC_VISIBILITY_OPTION,
+];
+
 export function MCPServerStatusDropdown({
   server,
 }: {
@@ -360,13 +366,11 @@ export function MCPServerStatusDropdown({
     { enabled: isTunneled },
   );
   const sourceAllowsPublic = tunneledSource?.allowPublic ?? false;
-  const options = isTunneled
-    ? [...VISIBILITY_OPTIONS, PUBLIC_VISIBILITY_OPTION]
-    : VISIBILITY_OPTIONS;
+  const options = isTunneled ? ALL_VISIBILITY_OPTIONS : VISIBILITY_OPTIONS;
   const currentLabel = visibilityLabel(server.visibility);
   const currentDotClass =
-    options.find((option) => option.value === server.visibility)?.dotClass ??
-    "bg-green-400";
+    ALL_VISIBILITY_OPTIONS.find((option) => option.value === server.visibility)
+      ?.dotClass ?? "bg-muted-foreground";
   // Public is gated on the source's consent; the option stays visible but
   // disabled, and this footer takes the owner to where consent is given.
   const publicBlocked = isTunneled && !sourceAllowsPublic;
@@ -394,6 +398,14 @@ export function MCPServerStatusDropdown({
       <DropdownMenuTrigger asChild disabled={!canWrite || updating}>
         <button
           type="button"
+          title={
+            isKnownEnumValue(
+              KnownUpdateMcpServerFormVisibility,
+              server.visibility,
+            )
+              ? undefined
+              : "Refresh the page before changing this server’s availability."
+          }
           disabled={!canWrite || updating}
           className="text-foreground hover:bg-muted trans border-border flex w-fit items-center gap-2 border px-3 py-1.5 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-50"
         >
@@ -474,17 +486,32 @@ export function MCPServerAvailabilityToggle({
 }): JSX.Element {
   const { canWrite, updateVisibility, updating } =
     useMcpServerVisibilityUpdate(server);
-  const available = server.visibility !== "disabled";
+  const known = isKnownEnumValue(
+    KnownUpdateMcpServerFormVisibility,
+    server.visibility,
+  );
+  const available =
+    server.visibility === "private" || server.visibility === "public";
 
+  let label = available ? "Disable MCP server" : "Enable MCP server";
+  if (!known) label = "MCP server availability unknown";
   return (
-    <Switch
-      checked={available}
-      disabled={!canWrite || updating}
-      aria-label={available ? "Disable MCP server" : "Enable MCP server"}
-      onCheckedChange={(checked) => {
-        updateVisibility(checked ? "private" : "disabled");
-      }}
-    />
+    <span
+      title={
+        known
+          ? undefined
+          : "Refresh the page before changing this server’s availability."
+      }
+    >
+      <Switch
+        checked={available}
+        disabled={!canWrite || updating}
+        aria-label={label}
+        onCheckedChange={(checked) => {
+          updateVisibility(checked ? "private" : "disabled");
+        }}
+      />
+    </span>
   );
 }
 
@@ -497,17 +524,7 @@ function visibilityLabel(visibility: McpServerVisibility): string {
     case "private":
       return "Private";
   }
-}
-
-function visibilityToast(visibility: McpServerVisibility): string {
-  switch (visibility) {
-    case "disabled":
-      return "MCP server disabled";
-    case "public":
-      return "MCP server set to public";
-    case "private":
-      return "MCP server set to private";
-  }
+  return "Unknown";
 }
 
 function useMcpServerVisibilityUpdate(server: McpServer): {
@@ -517,22 +534,16 @@ function useMcpServerVisibilityUpdate(server: McpServer): {
 } {
   const { hasScope } = useRBAC();
   // These controls offer no public state for hosted servers; their visibility stays on the toolset page.
-  const canWrite = hasScope("mcp:write") && !isCanonicalHostedWrapper(server);
+  const canWrite =
+    hasScope("mcp:write") &&
+    !isCanonicalHostedWrapper(server) &&
+    isKnownEnumValue(KnownUpdateMcpServerFormVisibility, server.visibility);
   const queryClient = useQueryClient();
   const update = useUpdateMcpServerMutation({
     onSuccess: async (_data, variables) => {
-      await Promise.all([
-        invalidateAllGetMcpServer(queryClient, { refetchType: "all" }),
-        invalidateAllMcpServers(queryClient, { refetchType: "all" }),
-        invalidateAllResourceAudience(queryClient, { refetchType: "all" }),
-        // Enabling a disabled server (e.g. disabled -> private) auto-attaches
-        // it to the Default plugin server-side, which the plugin banner's
-        // membership check and publish-freshness state need to pick up.
-        invalidateAllPlugins(queryClient, { refetchType: "all" }),
-        invalidateAllPublishStatus(queryClient, { refetchType: "all" }),
-      ]);
+      await invalidateMcpServerQueries(queryClient);
       const next = variables.request.updateMcpServerForm.visibility;
-      toast.success(visibilityToast(next));
+      toast.success(mcpServerVisibilityToast(next));
     },
     onError: (error) => {
       toast.error(
@@ -544,25 +555,16 @@ function useMcpServerVisibilityUpdate(server: McpServer): {
   });
 
   const updateVisibility = (next: McpServerVisibility) => {
-    if (next === server.visibility) return;
-    update.mutate({
-      request: {
-        updateMcpServerForm: {
-          id: server.id,
-          name: server.name ?? undefined,
-          remoteMcpServerId: server.remoteMcpServerId ?? undefined,
-          tunneledMcpServerId: server.tunneledMcpServerId ?? undefined,
-          toolsetId: server.toolsetId ?? undefined,
-          unproxiedMcpServerId: server.unproxiedMcpServerId ?? undefined,
-          environmentId: server.environmentId ?? undefined,
-          // updateMcpServer is a full-record replace for the optional UUID
-          // references. Forwarding them keeps stored values intact across a
-          // visibility-only update.
-          toolVariationsGroupId: server.toolVariationsGroupId ?? undefined,
-          visibility: next,
+    if (!canWrite || next === server.visibility) return;
+    try {
+      update.mutate({
+        request: {
+          updateMcpServerForm: mcpServerVisibilityUpdateForm(server, next),
         },
-      },
-    });
+      });
+    } catch (error) {
+      handleError(error, { title: "Couldn't update server availability" });
+    }
   };
 
   return { canWrite, updateVisibility, updating: update.isPending };

@@ -24,7 +24,7 @@ func TestPluginsService_PublishPlugins_CanonicalWrapperWinsOverOtherToolsetServe
 	ac, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 
-	toolset := createTestToolset(t, ctx, ti.conn, "canonical")
+	toolset := createUnwrappedTestToolset(t, ctx, ti.conn, "canonical")
 	servers := mcpserversrepo.New(ti.conn)
 	// A gateway member over the same toolset, created before the canonical wrapper.
 	_, err := servers.CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{

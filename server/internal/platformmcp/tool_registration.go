@@ -55,6 +55,7 @@ func registerCatalogRegistrationTool(reg *Registrar, registrations *Registration
 		Name:        "register_catalog_mcp",
 		Title:       "Add a Reviewed MCP Server to a Project",
 		Description: "Add one reviewed catalogue MCP server to a named project. This writes private project configuration only: nobody receives the MCP server until it is put into a plugin.",
+		Annotations: registrationAnnotations(),
 	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input RegisterCatalogMCPToolInput) (*mcp.CallToolResult, RegisterCatalogMCPToolOutput, error) {
 		principal, err := principalFromToolContext(ctx)
 		if err != nil {
@@ -121,6 +122,7 @@ func registerRemoteRegistrationTool(reg *Registrar, registrations *RegistrationS
 		Name:        "register_remote_mcp",
 		Title:       "Add Your Own MCP Server to a Project",
 		Description: "Add one MCP server of the user's own, by its Streamable HTTP URL, to a named project. Constraints: the URL is revalidated and re-inspected first. This writes private project configuration only: nobody receives the MCP server until it is put into a plugin, and a project Shadow MCP policy is applied at that later step, where the administrator's distribution counts as the review.",
+		Annotations: registrationAnnotations(),
 	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input RegisterRemoteMCPToolInput) (*mcp.CallToolResult, RegisterRemoteMCPToolOutput, error) {
 		principal, err := principalFromToolContext(ctx)
 		if err != nil {

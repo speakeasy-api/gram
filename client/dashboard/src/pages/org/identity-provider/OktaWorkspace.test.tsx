@@ -9,13 +9,15 @@ import {
 import { MemoryRouter } from "react-router";
 import { TooltipProvider } from "@/components/ui/Tooltip";
 import type { LiveConnection } from "./connectionView";
-import { OktaWorkspace } from "./OktaWorkspace";
+import { OktaProviderCard, OktaWorkspace } from "./OktaWorkspace";
 import { makeChecklistItem, makeConnection } from "./tabs/setup/testFixtures";
 
 const mocks = vi.hoisted(() => ({
   query: {
     data: {
-      connection: undefined as undefined | { status: string; orgUrl: string },
+      connection: undefined as
+        | undefined
+        | { provider: string; status: string; orgUrl: string },
     },
     error: null as Error | null,
     isPending: false,
@@ -78,6 +80,52 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("Okta workspace", () => {
+  it.each(["pending", "verified", "revoked"])(
+    "does not expose Okta management for an unsupported provider (%s)",
+    (status) => {
+      mocks.query.data.connection = {
+        provider: "future_provider",
+        status,
+        orgUrl: "https://identity.example.com",
+      };
+      show("setup");
+      expect(
+        screen.getByText(/managing this unsupported identity provider/),
+      ).toBeTruthy();
+      expect(screen.queryByRole("tab")).toBeNull();
+      expect(screen.queryByText(/Okta content:/)).toBeNull();
+      expect(screen.queryByText(/Leverage your Okta connection/)).toBeNull();
+      expect(screen.getByRole("region", { name: "Okta" })).toBeTruthy();
+      expect(
+        screen
+          .getByRole("link", { name: "All identity providers" })
+          .getAttribute("href"),
+      ).toBe("/example/identity?tab=identity-providers");
+    },
+  );
+
+  it("does not offer a connect action for an unsupported provider", () => {
+    mocks.query.data.connection = {
+      provider: "future_provider",
+      status: "revoked",
+      orgUrl: "https://identity.example.com",
+    };
+    render(
+      <MemoryRouter>
+        <OktaProviderCard />
+      </MemoryRouter>,
+    );
+    expect(
+      screen.getByText(/managing this unsupported identity provider/),
+    ).toBeTruthy();
+    expect(screen.queryByRole("link", { name: /Okta/ })).toBeNull();
+    expect(
+      screen.getByRole("article", { name: "Okta identity provider" }),
+    ).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Okta" })).toBeTruthy();
+    expect(screen.queryByText("Not connected")).toBeNull();
+  });
+
   it.each([
     ["setup", "setup"],
     ["applications", "applications"],
@@ -85,6 +133,7 @@ describe("Okta workspace", () => {
     ["unknown", "setup"],
   ])("opens the %s Okta view", (view, tab) => {
     mocks.query.data.connection = {
+      provider: "okta",
       status: "verified",
       orgUrl: "https://example.okta.com",
     };
@@ -103,6 +152,7 @@ describe("Okta workspace", () => {
   });
   it("activates Okta views using ArrowRight and Space", async () => {
     mocks.query.data.connection = {
+      provider: "okta",
       status: "verified",
       orgUrl: "https://example.okta.com",
     };
@@ -170,6 +220,7 @@ describe("Okta workspace", () => {
   );
   it("treats revoked connections as unconnected for deep links", () => {
     mocks.query.data.connection = {
+      provider: "okta",
       status: "revoked",
       orgUrl: "https://example.okta.com",
     };
@@ -182,6 +233,7 @@ describe("Okta workspace", () => {
     "keeps workspace tabs for %s connections",
     (status) => {
       mocks.query.data.connection = {
+        provider: "okta",
         status,
         orgUrl: "https://example.okta.com",
       };
@@ -211,3 +263,18 @@ describe("Okta workspace", () => {
     expect(screen.queryByText(/Okta content:/)).toBeNull();
   });
 });
+
+it.each(["setup", "applications", "cross-app-access"])(
+  "blocks unknown status on the %s view",
+  (view) => {
+    mocks.query.data.connection = {
+      provider: "okta",
+      status: "future_status",
+      orgUrl: "https://example.okta.com",
+    };
+    show(view);
+    expect(screen.getByText(/Connection status is unknown/)).toBeTruthy();
+    expect(screen.queryByRole("tab")).toBeNull();
+    expect(screen.queryByText(/Okta content:/)).toBeNull();
+  },
+);

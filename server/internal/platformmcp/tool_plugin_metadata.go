@@ -43,7 +43,7 @@ func registerPluginMetadataTools(reg *Registrar, plugins *PluginsService) {
 			"The slug is the plugin's permanent install name. When omitted it is derived from the name; when supplied it must already be at most 60 lowercase letters, digits, and hyphens. Choose one idempotency key for this create and pass it on both calls. Call first without confirmed: true: nothing is created and no receipt is stored, and the confirmation_required refusal returns the exact slug in its slug field. Show the user that slug, never one you worked out yourself, then call again with the same input, the same idempotency key, and confirmed: true once they confirm. Use a fresh key only for a new attempt, such as a different slug after slug_taken. A slug another plugin in the project holds is refused as slug_taken; reusing an idempotency key with different input is refused as idempotency_key_reused. " +
 			"The new plugin carries nothing. In the organization's default project it is delivered to every member, as the dashboard does there; in any other project it reaches no one until people are assigned to it. " +
 			"Retrying with the same idempotency key returns the plugin already created rather than a second one.",
-		Annotations: &mcp.ToolAnnotations{IdempotentHint: true, DestructiveHint: new(false)},
+		Annotations: &mcp.ToolAnnotations{IdempotentHint: true, DestructiveHint: new(false), OpenWorldHint: new(false)},
 	}, meta, createPlugin)
 	addTool(reg, &mcp.Tool{
 		Name:  operationRenamePlugin,
@@ -51,7 +51,7 @@ func registerPluginMetadataTools(reg *Registrar, plugins *PluginsService) {
 		Description: "Change the display name of one exact plugin in an explicit project. Nothing else changes: not its slug or install name, not its description, not which MCP servers and skills it carries, and not who receives it. " +
 			"Name the plugin exactly as list_plugins returned it, pass a stable idempotency key, and set confirmed: true only after the user confirms the plugin and its new name. " +
 			"People who already installed the plugin see the new name the next time the plugin is published to them.",
-		Annotations: &mcp.ToolAnnotations{IdempotentHint: true, DestructiveHint: new(false)},
+		Annotations: &mcp.ToolAnnotations{IdempotentHint: true, DestructiveHint: new(false), OpenWorldHint: new(false)},
 	}, meta, renamePlugin)
 }
 

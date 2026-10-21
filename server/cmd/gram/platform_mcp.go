@@ -97,6 +97,9 @@ type platformMCPConfig struct {
 	AccessRoles            access.RoleProvider
 	PluginPublisher        *plugins.Service
 	PluginManagement       *plugins.Service
+	// DirectoryReview backs the directory review tools with the dashboard's
+	// access service, so they share its authorization, checks and audit.
+	DirectoryReview        platformmcp.DirectoryReviewBackend
 	PluginPublishSignaler  plugins.PluginPublishSignaler
 	NetworkAccessAdmission networkaccess.EligibilityChecker
 	PublicationRequests    plugins.PublicationRequests
@@ -461,6 +464,9 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		pluginInventory.WithServerRemoval(config.PluginManagement)
 	}
 	accessReads := platformmcp.NewAccessReadService(config.Logger, config.DB, budgets.AccessReads, config.JWTSigningKey)
+	if config.DirectoryReview != nil {
+		accessReads.WithDirectoryReview(config.DirectoryReview)
+	}
 	accessRoleMutations, accessRoleMutationErr := platformmcp.NewAccessRoleMutationService(accessReads, config.FeatureFlags, budgets.AccessRoleMutations, config.JWTSigningKey, access.NewRoleManager(config.Logger, config.DB, config.AccessRoles, config.AuditLogger, config.PublicationRequests, config.DistributionAdmission))
 	if accessRoleMutationErr != nil {
 		config.Logger.WarnContext(ctx, "Platform MCP access role mutations unavailable", attr.SlogError(accessRoleMutationErr))
@@ -504,8 +510,8 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		WithMCPNetworkTraffic(config.NetworkTraffic, config.LogsEnabled).
 		WithOrganizationEvents(config.EventFeed, config.LogsEnabled, config.DashboardURL).
 		WithNetworkIngressStatus(config.DashboardURL).
-		WithRiskAnalysisStatus(platformmcp.NewRiskAnalysisStatusService(config.Logger, config.DB, config.RiskAnalysisDescriber, config.FeatureFlags, platformmcp.NewPostgresOrganizationSlugResolver(config.DB))).
-		WithRiskFindings(platformmcp.NewRiskFindingsService(config.DB, config.RiskFindings, config.FeatureFlags, platformmcp.NewPostgresOrganizationSlugResolver(config.DB), config.JWTSigningKey), budgets.RiskFindings).
+		WithRiskAnalysisStatus(platformmcp.NewRiskAnalysisStatusService(config.Logger, config.DB, config.RiskAnalysisDescriber)).
+		WithRiskFindings(platformmcp.NewRiskFindingsService(config.DB, config.RiskFindings, config.JWTSigningKey), budgets.RiskFindings).
 		WithRiskFindingList(platformmcp.NewRiskFindingListService(config.DB, config.RiskFindingList, config.JWTSigningKey), budgets.RiskFindings).
 		// Metered on the sensitive allowance: a chat page carries masked
 		// participants and person references, like the drill-down reads.
@@ -794,7 +800,7 @@ func newPlatformMCPToolExposure(config platformMCPConfig, authorizer platformmcp
 	if config.TemporalEnv == nil {
 		config.Logger.WarnContext(context.Background(), "Platform MCP tool exposure cannot schedule toolset indexing; changes will report index_signal unavailable until the periodic sweep runs")
 	}
-	return service.WithFeatureProvider(config.FeatureFlags).WithIndexing(func(ctx context.Context, projectID, toolsetID uuid.UUID) error {
+	return service.WithIndexing(func(ctx context.Context, projectID, toolsetID uuid.UUID) error {
 		return toolsets.TriggerToolsetIndexForVersion(ctx, config.Logger, config.DB, config.TemporalEnv, projectID, toolsetID)
 	})
 }
@@ -1106,6 +1112,9 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		pluginInventory.WithServerRemoval(config.PluginManagement)
 	}
 	accessReads := platformmcp.NewAccessReadService(config.Logger, config.DB, budgets.AccessReads, config.JWTSigningKey)
+	if config.DirectoryReview != nil {
+		accessReads.WithDirectoryReview(config.DirectoryReview)
+	}
 	accessRoleMutations, accessRoleMutationErr := platformmcp.NewAccessRoleMutationService(accessReads, config.FeatureFlags, budgets.AccessRoleMutations, config.JWTSigningKey, access.NewRoleManager(config.Logger, config.DB, config.AccessRoles, config.AuditLogger, config.PublicationRequests, config.DistributionAdmission))
 	if accessRoleMutationErr != nil {
 		config.Logger.WarnContext(ctx, "Platform MCP access role mutations unavailable", attr.SlogError(accessRoleMutationErr))
@@ -1130,8 +1139,8 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		WithMCPNetworkTraffic(config.NetworkTraffic, config.LogsEnabled).
 		WithOrganizationEvents(config.EventFeed, config.LogsEnabled, config.DashboardURL).
 		WithNetworkIngressStatus(config.DashboardURL).
-		WithRiskAnalysisStatus(platformmcp.NewRiskAnalysisStatusService(config.Logger, config.DB, config.RiskAnalysisDescriber, config.FeatureFlags, platformmcp.NewPostgresOrganizationSlugResolver(config.DB))).
-		WithRiskFindings(platformmcp.NewRiskFindingsService(config.DB, config.RiskFindings, config.FeatureFlags, platformmcp.NewPostgresOrganizationSlugResolver(config.DB), config.JWTSigningKey), budgets.RiskFindings).
+		WithRiskAnalysisStatus(platformmcp.NewRiskAnalysisStatusService(config.Logger, config.DB, config.RiskAnalysisDescriber)).
+		WithRiskFindings(platformmcp.NewRiskFindingsService(config.DB, config.RiskFindings, config.JWTSigningKey), budgets.RiskFindings).
 		WithRiskFindingList(platformmcp.NewRiskFindingListService(config.DB, config.RiskFindingList, config.JWTSigningKey), budgets.RiskFindings).
 		// Metered on the sensitive allowance: a chat page carries masked
 		// participants and person references, like the drill-down reads.

@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
@@ -21,7 +22,7 @@ export const Disposition = {
 /**
  * Tool disposition filter (MCP scopes only).
  */
-export type Disposition = ClosedEnum<typeof Disposition>;
+export type Disposition = OpenEnum<typeof Disposition>;
 
 /**
  * The kind of resource this selector targets.
@@ -42,7 +43,7 @@ export const ResourceKind = {
 /**
  * The kind of resource this selector targets.
  */
-export type ResourceKind = ClosedEnum<typeof ResourceKind>;
+export type ResourceKind = OpenEnum<typeof ResourceKind>;
 
 /**
  * A constraint that narrows which resources a grant applies to.
@@ -75,18 +76,18 @@ export type Selector = {
 };
 
 /** @internal */
-export const Disposition$inboundSchema: z.ZodMiniEnum<typeof Disposition> = z
-  .enum(Disposition);
+export const Disposition$inboundSchema: z.ZodMiniType<Disposition, unknown> =
+  openEnums.inboundSchema(Disposition);
 /** @internal */
-export const Disposition$outboundSchema: z.ZodMiniEnum<typeof Disposition> =
-  Disposition$inboundSchema;
+export const Disposition$outboundSchema: z.ZodMiniType<string, Disposition> =
+  openEnums.outboundSchema(Disposition);
 
 /** @internal */
-export const ResourceKind$inboundSchema: z.ZodMiniEnum<typeof ResourceKind> = z
-  .enum(ResourceKind);
+export const ResourceKind$inboundSchema: z.ZodMiniType<ResourceKind, unknown> =
+  openEnums.inboundSchema(ResourceKind);
 /** @internal */
-export const ResourceKind$outboundSchema: z.ZodMiniEnum<typeof ResourceKind> =
-  ResourceKind$inboundSchema;
+export const ResourceKind$outboundSchema: z.ZodMiniType<string, ResourceKind> =
+  openEnums.outboundSchema(ResourceKind);
 
 /** @internal */
 export const Selector$inboundSchema: z.ZodMiniType<Selector, unknown> = z.pipe(
