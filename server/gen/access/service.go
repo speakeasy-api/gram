@@ -241,6 +241,38 @@ type AccessMember struct {
 	Department *string
 	// Names of the directory groups the member belongs to.
 	Groups []string
+	// The directory groups the member belongs to, by stable ID. Prefer this to
+	// groups when matching a member to a group, since two groups can share a name.
+	DirectoryGroups []*AccessMemberDirectoryGroup
+	// Whether the member has a live profile in the organization's synced
+	// directory. Set by listMembers.
+	InDirectory *bool
+	// Where each role in directory_role_ids comes from: one entry per directory
+	// role mapping that currently gives the member that role, so a role reached
+	// through two groups appears twice. Set by listMembers.
+	DirectoryRoleSources []*AccessMemberDirectoryRoleSource
+}
+
+// A live directory group a member belongs to.
+type AccessMemberDirectoryGroup struct {
+	// Directory group identifier.
+	ID string
+	// Directory group name.
+	Name string
+}
+
+// One directory role mapping that currently gives a member a role. Attribute
+// keys and values are not included: they can carry personal directory data, so
+// admins resolve them through listDirectoryRoleMappings by mapping_id.
+type AccessMemberDirectoryRoleSource struct {
+	// The role the mapping grants.
+	RoleID string
+	// The directory role mapping.
+	MappingID string
+	// What the mapping matches: a directory group or an attribute value.
+	SourceKind string
+	// The mapped directory group. Set when source_kind is group.
+	DirectoryGroupID *string
 }
 
 // An MCP server an identity is authorized to reach.
@@ -471,6 +503,11 @@ type DirectoryRoleMapping struct {
 	AttributeKey *string
 	// The directory attribute value. Set when source_kind is attribute.
 	AttributeValue *string
+	// Whether the mapped source still exists. missing means the group was deleted
+	// from the directory, or no live directory user has the attribute value. A
+	// missing source matches nobody, so the mapping grants nothing until the
+	// source returns.
+	SourceStatus string
 	// Principal URN of the role granted to matching members.
 	RoleUrn   string
 	CreatedAt string

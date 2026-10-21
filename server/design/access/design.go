@@ -1314,10 +1314,40 @@ var MemberModel = Type("AccessMember", func() {
 		Format(FormatDateTime)
 	})
 	// Directory profile, from the org's synced identity provider. Every field
-	// is absent when no directory is connected, when the member has no profile
-	// in it, or when the provider does not report that attribute.
+	// except in_directory is absent when no directory is connected, when the
+	// member has no profile in it, or when the provider does not report that
+	// attribute. listMembers sets in_directory to false in those cases.
 	Attribute("department", String, "Department name as reported by the identity provider.")
 	Attribute("groups", ArrayOf(String), "Names of the directory groups the member belongs to.")
+	Attribute("directory_groups", ArrayOf(MemberDirectoryGroupModel), "The directory groups the member belongs to, by stable ID. Prefer this to groups when matching a member to a group, since two groups can share a name.")
+	Attribute("in_directory", Boolean, "Whether the member has a live profile in the organization's synced directory. Set by listMembers.")
+	Attribute("directory_role_sources", ArrayOf(MemberDirectoryRoleSourceModel), "Where each role in directory_role_ids comes from: one entry per directory role mapping that currently gives the member that role, so a role reached through two groups appears twice. Set by listMembers.")
+})
+
+var MemberDirectoryGroupModel = Type("AccessMemberDirectoryGroup", func() {
+	Description("A live directory group a member belongs to.")
+	Required("id", "name")
+
+	Attribute("id", String, "Directory group identifier.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("name", String, "Directory group name.")
+})
+
+var MemberDirectoryRoleSourceModel = Type("AccessMemberDirectoryRoleSource", func() {
+	Description("One directory role mapping that currently gives a member a role. Attribute keys and values are not included: they can carry personal directory data, so admins resolve them through listDirectoryRoleMappings by mapping_id.")
+	Required("role_id", "mapping_id", "source_kind")
+
+	Attribute("role_id", String, "The role the mapping grants.")
+	Attribute("mapping_id", String, "The directory role mapping.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("source_kind", String, "What the mapping matches: a directory group or an attribute value.", func() {
+		Enum("group", "attribute")
+	})
+	Attribute("directory_group_id", String, "The mapped directory group. Set when source_kind is group.", func() {
+		Format(FormatUUID)
+	})
 })
 
 var ListMembersResult = Type("ListMembersResult", func() {
@@ -1830,7 +1860,7 @@ var ListIdentityAccessResult = Type("ListIdentityAccessResult", func() {
 })
 
 var DirectoryRoleMappingModel = Type("DirectoryRoleMapping", func() {
-	Required("id", "source_kind", "role_urn", "created_at", "updated_at")
+	Required("id", "source_kind", "source_status", "role_urn", "created_at", "updated_at")
 
 	Attribute("id", String, "Unique mapping identifier.", func() {
 		Format(FormatUUID)
@@ -1844,6 +1874,10 @@ var DirectoryRoleMappingModel = Type("DirectoryRoleMapping", func() {
 	Attribute("directory_group_name", String, "Display name of the mapped directory group.")
 	Attribute("attribute_key", String, "The directory attribute key. Set when source_kind is attribute.")
 	Attribute("attribute_value", String, "The directory attribute value. Set when source_kind is attribute.")
+	Attribute("source_status", String, func() {
+		Description("Whether the mapped source still exists. missing means the group was deleted from the directory, or no live directory user has the attribute value. A missing source matches nobody, so the mapping grants nothing until the source returns.")
+		Enum("active", "missing")
+	})
 	Attribute("role_urn", String, "Principal URN of the role granted to matching members.")
 	Attribute("created_at", String, func() {
 		Format(FormatDateTime)

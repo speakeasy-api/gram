@@ -112,6 +112,7 @@ function mapping(name: string): DirectoryRoleMapping {
     roleUrn: `role:organization:${name}`,
     sourceKind: "group",
     directoryGroupId: "group-1",
+    sourceStatus: "active",
     createdAt: new Date(),
     updatedAt: new Date(),
   };

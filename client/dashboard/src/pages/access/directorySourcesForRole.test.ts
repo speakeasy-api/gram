@@ -12,6 +12,7 @@ function mapping(
 ): DirectoryRoleMapping {
   return {
     roleUrn: analyst.principalUrn,
+    sourceStatus: "active",
     createdAt: new Date(0),
     updatedAt: new Date(0),
     ...fields,

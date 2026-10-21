@@ -291,6 +291,11 @@ type SetDirectoryRoleMappingResponseBody struct {
 	AttributeKey *string `form:"attribute_key,omitempty" json:"attribute_key,omitempty" xml:"attribute_key,omitempty"`
 	// The directory attribute value. Set when source_kind is attribute.
 	AttributeValue *string `form:"attribute_value,omitempty" json:"attribute_value,omitempty" xml:"attribute_value,omitempty"`
+	// Whether the mapped source still exists. missing means the group was deleted
+	// from the directory, or no live directory user has the attribute value. A
+	// missing source matches nobody, so the mapping grants nothing until the
+	// source returns.
+	SourceStatus string `form:"source_status" json:"source_status" xml:"source_status"`
 	// Principal URN of the role granted to matching members.
 	RoleUrn   string `form:"role_urn" json:"role_urn" xml:"role_urn"`
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
@@ -347,6 +352,16 @@ type UpdateMemberRolesResponseBody struct {
 	Department *string `form:"department,omitempty" json:"department,omitempty" xml:"department,omitempty"`
 	// Names of the directory groups the member belongs to.
 	Groups []string `form:"groups,omitempty" json:"groups,omitempty" xml:"groups,omitempty"`
+	// The directory groups the member belongs to, by stable ID. Prefer this to
+	// groups when matching a member to a group, since two groups can share a name.
+	DirectoryGroups []*AccessMemberDirectoryGroupResponseBody `form:"directory_groups,omitempty" json:"directory_groups,omitempty" xml:"directory_groups,omitempty"`
+	// Whether the member has a live profile in the organization's synced
+	// directory. Set by listMembers.
+	InDirectory *bool `form:"in_directory,omitempty" json:"in_directory,omitempty" xml:"in_directory,omitempty"`
+	// Where each role in directory_role_ids comes from: one entry per directory
+	// role mapping that currently gives the member that role, so a role reached
+	// through two groups appears twice. Set by listMembers.
+	DirectoryRoleSources []*AccessMemberDirectoryRoleSourceResponseBody `form:"directory_role_sources,omitempty" json:"directory_role_sources,omitempty" xml:"directory_role_sources,omitempty"`
 }
 
 // ListShadowMCPInventoryResponseBody is the type of the "access" service
@@ -6758,6 +6773,11 @@ type DirectoryRoleMappingResponseBody struct {
 	AttributeKey *string `form:"attribute_key,omitempty" json:"attribute_key,omitempty" xml:"attribute_key,omitempty"`
 	// The directory attribute value. Set when source_kind is attribute.
 	AttributeValue *string `form:"attribute_value,omitempty" json:"attribute_value,omitempty" xml:"attribute_value,omitempty"`
+	// Whether the mapped source still exists. missing means the group was deleted
+	// from the directory, or no live directory user has the attribute value. A
+	// missing source matches nobody, so the mapping grants nothing until the
+	// source returns.
+	SourceStatus string `form:"source_status" json:"source_status" xml:"source_status"`
 	// Principal URN of the role granted to matching members.
 	RoleUrn   string `form:"role_urn" json:"role_urn" xml:"role_urn"`
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
@@ -6778,6 +6798,11 @@ type DirectoryRoleMappingResponse struct {
 	AttributeKey *string `form:"attribute_key,omitempty" json:"attribute_key,omitempty" xml:"attribute_key,omitempty"`
 	// The directory attribute value. Set when source_kind is attribute.
 	AttributeValue *string `form:"attribute_value,omitempty" json:"attribute_value,omitempty" xml:"attribute_value,omitempty"`
+	// Whether the mapped source still exists. missing means the group was deleted
+	// from the directory, or no live directory user has the attribute value. A
+	// missing source matches nobody, so the mapping grants nothing until the
+	// source returns.
+	SourceStatus string `form:"source_status" json:"source_status" xml:"source_status"`
 	// Principal URN of the role granted to matching members.
 	RoleUrn   string `form:"role_urn" json:"role_urn" xml:"role_urn"`
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
@@ -6827,6 +6852,38 @@ type AccessMemberResponseBody struct {
 	Department *string `form:"department,omitempty" json:"department,omitempty" xml:"department,omitempty"`
 	// Names of the directory groups the member belongs to.
 	Groups []string `form:"groups,omitempty" json:"groups,omitempty" xml:"groups,omitempty"`
+	// The directory groups the member belongs to, by stable ID. Prefer this to
+	// groups when matching a member to a group, since two groups can share a name.
+	DirectoryGroups []*AccessMemberDirectoryGroupResponseBody `form:"directory_groups,omitempty" json:"directory_groups,omitempty" xml:"directory_groups,omitempty"`
+	// Whether the member has a live profile in the organization's synced
+	// directory. Set by listMembers.
+	InDirectory *bool `form:"in_directory,omitempty" json:"in_directory,omitempty" xml:"in_directory,omitempty"`
+	// Where each role in directory_role_ids comes from: one entry per directory
+	// role mapping that currently gives the member that role, so a role reached
+	// through two groups appears twice. Set by listMembers.
+	DirectoryRoleSources []*AccessMemberDirectoryRoleSourceResponseBody `form:"directory_role_sources,omitempty" json:"directory_role_sources,omitempty" xml:"directory_role_sources,omitempty"`
+}
+
+// AccessMemberDirectoryGroupResponseBody is used to define fields on response
+// body types.
+type AccessMemberDirectoryGroupResponseBody struct {
+	// Directory group identifier.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Directory group name.
+	Name string `form:"name" json:"name" xml:"name"`
+}
+
+// AccessMemberDirectoryRoleSourceResponseBody is used to define fields on
+// response body types.
+type AccessMemberDirectoryRoleSourceResponseBody struct {
+	// The role the mapping grants.
+	RoleID string `form:"role_id" json:"role_id" xml:"role_id"`
+	// The directory role mapping.
+	MappingID string `form:"mapping_id" json:"mapping_id" xml:"mapping_id"`
+	// What the mapping matches: a directory group or an attribute value.
+	SourceKind string `form:"source_kind" json:"source_kind" xml:"source_kind"`
+	// The mapped directory group. Set when source_kind is group.
+	DirectoryGroupID *string `form:"directory_group_id,omitempty" json:"directory_group_id,omitempty" xml:"directory_group_id,omitempty"`
 }
 
 // ListRoleGrantResponseBody is used to define fields on response body types.
@@ -7539,6 +7596,7 @@ func NewSetDirectoryRoleMappingResponseBody(res *access.DirectoryRoleMapping) *S
 		DirectoryGroupName: res.DirectoryGroupName,
 		AttributeKey:       res.AttributeKey,
 		AttributeValue:     res.AttributeValue,
+		SourceStatus:       res.SourceStatus,
 		RoleUrn:            res.RoleUrn,
 		CreatedAt:          res.CreatedAt,
 		UpdatedAt:          res.UpdatedAt,
@@ -7629,6 +7687,7 @@ func NewUpdateMemberRolesResponseBody(res *access.AccessMember) *UpdateMemberRol
 		PhotoURL:     res.PhotoURL,
 		JoinedAt:     res.JoinedAt,
 		Department:   res.Department,
+		InDirectory:  res.InDirectory,
 	}
 	if res.RoleIds != nil {
 		body.RoleIds = make([]string, len(res.RoleIds))
@@ -7650,6 +7709,26 @@ func NewUpdateMemberRolesResponseBody(res *access.AccessMember) *UpdateMemberRol
 		body.Groups = make([]string, len(res.Groups))
 		for i, val := range res.Groups {
 			body.Groups[i] = val
+		}
+	}
+	if res.DirectoryGroups != nil {
+		body.DirectoryGroups = make([]*AccessMemberDirectoryGroupResponseBody, len(res.DirectoryGroups))
+		for i, val := range res.DirectoryGroups {
+			if val == nil {
+				body.DirectoryGroups[i] = nil
+				continue
+			}
+			body.DirectoryGroups[i] = marshalAccessAccessMemberDirectoryGroupToAccessMemberDirectoryGroupResponseBody(val)
+		}
+	}
+	if res.DirectoryRoleSources != nil {
+		body.DirectoryRoleSources = make([]*AccessMemberDirectoryRoleSourceResponseBody, len(res.DirectoryRoleSources))
+		for i, val := range res.DirectoryRoleSources {
+			if val == nil {
+				body.DirectoryRoleSources[i] = nil
+				continue
+			}
+			body.DirectoryRoleSources[i] = marshalAccessAccessMemberDirectoryRoleSourceToAccessMemberDirectoryRoleSourceResponseBody(val)
 		}
 	}
 	return body

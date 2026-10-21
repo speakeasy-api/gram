@@ -31,6 +31,12 @@ const (
 	directoryRoleMappingSourceGroup     = "group"
 	directoryRoleMappingSourceAttribute = "attribute"
 
+	// directoryRoleMappingSourceActive and directoryRoleMappingSourceMissing
+	// are the source_status values on a listed mapping. A missing source
+	// matches nobody, so its mappings grant nothing.
+	directoryRoleMappingSourceActive  = "active"
+	directoryRoleMappingSourceMissing = "missing"
+
 	// maxDirectoryAttributeOptionsPerKey keeps the option list usable: a key
 	// with more distinct values than this (emails, employee ids) is no use as
 	// a mapping source, so it is left out. It is not a privacy boundary; the
@@ -92,6 +98,10 @@ func (s *Service) ListDirectoryRoleMappings(ctx context.Context, _ *gen.ListDire
 	}
 	mappings := make([]*gen.DirectoryRoleMapping, 0, len(mappingRows))
 	for _, row := range mappingRows {
+		sourceStatus := directoryRoleMappingSourceActive
+		if row.SourceMissing {
+			sourceStatus = directoryRoleMappingSourceMissing
+		}
 		mappings = append(mappings, &gen.DirectoryRoleMapping{
 			ID:                 row.ID.String(),
 			SourceKind:         row.SourceKind,
@@ -99,6 +109,7 @@ func (s *Service) ListDirectoryRoleMappings(ctx context.Context, _ *gen.ListDire
 			DirectoryGroupName: conv.FromPGText[string](row.DirectoryGroupName),
 			AttributeKey:       conv.FromPGText[string](row.AttributeKey),
 			AttributeValue:     conv.FromPGText[string](row.AttributeValue),
+			SourceStatus:       sourceStatus,
 			RoleUrn:            row.RoleUrn,
 			CreatedAt:          conv.FromPGTimestamptz(row.CreatedAt),
 			UpdatedAt:          conv.FromPGTimestamptz(row.UpdatedAt),
@@ -456,10 +467,13 @@ func (s *Service) setDirectoryRoleMappingsTx(ctx context.Context, dbtx pgx.Tx, a
 				return nil, oops.E(oops.CodeUnexpected, err, "log directory role mapping addition").LogError(ctx, s.logger)
 			}
 		}
+		// A non-empty set is refused above unless its source is live, so
+		// every mapping returned here has an active source.
 		mappings = append(mappings, &gen.DirectoryRoleMapping{
 			ID: mappingID.String(), SourceKind: payload.SourceKind, DirectoryGroupID: conv.FromNullableUUID(groupID),
 			DirectoryGroupName: groupName, AttributeKey: payload.AttributeKey, AttributeValue: payload.AttributeValue,
-			RoleUrn: roleURN, CreatedAt: createdAt, UpdatedAt: updatedAt,
+			SourceStatus: directoryRoleMappingSourceActive,
+			RoleUrn:      roleURN, CreatedAt: createdAt, UpdatedAt: updatedAt,
 		})
 	}
 

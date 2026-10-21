@@ -88268,11 +88268,21 @@ components:
                 department:
                     type: string
                     description: Department name as reported by the identity provider.
+                directory_groups:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AccessMemberDirectoryGroup'
+                    description: The directory groups the member belongs to, by stable ID. Prefer this to groups when matching a member to a group, since two groups can share a name.
                 directory_role_ids:
                     type: array
                     items:
                         type: string
                     description: Role IDs this member holds through directory role mappings. They follow the member's directory groups and attributes, so updating the member's roles does not change them.
+                directory_role_sources:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AccessMemberDirectoryRoleSource'
+                    description: 'Where each role in directory_role_ids comes from: one entry per directory role mapping that currently gives the member that role, so a role reached through two groups appears twice. Set by listMembers.'
                 email:
                     type: string
                     description: Email address.
@@ -88284,6 +88294,9 @@ components:
                 id:
                     type: string
                     description: User ID.
+                in_directory:
+                    type: boolean
+                    description: Whether the member has a live profile in the organization's synced directory. Set by listMembers.
                 joined_at:
                     type: string
                     description: When the member joined the organization.
@@ -88310,6 +88323,45 @@ components:
                 - role_ids
                 - directory_role_ids
                 - joined_at
+        AccessMemberDirectoryGroup:
+            type: object
+            properties:
+                id:
+                    type: string
+                    description: Directory group identifier.
+                    format: uuid
+                name:
+                    type: string
+                    description: Directory group name.
+            description: A live directory group a member belongs to.
+            required:
+                - id
+                - name
+        AccessMemberDirectoryRoleSource:
+            type: object
+            properties:
+                directory_group_id:
+                    type: string
+                    description: The mapped directory group. Set when source_kind is group.
+                    format: uuid
+                mapping_id:
+                    type: string
+                    description: The directory role mapping.
+                    format: uuid
+                role_id:
+                    type: string
+                    description: The role the mapping grants.
+                source_kind:
+                    type: string
+                    description: 'What the mapping matches: a directory group or an attribute value.'
+                    enum:
+                        - group
+                        - attribute
+            description: 'One directory role mapping that currently gives a member a role. Attribute keys and values are not included: they can carry personal directory data, so admins resolve them through listDirectoryRoleMappings by mapping_id.'
+            required:
+                - role_id
+                - mapping_id
+                - source_kind
         AccessibleMCPServer:
             type: object
             properties:
@@ -97762,12 +97814,19 @@ components:
                     enum:
                         - group
                         - attribute
+                source_status:
+                    type: string
+                    description: Whether the mapped source still exists. missing means the group was deleted from the directory, or no live directory user has the attribute value. A missing source matches nobody, so the mapping grants nothing until the source returns.
+                    enum:
+                        - active
+                        - missing
                 updated_at:
                     type: string
                     format: date-time
             required:
                 - id
                 - source_kind
+                - source_status
                 - role_urn
                 - created_at
                 - updated_at

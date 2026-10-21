@@ -852,6 +852,8 @@ trackedFiles:
   src/models/components/accessiblemcpserver.ts: {}
   src/models/components/accessibleskill.ts: {}
   src/models/components/accessmember.ts: {}
+  src/models/components/accessmemberdirectorygroup.ts: {}
+  src/models/components/accessmemberdirectoryrolesource.ts: {}
   src/models/components/acknowledgeriskpolicychallengerequestbody.ts: {}
   src/models/components/acknowledgeriskpolicychallengeresponsebody.ts: {}
   src/models/components/activateprescriptionrequestbody.ts: {}
@@ -9250,7 +9252,7 @@ examples:
     speakeasy-default-list-directory-role-mappings:
       responses:
         "200":
-          application/json: {"attributes": [], "groups": [], "mappings": [{"created_at": "2026-06-08T20:39:17.479Z", "id": "beeb6442-b41b-4e3a-b4c4-ec7a9ac9bc83", "role_urn": "<value>", "source_kind": "group", "updated_at": "2024-12-11T16:06:03.477Z"}]}
+          application/json: {"attributes": [], "groups": [], "mappings": [{"created_at": "2026-06-08T20:39:17.479Z", "id": "beeb6442-b41b-4e3a-b4c4-ec7a9ac9bc83", "role_urn": "<value>", "source_kind": "group", "source_status": "active", "updated_at": "2024-12-11T16:06:03.477Z"}]}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
@@ -12120,7 +12122,7 @@ examples:
         application/json: {"role_urns": ["<value 1>", "<value 2>", "<value 3>"], "source_kind": "group"}
       responses:
         "200":
-          application/json: [{"created_at": "2024-09-29T00:04:10.995Z", "id": "8fbf3700-9b0c-4ce9-833c-21f6146f35e9", "role_urn": "<value>", "source_kind": "attribute", "updated_at": "2024-09-15T11:23:43.947Z"}]
+          application/json: [{"created_at": "2024-09-29T00:04:10.995Z", "id": "8fbf3700-9b0c-4ce9-833c-21f6146f35e9", "role_urn": "<value>", "source_kind": "attribute", "source_status": "missing", "updated_at": "2024-09-15T11:23:43.947Z"}]
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
