@@ -614,6 +614,7 @@ WHERE TRUE
       WHERE l.auth_client_id = sqlc.narg('required_auth_client_id')::uuid
         AND l.organization_id = @organization_id::text
         AND l.deleted IS FALSE
+        AND s3.project_id = src.project_id
         AND COALESCE(
           (src.source_kind = 'remote' AND s3.remote_mcp_server_id = src.source_id)
           OR (src.source_kind = 'tunneled' AND s3.tunneled_mcp_server_id = src.source_id),
@@ -628,8 +629,9 @@ WHERE TRUE
         AND l.organization_id = @organization_id::text
         AND l.deleted IS FALSE
         AND NOT COALESCE(
-          (src.source_kind = 'remote' AND s3.remote_mcp_server_id = src.source_id)
-          OR (src.source_kind = 'tunneled' AND s3.tunneled_mcp_server_id = src.source_id),
+          s3.project_id = src.project_id
+          AND ((src.source_kind = 'remote' AND s3.remote_mcp_server_id = src.source_id)
+               OR (src.source_kind = 'tunneled' AND s3.tunneled_mcp_server_id = src.source_id)),
           FALSE
         )
     )
@@ -696,6 +698,7 @@ WHERE c.id = @copy_id::uuid
       WHERE l.auth_client_id = sqlc.narg('required_auth_client_id')::uuid
         AND l.organization_id = @organization_id::text
         AND l.deleted IS FALSE
+        AND s3.project_id = src.project_id
         AND COALESCE(
           (src.source_kind = 'remote' AND s3.remote_mcp_server_id = src.source_id)
           OR (src.source_kind = 'tunneled' AND s3.tunneled_mcp_server_id = src.source_id),
@@ -710,8 +713,9 @@ WHERE c.id = @copy_id::uuid
         AND l.organization_id = @organization_id::text
         AND l.deleted IS FALSE
         AND NOT COALESCE(
-          (src.source_kind = 'remote' AND s3.remote_mcp_server_id = src.source_id)
-          OR (src.source_kind = 'tunneled' AND s3.tunneled_mcp_server_id = src.source_id),
+          s3.project_id = src.project_id
+          AND ((src.source_kind = 'remote' AND s3.remote_mcp_server_id = src.source_id)
+               OR (src.source_kind = 'tunneled' AND s3.tunneled_mcp_server_id = src.source_id)),
           FALSE
         )
     )
@@ -773,6 +777,21 @@ WHERE s.id = @mcp_server_id::uuid
          WHERE el.mcp_server_id = s.id AND el.organization_id = p.organization_id AND el.deleted IS FALSE
        )))
 ON CONFLICT (mcp_server_id, auth_client_id) WHERE deleted IS FALSE DO NOTHING;
+
+-- name: ListEMAClientLiveServers :many
+-- The live servers a backfilled ema client is linked to.
+SELECT s.id
+FROM mcp_server_auth_clients AS l
+JOIN mcp_auth_clients AS ac
+  ON ac.id = l.auth_client_id
+ AND ac.organization_id = l.organization_id
+ AND ac.client_type = 'ema'
+ AND ac.source = 'backfill'
+JOIN mcp_servers AS s ON s.id = l.mcp_server_id AND s.project_id = l.project_id AND s.deleted IS FALSE
+WHERE l.auth_client_id = @auth_client_id::uuid
+  AND l.organization_id = @organization_id::text
+  AND l.deleted IS FALSE
+ORDER BY s.id;
 
 -- name: ListServerCredentialSources :many
 -- The sources of the given live servers in the organization, each with those

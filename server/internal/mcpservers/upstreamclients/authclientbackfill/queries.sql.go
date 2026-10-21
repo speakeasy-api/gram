@@ -475,6 +475,7 @@ WHERE TRUE
       WHERE l.auth_client_id = $6::uuid
         AND l.organization_id = $3::text
         AND l.deleted IS FALSE
+        AND s3.project_id = src.project_id
         AND COALESCE(
           (src.source_kind = 'remote' AND s3.remote_mcp_server_id = src.source_id)
           OR (src.source_kind = 'tunneled' AND s3.tunneled_mcp_server_id = src.source_id),
@@ -489,8 +490,9 @@ WHERE TRUE
         AND l.organization_id = $3::text
         AND l.deleted IS FALSE
         AND NOT COALESCE(
-          (src.source_kind = 'remote' AND s3.remote_mcp_server_id = src.source_id)
-          OR (src.source_kind = 'tunneled' AND s3.tunneled_mcp_server_id = src.source_id),
+          s3.project_id = src.project_id
+          AND ((src.source_kind = 'remote' AND s3.remote_mcp_server_id = src.source_id)
+               OR (src.source_kind = 'tunneled' AND s3.tunneled_mcp_server_id = src.source_id)),
           FALSE
         )
     )
@@ -1391,6 +1393,47 @@ func (q *Queries) ListEMABindingServers(ctx context.Context, arg ListEMABindingS
 			return nil, err
 		}
 		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listEMAClientLiveServers = `-- name: ListEMAClientLiveServers :many
+SELECT s.id
+FROM mcp_server_auth_clients AS l
+JOIN mcp_auth_clients AS ac
+  ON ac.id = l.auth_client_id
+ AND ac.organization_id = l.organization_id
+ AND ac.client_type = 'ema'
+ AND ac.source = 'backfill'
+JOIN mcp_servers AS s ON s.id = l.mcp_server_id AND s.project_id = l.project_id AND s.deleted IS FALSE
+WHERE l.auth_client_id = $1::uuid
+  AND l.organization_id = $2::text
+  AND l.deleted IS FALSE
+ORDER BY s.id
+`
+
+type ListEMAClientLiveServersParams struct {
+	AuthClientID   uuid.UUID
+	OrganizationID string
+}
+
+// The live servers a backfilled ema client is linked to.
+func (q *Queries) ListEMAClientLiveServers(ctx context.Context, arg ListEMAClientLiveServersParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listEMAClientLiveServers, arg.AuthClientID, arg.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -3215,6 +3258,7 @@ WHERE c.id = $1::uuid
       WHERE l.auth_client_id = $4::uuid
         AND l.organization_id = $2::text
         AND l.deleted IS FALSE
+        AND s3.project_id = src.project_id
         AND COALESCE(
           (src.source_kind = 'remote' AND s3.remote_mcp_server_id = src.source_id)
           OR (src.source_kind = 'tunneled' AND s3.tunneled_mcp_server_id = src.source_id),
@@ -3229,8 +3273,9 @@ WHERE c.id = $1::uuid
         AND l.organization_id = $2::text
         AND l.deleted IS FALSE
         AND NOT COALESCE(
-          (src.source_kind = 'remote' AND s3.remote_mcp_server_id = src.source_id)
-          OR (src.source_kind = 'tunneled' AND s3.tunneled_mcp_server_id = src.source_id),
+          s3.project_id = src.project_id
+          AND ((src.source_kind = 'remote' AND s3.remote_mcp_server_id = src.source_id)
+               OR (src.source_kind = 'tunneled' AND s3.tunneled_mcp_server_id = src.source_id)),
           FALSE
         )
     )

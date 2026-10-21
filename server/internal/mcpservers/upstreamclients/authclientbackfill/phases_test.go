@@ -493,12 +493,49 @@ func TestRun_KeptEMAClientKeepsTrackingItsHeaders(t *testing.T) {
 	emaID := f.live(TypeEMA)[0].ID
 
 	f.binding(otherUSI, issuerID, clientID, resource, []string{"read", "write"})
+	f.binding(f.userSessionIssuer(), issuerID, clientID, resource, []string{"read", "write", "admin"})
 	require.NoError(t, f.q.UpdateRemoteHeaderFixture(t.Context(), UpdateRemoteHeaderFixtureParams{Name: "X-Api-Key", Value: pgtype.Text{String: "rotated", Valid: true}, ValueFromRequestHeader: pgtype.Text{}, IsSecret: true, ID: key}))
-	f.run(true)
+	dry := f.run(false)
+	require.Equal(t, 1, dry.ByKind[KindEMA].PendingHeaders, "the kept client is synced once, however many bindings find it")
+	applied := f.run(true)
+	require.Equal(t, 1, applied.ByKind[KindEMA].Written)
 	require.Empty(t, f.live(TypeStaticCredential))
 	headers := f.headers(emaID)
 	require.Len(t, headers, 1)
 	require.Equal(t, "rotated", headers[0].Value.String)
+}
+
+// A disagreeing binding that reaches a server the kept client is not linked
+// to leaves that server's own header client in place: the kept client covers
+// only the servers it keeps.
+func TestRun_KeptEMAClientCoversOnlyItsLinkedServers(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	usi, otherUSI := f.userSessionIssuer(), f.userSessionIssuer()
+	clientID, issuerID := f.emaClient()
+	resource := "https://mcp.vendor.example.com/mcp"
+	sourceA, _ := f.emaSourceAt(resource, usi)
+	f.header(sourceA, "X-Api-Key", true, secretValue, "")
+	sourceB, serverB := f.emaSourceAt(resource, otherUSI)
+	f.header(sourceB, "X-Api-Key", true, "other-"+secretValue, "")
+	f.binding(usi, issuerID, clientID, resource, []string{"read"})
+	f.run(true)
+	emaID := f.live(TypeEMA)[0].ID
+	static := f.live(TypeStaticCredential)
+	require.Len(t, static, 1, "B, which no binding reaches, has its own header client")
+	require.Equal(t, []uuid.UUID{static[0].ID}, f.links(serverB))
+
+	f.binding(otherUSI, issuerID, clientID, resource, []string{"read", "write"})
+	for range 2 {
+		f.run(true)
+		require.Equal(t, []uuid.UUID{static[0].ID}, f.links(serverB), "B keeps its header client")
+		live := f.live(TypeStaticCredential)
+		require.Len(t, live, 1)
+		require.Equal(t, static[0].ID, live[0].ID)
+		headers := f.headers(emaID)
+		require.Len(t, headers, 1)
+		require.Equal(t, secretValue, headers[0].Value.String, "the kept client carries only A's header")
+	}
 }
 
 // A server whose ema client is going away is not linked to a separate header

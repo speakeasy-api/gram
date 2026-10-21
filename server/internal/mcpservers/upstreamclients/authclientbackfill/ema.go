@@ -223,24 +223,28 @@ func decideEMA(ctx context.Context, tx pgx.Tx, q *Queries, opts Options, key ema
 		// Disagreeing bindings decide nothing new, but a client already
 		// recorded for one of them keeps serving with its links until they
 		// agree again.
+		kept := map[uuid.UUID]bool{}
 		for _, binding := range bindings {
 			existing, found, err := findEMA(ctx, q, opts.OrganizationID, key.issuerID, key.clientID, binding.ExactResource)
 			if err != nil {
 				return err
 			}
-			if found {
-				want.race(existing.ID)
-				// The kept client still serves these servers, so it keeps
-				// carrying their credential headers.
-				target := emaTarget{clientID: existing.ID, recorded: true, servers: nil}
-				for _, server := range servers {
-					if server.allowed {
-						target.servers = append(target.servers, server.id)
-						plan.served[server.id] = true
-					}
-				}
-				plan.targets = append(plan.targets, target)
+			if !found || kept[existing.ID] {
+				continue
 			}
+			kept[existing.ID] = true
+			want.race(existing.ID)
+			// The kept client keeps exactly the servers it is linked to, so it
+			// keeps carrying their credential headers and no other server's.
+			linked, err := q.ListEMAClientLiveServers(ctx, ListEMAClientLiveServersParams{OrganizationID: opts.OrganizationID, AuthClientID: existing.ID})
+			if err != nil {
+				return fmt.Errorf("list servers of kept ema auth client %s: %w", existing.ID, err)
+			}
+			target := emaTarget{clientID: existing.ID, recorded: true, servers: linked}
+			for _, serverID := range linked {
+				plan.served[serverID] = true
+			}
+			plan.targets = append(plan.targets, target)
 		}
 		report.add(result)
 		return nil
