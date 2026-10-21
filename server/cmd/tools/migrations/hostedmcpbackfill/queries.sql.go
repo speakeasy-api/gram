@@ -28,6 +28,22 @@ func (q *Queries) BumpPluginServerDeletedAtFixture(ctx context.Context, arg Bump
 	return err
 }
 
+const bumpPluginServerUpdatedAtFixture = `-- name: BumpPluginServerUpdatedAtFixture :exec
+UPDATE plugin_servers AS ps SET updated_at = ps.updated_at + interval '1 second'
+FROM plugins AS pl
+WHERE ps.id = $1 AND pl.id = ps.plugin_id AND pl.project_id = $2
+`
+
+type BumpPluginServerUpdatedAtFixtureParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) BumpPluginServerUpdatedAtFixture(ctx context.Context, arg BumpPluginServerUpdatedAtFixtureParams) error {
+	_, err := q.db.Exec(ctx, bumpPluginServerUpdatedAtFixture, arg.ID, arg.ProjectID)
+	return err
+}
+
 const canonicalWrapperLive = `-- name: CanonicalWrapperLive :one
 SELECT EXISTS (
   SELECT 1
@@ -657,6 +673,52 @@ func (q *Queries) ListMetadataFixture(ctx context.Context, projectID uuid.UUID) 
 	return items, nil
 }
 
+const listPluginServerRemovalsFixture = `-- name: ListPluginServerRemovalsFixture :many
+SELECT ps.id, ps.plugin_id, ps.toolset_id, ps.mcp_server_id, ps.deleted, COALESCE(ps.deleted_at::text, '')::text AS deleted_at, ps.updated_at::text AS updated_at
+FROM plugin_servers AS ps
+JOIN plugins AS pl ON pl.id = ps.plugin_id
+WHERE pl.project_id = $1
+ORDER BY ps.id
+`
+
+type ListPluginServerRemovalsFixtureRow struct {
+	ID          uuid.UUID
+	PluginID    uuid.UUID
+	ToolsetID   uuid.NullUUID
+	McpServerID uuid.NullUUID
+	Deleted     bool
+	DeletedAt   string
+	UpdatedAt   string
+}
+
+func (q *Queries) ListPluginServerRemovalsFixture(ctx context.Context, projectID uuid.UUID) ([]ListPluginServerRemovalsFixtureRow, error) {
+	rows, err := q.db.Query(ctx, listPluginServerRemovalsFixture, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPluginServerRemovalsFixtureRow
+	for rows.Next() {
+		var i ListPluginServerRemovalsFixtureRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.PluginID,
+			&i.ToolsetID,
+			&i.McpServerID,
+			&i.Deleted,
+			&i.DeletedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listPluginServersFixture = `-- name: ListPluginServersFixture :many
 SELECT ps.id, ps.toolset_id, ps.mcp_server_id, ps.deleted
 FROM plugin_servers AS ps
@@ -690,6 +752,46 @@ func (q *Queries) ListPluginServersFixture(ctx context.Context, projectID uuid.U
 			return nil, err
 		}
 		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRemovalRecordToolsets = `-- name: ListRemovalRecordToolsets :many
+SELECT DISTINCT ps.toolset_id::uuid AS toolset_id
+FROM plugin_servers AS ps
+JOIN plugins AS pl ON pl.id = ps.plugin_id
+WHERE ps.toolset_id IS NOT NULL
+  AND ps.mcp_server_id IS NULL
+  AND ps.meta_mcp_server_id IS NULL
+  AND ($1::uuid IS NULL OR pl.project_id = $1::uuid)
+  AND ps.toolset_id > $2::uuid
+ORDER BY 1
+LIMIT $3::int
+`
+
+type ListRemovalRecordToolsetsParams struct {
+	ProjectID uuid.NullUUID
+	AfterID   uuid.UUID
+	PageSize  int32
+}
+
+// Live rows are listed too, so the run reports them as blocked_live.
+func (q *Queries) ListRemovalRecordToolsets(ctx context.Context, arg ListRemovalRecordToolsetsParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listRemovalRecordToolsets, arg.ProjectID, arg.AfterID, arg.PageSize)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var toolset_id uuid.UUID
+		if err := rows.Scan(&toolset_id); err != nil {
+			return nil, err
+		}
+		items = append(items, toolset_id)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -785,6 +887,47 @@ func (q *Queries) ListToolsetDependents(ctx context.Context, arg ListToolsetDepe
 	for rows.Next() {
 		var i ListToolsetDependentsRow
 		if err := rows.Scan(&i.TableName, &i.ID, &i.ProjectID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listToolsetRemovalRecords = `-- name: ListToolsetRemovalRecords :many
+SELECT ps.id, pl.project_id
+FROM plugin_servers AS ps
+JOIN plugins AS pl ON pl.id = ps.plugin_id
+WHERE ps.toolset_id = $1::uuid
+  AND ps.mcp_server_id IS NULL
+  AND ps.meta_mcp_server_id IS NULL
+  AND ($2::uuid IS NULL OR pl.project_id = $2::uuid)
+ORDER BY ps.id
+`
+
+type ListToolsetRemovalRecordsParams struct {
+	ToolsetID uuid.UUID
+	ProjectID uuid.NullUUID
+}
+
+type ListToolsetRemovalRecordsRow struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) ListToolsetRemovalRecords(ctx context.Context, arg ListToolsetRemovalRecordsParams) ([]ListToolsetRemovalRecordsRow, error) {
+	rows, err := q.db.Query(ctx, listToolsetRemovalRecords, arg.ToolsetID, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListToolsetRemovalRecordsRow
+	for rows.Next() {
+		var i ListToolsetRemovalRecordsRow
+		if err := rows.Scan(&i.ID, &i.ProjectID); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -1203,6 +1346,32 @@ func (q *Queries) LockServerKeyedPluginServerTwin(ctx context.Context, arg LockS
 	return i, err
 }
 
+const lockServerKeyedRemovalRecord = `-- name: LockServerKeyedRemovalRecord :one
+SELECT ps.id
+FROM plugin_servers AS ps
+JOIN plugins AS pl ON pl.id = ps.plugin_id
+WHERE ps.plugin_id = $1
+  AND pl.project_id = $2
+  AND ps.mcp_server_id = $3::uuid
+  AND ps.deleted IS TRUE
+ORDER BY ps.id
+LIMIT 1
+FOR UPDATE OF ps
+`
+
+type LockServerKeyedRemovalRecordParams struct {
+	PluginID    uuid.UUID
+	ProjectID   uuid.UUID
+	McpServerID uuid.UUID
+}
+
+func (q *Queries) LockServerKeyedRemovalRecord(ctx context.Context, arg LockServerKeyedRemovalRecordParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, lockServerKeyedRemovalRecord, arg.PluginID, arg.ProjectID, arg.McpServerID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const lockToolsetBackfill = `-- name: LockToolsetBackfill :exec
 SELECT pg_advisory_xact_lock(hashtextextended('hosted-mcp-backfill:' || $1::text, 0))
 `
@@ -1284,6 +1453,45 @@ func (q *Queries) LockToolsetKeyedPluginServer(ctx context.Context, arg LockTool
 		&i.SortOrder,
 		&i.PluginName,
 		&i.PluginSlug,
+	)
+	return i, err
+}
+
+const lockToolsetKeyedRemovalRecord = `-- name: LockToolsetKeyedRemovalRecord :one
+SELECT ps.id, ps.plugin_id, ps.deleted, COALESCE(ps.deleted_at::text, '')::text AS deleted_at, to_jsonb(ps)::jsonb AS row_json
+FROM plugin_servers AS ps
+JOIN plugins AS pl ON pl.id = ps.plugin_id
+WHERE ps.id = $1
+  AND pl.project_id = $2
+  AND ps.toolset_id = $3::uuid
+  AND ps.mcp_server_id IS NULL
+  AND ps.meta_mcp_server_id IS NULL
+FOR UPDATE OF ps
+`
+
+type LockToolsetKeyedRemovalRecordParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+	ToolsetID uuid.UUID
+}
+
+type LockToolsetKeyedRemovalRecordRow struct {
+	ID        uuid.UUID
+	PluginID  uuid.UUID
+	Deleted   bool
+	DeletedAt string
+	RowJson   []byte
+}
+
+func (q *Queries) LockToolsetKeyedRemovalRecord(ctx context.Context, arg LockToolsetKeyedRemovalRecordParams) (LockToolsetKeyedRemovalRecordRow, error) {
+	row := q.db.QueryRow(ctx, lockToolsetKeyedRemovalRecord, arg.ID, arg.ProjectID, arg.ToolsetID)
+	var i LockToolsetKeyedRemovalRecordRow
+	err := row.Scan(
+		&i.ID,
+		&i.PluginID,
+		&i.Deleted,
+		&i.DeletedAt,
+		&i.RowJson,
 	)
 	return i, err
 }
@@ -1410,6 +1618,39 @@ func (q *Queries) RekeyPluginServer(ctx context.Context, arg RekeyPluginServerPa
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const rekeyRemovalRecord = `-- name: RekeyRemovalRecord :one
+UPDATE plugin_servers AS ps
+SET toolset_id = NULL, mcp_server_id = $1::uuid, updated_at = clock_timestamp()
+FROM plugins AS pl
+WHERE ps.id = $2
+  AND pl.id = ps.plugin_id
+  AND pl.project_id = $3
+  AND ps.toolset_id = $1::uuid
+  AND ps.mcp_server_id IS NULL
+  AND ps.meta_mcp_server_id IS NULL
+  AND ps.deleted IS TRUE
+RETURNING ps.deleted_at::text AS deleted_at, ps.updated_at::text AS updated_at
+`
+
+type RekeyRemovalRecordParams struct {
+	McpServerID uuid.UUID
+	ID          uuid.UUID
+	ProjectID   uuid.UUID
+}
+
+type RekeyRemovalRecordRow struct {
+	DeletedAt string
+	UpdatedAt string
+}
+
+// Soft-deleted rows only: every partial unique index on plugin_servers covers live rows, so none applies.
+func (q *Queries) RekeyRemovalRecord(ctx context.Context, arg RekeyRemovalRecordParams) (RekeyRemovalRecordRow, error) {
+	row := q.db.QueryRow(ctx, rekeyRemovalRecord, arg.McpServerID, arg.ID, arg.ProjectID)
+	var i RekeyRemovalRecordRow
+	err := row.Scan(&i.DeletedAt, &i.UpdatedAt)
+	return i, err
 }
 
 const restoreEnvironmentConfigsFixture = `-- name: RestoreEnvironmentConfigsFixture :exec
@@ -1792,6 +2033,32 @@ func (q *Queries) SeedProjectFixture(ctx context.Context, arg SeedProjectFixture
 		arg.Name,
 		arg.Slug,
 		arg.OrganizationID,
+	)
+	return err
+}
+
+const seedRemovedPluginServerFixture = `-- name: SeedRemovedPluginServerFixture :exec
+INSERT INTO plugin_servers (id, plugin_id, toolset_id, mcp_server_id, display_name, deleted_at)
+VALUES ($1, $2, $3, $4, $5, $6)
+`
+
+type SeedRemovedPluginServerFixtureParams struct {
+	ID          uuid.UUID
+	PluginID    uuid.UUID
+	ToolsetID   uuid.NullUUID
+	McpServerID uuid.NullUUID
+	DisplayName string
+	DeletedAt   pgtype.Timestamptz
+}
+
+func (q *Queries) SeedRemovedPluginServerFixture(ctx context.Context, arg SeedRemovedPluginServerFixtureParams) error {
+	_, err := q.db.Exec(ctx, seedRemovedPluginServerFixture,
+		arg.ID,
+		arg.PluginID,
+		arg.ToolsetID,
+		arg.McpServerID,
+		arg.DisplayName,
+		arg.DeletedAt,
 	)
 	return err
 }

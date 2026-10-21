@@ -304,7 +304,6 @@ func attachToPlugin(ctx context.Context, q *repo.Queries, plugin repo.Plugin, pl
 		PluginID:       plugin.ID,
 		ProjectID:      plugin.ProjectID,
 		OrganizationID: plugin.OrganizationID,
-		ToolsetID:      params.ToolsetID,
 		McpServerID:    mcpServerID,
 	})
 	switch {
