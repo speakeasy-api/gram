@@ -93,9 +93,10 @@ func (q *Queries) ActivityInsertAssistantThread(ctx context.Context, arg Activit
 }
 
 const activityInsertChat = `-- name: ActivityInsertChat :exec
-INSERT INTO chats (id, project_id, organization_id, user_id, external_user_id, title, session_surface, created_at, updated_at)
+INSERT INTO chats (id, project_id, organization_id, user_id, external_user_id, title, session_surface, agent_id, created_at, updated_at)
 VALUES ($1, $2, $3, $4::text, $5::text, $6::text,
-        $7::text, now() - $8::interval, now() - $9::interval)
+        $7::text, $8::uuid,
+        now() - $9::interval, now() - $10::interval)
 `
 
 type ActivityInsertChatParams struct {
@@ -106,10 +107,13 @@ type ActivityInsertChatParams struct {
 	ExternalUserID string
 	Title          string
 	SessionSurface pgtype.Text
+	AgentID        uuid.NullUUID
 	CreatedAge     pgtype.Interval
 	UpdatedAge     pgtype.Interval
 }
 
+// agent_id names the Speakeasy agent principal that produced the session, as
+// hook capture stamps it. NULL for the human-driven sessions.
 func (q *Queries) ActivityInsertChat(ctx context.Context, arg ActivityInsertChatParams) error {
 	_, err := q.db.Exec(ctx, activityInsertChat,
 		arg.ID,
@@ -119,6 +123,7 @@ func (q *Queries) ActivityInsertChat(ctx context.Context, arg ActivityInsertChat
 		arg.ExternalUserID,
 		arg.Title,
 		arg.SessionSurface,
+		arg.AgentID,
 		arg.CreatedAge,
 		arg.UpdatedAge,
 	)
