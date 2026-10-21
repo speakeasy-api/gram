@@ -19,7 +19,7 @@ const (
 	// cannot see the feature. Targeted by PostHog organization group (org
 	// slug), the same way the dashboard evaluates it.
 	FlagBudgets Flag = "gram-budgets"
-	// FlagRiskEnforcementPubsub routes realtime gitleaks and Presidio scans over Pub/Sub.
+	// FlagRiskEnforcementPubsub routes applicable realtime scanner lanes over Pub/Sub.
 	FlagRiskEnforcementPubsub Flag = "risk-enforcement-pubsub"
 	// FlagRiskEnforcementMaxContentBytes overrides the realtime enforcement
 	// truncation limit globally. Evaluated server-side with no targeting. The
