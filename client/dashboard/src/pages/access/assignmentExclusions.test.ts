@@ -76,3 +76,13 @@ it("rejects unknown annotations instead of broadening a preserved rule", () => {
     assignmentExclusions([unknown], ["role:organization:engineer"]),
   ).toThrow();
 });
+
+it("rejects unknown access levels before preserving a rule", () => {
+  const unknown = {
+    ...entries[1]!,
+    level: "future_level",
+  } as unknown as ResourceAudienceEntry;
+  expect(() =>
+    assignmentExclusions([unknown], ["role:organization:engineer"]),
+  ).toThrow();
+});

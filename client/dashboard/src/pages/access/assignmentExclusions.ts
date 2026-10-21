@@ -1,6 +1,7 @@
 import type { ResourceAudienceEntry } from "@gram/client/models/components/resourceaudienceentry.js";
 import {
   SetResourceAudienceEntryDispositions$outboundSchema,
+  SetResourceAudienceEntryLevel$outboundSchema,
   type SetResourceAudienceEntry,
 } from "@gram/client/models/components/setresourceaudienceentry.js";
 import { ownRules } from "../mcp/access/serverAudience";
@@ -15,7 +16,7 @@ export function assignmentWriteEntry({
 }: ResourceAudienceEntry): SetResourceAudienceEntry {
   return {
     principalUrn,
-    level,
+    level: SetResourceAudienceEntryLevel$outboundSchema.parse(level),
     tools,
     dispositions: dispositions?.map((disposition) =>
       SetResourceAudienceEntryDispositions$outboundSchema.parse(disposition),
