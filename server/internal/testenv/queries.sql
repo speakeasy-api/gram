@@ -2028,12 +2028,6 @@ FROM mcp_metadata
 WHERE project_id = @project_id
   AND (toolset_id = @backend_id::uuid OR mcp_server_id = @backend_id::uuid);
 
--- name: RekeyMcpMetadataToMcpServerFixture :execrows
-UPDATE mcp_metadata
-SET toolset_id = NULL, mcp_server_id = toolset_id
-WHERE project_id = @project_id
-  AND toolset_id = @toolset_id;
-
 -- name: SetMcpMetadataHeaderDisplayNamesFixture :execrows
 UPDATE mcp_metadata
 SET header_display_names = @header_display_names
@@ -2185,3 +2179,8 @@ RETURNING id;
 INSERT INTO plugin_servers (plugin_id, toolset_id, display_name, policy, sort_order, deleted_at)
 VALUES (@plugin_id, @toolset_id, @display_name, @policy, @sort_order, sqlc.narg('deleted_at'))
 RETURNING *;
+
+-- name: CurrentDatabaseTime :one
+-- The database's clock, for tests that compare against timestamps the
+-- database wrote.
+SELECT clock_timestamp()::timestamptz AS now;
