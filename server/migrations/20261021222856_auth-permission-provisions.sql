@@ -13,7 +13,8 @@ CREATE TABLE "auth_permission_provisions" (
   CONSTRAINT "auth_permission_provisions_organization_id_fkey" FOREIGN KEY ("organization_id") REFERENCES "organization_metadata" ("id") ON UPDATE NO ACTION ON DELETE CASCADE,
   CONSTRAINT "auth_permission_provisions_kind_check" CHECK (kind <> ''::text),
   CONSTRAINT "auth_permission_provisions_principal_urn_check" CHECK (principal_urn <> ''::text),
-  CONSTRAINT "auth_permission_provisions_scope_check" CHECK (scope <> ''::text)
+  CONSTRAINT "auth_permission_provisions_scope_check" CHECK (scope <> ''::text),
+  CONSTRAINT "auth_permission_provisions_selectors_check" CHECK ((jsonb_typeof(selectors) = 'object'::text) AND (selectors <> '{}'::jsonb))
 );
 -- Create index "auth_permission_provisions_org_principal_scope_selector_key" to table: "auth_permission_provisions"
 CREATE UNIQUE INDEX "auth_permission_provisions_org_principal_scope_selector_key" ON "auth_permission_provisions" ("organization_id", "principal_urn", "scope", "selectors");

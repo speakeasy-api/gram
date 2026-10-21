@@ -9362,7 +9362,8 @@ CREATE TABLE IF NOT EXISTS auth_permission_provisions (
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
 
   CONSTRAINT auth_permission_provisions_pkey PRIMARY KEY (id),
-  CONSTRAINT auth_permission_provisions_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE
+  CONSTRAINT auth_permission_provisions_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT auth_permission_provisions_selectors_check CHECK (jsonb_typeof(selectors) = 'object' AND selectors != '{}')
 );
 
 COMMENT ON TABLE auth_permission_provisions IS 'Default auth permission grants the backfill provisioned, one row per grant, kept after the grant itself is deleted.';
