@@ -43,10 +43,11 @@ import { useGramContext } from "@gram/client/react-query/_context.js";
 import { useMembers } from "@gram/client/react-query/members.js";
 import { useRoles } from "@gram/client/react-query/roles.js";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
+import { ActingPrincipal } from "@/components/ui/ActingPrincipal";
 import { Bot, Plus, User } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, Navigate, Outlet, useLocation, useNavigate } from "react-router";
-import { useCatalogEntries } from "@/pages/agents/provision/workloadCatalog";
+import { useCatalogEntries } from "@/pages/agents/credentials/workloadCatalog";
 import { useWorkloadIdentities } from "@gram/client/react-query/workloadIdentities.js";
 import {
   identityKindOf,
@@ -110,6 +111,22 @@ const IDENTITY_FILTERS = defineFilters([
     kind: "multiselect",
     pinned: true,
     description: "People and agents.",
+  },
+  // Default-on, and inverted for it: the absent value is the filtered one,
+  // because a URL with no filters still has to arrive excluded. The roster
+  // is mostly these rows, and a page that opens full of opaque hashes reads
+  // as broken rather than as complete.
+  {
+    id: "anonymous",
+    label: "Anonymous",
+    kind: "select",
+    pinned: true,
+    // No clear: emptying it resolves straight back to excluding them, so a ×
+    // would look like it did nothing.
+    required: true,
+    allLabel: "Anonymous excluded",
+    description:
+      "Activity whose only identifier is an opaque client id, never matched to a person. It arrives from sessions signed in with personal credentials, and carries no name, no account and no tokens.",
   },
   // Three separate facts, each its own filter. None implies another: a
   // directory profile can belong to someone who never signed in, and activity
@@ -267,6 +284,13 @@ const DIRECTORY_OPTIONS = [
   { value: "in_directory", label: "In directory" },
   { value: "not_in_directory", label: "Not in directory" },
 ];
+
+/**
+ * Only the opt-in. "Excluded" is the dimension's own all-label, so it is the
+ * value a page with no filters already holds rather than a second option
+ * saying the same thing.
+ */
+const ANONYMOUS_OPTIONS = [{ value: "included", label: "Anonymous included" }];
 
 const MEMBERSHIP_OPTIONS = [
   { value: "member", label: "Member" },
@@ -761,6 +785,8 @@ function IdentitiesIndexContent({ kind }: { kind: RosterKind }): JSX.Element {
 
   const accountType = (values.account_type as string | undefined) ?? "";
   const personalAccount = (values.personal_account as string | undefined) ?? "";
+  // Absent means excluded: this filter is on before anyone touches it.
+  const anonymous = (values.anonymous as string | undefined) ?? "";
   const directory = (values.directory as string | undefined) ?? "";
   const membership = (values.membership as string | undefined) ?? "";
   const seen = (values.seen as string | undefined) ?? "";
@@ -785,6 +811,19 @@ function IdentitiesIndexContent({ kind }: { kind: RosterKind }): JSX.Element {
       // produced the page. Re-applying people predicates here would drop rows
       // for having no department.
       if (kind === "agent") return true;
+      // An identity with nothing but an opaque client id behind it. Shown
+      // only when asked for: it is a record of activity, not of a person,
+      // and it crowds out every row that names someone.
+      //
+      // Naming the kind is asking for them, so it beats the default. A link
+      // written to show exactly these rows must not land on an empty table.
+      if (
+        anonymous !== "included" &&
+        !selectedKinds.includes("unknown") &&
+        identityKindOf(identity) === "unknown"
+      ) {
+        return false;
+      }
       if (
         selectedKinds.length > 0 &&
         !selectedKinds.includes(identityKindOf(identity))
@@ -851,6 +890,7 @@ function IdentitiesIndexContent({ kind }: { kind: RosterKind }): JSX.Element {
     identities,
     search,
     kindKey,
+    anonymous,
     accountType,
     personalAccount,
     directory,
@@ -1114,6 +1154,7 @@ function IdentitiesIndexContent({ kind }: { kind: RosterKind }): JSX.Element {
   }, [
     search,
     kindKey,
+    anonymous,
     accountType,
     personalAccount,
     directory,
@@ -1208,6 +1249,7 @@ function IdentitiesIndexContent({ kind }: { kind: RosterKind }): JSX.Element {
                       ([value, label]) => ({ value, label }),
                     ),
                     directory: DIRECTORY_OPTIONS,
+                    anonymous: ANONYMOUS_OPTIONS,
                     membership: MEMBERSHIP_OPTIONS,
                     seen: SEEN_OPTIONS,
                     activity: ACTIVITY_OPTIONS,
@@ -1259,7 +1301,7 @@ function IdentitiesIndexContent({ kind }: { kind: RosterKind }): JSX.Element {
                   Agents
                 </Link>{" "}
                 page to see all agent identities configured on the platform, and
-                provision new agent identities.
+                set up new ones.
               </Text>
             </div>
           )}
@@ -1516,10 +1558,25 @@ function personInitials(name: string): string {
  * and quietly.
  */
 function IdentityCell({ identity }: { identity: Employee }): JSX.Element {
-  const isAgent = identityKindOf(identity) === "agent";
+  const agentId = identity.registeredAgentId;
   // A person with no member row has only their address, which is already the
   // name; repeating it underneath would be noise.
   const secondary = identity.email === identity.name ? "" : identity.email;
+
+  if (agentId) {
+    // The shared renderer, so this roster draws the same agent face as every
+    // other surface rather than a lucide glyph inside a round person avatar.
+    //
+    // No authorizer: the Owner column already names the person behind this
+    // agent, and saying it again on every row would be noise — not because
+    // there is nobody to name.
+    return (
+      <ActingPrincipal
+        agent={{ id: agentId, name: identity.name }}
+        className="font-medium"
+      />
+    );
+  }
 
   return (
     <div className="flex min-w-0 items-center gap-3">
@@ -1528,7 +1585,7 @@ function IdentityCell({ identity }: { identity: Employee }): JSX.Element {
           <AvatarImage src={identity.photoUrl} alt={identity.name} />
         )}
         <AvatarFallback className="text-[11px] font-medium">
-          {isAgent ? <Bot className="size-4" /> : personInitials(identity.name)}
+          {personInitials(identity.name)}
         </AvatarFallback>
       </Avatar>
       <div className="flex min-w-0 flex-col">
@@ -1537,8 +1594,8 @@ function IdentityCell({ identity }: { identity: Employee }): JSX.Element {
               link: no cmd+click, no middle-click, no copy-link, and nothing
               for a screen reader to announce. On a page whose whole job is
               reaching people, the name itself has to be the anchor. */}
-          {/* An agent's name may be a long unbroken id, so it wraps anywhere
-              and stops at two lines rather than running past the row. */}
+          {/* A name can be a long unbroken address, so it wraps anywhere and
+              stops at two lines rather than running past the row. */}
           <Text className="line-clamp-2 min-w-0 font-medium wrap-anywhere">
             <IdentityLink
               identifier={{ urn: identityUrnForEmployee(identity) }}

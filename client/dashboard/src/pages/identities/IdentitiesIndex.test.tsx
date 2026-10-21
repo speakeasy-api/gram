@@ -189,6 +189,18 @@ it("skips organization-only device coverage for a project reader", async () => {
   await screen.findByText("Registered agent");
   expect(mocks.coverage).not.toHaveBeenCalled();
 });
+it("excludes anonymous identities until they are asked for", async () => {
+  // The roster is mostly opaque client ids from personal-credential
+  // sessions. Opening the page full of them reads as broken rather than as
+  // complete, so the filter is on before anyone touches it.
+  setup("", "person");
+  await screen.findByText("human@example.com");
+  expect(rowsText()).not.toContain("unknown_subject");
+  // The chip's own wording is the schema's `allLabel`; the stub here renders
+  // dimension ids, so this asserts the dimension is offered at all.
+  expect(screen.getByTestId("filters").textContent).toContain("anonymous");
+});
+
 it.each(["unknown", "unknown,agent"])(
   "preserves legacy kind=%s and exposes a clearable filter",
   async (kind) => {
