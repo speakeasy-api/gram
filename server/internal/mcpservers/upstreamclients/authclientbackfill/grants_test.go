@@ -378,3 +378,14 @@ func TestRun_TrimmedKeyPoliciesAreNotToppedUp(t *testing.T) {
 	f.sharedClient()
 	require.Equal(t, before, f.grantsOf(principal), "an admin trimmed this policy, so it is theirs")
 }
+
+func TestRun_NeverRestoresARemovedCreationDefault(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	require.NoError(t, authz.SeedPersonalAuthClientDefaultTx(t.Context(), f.pool, f.orgID))
+	personal := []*authz.RoleGrant{{Scope: string(authz.ScopeMCPAuth), Selectors: []authz.Selector{authz.PersonalAuthClientSelector()}}}
+	require.NoError(t, authz.PatchPrincipalGrants(t.Context(), f.pool, f.orgID, authz.AllUsersPrincipal(), nil, personal))
+
+	f.run(true)
+	require.Empty(t, f.grantsOf(authz.AllUsersPrincipal()), "the creation-time default is provisioned too, so its removal sticks")
+}

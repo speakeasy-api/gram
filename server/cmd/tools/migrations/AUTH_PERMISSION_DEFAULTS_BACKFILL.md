@@ -37,17 +37,61 @@ After applying, a preview should report zero kind counts apart from organization
 
 ## Rollback
 
-Delete the provisioned grants that are still live and that no admin took over, then the ledger rows, per organization or for all:
+A rollback deletes the provisioned grants that are still live, then their ledger rows. It leaves:
+
+- grants an admin took over by writing them (`taken_over_at` set), and
+- every grant of an API key whose provisioned policy an admin took over in part. Removing the rest would leave the key a narrower policy than it had before the backfill.
+
+Run it in a transaction, preview first, and scope it to one organization unless you mean all of them. After a rollback the ledger is gone, so a later run provisions again, including defaults admins had removed.
 
 ```sql
+BEGIN;
+
+-- Preview: grants that would be deleted.
+SELECT count(*)
+FROM principal_grants g
+JOIN auth_permission_provisions p
+  ON g.organization_id = p.organization_id
+ AND g.principal_urn = p.principal_urn
+ AND g.scope = p.scope
+ AND g.selectors = p.selectors
+WHERE p.taken_over_at IS NULL
+  AND p.organization_id = '<ORG_ID>'
+  AND NOT EXISTS (
+    SELECT 1 FROM auth_permission_provisions t
+    WHERE t.organization_id = p.organization_id
+      AND t.principal_urn = p.principal_urn
+      AND t.principal_urn LIKE 'api_key:%'
+      AND t.taken_over_at IS NOT NULL
+  );
+
 DELETE FROM principal_grants g
 USING auth_permission_provisions p
 WHERE g.organization_id = p.organization_id
   AND g.principal_urn = p.principal_urn
   AND g.scope = p.scope
   AND g.selectors = p.selectors
-  AND p.taken_over_at IS NULL;
-DELETE FROM auth_permission_provisions;
+  AND p.taken_over_at IS NULL
+  AND p.organization_id = '<ORG_ID>'
+  AND NOT EXISTS (
+    SELECT 1 FROM auth_permission_provisions t
+    WHERE t.organization_id = p.organization_id
+      AND t.principal_urn = p.principal_urn
+      AND t.principal_urn LIKE 'api_key:%'
+      AND t.taken_over_at IS NOT NULL
+  );
+
+DELETE FROM auth_permission_provisions WHERE organization_id = '<ORG_ID>';
+
+COMMIT;
 ```
 
-A grant an admin wrote the same way afterwards has `taken_over_at` set and survives.
+For every organization, drop the two `organization_id = '<ORG_ID>'` conditions and the `WHERE` on the last statement, together. Never scope one statement without the others.
+
+## Deploy and revert order
+
+The migration adding `auth_permission_provisions` must be deployed before the server code that writes it: every explicit grant write now marks provisioned grants taken over. Revert that code before ever reverting the migration.
+
+## Known gap
+
+An admin adding a grant to a key's policy at the same moment the backfill tops it up can end up with both; a later run then leaves the policy alone.

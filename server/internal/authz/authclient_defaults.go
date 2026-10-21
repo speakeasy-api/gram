@@ -52,11 +52,60 @@ func GrantAllows(grant Grant, check Check) bool {
 }
 
 // SeedPersonalAuthClientDefaultTx grants user:all the personal auth client
-// default unless it already holds it.
+// default unless it already holds it, recording it as provisioned so a later
+// backfill never restores it once removed.
 func SeedPersonalAuthClientDefaultTx(ctx context.Context, dbtx repo.DBTX, organizationID string) error {
-	grant := &RoleGrant{Scope: string(ScopeMCPAuth), Selectors: []Selector{PersonalAuthClientSelector()}}
-	if _, err := InsertPrincipalGrantsIfAbsentTx(ctx, dbtx, organizationID, AllUsersPrincipal(), []*RoleGrant{grant}); err != nil {
+	selector := PersonalAuthClientSelector()
+	grant := &RoleGrant{Scope: string(ScopeMCPAuth), Selectors: []Selector{selector}}
+	inserted, err := InsertPrincipalGrantsIfAbsentTx(ctx, dbtx, organizationID, AllUsersPrincipal(), []*RoleGrant{grant})
+	if err != nil {
 		return fmt.Errorf("seed personal auth client default: %w", err)
+	}
+	if inserted == 0 {
+		return nil
+	}
+	raw, err := selector.MarshalJSON()
+	if err != nil {
+		return fmt.Errorf("marshal personal auth client default: %w", err)
+	}
+	if err := repo.New(dbtx).RecordAuthPermissionDefault(ctx, repo.RecordAuthPermissionDefaultParams{
+		OrganizationID: organizationID,
+		PrincipalUrn:   AllUsersPrincipal().String(),
+		Scope:          string(ScopeMCPAuth),
+		Selectors:      raw,
+		Kind:           "personal_default",
+	}); err != nil {
+		return fmt.Errorf("record personal auth client default: %w", err)
+	}
+	return nil
+}
+
+// MarkAuthPermissionTakenOverTx records that an explicit write took a grant
+// over from the default auth permission backfill. Call it after the write.
+func MarkAuthPermissionTakenOverTx(ctx context.Context, dbtx repo.DBTX, organizationID, principalURN, scope string, selectors []byte) error {
+	if err := repo.New(dbtx).MarkAuthPermissionTakenOver(ctx, repo.MarkAuthPermissionTakenOverParams{
+		OrganizationID: organizationID,
+		PrincipalUrn:   principalURN,
+		Scope:          scope,
+		Selectors:      selectors,
+	}); err != nil {
+		return fmt.Errorf("mark auth permission taken over: %w", err)
+	}
+	return nil
+}
+
+// upsertGrant writes an explicit grant and takes it over from the backfill.
+func upsertGrant(ctx context.Context, q *repo.Queries, params repo.UpsertPrincipalGrantParams) error {
+	if _, err := q.UpsertPrincipalGrant(ctx, params); err != nil {
+		return fmt.Errorf("upsert grant: %w", err)
+	}
+	if err := q.MarkAuthPermissionTakenOver(ctx, repo.MarkAuthPermissionTakenOverParams{
+		OrganizationID: params.OrganizationID,
+		PrincipalUrn:   params.PrincipalUrn.String(),
+		Scope:          params.Scope,
+		Selectors:      params.Selectors,
+	}); err != nil {
+		return fmt.Errorf("mark auth permission taken over: %w", err)
 	}
 	return nil
 }

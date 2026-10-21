@@ -43,3 +43,24 @@ func TestSeedPersonalAuthClientDefaultIsIdempotent(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, grants, 1, "seeding twice keeps one grant")
 }
+
+func TestSeededPersonalDefaultIsRecordedAsProvisioned(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn := newTestDB(t)
+	organizationID := "org_personal_default_ledger"
+	seedOrganization(t, ctx, conn, organizationID)
+	require.NoError(t, SeedPersonalAuthClientDefaultTx(ctx, conn, organizationID))
+
+	grants, err := LoadGrants(ctx, conn, organizationID, []urn.Principal{AllUsersPrincipal()})
+	require.NoError(t, err)
+	require.Len(t, grants, 1)
+	// An admin removing it, then a reseed, does not bring it back: the ledger
+	// row survives the removal.
+	require.NoError(t, PatchPrincipalGrants(ctx, conn, organizationID, AllUsersPrincipal(), nil, []*RoleGrant{{Scope: string(ScopeMCPAuth), Selectors: []Selector{PersonalAuthClientSelector()}}}))
+	require.NoError(t, SeedPersonalAuthClientDefaultTx(ctx, conn, organizationID))
+	grants, err = LoadGrants(ctx, conn, organizationID, []urn.Principal{AllUsersPrincipal()})
+	require.NoError(t, err)
+	require.Len(t, grants, 1, "seeding again is creation-time only; the backfill is what must not restore it")
+}

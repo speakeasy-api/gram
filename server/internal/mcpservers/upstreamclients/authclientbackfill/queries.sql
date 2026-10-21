@@ -1734,12 +1734,15 @@ WHERE organization_id = @organization_id
   AND scope = ANY(@scopes::text[]);
 
 -- name: ListAPIKeyGrantRows :many
--- Every key policy row, to tell provisioned policies from explicit ones.
+-- Every key policy row, to tell provisioned policies from explicit ones. The
+-- rows stay locked until the phase commits, so an admin edit to a key's policy
+-- waits rather than interleaving with a top-up.
 SELECT principal_urn, scope, selectors
 FROM principal_grants
 WHERE organization_id = @organization_id
   AND principal_type = 'api_key'
-ORDER BY principal_urn, scope, id;
+ORDER BY principal_urn, scope, id
+FOR UPDATE;
 
 -- name: ListActiveLegacyAPIKeys :many
 -- Live legacy keys, matching admission's active predicate.
