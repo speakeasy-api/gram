@@ -5,13 +5,16 @@ import { useRoutes } from "@/routes";
 import { encodeIdentityUrn } from "@/lib/identity-urn";
 import { cn } from "@/lib/utils";
 
-export function AgentIcon(): JSX.Element {
+export function AgentIcon({ className }: { className?: string }): JSX.Element {
   return (
     <span
       role="img"
       aria-label="Agent"
       title="Agent"
-      className="bg-muted flex size-6 shrink-0 items-center justify-center rounded-full"
+      className={cn(
+        "bg-muted flex size-6 shrink-0 items-center justify-center rounded-full",
+        className,
+      )}
     >
       <Bot aria-hidden="true" className="text-muted-foreground size-3.5" />
     </span>

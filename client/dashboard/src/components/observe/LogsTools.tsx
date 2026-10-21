@@ -1,5 +1,8 @@
 import { traceLogsQueryOptions } from "@/pages/logs/traceLogsQuery";
+import { AgentIcon } from "@/components/agent-link";
 import { IdentityLink } from "@/components/identity-link";
+import { ToolUsageIdentity } from "@/components/tool-usage-identity";
+import { useReadableAgentsById } from "@/hooks/useReadableAgents";
 import { identityRefForKind } from "@/lib/identity-urn";
 import { EnableLoggingOverlay } from "@/components/EnableLoggingOverlay";
 import { EnterpriseGate } from "@/components/enterprise-gate";
@@ -15,6 +18,7 @@ import {
   type ObserveTypeFilterValue,
 } from "@/components/observe/ObserveFilterBar";
 import {
+  encodeAgentUserFilter,
   encodeGatewayServerFilter,
   encodeHostedServerFilter,
   encodeShadowServerFilter,
@@ -22,7 +26,7 @@ import {
   isDefaultToolUsageTypeSelection,
   selectedHookSources,
   selectedTargetValues,
-  selectedUserEmails,
+  selectedUserFilterValues,
   TOOL_USAGE_DEFAULT_TYPES,
   TOOL_USAGE_STATUS_OPTIONS,
   TOOL_USAGE_TYPE_OPTIONS,
@@ -292,9 +296,13 @@ export function LogsTools(): JSX.Element {
     () => selectedTargetValues(activeFilters),
     [activeFilters],
   );
-  const selectedEmails = useMemo(
-    () => selectedUserEmails(activeFilters),
+  const selectedUsers = useMemo(
+    () => selectedUserFilterValues(activeFilters),
     [activeFilters],
+  );
+  const agentsById = useReadableAgentsById(
+    filterOptionsData?.users.some((user) => user.userKind === "agent_id") ??
+      false,
   );
   const selectedSources = useMemo(
     () => selectedHookSources(activeFilters),
@@ -447,33 +455,50 @@ export function LogsTools(): JSX.Element {
       {
         id: "user",
         label: "User",
-        // The URL and the payload carry emails; an agent or an external id
-        // sent as an email filter matches nothing, so those identities are not
-        // offered here rather than offered and broken.
+        // People filter by email and agents by id. External and internal
+        // user ids have no filter value the payload carries, so they are not
+        // offered rather than offered and broken. An agent the viewer cannot
+        // read keeps its id label, never its name.
         values: withSelected(
           (filterOptionsData?.users ?? [])
-            .filter((user) => user.userKind === "email")
-            .map((user) => ({
-              value: user.userKey,
-              label: user.userLabel,
-              count: Number(user.eventCount),
-              icon: (
-                <IdentityAvatar label={user.userLabel} className="size-5" />
-              ),
-              selected: selectedEmails.includes(user.userKey),
-            })),
-          selectedEmails,
+            .filter(
+              (user) =>
+                user.userKind === "email" || user.userKind === "agent_id",
+            )
+            .map((user) => {
+              if (user.userKind === "agent_id") {
+                const value = encodeAgentUserFilter(user.userKey);
+                return {
+                  value,
+                  label: agentsById.get(user.userKey)?.name ?? user.userLabel,
+                  count: Number(user.eventCount),
+                  icon: <AgentIcon className="size-5" />,
+                  selected: selectedUsers.includes(value),
+                };
+              }
+              return {
+                value: user.userKey,
+                label: user.userLabel,
+                count: Number(user.eventCount),
+                icon: (
+                  <IdentityAvatar label={user.userLabel} className="size-5" />
+                ),
+                selected: selectedUsers.includes(user.userKey),
+              };
+            }),
+          selectedUsers,
         ),
       },
     ];
   }, [
     accountType,
+    agentsById,
     filterOptionsData,
     hookSourceOptions,
     roleOptions,
     selectedClientKeys,
     selectedRoleIds,
-    selectedEmails,
+    selectedUsers,
     selectedHookTypes,
     selectedServerValues,
     selectedSources,
@@ -515,7 +540,7 @@ export function LogsTools(): JSX.Element {
           handleAccountTypeChange(nextSelected ? value : "");
           break;
         case "user":
-          handleUserEmailSelectionChange(next(selectedEmails));
+          handleUserEmailSelectionChange(next(selectedUsers));
           break;
       }
     },
@@ -529,7 +554,7 @@ export function LogsTools(): JSX.Element {
       handleStatusesChange,
       handleUserEmailSelectionChange,
       selectedClientKeys,
-      selectedEmails,
+      selectedUsers,
       selectedHookTypes,
       selectedServerValues,
       selectedSources,
@@ -1482,6 +1507,10 @@ function LogsToolsTableContent({
   from: Date;
   to: Date;
 }) {
+  const agentsById = useReadableAgentsById(
+    traces.some((trace) => trace.userKind === "agent_id"),
+  );
+
   if (error) {
     return (
       <ErrorAlert
@@ -1583,6 +1612,11 @@ function LogsToolsTableContent({
               onToggle={() => void onToggleExpand(trace)}
               onLogClick={onLogClick}
               serverNameMappings={serverNameMappings}
+              agent={
+                trace.userKind === "agent_id"
+                  ? agentsById.get(trace.userKey)
+                  : undefined
+              }
               from={from}
               to={to}
             />
@@ -1614,6 +1648,7 @@ function LogsToolsTraceRow({
   onToggle,
   onLogClick,
   serverNameMappings,
+  agent,
   from,
   to,
 }: {
@@ -1623,6 +1658,8 @@ function LogsToolsTraceRow({
   onToggle: () => void;
   onLogClick: (log: TelemetryLogRecord, trace?: ToolUsageTraceSummary) => void;
   serverNameMappings: ReturnType<typeof useServerNameMappings>;
+  /** The calling agent, when the viewer may read it. */
+  agent?: { id: string; name: string };
   from: Date;
   to: Date;
 }) {
@@ -1798,13 +1835,26 @@ function LogsToolsTraceRow({
         </div>
 
         <div className="flex min-w-[180px] flex-1 items-center gap-2 text-xs">
-          <IdentityAvatar label={userLabel} />
-          <IdentityLink
-            identifier={identityRefForKind(trace.userKind, trace.userKey)}
-            className="text-muted-foreground min-w-0 truncate"
-          >
-            {userLabel || "—"}
-          </IdentityLink>
+          {trace.userKind === "agent_id" ? (
+            <span className="text-muted-foreground min-w-0">
+              <ToolUsageIdentity
+                kind={trace.userKind}
+                identityKey={trace.userKey}
+                label={userLabel}
+                agent={agent}
+              />
+            </span>
+          ) : (
+            <>
+              <IdentityAvatar label={userLabel} />
+              <IdentityLink
+                identifier={identityRefForKind(trace.userKind, trace.userKey)}
+                className="text-muted-foreground min-w-0 truncate"
+              >
+                {userLabel || "—"}
+              </IdentityLink>
+            </>
+          )}
         </div>
 
         {/* The MCP client that made the call — the same dimension the Client
