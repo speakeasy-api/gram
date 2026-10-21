@@ -46,6 +46,7 @@ describe("wildcardConnectGrant", () => {
   it("reports a wildcard the selection cannot show", () => {
     expect(wildcardConnectGrant([grant("g1", "*", "")])).toEqual({
       projectId: "",
+      grantIds: ["g1"],
     });
     expect(wildcardConnectGrant([grant("g1", "server-a")])).toBeUndefined();
   });
@@ -53,6 +54,7 @@ describe("wildcardConnectGrant", () => {
   it("names the project a scoped wildcard is confined to", () => {
     expect(wildcardConnectGrant([grant("g1", "*", "project-1")])).toEqual({
       projectId: "project-1",
+      grantIds: ["g1"],
     });
   });
 
@@ -62,7 +64,9 @@ describe("wildcardConnectGrant", () => {
         grant("g1", "*", "project-1"),
         grant("g2", "*", ""),
       ]),
-    ).toEqual({ projectId: "" });
+      // Both rows, because removing only the org-wide one would leave the
+      // project's servers still reachable through the scoped one.
+    ).toEqual({ projectId: "", grantIds: ["g1", "g2"] });
   });
 });
 

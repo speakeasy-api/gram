@@ -49,6 +49,12 @@ export function grantedServers(
 export type WildcardConnectGrant = {
   /** The project it is scoped to, or `""` where it reaches every project. */
   projectId: string;
+  /**
+   * Every wildcard row, so replacing the reach with a chosen list can remove
+   * all of them. Leaving one behind would keep the agent reaching everything
+   * while the list claims otherwise.
+   */
+  grantIds: string[];
 };
 
 /**
@@ -72,12 +78,13 @@ export function wildcardConnectGrant(
       grant.selector.resourceId === "*",
   );
   if (wildcards.length === 0) return undefined;
+  const grantIds = wildcards.map((grant) => grant.id);
   // An unscoped wildcard swallows every scoped one, so it is the reach to
   // report: naming one project beside it would understate what the agent has.
   if (wildcards.some((grant) => !grant.selector.projectId)) {
-    return { projectId: "" };
+    return { projectId: "", grantIds };
   }
-  return { projectId: wildcards[0]?.selector.projectId ?? "" };
+  return { projectId: wildcards[0]?.selector.projectId ?? "", grantIds };
 }
 
 /**
