@@ -895,46 +895,50 @@ func (m *ChallengeManager) listClients(
 			noted[r.RemoteSessionIssuerID] = true
 			m.issuerMetadata.NoteUse(ctx, issuerUseFromClientListRow(r))
 		}
-		out = append(out, Client{
-			ID:                               r.ClientID,
-			ProjectID:                        r.ClientProjectID,
-			RemoteSessionIssuerID:            r.RemoteSessionIssuerID,
-			ExternalClientID:                 r.ExternalClientID,
-			ClientSecretEncrypted:            conv.FromPGText[string](r.ClientSecretEncrypted),
-			IssuerSlug:                       r.IssuerSlug,
-			IssuerName:                       conv.FromPGText[string](r.IssuerName),
-			IssuerLogoAssetID:                r.IssuerLogoAssetID,
-			IssuerDocumentationURL:           conv.FromPGTextOrEmpty[string](r.IssuerServiceDocumentation),
-			IssuerPolicyURL:                  conv.FromPGTextOrEmpty[string](r.IssuerOpPolicyUri),
-			IssuerTosURL:                     conv.FromPGTextOrEmpty[string](r.IssuerOpTosUri),
-			ResourceIdentifier:               conv.FromPGTextOrEmpty[string](r.ResourceIdentifier),
-			ResourceName:                     conv.FromPGTextOrEmpty[string](r.ResourceName),
-			ResourceDocumentationURL:         conv.FromPGTextOrEmpty[string](r.ResourceDocumentation),
-			ResourcePolicyURL:                conv.FromPGTextOrEmpty[string](r.ResourcePolicyUri),
-			ResourceTosURL:                   conv.FromPGTextOrEmpty[string](r.ResourceTosUri),
-			IssuerURL:                        r.IssuerUrl,
-			IssuerIdentifier:                 issuerIdentifier(r.IssuerMetadata, r.IssuerUrl),
-			ClientAssertionIssuer:            clientAssertionIssuer(r.IssuerMetadata, r.IssuerUrl),
-			AuthorizationEndpoint:            conv.PtrValOr(conv.FromPGText[string](r.AuthorizationEndpoint), ""),
-			TokenEndpoint:                    conv.PtrValOr(conv.FromPGText[string](r.TokenEndpoint), ""),
-			ClientScope:                      r.ClientScope,
-			IssuerScopesSupported:            r.ScopesSupported,
-			IssuerScopeOverride:              r.ScopeOverride,
-			IssuerOmitScopeFallback:          r.OmitScopeFallback.Valid && r.OmitScopeFallback.Bool,
-			IssuerResourceIndicatorSupported: conv.FromPGBool[bool](r.ResourceIndicatorSupported),
-			IssuerAuthorizationResponseIssParameterSupported: r.AuthorizationResponseIssParameterSupported.Valid && r.AuthorizationResponseIssParameterSupported.Bool,
-			IssuerCodeChallengeMethodsSupported:              r.CodeChallengeMethodsSupported,
-			Audience:                                         conv.FromPGTextOrEmpty[string](r.ClientAudience),
-			Passthrough:                                      r.Passthrough,
-			LegacyCallbackUrl:                                r.LegacyCallbackUrl,
-			CallbackBaseURL:                                  r.CallbackBaseUrl,
-			IssuerRegistrationEndpoint:                       conv.FromPGTextOrEmpty[string](r.IssuerRegistrationEndpoint),
-			ClientSecretExpiresAt:                            timestampPtr(r.ClientSecretExpiresAt),
-			UpstreamRejectedAt:                               timestampPtr(r.UpstreamRejectedAt),
-			CredentialOwner:                                  CredentialOwner(r.CredentialOwner),
-		})
+		out = append(out, clientFromRow(r))
 	}
 	return out, nil
+}
+
+func clientFromRow(r remotesessions_repo.ListRemoteSessionClientsForUserSessionIssuerRow) Client {
+	return Client{
+		ID:                               r.ClientID,
+		ProjectID:                        r.ClientProjectID,
+		RemoteSessionIssuerID:            r.RemoteSessionIssuerID,
+		ExternalClientID:                 r.ExternalClientID,
+		ClientSecretEncrypted:            conv.FromPGText[string](r.ClientSecretEncrypted),
+		IssuerSlug:                       r.IssuerSlug,
+		IssuerName:                       conv.FromPGText[string](r.IssuerName),
+		IssuerLogoAssetID:                r.IssuerLogoAssetID,
+		IssuerDocumentationURL:           conv.FromPGTextOrEmpty[string](r.IssuerServiceDocumentation),
+		IssuerPolicyURL:                  conv.FromPGTextOrEmpty[string](r.IssuerOpPolicyUri),
+		IssuerTosURL:                     conv.FromPGTextOrEmpty[string](r.IssuerOpTosUri),
+		ResourceIdentifier:               conv.FromPGTextOrEmpty[string](r.ResourceIdentifier),
+		ResourceName:                     conv.FromPGTextOrEmpty[string](r.ResourceName),
+		ResourceDocumentationURL:         conv.FromPGTextOrEmpty[string](r.ResourceDocumentation),
+		ResourcePolicyURL:                conv.FromPGTextOrEmpty[string](r.ResourcePolicyUri),
+		ResourceTosURL:                   conv.FromPGTextOrEmpty[string](r.ResourceTosUri),
+		IssuerURL:                        r.IssuerUrl,
+		IssuerIdentifier:                 issuerIdentifier(r.IssuerMetadata, r.IssuerUrl),
+		ClientAssertionIssuer:            clientAssertionIssuer(r.IssuerMetadata, r.IssuerUrl),
+		AuthorizationEndpoint:            conv.PtrValOr(conv.FromPGText[string](r.AuthorizationEndpoint), ""),
+		TokenEndpoint:                    conv.PtrValOr(conv.FromPGText[string](r.TokenEndpoint), ""),
+		ClientScope:                      r.ClientScope,
+		IssuerScopesSupported:            r.ScopesSupported,
+		IssuerScopeOverride:              r.ScopeOverride,
+		IssuerOmitScopeFallback:          r.OmitScopeFallback.Valid && r.OmitScopeFallback.Bool,
+		IssuerResourceIndicatorSupported: conv.FromPGBool[bool](r.ResourceIndicatorSupported),
+		IssuerAuthorizationResponseIssParameterSupported: r.AuthorizationResponseIssParameterSupported.Valid && r.AuthorizationResponseIssParameterSupported.Bool,
+		IssuerCodeChallengeMethodsSupported:              r.CodeChallengeMethodsSupported,
+		Audience:                                         conv.FromPGTextOrEmpty[string](r.ClientAudience),
+		Passthrough:                                      r.Passthrough,
+		LegacyCallbackUrl:                                r.LegacyCallbackUrl,
+		CallbackBaseURL:                                  r.CallbackBaseUrl,
+		IssuerRegistrationEndpoint:                       conv.FromPGTextOrEmpty[string](r.IssuerRegistrationEndpoint),
+		ClientSecretExpiresAt:                            timestampPtr(r.ClientSecretExpiresAt),
+		UpstreamRejectedAt:                               timestampPtr(r.UpstreamRejectedAt),
+		CredentialOwner:                                  CredentialOwner(r.CredentialOwner),
+	}
 }
 
 // RemoteSessionStatus is the usability of a subject's stored remote_session
@@ -1048,6 +1052,11 @@ func (m *ChallengeManager) remoteSessionStatuses(
 	if err != nil {
 		return nil, fmt.Errorf("list remote session statuses: %w", err)
 	}
+	return remoteSessionStates(rows), nil
+}
+
+// remoteSessionStates keys each status row by its client.
+func remoteSessionStates(rows []remotesessions_repo.ListRemoteSessionStatusesForSubjectRow) map[uuid.UUID]RemoteSessionState {
 	statuses := make(map[uuid.UUID]RemoteSessionState, len(rows))
 	for _, row := range rows {
 		var accessExpiresAt *time.Time
@@ -1096,7 +1105,7 @@ func (m *ChallengeManager) remoteSessionStatuses(
 			ValidationReason:       row.ValidationReason.String,
 		}
 	}
-	return statuses, nil
+	return statuses
 }
 
 var ErrRemoteSessionNotRefreshable = errors.New("remote session has no usable refresh token")

@@ -10399,6 +10399,130 @@ func (q *Queries) ListRemoteSessionStatusesForSubject(ctx context.Context, arg L
 	return items, nil
 }
 
+const listRemoteSessionStatusesInTenant = `-- name: ListRemoteSessionStatusesInTenant :many
+SELECT
+  s.remote_session_client_id,
+  s.auto_refresh,
+  s.resource,
+  s.scopes,
+  s.access_expires_at,
+  s.authorization_expires_at,
+  s.refresh_expires_at,
+  s.upstream_subject,
+  s.upstream_email,
+  s.upstream_display_name,
+  s.identity_source,
+  s.enrichment,
+  s.id,
+  s.updated_at,
+  s.last_validated_at,
+  s.validation_status,
+  s.validation_reason,
+  (s.refresh_token_encrypted IS NOT NULL
+    AND (s.authorization_expires_at IS NULL OR s.authorization_expires_at > now())
+    AND (s.refresh_expires_at IS NULL OR s.refresh_expires_at > now()))::boolean AS can_refresh,
+  (CASE
+    WHEN (s.authorization_expires_at IS NULL OR s.authorization_expires_at > now())
+      AND (
+        s.access_expires_at IS NULL
+        OR s.access_expires_at > now()
+        OR (s.refresh_token_encrypted IS NOT NULL
+            AND (s.refresh_expires_at IS NULL OR s.refresh_expires_at > now()))
+      ) THEN 'active'
+    ELSE 'expired'
+  END)::text AS status
+FROM remote_sessions s
+JOIN remote_session_clients c ON c.id = s.remote_session_client_id AND NOT c.deleted
+JOIN remote_session_issuers i ON i.id = c.remote_session_issuer_id AND NOT i.deleted
+JOIN user_session_issuers u ON u.id = s.user_session_issuer_id
+LEFT JOIN projects up ON up.id = u.project_id
+JOIN projects p ON p.id = $1 AND p.organization_id = $2 AND NOT p.deleted
+WHERE s.subject_urn = $3 AND s.remote_session_client_id = ANY($4::uuid[]) AND NOT s.deleted
+ AND (c.project_id = p.id OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = p.organization_id)))
+ AND (i.project_id = p.id OR (i.project_id IS NULL AND (i.organization_id IS NULL OR i.organization_id = p.organization_id)))
+ AND (up.organization_id = p.organization_id OR (u.project_id IS NULL AND u.organization_id = p.organization_id))
+`
+
+type ListRemoteSessionStatusesInTenantParams struct {
+	ProjectID              uuid.UUID
+	OrganizationID         string
+	SubjectUrn             urn.SessionSubject
+	RemoteSessionClientIds []uuid.UUID
+}
+
+type ListRemoteSessionStatusesInTenantRow struct {
+	RemoteSessionClientID  uuid.UUID
+	AutoRefresh            bool
+	Resource               pgtype.Text
+	Scopes                 []string
+	AccessExpiresAt        pgtype.Timestamptz
+	AuthorizationExpiresAt pgtype.Timestamptz
+	RefreshExpiresAt       pgtype.Timestamptz
+	UpstreamSubject        pgtype.Text
+	UpstreamEmail          pgtype.Text
+	UpstreamDisplayName    pgtype.Text
+	IdentitySource         pgtype.Text
+	Enrichment             []byte
+	ID                     uuid.UUID
+	UpdatedAt              pgtype.Timestamptz
+	LastValidatedAt        pgtype.Timestamptz
+	ValidationStatus       pgtype.Text
+	ValidationReason       pgtype.Text
+	CanRefresh             bool
+	Status                 string
+}
+
+// ListRemoteSessionStatusesForSubject for the auth client resolver, over the
+// registrations it may serve instead of the user session issuer's links. A
+// session reports only where GetActiveRemoteSessionInTenant would serve it:
+// the client's reach pins a project registration to its project, and the
+// consent must have come through a sign-in of the server's organization.
+// A deleted sign-in still names the organization the consent was made in.
+func (q *Queries) ListRemoteSessionStatusesInTenant(ctx context.Context, arg ListRemoteSessionStatusesInTenantParams) ([]ListRemoteSessionStatusesInTenantRow, error) {
+	rows, err := q.db.Query(ctx, listRemoteSessionStatusesInTenant,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.SubjectUrn,
+		arg.RemoteSessionClientIds,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListRemoteSessionStatusesInTenantRow
+	for rows.Next() {
+		var i ListRemoteSessionStatusesInTenantRow
+		if err := rows.Scan(
+			&i.RemoteSessionClientID,
+			&i.AutoRefresh,
+			&i.Resource,
+			&i.Scopes,
+			&i.AccessExpiresAt,
+			&i.AuthorizationExpiresAt,
+			&i.RefreshExpiresAt,
+			&i.UpstreamSubject,
+			&i.UpstreamEmail,
+			&i.UpstreamDisplayName,
+			&i.IdentitySource,
+			&i.Enrichment,
+			&i.ID,
+			&i.UpdatedAt,
+			&i.LastValidatedAt,
+			&i.ValidationStatus,
+			&i.ValidationReason,
+			&i.CanRefresh,
+			&i.Status,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listRemoteSessionsByProjectID = `-- name: ListRemoteSessionsByProjectID :many
 SELECT s.id, s.grant_generation, s.subject_urn, s.user_session_issuer_id, s.remote_session_client_id, s.access_token_encrypted, s.access_expires_at, s.refresh_token_encrypted, s.authorization_expires_at, s.refresh_expires_at, s.scopes, s.resource, s.auto_refresh, s.last_refresh_attempt_at, s.last_used_at, s.upstream_subject, s.upstream_email, s.upstream_display_name, s.identity_source, s.enrichment, s.last_validated_at, s.validation_status, s.validation_reason, s.created_at, s.updated_at, s.deleted_at, s.deleted,
   u.display_name AS subject_display_name,

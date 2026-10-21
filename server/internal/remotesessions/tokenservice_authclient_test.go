@@ -304,3 +304,47 @@ func TestGetTenantUserRemoteSessionForClient(t *testing.T) {
 	_, err = q.GetTenantUserRemoteSessionForClient(ctx, params(member, f.clientID, f.projectID, f.organizationID))
 	require.ErrorIs(t, err, pgx.ErrNoRows, "a deleted registration serves nothing")
 }
+
+func TestAuthClientRemoteSessionStatuses_ReportWhatTheResolverServes(t *testing.T) {
+	t.Parallel()
+	ctx, f := newAuthClientTokenFixture(t, "ac-status")
+	otherOrg := createOrganization(t, ctx, f.ti.conn, "ac-status-tenant")
+	otherIssuer := seedOrgLevelRemoteIssuer(t, ctx, f.ti.conn, otherOrg, "ac-status-rsi")
+	otherClient := seedRemoteClientAtTier(t, ctx, f.ti.conn, uuid.NullUUID{}, conv.ToPGText(otherOrg), otherIssuer, "ac-status-client")
+	subject := urn.NewUserSubject("ac-status-user")
+	session := f.consent(t, subject, f.signInA, f.clientID, "token-from-a")
+
+	clients, err := f.mgr.ListAuthClientRegistrations(ctx, f.projectID, f.organizationID, []uuid.UUID{f.clientID, otherClient})
+	require.NoError(t, err)
+	require.Len(t, clients, 1, "another organization's registration is out of reach")
+	require.Equal(t, f.clientID, clients[0].ID)
+
+	statuses, err := f.mgr.AuthClientRemoteSessionStatuses(ctx, subject, f.projectID, f.organizationID, []uuid.UUID{f.clientID})
+	require.NoError(t, err)
+	require.Equal(t, remotesessions.RemoteSessionActive, statuses[f.clientID].Status, "a consent through another sign-in reports as the resolver serves it")
+	require.Equal(t, session.ID, statuses[f.clientID].ID)
+
+	linked, err := f.mgr.RemoteSessionStatuses(ctx, subject, f.projectID, f.organizationID, f.signInB)
+	require.NoError(t, err)
+	require.Empty(t, linked, "without the resolver, sign-in B has no link to the registration")
+
+	other, err := f.mgr.AuthClientRemoteSessionStatuses(ctx, urn.NewUserSubject("ac-status-other-user"), f.projectID, f.organizationID, []uuid.UUID{f.clientID})
+	require.NoError(t, err)
+	require.Empty(t, other, "another user's grant never reports")
+}
+
+func TestAuthClientRemoteSessionStatuses_SkipAGrantConsentedInAnotherOrganization(t *testing.T) {
+	t.Parallel()
+	ctx, r := newReconsentFixture(t, "ac-status-org")
+	r.store(t, ctx, r.otherOrg, r.otherSignIn, "org-b-token")
+
+	statuses, err := r.mgr.AuthClientRemoteSessionStatuses(ctx, r.member, r.projectID, r.organizationID, []uuid.UUID{r.clientID})
+	require.NoError(t, err)
+	require.Empty(t, statuses, "the resolver does not serve the first organization a grant consented in another")
+	_, err = r.mgr.ResolveAuthClientAccessTokens(ctx, r.request(r.member, r.clientID))
+	require.ErrorIs(t, err, remotesessions.ErrNoValidToken)
+
+	inOrgB, err := r.mgr.AuthClientRemoteSessionStatuses(ctx, r.member, r.otherProject, r.otherOrg, []uuid.UUID{r.clientID})
+	require.NoError(t, err)
+	require.Equal(t, remotesessions.RemoteSessionActive, inOrgB[r.clientID].Status)
+}

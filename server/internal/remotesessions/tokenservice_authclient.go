@@ -62,7 +62,7 @@ func (m *ChallengeManager) ResolveAuthClientAccessTokens(ctx context.Context, re
 	} else if attached {
 		return m.ResolveClientAccessTokens(ctx, req.ProjectID, req.OrganizationID, req.UserSessionIssuerID, req.Subject, req.RegistrationID, req.SkipUnusable)
 	}
-	client, err := m.reachableClient(ctx, req)
+	client, err := m.reachableClient(ctx, req.ProjectID, req.OrganizationID, req.RegistrationID)
 	if err != nil {
 		return nil, err
 	}
@@ -92,7 +92,7 @@ func (m *ChallengeManager) AuthClientNeedsReconnect(ctx context.Context, req Aut
 		}
 		return m.storedGrantsNeedReconnect(ctx, lookupSignIn, req.ProjectID, req.OrganizationID, req.UserSessionIssuerID, chosen, req.Subject)
 	}
-	client, err := m.reachableClient(ctx, req)
+	client, err := m.reachableClient(ctx, req.ProjectID, req.OrganizationID, req.RegistrationID)
 	switch {
 	case errors.Is(err, ErrChosenClientUnbound):
 		return true, nil
@@ -100,6 +100,49 @@ func (m *ChallengeManager) AuthClientNeedsReconnect(ctx context.Context, req Aut
 		return false, err
 	}
 	return m.storedGrantsNeedReconnect(ctx, lookupAuthClient, req.ProjectID, req.OrganizationID, req.UserSessionIssuerID, []remotesessions_repo.ListRemoteSessionClientsForUserSessionIssuerRow{client}, req.Subject)
+}
+
+// ListAuthClientRegistrations returns the registrations among ids that the
+// auth client resolver can serve in the project: live, with a live issuer, and
+// within the project's or organization's reach, whether or not a user session
+// issuer links them. Registrations out of reach are left out.
+func (m *ChallengeManager) ListAuthClientRegistrations(ctx context.Context, projectID uuid.UUID, organizationID string, ids []uuid.UUID) ([]Client, error) {
+	out := make([]Client, 0, len(ids))
+	for _, id := range ids {
+		row, err := m.reachableClient(ctx, projectID, organizationID, id)
+		switch {
+		case errors.Is(err, ErrChosenClientUnbound):
+			continue
+		case err != nil:
+			return nil, err
+		}
+		out = append(out, clientFromRow(row))
+	}
+	return out, nil
+}
+
+// AuthClientRemoteSessionStatuses is RemoteSessionStatuses for registrations
+// the auth client resolver serves: it reports a user's session for each of
+// clientIDs only where the resolver would serve it, whichever sign-in it was
+// consented through.
+func (m *ChallengeManager) AuthClientRemoteSessionStatuses(ctx context.Context, subject urn.SessionSubject, projectID uuid.UUID, organizationID string, clientIDs []uuid.UUID) (map[uuid.UUID]RemoteSessionState, error) {
+	if subject.IsZero() || len(clientIDs) == 0 {
+		return map[uuid.UUID]RemoteSessionState{}, nil
+	}
+	rows, err := remotesessions_repo.New(m.db).ListRemoteSessionStatusesInTenant(ctx, remotesessions_repo.ListRemoteSessionStatusesInTenantParams{
+		ProjectID:              projectID,
+		OrganizationID:         organizationID,
+		SubjectUrn:             subject,
+		RemoteSessionClientIds: clientIDs,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list remote session statuses in tenant: %w", err)
+	}
+	states := make([]remotesessions_repo.ListRemoteSessionStatusesForSubjectRow, 0, len(rows))
+	for _, row := range rows {
+		states = append(states, remotesessions_repo.ListRemoteSessionStatusesForSubjectRow(row))
+	}
+	return remoteSessionStates(states), nil
 }
 
 // attachedCaller reports whether the caller resolves through an agent
@@ -119,11 +162,11 @@ func attachedCaller(ctx context.Context, subject urn.SessionSubject) (bool, erro
 	return attached, err
 }
 
-func (m *ChallengeManager) reachableClient(ctx context.Context, req AuthClientTokenRequest) (remotesessions_repo.ListRemoteSessionClientsForUserSessionIssuerRow, error) {
+func (m *ChallengeManager) reachableClient(ctx context.Context, projectID uuid.UUID, organizationID string, registrationID uuid.UUID) (remotesessions_repo.ListRemoteSessionClientsForUserSessionIssuerRow, error) {
 	row, err := remotesessions_repo.New(m.db).GetReachableRemoteSessionClient(ctx, remotesessions_repo.GetReachableRemoteSessionClientParams{
-		ProjectID:             req.ProjectID,
-		OrganizationID:        req.OrganizationID,
-		RemoteSessionClientID: req.RegistrationID,
+		ProjectID:             projectID,
+		OrganizationID:        organizationID,
+		RemoteSessionClientID: registrationID,
 	})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
