@@ -49,6 +49,9 @@ export function OverviewTab({
     <MCPOverviewTab
       server={server}
       showPluginBanner={!bannerAboveTunnel}
+      // Tool Logs does not mark MCP errors from tunneled servers as failed;
+      // tunnel Activity counts them, so show failures only there.
+      failuresTracked={!bannerAboveTunnel}
       // Tool Logs cannot currently filter a tunneled target by id. Treating
       // it as hosted or shadow would silently show the wrong server's calls.
       logsTarget={

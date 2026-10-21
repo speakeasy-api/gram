@@ -45,11 +45,18 @@ export function MCPOverviewTab({
   server,
   logsTarget,
   showPluginBanner = true,
+  failuresTracked = true,
 }: {
   server: HostedServerRef;
   logsTarget?: ParsedTargetFilter | null;
   /** Set false when the page already shows the marketplace banner above this. */
   showPluginBanner?: boolean;
+  /**
+   * Set false when tool logs do not record this server's failures, as for
+   * tunneled servers whose errors appear in tunnel Activity instead. Failure
+   * counts are then hidden rather than shown as zero.
+   */
+  failuresTracked?: boolean;
 }): React.JSX.Element {
   const client = useGramContext();
   const project = useProject();
@@ -186,7 +193,7 @@ export function MCPOverviewTab({
         <>
           <StatTileGroup>
             {isLoading && !summary ? (
-              Array.from({ length: 4 }).map((_, i) => (
+              Array.from({ length: failuresTracked ? 4 : 2 }).map((_, i) => (
                 <Skeleton key={i} className="h-[116px] flex-1" />
               ))
             ) : (
@@ -199,28 +206,34 @@ export function MCPOverviewTab({
                   format="compact"
                   comparisonLabel="vs previous period"
                 />
-                <StatTile
-                  title="Failed calls"
-                  value={summary?.failedToolCalls ?? 0}
-                  tone={
-                    (summary?.failedToolCalls ?? 0) > 0
-                      ? "destructive"
-                      : "neutral"
-                  }
-                  previousValue={comparison?.failedToolCalls}
-                  format="compact"
-                  invertDelta
-                  comparisonLabel="vs previous period"
-                />
-                <StatTile
-                  title="Error rate"
-                  value={summary ? errorRate(summary) : 0}
-                  previousValue={comparison ? errorRate(comparison) : undefined}
-                  format="percent"
-                  invertDelta
-                  thresholds={{ red: 10, amber: 5, inverted: true }}
-                  comparisonLabel="vs previous period"
-                />
+                {failuresTracked && (
+                  <>
+                    <StatTile
+                      title="Failed calls"
+                      value={summary?.failedToolCalls ?? 0}
+                      tone={
+                        (summary?.failedToolCalls ?? 0) > 0
+                          ? "destructive"
+                          : "neutral"
+                      }
+                      previousValue={comparison?.failedToolCalls}
+                      format="compact"
+                      invertDelta
+                      comparisonLabel="vs previous period"
+                    />
+                    <StatTile
+                      title="Error rate"
+                      value={summary ? errorRate(summary) : 0}
+                      previousValue={
+                        comparison ? errorRate(comparison) : undefined
+                      }
+                      format="percent"
+                      invertDelta
+                      thresholds={{ red: 10, amber: 5, inverted: true }}
+                      comparisonLabel="vs previous period"
+                    />
+                  </>
+                )}
                 <StatTile
                   title="Avg latency"
                   value={summary?.avgLatencyMs ?? 0}
@@ -241,9 +254,21 @@ export function MCPOverviewTab({
             timeRangeMs={timeRangeMs}
             expandedChart={expandedChart}
             onExpand={setExpandedChart}
+            splitFailures={failuresTracked}
           />
+          {!failuresTracked && (
+            <Text small muted>
+              Errors for this server are counted in Activity above.
+            </Text>
+          )}
 
-          <div className="grid grid-cols-1 gap-6 @3xl:grid-cols-2">
+          <div
+            className={
+              failuresTracked
+                ? "grid grid-cols-1 gap-6 @3xl:grid-cols-2"
+                : "grid grid-cols-1 gap-6"
+            }
+          >
             <div className="border p-5">
               <h3 className="text-eyebrow mb-3">Top tools by call count</h3>
               {topByCount.length > 0 ? (
@@ -252,14 +277,16 @@ export function MCPOverviewTab({
                 <WidgetEmptyState message="No tool calls in the selected range." />
               )}
             </div>
-            <div className="border p-5">
-              <h3 className="text-eyebrow mb-3">Top tools by failure rate</h3>
-              {topByFailureRate.length > 0 ? (
-                <RankedBarList items={topByFailureRate} />
-              ) : (
-                <WidgetEmptyState message="No failed tool calls in the selected range." />
-              )}
-            </div>
+            {failuresTracked && (
+              <div className="border p-5">
+                <h3 className="text-eyebrow mb-3">Top tools by failure rate</h3>
+                {topByFailureRate.length > 0 ? (
+                  <RankedBarList items={topByFailureRate} />
+                ) : (
+                  <WidgetEmptyState message="No failed tool calls in the selected range." />
+                )}
+              </div>
+            )}
           </div>
 
           {server.kind === "toolset" && (

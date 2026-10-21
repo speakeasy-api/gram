@@ -165,7 +165,7 @@ it.each([
   [
     "disabled",
     { state: "disabled" },
-    "Checks are turned off for this agent. Forwarding still works.",
+    "Checks are turned off for this agent, so its reachability is not reported.",
   ],
   [
     "pending",
@@ -560,7 +560,7 @@ it("says checks are off for a disabled agent without suggesting an update", () =
   expect(screen.getByText("Checks turned off")).toBeTruthy();
   expect(
     screen.getByText(
-      "Checks are turned off for this agent. Forwarding still works.",
+      "Checks are turned off for this agent, so its reachability is not reported.",
     ),
   ).toBeTruthy();
   expect(

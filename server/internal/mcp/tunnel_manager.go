@@ -192,7 +192,7 @@ func (m *tunnelManager) observeNoRoute(tunnelID, mcpServerID string, r *http.Req
 	}
 	method, client := metrics.Method(rpc.Method), metrics.ClientFamily(r.UserAgent())
 	m.proxyManager.TunnelMetrics.Observe(tunnelID, mcpServerID, method, client, "attempt", 0)
-	m.proxyManager.TunnelMetrics.Observe(tunnelID, mcpServerID, method, client, "error", 0)
+	m.proxyManager.TunnelMetrics.Observe(tunnelID, mcpServerID, method, client, "unrouted", 0)
 }
 
 // guardianClientOptions builds the shared client options for dialing tunnel

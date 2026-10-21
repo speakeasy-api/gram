@@ -65,6 +65,11 @@ export interface ToolCallsTimeSeriesChartProps {
   onResetZoom?: () => void;
   /** Shown when the range has no buckets; defaults to a generic message. */
   emptyMessage?: string;
+  /**
+   * Split bars into successful and failed calls. Set false where failures are
+   * not recorded, so every call is not shown as a success.
+   */
+  splitFailures?: boolean;
 }
 
 /**
@@ -84,6 +89,7 @@ export function ToolCallsTimeSeriesChart({
   isZoomed,
   onResetZoom,
   emptyMessage = "No tool calls for the selected time range",
+  splitFailures = true,
 }: ToolCallsTimeSeriesChartProps): JSX.Element {
   const isExpanded = expandedChart === chartId;
   const height = isExpanded ? 420 : 260;
@@ -142,23 +148,33 @@ export function ToolCallsTimeSeriesChart({
 
     // Editorial split: success is the quiet norm (light neutral); failure is
     // the one thing that earns the red accent.
-    const barDatasets: Array<ChartDataset<"bar", number[]>> = [
-      {
-        label: "Successful",
-        data: successData,
-        // The shared neutral — quiet on both canvases.
-        backgroundColor: withAlpha(neutralColor, 0.6),
-        stack: "stack",
-        order: 2,
-      },
-      {
-        label: "Failed",
-        data: failedData,
-        backgroundColor: ACCENT_RED,
-        stack: "stack",
-        order: 2,
-      },
-    ];
+    const barDatasets: Array<ChartDataset<"bar", number[]>> = splitFailures
+      ? [
+          {
+            label: "Successful",
+            data: successData,
+            // The shared neutral — quiet on both canvases.
+            backgroundColor: withAlpha(neutralColor, 0.6),
+            stack: "stack",
+            order: 2,
+          },
+          {
+            label: "Failed",
+            data: failedData,
+            backgroundColor: ACCENT_RED,
+            stack: "stack",
+            order: 2,
+          },
+        ]
+      : [
+          {
+            label: "Tool calls",
+            data: timeSeries.map((b) => b.totalToolCalls),
+            backgroundColor: withAlpha(neutralColor, 0.6),
+            stack: "stack",
+            order: 2,
+          },
+        ];
 
     const trendDataset: ChartDataset<"line", number[]> = {
       label: "Total Trend",
@@ -175,7 +191,7 @@ export function ToolCallsTimeSeriesChart({
     };
 
     return { labels, datasets: [...barDatasets, trendDataset] };
-  }, [timeSeries, timeRangeMs, seriesColors, neutralColor]);
+  }, [timeSeries, timeRangeMs, seriesColors, neutralColor, splitFailures]);
 
   // Chart.js paints the canvas with static defaults that ignore the CSS
   // theme, so gridlines and tick labels need explicit dark-mode colors.

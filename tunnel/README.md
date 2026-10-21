@@ -90,9 +90,9 @@ failures. Checks never send HTTP requests or invoke MCP tools.
 HTTP/MCP stays **Not observed** until normal traffic arrives. HTTP 200 alone does
 not prove MCP success, and an open SSE response is not itself a failure.
 
-Telemetry includes bounded counters and the configured target's scheme, hostname,
-port and path. It excludes payloads, tool names, raw user agents, URL userinfo,
-query strings and raw errors. Requests are collected in minute buckets and
+Telemetry includes bounded counters and the configured target's scheme, hostname
+and port. It excludes the target's path, payloads, tool names, raw user agents,
+URL userinfo, query strings and raw errors. Requests are collected in minute buckets and
 gateway connections are sampled every 15 seconds. The Overview groups history
 into 1-minute buckets for 1 hour, 15-minute buckets for 24 hours, and hourly
 buckets for 7 days.

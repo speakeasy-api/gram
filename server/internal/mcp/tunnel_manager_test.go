@@ -154,4 +154,5 @@ func TestTunnelManagerRecordsRequestsWithNoConnectedAgent(t *testing.T) {
 	require.Equal(t, "claude", rows[0].ClientFamily)
 	require.EqualValues(t, 1, rows[0].Attempts)
 	require.EqualValues(t, 1, rows[0].Errors)
+	require.Equal(t, [12]uint64{}, rows[0].LatencyBins, "an outage must not pull response times toward zero")
 }

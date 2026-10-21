@@ -133,7 +133,7 @@ export function TunnelObservability({
                 : ""}
             </p>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             <Button asChild variant="tertiary" size="sm">
               <Link to={logsHref}>View tool calls</Link>
             </Button>
@@ -389,7 +389,8 @@ function AgentRow({ connection: c }: { connection: TunneledMcpConnection }) {
       ) : d.state === "disabled" ? (
         // The agent or the gateway can turn checks off; both report this.
         <p className="text-muted-foreground text-sm">
-          Checks are turned off for this agent. Forwarding still works.
+          Checks are turned off for this agent, so its reachability is not
+          reported.
         </p>
       ) : (
         <DiagnosticDetails value={d} />

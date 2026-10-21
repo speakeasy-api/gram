@@ -16,8 +16,14 @@ vi.mock("@/pages/mcp/overview/PluginStatusBanner", () => ({
 }));
 // The real dashboard renders the marketplace banner unless told not to.
 vi.mock("@/pages/mcp/overview/MCPOverviewTab", () => ({
-  MCPOverviewTab: ({ showPluginBanner }: { showPluginBanner?: boolean }) => (
-    <div>
+  MCPOverviewTab: ({
+    showPluginBanner,
+    failuresTracked,
+  }: {
+    showPluginBanner?: boolean;
+    failuresTracked?: boolean;
+  }) => (
+    <div data-testid="usage" data-failures={String(failuresTracked !== false)}>
       {showPluginBanner !== false && <div>Marketplace</div>}
       <div>Shared usage dashboard</div>
     </div>
@@ -50,6 +56,9 @@ it("places the marketplace above tunnel status and keeps the usage dashboard bel
     "MarketplaceTunnel statusShared usage dashboard",
   );
   expect(screen.getAllByText("Marketplace")).toHaveLength(1);
+  // Tool Logs does not record tunneled MCP errors, so the usage dashboard must
+  // not report zero failures next to Activity's real error count.
+  expect(screen.getByTestId("usage").dataset.failures).toBe("false");
   const url = new URL(
     screen.getByRole("link").getAttribute("href")!,
     "https://example.test",
@@ -69,6 +78,7 @@ it("keeps the connections panel above the usage dashboard when tunnel observabil
     "Tunnel statusMarketplaceShared usage dashboard",
   );
   expect(screen.getAllByText("Marketplace")).toHaveLength(1);
+  expect(screen.getByTestId("usage").dataset.failures).toBe("true");
 });
 
 it("shows the tunnel status without a usage dashboard when the server has no slug", () => {
@@ -91,4 +101,5 @@ it("retains the shared overview for servers without tunnels", () => {
   expect(screen.getByText("Shared usage dashboard")).toBeTruthy();
   expect(screen.getAllByText("Marketplace")).toHaveLength(1);
   expect(screen.queryByText("Tunnel status")).toBeNull();
+  expect(screen.getByTestId("usage").dataset.failures).toBe("true");
 });

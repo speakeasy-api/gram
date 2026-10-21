@@ -235,3 +235,20 @@ func TestRejectionsAreCountedApartFromErrorsAndLatency(t *testing.T) {
 	require.Zero(t, row.Incomplete)
 	require.Equal(t, [12]uint64{}, row.LatencyBins, "a rejection never reached the MCP server, so it has no response time")
 }
+
+func TestUnroutedRequestsAreErrorsWithoutLatency(t *testing.T) {
+	c := New()
+	now := time.Now().UTC().Truncate(time.Minute).Add(10 * time.Second)
+	c.now = func() time.Time { return now }
+	c.Observe("source", "server", "tools/call", "claude", "attempt", 0)
+	c.Observe("source", "server", "tools/call", "claude", "unrouted", 0)
+	var row Snapshot
+	c.Flush(t.Context(), func(_ context.Context, s Snapshot) error {
+		if s.Kind == "requests" {
+			row = s
+		}
+		return nil
+	})
+	require.EqualValues(t, 1, row.Errors)
+	require.Equal(t, [12]uint64{}, row.LatencyBins, "a request that never reached an agent has no response time")
+}

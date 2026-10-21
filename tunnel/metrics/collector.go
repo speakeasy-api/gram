@@ -102,6 +102,10 @@ func (c *Collector) Observe(source, server, method, client, outcome string, dura
 		row.Canceled++
 	case "rejected":
 		row.Rejected++
+	case "unrouted":
+		// No agent was connected, so the request failed without a response
+		// time. It counts as an error but gets no latency bin.
+		row.Errors++
 	default:
 		row.Incomplete++
 	}

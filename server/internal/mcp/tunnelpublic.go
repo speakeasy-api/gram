@@ -660,6 +660,7 @@ func (s *Service) serveTunneledPublicSession(
 		}
 	}
 	if !live {
+		m.observeNoRoute(tunnelID, mcpServerID, r)
 		if delErr := rt.sessions.Delete(ctx, tunnelID, mcpServerID, sid); delErr != nil {
 			logger.ErrorContext(ctx, "drop anonymous tunnel session for dead gateway", attr.SlogError(delErr))
 		}
