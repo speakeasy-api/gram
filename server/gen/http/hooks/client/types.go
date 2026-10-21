@@ -1969,8 +1969,9 @@ type HookIngestDataRequestBody struct {
 	// Transcript-derived prompt attachment content (Claude
 	// Stop/SubagentStop/SessionEnd).
 	PromptAttachments []*HookPromptAttachmentEntryRequestBody `form:"prompt_attachments,omitempty" json:"prompt_attachments,omitempty" xml:"prompt_attachments,omitempty"`
-	// Device-side delivery failure report. Required on client.delivery_failed and
-	// rejected on every other event type.
+	// Device-side delivery failure report. Required on client.delivery_failed,
+	// where it must be the only block and the payload carries no session; rejected
+	// on every other event type.
 	DeliveryFailure *HookDeliveryFailureDataRequestBody `form:"delivery_failure,omitempty" json:"delivery_failure,omitempty" xml:"delivery_failure,omitempty"`
 }
 
@@ -2114,7 +2115,7 @@ type HookPromptAttachmentEntryRequestBody struct {
 // types.
 type HookDeliveryFailureDataRequestBody struct {
 	// Canonical type of the event whose delivery failed.
-	EventType string `form:"event_type" json:"event_type" xml:"event_type"`
+	FailedEventType string `form:"failed_event_type" json:"failed_event_type" xml:"failed_event_type"`
 	// Whether the failed send was a live hook or a spool-drain replay.
 	DeliveryPhase string `form:"delivery_phase" json:"delivery_phase" xml:"delivery_phase"`
 	// Failure class the client observed.
@@ -6124,8 +6125,8 @@ func ValidateHookSkillDataRequestBody(body *HookSkillDataRequestBody) (err error
 // ValidateHookDeliveryFailureDataRequestBody runs the validations defined on
 // HookDeliveryFailureDataRequestBody
 func ValidateHookDeliveryFailureDataRequestBody(body *HookDeliveryFailureDataRequestBody) (err error) {
-	if utf8.RuneCountInString(body.EventType) > 64 {
-		err = goa.MergeErrors(err, goa.InvalidLengthError("body.event_type", body.EventType, utf8.RuneCountInString(body.EventType), 64, false))
+	if !(body.FailedEventType == "session.started" || body.FailedEventType == "session.updated" || body.FailedEventType == "session.ended" || body.FailedEventType == "mcp.inventory" || body.FailedEventType == "prompt.submitted" || body.FailedEventType == "tool.requested" || body.FailedEventType == "tool.completed" || body.FailedEventType == "tool.failed" || body.FailedEventType == "assistant.responded" || body.FailedEventType == "assistant.thought" || body.FailedEventType == "usage.reported" || body.FailedEventType == "skill.activated" || body.FailedEventType == "notification.reported" || body.FailedEventType == "client.delivery_failed") {
+		err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.failed_event_type", body.FailedEventType, []any{"session.started", "session.updated", "session.ended", "mcp.inventory", "prompt.submitted", "tool.requested", "tool.completed", "tool.failed", "assistant.responded", "assistant.thought", "usage.reported", "skill.activated", "notification.reported", "client.delivery_failed"}))
 	}
 	if !(body.DeliveryPhase == "live" || body.DeliveryPhase == "drain") {
 		err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.delivery_phase", body.DeliveryPhase, []any{"live", "drain"}))

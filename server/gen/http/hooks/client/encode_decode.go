@@ -2448,7 +2448,7 @@ func marshalHooksHookDeliveryFailureDataToHookDeliveryFailureDataRequestBody(v *
 		return nil
 	}
 	res := &HookDeliveryFailureDataRequestBody{
-		EventType:            v.EventType,
+		FailedEventType:      string(v.FailedEventType),
 		DeliveryPhase:        string(v.DeliveryPhase),
 		Cause:                string(v.Cause),
 		StatusCode:           v.StatusCode,
@@ -2747,7 +2747,7 @@ func marshalHookDeliveryFailureDataRequestBodyToHooksHookDeliveryFailureData(v *
 		return nil
 	}
 	res := &hooks.HookDeliveryFailureData{
-		EventType:            v.EventType,
+		FailedEventType:      hooks.HookDeliveryFailedEventType(v.FailedEventType),
 		DeliveryPhase:        hooks.HookDeliveryPhase(v.DeliveryPhase),
 		Cause:                hooks.HookDeliveryCause(v.Cause),
 		StatusCode:           v.StatusCode,

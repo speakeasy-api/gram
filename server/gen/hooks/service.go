@@ -294,6 +294,10 @@ type GetStatusPayload struct {
 // answered with a retryable status.
 type HookDeliveryCause string
 
+// Canonical type of the event whose delivery failed. Bounded to the hook event
+// vocabulary because it is a metric dimension.
+type HookDeliveryFailedEventType string
+
 // Device-side delivery failure report, sent with event type
 // client.delivery_failed. The speakeasy-hooks binary writes one when an event
 // could not reach the control plane and redelivers it from the offline spool
@@ -302,7 +306,7 @@ type HookDeliveryCause string
 // counts as agent activity.
 type HookDeliveryFailureData struct {
 	// Canonical type of the event whose delivery failed.
-	EventType string
+	FailedEventType HookDeliveryFailedEventType
 	// Whether the failed send was a live hook or a spool-drain replay.
 	DeliveryPhase HookDeliveryPhase
 	// Failure class the client observed.
@@ -367,8 +371,9 @@ type HookIngestData struct {
 	// Transcript-derived prompt attachment content (Claude
 	// Stop/SubagentStop/SessionEnd).
 	PromptAttachments []*HookPromptAttachmentEntry
-	// Device-side delivery failure report. Required on client.delivery_failed and
-	// rejected on every other event type.
+	// Device-side delivery failure report. Required on client.delivery_failed,
+	// where it must be the only block and the payload carries no session; rejected
+	// on every other event type.
 	DeliveryFailure *HookDeliveryFailureData
 }
 

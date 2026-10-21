@@ -34,7 +34,7 @@ func deliveryFailurePayload(attemptedAt time.Time) *gen.IngestPayload {
 	payload.Source.Hostname = new("dev-laptop")
 	payload.Data = &gen.HookIngestData{
 		DeliveryFailure: &gen.HookDeliveryFailureData{
-			EventType:            "tool.requested",
+			FailedEventType:      "tool.requested",
 			DeliveryPhase:        "live",
 			Cause:                "timeout",
 			StatusCode:           new(0),
@@ -212,6 +212,90 @@ func TestIngest_DeliveryFailureBlockRejectedOnOtherEvents(t *testing.T) {
 	require.Error(t, err)
 	require.Nil(t, result)
 	require.Contains(t, err.Error(), "data.delivery_failure is only valid")
+}
+
+func TestIngest_DeliveryFailureRejectsActivityContent(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		mutate  func(payload *gen.IngestPayload)
+		wantErr string
+	}{
+		{
+			name: "session on the envelope",
+			mutate: func(payload *gen.IngestPayload) {
+				payload.Session = &gen.HookIngestSession{ID: new("session-1"), TurnID: nil, Cwd: nil, Model: nil}
+			},
+			wantErr: "session is not valid on client.delivery_failed events",
+		},
+		{
+			name: "tool call beside the report",
+			mutate: func(payload *gen.IngestPayload) {
+				payload.Data.ToolCall = &gen.HookToolCallData{
+					ID: nil, Name: new("Bash"), Input: nil, Output: nil, Error: nil,
+					IsInterrupt: nil, PermissionType: nil, DurationMs: nil, Status: nil,
+				}
+			},
+			wantErr: "data.tool_call is not valid on client.delivery_failed events",
+		},
+		{
+			name: "inventory flag beside the report",
+			mutate: func(payload *gen.IngestPayload) {
+				payload.Data.McpInventoryCollected = new(true)
+			},
+			wantErr: "data.mcp_inventory_collected is not valid on client.delivery_failed events",
+		},
+		{
+			name: "event type outside the vocabulary",
+			mutate: func(payload *gen.IngestPayload) {
+				payload.Data.DeliveryFailure.FailedEventType = "tool.invented"
+			},
+			wantErr: "data.delivery_failure.failed_event_type is not a canonical hook event type",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			ctx, ti := newTestHooksService(t)
+			reader := deliveryFailureMetrics(t, ti)
+			payload := deliveryFailurePayload(time.Now().UTC().Add(-time.Hour))
+			tt.mutate(payload)
+
+			result, err := ti.service.Ingest(ctx, payload)
+			require.Error(t, err)
+			require.Nil(t, result)
+			require.Contains(t, err.Error(), tt.wantErr)
+
+			var rm metricdata.ResourceMetrics
+			require.NoError(t, reader.Collect(t.Context(), &rm))
+			for _, sm := range rm.ScopeMetrics {
+				for _, m := range sm.Metrics {
+					require.NotEqual(t, meterHooksDeliveryFailure, m.Name, "a rejected report is not counted")
+				}
+			}
+		})
+	}
+}
+
+func TestIngest_DeliveryFailureRowCarriesNoToolName(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	chClient := enableHookTelemetryLogger(t, ctx, ti)
+	authCtx := hookAuthContext(t, ctx)
+	attemptedAt := time.Now().UTC().Add(-time.Hour).Truncate(time.Second)
+
+	_, err := ti.service.Ingest(ctx, deliveryFailurePayload(attemptedAt))
+	require.NoError(t, err)
+
+	logs := waitForHookLogs(t, ctx, chClient, authCtx.ProjectID.String(), "", attemptedAt, 1)
+	var stored map[string]any
+	require.NoError(t, json.Unmarshal([]byte(logs[0].Attributes), &stored))
+	gram, _ := stored["gram"].(map[string]any)
+	tool, _ := gram["tool"].(map[string]any)
+	require.Empty(t, tool["name"], "tool-trace queries count any hook row with a tool name as a call")
 }
 
 func TestDeliveryFailureTime_PrefersOccurredAtAndClampsAttemptedAt(t *testing.T) {

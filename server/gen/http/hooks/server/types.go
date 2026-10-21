@@ -1969,8 +1969,9 @@ type HookIngestDataRequestBody struct {
 	// Transcript-derived prompt attachment content (Claude
 	// Stop/SubagentStop/SessionEnd).
 	PromptAttachments []*HookPromptAttachmentEntryRequestBody `form:"prompt_attachments,omitempty" json:"prompt_attachments,omitempty" xml:"prompt_attachments,omitempty"`
-	// Device-side delivery failure report. Required on client.delivery_failed and
-	// rejected on every other event type.
+	// Device-side delivery failure report. Required on client.delivery_failed,
+	// where it must be the only block and the payload carries no session; rejected
+	// on every other event type.
 	DeliveryFailure *HookDeliveryFailureDataRequestBody `form:"delivery_failure,omitempty" json:"delivery_failure,omitempty" xml:"delivery_failure,omitempty"`
 }
 
@@ -2114,7 +2115,7 @@ type HookPromptAttachmentEntryRequestBody struct {
 // types.
 type HookDeliveryFailureDataRequestBody struct {
 	// Canonical type of the event whose delivery failed.
-	EventType *string `form:"event_type,omitempty" json:"event_type,omitempty" xml:"event_type,omitempty"`
+	FailedEventType *string `form:"failed_event_type,omitempty" json:"failed_event_type,omitempty" xml:"failed_event_type,omitempty"`
 	// Whether the failed send was a live hook or a spool-drain replay.
 	DeliveryPhase *string `form:"delivery_phase,omitempty" json:"delivery_phase,omitempty" xml:"delivery_phase,omitempty"`
 	// Failure class the client observed.
@@ -4128,8 +4129,8 @@ func ValidateHookPromptAttachmentEntryRequestBody(body *HookPromptAttachmentEntr
 // ValidateHookDeliveryFailureDataRequestBody runs the validations defined on
 // HookDeliveryFailureDataRequestBody
 func ValidateHookDeliveryFailureDataRequestBody(body *HookDeliveryFailureDataRequestBody) (err error) {
-	if body.EventType == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("event_type", "body"))
+	if body.FailedEventType == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("failed_event_type", "body"))
 	}
 	if body.DeliveryPhase == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("delivery_phase", "body"))
@@ -4140,9 +4141,9 @@ func ValidateHookDeliveryFailureDataRequestBody(body *HookDeliveryFailureDataReq
 	if body.AttemptedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("attempted_at", "body"))
 	}
-	if body.EventType != nil {
-		if utf8.RuneCountInString(*body.EventType) > 64 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("body.event_type", *body.EventType, utf8.RuneCountInString(*body.EventType), 64, false))
+	if body.FailedEventType != nil {
+		if !(*body.FailedEventType == "session.started" || *body.FailedEventType == "session.updated" || *body.FailedEventType == "session.ended" || *body.FailedEventType == "mcp.inventory" || *body.FailedEventType == "prompt.submitted" || *body.FailedEventType == "tool.requested" || *body.FailedEventType == "tool.completed" || *body.FailedEventType == "tool.failed" || *body.FailedEventType == "assistant.responded" || *body.FailedEventType == "assistant.thought" || *body.FailedEventType == "usage.reported" || *body.FailedEventType == "skill.activated" || *body.FailedEventType == "notification.reported" || *body.FailedEventType == "client.delivery_failed") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.failed_event_type", *body.FailedEventType, []any{"session.started", "session.updated", "session.ended", "mcp.inventory", "prompt.submitted", "tool.requested", "tool.completed", "tool.failed", "assistant.responded", "assistant.thought", "usage.reported", "skill.activated", "notification.reported", "client.delivery_failed"}))
 		}
 	}
 	if body.DeliveryPhase != nil {

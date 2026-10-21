@@ -2381,7 +2381,7 @@ func unmarshalHookDeliveryFailureDataRequestBodyToHooksHookDeliveryFailureData(v
 		return nil
 	}
 	res := &hooks.HookDeliveryFailureData{
-		EventType:            *v.EventType,
+		FailedEventType:      hooks.HookDeliveryFailedEventType(*v.FailedEventType),
 		DeliveryPhase:        hooks.HookDeliveryPhase(*v.DeliveryPhase),
 		Cause:                hooks.HookDeliveryCause(*v.Cause),
 		StatusCode:           v.StatusCode,

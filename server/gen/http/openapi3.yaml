@@ -100502,10 +100502,24 @@ components:
                     type: integer
                     description: Wall time the client spent on the send across its attempts, in milliseconds.
                     format: int64
-                event_type:
+                failed_event_type:
                     type: string
-                    description: Canonical type of the event whose delivery failed.
-                    maxLength: 64
+                    description: Canonical type of the event whose delivery failed. Bounded to the hook event vocabulary because it is a metric dimension.
+                    enum:
+                        - session.started
+                        - session.updated
+                        - session.ended
+                        - mcp.inventory
+                        - prompt.submitted
+                        - tool.requested
+                        - tool.completed
+                        - tool.failed
+                        - assistant.responded
+                        - assistant.thought
+                        - usage.reported
+                        - skill.activated
+                        - notification.reported
+                        - client.delivery_failed
                 failed_idempotency_key:
                     type: string
                     description: Idempotency key of the event that failed, so the report joins to the row its eventual replay produces.
@@ -100543,7 +100557,7 @@ components:
                     format: int64
             description: Device-side delivery failure report, sent with event type client.delivery_failed. The speakeasy-hooks binary writes one when an event could not reach the control plane and redelivers it from the offline spool once connectivity returns, so the record describes the original attempt rather than the request that carried it. It is diagnostic only and never counts as agent activity.
             required:
-                - event_type
+                - failed_event_type
                 - delivery_phase
                 - cause
                 - attempted_at

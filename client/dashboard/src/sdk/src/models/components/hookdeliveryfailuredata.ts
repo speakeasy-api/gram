@@ -37,6 +37,30 @@ export const DeliveryPhase = {
 export type DeliveryPhase = ClosedEnum<typeof DeliveryPhase>;
 
 /**
+ * Canonical type of the event whose delivery failed. Bounded to the hook event vocabulary because it is a metric dimension.
+ */
+export const FailedEventType = {
+  SessionStarted: "session.started",
+  SessionUpdated: "session.updated",
+  SessionEnded: "session.ended",
+  McpInventory: "mcp.inventory",
+  PromptSubmitted: "prompt.submitted",
+  ToolRequested: "tool.requested",
+  ToolCompleted: "tool.completed",
+  ToolFailed: "tool.failed",
+  AssistantResponded: "assistant.responded",
+  AssistantThought: "assistant.thought",
+  UsageReported: "usage.reported",
+  SkillActivated: "skill.activated",
+  NotificationReported: "notification.reported",
+  ClientDeliveryFailed: "client.delivery_failed",
+} as const;
+/**
+ * Canonical type of the event whose delivery failed. Bounded to the hook event vocabulary because it is a metric dimension.
+ */
+export type FailedEventType = ClosedEnum<typeof FailedEventType>;
+
+/**
  * Device-side delivery failure report, sent with event type client.delivery_failed. The speakeasy-hooks binary writes one when an event could not reach the control plane and redelivers it from the offline spool once connectivity returns, so the record describes the original attempt rather than the request that carried it. It is diagnostic only and never counts as agent activity.
  */
 export type HookDeliveryFailureData = {
@@ -69,9 +93,9 @@ export type HookDeliveryFailureData = {
    */
   elapsedMs?: number | undefined;
   /**
-   * Canonical type of the event whose delivery failed.
+   * Canonical type of the event whose delivery failed. Bounded to the hook event vocabulary because it is a metric dimension.
    */
-  eventType: string;
+  failedEventType: FailedEventType;
   /**
    * Idempotency key of the event that failed, so the report joins to the row its eventual replay produces.
    */
@@ -118,6 +142,11 @@ export const DeliveryPhase$outboundSchema: z.ZodMiniEnum<typeof DeliveryPhase> =
   z.enum(DeliveryPhase);
 
 /** @internal */
+export const FailedEventType$outboundSchema: z.ZodMiniEnum<
+  typeof FailedEventType
+> = z.enum(FailedEventType);
+
+/** @internal */
 export type HookDeliveryFailureData$Outbound = {
   arch?: string | undefined;
   attempted_at: string;
@@ -126,7 +155,7 @@ export type HookDeliveryFailureData$Outbound = {
   cause: string;
   delivery_phase: string;
   elapsed_ms?: number | undefined;
-  event_type: string;
+  failed_event_type: string;
   failed_idempotency_key?: string | undefined;
   gating?: boolean | undefined;
   harness?: string | undefined;
@@ -151,7 +180,7 @@ export const HookDeliveryFailureData$outboundSchema: z.ZodMiniType<
     cause: Cause$outboundSchema,
     deliveryPhase: DeliveryPhase$outboundSchema,
     elapsedMs: z.optional(z.int()),
-    eventType: z.string(),
+    failedEventType: FailedEventType$outboundSchema,
     failedIdempotencyKey: z.optional(z.string()),
     gating: z.optional(z.boolean()),
     harness: z.optional(z.string()),
@@ -168,7 +197,7 @@ export const HookDeliveryFailureData$outboundSchema: z.ZodMiniType<
       binaryVersion: "binary_version",
       deliveryPhase: "delivery_phase",
       elapsedMs: "elapsed_ms",
-      eventType: "event_type",
+      failedEventType: "failed_event_type",
       failedIdempotencyKey: "failed_idempotency_key",
       harnessVariant: "harness_variant",
       harnessVersion: "harness_version",

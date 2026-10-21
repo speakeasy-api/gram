@@ -19,6 +19,27 @@ import (
 // content, so it is never agent activity.
 const eventTypeClientDeliveryFailed = "client.delivery_failed"
 
+// canonicalHookEventTypes mirrors the hook event enum in the Goa design. Goa
+// enforces that enum at the HTTP edge only; in-process callers reach ingest()
+// without it, and a report's failed_event_type is a metric dimension, so it is
+// checked here as well.
+var canonicalHookEventTypes = map[string]struct{}{
+	"session.started":             {},
+	"session.updated":             {},
+	"session.ended":               {},
+	"mcp.inventory":               {},
+	"prompt.submitted":            {},
+	"tool.requested":              {},
+	"tool.completed":              {},
+	"tool.failed":                 {},
+	"assistant.responded":         {},
+	"assistant.thought":           {},
+	"usage.reported":              {},
+	"skill.activated":             {},
+	"notification.reported":       {},
+	eventTypeClientDeliveryFailed: {},
+}
+
 func isDeliveryFailureReport(payload *gen.IngestPayload) bool {
 	return payload != nil && payload.Event != nil && strings.TrimSpace(payload.Event.Type) == eventTypeClientDeliveryFailed
 }
@@ -32,16 +53,60 @@ func canonicalDeliveryFailure(payload *gen.IngestPayload) *gen.HookDeliveryFailu
 
 // validateDeliveryFailurePayload pairs the report block with its event type: a
 // report without the block has nothing to record, and the block on any other
-// event would let an ordinary hook row carry diagnostic fields.
+// event would let an ordinary hook row carry diagnostic fields. A report is
+// answered with allow before any policy runs, so it must not carry anything a
+// policy would otherwise judge: no session and no other data block.
 func validateDeliveryFailurePayload(payload *gen.IngestPayload) error {
 	report := canonicalDeliveryFailure(payload)
 	switch {
-	case isDeliveryFailureReport(payload) && report == nil:
-		return oops.E(oops.CodeInvalid, nil, "data.delivery_failure is required for client.delivery_failed events")
 	case !isDeliveryFailureReport(payload) && report != nil:
 		return oops.E(oops.CodeInvalid, nil, "data.delivery_failure is only valid on client.delivery_failed events")
-	default:
+	case !isDeliveryFailureReport(payload):
 		return nil
+	case report == nil:
+		return oops.E(oops.CodeInvalid, nil, "data.delivery_failure is required for client.delivery_failed events")
+	case payload.Session != nil:
+		return oops.E(oops.CodeInvalid, nil, "session is not valid on client.delivery_failed events")
+	}
+	if block := activityBlockName(payload.Data); block != "" {
+		return oops.E(oops.CodeInvalid, nil, "data.%s is not valid on client.delivery_failed events", block)
+	}
+	if _, ok := canonicalHookEventTypes[strings.TrimSpace(string(report.FailedEventType))]; !ok {
+		return oops.E(oops.CodeInvalid, nil, "data.delivery_failure.failed_event_type is not a canonical hook event type")
+	}
+	return nil
+}
+
+// activityBlockName returns the wire name of the first populated data block
+// other than delivery_failure, or "" when the report is the only block.
+func activityBlockName(data *gen.HookIngestData) string {
+	switch {
+	case data == nil:
+		return ""
+	case data.Prompt != nil:
+		return "prompt"
+	case data.ToolCall != nil:
+		return "tool_call"
+	case data.Mcp != nil:
+		return "mcp"
+	case data.McpInventory != nil:
+		return "mcp_inventory"
+	case data.McpInventoryCollected != nil:
+		return "mcp_inventory_collected"
+	case data.Usage != nil:
+		return "usage"
+	case data.Message != nil:
+		return "message"
+	case data.Skill != nil:
+		return "skill"
+	case data.Notification != nil:
+		return "notification"
+	case data.McpAttribution != nil:
+		return "mcp_attribution"
+	case data.PromptAttachments != nil:
+		return "prompt_attachments"
+	default:
+		return ""
 	}
 }
 
@@ -78,7 +143,7 @@ func (s *Service) recordDeliveryFailure(ctx context.Context, payload *gen.Ingest
 		return
 	}
 	adapter := strings.TrimSpace(payload.Source.Adapter)
-	eventType := strings.TrimSpace(report.EventType)
+	eventType := strings.TrimSpace(string(report.FailedEventType))
 	phase := strings.TrimSpace(string(report.DeliveryPhase))
 	cause := strings.TrimSpace(string(report.Cause))
 	harness := strings.TrimSpace(conv.PtrValOr(report.Harness, ""))
@@ -164,10 +229,12 @@ func (s *Service) recordDeliveryFailure(ctx context.Context, payload *gen.Ingest
 		}
 	}
 
+	// No tool name: the row is a diagnostic, and tool-trace queries treat a
+	// non-empty tool_name as a call to count.
 	s.telemetryLogger.Log(ctx, telemetry.LogParams{
 		Timestamp: deliveryFailureTime(payload, s.now()),
 		ToolInfo: telemetry.ToolInfo{
-			Name:           eventTypeClientDeliveryFailed,
+			Name:           "",
 			OrganizationID: authCtx.ActiveOrganizationID,
 			ProjectID:      authCtx.ProjectID.String(),
 			ID:             "",
