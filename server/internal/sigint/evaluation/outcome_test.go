@@ -26,7 +26,7 @@ func TestOutcomeNotApplicableCarriesReadingIdentityAndAttribution(t *testing.T) 
 	provenance.SetBillingUserId("billing-user")
 	provenance.SetSource("example-source")
 	provenance.SetReplayed(true)
-	provenance.SetAttributes(map[string]string{"model_name": "gpt-6.1-sol", "model_family": "openai", "model_provider": "openrouter", "department": "engineering"})
+	provenance.SetAttributes(map[string]string{"model_name": "gpt-6.1-sol", "model_family": "openai", "inference_provider": "openrouter", "department": "engineering"})
 	m.SetIngestion(provenance)
 	definitions := partialSensors()
 	definitions[0].MatchExpression = `message.role == "assistant"`

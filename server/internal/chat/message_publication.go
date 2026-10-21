@@ -91,7 +91,7 @@ func (w *ChatMessageWriter) enqueueMessageEvents(ctx context.Context, tx repo.DB
 			ingestion.SetBillingMode(write.BillingMode)
 		}
 		ingestion.SetReplayed(row.Replayed)
-		ingestion.SetAttributes(messageAttributes(conv.FromPGTextOrEmpty[string](row.Model), write.ModelProvider, row.Department))
+		ingestion.SetAttributes(messageAttributes(conv.FromPGTextOrEmpty[string](row.Model), write.InferenceProvider, row.Department))
 		event.SetIngestion(ingestion)
 		publications = append(publications, outbox.Message{Proto: event, PublicID: id, Attributes: map[string]string{
 			"type": event.GetType().String(), "role": row.Role, "source": ingestion.GetSource(),
@@ -109,5 +109,5 @@ func externalPublication(write ExternalMessageWrite) MessageWrite {
 	var params repo.CreateChatMessageParams
 	params.ID = write.Params.ID
 	params.ProjectID = write.Params.ProjectID
-	return MessageWrite{Params: params, BillingUserID: write.BillingUserID, AssistantID: uuid.Nil, WorkloadSource: write.WorkloadSource, UserEmail: write.UserEmail, Provider: write.Provider, ModelProvider: write.ModelProvider, HookHostname: write.HookHostname, AccountType: write.AccountType, BillingMode: write.BillingMode}
+	return MessageWrite{Params: params, BillingUserID: write.BillingUserID, AssistantID: uuid.Nil, WorkloadSource: write.WorkloadSource, UserEmail: write.UserEmail, Provider: write.Provider, InferenceProvider: write.InferenceProvider, HookHostname: write.HookHostname, AccountType: write.AccountType, BillingMode: write.BillingMode}
 }

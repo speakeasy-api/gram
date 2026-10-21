@@ -57,7 +57,7 @@ func TestConversationEventsDoNotUploadLargeBodies(t *testing.T) {
 			params.Model = conv.ToPGText("anthropic/claude-opus-5")
 			params.Content = "short display text"
 			params.ContentRaw = []byte(`{"payload":"` + strings.Repeat("x", 9*1024*1024) + `"}`)
-			writes := []chat.MessageWrite{{Params: params, ModelProvider: "OpenRouter"}}
+			writes := []chat.MessageWrite{{Params: params, InferenceProvider: "OpenRouter"}}
 			var err error
 			switch mode {
 			case "write":
@@ -68,7 +68,7 @@ func TestConversationEventsDoNotUploadLargeBodies(t *testing.T) {
 				_, err = writer.WriteExternal(ctx, ti.projectID, []chat.ExternalMessageWrite{{Params: repo.CreateExternalChatMessageParams{
 					ID: params.ID, ChatID: chatID, ProjectID: ti.projectID, Role: params.Role, Content: params.Content, ContentRaw: params.ContentRaw,
 					ExternalMessageID: conv.ToPGText("large-external"), Model: params.Model,
-				}, ModelProvider: "OpenRouter"}})
+				}, InferenceProvider: "OpenRouter"}})
 			case "caller transaction":
 				tx := testenv.BeginTx(t, ctx, ti.conn)
 				_, err = writer.WriteInTx(ctx, tx, writes)
@@ -85,7 +85,7 @@ func TestConversationEventsDoNotUploadLargeBodies(t *testing.T) {
 			require.Len(t, stored, 1)
 			require.Equal(t, stored[0].ID.String(), events[0].GetMessageId())
 			require.Equal(t, map[string]string{
-				"model_name": "anthropic/claude-opus-5", "model_family": "anthropic", "model_provider": "openrouter",
+				"model_name": "anthropic/claude-opus-5", "model_family": "anthropic", "inference_provider": "openrouter",
 			}, events[0].GetIngestion().GetAttributes())
 			require.JSONEq(t, string(params.ContentRaw), string(stored[0].ContentRaw))
 		})
@@ -126,7 +126,7 @@ func TestConversationEventPreservesIngestionContext(t *testing.T) {
 	require.Equal(t, "actor@example.test", ingestion.GetObservedUserEmail())
 	require.Equal(t, assistantID.String(), ingestion.GetAssistantId())
 	require.Equal(t, "anthropic", ingestion.GetProvider())
-	require.NotContains(t, ingestion.GetAttributes(), "model_provider", "account attribution does not identify the serving provider")
+	require.NotContains(t, ingestion.GetAttributes(), "inference_provider", "account attribution does not identify the inference provider")
 	require.Equal(t, "opencode", ingestion.GetHookSource())
 	require.Equal(t, "dev-host", ingestion.GetHostname())
 	require.Equal(t, "team", ingestion.GetAccountType())
@@ -288,7 +288,7 @@ func TestConversationEventSnapshotSurvivesDirectoryChangeAndConflict(t *testing.
 	write := chat.ExternalMessageWrite{Params: repo.CreateExternalChatMessageParams{
 		ID: uuid.New(), ProjectID: ti.projectID, ChatID: chatID, Role: "user", UserID: conv.ToPGText("actor"),
 		ExternalMessageID: conv.ToPGText("immutable-message"), Model: conv.ToPGText("anthropic/claude-opus-5"),
-	}, Provider: "anthropic", ModelProvider: "Amazon Bedrock"}
+	}, Provider: "anthropic", InferenceProvider: "Amazon Bedrock"}
 	_, err = writer.WriteExternal(ctx, ti.projectID, []chat.ExternalMessageWrite{write})
 	require.NoError(t, err)
 
@@ -296,13 +296,13 @@ func TestConversationEventSnapshotSurvivesDirectoryChangeAndConflict(t *testing.
 	_, err = directory.UpsertDirectoryUser(ctx, profile)
 	require.NoError(t, err)
 	write.Params.Model = conv.ToPGText("gpt-6.1-sol")
-	write.ModelProvider = "openai"
+	write.InferenceProvider = "openai"
 	n, err := writer.WriteExternal(ctx, ti.projectID, []chat.ExternalMessageWrite{write})
 	require.NoError(t, err)
 	require.Zero(t, n)
 	events := conversationMessages(t, ti)
 	require.Len(t, events, 1)
 	require.Equal(t, map[string]string{
-		"model_family": "anthropic", "model_provider": "bedrock", "model_name": "anthropic/claude-opus-5", "department": "engineering",
+		"model_family": "anthropic", "inference_provider": "bedrock", "model_name": "anthropic/claude-opus-5", "department": "engineering",
 	}, events[0].GetIngestion().GetAttributes())
 }

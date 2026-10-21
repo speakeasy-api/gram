@@ -54,9 +54,9 @@ type MessageWrite struct {
 	// and account context. It does not by itself establish the serving route.
 	Provider string
 
-	// ModelProvider is the reported serving provider or a known first-party
+	// InferenceProvider is the reported inference service or a known first-party
 	// service. Empty means unknown, independently of the account provider.
-	ModelProvider string
+	InferenceProvider string
 
 	// HookHostname is the device hostname explicitly reported by hook ingestion.
 	HookHostname string
@@ -86,9 +86,9 @@ type ExternalMessageWrite struct {
 	// and account context. It does not by itself establish the serving route.
 	Provider string
 
-	// ModelProvider is the reported serving provider or a known first-party
+	// InferenceProvider is the reported inference service or a known first-party
 	// service. Empty means unknown, independently of the account provider.
-	ModelProvider string
+	InferenceProvider string
 
 	// HookHostname is the device hostname explicitly reported by hook ingestion.
 	HookHostname string

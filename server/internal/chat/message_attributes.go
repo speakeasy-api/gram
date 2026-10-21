@@ -9,7 +9,7 @@ func messageAttributes(model, provider, department string) map[string]string {
 	model = knownMessageAttribute(model)
 	setReadingAttribute(&attributes, "model_name", model)
 	setReadingAttribute(&attributes, "model_family", messageModelFamily(model))
-	setReadingAttribute(&attributes, "model_provider", messageModelProvider(provider))
+	setReadingAttribute(&attributes, "inference_provider", messageInferenceProvider(provider))
 	setReadingAttribute(&attributes, "department", knownMessageAttribute(department))
 	return attributes
 }
@@ -76,9 +76,9 @@ func messageModelFamily(model string) string {
 	}
 }
 
-// messageModelProvider normalizes reported serving-provider aliases. A model
+// messageInferenceProvider normalizes reported inference-provider aliases. A model
 // family is never evidence that its vendor actually served the request.
-func messageModelProvider(provider string) string {
+func messageInferenceProvider(provider string) string {
 	provider = strings.ToLower(knownMessageAttribute(provider))
 	switch provider {
 	case "amazon bedrock", "aws bedrock", "amazon-bedrock", "aws-bedrock":

@@ -428,16 +428,16 @@ func buildAssistantRows(
 
 	assistantID, workloadSource := messageReadingAttribution(ctx, request.UsageSource)
 	return []MessageWrite{{
-		Params:         only,
-		BillingUserID:  request.UserID,
-		AssistantID:    assistantID,
-		WorkloadSource: workloadSource,
-		UserEmail:      request.UserEmail,
-		Provider:       response.Provider,
-		ModelProvider:  response.Provider,
-		HookHostname:   "",
-		AccountType:    "",
-		BillingMode:    "",
+		Params:            only,
+		BillingUserID:     request.UserID,
+		AssistantID:       assistantID,
+		WorkloadSource:    workloadSource,
+		UserEmail:         request.UserEmail,
+		Provider:          response.Provider,
+		InferenceProvider: response.Provider,
+		HookHostname:      "",
+		AccountType:       "",
+		BillingMode:       "",
 	}}
 }
 

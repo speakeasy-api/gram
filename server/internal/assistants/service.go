@@ -3849,16 +3849,16 @@ func (s *ServiceCore) selfHealCorruptHistory(ctx context.Context, chatID uuid.UU
 	notice := base
 	notice.Content = fmt.Sprintf(selfHealRecoveryNoticeTemplate, len(userMessages), selfHealUserMessageMaxLen)
 	rows = append(rows, chat.MessageWrite{
-		Params:         notice,
-		BillingUserID:  billingUserID,
-		AssistantID:    assistantID,
-		WorkloadSource: metering.WorkloadSourceAssistant,
-		UserEmail:      "",
-		Provider:       "",
-		ModelProvider:  "",
-		HookHostname:   "",
-		AccountType:    chatRow.AccountType,
-		BillingMode:    "",
+		Params:            notice,
+		BillingUserID:     billingUserID,
+		AssistantID:       assistantID,
+		WorkloadSource:    metering.WorkloadSourceAssistant,
+		UserEmail:         "",
+		Provider:          "",
+		InferenceProvider: "",
+		HookHostname:      "",
+		AccountType:       chatRow.AccountType,
+		BillingMode:       "",
 	})
 	for _, m := range userMessages {
 		row := base
@@ -3866,16 +3866,16 @@ func (s *ServiceCore) selfHealCorruptHistory(ctx context.Context, chatID uuid.UU
 		row.UserID = m.UserID
 		row.ExternalUserID = m.ExternalUserID
 		rows = append(rows, chat.MessageWrite{
-			Params:         row,
-			BillingUserID:  billingUserID,
-			AssistantID:    assistantID,
-			WorkloadSource: metering.WorkloadSourceAssistant,
-			UserEmail:      "",
-			Provider:       "",
-			ModelProvider:  "",
-			HookHostname:   "",
-			AccountType:    chatRow.AccountType,
-			BillingMode:    "",
+			Params:            row,
+			BillingUserID:     billingUserID,
+			AssistantID:       assistantID,
+			WorkloadSource:    metering.WorkloadSourceAssistant,
+			UserEmail:         "",
+			Provider:          "",
+			InferenceProvider: "",
+			HookHostname:      "",
+			AccountType:       chatRow.AccountType,
+			BillingMode:       "",
 		})
 	}
 

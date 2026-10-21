@@ -169,7 +169,7 @@ func TestCaptureMessage_PropagatesReportedProviderToStorageReading(t *testing.T)
 	}
 	require.NotNil(t, assistantEvent)
 	require.Equal(t, "anthropic", assistantEvent.GetIngestion().GetAttributes()["model_family"])
-	require.Equal(t, "bedrock", assistantEvent.GetIngestion().GetAttributes()["model_provider"])
+	require.Equal(t, "bedrock", assistantEvent.GetIngestion().GetAttributes()["inference_provider"])
 }
 
 func TestCaptureMessage_OmitsUnknownProviderFromStorageReading(t *testing.T) {
@@ -195,7 +195,7 @@ func TestCaptureMessage_OmitsUnknownProviderFromStorageReading(t *testing.T) {
 	events := conversationMessages(t, ti)
 	require.NotEmpty(t, events)
 	for _, event := range events {
-		require.NotContains(t, event.GetIngestion().GetAttributes(), "model_provider")
+		require.NotContains(t, event.GetIngestion().GetAttributes(), "inference_provider")
 	}
 }
 

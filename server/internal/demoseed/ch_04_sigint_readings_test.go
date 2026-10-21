@@ -40,7 +40,7 @@ func TestSeededSigintReadingsSatisfyWriterRules(t *testing.T) {
 		require.NotEmpty(t, row.ResultType)
 		require.NotEmpty(t, row.Probabilities)
 		require.LessOrEqual(t, len(row.Attributes), chrepo.MaxAttributes)
-		for _, key := range []string{"model_name", "model_family", "model_provider", "department"} {
+		for _, key := range []string{"model_name", "model_family", "inference_provider", "department"} {
 			value, present := row.Attributes[key]
 			if present {
 				require.NotEmpty(t, value)

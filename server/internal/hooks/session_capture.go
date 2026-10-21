@@ -488,16 +488,16 @@ func (s *Service) insertMessageWithFallbackUpsertResult(
 	}
 
 	write := chat.MessageWrite{
-		Params:         msgParams,
-		BillingUserID:  metadata.UserID,
-		AssistantID:    uuid.Nil,
-		WorkloadSource: metering.WorkloadSourceHook,
-		UserEmail:      metadata.UserEmail,
-		Provider:       metadata.Provider,
-		ModelProvider:  "",
-		HookHostname:   metadata.Hostname,
-		AccountType:    metadata.AccountType,
-		BillingMode:    metadata.BillingMode,
+		Params:            msgParams,
+		BillingUserID:     metadata.UserID,
+		AssistantID:       uuid.Nil,
+		WorkloadSource:    metering.WorkloadSourceHook,
+		UserEmail:         metadata.UserEmail,
+		Provider:          metadata.Provider,
+		InferenceProvider: "",
+		HookHostname:      metadata.Hostname,
+		AccountType:       metadata.AccountType,
+		BillingMode:       metadata.BillingMode,
 	}
 	writeMessage := func() (int64, error) {
 		if msgParams.MessageID.Valid && strings.HasPrefix(msgParams.MessageID.String, agentPromptCorrelationPrefix) {
@@ -617,16 +617,16 @@ func (s *Service) insertUncorrelatedAgentPrompt(
 	}
 
 	writes := []chat.MessageWrite{{
-		Params:         msgParams,
-		BillingUserID:  metadata.UserID,
-		AssistantID:    uuid.Nil,
-		WorkloadSource: metering.WorkloadSourceHook,
-		UserEmail:      metadata.UserEmail,
-		Provider:       metadata.Provider,
-		ModelProvider:  "",
-		HookHostname:   metadata.Hostname,
-		AccountType:    metadata.AccountType,
-		BillingMode:    metadata.BillingMode,
+		Params:            msgParams,
+		BillingUserID:     metadata.UserID,
+		AssistantID:       uuid.Nil,
+		WorkloadSource:    metering.WorkloadSourceHook,
+		UserEmail:         metadata.UserEmail,
+		Provider:          metadata.Provider,
+		InferenceProvider: "",
+		HookHostname:      metadata.Hostname,
+		AccountType:       metadata.AccountType,
+		BillingMode:       metadata.BillingMode,
 	}}
 	tx, err := s.db.Begin(ctx)
 	if err != nil {

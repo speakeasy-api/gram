@@ -28,18 +28,18 @@ stack is rebased against `origin/main` before handoff.
 
 Capture an immutable creation-event snapshot, preserved by evaluation retries and outcomes:
 
-| Key              | Meaning                                                               | Examples                                       |
-| ---------------- | --------------------------------------------------------------------- | ---------------------------------------------- |
-| `model_family`   | Model vendor identified by the model name                             | `anthropic`, `openai`                          |
-| `model_provider` | Serving provider reported by ingestion, independently of model family | `openrouter`, `bedrock`, `anthropic`, `openai` |
-| `model_name`     | Model identifier recorded on the message                              | `anthropic/claude-opus-5`, `gpt-6.1-sol`       |
-| `department`     | Message actor's organization-scoped directory department at capture   | `engineering`, `marketing`                     |
+| Key                  | Meaning                                                                | Examples                                       |
+| -------------------- | ---------------------------------------------------------------------- | ---------------------------------------------- |
+| `model_family`       | Model vendor identified by the model name                              | `anthropic`, `openai`                          |
+| `inference_provider` | Inference service reported by ingestion, independently of model family | `openrouter`, `bedrock`, `anthropic`, `openai` |
+| `model_name`         | Model identifier recorded on the message                               | `anthropic/claude-opus-5`, `gpt-6.1-sol`       |
+| `department`         | Message actor's organization-scoped directory department at capture    | `engineering`, `marketing`                     |
 
 Omit unknown or blank values; never write an `<unset>` sentinel. Preserve the model identifier and department spelling. Normalize known provider aliases. Do not infer a serving provider from a model family, or a department from billing allocation. Historical imports snapshot information available at ingestion, not an invented historical directory state. Source-message model labels are distinct from the sensor's classifier model/provider columns.
 
 These are the first populated labels, not a closed query vocabulary. Future arbitrary labels remain queryable within explicit budgets. Fingerprints/catalogs are benchmark candidates, not prerequisites.
 
-Producer contract: an explicit `ModelProvider` field distinguishes serving facts from the existing account/metering `Provider`. Completion responses and known first-party imports supply it. Hook account metadata alone leaves it unknown.
+Producer contract: an explicit `InferenceProvider` field distinguishes inference-service facts from the existing account/metering `Provider`. Completion responses and known first-party imports supply it. Hook account metadata alone leaves it unknown.
 
 ## Primary-key-first query architecture
 

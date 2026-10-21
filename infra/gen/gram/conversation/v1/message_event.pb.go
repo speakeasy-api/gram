@@ -884,7 +884,7 @@ type MessageEvent_IngestionContext_builder struct {
 	Replayed *bool
 	// String labels snapshotted when the message is created. model_name is the
 	// message's model identifier, model_family its recognized vendor, and
-	// model_provider its reported serving provider. department is the actor's
+	// inference_provider its reported inference service. department is the actor's
 	// active organization-scoped directory department at capture time, not the
 	// billing user's. Unknown values are omitted. Consumers preserve this
 	// snapshot across retries rather than resolving current directory state.
