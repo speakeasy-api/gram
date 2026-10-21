@@ -45,7 +45,7 @@ export type McpServerToolsetSummary = {
    */
   slug: string;
   /**
-   * Number of tools the toolset serves from the project's latest completed deployment, excluding external MCP proxy tools.
+   * Number of tools the toolset serves: deployment-backed tools (HTTP, function, external MCP) that resolve in the project's latest completed deployment, plus its prompt templates and registered platform tools. External MCP proxy tools are excluded.
    */
   toolCount: number;
   /**

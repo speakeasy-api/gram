@@ -747,6 +747,7 @@ WITH active_deployments AS MATERIALIZED (
     FROM deployments d
     JOIN deployment_statuses ds ON ds.deployment_id = d.id
     WHERE d.project_id = p.project_id
+      AND d.organization_id = @organization_id
       AND ds.status = 'completed'
     ORDER BY d.seq DESC
     LIMIT 1
