@@ -1,3 +1,5 @@
+import { Lock } from "lucide-react";
+import { useSensitiveContentRestricted } from "@/hooks/useSensitiveContentRestricted";
 import { Icon } from "@/components/ui/Icon";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useRBAC } from "@/hooks/useRBAC";
@@ -28,7 +30,11 @@ import { formatDistanceToNow } from "date-fns";
 import { Loader2, TriangleAlert } from "lucide-react";
 import { useLayoutEffect, useRef, useState } from "react";
 import { Link } from "react-router";
-import { TRANSCRIPT_DENIED_REASON, useCanReadFindingChat } from "../unmask";
+import {
+  SUPPORT_EVIDENCE_REASON,
+  TRANSCRIPT_DENIED_REASON,
+  useCanReadFindingChat,
+} from "../unmask";
 import { collectChatFindings } from "./collect-findings";
 
 /**
@@ -52,6 +58,7 @@ export function EvidenceTitle({
   onOpenChat: (chatId: string, chatMessageId?: string) => void;
 }): JSX.Element {
   const routes = useRoutes();
+  const restricted = useSensitiveContentRestricted();
   const canReadChat = useCanReadFindingChat();
   const { isLoading: scopesLoading } = useRBAC();
   // Without chat:read on this chat, the chat is never requested.
@@ -130,13 +137,25 @@ export function EvidenceTitle({
           )}
         </div>
         {transcriptDenied && (
-          <p className="text-warning flex items-start gap-1 text-xs">
-            <TriangleAlert aria-hidden className="mt-0.5 size-3 shrink-0" />
-            <span>{TRANSCRIPT_DENIED_REASON}</span>
+          <p
+            className={
+              restricted
+                ? "text-muted-foreground flex items-start gap-1 text-xs"
+                : "text-warning flex items-start gap-1 text-xs"
+            }
+          >
+            {restricted ? (
+              <Lock aria-hidden className="mt-0.5 size-3 shrink-0" />
+            ) : (
+              <TriangleAlert aria-hidden className="mt-0.5 size-3 shrink-0" />
+            )}
+            <span>
+              {restricted ? SUPPORT_EVIDENCE_REASON : TRANSCRIPT_DENIED_REASON}
+            </span>
           </p>
         )}
         {/* Outside the title button so the text can be selected. */}
-        {expanded && (
+        {expanded && !restricted && (
           <FlaggedMessageBody message={flaggedMessage} chatId={chatId} />
         )}
       </div>
@@ -159,6 +178,7 @@ export function FlaggedMessage({
 }): JSX.Element {
   const canReadChat = useCanReadFindingChat();
   const chatId = canReadChat(findingChatId) ? findingChatId : undefined;
+  const restricted = useSensitiveContentRestricted();
   const message = useFlaggedMessage(chatId, chatMessageId, enabled);
   if (!findingChatId || !chatMessageId) {
     return (
@@ -170,7 +190,9 @@ export function FlaggedMessage({
   if (!chatId) {
     return (
       <p className="text-muted-foreground text-xs">
-        Viewing the flagged message needs chat:read on this session.
+        {restricted
+          ? SUPPORT_EVIDENCE_REASON
+          : "Viewing the flagged message needs chat:read on this session."}
       </p>
     );
   }

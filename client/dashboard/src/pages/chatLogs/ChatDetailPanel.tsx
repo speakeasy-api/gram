@@ -1,3 +1,4 @@
+import { useSensitiveContentRestricted } from "@/hooks/useSensitiveContentRestricted";
 import { SlackChannelLink } from "@/components/slack-channel-link";
 import { claudeTagMetadata, projectClaudeTagRows } from "./claudeTag";
 import { IdentityLink } from "@/components/identity-link";
@@ -220,7 +221,9 @@ export function ChatDetailSheet({
   riskFocus,
   dimNonRisk,
   onOpenChat,
-}: ChatDetailSheetProps): JSX.Element {
+}: ChatDetailSheetProps): JSX.Element | null {
+  const restricted = useSensitiveContentRestricted();
+  if (restricted) return null;
   return (
     <Sheet
       open={Boolean(chatId)}

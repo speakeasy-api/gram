@@ -2,6 +2,7 @@ import { Text } from "@/components/ui/Text";
 import { Stack } from "@/components/ui/Stack";
 import { toast } from "sonner";
 import { GramError } from "@gram/client/models/errors/gramerror.js";
+import { LockKeyhole } from "lucide-react";
 
 interface ErrorHandlerOptions {
   title?: string;
@@ -68,6 +69,27 @@ export function handleError(
     console.warn("Error handled:", error);
   } else {
     console.error("Error handled:", error);
+  }
+
+  // A stale tab can still attempt a reveal after support access begins. This
+  // refusal is an expected privacy boundary, not a failed system operation.
+  if (
+    !silent &&
+    error instanceof GramError &&
+    error.statusCode === 403 &&
+    errorMessage.includes(
+      "sensitive content cannot be accessed while impersonating an organization",
+    )
+  ) {
+    toast("Evidence is protected", {
+      description: "Raw evidence is hidden during support access.",
+      icon: (
+        <LockKeyhole className="size-4 text-muted-foreground" aria-hidden />
+      ),
+      id: "sensitive-content-protected",
+      duration: persist ? Infinity : 5000,
+    });
+    return;
   }
 
   // Show toast notification unless silent

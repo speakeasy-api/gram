@@ -1,3 +1,4 @@
+import { useSensitiveContentRestricted } from "@/hooks/useSensitiveContentRestricted";
 import { Label } from "@/components/ui/Label";
 import {
   Select,
@@ -263,15 +264,17 @@ function ExclusionForm({
   // itself offers. Fired on selecting the option rather than on open: an
   // operator who picks "any finding from this rule" should not leave an audit
   // entry for a value they never looked at.
+  const restricted = useSensitiveContentRestricted();
   const { hasScope } = useRBAC();
   // Entity-type exclusions only mean something to the Presidio engine; under
   // the LLM analyzer they are not applied, so the sheet stops offering them.
   const mode = useDetectorMode();
   const reveals = useUnmaskedMatch(single?.id ?? "");
   const exact = exactCandidate(
-    single,
+    restricted && single ? { ...single, match: undefined } : single,
     reveals.value,
-    hasScope(REVEAL_SCOPE, single?.chatId) &&
+    !restricted &&
+      hasScope(REVEAL_SCOPE, single?.chatId) &&
       hasRevealableEvent(single?.matchRedacted),
   );
 
@@ -622,6 +625,7 @@ function SelectedFindingRow({ result }: { result: RiskResult }): JSX.Element {
 // click-to-reveal. Chat surfaces carry the plaintext on the finding itself, so
 // there is nothing left to reveal there.
 function SelectedFindingMatch({ result }: { result: RiskResult }): JSX.Element {
+  const restricted = useSensitiveContentRestricted();
   if (isRationaleSource(result.source)) {
     return (
       <EventMatchDialog
@@ -631,7 +635,7 @@ function SelectedFindingMatch({ result }: { result: RiskResult }): JSX.Element {
       />
     );
   }
-  if (result.match) {
+  if (result.match && !restricted) {
     return (
       <span
         className="block min-w-0 overflow-x-auto font-mono text-xs whitespace-nowrap"

@@ -4,7 +4,18 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { ChatDetailSheet } from "./ChatDetailPanel";
 import { ChatLogsTable } from "./ChatLogsTable";
+
+const restricted = vi.hoisted(() => ({ value: false }));
+const lineage = vi.hoisted(() => ({ links: [] as unknown[] }));
+const overviewQuery = vi.hoisted(() => vi.fn());
+vi.mock("@gram/client/react-query/loadChatOverview.js", () => ({
+  buildLoadChatOverviewQuery: overviewQuery,
+}));
+vi.mock("@/hooks/useSensitiveContentRestricted", () => ({
+  useSensitiveContentRestricted: () => restricted.value,
+}));
 
 vi.mock("@gram/client/react-query/_context.js", () => ({
   useGramContext: () => ({}),
@@ -45,7 +56,7 @@ vi.mock("@gram/client/react-query/members.js", () => ({
 vi.mock("@gram/client/react-query/listChatSessionLinks.js", () => ({
   // No lineage edges by default: rows render without the icon cluster, and
   // the hook never reaches useGramContext (no SDK provider in these tests).
-  useListChatSessionLinks: () => ({ data: { links: [] } }),
+  useListChatSessionLinks: () => ({ data: lineage }),
 }));
 
 vi.mock("@gram/client/react-query/chatSetPinned.js", () => ({
@@ -109,8 +120,100 @@ function renderTable(ui: ReactNode) {
 
 describe("ChatLogsTable", () => {
   afterEach(() => {
+    restricted.value = false;
+    lineage.links = [];
     cleanup();
     vi.restoreAllMocks();
+  });
+
+  it("does not prefetch protected ancestor overviews and keeps safe lineage metadata", () => {
+    restricted.value = true;
+    lineage.links = [
+      {
+        kind: "subagent",
+        parentCaptured: true,
+        parentChatId: "parent",
+        childChatId: "child",
+      },
+    ];
+    renderTable(
+      <ChatLogsTable
+        chats={[makeChat("child")]}
+        onSelectChat={vi.fn<(chat: ChatOverview) => void>()}
+        onDeleteChat={vi.fn<(chatId: string) => void>()}
+        isLoading={false}
+        error={null}
+      />,
+    );
+    expect(overviewQuery).not.toHaveBeenCalled();
+    expect(screen.getByText("Session · child")).toBeTruthy();
+  });
+
+  it("removes an already selected cached session title when access becomes restricted", () => {
+    const chat = makeChat("session-123456");
+    const table = (
+      <ChatLogsTable
+        chats={[chat]}
+        selectedChatId={chat.id}
+        onSelectChat={vi.fn<(chat: ChatOverview) => void>()}
+        onDeleteChat={vi.fn<(chatId: string) => void>()}
+        isLoading={false}
+        error={null}
+      />
+    );
+    const view = renderTable(table);
+    expect(screen.getByText(chat.title)).toBeTruthy();
+    restricted.value = true;
+    view.rerender(
+      <QueryClientProvider client={new QueryClient()}>
+        <MemoryRouter>{table}</MemoryRouter>
+      </QueryClientProvider>,
+    );
+    expect(screen.queryByText(chat.title)).toBeNull();
+    expect(screen.queryByRole("button", { name: /Open session/ })).toBeNull();
+  });
+
+  it("does not mount a deep-linked transcript sheet during restricted access", () => {
+    restricted.value = true;
+    renderTable(
+      <ChatDetailSheet
+        chatId="cached-session"
+        onClose={vi.fn<() => void>()}
+        onDelete={vi.fn<(chatId: string) => void>()}
+      />,
+    );
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(overviewQuery).not.toHaveBeenCalled();
+  });
+
+  it("protects cached titles and removes session actions while preserving metadata", () => {
+    restricted.value = true;
+    const onSelect = vi.fn<(chat: ChatOverview) => void>();
+    const onDelete = vi.fn<(chatId: string) => void>();
+    renderTable(
+      <ChatLogsTable
+        chats={[makeChat("session-123456")]}
+        selectedChatId="session-123456"
+        onSelectChat={onSelect}
+        onDeleteChat={onDelete}
+        isLoading={false}
+        error={null}
+      />,
+    );
+    expect(screen.queryByText("Investigate session")).toBeNull();
+    expect(screen.getByText("Session · session-")).toBeTruthy();
+    expect(screen.getByTitle("Copy Chat ID").closest("h3")).toBeTruthy();
+    expect(screen.queryByText("session-", { exact: true })).toBeNull();
+    expect(screen.getByText(/^Created Jan 1/)).toBeTruthy();
+    expect(
+      screen.queryByRole("button", {
+        name: /Open session|Pin session|Delete chat/,
+      }),
+    ).toBeNull();
+    fireEvent.contextMenu(screen.getByText("Session · session-"));
+    expect(screen.queryByText("Delete chat")).toBeNull();
+    expect(onSelect).not.toHaveBeenCalled();
+    expect(onDelete).not.toHaveBeenCalled();
   });
 
   it("copies the raw chat id without a label prefix", () => {

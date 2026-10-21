@@ -1,3 +1,4 @@
+import { useSensitiveContentRestricted } from "@/hooks/useSensitiveContentRestricted";
 import { Eye, EyeOff, Loader2, Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -32,6 +33,7 @@ import { useRBAC } from "@/hooks/useRBAC";
 import {
   hasRevealableEvent,
   REVEAL_DENIED_REASON,
+  SUPPORT_EVIDENCE_REASON,
   REVEAL_SCOPE,
   useUnmaskedMatch,
 } from "./unmask";
@@ -159,29 +161,43 @@ export function RevealAllToggle({
 }: {
   className?: string;
 }): JSX.Element | null {
+  const restricted = useSensitiveContentRestricted();
+  const reason = restricted ? SUPPORT_EVIDENCE_REASON : REVEAL_DENIED_REASON;
   const { hasScope } = useRBAC();
   const ctx = useRevealAll();
   if (!ctx) return null;
   // No point offering a reveal-all control when every value stays masked.
   if (!hasScope(REVEAL_SCOPE)) return null;
   const { revealAll, setRevealAll } = ctx;
+  const shown = !restricted && revealAll;
   return (
     <SimpleTooltip
-      tooltip={revealAll ? "Hide all matches" : "Reveal all matches"}
+      tooltip={
+        restricted ? reason : shown ? "Hide all matches" : "Reveal all matches"
+      }
     >
-      <button
-        type="button"
-        onClick={() => setRevealAll(!revealAll)}
-        aria-pressed={revealAll}
-        aria-label={revealAll ? "Hide all matches" : "Reveal all matches"}
-        className={
-          className ??
-          "border-border hover:bg-muted text-muted-foreground inline-flex h-9 items-center gap-2 border px-3 text-sm transition-colors"
-        }
-      >
-        {revealAll ? <Eye className="size-4" /> : <EyeOff className="size-4" />}
-        <span>{revealAll ? "Hide all" : "Reveal all"}</span>
-      </button>
+      <span tabIndex={restricted ? 0 : undefined} className="inline-flex">
+        <button
+          type="button"
+          disabled={restricted}
+          onClick={() => setRevealAll(!revealAll)}
+          aria-pressed={shown}
+          aria-label={shown ? "Hide all matches" : "Reveal all matches"}
+          className={
+            className ??
+            "border-border hover:bg-muted text-muted-foreground inline-flex h-9 items-center gap-2 border px-3 text-sm transition-colors"
+          }
+        >
+          {restricted ? (
+            <Lock className="size-4" />
+          ) : shown ? (
+            <Eye className="size-4" />
+          ) : (
+            <EyeOff className="size-4" />
+          )}
+          <span>{shown ? "Hide all" : "Reveal all"}</span>
+        </button>
+      </span>
     </SimpleTooltip>
   );
 }
@@ -302,8 +318,10 @@ export function MaskedMatch({
   wrap?: boolean;
 }): JSX.Element {
   const contrast = tone === "contrast";
+  const restricted = useSensitiveContentRestricted();
+  const reason = restricted ? SUPPORT_EVIDENCE_REASON : REVEAL_DENIED_REASON;
   const { hasScope } = useRBAC();
-  const canReveal = hasScope(REVEAL_SCOPE, chatId);
+  const canReveal = !restricted && hasScope(REVEAL_SCOPE, chatId);
   const ctx = useRevealAll();
   const generation = ctx?.generation;
   const revealAll = ctx?.revealAll ?? false;
@@ -334,6 +352,7 @@ export function MaskedMatch({
   if (!canReveal) {
     return (
       <LockedRedactedMatch
+        reason={reason}
         matchRedacted={matchRedacted}
         contrast={contrast}
         wrap={wrap}
@@ -452,10 +471,12 @@ function EvidenceNotStored({
 // token the list endpoints already ship as match_redacted.
 function LockedRedactedMatch({
   matchRedacted,
+  reason = REVEAL_DENIED_REASON,
   contrast = false,
   wrap = false,
 }: {
   matchRedacted: string;
+  reason?: string;
   contrast?: boolean;
   wrap?: boolean;
 }): JSX.Element {
@@ -463,8 +484,10 @@ function LockedRedactedMatch({
     <SimpleTooltip
       tooltip={
         <span className="flex flex-col gap-1">
-          <span>{REVEAL_DENIED_REASON}</span>
-          <span className="font-mono opacity-70">{matchRedacted}</span>
+          <span>{reason}</span>
+          {reason !== SUPPORT_EVIDENCE_REASON && (
+            <span className="font-mono opacity-70">{matchRedacted}</span>
+          )}
         </span>
       }
     >
@@ -477,13 +500,15 @@ function LockedRedactedMatch({
           contrast ? "text-background/70" : "text-muted-foreground",
         )}
       >
-        <Lock
-          role="img"
-          aria-label={REVEAL_DENIED_REASON}
-          className="h-3 w-3 shrink-0"
-        />
+        <Lock role="img" aria-label={reason} className="h-3 w-3 shrink-0" />
         <span className="min-w-0 truncate">
-          Requires <span className="font-mono">{REVEAL_SCOPE}</span>
+          {reason === SUPPORT_EVIDENCE_REASON ? (
+            "Evidence protected"
+          ) : (
+            <>
+              Requires <span className="font-mono">{REVEAL_SCOPE}</span>
+            </>
+          )}
         </span>
       </span>
     </SimpleTooltip>
@@ -524,8 +549,10 @@ export function EventMatchDialog({
   matchRedacted: string | undefined;
   rationale: string | undefined;
 }): JSX.Element {
+  const restricted = useSensitiveContentRestricted();
+  const reason = restricted ? SUPPORT_EVIDENCE_REASON : REVEAL_DENIED_REASON;
   const { hasScope } = useRBAC();
-  const canReveal = hasScope(REVEAL_SCOPE);
+  const canReveal = !restricted && hasScope(REVEAL_SCOPE);
   const [open, setOpen] = useState(false);
   const { value, evidenceNotStored, isLoading, reveal } = useUnmaskedMatch(
     resultId ?? "",
@@ -544,10 +571,10 @@ export function EventMatchDialog({
     if (summary) {
       return (
         <span className="flex min-w-0 items-center gap-1.5">
-          <SimpleTooltip tooltip={REVEAL_DENIED_REASON}>
+          <SimpleTooltip tooltip={reason}>
             <Lock
               role="img"
-              aria-label={REVEAL_DENIED_REASON}
+              aria-label={reason}
               className="text-muted-foreground h-3 w-3 shrink-0"
             />
           </SimpleTooltip>
@@ -555,7 +582,9 @@ export function EventMatchDialog({
         </span>
       );
     }
-    return <LockedRedactedMatch matchRedacted={matchRedacted} />;
+    return (
+      <LockedRedactedMatch reason={reason} matchRedacted={matchRedacted} />
+    );
   }
 
   return (

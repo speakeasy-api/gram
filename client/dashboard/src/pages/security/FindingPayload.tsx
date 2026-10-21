@@ -1,3 +1,4 @@
+import { useSensitiveContentRestricted } from "@/hooks/useSensitiveContentRestricted";
 import type { RiskResult } from "@gram/client/models/components/riskresult.js";
 import { addDays } from "date-fns";
 import { useCallback, useMemo } from "react";
@@ -265,6 +266,13 @@ export function FindingPayload({
   onToggleReveal: () => void;
   onSelect: (id: string) => void;
 }): JSX.Element {
+  const restricted = useSensitiveContentRestricted();
+  if (restricted)
+    return (
+      <DrawerSection label="Evidence protected">
+        <NoRevealAccessNote />
+      </DrawerSection>
+    );
   const notStored = payload.data?.revealState === "evidence_not_stored";
   const expiresAt =
     payload.data?.expiresAt ??

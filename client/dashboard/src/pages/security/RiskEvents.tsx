@@ -1,3 +1,4 @@
+import { useSensitiveContentRestricted } from "@/hooks/useSensitiveContentRestricted";
 import { RiskSetupEmptyState } from "@/components/setup-empty-state";
 import { EnableLoggingOverlay } from "@/components/EnableLoggingOverlay";
 import { IdentityLink } from "@/components/identity-link";
@@ -166,6 +167,7 @@ const MAX_COUNTS_WINDOW_MS = 31 * 24 * 60 * 60 * 1000;
 const NO_ASSISTANT = "none";
 
 export default function RiskEvents(): JSX.Element {
+  const restricted = useSensitiveContentRestricted();
   const project = useProject();
   const { hasScope } = useRBAC();
   const canReadAssistants = hasScope("assistant:read", undefined, project.id);
@@ -652,7 +654,7 @@ export default function RiskEvents(): JSX.Element {
             {/* Older links open a transcript straight from the list; with a
                 finding open the drawer hosts the transcript instead. */}
             <ChatDetailSheet
-              chatId={selectedFindingId ? null : selectedChatId}
+              chatId={restricted || selectedFindingId ? null : selectedChatId}
               onClose={() => setSelectedChatId(null)}
               onDelete={() => setSelectedChatId(null)}
               riskFocus
@@ -892,6 +894,7 @@ export function RiskEventsRow({
   onSetupExclusion: (result: RiskResult) => void;
 }): JSX.Element {
   const outcomeLabel = enforcementOutcomeLabel(result.enforcementOutcome);
+  const restricted = useSensitiveContentRestricted();
   const isShadowMCP = isShadowMcpSource(result.source);
   // Judge and LLM analyzer findings carry their evidence as a rationale.
   const isEventSource = isRationaleSource(result.source);
@@ -998,7 +1001,7 @@ export function RiskEventsRow({
       </div>
       {/* Judge rationale wraps to two lines, so this cell can't clip to one. */}
       <div className={cn("min-w-0", !isEventSource && "truncate")}>
-        {isShadowMCP && result.matchRedacted ? (
+        {!restricted && isShadowMCP && result.matchRedacted ? (
           // Square hairline mono tag — the fingerprint reads as a chip, not
           // prose.
           <span

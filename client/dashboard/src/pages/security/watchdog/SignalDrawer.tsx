@@ -1,3 +1,4 @@
+import { useSensitiveContentRestricted } from "@/hooks/useSensitiveContentRestricted";
 import { IdentityLink } from "@/components/identity-link";
 import { Avatar, AvatarFallback } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
@@ -240,6 +241,7 @@ export function SignalDrawer({
   onClose: () => void;
   mcpFindingNames?: MCPFindingNames;
 }): JSX.Element {
+  const restricted = useSensitiveContentRestricted();
   const client = useSdkClient();
   const { dismiss, isOptimisticallyDismissed } = useDismissFinding();
   const [exclusionState, setExclusionState] =
@@ -655,7 +657,7 @@ export function SignalDrawer({
           {/* Nested in this sheet so closing it doesn't read as an outside
               click and close the drawer too. */}
           <ChatDetailSheet
-            chatId={shownChat?.chatId ?? null}
+            chatId={restricted ? null : (shownChat?.chatId ?? null)}
             focusedMessageId={shownChat?.chatMessageId}
             onClose={() => setOpenChat(null)}
             onDelete={() => setOpenChat(null)}

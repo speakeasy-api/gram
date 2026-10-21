@@ -1,3 +1,4 @@
+import { useSensitiveContentRestricted } from "@/hooks/useSensitiveContentRestricted";
 import { useRiskUnmaskResultMutation } from "@gram/client/react-query/riskUnmaskResult.js";
 import type { Scope } from "@gram/client/models/components/rolegrant.js";
 import { useRBAC } from "@/hooks/useRBAC";
@@ -7,6 +8,9 @@ import { useCallback, useState } from "react";
 // traffic, so it is gated behind the same `chat:read` scope that grants access
 // to other members' session transcripts. hasScope short-circuits to true when
 // RBAC is disabled, preserving existing behavior for non-RBAC orgs.
+export const SUPPORT_EVIDENCE_REASON =
+  "Evidence is hidden during support access.";
+
 export const REVEAL_SCOPE: Scope = "chat:read";
 export const REVEAL_DENIED_REASON =
   "You need the chat:read scope to reveal flagged values.";
@@ -23,9 +27,10 @@ export const TRANSCRIPT_DENIED_REASON =
 export function useCanReadFindingChat(): (
   chatId: string | undefined,
 ) => chatId is string {
+  const restricted = useSensitiveContentRestricted();
   const { hasScope } = useRBAC();
   return (chatId): chatId is string =>
-    !!chatId && hasScope(REVEAL_SCOPE, chatId);
+    !restricted && !!chatId && hasScope(REVEAL_SCOPE, chatId);
 }
 
 // The server redacts an absent match to this exact sentinel (no sha segment,
@@ -69,11 +74,12 @@ export function useUnmaskedMatch(resultId: string): {
   evidenceNotStored: boolean;
   reveal: () => void;
 } {
+  const restricted = useSensitiveContentRestricted();
   const { mutate, isPending, isError } = useRiskUnmaskResultMutation();
   const [value, setValue] = useState<string | null>(null);
   const [evidenceNotStored, setEvidenceNotStored] = useState(false);
   const reveal = useCallback(() => {
-    if (value !== null || evidenceNotStored || isPending) return;
+    if (restricted || value !== null || evidenceNotStored || isPending) return;
     mutate(
       { request: { riskIDRequestBody: { id: resultId } } },
       {
@@ -86,6 +92,12 @@ export function useUnmaskedMatch(resultId: string): {
         },
       },
     );
-  }, [mutate, resultId, value, evidenceNotStored, isPending]);
-  return { value, evidenceNotStored, isLoading: isPending, isError, reveal };
+  }, [restricted, mutate, resultId, value, evidenceNotStored, isPending]);
+  return {
+    value: restricted ? null : value,
+    evidenceNotStored,
+    isLoading: !restricted && isPending,
+    isError: !restricted && isError,
+    reveal,
+  };
 }
