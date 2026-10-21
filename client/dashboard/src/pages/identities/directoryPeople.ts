@@ -30,7 +30,7 @@ export const DIRECTORY_STATE_DESCRIPTIONS: Record<
 };
 
 /** The states that describe someone the directory knows but who is not a member. */
-export const NOT_MEMBER_DIRECTORY_STATES: DirectoryPersonState[] = [
+const NOT_MEMBER_DIRECTORY_STATES: DirectoryPersonState[] = [
   "account_not_member",
   "not_signed_in",
   "ambiguous_email",
