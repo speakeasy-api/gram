@@ -126,7 +126,6 @@ func newStreamsCommand() *cli.Command {
 	var shutdownFuncs []func(context.Context) error
 
 	flags := []cli.Flag{
-		&cli.BoolFlag{Name: "tunnel-metrics-consumer-enabled", Usage: "Ingest aggregate tunnel metrics into ClickHouse", EnvVars: []string{"GRAM_TUNNEL_METRICS_CONSUMER_ENABLED"}},
 		&cli.StringFlag{
 			Name:    "control-address",
 			Value:   ":8087",
@@ -852,9 +851,7 @@ func newStreamsCommand() *cli.Command {
 					}
 					mustReceiveBatchWithResult(rg, &conversationv1.MessageEvent{}, &sigintv1.Evaluator{}, handler, gcp.BatchReceiveSettings{MaxMessages: 20, MaxBytes: 10 * constants.MiB, MaxLatency: time.Second, MaxBufferedMessages: 0, MaxBufferedBytes: 0})
 				}
-				if c.Bool("tunnel-metrics-consumer-enabled") {
-					mustReceiveBatch(rg, &tunnelv1.MetricsSnapshot{}, &tunnelv1.MetricsCHWriter{}, tunnelmetrics.NewWriter(chConn, logger, tunnelrepo.New(db).ListMetricSourceOwners), gcp.BatchReceiveSettings{MaxMessages: 10000, MaxBytes: 10 * constants.MiB, MaxLatency: 5 * time.Second, MaxBufferedMessages: 0, MaxBufferedBytes: 0})
-				}
+				mustReceiveBatch(rg, &tunnelv1.MetricsSnapshot{}, &tunnelv1.MetricsCHWriter{}, tunnelmetrics.NewWriter(chConn, logger, tunnelrepo.New(db).ListMetricSourceOwners), gcp.BatchReceiveSettings{MaxMessages: 10000, MaxBytes: 10 * constants.MiB, MaxLatency: 5 * time.Second, MaxBufferedMessages: 0, MaxBufferedBytes: 0})
 				mustReceiveBatchWithResult(rg, &authzv1.Challenge{}, &authzv1.ChallengeCHWriter{}, authz.NewChallengeCHWriter(logger, meterProvider, chConn), gcp.BatchReceiveSettings{MaxMessages: 1000, MaxBytes: 10 * constants.MiB, MaxLatency: 1 * time.Second, MaxBufferedMessages: 0, MaxBufferedBytes: 0})
 				mustReceiveBatch(rg, &meteringv1.MeterReading{}, &meteringv1.MeterReadingCHWriter{}, metering.NewMeterReadingCHWriter(logger, db, meteringchrepo.New(chConn)), gcp.BatchReceiveSettings{MaxMessages: 1000, MaxBytes: 10 * constants.MiB, MaxLatency: time.Second, MaxBufferedMessages: 0, MaxBufferedBytes: 0})
 				mustReceive(rg, &meteringv1.MeterReading{}, &meteringv1.MeterReadingStripeExporter{}, metering.NewMeterReadingStripeExporter(logger, meterProvider, replicaDB, stripeMeterEvents, stripeCatalog, c.Bool(stripeMeterEventExportFlagName)))

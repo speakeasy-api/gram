@@ -387,7 +387,7 @@ function AgentRow({ connection: c }: { connection: TunneledMcpConnection }) {
           gateway to see them; forwarding still works.
         </p>
       ) : d.state === "disabled" ? (
-        // The agent or the gateway can turn checks off; both report this.
+        // The agent announced that its checks are turned off.
         <p className="text-muted-foreground text-sm">
           Checks are turned off for this agent, so its reachability is not
           reported.

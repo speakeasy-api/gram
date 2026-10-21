@@ -488,15 +488,13 @@ func TestConnectRecordsAgentDiagnosticsState(t *testing.T) {
 	controlToken := strings.Repeat("ab", 32)
 	tests := []struct {
 		name              string
-		gatewayCollects   bool
 		header            http.Header
 		wantState         string
 		wantTargetDisplay string
 		wantPoll          bool
 	}{
 		{
-			name:            "diagnostics agent and collecting gateway",
-			gatewayCollects: true,
+			name: "diagnostics agent",
 			header: http.Header{
 				wire.HeaderCapabilities:  {wire.DiagnosticsCapability},
 				wire.HeaderControlToken:  {controlToken},
@@ -507,20 +505,7 @@ func TestConnectRecordsAgentDiagnosticsState(t *testing.T) {
 			wantPoll:          true,
 		},
 		{
-			name:            "diagnostics agent and non-collecting gateway",
-			gatewayCollects: false,
-			header: http.Header{
-				wire.HeaderCapabilities:  {wire.DiagnosticsCapability},
-				wire.HeaderControlToken:  {controlToken},
-				wire.HeaderTargetDisplay: {"https://mcp.internal:8443"},
-			},
-			wantState:         "disabled",
-			wantTargetDisplay: "https://mcp.internal:8443",
-			wantPoll:          false,
-		},
-		{
-			name:            "agent with diagnostics turned off",
-			gatewayCollects: true,
+			name: "agent with diagnostics turned off",
 			header: http.Header{
 				wire.HeaderCapabilities: {wire.DiagnosticsDisabledCapability},
 			},
@@ -530,15 +515,13 @@ func TestConnectRecordsAgentDiagnosticsState(t *testing.T) {
 		},
 		{
 			name:              "agent that predates diagnostics",
-			gatewayCollects:   true,
 			header:            http.Header{},
 			wantState:         "unsupported",
 			wantTargetDisplay: "",
 			wantPoll:          false,
 		},
 		{
-			name:            "target path from an older agent is dropped",
-			gatewayCollects: true,
+			name: "target path from an older agent is dropped",
 			header: http.Header{
 				wire.HeaderCapabilities:  {wire.DiagnosticsCapability},
 				wire.HeaderControlToken:  {controlToken},
@@ -549,8 +532,7 @@ func TestConnectRecordsAgentDiagnosticsState(t *testing.T) {
 			wantPoll:          true,
 		},
 		{
-			name:            "diagnostics capability without a valid control token",
-			gatewayCollects: true,
+			name: "diagnostics capability without a valid control token",
 			header: http.Header{
 				wire.HeaderCapabilities:  {wire.DiagnosticsCapability},
 				wire.HeaderControlToken:  {"not-a-control-token"},
@@ -561,8 +543,7 @@ func TestConnectRecordsAgentDiagnosticsState(t *testing.T) {
 			wantPoll:          false,
 		},
 		{
-			name:            "agent with diagnostics turned off cannot supply a target",
-			gatewayCollects: true,
+			name: "agent with diagnostics turned off cannot supply a target",
 			header: http.Header{
 				wire.HeaderCapabilities:  {wire.DiagnosticsDisabledCapability},
 				wire.HeaderTargetDisplay: {"https://mcp.internal:8443"},
@@ -578,7 +559,7 @@ func TestConnectRecordsAgentDiagnosticsState(t *testing.T) {
 
 			const tunnelID = "tunnel-1"
 			const key = "gram_tunnel_testkey"
-			gw := newForwardTestGateway(t, Config{ForwardToken: "s3cret", DiagnosticsEnabled: tc.gatewayCollects})
+			gw := newForwardTestGateway(t, Config{ForwardToken: "s3cret"})
 			keys, ok := gw.keys.(*StaticKeyStore)
 			require.True(t, ok)
 			keys.Add(tunnelID, key)
@@ -598,7 +579,7 @@ func TestConnectRecordsAgentDiagnosticsState(t *testing.T) {
 			require.Equal(t, tc.wantState, connection.Diagnostics.State)
 			require.Equal(t, tc.wantTargetDisplay, connection.TargetDisplay)
 
-			_, _, poll := agentDiagnostics(tc.header, tc.gatewayCollects)
+			_, _, poll := agentDiagnostics(tc.header)
 			require.Equal(t, tc.wantPoll, poll)
 		})
 	}

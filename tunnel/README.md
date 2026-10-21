@@ -98,18 +98,14 @@ into 1-minute buckets for 1 hour, 15-minute buckets for 24 hours, and hourly
 buckets for 7 days.
 Missing samples remain gaps. Metrics are best-effort.
 
-Speakeasy servers record request metrics and serve history automatically. Deploy the
-metrics schema and Pub/Sub topology/IAM before the server. These switches control
-ingestion and gateway reporting:
+Speakeasy servers record request metrics, `gram streams` ingests them, and the
+gateway polls capable agents for diagnostics and publishes connection history.
+None of this has a switch. Deploy the metrics schema and Pub/Sub topology/IAM
+before the server.
 
-| Switch                                   | Process        | Enables                        |
-| ---------------------------------------- | -------------- | ------------------------------ |
-| `GRAM_TUNNEL_METRICS_CONSUMER_ENABLED=1` | `gram streams` | Metrics ingestion              |
-| `TUNNEL_METRICS_ENABLED=1`               | Tunnel gateway | Connection history publication |
-| `TUNNEL_DIAGNOSTICS_ENABLED=1`           | Tunnel gateway | Agent diagnostics polling      |
-
-Gateway publication also requires `GRAM_GCP_PROJECT_ID` and permission to publish
-the metrics topic; local development can use `PUBSUB_EMULATOR_HOST`.
+Gateway publication requires `GRAM_GCP_PROJECT_ID` and permission to publish the
+metrics topic; local development can use `PUBSUB_EMULATOR_HOST`. Without a project
+ID the gateway logs a warning and forwards traffic without publishing metrics.
 
 Diagnostics enrich the optional protocol. Old agents and gateways continue to
 forward traffic; old agents show diagnostics as unsupported. Set

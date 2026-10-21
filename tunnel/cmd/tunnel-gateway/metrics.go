@@ -16,9 +16,6 @@ import (
 )
 
 func startMetrics(ctx context.Context, logger *slog.Logger) (*metrics.Collector, func(context.Context) error) {
-	if os.Getenv("TUNNEL_METRICS_ENABLED") != "1" {
-		return nil, func(context.Context) error { return nil }
-	}
 	project := os.Getenv("GRAM_GCP_PROJECT_ID")
 	if project == "" {
 		logger.WarnContext(ctx, "tunnel metrics disabled: GRAM_GCP_PROJECT_ID missing")

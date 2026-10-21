@@ -49,10 +49,9 @@ type Config struct {
 	MaxStreamsPerTunnel int
 	// MaxSessions bounds live agent sessions; connects beyond it shed with 503
 	// so load moves to sibling gateway pods via agent retry.
-	MaxSessions        int
-	ForwardToken       string
-	DiagnosticsEnabled bool
-	Metrics            *metrics.Collector
+	MaxSessions  int
+	ForwardToken string
+	Metrics      *metrics.Collector
 
 	// AuthzPublicKeys contains only SPKI public PEM keys published for caller assertions.
 	AuthzPublicKeys string
@@ -262,7 +261,7 @@ func (g *Gateway) handleConnect(w http.ResponseWriter, r *http.Request) {
 
 	sessionID := uuid.NewString()
 	now := time.Now().UTC()
-	diagnostics, targetDisplay, poll := agentDiagnostics(r.Header, g.cfg.DiagnosticsEnabled)
+	diagnostics, targetDisplay, poll := agentDiagnostics(r.Header)
 	remove := g.reg.add(tunnelID, sessionID, presentedKeyHash, session, g.newSessionProxy(tunnelID, session), route.Connection{
 		GatewaySessionID:       sessionID,
 		ServiceVersion:         serviceVersion,
@@ -304,18 +303,14 @@ func (g *Gateway) handleConnect(w http.ResponseWriter, r *http.Request) {
 // agentDiagnostics derives a new connection's diagnostics state and target from
 // the agent's connect headers, and whether the gateway should poll the agent.
 // An agent with diagnostics and a valid control token is "pending" until its
-// first poll, or "disabled" when this gateway does not collect diagnostics. An
-// agent that announces diagnostics are turned off is "disabled" and supplies no
-// target. An agent that announces neither predates diagnostics: "unsupported".
-func agentDiagnostics(header http.Header, gatewayCollects bool) (status *route.Diagnostics, targetDisplay string, poll bool) {
+// first poll. An agent that announces diagnostics are turned off is "disabled"
+// and supplies no target. An agent that announces neither predates
+// diagnostics: "unsupported".
+func agentDiagnostics(header http.Header) (status *route.Diagnostics, targetDisplay string, poll bool) {
 	capabilities := header.Get(wire.HeaderCapabilities)
 	switch {
 	case wire.SupportsDiagnostics(capabilities, header.Get(wire.HeaderControlToken)):
-		state := "disabled"
-		if gatewayCollects {
-			state = "pending"
-		}
-		return &route.Diagnostics{State: state}, wire.TargetDisplay(header.Get(wire.HeaderTargetDisplay)), gatewayCollects
+		return &route.Diagnostics{State: "pending"}, wire.TargetDisplay(header.Get(wire.HeaderTargetDisplay)), true
 	case wire.DiagnosticsDisabled(capabilities):
 		return &route.Diagnostics{State: "disabled"}, "", false
 	default:

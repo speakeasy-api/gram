@@ -61,11 +61,10 @@ func main() {
 		AdvertiseAddr: advertiseAddr,
 		// MaxStreamsPerTunnel left unset: gateway.New applies its
 		// defaultMaxStreamsPerTunnel so the cap has a single source of truth.
-		MaxSessions:        maxSessions,
-		ForwardToken:       forwardToken,
-		AuthzPublicKeys:    os.Getenv("GRAM_AUTHZ_PUBLIC_KEYS"),
-		DiagnosticsEnabled: os.Getenv("TUNNEL_DIAGNOSTICS_ENABLED") == "1",
-		Metrics:            collector,
+		MaxSessions:     maxSessions,
+		ForwardToken:    forwardToken,
+		AuthzPublicKeys: os.Getenv("GRAM_AUTHZ_PUBLIC_KEYS"),
+		Metrics:         collector,
 	}, keys, routes, logger)
 	if err != nil {
 		logger.ErrorContext(context.Background(), "tunnel-gateway init failed", slog.Any("error", err))
