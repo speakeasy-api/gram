@@ -104,10 +104,8 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	if scheme == "http" {
-		if err := validateHTTPListenerAddress(*address); err != nil {
-			return err
-		}
+	if err := validateListenerAddresses(scheme, *address, *controlAddress); err != nil {
+		return err
 	}
 
 	logger := plog.NewLogger(os.Stderr).With(slog.String("component", "dev-idp"))
@@ -316,6 +314,18 @@ func listenerScheme(certFile, keyFile, externalURL string) (string, error) {
 		}
 	}
 	return scheme, nil
+}
+
+func validateListenerAddresses(scheme, publicAddress, controlAddress string) error {
+	if err := validateHTTPListenerAddress(controlAddress); err != nil {
+		return fmt.Errorf("control-address: %w", err)
+	}
+	if scheme == "http" {
+		if err := validateHTTPListenerAddress(publicAddress); err != nil {
+			return fmt.Errorf("address: %w", err)
+		}
+	}
+	return nil
 }
 
 func validateHTTPListenerAddress(address string) error {

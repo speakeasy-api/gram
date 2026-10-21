@@ -92,6 +92,38 @@ func TestListenerSchemeAllowsEscapedPathDelimiters(t *testing.T) {
 	require.Equal(t, "https", scheme)
 }
 
+func TestValidateListenerAddresses(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name           string
+		scheme         string
+		publicAddress  string
+		controlAddress string
+		wantErr        string
+	}{
+		{name: "HTTPS public Tailnet with loopback control", scheme: "https", publicAddress: "100.64.0.1:35291", controlAddress: "127.0.0.1:35292", wantErr: ""},
+		{name: "HTTPS public Tailnet with IPv6 loopback control", scheme: "https", publicAddress: "100.64.0.1:35291", controlAddress: "[::1]:35292", wantErr: ""},
+		{name: "HTTPS public Tailnet with Tailnet control", scheme: "https", publicAddress: "100.64.0.1:35291", controlAddress: "100.64.0.1:35292", wantErr: "control-address: plain HTTP requires a loopback listener address"},
+		{name: "HTTPS public Tailnet with wildcard control", scheme: "https", publicAddress: "100.64.0.1:35291", controlAddress: ":35292", wantErr: "control-address: plain HTTP requires a loopback listener address"},
+		{name: "HTTPS public Tailnet with malformed control", scheme: "https", publicAddress: "100.64.0.1:35291", controlAddress: "localhost", wantErr: "control-address: plain HTTP requires a loopback listener address"},
+		{name: "HTTP public loopback with loopback control", scheme: "http", publicAddress: "127.0.0.1:35291", controlAddress: "127.0.0.1:35292", wantErr: ""},
+		{name: "HTTP public loopback with Tailnet control", scheme: "http", publicAddress: "127.0.0.1:35291", controlAddress: "100.64.0.1:35292", wantErr: "control-address: plain HTTP requires a loopback listener address"},
+		{name: "HTTP public Tailnet with loopback control", scheme: "http", publicAddress: "100.64.0.1:35291", controlAddress: "127.0.0.1:35292", wantErr: "address: plain HTTP requires a loopback listener address"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			err := validateListenerAddresses(tc.scheme, tc.publicAddress, tc.controlAddress)
+			if tc.wantErr != "" {
+				require.EqualError(t, err, tc.wantErr)
+				return
+			}
+			require.NoError(t, err)
+		})
+	}
+}
+
 func TestValidateHTTPListenerAddress(t *testing.T) {
 	t.Parallel()
 
