@@ -22,6 +22,10 @@ describe("grantsFromRole", () => {
             },
           ],
         },
+        {
+          scope: "mcp:blocked_auth",
+          selectors: [{ resourceKind: "mcp_auth_client", resourceId: "c1" }],
+        },
       ],
     } as unknown as Role;
 
