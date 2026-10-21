@@ -130,6 +130,7 @@ func Build(opts Options) ([]platformmcp.SetupResource, error) {
 				continue
 			}
 			resource := platformmcp.SetupResource{
+				Render:       nil,
 				URI:          platformmcp.SetupResourceURI(string(guide.Slug), section.intent),
 				Name:         fmt.Sprintf("setup-%s-%s", guide.Slug, strings.ReplaceAll(section.intent, "_", "-")),
 				Title:        fmt.Sprintf("%s — %s", guide.Title, section.label),

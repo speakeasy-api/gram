@@ -358,7 +358,11 @@ func (s *Service) handleProxyRegister(w http.ResponseWriter, r *http.Request) er
 
 	// The dashboard stores the result through a project client create, which
 	// records the registration origin, so register the same one here.
-	registered, err := RegisterDynamicClient(ctx, s.policy, s.tunnels, s.origins.ForNewClient(true), req, s.registrationTelemetry)
+	callbackBaseURL, err := s.newClientCallbackBaseURL(ctx, authCtx.ActiveOrganizationID, CredentialOwnerSubject)
+	if err != nil {
+		return err
+	}
+	registered, err := RegisterDynamicClient(ctx, s.policy, s.tunnels, s.origins.ForClient(callbackBaseURL), req, s.registrationTelemetry)
 	if err != nil {
 		mapped := proxyRegistrationError(err)
 		if mapped.Code == oops.CodeBadRequest {
