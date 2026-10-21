@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"hash"
+	"mime"
 	"net/http"
 	"net/url"
 	"reflect"
@@ -456,13 +457,25 @@ type slackInteractionPayload struct {
 	} `json:"actions"`
 }
 
-func isSlackInteractionRequest(headers http.Header) bool {
-	// Events API requests are application/json; interactivity requests are
-	// always application/x-www-form-urlencoded with a single `payload` field.
-	// HasPrefix tolerates an optional ;charset= parameter without paying for
-	// mime.ParseMediaType on every webhook.
-	contentType := strings.ToLower(headers.Get("Content-Type"))
-	return strings.HasPrefix(contentType, "application/x-www-form-urlencoded")
+const (
+	// slackMediaTypeJSON is the media type of Events API deliveries, including
+	// the url_verification handshake.
+	slackMediaTypeJSON = "application/json"
+
+	// slackMediaTypeForm is the media type of interactivity deliveries, which
+	// carry a single form field `payload` holding the JSON envelope.
+	slackMediaTypeForm = "application/x-www-form-urlencoded"
+)
+
+// slackRequestMediaType returns the lowercased media type of a Slack webhook
+// request without parameters such as charset, or "" when the header is
+// missing or malformed.
+func slackRequestMediaType(headers http.Header) string {
+	mediaType, _, err := mime.ParseMediaType(headers.Get("Content-Type"))
+	if err != nil {
+		return ""
+	}
+	return mediaType
 }
 
 func handleSlackInteraction(body []byte) (*WebhookIngest, error) {
@@ -726,17 +739,8 @@ func newSlackDefinition() Definition {
 		},
 		SupportedEventTypes: supportedSlackEventTypes,
 		Authenticate:        nil,
-		PreVerify: func(body []byte, _ http.Header) (bool, error) {
-			// Slack's URL verification handshake must echo the challenge before
-			// any signing secret has necessarily been configured. Allow it
-			// through auth; Ingest will respond with the challenge.
-			var probe slackEventRequest
-			if err := json.Unmarshal(body, &probe); err == nil && probe.Type == "url_verification" && probe.Challenge != "" {
-				return true, nil
-			}
-			return false, nil
-		},
-		Ingest: slackIngest,
+		Handshake:           slackHandshake,
+		Ingest:              slackIngest,
 	}
 	return NewWebhookDefinition(vendor, schema, compiled, func(raw map[string]any) (Config, error) {
 		cfg, err := decodeConfig[slackTriggerConfig](raw, compiled)
@@ -757,26 +761,41 @@ func newSlackDefinition() Definition {
 	})
 }
 
+// slackHandshake answers Slack's URL verification handshake, which must echo
+// the challenge before any signing secret has necessarily been configured.
+// Slack sends it to the Events API URL as application/json, so any other media
+// type is never treated as a handshake and goes through signature
+// verification; this keeps the exemption and slackIngest classifying the same
+// bytes identically.
+func slackHandshake(body []byte, headers http.Header) *WebhookResponse {
+	if slackRequestMediaType(headers) != slackMediaTypeJSON {
+		return nil
+	}
+
+	var req slackEventRequest
+	if err := json.Unmarshal(body, &req); err != nil || req.Type != "url_verification" || req.Challenge == "" {
+		return nil
+	}
+
+	return &WebhookResponse{
+		Status:      http.StatusOK,
+		ContentType: "text/plain",
+		Body:        []byte(req.Challenge),
+	}
+}
+
 func slackIngest(body []byte, headers http.Header) (*WebhookIngest, error) {
-	if isSlackInteractionRequest(headers) {
+	switch mediaType := slackRequestMediaType(headers); mediaType {
+	case slackMediaTypeForm:
 		return handleSlackInteraction(body)
+	case slackMediaTypeJSON:
+	default:
+		return nil, fmt.Errorf("decode slack payload: unsupported content type %q", mediaType)
 	}
 
 	var req slackEventRequest
 	if err := json.Unmarshal(body, &req); err != nil {
 		return nil, fmt.Errorf("decode slack payload: %w", err)
-	}
-	if req.Type == "url_verification" && req.Challenge != "" {
-		return &WebhookIngest{
-			Response: &WebhookResponse{
-				Status:      200,
-				ContentType: "text/plain",
-				Body:        []byte(req.Challenge),
-			},
-			Event:         nil,
-			EventID:       "",
-			CorrelationID: "",
-		}, nil
 	}
 
 	if len(req.Event) == 0 {

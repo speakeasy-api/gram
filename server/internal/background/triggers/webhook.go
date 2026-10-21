@@ -152,12 +152,14 @@ type WebhookVendor struct {
 	// must be set; NewWebhookDefinition enforces this at construction so a
 	// vendor can never be silently wired with no authentication at all.
 	Authenticate func(ctx context.Context, body []byte, headers http.Header, env map[string]string) error
-	// PreVerify inspects the request before signature verification. Return
-	// skipSignature=true to authorize the request without checking the HMAC
-	// (e.g. Slack's url_verification handshake, which must echo a challenge
-	// before any signing secret is necessarily configured). Return an error
-	// to reject. May be nil, in which case signature verification always runs.
-	PreVerify func(body []byte, headers http.Header) (skipSignature bool, err error)
+	// Handshake recognizes an unsigned verification handshake (e.g. Slack's
+	// url_verification, which must echo a challenge before any signing secret
+	// is necessarily configured) and returns the response to send. A non-nil
+	// response is terminal: authentication skips signature verification, and
+	// ingress returns only that response without calling Ingest, so a request
+	// exempt from verification can never produce an event. May be nil, in
+	// which case signature verification always runs.
+	Handshake func(body []byte, headers http.Header) *WebhookResponse
 	// Ingest decodes body + headers into a normalized event for downstream
 	// consumers, the vendor's delivery id (used for dedup; falls back to a
 	// content hash when empty), and the correlation id that routes the event
@@ -204,14 +206,8 @@ func NewWebhookDefinition(
 		EventType:            vendor.EventType,
 		DecodeConfig:         decodeConfigFn,
 		AuthenticateWebhook: func(ctx context.Context, body []byte, headers http.Header, env map[string]string, _ Config) error {
-			if vendor.PreVerify != nil {
-				skip, err := vendor.PreVerify(body, headers)
-				if err != nil {
-					return err
-				}
-				if skip {
-					return nil
-				}
+			if vendor.Handshake != nil && vendor.Handshake(body, headers) != nil {
+				return nil
 			}
 			if vendor.Authenticate != nil {
 				return vendor.Authenticate(ctx, body, headers, env)
@@ -224,6 +220,12 @@ func NewWebhookDefinition(
 			return vendor.Signature.Verify(body, headers, secret)
 		},
 		HandleWebhook: func(body []byte, headers http.Header, _ Config) (*WebhookIngressResult, error) {
+			if vendor.Handshake != nil {
+				if response := vendor.Handshake(body, headers); response != nil {
+					return &WebhookIngressResult{Response: response, Event: nil, Task: nil}, nil
+				}
+			}
+
 			ingest, err := vendor.Ingest(body, headers)
 			if err != nil {
 				return nil, err
