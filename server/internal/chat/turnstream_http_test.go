@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
+	authrepo "github.com/speakeasy-api/gram/server/internal/auth/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/constants"
@@ -58,8 +59,9 @@ func TestHandleTurnStreamSensitiveContentAccess(t *testing.T) {
 				session.ActiveOrganizationID = constants.DemoOrganizationID
 			}
 			if tc.support {
-				_, err := ti.conn.Exec(ctx, "UPDATE users SET admin = true WHERE id = $1", session.UserID)
-				require.NoError(t, err)
+				require.NoError(t, authrepo.New(ti.conn).SetUserAdminFixture(ctx, authrepo.SetUserAdminFixtureParams{
+					Admin: true, UserID: session.UserID,
+				}))
 				require.NoError(t, ti.sessions.InvalidateUserInfoCache(ctx, session.UserID))
 				session.SupportOrganizationID = session.ActiveOrganizationID
 				session.SupportExpiresAt = time.Now().Add(time.Hour)

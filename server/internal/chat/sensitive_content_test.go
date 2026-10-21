@@ -62,6 +62,7 @@ func TestChatSensitiveContentAccess(t *testing.T) {
 				authz.NewGrant(authz.ScopeChatRead, authz.WildcardResource),
 				authz.NewGrant(authz.ScopeChatWrite, authz.WildcardResource))
 			t.Run("list_titles", func(t *testing.T) {
+				t.Parallel()
 				result, err := ti.service.ListChats(ctx, defaultPayload())
 				require.NoError(t, err)
 				require.Equal(t, 2, result.Total)
@@ -76,6 +77,7 @@ func TestChatSensitiveContentAccess(t *testing.T) {
 			})
 
 			t.Run("title_search", func(t *testing.T) {
+				t.Parallel()
 				payload := defaultPayload()
 				query := "private other"
 				payload.Search = &query
@@ -92,6 +94,7 @@ func TestChatSensitiveContentAccess(t *testing.T) {
 				}
 			})
 			t.Run("linked_titles", func(t *testing.T) {
+				t.Parallel()
 				seedSessionLink(t, ctx, ti, own, &other, "test-harness")
 				result, err := ti.service.ListSessionLinks(ctx, &gen.ListSessionLinksPayload{ChatIds: []string{own.String()}})
 				require.NoError(t, err)
@@ -107,6 +110,7 @@ func TestChatSensitiveContentAccess(t *testing.T) {
 			})
 			for name, chatID := range map[string]string{"own": own.String(), "other": other.String()} {
 				t.Run(name, func(t *testing.T) {
+					t.Parallel()
 					before, err := audittest.AuditLogCountByAction(t.Context(), ti.conn, audit.ActionChatSessionAccess)
 					require.NoError(t, err)
 					result, err := ti.service.LoadChat(ctx, loadPayload(chatID))

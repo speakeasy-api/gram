@@ -34,7 +34,7 @@ func (s *Service) HandleTurnStream(w http.ResponseWriter, r *http.Request) error
 		return oops.C(oops.CodeUnauthorized)
 	}
 	if err := authz.CheckSensitiveContentAccess(ctx); err != nil {
-		return err
+		return fmt.Errorf("authorize turn stream content: %w", err)
 	}
 	if err := s.authz.Require(ctx, authz.Check{
 		Scope:        authz.ScopeProjectRead,

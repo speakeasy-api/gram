@@ -296,7 +296,7 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 	// Searching hidden titles would reveal their contents through result counts.
 	if search != "" {
 		if err := authz.CheckSensitiveContentAccess(ctx); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("authorize chat search: %w", err)
 		}
 	}
 	assistantID := conv.PtrValOr(payload.AssistantID, "")
@@ -1110,7 +1110,7 @@ func (s *Service) loadAuthorizedChat(ctx context.Context, authCtx *contextvalues
 	// Impersonation grants may include every scope, so deny sensitive content
 	// independently of RBAC and before reading the chat.
 	if err := authz.CheckSensitiveContentAccess(ctx); err != nil {
-		return none, err
+		return none, fmt.Errorf("authorize chat content: %w", err)
 	}
 
 	chat, err := s.repo.GetChat(ctx, repo.GetChatParams{ID: chatID, ProjectID: *authCtx.ProjectID})

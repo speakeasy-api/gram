@@ -1310,7 +1310,9 @@ func cursorToParams(c *riskResultsCursor) (pgtype.Timestamptz, uuid.NullUUID) {
 // them load the chat's full transcript (which contains the same secret
 // embedded in message content) via chat.LoadChat. That is a soft check
 // (FindMatched, not Require): missing chat:read doesn't fail the request, it
-// just falls back to a redacted response. Every other call — notably the
+// just falls back to a redacted response. Impersonation also disables the raw
+// content bypass regardless of grants, except in the fabricated demo org.
+// Every other call — notably the
 // Risk Events page, which lists across many chats with no single chat_id
 // filter — gets match_redacted instead of the raw secret.
 func (s *Service) ListRiskResults(ctx context.Context, payload *gen.ListRiskResultsPayload) (*gen.ListRiskResultsResult, error) {
@@ -1581,7 +1583,7 @@ func (s *Service) UnmaskRiskResult(ctx context.Context, payload *gen.UnmaskRiskR
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 	if err := authz.CheckSensitiveContentAccess(ctx); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("authorize risk match reveal: %w", err)
 	}
 
 	id, err := uuid.Parse(payload.ID)
