@@ -34,7 +34,7 @@ agent:00000000-0000-0000-0000-000000000004
 
 Role principals use `role:<kind>:<role-uuid>`, where `kind` is `global` or `organization`. Role slugs such as `admin` remain display and lookup metadata; they are not principal identifiers.
 
-The current RBAC implementation supports `user`, `role`, `agent`, and `api_key` principals. An `api_key:<api_keys.id>` principal is a legacy API key holding its own server and auth client policy; it is written only by the keys service and is not grantable anywhere else (see "API key policies and the mandatory check").
+The current RBAC implementation supports `user`, `role`, `agent`, and `api_key` principals. An `api_key:<api_keys.id>` principal is a legacy API key holding its own server and auth client policy; it is written only through `keys.create` and is not grantable anywhere else (see "API key policies and the mandatory check").
 
 Agent principals are grantable in two places in the RBAC administration surfaces: on a role, through the role editor, and on a single MCP server, through that server's access list. An agent's own direct grants are managed separately, through the agent policy API (`agents.createPolicyGrant` and friends), which is also what agent key issuance delegates from. Role membership for agents lives in `agent_role_assignments` rather than `organization_role_assignments`, because agents have no WorkOS identity and their membership is never reconciled outward.
 
@@ -839,7 +839,7 @@ The new scopes are safe from delegated policy version 5, but credentials are iss
 
 #### API key policies and the mandatory check
 
-A legacy API key is its own principal, `api_key:<api_keys.id>`. Its policy is `mcp:connect` and `mcp:auth` grants, and their blocks, written only by the keys service. A key represents no user, so it never uses a personal connection. API key grants always match strictly, and no key grant matches an MCP check that lacks a project. A key never inherits `user:all`, its creator's roles, or a direct-user override. Audience, assignment and policy APIs neither list nor accept `api_key` principals.
+A legacy API key is its own principal, `api_key:<api_keys.id>`. Its policy is `mcp:connect` and `mcp:auth` grants, and their blocks, written when the key is created (`keys.create` `policy_grants`, org admin only) and deleted when it is revoked. An `mcp:auth` grant must name its client, and a key represents no user, so it never uses a personal connection. API key grants always match strictly, and no key grant matches an MCP check that lacks a project. A project-bound key's grants must name its project, and a grant on every server must name a project. A key never inherits `user:all`, its creator's roles, or a direct-user override. Audience, assignment and policy APIs neither list nor accept `api_key` principals.
 
 `Engine.AuthorizeMandatory` evaluates `mcp:connect` and `mcp:auth` for any caller, including legacy keys and sessionless callers that `Require` skips. A legacy key is evaluated against its own live policy; every other caller against the policy its request already holds. A caller with no policy, an inactive credential, a key check without a project, or a check outside the key's own project or transport scopes is denied, and the decision says which policy it used and why it denied. Nothing calls it yet; AIM-591 runs it in shadow.
 
