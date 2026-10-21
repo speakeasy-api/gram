@@ -43,10 +43,9 @@ from pystreams.risk.scanner import (
 # means anything older can no longer satisfy a caller.
 DEFAULT_MAX_REQUEST_AGE_SECONDS: Final = 30.0
 
-# Per-message content budget, matching enforcereply.MaxContentBytes on the Go
-# dispatcher; a request that bypasses the dispatcher must not buy an unbounded
-# scan.
-MAX_CONTENT_BYTES: Final = 1024 * 1024
+# Presidio's engine-local scan limit. The Pub/Sub transport accepts a larger
+# message and marks replies when only this UTF-8-safe prefix was evaluated.
+MAX_CONTENT_BYTES: Final = 50 * 1024
 
 # Transport-metadata key carrying the request's return address; must match
 # requestreply.ReplyURNAttribute on the Go side.
@@ -181,15 +180,17 @@ class PresidioEnforceHandler:
         reason = ""
         scan_started_at: datetime | None = None
         scan_completed = False
-        if len(message.content.encode()) > MAX_CONTENT_BYTES:
-            status = enforcement_reply_pb2.ENFORCEMENT_STATUS_ERROR
-            reason = "enforcement content exceeds the maximum byte budget"
-        elif len(message.entities) > MAX_REQUESTED_ENTITIES:
+        encoded_content = message.content.encode()
+        content_truncated = message.content_truncated
+        if len(encoded_content) > MAX_CONTENT_BYTES:
+            content = encoded_content[:MAX_CONTENT_BYTES].decode(errors="ignore")
+            content_truncated = True
+        else:
+            content = message.content
+        if len(message.entities) > MAX_REQUESTED_ENTITIES:
             status = enforcement_reply_pb2.ENFORCEMENT_STATUS_ERROR
             reason = "enforcement entity selection exceeds the maximum count"
         elif not 0.0 <= message.score_threshold <= 1.0:
-            # A negative threshold admits noise; above 1.0 suppresses every
-            # finding. Neither is a scan worth running.
             status = enforcement_reply_pb2.ENFORCEMENT_STATUS_ERROR
             reason = "enforcement score threshold is outside 0.0-1.0"
         else:
@@ -202,7 +203,7 @@ class PresidioEnforceHandler:
             try:
                 scan_started_at = datetime.now(UTC)
                 detections = await self._scanner.scan(
-                    message.content, requested, score_threshold
+                    content, requested, score_threshold
                 )
             except ScanSlotTimeout:
                 # Requeueing cannot rescue an inline scan: reply ERROR now so
@@ -242,6 +243,8 @@ class PresidioEnforceHandler:
                 consumer_id=self._consumer_id,
                 delivery_attempt=meta.delivery_attempt or 0,
             ),
+            content_truncated=content_truncated,
+            incomplete=not scan_completed,
         )
 
         reply_written = False

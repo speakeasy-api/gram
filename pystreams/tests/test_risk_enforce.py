@@ -640,17 +640,19 @@ async def test_handler_rejects_oversized_entity_selection_without_scanning():
     assert reply.status == enforcement_reply_pb2.ENFORCEMENT_STATUS_ERROR
 
 
-async def test_handler_rejects_oversized_content_without_scanning():
+async def test_handler_scans_utf8_safe_prefix_for_oversized_content():
     client = fakeredis.aioredis.FakeRedis()
     scanner = FakeScanner()
-    big = "a" * (MAX_CONTENT_BYTES + 1)
+    big = "a" * (MAX_CONTENT_BYTES - 1) + "é"
     await _handler(scanner, client).handle(_message(content=big), _meta())
-    assert scanner.calls == []
+    assert scanner.calls == ["a" * (MAX_CONTENT_BYTES - 1)]
     reply = await _read_reply(client)
-    assert reply.status == enforcement_reply_pb2.ENFORCEMENT_STATUS_ERROR
+    assert reply.status == enforcement_reply_pb2.ENFORCEMENT_STATUS_OK
+    assert reply.content_truncated
+    assert not reply.incomplete
 
 
-async def test_oversized_request_does_not_publish_enforcement_meter():
+async def test_truncated_request_publishes_one_enforcement_meter():
     client = fakeredis.aioredis.FakeRedis()
     meter_publisher = FakeMeterPublisher()
 
@@ -658,4 +660,4 @@ async def test_oversized_request_does_not_publish_enforcement_meter():
         _metered_message(content="a" * (MAX_CONTENT_BYTES + 1)), _meta()
     )
 
-    assert meter_publisher.published == []
+    assert len(meter_publisher.published) == 1

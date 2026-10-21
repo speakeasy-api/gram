@@ -20,12 +20,16 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/risk/enforcereply"
 	"github.com/speakeasy-api/gram/server/internal/risk/maskdisplay"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
+	enforce "github.com/speakeasy-api/gram/server/internal/scanners/enforcement"
 )
 
 const (
 	// DefaultMaxRequestAge is the maximum useful age of an inline scan request.
 	DefaultMaxRequestAge = 30 * time.Second
-	maxReplyReasonRunes  = 256
+	// DefaultEnforcementMaxContentBytes bounds work to the historical scanner
+	// input limit while the transport accepts larger messages.
+	DefaultEnforcementMaxContentBytes = 50 * 1024
+	maxReplyReasonRunes               = 256
 )
 
 // FingerprintFinding returns a canonically encoded, tenant-scoped fingerprint.
@@ -37,18 +41,22 @@ type FingerprintFinding func(tenantID string, message []byte) (string, error)
 type EnforceHandlerConfig struct {
 	// MaxRequestAge drops requests that can no longer satisfy an inline caller.
 	MaxRequestAge time.Duration
+
+	// MaxContentBytes bounds the prefix scanned by gitleaks.
+	MaxContentBytes int
 }
 
 // EnforceHandler scans one inline request and writes a safe correlated reply.
 type EnforceHandler struct {
-	logger        *slog.Logger
-	writer        requestreply.ReplyBroker[*riskv1.EnforcementReply]
-	scanner       *Scanner
-	fingerprint   FingerprintFinding
-	metrics       enforceHandlerMetrics
-	riskRecorder  *metering.RiskRecorder
-	consumerID    string
-	maxRequestAge time.Duration
+	logger          *slog.Logger
+	writer          requestreply.ReplyBroker[*riskv1.EnforcementReply]
+	scanner         *Scanner
+	fingerprint     FingerprintFinding
+	metrics         enforceHandlerMetrics
+	riskRecorder    *metering.RiskRecorder
+	consumerID      string
+	maxRequestAge   time.Duration
+	maxContentBytes int
 }
 
 // NewEnforceHandler builds the gitleaks enforcement subscription handler.
@@ -72,19 +80,23 @@ func NewEnforceHandler(
 	if cfg.MaxRequestAge <= 0 {
 		cfg.MaxRequestAge = DefaultMaxRequestAge
 	}
+	if cfg.MaxContentBytes <= 0 {
+		cfg.MaxContentBytes = DefaultEnforcementMaxContentBytes
+	}
 	metrics, err := newEnforceHandlerMetrics(meterProvider)
 	if err != nil {
 		return nil, err
 	}
 	return &EnforceHandler{
-		logger:        logger.With(attr.SlogComponent("gitleaks-enforcer")),
-		writer:        writer,
-		scanner:       NewScanner(),
-		fingerprint:   fingerprint,
-		metrics:       metrics,
-		riskRecorder:  riskRecorder,
-		consumerID:    uuid.NewString(),
-		maxRequestAge: cfg.MaxRequestAge,
+		logger:          logger.With(attr.SlogComponent("gitleaks-enforcer")),
+		writer:          writer,
+		scanner:         NewScanner(),
+		fingerprint:     fingerprint,
+		metrics:         metrics,
+		riskRecorder:    riskRecorder,
+		consumerID:      uuid.NewString(),
+		maxRequestAge:   cfg.MaxRequestAge,
+		maxContentBytes: cfg.MaxContentBytes,
 	}, nil
 }
 
@@ -118,22 +130,15 @@ func (h *EnforceHandler) Handle(ctx context.Context, m *riskv1.GitleaksEnforceme
 	}
 
 	started := time.Now().UTC()
-	result := scanners.Result{Findings: nil, STokens: 0, Completed: false}
-	var findings []scanners.Finding
+	content := m.GetContent()
+	truncated := m.GetContentTruncated() || enforce.TruncateFields(h.maxContentBytes, &content)
+	result, err := h.scanner.Scan(ctx, content)
+	findings := result.Findings
 	status := riskv1.EnforcementStatus_ENFORCEMENT_STATUS_OK
 	reason := ""
-	if len(m.GetContent()) > enforcereply.MaxContentBytes {
-		// Dispatcher enforces this budget too; a request that bypasses it must
-		// not buy an unbounded scan.
+	if err != nil {
 		status = riskv1.EnforcementStatus_ENFORCEMENT_STATUS_ERROR
-		reason = fmt.Sprintf("enforcement content is %d bytes; maximum is %d bytes", len(m.GetContent()), enforcereply.MaxContentBytes)
-	} else {
-		result, err = h.scanner.Scan(ctx, m.GetContent())
-		findings = result.Findings
-		if err != nil {
-			status = riskv1.EnforcementStatus_ENFORCEMENT_STATUS_ERROR
-			reason = err.Error()
-		}
+		reason = err.Error()
 	}
 
 	replyFindings := make([]*riskv1.EnforcementFinding, 0, len(findings))
@@ -177,6 +182,8 @@ func (h *EnforceHandler) Handle(ctx context.Context, m *riskv1.GitleaksEnforceme
 			ConsumerId:      new(h.consumerID),
 			DeliveryAttempt: new(deliveryAttempt),
 		}.Build(),
+		ContentTruncated: new(truncated),
+		Incomplete:       new(!result.Completed),
 	}.Build()
 	replyErr := h.writer.Reply(ctx, replyURN, reply)
 	if replyErr != nil {

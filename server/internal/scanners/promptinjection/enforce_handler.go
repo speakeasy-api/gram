@@ -1,0 +1,157 @@
+package promptinjection
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"log/slog"
+	"time"
+
+	"github.com/google/uuid"
+
+	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
+	"github.com/speakeasy-api/gram/infra/pkg/gcp"
+	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/judgemessage"
+	"github.com/speakeasy-api/gram/server/internal/metering"
+	"github.com/speakeasy-api/gram/server/internal/requestreply"
+	"github.com/speakeasy-api/gram/server/internal/scanners"
+	enforce "github.com/speakeasy-api/gram/server/internal/scanners/enforcement"
+)
+
+const (
+	// DefaultEnforcementMaxRequestAge leaves transport slack around the
+	// cascade's 55-second model budget while staying below its ack deadline.
+	DefaultEnforcementMaxRequestAge = 75 * time.Second
+	// DefaultEnforcementMaxContentBytes bounds model input while preserving
+	// enough context for long tool results and prompts.
+	DefaultEnforcementMaxContentBytes = 64 * 1024
+)
+
+type enforcementScanner interface {
+	ScanWithVerdict(context.Context, string, string, string, string, judgemessage.Message, ...judgemessage.Trajectory) (scanners.Result, Result, error)
+}
+
+// EnforceHandlerConfig controls realtime prompt-injection request bounds.
+type EnforceHandlerConfig struct {
+	MaxRequestAge   time.Duration
+	MaxContentBytes int
+}
+
+// EnforceHandler evaluates one prompt-injection lane and writes its reply.
+type EnforceHandler struct {
+	logger          *slog.Logger
+	scanner         enforcementScanner
+	writer          requestreply.ReplyBroker[*riskv1.EnforcementReply]
+	riskRecorder    *metering.RiskRecorder
+	consumerID      string
+	maxRequestAge   time.Duration
+	maxContentBytes int
+}
+
+// NewEnforceHandler builds the prompt-injection enforcement handler.
+func NewEnforceHandler(logger *slog.Logger, scanner enforcementScanner, writer requestreply.ReplyBroker[*riskv1.EnforcementReply], riskRecorder *metering.RiskRecorder, cfg EnforceHandlerConfig) (*EnforceHandler, error) {
+	if scanner == nil {
+		return nil, errors.New("prompt injection enforcement scanner is required")
+	}
+	if writer == nil {
+		return nil, errors.New("prompt injection enforcement reply writer is required")
+	}
+	if cfg.MaxRequestAge <= 0 {
+		cfg.MaxRequestAge = DefaultEnforcementMaxRequestAge
+	}
+	if cfg.MaxContentBytes <= 0 {
+		cfg.MaxContentBytes = DefaultEnforcementMaxContentBytes
+	}
+	return &EnforceHandler{
+		logger:          logger.With(attr.SlogComponent("prompt-injection-enforcer")),
+		scanner:         scanner,
+		writer:          writer,
+		riskRecorder:    riskRecorder,
+		consumerID:      uuid.NewString(),
+		maxRequestAge:   cfg.MaxRequestAge,
+		maxContentBytes: cfg.MaxContentBytes,
+	}, nil
+}
+
+// Handle ACKs answered and stale requests. Malformed requests are retried.
+func (h *EnforceHandler) Handle(ctx context.Context, m *riskv1.PromptInjectionEnforcement, meta gcp.MessageMetadata) error {
+	replyURN := enforce.ReplyURN(meta.Attributes)
+	correlationID, stale, err := enforce.ValidateRequest(enforce.Request{
+		CreatedAt: m.GetCreatedAt(), OrganizationID: m.GetOrganizationId(), ProjectID: m.GetProjectId(), ReplyURN: replyURN, MaxRequestAge: h.maxRequestAge,
+	})
+	if err != nil {
+		return fmt.Errorf("validate prompt injection enforcement request: %w", err)
+	}
+	if stale {
+		return nil
+	}
+
+	content := m.GetContent()
+	body := conv.Default(m.GetBody(), content)
+	calls := make([]judgemessage.ToolCall, 0, len(m.GetToolCalls()))
+	argumentFields := make([]string, len(m.GetToolCalls()))
+	fields := make([]*string, 0, len(argumentFields)+1)
+	if len(argumentFields) == 0 {
+		fields = append(fields, &body)
+	} else {
+		for i, call := range m.GetToolCalls() {
+			argumentFields[i] = call.GetArguments()
+			fields = append(fields, &argumentFields[i])
+		}
+	}
+	contentCut := enforce.TruncateFields(h.maxContentBytes, &content)
+	messageCut := enforce.TruncateFields(h.maxContentBytes, fields...)
+	truncated := m.GetContentTruncated() || contentCut || messageCut
+	var judgeMessage judgemessage.Message
+	if len(argumentFields) == 0 {
+		judgeMessage = judgemessage.New(m.GetMessageType(), m.GetToolName(), body)
+	} else {
+		for i, call := range m.GetToolCalls() {
+			calls = append(calls, judgemessage.NewToolCall(call.GetName(), argumentFields[i]))
+		}
+		judgeMessage = judgemessage.NewForToolCalls(calls)
+	}
+
+	started := time.Now().UTC()
+	result, verdict, scanErr := h.scanner.ScanWithVerdict(ctx, content, m.GetOrganizationId(), m.GetProjectId(), m.GetUserId(), judgeMessage)
+	status := riskv1.EnforcementStatus_ENFORCEMENT_STATUS_OK
+	reason := ""
+	if scanErr != nil {
+		status = riskv1.EnforcementStatus_ENFORCEMENT_STATUS_ERROR
+		reason = "prompt injection judge failed"
+	}
+	reply := riskv1.EnforcementReply_builder{
+		CorrelationId: new(correlationID),
+		Scanner:       new(riskv1.EnforcementScanner_ENFORCEMENT_SCANNER_PROMPT_INJECTION),
+		Status:        new(status),
+		Reason:        new(conv.TruncateString(reason, enforce.MaxReplyReasonRunes)),
+		Findings:      enforce.Findings(result.Findings),
+		Diagnostics: riskv1.EnforcementDiagnostics_builder{
+			ScanDurationMs:  new(time.Since(started).Milliseconds()),
+			ConsumerId:      new(h.consumerID),
+			DeliveryAttempt: new(conv.SafeInt32(conv.PtrValOr(meta.DeliveryAttempt, 0))),
+		}.Build(),
+		PolicyId:         new(""),
+		ContentTruncated: new(truncated),
+		Incomplete:       new(scanErr != nil || !result.Completed),
+	}.Build()
+	if replyErr := h.writer.Reply(ctx, replyURN, reply); replyErr != nil {
+		h.logger.ErrorContext(ctx, "write prompt injection enforcement reply; acknowledging request", attr.SlogError(replyErr))
+	}
+
+	if h.riskRecorder != nil && result.Completed {
+		provenance, provenanceErr := scanners.ParseRiskProvenance(m, m.GetMessageType(), "realtime_streams")
+		if provenanceErr != nil {
+			h.logger.WarnContext(ctx, "skipping prompt injection enforcement usage with invalid attribution", attr.SlogError(provenanceErr))
+		} else {
+			provenance.Model = verdict.Model
+			provenance.Provider = verdict.Provider
+			if recordErr := h.riskRecorder.Record(ctx, metering.RiskPromptInjection(), provenance, result.STokens, started); recordErr != nil {
+				h.logger.ErrorContext(ctx, "record prompt injection enforcement usage", attr.SlogError(recordErr))
+			}
+		}
+	}
+	return nil
+}

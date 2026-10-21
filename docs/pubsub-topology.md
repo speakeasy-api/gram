@@ -30,6 +30,7 @@ flowchart LR
   t_gram_plugins_v1_publication_requested(["gram-plugins-v1-publication-requested<br/>(topic)"]):::topic
   t_gram_risk_v1_account_identity_analysis(["gram-risk-v1-account-identity-analysis<br/>(topic)"]):::topic
   t_gram_risk_v1_custom_rules_analysis(["gram-risk-v1-custom-rules-analysis<br/>(topic)"]):::topic
+  t_gram_risk_v1_custom_rules_enforcement(["gram-risk-v1-custom-rules-enforcement<br/>(topic)"]):::topic
   t_gram_risk_v1_finding(["gram-risk-v1-finding<br/>(topic)"]):::topic
   t_gram_risk_v1_gitleaks_analysis(["gram-risk-v1-gitleaks-analysis<br/>(topic)"]):::topic
   t_gram_risk_v1_gitleaks_enforcement(["gram-risk-v1-gitleaks-enforcement<br/>(topic)"]):::topic
@@ -38,7 +39,9 @@ flowchart LR
   t_gram_risk_v1_presidio_analysis(["gram-risk-v1-presidio-analysis<br/>(topic)"]):::topic
   t_gram_risk_v1_presidio_enforcement(["gram-risk-v1-presidio-enforcement<br/>(topic)"]):::topic
   t_gram_risk_v1_prompt_injection_analysis(["gram-risk-v1-prompt-injection-analysis<br/>(topic)"]):::topic
+  t_gram_risk_v1_prompt_injection_enforcement(["gram-risk-v1-prompt-injection-enforcement<br/>(topic)"]):::topic
   t_gram_risk_v1_prompt_policy_analysis(["gram-risk-v1-prompt-policy-analysis<br/>(topic)"]):::topic
+  t_gram_risk_v1_prompt_policy_enforcement(["gram-risk-v1-prompt-policy-enforcement<br/>(topic)"]):::topic
   t_gram_risk_v1_tool_call_analysis(["gram-risk-v1-tool-call-analysis<br/>(topic)"]):::topic
   t_gram_role_distribution_v1_role_distribution_setup_requested_v1(["gram-role-distribution-v1-role-distribution-setup-requested-v1<br/>(topic)"]):::topic
   t_gram_sigint_v1_outcome(["gram-sigint-v1-outcome<br/>(topic)"]):::topic
@@ -68,6 +71,7 @@ flowchart LR
   s_gram_plugins_v1_publication_scheduler["gram-plugins-v1-publication-scheduler<br/>(sub)"]:::sub
   s_gram_risk_v1_account_identity_analyzer["gram-risk-v1-account-identity-analyzer<br/>(sub)"]:::sub
   s_gram_risk_v1_custom_rules_analyzer["gram-risk-v1-custom-rules-analyzer<br/>(sub)"]:::sub
+  s_gram_risk_v1_custom_rules_enforcer["gram-risk-v1-custom-rules-enforcer<br/>(sub)"]:::sub
   s_gram_risk_v1_finding_ch_writer["gram-risk-v1-finding-ch-writer<br/>(sub)"]:::sub
   s_gram_risk_v1_finding_otel_relay["gram-risk-v1-finding-otel-relay<br/>(sub)"]:::sub
   s_gram_risk_v1_gitleaks_analyzer["gram-risk-v1-gitleaks-analyzer<br/>(sub)"]:::sub
@@ -77,7 +81,9 @@ flowchart LR
   s_gram_risk_v1_presidio_analyzer["gram-risk-v1-presidio-analyzer<br/>(sub)"]:::sub
   s_gram_risk_v1_presidio_enforcer["gram-risk-v1-presidio-enforcer<br/>(sub)"]:::sub
   s_gram_risk_v1_prompt_injection_analyzer["gram-risk-v1-prompt-injection-analyzer<br/>(sub)"]:::sub
+  s_gram_risk_v1_prompt_injection_enforcer["gram-risk-v1-prompt-injection-enforcer<br/>(sub)"]:::sub
   s_gram_risk_v1_prompt_policy_analyzer["gram-risk-v1-prompt-policy-analyzer<br/>(sub)"]:::sub
+  s_gram_risk_v1_prompt_policy_enforcer["gram-risk-v1-prompt-policy-enforcer<br/>(sub)"]:::sub
   s_gram_risk_v1_tool_call_analyzer["gram-risk-v1-tool-call-analyzer<br/>(sub)"]:::sub
   s_gram_role_distribution_v1_role_distribution_setup_handler["gram-role-distribution-v1-role-distribution-setup-handler<br/>(sub)"]:::sub
   s_gram_sigint_v1_evaluator["gram-sigint-v1-evaluator<br/>(sub)"]:::sub
@@ -118,9 +124,9 @@ flowchart LR
   p11 --> t_gram_risk_v1_account_identity_analysis
   p12[/"📤<br/>server/internal/background/activities/risk_analysis/scan_custom_rules.go"/]:::go
   p12 --> t_gram_risk_v1_custom_rules_analysis
-  p13[/"📤<br/>pystreams/src/pystreams/risk/handler.py"/]:::python
-  p13 --> t_gram_risk_v1_finding
-  p14[/"📤<br/>server/internal/scanners/publish.go"/]:::go
+  p13[/"📤<br/>server/internal/risk/enforcereply/dispatch.go"/]:::go
+  p13 --> t_gram_risk_v1_custom_rules_enforcement
+  p14[/"📤<br/>pystreams/src/pystreams/risk/handler.py"/]:::python
   p14 --> t_gram_risk_v1_finding
   p15[/"📤<br/>server/internal/background/activities/risk_analysis/scan_gitleaks.go"/]:::go
   p15 --> t_gram_risk_v1_gitleaks_analysis
@@ -176,6 +182,7 @@ flowchart LR
   t_gram_plugins_v1_publication_requested --> s_gram_plugins_v1_publication_scheduler
   t_gram_risk_v1_account_identity_analysis --> s_gram_risk_v1_account_identity_analyzer
   t_gram_risk_v1_custom_rules_analysis --> s_gram_risk_v1_custom_rules_analyzer
+  t_gram_risk_v1_custom_rules_enforcement --> s_gram_risk_v1_custom_rules_enforcer
   t_gram_risk_v1_finding --> s_gram_risk_v1_finding_ch_writer
   t_gram_risk_v1_finding --> s_gram_risk_v1_finding_otel_relay
   t_gram_risk_v1_gitleaks_analysis --> s_gram_risk_v1_gitleaks_analyzer
@@ -185,7 +192,9 @@ flowchart LR
   t_gram_risk_v1_presidio_analysis --> s_gram_risk_v1_presidio_analyzer
   t_gram_risk_v1_presidio_enforcement --> s_gram_risk_v1_presidio_enforcer
   t_gram_risk_v1_prompt_injection_analysis --> s_gram_risk_v1_prompt_injection_analyzer
+  t_gram_risk_v1_prompt_injection_enforcement --> s_gram_risk_v1_prompt_injection_enforcer
   t_gram_risk_v1_prompt_policy_analysis --> s_gram_risk_v1_prompt_policy_analyzer
+  t_gram_risk_v1_prompt_policy_enforcement --> s_gram_risk_v1_prompt_policy_enforcer
   t_gram_risk_v1_tool_call_analysis --> s_gram_risk_v1_tool_call_analyzer
   t_gram_role_distribution_v1_role_distribution_setup_requested_v1 --> s_gram_role_distribution_v1_role_distribution_setup_handler
   t_gram_conversation_v1_message_event --> s_gram_sigint_v1_evaluator
@@ -299,6 +308,7 @@ flowchart LR
 | [`gram-plugins-v1-publication-requested`](../infra/proto/gram/plugins/v1/publication_requested.proto) | topic | 7d | [`server/internal/plugins/organization_publication_handler.go`](../server/internal/plugins/organization_publication_handler.go)<br/>[`server/internal/plugins/publication_requests.go`](../server/internal/plugins/publication_requests.go) |
 | [`gram-risk-v1-account-identity-analysis`](../infra/proto/gram/risk/v1/account_identity_analysis.proto) | topic | 7d | [`server/internal/background/activities/risk_analysis/scan_account_identity.go`](../server/internal/background/activities/risk_analysis/scan_account_identity.go) |
 | [`gram-risk-v1-custom-rules-analysis`](../infra/proto/gram/risk/v1/custom_rules_analysis.proto) | topic | 7d | [`server/internal/background/activities/risk_analysis/scan_custom_rules.go`](../server/internal/background/activities/risk_analysis/scan_custom_rules.go) |
+| [`gram-risk-v1-custom-rules-enforcement`](../infra/proto/gram/risk/v1/custom_rules_enforcement.proto) | topic | 10m | [`server/internal/risk/enforcereply/dispatch.go`](../server/internal/risk/enforcereply/dispatch.go) |
 | [`gram-risk-v1-finding`](../infra/proto/gram/risk/v1/finding.proto) | topic | 7d | [`pystreams/src/pystreams/risk/handler.py`](../pystreams/src/pystreams/risk/handler.py)<br/>[`server/internal/scanners/publish.go`](../server/internal/scanners/publish.go) |
 | [`gram-risk-v1-gitleaks-analysis`](../infra/proto/gram/risk/v1/gitleaks_analysis.proto) | topic | 7d | [`server/internal/background/activities/risk_analysis/scan_gitleaks.go`](../server/internal/background/activities/risk_analysis/scan_gitleaks.go) |
 | [`gram-risk-v1-gitleaks-enforcement`](../infra/proto/gram/risk/v1/gitleaks_enforcement.proto) | topic | 10m | [`server/internal/risk/enforcereply/dispatch.go`](../server/internal/risk/enforcereply/dispatch.go) |
@@ -307,7 +317,9 @@ flowchart LR
 | [`gram-risk-v1-presidio-analysis`](../infra/proto/gram/risk/v1/presidio_analysis.proto) | topic | 7d | [`server/internal/background/activities/risk_analysis/scan_presidio.go`](../server/internal/background/activities/risk_analysis/scan_presidio.go) |
 | [`gram-risk-v1-presidio-enforcement`](../infra/proto/gram/risk/v1/presidio_enforcement.proto) | topic | 10m | [`server/internal/risk/enforcereply/dispatch.go`](../server/internal/risk/enforcereply/dispatch.go) |
 | [`gram-risk-v1-prompt-injection-analysis`](../infra/proto/gram/risk/v1/prompt_injection_analysis.proto) | topic | 7d | [`server/internal/background/activities/risk_analysis/scan_prompt_injection.go`](../server/internal/background/activities/risk_analysis/scan_prompt_injection.go) |
+| [`gram-risk-v1-prompt-injection-enforcement`](../infra/proto/gram/risk/v1/prompt_injection_enforcement.proto) | topic | 10m | [`server/internal/risk/enforcereply/dispatch.go`](../server/internal/risk/enforcereply/dispatch.go) |
 | [`gram-risk-v1-prompt-policy-analysis`](../infra/proto/gram/risk/v1/prompt_policy_analysis.proto) | topic | 7d | [`server/internal/background/activities/risk_analysis/prompt_judge_batch.go`](../server/internal/background/activities/risk_analysis/prompt_judge_batch.go) |
+| [`gram-risk-v1-prompt-policy-enforcement`](../infra/proto/gram/risk/v1/prompt_policy_enforcement.proto) | topic | 10m | [`server/internal/risk/enforcereply/dispatch.go`](../server/internal/risk/enforcereply/dispatch.go) |
 | [`gram-risk-v1-tool-call-analysis`](../infra/proto/gram/risk/v1/tool_call_analysis.proto) | topic | 7d | [`server/internal/background/activities/risk_analysis/scan_tool_calls.go`](../server/internal/background/activities/risk_analysis/scan_tool_calls.go) |
 | [`gram-role-distribution-v1-role-distribution-setup-requested-v1`](../infra/proto/gram/role_distribution/v1/setup_requested.proto) | topic | 7d | [`server/internal/roledistribution/requests/requests.go`](../server/internal/roledistribution/requests/requests.go) |
 | [`gram-sigint-v1-outcome`](../infra/proto/gram/sigint/v1/outcome.proto) | topic | 4d | [`server/internal/sigint/evaluation/outcome.go`](../server/internal/sigint/evaluation/outcome.go) |
@@ -342,6 +354,7 @@ flowchart LR
 | [`gram-plugins-v1-publication-scheduler`](../infra/proto/gram/plugins/v1/publication_scheduler.proto) | `gram-plugins-v1-publication-requested` | 1m | — | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
 | [`gram-risk-v1-account-identity-analyzer`](../infra/proto/gram/risk/v1/account_identity_analyzer.proto) | `gram-risk-v1-account-identity-analysis` | 1m | — | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
 | [`gram-risk-v1-custom-rules-analyzer`](../infra/proto/gram/risk/v1/custom_rules_analyzer.proto) | `gram-risk-v1-custom-rules-analysis` | 1m | — | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
+| [`gram-risk-v1-custom-rules-enforcer`](../infra/proto/gram/risk/v1/custom_rules_enforcer.proto) | `gram-risk-v1-custom-rules-enforcement` | 10s | — | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
 | [`gram-risk-v1-finding-ch-writer`](../infra/proto/gram/risk/v1/finding_ch_writer.proto) | `gram-risk-v1-finding` | 1m | — | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
 | [`gram-risk-v1-finding-otel-relay`](../infra/proto/gram/risk/v1/finding_otel_relay.proto) | `gram-risk-v1-finding` | 1m | — | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
 | [`gram-risk-v1-gitleaks-analyzer`](../infra/proto/gram/risk/v1/gitleaks_analyzer.proto) | `gram-risk-v1-gitleaks-analysis` | 1m | — | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
@@ -351,7 +364,9 @@ flowchart LR
 | [`gram-risk-v1-presidio-analyzer`](../infra/proto/gram/risk/v1/presidio_analyzer.proto) | `gram-risk-v1-presidio-analysis` | 1m | — | [`pystreams/src/pystreams/cmd/multi.py`](../pystreams/src/pystreams/cmd/multi.py) |
 | [`gram-risk-v1-presidio-enforcer`](../infra/proto/gram/risk/v1/presidio_enforcer.proto) | `gram-risk-v1-presidio-enforcement` | 10s | — | [`pystreams/src/pystreams/cmd/multi.py`](../pystreams/src/pystreams/cmd/multi.py) |
 | [`gram-risk-v1-prompt-injection-analyzer`](../infra/proto/gram/risk/v1/prompt_injection_analyzer.proto) | `gram-risk-v1-prompt-injection-analysis` | 1m | — | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
+| [`gram-risk-v1-prompt-injection-enforcer`](../infra/proto/gram/risk/v1/prompt_injection_enforcer.proto) | `gram-risk-v1-prompt-injection-enforcement` | 90s | — | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
 | [`gram-risk-v1-prompt-policy-analyzer`](../infra/proto/gram/risk/v1/prompt_policy_analyzer.proto) | `gram-risk-v1-prompt-policy-analysis` | 1m | — | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
+| [`gram-risk-v1-prompt-policy-enforcer`](../infra/proto/gram/risk/v1/prompt_policy_enforcer.proto) | `gram-risk-v1-prompt-policy-enforcement` | 30s | — | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
 | [`gram-risk-v1-tool-call-analyzer`](../infra/proto/gram/risk/v1/tool_call_analyzer.proto) | `gram-risk-v1-tool-call-analysis` | 1m | — | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
 | [`gram-role-distribution-v1-role-distribution-setup-handler`](../infra/proto/gram/role_distribution/v1/setup_handler.proto) | `gram-role-distribution-v1-role-distribution-setup-requested-v1` | 1m | — | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
 | [`gram-sigint-v1-evaluator`](../infra/proto/gram/sigint/v1/evaluator.proto) | `gram-conversation-v1-message-event` | 1m | — | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |

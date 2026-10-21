@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"maps"
 	"strings"
 	"testing"
@@ -19,6 +18,7 @@ import (
 	meteringv1 "github.com/speakeasy-api/gram/infra/gen/gram/metering/v1"
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/redisinbox"
 	"github.com/speakeasy-api/gram/server/internal/requestreply"
@@ -49,6 +49,12 @@ func (p *capturePublisher[T]) Publish(ctx context.Context, message T, options ..
 
 func (p *capturePublisher[T]) Stop(context.Context) error {
 	return nil
+}
+
+type enforcementLaneFunc func(context.Context, proto.Message) (*riskv1.EnforcementReply, error)
+
+func (f enforcementLaneFunc) Request(ctx context.Context, request proto.Message) (*riskv1.EnforcementReply, error) {
+	return f(ctx, request)
 }
 
 type (
@@ -829,4 +835,108 @@ func TestDispatchRejectsDuplicateLane(t *testing.T) {
 	})
 	require.ErrorContains(t, err, "duplicate enforcement lane")
 	require.Empty(t, publisher.messages)
+}
+
+func TestDispatchSendsPolicyKeyedJudgeLane(t *testing.T) {
+	t.Parallel()
+
+	policyID := uuid.NewString()
+	lane := Lane{Scanner: riskv1.EnforcementScanner_ENFORCEMENT_SCANNER_JUDGE, PolicyID: policyID}
+	var captured *riskv1.PromptPolicyEnforcement
+	dispatcher := &Dispatcher{
+		judge: enforcementLaneFunc(func(_ context.Context, request proto.Message) (*riskv1.EnforcementReply, error) {
+			var ok bool
+			captured, ok = request.(*riskv1.PromptPolicyEnforcement)
+			require.True(t, ok)
+			return riskv1.EnforcementReply_builder{
+				Scanner: new(riskv1.EnforcementScanner_ENFORCEMENT_SCANNER_JUDGE),
+				Status:  new(riskv1.EnforcementStatus_ENFORCEMENT_STATUS_OK),
+			}.Build(), nil
+		}),
+		waitTimeout: time.Second,
+		logger:      newTestLogger(),
+	}
+
+	outcome, err := dispatcher.Dispatch(t.Context(), DispatchRequest{
+		OrganizationID: "org-judge",
+		ProjectID:      uuid.NewString(),
+		Content:        "transport content",
+		Body:           "judge this body",
+		Lanes:          []Lane{lane},
+		Origins:        testOrigins(lane),
+		PromptPolicies: map[string]PromptPolicyConfig{
+			policyID: {Prompt: "deny unsafe requests", ModelConfig: []byte(`{"fail_open":false}`)},
+		},
+	})
+	require.NoError(t, err)
+	require.True(t, outcome.Complete)
+	require.NotNil(t, outcome.ByLane[lane])
+	require.NotNil(t, captured)
+	require.Equal(t, policyID, captured.GetRiskPolicyId())
+	require.Equal(t, "deny unsafe requests", captured.GetPrompt())
+	require.JSONEq(t, `{"fail_open":false}`, string(captured.GetModelConfig()))
+}
+
+func TestDispatchStartsNewEnforcementLanesConcurrently(t *testing.T) {
+	t.Parallel()
+
+	policyID := uuid.NewString()
+	lanes := []Lane{
+		{Scanner: riskv1.EnforcementScanner_ENFORCEMENT_SCANNER_PROMPT_INJECTION},
+		{Scanner: riskv1.EnforcementScanner_ENFORCEMENT_SCANNER_CUSTOM_RULES},
+		{Scanner: riskv1.EnforcementScanner_ENFORCEMENT_SCANNER_JUDGE, PolicyID: policyID},
+	}
+	started := make(chan riskv1.EnforcementScanner, len(lanes))
+	release := make(chan struct{})
+	fakeLane := func(scanner riskv1.EnforcementScanner) EnforcementLane {
+		return enforcementLaneFunc(func(ctx context.Context, _ proto.Message) (*riskv1.EnforcementReply, error) {
+			started <- scanner
+			select {
+			case <-release:
+				return riskv1.EnforcementReply_builder{
+					Scanner: new(scanner),
+					Status:  new(riskv1.EnforcementStatus_ENFORCEMENT_STATUS_OK),
+				}.Build(), nil
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			}
+		})
+	}
+	dispatcher := &Dispatcher{
+		promptInjection: fakeLane(riskv1.EnforcementScanner_ENFORCEMENT_SCANNER_PROMPT_INJECTION),
+		customRules:     fakeLane(riskv1.EnforcementScanner_ENFORCEMENT_SCANNER_CUSTOM_RULES),
+		judge:           fakeLane(riskv1.EnforcementScanner_ENFORCEMENT_SCANNER_JUDGE),
+		waitTimeout:     time.Second,
+		logger:          newTestLogger(),
+	}
+
+	type dispatchResult struct {
+		outcome Outcome
+		err     error
+	}
+	done := make(chan dispatchResult, 1)
+	go func() {
+		outcome, err := dispatcher.Dispatch(t.Context(), DispatchRequest{
+			OrganizationID: "org-concurrent",
+			ProjectID:      uuid.NewString(),
+			Content:        "content",
+			Lanes:          lanes,
+			Origins:        testOrigins(lanes...),
+			PromptPolicies: map[string]PromptPolicyConfig{policyID: {Prompt: "judge"}},
+		})
+		done <- dispatchResult{outcome: outcome, err: err}
+	}()
+
+	for range lanes {
+		select {
+		case <-started:
+		case <-time.After(time.Second):
+			t.Fatal("enforcement lanes did not all start before release")
+		}
+	}
+	close(release)
+	result := <-done
+	require.NoError(t, result.err)
+	require.True(t, result.outcome.Complete)
+	require.Len(t, result.outcome.ByLane, len(lanes))
 }

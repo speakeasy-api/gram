@@ -301,6 +301,42 @@ func TestEnforceHandlerRejectsMissingReplyURNAttribute(t *testing.T) {
 	require.ErrorContains(t, err, "enforcement reply urn attribute is required")
 }
 
+func TestEnforceHandlerScansBoundedPrefix(t *testing.T) {
+	t.Parallel()
+
+	_, client, writer := newReplyWriter(t)
+	meterProvider, _ := newTestMeterProvider(t)
+	meterPub, _ := capturingMeterPub(t)
+	handler, err := gitleaks.NewEnforceHandler(
+		testenv.NewLogger(t),
+		meterProvider,
+		writer,
+		func(string, []byte) (string, error) { return "fingerprint", nil },
+		gitleaks.EnforceHandlerConfig{MaxContentBytes: 4},
+		metering.NewRiskRecorder(meterPub),
+	)
+	require.NoError(t, err)
+
+	request := riskv1.GitleaksEnforcement_builder{
+		RequestId:         new("scan-truncated"),
+		ProjectId:         new(uuid.NewString()),
+		OrganizationId:    new("org-truncated"),
+		CreatedAt:         new(time.Now().UTC().Format(time.RFC3339Nano)),
+		Content:           new("abcé"),
+		PolicyLinkReason:  new("realtime_no_matching_policy"),
+		MessageLinkReason: new("enforcement_test_unlinked"),
+	}.Build()
+	require.NoError(t, handler.Handle(t.Context(), request, replyMetadata("replica-truncated", "scan-truncated", nil)))
+
+	payload, err := client.LPop(t.Context(), enforcereply.InboxKey("replica-truncated")).Bytes()
+	require.NoError(t, err)
+	reply := new(riskv1.EnforcementReply)
+	require.NoError(t, proto.Unmarshal(payload, reply))
+	require.Equal(t, riskv1.EnforcementStatus_ENFORCEMENT_STATUS_OK, reply.GetStatus())
+	require.True(t, reply.GetContentTruncated())
+	require.False(t, reply.GetIncomplete())
+}
+
 func replyMetadata(replicaID, correlationID string, deliveryAttempt *int) gcp.MessageMetadata {
 	return gcp.MessageMetadata{
 		Attributes: map[string]string{
