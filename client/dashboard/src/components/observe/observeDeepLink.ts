@@ -4,6 +4,10 @@ import {
   encodeShadowServerFilter,
   type ParsedTargetFilter,
 } from "@/components/observe/observeTargetFilters";
+import {
+  withLoadedVia,
+  type SkillLoadChannel,
+} from "@/components/observe/skillLoadChannel";
 import { applyFilterAdd } from "@/pages/logs/log-filter-types";
 import { parseFilters, serializeFilters } from "@/pages/logs/log-filter-url";
 import { useProject } from "@/contexts/Auth";
@@ -52,6 +56,8 @@ export type ObserveDeepLinkScope = {
   userEmail?: string;
   hookSource?: string;
   clientKey?: string;
+  /** Narrows skill loads to one channel; rides in `af` like a tool name. */
+  loadedVia?: SkillLoadChannel;
 };
 
 function appendCsv(
@@ -120,15 +126,24 @@ export function buildObserveHref(
   appendCsv(params, "source", scope.hookSource);
   appendCsv(params, "client", scope.clientKey);
 
-  if (scope.toolName) {
+  if (scope.toolName || scope.loadedVia) {
     // Merged into the chips already applied, so an unrelated chip the reader
     // set survives the drill-down. An existing chip on this same path is
     // replaced rather than added to: two eq chips on one path AND to nothing.
-    const merged = applyFilterAdd(parseFilters(current.get("af")), {
-      path: TOOL_NAME_ATTRIBUTE_PATH,
-      op: Operator.Eq,
-      value: scope.toolName,
-    });
+    let merged = parseFilters(current.get("af"));
+    if (scope.toolName) {
+      merged = applyFilterAdd(merged, {
+        path: TOOL_NAME_ATTRIBUTE_PATH,
+        op: Operator.Eq,
+        value: scope.toolName,
+      });
+    }
+    if (scope.loadedVia) {
+      merged = withLoadedVia(merged, scope.loadedVia);
+      // The channel means nothing for a tool call: without the type, "MCP"
+      // would let every hosted tool call through.
+      params.set("hookTypes", "skill");
+    }
     const serialized = serializeFilters(merged);
     if (serialized) params.set("af", serialized);
   }
