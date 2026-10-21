@@ -193,13 +193,14 @@ func TestHandleToken_PrivateKeyJWT_AuthorizationCodeGrant(t *testing.T) {
 	w := postForm(t, ti, toolset.McpSlug.String, "token", codeGrantForm(client, code, verifier))
 	requireInvalidClient(t, w, http.StatusBadRequest)
 
-	// A secret alongside the assertion is a client that does not match its
-	// registration.
+	// A secret alongside the assertion presents two authentication methods.
 	code, verifier = seedAuthorizationCode(t, ctx, ti, toolset, client)
 	form := withAssertion(codeGrantForm(client, code, verifier), signer.assertion(t, client.ClientID, advertisedIssuer))
 	form.Set("client_secret", "not-a-thing-this-client-has")
 	w = postForm(t, ti, toolset.McpSlug.String, "token", form)
-	requireInvalidClient(t, w, http.StatusBadRequest)
+	require.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
+	require.Contains(t, w.Body.String(), `"error":"invalid_request"`)
+	require.Empty(t, w.Header().Get("WWW-Authenticate"))
 
 	code, verifier = seedAuthorizationCode(t, ctx, ti, toolset, client)
 	w = postForm(t, ti, toolset.McpSlug.String, "token", withAssertion(codeGrantForm(client, code, verifier), signer.assertion(t, client.ClientID, advertisedIssuer)))
@@ -488,8 +489,7 @@ func TestHandleRevoke_LegacyNullMethodRows(t *testing.T) {
 }
 
 // HTTP Basic credentials alongside an assertion are refused at the handler:
-// the extractor labels the mix, and the assertion client's rule rejects any
-// presented secret.
+// request validation rejects multiple methods before authentication.
 func TestHandleToken_PrivateKeyJWT_BasicAlongsideAssertionRejected(t *testing.T) {
 	t.Parallel()
 
@@ -514,7 +514,9 @@ func TestHandleToken_PrivateKeyJWT_BasicAlongsideAssertionRejected(t *testing.T)
 		req = req.WithContext(context.WithValue(t.Context(), chi.RouteCtxKey, rctx))
 		w := httptest.NewRecorder()
 		require.NoError(t, ti.service.HandleToken(w, req))
-		requireInvalidClient(t, w, http.StatusUnauthorized)
+		require.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
+		require.Contains(t, w.Body.String(), `"error":"invalid_request"`)
+		require.Empty(t, w.Header().Get("WWW-Authenticate"))
 	}
 }
 

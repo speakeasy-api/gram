@@ -690,16 +690,16 @@ func (s *OAuthHTTP) TokenHandler() http.Handler {
 				s.oauthTelemetry().Record(r.Context(), OAuthEvent{Operation: operation, Outcome: recorded.outcome(), Reason: recorded.reason})
 			}()
 		}
+		clientID, clientSecret, code := clientCredentials(r)
+		if code != "" {
+			writeClientAuthenticationError(w, r, code)
+			return
+		}
 		now := s.now()
 		resource := s.resource(r.Context())
-		clientID, clientSecret := clientCredentials(r)
 		client, err := s.authenticateClient(r.Context(), clientID, clientSecret, now)
 		if err != nil {
-			status, challenge := oauthwire.InvalidClientResponse(r.Header)
-			if challenge != "" {
-				w.Header().Set("WWW-Authenticate", challenge)
-			}
-			writeOAuthError(w, status, oautherr.CodeInvalidClient, "client authentication failed")
+			writeClientAuthenticationError(w, r, oautherr.CodeInvalidClient)
 			return
 		}
 		switch r.PostForm.Get("grant_type") {
@@ -763,22 +763,31 @@ func (s *OAuthHTTP) TokenHandler() http.Handler {
 func (s *OAuthHTTP) RevokeHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		r.Body = http.MaxBytesReader(w, r.Body, 16<<10)
-		if r.ParseForm() == nil {
-			clientID, secret := clientCredentials(r)
-			if client, err := s.authenticateClient(r.Context(), clientID, secret, s.now()); err == nil {
-				token := r.PostForm.Get("token")
-				switch r.PostForm.Get("token_type_hint") {
-				case "access_token":
-					s.revokeAccessToken(r.Context(), token, client.ID)
-				default:
-					if organizationID, decodeErr := s.credentials.OrganizationID(refreshTokenCredential, token); decodeErr == nil {
-						if _, err := s.store.RevokeSession(r.Context(), organizationID, opaqueHash(token), client.ID, time.Now()); err == nil {
-							break
-						}
-					}
-					s.revokeAccessToken(r.Context(), token, client.ID)
+		if err := r.ParseForm(); err != nil {
+			writeOAuthError(w, http.StatusBadRequest, oautherr.CodeInvalidRequest, "could not parse revocation request")
+			return
+		}
+		clientID, secret, code := clientCredentials(r)
+		if code != "" {
+			writeClientAuthenticationError(w, r, code)
+			return
+		}
+		client, err := s.authenticateClient(r.Context(), clientID, secret, s.now())
+		if err != nil {
+			writeClientAuthenticationError(w, r, oautherr.CodeInvalidClient)
+			return
+		}
+		token := r.PostForm.Get(oauthwire.ParamToken)
+		switch r.PostForm.Get(oauthwire.ParamTokenTypeHint) {
+		case "access_token":
+			s.revokeAccessToken(r.Context(), token, client.ID)
+		default:
+			if organizationID, decodeErr := s.credentials.OrganizationID(refreshTokenCredential, token); decodeErr == nil {
+				if _, err := s.store.RevokeSession(r.Context(), organizationID, opaqueHash(token), client.ID, time.Now()); err == nil {
+					break
 				}
 			}
+			s.revokeAccessToken(r.Context(), token, client.ID)
 		}
 		w.Header().Set("Cache-Control", "no-store")
 		w.Header().Set("Pragma", "no-cache")
@@ -1123,11 +1132,32 @@ func (s *OAuthHTTP) writeClientResolutionError(w http.ResponseWriter, ctx contex
 	writeOAuthError(w, http.StatusBadRequest, oautherr.CodeInvalidClient, "unknown client_id")
 }
 
-func clientCredentials(r *http.Request) (string, string) {
-	if id, secret, ok := r.BasicAuth(); ok {
-		return id, secret
+func writeClientAuthenticationError(w http.ResponseWriter, r *http.Request, code string) {
+	status := http.StatusBadRequest
+	description := "invalid client authentication request"
+	if code == oautherr.CodeInvalidClient {
+		var challenge string
+		status, challenge = oauthwire.InvalidClientResponse(r.Header)
+		if challenge != "" {
+			w.Header().Set("WWW-Authenticate", challenge)
+		}
+		description = "client authentication failed"
 	}
-	return r.PostForm.Get("client_id"), r.PostForm.Get("client_secret")
+	writeOAuthError(w, status, code, description)
+}
+
+func clientCredentials(r *http.Request) (id, secret, code string) {
+	if code := oauthwire.ClientAuthenticationError(r); code != "" {
+		return "", "", code
+	}
+	// Platform clients support secrets or public authentication, not assertions.
+	if r.PostForm.Get(oauthwire.ParamClientAssertion) != "" || r.PostForm.Get(oauthwire.ParamClientAssertionType) != "" {
+		return "", "", oautherr.CodeInvalidClient
+	}
+	if id, secret, ok := r.BasicAuth(); ok {
+		return id, secret, ""
+	}
+	return r.PostForm.Get(oauthwire.ParamClientID), r.PostForm.Get(oauthwire.ParamClientSecret), ""
 }
 
 func requireJSON(w http.ResponseWriter, r *http.Request, maxBytes int64) bool {

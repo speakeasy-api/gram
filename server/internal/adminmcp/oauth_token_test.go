@@ -249,6 +249,12 @@ func TestStaffOAuthPublicClientCannotPresentCredentials(t *testing.T) {
 	tokens.TokenHandler().ServeHTTP(response, publicStaffTokenRequest("authorization_code", url.Values{"code": {"one-time-code"}, "client_id": {staffClient, "client_other"}}))
 	require.Equal(t, http.StatusBadRequest, response.Code)
 
+	response = httptest.NewRecorder()
+	tokens.TokenHandler().ServeHTTP(response, publicStaffTokenRequest("authorization_code", url.Values{"code": {"one-time-code"}, "client_assertion": {"assertion"}, "client_assertion_type": {"jwt"}}))
+	require.Equal(t, http.StatusBadRequest, response.Code)
+	require.Contains(t, response.Body.String(), `"error":"invalid_client"`)
+	require.Empty(t, response.Header().Get("WWW-Authenticate"))
+
 	// Any other Authorization header is an ambiguous presentation, not absent.
 	for _, header := range []string{"Bearer some-token", "Basic not-base64", "Basic"} {
 		request := publicStaffTokenRequest("authorization_code", url.Values{"code": {"one-time-code"}, "redirect_uri": {"http://localhost:5555/callback"}, "code_verifier": {strings.Repeat("x", 43)}})
@@ -306,7 +312,7 @@ func TestStaffOAuthClientErrorResponses(t *testing.T) {
 		{name: "wrong basic secret", headers: []string{"Basic dW5rbm93bjp3cm9uZw=="}, status: http.StatusUnauthorized, code: "invalid_client", challenge: `Basic realm="Speakeasy"`},
 		{name: "malformed basic", headers: []string{"Basic invalid"}, status: http.StatusUnauthorized, code: "invalid_client", challenge: `Basic realm="Speakeasy"`},
 		{name: "missing basic credentials", headers: []string{"Basic"}, status: http.StatusUnauthorized, code: "invalid_client", challenge: `Basic realm="Speakeasy"`},
-		{name: "unsupported scheme", headers: []string{"Bearer token"}, status: http.StatusBadRequest, code: "invalid_client"},
+		{name: "unsupported scheme", headers: []string{"Bearer token"}, status: http.StatusUnauthorized, code: "invalid_client", challenge: `Bearer realm="Speakeasy"`},
 		{name: "missing credentials", status: http.StatusBadRequest, code: "invalid_client"},
 		{name: "public presentation", form: url.Values{"client_id": {staffClient}}, status: http.StatusBadRequest, code: "invalid_client"},
 		{name: "unsupported body secret", form: url.Values{"client_id": {staffClient}, "client_secret": {"wrong"}}, status: http.StatusBadRequest, code: "invalid_client"},
@@ -360,6 +366,36 @@ func TestStaffOAuthClientLookupUnavailable(t *testing.T) {
 			require.Empty(t, response.Header().Get("WWW-Authenticate"))
 			require.NotContains(t, response.Body.String(), "database unavailable")
 			require.Zero(t, store.validate)
+		})
+	}
+}
+
+func TestStaffOAuthRejectsMultipleValidCredentials(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name           string
+		repeatedHeader bool
+		fields         url.Values
+	}{
+		{name: "repeated authorization", repeatedHeader: true},
+		{name: "body secret", fields: url.Values{"client_secret": {"test-client-secret"}}},
+		{name: "assertion", fields: url.Values{"client_assertion": {"assertion"}}},
+		{name: "repeated assertion", fields: url.Values{"client_assertion": {"assertion", "assertion"}}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			tokens, store, _ := staffTokensFixture(t)
+			request := staffTokenRequest("authorization_code", tc.fields)
+			if tc.repeatedHeader {
+				request.Header.Add("Authorization", request.Header.Get("Authorization"))
+			}
+			response := httptest.NewRecorder()
+			tokens.TokenHandler().ServeHTTP(response, request)
+			require.Equal(t, http.StatusBadRequest, response.Code, response.Body.String())
+			require.Contains(t, response.Body.String(), `"error":"invalid_request"`)
+			require.Empty(t, response.Header().Get("WWW-Authenticate"))
+			require.Zero(t, store.validate)
+			require.Zero(t, store.exchange)
 		})
 	}
 }

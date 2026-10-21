@@ -299,6 +299,11 @@ func (s *Service) ServeToken(w http.ResponseWriter, r *http.Request, endpoint *R
 		return writeTokenError(ctx, w, s.logger, http.StatusBadRequest, "invalid_request", "failed to parse form")
 	}
 
+	credentialError := oauthwire.ClientAuthenticationError(r)
+	if credentialError == oautherr.CodeInvalidRequest {
+		return writeTokenError(ctx, w, s.logger, http.StatusBadRequest, credentialError, "invalid client authentication request")
+	}
+
 	logger := endpoint.LogWith(s.logger)
 
 	grantType := r.PostForm.Get("grant_type")
@@ -313,6 +318,9 @@ func (s *Service) ServeToken(w http.ResponseWriter, r *http.Request, endpoint *R
 		clientID, _ := resolvePresentedClientID(creds)
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth token request rejected", clientID, creds.method, grantType, oautherr.CodeUnsupportedGrantType)
 		return writeTokenError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeUnsupportedGrantType, "unsupported grant_type")
+	}
+	if credentialError == oautherr.CodeInvalidClient {
+		return writeInvalidClientError(ctx, w, r, logger, clientAuthFailureDescription)
 	}
 	return s.serveTokenGrant(ctx, w, r, endpoint, logger, grantType, creds, grant)
 }

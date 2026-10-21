@@ -1,18 +1,22 @@
 package mcp_test
 
 import (
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"strings"
 	"testing"
 
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 	goahttp "goa.design/goa/v3/http"
+	"golang.org/x/crypto/bcrypt"
 
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/authserver"
+	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
 func TestOAuthInvalidClientPerServer(t *testing.T) {
@@ -84,6 +88,7 @@ func requireOAuthClientErrorResponses(t *testing.T, handler http.Handler, base, 
 			name       string
 			headers    []string
 			formClient bool
+			code       string
 			status     int
 			challenge  string
 		}{
@@ -93,13 +98,15 @@ func requireOAuthClientErrorResponses(t *testing.T, handler http.Handler, base, 
 			{name: "malformed basic", headers: []string{"Basic invalid"}, status: http.StatusUnauthorized, challenge: `Basic realm="Speakeasy"`},
 			{name: "basic without credentials", headers: []string{"Basic"}, status: http.StatusUnauthorized, challenge: `Basic realm="Speakeasy"`},
 			{name: "basic and form", headers: []string{"Basic dW5rbm93bjp3cm9uZw=="}, formClient: true, status: http.StatusUnauthorized, challenge: `Basic realm="Speakeasy"`},
-			{name: "repeated basic", headers: []string{"Basic invalid", "Basic invalid"}, status: http.StatusUnauthorized, challenge: `Basic realm="Speakeasy"`},
+			{name: "repeated basic", headers: []string{"Basic invalid", "Basic invalid"}, status: http.StatusBadRequest, code: "invalid_request"},
+			{name: "unsupported scheme", headers: []string{"Bearer token"}, status: http.StatusUnauthorized, challenge: `Bearer realm="Speakeasy"`},
+			{name: "unsupported scheme with identifier", headers: []string{"Bearer token"}, formClient: true, status: http.StatusUnauthorized, challenge: `Bearer realm="Speakeasy"`},
 		} {
 			t.Run(endpoint+"/"+tc.name, func(t *testing.T) {
 				t.Parallel()
 				form := url.Values{oauthwire.ParamGrantType: {oauthwire.GrantTypeJWTBearer}, oauthwire.ParamResource: {resource}, oauthwire.ParamToken: {"unknown-token"}}
 				if tc.formClient {
-					form.Set(oauthwire.ParamClientID, "unknown-client")
+					form.Set(oauthwire.ParamClientID, "unknown")
 				}
 				req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, base+"/"+endpoint, strings.NewReader(form.Encode()))
 				req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
@@ -109,7 +116,11 @@ func requireOAuthClientErrorResponses(t *testing.T, handler http.Handler, base, 
 				response := httptest.NewRecorder()
 				handler.ServeHTTP(response, req)
 				require.Equal(t, tc.status, response.Code, response.Body.String())
-				require.Contains(t, response.Body.String(), `"error":"invalid_client"`)
+				code := tc.code
+				if code == "" {
+					code = "invalid_client"
+				}
+				require.Contains(t, response.Body.String(), `"error":"`+code+`"`)
 				require.Equal(t, tc.challenge, response.Header().Get("WWW-Authenticate"))
 				require.Equal(t, "no-store", response.Header().Get("Cache-Control"))
 				require.Empty(t, response.Header().Get("Location"))
@@ -127,4 +138,72 @@ func requireOAuthClientErrorResponses(t *testing.T, handler http.Handler, base, 
 		require.Contains(t, response.Body.String(), `"error":"unsupported_grant_type"`)
 		require.Empty(t, response.Header().Get("WWW-Authenticate"))
 	})
+}
+
+func TestOAuthRejectsMultipleValidCredentials(t *testing.T) {
+	t.Parallel()
+	for _, endpoint := range []string{"token", "revoke"} {
+		for _, tc := range []struct {
+			name           string
+			basic          bool
+			repeatedHeader bool
+			fields         url.Values
+		}{
+			{name: "repeated authorization", basic: true, repeatedHeader: true},
+			{name: "basic and body secret", basic: true, fields: url.Values{"client_secret": {"test-secret"}}},
+			{name: "basic and assertion", basic: true, fields: url.Values{"client_assertion": {"assertion"}, "client_assertion_type": {"jwt"}}},
+			{name: "repeated client id", basic: true, fields: url.Values{"client_id": {"test-client", "test-client"}}},
+			{name: "repeated secret", fields: url.Values{"client_secret": {"test-secret", "test-secret"}}},
+			{name: "body secret and assertion", fields: url.Values{"client_secret": {"test-secret"}, "client_assertion": {"assertion"}}},
+		} {
+			t.Run(endpoint+"/"+tc.name, func(t *testing.T) {
+				t.Parallel()
+				ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
+				toolset, issuer, _ := seedPrivateToolsetWithIssuer(t, ctx, ti)
+				hash, err := bcrypt.GenerateFromPassword([]byte("test-secret"), bcrypt.MinCost)
+				require.NoError(t, err)
+				client, err := usersessions_repo.New(ti.conn).CreateUserSessionClient(ctx, usersessions_repo.CreateUserSessionClientParams{
+					UserSessionIssuerID:     issuer.ID,
+					ClientID:                "test-client",
+					ClientName:              "Test client",
+					ClientSecretHash:        pgtype.Text{String: string(hash), Valid: true},
+					RedirectUris:            []string{"http://127.0.0.1:51423/callback"},
+					TokenEndpointAuthMethod: oauthwire.AuthMethodClientSecretBasic,
+				})
+				require.NoError(t, err)
+				form := url.Values{oauthwire.ParamClientID: {client.ClientID}, oauthwire.ParamToken: {"unknown-token"}}
+				if endpoint == "token" {
+					code, verifier := seedAuthorizationCode(t, ctx, ti, toolset, client)
+					form = codeGrantForm(client, code, verifier)
+				}
+				validForm := form.Encode()
+				maps.Copy(form, tc.fields)
+				router := goahttp.NewMuxer()
+				mcp.Attach(router, ti.service.Service, nil)
+				target := ti.serverURL.String() + "/mcp/" + toolset.McpSlug.String + "/" + endpoint
+				request := httptest.NewRequest(http.MethodPost, target, strings.NewReader(form.Encode()))
+				request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+				if tc.basic {
+					request.SetBasicAuth(client.ClientID, "test-secret")
+				}
+				if tc.repeatedHeader {
+					request.Header.Add("Authorization", request.Header.Get("Authorization"))
+				}
+				response := httptest.NewRecorder()
+				router.ServeHTTP(response, request)
+				require.Equal(t, http.StatusBadRequest, response.Code, response.Body.String())
+				require.Contains(t, response.Body.String(), `"error":"invalid_request"`)
+				require.Empty(t, response.Header().Get("WWW-Authenticate"))
+				require.Equal(t, "no-store", response.Header().Get("Cache-Control"))
+
+				// Rejection leaves the grant usable by a single valid authentication method.
+				request = httptest.NewRequest(http.MethodPost, target, strings.NewReader(validForm))
+				request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+				request.SetBasicAuth(client.ClientID, "test-secret")
+				response = httptest.NewRecorder()
+				router.ServeHTTP(response, request)
+				require.Equal(t, http.StatusOK, response.Code, response.Body.String())
+			})
+		}
+	}
 }

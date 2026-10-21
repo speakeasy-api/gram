@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -13,6 +14,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"golang.org/x/crypto/bcrypt"
 
 	"github.com/speakeasy-api/gram/server/internal/auth/identity"
 	"github.com/speakeasy-api/gram/server/internal/cache"
@@ -617,35 +619,41 @@ func TestOAuthHTTPPinsIDPCallbackToOutboundOrigin(t *testing.T) {
 func TestOAuthHTTPClientErrorResponses(t *testing.T) {
 	t.Parallel()
 
-	for _, tc := range []struct {
-		name      string
-		header    string
-		status    int
-		challenge string
-	}{
-		{name: "form client", status: http.StatusBadRequest},
-		{name: "basic", header: "Basic dW5rbm93bjp3cm9uZw==", status: http.StatusUnauthorized, challenge: `Basic realm="Speakeasy"`},
-		{name: "lowercase basic", header: "basic dW5rbm93bjp3cm9uZw==", status: http.StatusUnauthorized, challenge: `Basic realm="Speakeasy"`},
-		{name: "malformed basic", header: "Basic invalid", status: http.StatusUnauthorized, challenge: `Basic realm="Speakeasy"`},
-		{name: "missing basic credentials", header: "Basic", status: http.StatusUnauthorized, challenge: `Basic realm="Speakeasy"`},
-		{name: "unsupported scheme", header: "Bearer token", status: http.StatusBadRequest},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			service := newTestOAuthHTTP(t)
-			request := httptest.NewRequest(http.MethodPost, "/platform-mcp/token", strings.NewReader("grant_type=refresh_token&refresh_token=x&client_id=unknown"))
-			request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-			if tc.header != "" {
-				request.Header.Set("Authorization", tc.header)
-			}
-			response := httptest.NewRecorder()
-			service.TokenHandler().ServeHTTP(response, request)
-			require.Equal(t, tc.status, response.Code, response.Body.String())
-			require.Contains(t, response.Body.String(), `"error":"invalid_client"`)
-			require.Contains(t, response.Body.String(), `"error_description":"client authentication failed"`)
-			require.Equal(t, tc.challenge, response.Header().Get("WWW-Authenticate"))
-			require.Equal(t, "no-store", response.Header().Get("Cache-Control"))
-		})
+	for _, endpoint := range []string{"token", "revoke"} {
+		for _, tc := range []struct {
+			name      string
+			header    string
+			status    int
+			challenge string
+		}{
+			{name: "form client", status: http.StatusBadRequest},
+			{name: "basic", header: "Basic dW5rbm93bjp3cm9uZw==", status: http.StatusUnauthorized, challenge: `Basic realm="Speakeasy"`},
+			{name: "lowercase basic", header: "basic dW5rbm93bjp3cm9uZw==", status: http.StatusUnauthorized, challenge: `Basic realm="Speakeasy"`},
+			{name: "malformed basic", header: "Basic invalid", status: http.StatusUnauthorized, challenge: `Basic realm="Speakeasy"`},
+			{name: "missing basic credentials", header: "Basic", status: http.StatusUnauthorized, challenge: `Basic realm="Speakeasy"`},
+			{name: "unsupported scheme", header: "Bearer token", status: http.StatusUnauthorized, challenge: `Bearer realm="Speakeasy"`},
+		} {
+			t.Run(endpoint+"/"+tc.name, func(t *testing.T) {
+				t.Parallel()
+				service := newTestOAuthHTTP(t)
+				request := httptest.NewRequest(http.MethodPost, "/platform-mcp/"+endpoint, strings.NewReader("grant_type=refresh_token&refresh_token=x&client_id=unknown"))
+				request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+				if tc.header != "" {
+					request.Header.Set("Authorization", tc.header)
+				}
+				response := httptest.NewRecorder()
+				if endpoint == "token" {
+					service.TokenHandler().ServeHTTP(response, request)
+				} else {
+					service.RevokeHandler().ServeHTTP(response, request)
+				}
+				require.Equal(t, tc.status, response.Code, response.Body.String())
+				require.Contains(t, response.Body.String(), `"error":"invalid_client"`)
+				require.Contains(t, response.Body.String(), `"error_description":"client authentication failed"`)
+				require.Equal(t, tc.challenge, response.Header().Get("WWW-Authenticate"))
+				require.Equal(t, "no-store", response.Header().Get("Cache-Control"))
+			})
+		}
 	}
 }
 
@@ -683,5 +691,98 @@ func TestOAuthHTTPAuthorizeClientLookupErrors(t *testing.T) {
 			require.Empty(t, response.Header().Get("Location"))
 			require.NotContains(t, response.Body.String(), "database unavailable")
 		})
+	}
+}
+
+func TestOAuthHTTPRejectsMultipleValidCredentials(t *testing.T) {
+	t.Parallel()
+	for _, endpoint := range []string{"token", "revoke"} {
+		for _, tc := range []struct {
+			name           string
+			repeatedHeader bool
+			fields         url.Values
+		}{
+			{name: "repeated authorization", repeatedHeader: true},
+			{name: "body secret", fields: url.Values{"client_secret": {"test-secret"}}},
+			{name: "assertion", fields: url.Values{"client_assertion": {"assertion"}}},
+			{name: "repeated client id", fields: url.Values{"client_id": {"test-client", "test-client"}}},
+			{name: "repeated secret", fields: url.Values{"client_secret": {"test-secret", "test-secret"}}},
+		} {
+			t.Run(endpoint+"/"+tc.name, func(t *testing.T) {
+				t.Parallel()
+				service := newTestOAuthHTTP(t)
+				hash, err := bcrypt.GenerateFromPassword([]byte("test-secret"), bcrypt.MinCost)
+				require.NoError(t, err)
+				require.NoError(t, testStore(t, service).RegisterClient(t.Context(), platformoauth.Client{ID: "test-client", SecretHash: string(hash)}))
+				form := url.Values{"grant_type": {"refresh_token"}, "refresh_token": {"unknown-token"}, "token": {"unknown-token"}, "client_id": {"test-client"}}
+				validForm := form.Encode()
+				maps.Copy(form, tc.fields)
+				handler := service.TokenHandler()
+				if endpoint == "revoke" {
+					handler = service.RevokeHandler()
+				}
+				request := httptest.NewRequest(http.MethodPost, "/platform-mcp/"+endpoint, strings.NewReader(form.Encode()))
+				request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+				request.SetBasicAuth("test-client", "test-secret")
+				if tc.repeatedHeader {
+					request.Header.Add("Authorization", request.Header.Get("Authorization"))
+				}
+				response := httptest.NewRecorder()
+				handler.ServeHTTP(response, request)
+				require.Equal(t, http.StatusBadRequest, response.Code, response.Body.String())
+				require.Contains(t, response.Body.String(), `"error":"invalid_request"`)
+				require.Empty(t, response.Header().Get("WWW-Authenticate"))
+				require.Equal(t, "no-store", response.Header().Get("Cache-Control"))
+
+				request = httptest.NewRequest(http.MethodPost, "/platform-mcp/"+endpoint, strings.NewReader(validForm))
+				request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+				request.SetBasicAuth("test-client", "test-secret")
+				response = httptest.NewRecorder()
+				handler.ServeHTTP(response, request)
+				if endpoint == "revoke" {
+					require.Equal(t, http.StatusOK, response.Code, response.Body.String())
+				} else {
+					require.Equal(t, http.StatusBadRequest, response.Code, response.Body.String())
+					require.Contains(t, response.Body.String(), `"error":"invalid_grant"`)
+				}
+			})
+		}
+	}
+}
+
+func TestOAuthHTTPUnsupportedAuthenticationCannotFallBackToPublicClient(t *testing.T) {
+	t.Parallel()
+	for _, endpoint := range []string{"token", "revoke"} {
+		for _, tc := range []struct {
+			name      string
+			header    string
+			form      string
+			status    int
+			challenge string
+		}{
+			{name: "bearer", header: "Bearer token", status: http.StatusUnauthorized, challenge: `Bearer realm="Speakeasy"`},
+			{name: "malformed basic", header: "Basic invalid", status: http.StatusUnauthorized, challenge: `Basic realm="Speakeasy"`},
+			{name: "unsupported assertion", form: "&client_assertion=assertion&client_assertion_type=jwt", status: http.StatusBadRequest},
+		} {
+			t.Run(endpoint+"/"+tc.name, func(t *testing.T) {
+				t.Parallel()
+				service := newTestOAuthHTTP(t)
+				require.NoError(t, testStore(t, service).RegisterClient(t.Context(), platformoauth.Client{ID: "public-client"}))
+				request := httptest.NewRequest(http.MethodPost, "/platform-mcp/"+endpoint, strings.NewReader("client_id=public-client&grant_type=refresh_token&refresh_token=unknown&token=unknown"+tc.form))
+				request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+				if tc.header != "" {
+					request.Header.Set("Authorization", tc.header)
+				}
+				response := httptest.NewRecorder()
+				handler := service.TokenHandler()
+				if endpoint == "revoke" {
+					handler = service.RevokeHandler()
+				}
+				handler.ServeHTTP(response, request)
+				require.Equal(t, tc.status, response.Code, response.Body.String())
+				require.Contains(t, response.Body.String(), `"error":"invalid_client"`)
+				require.Equal(t, tc.challenge, response.Header().Get("WWW-Authenticate"))
+			})
+		}
 	}
 }

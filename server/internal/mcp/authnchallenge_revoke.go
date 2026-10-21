@@ -17,6 +17,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
+	"github.com/speakeasy-api/gram/server/internal/oautherr"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
@@ -78,6 +79,13 @@ func (s *Service) serveRevoke(w http.ResponseWriter, r *http.Request, logger *sl
 	r.Body = http.MaxBytesReader(w, r.Body, 16<<10)
 	if err := r.ParseForm(); err != nil {
 		return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_request", "failed to parse form")
+	}
+
+	if code := oauthwire.ClientAuthenticationError(r); code != "" {
+		if code == oautherr.CodeInvalidClient {
+			return writeInvalidClientError(ctx, w, r, logger, clientAuthFailureDescription)
+		}
+		return writeTokenError(ctx, w, logger, http.StatusBadRequest, code, "invalid client authentication request")
 	}
 
 	creds := extractClientCredentials(r)

@@ -125,7 +125,7 @@ type staffPresentedClient struct {
 // staffClientCredentials accepts exactly one presentation: HTTP Basic for
 // confidential clients, or a single form client_id with no secret and no
 // Authorization header for public clients. A form client_secret, a Basic
-// header mixed with a form client_id, or any other Authorization header is
+// header mixed with a form client_id, a client assertion, or any other header is
 // refused. The returned OAuth error code distinguishes duplicate or mixed
 // credentials from a failed authentication method; an empty code means success.
 func staffClientCredentials(r *http.Request) (staffPresentedClient, string) {
@@ -136,7 +136,10 @@ func staffClientCredentials(r *http.Request) (staffPresentedClient, string) {
 		(len(authorization) > 0 && (r.PostForm.Has(oauthwire.ParamClientID) || r.PostForm.Has(oauthwire.ParamClientSecret))) {
 		return staffPresentedClient{ID: "", Secret: "", Public: false}, oautherr.CodeInvalidRequest
 	}
-	if r.PostForm.Has(oauthwire.ParamClientSecret) {
+	if code := oauthwire.ClientAuthenticationError(r); code != "" {
+		return staffPresentedClient{ID: "", Secret: "", Public: false}, code
+	}
+	if r.PostForm.Has(oauthwire.ParamClientSecret) || r.PostForm.Has(oauthwire.ParamClientAssertion) || r.PostForm.Has(oauthwire.ParamClientAssertionType) {
 		return staffPresentedClient{ID: "", Secret: "", Public: false}, oautherr.CodeInvalidClient
 	}
 	if id, secret, basic := r.BasicAuth(); basic {
