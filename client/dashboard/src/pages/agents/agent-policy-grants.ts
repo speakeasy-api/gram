@@ -8,7 +8,6 @@ import type {
 } from "@gram/client/models/components/agentpolicyselector.js";
 import type { ScopeDefinition } from "@gram/client/models/components/scopedefinition.js";
 import type { Selector } from "@gram/client/models/components/selector.js";
-import type { ScopeGroup } from "@/pages/access/RolePermissionsSection";
 import type { ResourceType } from "@/pages/access/types";
 
 import { ANY_RESOURCE, delegableGrantKey } from "./agent-api-key-grants";
@@ -112,45 +111,6 @@ export const AGENT_POLICY_SCOPES: (ScopeDefinition & {
     visibility: "user_visible",
     description: "Evaluate risk policies.",
     agentEligible: true,
-  },
-];
-
-export const AGENT_POLICY_SCOPE_GROUPS: ScopeGroup[] = [
-  {
-    label: "MCP Servers",
-    resourceType: "mcp",
-    description: "MCP server configuration and connections.",
-    scopes: AGENT_POLICY_SCOPES.filter((s) => s.resourceType === "mcp"),
-  },
-  {
-    label: "Build & Deploy",
-    resourceType: "project",
-    description: "Projects and their related resources.",
-    scopes: AGENT_POLICY_SCOPES.filter((s) => s.resourceType === "project"),
-  },
-  {
-    label: "Environments",
-    resourceType: "environment",
-    description: "Environments and their entries within projects.",
-    scopes: AGENT_POLICY_SCOPES.filter((s) => s.resourceType === "environment"),
-  },
-  {
-    label: "Skills",
-    resourceType: "skill",
-    description: "Skills available within projects.",
-    scopes: AGENT_POLICY_SCOPES.filter((s) => s.resourceType === "skill"),
-  },
-  {
-    label: "Assistants",
-    resourceType: "assistant",
-    description: "Assistants available within projects.",
-    scopes: AGENT_POLICY_SCOPES.filter((s) => s.resourceType === "assistant"),
-  },
-  {
-    label: "Risk Policies",
-    resourceType: "risk_policy",
-    description: "Risk policy evaluation for MCP traffic.",
-    scopes: AGENT_POLICY_SCOPES.filter((s) => s.resourceType === "risk_policy"),
   },
 ];
 
@@ -442,36 +402,6 @@ export function diffAgentPolicyGrants(
       .filter(([key]) => !nextKeys.has(key))
       .map(([, grant]) => grant),
   };
-}
-
-/**
- * Drop the caches a half-finished save made untrustworthy.
- *
- * `resetQueries`, not `invalidateQueries`: an invalidated query still serves
- * its cached data as a success while it refetches, which would let the next
- * editor build a draft on a ceiling that may never have existed. Resetting
- * clears it, so an active observer refetches and a later one loads fresh.
- *
- * Always called with the ids the save began under, so keys belonging to a
- * context the app has since moved to are left alone.
- */
-export function discardAgentPolicyCaches(
-  queryClient: QueryClient,
-  organizationId: string,
-  userId: string,
-  agentID: string,
-): Promise<unknown> {
-  return Promise.all([
-    queryClient.resetQueries({
-      queryKey: ["agent-policy-grants", organizationId, agentID],
-    }),
-    queryClient.resetQueries({
-      queryKey: ["agent-delegable-grants", organizationId, userId, agentID],
-    }),
-    queryClient.invalidateQueries({
-      queryKey: ["managed-agents", organizationId],
-    }),
-  ]);
 }
 
 /**

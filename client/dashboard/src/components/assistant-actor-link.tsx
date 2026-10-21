@@ -1,7 +1,7 @@
-import { AgentLink } from "@/components/agent-link";
-import { IdentityLink } from "@/components/identity-link";
+import { ActingPrincipal } from "@/components/ui/ActingPrincipal";
 import { Icon } from "@/components/ui/Icon";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
+import { useReadableAgents } from "@/hooks/useReadableAgents";
 import { useRoutes } from "@/routes";
 import { cn } from "@/lib/utils";
 import type { JSX } from "react";
@@ -16,48 +16,6 @@ type AssistantActor = {
 };
 
 /**
- * The agent principal a session ran as, when no assistant produced it. A
- * channel session has no assistant record, so this is the only thing that names
- * the agent that made the calls.
- *
- * A name means the agent still resolves from the project's own organization, so
- * only then is the identity page reachable; an agent deleted since capture
- * resolves to no name, and its short id renders as plain text rather than a link
- * to a page that would report the identity as missing. AgentLink applies the
- * same rule, hence passing the id only once it resolved.
- */
-function ActingAgentLink({
-  agentId,
-  agentName,
-  className,
-}: {
-  agentId: string;
-  agentName?: string;
-  className?: string;
-}): JSX.Element {
-  const resolved = Boolean(agentName);
-  return (
-    <SimpleTooltip
-      tooltip={
-        resolved
-          ? "Agent identity this session ran as"
-          : "The agent this session ran as has since been deleted"
-      }
-    >
-      <span className={cn("inline-flex min-w-0 items-center gap-1", className)}>
-        <Icon name="bot" className="size-3.5 shrink-0 opacity-60" />
-        <AgentLink
-          agentId={resolved ? agentId : undefined}
-          className="block min-w-0 truncate"
-        >
-          {agentName ?? agentId.slice(0, 8)}
-        </AgentLink>
-      </span>
-    </SimpleTooltip>
-  );
-}
-
-/**
  * The assistant a session ran as, linked to the agent identity it acts as or,
  * for an assistant without one, to the assistant itself. A session with no
  * assistant falls back to the agent principal that produced it.
@@ -70,14 +28,40 @@ export function AssistantActorLink({
   className?: string;
 }): JSX.Element | null {
   const routes = useRoutes();
+  // A chat row carries the agent's id, which is not permission to open that
+  // agent: a reader who may read the chat may not be allowed the agent. One
+  // cached inventory request serves every row, and an agent missing from it
+  // stays plain text rather than offering a door the next page refuses.
+  //
+  // A channel session has no assistant record, so the agent principal that
+  // produced it is the only thing that names who made the calls.
+  const agentId = chat.assistantName ? chat.assistantAgentId : chat.agentId;
+  const agents = useReadableAgents(Boolean(agentId));
+  const readable =
+    !agents.isError &&
+    (agents.data ?? []).some((agent) => agent.id === agentId);
+
   if (!chat.assistantName) {
     if (!chat.agentId) return null;
+    // No name means the agent no longer resolves in the organization; its id
+    // stays plain text rather than linking to a page reporting it missing.
+    const resolved = Boolean(chat.agentName);
     return (
-      <ActingAgentLink
-        agentId={chat.agentId}
-        agentName={chat.agentName}
-        className={className}
-      />
+      <SimpleTooltip
+        tooltip={
+          resolved
+            ? "Agent identity this session ran as"
+            : "The agent this session ran as has since been deleted"
+        }
+      >
+        <span className={cn("inline-flex min-w-0", className)}>
+          <ActingPrincipal
+            agent={{ id: chat.agentId, name: chat.agentName }}
+            linked={resolved && readable}
+            className="text-sm"
+          />
+        </span>
+      </SimpleTooltip>
     );
   }
 
@@ -90,16 +74,18 @@ export function AssistantActorLink({
   );
 
   if (chat.assistantAgentId) {
+    // The shared renderer, so an assistant acting as an agent carries the
+    // same face as the agent does everywhere else. No authorizer: a chat row
+    // records the assistant and its agent, not whoever approved the session.
     return (
       <SimpleTooltip tooltip="Agent identity this assistant acts as">
-        {wrap(
-          <IdentityLink
-            identifier={{ urn: `agent:${chat.assistantAgentId}` }}
-            className="block min-w-0 truncate"
-          >
-            {name}
-          </IdentityLink>,
-        )}
+        <span className={cn("inline-flex min-w-0", className)}>
+          <ActingPrincipal
+            agent={{ id: chat.assistantAgentId, name }}
+            linked={readable}
+            className="text-sm"
+          />
+        </span>
       </SimpleTooltip>
     );
   }
