@@ -554,7 +554,7 @@ func (s *Service) loadMemberToolset(
 	if member.serverID == toolset.ID && !toolset.McpEnabled {
 		return nil, uuid.Nil, &metaMemberError{message: fmt.Sprintf("server %q is not currently servable", member.slug)}
 	}
-	allowed, err := s.memberToolsetConnectAllowed(ctx, gate.authenticated, &toolset)
+	allowed, err := s.memberToolsetConnectAllowed(ctx, s.newMandatoryShadow(ctx, toolset.OrganizationID), mandatorySurfaceGatewayMember, gate.authenticated, &toolset)
 	if err != nil {
 		return nil, uuid.Nil, oops.E(oops.CodeUnexpected, err, "check toolset-level authz").LogError(ctx, logger)
 	}
@@ -568,14 +568,19 @@ func (s *Service) loadMemberToolset(
 // memberToolsetConnectAllowed applies a non-public toolset's own mcp:connect
 // gate, matching ServeToolsetResolved's connection check. Grants context was
 // prepared when the member snapshot was resolved.
-func (s *Service) memberToolsetConnectAllowed(ctx context.Context, authenticated bool, toolset *toolsets_repo.Toolset) (bool, error) {
+func (s *Service) memberToolsetConnectAllowed(ctx context.Context, shadow *mandatoryShadow, shadowSurface string, authenticated bool, toolset *toolsets_repo.Toolset) (bool, error) {
+	connect := authz.MCPCheck(authz.ScopeMCPConnect, toolset.ID.String(), toolset.ProjectID.String())
 	if toolset.McpIsPublic {
+		shadow.record(ctx, shadowSurface, true, connect)
 		return true, nil
 	}
 	if !authenticated {
+		shadow.record(ctx, shadowSurface, false, connect)
 		return false, nil
 	}
-	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPConnect, toolset.ID.String(), toolset.ProjectID.String())); err != nil {
+	err := s.authz.Require(ctx, connect)
+	shadow.shadowRequire(ctx, shadowSurface, err, connect)
+	if err != nil {
 		if oopsErr, ok := errors.AsType[*oops.ShareableError](err); ok && oopsErr.Code == oops.CodeForbidden {
 			return false, nil
 		}

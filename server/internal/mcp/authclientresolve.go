@@ -287,7 +287,7 @@ func (u *upstreamSelector) resolveAuthClient(ctx context.Context, serverID uuid.
 // as a request will use it: checked against the permitter, with the client's
 // headers loaded. The caller turns the outcome into a response, so direct
 // endpoints and gateway members can answer it their own way.
-func (s *Service) resolveAuthClientForServing(ctx context.Context, selector *upstreamSelector, serverID uuid.UUID, subject urn.SessionSubject) (authClientResolution, error) {
+func (s *Service) resolveAuthClientForServing(ctx context.Context, selector *upstreamSelector, serverID, projectID uuid.UUID, subject urn.SessionSubject) (authClientResolution, error) {
 	res, err := selector.resolveAuthClient(ctx, serverID)
 	if err != nil {
 		return res, err
@@ -305,6 +305,7 @@ func (s *Service) resolveAuthClientForServing(ctx context.Context, selector *ups
 		if err != nil {
 			return res, fmt.Errorf("check auth client permission: %w", err)
 		}
+		s.shadowMandatory(ctx, mandatorySurfaceAuthClient, selector.organizationID, permitted, mandatoryAuthClientCheck(projectID, res.clientID, res.clientType, subject))
 		if !permitted {
 			res.outcome = authClientNoAccess
 			res.reason = authClientReasonNotPermitted
@@ -407,7 +408,7 @@ func annotateAuthClient(ctx context.Context, logger *slog.Logger, res authClient
 func (s *Service) enforceAuthClient(ctx context.Context, w http.ResponseWriter, authentication *issuerGateAuthentication, selector *upstreamSelector) (upstreamChoice, bool, error) {
 	var none upstreamChoice
 	endpoint := authentication.endpoint
-	res, err := s.resolveAuthClientForServing(ctx, selector, endpoint.McpServerID.UUID, authentication.subject)
+	res, err := s.resolveAuthClientForServing(ctx, selector, endpoint.McpServerID.UUID, endpoint.ProjectID, authentication.subject)
 	if err != nil {
 		return none, true, oops.E(oops.CodeUnexpected, err, "resolve auth client").LogError(ctx, s.logger)
 	}
@@ -512,12 +513,18 @@ func legacyChoiceOutcome(choice upstreamChoice, err error) authClientOutcome {
 // shadowAuthClient compares the resolver with the upstream client choice for
 // the same request and reports disagreement. It never changes the request and
 // never asks the permitter.
-func (s *Service) shadowAuthClient(ctx context.Context, selector *upstreamSelector, serverID uuid.UUID, choice upstreamChoice, choiceErr error) {
+func (s *Service) shadowAuthClient(ctx context.Context, selector *upstreamSelector, serverID, projectID uuid.UUID, subject urn.SessionSubject, choice upstreamChoice, choiceErr error) {
 	res, err := selector.resolveAuthClient(ctx, serverID)
 	if err != nil {
 		s.metrics.RecordAuthClientParity(ctx, false, authClientParityError, string(legacyChoiceOutcome(choice, choiceErr)), authClientReasonNone)
 		s.logger.WarnContext(ctx, "auth client resolver shadow failed", attr.SlogMcpServerID(serverID.String()), attr.SlogError(err))
 		return
+	}
+	// Compare only a legacy decision: a missing or unusable choice refuses
+	// the request, any other error is not a decision.
+	legacyDenied := errors.Is(choiceErr, errUpstreamSelectionMissing) || errors.Is(choiceErr, errUpstreamSelectionUnusable)
+	if res.outcome == authClientResolved && (choiceErr == nil || legacyDenied) {
+		s.shadowMandatory(ctx, mandatorySurfaceAuthClient, selector.organizationID, choiceErr == nil, mandatoryAuthClientCheck(projectID, res.clientID, res.clientType, subject))
 	}
 	annotateAuthClient(ctx, s.logger, res)
 	s.reportAuthClientParity(ctx, selector.organizationID, serverID, res, choice, choiceErr)

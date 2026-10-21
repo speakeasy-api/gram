@@ -419,7 +419,7 @@ func (s *Service) consentSubjectMembers(ctx context.Context, endpoint *ResolvedM
 	if err != nil {
 		return nil, fmt.Errorf("stamp consent subject context: %w", err)
 	}
-	_, members, err := s.resolveEndpointMemberSnapshot(memberCtx, s.logger, endpoint)
+	_, members, err := s.resolveEndpointMemberSnapshot(memberCtx, s.logger, mandatorySurfaceConsent, endpoint)
 	if err != nil {
 		return nil, fmt.Errorf("resolve gateway members: %w", err)
 	}

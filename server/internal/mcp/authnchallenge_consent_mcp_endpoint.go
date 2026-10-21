@@ -300,12 +300,18 @@ func (s *Service) authorizedToolsetConsentInventory(ctx context.Context, endpoin
 			return nil, nil, oops.E(oops.CodeUnauthorized, nil, "consent subject has no authenticated context").LogWarn(ctx, logger)
 		}
 	}
+	connectResourceID := endpoint.connectResourceID()
+	connect := authz.MCPCheck(authz.ScopeMCPConnect, connectResourceID.String(), endpoint.ProjectID.String())
+	if s.authz != nil && !private {
+		s.shadowMandatory(authzCtx, mandatorySurfaceConsent, endpoint.OrganizationID, true, connect)
+	}
 	if s.authz != nil && private {
 		if authzCtx, cerr = s.authz.PrepareContext(authzCtx); cerr != nil {
 			return nil, nil, oops.E(oops.CodeUnexpected, cerr, "load access grants for consent inventory").LogError(ctx, logger)
 		}
-		connectResourceID := endpoint.connectResourceID()
-		if cerr = s.authz.Require(authzCtx, authz.MCPCheck(authz.ScopeMCPConnect, connectResourceID.String(), endpoint.ProjectID.String())); cerr != nil {
+		cerr = s.authz.Require(authzCtx, connect)
+		s.newMandatoryShadow(authzCtx, endpoint.OrganizationID).shadowRequire(authzCtx, mandatorySurfaceConsent, cerr, connect)
+		if cerr != nil {
 			return nil, nil, fmt.Errorf("authorize consent inventory access: %w", mcpaccess.ServerPermissionDenied(cerr, s.requestAccessURL(authzCtx, connectResourceID.String(), toolset.Name)))
 		}
 	}
@@ -400,7 +406,7 @@ func (s *Service) serveConsentProxiedMCP(
 		challengeState.Federation == nil && !challengeState.CreatedAt.IsZero() && !challengeState.CreatedAt.After(time.Now().Add(time.Minute)) {
 		ctx = s.identityValidator.StampConsentDiscovery(ctx, subject.ID, challengeState.CreatedAt.Add(challengeState.TTL()))
 	}
-	ctx, err = s.authorizeProxyBackendAccess(ctx, logger, endpoint.ProjectID, serverRow)
+	ctx, err = s.authorizeProxyBackendAccess(ctx, logger, mandatorySurfaceConsent, endpoint.OrganizationID, endpoint.ProjectID, serverRow)
 	if err != nil {
 		return fmt.Errorf("authorize consent transport access: %w", err)
 	}

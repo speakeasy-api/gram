@@ -877,6 +877,12 @@ func (s *Service) prepareProxyBackendContext(
 	// sessions, and would reject a perfectly valid user-session JWT. Skip
 	// it and trust the gate.
 	issuerGated := mcpServer.UserSessionIssuerID.Valid && !isTunneledPublic(mcpServer)
+	organizationID := projectWithOrganization.ID
+	connect := authz.MCPCheck(authz.ScopeMCPConnect, mcpServer.ID.String(), endpoint.ProjectID.String())
+	denied := func(err error) (context.Context, string, error) {
+		s.newMandatoryShadow(ctx, organizationID).shadowRequire(ctx, mandatorySurfaceProxiedConnect, err, connect)
+		return nil, "", err
+	}
 	if issuerGated {
 		// Public issuer-gated endpoints may carry an anonymous subject, which
 		// intentionally has no dashboard AuthContext. Private endpoints still
@@ -885,11 +891,11 @@ func (s *Service) prepareProxyBackendContext(
 		authCtx, ok := contextvalues.GetAuthContext(ctx)
 		if !ok || authCtx == nil {
 			if mcpServer.Visibility == mcpservers.VisibilityPrivate {
-				return nil, "", oops.C(oops.CodeUnauthorized)
+				return denied(oops.C(oops.CodeUnauthorized))
 			}
 		} else {
 			if projectWithOrganization.ID != authCtx.ActiveOrganizationID {
-				return nil, "", oops.C(oops.CodeUnauthorized)
+				return denied(oops.C(oops.CodeUnauthorized))
 			}
 			ctx = setProxyBackendProjectContext(ctx, authCtx, projectWithOrganization.ProjectID, projectWithOrganization.ProjectSlug)
 		}
@@ -905,15 +911,15 @@ func (s *Service) prepareProxyBackendContext(
 		if !issuerGated {
 			ctx, err = s.RequirePrivateIdentityAuth(ctx, w, r, false, mcpServer.ID, "")
 			if err != nil {
-				return nil, "", fmt.Errorf("private identity auth: %w", err)
+				return denied(fmt.Errorf("private identity auth: %w", err))
 			}
 
 			authCtx, ok := contextvalues.GetAuthContext(ctx)
 			if !ok || authCtx == nil || projectWithOrganization.ID != authCtx.ActiveOrganizationID {
-				return nil, "", oops.C(oops.CodeUnauthorized)
+				return denied(oops.C(oops.CodeUnauthorized))
 			}
 			if err := requirePrincipalCredentialProject(ctx, projectWithOrganization.ProjectID); err != nil {
-				return nil, "", err
+				return denied(err)
 			}
 			ctx = setProxyBackendProjectContext(ctx, authCtx, projectWithOrganization.ProjectID, projectWithOrganization.ProjectSlug)
 		}
@@ -925,7 +931,7 @@ func (s *Service) prepareProxyBackendContext(
 		if !issuerGated {
 			ctx, err = s.TryPublicIdentityAuth(ctx, r, false, mcpServer.ID)
 			if err != nil {
-				return nil, "", fmt.Errorf("public identity auth: %w", err)
+				return denied(fmt.Errorf("public identity auth: %w", err))
 			}
 			authCtx, ok := contextvalues.GetAuthContext(ctx)
 			if ok && authCtx != nil && authCtx.ProjectID == nil && projectWithOrganization.ID == authCtx.ActiveOrganizationID {
@@ -936,7 +942,7 @@ func (s *Service) prepareProxyBackendContext(
 		return nil, "", oops.E(oops.CodeUnexpected, nil, "unrecognized mcp server visibility %q", mcpServer.Visibility).LogError(ctx, logger)
 	}
 
-	ctx, err = s.authorizeProxyBackendAccess(ctx, logger, endpoint.ProjectID, mcpServer)
+	ctx, err = s.authorizeProxyBackendAccess(ctx, logger, mandatorySurfaceProxiedConnect, organizationID, endpoint.ProjectID, mcpServer)
 	if err != nil {
 		return nil, "", err
 	}
@@ -972,7 +978,29 @@ func (s *Service) prepareProxyBackendContext(
 func (s *Service) authorizeProxyBackendAccess(
 	ctx context.Context,
 	logger *slog.Logger,
+	surface string,
+	organizationID string,
 	projectID uuid.UUID,
+	mcpServer *mcpserversrepo.McpServer,
+) (context.Context, error) {
+	// mcp:connect covers non-tool proxy methods; tool interceptors still enforce per-tool scopes.
+	connect := authz.MCPCheck(authz.ScopeMCPConnect, mcpServer.ID.String(), projectID.String())
+	authorized, err := s.requireProxyBackendAccess(ctx, logger, connect, mcpServer)
+	shadowCtx := ctx
+	if authorized != nil {
+		shadowCtx = authorized
+	}
+	s.newMandatoryShadow(shadowCtx, organizationID).shadowRequire(shadowCtx, surface, err, connect)
+	if err != nil {
+		return nil, err
+	}
+	return authorized, nil
+}
+
+func (s *Service) requireProxyBackendAccess(
+	ctx context.Context,
+	logger *slog.Logger,
+	connect authz.Check,
 	mcpServer *mcpserversrepo.McpServer,
 ) (context.Context, error) {
 	switch mcpServer.Visibility {
@@ -986,14 +1014,12 @@ func (s *Service) authorizeProxyBackendAccess(
 			}
 			return nil, oops.E(oops.CodeUnexpected, prepErr, "load access grants").LogError(ctx, logger)
 		}
-
-		// mcp:connect covers non-tool proxy methods; tool interceptors still enforce per-tool scopes.
-		if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPConnect, mcpServer.ID.String(), projectID.String())); err != nil {
+		if err := s.authz.Require(ctx, connect); err != nil {
 			serverName := ""
 			if mcpServer.Name.Valid {
 				serverName = mcpServer.Name.String
 			}
-			return nil, fmt.Errorf("authorize MCP server access: %w", mcpaccess.ServerPermissionDenied(err, s.requestAccessURL(ctx, mcpServer.ID.String(), serverName)))
+			return ctx, fmt.Errorf("authorize MCP server access: %w", mcpaccess.ServerPermissionDenied(err, s.requestAccessURL(ctx, mcpServer.ID.String(), serverName)))
 		}
 		return ctx, nil
 	case mcpservers.VisibilityPublic:
