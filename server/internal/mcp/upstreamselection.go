@@ -247,6 +247,22 @@ func (s *Service) resolveAccessTokens(ctx context.Context, authentication *issue
 	if authentication.chosenNoAuth {
 		return map[uuid.UUID]remotesessions.UpstreamToken{}, nil
 	}
+	if authentication.chosenClient.Valid && authentication.authClient != nil {
+		// A typed auth client was checked against the server, which authorizes
+		// its registration without a sign-in link.
+		tokens, err := s.remoteChallengeMgr.ResolveAuthClientAccessTokens(ctx, remotesessions.AuthClientTokenRequest{
+			ProjectID:           endpoint.ProjectID,
+			OrganizationID:      endpoint.OrganizationID,
+			UserSessionIssuerID: endpoint.UserSessionIssuerID,
+			Subject:             authentication.subject,
+			RegistrationID:      authentication.chosenClient.UUID,
+			SkipUnusable:        skipUnusable,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("resolve auth client: %w", err)
+		}
+		return tokens, nil
+	}
 	if authentication.chosenClient.Valid {
 		tokens, err := s.remoteChallengeMgr.ResolveClientAccessTokens(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, authentication.subject, authentication.chosenClient.UUID, skipUnusable)
 		if err != nil {
