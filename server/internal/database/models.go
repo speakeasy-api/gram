@@ -909,6 +909,9 @@ type AuthPermissionProvision struct {
 	// Which default the grant belongs to: personal_default, shared_client or api_key. Validated in application code.
 	// @access: confidential
 	Kind string
+	// When an admin wrote the same grant, making it theirs: a rollback leaves it. NULL while it is still provisioned.
+	// @access: confidential
+	TakenOverAt pgtype.Timestamptz
 	// @access: confidential
 	CreatedAt pgtype.Timestamptz
 	// @access: confidential
