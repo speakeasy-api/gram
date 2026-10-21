@@ -789,7 +789,9 @@ func (m *ChallengeManager) storedGrantsNeedReconnect(
 	subject urn.SessionSubject,
 ) (bool, error) {
 	// The auth client resolver serves principal credentials from the
-	// authorizing user's session, as resolveCallerUpstreamToken does.
+	// authorizing user's session, as resolveCallerUpstreamToken does. The
+	// sign-in lookup keeps its existing reconnect check unchanged, so behavior
+	// with the resolver off stays as it was; aligning it is a separate change.
 	var authorizer *string
 	if credential, ok := principalcredential.FromContext(ctx); ok && lookup == lookupAuthClient {
 		authorizer = &credential.Credential.AuthorizerUserID

@@ -139,7 +139,7 @@ func TestStoreRemoteSessionGrant_ReconsentInAnotherOrganizationStartsANewGrant(t
 // With the flags off, a workload acting in the first organization resolves the
 // user's grant only through that organization's sign-in, so a re-consent
 // through another organization's sign-in leaves it asking to reconnect.
-func TestStoreRemoteSessionGrant_ReconsentInAnotherOrganizationMovesWorkloadsWithTheGrant(t *testing.T) {
+func TestStoreRemoteSessionGrant_ReconsentInAnotherOrganizationLeavesTheFirstOrganizationsWorkloadsUnresolved(t *testing.T) {
 	t.Parallel()
 	ctx, r := newReconsentFixture(t, "ac-reconsent-workload")
 	auth, ok := contextvalues.GetAuthContext(ctx)
@@ -183,7 +183,7 @@ func TestStoreRemoteSessionGrant_WithoutOrganizationProvenanceIsRefused(t *testi
 	accessEnc, err := r.enc.Encrypt([]byte("second-token"))
 	require.NoError(t, err)
 	_, err = remotesessions.StoreRemoteSessionGrant(ctx, repo.New(r.ti.conn), "", repo.UpsertRemoteSessionParams{SubjectUrn: r.member, UserSessionIssuerID: r.otherSignIn, RemoteSessionClientID: r.clientID, AccessTokenEncrypted: accessEnc, AccessExpiresAt: conv.ToPGTimestamptz(time.Now().Add(time.Hour)), Scopes: []string{}})
-	require.Error(t, err, "a state without an organization cannot write a grant")
+	require.ErrorIs(t, err, remotesessions.ErrRemoteLoginWithoutOrganization, "a state without an organization cannot write a grant")
 
 	kept, err := repo.New(r.ti.conn).GetRemoteSessionByID(ctx, repo.GetRemoteSessionByIDParams{ID: first.ID, ProjectID: r.projectID, OrganizationID: r.organizationID})
 	require.NoError(t, err)
