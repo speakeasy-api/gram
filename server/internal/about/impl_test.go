@@ -31,7 +31,7 @@ func newTestService(t *testing.T, manifestURL string) *Service {
 		tracer:                 tracerProvider.Tracer("test"),
 		guardianPolicy:         guardianPolicy,
 		deviceAgentManifestURL: manifestURL,
-		deviceAgentReleasesURL: deviceAgentReleasesBaseURL,
+		deviceAgentReleasesURL: DeviceAgentReleasesBaseURL,
 	}
 }
 
@@ -64,7 +64,7 @@ func TestHandleInstallDeviceAgentMacOS_RedirectsToVersionedPkg(t *testing.T) {
 
 	require.Equal(t, http.StatusFound, rec.Code)
 	require.Equal(t,
-		fmt.Sprintf("%s/v0.1.18/speakeasy-agent_0.1.18.pkg", deviceAgentReleasesBaseURL),
+		fmt.Sprintf("%s/v0.1.18/speakeasy-agent_0.1.18.pkg", DeviceAgentReleasesBaseURL),
 		rec.Header().Get("Location"),
 	)
 }
@@ -88,7 +88,7 @@ func TestHandleInstallDeviceAgentWindows_RedirectsToVersionedMsi(t *testing.T) {
 
 	require.Equal(t, http.StatusFound, rec.Code)
 	require.Equal(t,
-		fmt.Sprintf("%s/v0.1.31/speakeasy-agent_0.1.31.msi", deviceAgentReleasesBaseURL),
+		fmt.Sprintf("%s/v0.1.31/speakeasy-agent_0.1.31.msi", DeviceAgentReleasesBaseURL),
 		rec.Header().Get("Location"),
 	)
 }

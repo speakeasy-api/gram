@@ -28,6 +28,8 @@ import (
 	agentsrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/auth/deviceagenttoken"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -162,7 +164,7 @@ func (f deviceAgentGrantFixture) workloadPolicy(t *testing.T) *workloadpolicy.Se
 	redisClient, err := infra.NewRedisClient(t, 0)
 	require.NoError(t, err)
 	return workloadpolicy.NewService(f.ti.logger, f.ti.tracerProvider, f.ti.conn, f.ti.sessionManager, f.ti.authzEngine, f.ti.audit,
-		authserver.Hosts{ServerURL: f.ti.serverURL.String(), AuthenticationHostBaseURL: "", PlatformHosts: nil}, ratelimit.NewRedisStore(redisClient))
+		authserver.Hosts{ServerURL: f.ti.serverURL.String(), AuthenticationHostBaseURL: "", PlatformHosts: nil}, ratelimit.NewRedisStore(redisClient), cache.NewRedisCacheAdapter(redisClient), &feature.InMemory{})
 }
 
 // assertion signs an assertion as the device, addressed to aud.

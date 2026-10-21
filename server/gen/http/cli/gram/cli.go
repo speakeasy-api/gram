@@ -210,7 +210,7 @@ func UsageCommands() []string {
 		"organization-user-session-issuers (create-issuer|list-issuers|get-issuer|update-issuer|list-mcp-servers|get-authentication-host-impact|set-authentication-host|get-issuer-delete-preflight|delete-issuer|move-issuer|get-issuer-migrate-preflight|migrate-issuer|create-cimd-client|list-cimd-clients|get-cimd-client|delete-cimd-client)",
 		"user-sessions (list-user-sessions|list-facets|mint-user-session|revoke-user-session)",
 		"widgets (list-widgets|get-widget|create-widget|update-widget|duplicate-widget|delete-widget)",
-		"workload-identities (list|list-platforms|get-custom-flows|list-token-endpoints|register-issuer|update-issuer|withdraw-issuer|admit-subject|update-subject|withdraw-subject|create-device-join-token|list-device-join-tokens|revoke-device-join-token|register-device)",
+		"workload-identities (list|list-platforms|get-custom-flows|list-token-endpoints|register-issuer|update-issuer|withdraw-issuer|admit-subject|update-subject|withdraw-subject|create-device-join-token|create-device-install-command|list-device-join-tokens|revoke-device-join-token|register-device)",
 		"variations (upsert-global|delete-global|list-global|list-groups|create-global)",
 	}
 }
@@ -5119,6 +5119,12 @@ func ParseEndpoint(
 		workloadIdentitiesCreateDeviceJoinTokenApikeyTokenFlag      = workloadIdentitiesCreateDeviceJoinTokenFlags.String("apikey-token", "", "")
 		workloadIdentitiesCreateDeviceJoinTokenProjectSlugInputFlag = workloadIdentitiesCreateDeviceJoinTokenFlags.String("project-slug-input", "", "")
 
+		workloadIdentitiesCreateDeviceInstallCommandFlags                = flag.NewFlagSet("create-device-install-command", flag.ExitOnError)
+		workloadIdentitiesCreateDeviceInstallCommandBodyFlag             = workloadIdentitiesCreateDeviceInstallCommandFlags.String("body", "REQUIRED", "")
+		workloadIdentitiesCreateDeviceInstallCommandSessionTokenFlag     = workloadIdentitiesCreateDeviceInstallCommandFlags.String("session-token", "", "")
+		workloadIdentitiesCreateDeviceInstallCommandApikeyTokenFlag      = workloadIdentitiesCreateDeviceInstallCommandFlags.String("apikey-token", "", "")
+		workloadIdentitiesCreateDeviceInstallCommandProjectSlugInputFlag = workloadIdentitiesCreateDeviceInstallCommandFlags.String("project-slug-input", "", "")
+
 		workloadIdentitiesListDeviceJoinTokensFlags                = flag.NewFlagSet("list-device-join-tokens", flag.ExitOnError)
 		workloadIdentitiesListDeviceJoinTokensAgentIDFlag          = workloadIdentitiesListDeviceJoinTokensFlags.String("agent-id", "", "")
 		workloadIdentitiesListDeviceJoinTokensCursorFlag           = workloadIdentitiesListDeviceJoinTokensFlags.String("cursor", "", "")
@@ -6249,6 +6255,7 @@ func ParseEndpoint(
 	workloadIdentitiesUpdateSubjectFlags.Usage = workloadIdentitiesUpdateSubjectUsage
 	workloadIdentitiesWithdrawSubjectFlags.Usage = workloadIdentitiesWithdrawSubjectUsage
 	workloadIdentitiesCreateDeviceJoinTokenFlags.Usage = workloadIdentitiesCreateDeviceJoinTokenUsage
+	workloadIdentitiesCreateDeviceInstallCommandFlags.Usage = workloadIdentitiesCreateDeviceInstallCommandUsage
 	workloadIdentitiesListDeviceJoinTokensFlags.Usage = workloadIdentitiesListDeviceJoinTokensUsage
 	workloadIdentitiesRevokeDeviceJoinTokenFlags.Usage = workloadIdentitiesRevokeDeviceJoinTokenUsage
 	workloadIdentitiesRegisterDeviceFlags.Usage = workloadIdentitiesRegisterDeviceUsage
@@ -9545,6 +9552,9 @@ func ParseEndpoint(
 			case "create-device-join-token":
 				epf = workloadIdentitiesCreateDeviceJoinTokenFlags
 
+			case "create-device-install-command":
+				epf = workloadIdentitiesCreateDeviceInstallCommandFlags
+
 			case "list-device-join-tokens":
 				epf = workloadIdentitiesListDeviceJoinTokensFlags
 
@@ -12692,6 +12702,9 @@ func ParseEndpoint(
 			case "create-device-join-token":
 				endpoint = c.CreateDeviceJoinToken()
 				data, err = workloadidentitiesc.BuildCreateDeviceJoinTokenPayload(*workloadIdentitiesCreateDeviceJoinTokenBodyFlag, *workloadIdentitiesCreateDeviceJoinTokenSessionTokenFlag, *workloadIdentitiesCreateDeviceJoinTokenApikeyTokenFlag, *workloadIdentitiesCreateDeviceJoinTokenProjectSlugInputFlag)
+			case "create-device-install-command":
+				endpoint = c.CreateDeviceInstallCommand()
+				data, err = workloadidentitiesc.BuildCreateDeviceInstallCommandPayload(*workloadIdentitiesCreateDeviceInstallCommandBodyFlag, *workloadIdentitiesCreateDeviceInstallCommandSessionTokenFlag, *workloadIdentitiesCreateDeviceInstallCommandApikeyTokenFlag, *workloadIdentitiesCreateDeviceInstallCommandProjectSlugInputFlag)
 			case "list-device-join-tokens":
 				endpoint = c.ListDeviceJoinTokens()
 				data, err = workloadidentitiesc.BuildListDeviceJoinTokensPayload(*workloadIdentitiesListDeviceJoinTokensAgentIDFlag, *workloadIdentitiesListDeviceJoinTokensCursorFlag, *workloadIdentitiesListDeviceJoinTokensLimitFlag, *workloadIdentitiesListDeviceJoinTokensSessionTokenFlag, *workloadIdentitiesListDeviceJoinTokensApikeyTokenFlag, *workloadIdentitiesListDeviceJoinTokensProjectSlugInputFlag)
@@ -34485,6 +34498,7 @@ func workloadIdentitiesUsage() {
 	fmt.Fprintln(os.Stderr, `    update-subject: Edit an admitted subject's label, tags, or assigned agent. Omitted fields are left unchanged. The subject, match kind, issuer, and tier are fixed at admission. The agent assignment is shared by every admission of the same subject under the same issuer, at either tier, so reassigning it through one admission reassigns it for both. Requires workload:write. Returns the whole policy, so a caller replaces its view rather than merging into it.`)
 	fmt.Fprintln(os.Stderr, `    withdraw-subject: Withdraw an admitted subject and its agent assignment, stopping it authenticating. Requires workload:write.`)
 	fmt.Fprintln(os.Stderr, `    create-device-join-token: Create a single-use join token that enrolls one headless box with no platform identity as a workload assigned to an agent. The token is returned once and only its hash is kept. Only a person can create one: a key backed by a principal rather than a user is refused with 403 whatever its grants. Requires workload:write, and either owning the agent or agent:authorize on it, since an enrolled box acts under the agent's policy.`)
+	fmt.Fprintln(os.Stderr, `    create-device-install-command: Create a one-command install for a headless Linux device. Issues a device join token exactly as createDeviceJoinToken does, with the same authorization, agent checks and audit event, but never returns it: the token is held behind a single-use install code that expires after 15 minutes or with the token, whichever is sooner. The returned command fetches a script that installs the device agent, writes its managed config with the token, and starts it. Poll listDeviceJoinTokens for join_token_id to see the device enroll. Gated by the device-bootstrap-install rollout flag; an organization without it gets 404.`)
 	fmt.Fprintln(os.Stderr, `    list-device-join-tokens: List the organization's device join tokens, newest first, optionally for one agent. Revoked tokens are included. Each carries its status but never the token or its hash, which cannot be shown again. Requires workload:read.`)
 	fmt.Fprintln(os.Stderr, `    revoke-device-join-token: Revoke a device join token that has not been redeemed, so it can no longer enroll a device. A token that was already redeemed or revoked returns a failed precondition; revoking stops future enrollments only and leaves a device the token already enrolled in place. Only a person can revoke one: a key backed by a principal rather than a user is refused with 403 whatever its grants. Requires workload:write, and either owning the token's agent or agent:authorize on it, as creating one does.`)
 	fmt.Fprintln(os.Stderr, `    register-device: Enroll a device with its public key, redeeming a join token. No session or API key: the single-use join token is the credential, and an unknown, expired, or already redeemed token returns 401. A key already registered to another device returns 409, and an agent whose policy no longer grants org:device_agent_sync returns a failed precondition without spending the token. In one transaction the device's key is registered, the device is admitted under the organization's Speakeasy device issuer, and it is assigned the token's agent.`)
@@ -34746,6 +34760,30 @@ func workloadIdentitiesCreateDeviceJoinTokenUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "workload-identities create-device-join-token --body '{\n      \"agent_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"expires_in_seconds\": 61\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func workloadIdentitiesCreateDeviceInstallCommandUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] workload-identities create-device-install-command", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Create a one-command install for a headless Linux device. Issues a device join token exactly as createDeviceJoinToken does, with the same authorization, agent checks and audit event, but never returns it: the token is held behind a single-use install code that expires after 15 minutes or with the token, whichever is sooner. The returned command fetches a script that installs the device agent, writes its managed config with the token, and starts it. Poll listDeviceJoinTokens for join_token_id to see the device enroll. Gated by the device-bootstrap-install rollout flag; an organization without it gets 404.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "workload-identities create-device-install-command --body '{\n      \"agent_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"expires_in_seconds\": 61,\n      \"hooks_project_slug\": \"0\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func workloadIdentitiesListDeviceJoinTokensUsage() {

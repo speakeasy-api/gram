@@ -79835,6 +79835,110 @@ paths:
       x-speakeasy-name-override: admitSubject
       x-speakeasy-react-hook:
         name: AdmitWorkloadSubject
+  /rpc/workloadIdentities.createDeviceInstallCommand:
+    post:
+      description: 'Create a one-command install for a headless Linux device. Issues a device join token exactly as createDeviceJoinToken does, with the same authorization, agent checks and audit event, but never returns it: the token is held behind a single-use install code that expires after 15 minutes or with the token, whichever is sooner. The returned command fetches a script that installs the device agent, writes its managed config with the token, and starts it. Poll listDeviceJoinTokens for join_token_id to see the device enroll. Gated by the device-bootstrap-install rollout flag; an organization without it gets 404.'
+      operationId: createWorkloadDeviceInstallCommand
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateDeviceInstallCommandRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkloadDeviceInstallCommand'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: createDeviceInstallCommand workloadIdentities
+      tags:
+        - workloadIdentities
+      x-speakeasy-name-override: createDeviceInstallCommand
+      x-speakeasy-react-hook:
+        name: CreateWorkloadDeviceInstallCommand
   /rpc/workloadIdentities.createDeviceJoinToken:
     post:
       description: 'Create a single-use join token that enrolls one headless box with no platform identity as a workload assigned to an agent. The token is returned once and only its hash is kept. Only a person can create one: a key backed by a principal rather than a user is refused with 403 whatever its grants. Requires workload:write, and either owning the agent or agent:authorize on it, since an enrolled box acts under the agent''s policy.'
@@ -85869,6 +85973,27 @@ components:
       required:
         - name
         - destination_type
+    CreateDeviceInstallCommandRequestBody:
+      type: object
+      properties:
+        agent_id:
+          type: string
+          description: The agent the enrolled device inherits its policy from.
+          format: uuid
+        expires_in_seconds:
+          type: integer
+          description: How long the join token behind the command stays redeemable. Defaults to one hour.
+          default: 3600
+          format: int64
+          minimum: 60
+          maximum: 86400
+        hooks_project_slug:
+          type: string
+          description: The project the device's hooks and telemetry are sent to. Must be a project in the caller's organization.
+          pattern: ^[a-z0-9_-]{1,128}$
+      required:
+        - agent_id
+        - hooks_project_slug
     CreateDeviceJoinTokenRequestBody:
       type: object
       properties:
@@ -114728,6 +114853,34 @@ components:
         - edit_platform
         - allow_access
         - edit_access
+    WorkloadDeviceInstallCommand:
+      type: object
+      properties:
+        code_expires_at:
+          type: string
+          description: When the install code in the commands stops working.
+          format: date-time
+        command:
+          type: string
+          description: 'Run on the device as the account that runs its AI tools: fetches the install script and runs it with sudo.'
+        download_command:
+          type: string
+          description: The same install, saving the script first so it can be read before it runs.
+        join_token_id:
+          type: string
+          description: The join token behind the command. Its status in listDeviceJoinTokens becomes redeemed once the device enrolls.
+          format: uuid
+        token_expires_at:
+          type: string
+          description: When the join token stops being redeemable.
+          format: date-time
+      description: A one-command install for a headless device. The join token it carries is never included; the install code in the commands is single use.
+      required:
+        - command
+        - download_command
+        - code_expires_at
+        - join_token_id
+        - token_expires_at
     WorkloadDeviceJoinToken:
       type: object
       properties:

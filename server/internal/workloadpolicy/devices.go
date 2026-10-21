@@ -97,50 +97,95 @@ func (s *Service) requireDeviceJoinAgentAuthority(ctx context.Context, userID st
 }
 
 func (s *Service) CreateDeviceJoinToken(ctx context.Context, payload *gen.CreateDeviceJoinTokenPayload) (*gen.WorkloadDeviceJoinToken, error) {
-	t, err := s.resolve(ctx, authz.ScopeWorkloadWrite)
+	issuer, err := s.authorizeDeviceJoinToken(ctx, payload.AgentID)
 	if err != nil {
 		return nil, err
+	}
+
+	issued, err := s.issueDeviceJoinToken(ctx, issuer, payload.ExpiresInSeconds, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return &gen.WorkloadDeviceJoinToken{
+		Token:     issued.token,
+		ExpiresAt: issued.expiresAt.UTC().Format(time.RFC3339),
+	}, nil
+}
+
+// deviceJoinTokenIssuer is a caller cleared to issue a join token for an
+// agent: a person with workload:write and authority over a runnable agent
+// whose policy lets an enrolled device poll.
+type deviceJoinTokenIssuer struct {
+	tenancy tenancy
+	userID  string
+	agent   repo.GetDeviceJoinAgentRow
+}
+
+// issuedDeviceJoinToken is a join token that has been stored and audited. The
+// token exists only here; only its hash is kept.
+type issuedDeviceJoinToken struct {
+	id        uuid.UUID
+	token     string
+	expiresAt time.Time
+}
+
+// authorizeDeviceJoinToken runs every check that issuing a join token for an
+// agent needs, whichever way the token is handed over.
+func (s *Service) authorizeDeviceJoinToken(ctx context.Context, rawAgentID string) (deviceJoinTokenIssuer, error) {
+	t, err := s.resolve(ctx, authz.ScopeWorkloadWrite)
+	if err != nil {
+		return deviceJoinTokenIssuer{}, err
 	}
 	// The creator is recorded as the enrollment's actor, so a token needs a
 	// person behind it; a principal-backed key carries no user.
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.UserID == "" {
-		return nil, oops.E(oops.CodeForbidden, nil, "a device join token must be created by a person, not an agent credential")
+		return deviceJoinTokenIssuer{}, oops.E(oops.CodeForbidden, nil, "a device join token must be created by a person, not an agent credential")
 	}
 
-	agentID, err := uuid.Parse(payload.AgentID)
+	agentID, err := uuid.Parse(rawAgentID)
 	if err != nil {
-		return nil, oops.E(oops.CodeInvalid, err, "agent_id is not a valid uuid")
+		return deviceJoinTokenIssuer{}, oops.E(oops.CodeInvalid, err, "agent_id is not a valid uuid")
 	}
 
 	agent, err := s.repo.GetDeviceJoinAgent(ctx, repo.GetDeviceJoinAgentParams{OrganizationID: t.organizationID, ID: agentID})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, oops.E(oops.CodeNotFound, err, "agent not found")
+			return deviceJoinTokenIssuer{}, oops.E(oops.CodeNotFound, err, "agent not found")
 		}
-		return nil, oops.E(oops.CodeUnexpected, err, "error resolving agent").LogError(ctx, s.logger)
+		return deviceJoinTokenIssuer{}, oops.E(oops.CodeUnexpected, err, "error resolving agent").LogError(ctx, s.logger)
 	}
 	if !deviceJoinAgentRunnable(agent) {
-		return nil, oops.E(oops.CodeFailedPrecondition, nil, "the agent is suspended, revoked, or awaiting a new owner, so no device can enroll under it")
+		return deviceJoinTokenIssuer{}, oops.E(oops.CodeFailedPrecondition, nil, "the agent is suspended, revoked, or awaiting a new owner, so no device can enroll under it")
 	}
 
 	if err := s.requireDeviceJoinAgentAuthority(ctx, authCtx.UserID, agent.ID, agent.OwnerUserID); err != nil {
-		return nil, err
+		return deviceJoinTokenIssuer{}, err
 	}
 
 	if err := s.requireDeviceEnrollmentGrant(ctx, s.db, t.organizationID, agent.ID); err != nil {
-		return nil, err
+		return deviceJoinTokenIssuer{}, err
 	}
+
+	return deviceJoinTokenIssuer{tenancy: t, userID: authCtx.UserID, agent: agent}, nil
+}
+
+// issueDeviceJoinToken stores a new join token and records its creation in one
+// transaction. beforeCommit, when set, runs inside that transaction after the
+// audit entry, so a failure there leaves no token behind.
+func (s *Service) issueDeviceJoinToken(ctx context.Context, issuer deviceJoinTokenIssuer, expiresInSeconds int, beforeCommit func(issuedDeviceJoinToken) error) (issuedDeviceJoinToken, error) {
+	t, agent := issuer.tenancy, issuer.agent
 
 	token, hash, err := newDeviceJoinToken()
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error generating join token").LogError(ctx, s.logger)
+		return issuedDeviceJoinToken{}, oops.E(oops.CodeUnexpected, err, "error generating join token").LogError(ctx, s.logger)
 	}
-	expiresAt := time.Now().Add(time.Duration(payload.ExpiresInSeconds) * time.Second)
+	expiresAt := time.Now().Add(time.Duration(expiresInSeconds) * time.Second)
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error starting transaction").LogError(ctx, s.logger)
+		return issuedDeviceJoinToken{}, oops.E(oops.CodeUnexpected, err, "error starting transaction").LogError(ctx, s.logger)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
@@ -148,11 +193,11 @@ func (s *Service) CreateDeviceJoinToken(ctx context.Context, payload *gen.Create
 		OrganizationID:  t.organizationID,
 		TokenHash:       hash,
 		AgentID:         agent.ID,
-		CreatedByUserID: authCtx.UserID,
+		CreatedByUserID: issuer.userID,
 		ExpiresAt:       pgtype.Timestamptz{Time: expiresAt, InfinityModifier: pgtype.Finite, Valid: true},
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error creating join token").LogError(ctx, s.logger)
+		return issuedDeviceJoinToken{}, oops.E(oops.CodeUnexpected, err, "error creating join token").LogError(ctx, s.logger)
 	}
 
 	if err := s.audit.LogWorkloadDeviceJoinTokenCreate(ctx, dbtx, audit.LogWorkloadDeviceJoinTokenCreateEvent{
@@ -169,17 +214,21 @@ func (s *Service) CreateDeviceJoinToken(ctx context.Context, payload *gen.Create
 			Hostname:      "",
 		},
 	}); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error recording join token").LogError(ctx, s.logger)
+		return issuedDeviceJoinToken{}, oops.E(oops.CodeUnexpected, err, "error recording join token").LogError(ctx, s.logger)
+	}
+
+	issued := issuedDeviceJoinToken{id: row.ID, token: token, expiresAt: row.ExpiresAt.Time}
+	if beforeCommit != nil {
+		if err := beforeCommit(issued); err != nil {
+			return issuedDeviceJoinToken{}, err
+		}
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error committing transaction").LogError(ctx, s.logger)
+		return issuedDeviceJoinToken{}, oops.E(oops.CodeUnexpected, err, "error committing transaction").LogError(ctx, s.logger)
 	}
 
-	return &gen.WorkloadDeviceJoinToken{
-		Token:     token,
-		ExpiresAt: row.ExpiresAt.Time.UTC().Format(time.RFC3339),
-	}, nil
+	return issued, nil
 }
 
 func (s *Service) ListDeviceJoinTokens(ctx context.Context, payload *gen.ListDeviceJoinTokensPayload) (*gen.WorkloadDeviceJoinTokenList, error) {

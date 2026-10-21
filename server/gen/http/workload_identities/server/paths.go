@@ -62,6 +62,11 @@ func CreateDeviceJoinTokenWorkloadIdentitiesPath() string {
 	return "/rpc/workloadIdentities.createDeviceJoinToken"
 }
 
+// CreateDeviceInstallCommandWorkloadIdentitiesPath returns the URL path to the workloadIdentities service createDeviceInstallCommand HTTP endpoint.
+func CreateDeviceInstallCommandWorkloadIdentitiesPath() string {
+	return "/rpc/workloadIdentities.createDeviceInstallCommand"
+}
+
 // ListDeviceJoinTokensWorkloadIdentitiesPath returns the URL path to the workloadIdentities service listDeviceJoinTokens HTTP endpoint.
 func ListDeviceJoinTokensWorkloadIdentitiesPath() string {
 	return "/rpc/workloadIdentities.listDeviceJoinTokens"
