@@ -274,46 +274,52 @@ VALUES (
 -- Content is fetched by consumers, never serialized into these events.
 -- A linked directory profile wins as a complete snapshot. Email fallback must
 -- identify exactly one active profile and must not contradict a known actor.
-WITH inputs AS (
-  SELECT input.id, (@observed_user_emails::text[])[input.ordinality] AS email
-  FROM UNNEST(@ids::uuid[]) WITH ORDINALITY AS input(id, ordinality)
-)
-SELECT m.id, m.chat_id, m.role, m.created_at, m.source, m.replayed, m.model,
-  COALESCE(CASE WHEN jsonb_typeof(directory_user.attributes -> 'department_name') = 'string'
-    THEN BTRIM(directory_user.attributes ->> 'department_name') END, '')::text AS department
-FROM inputs input
-JOIN chat_messages m ON m.id = input.id AND m.project_id = @project_id::uuid
-JOIN chats c ON c.id = m.chat_id AND c.project_id = m.project_id
-JOIN projects p ON p.id = m.project_id AND p.organization_id = @organization_id::text
-LEFT JOIN LATERAL (
-  SELECT candidate.attributes
-  FROM (
-    SELECT d.attributes, 0 AS priority, d.workos_updated_at, d.updated_at, d.id
+-- Materialize resolved departments so repeated identities share one lookup.
+WITH messages AS MATERIALIZED (
+  SELECT m.id, m.chat_id, m.role, m.created_at, m.source, m.replayed, m.model, m.seq,
+    COALESCE(m.user_id, '') AS actor_id, COALESCE(input.email, '') AS email
+  FROM ROWS FROM (UNNEST(@ids::uuid[]), UNNEST(@observed_user_emails::text[])) AS input(id, email)
+  JOIN chat_messages m ON m.id = input.id AND m.project_id = @project_id::uuid
+  JOIN chats c ON c.id = m.chat_id AND c.project_id = m.project_id
+  JOIN projects p ON p.id = m.project_id AND p.organization_id = @organization_id::text
+), identities AS (
+  SELECT DISTINCT actor_id, email FROM messages
+), departments AS MATERIALIZED (
+  SELECT identity.actor_id, identity.email,
+    COALESCE(linked.department, fallback.department, '')::text AS department
+  FROM identities identity
+  LEFT JOIN LATERAL (
+    SELECT d.id, CASE WHEN jsonb_typeof(d.attributes -> 'department_name') = 'string'
+      THEN BTRIM(d.attributes ->> 'department_name') END AS department
     FROM directory_users d
-    WHERE d.organization_id = p.organization_id
-      AND d.user_id = NULLIF(m.user_id, '')
+    WHERE d.organization_id = @organization_id::text
+      AND d.user_id = NULLIF(identity.actor_id, '')
       AND d.user_id IS NOT NULL
       AND d.deleted IS FALSE
       AND d.workos_deleted IS FALSE
-    UNION ALL
-    SELECT email_candidate.attributes, 1 AS priority,
-      email_candidate.workos_updated_at, email_candidate.updated_at, email_candidate.id
+    ORDER BY d.workos_updated_at DESC, d.updated_at DESC, d.id
+    LIMIT 1
+  ) linked ON TRUE
+  LEFT JOIN LATERAL (
+    SELECT CASE WHEN jsonb_typeof(email_candidate.attributes -> 'department_name') = 'string'
+      THEN BTRIM(email_candidate.attributes ->> 'department_name') END AS department
     FROM (
-      SELECT d.attributes, d.user_id, d.workos_updated_at, d.updated_at, d.id,
-        COUNT(*) OVER () AS candidate_count
+      SELECT d.attributes, d.user_id, COUNT(*) OVER () AS candidate_count
       FROM directory_users d
-      WHERE d.organization_id = p.organization_id
-        AND input.email <> ''
-        AND LOWER(d.email) = input.email
+      WHERE linked.id IS NULL
+        AND d.organization_id = @organization_id::text
+        AND identity.email <> ''
+        AND LOWER(d.email) = identity.email
         AND d.deleted IS FALSE
         AND d.workos_deleted IS FALSE
     ) email_candidate
     WHERE email_candidate.candidate_count = 1
-      AND (NULLIF(m.user_id, '') IS NULL OR email_candidate.user_id IS NULL OR email_candidate.user_id = m.user_id)
-  ) candidate
-  ORDER BY candidate.priority, candidate.workos_updated_at DESC, candidate.updated_at DESC, candidate.id
-  LIMIT 1
-) directory_user ON TRUE
+      AND (identity.actor_id = '' OR email_candidate.user_id IS NULL OR email_candidate.user_id = identity.actor_id)
+  ) fallback ON TRUE
+)
+SELECT m.id, m.chat_id, m.role, m.created_at, m.source, m.replayed, m.model, d.department
+FROM messages m
+JOIN departments d ON d.actor_id = m.actor_id AND d.email = m.email
 ORDER BY m.seq;
 
 -- name: UpsertCorrelatedChatMessage :one

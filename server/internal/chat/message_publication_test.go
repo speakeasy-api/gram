@@ -211,6 +211,7 @@ func TestConversationEventDepartmentResolution(t *testing.T) {
 		{name: "email only", email: " ACTOR@example.test ", profiles: []profile{{email: "actor@example.test", attributes: `{"department_name":"marketing"}`}}, want: "marketing"},
 		{name: "unlinked email fallback", actor: "actor", email: "actor@example.test", profiles: []profile{{email: "actor@example.test", attributes: `{"department_name":"engineering"}`}}, want: "engineering"},
 		{name: "linked profile before email", actor: "actor", email: "actor@example.test", profiles: []profile{{user: "actor", attributes: `{"department_name":"engineering"}`}, {email: "actor@example.test", attributes: `{"department_name":"marketing"}`}}, want: "engineering"},
+		{name: "linked blank before email", actor: "actor", email: "actor@example.test", profiles: []profile{{user: "actor", attributes: `{"department_name":" "}`}, {email: "actor@example.test", attributes: `{"department_name":"marketing"}`}}},
 		{name: "ambiguous email", email: "actor@example.test", profiles: []profile{{email: "actor@example.test", attributes: `{"department_name":"engineering"}`}, {user: "another", email: "actor@example.test", attributes: `{"department_name":"marketing"}`}}},
 		{name: "contradictory email", actor: "actor", email: "actor@example.test", profiles: []profile{{user: "another", email: "actor@example.test", attributes: `{"department_name":"marketing"}`}}},
 		{name: "billing is not actor", billing: "billing", profiles: []profile{{user: "billing", attributes: `{"department_name":"engineering"}`}}},
@@ -268,6 +269,67 @@ func TestConversationEventDepartmentResolution(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestConversationEventDepartmentsStayAlignedAcrossBatchIdentities(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := initSessionCtx(t, ti)
+	chatID := seedChat(t, ctx, ti, "chat-owner", "", "batch department snapshots")
+	directory := directoryrepo.New(ti.conn)
+	for _, profile := range []struct{ user, email, attributes string }{
+		{user: "actor", email: "actor@example.test", attributes: `{"department_name":"engineering"}`},
+		{user: "other", email: "other@example.test", attributes: `{"department_name":"marketing"}`},
+		{email: "fallback@example.test", attributes: `{"department_name":"support"}`},
+		{email: "secondary@example.test", attributes: `{"department_name":"sales"}`},
+		{user: "blank", attributes: `{"department_name":" "}`},
+	} {
+		_, err := directory.UpsertDirectoryUser(ctx, directoryrepo.UpsertDirectoryUserParams{
+			OrganizationID: ti.orgID, UserID: conv.ToPGTextEmpty(profile.user), Email: conv.ToPGTextEmpty(profile.email),
+			WorkosDirectoryUserID: uuid.NewString(), Attributes: []byte(profile.attributes), RestoreDeleted: true,
+			WorkosCreatedAt: conv.ToPGTimestamptz(time.Now()), WorkosUpdatedAt: conv.ToPGTimestamptz(time.Now()),
+		})
+		require.NoError(t, err)
+	}
+	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), ti.conn, nil)
+	t.Cleanup(func() { require.NoError(t, shutdown(context.WithoutCancel(t.Context()))) })
+	var writes []chat.MessageWrite
+	expected := map[string]string{}
+	for _, message := range []struct{ actor, email, want string }{
+		{actor: "actor", email: "actor@example.test", want: "engineering"},
+		{actor: "actor", email: "actor@example.test", want: "engineering"},
+		{actor: "actor", email: "other@example.test", want: "engineering"},
+		{actor: "other", email: "other@example.test", want: "marketing"},
+		{actor: "unlinked", email: "fallback@example.test", want: "support"},
+		{actor: "unlinked", email: "secondary@example.test", want: "sales"},
+		{email: "fallback@example.test", want: "support"},
+		{actor: "unlinked", email: "other@example.test"},
+		{email: "other@example.test", want: "marketing"},
+		{actor: "blank", email: "fallback@example.test"},
+		{},
+	} {
+		params := minimalChatMessageParams(chatID, ti.projectID)
+		params.ID = uuid.New()
+		params.UserID = conv.ToPGTextEmpty(message.actor)
+		writes = append(writes, chat.MessageWrite{Params: params, UserEmail: message.email})
+		expected[params.ID.String()] = message.want
+	}
+	_, err := writer.Write(ctx, ti.projectID, writes)
+	require.NoError(t, err)
+	events := conversationMessages(t, ti)
+	require.Len(t, events, len(writes), "shared identities must not collapse message events")
+	for _, event := range events {
+		want, ok := expected[event.GetMessageId()]
+		require.True(t, ok)
+		attributes := event.GetIngestion().GetAttributes()
+		if want == "" {
+			require.NotContains(t, attributes, "department")
+		} else {
+			require.Equal(t, want, attributes["department"])
+		}
+		delete(expected, event.GetMessageId())
+	}
+	require.Empty(t, expected)
 }
 
 func TestConversationEventSnapshotSurvivesDirectoryChangeAndConflict(t *testing.T) {
