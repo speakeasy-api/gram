@@ -3,9 +3,12 @@
 package demoseed
 
 import (
+	"encoding/json"
 	"testing"
 
+	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
 	"github.com/speakeasy-api/gram/server/internal/demoseed/repo"
+	triggerrepo "github.com/speakeasy-api/gram/server/internal/triggers/repo"
 	"github.com/stretchr/testify/require"
 )
 
@@ -25,6 +28,17 @@ func TestGoogleChatTriggerReseed(t *testing.T) {
 				})
 				require.NoError(t, err)
 				require.EqualValues(t, 1, count, "reseed must preserve one paused, credential-free Google Chat trigger")
+				instance, err := triggerrepo.New(db).GetTriggerInstanceByIDPublic(ctx, s.det("assistant-googlechat-bound"))
+				require.NoError(t, err)
+				var config map[string]any
+				require.NoError(t, json.Unmarshal(instance.ConfigJson, &config))
+				definition, ok := bgtriggers.GetDefinition("googlechat")
+				require.True(t, ok)
+				_, err = definition.DecodeConfig(config)
+				require.NoError(t, err)
+				require.Contains(t, config, "workspace_events")
+				require.Equal(t, "paused", instance.Status)
+				require.False(t, instance.EnvironmentID.Valid)
 			}
 		})
 	}

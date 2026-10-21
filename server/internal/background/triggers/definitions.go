@@ -58,6 +58,9 @@ type Definition struct {
 }
 
 type WebhookIngressResult struct {
+	// Events holds independently routed messages delivered in one provider batch.
+	// Event and Events are mutually exclusive.
+	Events   []*EventEnvelope
 	Response *WebhookResponse
 	Event    *EventEnvelope
 	Task     *Task

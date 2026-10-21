@@ -281,7 +281,9 @@ JOIN assistants a ON a.id::text = t.target_ref AND a.organization_id = t.organiz
 WHERE t.organization_id = @org_id::text AND t.project_id = @project_id::uuid
   AND t.deleted IS FALSE AND a.deleted IS FALSE AND a.id = @assistant_id::uuid
   AND t.definition_slug = 'googlechat' AND t.target_kind = 'assistant'
-  AND t.status = 'paused' AND t.environment_id IS NULL AND t.config_json = '{}'::jsonb;
+  AND t.status = 'paused' AND t.environment_id IS NULL
+  AND jsonb_typeof(t.config_json->'workspace_events') = 'object'
+  AND t.config_json->'workspace_events'->>'text_prefix' = 'assistant:';
 
 -- name: PostflightIDAssistantAgentBindings :one
 SELECT count(*) FROM assistant_agent_bindings

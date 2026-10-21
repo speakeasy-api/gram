@@ -49,7 +49,7 @@ History reads are on demand, limited to spaces the app can access. This is not f
 
 ## Behavior and troubleshooting
 
-- **DMs and @mentions only.** An unmentioned follow-up in a space/thread does not wake the assistant, even after it previously replied. Mention it again. No ambient monitoring or background full-history ingestion.
+- **Native ingress: DMs and @mentions only.** An unmentioned follow-up in a space/thread does not wake the assistant, even after it previously replied. Mention it again. For explicit text commands from external participants, configure the separate Workspace Events mode below. No background full-history ingestion.
 - **401 on webhook:** check non-add-on mode, Project Number audience, and the exact numeric environment value. Do not use your credential service account as the inbound signer or choose the endpoint URL as audience.
 - **403 on history reads:** confirm `chat.app.messages.readonly` approval for the correct service-account Marketplace-compatible client and Workspace organization. Recheck app membership in the space. Do not solve this with user OAuth or domain-wide delegation.
 - **403 on writes/spaces:** check Chat API is enabled, credentials belong to the configured app's project, the app is installed/allowed by Workspace policy, and it has access to the space. Updating/deleting messages is limited to app-owned messages.
@@ -71,3 +71,72 @@ Verified against Google's documentation:
 - [Authenticate and authorize as a Chat app](https://developers.google.com/workspace/chat/authenticate-authorize-chat-app): service-account key, Marketplace-compatible client, private Marketplace SDK configuration, and administrator approval.
 - [Verify requests from Chat](https://developers.google.com/workspace/chat/verify-requests-from-chat), specifically **Authenticate requests with a Project Number JWT (Chat apps that aren't add-ons)**. The page's earlier add-on instructions are a different mode.
 - [Configure a Chat app](https://developers.google.com/workspace/chat/configure-chat-api).
+
+## Shared-space commands and scheduled digests
+
+A shared space can contain members of multiple organizations, but Google disables native app interactions for external participants. A native `@mention` therefore cannot serve as a shared invocation mechanism. The optional **Workspace Events** ingress receives ordinary messages instead. Selected internal and external participants use the same literal command, for example `assistant: explain this digest`.
+
+The assistant remains generic: configure its instructions and MCP access normally. A daily digest is an ordinary `cron` trigger targeting that assistant, with a note that names the exact destination space and instructs it to use `platform_googlechat_send_message`. Cron events do not carry a Google Chat source context, so the destination must be explicit in the assistant's task or trigger note. The digest's data sources and contents belong in the assistant configuration, not in the Google Chat integration. Attach the Google Chat message-reading tools if the assistant should answer questions about a previously posted digest or other thread context; inbound read permission does not attach those tools automatically. Use only MCP access appropriate for the shared audience.
+
+### Configure a shared-space trigger
+
+1. Create an invitation-only space with external membership enabled, install the Chat app, and invite the intended participants. Workspace policy must permit external spaces. Use the actual Chat user resource names (`users/{id}`), not display names or email guesses, for the participant allowlist.
+2. Complete the service-account setup above, including Workspace administrator approval for `chat.app.messages.readonly`. This ingress needs message access even if the assistant has no history-reading tool attached. Enable the Google Workspace Events and Pub/Sub APIs in the app's Cloud project.
+3. Create a dedicated Pub/Sub topic. Grant `chat-api-push@system.gserviceaccount.com` the Pub/Sub Publisher role **on that topic only**, as required by Google's Workspace Events setup.
+4. Create a Workspace Events subscription as the approved Chat app service account, with this request body. Replace all placeholders; keep the returned `subscriptions/{id}` and its actual expiration time.
+
+   ```json
+   {
+     "targetResource": "//chat.googleapis.com/spaces/<SPACE_ID>",
+     "eventTypes": ["google.workspace.chat.message.v1.created"],
+     "notificationEndpoint": {
+       "pubsubTopic": "projects/<PROJECT_ID>/topics/<TOPIC_ID>"
+     },
+     "payloadOptions": { "includeResourceData": true },
+     "ttl": "14400s"
+   }
+   ```
+
+   Call `POST https://workspaceevents.googleapis.com/v1/subscriptions`. The same approved app identity can use `gws events subscriptions create --json '<body>'` with appropriately configured service-account authentication. The ordinary `gws` user login is a different identity and is not the app's credentials.
+
+5. Create a dedicated push service account and reserve a Pub/Sub push subscription name. Configure the Google Chat trigger with the following shape. These fields contain identifiers, not credentials; keep the outbound service-account JSON in the assistant's secure shared environment.
+
+   ```json
+   {
+     "space_names": ["spaces/<SPACE_ID>"],
+     "workspace_events": {
+       "subscription": "projects/<PROJECT_ID>/subscriptions/<PUSH_SUBSCRIPTION_ID>",
+       "workspace_subscription": "subscriptions/<WORKSPACE_SUBSCRIPTION_ID>",
+       "audience": "https://<PUBLIC_HOST>/<UNIQUE_PUSH_AUDIENCE>",
+       "service_account_email": "<PUSH_ACCOUNT>@<PROJECT_ID>.iam.gserviceaccount.com",
+       "user_names": ["users/<INTERNAL_USER_ID>", "users/<EXTERNAL_USER_ID>"],
+       "text_prefix": "assistant:"
+     }
+   }
+   ```
+
+   The trigger requires exactly one space, an explicit nonempty user allowlist, and a nonempty prefix. An optional `filter` CEL expression can narrow it further using `event.text`, `event.user_name`, or the other existing event fields. Prefix matching is literal and case-sensitive after leading whitespace. Every invocation, including a reply to a digest, requires the prefix; unprefixed follow-ups do not invoke the assistant.
+
+6. Create the authenticated, **wrapped** Pub/Sub push subscription against the dedicated topic. Set the trigger's returned webhook URL as the push endpoint, the dedicated push service account as the authentication identity, and `workspace_events.audience` as the exact token audience. Grant the Pub/Sub service agent the token-creation permission required by Google's authenticated-push setup. Keep publisher and service-account impersonation permissions narrow: anyone able to publish to this topic or impersonate the push account can submit events to this connection.
+7. Test a command from one internal participant and one external participant, a command from an unlisted participant, and an ordinary unprefixed message. Only the first two should invoke the assistant. Test two simultaneous commands in different threads and redelivery: replies must stay in their original threads without duplication. Check trigger delivery errors as well as the visible replies. Do not claim live external-user support has been verified based only on a successful API subscription or synthetic tests.
+
+This mode replaces native interaction delivery **for this trigger**. Do not configure the Chat app's native interaction endpoint to use this Pub/Sub webhook. The backend verifies a Google Accounts OIDC token for the exact audience and verified push service-account email, then checks both subscription identities and the space. The Project Number JWT used by native Chat interactions is not accepted here. Separate native-interaction and Workspace Events triggers remain possible, but overlapping triggers can invoke the assistant twice for the same message; use one path for a given space.
+
+Pub/Sub receives all subscribed message creations, including unselected participants' messages; the backend filters before invoking the assistant. Bot messages, edits, deletes, and subscription lifecycle notifications never invoke it. Google may batch message creations automatically; each human message is filtered, deduplicated, and routed to its own thread, with only that message's payload attached to the assistant event. MCP authorization continues to use the configured assistant identity, not the external sender's credentials.
+
+### Keep the subscription alive
+
+Workspace Events subscriptions expire. With resource data included, use the expiration returned by Google rather than assuming a permanent subscription. Before enabling a durable workflow, configure an independent renewal job under the **same approved app identity** to call:
+
+```http
+PATCH https://workspaceevents.googleapis.com/v1/subscriptions/<WORKSPACE_SUBSCRIPTION_ID>?updateMask=ttl
+Content-Type: application/json
+
+{"ttl":"14400s"}
+```
+
+For example, an hourly Cloud Scheduler HTTP job can obtain an OAuth access token for that service account with the `https://www.googleapis.com/auth/chat.app.messages.readonly` scope and renew the four-hour subscription. Renewals must not run through an LLM or depend on a successful digest. Verify the returned operation completes and expiration advances, and monitor renewal failures and Workspace subscription lifecycle notifications. An expired subscription must be recreated, and the trigger's `workspace_subscription` updated to its new identity. Pausing a Speakeasy trigger does not delete the customer-managed Cloud subscription; retiring the integration requires deleting its renewal job and subscriptions too.
+
+The backend accepts authenticated events; it does not provision or renew customer-managed Cloud resources. Existing native trigger tools expose this configuration through their discovered schema. No Platform MCP setup tool is added: provisioning and credential entry still require the operator-controlled setup described above. No new Temporal schedule or polling loop is introduced by this transport.
+
+References: [Workspace event subscriptions](https://developers.google.com/workspace/events/guides/create-subscription), [event format and expiration](https://developers.google.com/workspace/events), [subscription renewal](https://developers.google.com/workspace/events/guides/update-subscription), [authenticated Pub/Sub push](https://cloud.google.com/pubsub/docs/authenticate-push-subscriptions), and [external-member restrictions](https://knowledge.workspace.google.com/admin/chat/chatting-with-external-users).

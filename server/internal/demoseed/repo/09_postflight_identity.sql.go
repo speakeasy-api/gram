@@ -599,7 +599,9 @@ JOIN assistants a ON a.id::text = t.target_ref AND a.organization_id = t.organiz
 WHERE t.organization_id = $1::text AND t.project_id = $2::uuid
   AND t.deleted IS FALSE AND a.deleted IS FALSE AND a.id = $3::uuid
   AND t.definition_slug = 'googlechat' AND t.target_kind = 'assistant'
-  AND t.status = 'paused' AND t.environment_id IS NULL AND t.config_json = '{}'::jsonb
+  AND t.status = 'paused' AND t.environment_id IS NULL
+  AND jsonb_typeof(t.config_json->'workspace_events') = 'object'
+  AND t.config_json->'workspace_events'->>'text_prefix' = 'assistant:'
 `
 
 type PostflightIDPausedGoogleChatTriggerParams struct {

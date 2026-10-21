@@ -22,8 +22,8 @@ import (
 const googleChatProjectNumberEnv = "GOOGLE_CHAT_PROJECT_NUMBER"
 const googleChatIssuer = "chat@system.gserviceaccount.com"
 
-// v1 supports non-add-on Chat apps configured with Project Number authentication
-// audience, not Workspace add-on OIDC or Workspace Events subscriptions. See
+// Native ingress supports non-add-on Chat apps with Project Number authentication,
+// not Workspace add-on OIDC. Workspace Events uses its own push verifier. See
 // https://developers.google.com/workspace/chat/verify-requests-from-chat#authenticate_requests_with_a_project_number_jwt
 // Google publishes the same service-account public keys in JWK and X509 forms.
 const googleChatKeysURL = "https://www.googleapis.com/service_accounts/v1/jwk/" + googleChatIssuer
@@ -31,9 +31,13 @@ const googleChatKeysURL = "https://www.googleapis.com/service_accounts/v1/jwk/" 
 var googleChatProjectNumberPattern = regexp.MustCompile(`^[0-9]+$`)
 
 type googlechatTriggerConfig struct {
-	FilterExpr     string   `json:"filter,omitempty"`
-	SpaceNames     []string `json:"space_names,omitempty"`
-	compiledFilter cel.Program
+	FilterExpr string   `json:"filter,omitempty"`
+	SpaceNames []string `json:"space_names,omitempty"`
+
+	// WorkspaceEvents opts into authenticated Pub/Sub message delivery instead
+	// of native Chat interactions. Each mode uses distinct inbound authentication.
+	WorkspaceEvents *googlechatWorkspaceConfig `json:"workspace_events,omitempty"`
+	compiledFilter  cel.Program
 }
 
 func (c googlechatTriggerConfig) Filter(event any) (bool, error) {
@@ -44,11 +48,15 @@ func (c googlechatTriggerConfig) Filter(event any) (bool, error) {
 	if len(c.SpaceNames) > 0 && !slices.Contains(c.SpaceNames, e.SpaceName) {
 		return false, nil
 	}
+	if c.WorkspaceEvents != nil && (!slices.Contains(c.WorkspaceEvents.UserNames, e.UserName) ||
+		!strings.HasPrefix(strings.TrimSpace(e.Text), c.WorkspaceEvents.TextPrefix)) {
+		return false, nil
+	}
 	return evalWebhookFilter(c.compiledFilter, nil, event, e.EventType, []string{"MESSAGE"})
 }
 
-// Chat only sends MESSAGE interactions for DMs and explicit app mentions. Never
-// infer mentions from untrusted text or ingest ambient Workspace Events here.
+// Both native interactions and explicitly configured Workspace Events normalize
+// to this shape. Addressed describes routing, never authorization.
 type googlechatTriggerEvent struct {
 	EventType   string `json:"event_type" cel:"event_type"`
 	MessageName string `json:"message_name" cel:"message_name"`
@@ -167,7 +175,7 @@ func newGoogleChatDefinition() Definition {
 		},
 		Ingest: googlechatIngest,
 	}
-	return NewWebhookDefinition(vendor, schema, compiled, func(raw map[string]any) (Config, error) {
+	definition := NewWebhookDefinition(vendor, schema, compiled, func(raw map[string]any) (Config, error) {
 		cfg, err := decodeConfig[googlechatTriggerConfig](raw, compiled)
 		if err != nil {
 			return nil, err
@@ -177,12 +185,18 @@ func newGoogleChatDefinition() Definition {
 				return nil, fmt.Errorf("invalid Google Chat space name %q", space)
 			}
 		}
+		if cfg.WorkspaceEvents != nil {
+			if err := cfg.WorkspaceEvents.validate(cfg.SpaceNames); err != nil {
+				return nil, err
+			}
+		}
 		cfg.compiledFilter, err = compileCELFilter(reflect.TypeFor[googlechatTriggerEvent](), cfg.FilterExpr)
 		if err != nil {
 			return nil, err
 		}
 		return cfg, nil
 	})
+	return withGoogleChatWorkspaceEvents(definition)
 }
 
 func scopeGoogleChatCorrelation(instanceID, threadName string) string {

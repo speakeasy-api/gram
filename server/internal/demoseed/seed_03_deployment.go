@@ -565,9 +565,24 @@ func (s *seeder) seedDeploymentAssistants(ctx context.Context) error {
 		}
 	}
 
-	// This paused example deliberately has no credentials or webhook subscription.
+	// The shared-space example remains paused with synthetic identifiers and no credentials.
+	chatConfig, err := json.Marshal(map[string]any{
+		"space_names": []string{"spaces/" + s.det("googlechat-space").String()},
+		"workspace_events": map[string]any{
+			"subscription":           "projects/example-project/subscriptions/demo-" + s.det("googlechat-push").String(),
+			"workspace_subscription": "subscriptions/" + s.det("googlechat-subscription").String(),
+			"audience":               "https://example.invalid/" + s.det("googlechat-audience").String(),
+			"service_account_email":  s.det("googlechat-push-account").String() + "@example-project.iam.gserviceaccount.com",
+			"user_names":             []string{"users/" + s.det("googlechat-participant").String()},
+			"text_prefix":            "assistant:",
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("marshal demo Google Chat configuration: %w", err)
+	}
 	if err := s.q.DeployInsertGoogleChatTrigger(ctx, repo.DeployInsertGoogleChatTriggerParams{
 		ID:             s.det("assistant-googlechat-bound"),
+		ConfigJson:     chatConfig,
 		OrganizationID: org,
 		ProjectID:      proj,
 		TargetRef:      bound.String(),

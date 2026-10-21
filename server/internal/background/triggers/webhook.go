@@ -229,10 +229,10 @@ func NewWebhookDefinition(
 				return nil, err
 			}
 			if ingest == nil || (ingest.Response == nil && ingest.Event == nil) {
-				return &WebhookIngressResult{Response: nil, Event: nil, Task: nil}, nil
+				return &WebhookIngressResult{Events: nil, Response: nil, Event: nil, Task: nil}, nil
 			}
 			if ingest.Response != nil && ingest.Event == nil {
-				return &WebhookIngressResult{Response: ingest.Response, Event: nil, Task: nil}, nil
+				return &WebhookIngressResult{Events: nil, Response: ingest.Response, Event: nil, Task: nil}, nil
 			}
 			// EventID and CorrelationID fallbacks are applied by the dispatcher
 			// (App.ProcessWebhook) once the trigger instance id is known. The
@@ -240,6 +240,7 @@ func NewWebhookDefinition(
 			// hash is identical across instances that receive the same payload,
 			// which would collide on the downstream dedup keys.
 			return &WebhookIngressResult{
+				Events:   nil,
 				Response: ingest.Response,
 				Event: &EventEnvelope{
 					EventID:           ingest.EventID,

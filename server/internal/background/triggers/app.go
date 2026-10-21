@@ -822,17 +822,40 @@ func (a *App) ProcessWebhook(ctx context.Context, instanceID uuid.UUID, body []b
 	if result == nil {
 		return nil, nil
 	}
+	if len(result.Events) > 0 {
+		if result.Event != nil {
+			return nil, fmt.Errorf("webhook returned both a single event and a batch")
+		}
+		for _, event := range result.Events {
+			if event == nil {
+				return nil, fmt.Errorf("webhook returned a nil batch event")
+			}
+			if _, err := a.processWebhookEvent(ctx, instance, envMap, body, event); err != nil {
+				return nil, err
+			}
+		}
+		return result, nil
+	}
 	if result.Event == nil {
 		return result, nil
 	}
+	result.Task, err = a.processWebhookEvent(ctx, instance, envMap, body, result.Event)
+	if err != nil {
+		return nil, err
+	}
+	return result, nil
+}
 
-	result.Event.Event = a.withSlackBotIdentity(ctx, instance, envMap, result.Event.Event)
-	result.Event.TriggerInstanceID = instance.ID.String()
-	result.Event.DefinitionSlug = instance.DefinitionSlug
+// processWebhookEvent independently filters, deduplicates, and routes each post,
+// including posts from different threads in a single provider delivery.
+func (a *App) processWebhookEvent(ctx context.Context, instance triggerrepo.TriggerInstance, envMap map[string]string, body []byte, event *EventEnvelope) (*Task, error) {
+	event.Event = a.withSlackBotIdentity(ctx, instance, envMap, event.Event)
+	event.TriggerInstanceID = instance.ID.String()
+	event.DefinitionSlug = instance.DefinitionSlug
 	// Google Chat resource names are shared across apps installed in a space.
 	// Keep each configured connection's conversation independent.
 	if instance.DefinitionSlug == DefinitionSlugGoogleChat {
-		result.Event.CorrelationID = scopeGoogleChatCorrelation(instance.ID.String(), result.Event.CorrelationID)
+		event.CorrelationID = scopeGoogleChatCorrelation(instance.ID.String(), event.CorrelationID)
 	}
 
 	// Scope the dedup event id to this trigger instance now that it's known —
@@ -840,35 +863,34 @@ func (a *App) ProcessWebhook(ctx context.Context, instanceID uuid.UUID, body []b
 	// exactly one instance, so two instances must never dedupe each other's
 	// deliveries on the dispatch workflow id or the assistant enqueue key and
 	// silently drop one.
-	result.Event.EventID = scopeWebhookEventID(result.Event.TriggerInstanceID, result.Event.EventID, body)
-	if result.Event.CorrelationID == "" {
-		result.Event.CorrelationID = result.Event.EventID
+	event.EventID = scopeWebhookEventID(event.TriggerInstanceID, event.EventID, body)
+	if event.CorrelationID == "" {
+		event.CorrelationID = event.EventID
 	}
 
 	// Unfurl before ProcessEvent: link previews should render even when no
 	// assistant subscribes to link_shared (ProcessEvent would filter the event
 	// out and return a nil task).
-	a.unfurlSlackGramLinks(ctx, instance, envMap, body, *result.Event)
+	a.unfurlSlackGramLinks(ctx, instance, envMap, body, *event)
 
-	task, err := a.ProcessEvent(ctx, instance, *result.Event)
+	task, err := a.ProcessEvent(ctx, instance, *event)
 	if err != nil {
-		a.clearSlackThreadStatus(ctx, instance, envMap, *result.Event)
+		a.clearSlackThreadStatus(ctx, instance, envMap, *event)
 		return nil, fmt.Errorf("process event: %w", err)
 	}
-	result.Task = task
 	if task == nil {
-		a.clearSlackThreadStatus(ctx, instance, envMap, *result.Event)
-		return result, nil
+		a.clearSlackThreadStatus(ctx, instance, envMap, *event)
+		return nil, nil
 	}
 
-	a.ackSlackThreadStatus(ctx, instance, envMap, *result.Event)
+	a.ackSlackThreadStatus(ctx, instance, envMap, *event)
 
 	if err := ExecuteTriggerDispatchWorkflow(ctx, a.temporalEnv, TriggerDispatchWorkflowInput{Task: *task}); err != nil {
-		a.clearSlackThreadStatus(ctx, instance, envMap, *result.Event)
+		a.clearSlackThreadStatus(ctx, instance, envMap, *event)
 		return nil, fmt.Errorf("execute trigger dispatch workflow: %w", err)
 	}
 
-	return result, nil
+	return task, nil
 }
 
 // ackSlackThreadStatus shows Slack's native loading indicator on the thread the

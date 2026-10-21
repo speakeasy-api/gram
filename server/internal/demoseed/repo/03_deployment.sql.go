@@ -385,10 +385,10 @@ func (q *Queries) DeployInsertExternalOAuthMetadata(ctx context.Context, arg Dep
 
 const deployInsertGoogleChatTrigger = `-- name: DeployInsertGoogleChatTrigger :exec
 INSERT INTO trigger_instances
-  (id, organization_id, project_id, definition_slug, name, target_kind, target_ref, target_display, status)
+  (id, organization_id, project_id, definition_slug, name, target_kind, target_ref, target_display, status, config_json)
 VALUES
   ($1, $2::text, $3::uuid, 'googlechat', 'Google Chat team assistant',
-   'assistant', $4, $5, 'paused')
+   'assistant', $4, $5, 'paused', $6::jsonb)
 `
 
 type DeployInsertGoogleChatTriggerParams struct {
@@ -397,6 +397,7 @@ type DeployInsertGoogleChatTriggerParams struct {
 	ProjectID      uuid.UUID
 	TargetRef      string
 	TargetDisplay  string
+	ConfigJson     []byte
 }
 
 // Paused display fixture: no credentials, environment, or webhook subscription.
@@ -407,6 +408,7 @@ func (q *Queries) DeployInsertGoogleChatTrigger(ctx context.Context, arg DeployI
 		arg.ProjectID,
 		arg.TargetRef,
 		arg.TargetDisplay,
+		arg.ConfigJson,
 	)
 	return err
 }
