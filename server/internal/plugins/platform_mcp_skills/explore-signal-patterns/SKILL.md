@@ -24,7 +24,7 @@ client's own connection and select the exact project requested by the user.
    `dimension: attribute_keys`. To discover values, use `dimension: attribute`
    and the exact `attribute` key. `present: false` means absent; present empty
    strings are a different group. Names such as `department`, `model_family`,
-   `model_provider` and `model_name` are starting labels, not a closed vocabulary.
+   `inference_provider` and `model_name` are starting labels, not a closed vocabulary.
 4. Call `run_analytics_query` with `dataset: signals`, explicit `from`/`to`,
    `grain: auto` (or an admitted UTC interval) and `signal_query`:
    - `selection`: `sensor_id`, `signal_id` or `minimum_level`, and `threshold`;

@@ -121,7 +121,7 @@ func (e *Engine) DescribeSignals(ctx context.Context, tenant Tenant) (*SignalCat
 	if len(sensors) > configurationLimit || len(labels) > configurationLimit {
 		return nil, newError(ErrLimitExceeded, signalquery.Dataset, "configuration", "", "project configuration exceeds the discoverable authoring limit")
 	}
-	out := &SignalCatalog{Dataset: signalquery.Dataset, Unit: "original_message", Population: "answered original-message readings that measured the selected signal or ordered level", Steps: []string{"auto", "minute", "hour", "day", "week", "month"}, Operators: []string{"equals", "in", "exists", "missing"}, SystemDimensions: []string{"source", "role", "actor", "assistant", "definition"}, InitialAttributes: []string{"model_family", "model_provider", "model_name", "department"}, MaxSpanDays: signalquery.MaxSpanDays, MaxGroups: signalquery.MaxGroups, MaxPoints: signalquery.MaxPoints, Sensors: []SignalSensor{}, Signals: []SignalName{}}
+	out := &SignalCatalog{Dataset: signalquery.Dataset, Unit: "original_message", Population: "answered original-message readings that measured the selected signal or ordered level", Steps: []string{"auto", "minute", "hour", "day", "week", "month"}, Operators: []string{"equals", "in", "exists", "missing"}, SystemDimensions: []string{"source", "role", "actor", "assistant", "definition"}, InitialAttributes: []string{"model_family", "inference_provider", "model_name", "department"}, MaxSpanDays: signalquery.MaxSpanDays, MaxGroups: signalquery.MaxGroups, MaxPoints: signalquery.MaxPoints, Sensors: []SignalSensor{}, Signals: []SignalName{}}
 	active := make(map[uuid.UUID]bool, len(labels))
 	for _, label := range labels {
 		active[label.ID] = true
