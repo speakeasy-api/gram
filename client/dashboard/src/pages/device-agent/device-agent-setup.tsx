@@ -35,6 +35,11 @@ const RELEASES_BASE =
   "https://storage.googleapis.com/speakeasy-device-agent-releases-prod";
 const MANIFEST_URL = `${RELEASES_BASE}/releases.json`;
 
+// Public docs: what the device agent is, and the MDM rollout guide.
+const DOCS_DEVICE_AGENT =
+  "https://www.speakeasy.com/docs/ai-control-plane/reference/device-agent";
+const DOCS_MDM = `${DOCS_DEVICE_AGENT}/mdm-installations`;
+
 // Shared inline-link styling for the anchors/Links on this page.
 const LINK_CLASS = "underline underline-offset-2 hover:text-foreground";
 
@@ -378,18 +383,10 @@ function ManualDownload({ os }: { os: "linux" }) {
   const cli = data?.latest?.["speakeasy"];
   if (isError || !daemon || !cli) {
     return (
-      <Text small muted>
-        Couldn't load the latest release — open the{" "}
-        <a
-          href={MANIFEST_URL}
-          target="_blank"
-          rel="noopener noreferrer"
-          className={LINK_CLASS}
-        >
-          release manifest
-        </a>{" "}
-        for the current version and download URLs.
-      </Text>
+      <ReleaseLookupError>
+        <code>speakeasyd_&lt;version&gt;_linux_amd64</code> and{" "}
+        <code>speakeasy_&lt;version&gt;_linux_amd64</code>
+      </ReleaseLookupError>
     );
   }
 
@@ -456,6 +453,49 @@ function ManualDownload({ os }: { os: "linux" }) {
   );
 }
 
+// ReleaseLookupError stands in for a download button when the release manifest
+// can't be fetched, and says how to build the download URL by hand. It renders
+// only on a failed lookup, so the manual route stays out of the normal path.
+function ReleaseLookupError({ children }: { children: React.ReactNode }) {
+  return (
+    <Alert variant="error">
+      <AlertTitle>Couldn't look up the latest version</AlertTitle>
+      <AlertDescription>
+        Open the{" "}
+        <a
+          href={MANIFEST_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          className={LINK_CLASS}
+        >
+          release manifest
+        </a>
+        , take <code>latest.speakeasyd.version</code>, and download {children}{" "}
+        from <code>{RELEASES_BASE}/v&lt;version&gt;/</code>.
+      </AlertDescription>
+    </Alert>
+  );
+}
+
+// AgentIntro answers "what am I installing?" in one line and links to the
+// public docs for the rest.
+function AgentIntro() {
+  return (
+    <Text small muted>
+      The device agent runs in the background on each computer, applies your
+      organization&apos;s AI tool policies, and reports coverage back to
+      Speakeasy.{" "}
+      <ExternalLink
+        href={DOCS_DEVICE_AGENT}
+        target="_blank"
+        iconSuffixName="external-link"
+      >
+        About the device agent
+      </ExternalLink>
+    </Text>
+  );
+}
+
 // DownloadStep is the first setup step on Linux: two ways to get the
 // binaries (script or direct download), separated by an OR so it's clear
 // they're alternatives. macOS uses MacInstallStep and Windows WinInstallStep
@@ -467,6 +507,7 @@ function DownloadStep({ os }: { os: "linux" }) {
 
   return (
     <div className="flex flex-col gap-6">
+      <AgentIntro />
       <div className="flex flex-col gap-2">
         <SubLabel>What&apos;s inside</SubLabel>
         <BinaryLegend />
@@ -915,55 +956,44 @@ const MANAGED_CONFIG_PATHS = [
 
 // MacInstallerDownload / WinInstallerDownload are the direct installer
 // buttons, shared by the setup sheet's install step and onboarding's inline
-// box. The fallback text stays context-free (no "use the script above") so it
-// reads correctly in both.
+// box. While the manifest loads they say so; only a failed lookup shows how to
+// build the URL by hand.
 function MacInstallerDownload() {
-  const { data, isError } = useAgentReleases();
+  const { data, isLoading } = useAgentReleases();
   const version = safeVersion(data?.latest?.["speakeasyd"]?.version);
-  // The pkg ships from the same bucket/version layout as the raw binaries
-  // (device-agent's release-pkg-macos job), but isn't itself listed in
-  // releases.json — it's the manual/MDM on-ramp, not something the
-  // auto-update client discovers — so its URL is built directly rather than
-  // read off the manifest the way ManualDownload reads speakeasyd/speakeasy.
-  const pkgUrl = version
-    ? `${RELEASES_BASE}/v${version}/speakeasy-agent_${version}.pkg`
-    : null;
 
-  if (!pkgUrl) {
+  if (version) {
+    // The pkg ships from the same bucket/version layout as the raw binaries
+    // (device-agent's release-pkg-macos job), but isn't itself listed in
+    // releases.json — it's the manual/MDM on-ramp, not something the
+    // auto-update client discovers — so its URL is built directly rather
+    // than read off the manifest the way ManualDownload reads the binaries.
+    return (
+      <BinaryDownloadButton
+        href={`${RELEASES_BASE}/v${version}/speakeasy-agent_${version}.pkg`}
+        role="Installer"
+        name="speakeasy-agent.pkg"
+        version={version}
+      />
+    );
+  }
+  if (isLoading) {
     return (
       <Text small muted>
-        {isError
-          ? "Couldn't load the latest release — open the "
-          : "Loading the latest release… or open the "}
-        <a
-          href={MANIFEST_URL}
-          target="_blank"
-          rel="noopener noreferrer"
-          className={LINK_CLASS}
-        >
-          release manifest
-        </a>{" "}
-        for the current version.
+        Loading the latest release…
       </Text>
     );
   }
-
   return (
-    <BinaryDownloadButton
-      href={pkgUrl}
-      role="Installer"
-      name="speakeasy-agent.pkg"
-      version={version ?? ""}
-    />
+    <ReleaseLookupError>
+      <code>speakeasy-agent_&lt;version&gt;.pkg</code>
+    </ReleaseLookupError>
   );
 }
 
 function WinInstallerDownload() {
-  const { data, isError } = useAgentReleases();
+  const { data, isLoading } = useAgentReleases();
   const version = safeVersion(data?.latest?.["speakeasyd"]?.version);
-  const msiUrl = version
-    ? `${RELEASES_BASE}/v${version}/speakeasy-agent_${version}.msi`
-    : null;
   // Never offer a plaintext download: if the server URL is somehow non-HTTPS,
   // fall back to the manifest rather than the stable link.
   const serverURL = getServerURL();
@@ -971,124 +1001,165 @@ function WinInstallerDownload() {
     ? `${serverURL}/v1/install/device-agent-windows.msi`
     : null;
 
-  if (!msiUrl) {
+  if (version) {
+    return (
+      <BinaryDownloadButton
+        href={`${RELEASES_BASE}/v${version}/speakeasy-agent_${version}.msi`}
+        role="Installer"
+        name="speakeasy-agent.msi"
+        version={version}
+      />
+    );
+  }
+  if (isLoading) {
     return (
       <Text small muted>
-        {isError
-          ? "Couldn't load the latest release — use the "
-          : "Loading the latest release… or use the "}
-        {stableMsiUrl ? (
-          <a
-            href={stableMsiUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className={LINK_CLASS}
-          >
-            stable installer link
-          </a>
-        ) : (
-          <a
-            href={MANIFEST_URL}
-            target="_blank"
-            rel="noopener noreferrer"
-            className={LINK_CLASS}
-          >
-            release manifest
-          </a>
-        )}
-        , which always points at the current version.
+        Loading the latest release…
       </Text>
     );
   }
-
+  if (!stableMsiUrl) {
+    return (
+      <ReleaseLookupError>
+        <code>speakeasy-agent_&lt;version&gt;.msi</code>
+      </ReleaseLookupError>
+    );
+  }
   return (
-    <BinaryDownloadButton
-      href={msiUrl}
-      role="Installer"
-      name="speakeasy-agent.msi"
-      version={version ?? ""}
-    />
+    <Alert variant="error">
+      <AlertTitle>Couldn't look up the latest version</AlertTitle>
+      <AlertDescription>
+        Use the{" "}
+        <a
+          href={stableMsiUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className={LINK_CLASS}
+        >
+          stable installer link
+        </a>
+        , which always points at the current version.
+      </AlertDescription>
+    </Alert>
   );
 }
 
-// MacInstallStep is the first (and only pre-identity) setup step on macOS.
-// Unlike Windows/Linux there's no separate chmod/move or service-registration
-// step — the pkg's postinstall does both.
+// MacInstallStep is the first setup step on macOS. The golden path is the
+// signed pkg pushed by MDM; installing on one Mac by hand stays available but
+// collapsed. There's no separate chmod/move or service-registration step: the
+// pkg's postinstall does both.
 function MacInstallStep() {
   const { data } = useAgentReleases();
   const version = safeVersion(data?.latest?.["speakeasyd"]?.version);
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex flex-col gap-2">
-        <SubLabel>What&apos;s inside</SubLabel>
-        <BinaryLegend />
-      </div>
-      <div className="flex flex-col gap-2">
-        <SubLabel>Run the download + install script</SubLabel>
-        <StepNote>
-          Deploying via Fleet MDM? Provision <code>managed.json</code> first
-          (see the identity step next) for a deterministic first start.
-          Personal/PoC enrolls via OAuth instead — nothing to provision first.
-        </StepNote>
-        {!inlinableVersion(version) && (
-          <StepNote>
-            Uses bash syntax: in fish or another shell, run <code>bash</code>{" "}
-            first.
-          </StepNote>
-        )}
-        <CodeBlock language="bash">{macInstall(version)}</CodeBlock>
-      </div>
-      <OrDivider />
-      <div className="flex flex-col gap-2">
-        <SubLabel>Download the installer directly</SubLabel>
+      <AgentIntro />
+      <div className="flex flex-col gap-3">
+        <SubLabel>Deploy the pkg with your MDM</SubLabel>
         <MacInstallerDownload />
-      </div>
-      <div className="flex flex-col gap-2">
-        <SubLabel>Or push it as a fleet via MDM</SubLabel>
         <Text small muted>
-          Get the pkg — the script or button above, or (if the automatic lookup
-          above is down) build the URL directly from the current version in the{" "}
+          Upload <code>speakeasy-agent.pkg</code> to Jamf, Iru (formerly
+          Kandji), Intune or another MDM as a{" "}
+          <strong className="font-medium">Package</strong>, and scope a policy
+          to install it once per computer. It installs the daemon, the CLI, the
+          menu bar app and the privileged helper, and sets them to start at
+          login.
+        </Text>
+        <Text small muted>
+          In the configuration profile that delivers <code>managed.json</code>{" "}
+          (next step), add a{" "}
+          <strong className="font-medium">Managed Login Items</strong> payload
+          so people can&apos;t switch the agent off in System Settings. The{" "}
           <ExternalLink
-            href={MANIFEST_URL}
+            href={DOCS_MDM}
             target="_blank"
             iconSuffixName="external-link"
           >
-            release manifest
-          </ExternalLink>
-          :{" "}
-          <code>.../v&lt;version&gt;/speakeasy-agent_&lt;version&gt;.pkg</code>.
-          Upload it to your MDM (Jamf, Iru (formerly Kandji), Intune, …) as a{" "}
-          <strong className="font-medium">Package</strong>, then scope a policy
-          to install it once per computer — no script needed. The pkg installs
-          the daemon, CLI, menu-bar UI, and privileged helper together, and its
-          postinstall step registers the per-user LaunchAgents itself.
+            MDM guide
+          </ExternalLink>{" "}
+          has the payload.
         </Text>
         <Text small muted>
-          You won't need to redeploy this for every agent update — with{" "}
-          <code>auto_update: "automatic"</code>, it stays current on its own
-          after this first install.
+          Push the pkg once. With <code>auto_update: "automatic"</code> the
+          agent keeps itself up to date.
         </Text>
       </div>
+      <details className="text-muted-foreground text-sm">
+        <summary className="cursor-pointer">
+          Install on a single Mac instead
+        </summary>
+        <div className="mt-3 flex flex-col gap-2">
+          <Text small muted>
+            For a personal or proof-of-concept install, open the pkg above, or
+            run:
+          </Text>
+          {!inlinableVersion(version) && (
+            <StepNote>
+              Uses bash syntax: in fish or another shell, run <code>bash</code>{" "}
+              first.
+            </StepNote>
+          )}
+          <CodeBlock language="bash">{macInstall(version)}</CodeBlock>
+          <Text small muted>
+            macOS then shows a{" "}
+            <strong className="font-medium">Background Items Added</strong>{" "}
+            notice. Leave Speakeasy switched on in System Settings → General →
+            Login Items.
+          </Text>
+        </div>
+      </details>
     </div>
   );
 }
 
-// The pkg deliberately doesn't add the CLI to PATH: it would collide with the
-// Speakeasy SDK generator's own `speakeasy` on a dev machine, and pointing
-// PATH at the pkg's staging copy would serve a stale binary after the first
-// auto-update. Reach it by its per-user seed path instead — every macOS CLI
-// invocation in this file does. The commands set no shell variables, so they
-// also run in fish.
+// MacVerifyStep checks the install from the menu bar app, which shows the
+// sign-in state, so it comes after the identity step. The terminal checks
+// stay available but collapsed. The pkg deliberately doesn't add the CLI to
+// PATH: it would collide with the Speakeasy SDK generator's own `speakeasy`
+// on a dev machine, and pointing PATH at the pkg's staging copy would serve a
+// stale binary after the first auto-update. Reach it by its per-user seed path
+// instead — every macOS CLI invocation in this file does. The commands set no
+// shell variables, so they also run in fish.
 function MacVerifyStep() {
   return (
-    <div className="flex flex-col gap-2">
-      <StepNote>
-        Run these in the enrolled user's own login session, not as root.
-      </StepNote>
-      <CodeBlock language="bash">{`pkgutil --pkg-info com.speakeasy.agent.pkg
+    <div className="flex flex-col gap-4">
+      <Text muted>
+        Click the Speakeasy icon in the menu bar. It shows{" "}
+        <strong className="font-medium">Signed in as</strong> your email, or{" "}
+        <strong className="font-medium">Provisioned by IT</strong> on a Mac that
+        received <code>managed.json</code>.{" "}
+        <strong className="font-medium">Agent not reachable</strong> means the
+        background service isn&apos;t running.
+      </Text>
+      <Text small muted>
+        In System Settings → General → Login Items, Speakeasy should be switched
+        on under{" "}
+        <strong className="font-medium">Allow in the Background</strong>. With
+        the Managed Login Items payload, the switch is dimmed so it can&apos;t
+        be turned off. To check a whole fleet, see{" "}
+        <ExternalLink
+          href={`${DOCS_MDM}#verify-the-rollout-with-agent-coverage`}
+          target="_blank"
+          iconSuffixName="external-link"
+        >
+          agent coverage
+        </ExternalLink>
+        .
+      </Text>
+      <details className="text-muted-foreground text-sm">
+        <summary className="cursor-pointer">
+          Check from a terminal instead
+        </summary>
+        <div className="mt-3 flex flex-col gap-2">
+          <StepNote>
+            Run these in the user&apos;s own login session, not as root.
+          </StepNote>
+          <CodeBlock language="bash">{`pkgutil --pkg-info com.speakeasy.agent.pkg
 launchctl print "gui/$(id -u)/com.speakeasy.daemon"
 "$HOME/Library/Application Support/Speakeasy/bin/speakeasy" status`}</CodeBlock>
+        </div>
+      </details>
     </div>
   );
 }
@@ -1121,54 +1192,56 @@ msiexec /i speakeasy-agent.msi`;
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex flex-col gap-2">
-        <SubLabel>What&apos;s inside</SubLabel>
-        <BinaryLegend />
-      </div>
-      <div className="flex flex-col gap-2">
-        <SubLabel>Run the download + install script</SubLabel>
-        <StepNote>
-          Run from an elevated (Administrator) PowerShell. The download URL
-          resolves to the latest signed installer.
-        </StepNote>
-        <CodeBlock language="powershell">{downloadScript}</CodeBlock>
-      </div>
-      <OrDivider />
-      <div className="flex flex-col gap-2">
-        <SubLabel>Download the installer directly</SubLabel>
+      <AgentIntro />
+      <div className="flex flex-col gap-3">
+        <SubLabel>Deploy the msi with your MDM</SubLabel>
         <WinInstallerDownload />
+        <Text small muted>
+          Upload the msi to Intune or another MDM as a{" "}
+          <strong className="font-medium">Win32 / line-of-business app</strong>{" "}
+          and assign it per machine. It installs the daemon, the CLI and the
+          agent app under <code>C:\Program Files\Speakeasy\</code> and registers
+          the service. Pair it with a <code>managed.json</code> in{" "}
+          <code>%ProgramData%\Speakeasy\</code> (next step) so enrollment is set
+          centrally.
+        </Text>
+        <Text small muted>
+          Keep <code>auto_update: "notify"</code> on Windows fleets and re-push
+          the msi for new versions until the msi self-update is validated on
+          real hardware.
+        </Text>
       </div>
-      <OrDivider />
-      <div className="flex flex-col gap-2">
-        <SubLabel>Scripted install with raw binaries</SubLabel>
-        <StepNote>
-          Raw binaries remain supported for scripted installs. Unlike the
-          MSI&apos;s machine-wide LocalSystem service, this registers the
-          service for the current user only.
-        </StepNote>
-        <CodeBlock language="powershell">{`${psVersionAssign(version)}
+      <details className="text-muted-foreground text-sm">
+        <summary className="cursor-pointer">
+          Install on a single PC instead
+        </summary>
+        <div className="mt-3 flex flex-col gap-2">
+          <StepNote>
+            Open the msi above, or run this from an elevated (Administrator)
+            PowerShell. The download URL resolves to the latest signed
+            installer.
+          </StepNote>
+          <CodeBlock language="powershell">{downloadScript}</CodeBlock>
+        </div>
+      </details>
+      <details className="text-muted-foreground text-sm">
+        <summary className="cursor-pointer">
+          Scripted install with raw binaries
+        </summary>
+        <div className="mt-3 flex flex-col gap-2">
+          <StepNote>
+            Raw binaries remain supported for scripted installs. Unlike the
+            MSI&apos;s machine-wide LocalSystem service, this registers the
+            service for the current user only.
+          </StepNote>
+          <CodeBlock language="powershell">{`${psVersionAssign(version)}
 $BASE = "${RELEASES_BASE}/v$VERSION"
 Invoke-WebRequest "$BASE/speakeasyd_\${VERSION}_windows_amd64.exe" -OutFile speakeasyd.exe
 Invoke-WebRequest "$BASE/speakeasy_\${VERSION}_windows_amd64.exe"  -OutFile speakeasy.exe
 .\\speakeasyd.exe -service install
 .\\speakeasyd.exe -service start`}</CodeBlock>
-      </div>
-      <div className="flex flex-col gap-2">
-        <SubLabel>Or push it as a fleet via MDM</SubLabel>
-        <Text small muted>
-          Upload the msi to Intune (or your MDM) as a{" "}
-          <strong className="font-medium">Win32 / line-of-business app</strong>{" "}
-          and assign it per machine — no script needed. Get it with the script
-          or link above, and pair it with a <code>managed.json</code> pushed to{" "}
-          <code>%ProgramData%\Speakeasy\</code> (see the identity step) so
-          enrollment is set centrally.
-        </Text>
-        <Text small muted>
-          Keep <code>auto_update: "notify"</code> on Windows fleets: the agent
-          can&apos;t replace its own running binaries on Windows, so version
-          bumps ship as MSI re-pushes from your MDM.
-        </Text>
-      </div>
+        </div>
+      </details>
     </div>
   );
 }
@@ -1277,25 +1350,27 @@ function buildSteps(platform: PlatformKey): SetupStep[] {
     ];
   }
 
+  // On macOS and Windows the identity step comes before verify, so the check
+  // can confirm the sign-in as well as the running service.
   if (platform === "macos") {
     return [
-      { title: "Download and install the agent", body: <MacInstallStep /> },
-      { title: "Verify it's running", body: <MacVerifyStep /> },
+      { title: "Install the agent", body: <MacInstallStep /> },
       {
         title: "Set the user's identity",
         body: <IdentityStep os={platform} />,
       },
+      { title: "Verify it's running", body: <MacVerifyStep /> },
     ];
   }
 
   if (platform === "windows") {
     return [
-      { title: "Download and install the agent", body: <WinInstallStep /> },
-      { title: "Verify it's running", body: <WinVerifyStep /> },
+      { title: "Install the agent", body: <WinInstallStep /> },
       {
         title: "Set the user's identity",
         body: <IdentityStep os={platform} />,
       },
+      { title: "Verify it's running", body: <WinVerifyStep /> },
     ];
   }
 
