@@ -1,0 +1,23 @@
+server/internal/anthropicinference/service.go
+  h_e404c1a6a54184 202
+server/internal/risk/enforcereply/dispatch_test.go
+  h_e404c1a6a54184 733,742-744,746,748-751,762-766
+server/internal/risk/enforcereply/dispatch.go
+  h_e404c1a6a54184 42-43,47,278,281-282,286-289
+server/internal/anthropicinference/service_test.go
+  h_e404c1a6a54184 371-375,388-394
+  h_e404c1a6a54184 50-59,90-94,376-387
+server/internal/risk/scanner.go
+  h_e404c1a6a54184 487-489,491-493,497,503-509,516,687,878-879,885,972,1312,1318-1320,1351-1353
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f9aca67c5d295690f9eacb3c65a7f123e2e24c76",
+  "prompts": {},
+  "humans": {
+    "h_e404c1a6a54184": {
+      "author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
