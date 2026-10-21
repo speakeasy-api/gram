@@ -291,7 +291,7 @@ func (s *Service) authClientMigrationStatus(ctx context.Context, organizationID 
 // failedPhases names the phases a run reports failed, in run order.
 func failedPhases(report authclientbackfill.Report) []string {
 	phases := []string{}
-	for _, phase := range []string{authclientbackfill.PhaseOAuth, authclientbackfill.PhaseHeaders, authclientbackfill.PhaseEMA, authclientbackfill.PhaseReconcile, authclientbackfill.PhaseMark, authclientbackfill.PhaseGrants} {
+	for _, phase := range []string{authclientbackfill.PhaseOAuth, authclientbackfill.PhaseHeaders, authclientbackfill.PhaseEMA, authclientbackfill.PhaseEMAWarnings, authclientbackfill.PhaseReconcile, authclientbackfill.PhaseMark, authclientbackfill.PhaseGrants} {
 		if _, failed := report.PhaseErrors[phase]; failed {
 			phases = append(phases, phase)
 		}
