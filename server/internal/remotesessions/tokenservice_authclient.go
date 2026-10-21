@@ -107,16 +107,20 @@ func (m *ChallengeManager) AuthClientNeedsReconnect(ctx context.Context, req Aut
 // within the project's or organization's reach, whether or not a user session
 // issuer links them. Registrations out of reach are left out.
 func (m *ChallengeManager) ListAuthClientRegistrations(ctx context.Context, projectID uuid.UUID, organizationID string, ids []uuid.UUID) ([]Client, error) {
-	out := make([]Client, 0, len(ids))
-	for _, id := range ids {
-		row, err := m.reachableClient(ctx, projectID, organizationID, id)
-		switch {
-		case errors.Is(err, ErrChosenClientUnbound):
-			continue
-		case err != nil:
-			return nil, err
-		}
-		out = append(out, clientFromRow(row))
+	if len(ids) == 0 {
+		return []Client{}, nil
+	}
+	rows, err := remotesessions_repo.New(m.db).ListReachableRemoteSessionClients(ctx, remotesessions_repo.ListReachableRemoteSessionClientsParams{
+		ProjectID:              projectID,
+		OrganizationID:         organizationID,
+		RemoteSessionClientIds: ids,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list reachable remote_session_clients: %w", err)
+	}
+	out := make([]Client, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, clientFromRow(remotesessions_repo.ListRemoteSessionClientsForUserSessionIssuerRow(row)))
 	}
 	return out, nil
 }

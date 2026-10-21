@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"slices"
 	"strings"
 	"time"
 
@@ -387,7 +386,6 @@ func (s *PluginsService) memberMCPConnectionClients(ctx context.Context, princip
 		for id := range target.associatedClients {
 			ids = append(ids, id)
 		}
-		slices.SortFunc(ids, func(a, b uuid.UUID) int { return strings.Compare(a.String(), b.String()) })
 		clients, err := s.remoteSessions.ListAuthClientRegistrations(ctx, target.projectID, principal.OrganizationID, ids)
 		if err != nil {
 			return nil, fmt.Errorf("list MCP auth client registrations: %w", err)

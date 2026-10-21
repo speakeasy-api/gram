@@ -9300,6 +9300,195 @@ func (q *Queries) ListPrincipalRemoteSessionCandidates(ctx context.Context, arg 
 	return items, nil
 }
 
+const listReachableRemoteSessionClients = `-- name: ListReachableRemoteSessionClients :many
+SELECT
+    c.id                                   AS client_id,
+    c.project_id                           AS client_project_id,
+    c.client_id                            AS external_client_id,
+    c.client_secret_encrypted              AS client_secret_encrypted,
+    c.token_endpoint_auth_method           AS token_endpoint_auth_method,
+    c.scope                                AS client_scope,
+    c.audience                             AS client_audience,
+    c.legacy_callback_url                  AS legacy_callback_url,
+    c.callback_base_url                    AS callback_base_url,
+    c.resource_identifier                  AS resource_identifier,
+    c.resource_name                        AS resource_name,
+    c.resource_documentation               AS resource_documentation,
+    c.resource_policy_uri                  AS resource_policy_uri,
+    c.resource_tos_uri                     AS resource_tos_uri,
+    c.client_secret_expires_at             AS client_secret_expires_at,
+    c.upstream_rejected_at                 AS upstream_rejected_at,
+    c.credential_owner                     AS credential_owner,
+    c.remote_session_issuer_id             AS remote_session_issuer_id,
+    i.tunneled_mcp_server_id               AS tunneled_mcp_server_id,
+    i.slug                                 AS issuer_slug,
+    i.name                                 AS issuer_name,
+    i.registration_endpoint                AS issuer_registration_endpoint,
+    i.logo_asset_id                        AS issuer_logo_asset_id,
+    i.service_documentation                AS issuer_service_documentation,
+    i.op_policy_uri                        AS issuer_op_policy_uri,
+    i.op_tos_uri                           AS issuer_op_tos_uri,
+    i.issuer                               AS issuer_url,
+    i.authorization_endpoint               AS authorization_endpoint,
+    i.token_endpoint                       AS token_endpoint,
+    i.scopes_supported                     AS scopes_supported,
+    i.scope_override                       AS scope_override,
+    i.omit_scope_fallback                  AS omit_scope_fallback,
+    i.code_challenge_methods_supported     AS code_challenge_methods_supported,
+    i.resource_indicator_supported         AS resource_indicator_supported,
+    i.authorization_response_iss_parameter_supported AS authorization_response_iss_parameter_supported,
+    i.metadata                             AS issuer_metadata,
+    i.passthrough                          AS passthrough,
+    i.oidc                                 AS oidc,
+    i.project_id                           AS issuer_project_id,
+    i.organization_id                      AS issuer_organization_id,
+    i.metadata_fetched_at                  AS metadata_fetched_at,
+    i.metadata_last_error_at               AS metadata_last_error_at,
+    i.metadata_last_error_url              AS metadata_last_error_url,
+    (
+      i.metadata IS NOT NULL AND (
+        i.introspection_endpoint_auth_methods_supported IS NULL
+        OR i.id_token_signing_alg_values_supported IS NULL
+        OR i.claims_supported IS NULL
+        OR i.backchannel_logout_supported IS NULL
+        OR i.authorization_response_iss_parameter_supported IS NULL
+        OR i.code_challenge_methods_supported IS NULL
+        OR (jsonb_typeof(COALESCE(NULLIF(i.metadata->'authorization_grant_profiles_supported', 'null'::jsonb), '[]'::jsonb)) IS DISTINCT FROM 'array'
+          OR COALESCE(NULLIF(i.metadata->'authorization_grant_profiles_supported', 'null'::jsonb), '[]'::jsonb) IS DISTINCT FROM to_jsonb(i.authorization_grant_profiles_supported)
+        )
+      )
+    )::boolean                             AS metadata_needs_reprojection
+FROM remote_session_clients AS c
+JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id
+JOIN projects AS p ON p.id = $1::uuid AND p.organization_id = $2::text AND p.deleted IS FALSE
+WHERE c.id = ANY($3::uuid[])
+  AND (c.project_id = p.id OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = p.organization_id)))
+  AND (i.project_id = p.id OR (i.project_id IS NULL AND (i.organization_id IS NULL OR i.organization_id = p.organization_id)))
+  AND c.deleted IS FALSE
+  AND i.deleted IS FALSE
+ORDER BY c.id
+`
+
+type ListReachableRemoteSessionClientsParams struct {
+	ProjectID              uuid.UUID
+	OrganizationID         string
+	RemoteSessionClientIds []uuid.UUID
+}
+
+type ListReachableRemoteSessionClientsRow struct {
+	ClientID                                   uuid.UUID
+	ClientProjectID                            uuid.NullUUID
+	ExternalClientID                           string
+	ClientSecretEncrypted                      pgtype.Text
+	TokenEndpointAuthMethod                    pgtype.Text
+	ClientScope                                []string
+	ClientAudience                             pgtype.Text
+	LegacyCallbackUrl                          bool
+	CallbackBaseUrl                            pgtype.Text
+	ResourceIdentifier                         pgtype.Text
+	ResourceName                               pgtype.Text
+	ResourceDocumentation                      pgtype.Text
+	ResourcePolicyUri                          pgtype.Text
+	ResourceTosUri                             pgtype.Text
+	ClientSecretExpiresAt                      pgtype.Timestamptz
+	UpstreamRejectedAt                         pgtype.Timestamptz
+	CredentialOwner                            string
+	RemoteSessionIssuerID                      uuid.UUID
+	TunneledMcpServerID                        uuid.NullUUID
+	IssuerSlug                                 string
+	IssuerName                                 pgtype.Text
+	IssuerRegistrationEndpoint                 pgtype.Text
+	IssuerLogoAssetID                          uuid.NullUUID
+	IssuerServiceDocumentation                 pgtype.Text
+	IssuerOpPolicyUri                          pgtype.Text
+	IssuerOpTosUri                             pgtype.Text
+	IssuerUrl                                  string
+	AuthorizationEndpoint                      pgtype.Text
+	TokenEndpoint                              pgtype.Text
+	ScopesSupported                            []string
+	ScopeOverride                              []string
+	OmitScopeFallback                          pgtype.Bool
+	CodeChallengeMethodsSupported              []string
+	ResourceIndicatorSupported                 pgtype.Bool
+	AuthorizationResponseIssParameterSupported pgtype.Bool
+	IssuerMetadata                             []byte
+	Passthrough                                bool
+	Oidc                                       bool
+	IssuerProjectID                            uuid.NullUUID
+	IssuerOrganizationID                       pgtype.Text
+	MetadataFetchedAt                          pgtype.Timestamptz
+	MetadataLastErrorAt                        pgtype.Timestamptz
+	MetadataLastErrorUrl                       pgtype.Text
+	MetadataNeedsReprojection                  bool
+}
+
+// GetReachableRemoteSessionClient for several clients at once; clients out of
+// reach are left out.
+func (q *Queries) ListReachableRemoteSessionClients(ctx context.Context, arg ListReachableRemoteSessionClientsParams) ([]ListReachableRemoteSessionClientsRow, error) {
+	rows, err := q.db.Query(ctx, listReachableRemoteSessionClients, arg.ProjectID, arg.OrganizationID, arg.RemoteSessionClientIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListReachableRemoteSessionClientsRow
+	for rows.Next() {
+		var i ListReachableRemoteSessionClientsRow
+		if err := rows.Scan(
+			&i.ClientID,
+			&i.ClientProjectID,
+			&i.ExternalClientID,
+			&i.ClientSecretEncrypted,
+			&i.TokenEndpointAuthMethod,
+			&i.ClientScope,
+			&i.ClientAudience,
+			&i.LegacyCallbackUrl,
+			&i.CallbackBaseUrl,
+			&i.ResourceIdentifier,
+			&i.ResourceName,
+			&i.ResourceDocumentation,
+			&i.ResourcePolicyUri,
+			&i.ResourceTosUri,
+			&i.ClientSecretExpiresAt,
+			&i.UpstreamRejectedAt,
+			&i.CredentialOwner,
+			&i.RemoteSessionIssuerID,
+			&i.TunneledMcpServerID,
+			&i.IssuerSlug,
+			&i.IssuerName,
+			&i.IssuerRegistrationEndpoint,
+			&i.IssuerLogoAssetID,
+			&i.IssuerServiceDocumentation,
+			&i.IssuerOpPolicyUri,
+			&i.IssuerOpTosUri,
+			&i.IssuerUrl,
+			&i.AuthorizationEndpoint,
+			&i.TokenEndpoint,
+			&i.ScopesSupported,
+			&i.ScopeOverride,
+			&i.OmitScopeFallback,
+			&i.CodeChallengeMethodsSupported,
+			&i.ResourceIndicatorSupported,
+			&i.AuthorizationResponseIssParameterSupported,
+			&i.IssuerMetadata,
+			&i.Passthrough,
+			&i.Oidc,
+			&i.IssuerProjectID,
+			&i.IssuerOrganizationID,
+			&i.MetadataFetchedAt,
+			&i.MetadataLastErrorAt,
+			&i.MetadataLastErrorUrl,
+			&i.MetadataNeedsReprojection,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listRemoteServerURLsForUserSessionIssuer = `-- name: ListRemoteServerURLsForUserSessionIssuer :many
 SELECT rms.url, COALESCE(rpr.metadata->>'resource', '')::text AS document_resource
 FROM mcp_servers AS m
