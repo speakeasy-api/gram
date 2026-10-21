@@ -1,12 +1,11 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 
-import { TooltipProvider } from "@/components/ui/Tooltip";
 import type { DirectoryReviewItem } from "@gram/client/models/components/directoryreviewitem.js";
-import type { Role } from "@gram/client/models/components/role.js";
-
 import { DirectoryReviewPanel } from "./DirectoryReviewPanel";
+import type { Role } from "@gram/client/models/components/role.js";
+import { TooltipProvider } from "@/components/ui/Tooltip";
 
 const mocks = vi.hoisted(() => ({
   mutate: vi.fn(),
@@ -181,7 +180,9 @@ describe("DirectoryReviewPanel", () => {
 
   it("maps a new group to the proposed role", () => {
     renderPanel();
-    fireEvent.click(screen.getAllByRole("button", { name: "Map" })[0]!);
+    fireEvent.click(
+      screen.getAllByRole("button", { name: "Map to new role" })[0]!,
+    );
     expect(requestOf(0)).toEqual({
       id: "item-group",
       decision: "approve",
@@ -220,11 +221,36 @@ describe("DirectoryReviewPanel", () => {
       },
     ];
     rerender(<DirectoryReviewPanel roles={[...roles, sales]} rolesLoaded />);
-    fireEvent.click(screen.getByRole("button", { name: "Map" }));
+    fireEvent.click(screen.getByRole("button", { name: "Map to Sales" }));
     expect(requestOf(0)).toEqual({
       id: "item-value",
       decision: "approve",
       version: "v2b",
+      roles: [{ roleUrn: "role:sales" }],
+    });
+  });
+
+  it("reuses a proposed new role that already exists before the item refetches", () => {
+    // The role list has refreshed but the item still proposes creating it.
+    mocks.items = [newValue];
+    const sales = {
+      id: "role-sales",
+      name: "Sales",
+      principalUrn: "role:sales",
+      grants: [],
+    } as unknown as Role;
+    render(<DirectoryReviewPanel roles={[...roles, sales]} rolesLoaded />, {
+      wrapper: ({ children }) => (
+        <QueryClientProvider client={new QueryClient()}>
+          <TooltipProvider>{children}</TooltipProvider>
+        </QueryClientProvider>
+      ),
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Map to Sales" }));
+    expect(requestOf(0)).toEqual({
+      id: "item-value",
+      decision: "approve",
+      version: "v2",
       roles: [{ roleUrn: "role:sales" }],
     });
   });
