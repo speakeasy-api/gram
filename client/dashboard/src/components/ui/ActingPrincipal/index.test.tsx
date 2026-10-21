@@ -1,7 +1,8 @@
 import { render, screen, cleanup } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ActingPrincipal, actingPrincipalText } from ".";
+import { ActingPrincipal } from ".";
+import { actingPrincipalText } from "./text";
 
 vi.mock("@/lib/useIdentityHref", () => ({
   useIdentityHrefBuilder: () => () => "/identities/x",

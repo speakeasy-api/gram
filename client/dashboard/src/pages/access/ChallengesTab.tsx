@@ -6,7 +6,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/Select";
-import { actingPrincipalText } from "@/components/ui/ActingPrincipal";
+import { actingPrincipalText } from "@/components/ui/ActingPrincipal/text";
 import { SkeletonTable } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
 import { cn } from "@/lib/utils";

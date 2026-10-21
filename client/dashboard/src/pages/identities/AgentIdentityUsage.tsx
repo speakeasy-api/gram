@@ -93,7 +93,10 @@ export function AgentIdentityUsage({
     throwOnError: false,
   });
 
-  const points = series.data?.targetTimeSeries ?? [];
+  // Memoised rather than defaulted inline: a bare `?? []` is a new array on
+  // every render, so the chart was rebuilt each time regardless.
+  const timeSeries = series.data?.targetTimeSeries;
+  const points = useMemo(() => timeSeries ?? [], [timeSeries]);
   const chart = useMemo(
     () =>
       buildToolUsageTimeSeries(
@@ -211,7 +214,10 @@ function AgentAuthorizers({ agent }: { agent: ManagedAgent }): JSX.Element {
     throwOnError: false,
     retry: false,
   });
-  const all = sessions.data?.items ?? [];
+  // Memoised rather than defaulted inline: a bare `?? []` is a new array on
+  // every render, which made the ranking below recompute each time.
+  const items = sessions.data?.items;
+  const all = useMemo(() => items ?? [], [items]);
   // Counted per authorizer, so a name that appears once does not outrank one
   // that appears daily, and the most recent session is kept beside it.
   const ranked = useMemo(() => {

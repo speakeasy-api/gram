@@ -18,10 +18,8 @@ import {
   type ObserveDeepLinkScope,
 } from "@/components/observe/observeDeepLink";
 import { buildToolUsageTimeSeries } from "@/components/observe/toolUsageTimeSeriesChartData";
-import {
-  ActingPrincipal,
-  actingPrincipalText,
-} from "@/components/ui/ActingPrincipal";
+import { ActingPrincipal } from "@/components/ui/ActingPrincipal";
+import { actingPrincipalText } from "@/components/ui/ActingPrincipal/text";
 import { useReadableAgents } from "@/hooks/useReadableAgents";
 import type { useServerNameMappings } from "@/hooks/useServerNameMappings";
 import type { ToolUsageClientSummary } from "@gram/client/models/components/toolusageclientsummary.js";

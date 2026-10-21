@@ -1486,6 +1486,26 @@ function LogsToolsTableContent({
   /** Resolved when this row's caller is an agent; its name is not on the row. */
   agent?: { id: string; name: string };
 }) {
+  // Agent names are not on a trace — the row carries "agent:<uuid>" and
+  // nothing else — so they are read once here rather than per row. Asked for
+  // only when a trace on screen actually names an agent.
+  //
+  // Above the error and empty returns below, because a hook that runs only on
+  // the rendering path changes the hook order between renders.
+  const agents = useReadableAgents(
+    traces.some((trace) => trace.userKind === "agent_id"),
+  );
+  const agentsById = useMemo(
+    () =>
+      new Map(
+        (agents.isError ? [] : (agents.data ?? [])).map((agent) => [
+          agent.id,
+          agent,
+        ]),
+      ),
+    [agents.data, agents.isError],
+  );
+
   if (error) {
     return (
       <ErrorAlert
@@ -1569,24 +1589,6 @@ function LogsToolsTableContent({
       dayGroups.push({ key, date: timestamp, traces: [trace] });
     }
   }
-
-  // Agent names are not on a trace — the row carries "agent:<uuid>" and
-  // nothing else — so they are read once here rather than per row. Asked for
-  // only when a trace on screen actually names an agent.
-  const agentRows = dayGroups.some((group) =>
-    group.traces.some((trace) => trace.userKind === "agent_id"),
-  );
-  const agents = useReadableAgents(agentRows);
-  const agentsById = useMemo(
-    () =>
-      new Map(
-        (agents.isError ? [] : (agents.data ?? [])).map((agent) => [
-          agent.id,
-          agent,
-        ]),
-      ),
-    [agents.data, agents.isError],
-  );
 
   return (
     <>

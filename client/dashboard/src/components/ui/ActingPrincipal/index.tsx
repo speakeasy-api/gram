@@ -23,8 +23,7 @@ import * as React from "react";
  * particular call. Those render as the agent alone, not as "on behalf of
  * unknown", which would imply a person we failed to look up.
  */
-/** A person this agent acted for. */
-type Principal = { id: string; name?: string | undefined; photoUrl?: string };
+import type { Principal } from "./text";
 
 export function ActingPrincipal({
   agent,
@@ -177,21 +176,4 @@ function initials(name: string): string {
   if (parts.length === 0) return "?";
   if (parts.length === 1) return parts[0]!.slice(0, 2).toUpperCase();
   return (parts[0]![0]! + parts[parts.length - 1]![0]!).toUpperCase();
-}
-
-/** The same relation as plain text, for a tooltip, a title or a CSV cell. */
-export function actingPrincipalText(
-  agent: { id: string; name?: string | undefined },
-  authorizer?: Principal | Principal[] | undefined,
-): string {
-  const agentLabel = agent.name || `agent:${agent.id}`;
-  const people = authorizer
-    ? Array.isArray(authorizer)
-      ? authorizer
-      : [authorizer]
-    : [];
-  if (people.length === 0) return agentLabel;
-  return `${agentLabel} on behalf of ${people
-    .map((person) => person.name || person.id)
-    .join(", ")}`;
 }
