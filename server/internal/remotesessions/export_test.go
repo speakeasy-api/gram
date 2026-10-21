@@ -22,6 +22,10 @@ func (s *Service) SetCreateDiscoveryBudget(d time.Duration) { s.createDiscoveryB
 // MaxEnrichmentBytes exposes the enrichment cap to e2e tests.
 const MaxEnrichmentBytes = maxEnrichmentBytes
 
+// ErrRemoteLoginWithoutOrganization is the refusal of a grant write that names
+// no organization.
+var ErrRemoteLoginWithoutOrganization = errRemoteLoginWithoutOrganization
+
 // PlanIssuerMetadataRefresh exposes the on-use decision to tests.
 func PlanIssuerMetadataRefresh(use IssuerMetadataUse, now time.Time) (reproject, fetch bool) {
 	plan := planIssuerMetadataRefresh(use, now)

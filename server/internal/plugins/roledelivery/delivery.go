@@ -121,7 +121,7 @@ func apply(ctx context.Context, tx pgx.Tx, org string, pluginID uuid.UUID, s ser
 	if !s.Eligible || s.BackendKind != "mcp_server" {
 		return false, nil
 	}
-	exists, err := pluginsrepo.New(tx).HasRoleDeliveryMembership(ctx, pluginsrepo.HasRoleDeliveryMembershipParams{PluginID: pluginID, OrganizationID: org, ProjectID: s.ProjectID, ToolsetID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, McpServerID: uuid.NullUUID{UUID: s.ID, Valid: true}, LegacyToolsetID: s.LegacyToolsetID, PreserveRemoval: preserveRemoval})
+	exists, err := pluginsrepo.New(tx).HasRoleDeliveryMembership(ctx, pluginsrepo.HasRoleDeliveryMembershipParams{PluginID: pluginID, OrganizationID: org, ProjectID: s.ProjectID, McpServerID: uuid.NullUUID{UUID: s.ID, Valid: true}, LegacyToolsetID: s.LegacyToolsetID, PreserveRemoval: preserveRemoval})
 	if err != nil {
 		return false, fmt.Errorf("check existing role delivery membership: %w", err)
 	}

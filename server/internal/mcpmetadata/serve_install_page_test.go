@@ -1768,11 +1768,9 @@ func TestServeInstallPage_McpServer_ToolsetBacked_WrapperVisibilityGates(t *test
 }
 
 // TestServeInstallPage_McpServer_PrefersMcpServerKeyedMetadata confirms
-// that when both toolset-keyed and mcp_server-keyed metadata rows exist
-// for a toolset-backed mcp_server, the mcp_server-keyed row is the one
-// surfaced on the install page. This is the precondition for letting the
-// dashboard Edit Branding affordance on the Remote MCP page take effect
-// without rewriting legacy toolset rows.
+// that when both the toolset's metadata and a fresh-id server's own row exist
+// for a toolset-backed mcp_server, the server's own row is the one surfaced
+// on the install page.
 func TestServeInstallPage_McpServer_PrefersMcpServerKeyedMetadata(t *testing.T) {
 	t.Parallel()
 
@@ -1808,11 +1806,11 @@ func TestServeInstallPage_McpServer_PrefersMcpServerKeyedMetadata(t *testing.T) 
 		toolsetID:    uuid.NullUUID{UUID: toolset.ID, Valid: true},
 	})
 
-	// Plant the toolset's metadata under the legacy toolset key.
-	toolsetDocs := "https://legacy-toolset-docs.example.com"
-	_, err = testrepo.New(ti.conn).InsertToolsetKeyedMcpMetadataFixture(ctx, testrepo.InsertToolsetKeyedMcpMetadataFixtureParams{
-		ToolsetID: uuid.NullUUID{UUID: toolset.ID, Valid: true}, ProjectID: toolset.ProjectID,
-		ExternalDocumentationUrl: conv.ToPGText(toolsetDocs),
+	// The toolset's metadata, stored under its canonical wrapper.
+	toolsetDocs := "https://toolset-docs.example.com"
+	_, err = ti.service.SetMcpMetadata(ctx, &gen.SetMcpMetadataPayload{
+		ToolsetSlug:              conv.PtrEmpty(types.Slug(toolset.Slug)),
+		ExternalDocumentationURL: &toolsetDocs,
 	})
 	require.NoError(t, err)
 
@@ -1877,11 +1875,11 @@ func TestServeInstallPage_McpServer_FallsBackToToolsetMetadata(t *testing.T) {
 		toolsetID:    uuid.NullUUID{UUID: toolset.ID, Valid: true},
 	})
 
-	// Only the toolset's metadata exists, under the legacy toolset key.
-	legacyDocs := "https://legacy-toolset.example.com"
-	legacyID, err := testrepo.New(ti.conn).InsertToolsetKeyedMcpMetadataFixture(ctx, testrepo.InsertToolsetKeyedMcpMetadataFixtureParams{
-		ToolsetID: uuid.NullUUID{UUID: toolset.ID, Valid: true}, ProjectID: toolset.ProjectID,
-		ExternalDocumentationUrl: conv.ToPGText(legacyDocs),
+	// Only the toolset's metadata exists, under its canonical wrapper.
+	toolsetDocs := "https://toolset.example.com"
+	_, err = ti.service.SetMcpMetadata(ctx, &gen.SetMcpMetadataPayload{
+		ToolsetSlug:              conv.PtrEmpty(types.Slug(toolset.Slug)),
+		ExternalDocumentationURL: &toolsetDocs,
 	})
 	require.NoError(t, err)
 
@@ -1895,10 +1893,10 @@ func TestServeInstallPage_McpServer_FallsBackToToolsetMetadata(t *testing.T) {
 		require.Equal(t, http.StatusOK, rr.Code)
 		return rr.Body.String()
 	}
-	assert.Contains(t, render(), legacyDocs,
-		"toolset-keyed metadata should be the fallback source when no mcp_server-keyed row exists")
+	assert.Contains(t, render(), toolsetDocs,
+		"the toolset's metadata should be the fallback source when the server has no row")
 
-	// A save moves the row onto the canonical server key; the fallback still finds it.
+	// A later save updates the same row; the fallback follows it.
 	savedDocs := "https://saved-toolset.example.com"
 	_, err = ti.service.SetMcpMetadata(ctx, &gen.SetMcpMetadataPayload{
 		ToolsetSlug:              conv.PtrEmpty(types.Slug(toolset.Slug)),
@@ -1907,8 +1905,8 @@ func TestServeInstallPage_McpServer_FallsBackToToolsetMetadata(t *testing.T) {
 	require.NoError(t, err)
 	count, err := testrepo.New(ti.conn).CountMcpMetadataForBackendIDFixture(ctx, testrepo.CountMcpMetadataForBackendIDFixtureParams{ProjectID: toolset.ProjectID, BackendID: toolset.ID})
 	require.NoError(t, err)
-	require.EqualValues(t, 1, count, "the save rekeys the legacy row %s in place", legacyID)
-	assert.Contains(t, render(), savedDocs, "server-keyed toolset metadata is the fallback source too")
+	require.EqualValues(t, 1, count)
+	assert.Contains(t, render(), savedDocs)
 }
 
 // TestServeInstallPage_McpServer_InstallationOverrideURL ensures the override

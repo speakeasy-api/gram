@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   scopes: [] as string[],
+  includeNewResourceFixtures: false,
   /**
    * When set, the mcp:write grant is selector-scoped to these server ids:
    * `hasScope("mcp:write")` with no resource still passes (an existential
@@ -220,6 +221,44 @@ vi.mock("@/hooks/useRBAC", () => ({
     },
   }),
 }));
+// The source hooks have their own query/navigation tests. Keep this suite
+// focused on launcher wiring and permission gates.
+vi.mock("./useSkillCandidates", () => ({
+  useSkillCandidates: vi.fn(({ enabled }: { enabled: boolean }) =>
+    enabled && mocks.includeNewResourceFixtures
+      ? [
+          {
+            id: "skill:test",
+            kind: "skill",
+            title: "Test skill",
+            detail: "Skill",
+            keywords: [],
+            verbs: ["open"],
+            group: "Skills",
+            run: () => {},
+          },
+        ]
+      : [],
+  ),
+}));
+vi.mock("./useAgentIdentityCandidates", () => ({
+  useAgentIdentityCandidates: vi.fn(({ enabled }: { enabled: boolean }) =>
+    enabled && mocks.includeNewResourceFixtures
+      ? [
+          {
+            id: "agent-identity:test",
+            kind: "person",
+            title: "Test agent",
+            detail: "Agent identity",
+            keywords: [],
+            verbs: ["open"],
+            group: "Identities",
+            run: () => {},
+          },
+        ]
+      : [],
+  ),
+}));
 vi.mock("@/contexts/CommandPalette", () => ({
   useCommandPalette: () => ({ actions: mocks.actions }),
 }));
@@ -265,6 +304,8 @@ vi.mock("@/routes", () => ({
 }));
 
 import { useLauncherCandidates } from "./index";
+import { useSkillCandidates } from "./useSkillCandidates";
+import { useAgentIdentityCandidates } from "./useAgentIdentityCandidates";
 import type { LauncherCandidate } from "./types";
 
 const REMOTE = { remoteMcpServerId: "remote-1" };
@@ -345,6 +386,7 @@ function acme(projects: ReturnType<typeof project>[]) {
 
 beforeEach(() => {
   mocks.scopes = [];
+  mocks.includeNewResourceFixtures = false;
   mocks.mcpWriteResourceIds = null;
   mocks.inProject = true;
   mocks.orgSlug = "acme";
@@ -1630,5 +1672,53 @@ describe("useLauncherCandidates", () => {
         expect(options?.enabled, name).toBe(false);
       }
     }
+  });
+});
+
+describe("new resource source wiring", () => {
+  beforeEach(() => {
+    mocks.includeNewResourceFixtures = true;
+  });
+  it("includes skills only with project skill:read access", () => {
+    mocks.scopes = ["skill:read"];
+    const { result } = renderCandidates();
+    expect(result.current.some((c) => c.id === "skill:test")).toBe(true);
+    expect(result.current.some((c) => c.id === "agent-identity:test")).toBe(
+      true,
+    );
+    expect(useSkillCandidates).toHaveBeenLastCalledWith({ enabled: true });
+    expect(mocks.rbacCalls).toContainEqual({
+      fn: "hasScope",
+      scopes: ["skill:read"],
+      resourceId: "project-default",
+    });
+  });
+
+  it("does not request skills without read access", () => {
+    const { result } = renderCandidates();
+    expect(result.current.some((c) => c.id === "skill:test")).toBe(false);
+    expect(useSkillCandidates).toHaveBeenLastCalledWith({ enabled: false });
+  });
+
+  it("does not request project skills from the organization shell", () => {
+    mocks.scopes = ["skill:read"];
+    const { result } = renderCandidates({ inProject: false });
+    expect(result.current.some((c) => c.id === "skill:test")).toBe(false);
+    expect(useSkillCandidates).toHaveBeenLastCalledWith({ enabled: false });
+    expect(result.current.some((c) => c.id === "agent-identity:test")).toBe(
+      true,
+    );
+    expect(useAgentIdentityCandidates).toHaveBeenLastCalledWith({
+      enabled: true,
+    });
+  });
+
+  it("disables both new sources while the palette is closed", () => {
+    mocks.scopes = ["skill:read"];
+    renderCandidates({ enabled: false });
+    expect(useSkillCandidates).toHaveBeenLastCalledWith({ enabled: false });
+    expect(useAgentIdentityCandidates).toHaveBeenLastCalledWith({
+      enabled: false,
+    });
   });
 });
