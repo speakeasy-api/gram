@@ -10,7 +10,6 @@ import {
   TabsContent,
 } from "@/components/ui/Tabs";
 import { Text } from "@/components/ui/Text";
-import { useTelemetry } from "@/contexts/Telemetry";
 import { useRBAC } from "@/hooks/useRBAC";
 import { MdmIntegrationsTab } from "@/pages/org/device-integrations/DeviceIntegrations";
 import React from "react";
@@ -19,21 +18,8 @@ import { AiScanTargetsSection } from "./ai-scan-targets";
 import { DeviceAgentConfigurationTab } from "./device-agent-configuration";
 import { DeviceAgentSetup } from "./device-agent-setup";
 
-// Route shell: subPages (the MDM tab and provider detail pages) render
-// through the Outlet; the whole surface gates on the device-agent flag.
-export function DeviceAgentRoot(): React.JSX.Element | null {
-  const telemetry = useTelemetry();
-  const isDeviceAgentEnabled = telemetry.isFeatureEnabled("gram-device-agent");
-
-  // Flags haven't resolved yet — render nothing rather than flashing a redirect.
-  if (isDeviceAgentEnabled === undefined) {
-    return null;
-  }
-
-  if (!isDeviceAgentEnabled) {
-    return <Navigate to=".." replace />;
-  }
-
+// Route shell shared by the setup, configuration, and MDM pages.
+export function DeviceAgentRoot(): React.JSX.Element {
   return <Outlet />;
 }
 
@@ -58,9 +44,6 @@ export default function DeviceAgent(): React.JSX.Element {
 function DeviceAgentTabs() {
   const location = useLocation();
   const navigate = useNavigate();
-  const telemetry = useTelemetry();
-  const mdmFlag = telemetry.isFeatureEnabled("gram-device-integrations");
-  const mdmEnabled = mdmFlag ?? false;
 
   // Fleet configuration is org-admin only. Org readers (plain members) can
   // reach the Setup tab but must not see or open the Configuration tab; the
@@ -81,7 +64,7 @@ function DeviceAgentTabs() {
     currentTab = "configuration";
   } else if (onScanTargetsTab && canConfigure) {
     currentTab = "scan-targets";
-  } else if (onMdmTab && mdmEnabled) {
+  } else if (onMdmTab) {
     currentTab = "mdm-integrations";
   }
   const onSubTab = onMdmTab || onConfigurationTab || onScanTargetsTab;
@@ -91,13 +74,6 @@ function DeviceAgentTabs() {
   const handleTabChange = (value: string) => {
     void navigate(value === "setup" ? basePath : `${basePath}/${value}`);
   };
-
-  // A deep link to the MDM tab while the rollout flag is off must not strand
-  // the browser on an MDM URL rendering the Setup tab. Only redirect once the
-  // flag has actually resolved to false.
-  if (onMdmTab && mdmFlag === false) {
-    return <Navigate to={basePath} replace />;
-  }
 
   // Same guard for a deep link to the Configuration tab as a non-admin: only
   // redirect once grants have resolved, so an admin refreshing the URL isn't
@@ -142,14 +118,12 @@ function DeviceAgentTabs() {
                 </span>
               </PageTabsTrigger>
             )}
-            {mdmEnabled && (
-              <PageTabsTrigger value="mdm-integrations">
-                <span className="inline-flex items-center gap-2">
-                  MDM Integrations
-                  <ReleaseStageBadge stage="preview" noTooltip />
-                </span>
-              </PageTabsTrigger>
-            )}
+            <PageTabsTrigger value="mdm-integrations">
+              <span className="inline-flex items-center gap-2">
+                MDM Integrations
+                <ReleaseStageBadge stage="preview" noTooltip />
+              </span>
+            </PageTabsTrigger>
           </PageTabsList>
         </div>
 
@@ -169,11 +143,9 @@ function DeviceAgentTabs() {
           </TabsContent>
         )}
 
-        {mdmEnabled && (
-          <TabsContent value="mdm-integrations" className="mt-6">
-            <MdmIntegrationsTab />
-          </TabsContent>
-        )}
+        <TabsContent value="mdm-integrations" className="mt-6">
+          <MdmIntegrationsTab />
+        </TabsContent>
       </Tabs>
     </>
   );
