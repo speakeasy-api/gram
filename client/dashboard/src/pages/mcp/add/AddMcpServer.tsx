@@ -4,8 +4,6 @@ import { Card } from "@/components/ui/Card";
 import { useIconDither } from "@/components/icon-dither";
 import { Text } from "@/components/ui/Text";
 import { useSdkClient, useSlugs } from "@/contexts/Sdk";
-import { useFeatureFlag } from "@/hooks/useFeatureFlag";
-import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { createDefaultGatewayEndpoint } from "@/lib/mcpEndpoints";
 import { useRoutes } from "@/routes";
 import { invalidateAllMcpEndpoints } from "@gram/client/react-query/mcpEndpoints.js";
@@ -132,12 +130,6 @@ export default function AddMcpServer(): JSX.Element {
   const { orgSlug } = useSlugs();
   const [gatewayDialogOpen, setGatewayDialogOpen] = useState(false);
   const [gatewayName, setGatewayName] = useState("");
-  // Gateways are behind a rollout flag: opt-in, so an unresolved flag keeps the
-  // option hidden. The flag gates discoverability only — the backend enforces
-  // mcp:write regardless.
-  const gatewaysEnabled =
-    useFeatureFlag(FEATURE_FLAGS.gatewayEndpoints).status === "enabled";
-
   // Creation is two calls: the gateway, then its default address. The address
   // is best-effort (createDefaultGatewayEndpoint warns rather than throwing),
   // so a failure there still lands the user on a usable gateway page.
@@ -241,18 +233,16 @@ export default function AddMcpServer(): JSX.Element {
           <AddOptionGrid options={connectOptions} />
         </SettingsSection>
 
-        {gatewaysEnabled && (
-          <SettingsSection>
-            <SettingsSection.Header>
-              <SettingsSection.Title>Group servers</SettingsSection.Title>
-              <SettingsSection.Description>
-                Put several servers behind a single address so people connect
-                once instead of per server.
-              </SettingsSection.Description>
-            </SettingsSection.Header>
-            <AddOptionGrid options={gatewayOptions} />
-          </SettingsSection>
-        )}
+        <SettingsSection>
+          <SettingsSection.Header>
+            <SettingsSection.Title>Group servers</SettingsSection.Title>
+            <SettingsSection.Description>
+              Put several servers behind a single address so people connect once
+              instead of per server.
+            </SettingsSection.Description>
+          </SettingsSection.Header>
+          <AddOptionGrid options={gatewayOptions} />
+        </SettingsSection>
 
         <SettingsSection>
           <SettingsSection.Header>
