@@ -221,6 +221,43 @@ WHERE project_id = @project_id::uuid AND deleted IS FALSE
 SELECT count(*) FROM mcp_server_remote_session_clients
 WHERE project_id = @project_id::uuid AND deleted IS FALSE;
 
+-- Check both the total and the expected credential/server/client tuples so
+-- eight misassigned choices cannot satisfy postflight.
+-- name: PostflightIDUpstreamClientChoices :one
+WITH live AS (
+  SELECT * FROM upstream_client_selections
+  WHERE project_id = @project_id::uuid AND deleted IS FALSE
+)
+SELECT count(*) FROM live
+WHERE (SELECT count(*) FROM live) = 8
+  AND credential_kind = 'user_session'
+  AND (
+    (credential_id = ANY(@linear_session_ids::uuid[])
+     AND mcp_server_id = @linear_server_id::uuid
+     AND remote_session_client_id = @linear_client_id::uuid
+     AND no_auth IS FALSE)
+    OR
+    (credential_id = ANY(@slack_session_ids::uuid[])
+     AND mcp_server_id = @slack_server_id::uuid
+     AND remote_session_client_id IS NULL
+     AND client_attachment_scope IS NULL
+     AND no_auth IS TRUE)
+  );
+
+-- Live choices that are not the intended ones: Linear through its main
+-- client, Slack with no upstream authentication, each on a seeded session.
+-- name: PostflightIDMisassignedUpstreamClientChoices :one
+SELECT count(*)
+FROM upstream_client_selections u
+WHERE u.project_id = @project_id::uuid AND u.deleted IS FALSE
+  AND NOT (
+    EXISTS (SELECT 1 FROM user_sessions s WHERE s.id = u.credential_id AND s.deleted IS FALSE)
+    AND (
+      (u.mcp_server_id = @linear_server_id::uuid AND u.remote_session_client_id = @linear_client_id::uuid)
+      OR (u.mcp_server_id = @slack_server_id::uuid AND u.no_auth)
+    )
+  );
+
 -- name: PostflightIDServiceAccountHeaders :one
 SELECT count(*)
 FROM remote_mcp_server_headers header
