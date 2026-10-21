@@ -165,8 +165,8 @@ func reviewRequestToolResult(err error) (*mcp.CallToolResult, bool) {
 }
 
 // Every call records a new review request. Before it does, it gathers
-// evidence from package registries, the source repository, and advisory
-// databases inside the same call.
+// best-effort evidence for the target inside the same call, such as package
+// registry, source repository, and advisory lookups for a package target.
 func requestMCPReviewAnnotations() *mcp.ToolAnnotations {
 	return writeAnnotations(false, false, true)
 }

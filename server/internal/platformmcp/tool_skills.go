@@ -140,12 +140,18 @@ func dismissSkillSuggestionAnnotations() *mcp.ToolAnnotations {
 	return &mcp.ToolAnnotations{ReadOnlyHint: false, DestructiveHint: new(true), IdempotentHint: true, OpenWorldHint: new(false)}
 }
 
-// skillWriteAnnotations are for create_skill, add_skill_version, and
-// distribute_skill. Each adds a skill, a version, or a distribution and does
-// not remove one. A repeat with identical content returns the existing
-// version, and a repeat distribution settles on the existing one.
+// skillWriteAnnotations are for create_skill and add_skill_version. Each adds
+// a skill or a version and does not remove one. A repeat with identical
+// content returns the existing version.
 func skillWriteAnnotations() *mcp.ToolAnnotations {
 	return writeAnnotations(false, true, false)
+}
+
+// distributeSkillAnnotations is for distribute_skill. A call on a distribution
+// pinned to a version clears the pin, so agents switch to the latest version.
+// A repeat settles on the same distribution.
+func distributeSkillAnnotations() *mcp.ToolAnnotations {
+	return writeAnnotations(true, true, false)
 }
 
 // updateSkillMetadataAnnotations is for update_skill_metadata. clear_summary
@@ -358,7 +364,7 @@ func registerSkillsTools(reg *Registrar, skills *SkillsService) {
 		Name:        "distribute_skill",
 		Title:       "Give a Skill to a Plugin or Assistant",
 		Description: "Give a skill to one plugin or one assistant in the same project, so agents there start loading it. This is the only way a skill takes effect. Constraints: name the target exactly — a name matching nothing is refused as not_found and a name matching more than one target as ambiguous_target, with no fallback to the default plugin. Repeat calls settle on the same result rather than adding it twice.",
-		Annotations: skillWriteAnnotations(),
+		Annotations: distributeSkillAnnotations(),
 	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input DistributeSkillToolInput) (*mcp.CallToolResult, DistributeSkillOutput, error) {
 		return skillsToolCall(ctx, func(principal Principal) (DistributeSkillOutput, error) {
 			return skills.DistributeSkill(ctx, principal, DistributeSkillInput(input))
@@ -442,6 +448,8 @@ func registerUnavailableSkillsTools(reg *Registrar) {
 			manifest.Annotations = updateSkillMetadataAnnotations()
 		case tool.name == "undistribute_skill":
 			manifest.Annotations = undistributeSkillAnnotations()
+		case tool.name == "distribute_skill":
+			manifest.Annotations = distributeSkillAnnotations()
 		default:
 			manifest.Annotations = skillWriteAnnotations()
 		}
