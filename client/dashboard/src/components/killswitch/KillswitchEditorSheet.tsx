@@ -13,8 +13,10 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/Sheet";
+import { isKnownEnumValue } from "@/lib/enum";
 import type { AccessMember } from "@gram/client/models/components/accessmember.js";
 import type { KillswitchCapability } from "@gram/client/models/components/killswitchcapability.js";
+import { KillswitchCapabilityKey } from "@gram/client/models/components/killswitchcapabilitykey.js";
 import type { KillswitchComingSoonCapability } from "@gram/client/models/components/killswitchcomingsooncapability.js";
 import type { KillswitchDetail } from "@gram/client/models/components/killswitchdetail.js";
 import type { KillswitchMCPServer } from "@gram/client/models/components/killswitchmcpserver.js";
@@ -209,6 +211,16 @@ function EditorContents({
     mode === "create" &&
     (Boolean(capabilitiesLoading) || Boolean(capabilitiesError));
   const targetName = agentTarget?.name;
+  const unsupportedCapability = [
+    draft.capabilityKey,
+    initial?.capabilityKey,
+    comparisonBaseline?.capabilityKey,
+  ].some(
+    (key) =>
+      key !== undefined &&
+      key !== "" &&
+      !isKnownEnumValue(KillswitchCapabilityKey, key),
+  );
   const member = members.find((item) => item.id === draft.userId);
   const serverNames = useMemo(
     () =>
@@ -246,7 +258,7 @@ function EditorContents({
     key: K,
     value: EditorDraft[K],
   ) => {
-    if (submittingRef.current) return;
+    if (submittingRef.current || unsupportedCapability) return;
     const nextDraft = { ...draftRef.current, [key]: value };
     draftRef.current = nextDraft;
     draftGeneration.current += 1;
@@ -263,7 +275,7 @@ function EditorContents({
   };
 
   const selectScope = (scopeType: EditorDraft["scopeType"]) => {
-    if (submittingRef.current) return;
+    if (submittingRef.current || unsupportedCapability) return;
     const current = draftRef.current;
     const nextDraft = {
       ...current,
@@ -296,7 +308,8 @@ function EditorContents({
   };
 
   const reviewImpact = async (): Promise<boolean> => {
-    if (submittingRef.current) return false;
+    if (submittingRef.current || unsupportedCapability || catalogUnavailable)
+      return false;
     const reviewedDraft = draftRef.current;
     const nextErrors = validateDraft(reviewedDraft);
     setErrors(nextErrors);
@@ -341,7 +354,8 @@ function EditorContents({
   };
 
   const submit = async () => {
-    if (submittingRef.current) return;
+    if (submittingRef.current || unsupportedCapability || catalogUnavailable)
+      return;
     if (previewFingerprint !== draftFingerprint.current) {
       await reviewImpact();
       return;
@@ -476,10 +490,15 @@ function EditorContents({
           </SheetDescription>
         </SheetHeader>
 
+        {unsupportedCapability && (
+          <p className="px-4 text-sm text-muted-foreground">
+            Refresh the page before editing this unsupported capability.
+          </p>
+        )}
         <fieldset
           ref={formRef}
           className="space-y-7 px-4 pb-4"
-          disabled={isSubmitting}
+          disabled={isSubmitting || unsupportedCapability}
         >
           <fieldset className="space-y-3">
             <legend className="font-medium">Who</legend>
@@ -544,24 +563,37 @@ function EditorContents({
               </Alert>
             )}
             {mode === "edit" ? (
-              <p>{initial?.capabilityLabel ?? "MCP tool calls"}</p>
+              <p>{initial?.capabilityLabel ?? "Unknown capability"}</p>
             ) : (
-              capabilities.map((capability) => (
-                <label
-                  key={capability.key}
-                  className="flex items-center gap-2 border p-3"
-                >
-                  <input
-                    type="radio"
-                    name="capability"
-                    aria-invalid={Boolean(errors.capabilityKey)}
-                    checked={draft.capabilityKey === capability.key}
-                    disabled={catalogUnavailable}
-                    onChange={() => update("capabilityKey", capability.key)}
-                  />
-                  {capability.label}
-                </label>
-              ))
+              capabilities.map((capability) => {
+                const supported = isKnownEnumValue(
+                  KillswitchCapabilityKey,
+                  capability.key,
+                );
+                return (
+                  <label
+                    key={capability.key}
+                    className="flex items-center gap-2 border p-3"
+                  >
+                    <input
+                      type="radio"
+                      name="capability"
+                      aria-invalid={Boolean(errors.capabilityKey)}
+                      checked={draft.capabilityKey === capability.key}
+                      disabled={catalogUnavailable || !supported}
+                      onChange={() => {
+                        if (supported) update("capabilityKey", capability.key);
+                      }}
+                    />
+                    {capability.label}
+                    {!supported && (
+                      <span className="text-muted-foreground text-sm">
+                        Unavailable in this version
+                      </span>
+                    )}
+                  </label>
+                );
+              })
             )}
             <div className="border border-dashed p-3 text-sm">
               <div className="font-medium">More capabilities — Coming soon</div>
@@ -901,14 +933,23 @@ function EditorContents({
         <SheetFooter className="border-t">
           <Button
             variant="secondary"
-            disabled={isReviewing || isSubmitting || catalogUnavailable}
+            disabled={
+              isReviewing ||
+              isSubmitting ||
+              catalogUnavailable ||
+              unsupportedCapability
+            }
             onClick={() => void reviewImpact()}
           >
             {isReviewing ? "Reviewing…" : "Review impact"}
           </Button>
           <Button
             disabled={
-              isReviewing || isSubmitting || stale || catalogUnavailable
+              isReviewing ||
+              isSubmitting ||
+              stale ||
+              catalogUnavailable ||
+              unsupportedCapability
             }
             onClick={() => void submit()}
           >

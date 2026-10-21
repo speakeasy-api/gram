@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
@@ -22,7 +23,7 @@ export const Lifecycle = {
   Suspended: "suspended",
   Revoked: "revoked",
 } as const;
-export type Lifecycle = ClosedEnum<typeof Lifecycle>;
+export type Lifecycle = OpenEnum<typeof Lifecycle>;
 
 export type ManagedAgent = {
   createdAt: Date;
@@ -52,9 +53,8 @@ export type ManagedAgent = {
 };
 
 /** @internal */
-export const Lifecycle$inboundSchema: z.ZodMiniEnum<typeof Lifecycle> = z.enum(
-  Lifecycle,
-);
+export const Lifecycle$inboundSchema: z.ZodMiniType<Lifecycle, unknown> =
+  openEnums.inboundSchema(Lifecycle);
 
 /** @internal */
 export const ManagedAgent$inboundSchema: z.ZodMiniType<ManagedAgent, unknown> =

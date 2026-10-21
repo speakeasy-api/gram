@@ -9,6 +9,7 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { KillswitchDetail } from "@gram/client/models/components/killswitchdetail.js";
+import { unrecognized } from "@gram/client/types/unrecognized.js";
 import { KillswitchEditorSheet } from "./KillswitchEditorSheet";
 import type { EditorDraft } from "./killswitch-view-model";
 
@@ -89,6 +90,91 @@ function renderEditor(
 }
 
 describe("KillswitchEditorSheet", () => {
+  it.each(["future_capability", "constructor", "__proto__"])(
+    "shows unsupported catalog capability %s without enabling it",
+    async (key) => {
+      renderEditor({
+        capabilities: [
+          ...capabilities,
+          { key: unrecognized(key), label: "Future capability" },
+        ],
+      });
+      const unsupported = screen.getByRole("radio", {
+        name: /Future capability/,
+      }) as HTMLInputElement;
+      expect(unsupported.disabled).toBe(true);
+      fireEvent.click(unsupported);
+      expect(unsupported.checked).toBe(false);
+      await userEvent.click(screen.getByLabelText("MCP tool calls"));
+      expect(
+        (screen.getByLabelText("MCP tool calls") as HTMLInputElement).checked,
+      ).toBe(true);
+    },
+  );
+
+  it.each(["initial", "refreshed"])(
+    "locks an editor with an unsupported %s capability",
+    async (state) => {
+      const initial: KillswitchDetail = {
+        id: "ks-1",
+        principalKind: "user",
+        userId: "user-1",
+        capabilityKey: "mcp_tool_calls",
+        capabilityLabel: "MCP tool calls",
+        version: 1,
+        status: "active",
+        scope: { type: "all_servers" },
+        schedule: { start: "now", end: "until_lifted" },
+        externalNote: "Access paused.",
+        internalNote: "Incident response.",
+        history: [],
+        historyTruncated: false,
+      };
+      const unsupported = {
+        ...initial,
+        capabilityKey: unrecognized("future_capability"),
+        capabilityLabel: "Future capability",
+      };
+      const view = renderEditor({
+        mode: "edit",
+        initial: state === "initial" ? unsupported : initial,
+      });
+      if (state === "refreshed") {
+        await userEvent.click(
+          screen.getByRole("button", { name: "Review impact" }),
+        );
+        await screen.findByText("No overlapping killswitches.");
+        vi.mocked(view.onPreview).mockClear();
+      }
+      view.rerender(
+        <MemoryRouter>
+          <KillswitchEditorSheet
+            {...view.componentProps}
+            initial={unsupported}
+          />
+        </MemoryRouter>,
+      );
+      expect(screen.getByText("Future capability")).not.toBeNull();
+      expect(
+        screen.getByText(
+          "Refresh the page before editing this unsupported capability.",
+        ),
+      ).not.toBeNull();
+      expect(
+        screen.getByLabelText("Internal note").closest("fieldset")?.disabled,
+      ).toBe(true);
+      for (const name of ["Review impact", "Save new version"]) {
+        const button = screen.getByRole("button", {
+          name,
+        }) as HTMLButtonElement;
+        expect(button.disabled).toBe(true);
+        fireEvent.click(button);
+      }
+      expect(view.onPreview).not.toHaveBeenCalled();
+      expect(view.onSubmit).not.toHaveBeenCalled();
+    },
+  );
+
   it("has no default resource scope and shows focused validation errors", async () => {
     renderEditor();
     expect(

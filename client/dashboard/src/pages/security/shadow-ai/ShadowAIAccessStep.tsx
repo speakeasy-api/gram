@@ -1,3 +1,4 @@
+import type { StoredDecision } from "./access-rows";
 import { formatShortDate } from "@/components/access/shadow-mcp-utils";
 import { AIToolIcon } from "@/components/ai-tools/AIToolIcon";
 import { CollapsibleSectionHeader } from "@/components/collapsible-section-header";
@@ -49,10 +50,16 @@ function DecisionControl({
   onDecide,
 }: {
   row: AccessRow;
-  decision: AccessDecision;
+  decision: StoredDecision;
   disabled: boolean;
   onDecide: (targetId: string, decision: AccessDecision) => void;
 }): JSX.Element {
+  if (decision === "unknown")
+    return (
+      <Text small muted>
+        Unknown decision
+      </Text>
+    );
   if (!row.enforceable) {
     return (
       <SimpleTooltip tooltip={INVENTORY_ONLY_REASON}>

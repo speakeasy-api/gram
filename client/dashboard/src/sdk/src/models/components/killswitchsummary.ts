@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
@@ -29,7 +30,7 @@ export const KillswitchSummaryPrincipalKind = {
   User: "user",
   Agent: "agent",
 } as const;
-export type KillswitchSummaryPrincipalKind = ClosedEnum<
+export type KillswitchSummaryPrincipalKind = OpenEnum<
   typeof KillswitchSummaryPrincipalKind
 >;
 
@@ -53,9 +54,10 @@ export type KillswitchSummary = {
 };
 
 /** @internal */
-export const KillswitchSummaryPrincipalKind$inboundSchema: z.ZodMiniEnum<
-  typeof KillswitchSummaryPrincipalKind
-> = z.enum(KillswitchSummaryPrincipalKind);
+export const KillswitchSummaryPrincipalKind$inboundSchema: z.ZodMiniType<
+  KillswitchSummaryPrincipalKind,
+  unknown
+> = openEnums.inboundSchema(KillswitchSummaryPrincipalKind);
 
 /** @internal */
 export const KillswitchSummary$inboundSchema: z.ZodMiniType<

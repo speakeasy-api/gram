@@ -1,6 +1,6 @@
 import { claudeTagSetupInstructions } from "./ClaudeTagSetupInstructions";
 import type { PlatformSetup } from "./setupInstructions";
-import type { CatalogEntry } from "./workloadCatalog";
+import { isSupportedCatalogEntry, type CatalogEntry } from "./workloadCatalog";
 
 /**
  * The catalog platforms this wizard ships a guided setup for, by the catalog's
@@ -17,12 +17,17 @@ const PLATFORM_SETUPS = new Map<string, (entry: CatalogEntry) => PlatformSetup>(
   [["claude-tag", claudeTagSetupInstructions]],
 );
 
-/** Whether this wizard ships a guided setup for a catalog platform. */
-export function hasPlatformSetup(key: string): boolean {
-  return PLATFORM_SETUPS.has(key);
+/** Whether this catalog entry can use the guided setup this wizard ships. */
+export function hasPlatformSetup(entry: CatalogEntry): boolean {
+  return (
+    entry.enabled &&
+    isSupportedCatalogEntry(entry) &&
+    PLATFORM_SETUPS.has(entry.key)
+  );
 }
 
 /** A catalog platform's guided setup, or undefined where it ships none. */
 export function platformSetup(entry: CatalogEntry): PlatformSetup | undefined {
+  if (!hasPlatformSetup(entry)) return undefined;
   return PLATFORM_SETUPS.get(entry.key)?.(entry);
 }

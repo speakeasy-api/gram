@@ -8,6 +8,7 @@ import {
   Network,
   UserRound,
 } from "lucide-react";
+import { enumPresentation } from "@/lib/enum";
 import { fleetDirectory, sourceLabels, type FleetRow } from "./fleet-model";
 
 const lifecycleLabels = {
@@ -25,7 +26,15 @@ export function FleetStatus({
 }): JSX.Element {
   return (
     <div className="fleet-status">
-      {row.agent && <span>{lifecycleLabels[row.agent.lifecycle]}</span>}
+      {row.agent && (
+        <span>
+          {enumPresentation(
+            lifecycleLabels,
+            row.agent.lifecycle,
+            "Unknown status",
+          )}
+        </span>
+      )}
       {row.source === "assistant" && (
         <span>
           {row.assistant?.status === "paused"

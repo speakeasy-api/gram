@@ -1,3 +1,5 @@
+import { isKnownEnumValue } from "@/lib/enum";
+import { KillswitchCapabilityKey } from "@gram/client/models/components/killswitchcapabilitykey.js";
 import type { KillswitchSchedule } from "@gram/client/models/components/killswitchschedule.js";
 import type { KillswitchScope } from "@gram/client/models/components/killswitchscope.js";
 
@@ -29,7 +31,7 @@ function trimNoteEdges(value: string): string {
 export type EditorDraft = {
   agentId?: string;
   userId: string;
-  capabilityKey: "" | "mcp_tool_calls";
+  capabilityKey: "" | KillswitchCapabilityKey;
   scopeType: "" | "all_servers" | "selected_servers";
   serverIds: string[];
   startType: "now" | "scheduled";
@@ -55,6 +57,9 @@ export function validateDraft(
   if (draft.userId && draft.agentId)
     errors.userId = "Choose exactly one target.";
   if (!draft.capabilityKey) errors.capabilityKey = "Choose one capability.";
+  else if (!isKnownEnumValue(KillswitchCapabilityKey, draft.capabilityKey))
+    errors.capabilityKey =
+      "Refresh the page before editing this unsupported capability.";
   if (!draft.scopeType) errors.scopeType = "Choose an MCP server scope.";
   if (draft.scopeType === "selected_servers" && draft.serverIds.length === 0) {
     errors.serverIds = "Choose at least one MCP server.";

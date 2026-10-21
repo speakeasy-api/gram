@@ -1,6 +1,7 @@
 import { RequireScope } from "@/components/require-scope";
 import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
+import { enumPresentation } from "@/lib/enum";
 import {
   IdentityPanel,
   IdentityPanelEmpty,
@@ -74,11 +75,14 @@ export function AgentFederatedAccess({
               // The subject is how Speakeasy recognises the platform's tokens.
               // Nobody reading this page has to know it, so the row says what
               // the rule covers instead of printing it.
-              detail={
-                admission.matchKind === "wildcard"
-                  ? "Any workload in the connected organization"
-                  : "One workload"
-              }
+              detail={enumPresentation(
+                {
+                  wildcard: "Any workload in the connected organization",
+                  exact: "One workload",
+                },
+                admission.matchKind,
+                "Unknown workload coverage",
+              )}
               // A wildcard rule the platform has not enabled admits nothing.
               // That is indistinguishable from working until a sign-in fails.
               accent={
