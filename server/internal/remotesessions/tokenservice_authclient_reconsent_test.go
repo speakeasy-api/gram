@@ -136,6 +136,26 @@ func TestStoreRemoteSessionGrant_ReconsentInAnotherOrganizationStartsANewGrant(t
 	require.ErrorIs(t, err, pgx.ErrNoRows, "the agent's attachment stays on the tombstoned grant and resolves nothing")
 }
 
+// With the flags off, a workload acting in the first organization resolves the
+// user's grant only through that organization's sign-in, so a re-consent
+// through another organization's sign-in leaves it asking to reconnect.
+func TestStoreRemoteSessionGrant_ReconsentInAnotherOrganizationMovesWorkloadsWithTheGrant(t *testing.T) {
+	t.Parallel()
+	ctx, r := newReconsentFixture(t, "ac-reconsent-workload")
+	auth, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	workloadCtx, caller := workloadCaller(t, ctx, r.ti.conn, auth, "ac-reconsent-workload-caller")
+
+	r.store(t, ctx, r.organizationID, r.signInA, "org-a-token")
+	tokens, err := r.mgr.ResolveClientAccessTokens(workloadCtx, r.projectID, r.organizationID, r.signInA, caller, r.clientID, false)
+	require.NoError(t, err)
+	require.Equal(t, "org-a-token", tokens[r.issuerID].Token)
+
+	r.store(t, ctx, r.otherOrg, r.otherSignIn, "org-b-token")
+	_, err = r.mgr.ResolveClientAccessTokens(workloadCtx, r.projectID, r.organizationID, r.signInA, caller, r.clientID, false)
+	require.ErrorIs(t, err, remotesessions.ErrNoValidToken, "the first organization's workload no longer resolves the grant")
+}
+
 func TestStoreRemoteSessionGrant_ReconsentInTheSameOrganizationUpdatesInPlace(t *testing.T) {
 	t.Parallel()
 	ctx, r := newReconsentFixture(t, "ac-reconsent-same")
