@@ -890,6 +890,31 @@ type AuditLog struct {
 	CreatedAt pgtype.Timestamptz
 }
 
+// Default auth permission grants the backfill provisioned, one row per grant, kept after the grant itself is deleted.
+type AuthPermissionProvision struct {
+	// @access: confidential
+	ID uuid.UUID
+	// The organization the grant belongs to.
+	// @access: confidential
+	OrganizationID string
+	// The principal the grant was written to, as in principal_grants.principal_urn.
+	// @access: confidential-pii
+	PrincipalUrn string
+	// The granted scope, mcp:auth or mcp:connect.
+	// @access: confidential
+	Scope string
+	// The grant's selector, as in principal_grants.selectors.
+	// @access: opaque-restricted
+	Selectors []byte
+	// Which default the grant belongs to: personal_default, shared_client or api_key. Validated in application code.
+	// @access: confidential
+	Kind string
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+}
+
 // Tracks admin resolutions of authz challenge denials. challenge_id references authz_challenges.id in ClickHouse (soft cross-DB reference).
 type AuthzChallengeResolution struct {
 	// @access: confidential
