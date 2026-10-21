@@ -87,6 +87,13 @@ func seedOrganizationGateway(t *testing.T, ctx context.Context, ti *testInstance
 	subject := urn.NewUserSubject(userID)
 	seedUserMCPConnectGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, userID, mcpServerBySlug(t, ctx, ti, *authCtx.ProjectID, grantedSlug).String())
 
+	featureQuery := featuresrepo.New(ti.conn)
+	setting := featuresrepo.EnableFeatureParams{OrganizationID: authCtx.ActiveOrganizationID, FeatureName: string(productfeatures.FeatureOrganizationGatewayDisabled)}
+	_, err := featureQuery.EnableFeature(ctx, setting)
+	require.NoError(t, err)
+	_, err = featureQuery.DeleteFeature(ctx, featuresrepo.DeleteFeatureParams(setting))
+	require.NoError(t, err)
+
 	return organizationGatewayFixture{
 		organizationSlug: authCtx.OrganizationSlug,
 		projectSlug:      *authCtx.ProjectSlug,

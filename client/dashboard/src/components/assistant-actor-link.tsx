@@ -11,11 +11,14 @@ type AssistantActor = {
   assistantId?: string;
   assistantName?: string;
   assistantAgentId?: string;
+  agentId?: string;
+  agentName?: string;
 };
 
 /**
  * The assistant a session ran as, linked to the agent identity it acts as or,
- * for an assistant without one, to the assistant itself.
+ * for an assistant without one, to the assistant itself. A session with no
+ * assistant falls back to the agent principal that produced it.
  */
 export function AssistantActorLink({
   chat,
@@ -29,11 +32,38 @@ export function AssistantActorLink({
   // agent: a reader who may read the chat may not be allowed the agent. One
   // cached inventory request serves every row, and an agent missing from it
   // stays plain text rather than offering a door the next page refuses.
-  const agents = useReadableAgents(Boolean(chat.assistantAgentId));
+  //
+  // A channel session has no assistant record, so the agent principal that
+  // produced it is the only thing that names who made the calls.
+  const agentId = chat.assistantName ? chat.assistantAgentId : chat.agentId;
+  const agents = useReadableAgents(Boolean(agentId));
   const readable =
     !agents.isError &&
-    (agents.data ?? []).some((agent) => agent.id === chat.assistantAgentId);
-  if (!chat.assistantName) return null;
+    (agents.data ?? []).some((agent) => agent.id === agentId);
+
+  if (!chat.assistantName) {
+    if (!chat.agentId) return null;
+    // No name means the agent no longer resolves in the organization; its id
+    // stays plain text rather than linking to a page reporting it missing.
+    const resolved = Boolean(chat.agentName);
+    return (
+      <SimpleTooltip
+        tooltip={
+          resolved
+            ? "Agent identity this session ran as"
+            : "The agent this session ran as has since been deleted"
+        }
+      >
+        <span className={cn("inline-flex min-w-0", className)}>
+          <ActingPrincipal
+            agent={{ id: chat.agentId, name: chat.agentName }}
+            linked={resolved && readable}
+            className="text-sm"
+          />
+        </span>
+      </SimpleTooltip>
+    );
+  }
 
   const name = chat.assistantName;
   const wrap = (content: JSX.Element) => (

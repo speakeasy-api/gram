@@ -47,18 +47,22 @@ func parseHostedMCPWrappersFlags(args []string, getenv func(string) string, help
 	fs := flag.NewFlagSet("hosted-mcp-wrappers", flag.ContinueOnError)
 	fs.SetOutput(helpOut)
 	apply := fs.Bool("apply", false, "commit writes (default: dry run)")
-	project := fs.String("project", "", "project_id (uuid) to scope the run")
+	project := fs.String("project", "", "project_id (uuid) to scope the run; this or -all-projects is required")
+	allProjects := fs.Bool("all-projects", false, "run across every project; this or -project is required")
 	cursor := fs.String("cursor", "", "resume after this toolset id")
 	limit := fs.Int("limit", 0, "max toolsets to process; 0 means all")
-	reportPath := fs.String("report", "", "per-row JSON report path; -apply refuses an existing file, and -move-dependents or -cleanup-orphans -apply also writes <report>.journal.jsonl")
+	reportPath := fs.String("report", "", "per-row JSON report path; -apply refuses an existing file, and -move-dependents, -cleanup-orphans, -rekey-removal-records, -delete-leftover-removal-records or -delete-orphan-wrapper-servers -apply also writes <report>.journal.jsonl")
 	moveDependents := fs.Bool("move-dependents", false, "re-key toolset-keyed mcp_metadata, plugin_servers and assistant_toolsets onto the canonical wrapper")
 	cleanupOrphans := fs.Bool("cleanup-orphans", false, "remove toolset-keyed mcp_metadata, plugin_servers and assistant_toolsets whose toolset or project is deleted")
+	rekeyRemovals := fs.Bool("rekey-removal-records", false, "re-key soft-deleted toolset-keyed plugin_servers rows (plugin removal records) onto the canonical server key")
+	deleteLeftovers := fs.Bool("delete-leftover-removal-records", false, "hard-delete soft-deleted toolset-keyed plugin_servers rows whose toolset or project is deleted, or whose plugin already has a server-keyed removal record for the canonical server")
+	deleteWrappers := fs.Bool("delete-orphan-wrapper-servers", false, "soft-delete live non-canonical mcp_servers rows of deleted toolsets in live projects through the app's server delete; run before -delete-leftover-removal-records")
 	emitEnv := getenv("GRAM_PLUGIN_PUBLICATION_EMIT_ENABLED")
 	defaultEmit, err := strconv.ParseBool(emitEnv)
 	if err != nil && emitEnv != "" {
 		return hostedMCPWrappersConfig{}, fmt.Errorf("invalid $GRAM_PLUGIN_PUBLICATION_EMIT_ENABLED: %w", err)
 	}
-	publicationEmit := fs.Bool("plugin-publication-emit", defaultEmit, "with -cleanup-orphans, enqueue a plugin publication request per removed member of a live project, as the app does (default $GRAM_PLUGIN_PUBLICATION_EMIT_ENABLED)")
+	publicationEmit := fs.Bool("plugin-publication-emit", defaultEmit, "with -cleanup-orphans or -delete-orphan-wrapper-servers, enqueue a plugin publication request per removed member or deleted server of a live project, as the app does (default $GRAM_PLUGIN_PUBLICATION_EMIT_ENABLED)")
 	readersCutOver := fs.Bool("readers-cut-over", false, "confirm AIM-16 phase A (dual-key readers) and phase B (writers switched to the server key) are both fully deployed; required for -move-dependents -apply")
 	if err := fs.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
@@ -69,11 +73,24 @@ func parseHostedMCPWrappersFlags(args []string, getenv func(string) string, help
 	if fs.NArg() != 0 {
 		return hostedMCPWrappersConfig{}, errors.New("unexpected positional arguments")
 	}
+	// Every phase writes on -apply, so neither a dry run nor an apply may fall back to every tenant by omission.
+	if *project != "" && *allProjects {
+		return hostedMCPWrappersConfig{}, errors.New("-project and -all-projects are mutually exclusive")
+	}
+	if *project == "" && !*allProjects {
+		return hostedMCPWrappersConfig{}, errors.New("pass -project <id> or -all-projects")
+	}
 	if *limit < 0 {
 		return hostedMCPWrappersConfig{}, errors.New("limit must be nonnegative")
 	}
-	if *moveDependents && *cleanupOrphans {
-		return hostedMCPWrappersConfig{}, errors.New("-move-dependents and -cleanup-orphans are separate phases")
+	phases := 0
+	for _, on := range []bool{*moveDependents, *cleanupOrphans, *rekeyRemovals, *deleteLeftovers, *deleteWrappers} {
+		if on {
+			phases++
+		}
+	}
+	if phases > 1 {
+		return hostedMCPWrappersConfig{}, errors.New("-move-dependents, -cleanup-orphans, -rekey-removal-records, -delete-leftover-removal-records and -delete-orphan-wrapper-servers are separate phases")
 	}
 	// Readers on main before AIM-16 only find toolset-keyed rows, so a moved row would vanish from them.
 	if *moveDependents && *apply && !*readersCutOver {
@@ -86,6 +103,15 @@ func parseHostedMCPWrappersFlags(args []string, getenv func(string) string, help
 	if *cleanupOrphans && *apply && *reportPath == "" {
 		return hostedMCPWrappersConfig{}, errors.New("-cleanup-orphans -apply requires -report")
 	}
+	if *rekeyRemovals && *apply && *reportPath == "" {
+		return hostedMCPWrappersConfig{}, errors.New("-rekey-removal-records -apply requires -report")
+	}
+	if *deleteLeftovers && *apply && *reportPath == "" {
+		return hostedMCPWrappersConfig{}, errors.New("-delete-leftover-removal-records -apply requires -report")
+	}
+	if *deleteWrappers && *apply && *reportPath == "" {
+		return hostedMCPWrappersConfig{}, errors.New("-delete-orphan-wrapper-servers -apply requires -report")
+	}
 	if *readersCutOver && !*moveDependents {
 		return hostedMCPWrappersConfig{}, errors.New("-readers-cut-over only applies to -move-dependents")
 	}
@@ -95,19 +121,22 @@ func parseHostedMCPWrappersFlags(args []string, getenv func(string) string, help
 		reportPath:  *reportPath,
 		journalPath: "",
 		options: hostedmcpbackfill.Options{
-			ProjectID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-			Cursor:         uuid.Nil,
-			Limit:          *limit,
-			PageSize:       0,
-			Apply:          *apply,
-			MoveDependents: *moveDependents,
-			CleanupOrphans: *cleanupOrphans,
-			Publication:    plugins.PublicationRequests{Enabled: *publicationEmit},
-			Journal:        nil,
-			LockTimeout:    0,
+			ProjectID:              uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+			Cursor:                 uuid.Nil,
+			Limit:                  *limit,
+			PageSize:               0,
+			Apply:                  *apply,
+			MoveDependents:         *moveDependents,
+			CleanupOrphans:         *cleanupOrphans,
+			RekeyRemovals:          *rekeyRemovals,
+			DeleteLeftoverRemovals: *deleteLeftovers,
+			DeleteOrphanWrappers:   *deleteWrappers,
+			Publication:            plugins.PublicationRequests{Enabled: *publicationEmit},
+			Journal:                nil,
+			LockTimeout:            0,
 		},
 	}
-	if (*moveDependents || *cleanupOrphans) && *apply {
+	if phases > 0 && *apply {
 		cfg.journalPath = *reportPath + ".journal.jsonl"
 	}
 	if cfg.dbURL == "" {
@@ -191,12 +220,29 @@ func runHostedMCPWrappers(args []string, stdout io.Writer, getenv func(string) s
 	if runErr != nil {
 		code = 1
 		if cfg.options.Apply {
-			log.Printf("hosted-mcp-wrappers %s phase stopped early: %v; resume with the same mode flags (%s), -cursor %s and a new -report path", report.Phase, runErr, hostedMCPWrappersModeFlags(cfg.options), report.LastCursor)
+			log.Printf("hosted-mcp-wrappers %s phase stopped early: %v; resume with the same mode flags (%s), -cursor %s and a new -report path", report.Phase, runErr, hostedMCPWrappersResumeFlags(cfg), report.LastCursor)
 		} else {
 			log.Printf("hosted-mcp-wrappers stopped early: %v; dry-run cursors commit nothing, so rerun without -cursor", runErr)
 		}
 	}
 	return code
+}
+
+// hostedMCPWrappersResumeFlags adds the run's scope, limit and effective publication choice to its mode flags.
+func hostedMCPWrappersResumeFlags(cfg hostedMCPWrappersConfig) string {
+	flags := hostedMCPWrappersModeFlags(cfg.options)
+	if cfg.options.ProjectID.Valid {
+		flags += " -project " + cfg.options.ProjectID.UUID.String()
+	} else {
+		flags += " -all-projects"
+	}
+	if cfg.options.Limit > 0 {
+		flags += " -limit " + strconv.Itoa(cfg.options.Limit)
+	}
+	if cfg.options.CleanupOrphans || cfg.options.DeleteOrphanWrappers {
+		flags += " -plugin-publication-emit=" + strconv.FormatBool(cfg.options.Publication.Enabled)
+	}
+	return flags
 }
 
 // hostedMCPWrappersModeFlags names the flags that select the run's phase, so a resume stays in it.
@@ -206,6 +252,12 @@ func hostedMCPWrappersModeFlags(options hostedmcpbackfill.Options) string {
 		return "-apply -move-dependents -readers-cut-over"
 	case options.CleanupOrphans:
 		return "-apply -cleanup-orphans"
+	case options.RekeyRemovals:
+		return "-apply -rekey-removal-records"
+	case options.DeleteLeftoverRemovals:
+		return "-apply -delete-leftover-removal-records"
+	case options.DeleteOrphanWrappers:
+		return "-apply -delete-orphan-wrapper-servers"
 	default:
 		return "-apply"
 	}

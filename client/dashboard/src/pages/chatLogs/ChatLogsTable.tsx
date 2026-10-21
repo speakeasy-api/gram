@@ -6,6 +6,8 @@ import { ChatOwnerLabel } from "@/components/chat-owner-label";
 import { chatOwnerLabel } from "@/lib/chat-owner";
 import { AssistantActorLink } from "@/components/assistant-actor-link";
 import { ActingPrincipal, PersonFace } from "@/components/ui/ActingPrincipal";
+import type { Principal } from "@/components/ui/ActingPrincipal/text";
+import { useReadableAgents } from "@/hooks/useReadableAgents";
 import { personalAccountEmail } from "@/components/observe/account-display-utils";
 import { TableRowContextMenu } from "@/components/table-row-context-menu";
 import { Dialog } from "@/components/ui/Dialog";
@@ -84,6 +86,33 @@ function getTraceId(chatId: string): string {
  * several people (the facepile), an assistant acting under one person's
  * authority (the two-line relation), and a person on their own.
  */
+/**
+ * A channel session's agent, linked only once it resolves through an agent
+ * inventory the reader may read: an id on a chat row is not permission to open
+ * the agent, and an agent deleted since capture has no name to resolve.
+ */
+function ChannelAgentPrincipal({
+  agentId,
+  agentName,
+  participants,
+}: {
+  agentId: string;
+  agentName: string | undefined;
+  participants: Principal[];
+}): JSX.Element {
+  const agents = useReadableAgents(true);
+  const readable =
+    !agents.isError &&
+    (agents.data ?? []).some((agent) => agent.id === agentId);
+  return (
+    <ActingPrincipal
+      agent={{ id: agentId, name: agentName }}
+      linked={Boolean(agentName) && readable}
+      authorizer={participants}
+    />
+  );
+}
+
 function ActingPrincipalCell({
   chat,
   members,
@@ -122,8 +151,20 @@ function ActingPrincipalCell({
     );
   }
 
-  // A channel session with no assistant on the row: the people are all there
-  // is to name.
+  // A channel session has no assistant record; the agent principal that
+  // produced it stands in, acting for the room.
+  if (!chat.assistantName && chat.agentId && participants.length > 0) {
+    return (
+      <ChannelAgentPrincipal
+        agentId={chat.agentId}
+        agentName={chat.agentName}
+        participants={participants}
+      />
+    );
+  }
+
+  // A channel session with neither an assistant nor an agent: the people are
+  // all there is to name.
   if (participants.length > 0) {
     return <ParticipantFacepile people={participants} />;
   }
@@ -167,9 +208,9 @@ function ActingPrincipalCell({
     );
   }
 
-  // An assistant with nobody behind it: named on its own, because there is no
-  // person whose authority it borrowed.
-  if (chat.assistantName) {
+  // An assistant (or a channel session's agent) with nobody behind it: named
+  // on its own, because there is no person whose authority it borrowed.
+  if (chat.assistantName || chat.agentId) {
     return <AssistantActorLink chat={chat} className="min-w-0" />;
   }
 

@@ -124,6 +124,10 @@ Background-work rules live in the `gram-temporal` skill (`.agents/skills/gram-te
 
 The Platform MCP is a first-party product surface under `server/internal/platformmcp/`. When adding or changing backend APIs, dashboard workflows, permissions, or user-facing product capabilities, explicitly assess whether an existing Platform MCP tool must change or a new outcome-oriented tool should be added. Keep tool schemas, descriptions, authorization, audiences, server instructions, tests, and shipped Platform MCP skills in sync with the product behavior. Activate the `maintaining-platform-mcp` skill (`.agents/skills/maintaining-platform-mcp/SKILL.md`) for this assessment and any Platform MCP implementation. Use `authoring-platform-mcp-skills` as well when changing workflows under `server/internal/plugins/platform_mcp_skills/`.
 
+### Command K discoverability
+
+When adding or changing dashboard pages, navigation, named resource lists/details, resource names, permissions, feature gates, or Command K search candidates/ranking/registration, assess Command K page actions and individual resource candidates separately. Sidebar links and overview routes do not automatically index resources by name. Add/update and register the appropriate candidates, or record a justified exclusion with test evidence. Activate `.agents/skills/maintaining-command-palette/SKILL.md`; Cubic's `cubic.yaml` rule and `REVIEW.md` use the same checklist.
+
 ### Staff Admin MCP
 
 When adding, removing, or changing an admin dashboard workflow, backend admin API, or staff permission, assess whether the staff-only Admin MCP needs a tool added or updated. Record an explicit reason when MCP parity is not appropriate. Keep staff-only authorization, exact target selection, safe results, tool contracts, and tests aligned with the dashboard. Activate `maintaining-admin-mcp` (`.agents/skills/maintaining-admin-mcp/SKILL.md`) for this assessment and any changes under `server/internal/adminmcp/`.

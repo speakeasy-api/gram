@@ -2179,3 +2179,8 @@ RETURNING id;
 INSERT INTO plugin_servers (plugin_id, toolset_id, display_name, policy, sort_order, deleted_at)
 VALUES (@plugin_id, @toolset_id, @display_name, @policy, @sort_order, sqlc.narg('deleted_at'))
 RETURNING *;
+
+-- name: CurrentDatabaseTime :one
+-- The database's clock, for tests that compare against timestamps the
+-- database wrote.
+SELECT clock_timestamp()::timestamptz AS now;

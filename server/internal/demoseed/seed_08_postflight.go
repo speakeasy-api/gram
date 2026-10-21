@@ -357,6 +357,16 @@ func (s *seeder) postflightCore(ctx context.Context) error {
 			count: byOrg(s.q.PostflightCountOwnerlessChats),
 			fail:  postflightMustBeZero("%d chats have no owner (sessions would render as anonymous)"),
 		},
+		{
+			what: "agent-attributed chats",
+			count: func() (int64, error) {
+				return s.q.PostflightCountAgentAttributedChats(ctx, repo.PostflightCountAgentAttributedChatsParams{
+					ProjectID: proj,
+					OrgID:     org,
+				})
+			},
+			fail: postflightMustEqual(2, "expected 2 chats attributed to a live agent, found %d (channel sessions would render with no actor)"),
+		},
 		// Every table that carries both the demo org id and a project id must
 		// agree with the demo constants: a mismatch means an insert escaped
 		// its scoping.

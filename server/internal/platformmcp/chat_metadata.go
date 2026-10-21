@@ -159,8 +159,17 @@ type ChatSummary struct {
 	// AssistantID and AssistantName identify the administrator-configured
 	// assistant behind the chat, when it was an assistant thread: the one the
 	// listing was narrowed to, otherwise the most recently active.
-	AssistantID    string `json:"assistant_id,omitempty"`
-	AssistantName  string `json:"assistant_name,omitempty"`
+	AssistantID   string `json:"assistant_id,omitempty"`
+	AssistantName string `json:"assistant_name,omitempty"`
+	// AgentID and AgentName identify the agent principal that produced the
+	// chat, recorded from the authenticated actor at capture. A channel session
+	// has no assistant record, so these are the only actor it reports. An agent
+	// is a non-human principal, like an assistant, so naming it crosses no
+	// person-reference boundary: the human participants of such a session stay
+	// masked here exactly as they do for every other chat. AgentName is absent
+	// when the agent has since been deleted, leaving AgentID reported alone.
+	AgentID        string `json:"agent_id,omitempty"`
+	AgentName      string `json:"agent_name,omitempty"`
 	MaskedIdentity string `json:"masked_identity,omitempty"`
 	// UserReference narrows a follow-up list_chats call to the same person. It
 	// is minted only for identities the listing can filter on.
@@ -493,6 +502,8 @@ func (s *ChatMetadataService) chatSummary(principal Principal, list chatList, ro
 		AccountType:       findingLabel(row.AccountType),
 		AssistantID:       uuidString(row.AssistantID),
 		AssistantName:     findingLabel(conv.FromPGTextOrEmpty[string](row.AssistantName)),
+		AgentID:           uuidString(row.AgentID),
+		AgentName:         findingLabel(conv.FromPGTextOrEmpty[string](row.AgentName)),
 	}
 	identityKind, identifier := chatIdentity(row)
 	if identifier == "" {
