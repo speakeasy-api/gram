@@ -368,6 +368,27 @@ func (q *Queries) GetLiveCanonicalWrapper(ctx context.Context, arg GetLiveCanoni
 	return i, err
 }
 
+const getRiskPolicyScopeFixture = `-- name: GetRiskPolicyScopeFixture :one
+SELECT mcp_scope::text AS scope, version FROM risk_policies WHERE id = $1 AND project_id = $2
+`
+
+type GetRiskPolicyScopeFixtureParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+type GetRiskPolicyScopeFixtureRow struct {
+	Scope   string
+	Version int64
+}
+
+func (q *Queries) GetRiskPolicyScopeFixture(ctx context.Context, arg GetRiskPolicyScopeFixtureParams) (GetRiskPolicyScopeFixtureRow, error) {
+	row := q.db.QueryRow(ctx, getRiskPolicyScopeFixture, arg.ID, arg.ProjectID)
+	var i GetRiskPolicyScopeFixtureRow
+	err := row.Scan(&i.Scope, &i.Version)
+	return i, err
+}
+
 const getServerIdentity = `-- name: GetServerIdentity :one
 SELECT id, toolset_id, deleted
 FROM mcp_servers
@@ -2766,6 +2787,33 @@ func (q *Queries) SeedSessionClientLinkFixture(ctx context.Context, arg SeedSess
 	return err
 }
 
+const seedSharedRiskPolicyFixture = `-- name: SeedSharedRiskPolicyFixture :exec
+INSERT INTO risk_policies (id, project_id, organization_id, name, sources, version, mcp_scope)
+VALUES ($1, $2, $3, 'shared policy', ARRAY['fixture']::text[], 1,
+  jsonb_build_object('servers', jsonb_build_array(
+    jsonb_build_object('mcp_server_id', $4::text),
+    jsonb_build_object('mcp_server_id', $5::text))))
+`
+
+type SeedSharedRiskPolicyFixtureParams struct {
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID string
+	FirstServerID  string
+	SecondServerID string
+}
+
+func (q *Queries) SeedSharedRiskPolicyFixture(ctx context.Context, arg SeedSharedRiskPolicyFixtureParams) error {
+	_, err := q.db.Exec(ctx, seedSharedRiskPolicyFixture,
+		arg.ID,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.FirstServerID,
+		arg.SecondServerID,
+	)
+	return err
+}
+
 const seedToolsetFixture = `-- name: SeedToolsetFixture :exec
 INSERT INTO toolsets (
   id, organization_id, project_id, name, slug, mcp_slug, mcp_is_public, mcp_enabled, custom_domain_id
@@ -2996,6 +3044,20 @@ type SoftDeleteToolsetFixtureParams struct {
 
 func (q *Queries) SoftDeleteToolsetFixture(ctx context.Context, arg SoftDeleteToolsetFixtureParams) error {
 	_, err := q.db.Exec(ctx, softDeleteToolsetFixture, arg.ID, arg.ProjectID)
+	return err
+}
+
+const touchRiskPolicyFixture = `-- name: TouchRiskPolicyFixture :exec
+UPDATE risk_policies SET updated_at = clock_timestamp() WHERE id = $1 AND project_id = $2
+`
+
+type TouchRiskPolicyFixtureParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) TouchRiskPolicyFixture(ctx context.Context, arg TouchRiskPolicyFixtureParams) error {
+	_, err := q.db.Exec(ctx, touchRiskPolicyFixture, arg.ID, arg.ProjectID)
 	return err
 }
 

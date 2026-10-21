@@ -829,6 +829,19 @@ INSERT INTO risk_policies (id, project_id, organization_id, name, sources, versi
 VALUES (@id, @project_id, @organization_id, 'policy', ARRAY['fixture']::text[], 1,
   jsonb_build_object('all_servers', false, 'servers', jsonb_build_array(jsonb_build_object('mcp_server_id', @mcp_server_id::text))));
 
+-- name: SeedSharedRiskPolicyFixture :exec
+INSERT INTO risk_policies (id, project_id, organization_id, name, sources, version, mcp_scope)
+VALUES (@id, @project_id, @organization_id, 'shared policy', ARRAY['fixture']::text[], 1,
+  jsonb_build_object('servers', jsonb_build_array(
+    jsonb_build_object('mcp_server_id', @first_server_id::text),
+    jsonb_build_object('mcp_server_id', @second_server_id::text))));
+
+-- name: GetRiskPolicyScopeFixture :one
+SELECT mcp_scope::text AS scope, version FROM risk_policies WHERE id = @id AND project_id = @project_id;
+
+-- name: TouchRiskPolicyFixture :exec
+UPDATE risk_policies SET updated_at = clock_timestamp() WHERE id = @id AND project_id = @project_id;
+
 -- name: ListWrapperStateFixture :many
 -- Every row the wrapper delete can change in a project, as text.
 SELECT 'mcp_servers'::text AS table_name, ms.id, to_jsonb(ms)::text AS row_text FROM mcp_servers AS ms WHERE ms.project_id = @project_id

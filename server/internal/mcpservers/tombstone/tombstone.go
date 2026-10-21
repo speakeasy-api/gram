@@ -79,11 +79,12 @@ type Input struct {
 }
 
 // Result is the tombstoned server, how many plugin attachments it lost, and
-// the risk policies deleted with it, whose results the caller cleans post-commit.
+// the risk policies deleted with it (results cleaned post-commit) or edited.
 type Result struct {
 	Server                repo.McpServer
 	DetachedPluginServers int
 	DeletedRiskPolicies   []uuid.UUID
+	RiskPolicyScopeEdits  []policylifecycle.ScopeEdit
 }
 
 // Tombstone soft-deletes a locked server and its attachments; the caller audits the server delete.
@@ -101,7 +102,7 @@ func Tombstone(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, locked
 	if err := servers.DeleteAssistantMCPServersByMCPServer(ctx, repo.DeleteAssistantMCPServersByMCPServerParams{McpServerID: deleted.ID, ProjectID: input.ProjectID}); err != nil {
 		return Result{}, fmt.Errorf("detach assistant mcp servers: %w", err)
 	}
-	deletedPolicies, err := policylifecycle.NewCleaner(input.TracerProvider, auditLogger).SoftDeleteForMCPServer(ctx, tx, input.OrganizationID, input.ProjectID, deleted.ID, policylifecycle.Actor{
+	policyCleanup, err := policylifecycle.NewCleaner(input.TracerProvider, auditLogger).SoftDeleteForMCPServer(ctx, tx, input.OrganizationID, input.ProjectID, deleted.ID, policylifecycle.Actor{
 		Principal:   actor,
 		DisplayName: input.ActorEmail,
 		Slug:        nil,
@@ -182,7 +183,7 @@ func Tombstone(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, locked
 		}
 	}
 
-	return Result{Server: deleted, DetachedPluginServers: len(detachedPluginServers), DeletedRiskPolicies: deletedPolicies}, nil
+	return Result{Server: deleted, DetachedPluginServers: len(detachedPluginServers), DeletedRiskPolicies: policyCleanup.Deleted, RiskPolicyScopeEdits: policyCleanup.ScopeEdits}, nil
 }
 
 func hasActor(ctx context.Context, input Input) bool {

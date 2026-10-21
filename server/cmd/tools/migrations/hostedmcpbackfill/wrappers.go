@@ -2,8 +2,10 @@ package hostedmcpbackfill
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -44,6 +46,9 @@ type WrapperDetached struct {
 
 	// OtherSessionClientLinks are other servers' unservable links the same prune removed; the journal and restore leave them out.
 	OtherSessionClientLinks int `json:"other_session_client_links"`
+
+	// RiskPolicyScopes are surviving policies whose scope the delete pruned; the policies are kept and journaled, not removed.
+	RiskPolicyScopes int `json:"risk_policy_scopes"`
 }
 
 // WrapperDependents are the images of the rows a server delete changed along with the server.
@@ -54,6 +59,18 @@ type WrapperDependents struct {
 
 	// SessionClientLinks are the deleted server's own links the issuer prune removed.
 	SessionClientLinks []RowImage `json:"session_client_links"`
+
+	// RiskPolicyScopes are the surviving policies the delete removed the server from.
+	RiskPolicyScopes []PolicyScopeImage `json:"risk_policy_scopes"`
+}
+
+// PolicyScopeImage is a policy's mcp_scope and updated_at before and after the delete removed the server.
+type PolicyScopeImage struct {
+	PolicyID        uuid.UUID       `json:"policy_id"`
+	ScopeBefore     json.RawMessage `json:"scope_before"`
+	ScopeAfter      json.RawMessage `json:"scope_after"`
+	UpdatedAtBefore time.Time       `json:"updated_at_before"`
+	UpdatedAtAfter  time.Time       `json:"updated_at_after"`
 }
 
 func (d ListToolsetOrphanWrappersRow) label() string { return tableMcpServers + " " + d.ID.String() }
@@ -195,10 +212,16 @@ func (r *Runner) deleteOrphanWrapperOne(ctx context.Context, toolsetID uuid.UUID
 	if err != nil {
 		return row, err
 	}
+	for _, edit := range tombstoned.RiskPolicyScopeEdits {
+		dependents.RiskPolicyScopes = append(dependents.RiskPolicyScopes, PolicyScopeImage{
+			PolicyID: edit.PolicyID, ScopeBefore: edit.ScopeBefore, ScopeAfter: edit.ScopeAfter,
+			UpdatedAtBefore: edit.UpdatedAtBefore, UpdatedAtAfter: edit.UpdatedAtAfter,
+		})
+	}
 	row.Detached = &WrapperDetached{
 		GatewayMemberships: len(dependents.GatewayMemberships), PluginMembers: len(dependents.PluginMembers),
 		AssistantAttachments: len(dependents.AssistantAttachments), SessionClientLinks: len(dependents.SessionClientLinks),
-		OtherSessionClientLinks: len(pruned) - len(dependents.SessionClientLinks),
+		OtherSessionClientLinks: len(pruned) - len(dependents.SessionClientLinks), RiskPolicyScopes: len(dependents.RiskPolicyScopes),
 	}
 	row.Reason = "toolset deleted"
 	row.Removed = removed.withoutImages()
@@ -228,7 +251,7 @@ func imageWrapperDelete(
 		return nil, nil, errors.New("tombstone server: server is still live")
 	}
 	removed := &RowImage{Table: tableMcpServers, ID: serverID, Deletion: "soft_deleted", Row: serverImage, EnvironmentConfigs: nil, SoftDeletedAt: deletedAt, RekeyedUpdatedAt: ""}
-	dependents := &WrapperDependents{GatewayMemberships: []RowImage{}, PluginMembers: []RowImage{}, AssistantAttachments: []RowImage{}, SessionClientLinks: []RowImage{}}
+	dependents := &WrapperDependents{GatewayMemberships: []RowImage{}, PluginMembers: []RowImage{}, AssistantAttachments: []RowImage{}, SessionClientLinks: []RowImage{}, RiskPolicyScopes: []PolicyScopeImage{}}
 
 	membershipIDs := make([]uuid.UUID, 0, len(memberships))
 	for _, m := range memberships {

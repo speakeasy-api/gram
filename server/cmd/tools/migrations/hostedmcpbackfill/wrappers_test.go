@@ -452,6 +452,70 @@ func TestRestoreOrphanWrapperServersJQReplaysCommittedRows(t *testing.T) {
 	require.Equal(t, before, f.wrapperState(t), "the restore brings back the deleted servers' rows, not another server's pruned link, and a second replay is a no-op")
 }
 
+// A policy that also targets a live server survives; the delete drops the wrapper from its scope, and the restore puts it back.
+func TestDeleteOrphanWrapperServersJournalsSharedPolicyScope(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	ctx := t.Context()
+	q := New(f.pool)
+	toolsetID := f.seedWrappedToolset(t, "scoped-"+uuid.NewString()[:8])
+	wrapper := f.seedExtraServer(t, toolsetID)
+	liveServer := f.seedWrappedToolset(t, "live-"+uuid.NewString()[:8])
+	policy := uuid.New()
+	require.NoError(t, q.SeedSharedRiskPolicyFixture(ctx, SeedSharedRiskPolicyFixtureParams{ID: policy, ProjectID: f.projectID, OrganizationID: f.orgID, FirstServerID: wrapper.String(), SecondServerID: liveServer.String()}))
+	f.deleteToolset(t, toolsetID)
+	before, err := q.GetRiskPolicyScopeFixture(ctx, GetRiskPolicyScopeFixtureParams{ID: policy, ProjectID: f.projectID})
+	require.NoError(t, err)
+
+	opts, journal := wrapperOptions(true)
+	report := f.run(t, opts)
+	row := dependentRowFor(t, report, wrapper)
+	require.Equal(t, OutcomeDeleted, row.Outcome)
+	require.Equal(t, 1, row.Detached.RiskPolicyScopes)
+	var images []PolicyScopeImage
+	for _, record := range journal.records {
+		if record.Event == JournalIntent && record.Dependents != nil {
+			images = append(images, record.Dependents.RiskPolicyScopes...)
+		}
+	}
+	require.Len(t, images, 1)
+	require.True(t, images[0].UpdatedAtAfter.After(images[0].UpdatedAtBefore))
+	after, err := q.GetRiskPolicyScopeFixture(ctx, GetRiskPolicyScopeFixtureParams{ID: policy, ProjectID: f.projectID})
+	require.NoError(t, err)
+	require.JSONEq(t, `{"servers": [{"mcp_server_id": "`+liveServer.String()+`"}]}`, after.Scope)
+	require.Equal(t, before.Version, after.Version)
+
+	f.replayWrapperRestore(t, writeJournal(t, journal.records), f.projectID)
+	restored, err := q.GetRiskPolicyScopeFixture(ctx, GetRiskPolicyScopeFixtureParams{ID: policy, ProjectID: f.projectID})
+	require.NoError(t, err)
+	require.JSONEq(t, before.Scope, restored.Scope, "the restore puts the wrapper back in the policy scope")
+}
+
+// A save after the backfill that leaves the same scope JSON still stops the restore from overwriting it.
+func TestRestoreOrphanWrapperServersJQSkipsPolicyChangedAfterBackfill(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	ctx := t.Context()
+	q := New(f.pool)
+	toolsetID := f.seedWrappedToolset(t, "touched-"+uuid.NewString()[:8])
+	wrapper := f.seedExtraServer(t, toolsetID)
+	liveServer := f.seedWrappedToolset(t, "live-"+uuid.NewString()[:8])
+	policy := uuid.New()
+	require.NoError(t, q.SeedSharedRiskPolicyFixture(ctx, SeedSharedRiskPolicyFixtureParams{ID: policy, ProjectID: f.projectID, OrganizationID: f.orgID, FirstServerID: wrapper.String(), SecondServerID: liveServer.String()}))
+	f.deleteToolset(t, toolsetID)
+
+	opts, journal := wrapperOptions(true)
+	require.Equal(t, 1, f.run(t, opts).Outcomes[OutcomeDeleted])
+	pruned, err := q.GetRiskPolicyScopeFixture(ctx, GetRiskPolicyScopeFixtureParams{ID: policy, ProjectID: f.projectID})
+	require.NoError(t, err)
+	require.NoError(t, q.TouchRiskPolicyFixture(ctx, TouchRiskPolicyFixtureParams{ID: policy, ProjectID: f.projectID}))
+
+	f.replayWrapperRestore(t, writeJournal(t, journal.records), f.projectID)
+	after, err := q.GetRiskPolicyScopeFixture(ctx, GetRiskPolicyScopeFixtureParams{ID: policy, ProjectID: f.projectID})
+	require.NoError(t, err)
+	require.JSONEq(t, pruned.Scope, after.Scope, "a policy saved after the backfill keeps its scope")
+}
+
 // Deleting the wrapper first lets the leftover delete remove the record that was blocked_live_wrapper, and role delivery re-adds nothing.
 func TestDeleteOrphanWrapperServersUnblocksLeftoverRemovalRecords(t *testing.T) {
 	t.Parallel()
