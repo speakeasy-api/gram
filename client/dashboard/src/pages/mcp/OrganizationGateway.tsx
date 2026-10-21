@@ -1,3 +1,14 @@
+import {
+  BRAND_MESH_SURFACE_CLASS,
+  BrandMeshLayers,
+} from "@/components/brand-mesh";
+import {
+  PageTabsList,
+  PageTabsTrigger,
+  Tabs,
+  TabsContent,
+} from "@/components/ui/Tabs";
+import { cn } from "@/lib/utils";
 import { MCPAssignments } from "../access/MCPAssignments";
 import { GatewayAccessReview } from "./GatewayAccessReview";
 import { SpeakeasyMark } from "@/components/mcp/OrganizationGatewayCard";
@@ -58,6 +69,9 @@ function OrganizationGatewayContent({
   } = useOrganizationGatewaySetting({ organizationId, isCurrentOrganization });
 
   const [reviewing, setReviewing] = useState(false);
+  const [tab, setTab] = useState("install");
+  const endpointUrl =
+    isOn && gateway.data?.available ? gateway.data.url : undefined;
 
   return (
     <SettingsPage
@@ -87,8 +101,10 @@ function OrganizationGatewayContent({
             <OrganizationGatewaySwitch
               on={isOn}
               setOn={(enabled, options) => {
-                if (enabled) setReviewing(true);
-                else setOn(false, options);
+                if (enabled) {
+                  setReviewing(true);
+                  setTab("assignments");
+                } else setOn(false, options);
               }}
               isPending={isPending}
             />
@@ -96,17 +112,6 @@ function OrganizationGatewayContent({
         ) : undefined
       }
     >
-      {reviewing && isOn === false && !!features.data && !features.error && (
-        <RequireScope scope="org:admin" level="section">
-          <GatewayAccessReview
-            isPending={isPending}
-            onCancel={() => setReviewing(false)}
-            onEnable={() =>
-              setOn(true, { onSuccess: () => setReviewing(false) })
-            }
-          />
-        </RequireScope>
-      )}
       {features.error && (
         <Alert variant="error">
           <AlertDescription>
@@ -117,21 +122,52 @@ function OrganizationGatewayContent({
           </AlertDescription>
         </Alert>
       )}
-      {!reviewing && (
-        <div className="space-y-8">
-          <GatewayBody
-            gateway={gateway}
-            isOn={isOn}
-            serverName={organizationSlug}
-          />
-          <RequireScope scope="org:admin" level="section">
-            <section aria-label="MCP assignments" className="space-y-4">
-              <Text variant="subheading">MCP assignments</Text>
-              <MCPAssignments />
-            </section>
-          </RequireScope>
-        </div>
-      )}
+      <div className="space-y-8">
+        <GatewayBody gateway={gateway} isOn={isOn} />
+        <Tabs value={tab} onValueChange={setTab}>
+          <div className="border-border border-b">
+            <PageTabsList>
+              <PageTabsTrigger value="install">Install</PageTabsTrigger>
+              <RequireScope scope="org:admin" level="component">
+                <PageTabsTrigger value="assignments">
+                  View assignments
+                </PageTabsTrigger>
+              </RequireScope>
+            </PageTabsList>
+          </div>
+          <TabsContent value="install" className="mt-6">
+            {endpointUrl ? (
+              <OrganizationGatewayInstall
+                serverName={organizationSlug}
+                url={endpointUrl}
+              />
+            ) : (
+              <Text small muted>
+                Enable Organization Gateway to get your endpoint and
+                installation steps.
+              </Text>
+            )}
+          </TabsContent>
+          <TabsContent value="assignments" className="mt-6">
+            <RequireScope scope="org:admin" level="section">
+              {reviewing &&
+              isOn === false &&
+              !!features.data &&
+              !features.error ? (
+                <GatewayAccessReview
+                  isPending={isPending}
+                  onCancel={() => setReviewing(false)}
+                  onEnable={() =>
+                    setOn(true, { onSuccess: () => setReviewing(false) })
+                  }
+                />
+              ) : (
+                <MCPAssignments />
+              )}
+            </RequireScope>
+          </TabsContent>
+        </Tabs>
+      </div>
     </SettingsPage>
   );
 }
@@ -139,11 +175,9 @@ function OrganizationGatewayContent({
 function GatewayBody({
   gateway,
   isOn,
-  serverName,
 }: {
   gateway: OrganizationGatewaySetting["gateway"];
   isOn: boolean | undefined;
-  serverName: string;
 }): JSX.Element {
   if (gateway.isLoading) {
     return (
@@ -200,19 +234,39 @@ function GatewayBody({
   }
 
   return (
-    <div className="space-y-10">
-      <section>
-        <h2 className="text-eyebrow mb-3">Endpoint</h2>
-        <div className="border-border bg-card flex items-center gap-3 border px-4 py-3">
-          <Text className="min-w-0 flex-1 truncate font-mono text-sm">
+    <section
+      aria-label="Gateway endpoint"
+      className={cn(
+        BRAND_MESH_SURFACE_CLASS,
+        "border-border overflow-hidden border",
+      )}
+    >
+      <BrandMeshLayers />
+      <div className="space-y-4 px-6 pt-8 pb-10 sm:px-8 sm:pt-10 sm:pb-12">
+        <span className="text-eyebrow">Your organization gateway</span>
+        <h2 className="text-foreground font-display text-4xl leading-tight font-thin tracking-tight sm:text-5xl">
+          Every server. One connection.
+        </h2>
+        <Text muted className="max-w-xl">
+          Connect your agent once. Get every MCP server you can access, across
+          every project.
+        </Text>
+      </div>
+      <div className="border-border bg-background/70 flex items-center gap-4 border-t px-6 py-5 sm:px-8">
+        <div className="min-w-0 flex-1 space-y-2">
+          <h3 className="text-eyebrow text-muted-foreground">Endpoint URL</h3>
+          <code className="text-foreground block font-mono text-base break-all sm:text-lg">
             {url}
-          </Text>
-          <CopyButton text={url} size="sm" tooltip="Copy endpoint" />
+          </code>
         </div>
-      </section>
-
-      <OrganizationGatewayInstall serverName={serverName} url={url} />
-    </div>
+        <CopyButton
+          text={url}
+          size="lg"
+          tooltip="Copy endpoint"
+          className="border-border bg-card shrink-0 border"
+        />
+      </div>
+    </section>
   );
 }
 

@@ -1,3 +1,5 @@
+import userEvent from "@testing-library/user-event";
+import { TooltipProvider } from "@/components/ui/Tooltip";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { ReactNode } from "react";
@@ -11,10 +13,12 @@ vi.mock("@/components/page-templates", () => ({
     children: ReactNode;
     primaryAction: ReactNode;
   }) => (
-    <div>
-      {primaryAction}
-      {children}
-    </div>
+    <TooltipProvider>
+      <div>
+        {primaryAction}
+        {children}
+      </div>
+    </TooltipProvider>
   ),
 }));
 vi.mock("@/components/require-scope", () => ({
@@ -29,7 +33,11 @@ vi.mock("@/hooks/useIsCurrentOrganization", () => ({
 vi.mock("@/components/mcp/useOrganizationGatewaySetting", () => ({
   useOrganizationGatewaySetting: () => ({
     features: { data: {}, error: state.error },
-    gateway: { data: { available: false, unavailableReason: "turned_off" } },
+    gateway: {
+      data: state.on
+        ? { available: true, url: "https://api.example.test/mcp/gateway/test" }
+        : { available: false, unavailableReason: "turned_off" },
+    },
     on: state.on,
     setOn: state.setOn,
     isPending: false,
@@ -86,12 +94,15 @@ it("does not offer mutation when the gateway setting failed to load", () => {
 
 it.each([false, true])(
   "shows assignments from the gateway card destination when enabled=%s",
-  (on) => {
+  async (on) => {
     state.on = on;
     render(<OrganizationGateway />);
     expect(
-      screen.getByRole("region", { name: "MCP assignments" }),
-    ).toBeTruthy();
+      screen.queryByRole("button", { name: "Assignments loaded" }),
+    ).toBeNull();
+    await userEvent.click(
+      screen.getByRole("tab", { name: "View assignments" }),
+    );
     expect(
       screen.getByRole("button", { name: "Assignments loaded" }),
     ).toBeTruthy();
@@ -100,3 +111,18 @@ it.each([false, true])(
     ).toBeNull();
   },
 );
+
+it("keeps the copyable endpoint above both tabs", async () => {
+  state.on = true;
+  render(<OrganizationGateway />);
+  expect(screen.getByRole("region", { name: "Gateway endpoint" })).toBeTruthy();
+  expect(
+    screen.getByText("https://api.example.test/mcp/gateway/test"),
+  ).toBeTruthy();
+  expect(screen.getByRole("button", { name: "Copy endpoint" })).toBeTruthy();
+  await userEvent.click(screen.getByRole("tab", { name: "View assignments" }));
+  expect(
+    screen.getByText("https://api.example.test/mcp/gateway/test"),
+  ).toBeTruthy();
+  expect(screen.queryByRole("heading", { name: "Install" })).toBeNull();
+});
