@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	meteringv1 "github.com/speakeasy-api/gram/infra/gen/gram/metering/v1"
+	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -19,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/risk"
+	"github.com/speakeasy-api/gram/server/internal/risk/enforcereply"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -66,12 +68,12 @@ func matchedJudgeVerdict(confidence float64, rationale string) *promptpolicy.Ver
 	}
 }
 
-func insertPromptBasedBlockPolicy(t *testing.T, ti *testInstance, ctx context.Context, name, prompt string) {
+func insertPromptBasedBlockPolicy(t *testing.T, ti *testInstance, ctx context.Context, name, prompt string) string {
 	t.Helper()
-	insertPromptBasedBlockPolicyWithConfig(t, ti, ctx, name, prompt, nil)
+	return insertPromptBasedBlockPolicyWithConfig(t, ti, ctx, name, prompt, nil)
 }
 
-func insertPromptBasedBlockPolicyWithConfig(t *testing.T, ti *testInstance, ctx context.Context, name, prompt string, modelConfig []byte) {
+func insertPromptBasedBlockPolicyWithConfig(t *testing.T, ti *testInstance, ctx context.Context, name, prompt string, modelConfig []byte) string {
 	t.Helper()
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	require.NotNil(t, authCtx.ProjectID)
@@ -99,6 +101,7 @@ func insertPromptBasedBlockPolicyWithConfig(t *testing.T, ti *testInstance, ctx 
 		Principals: []urn.Principal{authz.AllUsersPrincipal()},
 		Selector:   authz.NewSelector(authz.ScopeRiskPolicyEvaluate, policy.ID.String()),
 	}))
+	return policy.ID.String()
 }
 
 func promptPoliciesFlag(ctx context.Context) *feature.InMemory {
@@ -129,6 +132,59 @@ func TestScanner_PromptBasedPolicyBlocksToolRequest(t *testing.T) {
 	require.Equal(t, promptpolicy.Source, res.Source)
 	require.Equal(t, promptpolicy.Rule, res.RuleID)
 	require.Equal(t, "destructive delete", res.Description)
+}
+
+func TestScanner_PubsubRoutesPolicyKeyedPromptJudge(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+	policyID := insertPromptBasedBlockPolicyWithConfig(t, ti, ctx, "no-deletes", "Block destructive deletes", []byte(`{"fail_open":false}`))
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	flags := promptPoliciesFlag(ctx)
+	flags.SetFlag(feature.FlagRiskEnforcementPubsub, authCtx.ActiveOrganizationID, true)
+	judge := &fakePromptJudge{verdict: matchedJudgeVerdict(0.9, "local judge must not run")}
+	dispatcher := &fakeEnforcementDispatcher{fn: func(request enforcereply.DispatchRequest) (enforcereply.Outcome, error) {
+		require.Len(t, request.Lanes, 1)
+		lane := request.Lanes[0]
+		require.Equal(t, riskv1.EnforcementScanner_ENFORCEMENT_SCANNER_JUDGE, lane.Scanner)
+		require.Equal(t, policyID, lane.PolicyID)
+		config, ok := request.PromptPolicies[policyID]
+		require.True(t, ok)
+		require.Equal(t, "Block destructive deletes", config.Prompt)
+		require.JSONEq(t, `{"fail_open":false}`, string(config.ModelConfig))
+		reply := riskv1.EnforcementReply_builder{
+			Scanner:  new(lane.Scanner),
+			Status:   new(riskv1.EnforcementStatus_ENFORCEMENT_STATUS_OK),
+			PolicyId: new(policyID),
+			Findings: []*riskv1.EnforcementFinding{riskv1.EnforcementFinding_builder{
+				RuleId:   new(promptpolicy.Rule),
+				Category: new("prompt_policy"),
+				Score:    new(1.0),
+			}.Build()},
+		}.Build()
+		return enforcereply.Outcome{ByLane: map[enforcereply.Lane]*riskv1.EnforcementReply{lane: reply}, Complete: true}, nil
+	}}
+	scanner, err := risk.NewScannerWithEnforcementDispatcher(
+		testenv.NewLogger(t),
+		testenv.NewTracerProvider(t),
+		testenv.NewMeterProvider(t),
+		ti.conn,
+		newTestCustomRuleAnalyzer(t, ti.conn),
+		nil,
+		nil,
+		promptpolicy.NewScanner(testenv.NewLogger(t), judge.Evaluate),
+		flags,
+		testCELEngine(t),
+		dispatcher,
+		metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
+	)
+	require.NoError(t, err)
+
+	result, err := scanner.ScanForEnforcement(ctx, realtimeScanRequest(authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID, "delete production", message.User, ""))
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, promptpolicy.Source, result.Source)
+	require.Equal(t, promptpolicy.Rule, result.RuleID)
+	require.Zero(t, judge.calls.Load())
 }
 
 // TestScanner_PromptBasedPolicyAttributesMCPTool verifies the judge receives a
