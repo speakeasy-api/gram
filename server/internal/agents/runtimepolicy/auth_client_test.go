@@ -123,6 +123,22 @@ func TestDelegationContainmentAccountsForConcreteOwnerRestrictions(t *testing.T)
 	require.False(t, contained, "a symbolic carry does not cover a concrete owner pin")
 }
 
+func TestDirectSymbolicAllowOutranksInheritedOwnerBlock(t *testing.T) {
+	t.Parallel()
+
+	allow := authGrant("user:user_u", authz.ScopeMCPAuth, "client_a", ownedBy(authz.SelectorValueRepresentedUser))
+	inherited := authGrant("role:role_1", authz.ScopeMCPBlockedAuth, "client_a", ownedBy("user_u"))
+	policy := mustAuthPolicy(t, authGrant("", authz.ScopeMCPAuth, "client_a", ownedBy(authz.SelectorValueRepresentedUser)))
+
+	contained, err := DelegationContainedFor("user_u", policy, []authz.Grant{allow, inherited})
+	require.NoError(t, err)
+	require.True(t, contained, "the direct grant outranks the inherited block for user_u, as at runtime")
+
+	contained, err = DelegationContained(policy, []authz.Grant{allow, inherited})
+	require.NoError(t, err)
+	require.False(t, contained, "without a known user the block stays live")
+}
+
 func TestDelegableGrantsDoNotWidenSymbolicOwners(t *testing.T) {
 	t.Parallel()
 

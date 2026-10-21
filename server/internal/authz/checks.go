@@ -86,6 +86,9 @@ func validateAuthClientCheck(c Check) error {
 	if c.ResourceKind != "" && c.ResourceKind != ResourceKindMCPAuthClient {
 		return invalidCheckReason(c.Scope, c.ResourceID, "resource kind must be "+ResourceKindMCPAuthClient)
 	}
+	if ResourceKindForScope(c.Scope) != ResourceKindMCPAuthClient {
+		return invalidCheckReason(c.Scope, c.ResourceID, "scope must be an auth-client scope")
+	}
 	clientType := c.Dimensions[SelectorKeyClientType]
 	if !validAuthClientTypes[clientType] {
 		return invalidCheckReason(c.Scope, c.ResourceID, "unknown client_type")

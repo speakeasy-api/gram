@@ -1,6 +1,9 @@
 package authz
 
-import "maps"
+import (
+	"maps"
+	"slices"
+)
 
 // Check describes a single authorization requirement. ResourceID identifies the
 // resource. ResourceKind overrides the kind derived from the scope — leave empty
@@ -65,13 +68,19 @@ func (c Check) selector() Selector {
 // a concrete resource. Every parent dimension must be retained by the candidate.
 // This is allow-only: callers must separately reject overlapping exclusions.
 func GrantsContainSelector(grants []Grant, scope Scope, selector Selector) bool {
+	return GrantsContainSelectorFor("", grants, scope, selector)
+}
+
+// GrantsContainSelectorFor is GrantsContainSelector acting for representedUser,
+// so a $represented_user grant covers that user's own connection.
+func GrantsContainSelectorFor(representedUser string, grants []Grant, scope Scope, selector Selector) bool {
 	if selector[SelectorKeyResourceID] == "" || ValidateSelector(scope, selector) != nil {
 		return false
 	}
 	dimensions := maps.Clone(selector)
 	delete(dimensions, SelectorKeyResourceKind)
 	delete(dimensions, SelectorKeyResourceID)
-	check := Check{Scope: scope, ResourceKind: selector[SelectorKeyResourceKind], ResourceID: selector[SelectorKeyResourceID], Dimensions: dimensions, selectorMatch: selectorMatchStrict, representedUser: ""}
+	check := Check{Scope: scope, ResourceKind: selector[SelectorKeyResourceKind], ResourceID: selector[SelectorKeyResourceID], Dimensions: dimensions, selectorMatch: selectorMatchStrict, representedUser: representedUser}
 	grant, _ := matchingGrant(grants, check.expand())
 	return grant != nil
 }
@@ -85,13 +94,13 @@ func (c Check) expand() []Check {
 		{Scope: ScopeRoot, ResourceKind: c.ResourceKind, ResourceID: c.ResourceID, Dimensions: c.Dimensions, selectorMatch: c.selectorMatch, representedUser: c.representedUser},
 		{Scope: c.Scope, ResourceKind: c.ResourceKind, ResourceID: c.ResourceID, Dimensions: c.Dimensions, selectorMatch: c.selectorMatch, representedUser: c.representedUser},
 	}
-	// Root administers everything but uses no auth client.
-	if c.isAuthClientCheck() {
-		checks = checks[1:]
-	}
 	// Additional scopes that also satisfy this check.
 	for _, s := range scopeExpansions[c.Scope] {
 		checks = append(checks, Check{Scope: s, ResourceKind: c.ResourceKind, ResourceID: c.ResourceID, Dimensions: c.Dimensions, selectorMatch: c.selectorMatch, representedUser: c.representedUser})
+	}
+	// Root administers everything but uses no auth client.
+	if c.isAuthClientCheck() {
+		checks = slices.DeleteFunc(checks, func(e Check) bool { return e.Scope == ScopeRoot })
 	}
 	return checks
 }

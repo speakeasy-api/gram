@@ -91,6 +91,7 @@ func TestValidateSelectorForAuthClients(t *testing.T) {
 		"owner on server scope":   {ScopeMCPConnect, Selector{SelectorKeyResourceKind: ResourceKindMCP, SelectorKeyResourceID: "*", SelectorKeyConnectionOwner: SelectorValueRepresentedUser}},
 		"marker on server scope":  {ScopeMCPConnect, Selector{SelectorKeyResourceKind: ResourceKindMCP, SelectorKeyResourceID: "*", SelectorKeyProjectID: SelectorValueRepresentedUser}},
 		"client type on mcp kind": {ScopeMCPConnect, Selector{SelectorKeyResourceKind: ResourceKindMCP, SelectorKeyResourceID: "*", SelectorKeyClientType: AuthClientTypeEMA}},
+		"owner on shared type":    {ScopeMCPAuth, authSelector("*", map[string]string{SelectorKeyClientType: AuthClientTypeServiceAccount, SelectorKeyConnectionOwner: "user_456"})},
 	}
 	for name, tc := range invalid {
 		require.Error(t, ValidateSelector(tc.scope, tc.selector), name)
@@ -355,6 +356,13 @@ func TestRootAndOverridesGrantNoAuthClientUse(t *testing.T) {
 	allowed, err := GrantsAuthorize([]Grant{NewGrant(ScopeRoot, WildcardResource)}, sharedClientCheck(authProjectP))
 	require.NoError(t, err)
 	require.False(t, allowed, "root administers but uses no auth client")
+
+	rootScoped := sharedClientCheck(authProjectP)
+	rootScoped.Scope = ScopeRoot
+	rootScoped.ResourceKind = ResourceKindMCPAuthClient
+	allowed, err = GrantsAuthorize([]Grant{NewGrant(ScopeRoot, WildcardResource)}, rootScoped)
+	require.ErrorIs(t, err, ErrInvalidCheck)
+	require.False(t, allowed, "a root-scoped auth-client check is rejected")
 
 	grants := GrantsFromOverrides([]RoleGrant{{Scope: string(ScopeMCPAuth), Selectors: nil}, {Scope: string(ScopeMCPConnect), Selectors: nil}})
 	require.Len(t, grants, 1)

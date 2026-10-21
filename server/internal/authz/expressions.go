@@ -294,7 +294,7 @@ func evaluateGrantCheckDifference(grants []Grant, base GrantCheck, exclusion Gra
 	}
 
 	exclusionGrant, _ := matchingGrant(grants, expandWithoutRoot(exclusion.Check))
-	if exclusionGrant != nil {
+	if exclusionGrant != nil && !personalCheckUnbound(exclusion.Check) {
 		return GrantExpressionResult{Satisfied: false, Reason: GrantExpressionReasonExclusionMatched}, nil
 	}
 

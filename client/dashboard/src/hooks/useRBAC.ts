@@ -154,6 +154,8 @@ export function hasScopeInGrants(
   projectId?: string,
 ): boolean {
   if (!knownScopes.has(scope)) return false;
+  // Only the server can bind the connection owner of an auth-client check.
+  if (resourceKindForScope(scope) === "mcp_auth_client") return false;
 
   const resourceIds =
     typeof resourceId === "string" || resourceId === undefined
