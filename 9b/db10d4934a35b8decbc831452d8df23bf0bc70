@@ -1,0 +1,18 @@
+server/cmd/tools/migrations/RISK_RESULTS_MIGRATION.md
+  h_e404c1a6a54184 250-261,264-267,273-274
+server/cmd/tools/sweep_builtin_presets/main.go
+  h_e404c1a6a54184 100-101,113,121,352-353,501-504,506,593,630-631,655-656
+server/cmd/tools/sweep_builtin_presets/main_test.go
+  h_e404c1a6a54184 237,241,245,247-248,252,255,258-259,262,264,305-306,356,363,368
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "9bdb10d4934a35b8decbc831452d8df23bf0bc70",
+  "prompts": {},
+  "humans": {
+    "h_e404c1a6a54184": {
+      "author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
