@@ -65,8 +65,6 @@ func ListDeviceMCPServers(ctx context.Context, logger *slog.Logger, db repo.DBTX
 			err = requireHTTPS(mcpURL)
 		}
 		switch {
-		case r.WrapperCount > 1:
-			skip(r.PluginSlug, errors.New("ambiguous toolset MCP serving wrapper"))
 		case err != nil:
 			skip(r.PluginSlug, err)
 		case !unproxied:
