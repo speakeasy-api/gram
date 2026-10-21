@@ -230,12 +230,17 @@ func decideEMA(ctx context.Context, tx pgx.Tx, q *Queries, opts Options, key ema
 			}
 			if found {
 				want.race(existing.ID)
+				// The kept client still serves these servers, so it keeps
+				// carrying their credential headers.
+				target := emaTarget{clientID: existing.ID, recorded: true, servers: nil}
+				for _, server := range servers {
+					if server.allowed {
+						target.servers = append(target.servers, server.id)
+						plan.served[server.id] = true
+					}
+				}
+				plan.targets = append(plan.targets, target)
 			}
-		}
-		// The kept client still serves them, so their credential headers do
-		// not become a separate client.
-		for _, server := range servers {
-			plan.served[server.id] = true
 		}
 		report.add(result)
 		return nil

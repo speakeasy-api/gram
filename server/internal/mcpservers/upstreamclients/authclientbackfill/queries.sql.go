@@ -467,18 +467,33 @@ WHERE TRUE
         FALSE
       )
   ))
-  AND ($6::uuid IS NULL OR NOT EXISTS (
-    SELECT 1
-    FROM mcp_server_auth_clients AS l
-    JOIN mcp_servers AS s3 ON s3.id = l.mcp_server_id AND s3.project_id = l.project_id AND s3.deleted IS FALSE
-    WHERE l.auth_client_id = $6::uuid
-      AND l.organization_id = $3::text
-      AND l.deleted IS FALSE
-      AND NOT COALESCE(
-        (src.source_kind = 'remote' AND s3.remote_mcp_server_id = src.source_id)
-        OR (src.source_kind = 'tunneled' AND s3.tunneled_mcp_server_id = src.source_id),
-        FALSE
-      )
+  AND ($6::uuid IS NULL OR (
+    EXISTS (
+      SELECT 1
+      FROM mcp_server_auth_clients AS l
+      JOIN mcp_servers AS s3 ON s3.id = l.mcp_server_id AND s3.project_id = l.project_id AND s3.deleted IS FALSE
+      WHERE l.auth_client_id = $6::uuid
+        AND l.organization_id = $3::text
+        AND l.deleted IS FALSE
+        AND COALESCE(
+          (src.source_kind = 'remote' AND s3.remote_mcp_server_id = src.source_id)
+          OR (src.source_kind = 'tunneled' AND s3.tunneled_mcp_server_id = src.source_id),
+          FALSE
+        )
+    )
+    AND NOT EXISTS (
+      SELECT 1
+      FROM mcp_server_auth_clients AS l
+      JOIN mcp_servers AS s3 ON s3.id = l.mcp_server_id AND s3.project_id = l.project_id AND s3.deleted IS FALSE
+      WHERE l.auth_client_id = $6::uuid
+        AND l.organization_id = $3::text
+        AND l.deleted IS FALSE
+        AND NOT COALESCE(
+          (src.source_kind = 'remote' AND s3.remote_mcp_server_id = src.source_id)
+          OR (src.source_kind = 'tunneled' AND s3.tunneled_mcp_server_id = src.source_id),
+          FALSE
+        )
+    )
   ))
 ON CONFLICT (auth_client_id, name) WHERE deleted IS FALSE DO NOTHING
 `
@@ -497,7 +512,7 @@ type InsertHeaderCopyParams struct {
 // and its source being live in a live project of the organization, in the
 // auth client's project when the client has one, and, for an upstream OAuth
 // client's auth client or a required auth client, that client still being
-// used only on the header's source. Zero rows means the evidence changed or a copy with
+// used on the header's source and only there. Zero rows means the evidence changed or a copy with
 // that name already exists.
 func (q *Queries) InsertHeaderCopy(ctx context.Context, arg InsertHeaderCopyParams) (int64, error) {
 	result, err := q.db.Exec(ctx, insertHeaderCopy,
@@ -709,7 +724,7 @@ WHERE s.id = $3::uuid
         ELSE FALSE
       END
   AND ($6::boolean IS NULL
-       OR $6::boolean = EXISTS (
+       OR $6::boolean = (EXISTS (
          SELECT 1 FROM mcp_server_remote_session_clients AS a
          JOIN remote_session_clients AS c
            ON c.id = a.remote_session_client_id
@@ -731,7 +746,7 @@ WHERE s.id = $3::uuid
           AND ec.source = 'backfill'
           AND ec.deleted IS FALSE
          WHERE el.mcp_server_id = s.id AND el.organization_id = p.organization_id AND el.deleted IS FALSE
-       ))
+       )))
 ON CONFLICT (mcp_server_id, auth_client_id) WHERE deleted IS FALSE DO NOTHING
 `
 
@@ -3192,18 +3207,33 @@ WHERE c.id = $1::uuid
         FALSE
       )
   ))
-  AND ($4::uuid IS NULL OR NOT EXISTS (
-    SELECT 1
-    FROM mcp_server_auth_clients AS l
-    JOIN mcp_servers AS s3 ON s3.id = l.mcp_server_id AND s3.project_id = l.project_id AND s3.deleted IS FALSE
-    WHERE l.auth_client_id = $4::uuid
-      AND l.organization_id = $2::text
-      AND l.deleted IS FALSE
-      AND NOT COALESCE(
-        (src.source_kind = 'remote' AND s3.remote_mcp_server_id = src.source_id)
-        OR (src.source_kind = 'tunneled' AND s3.tunneled_mcp_server_id = src.source_id),
-        FALSE
-      )
+  AND ($4::uuid IS NULL OR (
+    EXISTS (
+      SELECT 1
+      FROM mcp_server_auth_clients AS l
+      JOIN mcp_servers AS s3 ON s3.id = l.mcp_server_id AND s3.project_id = l.project_id AND s3.deleted IS FALSE
+      WHERE l.auth_client_id = $4::uuid
+        AND l.organization_id = $2::text
+        AND l.deleted IS FALSE
+        AND COALESCE(
+          (src.source_kind = 'remote' AND s3.remote_mcp_server_id = src.source_id)
+          OR (src.source_kind = 'tunneled' AND s3.tunneled_mcp_server_id = src.source_id),
+          FALSE
+        )
+    )
+    AND NOT EXISTS (
+      SELECT 1
+      FROM mcp_server_auth_clients AS l
+      JOIN mcp_servers AS s3 ON s3.id = l.mcp_server_id AND s3.project_id = l.project_id AND s3.deleted IS FALSE
+      WHERE l.auth_client_id = $4::uuid
+        AND l.organization_id = $2::text
+        AND l.deleted IS FALSE
+        AND NOT COALESCE(
+          (src.source_kind = 'remote' AND s3.remote_mcp_server_id = src.source_id)
+          OR (src.source_kind = 'tunneled' AND s3.tunneled_mcp_server_id = src.source_id),
+          FALSE
+        )
+    )
   ))
 `
 
@@ -3219,8 +3249,8 @@ type UpdateHeaderCopyParams struct {
 // Brings one live header copy in line with its source header, conditional on
 // the source header still being live and named the same in any letter case,
 // and in the auth client's project when the client has one; with a required
-// upstream OAuth client or auth client, that client still being used only on
-// the header's source.
+// upstream OAuth client or auth client, that client still being used on the
+// header's source and only there.
 func (q *Queries) UpdateHeaderCopy(ctx context.Context, arg UpdateHeaderCopyParams) (int64, error) {
 	result, err := q.db.Exec(ctx, updateHeaderCopy,
 		arg.CopyID,

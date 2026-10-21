@@ -478,6 +478,52 @@ func TestRun_EMAClientCarriesItsServersCredentialHeaders(t *testing.T) {
 	require.Empty(t, f.headers(emaID), "a copy no source names is retired")
 }
 
+// A client kept while its bindings disagree keeps carrying its server's
+// credential headers and following them, so none becomes a separate client.
+func TestRun_KeptEMAClientKeepsTrackingItsHeaders(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	usi, otherUSI := f.userSessionIssuer(), f.userSessionIssuer()
+	clientID, issuerID := f.emaClient()
+	resource := "https://mcp.vendor.example.com/mcp"
+	source, _ := f.emaSourceAt(resource, usi)
+	key := f.header(source, "X-Api-Key", true, secretValue, "")
+	f.binding(usi, issuerID, clientID, resource, []string{"read"})
+	f.run(true)
+	emaID := f.live(TypeEMA)[0].ID
+
+	f.binding(otherUSI, issuerID, clientID, resource, []string{"read", "write"})
+	require.NoError(t, f.q.UpdateRemoteHeaderFixture(t.Context(), UpdateRemoteHeaderFixtureParams{Name: "X-Api-Key", Value: pgtype.Text{String: "rotated", Valid: true}, ValueFromRequestHeader: pgtype.Text{}, IsSecret: true, ID: key}))
+	f.run(true)
+	require.Empty(t, f.live(TypeStaticCredential))
+	headers := f.headers(emaID)
+	require.Len(t, headers, 1)
+	require.Equal(t, "rotated", headers[0].Value.String)
+}
+
+// A server whose ema client is going away is not linked to a separate header
+// client while that client's link is still live; the next run links it.
+func TestRun_LiveEMALinkHoldsBackAStandaloneHeaderLink(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	usi := f.userSessionIssuer()
+	clientID, issuerID := f.emaClient()
+	resource := "https://mcp.vendor.example.com/mcp"
+	source, server := f.emaSourceAt(resource, usi)
+	f.header(source, "X-Api-Key", true, secretValue, "")
+	binding := f.binding(usi, issuerID, clientID, resource, []string{})
+	f.run(true)
+	require.Len(t, f.links(server), 1)
+
+	require.NoError(t, f.q.DeleteEMABindingFixture(t.Context(), binding))
+	f.run(true)
+	require.Empty(t, f.links(server), "the header client waits for the ema link to retire")
+	f.run(true)
+	static := f.live(TypeStaticCredential)
+	require.Len(t, static, 1)
+	require.Equal(t, []uuid.UUID{static[0].ID}, f.links(server))
+}
+
 // An ema client its servers reach from more than one source with credential
 // headers is reported and carries no copies: one source's credentials would
 // otherwise be sent from the other's servers.
