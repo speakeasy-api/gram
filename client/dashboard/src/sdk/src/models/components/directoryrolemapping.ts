@@ -34,7 +34,7 @@ export const SourceStatus = {
 /**
  * Whether the mapped source still exists. missing means the group was deleted from the directory, or no live directory user has the attribute value. A missing source matches nobody, so the mapping grants nothing until the source returns.
  */
-export type SourceStatus = ClosedEnum<typeof SourceStatus>;
+export type SourceStatus = OpenEnum<typeof SourceStatus>;
 
 export type DirectoryRoleMapping = {
   /**
@@ -80,8 +80,8 @@ export const DirectoryRoleMappingSourceKind$inboundSchema: z.ZodMiniType<
 > = openEnums.inboundSchema(DirectoryRoleMappingSourceKind);
 
 /** @internal */
-export const SourceStatus$inboundSchema: z.ZodMiniEnum<typeof SourceStatus> = z
-  .enum(SourceStatus);
+export const SourceStatus$inboundSchema: z.ZodMiniType<SourceStatus, unknown> =
+  openEnums.inboundSchema(SourceStatus);
 
 /** @internal */
 export const DirectoryRoleMapping$inboundSchema: z.ZodMiniType<
