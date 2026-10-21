@@ -192,7 +192,8 @@ ORDER BY ac.id;
 
 -- name: RetireStaleBackfillAuthClients :many
 -- Soft-deletes the auth clients ListStaleBackfillAuthClients reports,
--- rechecking the same evidence.
+-- rechecking the same evidence, with their header copies.
+WITH retired AS (
 UPDATE mcp_auth_clients AS target
 SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
 WHERE target.id IN (
@@ -229,7 +230,17 @@ WHERE ac.organization_id = @organization_id::text
       AND (ac.project_id IS NULL OR a.project_id = ac.project_id)
   )
 )
-RETURNING target.id;
+RETURNING target.id
+), headers AS (
+  UPDATE mcp_auth_client_headers AS h
+  SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
+  FROM retired
+  WHERE h.auth_client_id = retired.id
+    AND h.organization_id = @organization_id::text
+    AND h.deleted IS FALSE
+  RETURNING h.id
+)
+SELECT id FROM retired;
 
 -- name: ListStaleBackfillLinks :many
 -- Live backfilled server links in the organization whose auth client is
@@ -541,9 +552,10 @@ WHERE c.rank > 1 OR NOT EXISTS (SELECT 1 FROM desired AS d WHERE d.lname = c.lna
 -- name: InsertHeaderCopy :execrows
 -- Copies one source credential header onto a live backfilled auth client of
 -- the organization as stored, ciphertext included, conditional on the header
--- and its source being live in a live project of the organization and, for an
--- upstream OAuth client's auth client, that client still being used only on
--- the header's source. Zero rows means the evidence changed or a copy with
+-- and its source being live in a live project of the organization, in the
+-- auth client's project when the client has one, and, for an upstream OAuth
+-- client's auth client, that client still being used only on the header's
+-- source. Zero rows means the evidence changed or a copy with
 -- that name already exists.
 INSERT INTO mcp_auth_client_headers (auth_client_id, organization_id, name, description, is_required, is_secret, value, value_from_request_header)
 SELECT ac.id, ac.organization_id, src.name, src.description, src.is_required, src.is_secret, src.value, src.value_from_request_header
@@ -566,6 +578,7 @@ JOIN mcp_auth_clients AS ac
  AND ac.organization_id = p.organization_id
  AND ac.source = 'backfill'
  AND ac.deleted IS FALSE
+ AND (ac.project_id IS NULL OR ac.project_id = src.project_id)
 WHERE TRUE
   AND (sqlc.narg('required_remote_session_client_id')::uuid IS NULL OR NOT EXISTS (
     SELECT 1
@@ -584,7 +597,8 @@ ON CONFLICT (auth_client_id, name) WHERE deleted IS FALSE DO NOTHING;
 
 -- name: UpdateHeaderCopy :execrows
 -- Brings one live header copy in line with its source header, conditional on
--- the source header still being live and named the same in any letter case.
+-- the source header still being live and named the same in any letter case,
+-- and in the auth client's project when the client has one.
 UPDATE mcp_auth_client_headers AS c
 SET name = src.name,
     description = src.description,
@@ -595,14 +609,14 @@ SET name = src.name,
     updated_at = clock_timestamp()
 FROM (
   SELECT h.name, h.description, h.is_required, h.is_secret, h.value, h.value_from_request_header,
-         'remote'::text AS source_kind, r.id AS source_id
+         'remote'::text AS source_kind, r.id AS source_id, r.project_id
   FROM remote_mcp_server_headers AS h
   JOIN remote_mcp_servers AS r ON r.id = h.remote_mcp_server_id AND r.deleted IS FALSE
   JOIN projects AS sp ON sp.id = r.project_id AND sp.organization_id = @organization_id::text AND sp.deleted IS FALSE
   WHERE @src_kind::text = 'remote' AND h.id = @src_id::uuid AND h.deleted IS FALSE
   UNION ALL
   SELECT h.name, h.description, h.is_required, h.is_secret, h.value, h.value_from_request_header,
-         'tunneled'::text, t.id
+         'tunneled'::text, t.id, t.project_id
   FROM tunneled_mcp_server_headers AS h
   JOIN tunneled_mcp_servers AS t ON t.id = h.tunneled_mcp_server_id AND t.deleted IS FALSE
   JOIN projects AS sp ON sp.id = t.project_id AND sp.organization_id = @organization_id::text AND sp.deleted IS FALSE
@@ -612,6 +626,12 @@ WHERE c.id = @copy_id::uuid
   AND c.organization_id = @organization_id::text
   AND c.deleted IS FALSE
   AND lower(c.name) = lower(src.name)
+  AND EXISTS (
+    SELECT 1 FROM mcp_auth_clients AS ac
+    WHERE ac.id = c.auth_client_id
+      AND ac.organization_id = c.organization_id
+      AND (ac.project_id IS NULL OR ac.project_id = src.project_id)
+  )
   AND (sqlc.narg('required_remote_session_client_id')::uuid IS NULL OR NOT EXISTS (
     SELECT 1
     FROM mcp_server_remote_session_clients AS a
@@ -923,7 +943,7 @@ WHERE e.auth_client_id = @auth_client_id::uuid
       AND b.remote_session_client_id = e.remote_session_client_id
       AND b.resource = e.resource
       AND b.state = 'ready'
-      AND ARRAY(SELECT DISTINCT btrim(x) FROM unnest(b.requested_scopes) AS x WHERE btrim(x) <> '' ORDER BY 1) = @requested_scopes::text[]
+      AND ARRAY(SELECT DISTINCT btrim(x) COLLATE "C" FROM unnest(b.requested_scopes) AS x WHERE btrim(x) <> '' ORDER BY 1) = @requested_scopes::text[]
   );
 
 -- name: CreateEMAAuthClient :one
@@ -962,7 +982,7 @@ WITH base AS (
         AND (rsi.project_id = b.project_id
              OR (rsi.project_id IS NULL AND rsi.organization_id = b.organization_id)
              OR (rsi.project_id IS NULL AND rsi.organization_id IS NULL))
-        AND ARRAY(SELECT DISTINCT btrim(x) FROM unnest(b.requested_scopes) AS x WHERE btrim(x) <> '' ORDER BY 1) = @requested_scopes::text[]
+        AND ARRAY(SELECT DISTINCT btrim(x) COLLATE "C" FROM unnest(b.requested_scopes) AS x WHERE btrim(x) <> '' ORDER BY 1) = @requested_scopes::text[]
     )
   RETURNING id, organization_id, remote_session_client_id
 )

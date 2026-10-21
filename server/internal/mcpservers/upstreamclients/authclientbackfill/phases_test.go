@@ -431,6 +431,25 @@ func TestRun_CredentialHeadersOnAnOAuthSourceAreCopiedOntoTheOAuthClient(t *test
 	require.Empty(t, f.headers(oauthID), "a copy no source names is retired")
 }
 
+// Retiring an OAuth client whose association is gone retires its header
+// copies with it, so none stays live on a client nothing reaches.
+func TestRun_RetiredOAuthClientRetiresItsHeaderCopies(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	source := f.source()
+	server := f.serverOn(source)
+	association := f.associate(server, f.client("subject"))
+	f.header(source, "X-Api-Key", true, secretValue, "")
+	f.run(true)
+	oauthID := f.live(TypeRemoteSession)[0].ID
+	require.Len(t, f.headers(oauthID), 1)
+
+	require.NoError(t, f.q.SoftDeleteAssociationFixture(t.Context(), association))
+	report := f.run(true)
+	require.Equal(t, 1, report.ClientsRetired)
+	require.Empty(t, f.headers(oauthID), "the retired client's copies retire with it")
+}
+
 func TestRun_MixedCredentialHeadersAreAmbiguous(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
@@ -534,6 +553,53 @@ func TestRun_EMABindingsThatDisagreeAreAmbiguous(t *testing.T) {
 	require.Equal(t, ReasonConflictingScopes, ambiguous[0].Reason)
 	require.Len(t, ambiguous[0].BindingIDs, 2, "every binding in the group is listed")
 	require.Empty(t, f.live(TypeEMA))
+}
+
+// A binding that starts to disagree decides nothing new, but the client
+// already recorded for the group keeps serving with its links.
+func TestRun_EMADisagreeingBindingKeepsTheRecordedClient(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	clientID, issuerID := f.emaClient()
+	resource := "https://mcp.vendor.example.com/mcp"
+
+	usi, otherUSI := f.userSessionIssuer(), f.userSessionIssuer()
+	server := f.serverAt(resource, usi)
+	f.binding(usi, issuerID, clientID, resource, []string{"read"})
+	f.run(true)
+	emaID := f.live(TypeEMA)[0].ID
+
+	f.binding(otherUSI, issuerID, clientID, resource, []string{"read", "write"})
+	report := f.run(true)
+	require.Len(t, results(report, KindEMA, OutcomeAmbiguous), 1)
+	require.Zero(t, report.ClientsRetired)
+	require.Zero(t, report.LinksRetired)
+	live := f.live(TypeEMA)
+	require.Len(t, live, 1)
+	require.Equal(t, emaID, live[0].ID)
+	require.Contains(t, f.links(server), emaID)
+}
+
+// Scopes compare bytewise in Go and in the database, so a scope set whose
+// order depends on letter case is recorded and then left unchanged.
+func TestRun_EMAMixedCaseScopesAreRecorded(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	usi := f.userSessionIssuer()
+	clientID, issuerID := f.emaClient()
+	resource := "https://mcp.vendor.example.com/mcp"
+	server := f.serverAt(resource, usi)
+	f.binding(usi, issuerID, clientID, resource, []string{"offline_access", "User.Read", "files:read", "files.write"})
+
+	applied := f.run(true)
+	require.Len(t, results(applied, KindEMA, OutcomeCreated), 1)
+	live := f.live(TypeEMA)
+	require.Len(t, live, 1)
+	require.Contains(t, f.links(server), live[0].ID)
+
+	rerun := f.run(true)
+	require.Empty(t, results(rerun, KindEMA, OutcomeUpdated))
+	require.Empty(t, results(rerun, KindEMA, OutcomeSkippedRace))
 }
 
 func TestRun_EMAResourceVariantsAreAmbiguous(t *testing.T) {

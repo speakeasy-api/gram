@@ -185,6 +185,18 @@ func decideEMA(ctx context.Context, tx pgx.Tx, q *Queries, opts Options, key ema
 		default:
 			continue
 		}
+		// Disagreeing bindings decide nothing new, but a client already
+		// recorded for one of them keeps serving with its links until they
+		// agree again.
+		for _, binding := range bindings {
+			existing, found, err := findEMA(ctx, q, opts.OrganizationID, key.issuerID, key.clientID, binding.ExactResource)
+			if err != nil {
+				return err
+			}
+			if found {
+				want.race(existing.ID)
+			}
+		}
 		report.add(result)
 		return nil
 	}
@@ -332,7 +344,9 @@ func findEMA(ctx context.Context, q *Queries, organizationID string, issuerID, c
 }
 
 // normalizedScopes sorts and deduplicates scopes so equal sets compare equal,
-// the same way the binding queries normalize them.
+// the same way the binding queries normalize them. Both sort bytewise: the
+// queries sort under COLLATE "C", since the database's default collation
+// orders mixed-case scopes differently.
 func normalizedScopes(scopes []string) []string {
 	out := make([]string, 0, len(scopes))
 	for _, scope := range scopes {
