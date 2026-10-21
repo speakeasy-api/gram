@@ -126,7 +126,7 @@ The Platform MCP is a first-party product surface under `server/internal/platfor
 
 ### Command K discoverability
 
-When adding or changing dashboard pages, navigation, named resource lists/details, resource names, permissions, or feature gates, assess Command K page actions and individual resource candidates separately. Sidebar links and overview routes do not automatically index resources by name. Add/update and register the appropriate candidates, or record a justified exclusion with test evidence. Activate `.agents/skills/maintaining-command-palette/SKILL.md`; Cubic's `cubic.yaml` rule and `REVIEW.md` use the same checklist.
+When adding or changing dashboard pages, navigation, named resource lists/details, resource names, permissions, feature gates, or Command K search candidates/ranking/registration, assess Command K page actions and individual resource candidates separately. Sidebar links and overview routes do not automatically index resources by name. Add/update and register the appropriate candidates, or record a justified exclusion with test evidence. Activate `.agents/skills/maintaining-command-palette/SKILL.md`; Cubic's `cubic.yaml` rule and `REVIEW.md` use the same checklist.
 
 ### Staff Admin MCP
 

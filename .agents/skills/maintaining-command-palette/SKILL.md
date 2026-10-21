@@ -11,14 +11,14 @@ Command K is a first-class discovery surface. A route, sidebar item, overview pa
 
 Paths below are relative to `client/dashboard/src/`.
 
-| Concern                               | Source                                                                                |
-| ------------------------------------- | ------------------------------------------------------------------------------------- |
-| Project navigation pages and gates    | `hooks/useProjectNavRoutes.ts`, consumed by sidebar and `App.tsx`                     |
-| Organization navigation registration  | `App.tsx` (`RouteProvider`, `routesToNavActions`)                                     |
-| Resource source registration and RBAC | `components/command-palette/candidates/index.ts`                                      |
-| Candidate shape and privacy           | `components/command-palette/candidates/types.ts` (`isSendable`)                       |
-| Example resource sources              | `useSkillCandidates.ts`, `useAgentIdentityCandidates.ts` in that candidates directory |
-| Matching, intent prefilter, display   | `components/command-palette/ranker.ts`, `useLauncherJudge.ts`, `CommandPalette.tsx`   |
+| Concern                               | Source                                                                                                                                    |
+| ------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| Project navigation pages and gates    | `hooks/useProjectNavRoutes.ts`, consumed by sidebar and `App.tsx`                                                                         |
+| Organization navigation registration  | `App.tsx` (`RouteProvider`, `routesToNavActions`)                                                                                         |
+| Resource source registration and RBAC | `components/command-palette/candidates/index.ts`                                                                                          |
+| Candidate shape and privacy           | `components/command-palette/candidates/types.ts` (`isSendable`)                                                                           |
+| Example resource sources              | `components/command-palette/candidates/useSkillCandidates.ts`, `components/command-palette/candidates/useAgentIdentityCandidates.ts`      |
+| Matching, intent prefilter, display   | `components/command-palette/ranker.ts`, `components/command-palette/useLauncherJudge.ts`, `components/command-palette/CommandPalette.tsx` |
 
 ## Implementation and review checklist
 

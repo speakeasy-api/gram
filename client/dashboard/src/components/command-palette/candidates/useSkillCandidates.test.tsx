@@ -105,40 +105,76 @@ describe("useSkillCandidates", () => {
   });
 
   it("keeps fetching until all skill pages have loaded", async () => {
+    const firstPage = { result: { skills: [skill("first", "First Page")] } };
+    const secondPage = { result: { skills: [skill("next", "Next Page")] } };
+    const lastPage = { result: { skills: [skill("last", "Final Page")] } };
+    mocks.query.data = { pages: [firstPage] };
     mocks.query.hasNextPage = true;
-    const { rerender } = renderHook(() =>
+    const { result, rerender } = renderHook(() =>
       useSkillCandidates({ enabled: true }),
     );
 
     await waitFor(() =>
       expect(mocks.query.fetchNextPage).toHaveBeenCalledTimes(1),
     );
-
     act(() => {
       mocks.query.isFetchingNextPage = true;
       rerender();
     });
     act(() => {
       mocks.query.isFetchingNextPage = false;
-      mocks.query.data = {
-        pages: [{ result: { skills: [skill("next", "Next Page")] } }],
-      };
+      mocks.query.data = { pages: [firstPage, secondPage] };
       rerender();
     });
-
     await waitFor(() =>
       expect(mocks.query.fetchNextPage).toHaveBeenCalledTimes(2),
     );
+    act(() => {
+      mocks.query.isFetchingNextPage = true;
+      rerender();
+    });
+    act(() => {
+      mocks.query.isFetchingNextPage = false;
+      mocks.query.hasNextPage = false;
+      mocks.query.data = { pages: [firstPage, secondPage, lastPage] };
+      rerender();
+    });
+
+    expect(result.current.map((candidate) => candidate.id)).toEqual([
+      "skill:first",
+      "skill:next",
+      "skill:last",
+    ]);
+    expect(mocks.query.fetchNextPage).toHaveBeenCalledTimes(2);
+    rerender();
+    expect(mocks.query.fetchNextPage).toHaveBeenCalledTimes(2);
   });
 
-  it("returns no candidates and stops draining when the query fails", () => {
+  it("stops draining after a page request rejects and keeps loaded candidates", async () => {
+    mocks.query.data = {
+      pages: [{ result: { skills: [skill("first", "First Page")] } }],
+    };
     mocks.query.hasNextPage = true;
-    mocks.query.isFetchNextPageError = true;
+    mocks.query.fetchNextPage.mockRejectedValueOnce(
+      new Error("page unavailable"),
+    );
 
-    const { result } = renderHook(() => useSkillCandidates({ enabled: true }));
+    const { result, rerender } = renderHook(() =>
+      useSkillCandidates({ enabled: true }),
+    );
+    expect(mocks.query.fetchNextPage).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      // Let the rejected request settle before exposing React Query's error state.
+      await Promise.resolve();
+      mocks.query.isFetchNextPageError = true;
+      rerender();
+    });
+    rerender();
 
-    expect(result.current).toEqual([]);
-    expect(mocks.query.fetchNextPage).not.toHaveBeenCalled();
+    expect(result.current.map((candidate) => candidate.id)).toEqual([
+      "skill:first",
+    ]);
+    expect(mocks.query.fetchNextPage).toHaveBeenCalledTimes(1);
     expect(mocks.calls.at(-1)?.[2]).toMatchObject({ throwOnError: false });
   });
 });

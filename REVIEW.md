@@ -191,11 +191,11 @@ Instead: add nullable columns, deprecate by making nullable, use expand-contract
 
 ### Command K Discoverability
 
-For dashboard changes to pages/navigation, named resource lists/details, names, permissions, or feature gates, follow `.agents/skills/maintaining-command-palette/SKILL.md`:
+For dashboard changes to pages/navigation, named resource lists/details, names, permissions, feature gates, or Command K search candidates/ranking/registration, follow `.agents/skills/maintaining-command-palette/SKILL.md`:
 
 - Check page actions and individual resource candidates separately. A sidebar entry, overview route, or Recently Visited entry does not make named resources searchable. Inspect existing sources and `useLauncherCandidates` registration even when palette files are absent from the diff.
 - Flag concrete omissions or stale names/aliases, destinations, pagination/search coverage, tenant-scoped keys, access/product/session gates, closed-palette fetching, failure handling, and identity privacy. Attach findings to the changed feature and describe the failed search.
-- Expect coverage or a justified exclusion and focused test evidence. Do not demand indexing secrets, high-volume telemetry/events/logs, transient dialogs, legacy redirects, or internal-only operations. Do not require new candidates for cosmetic/field-only changes or flag unrelated pre-existing debt.
+- Expect coverage or a justified exclusion and focused test evidence. Do not demand indexing secrets, high-volume telemetry/events/logs, transient dialogs, legacy redirects, or internal/admin-only operations not intended for this launcher. Do not require new candidates for cosmetic/field-only changes or flag unrelated pre-existing debt.
 
 ### Component Structure
 

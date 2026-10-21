@@ -1683,6 +1683,9 @@ describe("new resource source wiring", () => {
     mocks.scopes = ["skill:read"];
     const { result } = renderCandidates();
     expect(result.current.some((c) => c.id === "skill:test")).toBe(true);
+    expect(result.current.some((c) => c.id === "agent-identity:test")).toBe(
+      true,
+    );
     expect(useSkillCandidates).toHaveBeenLastCalledWith({ enabled: true });
     expect(mocks.rbacCalls).toContainEqual({
       fn: "hasScope",
@@ -1702,6 +1705,9 @@ describe("new resource source wiring", () => {
     const { result } = renderCandidates({ inProject: false });
     expect(result.current.some((c) => c.id === "skill:test")).toBe(false);
     expect(useSkillCandidates).toHaveBeenLastCalledWith({ enabled: false });
+    expect(result.current.some((c) => c.id === "agent-identity:test")).toBe(
+      true,
+    );
     expect(useAgentIdentityCandidates).toHaveBeenLastCalledWith({
       enabled: true,
     });
