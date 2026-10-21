@@ -52,6 +52,10 @@ var (
 	// or no longer exists, or a no-auth choice for a server that has since
 	// been given a client.
 	errUpstreamSelectionUnusable = errors.New("credential's upstream client choice for this server is no longer usable")
+
+	// errSessionAuthContextMismatch is a session credential whose auth context
+	// is missing or names another organization than the endpoint's.
+	errSessionAuthContextMismatch = errors.New("session credential's auth context does not match the endpoint's organization")
 )
 
 // upstreamChoice is one credential's usable choice for one server.
@@ -78,7 +82,11 @@ type upstreamSelector struct {
 }
 
 // upstreamSelectorFor returns the selector for the credential in ctx, or nil
-// when the credential has no session row and keeps the issuer-derived path.
+// when the credential is not a session and keeps the issuer-derived path. A
+// session credential gets a selector or an error, never the issuer-derived
+// path: one whose auth context is missing or names another organization is
+// refused. Anonymous sessions carry no auth context; their choices are read
+// in the endpoint's organization.
 func (s *Service) upstreamSelectorFor(ctx context.Context, endpoint *ResolvedMcpEndpoint) (*upstreamSelector, error) {
 	identity, ok := mcpidentity.FromContext(ctx)
 	if !ok || identity.SessionJTI() == "" {
@@ -86,11 +94,12 @@ func (s *Service) upstreamSelectorFor(ctx context.Context, endpoint *ResolvedMcp
 	}
 	switch identity.Kind() {
 	case mcpidentity.KindUserSession, mcpidentity.KindAgent, mcpidentity.KindWorkload:
+		authCtx, ok := contextvalues.GetAuthContext(ctx)
+		if !ok || authCtx == nil || authCtx.ActiveOrganizationID != endpoint.OrganizationID {
+			return nil, errSessionAuthContextMismatch
+		}
+	case mcpidentity.KindAnonymous:
 	default:
-		return nil, nil
-	}
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil || authCtx.ActiveOrganizationID != endpoint.OrganizationID {
 		return nil, nil
 	}
 	policy, err := s.loadSessionPolicy(ctx, endpoint, identity.SessionJTI())
@@ -247,7 +256,15 @@ type memberChoices struct {
 	resolve  func(ctx context.Context, member metaMember) (map[uuid.UUID]remotesessions.UpstreamToken, error)
 
 	mu       sync.Mutex
-	byServer map[uuid.UUID]map[uuid.UUID]remotesessions.UpstreamToken
+	byServer map[uuid.UUID]*memberTokens
+}
+
+// memberTokens is one member's resolution, shared by every caller asking for
+// it in the request. done closes once tokens and err are set.
+type memberTokens struct {
+	done   chan struct{}
+	tokens map[uuid.UUID]remotesessions.UpstreamToken
+	err    error
 }
 
 // newMemberChoices returns the gateway's member choices for the credential
@@ -272,7 +289,7 @@ func (s *Service) newMemberChoices(ctx context.Context, authentication *issuerGa
 			return tokens, nil
 		},
 		mu:       sync.Mutex{},
-		byServer: map[uuid.UUID]map[uuid.UUID]remotesessions.UpstreamToken{},
+		byServer: map[uuid.UUID]*memberTokens{},
 	}, nil
 }
 
@@ -314,7 +331,10 @@ func (c *memberChoices) apply(ctx context.Context, logger *slog.Logger, members 
 }
 
 // tokens is the token map a chosen member routes from: empty for no-auth,
-// otherwise its chosen client's credential.
+// otherwise its chosen client's credential. Each member resolves once per
+// request; concurrent callers for one member wait for that resolution, within
+// their own deadline, while other members resolve independently. A failed
+// resolution is not kept, so a later caller retries it.
 func (c *memberChoices) tokens(ctx context.Context, member metaMember) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
 	if member.upstreamUnavailable != nil {
 		return nil, member.upstreamUnavailable
@@ -323,19 +343,36 @@ func (c *memberChoices) tokens(ctx context.Context, member metaMember) (map[uuid
 		return nil, nil
 	}
 	c.mu.Lock()
-	defer c.mu.Unlock()
-	if tokens, ok := c.byServer[member.serverID]; ok {
-		return tokens, nil
+	entry, ok := c.byServer[member.serverID]
+	if !ok {
+		entry = &memberTokens{done: make(chan struct{}), tokens: nil, err: nil}
+		c.byServer[member.serverID] = entry
 	}
+	c.mu.Unlock()
+	if ok {
+		select {
+		case <-entry.done:
+			return entry.tokens, entry.err
+		case <-ctx.Done():
+			return nil, &metaMemberError{message: fmt.Sprintf("server %q could not load its connection credentials; retry shortly", member.slug)}
+		}
+	}
+
 	tokens, err := c.resolve(ctx, member)
-	if errors.Is(err, remotesessions.ErrChosenClientUnbound) {
-		return nil, &metaMemberError{message: fmt.Sprintf("server %q needs this gateway to be signed in to again to choose its connection", member.slug)}
+	switch {
+	case errors.Is(err, remotesessions.ErrChosenClientUnbound):
+		err = &metaMemberError{message: fmt.Sprintf("server %q needs this gateway to be signed in to again to choose its connection", member.slug)}
+	case err != nil:
+		err = &metaMemberError{message: fmt.Sprintf("server %q could not load its connection credentials; retry shortly", member.slug)}
 	}
 	if err != nil {
-		return nil, &metaMemberError{message: fmt.Sprintf("server %q could not load its connection credentials; retry shortly", member.slug)}
+		c.mu.Lock()
+		delete(c.byServer, member.serverID)
+		c.mu.Unlock()
 	}
-	c.byServer[member.serverID] = tokens
-	return tokens, nil
+	entry.tokens, entry.err = tokens, err
+	close(entry.done)
+	return tokens, err
 }
 
 // serverAssociatedClients returns the live clients associated with each of

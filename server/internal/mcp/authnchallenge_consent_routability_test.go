@@ -238,11 +238,16 @@ func TestServeConsent_AnotherMembersGrantForTheSameUpstreamDoesNotCompete(t *tes
 	issuerB := clientRemoteIssuerID(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, clientB)
 	createMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaID, "rt-dup-member-a", upstream, conv.ToNullUUID(issuerA), 0)
 	createMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaID, "rt-dup-member-b", upstream, conv.ToNullUUID(issuerB), 1)
+	// Rendered before any grant, the migration associates each member with
+	// the client of its own authorization server.
 	fx.server = "rt-dup-member-a"
+	expect(t, fx, 0, 1, false)
 
 	grant(t, ctx, fx, clientA, upstream)
 	expect(t, fx, 1, 1, false)
 	grant(t, ctx, fx, clientB, upstream)
+	expect(t, fx, 1, 1, false)
+	fx.server = "rt-dup-member-b"
 	expect(t, fx, 1, 1, false)
 }
 

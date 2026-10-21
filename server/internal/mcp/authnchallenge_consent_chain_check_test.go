@@ -71,6 +71,7 @@ func TestConsentChainCheck_SuccessConnectsWithRuntimeRequest(t *testing.T) {
 		UserID:                fx.subject.ID,
 		UpstreamResource:      consentChainedUpstream,
 		RemoteSessionIssuerID: uuid.NullUUID{},
+		RemoteSessionClientID: uuid.NullUUID{UUID: fx.clientA, Valid: true},
 	}}, g.acquired, "the check acquires, and so publishes, exactly the runtime's credential")
 	require.False(t, deadline.IsZero())
 	require.LessOrEqual(t, time.Until(deadline), 5*time.Second, "the check is bounded well under the chainer's own attempt budget")

@@ -281,6 +281,22 @@ func TestServeConsentAction_MetaMCPConnectRefusesAClientNoMemberIsAssociatedWith
 	requireConnectRefused(t, fx, clientID, "a member with no derived authorization server is associated with no client, rather than with every one")
 }
 
+// A hosted member keeps the issuer-derived path, so a client only a hosted
+// member uses still connects through the gateway rather than being refused
+// as configured for no member.
+func TestServeConsentAction_MetaMCPConnectAllowsAClientOnlyAHostedMemberUses(t *testing.T) {
+	t.Parallel()
+
+	ctx, fx, metaServerID := seedMetaConsentEndpoint(t, "aim87-hosted-gw")
+
+	clientID := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim87-hosted", "", []uuid.UUID{fx.shared})
+	issuerID := clientRemoteIssuerID(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, clientID)
+	hosted := seedHostedMetaMember(t, ctx, fx.ti, metaServerID, "Hosted", 0, "public")
+	stampRemoteSessionIssuer(t, ctx, fx.ti.conn, fx.projectID, hosted.serverID, conv.ToNullUUID(issuerID))
+
+	require.NotNil(t, postConnectAction(t, fx, clientID), "the hosted member's client connects")
+}
+
 // One authorization server fronting two members of the same meta MCP is
 // unsupported: a grant records one resource per (subject, client), so there is
 // no value that routes both correctly.

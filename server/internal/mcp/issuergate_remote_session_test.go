@@ -251,6 +251,39 @@ func TestHandleToken_RefreshFollowsTheChainingDecision(t *testing.T) {
 	}
 }
 
+// Refresh judges only the client the credential chose for the server: a
+// sibling client on the same user session issuer, even one the user never
+// connected, does not refuse an otherwise servable refresh.
+func TestHandleToken_RefreshIgnoresSiblingClientsOfTheIssuer(t *testing.T) {
+	t.Parallel()
+
+	const upstreamA = "https://sibling-refresh-a.example.com/mcp"
+	const upstreamB = "https://sibling-refresh-b.example.com/mcp"
+	ctx, ti := newTestMCPService(t)
+	authCtx := requireProjectAuthContext(t, ctx)
+	_, issuer, client, refreshToken, _ := seedRefreshReplaySessionDetails(t, ctx, ti, time.Now().Add(time.Hour))
+	clientA := attachTestRemoteSessionClient(t, ctx, ti, authCtx, issuer.ID)
+	attachTestRemoteSessionClient(t, ctx, ti, authCtx, issuer.ID)
+	slug := "sibling-refresh-" + uuid.NewString()[:8]
+	serverA := attachConsentRemoteMcpServer(t, ctx, ti.conn, *authCtx.ProjectID, issuer.ID, slug, upstreamA)
+	attachConsentRemoteMcpServer(t, ctx, ti.conn, *authCtx.ProjectID, issuer.ID, slug+"-b", upstreamB)
+	_, err := mcpendpointsrepo.New(ti.conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
+		ProjectID:       *authCtx.ProjectID,
+		CustomDomainID:  uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		McpServerID:     conv.ToNullUUID(serverA),
+		MetaMcpServerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		Slug:            slug,
+	})
+	require.NoError(t, err)
+	// The user connected client A for server A, which ties it to server A;
+	// the sibling client holds nothing for the user.
+	insertQualifiedRemoteSessionToken(t, ctx, ti, issuer.ID, clientA.ID, urn.NewUserSubject("refresh-replay-user"), "token-a", upstreamA)
+
+	res := performRefreshRequest(ctx, ti, slug, client.ClientID, refreshToken)
+	require.NoError(t, res.err)
+	require.Equal(t, http.StatusOK, res.code, res.body)
+}
+
 // The runtime and the token endpoint must agree: once a refresh the gate ran
 // fails for good and the gate answers invalid_token, the client's Speakeasy
 // refresh is refused rather than handing it a token for the same rejection.
@@ -363,17 +396,17 @@ func TestHandleToken_RefreshChecksStoredUpstreamCredentials(t *testing.T) {
 	}
 }
 
-// A provider's definitive refusal must not strand a human whose linked
-// upstream session needs reconnecting: the gate challenges as without
-// chaining, so reauthorizing reaches the consent page's separate sign-in,
-// which every chained card offers whatever the refusal. The reconnected
+// A provider's definitive refusal must not strand a human: the gate
+// challenges as without chaining, so reauthorizing reaches the consent page's
+// separate sign-in, which every chained card offers whatever the refusal. The
+// challenge applies whether or not the human linked the upstream, because the
+// credential's chosen client has no usable grant either way. The reconnected
 // session then routes directly and never chains, so even refusals a sign-in
 // cannot repair (configuration, invalid target) are served by it. Only
 // provider refusals challenge: refresh sees nothing else, so a selection or
 // authorization failure would loop between refresh and the challenge and
-// stands instead. Without a linked session there is nothing to reconnect and
-// the refusal stands; a retryable failure stays a retry.
-func TestServePublic_IssuerGate_ChainingRefusalChallengesTheLinkedSession(t *testing.T) {
+// stands instead. A retryable failure stays a retry.
+func TestServePublic_IssuerGate_ChainingProviderRefusalChallengesTheChosenClient(t *testing.T) {
 	t.Parallel()
 
 	type refusal struct {
@@ -414,8 +447,10 @@ func TestServePublic_IssuerGate_ChainingRefusalChallengesTheLinkedSession(t *tes
 			mcpServer, _ := createRemoteMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, "https://chain-refused.example.test/mcp", slug, "private", issuerID)
 			seedUserMCPConnectGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, mockidp.MockUserID, mcpServer.ID.String())
 			subject := urn.NewUserSubject(mockidp.MockUserID)
+			// The server's client is the one the chaining binding uses, so the
+			// credential chooses it whether or not the human linked it.
+			remoteClient := attachTestRemoteSessionClient(t, ctx, ti, authCtx, issuerID)
 			if tc.linked {
-				remoteClient := attachTestRemoteSessionClient(t, ctx, ti, authCtx, issuerID)
 				upsertExpiredRefreshableRemoteSession(t, ctx, ti, issuerID, remoteClient.ID, subject)
 				pointRemoteSessionTokenEndpoint(t, ctx, ti, authCtx, remoteClient.ID, func(w http.ResponseWriter, _ *http.Request) {
 					w.Header().Set("Content-Type", "application/json")
@@ -450,7 +485,7 @@ func TestServePublic_IssuerGate_ChainingRefusalChallengesTheLinkedSession(t *tes
 			case tc.refusal.retryable:
 				require.Contains(t, requireOopsCode(t, err, oops.CodeUnavailable), "retry shortly")
 				require.Empty(t, w.Header().Get("WWW-Authenticate"))
-			case tc.linked && refused.ProviderRefusal():
+			case refused.ProviderRefusal():
 				require.Equal(t, reconnectDescription, requireOopsCode(t, err, oops.CodeUnauthorized))
 				require.Contains(t, w.Header().Get("WWW-Authenticate"), `error="invalid_token"`)
 			default:

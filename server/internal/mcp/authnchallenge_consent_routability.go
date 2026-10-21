@@ -1,9 +1,11 @@
 // Consent-time routability of stored grants: a remote_session is shared by
 // every endpoint bound to its client, so a live one may never be forwarded
-// by this endpoint's backend. Mirrors grantRoutesToUpstream, per card. Each
-// listed client is one the server is associated with, and serving resolves
-// only the client a credential chose, so another client's grant for the same
-// upstream is never a competing candidate.
+// by this endpoint's backend. Mirrors grantRoutesToUpstream, per card. A
+// direct proxied server lists only its associated clients, and a gateway card
+// routes only through the members associated with its client. Serving
+// resolves only the client a credential chose, so another client's grant for
+// the same upstream is never a competing candidate. Endpoints without a
+// proxied backend apply no resource rule.
 
 package mcp
 

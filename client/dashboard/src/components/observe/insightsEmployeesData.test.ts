@@ -63,7 +63,7 @@ describe("buildEmployees attributed/unattributed split", () => {
 
     expect(employees).toHaveLength(1);
     expect(employees[0]!.id).toBe("member-1");
-    expect(employees[0]!.status).toBe("enrolled");
+    expect(employees[0]!.seen).toBe(true);
     expect(isUnattributedEmployee(employees[0]!)).toBe(false);
   });
 
@@ -79,7 +79,7 @@ describe("buildEmployees attributed/unattributed split", () => {
 
     expect(employees).toHaveLength(1);
     expect(employees[0]!.id).toBe("member-1");
-    expect(employees[0]!.status).toBe("enrolled");
+    expect(employees[0]!.seen).toBe(true);
     expect(isUnattributedEmployee(employees[0]!)).toBe(false);
   });
 
@@ -98,7 +98,7 @@ describe("buildEmployees attributed/unattributed split", () => {
 
     expect(employees).toHaveLength(1);
     expect(employees[0]!.id).toBe("member-1");
-    expect(employees[0]!.status).toBe("enrolled");
+    expect(employees[0]!.seen).toBe(true);
     expect(isUnattributedEmployee(employees[0]!)).toBe(false);
   });
 
@@ -124,9 +124,9 @@ describe("buildEmployees attributed/unattributed split", () => {
     const primary = employees.find((employee) => employee.id === "member-1")!;
     const alias = employees.find((employee) => employee.id === "member-2")!;
 
-    expect(primary.status).toBe("enrolled");
+    expect(primary.seen).toBe(true);
     expect(primary.tokenCount).toBe(150);
-    expect(alias.status).toBe("not_enrolled");
+    expect(alias.seen).toBe(false);
     expect(alias.tokenCount).toBe(0);
   });
 
@@ -157,7 +157,7 @@ describe("buildEmployees attributed/unattributed split", () => {
 
     expect(employees).toHaveLength(1);
     const ada = employees[0]!;
-    expect(ada.status).toBe("enrolled");
+    expect(ada.seen).toBe(true);
     expect(ada.tokenCount).toBe(720);
     expect(isUnattributedEmployee(ada)).toBe(false);
   });
@@ -238,7 +238,7 @@ describe("buildEmployees attributed/unattributed split", () => {
     expect(employees).toHaveLength(1);
     const ada = employees[0]!;
     expect(ada.id).toBe("member-1");
-    expect(ada.status).toBe("enrolled");
+    expect(ada.seen).toBe(true);
     expect(ada.tokenCount).toBe(330);
   });
 
@@ -321,12 +321,42 @@ describe("buildEmployees attributed/unattributed split", () => {
     expect(isUnattributedEmployee(employees[0]!)).toBe(true);
   });
 
-  it("marks unattributed rows as not enrolled", () => {
+  it("marks unattributed rows as seen but not in the directory", () => {
     const employees = buildEmployees([], noRoles, [
       makeSummary({ userId: "ghost@example.com" }),
     ]);
 
-    expect(employees[0]!.status).toBe("not_enrolled");
+    expect(employees[0]!.seen).toBe(true);
+    expect(employees[0]!.inDirectory).toBe(false);
+  });
+
+  it("reads directory presence from the member row, independently of activity", () => {
+    const employees = buildEmployees(
+      [
+        makeMember({
+          id: "member-1",
+          email: "ada@example.com",
+          name: "Ada",
+          inDirectory: true,
+        }),
+        makeMember({
+          id: "member-2",
+          email: "grace@example.com",
+          name: "Grace",
+        }),
+      ],
+      noRoles,
+      [makeSummary({ userId: "member-2" })],
+    );
+    const ada = employees.find((e) => e.id === "member-1")!;
+    const grace = employees.find((e) => e.id === "member-2")!;
+
+    // In the directory but never seen, and seen but not in the directory: no
+    // fact implies another.
+    expect(ada.inDirectory).toBe(true);
+    expect(ada.seen).toBe(false);
+    expect(grace.inDirectory).toBe(false);
+    expect(grace.seen).toBe(true);
   });
 
   it("partitions a mixed list cleanly into the two views", () => {
@@ -361,10 +391,8 @@ describe("buildEmployees attributed/unattributed split", () => {
       "usage:external-user-42",
       "usage:ghost@example.com",
     ]);
-    // Member without activity stays attributed, just not enrolled.
-    expect(attributed.find((e) => e.id === "member-2")!.status).toBe(
-      "not_enrolled",
-    );
+    // Member without activity stays attributed, just not seen.
+    expect(attributed.find((e) => e.id === "member-2")!.seen).toBe(false);
   });
 });
 

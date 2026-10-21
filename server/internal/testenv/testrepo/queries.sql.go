@@ -1207,6 +1207,27 @@ func (q *Queries) DetachRemoteSessionClientFromUserSessionIssuer(ctx context.Con
 	return result.RowsAffected(), nil
 }
 
+const directoryReviewAttributeOptedOutFixture = `-- name: DirectoryReviewAttributeOptedOutFixture :one
+SELECT EXISTS (
+  SELECT 1 FROM directory_review_attribute_opt_outs
+  WHERE organization_id = $1
+    AND attribute_key = $2
+    AND deleted IS FALSE
+)
+`
+
+type DirectoryReviewAttributeOptedOutFixtureParams struct {
+	OrganizationID string
+	AttributeKey   string
+}
+
+func (q *Queries) DirectoryReviewAttributeOptedOutFixture(ctx context.Context, arg DirectoryReviewAttributeOptedOutFixtureParams) (bool, error) {
+	row := q.db.QueryRow(ctx, directoryReviewAttributeOptedOutFixture, arg.OrganizationID, arg.AttributeKey)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const disableAttachmentRefreshFeatureFixture = `-- name: DisableAttachmentRefreshFeatureFixture :execrows
 UPDATE organization_features SET deleted_at = now() WHERE organization_id = $1 AND feature_name = 'remote_session_auto_refresh'
 `
@@ -1917,6 +1938,17 @@ func (q *Queries) GetDeviceIntegrationSyncPushDigests(ctx context.Context, devic
 		return nil, err
 	}
 	return items, nil
+}
+
+const getDirectoryReviewItemStateFixture = `-- name: GetDirectoryReviewItemStateFixture :one
+SELECT state FROM directory_review_items WHERE id = $1
+`
+
+func (q *Queries) GetDirectoryReviewItemStateFixture(ctx context.Context, id uuid.UUID) (string, error) {
+	row := q.db.QueryRow(ctx, getDirectoryReviewItemStateFixture, id)
+	var state string
+	err := row.Scan(&state)
+	return state, err
 }
 
 const getLatestTrialArmAuditIDFixture = `-- name: GetLatestTrialArmAuditIDFixture :one
@@ -3539,6 +3571,76 @@ func (q *Queries) ListDeviceAgentEnvironmentSyncsFixture(ctx context.Context, or
 			return nil, err
 		}
 		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listDirectoryReviewItemsFixture = `-- name: ListDirectoryReviewItemsFixture :many
+SELECT
+  i.kind,
+  COALESCE(dg.workos_directory_group_id, i.attribute_key || '=' || i.attribute_value)::text AS source,
+  i.occurrence,
+  i.state
+FROM directory_review_items AS i
+LEFT JOIN directory_groups AS dg ON dg.id = i.directory_group_id
+WHERE i.organization_id = $1
+ORDER BY i.created_at, i.id
+`
+
+type ListDirectoryReviewItemsFixtureRow struct {
+	Kind       string
+	Source     string
+	Occurrence int32
+	State      string
+}
+
+// Every review item of an organization, oldest first, with its source as a
+// group's WorkOS ID or key=value.
+func (q *Queries) ListDirectoryReviewItemsFixture(ctx context.Context, organizationID string) ([]ListDirectoryReviewItemsFixtureRow, error) {
+	rows, err := q.db.Query(ctx, listDirectoryReviewItemsFixture, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListDirectoryReviewItemsFixtureRow
+	for rows.Next() {
+		var i ListDirectoryReviewItemsFixtureRow
+		if err := rows.Scan(
+			&i.Kind,
+			&i.Source,
+			&i.Occurrence,
+			&i.State,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listDirectoryReviewOrgStateIDsFixture = `-- name: ListDirectoryReviewOrgStateIDsFixture :many
+SELECT organization_id FROM directory_review_org_states ORDER BY organization_id
+`
+
+func (q *Queries) ListDirectoryReviewOrgStateIDsFixture(ctx context.Context) ([]string, error) {
+	rows, err := q.db.Query(ctx, listDirectoryReviewOrgStateIDsFixture)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var organization_id string
+		if err := rows.Scan(&organization_id); err != nil {
+			return nil, err
+		}
+		items = append(items, organization_id)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -5587,6 +5689,54 @@ func (q *Queries) SetDeviceIntegrationSyncPushDigestFixture(ctx context.Context,
 	return err
 }
 
+const setDirectoryGroupWorkOSDeletedFixture = `-- name: SetDirectoryGroupWorkOSDeletedFixture :exec
+UPDATE directory_groups
+SET workos_deleted_at = CASE WHEN $1::boolean THEN clock_timestamp() END,
+    deleted_at = CASE WHEN $1::boolean THEN clock_timestamp() END
+WHERE id = $2
+`
+
+type SetDirectoryGroupWorkOSDeletedFixtureParams struct {
+	Deleted bool
+	ID      uuid.UUID
+}
+
+// Deletes a directory group as a WorkOS deletion does, setting both markers,
+// or with deleted false brings it back by clearing them.
+func (q *Queries) SetDirectoryGroupWorkOSDeletedFixture(ctx context.Context, arg SetDirectoryGroupWorkOSDeletedFixtureParams) error {
+	_, err := q.db.Exec(ctx, setDirectoryGroupWorkOSDeletedFixture, arg.Deleted, arg.ID)
+	return err
+}
+
+const setDirectoryUserAttributesFixture = `-- name: SetDirectoryUserAttributesFixture :exec
+UPDATE directory_users
+SET attributes = $1::jsonb
+WHERE workos_directory_user_id = $2
+`
+
+type SetDirectoryUserAttributesFixtureParams struct {
+	Attributes            []byte
+	WorkosDirectoryUserID string
+}
+
+func (q *Queries) SetDirectoryUserAttributesFixture(ctx context.Context, arg SetDirectoryUserAttributesFixtureParams) error {
+	_, err := q.db.Exec(ctx, setDirectoryUserAttributesFixture, arg.Attributes, arg.WorkosDirectoryUserID)
+	return err
+}
+
+const setDirectoryUserWorkOSDeletedFixture = `-- name: SetDirectoryUserWorkOSDeletedFixture :exec
+UPDATE directory_users
+SET workos_deleted_at = clock_timestamp(),
+    deleted_at = clock_timestamp()
+WHERE workos_directory_user_id = $1
+`
+
+// Deletes a directory user as a WorkOS deletion does, setting both markers.
+func (q *Queries) SetDirectoryUserWorkOSDeletedFixture(ctx context.Context, workosDirectoryUserID string) error {
+	_, err := q.db.Exec(ctx, setDirectoryUserWorkOSDeletedFixture, workosDirectoryUserID)
+	return err
+}
+
 const setFunctionToolVariables = `-- name: SetFunctionToolVariables :exec
 UPDATE function_tool_definitions
 SET variables = $1
@@ -5938,6 +6088,26 @@ type SetOrganizationVerifiedDomainsFixtureParams struct {
 
 func (q *Queries) SetOrganizationVerifiedDomainsFixture(ctx context.Context, arg SetOrganizationVerifiedDomainsFixtureParams) error {
 	_, err := q.db.Exec(ctx, setOrganizationVerifiedDomainsFixture, arg.VerifiedDomains, arg.ID)
+	return err
+}
+
+const setPendingDirectoryReviewItemsStateFixture = `-- name: SetPendingDirectoryReviewItemsStateFixture :exec
+UPDATE directory_review_items
+SET state = $1, resolved_at = clock_timestamp()
+WHERE organization_id = $2
+  AND kind = $3
+  AND state = 'pending'
+`
+
+type SetPendingDirectoryReviewItemsStateFixtureParams struct {
+	State          string
+	OrganizationID string
+	Kind           string
+}
+
+// Resolves an organization's pending items of one kind, as an admin would.
+func (q *Queries) SetPendingDirectoryReviewItemsStateFixture(ctx context.Context, arg SetPendingDirectoryReviewItemsStateFixtureParams) error {
+	_, err := q.db.Exec(ctx, setPendingDirectoryReviewItemsStateFixture, arg.State, arg.OrganizationID, arg.Kind)
 	return err
 }
 
@@ -6533,6 +6703,24 @@ func (q *Queries) SoftDeleteAttachmentSourceFixture(ctx context.Context, id uuid
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const softDeleteDirectoryGroupRoleMappingsFixture = `-- name: SoftDeleteDirectoryGroupRoleMappingsFixture :exec
+UPDATE directory_role_mappings
+SET deleted_at = clock_timestamp()
+WHERE organization_id = $1
+  AND directory_group_id = $2
+  AND deleted IS FALSE
+`
+
+type SoftDeleteDirectoryGroupRoleMappingsFixtureParams struct {
+	OrganizationID   string
+	DirectoryGroupID uuid.NullUUID
+}
+
+func (q *Queries) SoftDeleteDirectoryGroupRoleMappingsFixture(ctx context.Context, arg SoftDeleteDirectoryGroupRoleMappingsFixtureParams) error {
+	_, err := q.db.Exec(ctx, softDeleteDirectoryGroupRoleMappingsFixture, arg.OrganizationID, arg.DirectoryGroupID)
+	return err
 }
 
 const softDeleteExternalCredentialFixture = `-- name: SoftDeleteExternalCredentialFixture :exec

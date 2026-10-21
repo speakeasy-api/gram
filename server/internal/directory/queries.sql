@@ -428,6 +428,27 @@ FROM (
 WHERE values_per_key <= sqlc.arg(max_values_per_key)::bigint
 ORDER BY attribute_key, attribute_value;
 
+-- name: ListUnmappableDirectoryAttributeKeys :many
+-- The attribute keys ListMappableDirectoryAttributeValues leaves out, with
+-- how many distinct values each has, so bulk setup can say what it hid.
+SELECT
+  attribute.key::text AS attribute_key,
+  COUNT(DISTINCT attribute.value)::bigint AS value_count
+FROM directory_users AS du
+CROSS JOIN LATERAL jsonb_each_text(
+  CASE jsonb_typeof(du.attributes)
+    WHEN 'object' THEN du.attributes
+    ELSE '{}'::jsonb
+  END
+) AS attribute(key, value)
+WHERE du.organization_id = @organization_id
+  AND du.deleted IS FALSE
+  AND du.workos_deleted IS FALSE
+  AND attribute.value IS NOT NULL
+GROUP BY attribute.key
+HAVING COUNT(DISTINCT attribute.value) > sqlc.arg(max_values_per_key)::bigint
+ORDER BY attribute_key;
+
 -- name: ClearOrganizationDirectoryUserLinksFixture :exec
 -- Test fixture: exercise email fallback without a direct Speakeasy user link.
 UPDATE directory_users SET user_id = NULL WHERE organization_id = @organization_id;

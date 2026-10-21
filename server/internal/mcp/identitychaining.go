@@ -60,11 +60,11 @@ func (s *Service) SetIdentityChainer(chainer identityChainer) {
 // resource.
 //
 // chosenClientID is the client the caller's credential chose for the
-// upstream, when it has a choice; chaining then only uses a binding for that
-// client.
+// upstream. Chaining only uses a binding for that client, so a credential
+// without one, a no-auth choice included, never chains.
 func (s *Service) identityChainingRequest(ctx context.Context, organizationID string, projectID, userSessionIssuerID uuid.UUID, upstreamResource string, tunneled bool, backendIssuerID, chosenClientID uuid.NullUUID) (identitychaining.Request, bool) {
 	var none identitychaining.Request
-	if s.identityChainer == nil {
+	if s.identityChainer == nil || !chosenClientID.Valid {
 		return none, false
 	}
 	identity, ok := mcpidentity.FromContext(ctx)
@@ -103,10 +103,8 @@ func (s *Service) resolveDirectUpstreamToken(ctx context.Context, w http.Respons
 	req, chainable := s.identityChainingRequest(ctx, endpoint.OrganizationID, endpoint.ProjectID, endpoint.UserSessionIssuerID, upstreamResource, tunneled, backendIssuerID, authentication.chosenClient)
 	switch {
 	case !chainable && selected && choice.noAuth():
-		// No interactive client serves the server and chaining cannot
-		// either, so it calls anonymously. A no-auth choice still chains
-		// when a binding governs the upstream, since chaining needs no
-		// interactive client.
+		// The server has no client, so neither an interactive grant nor a
+		// chaining binding serves it, and it calls anonymously.
 		return none, nil
 	case !chainable:
 		return s.resolveStrictUpstreamToken(ctx, w, logger, authentication, upstreamResource, tunneled, backendIssuerID)
@@ -308,33 +306,19 @@ func (s *Service) consentChainingRequests(ctx context.Context, endpoint *Resolve
 	if endpoint.MetaMcpServerID.Valid {
 		return s.consentChainedMetaClients(ctx, endpoint, challengeState, clients, routing)
 	}
-	tunneled, ok, err := s.consentDirectBackend(ctx, endpoint, routing)
-	if err != nil || !ok {
+	if _, ok, err := s.consentDirectBackend(ctx, endpoint, routing); err != nil || !ok {
 		return nil
 	}
+	// The runtime chains only through the client a credential chose, so each
+	// card is judged with the request its client builds: restricted to that
+	// client's binding, and for a tunneled backend routed by its own issuer.
 	requests := make(map[uuid.UUID][]identitychaining.Request, len(clients))
-	if !tunneled {
-		// A remote backend's request names no issuer, so one answer judges
-		// every card.
-		req, ok, err := s.directChainingRequest(ctx, endpoint, subject.ID, routing, upstreamChoice{clientID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, remoteSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}})
-		if err != nil || !ok {
-			return nil
-		}
-		issuer, served := s.identityChainer.Serves(ctx, req)
-		if !served {
-			return nil
-		}
-		for _, c := range clients {
-			if c.RemoteSessionIssuerID == issuer {
-				requests[c.ID] = []identitychaining.Request{req}
-			}
-		}
-		return requests
-	}
-	// A tunneled backend routes, and chains, by the chosen client's own
-	// issuer, so each card is judged with the request its client builds.
 	for _, c := range clients {
-		req, ok := identitychaining.NewRequest(endpoint.OrganizationID, endpoint.ProjectID, endpoint.UserSessionIssuerID, subject.ID, endpoint.UpstreamResource, true, uuid.NullUUID{UUID: c.RemoteSessionIssuerID, Valid: true})
+		choice := upstreamChoice{clientID: uuid.NullUUID{UUID: c.ID, Valid: true}, remoteSessionIssuerID: uuid.NullUUID{UUID: c.RemoteSessionIssuerID, Valid: true}}
+		req, ok, err := s.directChainingRequest(ctx, endpoint, subject.ID, routing, choice)
+		if err != nil {
+			return nil
+		}
 		if !ok {
 			continue
 		}
@@ -438,6 +422,7 @@ func (s *Service) consentChainedMetaClients(ctx context.Context, endpoint *Resol
 				requests = nil
 				break
 			}
+			req.RemoteSessionClientID = uuid.NullUUID{UUID: c.ID, Valid: true}
 			answer, seen := served[req]
 			if !seen {
 				answer.issuer, answer.ok = s.identityChainer.Serves(ctx, req)
