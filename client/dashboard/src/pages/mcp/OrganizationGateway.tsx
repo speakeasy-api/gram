@@ -253,7 +253,7 @@ function GatewayBody({
     >
       <div className="min-w-0 flex-1 space-y-2">
         <h2 className="text-eyebrow text-black/60">Endpoint URL</h2>
-        <code className="block font-mono text-lg break-all sm:text-xl">
+        <code className="block font-mono text-sm break-all sm:text-base">
           {url}
         </code>
       </div>
