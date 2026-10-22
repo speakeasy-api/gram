@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/auth_clients"
@@ -11,6 +12,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authclients"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/visibility"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
@@ -206,4 +208,46 @@ func requireOopsCode(t *testing.T, err error, code oops.Code) {
 	var shareable *oops.ShareableError
 	require.ErrorAs(t, err, &shareable)
 	require.Equal(t, code, shareable.Code)
+}
+
+func TestProjectBoundLegacyKeysCannotManageAuthClients(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	clientID := seedStaticClient(t, ctx, ti.conn, ti.organizationID, ti.projectID, "Credential")
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	keyCtx := *authCtx
+	keyCtx.APIKeyID = uuid.NewString()
+	keyCtx.ProjectID = new(ti.projectID)
+	ctx = contextvalues.WithLegacyAPIKeyAuthorization(ctx, &keyCtx)
+
+	_, err := ti.service.ListAuthClients(ctx, &gen.ListAuthClientsPayload{Limit: 50})
+	requireOopsCode(t, err, oops.CodeForbidden)
+
+	_, err = ti.service.UpdateAuthClient(ctx, &gen.UpdateAuthClientPayload{ID: clientID.String(), Enabled: new(false)})
+	requireOopsCode(t, err, oops.CodeForbidden)
+}
+
+func TestEnablingAuthClientRespectsServersWithoutUpstreamAuth(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	server := seedServer(t, ctx, ti.conn, ti.projectID, visibility.Private)
+	ctx = withOrgGrants(t, ctx, authz.ScopeOrgRead, authz.ScopeOrgAdmin)
+
+	clientID := seedStaticClient(t, ctx, ti.conn, ti.organizationID, ti.projectID, "Credential")
+	associate(t, ctx, ti.conn, ti.organizationID, server, clientID)
+
+	_, err := ti.service.UpdateAuthClient(ctx, &gen.UpdateAuthClientPayload{ID: clientID.String(), Enabled: new(false)})
+	require.NoError(t, err)
+	_, err = ti.service.SetMcpServerUpstreamAuthRequirement(ctx, &gen.SetMcpServerUpstreamAuthRequirementPayload{McpServerID: server.id.String(), RequiresUpstreamAuth: false})
+	require.NoError(t, err)
+
+	_, err = ti.service.UpdateAuthClient(ctx, &gen.UpdateAuthClientPayload{ID: clientID.String(), Enabled: new(true)})
+	requireOopsCode(t, err, oops.CodeConflict)
+
+	_, err = ti.service.UpdateAuthClient(ctx, &gen.UpdateAuthClientPayload{ID: clientID.String(), Name: new("Renamed")})
+	require.NoError(t, err, "a disabled client can still be renamed")
 }

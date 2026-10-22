@@ -104,7 +104,10 @@ func (s *Service) ListAuthClients(ctx context.Context, payload *gen.ListAuthClie
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid cursor").LogError(ctx, logger)
 	}
-	limit := pageLimit(payload.Limit)
+	limit := int32(min(payload.Limit, constants.MaxPageLimit)) //nolint:gosec // bounded by MaxPageLimit
+	if limit <= 0 {
+		limit = constants.DefaultPageLimit
+	}
 
 	queries := repo.New(s.db)
 	clients, err := queries.ListAuthClients(ctx, repo.ListAuthClientsParams{
@@ -189,6 +192,24 @@ func (s *Service) UpdateAuthClient(ctx context.Context, payload *gen.UpdateAuthC
 	enabled := conv.PtrValOr(payload.Enabled, existing.Enabled)
 	if name == existing.Name && enabled == existing.Enabled {
 		return before, nil
+	}
+
+	if enabled && !existing.Enabled {
+		// Locking the offering servers serializes with
+		// SetMcpServerUpstreamAuthRequirement, which locks the server before
+		// checking for enabled clients.
+		servers, err := queries.LockAuthClientServerRequirements(ctx, repo.LockAuthClientServerRequirementsParams{
+			AuthClientID:   clientID,
+			OrganizationID: authCtx.ActiveOrganizationID,
+		})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "lock auth client servers").LogError(ctx, logger)
+		}
+		for _, srv := range servers {
+			if srv.RequiresUpstreamAuth.Valid && !srv.RequiresUpstreamAuth.Bool {
+				return nil, oops.E(oops.CodeConflict, nil, "a server that offers this auth client declares that its upstream needs no authentication; change that declaration or detach the client before enabling it").LogError(ctx, logger)
+			}
+		}
 	}
 
 	updated, err := queries.UpdateAuthClient(ctx, repo.UpdateAuthClientParams{
@@ -290,6 +311,7 @@ func (s *Service) DetachAuthClientFromMcpServer(ctx context.Context, payload *ge
 		AuthClientURN:    urn.NewAuthClient(client.ID),
 		AuthClientName:   client.Name,
 		McpServerURN:     urn.NewMcpServer(serverID),
+		McpServerName:    detached.McpServerName.String,
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "log auth client detach").LogError(ctx, logger)
 	}
@@ -418,11 +440,19 @@ func (s *Service) require(ctx context.Context, scope authz.Scope) (*contextvalue
 		return nil, nil, oops.C(oops.CodeUnauthorized)
 	}
 
+	logger := s.logger.With(attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
+
+	// Legacy API keys skip RBAC, and auth clients and their server links are
+	// organization-wide, so a key bound to one project cannot be confined to it.
+	if mode, byKey := contextvalues.APIKeyAuthorization(ctx); byKey && mode != contextvalues.APIKeyAuthorizationModePrincipal && authCtx.ProjectID != nil {
+		return nil, nil, oops.E(oops.CodeForbidden, nil, "project-scoped API keys cannot manage the organization's auth clients").LogError(ctx, logger)
+	}
+
 	if err := s.authz.Require(ctx, authz.Check{Scope: scope, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
 		return nil, nil, err
 	}
 
-	return authCtx, s.logger.With(attr.SlogOrganizationID(authCtx.ActiveOrganizationID)), nil
+	return authCtx, logger, nil
 }
 
 func (s *Service) serverAuthentication(ctx context.Context, queries *repo.Queries, organizationID string, serverID, projectID uuid.UUID, serverVisibility string, requires pgtype.Bool, logger *slog.Logger) (*types.McpServerAuthentication, error) {
@@ -516,12 +546,4 @@ func parseOptionalUUID(value *string) (uuid.NullUUID, error) {
 		return uuid.NullUUID{UUID: uuid.Nil, Valid: false}, fmt.Errorf("parse uuid: %w", err)
 	}
 	return uuid.NullUUID{UUID: id, Valid: true}, nil
-}
-
-func pageLimit(in *int) int32 {
-	limit := conv.PtrValOr(in, constants.DefaultPageLimit)
-	if limit <= 0 {
-		limit = constants.DefaultPageLimit
-	}
-	return int32(min(limit, constants.MaxPageLimit))
 }
