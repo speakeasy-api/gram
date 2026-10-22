@@ -2,12 +2,15 @@ package runtimepolicy
 
 import (
 	"context"
+	"strings"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -226,4 +229,27 @@ func TestLegacyCredentialsKeepTheirAuthClientUse(t *testing.T) {
 	prepared, err = f.engine.PrepareContext(readOnly)
 	require.NoError(t, err)
 	requireDenied(t, f.engine.Require(prepared, sharedUse("project-p")), "a credential that cannot connect gets no clients")
+}
+
+func TestAdmitStoredPolicyResolvesServerIDsInAnySpelling(t *testing.T) {
+	t.Parallel()
+
+	f := newCredentialAdmissionFixture(t)
+	projectID, toolsetID := uuid.New(), uuid.New()
+	_, err := testrepo.New(f.db).CreateProjectFixture(t.Context(), testrepo.CreateProjectFixtureParams{
+		ID: projectID, Name: "Legacy", Slug: "legacy-" + projectID.String()[:8], OrganizationID: f.organizationID,
+	})
+	require.NoError(t, err)
+	_, err = testrepo.New(f.db).CreateToolsetFixture(t.Context(), testrepo.CreateToolsetFixtureParams{
+		ID: toolsetID, OrganizationID: f.organizationID, ProjectID: projectID, Name: "Legacy", Slug: "legacy-" + toolsetID.String()[:8],
+	})
+	require.NoError(t, err)
+	policy, err := NewDelegatedPolicy(DelegatedPolicyVersion4, []authz.Grant{authz.NewGrantWithSelector(authz.ScopeMCPConnect, connectSelector(strings.ToUpper(toolsetID.String()), ""))})
+	require.NoError(t, err)
+	raw, err := EncodeDelegatedPolicy(DelegatedPolicyVersion4, policy)
+	require.NoError(t, err)
+	grants, derived, err := admitStoredPolicy(t.Context(), f.db, f.organizationID, int32(DelegatedPolicyVersion4), raw)
+	require.NoError(t, err)
+	require.True(t, derived)
+	require.Contains(t, grants, authCeiling(projectID.String()), "an uppercase server id still reaches its project")
 }

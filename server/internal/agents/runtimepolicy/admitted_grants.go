@@ -24,9 +24,11 @@ func admitStoredPolicy(ctx context.Context, tx accessrepo.DBTX, organizationID s
 	}
 	resolve := func(resourceIDs []string) (map[string]string, error) {
 		ids := make([]uuid.UUID, 0, len(resourceIDs))
+		requested := make(map[uuid.UUID][]string, len(resourceIDs))
 		for _, resourceID := range resourceIDs {
 			if id, err := uuid.Parse(resourceID); err == nil {
 				ids = append(ids, id)
+				requested[id] = append(requested[id], resourceID)
 			}
 		}
 		projects := make(map[string]string, len(ids))
@@ -38,7 +40,9 @@ func admitStoredPolicy(ctx context.Context, tx accessrepo.DBTX, organizationID s
 			return nil, fmt.Errorf("resolve mcp resource projects: %w", err)
 		}
 		for _, row := range rows {
-			projects[row.ResourceID.String()] = row.ProjectID.String()
+			for _, resourceID := range requested[row.ResourceID] {
+				projects[resourceID] = row.ProjectID.String()
+			}
 		}
 		return projects, nil
 	}
