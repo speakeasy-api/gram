@@ -164,9 +164,10 @@ func TestScanner_PubsubRoutesPolicyKeyedPromptJudge(t *testing.T) {
 			Status:   new(riskv1.EnforcementStatus_ENFORCEMENT_STATUS_OK),
 			PolicyId: new(policyID),
 			Findings: []*riskv1.EnforcementFinding{riskv1.EnforcementFinding_builder{
-				RuleId:   new(promptpolicy.Rule),
-				Category: new("prompt_policy"),
-				Score:    new(1.0),
+				RuleId:      new(promptpolicy.Rule),
+				Category:    new("prompt_policy"),
+				Description: new("remote judge rationale"),
+				Score:       new(1.0),
 			}.Build()},
 		}.Build()
 		return enforcereply.Outcome{ByLane: map[enforcereply.Lane]*riskv1.EnforcementReply{lane: reply}, Complete: true}, nil
@@ -192,6 +193,7 @@ func TestScanner_PubsubRoutesPolicyKeyedPromptJudge(t *testing.T) {
 	require.NotNil(t, result)
 	require.Equal(t, promptpolicy.Source, result.Source)
 	require.Equal(t, promptpolicy.Rule, result.RuleID)
+	require.Equal(t, "remote judge rationale", result.Description)
 	require.Zero(t, judge.calls.Load())
 }
 

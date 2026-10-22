@@ -354,11 +354,12 @@ func TestScanner_PubsubRoutesPromptInjectionRemotely(t *testing.T) {
 			}
 			if lane.Scanner == riskv1.EnforcementScanner_ENFORCEMENT_SCANNER_PROMPT_INJECTION {
 				builder.Findings = []*riskv1.EnforcementFinding{riskv1.EnforcementFinding_builder{
-					RuleId:   new("prompt_injection.detected"),
-					Category: new("prompt_injection"),
-					Score:    new(1.0),
-					StartPos: new(int32(0)),
-					EndPos:   new(int32(len(request.Content))),
+					RuleId:      new("prompt_injection.detected"),
+					Category:    new("prompt_injection"),
+					Score:       new(1.0),
+					Description: new("remote prompt injection description"),
+					StartPos:    new(int32(0)),
+					EndPos:      new(int32(len(request.Content))),
 				}.Build()}
 			}
 			replies[lane] = builder.Build()
@@ -385,6 +386,7 @@ func TestScanner_PubsubRoutesPromptInjectionRemotely(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	require.Equal(t, "prompt_injection", result.Source)
+	require.Equal(t, "remote prompt injection description", result.Description)
 	require.Equal(t, int32(1), dispatcher.calls.Load())
 	require.Equal(t, int32(0), engine.calls.Load())
 }
@@ -954,9 +956,10 @@ func TestScanner_PubsubRoutesCustomRulesWithoutCallerMetering(t *testing.T) {
 			Scanner: new(lane.Scanner),
 			Status:  new(riskv1.EnforcementStatus_ENFORCEMENT_STATUS_OK),
 			Findings: []*riskv1.EnforcementFinding{riskv1.EnforcementFinding_builder{
-				RuleId:   new("custom.acme_token"),
-				Category: new(risk_analysis.SourceCustom),
-				Score:    new(1.0),
+				RuleId:      new("custom.acme_token"),
+				Category:    new(risk_analysis.SourceCustom),
+				Description: new("remote custom rule description"),
+				Score:       new(1.0),
 			}.Build()},
 		}.Build()
 		return enforcereply.Outcome{ByLane: map[enforcereply.Lane]*riskv1.EnforcementReply{lane: reply}, Complete: true}, nil
@@ -988,6 +991,7 @@ func TestScanner_PubsubRoutesCustomRulesWithoutCallerMetering(t *testing.T) {
 	require.Equal(t, "remote custom block", result.PolicyName)
 	require.Equal(t, risk_analysis.SourceCustom, result.Source)
 	require.Equal(t, "custom.acme_token", result.RuleID)
+	require.Equal(t, "remote custom rule description", result.Description)
 	require.Never(t, func() bool { return len(published) > 0 }, 100*time.Millisecond, time.Millisecond)
 }
 
