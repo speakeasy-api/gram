@@ -116,9 +116,7 @@ func IsAgentKey(key string) bool {
 	return strings.HasPrefix(key, agentKeyPrefix)
 }
 
-// InternalProvenanceSource is the provenance source of records Speakeasy
-// itself emits, as opposed to records a producer exported to the ingest edge.
-// Only these are trusted to name the actor that made a call.
+// InternalProvenanceSource marks records Speakeasy emits itself; only these may name the actor.
 const InternalProvenanceSource = "speakeasy-internal"
 
 const (

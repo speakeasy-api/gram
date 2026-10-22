@@ -53,8 +53,6 @@ type toolCall struct {
 	userID          string
 	userEmail       string
 
-	// agentID is the Speakeasy agent the call ran as, directly or as a
-	// workload, and empty for a person.
 	agentID string
 }
 

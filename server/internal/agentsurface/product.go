@@ -2,7 +2,6 @@ package agentsurface
 
 import "strings"
 
-// Clients are the kinds of client an agent product runs in.
 const (
 	ClientCLI     = "cli"
 	ClientIDE     = "ide"
@@ -13,19 +12,12 @@ const (
 	ClientSlack   = "slack"
 )
 
-// Placement is the agent product a raw surface names and, when the name says
-// so, the kind of client it ran in. Either is empty when the name does not say.
+// Placement is the product a raw surface names and, when it says, the client.
 type Placement struct {
 	Product string
 	Client  string
 }
 
-// placements folds the raw surfaces producers report (hook sources, dialect
-// surfaces and MCP clientInfo names) into a product and a client. Bare
-// "claude" is absent for the reason given on bySource. claude-ai is the MCP
-// client name claude.ai connectors report from Anthropic's servers, so it says
-// nothing about the device. Claude Code on the web runs in a cloud sandbox, so
-// its client is cloud, not web.
 var placements = map[string]Placement{
 	"claude-code":         {Product: "claude-code", Client: ""},
 	"claude-code-cli":     {Product: "claude-code", Client: ClientCLI},
@@ -33,7 +25,8 @@ var placements = map[string]Placement{
 	"claude-code-desktop": {Product: "claude-code", Client: ClientDesktop},
 	"claude-tag":          {Product: "claude-code", Client: ClientSlack},
 
-	"claude-chat":         {Product: "claude-chat", Client: ""},
+	"claude-chat": {Product: "claude-chat", Client: ""},
+	// claude-ai is what claude.ai connectors report from Anthropic's servers, so it names no device.
 	"claude-ai":           {Product: "claude-chat", Client: ""},
 	"claude-chat-web":     {Product: "claude-chat", Client: ClientWeb},
 	"claude-web":          {Product: "claude-chat", Client: ClientWeb},
@@ -78,8 +71,7 @@ var compactPlacements = func() map[string]Placement {
 	return index
 }()
 
-// Place folds a raw surface into its product and client. An unrecognized name
-// places nowhere: the caller keeps the raw value and guesses nothing.
+// Place folds a raw surface into its product and client; an unknown name places nowhere.
 func Place(raw string) Placement {
 	normalized := Normalize(raw)
 	if placement, ok := placements[normalized]; ok {
@@ -91,12 +83,9 @@ func Place(raw string) Placement {
 	return Placement{Product: "", Client: ""}
 }
 
-// ideTerminals are the terminal.type values an editor's integrated terminal
-// reports. Any other stated terminal is a command line.
 var ideTerminals = []string{"vscode", "cursor", "windsurf", "zed", "jetbrains", "intellij", "pycharm", "webstorm", "goland"}
 
-// ClientForTerminal is the client a stated terminal type implies: an editor's
-// terminal is the IDE, anything else is the CLI, and nothing stated is empty.
+// ClientForTerminal reads an editor's terminal as the IDE and any other as the CLI.
 func ClientForTerminal(terminalType string) string {
 	normalized := strings.ToLower(strings.TrimSpace(terminalType))
 	if normalized == "" {

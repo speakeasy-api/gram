@@ -319,7 +319,6 @@ WHERE s.id = target.id
 RETURNING s.id, s.project_id, s.user_session_issuer_id, s.jti, s.deleted_at, target.issuer_project_id, target.deleted AS already_revoked;
 
 -- name: ListAgentNames :many
--- Every agent the organization has had, deleted ones included, so activity an
--- agent recorded before its deletion still shows its name.
+-- Deleted agents included, so older activity keeps its name.
 SELECT id, name FROM agents
 WHERE organization_id = @organization_id;
