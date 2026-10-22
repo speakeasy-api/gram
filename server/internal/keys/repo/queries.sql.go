@@ -834,6 +834,26 @@ func (q *Queries) RevokePluginHooksAPIKeysByProject(ctx context.Context, arg Rev
 	return items, nil
 }
 
+const touchAPIKeyUpdatedAt = `-- name: TouchAPIKeyUpdatedAt :one
+UPDATE api_keys
+SET updated_at = clock_timestamp()
+WHERE id = $1
+  AND organization_id = $2
+RETURNING updated_at
+`
+
+type TouchAPIKeyUpdatedAtParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) TouchAPIKeyUpdatedAt(ctx context.Context, arg TouchAPIKeyUpdatedAtParams) (pgtype.Timestamptz, error) {
+	row := q.db.QueryRow(ctx, touchAPIKeyUpdatedAt, arg.ID, arg.OrganizationID)
+	var updated_at pgtype.Timestamptz
+	err := row.Scan(&updated_at)
+	return updated_at, err
+}
+
 const updateAPIKeyLastAccessedAt = `-- name: UpdateAPIKeyLastAccessedAt :exec
 UPDATE api_keys
 SET last_accessed_at = clock_timestamp()
