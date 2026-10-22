@@ -230,10 +230,10 @@ func (s *Service) enumerateGatewayConsentInventory(r *http.Request, endpoint *Re
 		if memberAuth != nil {
 			return s.remoteChallengeMgr.ResolveAuthClientAccessTokens(ctx, remotesessions.AuthClientTokenRequest{
 				ProjectID: member.projectID, OrganizationID: endpoint.OrganizationID, UserSessionIssuerID: endpoint.UserSessionIssuerID,
-				Subject: subject, RegistrationID: member.chosenClientID.UUID, SkipUnusable: true, Attribution: consentRefreshAttribution(r, endpoint, challengeState),
+				Subject: subject, RegistrationID: member.chosenClientID.UUID, SkipUnusable: true, Attribution: consentRefreshAttribution(s.aiCatalog.Snapshot(), r, endpoint, challengeState),
 			})
 		}
-		return s.remoteChallengeMgr.ResolveClientAccessTokens(ctx, consentRefreshAttribution(r, endpoint, challengeState), member.projectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject, member.chosenClientID.UUID, true)
+		return s.remoteChallengeMgr.ResolveClientAccessTokens(ctx, consentRefreshAttribution(s.aiCatalog.Snapshot(), r, endpoint, challengeState), member.projectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject, member.chosenClientID.UUID, true)
 	}, mu: sync.Mutex{}, byServer: map[uuid.UUID]*memberTokens{}}
 	var signInID uuid.UUID
 	if challengeState.SignInID != nil {

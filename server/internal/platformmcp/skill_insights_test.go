@@ -14,6 +14,7 @@ import (
 
 	genskills "github.com/speakeasy-api/gram/server/gen/skills"
 	"github.com/speakeasy-api/gram/server/gen/types"
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 )
@@ -635,7 +636,7 @@ func TestSkillInsightsToolsAreDeclaredWithAndWithoutTheirReader(t *testing.T) {
 		{name: "no reader", service: testSkillsService(t, &recordingSkillsManagement{skill: testSkill()}), served: false},
 		{name: "skills absent", service: nil, served: false},
 	} {
-		_, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, test.service, nil, nil, nil, nil, CatalogDescriptor{})
+		_, registrar := newServer(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), nil, nil, nil, "", nil, nil, nil, nil, test.service, nil, nil, nil, nil, CatalogDescriptor{})
 
 		for _, call := range []struct {
 			tool      string
@@ -674,7 +675,7 @@ func TestSkillInsightsToolSchemasDoNotVaryTheirShape(t *testing.T) {
 	t.Parallel()
 
 	live := newInsightsFixture(t, testInsightRegistry(), &stubSkillInsightsReader{rows: testInsightRows()}).service
-	_, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, live, nil, nil, nil, nil, CatalogDescriptor{})
+	_, registrar := newServer(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), nil, nil, nil, "", nil, nil, nil, nil, live, nil, nil, nil, nil, CatalogDescriptor{})
 
 	listed := string(descriptorByName(t, registrar, "list_skill_insights").InputSchema)
 	require.NotContains(t, listed, `"skill_id"`, "ranking never takes a skill; comparing one skill's versions is its own tool")
@@ -692,7 +693,7 @@ func TestSkillInsightsToolsReturnStructuredRefusals(t *testing.T) {
 	t.Parallel()
 
 	live := newInsightsFixture(t, testInsightRegistry(), &stubSkillInsightsReader{rows: testInsightRows()}).service
-	_, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, live, nil, nil, nil, nil, CatalogDescriptor{})
+	_, registrar := newServer(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), nil, nil, nil, "", nil, nil, nil, nil, live, nil, nil, nil, nil, CatalogDescriptor{})
 
 	for _, call := range []struct {
 		tool      string

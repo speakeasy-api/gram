@@ -12,6 +12,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
@@ -136,7 +137,7 @@ func TestCatalogSearchCarriesTheCarouselOnlyInMeta(t *testing.T) {
 	require.NoError(t, err)
 	server := mcp.NewServer(&mcp.Implementation{Name: "catalog-carousel"}, nil)
 	bindExternalTestPrincipal(server)
-	reg := newRegistrar(server)
+	reg := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), server)
 	reg.withExternalAuthorizer(allowExternalCallAuthorizer{})
 	registerCatalogTools(reg, searchTestCatalog{candidates: candidates}, allowBudget(), codec, nil, nil)
 	session := connectTestClient(t, server)
@@ -196,7 +197,7 @@ func TestCatalogSearchMarksServersTheProjectHas(t *testing.T) {
 	codec, err := newCatalogCursorCodec("test-cursor-key")
 	require.NoError(t, err)
 
-	reg := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "platform-mcp-test"}, nil))
+	reg := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), mcp.NewServer(&mcp.Implementation{Name: "platform-mcp-test"}, nil))
 	registerCatalogRegistrationTool(reg, registrations, NewOnboardingService(conn))
 	registerCatalogTools(reg, catalog, allowBudget(), codec, nil, registrations)
 	reg.withExternalAuthorizer(allowExternalCallAuthorizer{})

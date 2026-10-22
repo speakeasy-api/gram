@@ -18,6 +18,7 @@ import (
 	orgremotegen "github.com/speakeasy-api/gram/server/gen/organization_remote_session_issuers"
 	orgusergen "github.com/speakeasy-api/gram/server/gen/organization_user_session_issuers"
 	"github.com/speakeasy-api/gram/server/gen/types"
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	directoryrepo "github.com/speakeasy-api/gram/server/internal/directory/repo"
@@ -334,7 +335,7 @@ func (s *InboundEMATrustService) valid() bool {
 	return s != nil && s.users != nil && s.remote != nil && s.db != nil
 }
 
-func (s *InboundEMATrustService) Get(ctx context.Context, principal Principal) (GetInboundEMATrustOutput, error) {
+func (s *InboundEMATrustService) Get(ctx context.Context, catalog *aivendors.Snapshot, principal Principal) (GetInboundEMATrustOutput, error) {
 	if !s.valid() {
 		return GetInboundEMATrustOutput{}, ErrUnavailable
 	}
@@ -346,7 +347,7 @@ func (s *InboundEMATrustService) Get(ctx context.Context, principal Principal) (
 	if err != nil {
 		return GetInboundEMATrustOutput{}, err
 	}
-	output := GetInboundEMATrustOutput{OrganizationID: principal.OrganizationID, Issuers: []InboundEMAIssuer{}, Truncated: listed.NextCursor != nil, PresetClients: inboundEMAPresetClients()}
+	output := GetInboundEMATrustOutput{OrganizationID: principal.OrganizationID, Issuers: []InboundEMAIssuer{}, Truncated: listed.NextCursor != nil, PresetClients: inboundEMAPresetClients(catalog)}
 	for _, issuer := range listed.Items {
 		if issuer == nil || issuer.ProjectID != "" {
 			continue
@@ -869,8 +870,8 @@ func inboundEMATrustNextStep(issuer InboundEMAIssuer, directory InboundEMADirect
 	return step + " The trust does not prove the identity provider issues valid ID-JAGs; test a sign-in."
 }
 
-func inboundEMAPresetClients() []InboundEMAClient {
-	presets := admission.Catalog()
+func inboundEMAPresetClients(catalog *aivendors.Snapshot) []InboundEMAClient {
+	presets := catalog.Catalog()
 	clients := make([]InboundEMAClient, 0, len(presets))
 	for _, preset := range presets {
 		if preset.Enabled {

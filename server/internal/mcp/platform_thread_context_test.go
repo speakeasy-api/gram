@@ -5,6 +5,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
@@ -46,7 +47,7 @@ func TestResolvePlatformThreadContextAuthorization(t *testing.T) {
 	siblingThread, siblingChat := createThread(firstAssistant)
 	otherThread, otherChat := createThread(secondAssistant)
 	logger := testenv.NewLogger(t)
-	service := &Service{db: db, logger: logger, authz: authz.NewEngine(logger, db, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())}
+	service := &Service{aiCatalog: aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), db: db, logger: logger, authz: authz.NewEngine(logger, db, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())}
 	sessionID := "thread-test-session"
 	auth := &contextvalues.AuthContext{ActiveOrganizationID: orgID, ProjectID: &project.ID, UserID: "thread-test-user", SessionID: &sessionID, AccountType: "enterprise"}
 	callerCtx := contextvalues.SetAuthContext(ctx, auth)

@@ -8,6 +8,7 @@ import (
 	"github.com/alicebob/miniredis/v2"
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/stretchr/testify/require"
@@ -63,7 +64,7 @@ func TestUpdateCodeReconnectReadsLegacyEncoding(t *testing.T) {
 	t.Cleanup(func() { require.NoError(t, client.Close()) })
 	adapter := cache.NewRedisCacheAdapter(client)
 	require.NoError(t, adapter.Set(t.Context(), current.CacheKey()+":", legacy.Interface(), current.TTL()))
-	service := &Service{authnChallengeCache: cache.NewTypedObjectCache[AuthnChallengeState](testenv.NewLogger(t), adapter, cache.SuffixNone)}
+	service := &Service{aiCatalog: aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), authnChallengeCache: cache.NewTypedObjectCache[AuthnChallengeState](testenv.NewLogger(t), adapter, cache.SuffixNone)}
 	updated := binding
 	updated.CatalogComplete = true
 	require.NoError(t, service.updateCodeReconnect(t.Context(), current, updated))

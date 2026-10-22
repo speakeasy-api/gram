@@ -27,6 +27,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/agent/aitargets"
 	"github.com/speakeasy-api/gram/server/internal/agent/repo"
 	"github.com/speakeasy-api/gram/server/internal/agents"
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
@@ -65,6 +66,8 @@ type ProductFeaturesClient interface {
 }
 
 type Service struct {
+	aiCatalog *aivendors.Store
+
 	tracer          trace.Tracer
 	logger          *slog.Logger
 	db              *pgxpool.Pool
@@ -132,7 +135,7 @@ var (
 )
 
 // NewService constructs the agent service.
-func NewService(
+func NewService(aiCatalog *aivendors.Store,
 	logger *slog.Logger,
 	tracerProvider trace.TracerProvider,
 	db *pgxpool.Pool,
@@ -149,6 +152,7 @@ func NewService(
 ) *Service {
 	logger = logger.With(attr.SlogComponent("agent"))
 	return &Service{
+		aiCatalog:                    aiCatalog,
 		tracer:                       tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/agent"),
 		logger:                       logger,
 		db:                           db,
@@ -653,7 +657,7 @@ func (s *Service) pluginSetFor(ctx context.Context, authCtx *contextvalues.AuthC
 	// Trouble reading the organization's scan targets must not break plugin
 	// delivery: a poll without ai_scan leaves agents on their cached or
 	// embedded list.
-	if list, err := aitargets.LoadOrganizationList(ctx, s.repo, authCtx.ActiveOrganizationID); err != nil {
+	if list, err := aitargets.LoadOrganizationList(ctx, s.repo, authCtx.ActiveOrganizationID, s.aiCatalog.Snapshot()); err != nil {
 		s.logger.WarnContext(ctx, "ai scan targets unavailable; plugin poll omits ai_scan", attr.SlogError(err))
 	} else {
 		attachAIScanEnvelope(configuration, list.Snapshot)

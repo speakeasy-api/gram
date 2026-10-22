@@ -15,6 +15,7 @@ import (
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -76,7 +77,7 @@ func TestConnectionCatalogValidationDiagnostics(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			var logs bytes.Buffer
-			s := &Service{logger: slog.New(slog.NewJSONHandler(&logs, nil))}
+			s := &Service{aiCatalog: aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), logger: slog.New(slog.NewJSONHandler(&logs, nil))}
 			member := metaMember{
 				serverID: uuid.New(), projectID: uuid.New(), slug: "source", name: "private server name",
 				backend: metaMemberBackendProxied, configuration: memberConfiguration{hash: "private configuration hash", typedHash: "private typed configuration hash"},
@@ -125,7 +126,7 @@ func TestConnectionCatalogValidationDiagnostics(t *testing.T) {
 func TestConnectionCatalogDiagnosticsDeduplicateConcurrentGateCopies(t *testing.T) {
 	t.Parallel()
 	var logs bytes.Buffer
-	s := &Service{logger: slog.New(slog.NewJSONHandler(&logs, nil))}
+	s := &Service{aiCatalog: aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), logger: slog.New(slog.NewJSONHandler(&logs, nil))}
 	gate := metaGateContext{catalog: &connectionCatalog{ID: uuid.New(), Members: map[string]connectionCatalogMember{}}, consentDiagnostics: &consentDiagnostics{seen: sync.Map{}}}
 	member := metaMember{serverID: uuid.New()}
 	var calls sync.WaitGroup
@@ -224,7 +225,7 @@ func TestConnectionCatalogLoadDiagnostics(t *testing.T) {
 			client := redis.NewClient(&redis.Options{Addr: mr.Addr()})
 			t.Cleanup(func() { require.NoError(t, client.Close()) })
 			var logs bytes.Buffer
-			service := &Service{logger: slog.New(slog.NewJSONHandler(&logs, nil)), connectionCatalogCache: cache.NewRedisCacheAdapter(client)}
+			service := &Service{aiCatalog: aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), logger: slog.New(slog.NewJSONHandler(&logs, nil)), connectionCatalogCache: cache.NewRedisCacheAdapter(client)}
 			endpoint := &ResolvedMcpEndpoint{OrganizationID: "org_test", ProjectID: uuid.New(), UserSessionIssuerID: uuid.New(), Slug: "gateway", RouteBase: mcproute.MCP, MetaMcpServerID: uuid.NullUUID{UUID: uuid.New(), Valid: true}}
 			subject := urn.NewUserSubject("private user")
 			catalog := connectionCatalog{Version: connectionCatalogVersion, ID: uuid.New(), OrganizationID: endpoint.OrganizationID, IssuerID: endpoint.UserSessionIssuerID, Resource: endpointToolSelectionResource(endpoint), ClientID: "private client", Subject: subject, Members: map[string]connectionCatalogMember{}, Tools: []*toolListEntry{}, ExpiresAt: expiresAt}
@@ -287,7 +288,7 @@ func TestConnectionCatalogExpiryAndIsolation(t *testing.T) {
 	mr := miniredis.RunT(t)
 	client := redis.NewClient(&redis.Options{Addr: mr.Addr()})
 	t.Cleanup(func() { require.NoError(t, client.Close()) })
-	service := &Service{logger: testenv.NewLogger(t), connectionCatalogCache: cache.NewRedisCacheAdapter(client)}
+	service := &Service{aiCatalog: aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), logger: testenv.NewLogger(t), connectionCatalogCache: cache.NewRedisCacheAdapter(client)}
 	endpoint := &ResolvedMcpEndpoint{OrganizationID: "org_test", UserSessionIssuerID: uuid.New(), Slug: "gateway", RouteBase: mcproute.MCP, MetaMcpServerID: uuid.NullUUID{UUID: uuid.New(), Valid: true}}
 	subject := urn.NewUserSubject("test-user")
 	ctx := contextvalues.SetOAuthClientID(t.Context(), "test-client")

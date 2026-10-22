@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/semaphore"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/mcpjsonrpc"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -71,7 +72,7 @@ func TestDescribeMetaMemberWithRetryKeepsTheFailureWhenASlotFreesTooLate(t *test
 		member := metaMember{slug: "linear", serverID: uuid.New(), projectID: uuid.New(), backend: metaMemberBackendProxied, upstreamUnavailable: rateLimited}
 		catalog := &connectionCatalog{Members: map[string]connectionCatalogMember{member.slug: {ServerID: member.serverID, ProjectID: member.projectID}}}
 		gate := &metaGateContext{catalog: catalog, execute: true}
-		service := &Service{metaRuntime: MetaRuntimeConfig{MemberCallTimeout: time.Second}}
+		service := &Service{aiCatalog: aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), metaRuntime: MetaRuntimeConfig{MemberCallTimeout: time.Second}}
 		const listingTime = time.Second
 		ctx, cancel := context.WithTimeout(t.Context(), listingTime)
 		defer cancel()

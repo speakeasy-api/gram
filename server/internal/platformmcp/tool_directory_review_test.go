@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	accessgen "github.com/speakeasy-api/gram/server/gen/access"
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
@@ -62,7 +63,7 @@ func testDirectoryReviewItem() *accessgen.DirectoryReviewItem {
 func TestDirectoryReviewToolDescriptors(t *testing.T) {
 	t.Parallel()
 
-	registrar := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "test", Version: "test"}, nil))
+	registrar := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), mcp.NewServer(&mcp.Implementation{Name: "test", Version: "test"}, nil))
 	registerDirectoryReviewTools(registrar, nil)
 
 	list := descriptorByName(t, registrar, operationListDirectoryReviewItems)

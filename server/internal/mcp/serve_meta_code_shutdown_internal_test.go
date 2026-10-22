@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/codemode"
 	"github.com/speakeasy-api/gram/server/internal/otelpub"
 	"github.com/stretchr/testify/require"
@@ -27,7 +28,7 @@ func (c *codeShutdownExecutor) Shutdown(ctx context.Context) error {
 func TestCodeRuntimeParticipatesInServiceShutdown(t *testing.T) {
 	t.Parallel()
 	runtime := &codeShutdownExecutor{}
-	service := &Service{codeExecutor: runtime, autoVerifications: newAutoVerifications(), remoteSessionRecheck: &remoteSessionRecheck{stop: make(chan struct{})}, toolCallLogger: &otelpub.Logger{}}
+	service := &Service{aiCatalog: aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), codeExecutor: runtime, autoVerifications: newAutoVerifications(), remoteSessionRecheck: &remoteSessionRecheck{stop: make(chan struct{})}, toolCallLogger: &otelpub.Logger{}}
 	require.NoError(t, service.Shutdown(t.Context()))
 	require.True(t, runtime.stopped, "all server entrypoints drain through Service.Shutdown")
 }
@@ -39,7 +40,7 @@ func TestCodeRuntimeDrainsBeforeBlockedVerification(t *testing.T) {
 		require.NoError(t, ctx.Err(), "probe draining must not exhaust the runtime's deadline")
 		close(runtimeStopped)
 	}}
-	service := &Service{codeExecutor: runtime, autoVerifications: newAutoVerifications(), remoteSessionRecheck: &remoteSessionRecheck{stop: make(chan struct{})}, toolCallLogger: &otelpub.Logger{}}
+	service := &Service{aiCatalog: aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), codeExecutor: runtime, autoVerifications: newAutoVerifications(), remoteSessionRecheck: &remoteSessionRecheck{stop: make(chan struct{})}, toolCallLogger: &otelpub.Logger{}}
 	verificationDone := make(chan struct{})
 	defer close(verificationDone)
 	require.True(t, service.autoVerifications.admit(func() { <-verificationDone }))

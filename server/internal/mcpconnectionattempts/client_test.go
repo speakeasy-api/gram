@@ -249,7 +249,7 @@ func TestStampClient_CatalogClientID(t *testing.T) {
 			if tc.reported != "" {
 				opts = append(opts, ReportedClient(func() (string, string) { return tc.reported, tc.reportedVersion }))
 			}
-			scope := ServerScope("org-test", uuid.New(), uuid.New(), AppOf(tc.clientID, ClientIDAdmitted))
+			scope := ServerScope("org-test", uuid.New(), uuid.New(), AppOf(aivendors.NewSnapshot(aivendors.Products()), tc.clientID, ClientIDAdmitted))
 			row, err := RowAt(Begin(scope), StepInboundToken, ResultCodeIssued, true, time.Now(), opts...)
 			require.NoError(t, err)
 			(&Recorder{}).stampClient(&row)
@@ -434,7 +434,7 @@ func TestNormalizers_HostileValues(t *testing.T) {
 	for _, value := range hostileUserAgents {
 		for _, input := range []string{value, "https://" + value, "https://" + value + "/path"} {
 			require.LessOrEqual(t, len(NormalizeProviderHost(input)), maxProviderHostBytes)
-			require.LessOrEqual(t, len(AppOf(input, ClientIDAdmitted).String()), maxProviderHostBytes)
+			require.LessOrEqual(t, len(AppOf(aivendors.NewSnapshot(aivendors.Products()), input, ClientIDAdmitted).String()), maxProviderHostBytes)
 		}
 	}
 }
@@ -446,7 +446,7 @@ func FuzzNormalizers(f *testing.F) {
 	}
 	f.Fuzz(func(t *testing.T, value string) {
 		require.LessOrEqual(t, len(NormalizeProviderHost(value)), maxProviderHostBytes)
-		require.LessOrEqual(t, len(AppOf(value, ClientIDAdmitted).String()), maxProviderHostBytes)
+		require.LessOrEqual(t, len(AppOf(aivendors.NewSnapshot(aivendors.Products()), value, ClientIDAdmitted).String()), maxProviderHostBytes)
 	})
 }
 
@@ -456,7 +456,7 @@ func TestStampClient_UncheckedCatalogClientID(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodPost, "/token", nil)
 	req.Header.Set("User-Agent", "Bun/1.4.4")
-	app := AppOf("https://claude.ai/oauth/claude-code-client-metadata", ClientIDNotAdmitted)
+	app := AppOf(aivendors.NewSnapshot(aivendors.Products()), "https://claude.ai/oauth/claude-code-client-metadata", ClientIDNotAdmitted)
 	require.Equal(t, App{"claude.ai", ""}, app)
 	row, err := RowAt(Begin(ServerScope("org-test", uuid.New(), uuid.New(), app)), StepInboundToken, CodeCIMDFetchFailed, true, time.Now(), FromRequest(req))
 	require.NoError(t, err)
@@ -468,7 +468,7 @@ func TestStampClient_UncheckedCatalogClientID(t *testing.T) {
 func TestStampClient_CatalogFamilyWithoutRequest(t *testing.T) {
 	t.Parallel()
 
-	scope := ProviderSessionScope("org-test", uuid.New(), AppOf("https://claude.ai/oauth/claude-code-client-metadata", ClientIDAdmitted))
+	scope := ProviderSessionScope("org-test", uuid.New(), AppOf(aivendors.NewSnapshot(aivendors.Products()), "https://claude.ai/oauth/claude-code-client-metadata", ClientIDAdmitted))
 	row, err := RowAt(Begin(scope), StepProviderRefresh, ResultRefreshed, true, time.Now())
 	require.NoError(t, err)
 	(&Recorder{}).stampClient(&row)

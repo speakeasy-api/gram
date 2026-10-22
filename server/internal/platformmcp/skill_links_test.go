@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/gen/types"
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/skills"
@@ -279,7 +280,7 @@ func TestSkillLinkToolsRequireConfirmationAndMapTheRollout(t *testing.T) {
 	management := &recordingSkillsManagement{skill: testSkill()}
 	server := mcp.NewServer(&mcp.Implementation{Name: "skill-links", Version: "0.0.1"}, nil)
 	bindExternalTestPrincipal(server)
-	reg := newRegistrar(server)
+	reg := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), server)
 	reg.withExternalAuthorizer(allowExternalCallAuthorizer{})
 	registerSkillsTools(reg, testLinkSkillsService(t, management))
 	session := connectTestClient(t, server)
@@ -312,9 +313,9 @@ func TestSkillLinkToolsRequireConfirmationAndMapTheRollout(t *testing.T) {
 func TestSkillLinkToolsAreDestructive(t *testing.T) {
 	t.Parallel()
 
-	live := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "skill-links", Version: "0.0.1"}, nil))
+	live := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), mcp.NewServer(&mcp.Implementation{Name: "skill-links", Version: "0.0.1"}, nil))
 	registerSkillsTools(live, testLinkSkillsService(t, &recordingSkillsManagement{skill: testSkill()}))
-	unavailable := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "skill-links", Version: "0.0.1"}, nil))
+	unavailable := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), mcp.NewServer(&mcp.Implementation{Name: "skill-links", Version: "0.0.1"}, nil))
 	registerUnavailableSkillsTools(unavailable)
 
 	for _, reg := range []*Registrar{live, unavailable} {

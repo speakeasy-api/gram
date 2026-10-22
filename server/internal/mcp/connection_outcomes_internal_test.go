@@ -15,6 +15,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/stretchr/testify/require"
 	otellog "go.opentelemetry.io/otel/log"
 
@@ -38,7 +39,7 @@ func TestCanceledConnectionChecksDoNotBlameProvider(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 	rec := mcpconnectionattemptstest.New(t)
-	s := &Service{connections: rec.Recorder}
+	s := &Service{aiCatalog: aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), connections: rec.Recorder}
 	s.recordRemoteSessionVerdict(ctx, mcpconnectionattempts.FromRequest(nil), directEndpoint(), openState(), remotesessions.Client{}, validationTarget{}, uuid.New(), remotesessions.ValidationOutcomeUnknown, probeFailure{}, remotesessionmetrics.ValidationTriggerVerify)
 	gate := &metaGateContext{organizationID: "org-test", projectID: uuid.New(), metaServerID: uuid.New()}
 	s.recordListingFailures(ctx, gate, []unavailableMember{{member: metaMember{serverID: uuid.New()}, err: context.Canceled}})
@@ -56,12 +57,12 @@ func TestTokenAdmissionRefusalKeepsCIMDApp(t *testing.T) {
 		t.Run(reason, func(t *testing.T) {
 			t.Parallel()
 			rec := mcpconnectionattemptstest.New(t)
-			s := &Service{connections: rec.Recorder}
+			s := &Service{aiCatalog: aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), connections: rec.Recorder}
 			clientID := "https://claude.ai"
 			req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/token", nil)
 			s.recordTokenClientRefusal(req, directEndpoint(), oauthwire.GrantTypeAuthorizationCode, clientID, reason)
 			row := rec.RequireEnded(mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.CodeCIMDAdmissionDenied)
-			require.Equal(t, mcpconnectionattempts.AppOf(clientID, mcpconnectionattempts.ClientIDAdmitted).String(), row.AppKey)
+			require.Equal(t, mcpconnectionattempts.AppOf(aivendors.NewSnapshot(aivendors.Products()), clientID, mcpconnectionattempts.ClientIDAdmitted).String(), row.AppKey)
 			require.NotEqual(t, mcpconnectionattempts.AppUnverified.String(), row.AppKey)
 		})
 	}
@@ -88,7 +89,7 @@ func TestRecordConsentPage_OneRowPerGatewayMember(t *testing.T) {
 	t.Parallel()
 
 	rec := mcpconnectionattemptstest.New(t)
-	service := &Service{connections: rec.Recorder}
+	service := &Service{aiCatalog: aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), connections: rec.Recorder}
 	connected, stale, unset := uuid.New(), uuid.New(), uuid.New()
 	gap := authClientResolution{outcome: authClientGap, reason: authClientReasonNoAuthStale}
 	view := &gatewayConsentView{
@@ -117,7 +118,7 @@ func memberStatusService(t *testing.T) (*Service, *mcpconnectionattemptstest.Rec
 	client := redis.NewClient(&redis.Options{Addr: mr.Addr()})
 	t.Cleanup(func() { _ = client.Close() })
 	rec := mcpconnectionattemptstest.New(t)
-	service := &Service{connections: rec.Recorder, userSessionRefreshReplayCoordination: cache.NewRedisCacheAdapter(client)}
+	service := &Service{aiCatalog: aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), connections: rec.Recorder, userSessionRefreshReplayCoordination: cache.NewRedisCacheAdapter(client)}
 	return service, rec, mr
 }
 
@@ -220,7 +221,7 @@ func TestRecordConsentPage_ProblemIsAStepOnTheAttempt(t *testing.T) {
 	t.Parallel()
 
 	rec := mcpconnectionattemptstest.New(t)
-	service := &Service{connections: rec.Recorder}
+	service := &Service{aiCatalog: aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), connections: rec.Recorder}
 	service.recordConsentPage(t.Context(), nil, mcpconnectionattempts.FromRequest(nil), directEndpoint(), openState(), nil, []remoteSessionCard{{}}, mcpconnectionattempts.CodeNoServerAccess)
 
 	rec.RequireStep(mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.CodeNoServerAccess)
@@ -272,7 +273,7 @@ func TestRecordRemoteSessionVerdict_KeepaliveBelongsToNoAttempt(t *testing.T) {
 	t.Parallel()
 
 	rec := mcpconnectionattemptstest.New(t)
-	service := &Service{connections: rec.Recorder}
+	service := &Service{aiCatalog: aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), connections: rec.Recorder}
 	service.recordRemoteSessionVerdict(t.Context(), mcpconnectionattempts.FromRequest(nil), directEndpoint(), openState(), remotesessions.Client{}, validationTarget{}, uuid.New(), remotesessions.ValidationOutcomeRejectedByMember, probeFailure{}, remotesessionmetrics.ValidationTriggerKeepalive)
 	rec.RequireNothing()
 }
@@ -294,13 +295,13 @@ func TestTokenClientRefusal(t *testing.T) {
 		"client_method_unreadable":            mcpconnectionattempts.CodeInternalError,
 	} {
 		rec := mcpconnectionattemptstest.New(t)
-		service := &Service{connections: rec.Recorder}
+		service := &Service{aiCatalog: aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), connections: rec.Recorder}
 		service.recordTokenClientRefusal(tokenRequest(t), directEndpoint(), oauthwire.GrantTypeAuthorizationCode, "client", reason)
 		require.Equal(t, reason, rec.RequireEnded(mcpconnectionattempts.StepInboundToken, what).SubReason)
 	}
 
 	rec := mcpconnectionattemptstest.New(t)
-	service := &Service{connections: rec.Recorder}
+	service := &Service{aiCatalog: aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), connections: rec.Recorder}
 	code := oauthwire.GrantTypeAuthorizationCode
 	for _, reason := range []string{"missing_client_id", "unknown_client_id", clientIDNamesEndpointReason} {
 		service.recordTokenClientRefusal(tokenRequest(t), directEndpoint(), code, "client", reason)
@@ -349,7 +350,7 @@ func TestTokenClientRows_UncheckedClientNamesNoFamily(t *testing.T) {
 			rec := mcpconnectionattemptstest.New(t)
 			req := tokenRequest(t)
 			req.Header.Set("User-Agent", "Bun/1.4.4")
-			tc.record(&Service{connections: rec.Recorder}, req)
+			tc.record(&Service{aiCatalog: aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), connections: rec.Recorder}, req)
 			row := rec.RequireEnded(mcpconnectionattempts.StepInboundToken, tc.what)
 			require.Equal(t, "claude.ai", row.AppKey)
 			require.Equal(t, tc.family, row.ClientFamily)
@@ -369,7 +370,7 @@ func TestRecordListingFailures(t *testing.T) {
 	}
 
 	rec := mcpconnectionattemptstest.New(t)
-	service := &Service{connections: rec.Recorder}
+	service := &Service{aiCatalog: aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), connections: rec.Recorder}
 	service.recordListingFailures(t.Context(), gate, unavailable)
 	require.Len(t, rec.Rows(), 2, "waiting on sign-in is not a failure")
 	require.Equal(t, broken.String(), rec.RequireEnded(mcpconnectionattempts.StepDiscoveryMember, mcpconnectionattempts.CodeMemberToolsMissing).MemberID)
@@ -378,7 +379,7 @@ func TestRecordListingFailures(t *testing.T) {
 	orgGate := *gate
 	orgGate.projectID = uuid.Nil
 	orgRec := mcpconnectionattemptstest.New(t)
-	orgService := &Service{connections: orgRec.Recorder}
+	orgService := &Service{aiCatalog: aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), connections: orgRec.Recorder}
 	orgService.recordListingFailures(t.Context(), &orgGate, unavailable[1:2])
 	require.Equal(t, uuid.Nil, orgRec.RequireEnded(mcpconnectionattempts.StepDiscoveryMember, mcpconnectionattempts.CodeMemberToolsMissing).ProjectID)
 }
@@ -477,7 +478,7 @@ func TestRecordConsentPage_PendingReviewDoesNotComplete(t *testing.T) {
 	t.Parallel()
 
 	rec := mcpconnectionattemptstest.New(t)
-	service := &Service{connections: rec.Recorder}
+	service := &Service{aiCatalog: aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), connections: rec.Recorder}
 	state := openState()
 	state.FirstParty = true
 	state.CodeReconnect = &CodeReconnectBinding{CatalogID: uuid.New(), ReviewReady: true}
@@ -522,9 +523,9 @@ func TestEndAttemptOnce_StalledRedisDoesNotBlockTheRequest(t *testing.T) {
 
 	stalled := &addOnlyCache{release: make(chan struct{})}
 	rec := mcpconnectionattemptstest.New(t)
-	service := &Service{connections: rec.Recorder, userSessionRefreshReplayCoordination: stalled, attemptEndings: newAttemptEndings()}
+	service := &Service{aiCatalog: aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), connections: rec.Recorder, userSessionRefreshReplayCoordination: stalled, attemptEndings: newAttemptEndings()}
 	state := openState()
-	attempt := state.connectionAttempt(directEndpoint())
+	attempt := state.connectionAttempt(aivendors.NewSnapshot(aivendors.Products()), directEndpoint())
 	logger := testenv.NewLogger(t)
 
 	returned := make(chan struct{})
@@ -551,11 +552,11 @@ func TestEndAttemptOnce_FullQueueLeavesTheAttemptOpen(t *testing.T) {
 	stalled := &addOnlyCache{release: make(chan struct{})}
 	rec := mcpconnectionattemptstest.New(t)
 	endings := newAttemptEndings()
-	service := &Service{connections: rec.Recorder, userSessionRefreshReplayCoordination: stalled, attemptEndings: endings}
+	service := &Service{aiCatalog: aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), connections: rec.Recorder, userSessionRefreshReplayCoordination: stalled, attemptEndings: endings}
 	logger := testenv.NewLogger(t)
 	for range maxPendingAttemptEndings + 5 {
 		state := openState()
-		service.endAttemptOnce(t.Context(), logger, state.connectionAttempt(directEndpoint()), mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.ResultComplete)
+		service.endAttemptOnce(t.Context(), logger, state.connectionAttempt(aivendors.NewSnapshot(aivendors.Products()), directEndpoint()), mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.ResultComplete)
 	}
 	close(stalled.release)
 	require.NoError(t, endings.drain(t.Context()))
@@ -567,7 +568,7 @@ func TestRecordConsentPage_CanceledReviewNeverCompletes(t *testing.T) {
 	t.Parallel()
 
 	rec := mcpconnectionattemptstest.New(t)
-	service := &Service{connections: rec.Recorder, userSessionRefreshReplayCoordination: &addOnlyCache{}, attemptEndings: newAttemptEndings()}
+	service := &Service{aiCatalog: aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), connections: rec.Recorder, userSessionRefreshReplayCoordination: &addOnlyCache{}, attemptEndings: newAttemptEndings()}
 	state := openState()
 	state.FirstParty = true
 	state.CodeReconnect = &CodeReconnectBinding{CatalogID: uuid.New(), ReviewReady: true, CatalogComplete: true, CatalogCanceled: true}
@@ -601,7 +602,7 @@ func TestRecordRemoteLoginRefusal_ExportOmitsProviderHost(t *testing.T) {
 			sink := &verdictExportSink{mu: sync.Mutex{}, records: nil}
 			logsOn := func(context.Context, string) (bool, error) { return true, nil }
 			recorder := mcpconnectionattempts.NewRecorder(testenv.NewLogger(t), testenv.NewMeterProvider(t), storingConn{}, logsOn, mcpconnectionattempts.WithExport(sink))
-			service := &Service{connections: recorder, userSessionRefreshReplayCoordination: &addOnlyCache{}, attemptEndings: newAttemptEndings(), logger: testenv.NewLogger(t)}
+			service := &Service{aiCatalog: aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), connections: recorder, userSessionRefreshReplayCoordination: &addOnlyCache{}, attemptEndings: newAttemptEndings(), logger: testenv.NewLogger(t)}
 			remote := remotesessions.RemoteLoginState{
 				Attempt:      mcpconnectionattempts.Begin(mcpconnectionattempts.ServerScope("org-test", uuid.New(), uuid.New(), mcpconnectionattempts.AppDCR)),
 				ProviderHost: "login.example.com:8443",
@@ -628,7 +629,7 @@ func TestRecordConsentPage_ExpiredCatalogReloadsExportOnce(t *testing.T) {
 	sink := &verdictExportSink{mu: sync.Mutex{}, records: nil}
 	logsOn := func(context.Context, string) (bool, error) { return true, nil }
 	recorder := mcpconnectionattempts.NewRecorder(testenv.NewLogger(t), testenv.NewMeterProvider(t), storingConn{}, logsOn, mcpconnectionattempts.WithExport(sink))
-	service := &Service{connections: recorder, userSessionRefreshReplayCoordination: &addOnlyCache{}}
+	service := &Service{aiCatalog: aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), connections: recorder, userSessionRefreshReplayCoordination: &addOnlyCache{}}
 	endpoint, state := directEndpoint(), openState()
 
 	for range 4 {
@@ -648,7 +649,7 @@ func TestRecordConsentPage_ExpiredCatalogRejectedRowIsOfferedAgain(t *testing.T)
 
 	stopped := mcpconnectionattempts.NewRecorder(testenv.NewLogger(t), testenv.NewMeterProvider(t), storingConn{}, func(context.Context, string) (bool, error) { return true, nil })
 	require.NoError(t, stopped.Shutdown(t.Context()))
-	service := &Service{connections: stopped, userSessionRefreshReplayCoordination: &addOnlyCache{}}
+	service := &Service{aiCatalog: aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), connections: stopped, userSessionRefreshReplayCoordination: &addOnlyCache{}}
 	endpoint, state := directEndpoint(), openState()
 	service.recordConsentPage(t.Context(), testenv.NewLogger(t), mcpconnectionattempts.FromRequest(nil), endpoint, state, nil, nil, mcpconnectionattempts.CodeConnectionCatalogExpired)
 
@@ -663,7 +664,7 @@ func TestRecordConsentPage_OtherProblemsRecordEachRender(t *testing.T) {
 	t.Parallel()
 
 	rec := mcpconnectionattemptstest.New(t)
-	service := &Service{connections: rec.Recorder, userSessionRefreshReplayCoordination: &addOnlyCache{}}
+	service := &Service{aiCatalog: aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), connections: rec.Recorder, userSessionRefreshReplayCoordination: &addOnlyCache{}}
 	endpoint, state := directEndpoint(), openState()
 
 	service.recordConsentPage(t.Context(), testenv.NewLogger(t), mcpconnectionattempts.FromRequest(nil), endpoint, state, nil, nil, mcpconnectionattempts.CodeCatalogTooLarge)
@@ -680,7 +681,7 @@ func TestRecordIDPAuthorityRefusal(t *testing.T) {
 	t.Parallel()
 	for _, unavailable := range []bool{true, false} {
 		rec := mcpconnectionattemptstest.New(t)
-		service := &Service{connections: rec.Recorder, userSessionRefreshReplayCoordination: &addOnlyCache{}, attemptEndings: newAttemptEndings()}
+		service := &Service{aiCatalog: aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), connections: rec.Recorder, userSessionRefreshReplayCoordination: &addOnlyCache{}, attemptEndings: newAttemptEndings()}
 		endpoint, state := directEndpoint(), openState()
 		err := errors.New("authority changed")
 		if unavailable {
@@ -702,7 +703,7 @@ func TestRecordIDPAuthorityRefusal(t *testing.T) {
 func TestRecordRemoteSessionVerdict_SetupFailure(t *testing.T) {
 	t.Parallel()
 	rec := mcpconnectionattemptstest.New(t)
-	service := &Service{connections: rec.Recorder}
+	service := &Service{aiCatalog: aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), connections: rec.Recorder}
 	member := uuid.New()
 	service.recordRemoteSessionVerdict(t.Context(), mcpconnectionattempts.FromRequest(nil), gatewayEndpoint(), openState(), remotesessions.Client{}, validationTarget{setupFailed: true, memberID: member}, uuid.New(), remotesessions.ValidationOutcomeUnknown, probeFailure{}, remotesessionmetrics.ValidationTriggerVerify)
 	require.Equal(t, member.String(), rec.RequireStep(mcpconnectionattempts.StepProviderSignIn, mcpconnectionattempts.CodeMemberToolsMissing).MemberID)
@@ -735,7 +736,7 @@ func TestForgetMemberStatuses_DroppedRowIsRecordedAgain(t *testing.T) {
 
 	service, _, _ := memberStatusService(t)
 	endpoint, state := gatewayEndpoint(), openState()
-	attempt := state.connectionAttempt(endpoint)
+	attempt := state.connectionAttempt(aivendors.NewSnapshot(aivendors.Products()), endpoint)
 	kept := memberStatus{id: uuid.NewString(), status: "allowed|connected", what: mcpconnectionattempts.ResultAllowed, opts: nil}
 	dropped := memberStatus{id: uuid.NewString(), status: "needs_sign_in|needs_sign_in", what: mcpconnectionattempts.CodeNeedsSignIn, opts: nil}
 	logger := testenv.NewLogger(t)
@@ -824,7 +825,7 @@ func exportVerdict(t *testing.T, tunneled bool, verdict remotesessions.Validatio
 	sink := &verdictExportSink{mu: sync.Mutex{}, records: nil}
 	logsOn := func(context.Context, string) (bool, error) { return true, nil }
 	recorder := mcpconnectionattempts.NewRecorder(testenv.NewLogger(t), testenv.NewMeterProvider(t), storingConn{}, logsOn, mcpconnectionattempts.WithExport(sink))
-	service := &Service{connections: recorder}
+	service := &Service{aiCatalog: aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), connections: recorder}
 	client := remotesessions.Client{IssuerURL: "https://login.example.com"}
 	target := validationTarget{memberID: uuid.New(), tunnelID: uuid.NullUUID{UUID: uuid.New(), Valid: tunneled}}
 

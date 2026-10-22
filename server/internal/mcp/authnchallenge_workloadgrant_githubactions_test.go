@@ -17,6 +17,7 @@ import (
 	agentgen "github.com/speakeasy-api/gram/server/gen/agent"
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/agent"
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
 	"github.com/speakeasy-api/gram/server/internal/auth/deviceagenttoken"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -182,7 +183,7 @@ func TestGitHubActionsRule_OneAgentForPluginsMCPAndHooks(t *testing.T) {
 	// internal/hooks (TestClaude_GitHubActionsJob*), whose service this
 	// package's fixtures cannot build; here the exchanged token's hooks reach
 	// is checked against the engine that handler uses.
-	plugins := agent.NewService(f.ti.logger, f.ti.tracerProvider, f.ti.conn, f.ti.sessionManager, f.ti.authzEngine, f.ti.audit,
+	plugins := agent.NewService(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), f.ti.logger, f.ti.tracerProvider, f.ti.conn, f.ti.sessionManager, f.ti.authzEngine, f.ti.audit,
 		f.ti.productFeatures, f.ti.serverURL.String(), orghost.New(orghost.Config{ServerURL: f.ti.serverURL, SiteURL: nil}),
 		assetstest.NewTestBlobStore(t), nil, nil, tokens)
 	polling, err := plugins.JWTAuth(context.WithValue(t.Context(), goa.MethodKey, "getPlugins"), accessToken, &security.JWTScheme{Name: constants.DeviceAgentTokenSecurityScheme, Scopes: []string{}, RequiredScopes: []string{}})

@@ -6,6 +6,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/stretchr/testify/require"
 
@@ -14,7 +15,7 @@ import (
 
 func TestCustomDomainStatusContract(t *testing.T) {
 	t.Parallel()
-	reg := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "test", Version: "1"}, nil))
+	reg := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), mcp.NewServer(&mcp.Implementation{Name: "test", Version: "1"}, nil))
 	registerCustomDomainStatusTool(reg, nil, nil, "")
 	descriptors := reg.Descriptors()
 	require.Len(t, descriptors, 1)
@@ -29,7 +30,7 @@ func TestCustomDomainStatusAuthorizationAndUnavailable(t *testing.T) {
 	t.Parallel()
 	server := newTestMCPServer()
 	bindExternalTestPrincipal(server)
-	reg := newRegistrar(server)
+	reg := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), server)
 	reg.withExternalAuthorizer(allowExternalCallAuthorizer{})
 	registerCustomDomainStatusTool(reg, nil, nil, "")
 	clientTransport, serverTransport := mcp.NewInMemoryTransports()

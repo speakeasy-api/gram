@@ -7,6 +7,8 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
+
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 )
 
 func newTestMCPServer() *mcp.Server {
@@ -80,7 +82,7 @@ func TestSetupResourceReadWarnsThenWithholds(t *testing.T) {
 
 	resource := testSetupResource()
 	now := resource.RevalidateBy.Add(-time.Hour)
-	reg := newRegistrar(newTestMCPServer())
+	reg := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), newTestMCPServer())
 	registerSetupResources(reg, []SetupResource{resource}, func() time.Time { return now })
 
 	descriptor, ok := reg.ResourceFor(AudienceExternal, resource.URI)

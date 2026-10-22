@@ -12,7 +12,7 @@
 // handlers all share one definition of the policy.
 //
 // The policy has two halves, and this package owns only the first: an
-// in-memory decision over the compile-time preset catalog, plus the mode
+// in-memory decision over the captured database catalog, plus the mode
 // resolution rules. The second half — an issuer's own custom URL rows — is a
 // database lookup the caller performs, and only when Evaluate asks for it.
 //

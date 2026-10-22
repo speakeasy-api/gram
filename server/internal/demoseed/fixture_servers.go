@@ -217,6 +217,6 @@ func wireLocalUpstreams(ctx context.Context, logger *slog.Logger, tx pgx.Tx, opt
 		logger.InfoContext(ctx, "GRAM_SERVER_URL is not set; Linear and Notion keep the shared seed's metadata document clients")
 		return nil
 	}
-	s := &seeder{spec: LocalSpec(), q: repo.New(tx), logger: logger, enc: nil, assistantIssuer: "", serverURL: opts.ServerURL, now: time.Now(), signalSequences: nil}
+	s := &seeder{spec: LocalSpec(), catalog: nil, q: repo.New(tx), logger: logger, enc: nil, assistantIssuer: "", serverURL: opts.ServerURL, now: time.Now(), signalSequences: nil}
 	return wireLocalVendorApps(ctx, logger, s, opts)
 }

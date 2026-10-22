@@ -15,6 +15,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/metric"
 
+	"github.com/speakeasy-api/gram/server/internal/agent/aitargets"
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -87,6 +89,9 @@ type Builder struct {
 
 	// clock is the wall clock, which decides whether raw events are still whole.
 	clock func() time.Time
+
+	// catalog loads the AI client catalog snapshot that names app labels.
+	catalog func(context.Context) (*aivendors.Snapshot, error)
 }
 
 func NewBuilder(logger *slog.Logger, meterProvider metric.MeterProvider, db *pgxpool.Pool, ch driver.Conn) *Builder {
@@ -104,7 +109,9 @@ func NewBuilder(logger *slog.Logger, meterProvider metric.MeterProvider, db *pgx
 	if err != nil {
 		logger.ErrorContext(context.Background(), "create metric", attr.SlogMetricName(meterUnknownLabels), attr.SlogError(err))
 	}
-	return &Builder{logger: logger, db: db, ch: ch, skippedDays: skipped, unknownLabels: unknown, backfillStart: BackfillStart, clock: time.Now}
+	return &Builder{logger: logger, db: db, ch: ch, skippedDays: skipped, unknownLabels: unknown, backfillStart: BackfillStart, clock: time.Now, catalog: func(ctx context.Context) (*aivendors.Snapshot, error) {
+		return aivendors.Load(ctx, db, logger, aitargets.ValidateCatalog)
+	}}
 }
 
 const (
@@ -263,13 +270,17 @@ func (b *Builder) checkRawWhole(day time.Time) error {
 
 // outcomes works out the day's rows: how each attempt ended and what fixed it.
 func (b *Builder) outcomes(ctx context.Context, day, now time.Time) ([]DayRow, error) {
-	counts := newTally()
+	catalog, err := b.catalog(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("load AI catalog: %w", err)
+	}
+	counts := newTally(catalog)
 	var failures []mcpconnectionattempts.AttemptSummary
 	dayFilter := mcpconnectionattempts.AttemptFilter{
 		StartedFrom: day, StartedBefore: day.Add(day24h), OrganizationID: "", ExcludeOrganizationIDs: mcpconnectionattempts.ExcludedOrganizations(),
 		ProjectID: uuid.Nil, ServerID: "", PeopleFailingFrom: time.Time{}, PeopleFailingBefore: time.Time{}, FixCandidatesOnly: false,
 	}
-	err := mcpconnectionattempts.ReadAttempts(readContext(ctx), b.ch, dayFilter, func(a mcpconnectionattempts.AttemptSummary) {
+	err = mcpconnectionattempts.ReadAttempts(readContext(ctx), b.ch, dayFilter, func(a mcpconnectionattempts.AttemptSummary) {
 		e := a.End(now)
 		// Until AIM-1027, a refused used token stays unpaired, as when it named nobody.
 		if e.NeedsFix() && a.SubjectURN != "" && e.Reason != mcpconnectionattempts.CodeRefreshTokenUnknownOrAlreadyUsed.String() {

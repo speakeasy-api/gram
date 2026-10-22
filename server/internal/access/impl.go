@@ -21,6 +21,7 @@ import (
 	srv "github.com/speakeasy-api/gram/server/gen/http/access/server"
 	"github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
@@ -50,6 +51,8 @@ type CanonicalFoldGate interface {
 }
 
 type Service struct {
+	aiCatalog *aivendors.Store
+
 	tracer   trace.Tracer
 	logger   *slog.Logger
 	db       *pgxpool.Pool
@@ -74,7 +77,7 @@ func (s *Service) canonicalFoldOrg(ctx context.Context, orgID string) string {
 var _ gen.Service = (*Service)(nil)
 var _ gen.Auther = (*Service)(nil)
 
-func NewService(
+func NewService(aiCatalog *aivendors.Store,
 	logger *slog.Logger,
 	tracerProvider trace.TracerProvider,
 	db *pgxpool.Pool,
@@ -90,17 +93,18 @@ func NewService(
 	logger = logger.With(attr.SlogComponent("access"))
 
 	return &Service{
-		tracer:   tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/access"),
-		logger:   logger,
-		db:       db,
-		chConn:   chConn,
-		auth:     auth.New(logger, db, sessions, authz),
-		authz:    authz,
-		roleMgr:  roleMgr,
-		audit:    auditLogger,
-		email:    emailService,
-		orgHosts: orgHosts,
-		foldGate: foldGate,
+		aiCatalog: aiCatalog,
+		tracer:    tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/access"),
+		logger:    logger,
+		db:        db,
+		chConn:    chConn,
+		auth:      auth.New(logger, db, sessions, authz),
+		authz:     authz,
+		roleMgr:   roleMgr,
+		audit:     auditLogger,
+		email:     emailService,
+		orgHosts:  orgHosts,
+		foldGate:  foldGate,
 	}
 }
 

@@ -15,6 +15,7 @@ import (
 
 	genskills "github.com/speakeasy-api/gram/server/gen/skills"
 	"github.com/speakeasy-api/gram/server/gen/types"
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -869,7 +870,7 @@ func TestSkillsToolsAreDeclaredWithAndWithoutTheirDependencies(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 
-			_, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, test.build(), nil, nil, nil, nil, CatalogDescriptor{})
+			_, registrar := newServer(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), nil, nil, nil, "", nil, nil, nil, nil, test.build(), nil, nil, nil, nil, CatalogDescriptor{})
 
 			registered := make(map[string]Descriptor, len(wanted))
 			for _, descriptor := range registrar.Descriptors() {
@@ -1300,7 +1301,7 @@ func TestUndistributeSkillToolRefusesWithoutConfirmation(t *testing.T) {
 	t.Parallel()
 
 	skills := &recordingSkillsManagement{skill: testSkill()}
-	_, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, testSkillsService(t, skills), nil, nil, nil, nil, CatalogDescriptor{})
+	_, registrar := newServer(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), nil, nil, nil, "", nil, nil, nil, nil, testSkillsService(t, skills), nil, nil, nil, nil, CatalogDescriptor{})
 	var descriptor Descriptor
 	for _, candidate := range registrar.Descriptors() {
 		if candidate.Name == "undistribute_skill" {
@@ -1327,7 +1328,7 @@ func TestUndistributeSkillToolRefusesWithoutConfirmation(t *testing.T) {
 func TestListSkillDistributionsToolIsAReadForMembers(t *testing.T) {
 	t.Parallel()
 
-	_, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, testSkillsService(t, &recordingSkillsManagement{skill: testSkill()}), nil, nil, nil, nil, CatalogDescriptor{})
+	_, registrar := newServer(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), nil, nil, nil, "", nil, nil, nil, nil, testSkillsService(t, &recordingSkillsManagement{skill: testSkill()}), nil, nil, nil, nil, CatalogDescriptor{})
 	for _, descriptor := range registrar.Descriptors() {
 		if descriptor.Name != "list_skill_distributions" {
 			continue

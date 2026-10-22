@@ -6,6 +6,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -54,7 +55,7 @@ func TestCodeVerificationLimiterFailureIsNotAThrottle(t *testing.T) {
 	client, err := TestInfra.NewRedisClient(t, 0)
 	require.NoError(t, err)
 	limiter := ratelimit.New(ratelimit.NewRedisStore(client), "code-verify-test", ratelimit.PerMinute(1))
-	service := &Service{db: pool, logger: testenv.NewLogger(t), validationLimiter: limiter}
+	service := &Service{aiCatalog: aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), db: pool, logger: testenv.NewLogger(t), validationLimiter: limiter}
 	backend := &metaCodeBackend{service: service}
 	gate := &metaGateContext{userID: "code-verify-test"}
 	member := metaMember{slug: "limited", serverID: uuid.New()}

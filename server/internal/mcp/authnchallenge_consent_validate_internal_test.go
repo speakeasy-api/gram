@@ -13,6 +13,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -131,7 +132,7 @@ func TestUnservedCredentialReason(t *testing.T) {
 func TestProbeRemoteSession_ClientOnNoProjectCannotBeChecked(t *testing.T) {
 	t.Parallel()
 
-	service := &Service{}
+	service := &Service{aiCatalog: aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products()))}
 	subject := urn.NewUserSubject("user_1")
 	endpoint := &ResolvedMcpEndpoint{RouteBase: mcproute.OrganizationGateway, ProjectID: uuid.New()}
 	client := remotesessions.Client{ProjectID: uuid.NullUUID{UUID: uuid.New(), Valid: true}}

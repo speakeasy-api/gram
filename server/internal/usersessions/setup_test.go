@@ -19,6 +19,7 @@ import (
 
 	issuersgen "github.com/speakeasy-api/gram/server/gen/user_session_issuers"
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
@@ -137,7 +138,7 @@ func newTestServiceWithHosts(t *testing.T, hosts authserver.Hosts, revoker users
 	codeModeEnabled := &atomic.Bool{}
 	codeModeSelection := func(context.Context, string) bool { return codeModeEnabled.Load() }
 	svc := usersessions.NewService(
-		logger,
+		aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), logger,
 		tracerProvider,
 		testenv.NewMeterProvider(t),
 		conn,

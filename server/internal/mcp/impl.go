@@ -27,6 +27,7 @@ import (
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/hostedmcp/hostingstate"
 	"github.com/speakeasy-api/gram/server/internal/hostedmcp/legacyalias"
@@ -122,6 +123,8 @@ type IdentityResolver interface {
 }
 
 type Service struct {
+	aiCatalog *aivendors.Store
+
 	assistantWorkloadTokens AssistantWorkloadTokenIssuer
 	codeExecutor            codemode.Executor
 	federatedLoginConsumer  FederatedLoginConsumer
@@ -527,7 +530,7 @@ func optionalUUIDString(id *uuid.UUID) *string {
 	return new(id.String())
 }
 
-func NewService(
+func NewService(aiCatalog *aivendors.Store,
 	logger *slog.Logger,
 	tracerProvider trace.TracerProvider,
 	meterProvider metric.MeterProvider,
@@ -615,6 +618,7 @@ func NewService(
 		shutdownDrain = shutdowndrain.New()
 	}
 	service := &Service{
+		aiCatalog:                 aiCatalog,
 		assistantWorkloadTokens:   nil,
 		replayLiveness:            nil,
 		federatedLoginConsumer:    nil,
@@ -1580,7 +1584,7 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 	hostedCoverageRecorded := false
 	if isHostedToolsCall {
 		if err := s.enforceHostedToolsCall(ctx, toolset.OrganizationID, cfg.mcpServerID); err != nil {
-			s.recordRequestOutcome(ctx, hostedConnectionScope(ctx, toolset, cfg), killswitchHappened(err), r, callerSubject(ctx), s.reportedClient(ctx, r, toolset.ProjectID, toolset.Slug))
+			s.recordRequestOutcome(ctx, hostedConnectionScope(ctx, s.aiCatalog.Snapshot(), toolset, cfg), killswitchHappened(err), r, callerSubject(ctx), s.reportedClient(ctx, r, toolset.ProjectID, toolset.Slug))
 			return writeMCPError(ctx, s.logger, w, req.ID, protocolVersion.InEffect, err)
 		}
 		hostedCoverageRecorded = true
@@ -1707,7 +1711,7 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 	satisfied, failureCode, err := s.checkToolsetSecurityOutcome(ctx, toolset, cfg.isPublic, mcpInputs)
 	// A notification has no response, so its refusal tells no one anything.
 	if (err != nil || !satisfied) && req.ID.IsSet() {
-		s.recordRequestOutcome(ctx, hostedConnectionScope(ctx, toolset, cfg), failureCode, r, callerSubject(ctx), s.reportedClient(ctx, r, toolset.ProjectID, toolset.Slug))
+		s.recordRequestOutcome(ctx, hostedConnectionScope(ctx, s.aiCatalog.Snapshot(), toolset, cfg), failureCode, r, callerSubject(ctx), s.reportedClient(ctx, r, toolset.ProjectID, toolset.Slug))
 	}
 	if err != nil {
 		return err
@@ -1747,11 +1751,11 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 }
 
 // hostedConnectionScope files a hosted request under its fronting server, else its toolset.
-func hostedConnectionScope(ctx context.Context, toolset *toolsets_repo.Toolset, cfg *hostedServing) mcpconnectionattempts.Scope {
+func hostedConnectionScope(ctx context.Context, catalog *aivendors.Snapshot, toolset *toolsets_repo.Toolset, cfg *hostedServing) mcpconnectionattempts.Scope {
 	if cfg.mcpServerID != nil {
-		return mcpconnectionattempts.ServerScope(toolset.OrganizationID, toolset.ProjectID, *cfg.mcpServerID, requestApp(ctx))
+		return mcpconnectionattempts.ServerScope(toolset.OrganizationID, toolset.ProjectID, *cfg.mcpServerID, requestApp(ctx, catalog))
 	}
-	return mcpconnectionattempts.ToolsetScope(toolset.OrganizationID, toolset.ProjectID, toolset.ID, requestApp(ctx))
+	return mcpconnectionattempts.ToolsetScope(toolset.OrganizationID, toolset.ProjectID, toolset.ID, requestApp(ctx, catalog))
 }
 
 // admitHostedRequest applies today's access decision for a hosted server and
@@ -1819,7 +1823,7 @@ func (s *Service) authorizeHostedRequest(ctx context.Context, r *http.Request, t
 			if err := s.authz.Require(ctx, connect); err != nil {
 				denied := mcpaccess.ServerPermissionDenied(err, s.requestAccessURL(ctx, cfg.rbacResourceID.String(), toolset.Name))
 				if mcpaccess.IsServerPermissionDenied(denied) {
-					s.recordRequestOutcome(ctx, hostedConnectionScope(ctx, toolset, cfg), mcpconnectionattempts.CodeNoServerAccess, r, callerSubject(ctx), s.reportedClient(ctx, r, toolset.ProjectID, toolset.Slug))
+					s.recordRequestOutcome(ctx, hostedConnectionScope(ctx, s.aiCatalog.Snapshot(), toolset, cfg), mcpconnectionattempts.CodeNoServerAccess, r, callerSubject(ctx), s.reportedClient(ctx, r, toolset.ProjectID, toolset.Slug))
 				}
 				return ctx, false, fmt.Errorf("authorize MCP server access: %w", denied)
 			}

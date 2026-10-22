@@ -10,6 +10,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 )
 
@@ -20,7 +21,7 @@ import (
 func TestEveryExternalToolHasACardOrAWrittenReason(t *testing.T) {
 	t.Parallel()
 
-	server, _ := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
+	server, _ := newServer(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
 	external := map[string]bool{}
 	for _, tool := range listAdvertisedTools(t, server) {
 		external[tool.Name] = true
@@ -291,7 +292,7 @@ func TestAddToolAttachesCardWithoutChangingTheResult(t *testing.T) {
 
 	server := newTestMCPServer()
 	bindExternalTestPrincipal(server)
-	registrar := newRegistrar(server)
+	registrar := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), server)
 	registrar.withExternalAuthorizer(allowExternalCallAuthorizer{})
 	type output struct {
 		Plugins []map[string]string `json:"plugins"`
@@ -332,7 +333,7 @@ func TestDeniedCallDrawsARefusalCard(t *testing.T) {
 
 	server := newTestMCPServer()
 	bindExternalTestPrincipal(server)
-	registrar := newRegistrar(server)
+	registrar := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), server)
 	registrar.withExternalAuthorizer(denyExternalCallAuthorizer{err: &ExternalAuthorizationError{
 		RequiredScope:    "org:admin",
 		RequestAccessURL: "https://app.example.test/example/request-access",

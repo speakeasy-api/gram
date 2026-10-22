@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -28,7 +29,9 @@ func TestRetireDeniedConsentCredentials(t *testing.T) {
 	subject := urn.NewUserSubject("user-1")
 	signInID := uuid.New()
 	r := &retireRecorder{}
-	s := &Service{identityChainer: r, logger: testenv.NewLogger(t)}
+	s := &Service{
+		aiCatalog:       aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())),
+		identityChainer: r, logger: testenv.NewLogger(t)}
 
 	s.retireDeniedConsentCredentials(t.Context(), s.logger, endpoint, AuthnChallengeState{Subject: &subject, SignInID: nil})
 	require.Empty(t, r.retired, "a flow without a recorded sign-in minted nothing")

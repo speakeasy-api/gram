@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/assertion/idjag"
@@ -53,7 +54,7 @@ func TestIDJAGExchangeLogsEachOutcomeOnceWithIssuer(t *testing.T) {
 			t.Parallel()
 			var logs bytes.Buffer
 			base := slog.New(slog.NewJSONHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug, AddSource: false, ReplaceAttr: nil}))
-			svc := &Service{}
+			svc := &Service{aiCatalog: aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products()))}
 			exchange, logger := svc.startIDJAGExchange(endpoint, base)
 			tc.finish(exchange, logger)
 			exchange.record(t.Context())
@@ -86,7 +87,7 @@ func TestIDJAGExchangeRecordsInfrastructureRefusalAsError(t *testing.T) {
 			t.Parallel()
 			var logs bytes.Buffer
 			base := slog.New(slog.NewJSONHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug, AddSource: false, ReplaceAttr: nil}))
-			exchange, logger := (&Service{}).startIDJAGExchange(&ResolvedMcpEndpoint{UserSessionIssuerID: uuid.New()}, base)
+			exchange, logger := (&Service{aiCatalog: aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products()))}).startIDJAGExchange(&ResolvedMcpEndpoint{UserSessionIssuerID: uuid.New()}, base)
 			err := &idjag.Error{Reason: tc.reason, Err: errors.New("validator refused")}
 			logger.InfoContext(t.Context(), "oauth ID-JAG token request rejected", attrsToArgs(exchange.rejectAssertion(err))...)
 			exchange.record(t.Context())

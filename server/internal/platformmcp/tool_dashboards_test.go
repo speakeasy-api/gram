@@ -13,6 +13,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/dashboards"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/widgets"
@@ -71,7 +72,7 @@ func TestDashboardToolsWithoutAServiceAnswerUnavailable(t *testing.T) {
 	t.Parallel()
 
 	project := uuid.NewString()
-	reg := newRegistrar(newTestMCPServer())
+	reg := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), newTestMCPServer())
 	reg.withProjects(slugProjects{"payments": uuid.MustParse(project)})
 	registerDashboardTools(reg, nil)
 	ctx := contextWithPrincipal(t.Context(), testPrincipal())

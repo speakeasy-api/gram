@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcpidentity"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -12,7 +13,9 @@ import (
 
 func TestStampAuthenticatedAPIKeyAgentAttribution(t *testing.T) {
 	t.Parallel()
-	s := &Service{identityValidator: mcpidentity.NewValidatorBoundary()}
+	s := &Service{
+		aiCatalog:         aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())),
+		identityValidator: mcpidentity.NewValidatorBoundary()}
 	id := uuid.New()
 	actor := urn.NewPrincipal(urn.PrincipalTypeAgent, id.String())
 	credential := contextvalues.PrincipalCredential{AuthorizerUserID: "user_authorizer", DelegatedGrants: []byte(`[]`), DelegatedGrantsVersion: 1}
@@ -39,7 +42,9 @@ func TestStampAuthenticatedAPIKeyAgentAttribution(t *testing.T) {
 
 func TestStampAuthenticatedAPIKeyRejectsInvalidPrincipal(t *testing.T) {
 	t.Parallel()
-	s := &Service{identityValidator: mcpidentity.NewValidatorBoundary()}
+	s := &Service{
+		aiCatalog:         aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())),
+		identityValidator: mcpidentity.NewValidatorBoundary()}
 	for _, actor := range []urn.Principal{
 		urn.NewPrincipal(urn.PrincipalTypeAgent, "invalid"),
 		urn.NewPrincipal(urn.PrincipalTypeAgent, uuid.Nil.String()),
@@ -53,7 +58,9 @@ func TestStampAuthenticatedAPIKeyRejectsInvalidPrincipal(t *testing.T) {
 
 func TestStampAuthenticatedAPIKeyLegacyRemainsUnattributed(t *testing.T) {
 	t.Parallel()
-	s := &Service{identityValidator: mcpidentity.NewValidatorBoundary()}
+	s := &Service{
+		aiCatalog:         aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())),
+		identityValidator: mcpidentity.NewValidatorBoundary()}
 	ctx := contextvalues.WithLegacyAPIKeyAuthorization(t.Context(), &contextvalues.AuthContext{})
 	stamped, err := s.stampAuthenticatedAPIKey(ctx)
 	require.NoError(t, err)

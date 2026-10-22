@@ -254,11 +254,11 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 		var result remotesessions.RefreshResult
 		var refreshErr error
 		if projectID, ok := offered[client.ID]; ok {
-			result, refreshErr = s.remoteChallengeMgr.RefreshAuthClientRemoteSession(ctx, consentRefreshAttribution(r, endpoint, challengeState), subject, projectID, endpoint.OrganizationID, client.ID)
+			result, refreshErr = s.remoteChallengeMgr.RefreshAuthClientRemoteSession(ctx, consentRefreshAttribution(s.aiCatalog.Snapshot(), r, endpoint, challengeState), subject, projectID, endpoint.OrganizationID, client.ID)
 		} else {
 			result, refreshErr = s.remoteChallengeMgr.RefreshRemoteSession(
 				ctx,
-				consentRefreshAttribution(r, endpoint, challengeState),
+				consentRefreshAttribution(s.aiCatalog.Snapshot(), r, endpoint, challengeState),
 				subject,
 				endpoint.clientProjectID(*client),
 				endpoint.OrganizationID,
@@ -384,9 +384,9 @@ func (s *Service) buildRemoteConnectURL(
 	focusServer string,
 ) (string, bool, error) {
 	ctx := r.Context()
-	t := s.connections.Track(connectionScope(endpoint, mcpconnectionattempts.AppOf(challengeState.ClientID, mcpconnectionattempts.ClientIDAdmitted)), mcpconnectionattempts.StepProviderSignIn,
+	t := s.connections.Track(connectionScope(endpoint, mcpconnectionattempts.AppOf(s.aiCatalog.Snapshot(), challengeState.ClientID, mcpconnectionattempts.ClientIDAdmitted)), mcpconnectionattempts.StepProviderSignIn,
 		mcpconnectionattempts.FromRequest(r), mcpconnectionattempts.Provider(client.IssuerURL), mcpconnectionattempts.RemoteSessionClient(client.ID), mcpconnectionattempts.Subject(challengeState.Subject))
-	t.Attach(challengeState.connectionAttempt(endpoint))
+	t.Attach(challengeState.connectionAttempt(s.aiCatalog.Snapshot(), endpoint))
 	defer t.Finish(ctx)
 	// An exact typed offer takes precedence and keeps endpoint.UpstreamResource.
 	// Otherwise, use it only when no other bound client can claim it: under
@@ -489,7 +489,7 @@ func (s *Service) buildRemoteConnectURL(
 		Authority:           challengeState.Endpoint.Authority,
 		BrowserCookieID:     "",
 		BrowserHash:         "",
-		Attempt:             challengeState.connectionAttempt(endpoint),
+		Attempt:             challengeState.connectionAttempt(s.aiCatalog.Snapshot(), endpoint),
 		ClientRequest:       mcpconnectionattempts.FromRequest(r),
 		ClientName:          s.forwardedClientName(ctx, logger, endpoint, challengeState, client),
 	}

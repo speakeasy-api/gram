@@ -17,6 +17,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	authrepo "github.com/speakeasy-api/gram/server/internal/auth/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -62,7 +63,9 @@ func TestMCPPrincipalCredentialReadmissionErrors(t *testing.T) {
 				projectID := uuid.New()
 				serverURL, err := url.Parse("https://example.com")
 				require.NoError(t, err)
-				service := &Service{logger: logger, authz: engine, serverURL: serverURL,
+				service := &Service{
+					aiCatalog: aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())),
+					logger:    logger, authz: engine, serverURL: serverURL,
 					authRepo: authrepo.New(&admissionProjectsDB{projectID: projectID}),
 				}
 				switch caller {

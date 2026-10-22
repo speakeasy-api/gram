@@ -828,7 +828,7 @@ func (s *Service) serveAuthClient(ctx context.Context, w http.ResponseWriter, au
 		return none, s.writeRemoteSessionReconnectChallenge(ctx, w, authentication)
 	case authClientNoAccess:
 		endpoint := authentication.endpoint
-		s.recordRequestOutcome(ctx, connectionScope(endpoint, requestApp(ctx)), mcpconnectionattempts.CodeNoServerAccess, authentication.request,
+		s.recordRequestOutcome(ctx, connectionScope(endpoint, requestApp(ctx, s.aiCatalog.Snapshot())), mcpconnectionattempts.CodeNoServerAccess, authentication.request,
 			mcpconnectionattempts.Detail(res.reason), mcpconnectionattempts.Subject(&authentication.subject),
 			s.reportedClient(ctx, authentication.request, endpoint.clientInfoProjectID(), endpoint.clientInfoScope))
 		return none, s.authClientNoAccessError(ctx, endpoint.McpServerID.UUID, res)

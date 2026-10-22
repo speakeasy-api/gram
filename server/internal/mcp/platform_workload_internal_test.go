@@ -6,6 +6,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	"github.com/stretchr/testify/require"
 )
@@ -15,7 +16,7 @@ func TestPlatformWorkloadResourceExact(t *testing.T) {
 	base, err := url.Parse("https://management.example.com")
 	require.NoError(t, err)
 	slug := platformtools.AssistantsPlatformToolsetSlug
-	s := &Service{serverURL: base, platformToolsets: map[string]platformtools.Toolset{slug: platformtools.NewAssistantsToolset()}}
+	s := &Service{aiCatalog: aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), serverURL: base, platformToolsets: map[string]platformtools.Toolset{slug: platformtools.NewAssistantsToolset()}}
 	resource := platformtools.PlatformToolsetURL(base, slug)
 	got, ok := s.platformWorkloadResource(resource)
 	require.True(t, ok)

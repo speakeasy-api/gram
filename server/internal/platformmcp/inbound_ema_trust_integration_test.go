@@ -17,6 +17,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	orgremotegen "github.com/speakeasy-api/gram/server/gen/organization_remote_session_issuers"
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
@@ -98,7 +99,7 @@ func newInboundEMAServicesFixture(t *testing.T, maxConns int32) (context.Context
 	serverURL, err := url.Parse("https://app.example.test")
 	require.NoError(t, err)
 	hosts := authserver.Hosts{ServerURL: serverURL.String(), AuthenticationHostBaseURL: "", PlatformHosts: nil}
-	users := usersessions.NewService(logger, tracer, meter, conn, &sessions.Manager{}, nil, engine, audit.NewLogger(), policy, nil, enc, usersessions.NewSigner("test-jwt-secret"), serverURL.String(), hosts, ratelimit.NewRedisStore(redisClient), func(_ context.Context, _ string) bool { return false })
+	users := usersessions.NewService(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), logger, tracer, meter, conn, &sessions.Manager{}, nil, engine, audit.NewLogger(), policy, nil, enc, usersessions.NewSigner("test-jwt-secret"), serverURL.String(), hosts, ratelimit.NewRedisStore(redisClient), func(_ context.Context, _ string) bool { return false })
 	remote := remotesessions.NewService(logger, tracer, meter, conn, &sessions.Manager{}, engine, enc,
 		environments.NewEnvironmentEntries(logger, conn, enc, mcpmetadatarepo.New(conn)), policy, nil, audit.NewLogger(), serverURL,
 		remotesessions.NewIdentityCommitter(logger, conn, enc, audit.NewLogger(), serverURL, policy, nil, nil),

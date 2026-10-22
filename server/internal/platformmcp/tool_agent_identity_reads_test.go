@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/gen/types"
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -18,7 +19,7 @@ import (
 func TestAgentIdentityReadToolsContract(t *testing.T) {
 	t.Parallel()
 
-	reg := newRegistrar(newTestMCPServer())
+	reg := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), newTestMCPServer())
 	registerAgentIdentityReadTools(reg, nil)
 	for _, name := range []string{getAgentMCPAccessToolName, listAgentAuthorizationChecksToolName} {
 		descriptor := descriptorByName(t, reg, name)

@@ -136,7 +136,7 @@ func (s *Service) serveIdentityChainingCheck(w http.ResponseWriter, r *http.Requ
 	)
 
 	if result.Status == chainCheckRejected && outcome.Reason == identitychaining.ReasonIneligibleIdentity {
-		s.recordIneligibleConsent(ctx, logger, challengeState.connectionAttempt(endpoint), client.ID,
+		s.recordIneligibleConsent(ctx, logger, challengeState.connectionAttempt(s.aiCatalog.Snapshot(), endpoint), client.ID,
 			mcpconnectionattempts.FromRequest(r), mcpconnectionattempts.Subject(challengeState.Subject),
 			mcpconnectionattempts.Provider(client.IssuerURL), mcpconnectionattempts.RemoteSessionClient(client.ID))
 	}

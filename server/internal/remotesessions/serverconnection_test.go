@@ -15,6 +15,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	wire "github.com/speakeasy-api/gram/server/gen/http/remote_sessions/server"
 	gen "github.com/speakeasy-api/gram/server/gen/remote_sessions"
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -69,7 +70,7 @@ func TestServerConnectionUsesSignedInUserAndDoesNotExecuteTools(t *testing.T) {
 	}, withRemoteServer(upstream.URL))
 	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil)
 	require.NoError(t, err)
-	env.service.SetServerConnectionTester(platformmcp.NewRemoteMCPReadinessProber(testenv.NewLogger(t), env.db, env.enc, policy, env.mgr))
+	env.service.SetServerConnectionTester(platformmcp.NewRemoteMCPReadinessProber(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), testenv.NewLogger(t), env.db, env.enc, policy, env.mgr))
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	signedInUser := *authCtx
 	signedInUser.UserID = env.subject.ID
@@ -182,7 +183,7 @@ func TestServerConnectionSelectsOnlyAssociatedClient(t *testing.T) {
 			}
 			policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil)
 			require.NoError(t, err)
-			env.service.SetServerConnectionTester(platformmcp.NewRemoteMCPReadinessProber(testenv.NewLogger(t), env.db, env.enc, policy, env.mgr))
+			env.service.SetServerConnectionTester(platformmcp.NewRemoteMCPReadinessProber(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), testenv.NewLogger(t), env.db, env.enc, policy, env.mgr))
 			authCtx, _ := contextvalues.GetAuthContext(ctx)
 			signedInUser := *authCtx
 			signedInUser.UserID = env.subject.ID
@@ -251,7 +252,7 @@ func TestServerConnectionRefusesStaticAuthorizationHeader(t *testing.T) {
 	require.NoError(t, err)
 	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil)
 	require.NoError(t, err)
-	env.service.SetServerConnectionTester(platformmcp.NewRemoteMCPReadinessProber(testenv.NewLogger(t), env.db, env.enc, policy, env.mgr))
+	env.service.SetServerConnectionTester(platformmcp.NewRemoteMCPReadinessProber(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), testenv.NewLogger(t), env.db, env.enc, policy, env.mgr))
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	signedInUser := *authCtx
 	signedInUser.UserID = env.subject.ID

@@ -17,6 +17,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	genwidgets "github.com/speakeasy-api/gram/server/gen/widgets"
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
@@ -63,7 +64,7 @@ func newWidgetToolsFixture(t *testing.T) (context.Context, *widgetToolsFixture) 
 	service := NewWidgetService(slog.New(slog.NewJSONHandler(logs, nil)), management, NewPostgresReader(logger, db), engine, flags, NewPostgresOrganizationSlugResolver(db), "test-widget-tools-key")
 	require.NotNil(t, service)
 
-	reg := newRegistrar(newTestMCPServer())
+	reg := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), newTestMCPServer())
 	reg.withProjects(&RegistrationStore{db: db})
 	registerWidgetTools(reg, service)
 
@@ -177,7 +178,7 @@ func TestWidgetToolsDeclareTheirContract(t *testing.T) {
 	t.Parallel()
 
 	projectID, widgetID := uuid.NewString(), uuid.NewString()
-	reg := newRegistrar(newTestMCPServer())
+	reg := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), newTestMCPServer())
 	reg.withProjects(slugProjects{"payments": uuid.MustParse(projectID)})
 	registerWidgetTools(reg, nil)
 	for _, name := range []string{listWidgetsToolName, getWidgetToolName} {

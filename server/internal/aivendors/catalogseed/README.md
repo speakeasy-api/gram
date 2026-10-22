@@ -2,8 +2,8 @@
 
 `catalog.json` is a frozen bootstrap of 51 products and 26 CIMD documents.
 Production is the source of truth after bootstrap. New clients belong in the
-admin review queue, not this file. This seed does not change the compiled
-catalog readers; that transition belongs to AIM-449.
+admin review queue, not this file. API processes synchronously ensure reference data and load a database snapshot
+before serving. They refresh that snapshot about once a minute.
 
 The `ai-client-catalog` startup seed hashes the embedded file and its application
 revision. Workers apply each version through the existing startup workflow.
@@ -41,5 +41,4 @@ Isolated demo tests seed the global catalog before taking their safety baseline.
 Platform MCP needs no new tool for this worker-owned initialization of global
 reference data. The existing Shadow AI inventory/library and client admission
 tools retain their readers, permissions and result contracts. Catalog and
-decision integration tests verify the new persistence behavior; reader changes
-remain in AIM-449.
+decision integration tests verify persistence and refreshed reader behavior.

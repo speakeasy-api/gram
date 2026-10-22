@@ -12,6 +12,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
@@ -84,7 +85,7 @@ func newConsentSignInHarness(t *testing.T, ctx context.Context, conn *pgxpool.Po
 		WithSignInConnectLinks(conn, serverURL).
 		WithIdentityProviderAttachment(attachment)
 
-	reg := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "platform-mcp-test"}, nil))
+	reg := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), mcp.NewServer(&mcp.Implementation{Name: "platform-mcp-test"}, nil))
 	registerCatalogRegistrationTool(reg, registrations, NewOnboardingService(conn))
 	reg.withExternalAuthorizer(allowExternalCallAuthorizer{})
 	reg.server.AddReceivingMiddleware(func(next mcp.MethodHandler) mcp.MethodHandler {

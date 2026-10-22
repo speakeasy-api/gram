@@ -16,6 +16,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
@@ -444,7 +445,7 @@ func TestCatalogRegistrationToolBindsOnboardingSoTheMCPCanBeDistributed(t *testi
 		remoteURL:        "https://reviewed.example.test/mcp",
 	}}, &testRegistrationGate{enabled: true}, store)
 
-	reg := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "platform-mcp-test"}, nil))
+	reg := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), mcp.NewServer(&mcp.Implementation{Name: "platform-mcp-test"}, nil))
 	registerCatalogRegistrationTool(reg, registrations, onboarding)
 	register := descriptorByName(t, reg, "register_catalog_mcp")
 
@@ -555,7 +556,7 @@ func TestDistributeToolSharesTheNamedServerNotTheSessionSelection(t *testing.T) 
 	require.NoError(t, err)
 
 	service := NewDistributionService(conn, nil, testExistingPluginAttacher(), func(context.Context, uuid.UUID, string, string) error { return nil }, testPluginTargets(conn))
-	reg := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "platform-mcp-test"}, nil))
+	reg := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), mcp.NewServer(&mcp.Implementation{Name: "platform-mcp-test"}, nil))
 	registerDistributionTools(reg, onboarding, service, nil)
 	distribute := descriptorByName(t, reg, "distribute_mcp_to_plugin")
 	callCtx := ContextWithPrincipal(ctx, principal)
@@ -662,7 +663,7 @@ func TestDistributeToolChecksTheNamedServerWhenNoCheckIsStored(t *testing.T) {
 	registrations := NewRegistrationService(nil, gate, store).WithReadiness(readiness)
 
 	service := NewDistributionService(conn, nil, testExistingPluginAttacher(), func(context.Context, uuid.UUID, string, string) error { return nil }, testPluginTargets(conn))
-	reg := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "platform-mcp-test"}, nil))
+	reg := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), mcp.NewServer(&mcp.Implementation{Name: "platform-mcp-test"}, nil))
 	registerDistributionTools(reg, NewOnboardingService(conn), service, registrations)
 	distribute := descriptorByName(t, reg, "distribute_mcp_to_plugin")
 	callCtx := ContextWithPrincipal(ctx, principal)

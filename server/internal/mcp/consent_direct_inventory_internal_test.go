@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/authenforcement"
 	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -21,7 +22,7 @@ func TestConsentDirectCredentialDependencyFailureIsNotAChangedCredential(t *test
 	pool, err := pgxpool.New(t.Context(), "postgres://localhost/unused")
 	require.NoError(t, err)
 	pool.Close()
-	service := &Service{db: pool, logger: testenv.NewLogger(t), authEnforcement: authenforcement.NewGate(pool)}
+	service := &Service{aiCatalog: aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), db: pool, logger: testenv.NewLogger(t), authEnforcement: authenforcement.NewGate(pool)}
 	endpoint := &ResolvedMcpEndpoint{OrganizationID: "organization", ProjectID: uuid.New(), McpServerID: uuid.NullUUID{UUID: uuid.New(), Valid: true}}
 	subject := urn.NewUserSubject("human")
 

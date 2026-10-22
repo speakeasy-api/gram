@@ -93,7 +93,7 @@ func (s *Service) markReconnectReviewReady(r *http.Request, grant remotesessions
 	if err != nil {
 		return err
 	}
-	attempt := state.connectionAttempt(endpoint)
+	attempt := state.connectionAttempt(s.aiCatalog.Snapshot(), endpoint)
 	if err := endpoint.ValidateGlobalChallenge(r.Context(), s.db, state.Endpoint, state.UserSessionIssuerID); err != nil {
 		code, detail := remotesessions.AuthorityHappened(err)
 		s.connections.Step(r.Context(), attempt, mcpconnectionattempts.StepProviderSignIn, code, detail, mcpconnectionattempts.FromRequest(r))
@@ -117,7 +117,7 @@ func (s *Service) approveCodeReconnect(w http.ResponseWriter, r *http.Request, t
 		t.Continue()
 		return fmt.Errorf("reload the gateway tool review before approving")
 	}
-	attempt := state.connectionAttempt(endpoint)
+	attempt := state.connectionAttempt(s.aiCatalog.Snapshot(), endpoint)
 	fail := func(err error) error {
 		s.refuseReconnect(r, s.logger, t, attempt, err)
 		return err
@@ -214,7 +214,7 @@ func (s *Service) finishCodeReconnectApproval(w http.ResponseWriter, r *http.Req
 		return err
 	}
 	s.evictConsentToolInventory(ctx, state.ID)
-	s.endAttemptOnce(ctx, s.logger, state.connectionAttempt(endpoint), mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.ResultComplete, mcpconnectionattempts.FromRequest(r), mcpconnectionattempts.Subject(state.Subject))
+	s.endAttemptOnce(ctx, s.logger, state.connectionAttempt(s.aiCatalog.Snapshot(), endpoint), mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.ResultComplete, mcpconnectionattempts.FromRequest(r), mcpconnectionattempts.Subject(state.Subject))
 	t.Continue()
 	http.Redirect(w, r, endpoint.consentPath()+"?state="+state.ID, http.StatusSeeOther)
 	return nil

@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 )
 
@@ -1198,9 +1199,9 @@ func TestToolCallSearchTools_RequireTheDrilldownComposition(t *testing.T) {
 func TestToolCallSearchTools_AreRegisteredForBothAudiences(t *testing.T) {
 	t.Parallel()
 
-	live := newRegistrar(newTestMCPServer())
+	live := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), newTestMCPServer())
 	registerToolCallSearchTools(live, nil)
-	unavailable := newRegistrar(newTestMCPServer())
+	unavailable := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), newTestMCPServer())
 	registerUnavailableToolCallSearchTools(unavailable)
 
 	for _, registrar := range []*Registrar{live, unavailable} {

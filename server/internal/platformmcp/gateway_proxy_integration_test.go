@@ -12,6 +12,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
@@ -224,7 +225,7 @@ func TestGatewayProxyToolsServeOverMCP(t *testing.T) {
 			return next(contextWithPrincipal(ctx, principal), method, req)
 		}
 	})
-	reg := newRegistrar(server)
+	reg := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), server)
 	reg.withExternalAuthorizer(allowExternalCallAuthorizer{})
 	registerGatewayProxyTools(reg, service)
 	session := connectTestClient(t, server)
@@ -251,7 +252,7 @@ func TestGatewayProxyToolsServeOverMCP(t *testing.T) {
 func TestGatewayProxyToolsAreUnavailableWithoutAProxy(t *testing.T) {
 	t.Parallel()
 	server := newTestMCPServer()
-	reg := newRegistrar(server)
+	reg := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), server)
 	reg.withExternalAuthorizer(allowExternalCallAuthorizer{})
 
 	registerGatewayProxyTools(reg, nil)

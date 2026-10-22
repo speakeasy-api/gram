@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -34,7 +35,7 @@ func TestFreezeConnectionCatalogRejectsInvalidDefinitions(t *testing.T) {
 	t.Parallel()
 	pool, err := TestInfra.CloneTestDatabase(t, "freeze_invalid_definitions")
 	require.NoError(t, err)
-	service := &Service{db: pool, logger: testenv.NewLogger(t)}
+	service := &Service{aiCatalog: aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), db: pool, logger: testenv.NewLogger(t)}
 	endpoint := &ResolvedMcpEndpoint{MetaMcpServerID: validUUID(uuid.New())}
 	subject := urn.NewAnonymousSubject(uuid.NewString())
 	state := AuthnChallengeState{ID: uuid.NewString(), Subject: &subject}

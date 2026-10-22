@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -19,7 +20,9 @@ func TestConsentHumanDenialAndDependencyFailureRemainDistinct(t *testing.T) {
 	pool, err := pgxpool.New(t.Context(), "postgres://localhost/unused")
 	require.NoError(t, err)
 	pool.Close()
-	service := &Service{db: pool, logger: testenv.NewLogger(t)}
+	service := &Service{
+		aiCatalog: aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())),
+		db:        pool, logger: testenv.NewLogger(t)}
 	endpoint := &ResolvedMcpEndpoint{OrganizationID: "organization", ProjectID: uuid.New(), UserSessionIssuerID: uuid.New(), ToolsetID: uuid.NullUUID{UUID: uuid.New(), Valid: true}}
 	target, ok := agentAuthorizationTarget(endpoint)
 	require.True(t, ok)

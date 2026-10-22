@@ -14,6 +14,7 @@ import (
 	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 )
@@ -179,6 +180,8 @@ func (d ResourceDescriptor) Read(ctx context.Context) (string, error) {
 // admitted audience are built from a single pass rather than two lists that can
 // drift.
 type Registrar struct {
+	aiCatalog *aivendors.Store
+
 	server             *mcp.Server
 	descriptors        []Descriptor
 	resources          []ResourceDescriptor
@@ -206,8 +209,8 @@ func (r *Registrar) withDashboardLinks(links cardLinks) {
 	r.cardLinks = links
 }
 
-func newRegistrar(server *mcp.Server) *Registrar {
-	return &Registrar{server: server, descriptors: nil, resources: nil, riskTelemetry: noopRiskTelemetry{}, externalAuthorizer: nil, logger: nil, instructions: "", cardLinks: cardLinks{dashboardURL: nil, serverURL: nil, projectSlug: nil}, projects: nil}
+func newRegistrar(aiCatalog *aivendors.Store, server *mcp.Server) *Registrar {
+	return &Registrar{aiCatalog: aiCatalog, server: server, descriptors: nil, resources: nil, riskTelemetry: noopRiskTelemetry{}, externalAuthorizer: nil, logger: nil, instructions: "", cardLinks: cardLinks{dashboardURL: nil, serverURL: nil, projectSlug: nil}, projects: nil}
 }
 
 // withProjects lets tools name their project by slug while their handlers act
@@ -274,7 +277,7 @@ func (r *Registrar) FilterExternalTools(ctx context.Context, principal Principal
 		}
 	}
 	grants, grantsLoaded := authz.GrantsFromContext(ctx)
-	allowlist := clientToolAllowlist(principal.ClientID)
+	allowlist := clientToolAllowlist(r.aiCatalog.Snapshot(), principal.ClientID)
 	// The small discovery surface reaches every tool by design, so the
 	// allowlist only narrows the full catalogue.
 	if discoveryModeFromContext(ctx) != discoveryFull {

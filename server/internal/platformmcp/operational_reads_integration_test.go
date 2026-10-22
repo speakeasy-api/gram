@@ -15,6 +15,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -504,8 +505,8 @@ func TestListRecentToolCallsRejectsInvalidAgentBeforeReadingLogs(t *testing.T) {
 
 func TestRecentToolCallAgentContractMatchesUnavailable(t *testing.T) {
 	t.Parallel()
-	live := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "live", Version: "1"}, nil))
-	unavailable := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "unavailable", Version: "1"}, nil))
+	live := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), mcp.NewServer(&mcp.Implementation{Name: "live", Version: "1"}, nil))
+	unavailable := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), mcp.NewServer(&mcp.Implementation{Name: "unavailable", Version: "1"}, nil))
 	registerRecentToolCallTools(live, nil)
 	registerUnavailableRecentToolCallTools(unavailable)
 	a, b := descriptorByName(t, live, "list_recent_tool_calls"), descriptorByName(t, unavailable, "list_recent_tool_calls")

@@ -786,7 +786,7 @@ func (s *Service) serveRemoteBackend(
 		return err
 	}
 
-	buildOptions = append(buildOptions, directConnectionOptions(ctx, r, organizationID, endpoint.ProjectID, mcpServer.ID, upstream, s.reportedClient(ctx, r, endpoint.ProjectID, mcpServerClientInfoScope(mcpServer)))...)
+	buildOptions = append(buildOptions, directConnectionOptions(ctx, s.aiCatalog.Snapshot(), r, organizationID, endpoint.ProjectID, mcpServer.ID, upstream, s.reportedClient(ctx, r, endpoint.ProjectID, mcpServerClientInfoScope(mcpServer)))...)
 
 	// Identity auth above stamps an AuthContext for every caller that
 	// presented a Speakeasy credential, so its absence marks an anonymous caller.
@@ -1013,7 +1013,7 @@ func (s *Service) serveTunneledBackend(
 		}
 	}
 
-	buildOptions = append(buildOptions, directConnectionOptions(ctx, r, organizationID, endpoint.ProjectID, mcpServer.ID, upstream, s.reportedClient(ctx, r, endpoint.ProjectID, mcpServerClientInfoScope(mcpServer)))...)
+	buildOptions = append(buildOptions, directConnectionOptions(ctx, s.aiCatalog.Snapshot(), r, organizationID, endpoint.ProjectID, mcpServer.ID, upstream, s.reportedClient(ctx, r, endpoint.ProjectID, mcpServerClientInfoScope(mcpServer)))...)
 	p, err := s.tunnelManager.buildProxy(ctx, logger, buildProxyParams{
 		ClientAffinityKey:  tunnelrouting.ClientAffinityKeyFromRequest(r),
 		ProjectID:          endpoint.ProjectID,
@@ -1027,7 +1027,7 @@ func (s *Service) serveTunneledBackend(
 	}, buildOptions...)
 	if err != nil {
 		if errors.Is(err, errTunnelNoRoute) {
-			s.recordRequestOutcome(ctx, mcpconnectionattempts.ServerScope(organizationID, endpoint.ProjectID, mcpServer.ID, requestApp(ctx)), mcpconnectionattempts.CodeTunnelUnavailable, r, callerSubject(ctx), s.reportedClient(ctx, r, endpoint.ProjectID, mcpServerClientInfoScope(mcpServer)))
+			s.recordRequestOutcome(ctx, mcpconnectionattempts.ServerScope(organizationID, endpoint.ProjectID, mcpServer.ID, requestApp(ctx, s.aiCatalog.Snapshot())), mcpconnectionattempts.CodeTunnelUnavailable, r, callerSubject(ctx), s.reportedClient(ctx, r, endpoint.ProjectID, mcpServerClientInfoScope(mcpServer)))
 		}
 		tagTunnelOutage(w, err)
 		return err
@@ -1143,7 +1143,7 @@ func (s *Service) prepareProxyBackendContext(
 	authorized, err := s.authorizeProxyBackendAccess(ctx, logger, mandatorySurfaceProxiedConnect, organizationID, endpoint.ProjectID, mcpServer)
 	if err != nil {
 		if mcpaccess.IsServerPermissionDenied(err) {
-			s.recordRequestOutcome(ctx, mcpconnectionattempts.ServerScope(organizationID, endpoint.ProjectID, mcpServer.ID, requestApp(ctx)), mcpconnectionattempts.CodeNoServerAccess, r, callerSubject(ctx), s.reportedClient(ctx, r, endpoint.ProjectID, mcpServerClientInfoScope(mcpServer)))
+			s.recordRequestOutcome(ctx, mcpconnectionattempts.ServerScope(organizationID, endpoint.ProjectID, mcpServer.ID, requestApp(ctx, s.aiCatalog.Snapshot())), mcpconnectionattempts.CodeNoServerAccess, r, callerSubject(ctx), s.reportedClient(ctx, r, endpoint.ProjectID, mcpServerClientInfoScope(mcpServer)))
 		}
 		return nil, "", err
 	}

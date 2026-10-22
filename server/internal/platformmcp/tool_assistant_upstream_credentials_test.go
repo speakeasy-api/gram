@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	genassistants "github.com/speakeasy-api/gram/server/gen/assistants"
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -149,8 +150,8 @@ func TestAssistantUpstreamCredentialRefusalIsBounded(t *testing.T) {
 
 func TestAssistantUpstreamCredentialToolContract(t *testing.T) {
 	t.Parallel()
-	live := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "live", Version: "1"}, nil))
-	unavailable := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "unavailable", Version: "1"}, nil))
+	live := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), mcp.NewServer(&mcp.Implementation{Name: "live", Version: "1"}, nil))
+	unavailable := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), mcp.NewServer(&mcp.Implementation{Name: "unavailable", Version: "1"}, nil))
 	registerAssistantIdentityTool(live, &AssistantIdentityService{})
 	registerAssistantIdentityTool(unavailable, nil)
 	a := descriptorByName(t, live, chooseAssistantUpstreamCredentialToolName)

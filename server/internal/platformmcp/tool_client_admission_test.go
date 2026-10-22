@@ -6,6 +6,8 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
+
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 )
 
 // A mode change is a policy decision with an unrecoverable failure mode for end
@@ -13,7 +15,7 @@ import (
 func TestSetClientAdmissionRequiresConfirmationAndAValidMode(t *testing.T) {
 	t.Parallel()
 
-	_, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
+	_, registrar := newServer(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
 	descriptors := registrar.For(AudienceAssistant)
 	var found bool
 	for _, descriptor := range descriptors {

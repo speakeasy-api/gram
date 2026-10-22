@@ -528,3 +528,6 @@ in Support Desk, and `not_granted` a viewer without an allow grant for the tool.
 AI tool decisions: all five seeded built-ins reference global catalog products.
 The catalog bootstrap runs before tenant provisioning; reseeding preserves the
 references and catalog edits. Postflight checks five matching product links.
+
+The AI tool library reads the seeded global catalog through the live snapshot.
+Catalog edits reach the library and gateway matchers on the next refresh.

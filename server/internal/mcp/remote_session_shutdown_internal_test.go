@@ -10,6 +10,7 @@ import (
 
 	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/otelpub"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 )
@@ -68,7 +69,7 @@ func (c remoteSessionErrHookContext) Err() error {
 
 func TestRemoteSessionShutdownClosesBothAdmissionGatesBeforeDraining(t *testing.T) {
 	t.Parallel()
-	s := new(Service)
+	s := (&Service{aiCatalog: aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products()))})
 	s.toolCallLogger = otelpub.NewLogger(gcp.NewNoopPublisher[*otelv1.InboundLogRecord](), resource.Empty(), "test")
 	s.autoVerifications = newAutoVerifications()
 	s.remoteSessionRecheck = newRemoteSessionRecheck(time.Hour, nil, nil)

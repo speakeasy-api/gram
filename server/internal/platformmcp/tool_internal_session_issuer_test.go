@@ -8,6 +8,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/identityproviderconnections/provisiontest"
@@ -18,7 +19,7 @@ import (
 
 func TestInternalSessionIssuerToolContract(t *testing.T) {
 	t.Parallel()
-	reg := newRegistrar(newTestMCPServer())
+	reg := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), newTestMCPServer())
 	registerInternalSessionIssuerTool(reg, nil)
 	d := reg.Descriptors()[0]
 	require.Equal(t, "get_internal_session_issuer", d.Name)
@@ -55,7 +56,7 @@ func TestInternalSessionIssuerToolStates(t *testing.T) {
 			return next(contextWithPrincipal(ctx, principal), method, req)
 		}
 	})
-	reg := newRegistrar(server)
+	reg := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), server)
 	reg.withExternalAuthorizer(allowExternalCallAuthorizer{})
 	registerInternalSessionIssuerTool(reg, reader)
 	session := connectTestClient(t, server)

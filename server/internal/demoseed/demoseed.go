@@ -22,6 +22,8 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/speakeasy-api/gram/server/internal/agent/aitargets"
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/aivendors/catalogseed"
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -65,6 +67,10 @@ func Run(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, ch driver.C
 	if err := catalogseed.EnsureCatalog(ctx, db); err != nil {
 		return fmt.Errorf("ensure AI catalog before demo seed: %w", err)
 	}
+	catalog, err := aivendors.Load(ctx, db, logger, aitargets.ValidateCatalog)
+	if err != nil {
+		return fmt.Errorf("load AI catalog before demo seed: %w", err)
+	}
 
 	// The advisory lock holds one connection for the whole run, and the
 	// upstream auth backfills acquire another while it is held.
@@ -84,7 +90,7 @@ func Run(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, ch driver.C
 		}
 		logger.InfoContext(ctx, "demo seed upstream auth migrated")
 
-		if err := s.runClickHouse(ctx, ch); err != nil {
+		if err := s.runClickHouse(ctx, ch, catalog); err != nil {
 			return fmt.Errorf("apply demo seed to clickhouse: %w", err)
 		}
 		logger.InfoContext(ctx, "demo seed applied to clickhouse")
@@ -162,7 +168,7 @@ func seedPostgres(ctx context.Context, logger *slog.Logger, db txBeginner, blob 
 	if err != nil {
 		return nil, err
 	}
-	s := &seeder{spec: spec, enc: enc, assistantIssuer: assistantIssuer, serverURL: server, q: nil, logger: logger, now: time.Time{}, signalSequences: nil}
+	s := &seeder{spec: spec, catalog: nil, enc: enc, assistantIssuer: assistantIssuer, serverURL: server, q: nil, logger: logger, now: time.Time{}, signalSequences: nil}
 	if err := pgx.BeginFunc(ctx, db, func(tx pgx.Tx) error {
 		s.q = repo.New(tx)
 		if err := s.runPostgres(ctx); err != nil {

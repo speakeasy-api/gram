@@ -18,6 +18,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
 	assetsrepo "github.com/speakeasy-api/gram/server/internal/assets/repo"
@@ -222,7 +223,7 @@ func TestCatalogRegistrationCapturesLogoForItsCard(t *testing.T) {
 		WithDashboardURL(dashboardURL).
 		WithCardLogos(testenv.NewLogger(t), conn, storage)
 
-	reg := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "platform-mcp-test"}, nil))
+	reg := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), mcp.NewServer(&mcp.Implementation{Name: "platform-mcp-test"}, nil))
 	registerCatalogRegistrationTool(reg, registrations, NewOnboardingService(conn))
 	reg.withExternalAuthorizer(allowExternalCallAuthorizer{})
 	reg.server.AddReceivingMiddleware(func(next mcp.MethodHandler) mcp.MethodHandler {

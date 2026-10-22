@@ -14,11 +14,12 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 
 	"github.com/speakeasy-api/gram/server/internal/agent/aitargets"
 	agentrepo "github.com/speakeasy-api/gram/server/internal/agent/repo"
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/attr"
-	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd/admission"
 )
 
 // ErrAIToolBlockCheckUnavailable reports that the organization has blocked at
@@ -80,7 +81,7 @@ type aiToolBlockReads struct {
 
 	// catalog loads the organization's scan-target catalog, which is what
 	// matches the caller to a target.
-	catalog func(ctx context.Context, queries *agentrepo.Queries, organizationID string) (*aitargets.OrganizationList, error)
+	catalog func(ctx context.Context, queries *agentrepo.Queries, organizationID string, snapshot *aivendors.Snapshot) (*aitargets.OrganizationList, error)
 }
 
 // defaultAIToolBlockReads returns the production reads.
@@ -115,6 +116,7 @@ func (s *Service) checkAIToolGatewayBlock(ctx context.Context, logger *slog.Logg
 		return nil
 	}
 
+	snapshot := s.aiCatalog.Snapshot()
 	queries := agentrepo.New(s.db)
 	blocked, err := s.aiToolBlockReads.blockedTargetIDs(ctx, queries, organizationID)
 	if err != nil {
@@ -125,12 +127,13 @@ func (s *Service) checkAIToolGatewayBlock(ctx context.Context, logger *slog.Logg
 		return nil
 	}
 
-	list, err := s.aiToolBlockReads.catalog(ctx, queries, organizationID)
+	list, err := s.aiToolBlockReads.catalog(ctx, queries, organizationID, snapshot)
 	if err != nil {
 		logger.ErrorContext(ctx, "ai scan targets unavailable while a block is in force", attr.SlogError(err))
 		return fmt.Errorf("%w: %w", ErrAIToolBlockCheckUnavailable, err)
 	}
 
+	ambiguousVendor := ""
 	caller := aitargets.GatewayCaller{
 		OAuthClientID:  clientID,
 		CIMDVendorKey:  "",
@@ -138,13 +141,31 @@ func (s *Service) checkAIToolGatewayBlock(ctx context.Context, logger *slog.Logg
 	}
 	// A CIMD client_id is also a catalog entry, and the entry is the only
 	// stable handle on a vendor that mints one document per server.
-	if preset, known := admission.CatalogPreset(clientID); known {
-		caller.CIMDVendorKey = preset.VendorKey
+	if preset, known := snapshot.CatalogPreset(clientID); known {
+		// A formerly unique vendor key can become shared after a refresh.
+		// Existing organization matchers must not expand to the new product.
+		if snapshot.BlockableVendorKey(preset.VendorKey) {
+			caller.CIMDVendorKey = preset.VendorKey
+		} else {
+			ambiguousVendor = preset.VendorKey
+		}
 		caller.CIMDCatalogURL = preset.URL
 	}
 
 	target, matched := aitargets.MatchGatewayCaller(list.Snapshot.Targets(), caller)
 	if !matched {
+		// A recorded block whose vendor handle became ambiguous cannot safely be
+		// treated as absent. Keep the retryable refusal used for unavailable
+		// catalog reads until the organization selects a specific document URL.
+		if ambiguousVendor != "" {
+			for _, entry := range list.Entries {
+				if slices.Contains(blocked, entry.ID) && slices.Contains(entry.GatewayClient.CIMDVendorKeys, ambiguousVendor) {
+					err := fmt.Errorf("%w: blocked vendor matcher no longer identifies one product", ErrAIToolBlockCheckUnavailable)
+					logger.ErrorContext(ctx, "ambiguous AI tool block", attr.SlogError(err))
+					return err
+				}
+			}
+		}
 		return nil
 	}
 	blockedIDs := make(map[string]struct{}, len(blocked))

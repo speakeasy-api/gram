@@ -20,6 +20,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/access"
 	agentrepo "github.com/speakeasy-api/gram/server/internal/agent/repo"
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
@@ -75,6 +76,9 @@ import (
 )
 
 type platformMCPConfig struct {
+	// AICatalog is the process-wide database catalog store.
+	AICatalog *aivendors.Store
+
 	// CustomDomainTargetSuffix is the normalized parent of designated CNAME destinations.
 	CustomDomainTargetSuffix string
 	// GatewaySessions shares dashboard session scoping and pagination.
@@ -295,6 +299,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 	oauthTelemetry := platformmcp.NewOAuthTelemetry(config.Logger, config.MeterProvider)
 	oauthStore := platformmcp.NewPostgresOAuthStore(config.DB).WithTelemetry(oauthTelemetry)
 	oauth, err := platformmcp.NewOAuthHTTP(platformmcp.OAuthHTTPConfig{
+		AICatalog:     config.AICatalog,
 		BaseURL:       config.ServerURL,
 		Environment:   config.Environment,
 		Cache:         cache.NewRedisCacheAdapter(config.Redis),
@@ -461,7 +466,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		adapters,
 		ratelimit.New(limitStore, platformmcp.ForcedReadinessProbeLimit, ratelimit.PerMinute(platformmcp.ForcedReadinessProbesPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
 		budgets.Repair,
-		platformmcp.NewRemoteMCPReadinessProber(config.Logger, config.DB, config.Encryption, config.GuardianPolicy, config.RemoteChallengeManager).WithIdentityChaining(chaining),
+		platformmcp.NewRemoteMCPReadinessProber(config.AICatalog, config.Logger, config.DB, config.Encryption, config.GuardianPolicy, config.RemoteChallengeManager).WithIdentityChaining(chaining),
 	).WithTelemetry(telemetry)
 	lifecycleMetadata, err := newPlatformMCPLifecycleMetadataService(config)
 	if err != nil {
@@ -626,7 +631,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		return AssistantSurface{}, fmt.Errorf("create local Platform MCP risk policy mutations: %w", err)
 	}
 	runtime := platformmcp.NewRuntimeWithRiskMutations(
-		config.Logger,
+		config.AICatalog, config.Logger,
 		authenticator,
 		gate,
 		authorizer,
@@ -706,7 +711,7 @@ func attachShadowInventory(reader *platformmcp.PostgresReader, config platformMC
 func attachShadowAI(reader *platformmcp.PostgresReader, config platformMCPConfig, authorizer platformmcp.Authorizer, budget platformmcp.OperationBudget) {
 	service := platformmcp.NewShadowAIService(
 		config.ShadowInventory,
-		platformmcp.NewPostgresShadowAILibrary(agentrepo.New(config.DB)),
+		platformmcp.NewPostgresShadowAILibrary(config.AICatalog, agentrepo.New(config.DB)),
 		authorizer,
 		budget,
 	)
@@ -1127,6 +1132,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 	oauthTelemetry := platformmcp.NewOAuthTelemetry(config.Logger, config.MeterProvider)
 	oauthStore := platformmcp.NewPostgresOAuthStore(config.DB).WithTelemetry(oauthTelemetry)
 	oauth, err := platformmcp.NewOAuthHTTP(platformmcp.OAuthHTTPConfig{
+		AICatalog:     config.AICatalog,
 		BaseURL:       config.ServerURL,
 		Environment:   config.Environment,
 		Cache:         cache.NewRedisCacheAdapter(config.Redis),
@@ -1273,7 +1279,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		adapters,
 		ratelimit.New(limitStore, platformmcp.ForcedReadinessProbeLimit, ratelimit.PerMinute(platformmcp.ForcedReadinessProbesPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
 		budgets.Repair,
-		platformmcp.NewRemoteMCPReadinessProber(config.Logger, config.DB, config.Encryption, config.GuardianPolicy, config.RemoteChallengeManager).WithIdentityChaining(chaining),
+		platformmcp.NewRemoteMCPReadinessProber(config.AICatalog, config.Logger, config.DB, config.Encryption, config.GuardianPolicy, config.RemoteChallengeManager).WithIdentityChaining(chaining),
 	).WithTelemetry(telemetry)
 	lifecycleMetadata, err := newPlatformMCPLifecycleMetadataService(config)
 	if err != nil {
@@ -1433,7 +1439,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		return AssistantSurface{}, fmt.Errorf("create browser Platform MCP risk policy mutations: %w", err)
 	}
 	runtime := platformmcp.NewRuntimeWithRiskMutations(
-		config.Logger,
+		config.AICatalog, config.Logger,
 		authenticator,
 		gate,
 		authorizer,

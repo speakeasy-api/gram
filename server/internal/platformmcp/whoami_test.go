@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
@@ -19,7 +20,7 @@ import (
 func TestWhoamiIsAMemberReadForBothAudiencesWithoutInputs(t *testing.T) {
 	t.Parallel()
 
-	live := newRegistrar(newTestMCPServer())
+	live := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), newTestMCPServer())
 	registerWhoamiTool(live, NewWhoamiService(nil))
 	descriptor := descriptorByName(t, live, "whoami")
 	require.Equal(t, ExternalAuthorizationMember, descriptor.Meta.Authorization)
@@ -32,7 +33,7 @@ func TestWhoamiIsAMemberReadForBothAudiencesWithoutInputs(t *testing.T) {
 	require.NoError(t, json.Unmarshal(descriptor.InputSchema, &schema))
 	require.Empty(t, schema.Properties, "whoami answers for the caller and takes no selector")
 
-	stub := newRegistrar(newTestMCPServer())
+	stub := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), newTestMCPServer())
 	registerWhoamiTool(stub, nil)
 	unavailable := descriptorByName(t, stub, "whoami")
 	require.Equal(t, descriptor.Meta, unavailable.Meta)

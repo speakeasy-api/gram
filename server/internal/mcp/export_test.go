@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"fmt"
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"net/http"
@@ -73,7 +74,7 @@ func (s *Service) SetConnectionRecorder(recorder *mcpconnectionattempts.Recorder
 
 // ConnectionAttempt exposes the state's connection attempt.
 func (a AuthnChallengeState) ConnectionAttempt(endpoint *ResolvedMcpEndpoint) mcpconnectionattempts.Attempt {
-	return a.connectionAttempt(endpoint)
+	return a.connectionAttempt(aivendors.NewSnapshot(aivendors.Products()), endpoint)
 }
 
 // SetEnvironmentLoader replaces the environment loader.
@@ -163,7 +164,7 @@ func (s *Service) FailAIToolBlockedIDsRead(err error) {
 // FailAIToolCatalogRead makes the scan-target catalog read behind the gateway
 // block check fail with err, leaving the blocked-ids read intact.
 func (s *Service) FailAIToolCatalogRead(err error) {
-	s.aiToolBlockReads.catalog = func(context.Context, *agentrepo.Queries, string) (*aitargets.OrganizationList, error) {
+	s.aiToolBlockReads.catalog = func(context.Context, *agentrepo.Queries, string, *aivendors.Snapshot) (*aitargets.OrganizationList, error) {
 		return nil, err
 	}
 }

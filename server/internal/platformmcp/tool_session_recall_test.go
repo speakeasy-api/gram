@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/risk/chrepo"
 	"github.com/speakeasy-api/gram/server/internal/risk/maskdisplay"
@@ -48,7 +49,7 @@ func (f *fakeSessionRecaller) CreateSessionHandoffLink(_ context.Context, princi
 }
 
 func sessionRecallRegistrar(svc SessionRecaller) *Registrar {
-	registrar := newRegistrar(newTestMCPServer())
+	registrar := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), newTestMCPServer())
 	registerSessionRecallTools(registrar, svc)
 	return registrar
 }
@@ -143,8 +144,8 @@ func TestSessionRecallUnavailableSentinelsAreToolSpecific(t *testing.T) {
 
 func TestSessionRecallUnavailableToolsPreserveContracts(t *testing.T) {
 	t.Parallel()
-	live := newRegistrar(newTestMCPServer())
-	unavailable := newRegistrar(newTestMCPServer())
+	live := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), newTestMCPServer())
+	unavailable := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), newTestMCPServer())
 	registerSessionRecallTools(live, &fakeSessionRecaller{})
 	registerUnavailableSessionRecallTools(unavailable)
 	liveTools, unavailableTools := live.Descriptors(), unavailable.Descriptors()
@@ -277,7 +278,7 @@ func TestContinueSessionToolMapsBudgetErrors(t *testing.T) {
 func TestSessionRecallStubsRefuse(t *testing.T) {
 	t.Parallel()
 
-	registrar := newRegistrar(newTestMCPServer())
+	registrar := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), newTestMCPServer())
 	registerUnavailableSessionRecallTools(registrar)
 	ctx := ContextWithPrincipal(t.Context(), registrationServicePrincipal())
 

@@ -15,6 +15,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -69,7 +70,7 @@ func (f pluginMetadataFixture) pluginCount(t *testing.T, ctx context.Context, pr
 
 func (f pluginMetadataFixture) descriptor(t *testing.T, name string) Descriptor {
 	t.Helper()
-	registrar := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "plugin-metadata", Version: "0.0.1"}, nil))
+	registrar := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), mcp.NewServer(&mcp.Implementation{Name: "plugin-metadata", Version: "0.0.1"}, nil))
 	registrar.withProjects(&RegistrationStore{db: f.conn, icons: nil})
 	registerPluginMetadataTools(registrar, f.service)
 	return descriptorByName(t, registrar, name)
@@ -500,7 +501,7 @@ func TestPluginMetadataNeverReturnsDatabaseErrorText(t *testing.T) {
 	// The slug resolves without the database, so each call reaches the plugin
 	// service and fails on its own queries rather than on the lookup.
 	describe := func(name string) Descriptor {
-		registrar := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "plugin-metadata-no-db-text", Version: "0.0.1"}, nil))
+		registrar := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), mcp.NewServer(&mcp.Implementation{Name: "plugin-metadata-no-db-text", Version: "0.0.1"}, nil))
 		registrar.withProjects(slugProjects{fixture.project.Slug: fixture.project.ID})
 		registerPluginMetadataTools(registrar, fixture.service)
 		return descriptorByName(t, registrar, name)
@@ -558,7 +559,7 @@ func TestPluginMetadataUnavailableRegistrationMatchesLiveManifest(t *testing.T) 
 	require.True(t, fixture.service.autoSyncMutationValid(), "the live side must be a composed service")
 
 	describe := func(service *PluginsService) map[string]Descriptor {
-		registrar := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "plugin-metadata-manifest", Version: "0.0.1"}, nil))
+		registrar := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), mcp.NewServer(&mcp.Implementation{Name: "plugin-metadata-manifest", Version: "0.0.1"}, nil))
 		registrar.withProjects(&RegistrationStore{db: fixture.conn, icons: nil})
 		registerPluginMetadataTools(registrar, service)
 		byName := map[string]Descriptor{}

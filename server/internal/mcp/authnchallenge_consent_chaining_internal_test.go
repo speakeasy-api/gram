@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
@@ -63,7 +64,9 @@ func consentChainingFixture(t *testing.T, g *funcGovernor) (*Service, *ResolvedM
 		UpstreamResource:    "https://upstream.example.test/mcp",
 	}
 	subject := urn.NewUserSubject("user-1")
-	return &Service{identityChainer: g, logger: testenv.NewLogger(t)}, endpoint, AuthnChallengeState{Subject: &subject}
+	return &Service{
+		aiCatalog:       aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())),
+		identityChainer: g, logger: testenv.NewLogger(t)}, endpoint, AuthnChallengeState{Subject: &subject}
 }
 
 func directRouting(backend consentBackend) consentRouting {

@@ -9,6 +9,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 )
 
@@ -16,10 +17,10 @@ func TestChatSearchToolContractAndDiscovery(t *testing.T) {
 	t.Parallel()
 	f := newChatSearchFixture(t)
 	ctx := f.context(t.Context())
-	live := newRegistrar(newTestMCPServer())
+	live := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), newTestMCPServer())
 	live.withProjects(&RegistrationStore{db: f.db})
 	registerChatSearchTools(live, f.service)
-	stub := newRegistrar(newTestMCPServer())
+	stub := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), newTestMCPServer())
 	stub.withProjects(slugProjects{})
 	registerChatSearchTools(stub, nil)
 	for _, name := range []string{searchChatsToolName, readChatToolName} {
@@ -91,7 +92,7 @@ func TestChatSearchToolContractAndDiscovery(t *testing.T) {
 
 func TestChatSearchInputSchemas(t *testing.T) {
 	t.Parallel()
-	reg := newRegistrar(newTestMCPServer())
+	reg := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), newTestMCPServer())
 	registerChatSearchTools(reg, nil)
 	chatIDs := make([]string, chatSearchMaxChatIDs+1)
 	for i := range chatIDs {
