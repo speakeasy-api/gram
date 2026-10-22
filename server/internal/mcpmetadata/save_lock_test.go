@@ -26,7 +26,7 @@ func TestSetMcpMetadata_SerializesConcurrentSaves(t *testing.T) {
 	other := repo.New(tx)
 	require.NoError(t, other.AcquireMetadataBackendLock(ctx, repo.AcquireMetadataBackendLockParams{ProjectID: toolset.ProjectID, BackendID: toolset.ID}))
 	inserted, err := other.UpsertMetadataByMcpServerID(ctx, repo.UpsertMetadataByMcpServerIDParams{
-		McpServerID: uuid.NullUUID{UUID: toolset.ID, Valid: true}, ProjectID: toolset.ProjectID,
+		McpServerID: toolset.ID, ProjectID: toolset.ProjectID,
 		ExternalDocumentationUrl: pgtype.Text{String: "", Valid: false}, ExternalDocumentationText: pgtype.Text{String: "", Valid: false},
 		LogoID: uuid.NullUUID{}, Instructions: conv.ToPGText("other"), DefaultEnvironmentID: uuid.NullUUID{},
 		InstallationOverrideUrl: pgtype.Text{String: "", Valid: false},
