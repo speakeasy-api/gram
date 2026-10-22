@@ -34,6 +34,10 @@ import {
 const RELEASES_BASE =
   "https://storage.googleapis.com/speakeasy-device-agent-releases-prod";
 const MANIFEST_URL = `${RELEASES_BASE}/releases.json`;
+// The server's stable link to the current signed Windows msi (a 302 to the
+// versioned file in the release bucket). It sits under /rpc, which the
+// Ingress routes to the server.
+const STABLE_MSI_PATH = "/rpc/install/device-agent-windows.msi";
 
 // Public docs: what the device agent is, and the MDM rollout guide.
 const DOCS_DEVICE_AGENT =
@@ -1059,7 +1063,7 @@ function WinInstallerDownload() {
   // fall back to the manifest rather than the stable link.
   const serverURL = getServerURL();
   const stableMsiUrl = serverURL.startsWith("https:")
-    ? `${serverURL}/v1/install/device-agent-windows.msi`
+    ? `${serverURL}${STABLE_MSI_PATH}`
     : null;
 
   if (version) {
@@ -1272,7 +1276,7 @@ launchctl print "gui/$(id -u)/com.speakeasy.daemon"
 // install from the signed .msi, which lays down the daemon, CLI, and UI under
 // C:\Program Files\Speakeasy\ and registers the machine-wide LocalSystem
 // service itself — no separate service-registration step. The primary snippet
-// uses this Speakeasy server's stable /v1/install URL, which 302-redirects to the
+// uses this Speakeasy server's stable install URL, which 302-redirects to the
 // current version's signed msi, so the copy never goes stale. Like the macOS
 // pkg, the msi is deliberately not listed in releases.json (it's the
 // manual/MDM on-ramp), so the direct-download URL is built from the resolved
@@ -1285,7 +1289,7 @@ function WinInstallStep() {
   // and build the snippet against the (always-HTTPS) release bucket instead.
   const serverURL = getServerURL();
   const stableMsiUrl = serverURL.startsWith("https:")
-    ? `${serverURL}/v1/install/device-agent-windows.msi`
+    ? `${serverURL}${STABLE_MSI_PATH}`
     : null;
   const downloadScript = stableMsiUrl
     ? `Invoke-WebRequest "${stableMsiUrl}" -OutFile speakeasy-agent.msi
