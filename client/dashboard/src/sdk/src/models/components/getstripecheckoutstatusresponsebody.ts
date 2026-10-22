@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
@@ -14,14 +15,14 @@ export const PaymentStatus = {
   Unpaid: "unpaid",
   NoPaymentRequired: "no_payment_required",
 } as const;
-export type PaymentStatus = ClosedEnum<typeof PaymentStatus>;
+export type PaymentStatus = OpenEnum<typeof PaymentStatus>;
 
 export const GetStripeCheckoutStatusResponseBodyStatus = {
   Open: "open",
   Complete: "complete",
   Expired: "expired",
 } as const;
-export type GetStripeCheckoutStatusResponseBodyStatus = ClosedEnum<
+export type GetStripeCheckoutStatusResponseBodyStatus = OpenEnum<
   typeof GetStripeCheckoutStatusResponseBodyStatus
 >;
 
@@ -35,14 +36,15 @@ export type GetStripeCheckoutStatusResponseBody = {
 };
 
 /** @internal */
-export const PaymentStatus$inboundSchema: z.ZodMiniEnum<typeof PaymentStatus> =
-  z.enum(PaymentStatus);
+export const PaymentStatus$inboundSchema: z.ZodMiniType<
+  PaymentStatus,
+  unknown
+> = openEnums.inboundSchema(PaymentStatus);
 
 /** @internal */
 export const GetStripeCheckoutStatusResponseBodyStatus$inboundSchema:
-  z.ZodMiniEnum<typeof GetStripeCheckoutStatusResponseBodyStatus> = z.enum(
-    GetStripeCheckoutStatusResponseBodyStatus,
-  );
+  z.ZodMiniType<GetStripeCheckoutStatusResponseBodyStatus, unknown> = openEnums
+    .inboundSchema(GetStripeCheckoutStatusResponseBodyStatus);
 
 /** @internal */
 export const GetStripeCheckoutStatusResponseBody$inboundSchema: z.ZodMiniType<
