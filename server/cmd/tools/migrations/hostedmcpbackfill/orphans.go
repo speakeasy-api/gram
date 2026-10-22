@@ -38,7 +38,7 @@ type orphanCleanup struct {
 func (r *Runner) cleanupOne(ctx context.Context, toolsetID uuid.UUID, dep ListToolsetDependentsRow) (RowReport, error) {
 	row := RowReport{
 		ToolsetID: toolsetID, Table: dep.TableName, RowID: &dep.ID, ProjectID: dep.ProjectID, McpSlug: "", CustomDomainID: nil,
-		Outcome: "", Reason: "", Wrote: false, LiveEndpoints: 0, FreshIDServers: 0, DomainsToReconcile: nil, CollapsedTwin: nil, Removed: nil, PublicationRequested: false,
+		Outcome: "", Reason: "", Wrote: false, LiveEndpoints: 0, FreshIDServers: 0, DomainsToReconcile: nil, CollapsedTwin: nil, Removed: nil, PublicationRequested: false, Detached: nil,
 	}
 
 	tx, err := r.pool.Begin(ctx)
@@ -116,7 +116,7 @@ func (r *Runner) cleanupOne(ctx context.Context, toolsetID uuid.UUID, dep ListTo
 	return r.commitJournaled(ctx, tx, row, JournalRecord{
 		Event: JournalIntent, ProjectID: toolset.ProjectID, ToolsetID: toolsetID, RowID: dep.ID, Outcome: row.Outcome,
 		From: RowKey{Table: dep.TableName, Column: "toolset_id", ID: toolsetID}, To: RowKey{Table: "", Column: "", ID: uuid.Nil},
-		CollapsedTwin: nil, Removed: c.removed,
+		CollapsedTwin: nil, Removed: c.removed, Rekeyed: nil, Dependents: nil,
 	})
 }
 
@@ -174,7 +174,7 @@ func (r *Runner) cleanupMetadata(ctx context.Context, tx pgx.Tx, c *orphanCleanu
 	}); err != nil {
 		return "", "", fmt.Errorf("audit metadata delete: %w", err)
 	}
-	c.removed = &RowImage{Table: tableMcpMetadata, ID: c.rowID, Deletion: "deleted", Row: locked.RowJson, EnvironmentConfigs: configsJSON, SoftDeletedAt: ""}
+	c.removed = &RowImage{Table: tableMcpMetadata, ID: c.rowID, Deletion: "deleted", Row: locked.RowJson, EnvironmentConfigs: configsJSON, SoftDeletedAt: "", RekeyedUpdatedAt: ""}
 	return "", "", nil
 }
 
@@ -218,7 +218,7 @@ func (r *Runner) cleanupPluginServer(ctx context.Context, tx pgx.Tx, c *orphanCl
 		}
 		c.published = outcome == plugins.ProjectPublicationEnqueued
 	}
-	c.removed = &RowImage{Table: tablePluginServers, ID: c.rowID, Deletion: "soft_deleted", Row: member.RowJson, EnvironmentConfigs: nil, SoftDeletedAt: deletedAt}
+	c.removed = &RowImage{Table: tablePluginServers, ID: c.rowID, Deletion: "soft_deleted", Row: member.RowJson, EnvironmentConfigs: nil, SoftDeletedAt: deletedAt, RekeyedUpdatedAt: ""}
 	return "", "", nil
 }
 
@@ -260,6 +260,6 @@ func cleanupAssistantAttachment(ctx context.Context, tx pgx.Tx, c *orphanCleanup
 	if deleted != 1 {
 		return "", "", fmt.Errorf("delete assistant toolset: %d rows deleted", deleted)
 	}
-	c.removed = &RowImage{Table: tableAssistantToolsets, ID: c.rowID, Deletion: "deleted", Row: attachment.RowJson, EnvironmentConfigs: nil, SoftDeletedAt: ""}
+	c.removed = &RowImage{Table: tableAssistantToolsets, ID: c.rowID, Deletion: "deleted", Row: attachment.RowJson, EnvironmentConfigs: nil, SoftDeletedAt: "", RekeyedUpdatedAt: ""}
 	return "", "", nil
 }

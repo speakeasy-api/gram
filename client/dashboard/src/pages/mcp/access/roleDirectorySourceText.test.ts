@@ -23,15 +23,36 @@ describe("roleDirectorySourceText", () => {
     expect(roleDirectorySourceText([])).toBeUndefined();
   });
 
-  it("names every source, live ones before removed ones", () => {
+  it("names two live sources and counts removed ones", () => {
     expect(
       roleDirectorySourceText([
         source("Platform (removed)", { missing: true }),
         source("Engineering"),
         source("department = Sales", { kind: "attribute" }),
       ]),
-    ).toBe(
-      "Via directory: Engineering, department = Sales, Platform (removed)",
-    );
+    ).toEqual({
+      line: "Via directory: Engineering, department = Sales · 1 removed source",
+      full: "Via directory: Engineering, department = Sales, Platform (removed)",
+    });
+  });
+
+  it("folds live sources past the second into a count", () => {
+    expect(
+      roleDirectorySourceText([
+        source("Engineering"),
+        source("Platform"),
+        source("Design"),
+        source("Support"),
+      ])?.line,
+    ).toBe("Via directory: Engineering, Platform +2 more");
+  });
+
+  it("counts removed sources when no live one is left", () => {
+    expect(
+      roleDirectorySourceText([
+        source("Platform (removed)", { missing: true }),
+        source("Design (removed)", { missing: true }),
+      ])?.line,
+    ).toBe("Via directory: 2 removed sources");
   });
 });

@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
@@ -19,7 +20,7 @@ export const AccessMemberDirectoryRoleSourceSourceKind = {
 /**
  * What the mapping matches: a directory group or an attribute value.
  */
-export type AccessMemberDirectoryRoleSourceSourceKind = ClosedEnum<
+export type AccessMemberDirectoryRoleSourceSourceKind = OpenEnum<
   typeof AccessMemberDirectoryRoleSourceSourceKind
 >;
 
@@ -47,9 +48,8 @@ export type AccessMemberDirectoryRoleSource = {
 
 /** @internal */
 export const AccessMemberDirectoryRoleSourceSourceKind$inboundSchema:
-  z.ZodMiniEnum<typeof AccessMemberDirectoryRoleSourceSourceKind> = z.enum(
-    AccessMemberDirectoryRoleSourceSourceKind,
-  );
+  z.ZodMiniType<AccessMemberDirectoryRoleSourceSourceKind, unknown> = openEnums
+    .inboundSchema(AccessMemberDirectoryRoleSourceSourceKind);
 
 /** @internal */
 export const AccessMemberDirectoryRoleSource$inboundSchema: z.ZodMiniType<

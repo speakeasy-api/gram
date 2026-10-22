@@ -1,3 +1,4 @@
+import { unrecognized } from "@gram/client/types/unrecognized.js";
 import type { ResourceAudienceEntry } from "@gram/client/models/components/resourceaudienceentry.js";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -93,7 +94,7 @@ vi.mock("@gram/client/react-query/audienceOptions.js", () => ({
 }));
 
 vi.mock("@tanstack/react-query", () => ({
-  useQueryClient: () => ({}),
+  useQueryClient: () => ({ invalidateQueries: invalidate }),
 }));
 
 vi.mock("react-router", () => ({
@@ -388,7 +389,8 @@ describe("the access list", () => {
       ],
     });
     await mutationOptions.mock.calls.at(-1)![0].onSuccess();
-    expect(invalidate).toHaveBeenCalledTimes(4);
+    expect(invalidate).toHaveBeenCalledTimes(5);
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ["mcpAssignments"] });
   });
 
   it("says when nobody reaches the server", () => {
@@ -562,6 +564,38 @@ describe("role plugin distribution", () => {
     expect(screen.queryByRole("link", { name: "Tools" })).toBeNull();
   });
 
+  it("keeps plugin links visible while unsupported rules disable all editing", () => {
+    render(
+      ui(
+        [plugin],
+        [
+          role,
+          {
+            ...role,
+            level: "blocked",
+            dispositions: [unrecognized("future_disposition")],
+          },
+        ],
+      ),
+    );
+    expect(screen.getByRole("link", { name: "Tools" })).toBeDefined();
+    expect(screen.getByText("Distributed via")).toBeDefined();
+    expect(
+      screen
+        .getByRole("button", { name: /Grant access/ })
+        .hasAttribute("disabled"),
+    ).toBe(true);
+    expandFirstRow();
+    for (const control of screen.getAllByRole("button", {
+      name: "Access unknown",
+    })) {
+      expect(control.hasAttribute("disabled")).toBe(true);
+      fireEvent.click(control);
+    }
+    expect(screen.queryByRole("menuitem", { name: "All tools" })).toBeNull();
+    expect(mutate).not.toHaveBeenCalled();
+  });
+
   it("hides cached plugin data immediately after permission downgrade", () => {
     const { rerender } = render(ui([plugin]));
     expect(screen.getByRole("link", { name: "Tools" })).toBeDefined();
@@ -625,7 +659,7 @@ describe("directory sources on role rows", () => {
     renderList([role]);
     expect(
       screen.getByText(
-        /^Via directory: Platform, department = Sales, Contractors \(removed\)/,
+        "Via directory: Platform, department = Sales · 1 removed source",
       ),
     ).toBeDefined();
     expect(
@@ -672,4 +706,85 @@ describe("directory sources on role rows", () => {
     );
     expect(screen.queryByText(/Via directory/)).toBeNull();
   });
+});
+
+it("closes an open mutation dialog when a refreshed rule becomes unsupported", () => {
+  const props = { resourceId: "server-1", version: "v1", isLoading: false };
+  const known = entry({ appliesTo: "all_resources" });
+  const { rerender } = render(
+    <TooltipProvider>
+      <ManageAccess {...props} entries={[known]} />
+    </TooltipProvider>,
+  );
+  fireEvent.click(screen.getByLabelText("Remove Hana Sato from this server"));
+  expect(screen.getByRole("button", { name: "Remove" })).toBeDefined();
+  rerender(
+    <TooltipProvider>
+      <ManageAccess
+        {...props}
+        entries={[known, entry({ level: unrecognized("future_level") })]}
+      />
+    </TooltipProvider>,
+  );
+  expect(screen.queryByRole("button", { name: "Remove" })).toBeNull();
+  expect(screen.getByText(/Some access rules are not supported/)).toBeDefined();
+  expect(mutate).not.toHaveBeenCalled();
+});
+
+it("disables all editing for an unknown audience applicability", () => {
+  renderList([entry({ appliesTo: unrecognized("future_applicability") })]);
+  expandFirstRow();
+  for (const button of screen.getAllByRole("button", {
+    name: "Access unknown",
+  })) {
+    expect(button.hasAttribute("disabled")).toBe(true);
+  }
+  expect(
+    screen
+      .getByRole("button", { name: "Access cannot be changed here." })
+      .hasAttribute("disabled"),
+  ).toBe(true);
+  expect(
+    screen
+      .getByRole("button", { name: /Grant access/ })
+      .hasAttribute("disabled"),
+  ).toBe(true);
+  expect(mutate).not.toHaveBeenCalled();
+});
+
+it("explains the required admin permission on disabled remove controls", () => {
+  permission.admin = false;
+  renderList([entry({})]);
+  expect(
+    screen
+      .getByRole("button", {
+        name: "Only organization admins can change access.",
+      })
+      .hasAttribute("disabled"),
+  ).toBe(true);
+  expect(
+    screen.queryByRole("button", { name: "Access cannot be changed here." }),
+  ).toBeNull();
+});
+
+it("keeps an unsupported principal visible with all audience edits disabled", () => {
+  renderList([entry({ kind: unrecognized("future_kind") })]);
+  expect(screen.getByText("Hana Sato")).toBeTruthy();
+  expandFirstRow();
+  for (const button of screen.getAllByRole("button", {
+    name: "Access unknown",
+  })) {
+    expect(button.hasAttribute("disabled")).toBe(true);
+  }
+  expect(
+    screen
+      .getByRole("button", { name: "Access cannot be changed here." })
+      .hasAttribute("disabled"),
+  ).toBe(true);
+  expect(
+    screen
+      .getByRole("button", { name: /Grant access/ })
+      .hasAttribute("disabled"),
+  ).toBe(true);
+  expect(mutate).not.toHaveBeenCalled();
 });

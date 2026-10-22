@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
@@ -13,7 +14,7 @@ export const ChallengeResolutionResolutionType = {
   RoleAssigned: "role_assigned",
   Dismissed: "dismissed",
 } as const;
-export type ChallengeResolutionResolutionType = ClosedEnum<
+export type ChallengeResolutionResolutionType = OpenEnum<
   typeof ChallengeResolutionResolutionType
 >;
 
@@ -59,9 +60,10 @@ export type ChallengeResolution = {
 };
 
 /** @internal */
-export const ChallengeResolutionResolutionType$inboundSchema: z.ZodMiniEnum<
-  typeof ChallengeResolutionResolutionType
-> = z.enum(ChallengeResolutionResolutionType);
+export const ChallengeResolutionResolutionType$inboundSchema: z.ZodMiniType<
+  ChallengeResolutionResolutionType,
+  unknown
+> = openEnums.inboundSchema(ChallengeResolutionResolutionType);
 
 /** @internal */
 export const ChallengeResolution$inboundSchema: z.ZodMiniType<

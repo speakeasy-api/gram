@@ -109,9 +109,8 @@ type platformMCPConfig struct {
 	// the dashboard makes. Nil keeps both tools visible as unavailable.
 	ProjectCore *projects.Core
 	Skills      platformmcp.SkillsManagement
-	// CallbackOrigin is the origin of the redirect_uri a remote session client
-	// created now registers. The setup guides show that URL.
-	CallbackOrigin *url.URL
+	// CallbackOrigins resolves new-client redirect URIs shown in setup guides.
+	CallbackOrigins remotesessions.CallbackOrigins
 	// OutboundCallbackOrigin is the pinned origin of the identity provider
 	// callback the Platform MCP OAuth login registers.
 	OutboundCallbackOrigin *url.URL
@@ -441,6 +440,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 	pluginInventory := platformmcp.NewPluginsService(config.DB, budgets.Plugins, config.JWTSigningKey).
 		WithAuthorization(config.Authz).
 		WithRemoteSessions(config.RemoteChallengeManager).
+		WithAuthClientResolver(config.FeatureFlags).
 		WithIdentityChaining(chaining).
 		WithInstallLinks(config.DashboardURL, config.ServerURL).
 		WithAssignmentMutations(config.FeatureFlags, organizationSlugs, config.AuditLogger, pluginAssignmentMutationBudget).
@@ -510,8 +510,8 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		WithMCPNetworkTraffic(config.NetworkTraffic, config.LogsEnabled).
 		WithOrganizationEvents(config.EventFeed, config.LogsEnabled, config.DashboardURL).
 		WithNetworkIngressStatus(config.DashboardURL).
-		WithRiskAnalysisStatus(platformmcp.NewRiskAnalysisStatusService(config.Logger, config.DB, config.RiskAnalysisDescriber, config.FeatureFlags, platformmcp.NewPostgresOrganizationSlugResolver(config.DB))).
-		WithRiskFindings(platformmcp.NewRiskFindingsService(config.DB, config.RiskFindings, config.FeatureFlags, platformmcp.NewPostgresOrganizationSlugResolver(config.DB), config.JWTSigningKey), budgets.RiskFindings).
+		WithRiskAnalysisStatus(platformmcp.NewRiskAnalysisStatusService(config.Logger, config.DB, config.RiskAnalysisDescriber)).
+		WithRiskFindings(platformmcp.NewRiskFindingsService(config.DB, config.RiskFindings, config.JWTSigningKey), budgets.RiskFindings).
 		WithRiskFindingList(platformmcp.NewRiskFindingListService(config.DB, config.RiskFindingList, config.JWTSigningKey), budgets.RiskFindings).
 		// Metered on the sensitive allowance: a chat page carries masked
 		// participants and person references, like the drill-down reads.
@@ -635,10 +635,22 @@ func attachShadowAI(reader *platformmcp.PostgresReader, config platformMCPConfig
 func platformMCPSetupResources(config platformMCPConfig) ([]platformmcp.SetupResource, error) {
 	// The redirect_uri a newly created client registers, derived the same way
 	// externalmcp, remotesessions, and the dashboard derive it.
-	callbackURL := remotesessions.RemoteLoginCallbackURL(config.CallbackOrigin)
+	callbackURL := remotesessions.RemoteLoginCallbackURL(config.CallbackOrigins.ForNewClient(true))
+	if config.CallbackOrigins.OrganizationHosts != nil {
+		callbackURL = "{{organization_oauth_callback_url}}"
+	}
 	resources, err := setupcorpus.Build(setupcorpus.Options{OAuthCallbackURL: callbackURL})
 	if err != nil {
 		return nil, fmt.Errorf("build platform mcp setup corpus: %w", err)
+	}
+	if config.CallbackOrigins.OrganizationHosts != nil {
+		resources = platformmcp.WithSetupCallbackResolver(resources, callbackURL, func(ctx context.Context, organizationID string) (string, error) {
+			base, err := config.CallbackOrigins.ResolveNewClientBaseURL(ctx, config.DB, organizationID)
+			if err != nil {
+				return "", err
+			}
+			return remotesessions.RemoteLoginCallbackURL(config.CallbackOrigins.ForClient(base)), nil
+		})
 	}
 	return resources, nil
 }
@@ -1089,6 +1101,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 	pluginInventory := platformmcp.NewPluginsService(config.DB, budgets.Plugins, config.JWTSigningKey).
 		WithAuthorization(config.Authz).
 		WithRemoteSessions(config.RemoteChallengeManager).
+		WithAuthClientResolver(config.FeatureFlags).
 		WithIdentityChaining(chaining).
 		WithInstallLinks(config.DashboardURL, config.ServerURL).
 		WithAssignmentMutations(config.FeatureFlags, organizationSlugs, config.AuditLogger, pluginAssignmentMutationBudget).
@@ -1139,8 +1152,8 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		WithMCPNetworkTraffic(config.NetworkTraffic, config.LogsEnabled).
 		WithOrganizationEvents(config.EventFeed, config.LogsEnabled, config.DashboardURL).
 		WithNetworkIngressStatus(config.DashboardURL).
-		WithRiskAnalysisStatus(platformmcp.NewRiskAnalysisStatusService(config.Logger, config.DB, config.RiskAnalysisDescriber, config.FeatureFlags, platformmcp.NewPostgresOrganizationSlugResolver(config.DB))).
-		WithRiskFindings(platformmcp.NewRiskFindingsService(config.DB, config.RiskFindings, config.FeatureFlags, platformmcp.NewPostgresOrganizationSlugResolver(config.DB), config.JWTSigningKey), budgets.RiskFindings).
+		WithRiskAnalysisStatus(platformmcp.NewRiskAnalysisStatusService(config.Logger, config.DB, config.RiskAnalysisDescriber)).
+		WithRiskFindings(platformmcp.NewRiskFindingsService(config.DB, config.RiskFindings, config.JWTSigningKey), budgets.RiskFindings).
 		WithRiskFindingList(platformmcp.NewRiskFindingListService(config.DB, config.RiskFindingList, config.JWTSigningKey), budgets.RiskFindings).
 		// Metered on the sensitive allowance: a chat page carries masked
 		// participants and person references, like the drill-down reads.

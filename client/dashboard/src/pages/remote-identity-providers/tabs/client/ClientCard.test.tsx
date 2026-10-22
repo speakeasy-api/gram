@@ -1,13 +1,20 @@
+import { unrecognized } from "@gram/client/types/unrecognized.js";
 import { CreateRemoteSessionClientFormTokenEndpointAuthMethod as AuthMethod } from "@gram/client/models/components/createremotesessionclientform.js";
 import type { RemoteSessionClient } from "@gram/client/models/components/remotesessionclient.js";
 import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ClientCard } from "./ClientCard";
 
 // Unlike OverviewTab.test, this renders the real Radix select fields, which a
 // disabled fieldset does not stop from opening.
+
+const testState = vi.hoisted(() => ({ admin: false, mutate: vi.fn() }));
+beforeEach(() => {
+  testState.admin = false;
+  testState.mutate.mockClear();
+});
 
 vi.mock("@/lib/remote-identity/queries/useCustomerManagedKeys", () => ({
   useCustomerManagedKeys: () => ({ entitled: false, isLoading: false }),
@@ -15,7 +22,7 @@ vi.mock("@/lib/remote-identity/queries/useCustomerManagedKeys", () => ({
 vi.mock("@/contexts/Auth", () => ({ useIsPlatformAdmin: () => true }));
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({
-    hasAnyScope: () => false,
+    hasAnyScope: () => testState.admin,
     hasScope: () => false,
     hasAllScopes: () => false,
     isLoading: false,
@@ -32,7 +39,7 @@ vi.mock(
   "@gram/client/react-query/updateOrganizationRemoteSessionClient.js",
   () => ({
     useUpdateOrganizationRemoteSessionClientMutation: () => ({
-      mutate: vi.fn(),
+      mutate: testState.mutate,
       isPending: false,
     }),
   }),
@@ -89,4 +96,81 @@ describe("client card without org:admin", () => {
       "true",
     );
   });
+});
+
+describe("client card with unsupported configuration", () => {
+  it.each([
+    { tokenEndpointAuthMethod: unrecognized("future_auth") },
+    { tokenEndpointAuthAudienceFormat: unrecognized("future_audience") },
+  ])("disables editing for an administrator: %j", (unknown) => {
+    testState.admin = true;
+    render(
+      <ClientCard
+        client={{ ...client, ...unknown }}
+        issuer={issuer}
+        issuerId="issuer-1"
+      />,
+    );
+    expect(
+      (screen.getByLabelText("Audience") as HTMLInputElement).disabled,
+    ).toBe(true);
+    expect(screen.queryByRole("button", { name: "Save changes" })).toBeNull();
+    expect(screen.getByText(/unsupported client configuration/)).toBeTruthy();
+    expect(screen.getByTestId("key-set").getAttribute("data-disabled")).toBe(
+      "true",
+    );
+  });
+});
+
+it("preserves unknown audience configuration for unrelated non-JWT edits and blocks switching to JWT", () => {
+  testState.admin = true;
+  render(
+    <ClientCard
+      client={{
+        ...client,
+        tokenEndpointAuthMethod: AuthMethod.ClientSecretPost,
+        tokenEndpointAuthAudienceFormat: unrecognized("future_audience"),
+      }}
+      issuer={issuer}
+      issuerId="issuer-1"
+    />,
+  );
+  const audience = screen.getByLabelText("Audience");
+  expect(audience).toHaveProperty("disabled", false);
+  fireEvent.change(audience, { target: { value: "new-audience" } });
+  fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+  expect(testState.mutate).toHaveBeenCalledWith({
+    request: {
+      updateRemoteSessionClientForm: expect.objectContaining({
+        audience: "new-audience",
+        tokenEndpointAuthAudienceFormat: undefined,
+      }),
+    },
+  });
+  const auth = screen
+    .getAllByRole("combobox")
+    .find((el) => el.id !== "client-scopes")!;
+  fireEvent.click(auth);
+  expect(
+    screen
+      .getByRole("option", { name: /private_key_jwt/ })
+      .getAttribute("aria-disabled"),
+  ).toBe("true");
+});
+
+it("labels an unknown authentication method as unsupported rather than the default", () => {
+  testState.admin = true;
+  render(
+    <ClientCard
+      client={{
+        ...client,
+        tokenEndpointAuthMethod: unrecognized("future_auth"),
+      }}
+      issuer={issuer}
+      issuerId="issuer-1"
+    />,
+  );
+  expect(screen.getByText("Unsupported authentication method")).toBeTruthy();
+  expect(screen.queryByText("client_secret_basic (default)")).toBeNull();
+  expect(screen.queryByRole("button", { name: "Save changes" })).toBeNull();
 });

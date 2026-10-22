@@ -107,3 +107,24 @@ func TestEligibleServerRespectsToolsetKeyedRemoval(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, got.Servers, "a toolset-keyed removal is not re-added")
 }
+
+// A live toolset-keyed row left from before the server key reports no backend, so clients show it as missing.
+func TestGetPluginReportsNoBackendForLeftoverToolsetKeyedEntry(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestPluginsService(t)
+	server := createTestToolset(t, ctx, ti.conn, "Leftover")
+	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Leftover entry"})
+	require.NoError(t, err)
+	_, err = testrepo.New(ti.conn).InsertToolsetKeyedPluginServerFixture(ctx, testrepo.InsertToolsetKeyedPluginServerFixtureParams{
+		PluginID: uuid.MustParse(plugin.ID), ToolsetID: uuid.NullUUID{UUID: server.ID, Valid: true}, DisplayName: server.Name, Policy: "required", SortOrder: 0,
+		DeletedAt: pgtype.Timestamptz{},
+	})
+	require.NoError(t, err)
+
+	got, err := ti.service.GetPlugin(ctx, &gen.GetPluginPayload{ID: plugin.ID})
+	require.NoError(t, err)
+	require.Len(t, got.Servers, 1)
+	require.Nil(t, got.Servers[0].ToolsetID)
+	require.Nil(t, got.Servers[0].McpServerID)
+	require.Nil(t, got.Servers[0].MetaMcpServerID)
+}

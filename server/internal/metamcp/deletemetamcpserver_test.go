@@ -275,6 +275,63 @@ func TestDeleteMetaMcpServer_SoftDeletesLifecycleBoundRiskPolicy(t *testing.T) {
 	require.Equal(t, beforeDeletes+1, afterDeletes)
 }
 
+func TestDeleteMetaMcpServer_RemovesGatewayFromSharedRiskPolicyScope(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	gateway, err := ti.service.CreateMetaMcpServer(ctx, &gen.CreateMetaMcpServerPayload{Name: "shared policy gateway"})
+	require.NoError(t, err)
+	serverID := seedMcpServer(t, ctx, ti.conn, *authCtx.ProjectID)
+	policy, err := riskrepo.New(ti.conn).CreateRiskPolicy(ctx, riskrepo.CreateRiskPolicyParams{
+		ID:                   uuid.New(),
+		ProjectID:            *authCtx.ProjectID,
+		OrganizationID:       authCtx.ActiveOrganizationID,
+		Name:                 "shared policy",
+		PolicyType:           "standard",
+		Sources:              []string{"gitleaks"},
+		PresidioEntities:     nil,
+		AnalyzerConfig:       []byte(`{}`),
+		PromptInjectionRules: nil,
+		DisabledRules:        nil,
+		CustomRuleIds:        nil,
+		McpScope:             []byte(`{"servers":[{"mcp_server_id":"` + gateway.ID + `"},{"mcp_server_id":"` + serverID.String() + `"}]}`),
+		Enabled:              true,
+		Action:               "flag",
+		AudienceType:         "everyone",
+		ShadowMcpDisposition: pgtype.Text{String: "", Valid: false},
+		AutoName:             false,
+		UserMessage:          pgtype.Text{String: "", Valid: false},
+		Prompt:               pgtype.Text{String: "", Valid: false},
+		ModelConfig:          nil,
+		Score:                pgtype.Float8{Float64: 0, Valid: false},
+	})
+	require.NoError(t, err)
+	beforeUpdates, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRiskPolicyUpdate)
+	require.NoError(t, err)
+
+	require.NoError(t, ti.service.DeleteMetaMcpServer(ctx, &gen.DeleteMetaMcpServerPayload{ID: gateway.ID}))
+
+	survivor, err := riskrepo.New(ti.conn).GetRiskPolicy(ctx, riskrepo.GetRiskPolicyParams{
+		ID:        policy.ID,
+		ProjectID: *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+	require.JSONEq(t, `{"servers":[{"mcp_server_id":"`+serverID.String()+`"}]}`, string(survivor.McpScope))
+	require.Equal(t, policy.Version, survivor.Version, "dropping a dead target must not bump the version")
+	require.True(t, survivor.UpdatedAt.Time.After(policy.UpdatedAt.Time), "the prune must move updated_at")
+	afterUpdates, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRiskPolicyUpdate)
+	require.NoError(t, err)
+	require.Equal(t, beforeUpdates+1, afterUpdates)
+	record, err := audittest.LatestAuditLogByActionAndSubject(ctx, ti.conn, audit.ActionRiskPolicyUpdate, policy.ID.String())
+	require.NoError(t, err)
+	require.Contains(t, string(record.BeforeSnapshot), gateway.ID)
+	require.NotContains(t, string(record.AfterSnapshot), gateway.ID)
+	require.Contains(t, string(record.AfterSnapshot), serverID.String())
+}
+
 // Deleting a gateway removes its members, so a member's association with a
 // client only the gateway's issuer binds goes with them, as it does when the
 // member is removed on its own.

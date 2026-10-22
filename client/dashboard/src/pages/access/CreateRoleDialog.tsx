@@ -1,3 +1,4 @@
+import { isKnownResourceType } from "./types";
 import { invalidateAllResourceAudience } from "@gram/client/react-query/resourceAudience.js";
 import { AnyField } from "@/components/moon/any-field";
 import { InputField } from "@/components/moon/input-field";
@@ -213,7 +214,9 @@ export function CreateRoleDialog({
   const userVisibleScopeDefinitions = useMemo(
     () =>
       (scopeDefinitions ?? []).filter(
-        (scope) => scope.visibility === "user_visible",
+        (scope): scope is typeof scope & { resourceType: ResourceType } =>
+          scope.visibility === "user_visible" &&
+          isKnownResourceType(scope.resourceType),
       ),
     [scopeDefinitions],
   );

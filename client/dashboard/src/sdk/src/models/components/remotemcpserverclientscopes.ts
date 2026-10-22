@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
@@ -26,7 +27,7 @@ export const ScopeSource = {
 /**
  * The precedence step that decided the request.
  */
-export type ScopeSource = ClosedEnum<typeof ScopeSource>;
+export type ScopeSource = OpenEnum<typeof ScopeSource>;
 
 /**
  * What a login through one client bound to the MCP server would request now, resolved from cached state.
@@ -63,8 +64,8 @@ export type RemoteMcpServerClientScopes = {
 };
 
 /** @internal */
-export const ScopeSource$inboundSchema: z.ZodMiniEnum<typeof ScopeSource> = z
-  .enum(ScopeSource);
+export const ScopeSource$inboundSchema: z.ZodMiniType<ScopeSource, unknown> =
+  openEnums.inboundSchema(ScopeSource);
 
 /** @internal */
 export const RemoteMcpServerClientScopes$inboundSchema: z.ZodMiniType<

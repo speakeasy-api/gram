@@ -17,9 +17,9 @@ probe_address() {
 }
 
 # Most probe targets below are plain-HTTP-only regardless of GRAM_HTTP_SCHEME:
-# the Go/Python control servers, dev-idp, and mock-oidc never enable TLS. Only
-# the Vite dev servers (dashboard, admin-dashboard) serve TLS when GRAM_SSL_*
-# is configured.
+# the Go/Python control servers and mock-oidc never enable TLS. The Vite dev
+# servers (dashboard, admin-dashboard) and dev-idp's public listener serve TLS
+# when GRAM_SSL_* is configured.
 case "$usage_name" in
   dev-idp)
     mise run check:http --url "http://$(probe_address "${GRAM_DEVIDP_CONTROL_ADDRESS:-localhost:$GRAM_DEVIDP_CONTROL_PORT}")/healthz"

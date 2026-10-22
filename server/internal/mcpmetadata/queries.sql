@@ -1,5 +1,5 @@
 -- name: GetMetadataByBackendID :one
--- A canonical wrapper shares its toolset's id, so one id matches the row under either key; any other server holding the id keeps its own row.
+-- Addressed by toolset id, the row counts only under the toolset's canonical wrapper, which shares its id.
 SELECT id,
        toolset_id,
        mcp_server_id,
@@ -15,10 +15,8 @@ SELECT id,
        updated_at
 FROM mcp_metadata
 WHERE mcp_metadata.project_id = @project_id::uuid
-  AND ((mcp_metadata.toolset_id = @backend_id::uuid AND (@toolset_backend::bool OR EXISTS (SELECT 1 FROM mcp_servers s WHERE s.id = @backend_id::uuid AND s.toolset_id = s.id AND s.project_id = @project_id::uuid)))
-    OR (mcp_metadata.mcp_server_id = @backend_id::uuid AND (NOT @toolset_backend::bool OR EXISTS (SELECT 1 FROM mcp_servers s WHERE s.id = @backend_id::uuid AND s.toolset_id = s.id AND s.project_id = @project_id::uuid))))
-ORDER BY (toolset_id IS NOT NULL) DESC, updated_at DESC
-LIMIT 1;
+  AND mcp_metadata.mcp_server_id = @backend_id::uuid
+  AND (NOT @toolset_backend::bool OR EXISTS (SELECT 1 FROM mcp_servers s WHERE s.id = @backend_id::uuid AND s.toolset_id = s.id AND s.project_id = @project_id::uuid));
 
 -- name: UpsertMetadataByMcpServerID :one
 INSERT INTO mcp_metadata (
@@ -101,8 +99,8 @@ RETURNING id,
           created_at,
           updated_at;
 
--- name: LockMetadataByBackendID :many
--- Locks the toolset-keyed row before its server-keyed twin, the order the dependent move takes; the same match as GetMetadataByBackendID.
+-- name: LockMetadataByBackendID :one
+-- The same match as GetMetadataByBackendID.
 SELECT id,
        toolset_id,
        mcp_server_id,
@@ -118,50 +116,29 @@ SELECT id,
        updated_at
 FROM mcp_metadata
 WHERE mcp_metadata.project_id = @project_id::uuid
-  AND ((mcp_metadata.toolset_id = @backend_id::uuid AND (@toolset_backend::bool OR EXISTS (SELECT 1 FROM mcp_servers s WHERE s.id = @backend_id::uuid AND s.toolset_id = s.id AND s.project_id = @project_id::uuid)))
-    OR (mcp_metadata.mcp_server_id = @backend_id::uuid AND (NOT @toolset_backend::bool OR EXISTS (SELECT 1 FROM mcp_servers s WHERE s.id = @backend_id::uuid AND s.toolset_id = s.id AND s.project_id = @project_id::uuid))))
-ORDER BY (toolset_id IS NOT NULL) DESC, updated_at DESC
+  AND mcp_metadata.mcp_server_id = @backend_id::uuid
+  AND (NOT @toolset_backend::bool OR EXISTS (SELECT 1 FROM mcp_servers s WHERE s.id = @backend_id::uuid AND s.toolset_id = s.id AND s.project_id = @project_id::uuid))
 FOR UPDATE;
 
 -- name: AcquireMetadataBackendLock :exec
 -- Serializes saves for one backend id, so a save sees any row a concurrent save inserted for it.
 SELECT pg_advisory_xact_lock(hashtextextended('mcp_metadata:' || (@project_id::uuid)::text || ':' || (@backend_id::uuid)::text, 0));
 
--- name: DeleteServerKeyedMetadata :execrows
--- Cascades to the row's mcp_environment_configs.
-DELETE FROM mcp_metadata
-WHERE id = @id
-  AND project_id = @project_id
-  AND mcp_server_id = @mcp_server_id;
-
--- name: RekeyMetadataToMcpServer :execrows
--- Same row id, so its mcp_environment_configs stay attached.
-UPDATE mcp_metadata
-SET toolset_id = NULL,
-    mcp_server_id = @mcp_server_id,
-    updated_at = clock_timestamp()
-WHERE id = @id
-  AND project_id = @project_id
-  AND toolset_id = @mcp_server_id;
-
 -- name: GetHeaderDisplayNames :one
--- Addressed by toolset id: a server-keyed row counts only under the toolset's canonical wrapper.
+-- Addressed by toolset id: the row counts only under the toolset's canonical wrapper.
 SELECT header_display_names
 FROM mcp_metadata
 WHERE mcp_metadata.project_id = @project_id::uuid
-  AND (mcp_metadata.toolset_id = @backend_id::uuid OR (mcp_metadata.mcp_server_id = @backend_id::uuid AND EXISTS (SELECT 1 FROM mcp_servers s WHERE s.id = @backend_id::uuid AND s.toolset_id = s.id AND s.project_id = @project_id::uuid)))
-ORDER BY (toolset_id IS NOT NULL) DESC, updated_at DESC
-LIMIT 1;
+  AND mcp_metadata.mcp_server_id = @backend_id::uuid
+  AND EXISTS (SELECT 1 FROM mcp_servers s WHERE s.id = @backend_id::uuid AND s.toolset_id = s.id AND s.project_id = @project_id::uuid);
 
 -- name: GetHeaderDisplayNamesByToolsetIDs :many
--- Toolset-keyed rows sort last so they win when the caller builds a map; a server-keyed row counts only under the toolset's canonical wrapper.
-SELECT COALESCE(m.toolset_id, m.mcp_server_id)::uuid AS toolset_id, m.header_display_names
+-- A row counts only under the toolset's canonical wrapper, which shares its id.
+SELECT m.mcp_server_id::uuid AS toolset_id, m.header_display_names
 FROM mcp_metadata m
 WHERE m.project_id = @project_id
-  AND (m.toolset_id = ANY(@toolset_ids::uuid[])
-    OR (m.mcp_server_id = ANY(@toolset_ids::uuid[])
-      AND EXISTS (SELECT 1 FROM mcp_servers s WHERE s.id = m.mcp_server_id AND s.toolset_id = s.id AND s.project_id = m.project_id)))
-ORDER BY (m.toolset_id IS NOT NULL), m.updated_at;
+  AND m.mcp_server_id = ANY(@toolset_ids::uuid[])
+  AND EXISTS (SELECT 1 FROM mcp_servers s WHERE s.id = m.mcp_server_id AND s.toolset_id = s.id AND s.project_id = m.project_id);
 
 -- name: GetHeaderDisplayNamesByMcpServerID :one
 SELECT header_display_names

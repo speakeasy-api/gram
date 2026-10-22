@@ -567,7 +567,7 @@ func (s *Service) ListRiskPolicies(ctx context.Context, payload *gen.ListRiskPol
 
 	result := make([]*types.RiskPolicy, 0, len(policies))
 	for _, policy := range policies {
-		result = append(result, policyToGoa(policy))
+		result = append(result, policycore.ToGoa(policy))
 	}
 	return &gen.ListRiskPoliciesResult{Policies: result}, nil
 }
@@ -646,7 +646,7 @@ func (s *Service) ListRiskPoliciesForMcpServer(ctx context.Context, payload *gen
 
 	result := make([]*types.RiskPolicy, 0, len(policies))
 	for _, policy := range policies {
-		result = append(result, policyToGoa(policy))
+		result = append(result, policycore.ToGoa(policy))
 	}
 	return &gen.ListRiskPoliciesResult{Policies: result}, nil
 }
@@ -826,7 +826,7 @@ func (s *Service) GetRiskPolicy(ctx context.Context, payload *gen.GetRiskPolicyP
 		return nil, oops.E(oops.CodeUnexpected, err, "load risk policy").LogError(ctx, s.logger)
 	}
 
-	return policyToGoa(policy), nil
+	return policycore.ToGoa(policy), nil
 }
 
 func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskPolicyPayload) (*types.RiskPolicy, error) {
@@ -3567,7 +3567,7 @@ func (s *Service) policyToType(ctx context.Context, row repo.RiskPolicy) (*types
 	if err != nil {
 		return nil, fmt.Errorf("project risk policy: %w", err)
 	}
-	return policyToGoa(policy), nil
+	return policycore.ToGoa(policy), nil
 }
 
 func buildSessionQuarantine(row repo.SessionQuarantine) *gen.SessionQuarantine {
