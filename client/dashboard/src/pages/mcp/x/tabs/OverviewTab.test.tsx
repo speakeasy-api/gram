@@ -5,12 +5,20 @@ import { parseFilters } from "@/pages/logs/log-filter-url";
 import { OverviewTab } from "./OverviewTab";
 
 const logs = vi.hoisted(() => ({ canView: true, enabled: true }));
-vi.mock("@/contexts/Auth", () => ({ useOrganization: () => ({ id: "org" }) }));
+vi.mock("@/contexts/Auth", () => ({ useProject: () => ({ id: "project" }) }));
 vi.mock("@/components/observe/observeDeepLink", () => ({
   useCanViewToolLogs: () => logs.canView,
 }));
-vi.mock("@gram/client/react-query/productFeatures.js", () => ({
-  useProductFeatures: () => ({ data: { logsEnabled: logs.enabled } }),
+vi.mock("@gram/client/react-query/_context.js", () => ({
+  useGramContext: () => ({}),
+}));
+// The Tool Logs probe succeeds when the organization records logs and answers
+// 404 (an error) when it does not.
+vi.mock("@tanstack/react-query", async (original) => ({
+  ...(await original<typeof import("@tanstack/react-query")>()),
+  useQuery: ({ enabled }: { enabled?: boolean }) => ({
+    isSuccess: enabled !== false && logs.enabled,
+  }),
 }));
 vi.mock("@/routes", () => ({
   useRoutes: () => ({ logs: { href: () => "/example/projects/test/logs" } }),

@@ -1,7 +1,10 @@
 import { useRoutes } from "@/routes";
-import { useOrganization } from "@/contexts/Auth";
+import { useProject } from "@/contexts/Auth";
 import { useCanViewToolLogs } from "@/components/observe/observeDeepLink";
-import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
+import { telemetrySearchLogs } from "@gram/client/funcs/telemetrySearchLogs";
+import { useGramContext } from "@gram/client/react-query/_context.js";
+import { unwrapAsync } from "@gram/client/types/fp";
+import { useQuery } from "@tanstack/react-query";
 import { serializeFilters } from "@/pages/logs/log-filter-url";
 import { Operator } from "@gram/client/models/components/logfilter";
 import { PluginStatusBanner } from "@/pages/mcp/overview/PluginStatusBanner";
@@ -22,17 +25,34 @@ export function OverviewTab({
   agentSetupHref: string;
 }): JSX.Element | null {
   const routes = useRoutes();
-  const organization = useOrganization();
+  const client = useGramContext();
+  const project = useProject();
   const canViewToolLogs = useCanViewToolLogs();
-  const features = useProductFeatures(
-    { organizationId: organization.id },
-    undefined,
-    { enabled: !!mcpServer.tunneledMcpServerId, throwOnError: false },
-  );
   // Tool Logs is empty when the organization does not record logs, so the
-  // tunnel view links to it only when it can show something.
-  const toolLogsAvailable =
-    canViewToolLogs && features.data?.logsEnabled === true;
+  // tunnel view links to it only when it can show something. Tool Logs' own
+  // search answers 404 in that case and is authorized for the same log:read
+  // audience as the link, unlike the organization's feature settings. A
+  // one-minute, one-row search keeps the probe cheap.
+  const toolLogsProbe = useQuery({
+    queryKey: ["tool-logs-available", project.id],
+    queryFn: () => {
+      const to = new Date();
+      return unwrapAsync(
+        telemetrySearchLogs(client, {
+          searchLogsPayload: {
+            from: new Date(to.getTime() - 60_000),
+            to,
+            limit: 1,
+          },
+        }),
+      );
+    },
+    enabled: canViewToolLogs && !!mcpServer.tunneledMcpServerId,
+    staleTime: 5 * 60_000,
+    retry: false,
+    throwOnError: false,
+  });
+  const toolLogsAvailable = canViewToolLogs && toolLogsProbe.isSuccess;
   if (mcpServer.unproxiedMcpServerId) {
     return (
       <UnproxiedMcpOverviewTab
