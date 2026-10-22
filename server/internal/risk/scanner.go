@@ -1785,11 +1785,15 @@ func enforcementFindings(text, source string, in []*riskv1.EnforcementFinding) (
 			return nil, fmt.Errorf("enforcement finding has invalid byte range %d:%d", start, end)
 		}
 		match := text[start:end]
-		description := finding.GetRuleId()
-		if source == ra.SourcePresidio {
+		description := conv.Default(finding.GetDescription(), finding.GetRuleId())
+		switch source {
+		case ra.SourcePresidio:
 			_, description = ra.DescribePresidioEntity(strings.ToUpper(strings.TrimPrefix(finding.GetRuleId(), "pii.")))
-		} else if ruleDescription, ok := gitleaks.DescribeRule(finding.GetRuleId()); ok {
-			description = ruleDescription
+		case ra.SourceGitleaks:
+			description = finding.GetRuleId()
+			if ruleDescription, ok := gitleaks.DescribeRule(finding.GetRuleId()); ok {
+				description = ruleDescription
+			}
 		}
 		out = append(out, scanners.Finding{
 			RuleID:              finding.GetRuleId(),
