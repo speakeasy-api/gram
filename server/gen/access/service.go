@@ -1327,6 +1327,10 @@ type Selector struct {
 	// only). A user ID, '*', or '$represented_user' for the user the request acts
 	// for. Never lets a caller use another user's connection.
 	ConnectionOwner *string
+	// Upstream OAuth client filter (mcp:auth scopes on remote_session clients
+	// only). Together with connection_owner it names one person's connection
+	// across every auth client sharing that upstream client.
+	UpstreamClient *string
 	// Tool disposition filter (MCP scopes only).
 	Disposition *string
 	// Specific tool name filter (MCP scopes only).

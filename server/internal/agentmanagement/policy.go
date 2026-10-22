@@ -283,6 +283,7 @@ func policySelector(input *gen.AgentPolicySelector) authz.Selector {
 		authz.SelectorKeyServerIdentity:  input.ServerIdentity,
 		authz.SelectorKeyClientType:      input.ClientType,
 		authz.SelectorKeyConnectionOwner: input.ConnectionOwner,
+		authz.SelectorKeyUpstreamClient:  input.UpstreamClient,
 	} {
 		if value != nil {
 			selector[key] = *value
@@ -313,6 +314,7 @@ func policySelectorView(selector authz.Selector) *gen.AgentPolicySelector {
 		ServerIdentity:  nil,
 		ClientType:      nil,
 		ConnectionOwner: nil,
+		UpstreamClient:  nil,
 	}
 	for key, target := range map[string]**string{
 		authz.SelectorKeyDisposition:     &result.Disposition,
@@ -322,6 +324,7 @@ func policySelectorView(selector authz.Selector) *gen.AgentPolicySelector {
 		authz.SelectorKeyServerIdentity:  &result.ServerIdentity,
 		authz.SelectorKeyClientType:      &result.ClientType,
 		authz.SelectorKeyConnectionOwner: &result.ConnectionOwner,
+		authz.SelectorKeyUpstreamClient:  &result.UpstreamClient,
 	} {
 		if value, ok := selector[key]; ok {
 			value := value

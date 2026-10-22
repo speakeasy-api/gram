@@ -143,7 +143,7 @@ func TestRun_LegacyKeysGetTheirCurrentReach(t *testing.T) {
 		return contextvalues.WithLegacyAPIKeyAuthorization(t.Context(), &contextvalues.AuthContext{ActiveOrganizationID: f.orgID, APIKeyID: id.String(), AccountType: "enterprise"})
 	}
 	connect := authz.MCPCheck(authz.ScopeMCPConnect, serverID.String(), f.projectID.String())
-	useClient := authz.MCPAuthClientCheck(clientID.String(), authz.MCPAuthClientDimensions{ClientType: TypeServiceAccount, ProjectID: f.projectID.String(), ConnectionOwner: ""})
+	useClient := authz.MCPAuthClientCheck(clientID.String(), authz.MCPAuthClientDimensions{ClientType: TypeServiceAccount, ProjectID: f.projectID.String(), ConnectionOwner: "", UpstreamClient: ""})
 	require.False(t, mandatory(t, keyCtx(orgWide), f, connect).Allowed, "no policy before the backfill")
 
 	report := f.run(true)
@@ -184,7 +184,7 @@ func TestRun_InferredGrantsNeverOutrankBlocks(t *testing.T) {
 	f.run(true)
 
 	grants := append(f.grantsOf(user), f.grantsOf(role)...)
-	check := authz.MCPAuthClientCheck(clientID.String(), authz.MCPAuthClientDimensions{ClientType: TypeServiceAccount, ProjectID: f.projectID.String(), ConnectionOwner: ""})
+	check := authz.MCPAuthClientCheck(clientID.String(), authz.MCPAuthClientDimensions{ClientType: TypeServiceAccount, ProjectID: f.projectID.String(), ConnectionOwner: "", UpstreamClient: ""})
 	session := "session_1"
 	ctx := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{ActiveOrganizationID: f.orgID, UserID: "user_blocked", SessionID: &session, AccountType: "enterprise"})
 	require.False(t, mandatory(t, authz.GrantsToContext(ctx, grants), f, check).Allowed, "the inherited block still applies")
@@ -210,7 +210,7 @@ func TestRun_ProvisionedKeyPoliciesGetLaterClients(t *testing.T) {
 
 	serverID, clientID := f.sharedClient()
 	ctx := contextvalues.WithLegacyAPIKeyAuthorization(t.Context(), &contextvalues.AuthContext{ActiveOrganizationID: f.orgID, APIKeyID: key.String(), AccountType: "enterprise"})
-	use := authz.MCPAuthClientCheck(clientID.String(), authz.MCPAuthClientDimensions{ClientType: TypeServiceAccount, ProjectID: f.projectID.String(), ConnectionOwner: ""})
+	use := authz.MCPAuthClientCheck(clientID.String(), authz.MCPAuthClientDimensions{ClientType: TypeServiceAccount, ProjectID: f.projectID.String(), ConnectionOwner: "", UpstreamClient: ""})
 	require.True(t, mandatory(t, ctx, f, authz.MCPCheck(authz.ScopeMCPConnect, serverID.String(), f.projectID.String()), use).Allowed,
 		"a policy the backfill wrote gets clients recorded since")
 	require.Zero(t, f.run(false).PendingGrants)
@@ -316,7 +316,7 @@ func TestRunGrants_KeyPoliciesWaitForRecordedClients(t *testing.T) {
 		}
 	}
 	ctx := contextvalues.WithLegacyAPIKeyAuthorization(t.Context(), &contextvalues.AuthContext{ActiveOrganizationID: f.orgID, APIKeyID: key.String(), AccountType: "enterprise"})
-	use := authz.MCPAuthClientCheck(clientID.String(), authz.MCPAuthClientDimensions{ClientType: TypeServiceAccount, ProjectID: f.projectID.String(), ConnectionOwner: ""})
+	use := authz.MCPAuthClientCheck(clientID.String(), authz.MCPAuthClientDimensions{ClientType: TypeServiceAccount, ProjectID: f.projectID.String(), ConnectionOwner: "", UpstreamClient: ""})
 	require.True(t, mandatory(t, ctx, f, authz.MCPCheck(authz.ScopeMCPConnect, serverID.String(), f.projectID.String()), use).Allowed)
 
 	settled, err := RunGrants(t.Context(), f.pool, Options{OrganizationID: f.orgID, Apply: false, PageSize: 0})
@@ -335,7 +335,7 @@ func TestRun_UserServerGrantsKeepInheritedBlocks(t *testing.T) {
 
 	session := "session_1"
 	ctx := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{ActiveOrganizationID: f.orgID, UserID: "user_concrete", SessionID: &session, AccountType: "enterprise"})
-	check := authz.MCPAuthClientCheck(clientID.String(), authz.MCPAuthClientDimensions{ClientType: TypeServiceAccount, ProjectID: f.projectID.String(), ConnectionOwner: ""})
+	check := authz.MCPAuthClientCheck(clientID.String(), authz.MCPAuthClientDimensions{ClientType: TypeServiceAccount, ProjectID: f.projectID.String(), ConnectionOwner: "", UpstreamClient: ""})
 	require.True(t, mandatory(t, authz.GrantsToContext(ctx, f.grantsOf(user)), f, check).Allowed, "the user keeps today's reach")
 
 	role := urn.NewPrincipal(urn.PrincipalTypeRole, "blocks_concrete")
@@ -365,7 +365,7 @@ func TestRun_SharedClientGrantsNeverReachOtherClients(t *testing.T) {
 		return authz.GrantsToContext(ctx, grants)
 	}
 	useClient := func(clientID uuid.UUID) authz.Check {
-		return authz.MCPAuthClientCheck(clientID.String(), authz.MCPAuthClientDimensions{ClientType: TypeServiceAccount, ProjectID: project, ConnectionOwner: ""})
+		return authz.MCPAuthClientCheck(clientID.String(), authz.MCPAuthClientDimensions{ClientType: TypeServiceAccount, ProjectID: project, ConnectionOwner: "", UpstreamClient: ""})
 	}
 	// A client created after the backfill, which no run has seen.
 	later := uuid.New()
@@ -410,7 +410,7 @@ func TestRun_TakenOverUserGrantsOutrankInheritedBlocks(t *testing.T) {
 
 	session := "session_1"
 	ctx := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{ActiveOrganizationID: f.orgID, UserID: user.ID, SessionID: &session, AccountType: "enterprise"})
-	check := authz.MCPAuthClientCheck(clientID.String(), authz.MCPAuthClientDimensions{ClientType: TypeServiceAccount, ProjectID: f.projectID.String(), ConnectionOwner: ""})
+	check := authz.MCPAuthClientCheck(clientID.String(), authz.MCPAuthClientDimensions{ClientType: TypeServiceAccount, ProjectID: f.projectID.String(), ConnectionOwner: "", UpstreamClient: ""})
 	require.False(t, mandatory(t, authz.GrantsToContext(ctx, append(f.grantsOf(user), f.grantsOf(role)...)), f, check).Allowed, "the provisioned grant yields to the block")
 
 	// An administrator granting the same client to the user by name makes the

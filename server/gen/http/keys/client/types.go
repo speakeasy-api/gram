@@ -1297,6 +1297,10 @@ type AgentPolicySelectorRequestBody struct {
 	// Personal connection owner filter (mcp:auth scopes on remote_session clients
 	// only): a user ID, '*', or '$represented_user'.
 	ConnectionOwner *string `form:"connection_owner,omitempty" json:"connection_owner,omitempty" xml:"connection_owner,omitempty"`
+	// Upstream OAuth client filter (mcp:auth scopes on remote_session clients
+	// only). Together with connection_owner it names one person's connection
+	// across every auth client sharing that upstream client.
+	UpstreamClient *string `form:"upstream_client,omitempty" json:"upstream_client,omitempty" xml:"upstream_client,omitempty"`
 	// Tool disposition filter (MCP scopes only).
 	Disposition *string `form:"disposition,omitempty" json:"disposition,omitempty" xml:"disposition,omitempty"`
 	// Specific tool name filter (MCP scopes only).
@@ -1357,6 +1361,10 @@ type AgentPolicySelectorResponseBody struct {
 	// Personal connection owner filter (mcp:auth scopes on remote_session clients
 	// only): a user ID, '*', or '$represented_user'.
 	ConnectionOwner *string `form:"connection_owner,omitempty" json:"connection_owner,omitempty" xml:"connection_owner,omitempty"`
+	// Upstream OAuth client filter (mcp:auth scopes on remote_session clients
+	// only). Together with connection_owner it names one person's connection
+	// across every auth client sharing that upstream client.
+	UpstreamClient *string `form:"upstream_client,omitempty" json:"upstream_client,omitempty" xml:"upstream_client,omitempty"`
 	// Tool disposition filter (MCP scopes only).
 	Disposition *string `form:"disposition,omitempty" json:"disposition,omitempty" xml:"disposition,omitempty"`
 	// Specific tool name filter (MCP scopes only).

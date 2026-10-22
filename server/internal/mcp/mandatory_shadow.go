@@ -122,13 +122,19 @@ func isAccessDenial(err error) bool {
 }
 
 // mandatoryAuthClientCheck is the check for using a resolved client. A
-// personal client is checked against the connection's stored owner.
-func mandatoryAuthClientCheck(projectID, clientID uuid.UUID, clientType string, subject urn.SessionSubject) authz.Check {
-	owner := ""
-	if clientType == authClientTypeRemoteSession && subject.Kind == urn.SessionSubjectKindUser {
-		owner = subject.ID
+// personal client is checked against the connection's stored owner and the
+// upstream OAuth client the connection uses.
+func mandatoryAuthClientCheck(projectID, clientID uuid.UUID, registrationID uuid.NullUUID, clientType string, subject urn.SessionSubject) authz.Check {
+	owner, upstream := "", ""
+	if clientType == authClientTypeRemoteSession {
+		if subject.Kind == urn.SessionSubjectKindUser {
+			owner = subject.ID
+		}
+		if registrationID.Valid {
+			upstream = registrationID.UUID.String()
+		}
 	}
-	return authz.MCPAuthClientCheck(clientID.String(), authz.MCPAuthClientDimensions{ClientType: clientType, ProjectID: projectID.String(), ConnectionOwner: owner})
+	return authz.MCPAuthClientCheck(clientID.String(), authz.MCPAuthClientDimensions{ClientType: clientType, ProjectID: projectID.String(), ConnectionOwner: owner, UpstreamClient: upstream})
 }
 
 func (m *mandatoryShadow) callerClass() string {

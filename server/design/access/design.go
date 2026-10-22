@@ -1175,6 +1175,9 @@ var SelectorModel = Type("Selector", func() {
 	Attribute("connection_owner", String, func() {
 		Description("Personal connection owner filter (mcp:auth scopes on remote_session clients only). A user ID, '*', or '$represented_user' for the user the request acts for. Never lets a caller use another user's connection.")
 	})
+	Attribute("upstream_client", String, func() {
+		Description("Upstream OAuth client filter (mcp:auth scopes on remote_session clients only). Together with connection_owner it names one person's connection across every auth client sharing that upstream client.")
+	})
 	Attribute("disposition", String, func() {
 		Description("Tool disposition filter (MCP scopes only).")
 		Enum("read_only", "destructive", "idempotent", "open_world")

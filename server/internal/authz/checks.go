@@ -53,11 +53,13 @@ func HooksIngestCheck(organizationID, projectID string) Check {
 // MCPAuthClientDimensions carries the trusted attributes of one use of an auth
 // client. ProjectID is the project of the server the client serves.
 // ConnectionOwner is the stored owner of a personal connection, or the user
-// about to create it; leave it empty for every client type but remote_session.
+// about to create it, and UpstreamClient is the upstream OAuth client the
+// connection uses; leave both empty for every client type but remote_session.
 type MCPAuthClientDimensions struct {
 	ClientType      string
 	ProjectID       string
 	ConnectionOwner string
+	UpstreamClient  string
 }
 
 // MCPAuthClientCheck builds the mcp:auth check for using clientID. It always
@@ -72,6 +74,9 @@ func MCPAuthClientCheck(clientID string, dims MCPAuthClientDimensions) Check {
 	}
 	if dims.ConnectionOwner != "" {
 		dimensions[SelectorKeyConnectionOwner] = dims.ConnectionOwner
+	}
+	if dims.UpstreamClient != "" {
+		dimensions[SelectorKeyUpstreamClient] = dims.UpstreamClient
 	}
 	return Check{Scope: ScopeMCPAuth, ResourceKind: "", ResourceID: clientID, Dimensions: dimensions, selectorMatch: selectorMatchStrict, representedUser: ""}
 }
@@ -96,9 +101,12 @@ func validateAuthClientCheck(c Check) error {
 	if c.Dimensions[SelectorKeyProjectID] == "" {
 		return invalidCheckReason(c.Scope, c.ResourceID, "missing project_id")
 	}
-	owner, hasOwner := c.Dimensions[SelectorKeyConnectionOwner]
-	if hasOwner != (clientType == AuthClientTypeRemoteSession) || (hasOwner && owner == "") {
-		return invalidCheckReason(c.Scope, c.ResourceID, "connection_owner is required for remote_session clients only")
+	personal := clientType == AuthClientTypeRemoteSession
+	for _, key := range []string{SelectorKeyConnectionOwner, SelectorKeyUpstreamClient} {
+		value, has := c.Dimensions[key]
+		if has != personal || (has && value == "") {
+			return invalidCheckReason(c.Scope, c.ResourceID, key+" is required for remote_session clients only")
+		}
 	}
 	for key, value := range c.Dimensions {
 		if !allowedSelectorKeys[ResourceKindMCPAuthClient][key] {

@@ -56,6 +56,7 @@ var PolicySelector = Type("AgentPolicySelector", func() {
 		Enum("remote_session", "service_account", "static_credential", "pass_through", "ema", "*")
 	})
 	Attribute("connection_owner", String, "Personal connection owner filter (mcp:auth scopes on remote_session clients only): a user ID, '*', or '$represented_user'.")
+	Attribute("upstream_client", String, "Upstream OAuth client filter (mcp:auth scopes on remote_session clients only). Together with connection_owner it names one person's connection across every auth client sharing that upstream client.")
 	Attribute("disposition", String, "Tool disposition filter (MCP scopes only).", func() {
 		Enum("read_only", "destructive", "idempotent", "open_world")
 	})

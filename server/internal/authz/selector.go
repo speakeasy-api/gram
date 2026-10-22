@@ -26,6 +26,11 @@ const (
 	// grants to an auth client type and to the owner of a personal connection.
 	SelectorKeyClientType      = "client_type"
 	SelectorKeyConnectionOwner = "connection_owner"
+	// SelectorKeyUpstreamClient narrows mcp:auth grants on personal clients to
+	// one upstream OAuth client, the remote_session_clients id behind it. With
+	// a connection owner it names one logical connection across every auth
+	// client sharing that upstream client.
+	SelectorKeyUpstreamClient = "upstream_client"
 )
 
 // SelectorValueRepresentedUser is the connection_owner value naming the user a
@@ -178,6 +183,7 @@ var allowedSelectorKeys = map[string]map[string]bool{
 		SelectorKeyClientType:      true,
 		SelectorKeyProjectID:       true,
 		SelectorKeyConnectionOwner: true,
+		SelectorKeyUpstreamClient:  true,
 	},
 }
 
@@ -236,7 +242,7 @@ func ValidateSelector(scope Scope, sel Selector) error {
 		if k == SelectorKeyClientType && v != WildcardResource && !validAuthClientTypes[v] {
 			return fmt.Errorf("invalid client_type value %q", v)
 		}
-		if k == SelectorKeyConnectionOwner {
+		if k == SelectorKeyConnectionOwner || k == SelectorKeyUpstreamClient {
 			if clientType, ok := sel[SelectorKeyClientType]; ok && clientType != WildcardResource && clientType != AuthClientTypeRemoteSession {
 				return fmt.Errorf("selector key %q requires client_type %q", k, AuthClientTypeRemoteSession)
 			}

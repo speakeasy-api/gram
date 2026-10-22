@@ -107,6 +107,10 @@ export type AgentPolicySelector = {
    * Specific tool name filter (MCP scopes only).
    */
   tool?: string | undefined;
+  /**
+   * Upstream OAuth client filter (mcp:auth scopes on remote_session clients only). Together with connection_owner it names one person's connection across every auth client sharing that upstream client.
+   */
+  upstreamClient?: string | undefined;
 };
 
 /** @internal */
@@ -157,6 +161,7 @@ export const AgentPolicySelector$inboundSchema: z.ZodMiniType<
     server_identity: z.optional(z.string()),
     server_url: z.optional(z.string()),
     tool: z.optional(z.string()),
+    upstream_client: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
@@ -167,6 +172,7 @@ export const AgentPolicySelector$inboundSchema: z.ZodMiniType<
       "resource_kind": "resourceKind",
       "server_identity": "serverIdentity",
       "server_url": "serverUrl",
+      "upstream_client": "upstreamClient",
     });
   }),
 );
@@ -181,6 +187,7 @@ export type AgentPolicySelector$Outbound = {
   server_identity?: string | undefined;
   server_url?: string | undefined;
   tool?: string | undefined;
+  upstream_client?: string | undefined;
 };
 
 /** @internal */
@@ -198,6 +205,7 @@ export const AgentPolicySelector$outboundSchema: z.ZodMiniType<
     serverIdentity: z.optional(z.string()),
     serverUrl: z.optional(z.string()),
     tool: z.optional(z.string()),
+    upstreamClient: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
@@ -208,6 +216,7 @@ export const AgentPolicySelector$outboundSchema: z.ZodMiniType<
       resourceKind: "resource_kind",
       serverIdentity: "server_identity",
       serverUrl: "server_url",
+      upstreamClient: "upstream_client",
     });
   }),
 );

@@ -683,6 +683,7 @@ func TestResolveAuthClientReadsTheRecordedChoice(t *testing.T) {
 			ServerID:       f.serverID,
 			ClientID:       id,
 			ClientType:     authClientTypeServiceAccount,
+			RegistrationID: validUUID(f.registration),
 			CredentialKind: "user_session",
 			CredentialID:   selector.credentialID,
 			Subject:        urn.NewUserSubject("user_1"),

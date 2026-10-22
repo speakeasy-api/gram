@@ -105,6 +105,10 @@ type AgentPolicySelector struct {
 	// Personal connection owner filter (mcp:auth scopes on remote_session clients
 	// only): a user ID, '*', or '$represented_user'.
 	ConnectionOwner *string
+	// Upstream OAuth client filter (mcp:auth scopes on remote_session clients
+	// only). Together with connection_owner it names one person's connection
+	// across every auth client sharing that upstream client.
+	UpstreamClient *string
 	// Tool disposition filter (MCP scopes only).
 	Disposition *string
 	// Specific tool name filter (MCP scopes only).

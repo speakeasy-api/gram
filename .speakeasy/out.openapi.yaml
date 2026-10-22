@@ -83337,6 +83337,9 @@ components:
         tool:
           type: string
           description: Specific tool name filter (MCP scopes only).
+        upstream_client:
+          type: string
+          description: Upstream OAuth client filter (mcp:auth scopes on remote_session clients only). Together with connection_owner it names one person's connection across every auth client sharing that upstream client.
       description: A constraint that narrows which resources an agent grant applies to.
       required:
         - resource_kind
@@ -106382,6 +106385,9 @@ components:
         tool:
           type: string
           description: Specific tool name filter (MCP scopes only).
+        upstream_client:
+          type: string
+          description: Upstream OAuth client filter (mcp:auth scopes on remote_session clients only). Together with connection_owner it names one person's connection across every auth client sharing that upstream client.
       description: A constraint that narrows which resources a grant applies to.
       required:
         - resource_kind
