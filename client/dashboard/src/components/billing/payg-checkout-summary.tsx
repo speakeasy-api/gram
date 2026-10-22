@@ -1,3 +1,4 @@
+import { Badge } from "@/components/ui/Badge";
 import { Heading } from "@/components/ui/Heading";
 import type { StripeCheckoutSession } from "@stripe/stripe-js";
 
@@ -11,34 +12,15 @@ const catalogUnits: Readonly<Record<string, string>> = {
   "Sandbox risk scans": "tokens scanned",
 };
 
-function trialDaysRemaining(checkout: StripeCheckoutSession): number {
-  const trial = checkout.recurring?.trial;
-  return trial
-    ? Math.max(0, Math.ceil((trial.trialEnd * 1000 - Date.now()) / 86_400_000))
-    : 0;
-}
-
-export function PaygCheckoutHeader({
-  checkout,
-}: {
-  checkout: StripeCheckoutSession;
-}): JSX.Element {
-  const days = trialDaysRemaining(checkout);
+export function PaygCheckoutHeader(): JSX.Element {
   return (
-    <div className="space-y-2">
-      <Heading variant="h2" className="text-display-sm font-thin">
-        Pay as you go pricing
+    <div className="flex items-center justify-between gap-4">
+      <Heading variant="h4" className="text-xl font-semibold">
+        Pricing
       </Heading>
-      <p className="text-sm text-default">
-        {days > 0
-          ? `${days} days during a trial, billing starts when the trial converts.`
-          : `Billed based on usage${
-              checkout.recurring?.interval === "month" &&
-              checkout.recurring.intervalCount === 1
-                ? " each month"
-                : ""
-            }.`}
-      </p>
+      <Badge variant="neutral" className="shrink-0">
+        Pay as you go
+      </Badge>
     </div>
   );
 }
@@ -49,7 +31,13 @@ export function PaygCheckoutSummary({
 }: {
   checkout: StripeCheckoutSession;
 }): JSX.Element {
-  const days = trialDaysRemaining(checkout);
+  const trial = checkout.recurring?.trial;
+  const activeTrial = trial != null && trial.trialEnd * 1000 > Date.now();
+  const trialEnd = activeTrial
+    ? new Intl.DateTimeFormat(undefined, { dateStyle: "long" }).format(
+        new Date(trial.trialEnd * 1000),
+      )
+    : null;
   const metered = checkout.lineItems.some(
     (item) => item.recurring?.usageType === "metered",
   );
@@ -61,8 +49,8 @@ export function PaygCheckoutSummary({
   });
 
   return (
-    <section aria-label="Order summary" className="min-w-0 space-y-8">
-      <ul className="space-y-6">
+    <section aria-label="Order summary" className="min-w-0 space-y-6">
+      <ul className="divide-y divide-border/50 border-b border-border pb-2">
         {checkout.lineItems.map((item) => {
           const unit = item.unitAmountDecimal ?? item.unitAmount;
           // Explicit Stripe units always win; unknown unlabeled items stay per unit.
@@ -91,52 +79,92 @@ export function PaygCheckoutSummary({
                 currency: checkout.currency,
               }).format(amount * 2 ** 30)
             : currency.format(amount);
+          const rateUnit = perToken
+            ? `M ${unitLabel === "tokens scanned" ? "tokens scanned" : "tokens"}`
+            : perByte
+              ? "GiB"
+              : (unitLabel ?? "unit");
           return (
-            <li key={item.id} className="space-y-2">
-              <div className="flex items-start justify-between gap-4">
-                <h3 className="font-medium text-foreground">{item.name}</h3>
-                {days > 0 && (
-                  <span className="shrink-0 text-sm text-default">
-                    {days} days free
-                  </span>
-                )}
+            <li
+              key={item.id}
+              className="flex items-start justify-between py-3 first:pt-0"
+            >
+              <div className="min-w-0">
+                <h3 className="text-lg font-medium text-foreground">
+                  {item.name}
+                </h3>
               </div>
-              {item.description && (
-                <p className="text-sm text-muted">{item.description}</p>
-              )}
-              <p className="text-sm text-default">
-                {days > 0 ? "Then " : ""}
-                {rate}
-                {perToken
-                  ? ` per M ${unitLabel === "tokens scanned" ? "tokens scanned" : "tokens"}`
-                  : perByte
-                    ? " per GiB"
-                    : unitLabel
-                      ? ` per ${unitLabel}`
-                      : " per unit"}
-                {item.recurring?.usageType === "metered"
-                  ? ", billed based on usage"
-                  : ""}
+              <p className="shrink-0 text-right">
+                <span className="block font-mono text-xl font-medium text-foreground tabular-nums">
+                  {rate}
+                </span>{" "}
+                <span className="block font-mono text-xs leading-5 text-muted">
+                  per {rateUnit}
+                </span>
               </p>
             </li>
           );
         })}
       </ul>
-      <dl className="space-y-3 border-t border-neutral-default pt-5 text-sm">
-        <div className="flex justify-between gap-4 text-default">
-          <dt>{days > 0 ? "Total after trial" : "Total"}</dt>
-          <dd>
-            {metered
-              ? "Price varies with usage"
-              : days > 0
-                ? (checkout.recurring?.dueNext.total.amount ??
-                  "Calculated after trial")
-                : checkout.total.total.amount}
+      <dl>
+        <div className="relative space-y-2 pb-6 pl-6">
+          <dt className="font-mono text-xs uppercase tracking-wide text-muted">
+            <span
+              aria-hidden="true"
+              className="absolute left-0 top-1 size-2 bg-foreground"
+            />
+            <span
+              aria-hidden="true"
+              className="absolute bottom-0 left-1 top-5 border-l border-neutral-default"
+            />
+            Today
+          </dt>
+          <dd className="flex items-baseline justify-between gap-4 text-base text-foreground">
+            <span>{activeTrial ? "Trial active" : "Payment due today"}</span>
+            <span className="shrink-0 text-right font-mono tabular-nums text-muted">
+              {checkout.total.total.amount}
+            </span>
           </dd>
         </div>
-        <div className="flex justify-between gap-4 text-lg font-medium text-foreground">
-          <dt>Due today</dt>
-          <dd>{checkout.total.total.amount}</dd>
+        <div className="relative space-y-2 pl-6">
+          <dt className="font-mono text-xs uppercase tracking-wide text-muted">
+            <span
+              aria-hidden="true"
+              className="absolute left-0 top-1 size-2 border border-foreground"
+            />
+            {activeTrial
+              ? `Trial ends ${trialEnd}`
+              : metered
+                ? "Billing"
+                : "Total"}
+          </dt>
+          <dd className="flex items-baseline justify-between gap-4 text-base text-foreground">
+            <span>
+              {metered
+                ? checkout.recurring?.interval === "month" &&
+                  checkout.recurring.intervalCount === 1
+                  ? "Billed monthly based on usage"
+                  : "Billed based on usage"
+                : checkout.recurring?.interval === "month" &&
+                    checkout.recurring.intervalCount === 1
+                  ? "Billed monthly"
+                  : "Payment due"}
+            </span>
+            <span className="shrink-0 text-right font-mono tabular-nums text-muted">
+              {metered
+                ? "Usage-based"
+                : (checkout.recurring?.dueNext.total.amount ??
+                  checkout.total.total.amount)}
+            </span>
+          </dd>
+        </div>
+      </dl>
+      <dl className="border-t border-border pt-4">
+        <div className="flex items-baseline justify-between gap-4">
+          <dt className="text-lg font-medium text-foreground">Due today</dt>
+          <dd className="font-mono text-xl font-medium text-foreground tabular-nums">
+            {checkout.total.total.amount}
+          </dd>
         </div>
       </dl>
     </section>

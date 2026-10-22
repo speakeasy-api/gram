@@ -14,6 +14,7 @@ import {
   type Stripe,
   type StripeCheckoutFormConfirmEvent,
 } from "@stripe/stripe-js";
+import { Heading } from "@/components/ui/Heading";
 import { useConfig } from "@/components/ui/hooks/useConfig";
 
 const stripePromises = new Map<string, Promise<Stripe | null>>();
@@ -102,18 +103,32 @@ function FormPreview({ onComplete }: { onComplete: () => void }) {
   if (checkout.type === "error")
     return <p role="alert">{checkout.error.message}</p>;
   return (
-    <div className="grid w-full grid-cols-1 items-start gap-10 lg:grid-cols-2 lg:gap-12">
-      <div className="lg:col-span-2">
-        <PaygCheckoutHeader checkout={checkout.checkout} />
+    <div className="grid w-full grid-cols-1 gap-8 lg:block">
+      <div className="contents lg:grid lg:grid-cols-2 lg:items-start lg:gap-10 pb-6">
+        <div className="order-1 min-w-0 border-b border-border pb-2">
+          <PaygCheckoutHeader />
+        </div>
+        <div className="order-3 w-full max-w-lg border-b border-border pb-2 lg:justify-self-end">
+          <Heading
+            variant="h4"
+            className="flex font-semibold items-center text-xl"
+          >
+            Payment details
+          </Heading>
+        </div>
       </div>
-      <PaygCheckoutSummary checkout={checkout.checkout} />
-      <div className="w-full max-w-lg self-start space-y-3 lg:justify-self-end">
-        <CheckoutForm options={formPreviewOptions} onConfirm={onConfirm} />
-        {confirmationError && (
-          <p role="alert" className="text-sm text-destructive">
-            {confirmationError}
-          </p>
-        )}
+      <div className="contents lg:grid lg:grid-cols-2 lg:items-start lg:gap-10">
+        <div className="order-2 min-w-0">
+          <PaygCheckoutSummary checkout={checkout.checkout} />
+        </div>
+        <div className="order-4 w-full max-w-lg space-y-8 lg:justify-self-end">
+          <CheckoutForm options={formPreviewOptions} onConfirm={onConfirm} />
+          {confirmationError && (
+            <p role="alert" className="text-sm text-destructive">
+              {confirmationError}
+            </p>
+          )}
+        </div>
       </div>
     </div>
   );
