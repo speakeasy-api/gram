@@ -61,6 +61,7 @@ var placements = map[string]Placement{
 	"opencode":   {Product: "opencode", Client: ClientCLI},
 	"openclaw":   {Product: "openclaw", Client: ""},
 	"glean":      {Product: "glean", Client: ""},
+	"pi":         {Product: "pi", Client: ClientCLI},
 }
 
 var compactPlacements = func() map[string]Placement {
