@@ -1372,23 +1372,9 @@ function IdentityStep({ os }: { os: OsKey }) {
         for an org; personal enrollment is handy for testing.
       </Text>
       <Tabs defaultValue="fleet" className="gap-6">
-        <TabsList className="grid h-auto w-full grid-cols-2 items-stretch gap-3 divide-x-0 border-0 bg-transparent p-0">
-          <SetupTab
-            value="fleet"
-            icon="building-2"
-            title="Fleet (MDM)"
-            desc="IT sets identity centrally via managed.json."
-          />
-          <SetupTab
-            value="personal"
-            icon="user"
-            title="Personal / PoC"
-            desc={
-              os === "linux"
-                ? "Sign in once with the agent CLI."
-                : "Sign in once in the agent app."
-            }
-          />
+        <TabsList className="w-full">
+          <TabsTrigger value="fleet">Fleet (MDM)</TabsTrigger>
+          <TabsTrigger value="personal">Personal / PoC</TabsTrigger>
         </TabsList>
         <TabsContent value="fleet" className="pt-2">
           <FleetIdentity os={os} />
@@ -1398,32 +1384,6 @@ function IdentityStep({ os }: { os: OsKey }) {
         </TabsContent>
       </Tabs>
     </div>
-  );
-}
-
-// SetupTab renders a bordered card that doubles as a tab trigger.
-function SetupTab({
-  value,
-  icon,
-  title,
-  desc,
-}: {
-  value: string;
-  icon: React.ComponentProps<typeof Icon>["name"];
-  title: string;
-  desc: React.ReactNode;
-}) {
-  return (
-    <TabsTrigger
-      value={value}
-      className="border-border data-[state=active]:border-primary/40 h-auto flex-col items-start justify-start gap-1 border p-4 text-left whitespace-normal"
-    >
-      <div className="flex items-center gap-2">
-        <Icon name={icon} className="h-4 w-4" />
-        <span className="font-medium">{title}</span>
-      </div>
-      <span className="text-muted-foreground text-sm font-normal">{desc}</span>
-    </TabsTrigger>
   );
 }
 
