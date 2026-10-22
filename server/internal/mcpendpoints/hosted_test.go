@@ -3,6 +3,7 @@ package mcpendpoints_test
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -311,8 +312,10 @@ func TestUpdateMcpEndpointHostedLeavesUnservableDomain(t *testing.T) {
 			require.NoError(t, err)
 			require.Contains(t, string(record.BeforeSnapshot), domain.ID.String())
 			require.NotContains(t, string(record.AfterSnapshot), domain.ID.String())
-			_, err = audittest.LatestAuditLogByActionAndSubject(ctx, f.ti.conn, audit.ActionToolsetUpdate, f.toolset.ID.String())
+			record, err = audittest.LatestAuditLogByActionAndSubject(ctx, f.ti.conn, audit.ActionToolsetUpdate, f.toolset.ID.String())
 			require.NoError(t, err)
+			require.Contains(t, string(record.BeforeSnapshot), domain.ID.String())
+			require.NotContains(t, string(record.AfterSnapshot), domain.ID.String())
 		})
 	}
 }
@@ -341,4 +344,50 @@ func TestUpdateMcpEndpointHostedLeavingDomainAppliesPlatformRules(t *testing.T) 
 	endpoint := f.requireProjected(t, ctx)
 	require.False(t, endpoint.CustomDomainID.Valid)
 	require.Equal(t, renamed, endpoint.Slug)
+}
+
+func TestUpdateMcpEndpointHostedKeepsHealthDisabledDomain(t *testing.T) {
+	t.Parallel()
+	ctx, f := newHostedAddressFixture(t, "pro")
+	domain := f.activeDomain(t, ctx, "mcp.health-disabled.example.com")
+	_, err := f.ti.service.UpdateMcpEndpoint(ctx, f.payload(f.endpoint.Slug, func(p *gen.UpdateMcpEndpointPayload) {
+		p.CustomDomainID = new(domain.ID.String())
+	}))
+	require.NoError(t, err)
+
+	domains := customdomainsrepo.New(f.ti.conn)
+	_, err = domains.UpdateCustomDomainHealth(ctx, customdomainsrepo.UpdateCustomDomainHealthParams{
+		HealthStatus: conv.ToPGText("unhealthy"), HealthIssue: conv.ToPGText("dns"), CheckedAt: pgtype.Timestamptz{Time: time.Now(), InfinityModifier: pgtype.Finite, Valid: true},
+		UnhealthySince: pgtype.Timestamptz{Time: time.Now(), InfinityModifier: pgtype.Finite, Valid: true}, CertificateExpiresAt: pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
+		ConsecutiveFailures: pgtype.Int4{Int32: 5, Valid: true}, ID: domain.ID, OrganizationID: f.authCtx.ActiveOrganizationID,
+	})
+	require.NoError(t, err)
+	_, err = domains.DisableCustomDomainForHealth(ctx, customdomainsrepo.DisableCustomDomainForHealthParams{ID: domain.ID, OrganizationID: f.authCtx.ActiveOrganizationID})
+	require.NoError(t, err)
+	placed := f.requireProjected(t, ctx)
+
+	_, err = f.ti.service.UpdateMcpEndpoint(ctx, f.payload(f.endpoint.Slug, nil))
+	requireOopsCode(t, err, oops.CodeInvalid)
+	require.ErrorContains(t, err, "cannot leave its custom domain")
+	require.Equal(t, placed, f.requireProjected(t, ctx), "clients on a domain that can be reverified keep their URL")
+}
+
+func TestUpdateMcpEndpointHostedLeavingDomainProbesKeptSlug(t *testing.T) {
+	t.Parallel()
+	ctx, f := newHostedAddressFixture(t, "pro")
+	slug := f.endpoint.Slug
+	f.placeOnDomain(t, ctx, "mcp.kept-slug.example.com")
+
+	// Another server holds the platform address the hosted server would keep.
+	_, err := mcpendpointsrepo.New(f.ti.conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
+		ProjectID: f.projectID, CustomDomainID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, McpServerID: uuid.NullUUID{UUID: seedMcpServer(t, ctx, f.ti.conn, f.projectID), Valid: true},
+		MetaMcpServerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, Slug: slug,
+	})
+	require.NoError(t, err)
+	placed := f.requireProjected(t, ctx)
+
+	_, err = f.ti.service.UpdateMcpEndpoint(ctx, f.payload(slug, nil))
+	requireOopsCode(t, err, oops.CodeConflict)
+	require.ErrorContains(t, err, "already taken")
+	require.Equal(t, placed, f.requireProjected(t, ctx))
 }

@@ -96,13 +96,15 @@ func (s *Service) UpdateHostedAddress(ctx context.Context, update mcpendpoints.H
 		if !existing.CustomDomainID.Valid || update.CustomDomainID.Valid {
 			return mcpendpointsrepo.McpEndpoint{}, oops.E(oops.CodeInvalid, nil, "a hosted MCP server can only move to the organization's verified custom domain").LogWarn(ctx, logger)
 		}
-		// Only a domain that cannot serve may be left: no client can hold a URL on it.
-		servable, err := lockDomainServable(ctx, dbtx, authCtx.ActiveOrganizationID, existing.CustomDomainID.UUID)
+		if before.CustomDomainID != existing.CustomDomainID {
+			return mcpendpointsrepo.McpEndpoint{}, oops.E(oops.CodeConflict, nil, "hosted MCP endpoint is not on its toolset's custom domain").LogWarn(ctx, logger)
+		}
+		leavable, err := s.lockDomainLeavable(ctx, dbtx, authCtx.ActiveOrganizationID, existing.CustomDomainID.UUID)
 		if err != nil {
 			return mcpendpointsrepo.McpEndpoint{}, oops.E(oops.CodeUnexpected, err, "lock hosted MCP custom domain").LogError(ctx, logger)
 		}
-		if servable {
-			return mcpendpointsrepo.McpEndpoint{}, oops.E(oops.CodeInvalid, nil, "a hosted MCP server cannot leave its custom domain while the domain is live").LogWarn(ctx, logger)
+		if !leavable {
+			return mcpendpointsrepo.McpEndpoint{}, oops.E(oops.CodeInvalid, nil, "a hosted MCP server cannot leave its custom domain while the domain is live or can be reverified; delete the domain first").LogWarn(ctx, logger)
 		}
 		customDomainID = uuid.NullUUID{UUID: uuid.Nil, Valid: false}
 	}
@@ -123,6 +125,12 @@ func (s *Service) UpdateHostedAddress(ctx context.Context, update mcpendpoints.H
 	if err != nil {
 		return mcpendpointsrepo.McpEndpoint{}, oops.E(oops.CodeUnexpected, err, "describe hosted toolset").LogError(ctx, logger)
 	}
+	// UpdateToolset keeps a NULL custom_domain_id as is, so clear it first.
+	if existing.CustomDomainID.Valid && !customDomainID.Valid {
+		if _, err := tr.ClearToolsetCustomDomain(ctx, repo.ClearToolsetCustomDomainParams{ID: existing.ID, ProjectID: *authCtx.ProjectID}); err != nil {
+			return mcpendpointsrepo.McpEndpoint{}, oops.E(oops.CodeUnexpected, err, "clear hosted toolset custom domain").LogError(ctx, logger)
+		}
+	}
 	updated, err := tr.UpdateToolset(ctx, repo.UpdateToolsetParams{
 		Name:                   existing.Name,
 		Description:            existing.Description,
@@ -137,12 +145,6 @@ func (s *Service) UpdateHostedAddress(ctx context.Context, update mcpendpoints.H
 	})
 	if err != nil {
 		return mcpendpointsrepo.McpEndpoint{}, oops.E(oops.CodeUnexpected, err, "update hosted toolset address").LogError(ctx, logger)
-	}
-	if updated.CustomDomainID.Valid && !customDomainID.Valid {
-		updated, err = tr.ClearToolsetCustomDomain(ctx, repo.ClearToolsetCustomDomainParams{ID: updated.ID, ProjectID: *authCtx.ProjectID})
-		if err != nil {
-			return mcpendpointsrepo.McpEndpoint{}, oops.E(oops.CodeUnexpected, err, "clear hosted toolset custom domain").LogError(ctx, logger)
-		}
 	}
 
 	clearedDomainIDs, err := s.syncHostedServer(ctx, dbtx, authCtx, updated, nil)
@@ -193,14 +195,15 @@ func (s *Service) UpdateHostedAddress(ctx context.Context, update mcpendpoints.H
 	return after, nil
 }
 
-// lockDomainServable locks the org's custom domain row; a missing or soft-deleted row cannot serve.
-func lockDomainServable(ctx context.Context, tx pgx.Tx, organizationID string, id uuid.UUID) (bool, error) {
-	domain, err := domainsRepo.New(tx).LockCustomDomainByIDAndOrganization(ctx, domainsRepo.LockCustomDomainByIDAndOrganizationParams{ID: id, OrganizationID: organizationID})
+// lockDomainLeavable allows a missing, deleted or never-live domain; a health-disabled one can come back.
+func (s *Service) lockDomainLeavable(ctx context.Context, tx pgx.Tx, organizationID string, id uuid.UUID) (bool, error) {
+	domain, err := s.domainsRepo.WithTx(tx).LockCustomDomainByIDAndOrganization(ctx, domainsRepo.LockCustomDomainByIDAndOrganizationParams{ID: id, OrganizationID: organizationID})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		return false, nil
+		return true, nil
 	case err != nil:
 		return false, fmt.Errorf("lock custom domain: %w", err)
 	}
-	return domain.Activated && domain.Verified, nil
+	servable := domain.Activated && domain.Verified
+	return !servable && !domain.HealthCheckedAt.Valid, nil
 }
