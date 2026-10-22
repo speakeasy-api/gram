@@ -281,7 +281,14 @@ func TestStaffOAuthConfidentialClientCannotDowngradeToPublic(t *testing.T) {
 
 func TestStaffOAuthBasicAcceptsMatchingIdentifierAndEmptyParameters(t *testing.T) {
 	t.Parallel()
-	for _, grantType := range []string{oauthwire.GrantTypeAuthorizationCode, oauthwire.GrantTypeRefreshToken} {
+	for _, grant := range []struct {
+		grantType string
+		exchanges int
+		rotations int
+	}{
+		{grantType: oauthwire.GrantTypeAuthorizationCode, exchanges: 1, rotations: 0},
+		{grantType: oauthwire.GrantTypeRefreshToken, exchanges: 0, rotations: 1},
+	} {
 		for _, tc := range []struct {
 			name   string
 			fields url.Values
@@ -291,7 +298,7 @@ func TestStaffOAuthBasicAcceptsMatchingIdentifierAndEmptyParameters(t *testing.T
 			{name: "empty secret", fields: url.Values{oauthwire.ParamClientSecret: {""}}},
 			{name: "empty assertion", fields: url.Values{oauthwire.ParamClientAssertion: {""}, oauthwire.ParamClientAssertionType: {""}}},
 		} {
-			t.Run(grantType+"/"+tc.name, func(t *testing.T) {
+			t.Run(grant.grantType+"/"+tc.name, func(t *testing.T) {
 				t.Parallel()
 				tokens, store, _ := staffTokensFixture(t)
 				form := url.Values{
@@ -302,10 +309,11 @@ func TestStaffOAuthBasicAcceptsMatchingIdentifierAndEmptyParameters(t *testing.T
 				}
 				maps.Copy(form, tc.fields)
 				response := httptest.NewRecorder()
-				tokens.TokenHandler().ServeHTTP(response, staffTokenRequest(grantType, form))
+				tokens.TokenHandler().ServeHTTP(response, staffTokenRequest(grant.grantType, form))
 				require.Equal(t, http.StatusOK, response.Code, response.Body.String())
 				require.Empty(t, response.Header().Get("WWW-Authenticate"))
-				require.Equal(t, 1, store.exchange+store.rotate)
+				require.Equal(t, grant.exchanges, store.exchange)
+				require.Equal(t, grant.rotations, store.rotate)
 			})
 		}
 	}
