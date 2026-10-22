@@ -37,7 +37,10 @@ export const DIRECTORY_STATE_DESCRIPTIONS: Record<DirectoryState, string> = {
     "The email matches more than one directory profile or account, so it is not matched to anyone automatically.",
 };
 
-/** The states that describe someone the directory knows but who is not a member. */
+/**
+ * The state as one this dashboard knows, or undefined for a value a newer
+ * server sent that it does not.
+ */
 function knownDirectoryState(
   state: DirectoryPersonState,
 ): DirectoryState | undefined {
@@ -46,6 +49,7 @@ function knownDirectoryState(
     : undefined;
 }
 
+/** The states that describe someone the directory knows but who is not a member. */
 const NOT_MEMBER_DIRECTORY_STATES: DirectoryState[] = [
   "account_not_member",
   "not_signed_in",
