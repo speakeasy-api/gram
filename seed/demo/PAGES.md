@@ -184,6 +184,12 @@ Like the attachment above, every row has invalid ciphertext, no refresh token
 and auto-refresh disabled; they are display-only. IDs derive from
 `Spec.NameSeed` (`gram-demo-validated-session-<n>`).
 
+### In-band tool errors
+
+About 1 in 25 bulk hosted tool calls that return 200 carry `gram.outcome` =
+`error` and an `isError` result body. Admin server health outcomes and Platform
+MCP diagnostics count them as `failed`. Status-only charts still count them as OK.
+
 ## Tunnel source observability
 
 The Private inventory tunnel source has one linked private MCP server and deterministic 24-hour request/connection history with a recent gap. It has no connected agent. Live HTTP progress is never seeded as fresh evidence. Open its Overview and verify charts, the gap, and the no-agent diagnostic state.

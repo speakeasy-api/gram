@@ -8916,7 +8916,7 @@ components:
           format: date-time
         failed:
           type: integer
-          description: Failed tool calls in the bucket.
+          description: Tool calls in the bucket that failed with status 400 or above. Tool errors returned inside HTTP 200 (isError) are not counted here.
           format: int64
         total:
           type: integer
@@ -8951,7 +8951,7 @@ components:
         unknown:
           type: integer
           format: int64
-      description: Tool calls inside the window by outcome class. In-band tool errors (isError inside HTTP 200) count as success.
+      description: Tool calls inside the window by outcome class. failed counts isError tool errors in 2xx/3xx responses and hook-reported tool errors; hosted rows recorded before 2026-10-15 and remote rows recorded before this change shipped still count as success.
       required:
         - success
         - unauthorized

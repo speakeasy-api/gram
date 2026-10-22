@@ -931,12 +931,15 @@ type AdminMcpServerToolCallBucket struct {
 	BucketStart string
 	// Tool calls in the bucket.
 	Total int64
-	// Failed tool calls in the bucket.
+	// Tool calls in the bucket that failed with status 400 or above. Tool errors
+	// returned inside HTTP 200 (isError) are not counted here.
 	Failed int64
 }
 
-// Tool calls inside the window by outcome class. In-band tool errors (isError
-// inside HTTP 200) count as success.
+// Tool calls inside the window by outcome class. failed counts isError tool
+// errors in 2xx/3xx responses and hook-reported tool errors; hosted rows
+// recorded before 2026-10-15 and remote rows recorded before this change
+// shipped still count as success.
 type AdminMcpServerToolCallOutcomes struct {
 	Success      int64
 	Unauthorized int64

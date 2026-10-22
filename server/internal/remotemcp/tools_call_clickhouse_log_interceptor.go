@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/otel/dialect"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
 )
@@ -117,7 +118,7 @@ func (i *ToolsCallClickHouseLogInterceptor) InterceptToolsCallResponse(ctx conte
 		}
 	}
 
-	i.emit(ctx, call.Request, upstreamStatusCode(call), outputBytes, outputContent)
+	i.emit(ctx, call.Request, upstreamStatusCode(call), call.Result != nil && call.Result.IsError, outputBytes, outputContent)
 	return nil
 }
 
@@ -128,12 +129,12 @@ func (i *ToolsCallClickHouseLogInterceptor) InterceptToolsCallFailure(ctx contex
 	if failure == nil || failure.Request == nil || failure.Request.Params == nil {
 		return
 	}
-	i.emit(ctx, failure.Request, failedCallStatusCode(ctx, failure), 0, nil)
+	i.emit(ctx, failure.Request, failedCallStatusCode(ctx, failure), false, 0, nil)
 }
 
 // emit builds the telemetry_logs row for one tools/call and writes it
 // asynchronously to ClickHouse.
-func (i *ToolsCallClickHouseLogInterceptor) emit(ctx context.Context, request *proxy.ToolsCallRequest, statusCode int, outputBytes int64, outputContent []byte) {
+func (i *ToolsCallClickHouseLogInterceptor) emit(ctx context.Context, request *proxy.ToolsCallRequest, statusCode int, resultIsError bool, outputBytes int64, outputContent []byte) {
 	serverCtx, ok := GetServerContext(ctx)
 	if !ok || serverCtx.OrganizationID == "" || serverCtx.ProjectID == uuid.Nil {
 		i.logger.WarnContext(ctx, "skipping tools/call clickhouse log: missing server context",
@@ -150,6 +151,18 @@ func (i *ToolsCallClickHouseLogInterceptor) emit(ctx context.Context, request *p
 
 	toolName := request.Params.Name
 	requestBytes := int64(len(request.Params.Arguments))
+
+	if resultIsError {
+		// Warn, not error: an isError result is the upstream tool's verdict, not a
+		// Speakeasy fault. The body stays out: it is upstream-controlled content.
+		fields := append([]slog.Attr{
+			attr.SlogComponent("xmcp"),
+			attr.SlogToolName(toolName),
+			attr.SlogOrganizationID(serverCtx.OrganizationID),
+			attr.SlogProjectID(serverCtx.ProjectID.String()),
+		}, i.identity.SlogAttrs()...)
+		i.logger.LogAttrs(ctx, slog.LevelWarn, "remote MCP tool returned an error result", fields...)
+	}
 
 	// Synthetic URN: the dashboard's tool-call queries filter on
 	// startsWith(gram_urn, 'tools:'), so the prefix is required. Use the
@@ -179,6 +192,7 @@ func (i *ToolsCallClickHouseLogInterceptor) emit(ctx context.Context, request *p
 	}
 	logAttrs.RecordDuration(durationSec)
 	logAttrs.RecordStatusCode(statusCode)
+	logAttrs[attr.OutcomeKey] = dialect.ToolCallOutcome(statusCode, resultIsError)
 	logAttrs.RecordRequestBody(requestBytes)
 	logAttrs.RecordResponseBody(outputBytes)
 	logAttrs.RecordRequestBodyContent(request.Params.Arguments)
@@ -252,13 +266,14 @@ func ensureTraceContext(logAttrs tm.HTTPLogAttributes) {
 	}
 }
 
-// upstreamStatusCode returns the status code recorded for a tools/call
-// response. Tool Logs and the tool-call aggregates count a call as failed
-// when this is 400 or above, the same signal hosted tool calls give, so a
-// JSON-RPC error or a tool result with isError set maps to 500 when the HTTP
-// exchange itself succeeded. An upstream error status is kept.
+// upstreamStatusCode returns the upstream HTTP status code for a tools/call
+// response. JSON-RPC errors map to 500 since they signal upstream-side
+// failure even when the HTTP layer succeeded; tool-level errors (Result
+// with IsError=true) keep the upstream HTTP status — failure is signaled by
+// the response writer's status code, not the tool's inner error flag, which
+// is recorded separately as gram.outcome.
 func upstreamStatusCode(call *proxy.ToolsCallResponse) int {
-	failed := call.Error != nil || (call.Result != nil && call.Result.IsError)
+	failed := call.Error != nil
 	if call.RemoteMessage != nil && call.RemoteMessage.RemoteHTTPResponse != nil {
 		code := call.RemoteMessage.RemoteHTTPResponse.StatusCode
 		if failed && code < 400 {
