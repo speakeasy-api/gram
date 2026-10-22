@@ -172,15 +172,17 @@ Use this when the resource type is already represented (e.g. adding a new verb o
 
 1. Add the `Scope<Name>` constant in `server/internal/authz/scopes.go`.
 2. Add the new scope to `scopeExpansions` in the same file. Usually: the new scope is the upper or lower end of an existing read/write/connect triple.
+   Also register it in `scopeVisibilityByScope` in the same file, as `scopeVisibilityUserVisible` or `scopeVisibilityInternal`. This map is the Go source of truth behind `RegisteredScopes` and `allScopeGrants`, so a scope left out of it is missing from the demo-org grant set (`DemoScopeGrants`) and everything else built from that list.
 3. Extend `SystemRoleGrants` in `server/internal/authz/grants.go`: admin always receives the new scope. Member receives it if and only if end users should have it by default (read and connect, yes; write, no).
 4. Add a `{Slug, Description, ResourceType}` entry to `ListScopes` in `server/internal/access/impl.go`.
 5. Extend the hard-coded full-access scope list in `ListGrants` (same `impl.go`) so callers without grants loaded still see the complete catalogue.
 6. Update the three enums in `server/design/access/design.go` that have to stay in lockstep.
-7. No dashboard edit is needed for the `Scope` union — it is regenerated in the SDK (`@gram/client/models/components/rolegrant.js`) by `gen:sdk` in step 10. Confirm the new slug appears there after regeneration.
-8. Bump `expectedFullAccessScopes` in `server/internal/access/listusergrants_test.go` and the `require.Len(t, result.Scopes, N)` assertion in `server/internal/access/listscopes_test.go`.
-9. Update the "Dashboard Grant Reference" table in [docs/rbac.md](../../../docs/rbac.md) if the new scope affects any dashboard route, action, or user-facing grant question.
-10. Run `mise run gen:goa-server`, then `mise run gen:sdk`.
-11. Run `mise run lint:server` and `mise run test:server`.
+7. No dashboard edit is needed for the `Scope` union — it is regenerated in the SDK (`@gram/client/models/components/rolegrant.js`) by `gen:sdk` in step 11. Confirm the new slug appears there after regeneration.
+8. Add a `{scope, label, resourceType, description}` entry to `SCOPE_DEFS` in `client/dashboard/src/pages/platform-admin/rbac-override-state.ts`. This hard-coded list drives the local-dev RBAC override page (the `X-Gram-Scope-Override` header). A scope missing from it cannot be toggled there, and an active override never grants it, so the new scope always looks denied while you test with an override.
+9. Bump `expectedFullAccessScopes` in `server/internal/access/listusergrants_test.go` and the `require.Len(t, result.Scopes, N)` assertion in `server/internal/access/listscopes_test.go`.
+10. Update the "Dashboard Grant Reference" table in [docs/rbac.md](../../../docs/rbac.md) if the new scope affects any dashboard route, action, or user-facing grant question.
+11. Run `mise run gen:goa-server`, then `mise run gen:sdk`.
+12. Run `mise run lint:server` and `mise run test:server`.
 
 ### How to add a new resource type
 
@@ -189,6 +191,7 @@ Use this when introducing a resource type that doesn't exist yet (e.g. the first
 1. Follow every step under "How to add a new scope to an existing resource type" for each scope on the new type.
 2. Additionally, add the new resource type string to `ScopeModel.resource_type` in `server/design/access/design.go`.
 3. Additionally, add the new resource type to the `ResourceType` union in `client/dashboard/src/pages/access/types.ts`.
+4. Additionally, add the new resource type to the `ResourceType` union and the resource group list in `client/dashboard/src/pages/platform-admin/rbac-override-state.ts`, so the override page can show its scopes.
 
 ### How to change system role defaults
 
