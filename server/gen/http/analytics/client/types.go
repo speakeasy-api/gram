@@ -69,7 +69,12 @@ type QueryResponseBody struct {
 // DescribeResponseBody is the type of the "analytics" service "describe"
 // endpoint HTTP response body.
 type DescribeResponseBody struct {
+	// The datasets the caller can read
 	Datasets []*AnalyticsDatasetResponseBody `form:"datasets,omitempty" json:"datasets,omitempty" xml:"datasets,omitempty"`
+	// Names of the datasets the caller cannot read, such as one only organization
+	// administrators can read, so a saved widget over one can say why it shows
+	// nothing rather than reading as broken
+	RestrictedDatasets []string `form:"restricted_datasets,omitempty" json:"restricted_datasets,omitempty" xml:"restricted_datasets,omitempty"`
 }
 
 // DimensionValuesResponseBody is the type of the "analytics" service
@@ -960,6 +965,12 @@ func NewDescribeAnalyticsDescribeResultOK(body *DescribeResponseBody) *analytics
 			continue
 		}
 		v.Datasets[i] = unmarshalAnalyticsDatasetResponseBodyToAnalyticsAnalyticsDataset(val)
+	}
+	if body.RestrictedDatasets != nil {
+		v.RestrictedDatasets = make([]string, len(body.RestrictedDatasets))
+		for i, val := range body.RestrictedDatasets {
+			v.RestrictedDatasets[i] = val
+		}
 	}
 
 	return v
