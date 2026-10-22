@@ -47,7 +47,7 @@ export type ListAuthClientsRequest = {
    */
   cursor?: string | undefined;
   /**
-   * Page size (default 50, max 100).
+   * Page size.
    */
   limit?: number | undefined;
   /**
@@ -104,7 +104,7 @@ export type ListAuthClientsRequest$Outbound = {
   mcp_server_id?: string | undefined;
   client_type?: string | undefined;
   cursor?: string | undefined;
-  limit?: number | undefined;
+  limit: number;
   "Gram-Session"?: string | undefined;
   "Gram-Key"?: string | undefined;
 };
@@ -118,7 +118,7 @@ export const ListAuthClientsRequest$outboundSchema: z.ZodMiniType<
     mcpServerId: z.optional(z.string()),
     clientType: z.optional(ClientType$outboundSchema),
     cursor: z.optional(z.string()),
-    limit: z.optional(z.int()),
+    limit: z._default(z.int(), 50),
     gramSession: z.optional(z.string()),
     gramKey: z.optional(z.string()),
   }),
