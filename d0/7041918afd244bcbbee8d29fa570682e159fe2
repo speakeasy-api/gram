@@ -1,0 +1,33 @@
+server/internal/scanners/customruleanalyzer/enforce_handler.go
+  s_20283d10d6aa21::t_d561417a920c33 24-26
+server/internal/scanners/enforcement/helpers.go
+  s_20283d10d6aa21::t_96d3fcea998e9c 120
+server/internal/scanners/promptinjection/enforce_handler.go
+  s_76c3405050eb46::t_894d7ee68a1cf7 18,26-28,117-118,120-123,129-130
+server/internal/scanners/promptpolicy/enforce_handler.go
+  s_20283d10d6aa21::t_dce20997360db6 18,26-28,120-121,123-125
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d07041918afd244bcbbee8d29fa570682e159fe2",
+  "prompts": {},
+  "sessions": {
+    "s_20283d10d6aa21": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "9c404e67-472e-45bb-9c72-3542f703d4e8",
+        "model": "unknown"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    },
+    "s_76c3405050eb46": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "fe58aad0-7dc7-4ef8-86b5-4c74def17a2e",
+        "model": "unknown"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
