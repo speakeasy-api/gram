@@ -32,6 +32,17 @@ import (
 var errPermanent = oops.Permanent(errors.New("permanent error"))
 var attrError = attr.SlogEvent("functions:error")
 
+// ErrManifestTooLarge is returned when a functions archive's manifest.json
+// expands beyond MaxManifestBytes.
+var ErrManifestTooLarge = errors.New("manifest file is too large")
+
+// MaxManifestBytes bounds the decompressed size of manifest.json read into
+// deployment worker memory. The upload limit only bounds compressed bytes, so
+// without this a small archive can expand into an arbitrarily large manifest.
+// It matches the per-file extraction limit in the functions runner, which
+// would reject a larger manifest at runtime anyway.
+const MaxManifestBytes = 10 * 1024 * 1024 // 10 MiB
+
 var nodeEntrypoints = map[string]struct{}{
 	"functions.js":  {},
 	"functions.mjs": {},
@@ -203,22 +214,19 @@ func (p *ToolExtractor) Do(
 		return nil, oops.E(oops.CodeBadRequest, errPermanent, "%s: functions zip file is missing manifest.json file", slug).LogError(ctx, logger, attrError)
 	}
 
-	manifestRdr, err := manifestFile.Open()
-	if err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "%s: error opening manifest file", slug).LogError(ctx, logger, attrError)
-	}
-	defer o11y.LogDefer(ctx, logger, "failed to close functions manifest reader", func() error {
-		return manifestRdr.Close()
-	})
-
-	manifestBs, err := io.ReadAll(manifestRdr)
-	if err != nil {
+	manifestBs, err := readManifest(manifestFile)
+	switch {
+	case errors.Is(err, ErrManifestTooLarge):
+		return nil, oops.E(oops.CodeBadRequest, oops.Permanent(err), "%s: manifest.json exceeds the maximum size of %d bytes", slug, MaxManifestBytes).LogError(ctx, logger, attrError)
+	case errors.Is(err, zip.ErrFormat), errors.Is(err, zip.ErrChecksum), errors.Is(err, zip.ErrAlgorithm):
+		return nil, oops.E(oops.CodeBadRequest, oops.Permanent(err), "%s: manifest.json is corrupt", slug).LogError(ctx, logger, attrError)
+	case err != nil:
 		return nil, oops.E(oops.CodeBadRequest, err, "%s: error reading manifest file", slug).LogError(ctx, logger, attrError)
 	}
 
 	var manifest Manifest
 	if err := manifest.UnmarshalJSON(manifestBs); err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "%s: error parsing manifest file", slug).LogError(ctx, logger, attrError)
+		return nil, oops.E(oops.CodeBadRequest, oops.Permanent(err), "%s: error parsing manifest file", slug).LogError(ctx, logger, attrError)
 	}
 
 	dbtx, err := p.db.Begin(ctx)
@@ -291,6 +299,31 @@ func (p *ToolExtractor) Do(
 		ManifestVersion: manifest.Version,
 		NumTools:        numTools,
 	}, nil
+}
+
+// readManifest decompresses f into memory, reading at most MaxManifestBytes+1
+// bytes regardless of the size the archive declares for the entry.
+func readManifest(f *zip.File) ([]byte, error) {
+	if f.UncompressedSize64 > MaxManifestBytes {
+		return nil, fmt.Errorf("%w: declared size %d bytes exceeds %d bytes", ErrManifestTooLarge, f.UncompressedSize64, MaxManifestBytes)
+	}
+
+	rc, err := f.Open()
+	if err != nil {
+		return nil, fmt.Errorf("open manifest: %w", err)
+	}
+	defer o11y.NoLogDefer(func() error { return rc.Close() })
+
+	bs, err := io.ReadAll(io.LimitReader(rc, MaxManifestBytes+1))
+	if err != nil {
+		return nil, fmt.Errorf("read manifest: %w", err)
+	}
+
+	if len(bs) > MaxManifestBytes {
+		return nil, fmt.Errorf("%w: decompressed size exceeds %d bytes", ErrManifestTooLarge, MaxManifestBytes)
+	}
+
+	return bs, nil
 }
 
 func processManifestToolV0(
