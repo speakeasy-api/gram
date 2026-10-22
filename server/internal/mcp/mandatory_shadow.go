@@ -189,7 +189,7 @@ func isAccessDenial(err error) bool {
 // yet, so it is recorded as skipped rather than as an invalid check.
 func (s *Service) shadowAuthClientUse(ctx context.Context, organizationID string, legacyAllowed bool, projectID, clientID uuid.UUID, clientType string, subject urn.SessionSubject) {
 	if clientType == authClientTypeRemoteSession && subject.Kind != urn.SessionSubjectKindUser {
-		s.newMandatoryShadow(ctx, organizationID).recordSkipped(ctx, mandatorySurfaceAuthClient, mandatoryReasonNoConnectionOwner, clientID.String(), projectID.String())
+		s.newMandatoryShadow(ctx, organizationID).recordSkipped(ctx, mandatorySurfaceAuthClient, legacyAllowed, mandatoryReasonNoConnectionOwner, clientID.String(), projectID.String())
 		return
 	}
 	s.shadowMandatory(ctx, mandatorySurfaceAuthClient, organizationID, legacyAllowed, mandatoryAuthClientCheck(projectID, clientID, clientType, subject))
@@ -239,11 +239,11 @@ func (m *mandatoryShadow) record(ctx context.Context, surface string, legacyAllo
 // recordSkipped records a decision today's path made that the mandatory
 // check cannot evaluate yet, such as an auth client chosen without the
 // typed resolver. A skipped check is never an allow.
-func (m *mandatoryShadow) recordSkipped(ctx context.Context, surface, reason, resourceID, projectID string) {
+func (m *mandatoryShadow) recordSkipped(ctx context.Context, surface string, legacyAllowed bool, reason, resourceID, projectID string) {
 	if m == nil {
 		return
 	}
-	m.emit(ctx, surface, true, resourceID, projectID, authz.MandatoryDecision{Allowed: false, Source: authz.MandatoryPolicySourceNone, Reason: authz.MandatoryDenyReasonNone}, nil, reason)
+	m.emit(ctx, surface, legacyAllowed, resourceID, projectID, authz.MandatoryDecision{Allowed: false, Source: authz.MandatoryPolicySourceNone, Reason: authz.MandatoryDenyReasonNone}, nil, reason)
 }
 
 func (m *mandatoryShadow) emit(ctx context.Context, surface string, legacyAllowed bool, resourceID, projectID string, decision authz.MandatoryDecision, err error, skipped string) {

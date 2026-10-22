@@ -238,7 +238,7 @@ func TestShadowMandatoryRecordsSkippedChecks(t *testing.T) {
 	t.Parallel()
 
 	h := newShadowHarness(t, true)
-	h.service.newMandatoryShadow(sessionContext(t, shadowOrg), shadowOrg).recordSkipped(t.Context(), mandatorySurfaceAuthClient, mandatoryReasonResolverOff, "server_1", "project_1")
+	h.service.newMandatoryShadow(sessionContext(t, shadowOrg), shadowOrg).recordSkipped(t.Context(), mandatorySurfaceAuthClient, true, mandatoryReasonResolverOff, "server_1", "project_1")
 	require.Equal(t, map[attribute.Set]int64{
 		shadowKey(mandatorySurfaceAuthClient, mandatoryCallerRepresented, "user", true, "skipped", "none", mandatoryReasonResolverOff): 1,
 	}, h.points(t), "a check that was not evaluated is never an allow")
@@ -301,9 +301,11 @@ func TestShadowAuthClientUseSkipsPersonalClientsWithoutAUser(t *testing.T) {
 	h := newShadowHarness(t, true)
 	project, client := uuid.New(), uuid.New()
 	h.service.shadowAuthClientUse(sessionContext(t, shadowOrg), shadowOrg, true, project, client, authClientTypeRemoteSession, urn.NewAgentSubject(uuid.New()))
+	h.service.shadowAuthClientUse(sessionContext(t, shadowOrg), shadowOrg, false, project, client, authClientTypeRemoteSession, urn.NewAgentSubject(uuid.New()))
 	require.Equal(t, map[attribute.Set]int64{
-		shadowKey(mandatorySurfaceAuthClient, mandatoryCallerRepresented, "user", true, "skipped", "none", mandatoryReasonNoConnectionOwner): 1,
-	}, h.points(t), "a personal client used without a user to own it is not an invalid check")
+		shadowKey(mandatorySurfaceAuthClient, mandatoryCallerRepresented, "user", true, "skipped", "none", mandatoryReasonNoConnectionOwner):  1,
+		shadowKey(mandatorySurfaceAuthClient, mandatoryCallerRepresented, "user", false, "skipped", "none", mandatoryReasonNoConnectionOwner): 1,
+	}, h.points(t), "a personal client used without a user to own it is not an invalid check, and keeps today's decision")
 }
 
 func TestShadowMandatoryNeverRecordsCanceledRequests(t *testing.T) {
