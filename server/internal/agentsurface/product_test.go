@@ -51,6 +51,7 @@ func TestClientForTerminal(t *testing.T) {
 		want     string
 	}{
 		{name: "it reads an editor terminal as the IDE", terminal: "vscode", want: agentsurface.ClientIDE},
+		{name: "it reads a bare ide terminal as the IDE", terminal: "ide", want: agentsurface.ClientIDE},
 		{name: "it reads a jetbrains terminal as the IDE", terminal: "JetBrains-JediTerm", want: agentsurface.ClientIDE},
 		{name: "it reads any other terminal as the CLI", terminal: "iTerm.app", want: agentsurface.ClientCLI},
 		{name: "it says nothing for no terminal", terminal: " ", want: ""},

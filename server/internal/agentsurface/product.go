@@ -92,6 +92,9 @@ func ClientForTerminal(terminalType string) string {
 	if normalized == "" {
 		return ""
 	}
+	if normalized == ClientIDE {
+		return ClientIDE
+	}
 	for _, ide := range ideTerminals {
 		if strings.Contains(normalized, ide) {
 			return ClientIDE
