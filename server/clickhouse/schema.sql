@@ -2233,12 +2233,15 @@ CREATE TABLE IF NOT EXISTS agent_events (
     -- Producer, in agent vocabulary. Filled only when stated.
     source LowCardinality(String) COMMENT 'Canonicalized producer surface derived from resource service.name at write time (e.g. claude-code, litellm). Empty when not stated.\n@access: confidential',
     provider LowCardinality(String) COMMENT 'Model provider the record concerns (e.g. anthropic, openai). Empty when not stated.\n@access: confidential',
-    surface LowCardinality(String) COMMENT 'Agent surface the activity happened on (e.g. claude-code, codex, cursor). Empty when not stated.\n@access: confidential',
+    surface LowCardinality(String) COMMENT 'Agent surface as the producer named it (e.g. claude-code, codex, an MCP client name). Mixes product and client, so it is deprecated in favour of product and client, and written alongside them until a later contract migration drops it. Empty when not stated.\n@access: confidential',
+    product LowCardinality(String) COMMENT 'Agent product the activity happened in, folded to one vocabulary (e.g. claude-code, claude-chat, cowork, codex, cursor). Empty when the producer named none the fold recognizes.\n@access: confidential',
+    client LowCardinality(String) COMMENT 'Kind of client the product ran in: cli | ide | desktop | web | mobile | cloud | slack. Empty when the producer gives no signal for it.\n@access: confidential',
 
     -- Actor
     user_id String COMMENT 'Producer-stated user id. Empty when not stated.\n@access: confidential-pii' CODEC(ZSTD),
     user_email String COMMENT 'Producer-stated user email. Empty when not stated.\n@access: confidential-pii' CODEC(ZSTD),
     external_user_id String COMMENT 'User id in the provider own account system. Empty when not stated.\n@access: confidential-pii' CODEC(ZSTD),
+    agent_id String COMMENT 'Speakeasy agent principal the activity ran as, when an agent key or workload identity authenticated it. Set only from Speakeasy-emitted records, never from producer attributes. Empty for human activity.\n@access: confidential' CODEC(ZSTD),
 
     -- Gram-resolved attribution. Empty until the account-attribution path is ported into this pipeline.
     account_type LowCardinality(String) COMMENT 'Resolved account type. Empty until attribution runs in this pipeline.\n@access: opaque-confidential',
@@ -2318,7 +2321,10 @@ CREATE TABLE IF NOT EXISTS tool_calls (
     skill_name AggregateFunction(argMaxIf, String, Int64, UInt8) COMMENT 'Skill the call invoked, empty for a plain tool call.\n@access: opaque-confidential',
     session_id AggregateFunction(argMaxIf, String, Int64, UInt8) COMMENT 'Agent session the call belongs to.\n@access: confidential',
     user_email AggregateFunction(argMaxIf, String, Int64, UInt8) COMMENT 'Email of the user the call ran for.\n@access: confidential-pii',
-    surface AggregateFunction(argMaxIf, String, Int64, UInt8) COMMENT 'Agent surface that made the call.\n@access: confidential',
+    surface AggregateFunction(argMaxIf, String, Int64, UInt8) COMMENT 'Agent surface that made the call, as the producer named it. Deprecated in favour of product and client.\n@access: confidential',
+    product AggregateFunction(argMaxIf, String, Int64, UInt8) COMMENT 'Agent product that made the call.\n@access: confidential',
+    client AggregateFunction(argMaxIf, String, Int64, UInt8) COMMENT 'Kind of client the product ran in.\n@access: confidential',
+    agent_id AggregateFunction(argMaxIf, String, Int64, UInt8) COMMENT 'Speakeasy agent principal the call ran as, empty for a human.\n@access: confidential',
     status AggregateFunction(argMaxIf, String, Int64, UInt8) COMMENT 'How the call ended: ok, error, rejected or refused.\n@access: confidential',
     duration_nano AggregateFunction(argMaxIf, Int64, Int64, UInt8) COMMENT 'How long the call took, in nanoseconds.\n@access: confidential',
     started_at_unix_nano SimpleAggregateFunction(min, Int64) COMMENT 'Earliest observation of the call.\n@access: confidential',
@@ -2343,6 +2349,9 @@ SELECT
     argMaxIfState(session_id, observed_at_unix_nano, session_id != '') AS session_id,
     argMaxIfState(user_email, observed_at_unix_nano, user_email != '') AS user_email,
     argMaxIfState(toString(surface), observed_at_unix_nano, surface != '') AS surface,
+    argMaxIfState(toString(product), observed_at_unix_nano, product != '') AS product,
+    argMaxIfState(toString(client), observed_at_unix_nano, client != '') AS client,
+    argMaxIfState(agent_id, observed_at_unix_nano, agent_id != '') AS agent_id,
     argMaxIfState(toString(outcome), observed_at_unix_nano, outcome != '') AS status,
     argMaxIfState(duration_nano, observed_at_unix_nano, duration_nano != 0) AS duration_nano,
     min(occurred_at_unix_nano) AS started_at_unix_nano,
