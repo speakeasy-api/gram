@@ -1095,8 +1095,6 @@ func (s *Service) UpdatePluginServer(ctx context.Context, payload *gen.UpdatePlu
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "update plugin server").LogError(ctx, s.logger)
 	}
-	row := updated
-
 	if err := s.audit.LogPluginServerUpdate(ctx, tx, audit.LogPluginServerUpdateEvent{
 		OrganizationID:     ac.ActiveOrganizationID,
 		ProjectID:          *ac.ProjectID,
@@ -1106,10 +1104,10 @@ func (s *Service) UpdatePluginServer(ctx context.Context, payload *gen.UpdatePlu
 		PluginID:           plugin.ID,
 		PluginName:         plugin.Name,
 		PluginSlug:         plugin.Slug,
-		ServerID:           row.ID,
-		ServerDisplayName:  row.DisplayName,
-		ServerPolicy:       row.Policy,
-		ServerSortOrder:    row.SortOrder,
+		ServerID:           updated.ID,
+		ServerDisplayName:  updated.DisplayName,
+		ServerPolicy:       updated.Policy,
+		ServerSortOrder:    updated.SortOrder,
 		McpServerURN:       nil,
 		PreviousToolsetURN: nil,
 	}); err != nil {
@@ -1119,7 +1117,7 @@ func (s *Service) UpdatePluginServer(ctx context.Context, payload *gen.UpdatePlu
 	if err := s.publicationRequests.Project(ctx, tx, ac.ActiveOrganizationID, *ac.ProjectID, ac.UserID); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "enqueue plugin publication").LogError(ctx, s.logger)
 	}
-	wrappers, err := canonicalWrapperIDs(ctx, s.repo.WithTx(tx), *ac.ProjectID, row)
+	wrappers, err := canonicalWrapperIDs(ctx, s.repo.WithTx(tx), *ac.ProjectID, updated)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "load plugin server").LogError(ctx, s.logger)
 	}
@@ -1129,7 +1127,7 @@ func (s *Service) UpdatePluginServer(ctx context.Context, payload *gen.UpdatePlu
 
 	s.signalPublish(ctx, *ac.ProjectID, ac.UserID)
 
-	return pluginServerToGen(row, wrappers), nil
+	return pluginServerToGen(updated, wrappers), nil
 }
 
 func (s *Service) RemovePluginServer(ctx context.Context, payload *gen.RemovePluginServerPayload) error {

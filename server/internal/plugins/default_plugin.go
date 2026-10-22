@@ -155,8 +155,8 @@ var (
 )
 
 // AttachToDefaultPluginParams identifies the server to attach — exactly one
-// of ToolsetID / McpServerID must be Valid, mirroring the plugin_servers
-// backend-exclusivity constraint.
+// of ToolsetID / McpServerID must be Valid; a toolset resolves to its
+// canonical MCP server.
 type AttachToDefaultPluginParams struct {
 	OrganizationID string
 	ProjectID      uuid.UUID
@@ -314,9 +314,9 @@ func attachToPlugin(ctx context.Context, q *repo.Queries, plugin repo.Plugin, pl
 		return nil, fmt.Errorf("check existing default plugin server: %w", err)
 	}
 
-	// A different attached server (a same-named toolset row, or a stale row
-	// from a deleted server) may already hold the display name, which the
-	// (plugin_id, display_name) unique index spans across backends. Blocking
+	// A different attached server (a stale row from a deleted server) may
+	// already hold the display name, which the (plugin_id, display_name)
+	// unique index spans across backends. Blocking
 	// the attach — and with it the triggering action, e.g. enabling a server —
 	// over a marketplace display name is disproportionate, so uniquify instead.
 	displayName, err := availableDisplayName(ctx, q, plugin.ID, params)

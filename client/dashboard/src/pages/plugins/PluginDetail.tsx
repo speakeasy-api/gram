@@ -1405,7 +1405,7 @@ function PluginServerCard({
 }) {
   const routes = useRoutes();
 
-  // Hosted rows resolve to their toolset under either key; anything else is remote.
+  // Hosted rows resolve to their toolset; other MCP server rows are remote.
   const isRemote =
     !!server.mcpServerId &&
     !toolset &&
