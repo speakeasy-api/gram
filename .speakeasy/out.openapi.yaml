@@ -81800,6 +81800,51 @@ components:
         - state
         - decision
         - enforceable
+    APIKeyPolicyGrant:
+      type: object
+      properties:
+        scope:
+          type: string
+          description: 'mcp:connect, mcp:auth, or a block: mcp:blocked_connect, mcp:blocked_auth'
+          enum:
+            - mcp:connect
+            - mcp:blocked_connect
+            - mcp:auth
+            - mcp:blocked_auth
+        selector:
+          $ref: '#/components/schemas/APIKeyPolicySelector'
+      required:
+        - scope
+        - selector
+    APIKeyPolicySelector:
+      type: object
+      properties:
+        client_type:
+          type: string
+          description: Auth client type filter (mcp:auth only).
+          enum:
+            - service_account
+            - static_credential
+            - pass_through
+            - ema
+            - '*'
+        project_id:
+          type: string
+          description: The project the servers are in; required when resource_id is '*', and the key's own project when it is bound to one.
+          format: uuid
+        resource_id:
+          type: string
+          description: A server or auth client ID, or '*' for every server in project_id. mcp:auth grants must name their client.
+        resource_kind:
+          type: string
+          description: mcp for mcp:connect grants, mcp_auth_client for mcp:auth grants
+          enum:
+            - mcp
+            - mcp_auth_client
+      description: 'What an API key policy grant covers: servers (mcp) or auth clients (mcp_auth_client).'
+      required:
+        - resource_kind
+        - resource_id
     AccessMember:
       type: object
       properties:
@@ -86242,6 +86287,12 @@ components:
           type: string
           description: The name of the key
           maxLength: 255
+        policy_grants:
+          type: array
+          items:
+            $ref: '#/components/schemas/APIKeyPolicyGrant'
+          description: 'Optional policy for an ordinary key: mcp:connect and mcp:auth grants, and mcp:blocked_connect and mcp:blocked_auth blocks, that its server and auth client access is evaluated against. Not yet enforced. Requires org admin.'
+          maxItems: 100
         project_id:
           type: string
           description: Optional project binding. Omit for an organization-wide key; independent of permission scopes and the Gram-Project header.
@@ -93753,6 +93804,11 @@ components:
         organization_id:
           type: string
           description: The organization ID this key belongs to
+        policy_grants:
+          type: array
+          items:
+            $ref: '#/components/schemas/APIKeyPolicyGrant'
+          description: An ordinary key's own policy
         project_id:
           type: string
           description: The optional project ID this key is scoped to
