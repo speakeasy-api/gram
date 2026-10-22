@@ -1927,6 +1927,12 @@ type DirectoryUser struct {
 	DirectoryID pgtype.Text
 	// @access: confidential-pii
 	Email pgtype.Text
+	// Given name from the WorkOS directory user. NULL until a dsync.user event or the name backfill provides it.
+	// @access: confidential-pii
+	FirstName pgtype.Text
+	// Family name from the WorkOS directory user. NULL until a dsync.user event or the name backfill provides it.
+	// @access: confidential-pii
+	LastName pgtype.Text
 	// @access: opaque-restricted
 	Attributes []byte
 	// @access: confidential
