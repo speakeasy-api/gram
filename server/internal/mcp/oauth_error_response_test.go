@@ -216,7 +216,8 @@ func TestOAuthRejectsMultipleValidCredentials(t *testing.T) {
 }
 
 // requireOAuthMixedCredentialResponses exercises validation before grant
-// dispatch across each mounted route, with credentials valid for that issuer.
+// dispatch and authentication across each mounted route, with both valid
+// credentials and credentials that would fail client authentication.
 func requireOAuthMixedCredentialResponses(t *testing.T, ti *testInstance, issuerID uuid.UUID, handler http.Handler, base, resource string) {
 	t.Helper()
 	hash, err := bcrypt.GenerateFromPassword([]byte("test-secret"), bcrypt.MinCost)
@@ -246,13 +247,17 @@ func requireOAuthMixedCredentialResponses(t *testing.T, ti *testInstance, issuer
 		for _, grant := range grants {
 			for _, tc := range []struct {
 				name           string
+				clientID       string
+				secret         string
 				repeatedHeader bool
 				fields         url.Values
 			}{
-				{name: "repeated header", repeatedHeader: true},
-				{name: "body secret", fields: url.Values{oauthwire.ParamClientSecret: {"test-secret"}}},
-				{name: "assertion", fields: url.Values{oauthwire.ParamClientAssertion: {"assertion"}, oauthwire.ParamClientAssertionType: {"jwt"}}},
-				{name: "repeated identifier", fields: url.Values{oauthwire.ParamClientID: {client.ClientID, client.ClientID}}},
+				{name: "repeated header", clientID: client.ClientID, secret: "test-secret", repeatedHeader: true},
+				{name: "unknown client with repeated header", clientID: "unknown-client", secret: "test-secret", repeatedHeader: true},
+				{name: "wrong secret with repeated header", clientID: client.ClientID, secret: "wrong-secret", repeatedHeader: true},
+				{name: "body secret", clientID: client.ClientID, secret: "test-secret", fields: url.Values{oauthwire.ParamClientSecret: {"test-secret"}}},
+				{name: "assertion", clientID: client.ClientID, secret: "test-secret", fields: url.Values{oauthwire.ParamClientAssertion: {"assertion"}, oauthwire.ParamClientAssertionType: {"jwt"}}},
+				{name: "repeated identifier", clientID: client.ClientID, secret: "test-secret", fields: url.Values{oauthwire.ParamClientID: {client.ClientID, client.ClientID}}},
 			} {
 				t.Run("mixed/"+endpoint+"/"+grant+"/"+tc.name, func(t *testing.T) {
 					t.Parallel()
@@ -260,7 +265,7 @@ func requireOAuthMixedCredentialResponses(t *testing.T, ti *testInstance, issuer
 					maps.Copy(form, tc.fields)
 					request := httptest.NewRequest(http.MethodPost, base+"/"+endpoint, strings.NewReader(form.Encode()))
 					request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-					request.SetBasicAuth(client.ClientID, "test-secret")
+					request.SetBasicAuth(tc.clientID, tc.secret)
 					if tc.repeatedHeader {
 						request.Header.Add("Authorization", request.Header.Get("Authorization"))
 					}
