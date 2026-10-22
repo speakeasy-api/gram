@@ -234,7 +234,7 @@ func TestBuildAgentPluginsView_OverrideWinsOverPublishedName(t *testing.T) {
 func TestBuildAgentPluginsView_EmptyRows(t *testing.T) {
 	t.Parallel()
 
-	result := mv.BuildAgentPluginsView(nil, testMarketplaceURL, nil)
+	result := mv.BuildAgentPluginsView(nil, testMarketplaceURL, map[uuid.UUID][]*gen.AgentPluginServer{})
 
 	require.Empty(t, result.Marketplaces)
 	require.Empty(t, result.Plugins)
@@ -318,4 +318,38 @@ func TestBuildAgentPluginsView_ETagStableAndSensitive(t *testing.T) {
 	prod := mv.BuildAgentPluginsView(rowsAt(t0), func(tok string) string { return "https://prod/" + tok }, nil).Etag
 	staging := mv.BuildAgentPluginsView(rowsAt(t0), func(tok string) string { return "https://staging/" + tok }, nil).Etag
 	require.Equal(t, prod, staging, "ETag ignores the deployment-config marketplace URL")
+}
+
+func TestBuildAgentPluginsView_UnavailableServersLeaveListsOff(t *testing.T) {
+	t.Parallel()
+	now := time.Now()
+	row := withPlugin(marketplaceRow("acme", "Acme", "default", true, "tok", now), "engineering", now)
+
+	unavailable := mv.BuildAgentPluginsView([]repo.GetAgentPluginSetRow{row}, testMarketplaceURL, nil)
+	empty := mv.BuildAgentPluginsView([]repo.GetAgentPluginSetRow{row}, testMarketplaceURL, map[uuid.UUID][]*gen.AgentPluginServer{})
+
+	require.Len(t, unavailable.Plugins, 2)
+	require.Len(t, empty.Plugins, 2)
+	require.Nil(t, unavailable.Plugins[1].Servers, "unreadable lists are left off, not reported as empty")
+	require.NotNil(t, empty.Plugins[1].Servers)
+	require.Empty(t, empty.Plugins[1].Servers)
+	require.NotEqual(t, unavailable.Etag, empty.Etag,
+		"an agent that polled while lists were unreadable must see a change once they recover")
+}
+
+func TestBuildAgentPluginsView_ETagTracksServers(t *testing.T) {
+	t.Parallel()
+	now := time.Now()
+	row := withPlugin(marketplaceRow("acme", "Acme", "default", true, "tok", now), "engineering", now)
+	rows := []repo.GetAgentPluginSetRow{row}
+	with := func(servers ...*gen.AgentPluginServer) string {
+		return mv.BuildAgentPluginsView(rows, testMarketplaceURL, map[uuid.UUID][]*gen.AgentPluginServer{row.PluginID.UUID: servers}).Etag
+	}
+
+	unlinked := with(&gen.AgentPluginServer{Name: "Linear", DashboardURL: nil})
+	require.Equal(t, unlinked, with(&gen.AgentPluginServer{Name: "Linear", DashboardURL: nil}))
+	require.NotEqual(t, unlinked, with(&gen.AgentPluginServer{Name: "Linear", DashboardURL: new("https://dashboard.example/linear")}),
+		"gaining a dashboard link changes the ETag")
+	require.NotEqual(t, unlinked, with(&gen.AgentPluginServer{Name: "GitHub", DashboardURL: nil}),
+		"a renamed server changes the ETag")
 }

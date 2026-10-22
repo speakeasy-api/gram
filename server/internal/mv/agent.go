@@ -53,8 +53,9 @@ import (
 // caller owns the URL shape so this builder stays free of server-side config.
 //
 // servers holds each assigned plugin's MCP servers by plugin id. A plugin
-// missing from it gets an empty list. The observability plugin carries hooks
-// rather than servers, so it gets no list at all.
+// missing from it gets an empty list. A nil map means the lists could not be
+// read, so every plugin's list is left off. The observability plugin carries
+// hooks rather than servers, so it never gets a list.
 func BuildAgentPluginsView(rows []repo.GetAgentPluginSetRow, marketplaceURL func(token string) string, servers map[uuid.UUID][]*gen.AgentPluginServer) *gen.GetPluginsResult {
 	var marketplaces []*gen.AgentMarketplace
 	var plugins []*gen.AgentPlugin
@@ -99,7 +100,7 @@ func BuildAgentPluginsView(rows []repo.GetAgentPluginSetRow, marketplaceURL func
 		if delivered {
 			mode := installmode.FromStored(row.PluginInstallMode)
 			pluginServers := servers[row.PluginID.UUID]
-			if pluginServers == nil {
+			if servers != nil && pluginServers == nil {
 				pluginServers = []*gen.AgentPluginServer{}
 			}
 			plugins = append(plugins, &gen.AgentPlugin{
@@ -119,6 +120,12 @@ func BuildAgentPluginsView(rows []repo.GetAgentPluginSetRow, marketplaceURL func
 			}
 		}
 	})
+	// Omitted lists must not share an ETag with empty ones, or an agent that
+	// polled while the lists were unreadable would keep that result after
+	// they recover.
+	if servers == nil {
+		writeAgentPluginsETag(etag, "servers\x00unavailable\n")
+	}
 
 	return &gen.GetPluginsResult{
 		Etag:                   hex.EncodeToString(etag.Sum(nil)),

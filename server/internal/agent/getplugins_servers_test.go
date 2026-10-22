@@ -15,6 +15,7 @@ import (
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
@@ -227,6 +228,41 @@ func TestGetPlugins_SkipsDisabledPluginServers(t *testing.T) {
 
 	servers := pluginBySlug(t, res, "engineering").Servers
 	require.Len(t, servers, 1, "a turned-off server is no longer delivered by the plugin")
+	require.Equal(t, "Linear", servers[0].Name)
+}
+
+func TestGetPlugins_SkipsDeletedPluginServers(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestAgentService(t)
+
+	publishMarketplace(t, ctx, ti.conn, ti.projectID, "tok")
+	pluginID := seedPlugin(t, ctx, ti.conn, ti.orgID, ti.projectID, "engineering")
+	assignPlugin(t, ctx, ti.conn, pluginID, ti.orgID, "*")
+	seedPluginMCPServer(t, ctx, ti.conn, ti.orgID, ti.projectID, pluginID, "Linear", 0)
+
+	deletedServerID, _ := seedPluginMCPServer(t, ctx, ti.conn, ti.orgID, ti.projectID, pluginID, "Deleted server", 1)
+	_, err := mcpserversrepo.New(ti.conn).DeleteMCPServer(ctx, mcpserversrepo.DeleteMCPServerParams{
+		ID:        deletedServerID,
+		ProjectID: ti.projectID,
+	})
+	require.NoError(t, err)
+
+	removedServerID, _ := seedPluginMCPServer(t, ctx, ti.conn, ti.orgID, ti.projectID, pluginID, "Removed membership", 2)
+	membership, err := pluginsrepo.New(ti.conn).GetPluginServerByBackend(ctx, pluginsrepo.GetPluginServerByBackendParams{
+		PluginID:       pluginID,
+		ProjectID:      ti.projectID,
+		OrganizationID: ti.orgID,
+		McpServerID:    uuid.NullUUID{UUID: removedServerID, Valid: true},
+	})
+	require.NoError(t, err)
+	_, err = pluginsrepo.New(ti.conn).RemovePluginServer(ctx, pluginsrepo.RemovePluginServerParams{ID: membership.ID, PluginID: pluginID})
+	require.NoError(t, err)
+
+	res, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: new(mockidp.MockUserEmail)})
+	require.NoError(t, err)
+
+	servers := pluginBySlug(t, res, "engineering").Servers
+	require.Len(t, servers, 1, "a deleted server and a removed membership are no longer delivered by the plugin")
 	require.Equal(t, "Linear", servers[0].Name)
 }
 

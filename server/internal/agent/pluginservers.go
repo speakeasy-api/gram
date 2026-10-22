@@ -14,7 +14,8 @@ import (
 
 // pluginServers lists the MCP servers inside each delivered plugin, keyed by
 // plugin id, for the menu bar's expandable plugin rows. A server carries a
-// dashboard link only when the polling identity holds mcp:read on it.
+// dashboard link only when the polling identity holds mcp:read on it. The map
+// is non-nil on success, so plugins missing from it have no servers.
 //
 // The grants are loaded for the polling identity explicitly rather than read
 // from the request: the poll authenticates with an API key, which the engine
@@ -27,8 +28,9 @@ func (s *Service) pluginServers(ctx context.Context, organizationID string, prin
 			pluginIDs = append(pluginIDs, row.PluginID.UUID)
 		}
 	}
+	servers := make(map[uuid.UUID][]*gen.AgentPluginServer)
 	if len(pluginIDs) == 0 {
-		return nil, nil
+		return servers, nil
 	}
 
 	serverRows, err := s.repo.ListAgentPluginServers(ctx, repo.ListAgentPluginServersParams{
@@ -39,7 +41,7 @@ func (s *Service) pluginServers(ctx context.Context, organizationID string, prin
 		return nil, fmt.Errorf("list plugin servers: %w", err)
 	}
 	if len(serverRows) == 0 {
-		return nil, nil
+		return servers, nil
 	}
 
 	// An address that is not an org member has no RBAC principals, and so no
@@ -52,7 +54,6 @@ func (s *Service) pluginServers(ctx context.Context, organizationID string, prin
 		}
 	}
 
-	servers := make(map[uuid.UUID][]*gen.AgentPluginServer)
 	for _, row := range serverRows {
 		dashboardURL, err := s.pluginServerDashboardURL(grants, row)
 		if err != nil {
@@ -99,8 +100,10 @@ func (s *Service) pluginServerDashboardURL(grants []authz.Grant, row repo.ListAg
 	if err != nil {
 		return nil, fmt.Errorf("authorize plugin server dashboard link: %w", err)
 	}
+	// The agent drops links that aren't https, so an http dashboard (local
+	// development) sends none rather than one the agent would discard.
 	site := s.orgHosts.SiteURL(row.OrganizationDefaultHost)
-	if !allowed || site == nil {
+	if !allowed || site == nil || site.Scheme != "https" || site.Host == "" {
 		return nil, nil
 	}
 
