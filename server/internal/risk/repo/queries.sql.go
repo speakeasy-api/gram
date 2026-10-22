@@ -3062,6 +3062,40 @@ func (q *Queries) ListEnabledRiskPoliciesByProject(ctx context.Context, projectI
 	return items, nil
 }
 
+const listEnabledRiskPolicyIDsByOrganizationProject = `-- name: ListEnabledRiskPolicyIDsByOrganizationProject :many
+SELECT id
+FROM risk_policies
+WHERE organization_id = $1
+  AND project_id = $2
+  AND enabled IS TRUE
+  AND deleted IS FALSE
+`
+
+type ListEnabledRiskPolicyIDsByOrganizationProjectParams struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+}
+
+func (q *Queries) ListEnabledRiskPolicyIDsByOrganizationProject(ctx context.Context, arg ListEnabledRiskPolicyIDsByOrganizationProjectParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listEnabledRiskPolicyIDsByOrganizationProject, arg.OrganizationID, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listEnabledShadowMCPPoliciesByProject = `-- name: ListEnabledShadowMCPPoliciesByProject :many
 SELECT id, project_id, organization_id, enabled, name, policy_type, sources, presidio_entities, analyzer_config, mcp_scope, prompt_injection_rules, disabled_rules, custom_rule_ids, action, audience_type, shadow_mcp_disposition, auto_name, user_message, prompt, model_config, score, version, created_at, updated_at, deleted_at, deleted
 FROM risk_policies
@@ -3876,6 +3910,72 @@ func (q *Queries) ListRiskPoliciesPage(ctx context.Context, arg ListRiskPolicies
 		arg.CursorID,
 		arg.PageLimit,
 	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []RiskPolicy
+	for rows.Next() {
+		var i RiskPolicy
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.OrganizationID,
+			&i.Enabled,
+			&i.Name,
+			&i.PolicyType,
+			&i.Sources,
+			&i.PresidioEntities,
+			&i.AnalyzerConfig,
+			&i.McpScope,
+			&i.PromptInjectionRules,
+			&i.DisabledRules,
+			&i.CustomRuleIds,
+			&i.Action,
+			&i.AudienceType,
+			&i.ShadowMcpDisposition,
+			&i.AutoName,
+			&i.UserMessage,
+			&i.Prompt,
+			&i.ModelConfig,
+			&i.Score,
+			&i.Version,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRiskPoliciesScopingMCPServerForUpdate = `-- name: ListRiskPoliciesScopingMCPServerForUpdate :many
+SELECT id, project_id, organization_id, enabled, name, policy_type, sources, presidio_entities, analyzer_config, mcp_scope, prompt_injection_rules, disabled_rules, custom_rule_ids, action, audience_type, shadow_mcp_disposition, auto_name, user_message, prompt, model_config, score, version, created_at, updated_at, deleted_at, deleted
+FROM risk_policies
+WHERE project_id = $1
+  AND deleted IS FALSE
+  AND mcp_scope @> jsonb_build_object(
+    'servers',
+    jsonb_build_array(jsonb_build_object('mcp_server_id', $2::text))
+  )
+ORDER BY id
+FOR UPDATE
+`
+
+type ListRiskPoliciesScopingMCPServerForUpdateParams struct {
+	ProjectID   uuid.UUID
+	McpServerID string
+}
+
+// Containment never raises on a malformed scope.
+func (q *Queries) ListRiskPoliciesScopingMCPServerForUpdate(ctx context.Context, arg ListRiskPoliciesScopingMCPServerForUpdateParams) ([]RiskPolicy, error) {
+	rows, err := q.db.Query(ctx, listRiskPoliciesScopingMCPServerForUpdate, arg.ProjectID, arg.McpServerID)
 	if err != nil {
 		return nil, err
 	}
@@ -4969,6 +5069,57 @@ func (q *Queries) MarkRiskResultsFalsePositive(ctx context.Context, arg MarkRisk
 		return nil, err
 	}
 	return items, nil
+}
+
+const pruneRiskPolicyMCPScope = `-- name: PruneRiskPolicyMCPScope :one
+UPDATE risk_policies
+SET mcp_scope = $1::jsonb
+  , updated_at = clock_timestamp()
+WHERE id = $2
+  AND project_id = $3
+  AND deleted IS FALSE
+RETURNING id, project_id, organization_id, enabled, name, policy_type, sources, presidio_entities, analyzer_config, mcp_scope, prompt_injection_rules, disabled_rules, custom_rule_ids, action, audience_type, shadow_mcp_disposition, auto_name, user_message, prompt, model_config, score, version, created_at, updated_at, deleted_at, deleted
+`
+
+type PruneRiskPolicyMCPScopeParams struct {
+	McpScope  []byte
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+// Only for dropping a deleted server: it gets no traffic, so version stays.
+func (q *Queries) PruneRiskPolicyMCPScope(ctx context.Context, arg PruneRiskPolicyMCPScopeParams) (RiskPolicy, error) {
+	row := q.db.QueryRow(ctx, pruneRiskPolicyMCPScope, arg.McpScope, arg.ID, arg.ProjectID)
+	var i RiskPolicy
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.OrganizationID,
+		&i.Enabled,
+		&i.Name,
+		&i.PolicyType,
+		&i.Sources,
+		&i.PresidioEntities,
+		&i.AnalyzerConfig,
+		&i.McpScope,
+		&i.PromptInjectionRules,
+		&i.DisabledRules,
+		&i.CustomRuleIds,
+		&i.Action,
+		&i.AudienceType,
+		&i.ShadowMcpDisposition,
+		&i.AutoName,
+		&i.UserMessage,
+		&i.Prompt,
+		&i.ModelConfig,
+		&i.Score,
+		&i.Version,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
 }
 
 const recordSkillPromptInjectionScan = `-- name: RecordSkillPromptInjectionScan :exec

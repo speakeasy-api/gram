@@ -31,10 +31,12 @@ type consentGovernor struct {
 	governs    bool
 	configured bool
 	usable     bool
+	refresh    identitychaining.RefreshDecision
 	acquire    func(context.Context, identitychaining.Request) identitychaining.Outcome
 	mu         sync.Mutex
 	requests   []identitychaining.Request
 	acquired   []identitychaining.Request
+	refreshed  []identitychaining.Request
 }
 
 func (g *consentGovernor) Governs(context.Context, identitychaining.Request) bool {
@@ -54,6 +56,13 @@ func (g *consentGovernor) Configured(context.Context, string, uuid.UUID, uuid.UU
 
 func (g *consentGovernor) HasUsableCredential(context.Context, identitychaining.Request) bool {
 	return g.usable
+}
+
+func (g *consentGovernor) RefreshDecision(_ context.Context, req identitychaining.Request) identitychaining.RefreshVerdict {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.refreshed = append(g.refreshed, req)
+	return identitychaining.RefreshVerdict{Decision: g.refresh, RemoteSessionIssuerID: g.issuer, Provider: "", Reason: ""}
 }
 
 func (g *consentGovernor) Acquire(ctx context.Context, req identitychaining.Request) (identitychaining.Token, identitychaining.Outcome) {
@@ -76,7 +85,7 @@ func (g *consentGovernor) seen() []identitychaining.Request {
 
 func setConsentGovernor(t *testing.T, fx consentActionFixture, issuer uuid.UUID, served ...string) *consentGovernor {
 	t.Helper()
-	g := &consentGovernor{t: t, issuer: issuer, served: map[string]bool{}, governs: len(served) > 0, configured: true, usable: false, acquire: nil, mu: sync.Mutex{}, requests: nil, acquired: nil}
+	g := &consentGovernor{t: t, issuer: issuer, served: map[string]bool{}, governs: len(served) > 0, configured: true, usable: false, refresh: identitychaining.RefreshNotChained, acquire: nil, mu: sync.Mutex{}, requests: nil, acquired: nil, refreshed: nil}
 	for _, u := range served {
 		g.served[u] = true
 	}
@@ -121,7 +130,8 @@ func TestConsentPage_IdentityChainedServiceIsManagedWithFallback(t *testing.T) {
 		UserID:                fx.subject.ID,
 		UpstreamResource:      consentChainedUpstream,
 		RemoteSessionIssuerID: uuid.NullUUID{},
-	}, reqs[0], "a direct upstream is judged with the runtime's issuer-free request")
+		RemoteSessionClientID: uuid.NullUUID{UUID: fx.clientA, Valid: true},
+	}, reqs[0], "a direct upstream is judged with the runtime's issuer-free request, through its client")
 }
 
 func TestConsentPage_UngovernedServiceStillConnectsInteractively(t *testing.T) {
@@ -235,10 +245,15 @@ func TestConsentPage_DirectTunneledServiceIsManaged(t *testing.T) {
 		UserID:                fx.subject.ID,
 		UpstreamResource:      identifier,
 		RemoteSessionIssuerID: uuid.NullUUID{UUID: issuer, Valid: true},
-	}, reqs[0], "a tunneled upstream is judged with its own derived issuer")
+		RemoteSessionClientID: uuid.NullUUID{UUID: fx.clientA, Valid: true},
+	}, reqs[0], "a tunneled upstream is judged with its own derived issuer, through its client")
 }
 
 func (g *consentGovernor) CheckConsent(ctx context.Context, req identitychaining.Request, _ uuid.UUID) identitychaining.Outcome {
 	_, outcome := g.Acquire(ctx, req)
 	return outcome
+}
+
+func (g *consentGovernor) RetireConsentCredentials(context.Context, string, uuid.UUID, uuid.UUID, string, uuid.UUID) error {
+	return nil
 }

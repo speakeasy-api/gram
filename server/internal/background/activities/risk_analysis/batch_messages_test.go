@@ -19,7 +19,10 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"github.com/speakeasy-api/gram/server/internal/message"
+	"github.com/speakeasy-api/gram/server/internal/risk/categories"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
+	"github.com/speakeasy-api/gram/server/internal/scanners/clidestructive"
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/stokens"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
@@ -227,7 +230,6 @@ func TestRecordBatchResultsContinuesAfterPublishFailure(t *testing.T) {
 		promptInjectionPub:     nil,
 		promptPolicyPub:        nil,
 		customRulesPub:         nil,
-		findingsPub:            nil,
 		riskRecorder:           metering.NewRiskRecorder(publisher),
 		customRuleScanner:      nil,
 		cliDestructiveScanner:  nil,
@@ -320,4 +322,57 @@ func TestBatchJudgeParentlessPartHasNoLiveHistory(t *testing.T) {
 	target = batchJudgeMessage(msg)
 	require.Equal(t, msg.ParentChatMessageID, target.AnchorID)
 	require.Equal(t, msg.ChatID, target.ChatID)
+}
+
+func TestPublishToolCallScanRequestsAppliesCategoryScopes(t *testing.T) {
+	t.Parallel()
+
+	pub := gcp.NewMockPublisher[*riskv1.ToolCallAnalysis]()
+	var published []*riskv1.ToolCallAnalysis
+	pub.On("Publish", mock.Anything, mock.Anything).
+		Return(gcp.NewSuccessPublishResult()).
+		Run(func(args mock.Arguments) {
+			request, ok := args.Get(1).(*riskv1.ToolCallAnalysis)
+			require.True(t, ok)
+			published = append(published, request)
+		})
+	analyzer := &AnalyzeBatch{toolCallPub: pub}
+	message := toolReq("mcp__rogue__delete")
+	args := AnalyzeBatchArgs{
+		ProjectID:              uuid.MustParse("00000000-0000-0000-0000-000000000601"),
+		OrganizationID:         "org",
+		RiskPolicyID:           uuid.MustParse("00000000-0000-0000-0000-000000000602"),
+		PolicyVersion:          2,
+		MessageIDs:             []uuid.UUID{message.ID},
+		ContentPartIDs:         nil,
+		Sources:                nil,
+		PresidioEntities:       nil,
+		PresidioScoreThreshold: 0,
+		CustomRuleIds:          nil,
+		ApprovedEmailDomains:   nil,
+		BuiltinPresetsEnabled:  false,
+		DetectionScopes:        nil,
+	}
+	categoryOut := make(map[categories.Category][]bool)
+	categoryOut[categories.CategoryCLIDestructive] = []bool{true}
+	masks := CategoryScopeMasks{categoryOut: categoryOut}
+
+	publish := func(ctx context.Context) error {
+		return analyzer.publishToolCallScanRequests(
+			ctx,
+			args,
+			[]batchMessage{message},
+			newSourceSet([]string{shadowmcp.SourceShadowMCP, clidestructive.Source}),
+			masks,
+			true,
+			true,
+		)
+	}
+	var ts testsuite.WorkflowTestSuite
+	env := ts.NewTestActivityEnvironment()
+	env.RegisterActivity(publish)
+	_, err := env.ExecuteActivity(publish)
+	require.NoError(t, err)
+	require.Len(t, published, 1)
+	require.Equal(t, []string{shadowmcp.SourceShadowMCP}, published[0].GetSources())
 }

@@ -12,7 +12,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/risk/categories"
 	"github.com/speakeasy-api/gram/server/internal/risk/chrepo"
-	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 // chOverviewFinding mirrors what the enriched FindingCHWriter writes for one
@@ -132,8 +131,6 @@ func TestGetRiskOverview_CustomWindowAggregates(t *testing.T) {
 		VALUES (?, ?, ?, ?, 'secret.github_pat', 'gitleaks', 'secrets', ?, ?)
 	`, uuid.Must(uuid.NewV7()), from.Add(37*time.Hour), orgID, projectID.String(), aliceSecret1Chat.String(), from.Add(40*time.Hour)))
 
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
-
 	result, err := ti.service.GetRiskOverview(ctx, &gen.GetRiskOverviewPayload{
 		From: new(from.Format(time.RFC3339)),
 		To:   new(to.Format(time.RFC3339)),
@@ -220,8 +217,6 @@ func TestGetRiskOverview_ClickHouseDedupesAppendedDismissRow(t *testing.T) {
 		VALUES (?, ?, ?, ?, ?, 'secret.github_pat', 'gitleaks', 'secrets', ?, ?)
 	`, dismissedID, from.Add(3*time.Hour), from.Add(4*time.Hour), orgID, projectID.String(), chatID.String(), from.Add(4*time.Hour)))
 
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
-
 	result, err := ti.service.GetRiskOverview(ctx, &gen.GetRiskOverviewPayload{
 		From: new(from.Format(time.RFC3339)),
 		To:   new(to.Format(time.RFC3339)),
@@ -275,7 +270,6 @@ func TestInsertRiskFindings_SameIDTwiceInOneBatchGetsDistinctInsertedAt(t *testi
 	// (or a redelivered backlog) produces in production.
 	chQueries := chrepo.New(ti.chConn)
 	require.NoError(t, chQueries.InsertRiskFindings(ctx, []chrepo.RiskFindingRow{original, dismissed}))
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	rows, err := ti.chConn.Query(ctx, `SELECT toUnixTimestamp64Nano(inserted_at) FROM risk_findings WHERE id = ? ORDER BY inserted_at`, original.ID)
 	require.NoError(t, err)
@@ -330,7 +324,6 @@ func TestGetRiskOverview_ClickHouseUserEmailPrecedence(t *testing.T) {
 
 	chQueries := chrepo.New(ti.chConn)
 	require.NoError(t, chQueries.InsertRiskFindings(ctx, []chrepo.RiskFindingRow{internalUser, unknownUser}))
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	require.NotNil(t, authCtx.Email)
 	userEmail := *authCtx.Email
@@ -361,7 +354,6 @@ func TestRiskFindingsTTLRemovesExpiredRows(t *testing.T) { //nolint:paralleltest
 
 	queries := chrepo.New(ti.chConn)
 	require.NoError(t, queries.InsertRiskFindings(ctx, []chrepo.RiskFindingRow{expired, retained}))
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	// TTL deletion normally happens during background merges. Force a merge so
 	// this test observes the retention contract deterministically.

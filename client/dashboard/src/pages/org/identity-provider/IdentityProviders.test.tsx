@@ -6,7 +6,9 @@ import { IdentityProviders } from "./IdentityProviders";
 const mocks = vi.hoisted(() => ({
   query: {
     data: {
-      connection: undefined as undefined | { status: string; orgUrl: string },
+      connection: undefined as
+        | undefined
+        | { provider: string; status: string; orgUrl: string },
     },
     error: null as Error | null,
     isPending: false,
@@ -57,6 +59,14 @@ vi.mock("./useEnterpriseIssuer", () => ({
 vi.mock("./SpeakeasyWorkspace", () => ({
   SpeakeasyWorkspace: () => <div>Speakeasy page</div>,
 }));
+vi.mock("./services/EmaServices", () => ({
+  EmaServices: () => <div>Services table</div>,
+}));
+vi.mock("./services/EmaServiceWorkspace", () => ({
+  EmaServiceWorkspace: ({ vendorIssuer }: { vendorIssuer: string }) => (
+    <div>Service page: {vendorIssuer}</div>
+  ),
+}));
 function show(
   query = "",
   props = { showExternal: true, showSpeakeasy: false },
@@ -96,6 +106,7 @@ describe("Identity providers", () => {
     "offers management for a %s connection",
     (status) => {
       mocks.query.data.connection = {
+        provider: "okta",
         status,
         orgUrl: "https://example.okta.com",
       };
@@ -108,6 +119,7 @@ describe("Identity providers", () => {
   );
   it("offers reconnection for revoked connections", () => {
     mocks.query.data.connection = {
+      provider: "okta",
       status: "revoked",
       orgUrl: "https://example.okta.com",
     };
@@ -131,6 +143,7 @@ describe("Identity providers", () => {
   });
   it("navigates between the overview and provider workspace", () => {
     mocks.query.data.connection = {
+      provider: "okta",
       status: "pending",
       orgUrl: "https://example.okta.com",
     };
@@ -154,6 +167,52 @@ describe("Identity providers", () => {
     expect(
       screen.getByRole("heading", { name: "Identity providers" }),
     ).toBeTruthy();
+  });
+  it("lists the services identity chaining reaches below the providers", () => {
+    show();
+    expect(screen.getByText("Services table")).toBeTruthy();
+  });
+  it("opens one service from its link", () => {
+    show("&service=https%3A%2F%2Flinear.example.com");
+    expect(
+      screen.getByText("Service page: https://linear.example.com"),
+    ).toBeTruthy();
+    expect(screen.queryByText("Services table")).toBeNull();
+  });
+  it("asks which page to open when a link names both a provider and a service", () => {
+    show("&provider=okta&service=https%3A%2F%2Flinear.example.com");
+    expect(screen.queryByText(/Service page:/)).toBeNull();
+    expect(
+      screen.getByText(/points at both an identity provider and a service/),
+    ).toBeTruthy();
+    expect(
+      screen
+        .getByRole("link", { name: "open the service" })
+        .getAttribute("href"),
+    ).toBe(
+      "/example/identity?tab=identity-providers&service=https%3A%2F%2Flinear.example.com",
+    );
+    expect(
+      screen
+        .getByRole("link", { name: "Open the identity provider" })
+        .getAttribute("href"),
+    ).toBe("/example/identity?tab=identity-providers&provider=okta&view=setup");
+  });
+  it("offers only the service when the named provider is hidden by its rollout", () => {
+    show("&provider=okta&service=https%3A%2F%2Flinear.example.com", {
+      showExternal: false,
+      showSpeakeasy: true,
+    });
+    expect(
+      screen.queryByRole("link", { name: "Open the identity provider" }),
+    ).toBeNull();
+    expect(
+      screen
+        .getByRole("link", { name: "Open the service" })
+        .getAttribute("href"),
+    ).toBe(
+      "/example/identity?tab=identity-providers&service=https%3A%2F%2Flinear.example.com",
+    );
   });
   it("shows the provider list for unknown providers", () => {
     show("&provider=unsupported");

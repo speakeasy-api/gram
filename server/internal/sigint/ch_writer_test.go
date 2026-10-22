@@ -30,6 +30,7 @@ func writerReading(t *testing.T) *sigintv1.Reading {
 	at := time.Now().UTC().Format(time.RFC3339Nano)
 	return sigintv1.Reading_builder{
 		Id: new(uuid.NewString()), EvaluationAttemptId: new(uuid.NewString()),
+		TriggerKind: new("stream"), EvaluationRequestedAt: new(at),
 		OrganizationId: new("example-organization"), ProjectId: new(uuid.NewString()),
 		SensorId: new(uuid.NewString()), SensorSlug: new("example-sensor"),
 		DefinitionHash: new("example-definition"), EvaluatedAt: new(at),
@@ -66,6 +67,7 @@ func TestOutcomeCHWriterLandsOutcomesAndDropsPoison(t *testing.T) {
 	reading := writerReading(t)
 	outcome := sigintv1.Outcome_builder{
 		Id: new(reading.GetId()), EvaluationAttemptId: new(uuid.NewString()),
+		TriggerKind: new(reading.GetTriggerKind()), EvaluationRequestedAt: new(reading.GetEvaluationRequestedAt()),
 		OrganizationId: new(reading.GetOrganizationId()), ProjectId: new(reading.GetProjectId()),
 		SensorId: new(reading.GetSensorId()), SensorSlug: new(reading.GetSensorSlug()),
 		EvaluatedAt: new(reading.GetEvaluatedAt()), Status: new(sigintv1.Outcome_STATUS_NOT_APPLICABLE),

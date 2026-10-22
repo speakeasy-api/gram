@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
@@ -20,7 +21,7 @@ export const DirectoryStatus = {
 /**
  * Whether a snapshot belongs to the usable current authorization.
  */
-export type DirectoryStatus = ClosedEnum<typeof DirectoryStatus>;
+export type DirectoryStatus = OpenEnum<typeof DirectoryStatus>;
 
 /**
  * Authorization status, independent of directory sync.
@@ -33,7 +34,7 @@ export const SlackDirectoryConnectionStatus = {
 /**
  * Authorization status, independent of directory sync.
  */
-export type SlackDirectoryConnectionStatus = ClosedEnum<
+export type SlackDirectoryConnectionStatus = OpenEnum<
   typeof SlackDirectoryConnectionStatus
 >;
 
@@ -51,7 +52,7 @@ export const SyncStatus = {
 /**
  * Latest workflow state. Unknown means progress could not be checked.
  */
-export type SyncStatus = ClosedEnum<typeof SyncStatus>;
+export type SyncStatus = OpenEnum<typeof SyncStatus>;
 
 /**
  * An organization Slack workspace authorization. Authorization does not indicate directory sync or invocation protection.
@@ -132,18 +133,20 @@ export type SlackDirectoryConnection = {
 };
 
 /** @internal */
-export const DirectoryStatus$inboundSchema: z.ZodMiniEnum<
-  typeof DirectoryStatus
-> = z.enum(DirectoryStatus);
+export const DirectoryStatus$inboundSchema: z.ZodMiniType<
+  DirectoryStatus,
+  unknown
+> = openEnums.inboundSchema(DirectoryStatus);
 
 /** @internal */
-export const SlackDirectoryConnectionStatus$inboundSchema: z.ZodMiniEnum<
-  typeof SlackDirectoryConnectionStatus
-> = z.enum(SlackDirectoryConnectionStatus);
+export const SlackDirectoryConnectionStatus$inboundSchema: z.ZodMiniType<
+  SlackDirectoryConnectionStatus,
+  unknown
+> = openEnums.inboundSchema(SlackDirectoryConnectionStatus);
 
 /** @internal */
-export const SyncStatus$inboundSchema: z.ZodMiniEnum<typeof SyncStatus> = z
-  .enum(SyncStatus);
+export const SyncStatus$inboundSchema: z.ZodMiniType<SyncStatus, unknown> =
+  openEnums.inboundSchema(SyncStatus);
 
 /** @internal */
 export const SlackDirectoryConnection$inboundSchema: z.ZodMiniType<

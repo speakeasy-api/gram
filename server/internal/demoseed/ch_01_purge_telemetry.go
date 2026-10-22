@@ -116,6 +116,7 @@ var chPurgeOrgTables = []string{
 	"billing_meter_readings_by_time",
 	"agent_events",
 	"sigint_readings",
+	"sigint_readings_v2",
 }
 
 // chPurge runs the scoped deletes: telemetry source + every MV target + the
@@ -149,7 +150,8 @@ func (s *seeder) chPurge(ctx context.Context, ch driver.Conn) error {
 				+ (SELECT count() FROM billing_meter_readings_by_time WHERE organization_id = ?)
 				+ (SELECT count() FROM billing_meter_daily_summaries WHERE organization_id = ?)
 				+ (SELECT count() FROM sigint_readings WHERE organization_id = ?)
-		`, projectID, s.orgID(), s.orgID(), s.orgID()).Scan(&remaining)
+				+ (SELECT count() FROM sigint_readings_v2 WHERE organization_id = ?)
+		`, projectID, s.orgID(), s.orgID(), s.orgID(), s.orgID()).Scan(&remaining)
 		if err != nil {
 			return 0, fmt.Errorf("count remaining demo telemetry, meter ledger, summary, and sensor reading rows: %w", err)
 		}
@@ -423,8 +425,19 @@ func (s *seeder) chToolCallRows() []chTelemetryRow {
 				`,"gram.tool.name":"` + toolName + `"`
 			// Managed-agent calls retain the approving human email too: the
 			// actor must win.
+			//
+			// The authorizer rides along beside the actor. An agent acts
+			// under someone's authority, and a call that records only the
+			// machine cannot be read back to the person accountable for it —
+			// which is what the log detail sheet shows as "<agent> on behalf
+			// of <person>". Not every agent call has one: a key or a
+			// federated platform signs the agent in as itself, so a third of
+			// them deliberately carry no authorizer.
 			if i%4 == 0 {
 				attrs += `,"gram.event.source":"tool_call","gram.authorization.actor.type":"agent","gram.authorization.actor.id":"` + managedAgentID + `"`
+				if hash64("authz", i)%3 != 0 {
+					attrs += `,"gram.authorization.authorizer_user_id":"` + s.userID(u.handle) + `"`
+				}
 			}
 			attrs += `,"gram.toolset.slug":"` + chIf(i%5 == 0, "acme-ops", "acme-support-tools") + `"` +
 				`,"http.response.status_code":` + chIf(failed, "500", "200") +

@@ -321,10 +321,10 @@
           <h1 id="page-title">Sign in with SSO</h1>
           <p>
             <strong>{{.ClientName}}</strong> requests access to Platform MCP.
-            Your invitation to
+            {{if gt (len .Invitations) 1}}Your invitations to{{else}}Your invitation to{{end}}
             {{range $i, $invitation := .Invitations}}{{if $i}}, {{end}}<strong>{{$invitation.OrganizationName}}</strong>{{end}}
-            requires your company's single sign-on. Sign in with SSO, then
-            connect again.
+            {{if gt (len .Invitations) 1}}require{{else}}requires{{end}} your
+            company's single sign-on. Sign in with SSO, then connect again.
           </p>
         </header>
         {{else if eq .Kind "connect"}}

@@ -13042,6 +13042,895 @@ func EncodeGetMcpServerToolCallsError(encoder func(context.Context, http.Respons
 	}
 }
 
+// EncodeGetHookClientsResponse returns an encoder for responses returned by
+// the admin getHookClients endpoint.
+func EncodeGetHookClientsResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*admin.AdminHookClientsResult)
+		enc := encoder(ctx, w)
+		body := NewGetHookClientsResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeGetHookClientsRequest returns a decoder for requests sent to the admin
+// getHookClients endpoint.
+func DecodeGetHookClientsRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*admin.GetHookClientsPayload, error) {
+	return func(r *http.Request) (*admin.GetHookClientsPayload, error) {
+		var payload *admin.GetHookClientsPayload
+		var (
+			windowDays        int
+			refresh           bool
+			adminSessionToken *string
+			err               error
+		)
+		qp := r.URL.Query()
+		{
+			windowDaysRaw := qp.Get("window_days")
+			if windowDaysRaw == "" {
+				windowDays = 15
+			} else {
+				v, err2 := strconv.ParseInt(windowDaysRaw, 10, strconv.IntSize)
+				if err2 != nil {
+					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("window_days", windowDaysRaw, "integer"))
+				}
+				windowDays = int(v)
+			}
+		}
+		if windowDays < 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("window_days", windowDays, 1, true))
+		}
+		if windowDays > 30 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("window_days", windowDays, 30, false))
+		}
+		{
+			refreshRaw := qp.Get("refresh")
+			if refreshRaw != "" {
+				v, err2 := strconv.ParseBool(refreshRaw)
+				if err2 != nil {
+					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("refresh", refreshRaw, "boolean"))
+				}
+				refresh = v
+			}
+		}
+		adminSessionTokenRaw := r.Header.Get("Authorization")
+		if adminSessionTokenRaw != "" {
+			adminSessionToken = &adminSessionTokenRaw
+		}
+		if err != nil {
+			return payload, err
+		}
+		payload = NewGetHookClientsPayload(windowDays, refresh, adminSessionToken)
+		if payload.AdminSessionToken != nil {
+			if strings.Contains(*payload.AdminSessionToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.AdminSessionToken, " ", 2)[1]
+				payload.AdminSessionToken = &cred
+			}
+		}
+
+		return payload, nil
+	}
+}
+
+// EncodeGetHookClientsError returns an encoder for errors returned by the
+// getHookClients admin endpoint.
+func EncodeGetHookClientsError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unauthorized":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetHookClientsUnauthorizedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetHookClientsForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "bad_request":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetHookClientsBadRequestResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetHookClientsNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
+			return enc.Encode(body)
+		case "conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetHookClientsConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "unsupported_media":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetHookClientsUnsupportedMediaResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return enc.Encode(body)
+		case "invalid":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetHookClientsInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "invariant_violation":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetHookClientsInvariantViolationResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "unexpected":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetHookClientsUnexpectedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "gateway_error":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetHookClientsGatewayErrorResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadGateway)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
+// EncodeListExternalMcpMigrationCandidatesResponse returns an encoder for
+// responses returned by the admin listExternalMcpMigrationCandidates endpoint.
+func EncodeListExternalMcpMigrationCandidatesResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*admin.AdminListExternalMcpMigrationCandidatesResult)
+		enc := encoder(ctx, w)
+		body := NewListExternalMcpMigrationCandidatesResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeListExternalMcpMigrationCandidatesRequest returns a decoder for
+// requests sent to the admin listExternalMcpMigrationCandidates endpoint.
+func DecodeListExternalMcpMigrationCandidatesRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*admin.ListExternalMcpMigrationCandidatesPayload, error) {
+	return func(r *http.Request) (*admin.ListExternalMcpMigrationCandidatesPayload, error) {
+		var payload *admin.ListExternalMcpMigrationCandidatesPayload
+		var (
+			adminSessionToken *string
+		)
+		adminSessionTokenRaw := r.Header.Get("Authorization")
+		if adminSessionTokenRaw != "" {
+			adminSessionToken = &adminSessionTokenRaw
+		}
+		payload = NewListExternalMcpMigrationCandidatesPayload(adminSessionToken)
+		if payload.AdminSessionToken != nil {
+			if strings.Contains(*payload.AdminSessionToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.AdminSessionToken, " ", 2)[1]
+				payload.AdminSessionToken = &cred
+			}
+		}
+
+		return payload, nil
+	}
+}
+
+// EncodeListExternalMcpMigrationCandidatesError returns an encoder for errors
+// returned by the listExternalMcpMigrationCandidates admin endpoint.
+func EncodeListExternalMcpMigrationCandidatesError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unavailable":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListExternalMcpMigrationCandidatesUnavailableResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return enc.Encode(body)
+		case "unauthorized":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListExternalMcpMigrationCandidatesUnauthorizedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListExternalMcpMigrationCandidatesForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "bad_request":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListExternalMcpMigrationCandidatesBadRequestResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListExternalMcpMigrationCandidatesNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
+			return enc.Encode(body)
+		case "conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListExternalMcpMigrationCandidatesConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "unsupported_media":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListExternalMcpMigrationCandidatesUnsupportedMediaResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return enc.Encode(body)
+		case "invalid":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListExternalMcpMigrationCandidatesInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "invariant_violation":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListExternalMcpMigrationCandidatesInvariantViolationResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "unexpected":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListExternalMcpMigrationCandidatesUnexpectedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "gateway_error":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListExternalMcpMigrationCandidatesGatewayErrorResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadGateway)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
+// EncodePreviewExternalMcpMigrationResponse returns an encoder for responses
+// returned by the admin previewExternalMcpMigration endpoint.
+func EncodePreviewExternalMcpMigrationResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*admin.AdminExternalMcpMigrationResult)
+		enc := encoder(ctx, w)
+		body := NewPreviewExternalMcpMigrationResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodePreviewExternalMcpMigrationRequest returns a decoder for requests sent
+// to the admin previewExternalMcpMigration endpoint.
+func DecodePreviewExternalMcpMigrationRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*admin.PreviewExternalMcpMigrationPayload, error) {
+	return func(r *http.Request) (*admin.PreviewExternalMcpMigrationPayload, error) {
+		var payload *admin.PreviewExternalMcpMigrationPayload
+		var (
+			body PreviewExternalMcpMigrationRequestBody
+			err  error
+		)
+		err = decoder(r).Decode(&body)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return payload, goa.MissingPayloadError()
+			}
+			var gerr *goa.ServiceError
+			if errors.As(err, &gerr) {
+				return payload, gerr
+			}
+			return payload, goa.DecodePayloadError(err.Error())
+		}
+		err = ValidatePreviewExternalMcpMigrationRequestBody(&body)
+		if err != nil {
+			return payload, err
+		}
+
+		var (
+			adminSessionToken *string
+		)
+		adminSessionTokenRaw := r.Header.Get("Authorization")
+		if adminSessionTokenRaw != "" {
+			adminSessionToken = &adminSessionTokenRaw
+		}
+		payload = NewPreviewExternalMcpMigrationPayload(&body, adminSessionToken)
+		if payload.AdminSessionToken != nil {
+			if strings.Contains(*payload.AdminSessionToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.AdminSessionToken, " ", 2)[1]
+				payload.AdminSessionToken = &cred
+			}
+		}
+
+		return payload, nil
+	}
+}
+
+// EncodePreviewExternalMcpMigrationError returns an encoder for errors
+// returned by the previewExternalMcpMigration admin endpoint.
+func EncodePreviewExternalMcpMigrationError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unavailable":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewPreviewExternalMcpMigrationUnavailableResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return enc.Encode(body)
+		case "unauthorized":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewPreviewExternalMcpMigrationUnauthorizedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewPreviewExternalMcpMigrationForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "bad_request":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewPreviewExternalMcpMigrationBadRequestResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewPreviewExternalMcpMigrationNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
+			return enc.Encode(body)
+		case "conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewPreviewExternalMcpMigrationConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "unsupported_media":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewPreviewExternalMcpMigrationUnsupportedMediaResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return enc.Encode(body)
+		case "invalid":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewPreviewExternalMcpMigrationInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "invariant_violation":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewPreviewExternalMcpMigrationInvariantViolationResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "unexpected":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewPreviewExternalMcpMigrationUnexpectedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "gateway_error":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewPreviewExternalMcpMigrationGatewayErrorResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadGateway)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
+// EncodeMigrateExternalMcpServersResponse returns an encoder for responses
+// returned by the admin migrateExternalMcpServers endpoint.
+func EncodeMigrateExternalMcpServersResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*admin.AdminExternalMcpMigrationResult)
+		enc := encoder(ctx, w)
+		body := NewMigrateExternalMcpServersResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeMigrateExternalMcpServersRequest returns a decoder for requests sent
+// to the admin migrateExternalMcpServers endpoint.
+func DecodeMigrateExternalMcpServersRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*admin.MigrateExternalMcpServersPayload, error) {
+	return func(r *http.Request) (*admin.MigrateExternalMcpServersPayload, error) {
+		var payload *admin.MigrateExternalMcpServersPayload
+		var (
+			body MigrateExternalMcpServersRequestBody
+			err  error
+		)
+		err = decoder(r).Decode(&body)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return payload, goa.MissingPayloadError()
+			}
+			var gerr *goa.ServiceError
+			if errors.As(err, &gerr) {
+				return payload, gerr
+			}
+			return payload, goa.DecodePayloadError(err.Error())
+		}
+		err = ValidateMigrateExternalMcpServersRequestBody(&body)
+		if err != nil {
+			return payload, err
+		}
+
+		var (
+			adminSessionToken *string
+		)
+		adminSessionTokenRaw := r.Header.Get("Authorization")
+		if adminSessionTokenRaw != "" {
+			adminSessionToken = &adminSessionTokenRaw
+		}
+		payload = NewMigrateExternalMcpServersPayload(&body, adminSessionToken)
+		if payload.AdminSessionToken != nil {
+			if strings.Contains(*payload.AdminSessionToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.AdminSessionToken, " ", 2)[1]
+				payload.AdminSessionToken = &cred
+			}
+		}
+
+		return payload, nil
+	}
+}
+
+// EncodeMigrateExternalMcpServersError returns an encoder for errors returned
+// by the migrateExternalMcpServers admin endpoint.
+func EncodeMigrateExternalMcpServersError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unavailable":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewMigrateExternalMcpServersUnavailableResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return enc.Encode(body)
+		case "unauthorized":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewMigrateExternalMcpServersUnauthorizedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewMigrateExternalMcpServersForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "bad_request":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewMigrateExternalMcpServersBadRequestResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewMigrateExternalMcpServersNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
+			return enc.Encode(body)
+		case "conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewMigrateExternalMcpServersConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "unsupported_media":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewMigrateExternalMcpServersUnsupportedMediaResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return enc.Encode(body)
+		case "invalid":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewMigrateExternalMcpServersInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "invariant_violation":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewMigrateExternalMcpServersInvariantViolationResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "unexpected":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewMigrateExternalMcpServersUnexpectedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "gateway_error":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewMigrateExternalMcpServersGatewayErrorResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadGateway)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
 // EncodeGetRegistryOktaCandidatesResponse returns an encoder for responses
 // returned by the admin getRegistryOktaCandidates endpoint.
 func EncodeGetRegistryOktaCandidatesResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
@@ -18913,6 +19802,616 @@ func EncodeListCustomerUsageError(encoder func(context.Context, http.ResponseWri
 	}
 }
 
+// EncodeListUpstreamOAuthMigrationOrganizationsResponse returns an encoder for
+// responses returned by the admin listUpstreamOAuthMigrationOrganizations
+// endpoint.
+func EncodeListUpstreamOAuthMigrationOrganizationsResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*admin.AdminUpstreamOAuthMigrationOrganizations)
+		enc := encoder(ctx, w)
+		body := NewListUpstreamOAuthMigrationOrganizationsResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeListUpstreamOAuthMigrationOrganizationsRequest returns a decoder for
+// requests sent to the admin listUpstreamOAuthMigrationOrganizations endpoint.
+func DecodeListUpstreamOAuthMigrationOrganizationsRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*admin.ListUpstreamOAuthMigrationOrganizationsPayload, error) {
+	return func(r *http.Request) (*admin.ListUpstreamOAuthMigrationOrganizationsPayload, error) {
+		var payload *admin.ListUpstreamOAuthMigrationOrganizationsPayload
+		var (
+			adminSessionToken *string
+		)
+		adminSessionTokenRaw := r.Header.Get("Authorization")
+		if adminSessionTokenRaw != "" {
+			adminSessionToken = &adminSessionTokenRaw
+		}
+		payload = NewListUpstreamOAuthMigrationOrganizationsPayload(adminSessionToken)
+		if payload.AdminSessionToken != nil {
+			if strings.Contains(*payload.AdminSessionToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.AdminSessionToken, " ", 2)[1]
+				payload.AdminSessionToken = &cred
+			}
+		}
+
+		return payload, nil
+	}
+}
+
+// EncodeListUpstreamOAuthMigrationOrganizationsError returns an encoder for
+// errors returned by the listUpstreamOAuthMigrationOrganizations admin
+// endpoint.
+func EncodeListUpstreamOAuthMigrationOrganizationsError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unauthorized":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListUpstreamOAuthMigrationOrganizationsUnauthorizedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListUpstreamOAuthMigrationOrganizationsForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "bad_request":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListUpstreamOAuthMigrationOrganizationsBadRequestResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListUpstreamOAuthMigrationOrganizationsNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
+			return enc.Encode(body)
+		case "conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListUpstreamOAuthMigrationOrganizationsConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "unsupported_media":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListUpstreamOAuthMigrationOrganizationsUnsupportedMediaResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return enc.Encode(body)
+		case "invalid":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListUpstreamOAuthMigrationOrganizationsInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "invariant_violation":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListUpstreamOAuthMigrationOrganizationsInvariantViolationResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "unexpected":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListUpstreamOAuthMigrationOrganizationsUnexpectedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "gateway_error":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListUpstreamOAuthMigrationOrganizationsGatewayErrorResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadGateway)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
+// EncodeGetUpstreamOAuthMigrationStatusResponse returns an encoder for
+// responses returned by the admin getUpstreamOAuthMigrationStatus endpoint.
+func EncodeGetUpstreamOAuthMigrationStatusResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*admin.AdminUpstreamOAuthMigrationStatus)
+		enc := encoder(ctx, w)
+		body := NewGetUpstreamOAuthMigrationStatusResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeGetUpstreamOAuthMigrationStatusRequest returns a decoder for requests
+// sent to the admin getUpstreamOAuthMigrationStatus endpoint.
+func DecodeGetUpstreamOAuthMigrationStatusRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*admin.GetUpstreamOAuthMigrationStatusPayload, error) {
+	return func(r *http.Request) (*admin.GetUpstreamOAuthMigrationStatusPayload, error) {
+		var payload *admin.GetUpstreamOAuthMigrationStatusPayload
+		var (
+			organizationID    string
+			adminSessionToken *string
+			err               error
+		)
+		organizationID = r.URL.Query().Get("organization_id")
+		if organizationID == "" {
+			err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "query string"))
+		}
+		adminSessionTokenRaw := r.Header.Get("Authorization")
+		if adminSessionTokenRaw != "" {
+			adminSessionToken = &adminSessionTokenRaw
+		}
+		if err != nil {
+			return payload, err
+		}
+		payload = NewGetUpstreamOAuthMigrationStatusPayload(organizationID, adminSessionToken)
+		if payload.AdminSessionToken != nil {
+			if strings.Contains(*payload.AdminSessionToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.AdminSessionToken, " ", 2)[1]
+				payload.AdminSessionToken = &cred
+			}
+		}
+
+		return payload, nil
+	}
+}
+
+// EncodeGetUpstreamOAuthMigrationStatusError returns an encoder for errors
+// returned by the getUpstreamOAuthMigrationStatus admin endpoint.
+func EncodeGetUpstreamOAuthMigrationStatusError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unauthorized":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetUpstreamOAuthMigrationStatusUnauthorizedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetUpstreamOAuthMigrationStatusForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "bad_request":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetUpstreamOAuthMigrationStatusBadRequestResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetUpstreamOAuthMigrationStatusNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
+			return enc.Encode(body)
+		case "conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetUpstreamOAuthMigrationStatusConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "unsupported_media":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetUpstreamOAuthMigrationStatusUnsupportedMediaResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return enc.Encode(body)
+		case "invalid":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetUpstreamOAuthMigrationStatusInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "invariant_violation":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetUpstreamOAuthMigrationStatusInvariantViolationResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "unexpected":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetUpstreamOAuthMigrationStatusUnexpectedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "gateway_error":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetUpstreamOAuthMigrationStatusGatewayErrorResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadGateway)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
+// EncodeRunUpstreamOAuthMigrationResponse returns an encoder for responses
+// returned by the admin runUpstreamOAuthMigration endpoint.
+func EncodeRunUpstreamOAuthMigrationResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*admin.AdminUpstreamOAuthMigrationRun)
+		enc := encoder(ctx, w)
+		body := NewRunUpstreamOAuthMigrationResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeRunUpstreamOAuthMigrationRequest returns a decoder for requests sent
+// to the admin runUpstreamOAuthMigration endpoint.
+func DecodeRunUpstreamOAuthMigrationRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*admin.RunUpstreamOAuthMigrationPayload, error) {
+	return func(r *http.Request) (*admin.RunUpstreamOAuthMigrationPayload, error) {
+		var payload *admin.RunUpstreamOAuthMigrationPayload
+		var (
+			body RunUpstreamOAuthMigrationRequestBody
+			err  error
+		)
+		err = decoder(r).Decode(&body)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return payload, goa.MissingPayloadError()
+			}
+			var gerr *goa.ServiceError
+			if errors.As(err, &gerr) {
+				return payload, gerr
+			}
+			return payload, goa.DecodePayloadError(err.Error())
+		}
+		err = ValidateRunUpstreamOAuthMigrationRequestBody(&body)
+		if err != nil {
+			return payload, err
+		}
+
+		var (
+			adminSessionToken *string
+		)
+		adminSessionTokenRaw := r.Header.Get("Authorization")
+		if adminSessionTokenRaw != "" {
+			adminSessionToken = &adminSessionTokenRaw
+		}
+		payload = NewRunUpstreamOAuthMigrationPayload(&body, adminSessionToken)
+		if payload.AdminSessionToken != nil {
+			if strings.Contains(*payload.AdminSessionToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.AdminSessionToken, " ", 2)[1]
+				payload.AdminSessionToken = &cred
+			}
+		}
+
+		return payload, nil
+	}
+}
+
+// EncodeRunUpstreamOAuthMigrationError returns an encoder for errors returned
+// by the runUpstreamOAuthMigration admin endpoint.
+func EncodeRunUpstreamOAuthMigrationError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unauthorized":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewRunUpstreamOAuthMigrationUnauthorizedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewRunUpstreamOAuthMigrationForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "bad_request":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewRunUpstreamOAuthMigrationBadRequestResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewRunUpstreamOAuthMigrationNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
+			return enc.Encode(body)
+		case "conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewRunUpstreamOAuthMigrationConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "unsupported_media":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewRunUpstreamOAuthMigrationUnsupportedMediaResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return enc.Encode(body)
+		case "invalid":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewRunUpstreamOAuthMigrationInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "invariant_violation":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewRunUpstreamOAuthMigrationInvariantViolationResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "unexpected":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewRunUpstreamOAuthMigrationUnexpectedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "gateway_error":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewRunUpstreamOAuthMigrationGatewayErrorResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadGateway)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
 // marshalAdminAdminOrganizationMemberToAdminOrganizationMemberResponseBody
 // builds a value of type *AdminOrganizationMemberResponseBody from a value of
 // type *admin.AdminOrganizationMember.
@@ -19208,6 +20707,7 @@ func marshalTypesEMAProviderToEMAProviderResponseBody(v *types.EMAProvider) *EMA
 		RemoteSessionIssuerID:   v.RemoteSessionIssuerID,
 		InternalSessionIssuerID: v.InternalSessionIssuerID,
 		UnavailableReason:       v.UnavailableReason,
+		LastAcceptedAt:          v.LastAcceptedAt,
 	}
 
 	return res
@@ -19957,6 +21457,158 @@ func marshalAdminAdminMcpServerToolCallBucketToAdminMcpServerToolCallBucketRespo
 	return res
 }
 
+// marshalAdminAdminHookClientOrganizationToAdminHookClientOrganizationResponseBody
+// builds a value of type *AdminHookClientOrganizationResponseBody from a value
+// of type *admin.AdminHookClientOrganization.
+func marshalAdminAdminHookClientOrganizationToAdminHookClientOrganizationResponseBody(v *admin.AdminHookClientOrganization) *AdminHookClientOrganizationResponseBody {
+	res := &AdminHookClientOrganizationResponseBody{
+		ID:   v.ID,
+		Name: v.Name,
+		Slug: v.Slug,
+	}
+
+	return res
+}
+
+// marshalAdminAdminHookClientSessionCellToAdminHookClientSessionCellResponseBody
+// builds a value of type *AdminHookClientSessionCellResponseBody from a value
+// of type *admin.AdminHookClientSessionCell.
+func marshalAdminAdminHookClientSessionCellToAdminHookClientSessionCellResponseBody(v *admin.AdminHookClientSessionCell) *AdminHookClientSessionCellResponseBody {
+	res := &AdminHookClientSessionCellResponseBody{
+		OrganizationID: v.OrganizationID,
+		Day:            v.Day,
+		Client:         v.Client,
+		Machines:       v.Machines,
+		Sessions:       v.Sessions,
+		MachinesAll:    v.MachinesAll,
+	}
+
+	return res
+}
+
+// marshalAdminAdminInferenceHookCellToAdminInferenceHookCellResponseBody
+// builds a value of type *AdminInferenceHookCellResponseBody from a value of
+// type *admin.AdminInferenceHookCell.
+func marshalAdminAdminInferenceHookCellToAdminInferenceHookCellResponseBody(v *admin.AdminInferenceHookCell) *AdminInferenceHookCellResponseBody {
+	res := &AdminInferenceHookCellResponseBody{
+		OrganizationID: v.OrganizationID,
+		Day:            v.Day,
+		Surface:        v.Surface,
+		Users:          v.Users,
+		Events:         v.Events,
+		Sessions:       v.Sessions,
+	}
+
+	return res
+}
+
+// marshalAdminAdminDeviceAgentCellToAdminDeviceAgentCellResponseBody builds a
+// value of type *AdminDeviceAgentCellResponseBody from a value of type
+// *admin.AdminDeviceAgentCell.
+func marshalAdminAdminDeviceAgentCellToAdminDeviceAgentCellResponseBody(v *admin.AdminDeviceAgentCell) *AdminDeviceAgentCellResponseBody {
+	res := &AdminDeviceAgentCellResponseBody{
+		OrganizationID: v.OrganizationID,
+		Day:            v.Day,
+		Version:        v.Version,
+		Machines:       v.Machines,
+	}
+
+	return res
+}
+
+// marshalAdminAdminExternalMcpMigrationCandidateToAdminExternalMcpMigrationCandidateResponseBody
+// builds a value of type *AdminExternalMcpMigrationCandidateResponseBody from
+// a value of type *admin.AdminExternalMcpMigrationCandidate.
+func marshalAdminAdminExternalMcpMigrationCandidateToAdminExternalMcpMigrationCandidateResponseBody(v *admin.AdminExternalMcpMigrationCandidate) *AdminExternalMcpMigrationCandidateResponseBody {
+	res := &AdminExternalMcpMigrationCandidateResponseBody{
+		ToolsetID:        v.ToolsetID,
+		OrganizationID:   v.OrganizationID,
+		OrganizationName: v.OrganizationName,
+		OrganizationSlug: v.OrganizationSlug,
+		ProjectID:        v.ProjectID,
+		ProjectName:      v.ProjectName,
+		ProjectSlug:      v.ProjectSlug,
+		ServerName:       v.ServerName,
+		McpSlug:          v.McpSlug,
+		RemoteURL:        v.RemoteURL,
+		ReplacementURL:   v.ReplacementURL,
+		SignInProvider:   v.SignInProvider,
+		ToolCalls:        v.ToolCalls,
+		Action:           v.Action,
+	}
+	if v.DeleteReasons != nil {
+		res.DeleteReasons = make([]string, len(v.DeleteReasons))
+		for i, val := range v.DeleteReasons {
+			res.DeleteReasons[i] = val
+		}
+	} else {
+		res.DeleteReasons = []string{}
+	}
+	if v.Blockers != nil {
+		res.Blockers = make([]string, len(v.Blockers))
+		for i, val := range v.Blockers {
+			res.Blockers[i] = val
+		}
+	} else {
+		res.Blockers = []string{}
+	}
+	if v.Warnings != nil {
+		res.Warnings = make([]string, len(v.Warnings))
+		for i, val := range v.Warnings {
+			res.Warnings[i] = val
+		}
+	} else {
+		res.Warnings = []string{}
+	}
+
+	return res
+}
+
+// unmarshalAdminExternalMcpMigrationRequestRequestBodyToAdminAdminExternalMcpMigrationRequest
+// builds a value of type *admin.AdminExternalMcpMigrationRequest from a value
+// of type *AdminExternalMcpMigrationRequestRequestBody.
+func unmarshalAdminExternalMcpMigrationRequestRequestBodyToAdminAdminExternalMcpMigrationRequest(v *AdminExternalMcpMigrationRequestRequestBody) *admin.AdminExternalMcpMigrationRequest {
+	res := &admin.AdminExternalMcpMigrationRequest{
+		ToolsetID: *v.ToolsetID,
+	}
+
+	return res
+}
+
+// marshalAdminAdminExternalMcpMigrationOutcomeToAdminExternalMcpMigrationOutcomeResponseBody
+// builds a value of type *AdminExternalMcpMigrationOutcomeResponseBody from a
+// value of type *admin.AdminExternalMcpMigrationOutcome.
+func marshalAdminAdminExternalMcpMigrationOutcomeToAdminExternalMcpMigrationOutcomeResponseBody(v *admin.AdminExternalMcpMigrationOutcome) *AdminExternalMcpMigrationOutcomeResponseBody {
+	res := &AdminExternalMcpMigrationOutcomeResponseBody{
+		ToolsetID:         v.ToolsetID,
+		Action:            v.Action,
+		MigrationStatus:   v.MigrationStatus,
+		Reason:            v.Reason,
+		McpSlug:           v.McpSlug,
+		McpServerID:       v.McpServerID,
+		RemoteMcpServerID: v.RemoteMcpServerID,
+		RemoteURL:         v.RemoteURL,
+	}
+	if v.Actions != nil {
+		res.Actions = make([]string, len(v.Actions))
+		for i, val := range v.Actions {
+			res.Actions[i] = val
+		}
+	} else {
+		res.Actions = []string{}
+	}
+	if v.Warnings != nil {
+		res.Warnings = make([]string, len(v.Warnings))
+		for i, val := range v.Warnings {
+			res.Warnings[i] = val
+		}
+	} else {
+		res.Warnings = []string{}
+	}
+
+	return res
+}
+
 // marshalAdminAdminRegistryOktaCandidateToAdminRegistryOktaCandidateResponseBody
 // builds a value of type *AdminRegistryOktaCandidateResponseBody from a value
 // of type *admin.AdminRegistryOktaCandidate.
@@ -20316,6 +21968,191 @@ func marshalAdminAdminCustomerUsageProductCostToAdminCustomerUsageProductCostRes
 	res := &AdminCustomerUsageProductCostResponseBody{
 		ProductID: v.ProductID,
 		CostUsd:   v.CostUsd,
+	}
+
+	return res
+}
+
+// marshalAdminAdminUpstreamOAuthMigrationOrganizationToAdminUpstreamOAuthMigrationOrganizationResponseBody
+// builds a value of type *AdminUpstreamOAuthMigrationOrganizationResponseBody
+// from a value of type *admin.AdminUpstreamOAuthMigrationOrganization.
+func marshalAdminAdminUpstreamOAuthMigrationOrganizationToAdminUpstreamOAuthMigrationOrganizationResponseBody(v *admin.AdminUpstreamOAuthMigrationOrganization) *AdminUpstreamOAuthMigrationOrganizationResponseBody {
+	res := &AdminUpstreamOAuthMigrationOrganizationResponseBody{
+		ID:      v.ID,
+		Name:    v.Name,
+		Slug:    v.Slug,
+		Servers: v.Servers,
+	}
+
+	return res
+}
+
+// marshalAdminAdminUpstreamOAuthMigrationServerToAdminUpstreamOAuthMigrationServerResponseBody
+// builds a value of type *AdminUpstreamOAuthMigrationServerResponseBody from a
+// value of type *admin.AdminUpstreamOAuthMigrationServer.
+func marshalAdminAdminUpstreamOAuthMigrationServerToAdminUpstreamOAuthMigrationServerResponseBody(v *admin.AdminUpstreamOAuthMigrationServer) *AdminUpstreamOAuthMigrationServerResponseBody {
+	res := &AdminUpstreamOAuthMigrationServerResponseBody{
+		McpServerID: v.McpServerID,
+		ProjectID:   v.ProjectID,
+	}
+
+	return res
+}
+
+// marshalAdminAdminUpstreamOAuthMigrationAuthClientsToAdminUpstreamOAuthMigrationAuthClientsResponseBody
+// builds a value of type *AdminUpstreamOAuthMigrationAuthClientsResponseBody
+// from a value of type *admin.AdminUpstreamOAuthMigrationAuthClients.
+func marshalAdminAdminUpstreamOAuthMigrationAuthClientsToAdminUpstreamOAuthMigrationAuthClientsResponseBody(v *admin.AdminUpstreamOAuthMigrationAuthClients) *AdminUpstreamOAuthMigrationAuthClientsResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &AdminUpstreamOAuthMigrationAuthClientsResponseBody{
+		Complete:             v.Complete,
+		InProgress:           v.InProgress,
+		PendingMarkedServers: v.PendingMarkedServers,
+		Associations:         v.Associations,
+		PendingClients:       v.PendingClients,
+		PendingLinks:         v.PendingLinks,
+		PendingHeaders:       v.PendingHeaders,
+		PendingRetirements:   v.PendingRetirements,
+		Unresolved:           v.Unresolved,
+	}
+	if v.UnresolvedAssociations != nil {
+		res.UnresolvedAssociations = make([]*AdminUpstreamOAuthMigrationUnresolvedAssociationResponseBody, len(v.UnresolvedAssociations))
+		for i, val := range v.UnresolvedAssociations {
+			if val == nil {
+				res.UnresolvedAssociations[i] = nil
+				continue
+			}
+			res.UnresolvedAssociations[i] = marshalAdminAdminUpstreamOAuthMigrationUnresolvedAssociationToAdminUpstreamOAuthMigrationUnresolvedAssociationResponseBody(val)
+		}
+	} else {
+		res.UnresolvedAssociations = []*AdminUpstreamOAuthMigrationUnresolvedAssociationResponseBody{}
+	}
+	if v.Warnings != nil {
+		res.Warnings = make([]*AdminUpstreamOAuthMigrationUnresolvedAssociationResponseBody, len(v.Warnings))
+		for i, val := range v.Warnings {
+			if val == nil {
+				res.Warnings[i] = nil
+				continue
+			}
+			res.Warnings[i] = marshalAdminAdminUpstreamOAuthMigrationUnresolvedAssociationToAdminUpstreamOAuthMigrationUnresolvedAssociationResponseBody(val)
+		}
+	} else {
+		res.Warnings = []*AdminUpstreamOAuthMigrationUnresolvedAssociationResponseBody{}
+	}
+	if v.Kinds != nil {
+		res.Kinds = make([]*AdminUpstreamOAuthMigrationAuthClientKindResponseBody, len(v.Kinds))
+		for i, val := range v.Kinds {
+			if val == nil {
+				res.Kinds[i] = nil
+				continue
+			}
+			res.Kinds[i] = marshalAdminAdminUpstreamOAuthMigrationAuthClientKindToAdminUpstreamOAuthMigrationAuthClientKindResponseBody(val)
+		}
+	} else {
+		res.Kinds = []*AdminUpstreamOAuthMigrationAuthClientKindResponseBody{}
+	}
+	if v.FailedPhases != nil {
+		res.FailedPhases = make([]string, len(v.FailedPhases))
+		for i, val := range v.FailedPhases {
+			res.FailedPhases[i] = val
+		}
+	} else {
+		res.FailedPhases = []string{}
+	}
+
+	return res
+}
+
+// marshalAdminAdminUpstreamOAuthMigrationUnresolvedAssociationToAdminUpstreamOAuthMigrationUnresolvedAssociationResponseBody
+// builds a value of type
+// *AdminUpstreamOAuthMigrationUnresolvedAssociationResponseBody from a value
+// of type *admin.AdminUpstreamOAuthMigrationUnresolvedAssociation.
+func marshalAdminAdminUpstreamOAuthMigrationUnresolvedAssociationToAdminUpstreamOAuthMigrationUnresolvedAssociationResponseBody(v *admin.AdminUpstreamOAuthMigrationUnresolvedAssociation) *AdminUpstreamOAuthMigrationUnresolvedAssociationResponseBody {
+	res := &AdminUpstreamOAuthMigrationUnresolvedAssociationResponseBody{
+		Kind:                  v.Kind,
+		Reason:                v.Reason,
+		SubjectID:             v.SubjectID,
+		AssociationID:         v.AssociationID,
+		McpServerID:           v.McpServerID,
+		ProjectID:             v.ProjectID,
+		RemoteSessionClientID: v.RemoteSessionClientID,
+		AuthClientID:          v.AuthClientID,
+	}
+	if v.BindingIds != nil {
+		res.BindingIds = make([]string, len(v.BindingIds))
+		for i, val := range v.BindingIds {
+			res.BindingIds[i] = val
+		}
+	} else {
+		res.BindingIds = []string{}
+	}
+	if v.SourceIds != nil {
+		res.SourceIds = make([]string, len(v.SourceIds))
+		for i, val := range v.SourceIds {
+			res.SourceIds[i] = val
+		}
+	} else {
+		res.SourceIds = []string{}
+	}
+	if v.ServerIds != nil {
+		res.ServerIds = make([]string, len(v.ServerIds))
+		for i, val := range v.ServerIds {
+			res.ServerIds[i] = val
+		}
+	} else {
+		res.ServerIds = []string{}
+	}
+
+	return res
+}
+
+// marshalAdminAdminUpstreamOAuthMigrationAuthClientKindToAdminUpstreamOAuthMigrationAuthClientKindResponseBody
+// builds a value of type
+// *AdminUpstreamOAuthMigrationAuthClientKindResponseBody from a value of type
+// *admin.AdminUpstreamOAuthMigrationAuthClientKind.
+func marshalAdminAdminUpstreamOAuthMigrationAuthClientKindToAdminUpstreamOAuthMigrationAuthClientKindResponseBody(v *admin.AdminUpstreamOAuthMigrationAuthClientKind) *AdminUpstreamOAuthMigrationAuthClientKindResponseBody {
+	res := &AdminUpstreamOAuthMigrationAuthClientKindResponseBody{
+		Kind:               v.Kind,
+		Decided:            v.Decided,
+		PendingClients:     v.PendingClients,
+		PendingLinks:       v.PendingLinks,
+		PendingHeaders:     v.PendingHeaders,
+		PendingRetirements: v.PendingRetirements,
+		Unresolved:         v.Unresolved,
+	}
+
+	return res
+}
+
+// marshalAdminAdminUpstreamOAuthMigrationStatusToAdminUpstreamOAuthMigrationStatusResponseBody
+// builds a value of type *AdminUpstreamOAuthMigrationStatusResponseBody from a
+// value of type *admin.AdminUpstreamOAuthMigrationStatus.
+func marshalAdminAdminUpstreamOAuthMigrationStatusToAdminUpstreamOAuthMigrationStatusResponseBody(v *admin.AdminUpstreamOAuthMigrationStatus) *AdminUpstreamOAuthMigrationStatusResponseBody {
+	res := &AdminUpstreamOAuthMigrationStatusResponseBody{
+		OrganizationID:       v.OrganizationID,
+		Migrated:             v.Migrated,
+		Servers:              v.Servers,
+		PendingAssociations:  v.PendingAssociations,
+		Credentials:          v.Credentials,
+		PendingSelections:    v.PendingSelections,
+		ReconnectCredentials: v.ReconnectCredentials,
+	}
+	if v.UnresolvedServers != nil {
+		res.UnresolvedServers = make([]*AdminUpstreamOAuthMigrationServerResponseBody, len(v.UnresolvedServers))
+		for i, val := range v.UnresolvedServers {
+			if val == nil {
+				res.UnresolvedServers[i] = nil
+				continue
+			}
+			res.UnresolvedServers[i] = marshalAdminAdminUpstreamOAuthMigrationServerToAdminUpstreamOAuthMigrationServerResponseBody(val)
+		}
+	} else {
+		res.UnresolvedServers = []*AdminUpstreamOAuthMigrationServerResponseBody{}
+	}
+	if v.AuthClients != nil {
+		res.AuthClients = marshalAdminAdminUpstreamOAuthMigrationAuthClientsToAdminUpstreamOAuthMigrationAuthClientsResponseBody(v.AuthClients)
 	}
 
 	return res

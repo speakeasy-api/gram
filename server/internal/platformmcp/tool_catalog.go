@@ -58,6 +58,7 @@ func registerCatalogTools(reg *Registrar, catalog Catalog, budget OperationBudge
 		Name:        "search_mcp_catalog",
 		Title:       "Search Reviewed MCP Servers",
 		Description: "Search the reviewed catalogue — the MCP servers Speakeasy has vetted and made available to add. Searching only lists options: nothing is added to a project and nobody receives anything.",
+		Annotations: readOnlyOpenWorldAnnotations(),
 	}, ToolMeta{
 		Authorization: ExternalAuthorizationOrgAdmin,
 		Audiences:     bothAudiences, ProjectScope: ProjectScopeNone}, func(ctx context.Context, _ *mcp.CallToolRequest, input SearchCatalogInput) (*mcp.CallToolResult, SearchCatalogOutput, error) {
@@ -120,7 +121,7 @@ func registerCandidateInspectionTool(reg *Registrar, catalog Catalog, directRemo
 		Name:        "inspect_mcp_candidate",
 		Title:       "Inspect an MCP Server",
 		Description: "Look at one MCP server before adding it — either a reviewed catalogue entry or an HTTPS Streamable HTTP URL the user supplied. Looking changes nothing: the server is not added to a project and nobody receives it. For a URL that requires sign-in, automatic_client_registration says whether its OAuth provider can be connected automatically (dynamic client registration or a client ID metadata document) or needs a client configured by hand.",
-		Annotations: readOnlyAnnotations(),
+		Annotations: readOnlyOpenWorldAnnotations(),
 	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeNone}, func(ctx context.Context, _ *mcp.CallToolRequest, input InspectCatalogCandidateInput) (*mcp.CallToolResult, CandidateInspection, error) {
 		principal, err := principalFromToolContext(ctx)
 		if err != nil {

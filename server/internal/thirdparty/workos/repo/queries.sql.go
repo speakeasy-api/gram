@@ -25,6 +25,25 @@ func (q *Queries) GetOrganizationSyncLastEventID(ctx context.Context, workosOrga
 	return last_event_id, err
 }
 
+const getOrganizationSyncState = `-- name: GetOrganizationSyncState :one
+SELECT id, last_event_id, updated_at
+FROM workos_organization_syncs
+WHERE workos_organization_id = $1
+`
+
+type GetOrganizationSyncStateRow struct {
+	ID          uuid.UUID
+	LastEventID string
+	UpdatedAt   pgtype.Timestamptz
+}
+
+func (q *Queries) GetOrganizationSyncState(ctx context.Context, workosOrganizationID string) (GetOrganizationSyncStateRow, error) {
+	row := q.db.QueryRow(ctx, getOrganizationSyncState, workosOrganizationID)
+	var i GetOrganizationSyncStateRow
+	err := row.Scan(&i.ID, &i.LastEventID, &i.UpdatedAt)
+	return i, err
+}
+
 const getUserSyncLastEventID = `-- name: GetUserSyncLastEventID :one
 SELECT last_event_id
 FROM workos_user_syncs
@@ -38,12 +57,21 @@ func (q *Queries) GetUserSyncLastEventID(ctx context.Context, workosUserID pgtyp
 	return last_event_id, err
 }
 
+const lockOrganizationSync = `-- name: LockOrganizationSync :exec
+SELECT pg_advisory_xact_lock(hashtextextended('workos-organization-sync:' || $1::text, 0))
+`
+
+func (q *Queries) LockOrganizationSync(ctx context.Context, workosOrganizationID string) error {
+	_, err := q.db.Exec(ctx, lockOrganizationSync, workosOrganizationID)
+	return err
+}
+
 const setOrganizationSyncLastEventID = `-- name: SetOrganizationSyncLastEventID :one
 INSERT INTO workos_organization_syncs (workos_organization_id, last_event_id)
 VALUES ($1, $2)
 ON CONFLICT (workos_organization_id) DO UPDATE SET
     last_event_id = EXCLUDED.last_event_id,
-    updated_at = clock_timestamp()
+    updated_at = GREATEST(clock_timestamp(), workos_organization_syncs.updated_at + interval '1 microsecond')
 RETURNING id
 `
 

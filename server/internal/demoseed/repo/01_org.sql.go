@@ -427,6 +427,17 @@ func (q *Queries) OrgDeleteRemoteSessionEMABindings(ctx context.Context, orgID s
 	return err
 }
 
+const orgDeleteRemoteSessionEMACredentials = `-- name: OrgDeleteRemoteSessionEMACredentials :exec
+DELETE FROM remote_session_ema_credentials WHERE organization_id = $1::text
+`
+
+// Cached EMA credentials and the trusted issuer sessions they cite SET NULL
+// on their parents, so clear them by tenant first.
+func (q *Queries) OrgDeleteRemoteSessionEMACredentials(ctx context.Context, orgID string) error {
+	_, err := q.db.Exec(ctx, orgDeleteRemoteSessionEMACredentials, orgID)
+	return err
+}
+
 const orgDeleteRemoteSessionEMAProviders = `-- name: OrgDeleteRemoteSessionEMAProviders :exec
 DELETE FROM remote_session_ema_providers WHERE organization_id = $1::text
 `
@@ -545,6 +556,15 @@ type OrgDeleteTriggerWorkloadBindingsParams struct {
 
 func (q *Queries) OrgDeleteTriggerWorkloadBindings(ctx context.Context, arg OrgDeleteTriggerWorkloadBindingsParams) error {
 	_, err := q.db.Exec(ctx, orgDeleteTriggerWorkloadBindings, arg.OrgID, arg.ProjectID)
+	return err
+}
+
+const orgDeleteTrustedIssuerSessions = `-- name: OrgDeleteTrustedIssuerSessions :exec
+DELETE FROM trusted_issuer_sessions WHERE organization_id = $1::text
+`
+
+func (q *Queries) OrgDeleteTrustedIssuerSessions(ctx context.Context, orgID string) error {
+	_, err := q.db.Exec(ctx, orgDeleteTrustedIssuerSessions, orgID)
 	return err
 }
 
@@ -668,6 +688,22 @@ type OrgInsertFeaturesParams struct {
 // own-sessions-only, hiding every seeded chat (owned by the seeded users).
 func (q *Queries) OrgInsertFeatures(ctx context.Context, arg OrgInsertFeaturesParams) error {
 	_, err := q.db.Exec(ctx, orgInsertFeatures, arg.OrgID, arg.Features)
+	return err
+}
+
+const orgInsertGatewayDisabledFeature = `-- name: OrgInsertGatewayDisabledFeature :exec
+INSERT INTO organization_features (organization_id, feature_name)
+SELECT $1::text, 'organization_gateway_disabled'
+WHERE NOT EXISTS (
+  SELECT 1 FROM organization_features
+  WHERE organization_id = $1::text AND feature_name = 'organization_gateway_disabled'
+)
+ON CONFLICT (organization_id, feature_name) WHERE deleted IS FALSE DO NOTHING
+`
+
+// Start with access review required, preserving an explicit opt-in on reseed.
+func (q *Queries) OrgInsertGatewayDisabledFeature(ctx context.Context, orgID string) error {
+	_, err := q.db.Exec(ctx, orgInsertGatewayDisabledFeature, orgID)
 	return err
 }
 
@@ -938,8 +974,8 @@ func (q *Queries) OrgInsertSigintSensorSignal(ctx context.Context, arg OrgInsert
 }
 
 const orgUpsertMetadata = `-- name: OrgUpsertMetadata :exec
-INSERT INTO organization_metadata (id, name, slug, gram_account_type, whitelisted)
-VALUES ($1::text, $2::text, $3::text, 'enterprise', TRUE)
+INSERT INTO organization_metadata (id, name, slug, gram_account_type, whitelisted, scim_enabled)
+VALUES ($1::text, $2::text, $3::text, 'enterprise', TRUE, TRUE)
 ON CONFLICT (id) DO UPDATE
   -- whitelisted is repaired, not just set on insert: a developer who logged
   -- in before seeding already has this row, created un-whitelisted by the
@@ -947,7 +983,8 @@ ON CONFLICT (id) DO UPDATE
   -- gate.
   SET name = EXCLUDED.name, slug = EXCLUDED.slug,
       gram_account_type = EXCLUDED.gram_account_type,
-      whitelisted = EXCLUDED.whitelisted
+      whitelisted = EXCLUDED.whitelisted,
+      scim_enabled = EXCLUDED.scim_enabled
 `
 
 type OrgUpsertMetadataParams struct {

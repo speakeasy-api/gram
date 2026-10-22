@@ -283,6 +283,11 @@ func (s *Service) metaValidationTarget(
 	if !found {
 		return ctx, none, errRemoteSessionUnroutable
 	}
+	if member.associatedClients != nil {
+		// The member claimed this client by association, so a credential that
+		// chose it routes by the client's own issuer.
+		member.remoteSessionIssuerID = uuid.NullUUID{UUID: client.RemoteSessionIssuerID, Valid: true}
+	}
 	name := conv.Default(member.name, member.slug)
 
 	selectedTokens := map[uuid.UUID]remotesessions.UpstreamToken{
@@ -290,8 +295,9 @@ func (s *Service) metaValidationTarget(
 	}
 	// No inbound negotiation occurred; the SDK chooses the outbound revision.
 	gate := metaGateContext{
-		projectID:    endpoint.ProjectID,
-		metaServerID: endpoint.MetaMcpServerID.UUID,
+		discoveryMode: "progressive",
+		projectID:     endpoint.ProjectID,
+		metaServerID:  endpoint.MetaMcpServerID.UUID,
 		// Agent keys reach no consent page.
 		agentID:             uuid.Nil,
 		organizationGateway: endpoint.IsOrganizationGateway(),
@@ -300,6 +306,7 @@ func (s *Service) metaValidationTarget(
 		// gateway kind.
 		tokens:        selectedTokens,
 		projectTokens: nil,
+		memberChoices: nil,
 		// Consent probes never acquire credentials by identity chaining.
 		userSessionIssuerID: uuid.Nil,
 		connectRoot:         "",
@@ -368,9 +375,12 @@ func (s *Service) standaloneValidationTarget(
 		return ctx, none, errRemoteSessionUnroutable
 	}
 
+	// A credential that chose this client routes only its token, by the
+	// client's own issuer.
+	backendIssuer := uuid.NullUUID{UUID: client.RemoteSessionIssuerID, Valid: true}
 	selected := tokens[client.RemoteSessionIssuerID]
 	selectedTokens := map[uuid.UUID]remotesessions.UpstreamToken{client.RemoteSessionIssuerID: selected}
-	selectedToken, err := routeUpstreamToken(ctx, logger, selectedTokens, endpoint.UpstreamResource, server.TunneledMcpServerID.Valid, server.RemoteSessionIssuerID)
+	selectedToken, err := routeUpstreamToken(ctx, logger, selectedTokens, endpoint.UpstreamResource, server.TunneledMcpServerID.Valid, backendIssuer)
 	var routeErr *upstreamRoutingError
 	switch {
 	case errors.As(err, &routeErr), selectedToken.Token == "":
@@ -378,17 +388,7 @@ func (s *Service) standaloneValidationTarget(
 	case err != nil:
 		return ctx, none, fmt.Errorf("route selected upstream token for validation: %w", err)
 	}
-
-	routed, err := routeUpstreamToken(ctx, logger, tokens, endpoint.UpstreamResource, server.TunneledMcpServerID.Valid, server.RemoteSessionIssuerID)
-	switch {
-	case errors.As(err, &routeErr), errors.Is(err, remotesessions.ErrNoValidToken):
-		return ctx, none, errRemoteSessionUnroutable
-	case err != nil:
-		return ctx, none, fmt.Errorf("route upstream token for validation: %w", err)
-	case routed.Token == "" || routed.Token != selectedToken.Token:
-		return ctx, none, errRemoteSessionUnroutable
-	}
-	token := routed.Token
+	token := selectedToken.Token
 
 	authorized, err := s.authorizeProxyBackendAccess(ctx, logger, endpoint.ProjectID, &server)
 	if err != nil {

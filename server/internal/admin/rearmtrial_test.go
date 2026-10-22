@@ -629,6 +629,45 @@ func TestRearmTrial_MissingArmAuditIsRejected(t *testing.T) {
 	require.Zero(t, upstream.count())
 }
 
+func TestRearmTrial_AdminStartedGenerationCanBeRearmed(t *testing.T) {
+	t.Parallel()
+
+	ctx, svc, conn, upstream := newProductionRearmService(t)
+	const orgID = "org_rearm_admin_started"
+	endsAt := time.Now().UTC().Add(-10 * 24 * time.Hour)
+	demotedAt := time.Now().UTC().Add(-9 * 24 * time.Hour)
+	seedOrg(t, ctx, conn, orgFixture{id: orgID, name: orgID, slug: orgID, accountType: "free", whitelisted: false})
+	seedTrial(t, ctx, conn, trialFixture{orgID: orgID, tier: "enterprise", endsAt: endsAt, demotedAt: &demotedAt})
+	startOperationID, err := testrepo.New(conn).SeedTrialStartAuditFixture(ctx, orgID)
+	require.NoError(t, err)
+	require.NoError(t, testrepo.New(conn).SeedTrialDemotionAuditFixture(ctx, orgID))
+	for _, keyType := range openrouter.AllKeyTypes {
+		seedOpenRouterKey(t, ctx, conn, orgID, keyFixture{keyType: keyType, monthlyCredits: 50, disabled: true})
+	}
+
+	_, err = svc.RearmTrial(ctx, &gen.RearmTrialPayload{ID: orgID, Days: 14})
+	require.NoError(t, err)
+
+	rearmed := readTrial(t, ctx, conn, orgID)
+	require.False(t, rearmed.DemotedAt.Valid)
+	require.True(t, rearmed.EndsAt.Time.After(endsAt))
+	require.True(t, rearmed.EndsAt.Time.After(time.Now()))
+	for _, keyType := range openrouter.AllKeyTypes {
+		key := readOpenRouterKey(t, ctx, conn, orgID, keyType)
+		require.Empty(t, key.DisableCauses)
+		require.False(t, key.Disabled)
+	}
+	require.Equal(t, len(openrouter.AllKeyTypes), upstream.count())
+
+	rearmAudit, err := audittest.LatestAuditLogByAction(ctx, conn, audit.ActionOrganizationEnterpriseTrialRearmed)
+	require.NoError(t, err)
+	var metadata struct {
+		ArmOperationID string `json:"arm_operation_id"`
+	}
+	require.NoError(t, json.Unmarshal(rearmAudit.Metadata, &metadata))
+	require.Equal(t, startOperationID, metadata.ArmOperationID)
+}
+
 func TestRearmTrial_AmbiguousRetryAuditIsRejected(t *testing.T) {
 	t.Parallel()
 

@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/mcpregistry"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 )
 
@@ -69,16 +70,16 @@ func TestAttachWritesRejectsUnimplementedOperation(t *testing.T) {
 	t.Parallel()
 	oauth := &StaffOAuth{Approval: &StaffProposalApproval{}}
 	writes := WriteConfig{Enabled: true, Operations: map[WriteOperation]bool{OperationCreateGlobalIssuer: true}} //nolint:exhaustive // Only selected write operations are enabled by this test.
-	err := AttachWrites(&Runtime{}, oauth, &productfeatures.Client{}, writes)
+	err := AttachWrites(&Runtime{}, oauth, WriteDependencies{Features: &productfeatures.Client{}, Registry: mcpregistry.New(nil, nil)}, writes)
 	require.ErrorContains(t, err, "not implemented")
 	require.Nil(t, oauth.Approval.operations, "nothing becomes approvable after a configuration error")
 
-	require.NoError(t, AttachWrites(&Runtime{}, oauth, &productfeatures.Client{}, WriteConfig{}))
+	require.NoError(t, AttachWrites(&Runtime{}, oauth, WriteDependencies{Features: &productfeatures.Client{}, Registry: mcpregistry.New(nil, nil)}, WriteConfig{}))
 	require.Contains(t, oauth.Approval.operations, OperationSetOrganizationFeature)
 	require.Contains(t, oauth.Approval.operations, OperationAssignOrganizationOnboardingPlaybook)
 	require.Contains(t, oauth.Approval.operations, OperationExtendOrganizationTrial)
 	for _, op := range AllWriteOperations {
-		require.Equal(t, op.implemented(), oauth.Approval.operations[op] != nil, op)
+		require.Equal(t, op.implemented() && !op.direct(), oauth.Approval.operations[op] != nil, op)
 	}
 }
 
@@ -88,7 +89,7 @@ func TestAttachedChatAnalysisWriterPrepares(t *testing.T) {
 	runtime := NewRuntime(nil, "")
 	oauth := &StaffOAuth{Approval: &StaffProposalApproval{store: f.store}}
 	config := WriteConfig{Enabled: true, Operations: map[WriteOperation]bool{OperationSetChatAnalysisSettings: true}} //nolint:exhaustive // Test the production wiring for the analysis operation.
-	require.NoError(t, AttachWrites(runtime, oauth, &productfeatures.Client{}, config))
+	require.NoError(t, AttachWrites(runtime, oauth, WriteDependencies{Features: &productfeatures.Client{}, Registry: mcpregistry.New(nil, nil)}, config))
 	writer, ok := runtime.writes.writers[OperationSetChatAnalysisSettings].(*chatAnalysisWriter)
 	require.True(t, ok)
 	out, err := writer.prepare(writeContext(t, f), PrepareChatAnalysisInput{OrganizationID: f.orgA, Judge: "work_units", Enabled: true, DailyCap: 10, RetryKey: "attached-analysis"})
@@ -117,7 +118,7 @@ func TestWriteContextReportsOnlyExecutableOperations(t *testing.T) {
 			if tc.attached {
 				oauth := &StaffOAuth{Approval: &StaffProposalApproval{}}
 				config := WriteConfig{Enabled: tc.enabled, Operations: map[WriteOperation]bool{OperationSetChatAnalysisSettings: true}} //nolint:exhaustive // One operation tests registration and discovery.
-				require.NoError(t, AttachWrites(runtime, oauth, &productfeatures.Client{}, config))
+				require.NoError(t, AttachWrites(runtime, oauth, WriteDependencies{Features: &productfeatures.Client{}, Registry: mcpregistry.New(nil, nil)}, config))
 			}
 			request := httptest.NewRequest(http.MethodPost, Path, strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"get_admin_context","arguments":{}}}`))
 			request.Header.Set("Authorization", "Bearer test-token")
@@ -180,4 +181,25 @@ func TestApprovalPageEscapesStoredValues(t *testing.T) {
 	require.NotContains(t, page.String(), "<script>")
 	require.NotContains(t, page.String(), "<img")
 	require.Contains(t, page.String(), "&lt;script&gt;alert(1)&lt;/script&gt;")
+}
+
+func TestProposalOutputPassesSDKOutputValidation(t *testing.T) {
+	t.Parallel()
+	server := mcp.NewServer(&mcp.Implementation{Name: "test", Version: "1"}, nil)
+	addProposalTool(server, &mcp.Tool{Name: "prepare"}, func(context.Context, *mcp.CallToolRequest, struct{}) (*mcp.CallToolResult, ProposalOutput, error) {
+		return nil, ProposalOutput{ProposalID: "p", Status: "pending_approval", Preview: json.RawMessage(`{"name":"io.example/fixture"}`), Result: json.RawMessage(`{"id":"e"}`)}, nil
+	})
+	serverTransport, clientTransport := mcp.NewInMemoryTransports()
+	_, err := server.Connect(t.Context(), serverTransport, nil)
+	require.NoError(t, err)
+	session, err := mcp.NewClient(&mcp.Implementation{Name: "client", Version: "1"}, nil).Connect(t.Context(), clientTransport, nil)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = session.Close() })
+
+	res, err := session.CallTool(t.Context(), &mcp.CallToolParams{Name: "prepare", Arguments: map[string]any{}})
+	require.NoError(t, err)
+	require.False(t, res.IsError, "an object preview must satisfy the inferred output schema")
+	out, err := json.Marshal(res.StructuredContent)
+	require.NoError(t, err)
+	require.JSONEq(t, `{"proposal_id":"p","status":"pending_approval","operation":"","expires_at":"","preview":{"name":"io.example/fixture"},"replay":false,"result":{"id":"e"}}`, string(out))
 }

@@ -215,6 +215,7 @@ function RbacOverrideEditor(): JSX.Element {
                   let knownResources: { id: string; label: string }[] = [];
                   if (
                     def.resourceType === "project" ||
+                    def.resourceType === "plugin" ||
                     def.resourceType === "skill" ||
                     def.resourceType === "assistant"
                   ) {

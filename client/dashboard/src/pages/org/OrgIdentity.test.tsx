@@ -46,6 +46,9 @@ vi.mock("./identity-provider/DirectoryRoleMappings", () => ({
     </div>
   ),
 }));
+vi.mock("@/pages/identities/DirectoryPeopleSummary", () => ({
+  DirectoryPeopleSummary: () => null,
+}));
 vi.mock("./identity-provider/useEnterpriseIssuer", () => ({
   useEnterpriseIssuer: () =>
     mocks.issuerQuery ?? {

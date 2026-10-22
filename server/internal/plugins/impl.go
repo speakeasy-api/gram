@@ -43,11 +43,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/hostedmcp"
 	keysrepo "github.com/speakeasy-api/gram/server/internal/keys/repo"
 	"github.com/speakeasy-api/gram/server/internal/marketplace"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/visibility"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
-	"github.com/speakeasy-api/gram/server/internal/networkaccess"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	pluginassignments "github.com/speakeasy-api/gram/server/internal/plugins/assignments"
@@ -836,8 +836,6 @@ func (s *Service) AddPluginServer(ctx context.Context, payload *gen.AddPluginSer
 		}
 	}
 
-	// Resolved before the transaction so flag latency never holds its locks.
-	serverKey := s.hostedServerKeyWrites(ctx, ac)
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, s.logger)
@@ -886,20 +884,24 @@ func (s *Service) AddPluginServer(ctx context.Context, payload *gen.AddPluginSer
 	}
 
 	if !backend.metaMcpServerID.Valid {
+		legacyToolsetID := backend.toolsetID
+		backend.mcpServerID, err = hostedEntryKey(ctx, s.repo.WithTx(tx), *ac.ProjectID, backend.toolsetID, backend.mcpServerID)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "resolve plugin server key").LogError(ctx, s.logger)
+		}
+		if !backend.mcpServerID.Valid {
+			return nil, oops.E(oops.CodeBadRequest, nil, hostedmcp.NoServerMessage).LogWarn(ctx, s.logger)
+		}
+		backend.toolsetID = uuid.NullUUID{UUID: uuid.Nil, Valid: false}
 		exists, err := s.repo.WithTx(tx).HasRoleDeliveryMembership(ctx, repo.HasRoleDeliveryMembershipParams{
 			PluginID: pluginID, OrganizationID: ac.ActiveOrganizationID, ProjectID: *ac.ProjectID,
-			ToolsetID: backend.toolsetID, McpServerID: backend.mcpServerID,
-			LegacyToolsetID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, PreserveRemoval: false,
+			McpServerID: backend.mcpServerID, LegacyToolsetID: legacyToolsetID, PreserveRemoval: false,
 		})
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "check plugin server identity").LogError(ctx, s.logger)
 		}
 		if exists {
 			return nil, oops.E(oops.CodeConflict, nil, "this server has already been added to the plugin")
-		}
-		backend.toolsetID, backend.mcpServerID, err = hostedEntryKey(ctx, s.repo.WithTx(tx), *ac.ProjectID, backend.toolsetID, backend.mcpServerID, serverKey)
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "resolve plugin server key").LogError(ctx, s.logger)
 		}
 	}
 
@@ -916,7 +918,6 @@ func (s *Service) AddPluginServer(ctx context.Context, payload *gen.AddPluginSer
 	} else {
 		row, err = s.repo.WithTx(tx).AddPluginServer(ctx, repo.AddPluginServerParams{
 			PluginID:    pluginID,
-			ToolsetID:   backend.toolsetID,
 			McpServerID: backend.mcpServerID,
 			DisplayName: displayName,
 			Policy:      payload.Policy,
@@ -927,7 +928,7 @@ func (s *Service) AddPluginServer(ctx context.Context, payload *gen.AddPluginSer
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
 			switch pgErr.ConstraintName {
-			case "plugin_servers_plugin_id_toolset_id_key", "plugin_servers_plugin_id_mcp_server_id_key", "plugin_servers_plugin_id_meta_mcp_server_id_key":
+			case "plugin_servers_plugin_id_mcp_server_id_key", "plugin_servers_plugin_id_meta_mcp_server_id_key":
 				return nil, oops.E(oops.CodeConflict, nil, "this server has already been added to the plugin")
 			default:
 				return nil, oops.E(oops.CodeConflict, nil, "a server with this display name already exists in the plugin")
@@ -3291,47 +3292,11 @@ func (s *Service) resolvePluginInfos(ctx context.Context, projectID uuid.UUID, p
 	}
 
 	for _, m := range mcpRows {
-		if m.WrapperCount > 1 {
-			return nil, oops.E(oops.CodeUnexpected, nil, "ambiguous toolset MCP serving wrapper").LogError(ctx, s.logger)
-		}
 		pb := ensurePlugin(m.PluginID, m.PluginName, m.PluginSlug, m.PluginDescription)
 
-		// Classify from the authoritative backend signal (unproxied_url, set
-		// only when s.unproxied_mcp_server_id resolved a live row), not from
-		// endpoint presence/absence: nothing stops an mcp_endpoints row from
-		// existing for an unproxied-backed server (verifyEndpointReferenceOwnership
-		// only checks project ownership, not backend type), and mcp_servers'
-		// own backend-exclusivity check doesn't cover mcp_endpoints either.
-		// An unproxied-backed server's URL always wins so it's never routed
-		// through a Speakeasy endpoint it can't actually be served from.
-		mcpURL := ""
-		isOAuth := m.McpServerIsOauth
-		isUnproxied := false
-		switch {
-		case m.UnproxiedUrl.Valid:
-			mode, modeErr := networkaccess.Effective(m.NetworkAccessMode)
-			if modeErr != nil {
-				return nil, oops.E(oops.CodeUnexpected, modeErr, "unproxied plugin MCP has invalid network mode").LogError(ctx, s.logger)
-			}
-			if mode != networkaccess.ModePublicOnly {
-				return nil, oops.E(oops.CodeUnexpected, nil, "unproxied plugin MCP cannot use private network mode").LogError(ctx, s.logger)
-			}
-			mcpURL = m.UnproxiedUrl.String
-			isUnproxied = true
-		default:
-			// Custom-domain endpoints win on the public surface. The private
-			// surface is pinned to the ingress's configured namespace instead.
-			mcpBase, publicSlug, domain := s.serverURL, m.EndpointSlug, m.EndpointCustomDomain
-			if m.AddressSlug.Valid {
-				publicSlug, domain = m.AddressSlug.String, m.AddressCustomDomain
-			}
-			if cd := conv.FromPGText[string](domain); cd != nil {
-				mcpBase = fmt.Sprintf("https://%s", *cd)
-			}
-			mcpURL, err = packageMCPURL(m.NetworkAccessMode, mcpBase, publicSlug, m.PrivateDnsName.String, m.PrivateEndpointSlug)
-			if err != nil {
-				return nil, oops.E(oops.CodeUnexpected, err, "resolve MCP plugin address").LogError(ctx, s.logger)
-			}
+		mcpURL, isUnproxied, err := remoteServerURL(s.serverURL, m)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "resolve MCP plugin address").LogError(ctx, s.logger)
 		}
 
 		var serverEnv []ServerEnvConfig
@@ -3347,7 +3312,7 @@ func (s *Service) resolvePluginInfos(ctx context.Context, projectID uuid.UUID, p
 				Policy:      m.ServerPolicy,
 				MCPURL:      mcpURL,
 				IsPublic:    m.McpServerIsPublic,
-				IsOAuth:     isOAuth,
+				IsOAuth:     m.McpServerIsOauth,
 				IsUnproxied: isUnproxied,
 				EnvConfigs:  serverEnv,
 			},
@@ -3600,23 +3565,11 @@ func pluginToGen(p repo.Plugin, servers []repo.PluginServer, wrappers map[uuid.U
 	return result
 }
 
-// hostedServerKeyWrites reports whether this organization's hosted writes use the canonical server key; errors keep the toolset key.
-func (s *Service) hostedServerKeyWrites(ctx context.Context, ac *contextvalues.AuthContext) bool {
-	enabled, err := feature.HostedMCPServerKeyWrites(ctx, s.features, ac.ActiveOrganizationID, ac.OrganizationSlug)
-	if err != nil {
-		s.logger.WarnContext(ctx, "evaluate hosted mcp server key writes; keeping the toolset key", attr.SlogError(err))
-	}
-	return enabled
-}
-
 // canonicalWrapperIDs returns which of the servers' hosted backends are a live canonical wrapper in the project.
 func canonicalWrapperIDs(ctx context.Context, q *repo.Queries, projectID uuid.UUID, servers ...repo.PluginServer) (map[uuid.UUID]bool, error) {
 	ids := make([]uuid.UUID, 0, len(servers))
 	for _, srv := range servers {
-		switch {
-		case srv.ToolsetID.Valid:
-			ids = append(ids, srv.ToolsetID.UUID)
-		case srv.McpServerID.Valid:
+		if srv.McpServerID.Valid {
 			ids = append(ids, srv.McpServerID.UUID)
 		}
 	}
@@ -3645,11 +3598,7 @@ func pluginServerToGen(s repo.PluginServer, wrappers map[uuid.UUID]bool) *gen.Pl
 		SortOrder:       s.SortOrder,
 		CreatedAt:       formatTime(s.CreatedAt),
 	}
-	// Exactly one backend is set per row (DB XOR check); populate whichever.
-	if s.ToolsetID.Valid {
-		id := s.ToolsetID.UUID.String()
-		result.ToolsetID = &id
-	}
+	// A leftover toolset-keyed row has no server, so it reports no backend.
 	if s.McpServerID.Valid {
 		id := s.McpServerID.UUID.String()
 		result.McpServerID = &id
@@ -3658,10 +3607,10 @@ func pluginServerToGen(s repo.PluginServer, wrappers map[uuid.UUID]bool) *gen.Pl
 		id := s.MetaMcpServerID.UUID.String()
 		result.MetaMcpServerID = &id
 	}
-	// A hosted entry reports both ids under either key; a canonical wrapper shares its toolset's id.
-	if hosted := conv.Ternary(s.ToolsetID.Valid, s.ToolsetID, s.McpServerID); hosted.Valid && wrappers[hosted.UUID] {
-		toolsetID, mcpServerID := hosted.UUID.String(), hosted.UUID.String()
-		result.ToolsetID, result.McpServerID = &toolsetID, &mcpServerID
+	// A hosted entry reports both ids; a canonical wrapper shares its toolset's id.
+	if s.McpServerID.Valid && wrappers[s.McpServerID.UUID] {
+		toolsetID := s.McpServerID.UUID.String()
+		result.ToolsetID = &toolsetID
 	}
 	return result
 }

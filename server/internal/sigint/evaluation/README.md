@@ -214,12 +214,25 @@ A multi-label reading requires all its Noul outcomes to succeed.
 
 ## Identity and content
 
-Reading identity is a UUIDv5 derived from a versioned JSON tuple containing organization,
-project, event kind, immutable logical event ID and sensor ID. The tuple is
-`["sigint-reading-v1", organization_id, project_id, event_kind, event_id, sensor_id]`.
-Repeated evaluations share
-this identity even if the sensor configuration changes between attempts;
-downstream processors account for repeated readings.
+Reading identity is a UUIDv5 derived from a JSON tuple containing tenant,
+evaluation scope, source event and sensor:
+
+```text
+["sigint-reading", organization_id, project_id, "stream", event_kind, event_id, sensor_id]
+["sigint-reading", organization_id, project_id, "manual", run_id, event_kind, event_id, sensor_id]
+```
+
+Every input supplies a validated `readings.Context`: an explicit `stream` or
+`manual` trigger, a nonzero run UUID only for manual evaluations, and an immutable
+request timestamp. The conversation adapter uses the creation mutation's
+`MessageEvent.occurred_at` as request time, independently of the original
+`message_created_at` source time. Manual inputs use their accepted run's creation
+time. Both readings and outcomes carry that context, and ClickHouse uses request
+time for partitioning and two-year retention. Invalid or absent context is terminal
+before sensor loading or inference.
+
+Retries share identity even if sensor configuration changes between attempts.
+Separate manual runs and streaming results retain independent identities.
 The fixed namespace is UUIDv5(URL namespace, `gram:sigint:reading`). The UUID is
 serialized as a canonical string on the wire and can be stored in native UUID
 columns in PostgreSQL and ClickHouse.
@@ -277,16 +290,17 @@ awaited before acknowledgment like readings:
 | Answer does not fit the sensor mode            | `STATUS_FAILED`         | `invalid_answer`                                                                                      |
 | Reading over the 9 MiB transport budget        | `STATUS_FAILED`         | `reading_too_large`                                                                                   |
 
-An outcome carries the reading ID the same sensor and event would produce, the
-attempt ID, tenant, event reference, sensor ID/slug, definition hash (empty for a
+An outcome carries the reading ID the same sensor, event and evaluation scope
+would produce, the trigger/run and immutable request time, attempt ID, tenant,
+event reference, sensor ID/slug, definition hash (empty for a
 draft), decision time and the same attribution as a reading. Failures after input
 resolution also record the supplied input, and failures after inference record
 the classifier model metadata. One attempt ID covers every reading and outcome of
 an event evaluation. Retryable failures publish nothing and nack the delivery, so
 redelivery decides them later. Event-level failures before sensors load (invalid
-identity, timestamp or event) have no sensor to attribute and publish no outcome;
-a message census must account for those. The failure and skip counters are
-unchanged.
+identity, timestamp, event, or evaluation context) have no sensor to attribute and
+publish no outcome; a message census must account for those, including
+`invalid_evaluation_context`. The failure and skip counters are unchanged.
 Readings exceeding 9 MiB of serialized protobuf are rejected before publication,
 leaving headroom under Pub/Sub's 10 MiB limit. They are permanent failures with
 reason `reading_too_large`; other successful readings are still published.
@@ -305,8 +319,9 @@ budget and truncation reason. The log describes the context adjustment before
 classification; it does not imply that classification or publication succeeded.
 All evaluator logs carry `gram.component=sigint-evaluator`.
 Redelivery may reevaluate all sensors and republish successes with the same
-logical reading ID and different answers/attempt IDs. No evaluation checkpoints,
-DLQ, reading persistence or duplicate-winner policy are introduced.
+logical reading ID and different answers/attempt IDs. Independent ClickHouse
+consumers store both topics in `sigint_readings_v2`, where the latest completion
+wins within its trigger/run scope. Request time remains fixed across redelivery.
 
 Conversation and reading topics and the evaluator subscription retain messages
 for four days; acknowledged subscription messages are not retained. Provision

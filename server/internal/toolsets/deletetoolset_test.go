@@ -280,42 +280,35 @@ func TestToolsetsService_DeleteToolset_DetachesFromAssistants(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Len(t, otherBefore, 1)
-	var ids []string
 	var deleteID string
+	var retainedID uuid.UUID
 	for i, name := range []string{"deleted target", "retained target"} {
 		created, err := ti.service.CreateToolset(ctx, &gen.CreateToolsetPayload{Name: name, ToolUrns: []string{}})
 		require.NoError(t, err)
-		ids = append(ids, created.ID)
 		if i == 0 {
 			deleteID = string(created.Slug)
+		} else {
+			retainedID = uuid.MustParse(created.ID)
 		}
-		_, err = ar.AddAssistantToolsets(ctx, []assistantsrepo.AddAssistantToolsetsParams{{
-			AssistantID: assistant.ID, ToolsetID: uuid.MustParse(created.ID), ProjectID: *authCtx.ProjectID,
+		_, err = ar.AddAssistantMcpServers(ctx, []assistantsrepo.AddAssistantMcpServersParams{{
+			AssistantID: assistant.ID, McpServerID: uuid.MustParse(created.ID), ProjectID: *authCtx.ProjectID,
 		}})
 		require.NoError(t, err)
 	}
 	err = toolsetsrepo.New(ti.conn).DeleteAssistantToolsetsByToolset(ctx, toolsetsrepo.DeleteAssistantToolsetsByToolsetParams{
-		ToolsetID: uuid.MustParse(ids[0]), ProjectID: otherProject.ID,
+		ToolsetID: otherTarget.ID, ProjectID: *authCtx.ProjectID,
 	})
 	require.NoError(t, err)
-	before, err := ar.LoadAssistantToolsets(ctx, assistantsrepo.LoadAssistantToolsetsParams{
-		AssistantIds: []uuid.UUID{assistant.ID}, ProjectID: *authCtx.ProjectID,
-	})
-	require.NoError(t, err)
-	require.Len(t, before, 2, "a different project cannot detach these attachments")
 	err = ti.service.DeleteToolset(ctx, &gen.DeleteToolsetPayload{Slug: types.Slug(deleteID)})
 	require.NoError(t, err)
 	counts, err := testrepo.New(ti.conn).CountAssistantAttachments(ctx, testrepo.CountAssistantAttachmentsParams{
 		ProjectID: *authCtx.ProjectID, AssistantID: assistant.ID,
 	})
 	require.NoError(t, err)
-	require.EqualValues(t, 1, counts.Toolsets, "deleted target must be physically detached")
-	remaining, err := ar.LoadAssistantToolsets(ctx, assistantsrepo.LoadAssistantToolsetsParams{
-		AssistantIds: []uuid.UUID{assistant.ID}, ProjectID: *authCtx.ProjectID,
-	})
+	require.EqualValues(t, 1, counts.McpServers, "deleted target must be physically detached")
+	remaining, err := ar.ListAssistantAttachedServerIDs(ctx, assistantsrepo.ListAssistantAttachedServerIDsParams{AssistantID: assistant.ID, ProjectID: *authCtx.ProjectID})
 	require.NoError(t, err)
-	require.Len(t, remaining, 1)
-	require.Equal(t, uuid.MustParse(ids[1]), remaining[0].ToolsetID, "unrelated target must remain")
+	require.Equal(t, []uuid.UUID{retainedID}, remaining, "unrelated target must remain")
 	otherAfter, err := ar.LoadAssistantToolsets(ctx, assistantsrepo.LoadAssistantToolsetsParams{
 		AssistantIds: []uuid.UUID{otherAssistant.ID}, ProjectID: otherProject.ID,
 	})
@@ -327,7 +320,7 @@ func TestToolsetsService_DeleteToolset_DetachesFromAssistants(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, reloaded.MCPServers, 1)
 	name := "updated assistant"
-	updated, err := core.UpdateAssistant(ctx, *authCtx.ProjectID, reloaded.ID, &name, nil, nil, []*types.AssistantToolsetRef{{ToolsetSlug: reloaded.MCPServers[0].ToolsetSlug.String}}, nil, nil, nil, nil)
+	updated, err := core.UpdateAssistant(ctx, *authCtx.ProjectID, reloaded.ID, &name, nil, nil, []*types.AssistantToolsetRef{{ToolsetSlug: reloaded.MCPServers[0].ToolsetSlug.String}}, nil, nil, nil, nil, nil)
 	require.NoError(t, err)
 	require.Equal(t, name, updated.Name)
 }

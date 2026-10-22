@@ -2217,6 +2217,176 @@ func BuildGetMcpServerToolCallsPayload(adminGetMcpServerToolCallsOrganizationID 
 	return v, nil
 }
 
+// BuildGetHookClientsPayload builds the payload for the admin getHookClients
+// endpoint from CLI flags.
+func BuildGetHookClientsPayload(adminGetHookClientsWindowDays string, adminGetHookClientsRefresh string, adminGetHookClientsAdminSessionToken string) (*admin.GetHookClientsPayload, error) {
+	var err error
+	var windowDays int
+	{
+		if adminGetHookClientsWindowDays != "" {
+			var v int64
+			v, err = strconv.ParseInt(adminGetHookClientsWindowDays, 10, strconv.IntSize)
+			windowDays = int(v)
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for windowDays, must be INT")
+			}
+			if windowDays < 1 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("window_days", windowDays, 1, true))
+			}
+			if windowDays > 30 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("window_days", windowDays, 30, false))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var refresh bool
+	{
+		if adminGetHookClientsRefresh != "" {
+			refresh, err = strconv.ParseBool(adminGetHookClientsRefresh)
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for refresh, must be BOOL")
+			}
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminGetHookClientsAdminSessionToken != "" {
+			adminSessionToken = &adminGetHookClientsAdminSessionToken
+		}
+	}
+	v := &admin.GetHookClientsPayload{}
+	v.WindowDays = windowDays
+	v.Refresh = refresh
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildListExternalMcpMigrationCandidatesPayload builds the payload for the
+// admin listExternalMcpMigrationCandidates endpoint from CLI flags.
+func BuildListExternalMcpMigrationCandidatesPayload(adminListExternalMcpMigrationCandidatesAdminSessionToken string) (*admin.ListExternalMcpMigrationCandidatesPayload, error) {
+	var adminSessionToken *string
+	{
+		if adminListExternalMcpMigrationCandidatesAdminSessionToken != "" {
+			adminSessionToken = &adminListExternalMcpMigrationCandidatesAdminSessionToken
+		}
+	}
+	v := &admin.ListExternalMcpMigrationCandidatesPayload{}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildPreviewExternalMcpMigrationPayload builds the payload for the admin
+// previewExternalMcpMigration endpoint from CLI flags.
+func BuildPreviewExternalMcpMigrationPayload(adminPreviewExternalMcpMigrationBody string, adminPreviewExternalMcpMigrationAdminSessionToken string) (*admin.PreviewExternalMcpMigrationPayload, error) {
+	var err error
+	var body PreviewExternalMcpMigrationRequestBody
+	{
+		err = json.Unmarshal([]byte(adminPreviewExternalMcpMigrationBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"servers\": [\n         {\n            \"toolset_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n         },\n         {\n            \"toolset_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n         }\n      ]\n   }'")
+		}
+		if body.Servers == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("servers", "body"))
+		}
+		if len(body.Servers) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.servers", body.Servers, len(body.Servers), 1, true))
+		}
+		if len(body.Servers) > 100 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.servers", body.Servers, len(body.Servers), 100, false))
+		}
+		for _, e := range body.Servers {
+			if e != nil {
+				if err2 := ValidateAdminExternalMcpMigrationRequestRequestBody(e); err2 != nil {
+					err = goa.MergeErrors(err, err2)
+				}
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminPreviewExternalMcpMigrationAdminSessionToken != "" {
+			adminSessionToken = &adminPreviewExternalMcpMigrationAdminSessionToken
+		}
+	}
+	v := &admin.PreviewExternalMcpMigrationPayload{}
+	if body.Servers != nil {
+		v.Servers = make([]*admin.AdminExternalMcpMigrationRequest, len(body.Servers))
+		for i, val := range body.Servers {
+			if val == nil {
+				v.Servers[i] = nil
+				continue
+			}
+			v.Servers[i] = marshalAdminExternalMcpMigrationRequestRequestBodyToAdminAdminExternalMcpMigrationRequest(val)
+		}
+	} else {
+		v.Servers = []*admin.AdminExternalMcpMigrationRequest{}
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildMigrateExternalMcpServersPayload builds the payload for the admin
+// migrateExternalMcpServers endpoint from CLI flags.
+func BuildMigrateExternalMcpServersPayload(adminMigrateExternalMcpServersBody string, adminMigrateExternalMcpServersAdminSessionToken string) (*admin.MigrateExternalMcpServersPayload, error) {
+	var err error
+	var body MigrateExternalMcpServersRequestBody
+	{
+		err = json.Unmarshal([]byte(adminMigrateExternalMcpServersBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"servers\": [\n         {\n            \"toolset_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n         },\n         {\n            \"toolset_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n         }\n      ]\n   }'")
+		}
+		if body.Servers == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("servers", "body"))
+		}
+		if len(body.Servers) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.servers", body.Servers, len(body.Servers), 1, true))
+		}
+		if len(body.Servers) > 100 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.servers", body.Servers, len(body.Servers), 100, false))
+		}
+		for _, e := range body.Servers {
+			if e != nil {
+				if err2 := ValidateAdminExternalMcpMigrationRequestRequestBody(e); err2 != nil {
+					err = goa.MergeErrors(err, err2)
+				}
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminMigrateExternalMcpServersAdminSessionToken != "" {
+			adminSessionToken = &adminMigrateExternalMcpServersAdminSessionToken
+		}
+	}
+	v := &admin.MigrateExternalMcpServersPayload{}
+	if body.Servers != nil {
+		v.Servers = make([]*admin.AdminExternalMcpMigrationRequest, len(body.Servers))
+		for i, val := range body.Servers {
+			if val == nil {
+				v.Servers[i] = nil
+				continue
+			}
+			v.Servers[i] = marshalAdminExternalMcpMigrationRequestRequestBodyToAdminAdminExternalMcpMigrationRequest(val)
+		}
+	} else {
+		v.Servers = []*admin.AdminExternalMcpMigrationRequest{}
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
 // BuildGetRegistryOktaCandidatesPayload builds the payload for the admin
 // getRegistryOktaCandidates endpoint from CLI flags.
 func BuildGetRegistryOktaCandidatesPayload(adminGetRegistryOktaCandidatesID string, adminGetRegistryOktaCandidatesAdminSessionToken string) (*admin.GetRegistryOktaCandidatesPayload, error) {
@@ -3021,6 +3191,66 @@ func BuildListCustomerUsagePayload(adminListCustomerUsageInterval string, adminL
 	}
 	v := &admin.ListCustomerUsagePayload{}
 	v.Interval = interval
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildListUpstreamOAuthMigrationOrganizationsPayload builds the payload for
+// the admin listUpstreamOAuthMigrationOrganizations endpoint from CLI flags.
+func BuildListUpstreamOAuthMigrationOrganizationsPayload(adminListUpstreamOAuthMigrationOrganizationsAdminSessionToken string) (*admin.ListUpstreamOAuthMigrationOrganizationsPayload, error) {
+	var adminSessionToken *string
+	{
+		if adminListUpstreamOAuthMigrationOrganizationsAdminSessionToken != "" {
+			adminSessionToken = &adminListUpstreamOAuthMigrationOrganizationsAdminSessionToken
+		}
+	}
+	v := &admin.ListUpstreamOAuthMigrationOrganizationsPayload{}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildGetUpstreamOAuthMigrationStatusPayload builds the payload for the admin
+// getUpstreamOAuthMigrationStatus endpoint from CLI flags.
+func BuildGetUpstreamOAuthMigrationStatusPayload(adminGetUpstreamOAuthMigrationStatusOrganizationID string, adminGetUpstreamOAuthMigrationStatusAdminSessionToken string) (*admin.GetUpstreamOAuthMigrationStatusPayload, error) {
+	var organizationID string
+	{
+		organizationID = adminGetUpstreamOAuthMigrationStatusOrganizationID
+	}
+	var adminSessionToken *string
+	{
+		if adminGetUpstreamOAuthMigrationStatusAdminSessionToken != "" {
+			adminSessionToken = &adminGetUpstreamOAuthMigrationStatusAdminSessionToken
+		}
+	}
+	v := &admin.GetUpstreamOAuthMigrationStatusPayload{}
+	v.OrganizationID = organizationID
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildRunUpstreamOAuthMigrationPayload builds the payload for the admin
+// runUpstreamOAuthMigration endpoint from CLI flags.
+func BuildRunUpstreamOAuthMigrationPayload(adminRunUpstreamOAuthMigrationBody string, adminRunUpstreamOAuthMigrationAdminSessionToken string) (*admin.RunUpstreamOAuthMigrationPayload, error) {
+	var err error
+	var body RunUpstreamOAuthMigrationRequestBody
+	{
+		err = json.Unmarshal([]byte(adminRunUpstreamOAuthMigrationBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"organization_id\": \"abc123\"\n   }'")
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminRunUpstreamOAuthMigrationAdminSessionToken != "" {
+			adminSessionToken = &adminRunUpstreamOAuthMigrationAdminSessionToken
+		}
+	}
+	v := &admin.RunUpstreamOAuthMigrationPayload{
+		OrganizationID: body.OrganizationID,
+	}
 	v.AdminSessionToken = adminSessionToken
 
 	return v, nil

@@ -106,6 +106,9 @@ type testServiceConfig struct {
 	tunnelRouting bool
 	maxDBConns    int32
 	lockTimeout   time.Duration
+	// noProber builds the service without a protected resource prober, so
+	// scope resolution ignores resource rows.
+	noProber bool
 }
 
 func newTestService(t *testing.T) (context.Context, *testInstance) {
@@ -160,6 +163,10 @@ func newTestServiceWithConfig(t *testing.T, cfg testServiceConfig) (context.Cont
 	}
 
 	features := productfeatures.NewClient(logger, tracerProvider, conn, redisClient)
+	prober := protectedresource.NewProber(conn, guardianPolicy)
+	if cfg.noProber {
+		prober = nil
+	}
 
 	svc := remotesessions.NewService(
 		logger,
@@ -177,7 +184,7 @@ func newTestServiceWithConfig(t *testing.T, cfg testServiceConfig) (context.Cont
 		remotesessions.NewIdentityCommitter(logger, conn, enc, audit.NewLogger(), serverURL, guardianPolicy, tunnels, nil),
 		remotesessions.NewRefreshService(logger, testenv.NewMeterProvider(t), conn, enc, guardianPolicy, tunnels, redisCache),
 		features,
-		protectedresource.NewProber(conn, guardianPolicy),
+		prober,
 	)
 
 	return ctx, &testInstance{

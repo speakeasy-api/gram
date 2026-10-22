@@ -2,6 +2,7 @@ package access
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 
 	"github.com/google/uuid"
@@ -102,10 +103,11 @@ func seedExplainAccessFixture(t *testing.T, ctx context.Context, ti *testInstanc
 	groupID, workosGroupID := seedMappingDirectoryGroupWithWorkOSID(t, ctx, ti.conn, orgID, "okta/contractors")
 	addMappingGroupMember(t, ctx, ti.conn, directoryUserID, workosUserID, groupID, workosGroupID)
 	group := groupID.String()
-	_, err := ti.service.SetDirectoryRoleMapping(ctx, &gen.SetDirectoryRoleMappingPayload{
+	seedMappingAdministrator(t, ctx, ti)
+	_, err := ti.service.SetDirectoryRoleMappings(ctx, &gen.SetDirectoryRoleMappingsPayload{
 		SourceKind:       directoryRoleMappingSourceGroup,
 		DirectoryGroupID: &group,
-		RoleUrn:          contractors.String(),
+		RoleUrns:         []string{contractors.String()},
 	})
 	require.NoError(t, err)
 
@@ -227,6 +229,31 @@ func TestService_ExplainResourceAccess_BlockFromMappedRoleWins(t *testing.T) {
 	manage := explainedLevel(t, result, audienceLevelManage)
 	require.False(t, manage.Allowed)
 	require.Empty(t, manage.Rules)
+}
+
+func TestService_ExplainResourceAccess_ShowsEachRoleFromOneGroup(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestAccessService(t)
+	enableDirectoryRoleSetsForTest(t, ctx, ti)
+	fixture := seedExplainAccessFixture(t, ctx, ti)
+	mappings, err := ti.service.ListDirectoryRoleMappings(ctx, &gen.ListDirectoryRoleMappingsPayload{})
+	require.NoError(t, err)
+	require.Len(t, mappings.Mappings, 1)
+	engineer := seededRolePrincipal(t, ctx, ti.conn, fixture.orgID, "engineer")
+	contractors := seededRolePrincipal(t, ctx, ti.conn, fixture.orgID, "contractors")
+	_, err = ti.service.SetDirectoryRoleMappings(ctx, &gen.SetDirectoryRoleMappingsPayload{
+		SourceKind:       directoryRoleMappingSourceGroup,
+		DirectoryGroupID: mappings.Mappings[0].DirectoryGroupID,
+		RoleUrns:         []string{engineer.String(), contractors.String()},
+	})
+	require.NoError(t, err)
+	use := explainedLevel(t, explainAccess(t, ctx, ti, fixture.serverID, fixture.userID), audienceLevelUse)
+	for _, name := range []string{"Engineer", "Contractors"} {
+		rule := explainedRule(t, use.Rules, name)
+		require.Equal(t, name == "Contractors", rule.ViaDirectoryMapping, "unexpected directory-only marker for %s", name)
+		require.Len(t, rule.DirectorySources, 1)
+		require.Equal(t, "okta/contractors", *rule.DirectorySources[0].DirectoryGroupName)
+	}
 }
 
 func TestService_ExplainResourceAccess_DirectGrantOutranksRoleBlock(t *testing.T) {
@@ -511,4 +538,52 @@ func TestService_ExplainResourceAccess_WildcardToolRuleCoversEveryTool(t *testin
 	use := explainedLevel(t, explainAccess(t, ctx, ti, serverID, "local_hana"), audienceLevelUse)
 	require.True(t, use.Allowed)
 	require.Equal(t, explainedToolAccessAll, *use.ToolAccess)
+}
+
+func TestSummarizeMCPAccessRulesReportsBlocksAndOverridesWithoutIdentity(t *testing.T) {
+	t.Parallel()
+	serverID, projectID := "server-1", "project-1"
+	allow := authz.NewGrant(authz.ScopeMCPConnect, serverID)
+	allow.PrincipalUrn = "role:organization:readers"
+	block := authz.NewGrant(authz.ScopeMCPBlockedConnect, serverID)
+	block.PrincipalUrn = "user:all"
+	direct := authz.NewGrant(authz.ScopeMCPConnect, serverID)
+	direct.PrincipalUrn = "user:private-member-id"
+	narrowBlock := authz.NewGrant(authz.ScopeMCPBlockedConnect, serverID)
+	narrowBlock.Selector[authz.SelectorKeyTool] = "delete_tasks"
+	narrowBlock.PrincipalUrn = "user:all"
+	unrelated := authz.NewGrant(authz.ScopeMCPBlockedConnect, "other-server")
+	unrelated.Selector[authz.SelectorKeyTool] = "other_tool"
+	unrelated.PrincipalUrn = "user:all"
+	for _, test := range []struct {
+		name    string
+		grants  []authz.Grant
+		effects []string
+	}{
+		{name: "narrowed block", grants: []authz.Grant{allow, narrowBlock, unrelated}, effects: []string{"allows", "limits"}},
+		{name: "blocked", grants: []authz.Grant{allow, block}, effects: []string{"blocks", "blocked"}},
+		{name: "override", grants: []authz.Grant{allow, block, direct}, effects: []string{"overrides", "blocked", "overridden"}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			effective, rules, err := SummarizeMCPAccessRules(test.grants, serverID, projectID, map[string]string{allow.PrincipalUrn: "Readers"})
+			require.NoError(t, err)
+			expected, err := EvaluateEffectiveMCPAccess(test.grants, serverID, projectID)
+			require.NoError(t, err)
+			require.Equal(t, expected, effective)
+			var effects []string
+			for _, rule := range rules {
+				require.Equal(t, "use", rule.AccessLevel)
+				effects = append(effects, rule.Effect)
+				if rule.SourceKind == "role" {
+					require.Equal(t, "Readers", rule.SourceName)
+				}
+			}
+			require.ElementsMatch(t, test.effects, effects)
+			encoded, err := json.Marshal(rules)
+			require.NoError(t, err)
+			require.NotContains(t, string(encoded), direct.PrincipalUrn)
+			require.NotContains(t, string(encoded), allow.PrincipalUrn)
+		})
+	}
 }

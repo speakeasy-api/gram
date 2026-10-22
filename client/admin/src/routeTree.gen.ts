@@ -11,6 +11,8 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as CustomerUsageRouteImport } from './routes/customer-usage'
+import { Route as ExternalMcpMigrationRouteImport } from './routes/external-mcp-migration'
+import { Route as FleetHealthRouteImport } from './routes/fleet-health'
 import { Route as IntegrationCoverageRouteImport } from './routes/integration-coverage'
 import { Route as McpSetupRouteImport } from './routes/mcp-setup'
 import { Route as OnboardingPlaybooksRouteImport } from './routes/onboarding-playbooks'
@@ -21,6 +23,7 @@ import { Route as RegistryRouteImport } from './routes/registry'
 import { Route as RemoteSessionIssuersRouteImport } from './routes/remote-session-issuers'
 import { Route as SignupOffersRouteImport } from './routes/signup-offers'
 import { Route as StokenCalculatorRouteImport } from './routes/stoken-calculator'
+import { Route as UpstreamOauthMigrationRouteImport } from './routes/upstream-oauth-migration'
 import { Route as UsersRouteImport } from './routes/users'
 import { Route as OrganizationsIndexRouteImport } from './routes/organizations.index'
 import { Route as OrganizationsIdOrSlugRouteImport } from './routes/organizations.$idOrSlug'
@@ -52,6 +55,16 @@ const IndexRoute = IndexRouteImport.update({
 const CustomerUsageRoute = CustomerUsageRouteImport.update({
   id: '/customer-usage',
   path: '/customer-usage',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ExternalMcpMigrationRoute = ExternalMcpMigrationRouteImport.update({
+  id: '/external-mcp-migration',
+  path: '/external-mcp-migration',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const FleetHealthRoute = FleetHealthRouteImport.update({
+  id: '/fleet-health',
+  path: '/fleet-health',
   getParentRoute: () => rootRouteImport,
 } as any)
 const IntegrationCoverageRoute = IntegrationCoverageRouteImport.update({
@@ -102,6 +115,11 @@ const SignupOffersRoute = SignupOffersRouteImport.update({
 const StokenCalculatorRoute = StokenCalculatorRouteImport.update({
   id: '/stoken-calculator',
   path: '/stoken-calculator',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const UpstreamOauthMigrationRoute = UpstreamOauthMigrationRouteImport.update({
+  id: '/upstream-oauth-migration',
+  path: '/upstream-oauth-migration',
   getParentRoute: () => rootRouteImport,
 } as any)
 const UsersRoute = UsersRouteImport.update({
@@ -234,6 +252,8 @@ const OrganizationsIdOrSlugProjectsProjectIdOrSlugRoute =
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/customer-usage': typeof CustomerUsageRoute
+  '/external-mcp-migration': typeof ExternalMcpMigrationRoute
+  '/fleet-health': typeof FleetHealthRoute
   '/integration-coverage': typeof IntegrationCoverageRoute
   '/mcp-setup': typeof McpSetupRoute
   '/onboarding-playbooks': typeof OnboardingPlaybooksRoute
@@ -244,6 +264,7 @@ export interface FileRoutesByFullPath {
   '/remote-session-issuers': typeof RemoteSessionIssuersRouteWithChildren
   '/signup-offers': typeof SignupOffersRoute
   '/stoken-calculator': typeof StokenCalculatorRoute
+  '/upstream-oauth-migration': typeof UpstreamOauthMigrationRoute
   '/users': typeof UsersRouteWithChildren
   '/organizations/$idOrSlug': typeof OrganizationsIdOrSlugRouteWithChildren
   '/projects/$idOrSlug': typeof ProjectsIdOrSlugRoute
@@ -270,6 +291,8 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/customer-usage': typeof CustomerUsageRoute
+  '/external-mcp-migration': typeof ExternalMcpMigrationRoute
+  '/fleet-health': typeof FleetHealthRoute
   '/integration-coverage': typeof IntegrationCoverageRoute
   '/mcp-setup': typeof McpSetupRoute
   '/onboarding-playbooks': typeof OnboardingPlaybooksRoute
@@ -277,6 +300,7 @@ export interface FileRoutesByTo {
   '/registry': typeof RegistryRoute
   '/signup-offers': typeof SignupOffersRoute
   '/stoken-calculator': typeof StokenCalculatorRoute
+  '/upstream-oauth-migration': typeof UpstreamOauthMigrationRoute
   '/projects/$idOrSlug': typeof ProjectsIdOrSlugRoute
   '/organizations': typeof OrganizationsIndexRoute
   '/projects': typeof ProjectsIndexRoute
@@ -300,6 +324,8 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/customer-usage': typeof CustomerUsageRoute
+  '/external-mcp-migration': typeof ExternalMcpMigrationRoute
+  '/fleet-health': typeof FleetHealthRoute
   '/integration-coverage': typeof IntegrationCoverageRoute
   '/mcp-setup': typeof McpSetupRoute
   '/onboarding-playbooks': typeof OnboardingPlaybooksRoute
@@ -310,6 +336,7 @@ export interface FileRoutesById {
   '/remote-session-issuers': typeof RemoteSessionIssuersRouteWithChildren
   '/signup-offers': typeof SignupOffersRoute
   '/stoken-calculator': typeof StokenCalculatorRoute
+  '/upstream-oauth-migration': typeof UpstreamOauthMigrationRoute
   '/users': typeof UsersRouteWithChildren
   '/organizations/$idOrSlug': typeof OrganizationsIdOrSlugRouteWithChildren
   '/projects/$idOrSlug': typeof ProjectsIdOrSlugRoute
@@ -338,6 +365,8 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/customer-usage'
+    | '/external-mcp-migration'
+    | '/fleet-health'
     | '/integration-coverage'
     | '/mcp-setup'
     | '/onboarding-playbooks'
@@ -348,6 +377,7 @@ export interface FileRouteTypes {
     | '/remote-session-issuers'
     | '/signup-offers'
     | '/stoken-calculator'
+    | '/upstream-oauth-migration'
     | '/users'
     | '/organizations/$idOrSlug'
     | '/projects/$idOrSlug'
@@ -374,6 +404,8 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/customer-usage'
+    | '/external-mcp-migration'
+    | '/fleet-health'
     | '/integration-coverage'
     | '/mcp-setup'
     | '/onboarding-playbooks'
@@ -381,6 +413,7 @@ export interface FileRouteTypes {
     | '/registry'
     | '/signup-offers'
     | '/stoken-calculator'
+    | '/upstream-oauth-migration'
     | '/projects/$idOrSlug'
     | '/organizations'
     | '/projects'
@@ -403,6 +436,8 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/customer-usage'
+    | '/external-mcp-migration'
+    | '/fleet-health'
     | '/integration-coverage'
     | '/mcp-setup'
     | '/onboarding-playbooks'
@@ -413,6 +448,7 @@ export interface FileRouteTypes {
     | '/remote-session-issuers'
     | '/signup-offers'
     | '/stoken-calculator'
+    | '/upstream-oauth-migration'
     | '/users'
     | '/organizations/$idOrSlug'
     | '/projects/$idOrSlug'
@@ -440,6 +476,8 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   CustomerUsageRoute: typeof CustomerUsageRoute
+  ExternalMcpMigrationRoute: typeof ExternalMcpMigrationRoute
+  FleetHealthRoute: typeof FleetHealthRoute
   IntegrationCoverageRoute: typeof IntegrationCoverageRoute
   McpSetupRoute: typeof McpSetupRoute
   OnboardingPlaybooksRoute: typeof OnboardingPlaybooksRoute
@@ -450,6 +488,7 @@ export interface RootRouteChildren {
   RemoteSessionIssuersRoute: typeof RemoteSessionIssuersRouteWithChildren
   SignupOffersRoute: typeof SignupOffersRoute
   StokenCalculatorRoute: typeof StokenCalculatorRoute
+  UpstreamOauthMigrationRoute: typeof UpstreamOauthMigrationRoute
   UsersRoute: typeof UsersRouteWithChildren
 }
 
@@ -467,6 +506,20 @@ declare module '@tanstack/react-router' {
       path: '/customer-usage'
       fullPath: '/customer-usage'
       preLoaderRoute: typeof CustomerUsageRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/external-mcp-migration': {
+      id: '/external-mcp-migration'
+      path: '/external-mcp-migration'
+      fullPath: '/external-mcp-migration'
+      preLoaderRoute: typeof ExternalMcpMigrationRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/fleet-health': {
+      id: '/fleet-health'
+      path: '/fleet-health'
+      fullPath: '/fleet-health'
+      preLoaderRoute: typeof FleetHealthRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/integration-coverage': {
@@ -537,6 +590,13 @@ declare module '@tanstack/react-router' {
       path: '/stoken-calculator'
       fullPath: '/stoken-calculator'
       preLoaderRoute: typeof StokenCalculatorRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/upstream-oauth-migration': {
+      id: '/upstream-oauth-migration'
+      path: '/upstream-oauth-migration'
+      fullPath: '/upstream-oauth-migration'
+      preLoaderRoute: typeof UpstreamOauthMigrationRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/users': {
@@ -822,6 +882,8 @@ const UsersRouteWithChildren = UsersRoute._addFileChildren(UsersRouteChildren)
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   CustomerUsageRoute: CustomerUsageRoute,
+  ExternalMcpMigrationRoute: ExternalMcpMigrationRoute,
+  FleetHealthRoute: FleetHealthRoute,
   IntegrationCoverageRoute: IntegrationCoverageRoute,
   McpSetupRoute: McpSetupRoute,
   OnboardingPlaybooksRoute: OnboardingPlaybooksRoute,
@@ -832,6 +894,7 @@ const rootRouteChildren: RootRouteChildren = {
   RemoteSessionIssuersRoute: RemoteSessionIssuersRouteWithChildren,
   SignupOffersRoute: SignupOffersRoute,
   StokenCalculatorRoute: StokenCalculatorRoute,
+  UpstreamOauthMigrationRoute: UpstreamOauthMigrationRoute,
   UsersRoute: UsersRouteWithChildren,
 }
 export const routeTree = rootRouteImport

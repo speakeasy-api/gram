@@ -1210,7 +1210,9 @@ func TestUndistributeSkillToolRefusesWithoutConfirmation(t *testing.T) {
 	}
 	require.Equal(t, "undistribute_skill", descriptor.Name)
 	require.Equal(t, ExternalAuthorizationOrgAdmin, descriptor.Meta.Authorization)
-	require.Nil(t, descriptor.Annotations, "a revocation is not a read-only tool")
+	require.NotNil(t, descriptor.Annotations)
+	require.False(t, descriptor.Annotations.ReadOnlyHint, "a revocation is not a read-only tool")
+	require.True(t, *descriptor.Annotations.DestructiveHint)
 
 	_, err := descriptor.Invoke(t.Context(), json.RawMessage(fmt.Sprintf(`{"project_slug":%q,"skill_id":%q,"plugin":"marketing","confirmed":false,"idempotency_key":"k"}`, testSkillProjectSlug, testSkillID)))
 

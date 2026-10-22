@@ -30,6 +30,8 @@ const (
 	OperationCreateGlobalIssuer                   WriteOperation = "create_global_issuer"
 	OperationUpdateGlobalIssuer                   WriteOperation = "update_global_issuer"
 	OperationUpdateSupportMatrix                  WriteOperation = "update_support_matrix"
+	OperationCreateRegistryEntry                  WriteOperation = "create_registry_entry"
+	OperationUploadPlatformImage                  WriteOperation = "upload_platform_image"
 )
 
 // AllWriteOperations is the complete allowlist, in a stable order.
@@ -44,6 +46,8 @@ var AllWriteOperations = []WriteOperation{
 	OperationCreateGlobalIssuer,
 	OperationUpdateGlobalIssuer,
 	OperationUpdateSupportMatrix,
+	OperationCreateRegistryEntry,
+	OperationUploadPlatformImage,
 }
 
 // PlatformGlobal reports whether an operation has no tenant target. Global
@@ -51,7 +55,7 @@ var AllWriteOperations = []WriteOperation{
 // only durable record.
 func (op WriteOperation) PlatformGlobal() bool {
 	switch op {
-	case OperationCreateGlobalIssuer, OperationUpdateGlobalIssuer, OperationUpdateSupportMatrix:
+	case OperationCreateGlobalIssuer, OperationUpdateGlobalIssuer, OperationUpdateSupportMatrix, OperationCreateRegistryEntry, OperationUploadPlatformImage:
 		return true
 	default:
 		return false
@@ -94,13 +98,20 @@ func (op WriteOperation) implemented() bool {
 	switch op {
 	case OperationSetOrganizationFeature, OperationSetOrganizationWhitelist, OperationAssignOrganizationOnboardingPlaybook,
 		OperationSetChatAnalysisSettings, OperationExtendOrganizationTrial,
-		OperationEnableOrganization, OperationDisableOrganization, OperationUpdateSupportMatrix:
+		OperationEnableOrganization, OperationDisableOrganization, OperationUpdateSupportMatrix, OperationCreateRegistryEntry, OperationUploadPlatformImage:
 		return true
 	case OperationCreateGlobalIssuer, OperationUpdateGlobalIssuer:
 		return false
 	default:
 		return false
 	}
+}
+
+// direct reports whether an operation applies immediately instead of through a
+// stored proposal and browser approval. Only changes no customer sees until an
+// approved change references them qualify.
+func (op WriteOperation) direct() bool {
+	return op == OperationUploadPlatformImage
 }
 
 // WritesAvailable reports whether consent may offer admin:write at all.

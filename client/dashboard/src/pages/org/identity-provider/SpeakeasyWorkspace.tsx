@@ -1,9 +1,14 @@
+import { enumPresentation, isKnownEnumValue } from "@/lib/enum";
 import { useEffect, useState, type ReactNode } from "react";
 import { ArrowLeft } from "lucide-react";
 import { Link } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
-import type { InternalSessionIssuer } from "@gram/client/models/components/internalsessionissuer.js";
+import {
+  InternalSessionIssuerState,
+  type InternalSessionIssuer,
+} from "@gram/client/models/components/internalsessionissuer.js";
 import { invalidateAllInternalSessionIssuer } from "@gram/client/react-query/internalSessionIssuer.js";
+import { invalidateAllOrganizationRemoteSessionIssuerEMAServices } from "@gram/client/react-query/organizationRemoteSessionIssuerEMAServices.js";
 import { useRotateInternalSessionIssuerMutation } from "@gram/client/react-query/rotateInternalSessionIssuer.js";
 import { useSetInternalSessionIssuerEnabledMutation } from "@gram/client/react-query/setInternalSessionIssuerEnabled.js";
 import {
@@ -20,6 +25,7 @@ import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Heading } from "@/components/ui/Heading";
 import { SkeletonParagraph } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
+import { TrustedByServices } from "./services/TrustedByServices";
 import { IssuerUri } from "./SpeakeasyProviderCard";
 import { ISSUER_STATE_BADGE, KEY_STATE_BADGE } from "./speakeasyIssuerView";
 import { identityProvidersHref } from "./tabs";
@@ -53,6 +59,11 @@ function SpeakeasyWorkspaceContent(): JSX.Element {
   const update = (data: InternalSessionIssuer) => {
     queryClient.setQueryData(enterpriseIssuerQueryKey(organization.id), data);
     void invalidateAllInternalSessionIssuer(queryClient);
+    // Speakeasy's readiness shows on every service that accepts it.
+    void invalidateAllOrganizationRemoteSessionIssuerEMAServices(queryClient);
+    void queryClient.invalidateQueries({
+      queryKey: ["identityChaining", "readEMA"],
+    });
     setAction(null);
   };
   const enable = useSetInternalSessionIssuerEnabledMutation({
@@ -66,11 +77,18 @@ function SpeakeasyWorkspaceContent(): JSX.Element {
   });
   const issuer = query.data;
   const pending = enable.isPending || rotate.isPending;
-  const canEnable = canManage && issuer?.canEnable;
+  const supportsEditing = isKnownEnumValue(
+    InternalSessionIssuerState,
+    issuer?.state,
+  );
+  const canEnable = canManage && supportsEditing && issuer?.canEnable;
   const canDisable =
-    canManage && !!issuer?.issuer && issuer.state !== "disabled";
+    canManage &&
+    supportsEditing &&
+    !!issuer?.issuer &&
+    issuer.state !== "disabled";
   const activeKid = issuer?.keys.find((key) => key.state === "active")?.kid;
-  const canReplace = canManage && !!activeKid;
+  const canReplace = canManage && supportsEditing && !!activeKid;
   const canFinish = canManage && issuer?.state === "keyless";
   const canRotate = canManage && issuer?.state === "enabled" && !!activeKid;
   const hasPendingKey = !!issuer?.keys.some((key) => key.state === "pending");
@@ -85,23 +103,29 @@ function SpeakeasyWorkspaceContent(): JSX.Element {
   };
   // A compromised rotation withdraws every current key, then sets up a new
   // one. With no active key left it only finishes the setup.
-  const replaceKey = (kid: string | undefined) =>
+  const replaceKey = (kid: string | undefined) => {
+    if (pending || (kid === undefined ? !canFinish : !canReplace)) return;
     rotate.mutate({
       security: { sessionHeaderGramSession: "" },
       request: { rotateRequestBody: { activeKid: kid, compromised: true } },
     });
+  };
   // A routine rotation publishes a pending key; once verifiers have had time
   // to fetch it, the same call activates it. An early repeat changes nothing.
-  const rotateKey = () =>
+  const rotateKey = () => {
+    if (!canRotate || pending || rotationWaiting) return;
     rotate.mutate({
       security: { sessionHeaderGramSession: "" },
       request: { rotateRequestBody: { activeKid, compromised: false } },
     });
-  const setEnabled = (enabled: boolean) =>
+  };
+  const setEnabled = (enabled: boolean) => {
+    if (pending || (enabled ? !canEnable : !canDisable)) return;
     enable.mutate({
       security: { sessionHeaderGramSession: "" },
       request: { setEnabledRequestBody: { enabled } },
     });
+  };
 
   return (
     <section className="flex min-w-0 flex-col gap-6" aria-label="Speakeasy">
@@ -149,10 +173,20 @@ function SpeakeasyWorkspaceContent(): JSX.Element {
               <div className="flex flex-wrap items-center gap-3">
                 <SettingsSection.Title>Status</SettingsSection.Title>
                 <Badge
-                  variant={ISSUER_STATE_BADGE[issuer.state].variant}
+                  variant={
+                    enumPresentation(ISSUER_STATE_BADGE, issuer.state, {
+                      variant: "neutral",
+                      label: "Unknown",
+                    }).variant
+                  }
                   size="sm"
                 >
-                  {ISSUER_STATE_BADGE[issuer.state].label}
+                  {
+                    enumPresentation(ISSUER_STATE_BADGE, issuer.state, {
+                      variant: "neutral",
+                      label: "Unknown",
+                    }).label
+                  }
                 </Badge>
               </div>
             </SettingsSection.Header>
@@ -213,8 +247,10 @@ function SpeakeasyWorkspaceContent(): JSX.Element {
                     RFC 7523
                   </a>
                   . It never changes, even when signing keys are replaced.
-                  Registering it alone changes nothing: add Speakeasy to the
-                  service's EMA provider order too.
+                  Speakeasy only vouches on MCP servers with Speakeasy sign-in.
+                  Registering the URI isn’t enough on its own. Also turn on
+                  Enterprise Managed Authorization in each MCP server’s
+                  settings.
                 </SettingsSection.Description>
               </SettingsSection.Header>
               <SettingsSection.Panel>
@@ -224,6 +260,8 @@ function SpeakeasyWorkspaceContent(): JSX.Element {
               </SettingsSection.Panel>
             </SettingsSection>
           )}
+
+          {issuer.issuer && <TrustedByServices />}
 
           {issuer.issuer && (
             <SettingsSection id="signing-keys">
@@ -251,10 +289,20 @@ function SpeakeasyWorkspaceContent(): JSX.Element {
                             {key.kid}
                           </code>
                           <Badge
-                            variant={KEY_STATE_BADGE[key.state].variant}
+                            variant={
+                              enumPresentation(KEY_STATE_BADGE, key.state, {
+                                variant: "neutral",
+                                label: "Unknown",
+                              }).variant
+                            }
                             size="sm"
                           >
-                            {KEY_STATE_BADGE[key.state].label}
+                            {
+                              enumPresentation(KEY_STATE_BADGE, key.state, {
+                                variant: "neutral",
+                                label: "Unknown",
+                              }).label
+                            }
                           </Badge>
                         </li>
                       ))}
@@ -387,7 +435,7 @@ function SpeakeasyWorkspaceContent(): JSX.Element {
         </div>
       )}
       <ConfirmDialog
-        open={action === "replace"}
+        open={action === "replace" && canReplace}
         onOpenChange={(open) => {
           if (!open) chooseAction(null);
         }}
@@ -413,7 +461,7 @@ function SpeakeasyWorkspaceContent(): JSX.Element {
         onConfirm={() => replaceKey(activeKid)}
       />
       <ConfirmDialog
-        open={action === "rotate"}
+        open={action === "rotate" && canRotate}
         onOpenChange={(open) => {
           if (!open) chooseAction(null);
         }}
@@ -437,7 +485,7 @@ function SpeakeasyWorkspaceContent(): JSX.Element {
         onConfirm={rotateKey}
       />
       <ConfirmDialog
-        open={action === "disable"}
+        open={action === "disable" && canDisable}
         onOpenChange={(open) => {
           if (!open) chooseAction(null);
         }}
@@ -497,7 +545,7 @@ function IssuerStatus({
   switch (issuer.state) {
     case "enabled":
       message =
-        "The issuer is ready. Speakeasy vouches for your team only to services whose EMA provider order includes it; other services keep their current identity provider.";
+        "The issuer is ready. Speakeasy vouches for people on MCP servers with Speakeasy sign-in, at each service that trusts it.";
       break;
     case "setup_required":
       message = issuer.canEnable
@@ -532,6 +580,10 @@ function IssuerStatus({
     case "unavailable":
       message =
         "Enterprise Managed Authorization is not available for this organization. Contact your Speakeasy administrator.";
+      break;
+    default:
+      message =
+        "Issuer status is unknown. Refresh the page to check its current status.";
       break;
   }
   return (

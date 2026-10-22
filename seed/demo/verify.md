@@ -131,14 +131,29 @@ remains hidden and the PAGES.md row stays `[~]`, not UI-verified.
     starts with the fictional `https://auth.example.com` issuer; live discovery
     does not need to succeed for this seeded-page check.
 
-12a. **Organization gateway** — open **MCP** (`/<org>/projects/default/mcp`).
-The title row shows **Connect all servers**, because `acme-workforce` is the
-organization's only organization-wide authorization server. Clicking it opens
-**Connect all your servers at once** with the URL `<server>/mcp/gateway/<org>`
-and a copy button, where `<org>` is the organization's slug (`acme-demo` in the
-demo org, your own org's slug after `mise run seed`);
-`organizations.getGateway` in the network panel returns `available: true` with
-that URL.
+12a. **Organization Gateway** — after seeding, open **MCP**
+(`/<org>/projects/default/mcp`). The **Organization Gateway** card leads the
+unfiltered grid and table with an **Off** badge for organization admins.
+`organizations.getGateway` reports `available: false`. Open the card and confirm
+**View assignments** opens the role and member access view for organization
+admins before enabling. Use the gateway switch to start the assignment review. Acknowledge the completed
+review and select **Enable Organization Gateway**. The same page then shows
+the endpoint `<server>/mcp/gateway/<org>` with a copy button and client install
+instructions. Derive `<org>` from the active organization slug at the start of
+the dashboard URL (`/<org>/projects/default/mcp`), for both the shared demo
+and local seed. Confirm `organizations.getGateway` returns the matching endpoint.
+The page header uses the brand-mesh background with grain texture. Its endpoint has a
+white box and copy button with the enabled/disabled switch alongside it,
+above separate **Install** and **View assignments** tabs. Organization admins
+can inspect and edit assignments without turning the gateway off. The gateway response reports `available: true` with that URL.
+The old organization settings gateway URL redirects to this page.
+
+In **MCP Assignments**, confirm one row per role with stacked server icons under
+**Connect**. Expand **Support Desk** to inspect unrestricted and
+read-only access; expand **Contractors** to see its blocked server after allowed
+servers, with red styling and a blocked icon badge. The MCP filter opens a
+searchable list directly. Click a role’s member avatars and select a person to
+open their effective assignments; the dropdown always offers compact member search and **Edit role**. Default-project labels and per-row totals stay hidden.
 
 13. **Killswitches on the identity Access tab (local rewritten seed only)** —
     Killswitch management intentionally rejects demo/support sessions. Verify this
@@ -540,6 +555,28 @@ that URL.
       that uses it. Do not bind it to a server to populate a page: its secret
       is an invalid ciphertext, so any request would fail with the
       administrator misconfiguration error.
+
+30. **Enterprise Managed Authorization**
+    - Open **Team → IDP and SSO → Identity providers**. The Services table
+      lists Acme Tracker (default order, "Each server's own identity
+      provider", Not accepted yet) and Acme Wiki (saved order: Acme
+      Identity, Not accepted yet), one server each.
+    - Open Acme Wiki's page. It shows Acme Identity's issuer URL
+      `https://login.acme-identity.example` to copy, and the saved order with
+      **Use default**.
+    - **MCP → Acme Tracker → Settings** has no Enterprise Managed
+      Authorization section: `acme-workforce` does not trust Acme Identity,
+      on purpose, so interactive sign-in through it (GitHub, the organization
+      gateway) keeps working.
+    - Both servers are seeded disabled. Connect through the organization
+      gateway: its consent page must not list Acme Tracker or Acme Wiki.
+
+31. **Gateway discovery modes**
+    - Open a gateway with tools.
+    - In Settings, save Direct, then open Inspect: its default connection lists qualified member tools.
+    - Select Progressive and reconnect: expect three discovery tools plus `execute_tool`. Reload Inspect and confirm the selected mode is retained.
+    - Select Direct in Inspect and apply/reconnect, then restore the gateway default to Progressive. Confirm the explicit Direct connection stays Direct while a connection using the gateway default follows Progressive.
+    - Connect a client to the organization gateway (`<server>/mcp/gateway/<org>`), choose Direct under Configuration on the consent page, and confirm tools/list shows `server--tool` names from every project you can reach. Reconnect: Direct is pre-selected. A connection that keeps the default lists the Progressive tools.
 
 ## On failure
 

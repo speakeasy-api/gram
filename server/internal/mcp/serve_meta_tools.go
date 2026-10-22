@@ -11,6 +11,8 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
+	"slices"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -175,10 +177,15 @@ func (s *Service) handleMetaDescribeToolsCall(
 				continue
 			}
 			described = append(described, metamcp.SchemaTool{
-				Name:        metamcp.QualifyName(mr.member.slug, entry.Name),
-				Description: entry.Description,
-				InputSchema: entry.InputSchema,
-				Annotations: entry.Annotations,
+				Title:        entry.Title,
+				OutputSchema: entry.OutputSchema,
+				Icons:        entry.Icons,
+				Execution:    entry.Execution,
+				Meta:         entry.Meta,
+				Name:         metamcp.QualifyName(mr.member.slug, entry.Name),
+				Description:  entry.Description,
+				InputSchema:  entry.InputSchema,
+				Annotations:  entry.Annotations,
 			})
 		}
 	}
@@ -211,6 +218,11 @@ func (s *Service) handleMetaExecuteToolCall(
 		return nil, err
 	}
 
+	return s.executeMetaMemberTool(ctx, logger, gate, members, req, qualified, arguments, meta)
+}
+
+// executeMetaMemberTool is shared by Direct calls and Progressive execute_tool.
+func (s *Service) executeMetaMemberTool(ctx context.Context, logger *slog.Logger, gate *metaGateContext, members []metaMember, req *rawRequest, qualified string, arguments json.RawMessage, meta *mcprequests.WireMeta) (json.RawMessage, error) {
 	serverSlug, toolName, err := metamcp.SplitQualifiedName(qualified)
 	if err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "invalid tool name: must be of the form serverslug--toolname").LogWarn(ctx, logger)
@@ -294,8 +306,9 @@ func (s *Service) handleMetaExecuteToolCall(
 
 // memberCatalog is one hosted member's described tool inventory.
 type memberCatalog struct {
-	entries []*toolListEntry
-	byName  map[string]*toolListEntry
+	entries    []*toolListEntry
+	byName     map[string]*toolListEntry
+	incomplete bool
 }
 
 // describeMemberToolset loads the member's catalog via the same model view
@@ -333,17 +346,22 @@ func (s *Service) describeMemberToolset(
 		described.Tools = toolfilter.FilterToolsBySelection(described.Tools, gate.toolSelection)
 	}
 
-	catalog := &memberCatalog{entries: nil, byName: map[string]*toolListEntry{}}
+	catalog := &memberCatalog{entries: nil, byName: map[string]*toolListEntry{}, incomplete: false}
 	duplicates := map[string]bool{}
 	for _, tool := range described.Tools {
 		// External-MCP passthrough tools are excluded from the meta MCP
 		// catalog (toolToListEntry returns nil); they belong to the
 		// proxied-member runtime.
+		if tool != nil && conv.IsProxyTool(tool) {
+			continue
+		}
 		entry := toolToListEntry(tool)
-		if entry == nil {
+		if entry == nil || entry.Name == "" {
+			catalog.incomplete = true
 			continue
 		}
 		if _, exists := catalog.byName[entry.Name]; exists {
+			catalog.incomplete = true
 			duplicates[entry.Name] = true
 			continue
 		}
@@ -359,20 +377,16 @@ func (s *Service) describeMemberToolset(
 	// toolsets filter per-tool mcp:connect with tools/call's dimensions, so
 	// describe never discloses a tool the member endpoint would hide.
 	if gate.authenticated && !toolset.McpIsPublic {
-		for name, entry := range catalog.byName {
-			err := s.authz.Require(ctx, authz.MCPToolCallCheck(toolset.ID.String(), authz.MCPToolCallDimensions{
-				Tool:        name,
-				Disposition: dispositionFromAnnotations(entry.Annotations),
-				ProjectID:   toolset.ProjectID.String(),
-			}))
-			if err != nil {
-				var oopsErr *oops.ShareableError
-				if errors.As(err, &oopsErr) && oopsErr.Code == oops.CodeForbidden {
-					delete(catalog.byName, name)
-					continue
-				}
-				return nil, oops.E(oops.CodeUnexpected, err, "check tool-level authz for describe").LogError(ctx, logger)
-			}
+		allowed, err := filterToolsByMCPConnect(ctx, logger, s.authz, toolset.ID.String(), toolset.ProjectID.String(), slices.Collect(maps.Values(catalog.byName)))
+		if errors.Is(err, context.DeadlineExceeded) {
+			return nil, &metaMemberError{message: fmt.Sprintf("server %q did not answer in time", member.slug)}
+		}
+		if err != nil {
+			return nil, err
+		}
+		catalog.byName = make(map[string]*toolListEntry, len(allowed))
+		for _, entry := range allowed {
+			catalog.byName[entry.Name] = entry
 		}
 	}
 

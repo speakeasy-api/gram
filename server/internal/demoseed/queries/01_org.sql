@@ -24,8 +24,8 @@ SELECT EXISTS (
 -- (Logs page and other EnterpriseGate features). Demo identity is carried by
 -- the fixed org id (constants.DemoOrganizationID) — NOT by account type, which
 -- the auth callback overwrites anyway.
-INSERT INTO organization_metadata (id, name, slug, gram_account_type, whitelisted)
-VALUES (@org_id::text, @org_name::text, @org_slug::text, 'enterprise', TRUE)
+INSERT INTO organization_metadata (id, name, slug, gram_account_type, whitelisted, scim_enabled)
+VALUES (@org_id::text, @org_name::text, @org_slug::text, 'enterprise', TRUE, TRUE)
 ON CONFLICT (id) DO UPDATE
   -- whitelisted is repaired, not just set on insert: a developer who logged
   -- in before seeding already has this row, created un-whitelisted by the
@@ -33,7 +33,8 @@ ON CONFLICT (id) DO UPDATE
   -- gate.
   SET name = EXCLUDED.name, slug = EXCLUDED.slug,
       gram_account_type = EXCLUDED.gram_account_type,
-      whitelisted = EXCLUDED.whitelisted;
+      whitelisted = EXCLUDED.whitelisted,
+      scim_enabled = EXCLUDED.scim_enabled;
 
 -- name: OrgUpsertOnboarding :exec
 INSERT INTO organization_onboarding (organization_id, preset, mdm_vendor, mdm_vendor_name)
@@ -135,6 +136,14 @@ DELETE FROM remote_sessions WHERE user_session_issuer_id IN
   (SELECT id FROM user_session_issuers WHERE project_id = @project_id::uuid OR organization_id = @org_id::text)
   OR remote_session_client_id IN
   (SELECT id FROM remote_session_clients WHERE project_id = @project_id::uuid OR organization_id = @org_id::text);
+
+-- Cached EMA credentials and the trusted issuer sessions they cite SET NULL
+-- on their parents, so clear them by tenant first.
+-- name: OrgDeleteRemoteSessionEMACredentials :exec
+DELETE FROM remote_session_ema_credentials WHERE organization_id = @org_id::text;
+
+-- name: OrgDeleteTrustedIssuerSessions :exec
+DELETE FROM trusted_issuer_sessions WHERE organization_id = @org_id::text;
 
 -- name: OrgDeleteRemoteSessionEMABindings :exec
 DELETE FROM remote_session_ema_bindings
@@ -275,6 +284,16 @@ VALUES
 INSERT INTO organization_features (organization_id, feature_name)
 SELECT @org_id::text, f
 FROM unnest(@features::text[]) AS f
+ON CONFLICT (organization_id, feature_name) WHERE deleted IS FALSE DO NOTHING;
+
+-- name: OrgInsertGatewayDisabledFeature :exec
+-- Start with access review required, preserving an explicit opt-in on reseed.
+INSERT INTO organization_features (organization_id, feature_name)
+SELECT @org_id::text, 'organization_gateway_disabled'
+WHERE NOT EXISTS (
+  SELECT 1 FROM organization_features
+  WHERE organization_id = @org_id::text AND feature_name = 'organization_gateway_disabled'
+)
 ON CONFLICT (organization_id, feature_name) WHERE deleted IS FALSE DO NOTHING;
 
 -- name: OrgInsertHooksFailOpenFeature :exec

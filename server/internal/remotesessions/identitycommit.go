@@ -39,6 +39,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
+	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/oauth/registration"
 	"github.com/speakeasy-api/gram/server/internal/oauth/wellknown"
@@ -144,8 +145,16 @@ func (c *IdentityCommitter) SetCallbackOrigins(origins CallbackOrigins) {
 
 // newClientBaseURL is the callback_base_url recorded on a client this commit
 // creates. The DCR registration and the stored row must agree on it.
-func (c *IdentityCommit) newClientBaseURL() pgtype.Text {
-	return c.committer.origins.NewClientBaseURL(c.plan.Scope.OrganizationID != "")
+func (c *IdentityCommit) newClientBaseURL(ctx context.Context) (pgtype.Text, error) {
+	if c.callbackBaseURL != nil {
+		return *c.callbackBaseURL, nil
+	}
+	origin, err := c.committer.origins.ResolveNewClientBaseURL(ctx, c.committer.db, c.plan.Scope.OrganizationID)
+	if err != nil {
+		return pgtype.Text{}, err
+	}
+	c.callbackBaseURL = &origin
+	return origin, nil
 }
 
 // IdentityScope is the tenant and actor every read and write of a commit uses.
@@ -175,6 +184,12 @@ type IdentityPlan struct {
 
 	// UserSessionIssuerID is the user session issuer the client is bound to.
 	UserSessionIssuerID uuid.UUID
+
+	// MCPServerID is the MCP server being configured, which Bind associates
+	// with the bound client; uuid.Nil configures the issuer alone. The caller
+	// locks the server row before Lock, keeping the server-then-issuer lock
+	// order of MCP server updates.
+	MCPServerID uuid.UUID
 
 	// Provider is UseProvider or CreateProvider.
 	Provider ProviderChoice
@@ -392,8 +407,9 @@ type IdentityResult struct {
 // IdentityCommit is one prepared plan. Build one per request with
 // IdentityCommitter.Prepare and run its steps in order.
 type IdentityCommit struct {
-	committer *IdentityCommitter
-	plan      IdentityPlan
+	committer       *IdentityCommitter
+	callbackBaseURL *pgtype.Text
+	plan            IdentityPlan
 
 	// provider is the stored provider: read by Preflight or Register, locked
 	// by Lock, or created by Bind.
@@ -578,6 +594,13 @@ func (c *IdentityCommit) Register(ctx context.Context) (Registration, error) {
 	default:
 		return Registration{}, errors.New("identity plan has no client choice")
 	}
+	// Resolve before Begin for manual and CIMD clients too: Bind must not
+	// acquire a second pool connection while holding its transaction.
+	if reg.Method == RegistrationManual || reg.Method == RegistrationCIMD {
+		if _, err := c.newClientBaseURL(ctx); err != nil {
+			return Registration{}, err
+		}
+	}
 	c.registration = reg
 	return reg, nil
 }
@@ -605,7 +628,11 @@ func (c *IdentityCommit) register(ctx context.Context, reg Registration) (Regist
 	if c.provider.TunneledMcpServerID.Valid && !c.plan.Scope.ActorIsPlatformAdmin {
 		return reg, identityRefusal(ErrIdentityForbidden, nil, "registering through an MCP tunnel requires a platform admin")
 	}
-	response, err := RegisterDynamicClient(ctx, c.committer.policy, c.committer.tunnels, c.committer.origins.ForClient(c.newClientBaseURL()), ProxyRegisterRequest{
+	callbackBaseURL, err := c.newClientBaseURL(ctx)
+	if err != nil {
+		return reg, err
+	}
+	response, err := RegisterDynamicClient(ctx, c.committer.policy, c.committer.tunnels, c.committer.origins.ForClient(callbackBaseURL), ProxyRegisterRequest{
 		RegistrationEndpoint:    endpoint,
 		TunneledMcpServerID:     conv.PtrEmpty(tunnelBindingID(c.provider.TunneledMcpServerID)),
 		Scope:                   conv.PtrEmpty(strings.Join(c.registrationScope(policy), " ")),
@@ -906,6 +933,20 @@ func (c *IdentityCommit) Bind(ctx context.Context, tx *IdentityTx, reg Registrat
 	if err != nil {
 		return err
 	}
+	if c.plan.MCPServerID != uuid.Nil {
+		associated, err := upstreamclientsrepo.New(tx.tx).AssociateMCPServerRemoteSessionClient(ctx, upstreamclientsrepo.AssociateMCPServerRemoteSessionClientParams{
+			OrganizationID:        c.plan.Scope.OrganizationID,
+			RemoteSessionClientID: client.ID,
+			McpServerID:           c.plan.MCPServerID,
+			ProjectID:             c.plan.Scope.ProjectID,
+		})
+		if err != nil {
+			return fmt.Errorf("associate mcp server with remote session client: %w", err)
+		}
+		if associated == 0 {
+			return identityRefusal(ErrIdentityConflict, nil, "the MCP server or its client changed while saving; retry")
+		}
+	}
 	c.result = IdentityResult{
 		Provider:        c.provider,
 		Client:          client,
@@ -1201,7 +1242,10 @@ func (c *IdentityCommit) createCIMDClient(ctx context.Context, tx *IdentityTx) (
 		return repo.RemoteSessionClient{}, fmt.Errorf("generate client id: %w", err)
 	}
 	policy := c.plan.Client.policy
-	callbackBaseURL := c.newClientBaseURL()
+	callbackBaseURL, err := c.newClientBaseURL(ctx)
+	if err != nil {
+		return repo.RemoteSessionClient{}, err
+	}
 	client, err := tx.q.CreateRemoteSessionClientCIMD(ctx, repo.CreateRemoteSessionClientCIMDParams{
 		ID:                    id,
 		ProjectID:             conv.ToNullUUID(c.plan.Scope.ProjectID),
@@ -1221,6 +1265,10 @@ func (c *IdentityCommit) createCIMDClient(ctx context.Context, tx *IdentityTx) (
 
 // createClient creates a client from provider-issued credentials.
 func (c *IdentityCommit) createClient(ctx context.Context, tx *IdentityTx, credentials ClientCredentials) (repo.RemoteSessionClient, error) {
+	callbackBaseURL, err := c.newClientBaseURL(ctx)
+	if err != nil {
+		return repo.RemoteSessionClient{}, err
+	}
 	var secret pgtype.Text
 	if credentials.ClientSecret != "" {
 		encrypted, err := c.committer.enc.Encrypt([]byte(credentials.ClientSecret))
@@ -1253,7 +1301,7 @@ func (c *IdentityCommit) createClient(ctx context.Context, tx *IdentityTx, crede
 		Scope:                        credentials.Scope,
 		Audience:                     conv.PtrToPGText(credentials.Audience),
 		LegacyCallbackUrl:            false,
-		CallbackBaseUrl:              c.newClientBaseURL(),
+		CallbackBaseUrl:              callbackBaseURL,
 		GrantTypes:                   nil,
 		CredentialOwner:              pgtype.Text{String: "", Valid: false},
 	})

@@ -18,9 +18,8 @@ type McpServer struct {
 	Name *string
 	// A URL-safe, project-unique slug derived server-side from the name and ID
 	Slug *string
-	// An addressable platform endpoint slug for this server, populated only when
-	// getting by toolset ID. Absent when no platform endpoint exists; never a
-	// custom-domain slug.
+	// The slug of this server's primary platform endpoint, the oldest one. Absent
+	// when no platform endpoint exists; never a custom-domain slug.
 	PlatformEndpointSlug *string
 	// The ID of the environment associated with the server
 	EnvironmentID *string
@@ -43,6 +42,20 @@ type McpServer struct {
 	Visibility McpServerVisibility
 	// The effective allowed network surfaces. Existing NULL rows are public_only.
 	NetworkAccessMode NetworkAccessMode
+	// A summary of the backing toolset. Present only for toolset-backed (hosted)
+	// servers whose toolset is live.
+	Toolset *McpServerToolsetSummary
+	// The ID of the endpoint that stands for this server when a single address
+	// must be chosen: domain-root custom-domain endpoints first, then other
+	// custom-domain endpoints, then platform endpoints. Absent when the server has
+	// no addressable endpoint.
+	PrimaryEndpointID *string
+	// The public MCP URL of the primary endpoint. Absent when the server has no
+	// addressable endpoint.
+	PrimaryEndpointURL *string
+	// Whether any endpoint routes to this server, including one on a custom domain
+	// that is not live yet. Absent when it could not be read.
+	HasEndpoint *bool
 	// When the MCP server was created
 	CreatedAt string
 	// When the MCP server was last updated

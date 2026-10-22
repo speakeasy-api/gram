@@ -1,11 +1,8 @@
 import { Page } from "@/components/page-layout";
 import { SourceMcpIcon } from "@/components/sources/SourceCard";
 import { RequireScope } from "@/components/require-scope";
-import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
-import { Checkbox } from "@/components/ui/Checkbox";
-import { SearchBar } from "@/components/ui/SearchBar";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -16,16 +13,11 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/Dropdown";
 import { useRBAC } from "@/hooks/useRBAC";
-import { useTelemetry } from "@/contexts/Telemetry";
-import { TUNNELED_MCP_FEATURE_FLAG } from "@/lib/tunneledMcp";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
 import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/Sheet";
+  ServerPickerSheet,
+  type ServerPickerOption,
+} from "@/components/mcp/ServerPickerSheet";
 import { SkeletonTable } from "@/components/ui/Skeleton";
 import { Table, type Column } from "@/components/ui/Table";
 import { Text } from "@/components/ui/Text";
@@ -698,7 +690,6 @@ export function AddServersSheet({
 }): JSX.Element {
   const routes = useRoutes();
   const navigate = useNavigate();
-  const telemetry = useTelemetry();
   const { hasScope, isLoading: permissionsLoading } = useRBAC();
   const canWrite = !permissionsLoading && hasScope("mcp:write", gatewayId);
   const canCreate = !permissionsLoading && hasScope("mcp:write", projectId);
@@ -707,27 +698,24 @@ export function AddServersSheet({
   // Match the Catalog page's browse permission; installation checks stay there.
   const canBrowseCatalog =
     !permissionsLoading && (hasScope("project:read") || hasScope("mcp:write"));
-  const [selected, setSelected] = useState<string[]>([]);
-  const [search, setSearch] = useState("");
-  const searchContainerRef = useRef<HTMLLabelElement>(null);
-  const creationMenuOutsideEventRef = useRef<Event | null>(null);
-  const [results, setResults] = useState<AddResult[]>([]);
-  const [submitting, setSubmitting] = useState(false);
-  const submittingRef = useRef(false);
-  const busy = adding || submitting;
   const candidates = useMemo(
     () => buildAddCandidates(servers, toolsets, memberServerIds, ""),
     [servers, toolsets, memberServerIds],
   );
-  const options = candidates.map((candidate) => {
+  const options: ServerPickerOption[] = candidates.map((candidate) => {
     const key = candidateKey(candidate, wrappers);
     if (candidate.kind === "toolset") {
       return {
         value: key,
         label: candidateName(candidate),
-        mcpServerId: undefined,
+        icon: (
+          <SourceMcpIcon
+            mcpServerId={undefined}
+            className="size-6 shrink-0 object-contain"
+          />
+        ),
         slug: candidate.toolset.slug,
-        classification: CLASSIFICATION_LABEL.hosted,
+        kindLabel: CLASSIFICATION_LABEL.hosted,
         badge: candidate.toolset.mcpEnabled ? undefined : "MCP off",
         description: `${candidate.toolset.slug} · Hosted${candidate.toolset.mcpEnabled ? "" : " · MCP off: excluded until enabled"}${canCreate ? "" : " · Requires project-level MCP write permission"}`,
         disabled: !canWrite || !canCreate,
@@ -745,9 +733,14 @@ export function AddServersSheet({
     return {
       value: key,
       label: candidateName(candidate) || "MCP server",
-      mcpServerId: server.id,
+      icon: (
+        <SourceMcpIcon
+          mcpServerId={server.id}
+          className="size-6 shrink-0 object-contain"
+        />
+      ),
       slug: server.slug,
-      classification: CLASSIFICATION_LABEL[classification],
+      kindLabel: CLASSIFICATION_LABEL[classification],
       badge:
         classification === "hosted" || classification === "proxied"
           ? undefined
@@ -757,92 +750,12 @@ export function AddServersSheet({
         !canWrite || !server.slug || Boolean(server.unproxiedMcpServerId),
     };
   });
-  const query = search.trim().toLowerCase();
-  const visibleOptions = options.filter((option) =>
-    `${option.label} ${option.slug ?? ""}`.toLowerCase().includes(query),
-  );
-  const selectedCandidates = candidates.filter(
-    (candidate) =>
-      selected.includes(candidateKey(candidate, wrappers)) &&
-      !options.find(
-        (option) => option.value === candidateKey(candidate, wrappers),
-      )?.disabled,
-  );
-  const selectedValues = selectedCandidates.map((candidate) =>
-    candidateKey(candidate, wrappers),
-  );
-  const selectableValues = visibleOptions
-    .filter((option) => !option.disabled)
-    .map((option) => option.value);
-  const allSelected =
-    selectableValues.length > 0 &&
-    selectableValues.every((value) => selectedValues.includes(value));
-  const canSelectAll =
-    !isLoading &&
-    !loadFailed &&
-    !toolsetsLoading &&
-    selectableValues.length > 0;
-  const toggleSelectAll = () =>
-    setSelected((previous) => {
-      const rest = previous.filter(
-        (value) => !selectableValues.includes(value),
-      );
-      const everySelected = selectableValues.every((value) =>
-        previous.includes(value),
-      );
-      return everySelected ? rest : [...rest, ...selectableValues];
-    });
-  const submit = async () => {
-    if (
-      submittingRef.current ||
-      busy ||
-      !canWrite ||
-      isLoading ||
-      loadFailed ||
-      selectedCandidates.length === 0
-    )
-      return;
-    submittingRef.current = true;
-    setSubmitting(true);
-    try {
-      const returned = await onAdd(selectedCandidates);
-      // Missing results are not successes (including a rejected duplicate batch).
-      const next = selectedCandidates.map((candidate) => {
-        const key = candidateKey(candidate, wrappers);
-        return (
-          returned.find((result) => result.key === key) ?? {
-            key,
-            name: candidateName(candidate),
-            error: "Couldn't confirm this server was added. Try again.",
-          }
-        );
-      });
-      const failures = next.filter((result) => result.error);
-      setResults(failures);
-      setSelected(failures.map((result) => result.key));
-      if (failures.length === 0) {
-        toast.success(
-          `${next.length} ${next.length === 1 ? "server" : "servers"} added`,
-        );
-        // Bypass the user-dismissal busy guard after the batch has settled.
-        onOpenChange(false);
-      }
-    } catch (error) {
-      setResults(
-        selectedCandidates.map((candidate) => ({
-          key: candidateKey(candidate, wrappers),
-          name: candidateName(candidate),
-          error:
-            error instanceof Error
-              ? error.message
-              : "Couldn't add this server. Try again.",
-        })),
-      );
-    } finally {
-      submittingRef.current = false;
-      setSubmitting(false);
-    }
-  };
+  const submit = (values: string[]) =>
+    onAdd(
+      candidates.filter((candidate) =>
+        values.includes(candidateKey(candidate, wrappers)),
+      ),
+    );
   const creationOptions = [
     {
       label: "From the catalog",
@@ -865,22 +778,18 @@ export function AddServersSheet({
         encodeURIComponent(gatewayId),
       allowed: canCreate,
     },
-    ...(telemetry.isFeatureEnabled(TUNNELED_MCP_FEATURE_FLAG)
-      ? [
-          {
-            label: "Reachable through a tunnel",
-            description:
-              "Connect a server running inside your own network through a tunnel.",
-            Icon: Cable,
-            group: "Recommended",
-            href:
-              routes.mcp.add.tunneled.href() +
-              "?attachToGateway=" +
-              encodeURIComponent(gatewayId),
-            allowed: canCreate,
-          },
-        ]
-      : []),
+    {
+      label: "Reachable through a tunnel",
+      description:
+        "Connect a server running inside your own network through a tunnel.",
+      Icon: Cable,
+      group: "Recommended",
+      href:
+        routes.mcp.add.tunneled.href() +
+        "?attachToGateway=" +
+        encodeURIComponent(gatewayId),
+      allowed: canCreate,
+    },
     {
       label: "From your API",
       description: "Upload an OpenAPI document to generate tools.",
@@ -904,328 +813,129 @@ export function AddServersSheet({
         encodeURIComponent(gatewayId),
       allowed: canCreate,
     },
-    ...(telemetry.isFeatureEnabled("gram-functions")
-      ? [
-          {
-            label: "Write custom code",
-            description: "Create tools with TypeScript functions.",
-            Icon: Code,
-            group: "Advanced",
-            href:
-              routes.mcp.add.function.href() +
-              "?attachToGateway=" +
-              encodeURIComponent(gatewayId),
-            allowed: canWriteProject && canCreate,
-          },
-        ]
-      : []),
+    {
+      label: "Write custom code",
+      description: "Create tools with TypeScript functions.",
+      Icon: Code,
+      group: "Advanced",
+      href:
+        routes.mcp.add.function.href() +
+        "?attachToGateway=" +
+        encodeURIComponent(gatewayId),
+      allowed: canWriteProject && canCreate,
+    },
   ];
+  const creationAllowed = creationOptions.some((option) => option.allowed);
   return (
-    <Sheet
+    <ServerPickerSheet
       open={open}
-      onOpenChange={(value) => {
-        if (!busy) onOpenChange(value);
-      }}
-    >
-      <SheetContent
-        className="flex w-full flex-col gap-0 p-0 sm:max-w-xl"
-        onPointerDownOutside={(event) => {
-          // Dialog defers dismissal until click, after the menu has closed.
-          // Consume only the pointer interaction that dismissed the menu.
-          if (
-            event.detail.originalEvent === creationMenuOutsideEventRef.current
-          ) {
-            event.preventDefault();
-          }
-        }}
-        onEscapeKeyDown={(event) => {
-          if (
-            search &&
-            document.activeElement ===
-              searchContainerRef.current?.querySelector("input")
-          ) {
-            event.preventDefault();
-            setSearch("");
-          }
-        }}
-      >
-        <SheetHeader className="px-6 pt-6 pb-4">
-          <SheetTitle>Add servers to gateway</SheetTitle>
-          <SheetDescription>
-            Choose existing servers to add, or get started with a new one.
-          </SheetDescription>
-        </SheetHeader>
-        <div className="flex-1 space-y-4 overflow-y-auto px-6 pb-6">
-          <section aria-labelledby="add-new-server" className="space-y-3">
-            <Text as="h3" id="add-new-server" variant="subheading">
-              Create a new server
-            </Text>
-            <DropdownMenu>
-              <DropdownMenuTrigger
-                asChild
-                disabled={
-                  busy ||
-                  !canWrite ||
-                  !creationOptions.some((option) => option.allowed)
-                }
-              >
-                <Button
-                  variant="primary"
-                  disabled={
-                    busy ||
-                    !canWrite ||
-                    !creationOptions.some((option) => option.allowed)
-                  }
-                >
-                  <Button.LeftIcon>
-                    <Plus className="size-4" />
-                  </Button.LeftIcon>
-                  <Button.Text>Add new</Button.Text>
-                  <Button.RightIcon>
-                    <ChevronDown className="size-4" />
-                  </Button.RightIcon>
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent
-                onPointerDownOutside={(event) => {
-                  creationMenuOutsideEventRef.current =
-                    event.detail.originalEvent;
-                }}
-                align="start"
-                className="w-80 max-w-[calc(100vw-2rem)]"
-              >
-                {["Recommended", "Advanced"].map((group, index) => (
-                  <Fragment key={group}>
-                    {index > 0 && <DropdownMenuSeparator />}
-                    <DropdownMenuGroup aria-label={group}>
-                      <DropdownMenuLabel className="text-muted-foreground text-xs">
-                        {group}
-                      </DropdownMenuLabel>
-                      {creationOptions
-                        .filter((option) => option.group === group)
-                        .map((option) => (
-                          <DropdownMenuItem
-                            key={option.href}
-                            className="items-start"
-                            textValue={option.label}
-                            disabled={busy || !canWrite || !option.allowed}
-                            onSelect={() => {
-                              if (!busy && canWrite && option.allowed)
-                                void navigate(option.href);
-                            }}
-                          >
-                            <option.Icon className="mt-0.5" />
-                            <span className="min-w-0">
-                              <span className="block">{option.label}</span>
-                              <span className="text-muted-foreground mt-0.5 block text-xs leading-relaxed">
-                                {option.description}
-                              </span>
-                            </span>
-                          </DropdownMenuItem>
-                        ))}
-                    </DropdownMenuGroup>
-                  </Fragment>
-                ))}
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </section>
-          <section
-            aria-labelledby="add-existing-server"
-            className="space-y-4 border-t pt-4"
-          >
-            <div className="flex items-center justify-between gap-3">
-              <Text as="h3" id="add-existing-server" variant="subheading">
-                Add existing servers
+      onOpenChange={onOpenChange}
+      title="Add servers to gateway"
+      description="Choose existing servers to add, or get started with a new one."
+      options={options}
+      isLoading={isLoading}
+      loadFailed={loadFailed}
+      onRetryLoad={onRetryLoad}
+      partiallyLoading={toolsetsLoading}
+      hideEmptyState={
+        (toolsetsLoading || toolsetsFailed) &&
+        (servers.length > 0 || toolsets.length > 0)
+      }
+      emptyMessage={
+        servers.length === 0 && toolsets.length === 0
+          ? "No existing servers yet. Create a new server to get started."
+          : "All existing servers have already been added."
+      }
+      notices={
+        <>
+          {toolsetsLoading && <Text muted>Loading hosted servers…</Text>}
+          {toolsetsFailed && (
+            <div role="alert" className="space-y-2">
+              <Text muted>
+                Couldn't load hosted servers. Existing servers are still
+                available.
               </Text>
-              {canSelectAll && (
-                <Button
-                  variant="tertiary"
-                  size="sm"
-                  disabled={busy}
-                  onClick={toggleSelectAll}
-                >
-                  <Button.Text>
-                    {allSelected ? "Clear selection" : "Select all"}
-                  </Button.Text>
-                </Button>
-              )}
-            </div>
-            <label ref={searchContainerRef} className="block">
-              <span className="sr-only">Search existing servers</span>
-              <SearchBar
-                value={search}
-                onChange={setSearch}
-                placeholder="Search by name or slug"
-                disabled={busy}
-              />
-            </label>
-            {toolsetsLoading && <Text muted>Loading hosted servers…</Text>}
-            {toolsetsFailed && (
-              <div role="alert" className="space-y-2">
-                <Text muted>
-                  Couldn't load hosted servers. Existing servers are still
-                  available.
-                </Text>
-                <Button
-                  variant="secondary"
-                  onClick={onRetryLoad}
-                  disabled={busy}
-                >
-                  <Button.Text>Retry loading hosted servers</Button.Text>
-                </Button>
-              </div>
-            )}
-            {isLoading ? (
-              <Text muted>Loading servers…</Text>
-            ) : loadFailed ? (
-              <div role="alert" className="space-y-2">
-                <Text>
-                  Couldn't load all servers. Retry to refresh the list.
-                </Text>
-                <Button
-                  variant="secondary"
-                  onClick={onRetryLoad}
-                  disabled={busy}
-                >
-                  <Button.Text>Retry loading</Button.Text>
-                </Button>
-              </div>
-            ) : candidates.length === 0 &&
-              (toolsetsLoading || toolsetsFailed) &&
-              (servers.length > 0 ||
-                toolsets.length > 0) ? null : candidates.length === 0 ? (
-              <div className="bg-muted/20 flex min-h-24 items-center justify-center border border-dashed px-6 py-8 text-center">
-                <Text muted>
-                  {servers.length === 0 && toolsets.length === 0
-                    ? "No existing servers yet. Create a new server to get started."
-                    : "All existing servers have already been added."}
-                </Text>
-              </div>
-            ) : (
-              <ul aria-label="Existing servers" className="space-y-2">
-                {visibleOptions.length === 0 ? (
-                  <li className="p-3">
-                    <Text muted>
-                      No matching servers. Try another search or add a new
-                      server.
-                    </Text>
-                  </li>
-                ) : (
-                  visibleOptions.map((option) => (
-                    <li key={option.value}>
-                      {/* Native label activation toggles the checkbox once for
-                          the whole row, without a second bubbling click handler. */}
-                      <label
-                        className={`border-border/60 flex items-center gap-3 border px-3 py-2.5 ${busy || option.disabled ? "cursor-not-allowed" : "hover:border-border hover:bg-muted/40 cursor-pointer"}`}
-                      >
-                        <SourceMcpIcon
-                          mcpServerId={option.mcpServerId}
-                          className="size-6 shrink-0 object-contain"
-                        />
-                        <span className="flex min-w-0 flex-1 flex-col">
-                          <Text
-                            as="span"
-                            className="truncate text-sm font-medium"
-                          >
-                            {option.label}
-                          </Text>
-                          <span className="flex items-center gap-2">
-                            {option.slug && (
-                              <Text
-                                as="span"
-                                muted
-                                className="truncate font-mono text-xs"
-                              >
-                                {option.slug}
-                              </Text>
-                            )}
-                            <Text as="span" muted className="text-xs">
-                              {option.classification}
-                            </Text>
-                          </span>
-                          <span
-                            id={`${option.value}-description`}
-                            className={
-                              option.disabled
-                                ? "text-muted-foreground text-xs"
-                                : "sr-only"
-                            }
-                          >
-                            {option.description}
-                          </span>
-                          {results.find((result) => result.key === option.value)
-                            ?.error && (
-                            <span
-                              role="alert"
-                              className="text-destructive text-xs"
-                            >
-                              {`${option.label}: ${results.find((result) => result.key === option.value)?.error}`}
-                            </span>
-                          )}
-                        </span>
-                        {option.badge && (
-                          <Badge variant="warning">
-                            <Badge.Text>{option.badge}</Badge.Text>
-                          </Badge>
-                        )}
-                        <Checkbox
-                          aria-label={option.label}
-                          aria-describedby={`${option.value}-description`}
-                          checked={selectedValues.includes(option.value)}
-                          disabled={busy || option.disabled}
-                          onCheckedChange={(checked) => {
-                            if (busy || option.disabled) return;
-                            setSelected((previous) =>
-                              checked
-                                ? [
-                                    ...previous.filter(
-                                      (value) => value !== option.value,
-                                    ),
-                                    option.value,
-                                  ]
-                                : previous.filter(
-                                    (value) => value !== option.value,
-                                  ),
-                            );
-                          }}
-                        />
-                      </label>
-                    </li>
-                  ))
-                )}
-              </ul>
-            )}
-            {!canWrite && (
-              <Text muted small>
-                You need MCP write permission on this gateway to add servers.
-              </Text>
-            )}
-            {(busy || candidates.length > 0) && (
               <Button
-                disabled={
-                  busy ||
-                  !canWrite ||
-                  isLoading ||
-                  loadFailed ||
-                  selectedCandidates.length === 0
-                }
-                aria-busy={busy}
-                onClick={() => void submit()}
+                variant="secondary"
+                onClick={onRetryLoad}
+                disabled={adding}
               >
-                {busy && (
-                  <Button.LeftIcon>
-                    <Loader2 className="size-4 animate-spin" aria-hidden />
-                  </Button.LeftIcon>
-                )}
-                <Button.Text>Add selected servers</Button.Text>
+                <Button.Text>Retry loading hosted servers</Button.Text>
               </Button>
-            )}
-            <div aria-live="polite" className="space-y-2">
-              {busy && <Text muted>Adding selected servers…</Text>}
             </div>
-          </section>
-        </div>
-      </SheetContent>
-    </Sheet>
+          )}
+        </>
+      }
+      canWrite={canWrite}
+      permissionMessage="You need MCP write permission on this gateway to add servers."
+      adding={adding}
+      onSubmit={submit}
+      renderCreateSection={({ busy, onMenuPointerDownOutside }) => (
+        <section aria-labelledby="add-new-server" className="space-y-3">
+          <Text as="h3" id="add-new-server" variant="subheading">
+            Create a new server
+          </Text>
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              asChild
+              disabled={busy || !canWrite || !creationAllowed}
+            >
+              <Button
+                variant="primary"
+                disabled={busy || !canWrite || !creationAllowed}
+              >
+                <Button.LeftIcon>
+                  <Plus className="size-4" />
+                </Button.LeftIcon>
+                <Button.Text>Add new</Button.Text>
+                <Button.RightIcon>
+                  <ChevronDown className="size-4" />
+                </Button.RightIcon>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+              onPointerDownOutside={(event) =>
+                onMenuPointerDownOutside(event.detail.originalEvent)
+              }
+              align="start"
+              className="w-80 max-w-[calc(100vw-2rem)]"
+            >
+              {["Recommended", "Advanced"].map((group, index) => (
+                <Fragment key={group}>
+                  {index > 0 && <DropdownMenuSeparator />}
+                  <DropdownMenuGroup aria-label={group}>
+                    <DropdownMenuLabel className="text-muted-foreground text-xs">
+                      {group}
+                    </DropdownMenuLabel>
+                    {creationOptions
+                      .filter((option) => option.group === group)
+                      .map((option) => (
+                        <DropdownMenuItem
+                          key={option.href}
+                          className="items-start"
+                          textValue={option.label}
+                          disabled={busy || !canWrite || !option.allowed}
+                          onSelect={() => {
+                            if (!busy && canWrite && option.allowed)
+                              void navigate(option.href);
+                          }}
+                        >
+                          <option.Icon className="mt-0.5" />
+                          <span className="min-w-0">
+                            <span className="block">{option.label}</span>
+                            <span className="text-muted-foreground mt-0.5 block text-xs leading-relaxed">
+                              {option.description}
+                            </span>
+                          </span>
+                        </DropdownMenuItem>
+                      ))}
+                  </DropdownMenuGroup>
+                </Fragment>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </section>
+      )}
+    />
   );
 }

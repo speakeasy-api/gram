@@ -268,6 +268,38 @@ func TestGetMemberMCPAccessEvaluatesLiveRoleGrantsAcrossInventory(t *testing.T) 
 	require.Equal(t, "all", actual.ToolAccess)
 	require.True(t, actual.CanView)
 	require.False(t, actual.CanManage)
+	require.NotEmpty(t, actual.Rules)
+	for _, rule := range actual.Rules {
+		require.Equal(t, "role", rule.SourceKind)
+		require.Equal(t, "Table readers", rule.SourceName)
+	}
+
+	blockJSON, err := authz.NewSelector(authz.ScopeMCPBlockedConnect, target.McpServerID.String()).MarshalJSON()
+	require.NoError(t, err)
+	_, err = accessrepo.New(conn).UpsertPrincipalGrant(ctx, accessrepo.UpsertPrincipalGrantParams{
+		OrganizationID: principal.OrganizationID, PrincipalUrn: role, Scope: string(authz.ScopeMCPBlockedConnect), Selectors: blockJSON,
+	})
+	require.NoError(t, err)
+	blocked, err := service.GetMemberMCPAccess(ctx, principal, GetMemberMCPAccessInput{MemberReference: reference})
+	require.NoError(t, err)
+	found := false
+	for _, server := range blocked.Servers {
+		if server.MCPID != target.McpServerID.String() {
+			continue
+		}
+		found = true
+		require.False(t, server.CanConnect)
+		require.Equal(t, "none", server.ConnectionAccess)
+		var effects []string
+		for _, rule := range server.Rules {
+			if rule.AccessLevel == "use" {
+				effects = append(effects, rule.Effect)
+			}
+		}
+		require.Contains(t, effects, "blocks")
+		require.Contains(t, effects, "blocked")
+	}
+	require.True(t, found, "blocked servers remain in the member access inventory")
 
 	_, err = service.GetMemberMCPAccess(ctx, principal, GetMemberMCPAccessInput{MemberReference: "not-a-reference"})
 	require.ErrorIs(t, err, ErrAccessReferenceNotFound)
@@ -339,11 +371,11 @@ func TestListRolesNamesDirectorySourcesAndWithholdsSmallCounts(t *testing.T) {
 		require.NoError(t, err)
 	}
 	mappings := accessrepo.New(conn)
-	_, err = mappings.UpsertDirectoryGroupRoleMapping(ctx, accessrepo.UpsertDirectoryGroupRoleMappingParams{
+	_, err = mappings.InsertDirectoryGroupRoleMapping(ctx, accessrepo.InsertDirectoryGroupRoleMappingParams{
 		OrganizationID: org, DirectoryGroupID: uuid.NullUUID{UUID: groupID, Valid: true}, RoleUrn: analysts.String(),
 	})
 	require.NoError(t, err)
-	_, err = mappings.UpsertDirectoryAttributeRoleMapping(ctx, accessrepo.UpsertDirectoryAttributeRoleMappingParams{
+	_, err = mappings.InsertDirectoryAttributeRoleMapping(ctx, accessrepo.InsertDirectoryAttributeRoleMappingParams{
 		OrganizationID: org, AttributeKey: conv.ToPGText("department_name"), AttributeValue: conv.ToPGText("Research"), RoleUrn: analysts.String(),
 	})
 	require.NoError(t, err)

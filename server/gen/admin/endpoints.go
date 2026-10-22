@@ -17,94 +17,101 @@ import (
 
 // Endpoints wraps the "admin" service endpoints.
 type Endpoints struct {
-	Login                                 goa.Endpoint
-	Callback                              goa.Endpoint
-	Logout                                goa.Endpoint
-	GetSession                            goa.Endpoint
-	GetOrganizationFeatures               goa.Endpoint
-	SetOrganizationFeature                goa.Endpoint
-	GetOrganizationChatAnalysisSettings   goa.Endpoint
-	SetOrganizationChatAnalysisSettings   goa.Endpoint
-	TriggerOrganizationChatAnalysis       goa.Endpoint
-	OpenOrganizationInDashboard           goa.Endpoint
-	GetProject                            goa.Endpoint
-	UpdateOrganization                    goa.Endpoint
-	BulkUpdateAccountType                 goa.Endpoint
-	DisableOrganization                   goa.Endpoint
-	EnableOrganization                    goa.Endpoint
-	GetOrganization                       goa.Endpoint
-	ListOrganizationMembers               goa.Endpoint
-	ListOrganizationProjects              goa.Endpoint
-	ListProjectMcpServers                 goa.Endpoint
-	ListOrganizationActivity              goa.Endpoint
-	ListUsers                             goa.Endpoint
-	ListUserOrganizations                 goa.Endpoint
-	ListOrganizations                     goa.Endpoint
-	ExtendTrial                           goa.Endpoint
-	CreateOrganization                    goa.Endpoint
-	RearmTrial                            goa.Endpoint
-	GetOrganizationStats                  goa.Endpoint
-	RepairInferenceKey                    goa.Endpoint
-	GetInferenceKeys                      goa.Endpoint
-	SetInferenceKeyMonthlyLimit           goa.Endpoint
-	GetInferenceSpendHistory              goa.Endpoint
-	GetPaygBillingSummary                 goa.Endpoint
-	GetStripeCustomer                     goa.Endpoint
-	SetStripeCustomer                     goa.Endpoint
-	GetStripeSubscription                 goa.Endpoint
-	CancelStripeSubscription              goa.Endpoint
-	ResumeStripeSubscription              goa.Endpoint
-	MarkEnterpriseTrialConverted          goa.Endpoint
-	CreateGlobalIssuer                    goa.Endpoint
-	GetGlobalIssuerDuplicatePreflight     goa.Endpoint
-	ListGlobalIssuers                     goa.Endpoint
-	GetGlobalIssuer                       goa.Endpoint
-	UpdateGlobalIssuer                    goa.Endpoint
-	DeleteGlobalIssuer                    goa.Endpoint
-	FetchGlobalIssuerMetadata             goa.Endpoint
-	RefreshGlobalIssuerMetadata           goa.Endpoint
-	ListGlobalIssuerConvergenceCandidates goa.Endpoint
-	GetGlobalIssuerMigratePreflight       goa.Endpoint
-	MigrateToGlobalIssuer                 goa.Endpoint
-	UploadPlatformImage                   goa.Endpoint
-	ServeImage                            goa.Endpoint
-	StartTrial                            goa.Endpoint
-	ChangeTrialEndDate                    goa.Endpoint
-	GetMeterUsage                         goa.Endpoint
-	GetSpendBreakdown                     goa.Endpoint
-	GetSupportMatrix                      goa.Endpoint
-	UpdateSupportMatrix                   goa.Endpoint
-	GetSupportCoverage                    goa.Endpoint
-	DescribeMcpServerHealth               goa.Endpoint
-	GetMcpServerToolCalls                 goa.Endpoint
-	GetRegistryOktaCandidates             goa.Endpoint
-	ListRegistryOktaUnmapped              goa.Endpoint
-	ListRegistryEntries                   goa.Endpoint
-	GetRegistryEntry                      goa.Endpoint
-	CreateRegistryEntry                   goa.Endpoint
-	SaveRegistryEntry                     goa.Endpoint
-	SetRegistryEntryPublished             goa.Endpoint
-	ListOnboardingSteps                   goa.Endpoint
-	GetOnboardingStackOptions             goa.Endpoint
-	GetOrganizationOnboardingStack        goa.Endpoint
-	SetOrganizationOnboardingStack        goa.Endpoint
-	ListOnboardingUseCases                goa.Endpoint
-	CreateOnboardingUseCase               goa.Endpoint
-	UpdateOnboardingUseCase               goa.Endpoint
-	DeleteOnboardingUseCase               goa.Endpoint
-	ListOnboardingPlaybooks               goa.Endpoint
-	CreateOnboardingPlaybook              goa.Endpoint
-	UpdateOnboardingPlaybook              goa.Endpoint
-	DeleteOnboardingPlaybook              goa.Endpoint
-	CloneOnboardingPlaybook               goa.Endpoint
-	GetOrganizationOnboardingPlaybook     goa.Endpoint
-	AssignOrganizationOnboardingPlaybook  goa.Endpoint
-	ListSignupOffers                      goa.Endpoint
-	CreateSignupOffer                     goa.Endpoint
-	UpdateSignupOffer                     goa.Endpoint
-	GetStripeSubscriptionCandidate        goa.Endpoint
-	SetStripeSubscription                 goa.Endpoint
-	ListCustomerUsage                     goa.Endpoint
+	Login                                   goa.Endpoint
+	Callback                                goa.Endpoint
+	Logout                                  goa.Endpoint
+	GetSession                              goa.Endpoint
+	GetOrganizationFeatures                 goa.Endpoint
+	SetOrganizationFeature                  goa.Endpoint
+	GetOrganizationChatAnalysisSettings     goa.Endpoint
+	SetOrganizationChatAnalysisSettings     goa.Endpoint
+	TriggerOrganizationChatAnalysis         goa.Endpoint
+	OpenOrganizationInDashboard             goa.Endpoint
+	GetProject                              goa.Endpoint
+	UpdateOrganization                      goa.Endpoint
+	BulkUpdateAccountType                   goa.Endpoint
+	DisableOrganization                     goa.Endpoint
+	EnableOrganization                      goa.Endpoint
+	GetOrganization                         goa.Endpoint
+	ListOrganizationMembers                 goa.Endpoint
+	ListOrganizationProjects                goa.Endpoint
+	ListProjectMcpServers                   goa.Endpoint
+	ListOrganizationActivity                goa.Endpoint
+	ListUsers                               goa.Endpoint
+	ListUserOrganizations                   goa.Endpoint
+	ListOrganizations                       goa.Endpoint
+	ExtendTrial                             goa.Endpoint
+	CreateOrganization                      goa.Endpoint
+	RearmTrial                              goa.Endpoint
+	GetOrganizationStats                    goa.Endpoint
+	RepairInferenceKey                      goa.Endpoint
+	GetInferenceKeys                        goa.Endpoint
+	SetInferenceKeyMonthlyLimit             goa.Endpoint
+	GetInferenceSpendHistory                goa.Endpoint
+	GetPaygBillingSummary                   goa.Endpoint
+	GetStripeCustomer                       goa.Endpoint
+	SetStripeCustomer                       goa.Endpoint
+	GetStripeSubscription                   goa.Endpoint
+	CancelStripeSubscription                goa.Endpoint
+	ResumeStripeSubscription                goa.Endpoint
+	MarkEnterpriseTrialConverted            goa.Endpoint
+	CreateGlobalIssuer                      goa.Endpoint
+	GetGlobalIssuerDuplicatePreflight       goa.Endpoint
+	ListGlobalIssuers                       goa.Endpoint
+	GetGlobalIssuer                         goa.Endpoint
+	UpdateGlobalIssuer                      goa.Endpoint
+	DeleteGlobalIssuer                      goa.Endpoint
+	FetchGlobalIssuerMetadata               goa.Endpoint
+	RefreshGlobalIssuerMetadata             goa.Endpoint
+	ListGlobalIssuerConvergenceCandidates   goa.Endpoint
+	GetGlobalIssuerMigratePreflight         goa.Endpoint
+	MigrateToGlobalIssuer                   goa.Endpoint
+	UploadPlatformImage                     goa.Endpoint
+	ServeImage                              goa.Endpoint
+	StartTrial                              goa.Endpoint
+	ChangeTrialEndDate                      goa.Endpoint
+	GetMeterUsage                           goa.Endpoint
+	GetSpendBreakdown                       goa.Endpoint
+	GetSupportMatrix                        goa.Endpoint
+	UpdateSupportMatrix                     goa.Endpoint
+	GetSupportCoverage                      goa.Endpoint
+	DescribeMcpServerHealth                 goa.Endpoint
+	GetMcpServerToolCalls                   goa.Endpoint
+	GetHookClients                          goa.Endpoint
+	ListExternalMcpMigrationCandidates      goa.Endpoint
+	PreviewExternalMcpMigration             goa.Endpoint
+	MigrateExternalMcpServers               goa.Endpoint
+	GetRegistryOktaCandidates               goa.Endpoint
+	ListRegistryOktaUnmapped                goa.Endpoint
+	ListRegistryEntries                     goa.Endpoint
+	GetRegistryEntry                        goa.Endpoint
+	CreateRegistryEntry                     goa.Endpoint
+	SaveRegistryEntry                       goa.Endpoint
+	SetRegistryEntryPublished               goa.Endpoint
+	ListOnboardingSteps                     goa.Endpoint
+	GetOnboardingStackOptions               goa.Endpoint
+	GetOrganizationOnboardingStack          goa.Endpoint
+	SetOrganizationOnboardingStack          goa.Endpoint
+	ListOnboardingUseCases                  goa.Endpoint
+	CreateOnboardingUseCase                 goa.Endpoint
+	UpdateOnboardingUseCase                 goa.Endpoint
+	DeleteOnboardingUseCase                 goa.Endpoint
+	ListOnboardingPlaybooks                 goa.Endpoint
+	CreateOnboardingPlaybook                goa.Endpoint
+	UpdateOnboardingPlaybook                goa.Endpoint
+	DeleteOnboardingPlaybook                goa.Endpoint
+	CloneOnboardingPlaybook                 goa.Endpoint
+	GetOrganizationOnboardingPlaybook       goa.Endpoint
+	AssignOrganizationOnboardingPlaybook    goa.Endpoint
+	ListSignupOffers                        goa.Endpoint
+	CreateSignupOffer                       goa.Endpoint
+	UpdateSignupOffer                       goa.Endpoint
+	GetStripeSubscriptionCandidate          goa.Endpoint
+	SetStripeSubscription                   goa.Endpoint
+	ListCustomerUsage                       goa.Endpoint
+	ListUpstreamOAuthMigrationOrganizations goa.Endpoint
+	GetUpstreamOAuthMigrationStatus         goa.Endpoint
+	RunUpstreamOAuthMigration               goa.Endpoint
 }
 
 // UploadPlatformImageRequestData holds both the payload and the HTTP request
@@ -130,94 +137,101 @@ func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
 	a := s.(Auther)
 	return &Endpoints{
-		Login:                                 NewLoginEndpoint(s),
-		Callback:                              NewCallbackEndpoint(s),
-		Logout:                                NewLogoutEndpoint(s),
-		GetSession:                            NewGetSessionEndpoint(s, a.APIKeyAuth),
-		GetOrganizationFeatures:               NewGetOrganizationFeaturesEndpoint(s, a.APIKeyAuth),
-		SetOrganizationFeature:                NewSetOrganizationFeatureEndpoint(s, a.APIKeyAuth),
-		GetOrganizationChatAnalysisSettings:   NewGetOrganizationChatAnalysisSettingsEndpoint(s, a.APIKeyAuth),
-		SetOrganizationChatAnalysisSettings:   NewSetOrganizationChatAnalysisSettingsEndpoint(s, a.APIKeyAuth),
-		TriggerOrganizationChatAnalysis:       NewTriggerOrganizationChatAnalysisEndpoint(s, a.APIKeyAuth),
-		OpenOrganizationInDashboard:           NewOpenOrganizationInDashboardEndpoint(s, a.APIKeyAuth),
-		GetProject:                            NewGetProjectEndpoint(s, a.APIKeyAuth),
-		UpdateOrganization:                    NewUpdateOrganizationEndpoint(s, a.APIKeyAuth),
-		BulkUpdateAccountType:                 NewBulkUpdateAccountTypeEndpoint(s, a.APIKeyAuth),
-		DisableOrganization:                   NewDisableOrganizationEndpoint(s, a.APIKeyAuth),
-		EnableOrganization:                    NewEnableOrganizationEndpoint(s, a.APIKeyAuth),
-		GetOrganization:                       NewGetOrganizationEndpoint(s, a.APIKeyAuth),
-		ListOrganizationMembers:               NewListOrganizationMembersEndpoint(s, a.APIKeyAuth),
-		ListOrganizationProjects:              NewListOrganizationProjectsEndpoint(s, a.APIKeyAuth),
-		ListProjectMcpServers:                 NewListProjectMcpServersEndpoint(s, a.APIKeyAuth),
-		ListOrganizationActivity:              NewListOrganizationActivityEndpoint(s, a.APIKeyAuth),
-		ListUsers:                             NewListUsersEndpoint(s, a.APIKeyAuth),
-		ListUserOrganizations:                 NewListUserOrganizationsEndpoint(s, a.APIKeyAuth),
-		ListOrganizations:                     NewListOrganizationsEndpoint(s, a.APIKeyAuth),
-		ExtendTrial:                           NewExtendTrialEndpoint(s, a.APIKeyAuth),
-		CreateOrganization:                    NewCreateOrganizationEndpoint(s, a.APIKeyAuth),
-		RearmTrial:                            NewRearmTrialEndpoint(s, a.APIKeyAuth),
-		GetOrganizationStats:                  NewGetOrganizationStatsEndpoint(s, a.APIKeyAuth),
-		RepairInferenceKey:                    NewRepairInferenceKeyEndpoint(s, a.APIKeyAuth),
-		GetInferenceKeys:                      NewGetInferenceKeysEndpoint(s, a.APIKeyAuth),
-		SetInferenceKeyMonthlyLimit:           NewSetInferenceKeyMonthlyLimitEndpoint(s, a.APIKeyAuth),
-		GetInferenceSpendHistory:              NewGetInferenceSpendHistoryEndpoint(s, a.APIKeyAuth),
-		GetPaygBillingSummary:                 NewGetPaygBillingSummaryEndpoint(s, a.APIKeyAuth),
-		GetStripeCustomer:                     NewGetStripeCustomerEndpoint(s, a.APIKeyAuth),
-		SetStripeCustomer:                     NewSetStripeCustomerEndpoint(s, a.APIKeyAuth),
-		GetStripeSubscription:                 NewGetStripeSubscriptionEndpoint(s, a.APIKeyAuth),
-		CancelStripeSubscription:              NewCancelStripeSubscriptionEndpoint(s, a.APIKeyAuth),
-		ResumeStripeSubscription:              NewResumeStripeSubscriptionEndpoint(s, a.APIKeyAuth),
-		MarkEnterpriseTrialConverted:          NewMarkEnterpriseTrialConvertedEndpoint(s, a.APIKeyAuth),
-		CreateGlobalIssuer:                    NewCreateGlobalIssuerEndpoint(s, a.APIKeyAuth),
-		GetGlobalIssuerDuplicatePreflight:     NewGetGlobalIssuerDuplicatePreflightEndpoint(s, a.APIKeyAuth),
-		ListGlobalIssuers:                     NewListGlobalIssuersEndpoint(s, a.APIKeyAuth),
-		GetGlobalIssuer:                       NewGetGlobalIssuerEndpoint(s, a.APIKeyAuth),
-		UpdateGlobalIssuer:                    NewUpdateGlobalIssuerEndpoint(s, a.APIKeyAuth),
-		DeleteGlobalIssuer:                    NewDeleteGlobalIssuerEndpoint(s, a.APIKeyAuth),
-		FetchGlobalIssuerMetadata:             NewFetchGlobalIssuerMetadataEndpoint(s, a.APIKeyAuth),
-		RefreshGlobalIssuerMetadata:           NewRefreshGlobalIssuerMetadataEndpoint(s, a.APIKeyAuth),
-		ListGlobalIssuerConvergenceCandidates: NewListGlobalIssuerConvergenceCandidatesEndpoint(s, a.APIKeyAuth),
-		GetGlobalIssuerMigratePreflight:       NewGetGlobalIssuerMigratePreflightEndpoint(s, a.APIKeyAuth),
-		MigrateToGlobalIssuer:                 NewMigrateToGlobalIssuerEndpoint(s, a.APIKeyAuth),
-		UploadPlatformImage:                   NewUploadPlatformImageEndpoint(s, a.APIKeyAuth),
-		ServeImage:                            NewServeImageEndpoint(s),
-		StartTrial:                            NewStartTrialEndpoint(s, a.APIKeyAuth),
-		ChangeTrialEndDate:                    NewChangeTrialEndDateEndpoint(s, a.APIKeyAuth),
-		GetMeterUsage:                         NewGetMeterUsageEndpoint(s, a.APIKeyAuth),
-		GetSpendBreakdown:                     NewGetSpendBreakdownEndpoint(s, a.APIKeyAuth),
-		GetSupportMatrix:                      NewGetSupportMatrixEndpoint(s, a.APIKeyAuth),
-		UpdateSupportMatrix:                   NewUpdateSupportMatrixEndpoint(s, a.APIKeyAuth),
-		GetSupportCoverage:                    NewGetSupportCoverageEndpoint(s, a.APIKeyAuth),
-		DescribeMcpServerHealth:               NewDescribeMcpServerHealthEndpoint(s, a.APIKeyAuth),
-		GetMcpServerToolCalls:                 NewGetMcpServerToolCallsEndpoint(s, a.APIKeyAuth),
-		GetRegistryOktaCandidates:             NewGetRegistryOktaCandidatesEndpoint(s, a.APIKeyAuth),
-		ListRegistryOktaUnmapped:              NewListRegistryOktaUnmappedEndpoint(s, a.APIKeyAuth),
-		ListRegistryEntries:                   NewListRegistryEntriesEndpoint(s, a.APIKeyAuth),
-		GetRegistryEntry:                      NewGetRegistryEntryEndpoint(s, a.APIKeyAuth),
-		CreateRegistryEntry:                   NewCreateRegistryEntryEndpoint(s, a.APIKeyAuth),
-		SaveRegistryEntry:                     NewSaveRegistryEntryEndpoint(s, a.APIKeyAuth),
-		SetRegistryEntryPublished:             NewSetRegistryEntryPublishedEndpoint(s, a.APIKeyAuth),
-		ListOnboardingSteps:                   NewListOnboardingStepsEndpoint(s, a.APIKeyAuth),
-		GetOnboardingStackOptions:             NewGetOnboardingStackOptionsEndpoint(s, a.APIKeyAuth),
-		GetOrganizationOnboardingStack:        NewGetOrganizationOnboardingStackEndpoint(s, a.APIKeyAuth),
-		SetOrganizationOnboardingStack:        NewSetOrganizationOnboardingStackEndpoint(s, a.APIKeyAuth),
-		ListOnboardingUseCases:                NewListOnboardingUseCasesEndpoint(s, a.APIKeyAuth),
-		CreateOnboardingUseCase:               NewCreateOnboardingUseCaseEndpoint(s, a.APIKeyAuth),
-		UpdateOnboardingUseCase:               NewUpdateOnboardingUseCaseEndpoint(s, a.APIKeyAuth),
-		DeleteOnboardingUseCase:               NewDeleteOnboardingUseCaseEndpoint(s, a.APIKeyAuth),
-		ListOnboardingPlaybooks:               NewListOnboardingPlaybooksEndpoint(s, a.APIKeyAuth),
-		CreateOnboardingPlaybook:              NewCreateOnboardingPlaybookEndpoint(s, a.APIKeyAuth),
-		UpdateOnboardingPlaybook:              NewUpdateOnboardingPlaybookEndpoint(s, a.APIKeyAuth),
-		DeleteOnboardingPlaybook:              NewDeleteOnboardingPlaybookEndpoint(s, a.APIKeyAuth),
-		CloneOnboardingPlaybook:               NewCloneOnboardingPlaybookEndpoint(s, a.APIKeyAuth),
-		GetOrganizationOnboardingPlaybook:     NewGetOrganizationOnboardingPlaybookEndpoint(s, a.APIKeyAuth),
-		AssignOrganizationOnboardingPlaybook:  NewAssignOrganizationOnboardingPlaybookEndpoint(s, a.APIKeyAuth),
-		ListSignupOffers:                      NewListSignupOffersEndpoint(s, a.APIKeyAuth),
-		CreateSignupOffer:                     NewCreateSignupOfferEndpoint(s, a.APIKeyAuth),
-		UpdateSignupOffer:                     NewUpdateSignupOfferEndpoint(s, a.APIKeyAuth),
-		GetStripeSubscriptionCandidate:        NewGetStripeSubscriptionCandidateEndpoint(s, a.APIKeyAuth),
-		SetStripeSubscription:                 NewSetStripeSubscriptionEndpoint(s, a.APIKeyAuth),
-		ListCustomerUsage:                     NewListCustomerUsageEndpoint(s, a.APIKeyAuth),
+		Login:                                   NewLoginEndpoint(s),
+		Callback:                                NewCallbackEndpoint(s),
+		Logout:                                  NewLogoutEndpoint(s),
+		GetSession:                              NewGetSessionEndpoint(s, a.APIKeyAuth),
+		GetOrganizationFeatures:                 NewGetOrganizationFeaturesEndpoint(s, a.APIKeyAuth),
+		SetOrganizationFeature:                  NewSetOrganizationFeatureEndpoint(s, a.APIKeyAuth),
+		GetOrganizationChatAnalysisSettings:     NewGetOrganizationChatAnalysisSettingsEndpoint(s, a.APIKeyAuth),
+		SetOrganizationChatAnalysisSettings:     NewSetOrganizationChatAnalysisSettingsEndpoint(s, a.APIKeyAuth),
+		TriggerOrganizationChatAnalysis:         NewTriggerOrganizationChatAnalysisEndpoint(s, a.APIKeyAuth),
+		OpenOrganizationInDashboard:             NewOpenOrganizationInDashboardEndpoint(s, a.APIKeyAuth),
+		GetProject:                              NewGetProjectEndpoint(s, a.APIKeyAuth),
+		UpdateOrganization:                      NewUpdateOrganizationEndpoint(s, a.APIKeyAuth),
+		BulkUpdateAccountType:                   NewBulkUpdateAccountTypeEndpoint(s, a.APIKeyAuth),
+		DisableOrganization:                     NewDisableOrganizationEndpoint(s, a.APIKeyAuth),
+		EnableOrganization:                      NewEnableOrganizationEndpoint(s, a.APIKeyAuth),
+		GetOrganization:                         NewGetOrganizationEndpoint(s, a.APIKeyAuth),
+		ListOrganizationMembers:                 NewListOrganizationMembersEndpoint(s, a.APIKeyAuth),
+		ListOrganizationProjects:                NewListOrganizationProjectsEndpoint(s, a.APIKeyAuth),
+		ListProjectMcpServers:                   NewListProjectMcpServersEndpoint(s, a.APIKeyAuth),
+		ListOrganizationActivity:                NewListOrganizationActivityEndpoint(s, a.APIKeyAuth),
+		ListUsers:                               NewListUsersEndpoint(s, a.APIKeyAuth),
+		ListUserOrganizations:                   NewListUserOrganizationsEndpoint(s, a.APIKeyAuth),
+		ListOrganizations:                       NewListOrganizationsEndpoint(s, a.APIKeyAuth),
+		ExtendTrial:                             NewExtendTrialEndpoint(s, a.APIKeyAuth),
+		CreateOrganization:                      NewCreateOrganizationEndpoint(s, a.APIKeyAuth),
+		RearmTrial:                              NewRearmTrialEndpoint(s, a.APIKeyAuth),
+		GetOrganizationStats:                    NewGetOrganizationStatsEndpoint(s, a.APIKeyAuth),
+		RepairInferenceKey:                      NewRepairInferenceKeyEndpoint(s, a.APIKeyAuth),
+		GetInferenceKeys:                        NewGetInferenceKeysEndpoint(s, a.APIKeyAuth),
+		SetInferenceKeyMonthlyLimit:             NewSetInferenceKeyMonthlyLimitEndpoint(s, a.APIKeyAuth),
+		GetInferenceSpendHistory:                NewGetInferenceSpendHistoryEndpoint(s, a.APIKeyAuth),
+		GetPaygBillingSummary:                   NewGetPaygBillingSummaryEndpoint(s, a.APIKeyAuth),
+		GetStripeCustomer:                       NewGetStripeCustomerEndpoint(s, a.APIKeyAuth),
+		SetStripeCustomer:                       NewSetStripeCustomerEndpoint(s, a.APIKeyAuth),
+		GetStripeSubscription:                   NewGetStripeSubscriptionEndpoint(s, a.APIKeyAuth),
+		CancelStripeSubscription:                NewCancelStripeSubscriptionEndpoint(s, a.APIKeyAuth),
+		ResumeStripeSubscription:                NewResumeStripeSubscriptionEndpoint(s, a.APIKeyAuth),
+		MarkEnterpriseTrialConverted:            NewMarkEnterpriseTrialConvertedEndpoint(s, a.APIKeyAuth),
+		CreateGlobalIssuer:                      NewCreateGlobalIssuerEndpoint(s, a.APIKeyAuth),
+		GetGlobalIssuerDuplicatePreflight:       NewGetGlobalIssuerDuplicatePreflightEndpoint(s, a.APIKeyAuth),
+		ListGlobalIssuers:                       NewListGlobalIssuersEndpoint(s, a.APIKeyAuth),
+		GetGlobalIssuer:                         NewGetGlobalIssuerEndpoint(s, a.APIKeyAuth),
+		UpdateGlobalIssuer:                      NewUpdateGlobalIssuerEndpoint(s, a.APIKeyAuth),
+		DeleteGlobalIssuer:                      NewDeleteGlobalIssuerEndpoint(s, a.APIKeyAuth),
+		FetchGlobalIssuerMetadata:               NewFetchGlobalIssuerMetadataEndpoint(s, a.APIKeyAuth),
+		RefreshGlobalIssuerMetadata:             NewRefreshGlobalIssuerMetadataEndpoint(s, a.APIKeyAuth),
+		ListGlobalIssuerConvergenceCandidates:   NewListGlobalIssuerConvergenceCandidatesEndpoint(s, a.APIKeyAuth),
+		GetGlobalIssuerMigratePreflight:         NewGetGlobalIssuerMigratePreflightEndpoint(s, a.APIKeyAuth),
+		MigrateToGlobalIssuer:                   NewMigrateToGlobalIssuerEndpoint(s, a.APIKeyAuth),
+		UploadPlatformImage:                     NewUploadPlatformImageEndpoint(s, a.APIKeyAuth),
+		ServeImage:                              NewServeImageEndpoint(s),
+		StartTrial:                              NewStartTrialEndpoint(s, a.APIKeyAuth),
+		ChangeTrialEndDate:                      NewChangeTrialEndDateEndpoint(s, a.APIKeyAuth),
+		GetMeterUsage:                           NewGetMeterUsageEndpoint(s, a.APIKeyAuth),
+		GetSpendBreakdown:                       NewGetSpendBreakdownEndpoint(s, a.APIKeyAuth),
+		GetSupportMatrix:                        NewGetSupportMatrixEndpoint(s, a.APIKeyAuth),
+		UpdateSupportMatrix:                     NewUpdateSupportMatrixEndpoint(s, a.APIKeyAuth),
+		GetSupportCoverage:                      NewGetSupportCoverageEndpoint(s, a.APIKeyAuth),
+		DescribeMcpServerHealth:                 NewDescribeMcpServerHealthEndpoint(s, a.APIKeyAuth),
+		GetMcpServerToolCalls:                   NewGetMcpServerToolCallsEndpoint(s, a.APIKeyAuth),
+		GetHookClients:                          NewGetHookClientsEndpoint(s, a.APIKeyAuth),
+		ListExternalMcpMigrationCandidates:      NewListExternalMcpMigrationCandidatesEndpoint(s, a.APIKeyAuth),
+		PreviewExternalMcpMigration:             NewPreviewExternalMcpMigrationEndpoint(s, a.APIKeyAuth),
+		MigrateExternalMcpServers:               NewMigrateExternalMcpServersEndpoint(s, a.APIKeyAuth),
+		GetRegistryOktaCandidates:               NewGetRegistryOktaCandidatesEndpoint(s, a.APIKeyAuth),
+		ListRegistryOktaUnmapped:                NewListRegistryOktaUnmappedEndpoint(s, a.APIKeyAuth),
+		ListRegistryEntries:                     NewListRegistryEntriesEndpoint(s, a.APIKeyAuth),
+		GetRegistryEntry:                        NewGetRegistryEntryEndpoint(s, a.APIKeyAuth),
+		CreateRegistryEntry:                     NewCreateRegistryEntryEndpoint(s, a.APIKeyAuth),
+		SaveRegistryEntry:                       NewSaveRegistryEntryEndpoint(s, a.APIKeyAuth),
+		SetRegistryEntryPublished:               NewSetRegistryEntryPublishedEndpoint(s, a.APIKeyAuth),
+		ListOnboardingSteps:                     NewListOnboardingStepsEndpoint(s, a.APIKeyAuth),
+		GetOnboardingStackOptions:               NewGetOnboardingStackOptionsEndpoint(s, a.APIKeyAuth),
+		GetOrganizationOnboardingStack:          NewGetOrganizationOnboardingStackEndpoint(s, a.APIKeyAuth),
+		SetOrganizationOnboardingStack:          NewSetOrganizationOnboardingStackEndpoint(s, a.APIKeyAuth),
+		ListOnboardingUseCases:                  NewListOnboardingUseCasesEndpoint(s, a.APIKeyAuth),
+		CreateOnboardingUseCase:                 NewCreateOnboardingUseCaseEndpoint(s, a.APIKeyAuth),
+		UpdateOnboardingUseCase:                 NewUpdateOnboardingUseCaseEndpoint(s, a.APIKeyAuth),
+		DeleteOnboardingUseCase:                 NewDeleteOnboardingUseCaseEndpoint(s, a.APIKeyAuth),
+		ListOnboardingPlaybooks:                 NewListOnboardingPlaybooksEndpoint(s, a.APIKeyAuth),
+		CreateOnboardingPlaybook:                NewCreateOnboardingPlaybookEndpoint(s, a.APIKeyAuth),
+		UpdateOnboardingPlaybook:                NewUpdateOnboardingPlaybookEndpoint(s, a.APIKeyAuth),
+		DeleteOnboardingPlaybook:                NewDeleteOnboardingPlaybookEndpoint(s, a.APIKeyAuth),
+		CloneOnboardingPlaybook:                 NewCloneOnboardingPlaybookEndpoint(s, a.APIKeyAuth),
+		GetOrganizationOnboardingPlaybook:       NewGetOrganizationOnboardingPlaybookEndpoint(s, a.APIKeyAuth),
+		AssignOrganizationOnboardingPlaybook:    NewAssignOrganizationOnboardingPlaybookEndpoint(s, a.APIKeyAuth),
+		ListSignupOffers:                        NewListSignupOffersEndpoint(s, a.APIKeyAuth),
+		CreateSignupOffer:                       NewCreateSignupOfferEndpoint(s, a.APIKeyAuth),
+		UpdateSignupOffer:                       NewUpdateSignupOfferEndpoint(s, a.APIKeyAuth),
+		GetStripeSubscriptionCandidate:          NewGetStripeSubscriptionCandidateEndpoint(s, a.APIKeyAuth),
+		SetStripeSubscription:                   NewSetStripeSubscriptionEndpoint(s, a.APIKeyAuth),
+		ListCustomerUsage:                       NewListCustomerUsageEndpoint(s, a.APIKeyAuth),
+		ListUpstreamOAuthMigrationOrganizations: NewListUpstreamOAuthMigrationOrganizationsEndpoint(s, a.APIKeyAuth),
+		GetUpstreamOAuthMigrationStatus:         NewGetUpstreamOAuthMigrationStatusEndpoint(s, a.APIKeyAuth),
+		RunUpstreamOAuthMigration:               NewRunUpstreamOAuthMigrationEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -283,6 +297,10 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.GetSupportCoverage = m(e.GetSupportCoverage)
 	e.DescribeMcpServerHealth = m(e.DescribeMcpServerHealth)
 	e.GetMcpServerToolCalls = m(e.GetMcpServerToolCalls)
+	e.GetHookClients = m(e.GetHookClients)
+	e.ListExternalMcpMigrationCandidates = m(e.ListExternalMcpMigrationCandidates)
+	e.PreviewExternalMcpMigration = m(e.PreviewExternalMcpMigration)
+	e.MigrateExternalMcpServers = m(e.MigrateExternalMcpServers)
 	e.GetRegistryOktaCandidates = m(e.GetRegistryOktaCandidates)
 	e.ListRegistryOktaUnmapped = m(e.ListRegistryOktaUnmapped)
 	e.ListRegistryEntries = m(e.ListRegistryEntries)
@@ -311,6 +329,9 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.GetStripeSubscriptionCandidate = m(e.GetStripeSubscriptionCandidate)
 	e.SetStripeSubscription = m(e.SetStripeSubscription)
 	e.ListCustomerUsage = m(e.ListCustomerUsage)
+	e.ListUpstreamOAuthMigrationOrganizations = m(e.ListUpstreamOAuthMigrationOrganizations)
+	e.GetUpstreamOAuthMigrationStatus = m(e.GetUpstreamOAuthMigrationStatus)
+	e.RunUpstreamOAuthMigration = m(e.RunUpstreamOAuthMigration)
 }
 
 // NewLoginEndpoint returns an endpoint function that calls the method "login"
@@ -1654,6 +1675,99 @@ func NewGetMcpServerToolCallsEndpoint(s Service, authAPIKeyFn security.AuthAPIKe
 	}
 }
 
+// NewGetHookClientsEndpoint returns an endpoint function that calls the method
+// "getHookClients" of service "admin".
+func NewGetHookClientsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetHookClientsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.GetHookClients(ctx, p)
+	}
+}
+
+// NewListExternalMcpMigrationCandidatesEndpoint returns an endpoint function
+// that calls the method "listExternalMcpMigrationCandidates" of service
+// "admin".
+func NewListExternalMcpMigrationCandidatesEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListExternalMcpMigrationCandidatesPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.ListExternalMcpMigrationCandidates(ctx, p)
+	}
+}
+
+// NewPreviewExternalMcpMigrationEndpoint returns an endpoint function that
+// calls the method "previewExternalMcpMigration" of service "admin".
+func NewPreviewExternalMcpMigrationEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*PreviewExternalMcpMigrationPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.PreviewExternalMcpMigration(ctx, p)
+	}
+}
+
+// NewMigrateExternalMcpServersEndpoint returns an endpoint function that calls
+// the method "migrateExternalMcpServers" of service "admin".
+func NewMigrateExternalMcpServersEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*MigrateExternalMcpServersPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.MigrateExternalMcpServers(ctx, p)
+	}
+}
+
 // NewGetRegistryOktaCandidatesEndpoint returns an endpoint function that calls
 // the method "getRegistryOktaCandidates" of service "admin".
 func NewGetRegistryOktaCandidatesEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
@@ -2296,5 +2410,75 @@ func NewListCustomerUsageEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFun
 			return nil, err
 		}
 		return s.ListCustomerUsage(ctx, p)
+	}
+}
+
+// NewListUpstreamOAuthMigrationOrganizationsEndpoint returns an endpoint
+// function that calls the method "listUpstreamOAuthMigrationOrganizations" of
+// service "admin".
+func NewListUpstreamOAuthMigrationOrganizationsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListUpstreamOAuthMigrationOrganizationsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.ListUpstreamOAuthMigrationOrganizations(ctx, p)
+	}
+}
+
+// NewGetUpstreamOAuthMigrationStatusEndpoint returns an endpoint function that
+// calls the method "getUpstreamOAuthMigrationStatus" of service "admin".
+func NewGetUpstreamOAuthMigrationStatusEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetUpstreamOAuthMigrationStatusPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.GetUpstreamOAuthMigrationStatus(ctx, p)
+	}
+}
+
+// NewRunUpstreamOAuthMigrationEndpoint returns an endpoint function that calls
+// the method "runUpstreamOAuthMigration" of service "admin".
+func NewRunUpstreamOAuthMigrationEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*RunUpstreamOAuthMigrationPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.RunUpstreamOAuthMigration(ctx, p)
 	}
 }

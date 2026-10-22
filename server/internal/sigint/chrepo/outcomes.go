@@ -70,6 +70,11 @@ func readingEnvelope(m *sigintv1.Outcome) (*sigintv1.Reading, error) {
 	r.SetEvaluationAttemptId(m.GetEvaluationAttemptId())
 	r.SetOrganizationId(m.GetOrganizationId())
 	r.SetProjectId(m.GetProjectId())
+	r.SetTriggerKind(m.GetTriggerKind())
+	r.SetEvaluationRequestedAt(m.GetEvaluationRequestedAt())
+	if m.HasRunId() {
+		r.SetRunId(m.GetRunId())
+	}
 	r.SetSensorId(m.GetSensorId())
 	r.SetSensorSlug(m.GetSensorSlug())
 	r.SetEvaluatedAt(m.GetEvaluatedAt())

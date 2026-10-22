@@ -123,8 +123,9 @@ WITH risk_counts AS (
   -- disabling/deleting a policy retires its findings everywhere (keeps this
   -- count in sync with the risk.results.list detail view).
   JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
-  WHERE ($3::text <> '' OR $4::int >= 0)
-    AND rr.project_id = $5
+  WHERE NOT $3::boolean
+    AND ($4::text <> '' OR $5::int >= 0)
+    AND rr.project_id = $6
     AND rr.found IS TRUE
     AND rr.excluded_at IS NULL
     AND rr.false_positive_at IS NULL
@@ -137,76 +138,91 @@ candidate_chats AS (
   LEFT JOIN user_accounts ua ON ua.id = c.user_account_id AND ua.organization_id = c.organization_id AND ua.deleted_at IS NULL
   -- Join users table to enable searching by resolved user identity
   LEFT JOIN users u ON u.id = c.user_id AND u.deleted_at IS NULL
-  WHERE c.project_id = $5
+  WHERE c.project_id = $6
     AND c.deleted IS FALSE
-    AND ($6 = '' OR c.external_user_id = $6)
-    AND ($7 = '' OR c.user_id = $7)
+    AND ($7 = '' OR c.external_user_id = $7)
+    AND ($8 = '' OR c.user_id = $8)
     AND (
-      $8::text = ''
-      OR ($8::text = 'true' AND c.pinned_at IS NOT NULL)
-      OR ($8::text = 'false' AND c.pinned_at IS NULL)
-    )
-    AND (
-      $9 = ''
-      OR c.id::text ILIKE '%' || $9 || '%'
-      OR c.external_user_id ILIKE '%' || $9 || '%'
-      OR c.title ILIKE '%' || $9 || '%'
-      OR u.display_name ILIKE '%' || $9 || '%'
-      OR u.email ILIKE '%' || $9 || '%'
-      OR ua.email ILIKE '%' || $9 || '%'
+      $9::text = ''
+      OR ($9::text = 'true' AND c.pinned_at IS NOT NULL)
+      OR ($9::text = 'false' AND c.pinned_at IS NULL)
     )
     AND (
       $10 = ''
+      OR c.id::text ILIKE '%' || $10 || '%'
+      OR c.external_user_id ILIKE '%' || $10 || '%'
+      OR c.title ILIKE '%' || $10 || '%'
+      OR u.display_name ILIKE '%' || $10 || '%'
+      OR u.email ILIKE '%' || $10 || '%'
+      OR ua.email ILIKE '%' || $10 || '%'
+    )
+    AND (
+      $11 = ''
       OR EXISTS (
         SELECT 1 FROM assistant_threads at
         WHERE at.chat_id = c.id
-          AND at.project_id = $5
-          AND at.assistant_id = $10::uuid
+          AND at.project_id = $6
+          AND at.assistant_id = $11::uuid
           AND at.deleted IS FALSE
           -- Optional source-kind dimension so setup/onboarding and runtime
           -- threads for the same assistant don't pollute each other's listing.
           -- @source_kind keeps only threads of that kind (onboarding passes
           -- 'setup'); @exclude_source_kind drops threads of that kind (runtime
           -- views pass 'setup'). Empty string on either disables that side.
-          AND ($11::text = '' OR at.source_kind = $11::text)
-          AND ($12::text = '' OR at.source_kind <> $12::text)
+          AND ($12::text = '' OR at.source_kind = $12::text)
+          AND ($13::text = '' OR at.source_kind <> $13::text)
       )
     )
     AND (
-      $3::text = ''
-      OR ($3::text = 'true' AND COALESCE(rc.cnt, 0) > 0)
-      OR ($3::text = 'false' AND COALESCE(rc.cnt, 0) = 0)
+      $4::text = ''
+      OR (
+        $4::text = 'true'
+        AND CASE
+          WHEN $3::boolean THEN c.id = ANY($14::uuid[])
+          ELSE COALESCE(rc.cnt, 0) > 0
+        END
+      )
+      OR (
+        $4::text = 'false'
+        AND CASE
+          WHEN $3::boolean THEN NOT (c.id = ANY($14::uuid[]))
+          ELSE COALESCE(rc.cnt, 0) = 0
+        END
+      )
     )
     AND (
-      $13::text = ''
-      OR ua.account_type = $13::text
+      $15::text = ''
+      OR ua.account_type = $15::text
       -- Rows without a classified account type are treated as 'team' so the
       -- team filter stays backwards-compatible with pre-classification chats.
       OR (
-        $13::text = 'team'
+        $15::text = 'team'
         AND (ua.account_type IS NULL OR ua.account_type = '')
       )
     )
     AND (
-      $4::int < 0
-      OR COALESCE(rc.cnt, 0) >= $4::int
+      $5::int < 0
+      OR CASE
+        WHEN $3::boolean THEN c.id = ANY($14::uuid[])
+        ELSE COALESCE(rc.cnt, 0) >= $5::int
+      END
     )
     AND (
-      coalesce(cardinality($14::text[]), 0) = 0
+      coalesce(cardinality($16::text[]), 0) = 0
       -- Proxied sessions match the LiteLLM filter even when a native hook
       -- stream owns every transcript row (proxied rows are suppressed as
       -- duplicates, so the message-source probe alone would miss them).
-      OR ('litellm' = ANY ($14::text[]) AND c.litellm_proxied)
-      OR coalesce(c.session_surface, CASE WHEN EXISTS (SELECT 1 FROM chat_session_links tag_link WHERE tag_link.project_id = $5::uuid AND tag_link.child_chat_id = c.id AND tag_link.kind = 'subagent' AND tag_link.source_surface = 'claude-tag') THEN 'claude-tag' END, (
+      OR ('litellm' = ANY ($16::text[]) AND c.litellm_proxied)
+      OR coalesce(c.session_surface, CASE WHEN EXISTS (SELECT 1 FROM chat_session_links tag_link WHERE tag_link.project_id = $6::uuid AND tag_link.child_chat_id = c.id AND tag_link.kind = 'subagent' AND tag_link.source_surface = 'claude-tag') THEN 'claude-tag' END, (
         SELECT cmsrc.source
         FROM chat_messages cmsrc
         WHERE cmsrc.chat_id = c.id
-          AND cmsrc.project_id = $5::uuid
+          AND cmsrc.project_id = $6::uuid
           AND cmsrc.source IS NOT NULL
           AND cmsrc.source <> ''
         ORDER BY cmsrc.created_at DESC
         LIMIT 1
-      )) = ANY ($14::text[])
+      )) = ANY ($16::text[])
     )
 ),
 chat_activity AS (
@@ -223,7 +239,7 @@ chat_activity AS (
     SELECT MAX(cm.created_at) AS ts
     FROM chat_messages cm
     WHERE cm.chat_id = cc.id
-      AND cm.project_id = $5::uuid
+      AND cm.project_id = $6::uuid
   ) last_msg
 )
 SELECT COUNT(*) AS total
@@ -233,20 +249,22 @@ WHERE ($1::timestamptz IS NULL OR ca.last_message_timestamp >= $1)
 `
 
 type CountChatsParams struct {
-	FromTime          pgtype.Timestamptz
-	ToTime            pgtype.Timestamptz
-	HasRiskFilter     string
-	MinRiskScore      int32
-	ProjectID         uuid.UUID
-	ExternalUserID    interface{}
-	UserID            interface{}
-	Pinned            string
-	Search            interface{}
-	AssistantID       interface{}
-	SourceKind        string
-	ExcludeSourceKind string
-	AccountType       string
-	Sources           []string
+	FromTime               pgtype.Timestamptz
+	ToTime                 pgtype.Timestamptz
+	RiskFindingsClickhouse bool
+	HasRiskFilter          string
+	MinRiskScore           int32
+	ProjectID              uuid.UUID
+	ExternalUserID         interface{}
+	UserID                 interface{}
+	Pinned                 string
+	Search                 interface{}
+	AssistantID            interface{}
+	SourceKind             string
+	ExcludeSourceKind      string
+	RiskChatIds            []uuid.UUID
+	AccountType            string
+	Sources                []string
 }
 
 // Fallback for chats.list pagination: ListChats returns the total alongside
@@ -267,6 +285,7 @@ func (q *Queries) CountChats(ctx context.Context, arg CountChatsParams) (int64, 
 	row := q.db.QueryRow(ctx, countChats,
 		arg.FromTime,
 		arg.ToTime,
+		arg.RiskFindingsClickhouse,
 		arg.HasRiskFilter,
 		arg.MinRiskScore,
 		arg.ProjectID,
@@ -277,107 +296,9 @@ func (q *Queries) CountChats(ctx context.Context, arg CountChatsParams) (int64, 
 		arg.AssistantID,
 		arg.SourceKind,
 		arg.ExcludeSourceKind,
+		arg.RiskChatIds,
 		arg.AccountType,
 		arg.Sources,
-	)
-	var total int64
-	err := row.Scan(&total)
-	return total, err
-}
-
-const countChatsWithResolutions = `-- name: CountChatsWithResolutions :one
-SELECT COUNT(DISTINCT c.id) as total
-FROM chats c
-LEFT JOIN users u ON u.id = c.user_id AND u.deleted_at IS NULL
-WHERE c.project_id = $1
-  AND c.deleted IS FALSE
-  AND ($2 = '' OR c.external_user_id = $2)
-  AND ($3::timestamptz IS NULL OR c.created_at >= $3)
-  AND ($4::timestamptz IS NULL OR c.created_at <= $4)
-  AND (
-    $5 = ''
-    OR c.id::text ILIKE '%' || $5 || '%'
-    OR c.external_user_id ILIKE '%' || $5 || '%'
-    OR c.title ILIKE '%' || $5 || '%'
-    OR u.display_name ILIKE '%' || $5 || '%'
-  )
-  AND (
-    $6 = ''
-    OR EXISTS (
-      SELECT 1 FROM assistant_threads at
-      WHERE at.chat_id = c.id
-        AND at.assistant_id = $6::uuid
-        AND at.deleted IS FALSE
-    )
-  )
-  AND (
-    $7 = ''
-    OR (
-      $7 = 'unresolved' AND NOT EXISTS (
-        SELECT 1 FROM chat_resolutions WHERE chat_id = c.id
-      )
-    )
-    OR (
-      $7 != 'unresolved' AND EXISTS (
-        SELECT 1 FROM chat_resolutions WHERE chat_id = c.id AND resolution = $7
-      )
-    )
-  )
-  AND (
-    $8::text = ''
-    OR (
-      $8::text = 'true' AND EXISTS (
-        SELECT 1 FROM risk_results rr
-        JOIN chat_messages cm ON cm.id = rr.chat_message_id
-        -- Gate on the policy still being enabled and not deleted so the
-        -- has-risk list filter agrees with the per-chat count and detail view.
-        JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
-        WHERE cm.chat_id = c.id
-          AND rr.project_id = $1
-          AND rr.found IS TRUE
-          AND rr.excluded_at IS NULL
-          AND rr.false_positive_at IS NULL
-      )
-    )
-    OR (
-      $8::text = 'false' AND NOT EXISTS (
-        SELECT 1 FROM risk_results rr
-        JOIN chat_messages cm ON cm.id = rr.chat_message_id
-        -- Gate on the policy still being enabled and not deleted so the
-        -- has-risk list filter agrees with the per-chat count and detail view.
-        JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
-        WHERE cm.chat_id = c.id
-          AND rr.project_id = $1
-          AND rr.found IS TRUE
-          AND rr.excluded_at IS NULL
-          AND rr.false_positive_at IS NULL
-      )
-    )
-  )
-`
-
-type CountChatsWithResolutionsParams struct {
-	ProjectID        uuid.UUID
-	ExternalUserID   interface{}
-	FromTime         pgtype.Timestamptz
-	ToTime           pgtype.Timestamptz
-	Search           interface{}
-	AssistantID      interface{}
-	ResolutionStatus interface{}
-	HasRiskFilter    string
-}
-
-// Join users table to enable searching by user display name
-func (q *Queries) CountChatsWithResolutions(ctx context.Context, arg CountChatsWithResolutionsParams) (int64, error) {
-	row := q.db.QueryRow(ctx, countChatsWithResolutions,
-		arg.ProjectID,
-		arg.ExternalUserID,
-		arg.FromTime,
-		arg.ToTime,
-		arg.Search,
-		arg.AssistantID,
-		arg.ResolutionStatus,
-		arg.HasRiskFilter,
 	)
 	var total int64
 	err := row.Scan(&total)
@@ -865,8 +786,12 @@ func (q *Queries) GetAssistantThreadAssistantIDByChatID(ctx context.Context, arg
 }
 
 const getChat = `-- name: GetChat :one
-SELECT c.session_surface, c.slack_team_id, c.slack_channel_id, c.slack_channel_name, c.id, c.project_id, c.organization_id, c.user_id, c.external_user_id, c.external_chat_id, c.title, c.title_manually_set, c.pinned_at, c.summary, c.summary_generated_at, c.inference_accepted_checkpoint, c.inference_actor_key, c.user_account_id, c.litellm_proxied, c.cwd, c.created_at, c.updated_at, c.deleted_at, c.deleted, COALESCE(ua.account_type, '')::text AS account_type, COALESCE(ua.email, '')::text AS account_email,
+SELECT c.session_surface, c.slack_team_id, c.slack_channel_id, c.slack_channel_name, c.id, c.project_id, c.organization_id, c.user_id, c.external_user_id, c.external_chat_id, c.title, c.title_manually_set, c.pinned_at, c.summary, c.summary_generated_at, c.inference_accepted_checkpoint, c.inference_actor_key, c.user_account_id, c.litellm_proxied, c.cwd, c.agent_id, c.created_at, c.updated_at, c.deleted_at, c.deleted, COALESCE(ua.account_type, '')::text AS account_type, COALESCE(ua.email, '')::text AS account_email,
   a.id AS assistant_id, a.name AS assistant_name, b.original_agent_id AS assistant_agent_id,
+  -- Name of the agent principal that produced the session (chats.agent_id,
+  -- selected by c.*). Resolved live so a rename shows, and NULL for a deleted
+  -- agent, whose id the session still reports.
+  acting_agent.name AS agent_name,
   coalesce(c.session_surface, CASE WHEN EXISTS (SELECT 1 FROM chat_session_links l
     WHERE l.project_id = c.project_id AND l.child_chat_id = c.id AND l.kind = 'subagent'
       AND l.source_surface = 'claude-tag') THEN 'claude-tag' END, '')::text AS captured_surface
@@ -875,6 +800,9 @@ LEFT JOIN user_accounts ua ON ua.id = c.user_account_id AND ua.organization_id =
 LEFT JOIN assistant_threads at ON at.chat_id = c.id AND at.project_id = c.project_id AND at.deleted IS FALSE
 LEFT JOIN assistants a ON a.id = at.assistant_id AND a.project_id = c.project_id AND a.deleted IS FALSE
 LEFT JOIN assistant_agent_bindings b ON b.original_assistant_id = a.id AND b.project_id = c.project_id AND b.deleted IS FALSE
+LEFT JOIN agents acting_agent ON acting_agent.id = c.agent_id
+  AND acting_agent.organization_id = c.organization_id
+  AND acting_agent.deleted IS FALSE
 WHERE c.id = $1 AND c.project_id = $2 AND c.deleted IS FALSE
 `
 
@@ -904,6 +832,7 @@ type GetChatRow struct {
 	UserAccountID               uuid.NullUUID
 	LitellmProxied              bool
 	Cwd                         pgtype.Text
+	AgentID                     uuid.NullUUID
 	CreatedAt                   pgtype.Timestamptz
 	UpdatedAt                   pgtype.Timestamptz
 	DeletedAt                   pgtype.Timestamptz
@@ -913,6 +842,7 @@ type GetChatRow struct {
 	AssistantID                 uuid.NullUUID
 	AssistantName               pgtype.Text
 	AssistantAgentID            uuid.NullUUID
+	AgentName                   pgtype.Text
 	CapturedSurface             string
 }
 
@@ -920,6 +850,9 @@ type GetChatRow struct {
 // produced it (chats.user_account_id has no FK), scoped by organization. Returns
 // ” for account_type/account_email when the chat has no linked account or it
 // is unclassified.
+// Agents are organization-scoped, so the lookup is pinned to the chat's own
+// organization. chats.agent_id carries no foreign key, so this is what keeps a
+// stale or cross-tenant stamp from resolving to a name here.
 func (q *Queries) GetChat(ctx context.Context, arg GetChatParams) (GetChatRow, error) {
 	row := q.db.QueryRow(ctx, getChat, arg.ID, arg.ProjectID)
 	var i GetChatRow
@@ -944,6 +877,7 @@ func (q *Queries) GetChat(ctx context.Context, arg GetChatParams) (GetChatRow, e
 		&i.UserAccountID,
 		&i.LitellmProxied,
 		&i.Cwd,
+		&i.AgentID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -953,6 +887,7 @@ func (q *Queries) GetChat(ctx context.Context, arg GetChatParams) (GetChatRow, e
 		&i.AssistantID,
 		&i.AssistantName,
 		&i.AssistantAgentID,
+		&i.AgentName,
 		&i.CapturedSurface,
 	)
 	return i, err
@@ -974,23 +909,36 @@ WITH ordered AS (
       ELSE false
     END AS has_tool_calls
   FROM chat_messages cm
-  WHERE cm.chat_id = $2
-    AND cm.project_id = $1::uuid
-    AND cm.generation = $3::integer
+  WHERE cm.chat_id = $4
+    AND cm.project_id = $3::uuid
+    AND cm.generation = $5::integer
 ),
 attachment_risk_prompts AS (
   SELECT ccp.parent_chat_message_id AS id
   FROM chat_content_parts ccp
-  JOIN risk_results rr ON rr.chat_content_part_id = ccp.id
-  JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
-  WHERE ccp.chat_id = $2
-    AND ccp.project_id = $1::uuid
+  WHERE ccp.chat_id = $4
+    AND ccp.project_id = $3::uuid
     AND ccp.deleted IS FALSE
     AND ccp.parent_chat_message_id IS NOT NULL
-    AND rr.project_id = $1::uuid
-    AND rr.found IS TRUE
-    AND rr.excluded_at IS NULL
-    AND rr.false_positive_at IS NULL
+    AND (
+      (
+        $1::boolean
+        AND ccp.id = ANY($6::uuid[])
+      )
+      OR (
+        NOT $1::boolean
+        AND EXISTS (
+          SELECT 1
+          FROM risk_results rr
+          JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
+          WHERE rr.chat_content_part_id = ccp.id
+            AND rr.project_id = $3::uuid
+            AND rr.found IS TRUE
+            AND rr.excluded_at IS NULL
+            AND rr.false_positive_at IS NULL
+        )
+      )
+    )
 )
 SELECT
   COUNT(*) FILTER (WHERE has_tool_calls OR role IN ('user', 'assistant', 'tool'))::bigint AS total,
@@ -1000,16 +948,21 @@ SELECT
   COUNT(*) FILTER (WHERE NOT has_tool_calls AND role = 'tool')::bigint AS tool_results,
   (
     SELECT COUNT(*)::bigint FROM ordered o
-    WHERE EXISTS (
-      SELECT 1 FROM risk_results rr
-      -- Only count a finding while its policy is enabled and not deleted (see
-      -- the risk_counts CTE / risk.results.list for the same gate).
-      JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
-      WHERE rr.chat_message_id = o.id
-        AND rr.project_id = $1::uuid
-        AND rr.found IS TRUE
-        AND rr.excluded_at IS NULL
-        AND rr.false_positive_at IS NULL
+    WHERE (
+      $1::boolean
+      AND o.id = ANY($2::uuid[])
+    )
+    OR (
+      NOT $1::boolean
+      AND EXISTS (
+        SELECT 1 FROM risk_results rr
+        JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
+        WHERE rr.chat_message_id = o.id
+          AND rr.project_id = $3::uuid
+          AND rr.found IS TRUE
+          AND rr.excluded_at IS NULL
+          AND rr.false_positive_at IS NULL
+      )
     )
     OR o.id IN (SELECT id FROM attachment_risk_prompts)
   )::bigint AS risk_findings
@@ -1017,9 +970,12 @@ FROM ordered
 `
 
 type GetChatEntryTotalsParams struct {
-	ProjectID  uuid.UUID
-	ChatID     uuid.UUID
-	Generation int32
+	RiskFindingsClickhouse bool
+	RiskMessageIds         []uuid.UUID
+	ProjectID              uuid.UUID
+	ChatID                 uuid.UUID
+	Generation             int32
+	RiskContentPartIds     []uuid.UUID
 }
 
 type GetChatEntryTotalsRow struct {
@@ -1042,7 +998,14 @@ type GetChatEntryTotalsRow struct {
 // Prompts whose attachments hold an active finding. Such a finding has no
 // chat_message_id, so it flags the prompt the attachment hangs off.
 func (q *Queries) GetChatEntryTotals(ctx context.Context, arg GetChatEntryTotalsParams) (GetChatEntryTotalsRow, error) {
-	row := q.db.QueryRow(ctx, getChatEntryTotals, arg.ProjectID, arg.ChatID, arg.Generation)
+	row := q.db.QueryRow(ctx, getChatEntryTotals,
+		arg.RiskFindingsClickhouse,
+		arg.RiskMessageIds,
+		arg.ProjectID,
+		arg.ChatID,
+		arg.Generation,
+		arg.RiskContentPartIds,
+	)
 	var i GetChatEntryTotalsRow
 	err := row.Scan(
 		&i.Total,
@@ -1271,23 +1234,6 @@ func (q *Queries) GetImportedSessionObservations(ctx context.Context, arg GetImp
 		return nil, err
 	}
 	return items, nil
-}
-
-const getInferenceAcceptedCheckpoint = `-- name: GetInferenceAcceptedCheckpoint :one
-SELECT inference_accepted_checkpoint FROM chats
-WHERE project_id = $1 AND external_chat_id = $2
-`
-
-type GetInferenceAcceptedCheckpointParams struct {
-	ProjectID      uuid.UUID
-	ExternalChatID pgtype.Text
-}
-
-func (q *Queries) GetInferenceAcceptedCheckpoint(ctx context.Context, arg GetInferenceAcceptedCheckpointParams) ([]byte, error) {
-	row := q.db.QueryRow(ctx, getInferenceAcceptedCheckpoint, arg.ProjectID, arg.ExternalChatID)
-	var inference_accepted_checkpoint []byte
-	err := row.Scan(&inference_accepted_checkpoint)
-	return inference_accepted_checkpoint, err
 }
 
 const getLLMClientBreakdownByMessages = `-- name: GetLLMClientBreakdownByMessages :many
@@ -1622,31 +1568,6 @@ func (q *Queries) InferenceChatExists(ctx context.Context, arg InferenceChatExis
 	return exists, err
 }
 
-const inferencePolicyRevision = `-- name: InferencePolicyRevision :one
-WITH policies AS (
-  SELECT id, project_id, organization_id, enabled, name, policy_type, sources, presidio_entities, analyzer_config, mcp_scope, prompt_injection_rules, disabled_rules, custom_rule_ids, action, audience_type, shadow_mcp_disposition, auto_name, user_message, prompt, model_config, score, version, created_at, updated_at, deleted_at, deleted FROM risk_policies
-  WHERE project_id = $1 AND enabled IS TRUE AND deleted IS FALSE
-    AND action IN ('block', 'warn', 'quarantine')
-)
-SELECT jsonb_build_object(
-    'policies', (SELECT coalesce(jsonb_agg(to_jsonb(p) ORDER BY p.id), '[]'::jsonb) FROM policies p),
-    'exclusions', (SELECT coalesce(jsonb_agg(to_jsonb(e) ORDER BY e.id), '[]'::jsonb)
-      FROM risk_exclusions e WHERE e.project_id = $1 AND e.enabled IS TRUE AND e.deleted IS FALSE),
-    'custom_rules', (SELECT coalesce(jsonb_agg(to_jsonb(r) ORDER BY r.id), '[]'::jsonb)
-      FROM risk_custom_detection_rules r WHERE r.project_id = $1 AND r.deleted IS FALSE)
-  )::text AS revision
-`
-
-// Include mutable exclusions and custom rules, which do not bump policy
-// versions. Strict inference scans cannot accept in-scope prompt-policy
-// content while its feature flag is disabled or its evaluation is incomplete.
-func (q *Queries) InferencePolicyRevision(ctx context.Context, projectID uuid.UUID) (string, error) {
-	row := q.db.QueryRow(ctx, inferencePolicyRevision, projectID)
-	var revision string
-	err := row.Scan(&revision)
-	return revision, err
-}
-
 const insertChatResolution = `-- name: InsertChatResolution :one
 INSERT INTO chat_resolutions (
     project_id,
@@ -1945,22 +1866,26 @@ SELECT
   , ccp.updated_at
   , ccp.deleted_at
   , ccp.deleted
-  , EXISTS (
-      SELECT 1
-      FROM risk_results rr
-      JOIN risk_policies rp
-        ON rp.id = rr.risk_policy_id
-       AND rp.enabled IS TRUE
-       AND rp.deleted IS FALSE
-      WHERE rr.project_id = $1::uuid
-        AND rr.chat_content_part_id = ccp.id
-        AND rr.found IS TRUE
-        AND rr.excluded_at IS NULL
-        AND rr.false_positive_at IS NULL
-    ) AS is_risk
+  , CASE
+      WHEN $1::boolean
+        THEN ccp.id = ANY($2::uuid[])
+      ELSE EXISTS (
+        SELECT 1
+        FROM risk_results rr
+        JOIN risk_policies rp
+          ON rp.id = rr.risk_policy_id
+         AND rp.enabled IS TRUE
+         AND rp.deleted IS FALSE
+        WHERE rr.project_id = $3::uuid
+          AND rr.chat_content_part_id = ccp.id
+          AND rr.found IS TRUE
+          AND rr.excluded_at IS NULL
+          AND rr.false_positive_at IS NULL
+      )
+    END::boolean AS is_risk
 FROM chat_content_parts ccp
-WHERE ccp.chat_id = $2
-  AND ccp.project_id = $1::uuid
+WHERE ccp.chat_id = $4
+  AND ccp.project_id = $3::uuid
   AND ccp.deleted IS FALSE
   -- Only the parts the requested page can actually render: one anchored to a
   -- message on this page, or an unparented one the client places by time
@@ -1968,15 +1893,17 @@ WHERE ccp.chat_id = $2
   -- chat from asset storage, then discards the ones it cannot anchor.
   AND (
     ccp.parent_chat_message_id IS NULL
-    OR ccp.parent_chat_message_id = ANY($3::uuid[])
+    OR ccp.parent_chat_message_id = ANY($5::uuid[])
   )
 ORDER BY created_at ASC, id ASC
 `
 
 type ListChatContentPartsByChatIDParams struct {
-	ProjectID            uuid.UUID
-	ChatID               uuid.UUID
-	ParentChatMessageIds []uuid.UUID
+	RiskFindingsClickhouse bool
+	RiskContentPartIds     []uuid.UUID
+	ProjectID              uuid.UUID
+	ChatID                 uuid.UUID
+	ParentChatMessageIds   []uuid.UUID
 }
 
 type ListChatContentPartsByChatIDRow struct {
@@ -1999,7 +1926,13 @@ type ListChatContentPartsByChatIDRow struct {
 }
 
 func (q *Queries) ListChatContentPartsByChatID(ctx context.Context, arg ListChatContentPartsByChatIDParams) ([]ListChatContentPartsByChatIDRow, error) {
-	rows, err := q.db.Query(ctx, listChatContentPartsByChatID, arg.ProjectID, arg.ChatID, arg.ParentChatMessageIds)
+	rows, err := q.db.Query(ctx, listChatContentPartsByChatID,
+		arg.RiskFindingsClickhouse,
+		arg.RiskContentPartIds,
+		arg.ProjectID,
+		arg.ChatID,
+		arg.ParentChatMessageIds,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -2938,8 +2871,9 @@ WITH risk_counts AS (
   -- disabling/deleting a policy retires its findings everywhere (keeps this
   -- count in sync with the risk.results.list detail view).
   JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
-  WHERE ($2::text <> '' OR $3::int >= 0)
-    AND rr.project_id = $1
+  WHERE NOT $1::boolean
+    AND ($3::text <> '' OR $4::int >= 0)
+    AND rr.project_id = $2
     AND rr.found IS TRUE
     AND rr.excluded_at IS NULL
     AND rr.false_positive_at IS NULL
@@ -2956,6 +2890,7 @@ candidate_chats AS (
     c.updated_at,
     c.pinned_at,
     c.litellm_proxied,
+    c.agent_id,
     COALESCE(ua.account_type, '')::text AS account_type,
     COALESCE(ua.email, '')::text AS account_email
   FROM chats c
@@ -2965,77 +2900,92 @@ candidate_chats AS (
   LEFT JOIN user_accounts ua ON ua.id = c.user_account_id AND ua.organization_id = c.organization_id AND ua.deleted_at IS NULL
   -- Join users table to enable searching by resolved user identity
   LEFT JOIN users u ON u.id = c.user_id AND u.deleted_at IS NULL
-  WHERE c.project_id = $1
-    AND ($4::uuid IS NULL OR c.id = $4::uuid)
+  WHERE c.project_id = $2
+    AND ($5::uuid IS NULL OR c.id = $5::uuid)
     AND c.deleted IS FALSE
-    AND ($5 = '' OR c.external_user_id = $5)
-    AND ($6 = '' OR c.user_id = $6)
+    AND ($6 = '' OR c.external_user_id = $6)
+    AND ($7 = '' OR c.user_id = $7)
     AND (
-      $7::text = ''
-      OR ($7::text = 'true' AND c.pinned_at IS NOT NULL)
-      OR ($7::text = 'false' AND c.pinned_at IS NULL)
-    )
-    AND (
-      $8 = ''
-      OR c.id::text ILIKE '%' || $8 || '%'
-      OR c.external_user_id ILIKE '%' || $8 || '%'
-      OR c.title ILIKE '%' || $8 || '%'
-      OR u.display_name ILIKE '%' || $8 || '%'
-      OR u.email ILIKE '%' || $8 || '%'
-      OR ua.email ILIKE '%' || $8 || '%'
+      $8::text = ''
+      OR ($8::text = 'true' AND c.pinned_at IS NOT NULL)
+      OR ($8::text = 'false' AND c.pinned_at IS NULL)
     )
     AND (
       $9 = ''
+      OR c.id::text ILIKE '%' || $9 || '%'
+      OR c.external_user_id ILIKE '%' || $9 || '%'
+      OR c.title ILIKE '%' || $9 || '%'
+      OR u.display_name ILIKE '%' || $9 || '%'
+      OR u.email ILIKE '%' || $9 || '%'
+      OR ua.email ILIKE '%' || $9 || '%'
+    )
+    AND (
+      $10 = ''
       OR EXISTS (
         SELECT 1 FROM assistant_threads at
         WHERE at.chat_id = c.id
-          AND at.project_id = $1
-          AND at.assistant_id = $9::uuid
+          AND at.project_id = $2
+          AND at.assistant_id = $10::uuid
           AND at.deleted IS FALSE
           -- Optional source-kind dimension so setup/onboarding and runtime
           -- threads for the same assistant don't pollute each other's listing.
           -- @source_kind keeps only threads of that kind (onboarding passes
           -- 'setup'); @exclude_source_kind drops threads of that kind (runtime
           -- views pass 'setup'). Empty string on either disables that side.
-          AND ($10::text = '' OR at.source_kind = $10::text)
-          AND ($11::text = '' OR at.source_kind <> $11::text)
+          AND ($11::text = '' OR at.source_kind = $11::text)
+          AND ($12::text = '' OR at.source_kind <> $12::text)
       )
     )
     AND (
-      $2::text = ''
-      OR ($2::text = 'true' AND COALESCE(rc.cnt, 0) > 0)
-      OR ($2::text = 'false' AND COALESCE(rc.cnt, 0) = 0)
+      $3::text = ''
+      OR (
+        $3::text = 'true'
+        AND CASE
+          WHEN $1::boolean THEN c.id = ANY($13::uuid[])
+          ELSE COALESCE(rc.cnt, 0) > 0
+        END
+      )
+      OR (
+        $3::text = 'false'
+        AND CASE
+          WHEN $1::boolean THEN NOT (c.id = ANY($13::uuid[]))
+          ELSE COALESCE(rc.cnt, 0) = 0
+        END
+      )
     )
     AND (
-      $12::text = ''
-      OR ua.account_type = $12::text
+      $14::text = ''
+      OR ua.account_type = $14::text
       -- Rows without a classified account type are treated as 'team' so the
       -- team filter stays backwards-compatible with pre-classification chats.
       OR (
-        $12::text = 'team'
+        $14::text = 'team'
         AND (ua.account_type IS NULL OR ua.account_type = '')
       )
     )
     AND (
-      $3::int < 0
-      OR COALESCE(rc.cnt, 0) >= $3::int
+      $4::int < 0
+      OR CASE
+        WHEN $1::boolean THEN c.id = ANY($13::uuid[])
+        ELSE COALESCE(rc.cnt, 0) >= $4::int
+      END
     )
     AND (
-      coalesce(cardinality($13::text[]), 0) = 0
+      coalesce(cardinality($15::text[]), 0) = 0
       -- Proxied sessions match the LiteLLM filter even when a native hook
       -- stream owns every transcript row (proxied rows are suppressed as
       -- duplicates, so the message-source probe alone would miss them).
-      OR ('litellm' = ANY ($13::text[]) AND c.litellm_proxied)
-      OR coalesce(c.session_surface, CASE WHEN EXISTS (SELECT 1 FROM chat_session_links tag_link WHERE tag_link.project_id = $1::uuid AND tag_link.child_chat_id = c.id AND tag_link.kind = 'subagent' AND tag_link.source_surface = 'claude-tag') THEN 'claude-tag' END, (
+      OR ('litellm' = ANY ($15::text[]) AND c.litellm_proxied)
+      OR coalesce(c.session_surface, CASE WHEN EXISTS (SELECT 1 FROM chat_session_links tag_link WHERE tag_link.project_id = $2::uuid AND tag_link.child_chat_id = c.id AND tag_link.kind = 'subagent' AND tag_link.source_surface = 'claude-tag') THEN 'claude-tag' END, (
         SELECT cmsrc.source
         FROM chat_messages cmsrc
         WHERE cmsrc.chat_id = c.id
-          AND cmsrc.project_id = $1::uuid
+          AND cmsrc.project_id = $2::uuid
           AND cmsrc.source IS NOT NULL
           AND cmsrc.source <> ''
         ORDER BY cmsrc.created_at DESC
         LIMIT 1
-      )) = ANY ($13::text[])
+      )) = ANY ($15::text[])
     )
 ),
 chat_stats AS (
@@ -3047,18 +2997,18 @@ chat_stats AS (
   -- inflating either value.
   SELECT
     cc.id,
-    CASE WHEN $14 = 'num_messages' THEN (
+    CASE WHEN $16 = 'num_messages' THEN (
       -- COUNT(*) rather than COUNT(cm.id) so the probe stays index-only.
       SELECT COUNT(*)::integer
       FROM chat_messages cm
       WHERE cm.chat_id = cc.id
-        AND cm.project_id = $1::uuid
+        AND cm.project_id = $2::uuid
     ) END AS sort_num_messages,
     COALESCE((
       SELECT cm.created_at
       FROM chat_messages cm
       WHERE cm.chat_id = cc.id
-        AND cm.project_id = $1::uuid
+        AND cm.project_id = $2::uuid
       ORDER BY cm.created_at DESC
       LIMIT 1
     ), cc.created_at)::timestamptz AS last_message_timestamp
@@ -3075,6 +3025,7 @@ filtered_chats AS (
     cc.updated_at,
     cc.pinned_at,
     cc.litellm_proxied,
+    cc.agent_id,
     cs.sort_num_messages,
     cs.last_message_timestamp,
     cc.account_type,
@@ -3087,8 +3038,8 @@ filtered_chats AS (
   -- would evict an actively-writing chat the moment a new message lands past
   -- the caller's @to — the dashboard freezes @to when a range is picked, so
   -- running sessions would flicker out of the list until the next reload.
-  WHERE ($15::timestamptz IS NULL OR cs.last_message_timestamp >= $15)
-    AND ($16::timestamptz IS NULL OR cc.created_at <= $16)
+  WHERE ($17::timestamptz IS NULL OR cs.last_message_timestamp >= $17)
+    AND ($18::timestamptz IS NULL OR cc.created_at <= $18)
 ),
 limited_chats AS (
   -- Only ordering, paging and the total run over every filtered chat; the
@@ -3102,6 +3053,7 @@ limited_chats AS (
     fc.updated_at,
     fc.pinned_at,
     fc.litellm_proxied,
+    fc.agent_id,
     fc.sort_num_messages,
     fc.session_surface,
     fc.last_message_timestamp,
@@ -3119,17 +3071,17 @@ limited_chats AS (
         -- deliberate: listings are a timeline of when conversations happened,
         -- and folding in updated_at would let title renames and pin toggles
         -- reorder recency.
-        CASE WHEN $14 = 'last_message_timestamp' AND $17 = 'desc' THEN fc.last_message_timestamp END DESC NULLS LAST,
-        CASE WHEN $14 = 'last_message_timestamp' AND $17 = 'asc' THEN fc.last_message_timestamp END ASC NULLS LAST,
-        CASE WHEN $14 = 'num_messages' AND $17 = 'desc' THEN fc.sort_num_messages END DESC NULLS LAST,
-        CASE WHEN $14 = 'num_messages' AND $17 = 'asc' THEN fc.sort_num_messages END ASC NULLS LAST,
+        CASE WHEN $16 = 'last_message_timestamp' AND $19 = 'desc' THEN fc.last_message_timestamp END DESC NULLS LAST,
+        CASE WHEN $16 = 'last_message_timestamp' AND $19 = 'asc' THEN fc.last_message_timestamp END ASC NULLS LAST,
+        CASE WHEN $16 = 'num_messages' AND $19 = 'desc' THEN fc.sort_num_messages END DESC NULLS LAST,
+        CASE WHEN $16 = 'num_messages' AND $19 = 'asc' THEN fc.sort_num_messages END ASC NULLS LAST,
         fc.last_message_timestamp DESC,
         fc.id DESC
     ) AS page_position
   FROM filtered_chats fc
   ORDER BY page_position
-  LIMIT $19
-  OFFSET $18
+  LIMIT $21
+  OFFSET $20
 ),
 page_chats AS (
   SELECT
@@ -3145,9 +3097,9 @@ page_chats AS (
       SELECT COUNT(*)::integer
       FROM chat_messages cm
       WHERE cm.chat_id = lc.id
-        AND cm.project_id = $1::uuid
+        AND cm.project_id = $2::uuid
     ))::integer AS num_messages,
-    coalesce(lc.session_surface, CASE WHEN EXISTS (SELECT 1 FROM chat_session_links tag_link WHERE tag_link.project_id = $1::uuid AND tag_link.child_chat_id = lc.id AND tag_link.kind = 'subagent' AND tag_link.source_surface = 'claude-tag') THEN 'claude-tag' END, (SELECT source FROM chat_messages WHERE chat_id = lc.id AND project_id = $1::uuid AND source IS NOT NULL AND source <> '' ORDER BY created_at DESC LIMIT 1)) AS source,
+    coalesce(lc.session_surface, CASE WHEN EXISTS (SELECT 1 FROM chat_session_links tag_link WHERE tag_link.project_id = $2::uuid AND tag_link.child_chat_id = lc.id AND tag_link.kind = 'subagent' AND tag_link.source_surface = 'claude-tag') THEN 'claude-tag' END, (SELECT source FROM chat_messages WHERE chat_id = lc.id AND project_id = $2::uuid AND source IS NOT NULL AND source <> '' ORDER BY created_at DESC LIMIT 1)) AS source,
     lc.last_message_timestamp,
     lc.account_type,
     lc.account_email,
@@ -3160,6 +3112,14 @@ page_chats AS (
     -- The agent identity the assistant acts as, when it has one. At most one
     -- live binding exists per assistant, so this join adds no rows.
     b.original_agent_id AS assistant_agent_id,
+    -- The agent principal that produced the session, stamped at capture from
+    -- the authenticated actor. A channel session has no assistant record, so
+    -- the assistant columns above stay NULL and this is the only thing naming
+    -- the agent that made the calls. The name comes from the agents row rather
+    -- than the stamp so a rename is reflected, and a deleted agent reports its
+    -- id with no name rather than disappearing from the session's history.
+    lc.agent_id,
+    acting_agent.name AS agent_name,
     lc.total_count,
     lc.page_position
   FROM limited_chats lc
@@ -3173,17 +3133,24 @@ page_chats AS (
   LEFT JOIN LATERAL (
     SELECT at.id AS thread_id
     FROM assistant_threads at
-    WHERE at.chat_id = lc.id AND at.project_id = $1 AND at.deleted IS FALSE
-    ORDER BY ($9 <> '' AND at.assistant_id::text = $9) DESC, at.last_event_at DESC, at.id DESC
+    WHERE at.chat_id = lc.id AND at.project_id = $2 AND at.deleted IS FALSE
+    ORDER BY ($10 <> '' AND at.assistant_id::text = $10) DESC, at.last_event_at DESC, at.id DESC
     LIMIT 1
   ) picked ON TRUE
-  LEFT JOIN assistant_threads thread ON thread.id = picked.thread_id AND thread.project_id = $1
-  LEFT JOIN assistants a ON a.id = thread.assistant_id AND a.project_id = $1 AND a.deleted IS FALSE
-  LEFT JOIN assistant_agent_bindings b ON b.original_assistant_id = a.id AND b.project_id = $1 AND b.deleted IS FALSE
+  LEFT JOIN assistant_threads thread ON thread.id = picked.thread_id AND thread.project_id = $2
+  LEFT JOIN assistants a ON a.id = thread.assistant_id AND a.project_id = $2 AND a.deleted IS FALSE
+  LEFT JOIN assistant_agent_bindings b ON b.original_assistant_id = a.id AND b.project_id = $2 AND b.deleted IS FALSE
+  -- Agents are organization-scoped (their project_id is nullable), so the
+  -- lookup is pinned to the listed project's organization. chats.agent_id
+  -- carries no foreign key, so this is what keeps a stale or cross-tenant stamp
+  -- from resolving to a name here.
+  LEFT JOIN agents acting_agent ON acting_agent.id = lc.agent_id
+    AND acting_agent.organization_id = (SELECT p.organization_id FROM projects p WHERE p.id = $2::uuid)
+    AND acting_agent.deleted IS FALSE
 ),
 chat_attribution AS (
   SELECT
-    lc.id, lc.title, lc.user_id, lc.external_user_id, lc.created_at, lc.updated_at, lc.pinned_at, lc.litellm_proxied, lc.num_messages, lc.source, lc.last_message_timestamp, lc.account_type, lc.account_email, lc.assistant_id, lc.assistant_name, lc.assistant_agent_id, lc.total_count, lc.page_position,
+    lc.id, lc.title, lc.user_id, lc.external_user_id, lc.created_at, lc.updated_at, lc.pinned_at, lc.litellm_proxied, lc.num_messages, lc.source, lc.last_message_timestamp, lc.account_type, lc.account_email, lc.assistant_id, lc.assistant_name, lc.assistant_agent_id, lc.agent_id, lc.agent_name, lc.total_count, lc.page_position,
     COALESCE(CASE WHEN lc.source = 'litellm' THEN (
       SELECT CASE
         WHEN user_agent = ANY (ARRAY['claude-code', 'codex', 'opencode']::text[]) THEN user_agent
@@ -3191,7 +3158,7 @@ chat_attribution AS (
       END
       FROM chat_messages
       WHERE chat_id = lc.id
-        AND project_id = $1::uuid
+        AND project_id = $2::uuid
         AND source = 'litellm'
       ORDER BY created_at DESC
       LIMIT 1
@@ -3211,49 +3178,54 @@ SELECT
   lc.pinned_at,
   lc.num_messages,
   lc.last_message_timestamp,
-  -- Active findings for the returned page rows only; must stay in sync with
-  -- the risk_counts predicate above (and the risk.results.list detail view).
-  (
-    SELECT COUNT(*)::integer
-    FROM risk_results rr
-    JOIN chat_messages cm ON cm.id = rr.chat_message_id
-    JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
-    WHERE rr.project_id = $1
-      AND cm.chat_id = lc.id
-      AND rr.found IS TRUE
-      AND rr.excluded_at IS NULL
-      AND rr.false_positive_at IS NULL
-  ) AS risk_findings_count,
+  CASE
+    WHEN $1::boolean THEN 0
+    ELSE (
+      SELECT COUNT(*)::integer
+      FROM risk_results rr
+      JOIN chat_messages cm ON cm.id = rr.chat_message_id
+      JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
+      WHERE rr.project_id = $2
+        AND cm.chat_id = lc.id
+        AND rr.found IS TRUE
+        AND rr.excluded_at IS NULL
+        AND rr.false_positive_at IS NULL
+    )
+  END::integer AS risk_findings_count,
   lc.account_type,
   lc.account_email,
   lc.assistant_id,
   lc.assistant_name,
   lc.assistant_agent_id,
+  lc.agent_id,
+  lc.agent_name,
   lc.total_count
 FROM chat_attribution lc
 ORDER BY lc.page_position
 `
 
 type ListChatsParams struct {
-	ProjectID         uuid.UUID
-	HasRiskFilter     string
-	MinRiskScore      int32
-	ChatID            uuid.NullUUID
-	ExternalUserID    interface{}
-	UserID            interface{}
-	Pinned            string
-	Search            interface{}
-	AssistantID       interface{}
-	SourceKind        string
-	ExcludeSourceKind string
-	AccountType       string
-	Sources           []string
-	SortBy            interface{}
-	FromTime          pgtype.Timestamptz
-	ToTime            pgtype.Timestamptz
-	SortOrder         interface{}
-	PageOffset        int32
-	PageLimit         int32
+	RiskFindingsClickhouse bool
+	ProjectID              uuid.UUID
+	HasRiskFilter          string
+	MinRiskScore           int32
+	ChatID                 uuid.NullUUID
+	ExternalUserID         interface{}
+	UserID                 interface{}
+	Pinned                 string
+	Search                 interface{}
+	AssistantID            interface{}
+	SourceKind             string
+	ExcludeSourceKind      string
+	RiskChatIds            []uuid.UUID
+	AccountType            string
+	Sources                []string
+	SortBy                 interface{}
+	FromTime               pgtype.Timestamptz
+	ToTime                 pgtype.Timestamptz
+	SortOrder              interface{}
+	PageOffset             int32
+	PageLimit              int32
 }
 
 type ListChatsRow struct {
@@ -3275,6 +3247,8 @@ type ListChatsRow struct {
 	AssistantID          uuid.NullUUID
 	AssistantName        pgtype.Text
 	AssistantAgentID     uuid.NullUUID
+	AgentID              uuid.NullUUID
+	AgentName            pgtype.Text
 	TotalCount           int64
 }
 
@@ -3289,6 +3263,7 @@ type ListChatsRow struct {
 // risk_findings_count is computed per returned page row in the final SELECT.
 func (q *Queries) ListChats(ctx context.Context, arg ListChatsParams) ([]ListChatsRow, error) {
 	rows, err := q.db.Query(ctx, listChats,
+		arg.RiskFindingsClickhouse,
 		arg.ProjectID,
 		arg.HasRiskFilter,
 		arg.MinRiskScore,
@@ -3300,6 +3275,7 @@ func (q *Queries) ListChats(ctx context.Context, arg ListChatsParams) ([]ListCha
 		arg.AssistantID,
 		arg.SourceKind,
 		arg.ExcludeSourceKind,
+		arg.RiskChatIds,
 		arg.AccountType,
 		arg.Sources,
 		arg.SortBy,
@@ -3335,6 +3311,8 @@ func (q *Queries) ListChats(ctx context.Context, arg ListChatsParams) ([]ListCha
 			&i.AssistantID,
 			&i.AssistantName,
 			&i.AssistantAgentID,
+			&i.AgentID,
+			&i.AgentName,
 			&i.TotalCount,
 		); err != nil {
 			return nil, err
@@ -3564,30 +3542,47 @@ WITH ordered AS (
 attachment_risk_prompts AS (
   SELECT ccp.parent_chat_message_id AS id
   FROM chat_content_parts ccp
-  JOIN risk_results rr ON rr.chat_content_part_id = ccp.id
-  JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
   WHERE ccp.chat_id = $2
     AND ccp.project_id = $3::uuid
     AND ccp.deleted IS FALSE
     AND ccp.parent_chat_message_id IS NOT NULL
-    AND rr.project_id = $3::uuid
-    AND rr.found IS TRUE
-    AND rr.excluded_at IS NULL
-    AND rr.false_positive_at IS NULL
+    AND (
+      (
+        $5::boolean
+        AND ccp.id = ANY($6::uuid[])
+      )
+      OR (
+        NOT $5::boolean
+        AND EXISTS (
+          SELECT 1
+          FROM risk_results rr
+          JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
+          WHERE rr.chat_content_part_id = ccp.id
+            AND rr.project_id = $3::uuid
+            AND rr.found IS TRUE
+            AND rr.excluded_at IS NULL
+            AND rr.false_positive_at IS NULL
+        )
+      )
+    )
 ),
 risk_rns AS (
   SELECT o.rn FROM ordered o
-  WHERE EXISTS (
-    SELECT 1 FROM risk_results rr
-    -- is_risk only fires while the finding's policy is enabled and not deleted,
-    -- so a since-disabled policy drops out of the "Risky only" view too (matches
-    -- risk.results.list, which drives the highlight detail).
-    JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
-    WHERE rr.chat_message_id = o.id
-      AND rr.project_id = $3::uuid
-      AND rr.found IS TRUE
-      AND rr.excluded_at IS NULL
-      AND rr.false_positive_at IS NULL
+  WHERE (
+    $5::boolean
+    AND o.id = ANY($7::uuid[])
+  )
+  OR (
+    NOT $5::boolean
+    AND EXISTS (
+      SELECT 1 FROM risk_results rr
+      JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
+      WHERE rr.chat_message_id = o.id
+        AND rr.project_id = $3::uuid
+        AND rr.found IS TRUE
+        AND rr.excluded_at IS NULL
+        AND rr.false_positive_at IS NULL
+    )
   )
   OR o.id IN (SELECT id FROM attachment_risk_prompts)
 )
@@ -3603,10 +3598,13 @@ ORDER BY o.created_at ASC, o.seq ASC
 `
 
 type ListRiskWindowedMessagesParams struct {
-	ContextSize int64
-	ChatID      uuid.UUID
-	ProjectID   uuid.UUID
-	Generation  int32
+	ContextSize            int64
+	ChatID                 uuid.UUID
+	ProjectID              uuid.UUID
+	Generation             int32
+	RiskFindingsClickhouse bool
+	RiskContentPartIds     []uuid.UUID
+	RiskMessageIds         []uuid.UUID
 }
 
 type ListRiskWindowedMessagesRow struct {
@@ -3665,6 +3663,9 @@ func (q *Queries) ListRiskWindowedMessages(ctx context.Context, arg ListRiskWind
 		arg.ChatID,
 		arg.ProjectID,
 		arg.Generation,
+		arg.RiskFindingsClickhouse,
+		arg.RiskContentPartIds,
+		arg.RiskMessageIds,
 	)
 	if err != nil {
 		return nil, err
@@ -4302,19 +4303,20 @@ func (q *Queries) SeedDisabledRiskPolicy(ctx context.Context, arg SeedDisabledRi
 }
 
 const seedRiskPolicy = `-- name: SeedRiskPolicy :one
-INSERT INTO risk_policies (project_id, organization_id, name, sources, enabled, action, auto_name, version)
-VALUES ($1, $2, 'test-policy', '{}', TRUE, 'flag', TRUE, 1)
+INSERT INTO risk_policies (project_id, organization_id, name, sources, enabled, action, auto_name, score, version)
+VALUES ($1, $2, 'test-policy', '{}', TRUE, 'flag', TRUE, COALESCE(NULLIF($3::double precision, 0), 5), 1)
 RETURNING id
 `
 
 type SeedRiskPolicyParams struct {
 	ProjectID      uuid.UUID
 	OrganizationID string
+	Score          float64
 }
 
 // Test fixture: insert a minimal risk policy and return its id.
 func (q *Queries) SeedRiskPolicy(ctx context.Context, arg SeedRiskPolicyParams) (uuid.UUID, error) {
-	row := q.db.QueryRow(ctx, seedRiskPolicy, arg.ProjectID, arg.OrganizationID)
+	row := q.db.QueryRow(ctx, seedRiskPolicy, arg.ProjectID, arg.OrganizationID, arg.Score)
 	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err
@@ -4381,32 +4383,6 @@ type SetChatPinnedParams struct {
 func (q *Queries) SetChatPinned(ctx context.Context, arg SetChatPinnedParams) error {
 	_, err := q.db.Exec(ctx, setChatPinned, arg.Pinned, arg.ID, arg.ProjectID)
 	return err
-}
-
-const setInferenceAcceptedCheckpoint = `-- name: SetInferenceAcceptedCheckpoint :execrows
-UPDATE chats SET inference_accepted_checkpoint = $1
-WHERE project_id = $2 AND external_chat_id = $3
-  AND inference_accepted_checkpoint IS NOT DISTINCT FROM $4::bytea
-`
-
-type SetInferenceAcceptedCheckpointParams struct {
-	Checkpoint         []byte
-	ProjectID          uuid.UUID
-	ExternalChatID     pgtype.Text
-	ExpectedCheckpoint []byte
-}
-
-func (q *Queries) SetInferenceAcceptedCheckpoint(ctx context.Context, arg SetInferenceAcceptedCheckpointParams) (int64, error) {
-	result, err := q.db.Exec(ctx, setInferenceAcceptedCheckpoint,
-		arg.Checkpoint,
-		arg.ProjectID,
-		arg.ExternalChatID,
-		arg.ExpectedCheckpoint,
-	)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
 }
 
 const setInferenceActorKey = `-- name: SetInferenceActorKey :exec

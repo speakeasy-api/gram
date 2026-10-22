@@ -69,12 +69,13 @@ func startIdentitySocket(t *testing.T, status int, body string) string {
 	return socket
 }
 
-// isolateInstalledAgent hides machine-wide speakeasyd installs for the test.
-// Without it a real daemon at /usr/local/bin (as on any enrolled developer
-// machine) answers the exec tier and the assertion reads that machine's
-// identity instead of the fixture's.
+// isolateInstalledAgent hides machine-wide speakeasyd installs, and any under
+// the developer's XDG_STATE_HOME, for the test. Without it a real daemon at
+// /usr/local/bin (as on any enrolled developer machine) answers the exec tier
+// and the assertion reads that machine's identity instead of the fixture's.
 func isolateInstalledAgent(t *testing.T) {
 	t.Helper()
+	t.Setenv("XDG_STATE_HOME", "")
 	previous := machineWideAgentPaths
 	machineWideAgentPaths = nil
 	t.Cleanup(func() { machineWideAgentPaths = previous })
@@ -162,6 +163,33 @@ func TestDeviceAgentEmailFindsAgentOffPATH(t *testing.T) {
 
 	require.Contains(t, deviceAgentCommands(), agent)
 	require.Equal(t, "managed@example.com", deviceAgentEmail(t.Context()))
+}
+
+func TestDeviceAgentCommandsFindsXDGStateInstall(t *testing.T) {
+	// The dashboard's Linux setup installs both binaries into
+	// ~/.local/state/speakeasy/bin, off PATH and apart from the SDK
+	// generator's ~/.speakeasy folder.
+	if runtime.GOOS == "darwin" || runtime.GOOS == "windows" {
+		t.Skip("XDG state install location is Linux-only")
+	}
+	isolateInstalledAgent(t)
+	home := t.TempDir()
+	stateHome := t.TempDir()
+	defaultAgent := filepath.Join(home, ".local", "state", "speakeasy", "bin", "speakeasyd")
+	xdgAgent := filepath.Join(stateHome, "speakeasy", "bin", "speakeasyd")
+	for _, agent := range []string{defaultAgent, xdgAgent} {
+		require.NoError(t, os.MkdirAll(filepath.Dir(agent), 0o755))
+		require.NoError(t, os.WriteFile(agent, []byte("#!/bin/sh\n"), 0o700))
+	}
+
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_STATE_HOME", stateHome)
+	t.Setenv("SPEAKEASY_AI_DEVICE_AGENT_COMMANDS", "")
+	t.Setenv("GRAM_DEVICE_AGENT_COMMANDS", "")
+
+	commands := deviceAgentCommands()
+	require.Contains(t, commands, xdgAgent)
+	require.Contains(t, commands, defaultAgent)
 }
 
 func TestTopLevelPayloadEmailIgnoresNestedValues(t *testing.T) {

@@ -129,6 +129,14 @@ WHERE project_id = @project_id
   AND enabled IS TRUE
   AND deleted IS FALSE;
 
+-- name: ListEnabledRiskPolicyIDsByOrganizationProject :many
+SELECT id
+FROM risk_policies
+WHERE organization_id = @organization_id
+  AND project_id = @project_id
+  AND enabled IS TRUE
+  AND deleted IS FALSE;
+
 -- name: ListEnabledUnscopedRiskPoliciesByProject :many
 -- MCP-scoped policies are evaluated only at the MCP seams.
 SELECT *
@@ -244,6 +252,29 @@ WHERE project_id = @project_id
     jsonb_build_array(jsonb_build_object('mcp_server_id', @mcp_server_id::text))
   )
 ORDER BY id;
+
+-- name: ListRiskPoliciesScopingMCPServerForUpdate :many
+-- Containment never raises on a malformed scope.
+SELECT *
+FROM risk_policies
+WHERE project_id = @project_id
+  AND deleted IS FALSE
+  AND mcp_scope @> jsonb_build_object(
+    'servers',
+    jsonb_build_array(jsonb_build_object('mcp_server_id', @mcp_server_id::text))
+  )
+ORDER BY id
+FOR UPDATE;
+
+-- name: PruneRiskPolicyMCPScope :one
+-- Only for dropping a deleted server: it gets no traffic, so version stays.
+UPDATE risk_policies
+SET mcp_scope = @mcp_scope::jsonb
+  , updated_at = clock_timestamp()
+WHERE id = @id
+  AND project_id = @project_id
+  AND deleted IS FALSE
+RETURNING *;
 
 -- name: ListProjectIDsWithOrphanedLifecycleBoundRiskPolicies :many
 SELECT DISTINCT policy.project_id

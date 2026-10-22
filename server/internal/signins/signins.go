@@ -242,8 +242,11 @@ func CheckSignInIdentity(ctx context.Context, db repo.DBTX, organizationID strin
 }
 
 // CheckConsentIdentity checks the exact sign-in captured by an authenticated
-// authorization flow, before that flow has created an MCP grant. It never
-// grants access or substitutes for CheckSignInIdentity at token use.
+// authorization flow, before that flow has created an MCP grant. The sign-in
+// tier's own age limit applies; the caller sets no additional cap. Identity
+// chaining relies on it to mint and store a vendor token for that sign-in on
+// the consent page; the token is released only to a grant whose own sign-in
+// then passes CheckSignInIdentity.
 func CheckConsentIdentity(ctx context.Context, db repo.DBTX, organizationID, userID string, signInID uuid.UUID, now time.Time) (Result, error) {
 	if signInID == uuid.Nil || userID == "" {
 		return Result{Reason: ReasonNotLinked, Identity: nil}, nil

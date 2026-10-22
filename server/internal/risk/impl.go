@@ -567,7 +567,7 @@ func (s *Service) ListRiskPolicies(ctx context.Context, payload *gen.ListRiskPol
 
 	result := make([]*types.RiskPolicy, 0, len(policies))
 	for _, policy := range policies {
-		result = append(result, policyToGoa(policy))
+		result = append(result, policycore.ToGoa(policy))
 	}
 	return &gen.ListRiskPoliciesResult{Policies: result}, nil
 }
@@ -646,7 +646,7 @@ func (s *Service) ListRiskPoliciesForMcpServer(ctx context.Context, payload *gen
 
 	result := make([]*types.RiskPolicy, 0, len(policies))
 	for _, policy := range policies {
-		result = append(result, policyToGoa(policy))
+		result = append(result, policycore.ToGoa(policy))
 	}
 	return &gen.ListRiskPoliciesResult{Policies: result}, nil
 }
@@ -826,7 +826,7 @@ func (s *Service) GetRiskPolicy(ctx context.Context, payload *gen.GetRiskPolicyP
 		return nil, oops.E(oops.CodeUnexpected, err, "load risk policy").LogError(ctx, s.logger)
 	}
 
-	return policyToGoa(policy), nil
+	return policycore.ToGoa(policy), nil
 }
 
 func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskPolicyPayload) (*types.RiskPolicy, error) {
@@ -1366,6 +1366,19 @@ func parseOptionalMCPServerID(raw *string) (string, error) {
 	return id.String(), nil
 }
 
+func (s *Service) riskFindingsClickHouseEnabled(ctx context.Context, authCtx *contextvalues.AuthContext) bool {
+	projectSlug := ""
+	if authCtx.ProjectSlug != nil {
+		projectSlug = *authCtx.ProjectSlug
+	}
+	evaluation, err := feature.EvaluateFlag(ctx, s.flags, feature.FlagRiskFindingsClickHouseCutover, authCtx.ActiveOrganizationID, feature.OrgProjectGroups(authCtx.OrganizationSlug, projectSlug))
+	if err != nil {
+		s.logger.WarnContext(ctx, "evaluate risk findings ClickHouse cutover", attr.SlogError(err))
+		return false
+	}
+	return evaluation == feature.EvaluationEnabled
+}
+
 // listRiskResultsRaw is the shared, always-unredacted fetch behind both
 // ListRiskResults (which may redact its output) and ListRiskResultsForAgent
 // (which always redacts). Keeping this as the single source of raw data
@@ -1412,8 +1425,8 @@ func (s *Service) listRiskResultsRaw(ctx context.Context, payload *gen.ListRiskR
 		return nil, oops.E(oops.CodeInvalid, nil, "invalid execution ID")
 	}
 
-	// The Postgres chat listing cannot narrow by finding or execution.
-	if chatID != "" && mcpServerID == "" && !resultID.Valid && executionID == "" {
+	clickHouseCutover := s.riskFindingsClickHouseEnabled(ctx, authCtx)
+	if chatID != "" && mcpServerID == "" && !resultID.Valid && executionID == "" && !clickHouseCutover {
 		totalCount, err := s.repo.CountAllFindings(ctx, *authCtx.ProjectID)
 		if err != nil {
 			totalCount = 0
@@ -1475,7 +1488,7 @@ func (s *Service) listRiskResultsRaw(ctx context.Context, payload *gen.ListRiskR
 	if toTime.Valid {
 		to = &toTime.Time
 	}
-	return s.listResultsByProjectFromClickHouse(ctx, authCtx, cursor, pageSize, policyID, mcpServerID, chatID, resultID, executionID, category, ruleID, userID, payload.ExternalUserIds, uniqueMatch, nonAssistant, assistantID, from, to)
+	return s.listResultsByProjectFromClickHouse(ctx, authCtx, cursor, pageSize, policyID, mcpServerID, chatID, resultID, executionID, category, ruleID, userID, payload.ExternalUserIds, uniqueMatch, nonAssistant, assistantID, from, to, chatID != "" && clickHouseCutover)
 }
 
 func parseOptionalTimestamptz(raw *string) (pgtype.Timestamptz, error) {
@@ -1702,6 +1715,15 @@ func (s *Service) ListRiskResultsByChat(ctx context.Context, payload *gen.ListRi
 	}
 
 	pageSize := resolvePageSize(payload.Limit)
+	if s.flags != nil {
+		groups := feature.OrgProjectGroups(authCtx.OrganizationSlug, conv.PtrValOr(authCtx.ProjectSlug, ""))
+		cutover, flagErr := s.flags.IsFlagEnabled(ctx, feature.FlagRiskFindingsClickHouseCutover, authCtx.ActiveOrganizationID, groups)
+		if flagErr != nil {
+			s.logger.WarnContext(ctx, "risk findings clickhouse cutover flag check failed; using postgres", attr.SlogError(flagErr))
+		} else if cutover {
+			return s.listRiskResultsByChatFromClickHouse(ctx, authCtx, cursor, pageSize)
+		}
+	}
 
 	rows, err := s.repo.ListRiskResultsGroupedByChat(ctx, repo.ListRiskResultsGroupedByChatParams{
 		ProjectID: *authCtx.ProjectID,
@@ -2265,28 +2287,27 @@ func (s *Service) SuggestExclusion(ctx context.Context, payload *gen.SuggestExcl
 
 	prompt := strings.TrimSpace(conv.PtrValOr(payload.Prompt, ""))
 
-	// finding_ids are looked up server-side rather than trusting client-supplied
-	// match/rule_id/source content: the caller may be suggesting from a batch
-	// whose sensitive fields the dashboard hasn't unmasked, and this way the
-	// suggestion always sees authoritative data.
-	var findings []repo.RiskResult
+	// Resolve ids server-side to reject foreign-tenant or stale finding state.
+	var findings []exclusionSuggestionFinding
 	if len(payload.FindingIds) > 0 {
 		ids := make([]uuid.UUID, 0, len(payload.FindingIds))
+		seen := make(map[uuid.UUID]struct{}, len(payload.FindingIds))
 		for _, raw := range payload.FindingIds {
 			id, err := uuid.Parse(raw)
 			if err != nil {
 				return nil, oops.E(oops.CodeInvalid, err, "invalid finding id %q", raw)
 			}
+			if _, ok := seen[id]; ok {
+				continue
+			}
+			seen[id] = struct{}{}
 			ids = append(ids, id)
 		}
-		rows, err := s.repo.GetRiskResultsByIDs(ctx, repo.GetRiskResultsByIDsParams{
-			ProjectID: *authCtx.ProjectID,
-			Ids:       ids,
-		})
+		var err error
+		findings, err = s.exclusionSuggestionFindings(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, ids)
 		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "get risk results by ids").LogError(ctx, s.logger)
+			return nil, err
 		}
-		findings = rows
 	}
 
 	if prompt == "" && len(findings) == 0 {
@@ -2306,6 +2327,42 @@ func (s *Service) SuggestExclusion(ctx context.Context, payload *gen.SuggestExcl
 	return suggestion, nil
 }
 
+// exclusionSuggestionFinding carries only non-sensitive finding metadata. The
+// matched value is never read here: it would bypass the chat:read gate and
+// audit trail of risk.unmaskResult.
+type exclusionSuggestionFinding struct {
+	RuleID string
+	Source string
+}
+
+func (s *Service) exclusionSuggestionFindings(ctx context.Context, organizationID string, projectID uuid.UUID, ids []uuid.UUID) ([]exclusionSuggestionFinding, error) {
+	rows, err := s.findingsCH.ListRiskFindingsForUnmask(ctx, chrepo.ListRiskFindingsForUnmaskParams{
+		OrganizationID: organizationID,
+		ProjectID:      projectID.String(),
+		IDs:            ids,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "get risk findings by ids").LogError(ctx, s.logger)
+	}
+	byID := make(map[uuid.UUID]*chrepo.RiskFindingUnmaskRow, len(rows))
+	for i := range rows {
+		byID[rows[i].ID] = &rows[i]
+	}
+
+	findings := make([]exclusionSuggestionFinding, 0, len(ids))
+	for _, id := range ids {
+		row := byID[id]
+		if row == nil {
+			return nil, oops.E(oops.CodeInvalid, nil, "one or more finding ids are unavailable")
+		}
+		findings = append(findings, exclusionSuggestionFinding{
+			RuleID: row.RuleID,
+			Source: row.Source,
+		})
+	}
+	return findings, nil
+}
+
 // exclusionSuggestionResult wraps structured exclusion fields in the
 // suggestExclusion result type.
 func exclusionSuggestionResult(matchType, matchValue, ruleIDFilter, sourceFilter string) *gen.SuggestExclusionResult {
@@ -2318,16 +2375,12 @@ func exclusionSuggestionResult(matchType, matchValue, ruleIDFilter, sourceFilter
 }
 
 // heuristicExclusionSuggestion is the deterministic fallback when the LLM is
-// unavailable. With a prompt, treats it as the literal value to suppress —
-// safe, since the operator typed and is knowingly disclosing that value
-// themselves. With only a findings batch, never surfaces a finding's raw
-// matched value (a detected secret/PII value the operator hasn't reviewed):
-// unlike the prompt case, nothing here gates the operator seeing it first,
-// and putting it straight into match_value would bypass the audited
-// risk.unmaskResult path every other raw-match disclosure goes through.
-// Falls back to a rule_id- or source-scoped exclusion — coarser, but built
-// only from data that's never sensitive on its own.
-func heuristicExclusionSuggestion(prompt string, findings []repo.RiskResult) *gen.SuggestExclusionResult {
+// unavailable. With a prompt, treats it as the literal value to suppress, since
+// the operator typed and is knowingly disclosing that value. With only a
+// findings batch, never surfaces a finding's raw matched value: that would
+// bypass the audited risk.unmaskResult path. Falls back to a rule_id- or
+// source-scoped exclusion built only from non-sensitive metadata.
+func heuristicExclusionSuggestion(prompt string, findings []exclusionSuggestionFinding) *gen.SuggestExclusionResult {
 	if prompt != "" {
 		return exclusionSuggestionResult("exact", strings.TrimSpace(prompt), "", "")
 	}
@@ -2337,22 +2390,16 @@ func heuristicExclusionSuggestion(prompt string, findings []repo.RiskResult) *ge
 	return exclusionSuggestionResult("exact", "", "", "")
 }
 
-// exclusionSuggestionResultFromFindingMetadata derives a coarse exclusion
-// from a findings batch using only non-sensitive metadata (rule_id, source)
-// — never the matched value itself. Prefers rule_id when every finding
-// shares one (the more precise signal); falls back to source.
-func exclusionSuggestionResultFromFindingMetadata(findings []repo.RiskResult) *gen.SuggestExclusionResult {
-	firstRuleID := findings[0].RuleID.String
+// exclusionSuggestionResultFromFindingMetadata derives a coarse exclusion from
+// rule_id and source only. Prefers rule_id when every finding shares one.
+func exclusionSuggestionResultFromFindingMetadata(findings []exclusionSuggestionFinding) *gen.SuggestExclusionResult {
+	firstRuleID := findings[0].RuleID
 	sameRuleID := firstRuleID != ""
 	firstSource := findings[0].Source
-	sameSource := true
-	for _, f := range findings[1:] {
-		if f.RuleID.String != firstRuleID {
-			sameRuleID = false
-		}
-		if f.Source != firstSource {
-			sameSource = false
-		}
+	sameSource := firstSource != ""
+	for _, finding := range findings[1:] {
+		sameRuleID = sameRuleID && finding.RuleID == firstRuleID
+		sameSource = sameSource && finding.Source == firstSource
 	}
 	if sameRuleID {
 		return exclusionSuggestionResult("rule_id", firstRuleID, "", "")
@@ -2360,7 +2407,10 @@ func exclusionSuggestionResultFromFindingMetadata(findings []repo.RiskResult) *g
 	if sameSource {
 		return exclusionSuggestionResult("source", firstSource, "", "")
 	}
-	return exclusionSuggestionResult("rule_id", firstRuleID, "", "")
+	if firstRuleID != "" {
+		return exclusionSuggestionResult("rule_id", firstRuleID, "", "")
+	}
+	return exclusionSuggestionResult("source", firstSource, "", "")
 }
 
 // heuristicCustomRuleSuggestion is the deterministic fallback when the LLM
@@ -2761,12 +2811,12 @@ var exclusionMatchTypeAllow = map[string]bool{
 // would be wasted.
 var errExclusionSuggestionInvalid = errors.New("invalid exclusion suggestion")
 
-func (s *Service) suggestExclusionViaLLM(ctx context.Context, orgID, projectID, userID, userEmail, userPrompt string, findings []repo.RiskResult, knownRuleIDs []string) (*gen.SuggestExclusionResult, error) {
+func (s *Service) suggestExclusionViaLLM(ctx context.Context, orgID, projectID, userID, userEmail, userPrompt string, findings []exclusionSuggestionFinding, knownRuleIDs []string) (*gen.SuggestExclusionResult, error) {
 	systemPrompt := `You are a security-rules assistant for a runtime risk detection product.
 
 Given a natural-language description of findings an operator wants to stop flagging, a batch of example findings they selected, or both, return a JSON object the dashboard uses to prefill a "create exclusion" form. An exclusion suppresses matching findings retroactively and going forward.
 
-A finding carries the id of the rule that flagged it ("rule_id", e.g. "pii.email_address", "secret.aws_access_token", "custom.acme_token") and the detector source ("source", e.g. "gitleaks", "presidio", "prompt_injection", "custom"). When given a batch of example findings, their actual matched text is deliberately withheld from you — it's sensitive (a detected secret or PII value) and the operator hasn't reviewed or disclosed it to this request. Reason only from what the findings share by rule_id and source and suggest a "rule_id" or "source" match_type that covers them, never "exact"/"regex"/"entity_type" from batch findings alone. If the operator's own natural-language request separately names a specific value, that value came from them directly and may be used for "exact"/"regex"/"entity_type".
+A finding carries the id of the rule that flagged it ("rule_id", e.g. "pii.email_address", "secret.aws_access_token", "custom.acme_token") and the detector source ("source", e.g. "gitleaks", "presidio", "prompt_injection", "custom"). When given a batch of example findings, their actual matched text is deliberately withheld from you: it's sensitive (a detected secret or PII value), and the operator hasn't reviewed or disclosed it to this request. Reason only from what the findings share by rule_id and source and suggest a "rule_id" or "source" match_type that covers them, never "exact"/"regex"/"entity_type" from batch findings alone. If the operator's own natural-language request separately names a specific value, that value came from them directly and may be used for "exact"/"regex"/"entity_type".
 
 Fields:
 - "match_type": how match_value is compared, one of:
@@ -2793,13 +2843,11 @@ Output ONLY the JSON object. No prose, no markdown fences.`
 		messageParts = append(messageParts, fmt.Sprintf("Operator request: %s", userPrompt))
 	}
 	if len(findings) > 0 {
-		// Deliberately omits each finding's matched value (a detected
-		// secret/PII value) — see the system prompt's note on why. Only
-		// rule_id/source, neither sensitive on its own, cross this boundary.
+		// Matched values never cross this boundary; see the system prompt.
 		var b strings.Builder
 		b.WriteString("Example findings the operator selected:\n")
 		for _, f := range findings {
-			fmt.Fprintf(&b, "- rule_id=%q source=%q\n", f.RuleID.String, f.Source)
+			fmt.Fprintf(&b, "- rule_id=%q source=%q\n", f.RuleID, f.Source)
 		}
 		messageParts = append(messageParts, strings.TrimRight(b.String(), "\n"))
 	}
@@ -3519,7 +3567,7 @@ func (s *Service) policyToType(ctx context.Context, row repo.RiskPolicy) (*types
 	if err != nil {
 		return nil, fmt.Errorf("project risk policy: %w", err)
 	}
-	return policyToGoa(policy), nil
+	return policycore.ToGoa(policy), nil
 }
 
 func buildSessionQuarantine(row repo.SessionQuarantine) *gen.SessionQuarantine {
