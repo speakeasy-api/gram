@@ -318,6 +318,15 @@ The Default project contains its Everyone Default plugin and a role-only plugin 
 
 AIM-409 assistant fixtures use one ordinary project-pinned trust registration (nonempty illustrative platform issuer/JWKS URLs, no wildcard admission), exact root admission/assignment, and complete generation-1 binding mirror tuples. The fifth managed agent belongs only to the bound assistant and has no grants or upstream credentials. Dashboard roots are durable, not per-wake. The demo trust URLs are inert display fixtures; runtime creation instead uses the deployment's configured Speakeasy issuer and existing JWKS. Browser verification pending.
 
+### Assistants: runtime selection
+
+Seeded assistants retain `runtime_version = 2`: the assistant insert omits this
+column and uses its database default. The Runtime row must display **Default**.
+No seed data change is needed to populate this row. Do not opt demo assistants
+into Kit or provision runtime credentials. When the feature flag hides the
+selector, the persisted runtime selection must remain unchanged; hiding the
+control is not a runtime migration.
+
 ### Optional private-network onboarding
 
 The `private-network` setup task is catalog-backed and hidden by default, including

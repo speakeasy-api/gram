@@ -25,7 +25,7 @@ var assistantRuntimeImageTagPattern = regexp.MustCompile(`^[A-Za-z0-9_][A-Za-z0-
 // applied to a flag set. Sharing definitions across flag sets means sharing
 // mutable state.
 func assistantRuntimeFlags() []cli.Flag {
-	return []cli.Flag{
+	return append([]cli.Flag{
 		&cli.StringFlag{
 			Name:    "assistant-runtime-provider",
 			Usage:   "Assistant runtime provider. Allowed values: gke, local.",
@@ -85,7 +85,7 @@ func assistantRuntimeFlags() []cli.Flag {
 			Usage:   "Optional assistant runtime image tag. Defaults to the compiled assistant runtime image hash.",
 			EnvVars: []string{"GRAM_ASSISTANT_RUNTIME_IMAGE_TAG"},
 		},
-	}
+	}, assistantKitRuntimeFlags()...)
 }
 
 func assistantRuntimeConfigFromCLI(c *cli.Context, serverURL *url.URL) (assistants.RuntimeBackendConfig, error) {

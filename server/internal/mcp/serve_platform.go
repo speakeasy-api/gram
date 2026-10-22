@@ -524,11 +524,10 @@ func (s *Service) callPlatformToolsetTool(
 	}
 	outputBytes = int64(rw.body.Len())
 
-	chunk, structured, err := formatResult(*rw, plan.Kind)
+	responseContent, structured, err := formatResult(*rw, plan.Kind)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to format platform tool call result").LogError(ctx, logger)
 	}
-	responseContent := []json.RawMessage{chunk}
 	responsePayload, parseErr := mcpriskscan.ToolResultPayload(responseContent, structured)
 	if parseErr != nil {
 		responsePayload = mcpriskscan.Payload{}

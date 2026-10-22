@@ -29,6 +29,72 @@ func (q *Queries) AdvanceOrganizationUserSessionIssuerVersionFixture(ctx context
 	return err
 }
 
+const bindAssistantWorkloadClient = `-- name: BindAssistantWorkloadClient :one
+UPDATE user_session_clients c
+SET assistant_trigger_workload_binding_id = tb.id, assistant_runtime_id = r.id, updated_at = clock_timestamp()
+FROM trigger_workload_bindings tb
+JOIN assistant_agent_bindings ab ON ab.id = tb.assistant_binding_id
+  AND ab.organization_id = tb.organization_id AND ab.project_id = tb.project_id
+  AND ab.generation = tb.assistant_binding_generation
+JOIN assistants a ON a.id = ab.assistant_id AND a.project_id = ab.project_id AND a.organization_id = ab.organization_id
+JOIN assistant_runtimes r ON r.assistant_id = a.id AND r.project_id = a.project_id
+JOIN trigger_instances t ON t.id = tb.trigger_id AND t.project_id = tb.project_id AND t.organization_id = tb.organization_id
+WHERE c.id = $1 AND c.deleted IS FALSE
+  AND c.assistant_trigger_workload_binding_id IS NULL AND c.assistant_runtime_id IS NULL
+  AND r.id = $2 AND r.runtime_version = 3 AND a.runtime_version = 3
+  AND r.deleted IS FALSE AND r.ended IS FALSE AND r.state IN ('starting', 'active')
+  AND c.organization_id = $3
+  AND (c.project_id = $4 OR c.project_id IS NULL)
+  AND tb.organization_id = $3 AND tb.project_id = $4
+  AND ab.original_assistant_id = $5 AND tb.original_trigger_id = $6
+  AND tb.deleted IS FALSE AND ab.deleted IS FALSE AND a.deleted IS FALSE AND a.status = 'active'
+  AND t.deleted IS FALSE AND t.status = 'active' AND t.definition_slug <> 'wake'
+  AND t.target_kind = 'assistant' AND t.target_ref = a.id::text
+RETURNING c.id
+`
+
+type BindAssistantWorkloadClientParams struct {
+	ClientID       uuid.UUID
+	RuntimeID      uuid.UUID
+	OrganizationID pgtype.Text
+	ProjectID      uuid.NullUUID
+	AssistantID    uuid.UUID
+	TriggerID      uuid.UUID
+}
+
+// Pin a newly registered client to the current root binding, never infer it
+// from client metadata or accept a subject supplied at the token endpoint.
+func (q *Queries) BindAssistantWorkloadClient(ctx context.Context, arg BindAssistantWorkloadClientParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, bindAssistantWorkloadClient,
+		arg.ClientID,
+		arg.RuntimeID,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.AssistantID,
+		arg.TriggerID,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const clearAssistantWorkloadClientMarkersForTest = `-- name: ClearAssistantWorkloadClientMarkersForTest :exec
+UPDATE user_session_clients
+SET assistant_runtime_id = NULL, assistant_trigger_workload_binding_id = NULL
+WHERE id = $1 AND organization_id = $2
+`
+
+type ClearAssistantWorkloadClientMarkersForTestParams struct {
+	ClientID       uuid.UUID
+	OrganizationID pgtype.Text
+}
+
+// Test fixture: simulate ON DELETE SET NULL cleanup of both binding references.
+func (q *Queries) ClearAssistantWorkloadClientMarkersForTest(ctx context.Context, arg ClearAssistantWorkloadClientMarkersForTestParams) error {
+	_, err := q.db.Exec(ctx, clearAssistantWorkloadClientMarkersForTest, arg.ClientID, arg.OrganizationID)
+	return err
+}
+
 const clearUserSessionClientAuthMethod = `-- name: ClearUserSessionClientAuthMethod :one
 UPDATE user_session_clients
 SET token_endpoint_auth_method = NULL
@@ -1487,6 +1553,178 @@ func (q *Queries) DeleteUserSessionIssuerCimdClient(ctx context.Context, arg Del
 	return i, err
 }
 
+const getAssistantRuntimeForWorkloadSession = `-- name: GetAssistantRuntimeForWorkloadSession :one
+SELECT r.id AS runtime_id, r.assistant_id, c.id AS client_registration_id
+FROM user_sessions s
+JOIN user_session_clients c ON c.id = s.user_session_client_id AND c.user_session_issuer_id = s.user_session_issuer_id
+JOIN trigger_workload_bindings tb ON tb.id = c.assistant_trigger_workload_binding_id AND tb.organization_id = c.organization_id AND tb.deleted IS FALSE
+JOIN assistant_agent_bindings ab ON ab.id = tb.assistant_binding_id AND ab.organization_id = tb.organization_id AND ab.project_id = tb.project_id AND ab.deleted IS FALSE AND ab.generation = tb.assistant_binding_generation
+JOIN trigger_instances t ON t.id = tb.trigger_id AND t.project_id = tb.project_id AND t.organization_id = tb.organization_id AND t.deleted IS FALSE AND t.status = 'active'
+JOIN assistant_runtimes r ON r.id = c.assistant_runtime_id AND r.project_id = tb.project_id AND r.assistant_id = ab.assistant_id
+JOIN assistants a ON a.id = r.assistant_id AND a.project_id = r.project_id
+WHERE s.jti = $1 AND s.subject_urn = $2
+  AND s.organization_id = $3 AND r.project_id = $4
+  AND s.deleted IS FALSE AND s.expires_at > clock_timestamp() AND c.deleted IS FALSE
+  AND r.state IN ('starting', 'active')
+  AND r.runtime_version = 3 AND a.runtime_version = 3 AND r.deleted IS FALSE AND r.ended IS FALSE
+  AND a.deleted IS FALSE AND a.status = 'active' AND a.organization_id = $3
+  AND t.definition_slug <> 'wake' AND t.target_kind = 'assistant' AND t.target_ref = a.id::text
+`
+
+type GetAssistantRuntimeForWorkloadSessionParams struct {
+	Jti            string
+	SubjectUrn     urn.SessionSubject
+	OrganizationID pgtype.Text
+	ProjectID      uuid.UUID
+}
+
+type GetAssistantRuntimeForWorkloadSessionRow struct {
+	RuntimeID            uuid.UUID
+	AssistantID          uuid.UUID
+	ClientRegistrationID uuid.UUID
+}
+
+// Input comes only from the already authenticated workload context. The caller
+// locks/rechecks the returned runtime in its wake-creation transaction.
+func (q *Queries) GetAssistantRuntimeForWorkloadSession(ctx context.Context, arg GetAssistantRuntimeForWorkloadSessionParams) (GetAssistantRuntimeForWorkloadSessionRow, error) {
+	row := q.db.QueryRow(ctx, getAssistantRuntimeForWorkloadSession,
+		arg.Jti,
+		arg.SubjectUrn,
+		arg.OrganizationID,
+		arg.ProjectID,
+	)
+	var i GetAssistantRuntimeForWorkloadSessionRow
+	err := row.Scan(&i.RuntimeID, &i.AssistantID, &i.ClientRegistrationID)
+	return i, err
+}
+
+const getAssistantWorkloadClientBinding = `-- name: GetAssistantWorkloadClientBinding :one
+SELECT tb.id AS binding_id, r.id AS runtime_id, ab.original_assistant_id AS assistant_id,
+  tb.original_trigger_id AS trigger_id, tb.original_workload_issuer_id AS workload_issuer_id,
+  tb.subject
+FROM user_session_clients c
+JOIN trigger_workload_bindings tb ON tb.id = c.assistant_trigger_workload_binding_id
+JOIN assistant_agent_bindings ab ON ab.id = tb.assistant_binding_id
+  AND ab.organization_id = tb.organization_id AND ab.project_id = tb.project_id
+  AND ab.generation = tb.assistant_binding_generation
+JOIN assistants a ON a.id = ab.assistant_id AND a.project_id = ab.project_id AND a.organization_id = ab.organization_id
+JOIN assistant_runtimes r ON r.id = c.assistant_runtime_id AND r.assistant_id = a.id AND r.project_id = a.project_id
+JOIN trigger_instances t ON t.id = tb.trigger_id AND t.project_id = tb.project_id AND t.organization_id = tb.organization_id
+WHERE c.id = $1 AND c.user_session_issuer_id = $2
+  AND c.organization_id = $3 AND c.deleted IS FALSE
+  AND (c.project_id = $4 OR c.project_id IS NULL)
+  AND tb.organization_id = $3 AND tb.project_id = $4
+  AND tb.deleted IS FALSE AND ab.deleted IS FALSE AND a.deleted IS FALSE AND a.status = 'active'
+  AND r.runtime_version = 3 AND a.runtime_version = 3 AND r.deleted IS FALSE AND r.ended IS FALSE
+  AND t.deleted IS FALSE AND t.status = 'active' AND t.definition_slug <> 'wake'
+  AND t.target_kind = 'assistant' AND t.target_ref = a.id::text
+`
+
+type GetAssistantWorkloadClientBindingParams struct {
+	ClientID            uuid.UUID
+	UserSessionIssuerID uuid.UUID
+	OrganizationID      pgtype.Text
+	ProjectID           uuid.NullUUID
+}
+
+type GetAssistantWorkloadClientBindingRow struct {
+	BindingID        uuid.UUID
+	RuntimeID        uuid.UUID
+	AssistantID      uuid.UUID
+	TriggerID        uuid.UUID
+	WorkloadIssuerID uuid.UUID
+	Subject          string
+}
+
+func (q *Queries) GetAssistantWorkloadClientBinding(ctx context.Context, arg GetAssistantWorkloadClientBindingParams) (GetAssistantWorkloadClientBindingRow, error) {
+	row := q.db.QueryRow(ctx, getAssistantWorkloadClientBinding,
+		arg.ClientID,
+		arg.UserSessionIssuerID,
+		arg.OrganizationID,
+		arg.ProjectID,
+	)
+	var i GetAssistantWorkloadClientBindingRow
+	err := row.Scan(
+		&i.BindingID,
+		&i.RuntimeID,
+		&i.AssistantID,
+		&i.TriggerID,
+		&i.WorkloadIssuerID,
+		&i.Subject,
+	)
+	return i, err
+}
+
+const getAssistantWorkloadRuntime = `-- name: GetAssistantWorkloadRuntime :one
+SELECT r.id, r.assistant_id, r.project_id, a.organization_id
+FROM assistant_runtimes r
+JOIN assistants a ON a.id = r.assistant_id AND a.project_id = r.project_id
+WHERE r.id = $1 AND r.runtime_version = 3 AND a.runtime_version = 3
+  AND r.deleted IS FALSE AND r.ended IS FALSE AND r.state IN ('starting', 'active')
+  AND a.deleted IS FALSE AND a.status = 'active'
+`
+
+type GetAssistantWorkloadRuntimeRow struct {
+	ID             uuid.UUID
+	AssistantID    uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID string
+}
+
+// Trusted worker bootstrap resolves tenancy from the persisted incarnation.
+func (q *Queries) GetAssistantWorkloadRuntime(ctx context.Context, runtimeID uuid.UUID) (GetAssistantWorkloadRuntimeRow, error) {
+	row := q.db.QueryRow(ctx, getAssistantWorkloadRuntime, runtimeID)
+	var i GetAssistantWorkloadRuntimeRow
+	err := row.Scan(
+		&i.ID,
+		&i.AssistantID,
+		&i.ProjectID,
+		&i.OrganizationID,
+	)
+	return i, err
+}
+
+const getKitUserSessionIssuerByID = `-- name: GetKitUserSessionIssuerByID :one
+SELECT issuer.id, issuer.project_id, issuer.organization_id, issuer.attachment_scope, issuer.slug, issuer.authn_challenge_mode, issuer.session_duration, issuer.classification, issuer.client_id_metadata_admission_mode, issuer.trusted_remote_session_issuer_id, issuer.trusted_remote_session_client_id, issuer.use_authentication_host, issuer.authorization_server_mode, issuer.pinned_issuer_url, issuer.created_at, issuer.updated_at, issuer.deleted_at, issuer.deleted
+FROM user_session_issuers issuer
+LEFT JOIN projects project ON project.id = issuer.project_id
+WHERE issuer.id = $1 AND issuer.deleted IS FALSE
+  AND ((issuer.project_id = $2::uuid AND project.organization_id = $3::text)
+    OR (issuer.project_id IS NULL AND issuer.organization_id = $3::text))
+`
+
+type GetKitUserSessionIssuerByIDParams struct {
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) GetKitUserSessionIssuerByID(ctx context.Context, arg GetKitUserSessionIssuerByIDParams) (UserSessionIssuer, error) {
+	row := q.db.QueryRow(ctx, getKitUserSessionIssuerByID, arg.ID, arg.ProjectID, arg.OrganizationID)
+	var i UserSessionIssuer
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.OrganizationID,
+		&i.AttachmentScope,
+		&i.Slug,
+		&i.AuthnChallengeMode,
+		&i.SessionDuration,
+		&i.Classification,
+		&i.ClientIDMetadataAdmissionMode,
+		&i.TrustedRemoteSessionIssuerID,
+		&i.TrustedRemoteSessionClientID,
+		&i.UseAuthenticationHost,
+		&i.AuthorizationServerMode,
+		&i.PinnedIssuerUrl,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const getLatestLiveUserSessionToolSelection = `-- name: GetLatestLiveUserSessionToolSelection :one
 SELECT tool_selection
 FROM user_sessions
@@ -2416,7 +2654,7 @@ func (q *Queries) GetUserSessionPolicyByJTI(ctx context.Context, arg GetUserSess
 }
 
 const getUserSessionPrincipalCredentialByJTI = `-- name: GetUserSessionPrincipalCredentialByJTI :one
-SELECT organization_id, subject_urn, authorizer_user_id, delegated_grants, delegated_grants_version
+SELECT organization_id, subject_urn, authorizer_user_id, delegated_grants, delegated_grants_version, user_session_client_id
 FROM user_sessions
 WHERE user_session_issuer_id = $1
   AND jti = $2
@@ -2435,6 +2673,7 @@ type GetUserSessionPrincipalCredentialByJTIRow struct {
 	AuthorizerUserID       pgtype.Text
 	DelegatedGrants        []byte
 	DelegatedGrantsVersion pgtype.Int4
+	UserSessionClientID    uuid.NullUUID
 }
 
 // Authoritative serve-path lookup for an agent session's immutable credential
@@ -2449,6 +2688,7 @@ func (q *Queries) GetUserSessionPrincipalCredentialByJTI(ctx context.Context, ar
 		&i.AuthorizerUserID,
 		&i.DelegatedGrants,
 		&i.DelegatedGrantsVersion,
+		&i.UserSessionClientID,
 	)
 	return i, err
 }
@@ -2563,6 +2803,46 @@ func (q *Queries) IssuerAdmitsCimdClientURI(ctx context.Context, arg IssuerAdmit
 	var exists bool
 	err := row.Scan(&exists)
 	return exists, err
+}
+
+const listAssistantWorkloadRuntimeRoots = `-- name: ListAssistantWorkloadRuntimeRoots :many
+SELECT tb.original_trigger_id AS trigger_id
+FROM trigger_workload_bindings tb
+JOIN assistant_agent_bindings ab ON ab.id = tb.assistant_binding_id
+  AND ab.organization_id = tb.organization_id AND ab.project_id = tb.project_id
+  AND ab.generation = tb.assistant_binding_generation
+JOIN trigger_instances t ON t.id = tb.trigger_id AND t.project_id = tb.project_id AND t.organization_id = tb.organization_id
+WHERE tb.project_id = $1 AND tb.organization_id = $2
+  AND ab.original_assistant_id = $3 AND ab.deleted IS FALSE AND tb.deleted IS FALSE
+  AND t.deleted IS FALSE AND t.status = 'active' AND t.definition_slug <> 'wake'
+  AND t.target_kind = 'assistant' AND t.target_ref = ab.original_assistant_id::text
+ORDER BY tb.original_trigger_id
+`
+
+type ListAssistantWorkloadRuntimeRootsParams struct {
+	ProjectID      uuid.UUID
+	OrganizationID string
+	AssistantID    uuid.UUID
+}
+
+func (q *Queries) ListAssistantWorkloadRuntimeRoots(ctx context.Context, arg ListAssistantWorkloadRuntimeRootsParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listAssistantWorkloadRuntimeRoots, arg.ProjectID, arg.OrganizationID, arg.AssistantID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var trigger_id uuid.UUID
+		if err := rows.Scan(&trigger_id); err != nil {
+			return nil, err
+		}
+		items = append(items, trigger_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listMCPServerProjectIDsForUserSessionIssuerMigration = `-- name: ListMCPServerProjectIDsForUserSessionIssuerMigration :many
@@ -4829,6 +5109,42 @@ func (q *Queries) RetierUserSessions(ctx context.Context, arg RetierUserSessions
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const revokeAssistantRuntimeWorkloadClients = `-- name: RevokeAssistantRuntimeWorkloadClients :many
+UPDATE user_session_clients c
+SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
+FROM assistant_runtimes r
+WHERE c.assistant_runtime_id = $1 AND r.id = c.assistant_runtime_id
+  AND c.organization_id = $2 AND r.project_id = $3
+  AND (c.project_id = $3 OR c.project_id IS NULL) AND c.deleted IS FALSE
+RETURNING c.id
+`
+
+type RevokeAssistantRuntimeWorkloadClientsParams struct {
+	RuntimeID      uuid.NullUUID
+	OrganizationID pgtype.Text
+	ProjectID      uuid.UUID
+}
+
+func (q *Queries) RevokeAssistantRuntimeWorkloadClients(ctx context.Context, arg RevokeAssistantRuntimeWorkloadClientsParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, revokeAssistantRuntimeWorkloadClients, arg.RuntimeID, arg.OrganizationID, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const revokeUserSession = `-- name: RevokeUserSession :one

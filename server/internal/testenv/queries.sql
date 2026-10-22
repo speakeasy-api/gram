@@ -2167,6 +2167,14 @@ WHERE starts_with(datname, @prefix::text);
 -- Test-only fixture: records one participant snapshot on a captured message.
 INSERT INTO chat_message_participants (project_id, chat_id, message_id, provider, provider_user_id, user_id)
 VALUES (@project_id, @chat_id, @message_id, @provider, @provider_user_id, sqlc.narg(user_id));
+-- name: ExpireAssistantInferenceCredentialForTest :exec
+UPDATE api_keys SET expires_at = clock_timestamp() - interval '1 hour'
+WHERE organization_id = @organization_id AND id IN (SELECT c.api_key_id FROM assistant_inference_credentials c WHERE c.project_id = @project_id AND c.id = @id);
+
+-- name: CountOutboxRows :one
+-- Counts all legacy events in an isolated cloned test database.
+SELECT count(*) FROM outbox;
+
 
 -- name: InsertToolsetKeyedMcpMetadataFixture :one
 -- Plants a row under the toolset key, as pods from before the server-key writers wrote.

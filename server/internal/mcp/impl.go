@@ -113,8 +113,9 @@ type IdentityResolver interface {
 }
 
 type Service struct {
-	federatedLoginConsumer FederatedLoginConsumer
-	identityChainer        identityChainer
+	assistantWorkloadTokens AssistantWorkloadTokenIssuer
+	federatedLoginConsumer  FederatedLoginConsumer
+	identityChainer         identityChainer
 	// authClientPermitter decides whether the caller may use a resolved typed
 	// auth client; nil keeps the connect-equivalent rule (connectPermitter).
 	authClientPermitter       authClientPermitter
@@ -520,6 +521,7 @@ func NewService(
 
 	sessionClientInfo := sessionclientinfo.NewStore(redisClient, 0)
 	service := &Service{
+		assistantWorkloadTokens:   nil,
 		replayLiveness:            nil,
 		federatedLoginConsumer:    nil,
 		identityChainer:           nil,
@@ -635,6 +637,9 @@ func NewService(
 		tunnelPublic:         newTunnelPublicRuntime(redisClient, meterProvider, metrics, tunnelPublicConfig),
 		metaRuntime:          metaRuntimeConfig.withDefaults(),
 	}
+	// Discovery and token dispatch share this production issuer. Only explicitly
+	// provisioned, live assistant workload registrations can obtain tokens.
+	service.assistantWorkloadTokens = &registeredAssistantWorkloadIssuer{service: service}
 	return service, nil
 }
 
