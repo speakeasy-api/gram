@@ -132,9 +132,7 @@ describe("ToolsetRedirectPage", () => {
       },
     ];
     visit("/acme/projects/default/mcp/my-tools/tools");
-    expect(screen.getByTestId("landed").textContent).toBe(
-      "/mcp/x/host/tools",
-    );
+    expect(screen.getByTestId("landed").textContent).toBe("/mcp/x/host/tools");
   });
 
   it("says so when no server hosts the toolset", () => {

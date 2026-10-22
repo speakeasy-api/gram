@@ -30,8 +30,7 @@ export function ServerInstructionsSection({
 }): React.JSX.Element {
   const metadataResult = useGetMcpMetadata({ mcpServerId }, undefined, {
     retry: (failureCount, err) =>
-      !(err instanceof GramError && err.statusCode === 404) &&
-      failureCount < 3,
+      !(err instanceof GramError && err.statusCode === 404) && failureCount < 3,
     throwOnError: false,
   });
   const form = useMcpMetadataMetadataForm(

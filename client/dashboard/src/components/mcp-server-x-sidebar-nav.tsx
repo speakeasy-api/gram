@@ -725,9 +725,7 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
       {hosted && mcpServer.toolset ? (
         <div className="flex flex-col gap-1">
           <DetailSidebarInfoLabel>Tools</DetailSidebarInfoLabel>
-          <Text variant="small">
-            {hostedToolCountLabel(mcpServer.toolset)}
-          </Text>
+          <Text variant="small">{hostedToolCountLabel(mcpServer.toolset)}</Text>
         </div>
       ) : null}
 

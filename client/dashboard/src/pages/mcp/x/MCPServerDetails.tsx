@@ -147,10 +147,7 @@ export default function MCPServerDetails(): JSX.Element {
     );
   }
   if (!activeTab) {
-    const initialTab = tabForServer(
-      initialTabFromHash(location.hash),
-      hosted,
-    );
+    const initialTab = tabForServer(initialTabFromHash(location.hash), hosted);
     const hash =
       location.hash === `#${MCP_AUTHENTICATION_SECTION_ID}`
         ? `#${MCP_AUTHENTICATION_SECTION_ID}`
@@ -396,96 +393,96 @@ export function MCPServerStatusDropdown({
 
   return (
     <>
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild disabled={!canWrite || updating}>
-        <button
-          type="button"
-          title={
-            isKnownEnumValue(
-              KnownUpdateMcpServerFormVisibility,
-              server.visibility,
-            )
-              ? undefined
-              : "Refresh the page before changing this server’s availability."
-          }
-          disabled={!canWrite || updating}
-          className="text-foreground hover:bg-muted trans border-border flex w-fit items-center gap-2 border px-3 py-1.5 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          <span
-            className={cn("h-2 w-2 shrink-0 rounded-full", currentDotClass)}
-          />
-          {currentLabel}
-          <ChevronDown className="text-muted-foreground h-3 w-3" />
-        </button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="w-[320px] p-1">
-        {options.map((option) => {
-          const optionBlocked =
-            option.value === "public" &&
-            (publicBlocked || guard.publicUnavailable);
-          return (
-            <DropdownMenuItem
-              key={option.value}
-              disabled={optionBlocked}
-              onSelect={() => {
-                if (optionBlocked) return;
-                if (hosted) guard.request(option.value);
-                else updateVisibility(option.value);
-              }}
-              className="group flex cursor-pointer items-start gap-2.5 p-2 data-[disabled]:cursor-not-allowed data-[disabled]:opacity-60"
-            >
-              {option.value === server.visibility ? (
-                <span
-                  className={cn(
-                    "mt-1 flex size-3.5 shrink-0 items-center justify-center rounded-full",
-                    option.dotClass,
-                  )}
-                >
-                  <Check
-                    className="text-background h-2.5 w-2.5"
-                    strokeWidth={4}
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild disabled={!canWrite || updating}>
+          <button
+            type="button"
+            title={
+              isKnownEnumValue(
+                KnownUpdateMcpServerFormVisibility,
+                server.visibility,
+              )
+                ? undefined
+                : "Refresh the page before changing this server’s availability."
+            }
+            disabled={!canWrite || updating}
+            className="text-foreground hover:bg-muted trans border-border flex w-fit items-center gap-2 border px-3 py-1.5 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <span
+              className={cn("h-2 w-2 shrink-0 rounded-full", currentDotClass)}
+            />
+            {currentLabel}
+            <ChevronDown className="text-muted-foreground h-3 w-3" />
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start" className="w-[320px] p-1">
+          {options.map((option) => {
+            const optionBlocked =
+              option.value === "public" &&
+              (publicBlocked || guard.publicUnavailable);
+            return (
+              <DropdownMenuItem
+                key={option.value}
+                disabled={optionBlocked}
+                onSelect={() => {
+                  if (optionBlocked) return;
+                  if (hosted) guard.request(option.value);
+                  else updateVisibility(option.value);
+                }}
+                className="group flex cursor-pointer items-start gap-2.5 p-2 data-[disabled]:cursor-not-allowed data-[disabled]:opacity-60"
+              >
+                {option.value === server.visibility ? (
+                  <span
+                    className={cn(
+                      "mt-1 flex size-3.5 shrink-0 items-center justify-center rounded-full",
+                      option.dotClass,
+                    )}
+                  >
+                    <Check
+                      className="text-background h-2.5 w-2.5"
+                      strokeWidth={4}
+                    />
+                  </span>
+                ) : (
+                  <span
+                    className={cn(
+                      "mt-1 size-3.5 shrink-0 rounded-full transition-colors",
+                      "bg-muted",
+                      option.hoverDotClass,
+                    )}
                   />
-                </span>
-              ) : (
-                <span
-                  className={cn(
-                    "mt-1 size-3.5 shrink-0 rounded-full transition-colors",
-                    "bg-muted",
-                    option.hoverDotClass,
-                  )}
-                />
-              )}
-              <div className="flex-1">
-                <span className="block font-mono text-xs font-semibold tracking-wide uppercase">
-                  {option.label}
-                </span>
-                <span className="text-muted-foreground text-xs">
-                  {optionBlocked
-                    ? publicBlocked
-                      ? "Enable public access on the tunnel source first to allow anonymous serving."
-                      : "Loading environment data…"
-                    : hosted && option.value === "public"
-                      ? HOSTED_PUBLIC_DESCRIPTION
-                      : option.description}
-                </span>
-              </div>
+                )}
+                <div className="flex-1">
+                  <span className="block font-mono text-xs font-semibold tracking-wide uppercase">
+                    {option.label}
+                  </span>
+                  <span className="text-muted-foreground text-xs">
+                    {optionBlocked
+                      ? publicBlocked
+                        ? "Enable public access on the tunnel source first to allow anonymous serving."
+                        : "Loading environment data…"
+                      : hosted && option.value === "public"
+                        ? HOSTED_PUBLIC_DESCRIPTION
+                        : option.description}
+                  </span>
+                </div>
+              </DropdownMenuItem>
+            );
+          })}
+          {publicBlocked && (
+            <DropdownMenuItem asChild className="mt-1 border-t">
+              <Link
+                to={publicAccessHref}
+                className="text-muted-foreground hover:text-foreground flex cursor-pointer items-center gap-1 px-2 py-2 text-xs hover:no-underline"
+              >
+                Enable public access in Settings
+                <ArrowRight className="size-3" />
+              </Link>
             </DropdownMenuItem>
-          );
-        })}
-        {publicBlocked && (
-          <DropdownMenuItem asChild className="mt-1 border-t">
-            <Link
-              to={publicAccessHref}
-              className="text-muted-foreground hover:text-foreground flex cursor-pointer items-center gap-1 px-2 py-2 text-xs hover:no-underline"
-            >
-              Enable public access in Settings
-              <ArrowRight className="size-3" />
-            </Link>
-          </DropdownMenuItem>
-        )}
-      </DropdownMenuContent>
-    </DropdownMenu>
-    {guard.dialogs}
+          )}
+        </DropdownMenuContent>
+      </DropdownMenu>
+      {guard.dialogs}
     </>
   );
 }

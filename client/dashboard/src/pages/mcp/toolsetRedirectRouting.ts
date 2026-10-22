@@ -16,7 +16,8 @@ export function toolsetTabSegment(
   if (!toolsetSlug) return undefined;
   const segments = pathname.split("/").filter(Boolean).map(decodePathSegment);
   const slugIndex = segments.findIndex(
-    (segment, index) => segment === toolsetSlug && segments[index - 1] === "mcp",
+    (segment, index) =>
+      segment === toolsetSlug && segments[index - 1] === "mcp",
   );
   return slugIndex === -1 ? undefined : segments[slugIndex + 1];
 }

@@ -7,7 +7,10 @@ import {
 describe("toolsetTabSegment", () => {
   it("reads the tab after the toolset slug", () => {
     expect(
-      toolsetTabSegment("/acme/projects/default/mcp/my-tools/team-access", "my-tools"),
+      toolsetTabSegment(
+        "/acme/projects/default/mcp/my-tools/team-access",
+        "my-tools",
+      ),
     ).toBe("team-access");
   });
 
@@ -19,7 +22,10 @@ describe("toolsetTabSegment", () => {
 
   it("matches a toolset slug that equals a tab name", () => {
     expect(
-      toolsetTabSegment("/acme/projects/default/mcp/settings/tools", "settings"),
+      toolsetTabSegment(
+        "/acme/projects/default/mcp/settings/tools",
+        "settings",
+      ),
     ).toBe("tools");
   });
 });
