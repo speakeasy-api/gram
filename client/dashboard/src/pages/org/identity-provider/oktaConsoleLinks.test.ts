@@ -125,6 +125,9 @@ describe("normalizeOktaOrgUrl", () => {
       "https://example.okta.com",
     );
     expect(normalizeOktaOrgUrl("https://-admin.okta.com")).toBeUndefined();
+    expect(normalizeOktaOrgUrl("https://foo--admin.okta.com")).toBe(
+      "https://foo--admin.okta.com",
+    );
   });
 
   it("rejects paths, queries, fragments, http, and foreign hosts", () => {

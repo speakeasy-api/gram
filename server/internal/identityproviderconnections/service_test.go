@@ -898,6 +898,14 @@ func TestNormalizeOktaOrgURL(t *testing.T) {
 	require.Equal(t, fullOrgURL, adminConsole, "the admin console address maps to the org")
 	_, err = identityproviderconnections.NormalizeOktaOrgURL("https://-admin.okta.com")
 	require.Error(t, err)
+	for _, suffix := range []string{"oktapreview.com", "okta-emea.com", "okta.mil"} {
+		mapped, err := identityproviderconnections.NormalizeOktaOrgURL("https://example-admin." + suffix)
+		require.NoError(t, err, suffix)
+		require.Equal(t, "https://example."+suffix, mapped, suffix)
+	}
+	doubleHyphen, err := identityproviderconnections.NormalizeOktaOrgURL("https://foo--admin.okta.com")
+	require.NoError(t, err)
+	require.Equal(t, "https://foo--admin.okta.com", doubleHyphen)
 
 	for _, raw := range []string{"https://sub.example.okta.mil", "https://dev-1.oktapreview.com", "https://x.okta-emea.com"} {
 		_, err := identityproviderconnections.NormalizeOktaOrgURL(raw)

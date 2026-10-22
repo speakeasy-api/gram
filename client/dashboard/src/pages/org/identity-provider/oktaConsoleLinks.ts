@@ -7,6 +7,7 @@ const OKTA_ORG_HOST_SUFFIXES = [
 
 const HOST_LABEL = "[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?";
 const PLAIN_HOSTNAME = new RegExp(`^${HOST_LABEL}(?:\\.${HOST_LABEL})+$`);
+const PLAIN_TENANT = new RegExp(`^${HOST_LABEL}(?:\\.${HOST_LABEL})*$`, "i");
 
 /** Mirrors the create API and okta.parseOrgURL: https, an ASCII plain hostname (no userinfo, port, path beyond one trailing slash, query, or fragment) that is a subdomain of an Okta-owned suffix. */
 export function normalizeOktaOrgUrl(input: string): string | undefined {
@@ -17,8 +18,9 @@ export function normalizeOktaOrgUrl(input: string): string | undefined {
   for (const suffix of OKTA_ORG_HOST_SUFFIXES) {
     if (!host.endsWith(`.${suffix}`)) continue;
     // The admin console address is the org hostname with -admin appended.
-    const tenant = host.slice(0, -(suffix.length + 1)).replace(/-admin$/, "");
-    return tenant ? `https://${tenant}.${suffix}` : undefined;
+    const tenant = host.slice(0, -(suffix.length + 1));
+    const org = tenant.replace(/-admin$/, "");
+    return `https://${PLAIN_TENANT.test(org) ? org : tenant}.${suffix}`;
   }
   return undefined;
 }

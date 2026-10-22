@@ -55,12 +55,9 @@ func NormalizeOktaOrgURL(raw string) (string, error) {
 			continue
 		}
 		tenant := strings.TrimSuffix(host, "."+suffix)
-		// Administrators often paste the admin console address, which is the
-		// org hostname with -admin appended; the org itself is what Okta
-		// reports as the issuer.
-		tenant = strings.TrimSuffix(tenant, "-admin")
-		if tenant == "" {
-			break
+		// The admin console address is the org hostname with -admin appended.
+		if org := strings.TrimSuffix(tenant, "-admin"); org != "" && isPlainHostname(org) {
+			tenant = org
 		}
 		return "https://" + tenant + "." + suffix, nil
 	}
