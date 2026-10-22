@@ -348,6 +348,11 @@ func mcpRuntimeFlags() []cli.Flag {
 			EnvVars: []string{"GRAM_OPENAI_APPS_CHALLENGE_TOKEN"},
 		},
 		&cli.StringFlag{
+			Name:    "mcp-registry-auth",
+			Usage:   "Proof record served at /.well-known/mcp-registry-auth on the platform hosts, for the official MCP registry's HTTP ownership check (\"v=MCPv1; k=ed25519; p=<public key>\"). Empty serves not found.",
+			EnvVars: []string{"GRAM_MCP_REGISTRY_AUTH"},
+		},
+		&cli.StringFlag{
 			Name:    "presidio-analyzer-url",
 			Usage:   "Base URL of the Presidio Analyzer service (e.g. http://presidio-analyzer:3000). Empty disables PII scanning.",
 			EnvVars: []string{"PRESIDIO_ANALYZER_URL"},

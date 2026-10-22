@@ -150,8 +150,12 @@ type Service struct {
 	// on the platform hosts. Empty serves not found. Set by
 	// SetOpenAIAppsChallengeToken.
 	openAIAppsChallengeToken string
-	siteURL                  *url.URL
-	posthog                  *posthog.Posthog // posthog metrics will no-op if the dependency is not provided
+	// mcpRegistryAuth is the proof record served at
+	// /.well-known/mcp-registry-auth on the platform hosts. Empty serves not
+	// found. Set by SetMCPRegistryAuth.
+	mcpRegistryAuth string
+	siteURL         *url.URL
+	posthog         *posthog.Posthog // posthog metrics will no-op if the dependency is not provided
 	// features resolves flag-controlled behavior (the managed assistant's
 	// Platform MCP toolset variant). Wired from the environment-aware
 	// provider: the posthog client in production, the CSV-backed in-memory
@@ -543,6 +547,7 @@ func NewService(
 		authenticationHostBaseURL: "",
 		platformHosts:             nil,
 		openAIAppsChallengeToken:  "",
+		mcpRegistryAuth:           "",
 		siteURL:                   siteURL,
 		posthog:                   posthog,
 		features:                  features,
@@ -790,6 +795,7 @@ func Attach(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Se
 	// client assertions.
 	o11y.AttachHandler(mux, "GET", "/.well-known/oauth-client/{id}/jwks.json", oops.ErrHandle(service.logger, service.HandleClientJSONWebKeySet).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", "/.well-known/openai-apps-challenge", oops.ErrHandle(service.logger, service.HandleOpenAIAppsChallenge).ServeHTTP)
+	o11y.AttachHandler(mux, "GET", "/.well-known/mcp-registry-auth", oops.ErrHandle(service.logger, service.HandleMCPRegistryAuth).ServeHTTP)
 	// Agents live outside Speakeasy and reach it on the public host, so the gateway
 	// mounts here as well as on the private listener. Its own key is the
 	// credential, so being publicly routable is not being publicly readable.
