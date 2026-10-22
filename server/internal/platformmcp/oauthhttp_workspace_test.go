@@ -180,6 +180,11 @@ func TestOAuthHTTPUserWithoutOrganizationCreatesWorkspaceAndContinues(t *testing
 	require.Contains(t, refused.Body.String(), `role="alert"`)
 	require.Zero(t, workspaces.provisionedCount())
 
+	empty := postWorkspace(service, url.Values{"state": {state}, "csrf_token": {csrf}, "workspace_name": {"  "}})
+	require.Equal(t, http.StatusOK, empty.Code)
+	require.Contains(t, empty.Body.String(), "Enter an organization name.")
+	require.Zero(t, workspaces.provisionedCount())
+
 	created := postWorkspace(service, url.Values{"state": {state}, "csrf_token": {csrf}, "workspace_name": {"Acme Inc"}})
 	require.Equal(t, http.StatusSeeOther, created.Code)
 	require.Equal(t, []string{"user-1:Acme Inc"}, workspaces.provisioned)

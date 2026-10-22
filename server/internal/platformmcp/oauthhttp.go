@@ -738,8 +738,10 @@ func (s *OAuthHTTP) CreateWorkspaceHandler() http.Handler {
 		// A refused name keeps the challenge, so the user can correct it.
 		submitted := r.PostForm.Get("workspace_name")
 		if _, err := orgprovision.ValidateName(submitted); err != nil {
+			// An empty name gets the page's own wording rather than the
+			// validator's "org name is required".
 			problem := "Enter an organization name."
-			if shareable, ok := errors.AsType[*oops.ShareableError](err); ok {
+			if shareable, ok := errors.AsType[*oops.ShareableError](err); ok && strings.TrimSpace(submitted) != "" {
 				problem = shareable.Error()
 			}
 			s.renderWorkspacePage(w, client.Name, challenge, submitted, problem)
