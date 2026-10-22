@@ -19,7 +19,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/widgets"
 )
@@ -61,10 +60,6 @@ const (
 	widgetSnapshotVerificationUnavailable widgetSnapshotScope = "verification_unavailable"
 )
 
-// ErrWidgetsNotEnabled marks a call for an organization that has Explore
-// switched off.
-var ErrWidgetsNotEnabled = errors.New("platform mcp widgets not enabled")
-
 // widgetToolError is safe to return to the caller: its message says what to
 // do next and never carries database or driver detail.
 type widgetToolError struct {
@@ -100,7 +95,6 @@ type WidgetService struct {
 	widgets       widgetManagement
 	projects      *PostgresReader
 	engine        *authz.Engine
-	flags         feature.Provider
 	organizations OrganizationSlugResolver
 	db            *pgxpool.Pool
 	key           []byte
@@ -109,8 +103,8 @@ type WidgetService struct {
 
 // NewWidgetService returns nil when a dependency is missing, so the tools are
 // served as stable refusals.
-func NewWidgetService(logger *slog.Logger, management *widgets.Service, projects *PostgresReader, engine *authz.Engine, flags feature.Provider, organizations OrganizationSlugResolver, key string) *WidgetService {
-	if logger == nil || management == nil || projects == nil || projects.db == nil || engine == nil || flags == nil || organizations == nil || key == "" {
+func NewWidgetService(logger *slog.Logger, management *widgets.Service, projects *PostgresReader, engine *authz.Engine, organizations OrganizationSlugResolver, key string) *WidgetService {
+	if logger == nil || management == nil || projects == nil || projects.db == nil || engine == nil || organizations == nil || key == "" {
 		return nil
 	}
 	return &WidgetService{
@@ -118,7 +112,6 @@ func NewWidgetService(logger *slog.Logger, management *widgets.Service, projects
 		widgets:       management,
 		projects:      projects,
 		engine:        engine,
-		flags:         flags,
 		organizations: organizations,
 		db:            projects.db,
 		key:           []byte(key),
@@ -127,7 +120,7 @@ func NewWidgetService(logger *slog.Logger, management *widgets.Service, projects
 }
 
 func (s *WidgetService) valid() bool {
-	return s != nil && s.logger != nil && s.widgets != nil && s.projects != nil && s.engine != nil && s.flags != nil && s.organizations != nil && s.db != nil && len(s.key) > 0 && s.now != nil
+	return s != nil && s.logger != nil && s.widgets != nil && s.projects != nil && s.engine != nil && s.organizations != nil && s.db != nil && len(s.key) > 0 && s.now != nil
 }
 
 // WithWidgets attaches the widget tools. A nil service leaves them served as
@@ -511,12 +504,8 @@ func (s *WidgetService) scope(ctx context.Context, principal Principal, projectI
 			return ctx, project, fmt.Errorf("%w: resolve organization slug for widgets: %w", ErrUnavailable, err)
 		}
 	}
-	enabled, err := exploreEnabled(ctx, s.flags, principal.OrganizationID, organizationSlug, project.Slug)
-	if err != nil {
-		return ctx, project, err
-	}
-	if !enabled {
-		return ctx, project, ErrWidgetsNotEnabled
+	if organizationSlug == "" {
+		return ctx, project, fmt.Errorf("%w: organization slug is unavailable", ErrUnavailable)
 	}
 
 	scoped := *auth
@@ -638,8 +627,6 @@ func (s *WidgetService) boundaryError(ctx context.Context, tool string, err erro
 		return refusal
 	}
 	switch {
-	case errors.Is(err, ErrWidgetsNotEnabled):
-		return &widgetToolError{Code: analyticsNotEnabledCode, Field: "", Message: "Widgets are not switched on for your organization yet. They arrive with Explore; ask your Speakeasy contact to turn it on.", Cause: err}
 	case errors.Is(err, ErrForbidden):
 		return &widgetToolError{Code: "permission_denied", Field: "", Message: "This needs read access to the project.", Cause: err}
 	case errors.Is(err, errPreviewMismatch):

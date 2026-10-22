@@ -51,15 +51,15 @@ describe("failOpenMissingFlags", () => {
   }
 
   it("treats a missing flag as enabled", () => {
-    expect(wrap(undefined).isFeatureEnabled("gram-explore")).toBe(true);
+    expect(wrap(undefined).isFeatureEnabled("gram-budgets")).toBe(true);
   });
 
   it("preserves an explicit off so rollouts can be tested", () => {
-    expect(wrap(false).isFeatureEnabled("gram-explore")).toBe(false);
+    expect(wrap(false).isFeatureEnabled("gram-budgets")).toBe(false);
   });
 
   it("preserves an explicit on", () => {
-    expect(wrap(true).isFeatureEnabled("gram-explore")).toBe(true);
+    expect(wrap(true).isFeatureEnabled("gram-budgets")).toBe(true);
   });
 
   it("passes variants through without failing open", () => {

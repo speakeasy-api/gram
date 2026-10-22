@@ -66,7 +66,7 @@ function renderFeatureFlag({
     );
   }
 
-  const hook = renderHook(() => useFeatureFlag(FEATURE_FLAGS.explore), {
+  const hook = renderHook(() => useFeatureFlag(FEATURE_FLAGS.budgets), {
     wrapper: Wrapper,
   });
 
@@ -106,7 +106,7 @@ describe("useFeatureFlag", () => {
     emitFlagResult(true);
 
     expect(result.current).toEqual({ status: "enabled" });
-    expect(isFeatureEnabled).toHaveBeenCalledWith(FEATURE_FLAGS.explore, {
+    expect(isFeatureEnabled).toHaveBeenCalledWith(FEATURE_FLAGS.budgets, {
       fresh: true,
     });
   });

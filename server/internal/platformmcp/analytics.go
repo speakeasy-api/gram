@@ -8,7 +8,6 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/telemetry/analytics"
 )
 
@@ -21,9 +20,6 @@ type AnalyticsEngine interface {
 }
 
 var (
-	// ErrAnalyticsNotEnabled marks a read for an organization that has
-	// Explore switched off.
-	ErrAnalyticsNotEnabled = errors.New("platform mcp analytics not enabled")
 	// ErrAnalyticsInvalid marks a read that does not name one exact project.
 	ErrAnalyticsInvalid = errors.New("invalid platform mcp analytics read")
 )
@@ -31,26 +27,24 @@ var (
 // AnalyticsService serves the analytics catalog, values and queries to the
 // Platform MCP.
 type AnalyticsService struct {
-	logger        *slog.Logger
-	engine        AnalyticsEngine
-	flags         feature.Provider
-	organizations OrganizationSlugResolver
+	logger *slog.Logger
+	engine AnalyticsEngine
 	// projects holds the caller to project:read on the exact project named.
 	projects ProjectReadResolver
 	budget   OperationBudget
 }
 
-// NewAnalyticsService returns nil without a logger, an engine, an
-// organization resolver or a project reader, so the tools are served as stubs.
-func NewAnalyticsService(logger *slog.Logger, engine AnalyticsEngine, flags feature.Provider, organizations OrganizationSlugResolver, projects ProjectReadResolver, budget OperationBudget) *AnalyticsService {
-	if logger == nil || engine == nil || organizations == nil || projects == nil {
+// NewAnalyticsService returns nil without a logger, an engine or a project
+// reader, so the tools are served as stubs.
+func NewAnalyticsService(logger *slog.Logger, engine AnalyticsEngine, projects ProjectReadResolver, budget OperationBudget) *AnalyticsService {
+	if logger == nil || engine == nil || projects == nil {
 		return nil
 	}
-	return &AnalyticsService{logger: logger, engine: engine, flags: flags, organizations: organizations, projects: projects, budget: budget}
+	return &AnalyticsService{logger: logger, engine: engine, projects: projects, budget: budget}
 }
 
 func (s *AnalyticsService) valid() bool {
-	return s != nil && s.logger != nil && s.engine != nil && s.organizations != nil && s.projects != nil && s.budget.valid()
+	return s != nil && s.logger != nil && s.engine != nil && s.projects != nil && s.budget.valid()
 }
 
 // AnalyticsProject is the project a result was read for.
@@ -68,8 +62,8 @@ func analyticsTenant(principal Principal, project ResolvedProject) analytics.Ten
 	return analytics.Tenant{OrganizationID: principal.OrganizationID, ProjectID: project.ID.String()}
 }
 
-// DescribeAnalyticsCatalogInput names the project the rollout flag and
-// project:read are checked against; the catalog is the same for every project.
+// DescribeAnalyticsCatalogInput names the project project:read is checked
+// against; the catalog is the same for every project.
 type DescribeAnalyticsCatalogInput struct {
 	ProjectID string `json:"project_id"`
 }
@@ -375,8 +369,7 @@ func (s *AnalyticsService) Query(ctx context.Context, principal Principal, input
 	return out, nil
 }
 
-// authorize holds the caller to project:read on the exact project, then to
-// the Explore flag. A project the caller cannot read reads as one that does
+// authorize holds the caller to project:read on the exact project. A project the caller cannot read reads as one that does
 // not exist. Values and Query then charge the budget; Describe, which returns
 // only the static catalog, is not charged.
 func (s *AnalyticsService) authorize(ctx context.Context, principal Principal, projectID string) (ResolvedProject, error) {
@@ -394,30 +387,5 @@ func (s *AnalyticsService) authorize(ctx context.Context, principal Principal, p
 	if err != nil {
 		return zero, fmt.Errorf("authorize analytics read: %w", err)
 	}
-	organizationSlug, err := s.organizations.OrganizationSlug(ctx, principal.OrganizationID)
-	if err != nil {
-		return zero, fmt.Errorf("%w: resolve organization slug for analytics: %w", ErrUnavailable, err)
-	}
-	enabled, err := exploreEnabled(ctx, s.flags, principal.OrganizationID, organizationSlug, project.Slug)
-	if err != nil {
-		return zero, err
-	}
-	if !enabled {
-		return zero, ErrAnalyticsNotEnabled
-	}
 	return project, nil
-}
-
-// exploreEnabled evaluates the Explore flag for one project. Disabled, missing
-// and indeterminate read as off; an evaluation error or a missing slug is
-// unavailable, so the tools fail closed either way.
-func exploreEnabled(ctx context.Context, flags feature.Provider, organizationID, organizationSlug, projectSlug string) (bool, error) {
-	if organizationSlug == "" {
-		return false, fmt.Errorf("%w: organization slug is unavailable", ErrUnavailable)
-	}
-	evaluation, err := feature.EvaluateFlag(ctx, flags, feature.FlagExplore, organizationID, feature.OrgProjectGroups(organizationSlug, projectSlug))
-	if err != nil {
-		return false, fmt.Errorf("%w: evaluate explore flag: %w", ErrUnavailable, err)
-	}
-	return evaluation == feature.EvaluationEnabled, nil
 }

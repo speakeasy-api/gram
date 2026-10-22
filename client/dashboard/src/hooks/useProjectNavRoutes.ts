@@ -1,7 +1,5 @@
 import { useMemo } from "react";
 import { useOrganization, useProject } from "@/contexts/Auth";
-import { useFeatureFlag } from "@/hooks/useFeatureFlag";
-import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { Scope } from "@gram/client/models/components/rolegrant.js";
 import { AppRoute, useRoutes } from "@/routes";
 import { useOrgMemoryDeveloperToggle } from "./useOrgMemoryDeveloperToggle";
@@ -30,7 +28,7 @@ export interface ProjectNavRoute {
  * Single source of truth shared by the sidebar (`AppSidebar`) and the command
  * palette so the two never drift — the palette only lists pages a user can
  * actually reach from the nav, in the same order, behind the same scopes.
- * Honors the remaining feature flags that control navigation.
+ * Honors the product features and developer toggles that control navigation.
  *
  * The returned array is memoized so consumers can safely use it as a `useEffect`
  * dependency without re-running every render (this hook feeds the command
@@ -48,12 +46,7 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
   const isSignalsIntelligenceEnabled =
     productFeatures.isSuccess &&
     productFeatures.data.signalsIntelligenceEnabled === true;
-  const exploreFlag = useFeatureFlag(FEATURE_FLAGS.explore);
   const [isOrgMemoryEnabled] = useOrgMemoryDeveloperToggle();
-
-  // Explore is opt-in while it is dogfooded: the flag is released to the
-  // organizations trying it, and everyone else never sees the page.
-  const isExploreEnabled = exploreFlag.status === "enabled";
 
   return useMemo<ProjectNavRoute[]>(() => {
     const read: Scope[] = ["project:read"];
@@ -107,12 +100,8 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
       { route: routes.riskEvents, scope: ["org:admin"] as Scope[] },
       { route: routes.policyCenter, scope: readWrite },
       { route: routes.costs, scope: observe },
-      ...(isExploreEnabled
-        ? [
-            { route: routes.explore, scope: observe },
-            { route: routes.dashboards, scope: observe },
-          ]
-        : []),
+      { route: routes.explore, scope: observe },
+      { route: routes.dashboards, scope: observe },
       { route: routes.insights, scope: observe },
       { route: routes.agentSessions, scope: observe },
       ...(isSignalsIntelligenceEnabled
@@ -130,11 +119,5 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
       { route: routes.logs, scope: ["log:read"], resourceId: projectId },
       { route: routes.settings, scope: ["project:write"] },
     ];
-  }, [
-    routes,
-    projectId,
-    isExploreEnabled,
-    isOrgMemoryEnabled,
-    isSignalsIntelligenceEnabled,
-  ]);
+  }, [routes, projectId, isOrgMemoryEnabled, isSignalsIntelligenceEnabled]);
 }

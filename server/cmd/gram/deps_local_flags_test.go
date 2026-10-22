@@ -26,7 +26,7 @@ func TestNewLocalFeatureFlagsAcceptsRowsWithAndWithoutVariant(t *testing.T) { //
 			"org_four,gram-risk-llm-analyzer,true,shadow\n"+
 			"# a comment line\n"+
 			"org_empty,gram-risk-llm-analyzer,true,\n"+
-			"org_off,gram-explore,false\n"+
+			"org_off,gram-budgets,false\n"+
 			"org_no_pubsub,risk-enforcement-pubsub,false\n",
 	), 0o600))
 
@@ -41,7 +41,7 @@ func TestNewLocalFeatureFlagsAcceptsRowsWithAndWithoutVariant(t *testing.T) { //
 		{distinctID: "org_three", flag: feature.FlagRiskLLMAnalyzer, enabled: true, variant: ""},
 		{distinctID: "org_four", flag: feature.FlagRiskLLMAnalyzer, enabled: true, variant: feature.VariantRiskLLMShadow},
 		{distinctID: "org_empty", flag: feature.FlagRiskLLMAnalyzer, enabled: true, variant: ""},
-		{distinctID: "org_off", flag: feature.FlagExplore, enabled: false, variant: ""},
+		{distinctID: "org_off", flag: feature.FlagBudgets, enabled: false, variant: ""},
 		{distinctID: "org_three", flag: feature.FlagRiskEnforcementPubsub, enabled: true, variant: ""},
 		{distinctID: "org_no_pubsub", flag: feature.FlagRiskEnforcementPubsub, enabled: false, variant: ""},
 	} {

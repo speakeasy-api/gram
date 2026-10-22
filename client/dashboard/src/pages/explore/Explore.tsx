@@ -29,7 +29,6 @@ import {
 import { encodeSpec, TAB_PARAM } from "./exploreUrl";
 import { ExploreResults, ResultsFrame } from "./ExploreResults";
 import { QueryBuilder, ResultsToolbar } from "./QueryBuilder";
-import { RequireExplore } from "./RequireExplore";
 import { useQueryUrl } from "./useQueryUrl";
 import { WidgetBar } from "./WidgetBar";
 import { DiscardChangesDialog } from "./WidgetDialogs";
@@ -68,7 +67,7 @@ export default function Explore(): JSX.Element {
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
         <div className="flex w-full flex-col gap-6 p-8 pb-24">
           <ExploreHeader />
-          <ExploreBody />
+          <ExploreCatalog />
         </div>
       </div>
     </WorkbenchPage>
@@ -88,14 +87,6 @@ function ExploreHeader(): JSX.Element {
         this project reports.
       </p>
     </div>
-  );
-}
-
-function ExploreBody(): JSX.Element {
-  return (
-    <RequireExplore loading={<BuilderSkeleton />}>
-      <ExploreCatalog />
-    </RequireExplore>
   );
 }
 

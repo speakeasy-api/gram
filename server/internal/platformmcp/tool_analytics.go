@@ -23,9 +23,6 @@ const (
 
 	// analyticsFeature names the capability in refusals.
 	analyticsFeature = "analytics"
-	// analyticsNotEnabledCode is the refusal when Explore is off for the
-	// organization, as opposed to unavailableCode, which asks for a retry.
-	analyticsNotEnabledCode = "feature_not_enabled"
 )
 
 // analyticsRefusal is what a tool says when it will not run; an invalid
@@ -49,8 +46,7 @@ func registerAnalyticsTools(reg *Registrar, service *AnalyticsService) {
 		Name:  describeAnalyticsCatalogToolName,
 		Title: "Describe the Analytics Catalog",
 		Description: "Read the catalog a project's agent session data is queried through: every dataset (what one row is, and how many days back it can be asked about), its dimensions with the filter operators and the one aggregation each admits, its measures with their units and aggregations, the time grains, and the limits every query is held to. " +
-			"Call this before run_analytics_query or list_analytics_dimension_values: the names it returns are the only vocabulary they accept, and nothing here is a table or SQL. A field's description says which producers fill it; a field's lookup names the per-project map it reads through, so grouping and filtering on it speak the mapped names. " +
-			"Requires Explore to be switched on for the organization.",
+			"Call this before run_analytics_query or list_analytics_dimension_values: the names it returns are the only vocabulary they accept, and nothing here is a table or SQL. A field's description says which producers fill it; a field's lookup names the per-project map it reads through, so grouping and filtering on it speak the mapped names.",
 		Annotations: readOnlyAnnotations(),
 		InputSchema: analyticsProjectSchema(nil, []string{"project_id"}),
 	}
@@ -59,7 +55,7 @@ func registerAnalyticsTools(reg *Registrar, service *AnalyticsService) {
 		Title: "List a Dimension's Values",
 		Description: "List the values one dimension of a dataset actually holds inside a time window, most frequent first with how many rows at the dataset's grain carry each, for choosing filter values before run_analytics_query. " +
 			"Every value returned is one a filter will match: a dimension that reads through a lookup shows the mapped names, and the empty value is never offered. " +
-			"At most 200 values, 50 by default; the half-open window [from, to) is bounded by the dataset's max_time_range_days. Requires Explore to be switched on for the organization.",
+			"At most 200 values, 50 by default; the half-open window [from, to) is bounded by the dataset's max_time_range_days.",
 		Annotations: readOnlyAnnotations(),
 		InputSchema: analyticsProjectSchema(map[string]*jsonschema.Schema{
 			"dataset":   stringSchema("Dataset to look in, by name from describe_analytics_catalog.", 1, 64),
@@ -76,7 +72,7 @@ func registerAnalyticsTools(reg *Registrar, service *AnalyticsService) {
 			fmt.Sprintf("Grouped, the default: group by up to %d dimensions, optionally bucketed by a time grain, with one or more measures (count alone, count_distinct over a dimension that admits it, or an aggregation over a measure field that admits it), filters ANDed with at most %d values each, an order by measure alias, and a limit of at most %d rows (%d by default), ordered by the first measure descending unless order_by says otherwise. ", analytics.MaxDimensions, analytics.MaxFilterValues, analytics.MaxLimit, analytics.DefaultLimit) +
 			"Ungrouped: rows at the dataset's grain, newest first, projecting the named dimensions, with no measures and no grain. " +
 			"Row keys are the dimension names plus each measure's alias; time_bucket is present when a grain is set and time on ungrouped rows, both RFC 3339 in UTC, and columns says which key is which. " +
-			"The half-open window [from, to) is bounded by the dataset's max_time_range_days. An invalid request is refused naming the field to correct; a result holds at most limit rows and does not say whether more exist. Requires Explore to be switched on for the organization.",
+			"The half-open window [from, to) is bounded by the dataset's max_time_range_days. An invalid request is refused naming the field to correct; a result holds at most limit rows and does not say whether more exist.",
 		Annotations: readOnlyAnnotations(),
 		InputSchema: runAnalyticsQuerySchema(),
 	}
@@ -148,9 +144,6 @@ func analyticsRefusalFor(err error) (refusal analyticsRefusal, named bool) {
 	case errors.Is(err, ErrAnalyticsInvalid):
 		refusal.Code = "invalid_request"
 		refusal.Message = "Name exactly one project by its ID, as list_projects returns it."
-	case errors.Is(err, ErrAnalyticsNotEnabled):
-		refusal.Code = analyticsNotEnabledCode
-		refusal.Message = "Analytics queries are not switched on for your organization yet. They arrive with Explore; ask your Speakeasy contact to turn it on."
 	case errors.Is(err, ErrForbidden):
 		refusal.Code = "forbidden"
 		refusal.Message = "That project is not one this caller can read."

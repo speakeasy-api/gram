@@ -24,7 +24,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	dashboardsrepo "github.com/speakeasy-api/gram/server/internal/dashboards/repo"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -36,14 +35,13 @@ type widgetToolsFixture struct {
 	service    *WidgetService
 	management *widgets.Service
 	db         *pgxpool.Pool
-	flags      *feature.InMemory
 	principal  Principal
 	project    ResolvedProject
 	logs       *bytes.Buffer
 }
 
 // newWidgetToolsFixture registers the widget tools against a service database,
-// with Explore on and a caller holding project read and write.
+// with a caller holding project read and write.
 func newWidgetToolsFixture(t *testing.T) (context.Context, *widgetToolsFixture) {
 	t.Helper()
 
@@ -56,17 +54,15 @@ func newWidgetToolsFixture(t *testing.T) (context.Context, *widgetToolsFixture) 
 	logger, tracer := testenv.NewLogger(t), testenv.NewTracerProvider(t)
 	logs := &bytes.Buffer{}
 
-	flags := &feature.InMemory{}
-	flags.SetFlag(feature.FlagExplore, principal.OrganizationID, true)
 	engine := authz.NewEngine(logger, db, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	management := widgets.NewService(logger, tracer, db, &sessions.Manager{}, engine, audit.NewLogger())
-	service := NewWidgetService(slog.New(slog.NewJSONHandler(logs, nil)), management, NewPostgresReader(logger, db), engine, flags, NewPostgresOrganizationSlugResolver(db), "test-widget-tools-key")
+	service := NewWidgetService(slog.New(slog.NewJSONHandler(logs, nil)), management, NewPostgresReader(logger, db), engine, NewPostgresOrganizationSlugResolver(db), "test-widget-tools-key")
 	require.NotNil(t, service)
 
 	reg := newRegistrar(newTestMCPServer())
 	registerWidgetTools(reg, service)
 
-	return widgetCallerContext(t.Context(), principal, project, authz.ScopeProjectRead, authz.ScopeProjectWrite), &widgetToolsFixture{reg: reg, service: service, management: management, db: db, flags: flags, principal: principal, project: project, logs: logs}
+	return widgetCallerContext(t.Context(), principal, project, authz.ScopeProjectRead, authz.ScopeProjectWrite), &widgetToolsFixture{reg: reg, service: service, management: management, db: db, principal: principal, project: project, logs: logs}
 }
 
 func widgetCallerContext(ctx context.Context, principal Principal, project ResolvedProject, scopes ...authz.Scope) context.Context {
@@ -212,20 +208,6 @@ func TestWidgetToolsDeclareTheirContract(t *testing.T) {
 		require.ErrorAs(t, err, &refusal, "%s without a service refuses readably", name)
 		require.Equal(t, unavailableCode, refusal.Code, name)
 	}
-}
-
-func TestWidgetToolsRefuseWhenExploreIsOff(t *testing.T) {
-	t.Parallel()
-	ctx, f := newWidgetToolsFixture(t)
-	f.flags.SetFlag(feature.FlagExplore, f.principal.OrganizationID, false)
-
-	_, err := f.invoke(t, ctx, listWidgetsToolName, map[string]any{"project_id": f.project.ID.String()})
-	refusal := requireWidgetRefusal(t, err)
-	require.Equal(t, analyticsNotEnabledCode, refusal.Code)
-	require.Contains(t, refusal.Message, "not switched on")
-
-	_, err = f.invoke(t, ctx, saveWidgetToolName, saveArguments(f.project.ID.String(), "Tool calls by user"))
-	require.Equal(t, analyticsNotEnabledCode, requireWidgetRefusal(t, err).Code)
 }
 
 func TestWidgetToolsCheckProjectAccessBeforeAnyRead(t *testing.T) {

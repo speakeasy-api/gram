@@ -225,12 +225,12 @@ func registerDashboardTools(reg *Registrar, service *DashboardsService) {
 		logger = service.logger
 	}
 
-	addTool(reg, dashboardManifest(listDashboardsToolName, "List Dashboards", "List a project's dashboards with the Speakeasy-built ones, marked built_in: each with its name, description, card count, creator and when it last changed. A project dashboard is named by id, a Speakeasy-built one by slug; use get_dashboard for its cards. Requires project:read and Explore switched on for the organization. External users only.", dashboardHints{read: true, destructive: false, idempotent: true}), meta, func(ctx context.Context, _ *mcp.CallToolRequest, input listDashboardsInput) (*mcp.CallToolResult, listDashboardsOutput, error) {
+	addTool(reg, dashboardManifest(listDashboardsToolName, "List Dashboards", "List a project's dashboards with the Speakeasy-built ones, marked built_in: each with its name, description, card count, creator and when it last changed. A project dashboard is named by id, a Speakeasy-built one by slug; use get_dashboard for its cards. Requires project:read. External users only.", dashboardHints{read: true, destructive: false, idempotent: true}), meta, func(ctx context.Context, _ *mcp.CallToolRequest, input listDashboardsInput) (*mcp.CallToolResult, listDashboardsOutput, error) {
 		return principalToolCall(ctx, dashboardToolError(ctx, logger), func(principal Principal) (listDashboardsOutput, error) {
 			return service.List(ctx, principal, input)
 		})
 	})
-	addTool(reg, dashboardManifest(getDashboardToolName, "Read a Dashboard", "Read one dashboard by project dashboard id or Speakeasy-built slug: its cards with each card's placement on the 12-column grid (x, y, w, h) and the saved widget it shows (id, name, dataset, chart type), its saved filters, and its version, which a write's expected_version must match. Requires project:read and Explore switched on for the organization. External users only.", dashboardHints{read: true, destructive: false, idempotent: true}), meta, func(ctx context.Context, _ *mcp.CallToolRequest, input getDashboardInput) (*mcp.CallToolResult, dashboardView, error) {
+	addTool(reg, dashboardManifest(getDashboardToolName, "Read a Dashboard", "Read one dashboard by project dashboard id or Speakeasy-built slug: its cards with each card's placement on the 12-column grid (x, y, w, h) and the saved widget it shows (id, name, dataset, chart type), its saved filters, and its version, which a write's expected_version must match. Requires project:read. External users only.", dashboardHints{read: true, destructive: false, idempotent: true}), meta, func(ctx context.Context, _ *mcp.CallToolRequest, input getDashboardInput) (*mcp.CallToolResult, dashboardView, error) {
 		return principalToolCall(ctx, dashboardToolError(ctx, logger), func(principal Principal) (dashboardView, error) {
 			return service.Get(ctx, principal, input)
 		})
@@ -372,8 +372,6 @@ func dashboardToolError(ctx context.Context, logger *slog.Logger) func(error) (*
 		refusal := dashboardRefusal{Code: unavailableCode, Feature: dashboardsFeature, Reason: "", Message: "Dashboards are temporarily unavailable. Try again shortly."}
 		shareable, isShareable := errors.AsType[*oops.ShareableError](err)
 		switch {
-		case errors.Is(err, ErrDashboardsNotEnabled):
-			refusal.Code, refusal.Message = analyticsNotEnabledCode, "Dashboards are not switched on for your organization yet. They arrive with Explore; ask your Speakeasy contact to turn it on."
 		case errors.Is(err, errDashboardBuiltInReadOnly):
 			refusal.Code, refusal.Message = "built_in_read_only", "Speakeasy-built dashboards are read-only. Use duplicate_dashboard to make a project copy, then change the copy."
 		case errors.Is(err, dashboards.ErrStaleVersion):

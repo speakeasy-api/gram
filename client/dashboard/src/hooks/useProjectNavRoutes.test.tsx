@@ -1,14 +1,11 @@
 import { renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { FeatureFlagResult } from "@/hooks/useFeatureFlag";
-import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import type { AppRoute } from "@/routes";
 import { useProjectNavRoutes } from "./useProjectNavRoutes";
 
 const testState = vi.hoisted(() => ({
   projectId: "project_a",
   orgMemoryEnabled: false,
-  featureFlags: {} as Record<string, FeatureFlagResult>,
   productFeatures: {
     isSuccess: true,
     data: { signalsIntelligenceEnabled: false },
@@ -73,10 +70,6 @@ vi.mock("@/routes", async () => {
   };
 });
 
-vi.mock("@/hooks/useFeatureFlag", () => ({
-  useFeatureFlag: (flag: string) => testState.featureFlags[flag],
-}));
-
 vi.mock("@/contexts/Auth", () => ({
   useProject: () => ({ id: testState.projectId }),
   useOrganization: () => ({ id: "organization_a" }),
@@ -90,21 +83,12 @@ vi.mock("@gram/client/react-query/productFeatures.js", () => ({
   useProductFeatures: () => testState.productFeatures,
 }));
 
-function unavailableFeatureFlag(
-  status: "loading" | "missing" | "error",
-): FeatureFlagResult {
-  return { status };
-}
-
 beforeEach(() => {
   testState.projectId = "project_a";
   testState.orgMemoryEnabled = false;
   testState.productFeatures = {
     isSuccess: true,
     data: { signalsIntelligenceEnabled: false },
-  };
-  testState.featureFlags = {
-    [FEATURE_FLAGS.explore]: unavailableFeatureFlag("loading"),
   };
 });
 
@@ -226,38 +210,13 @@ describe("useProjectNavRoutes", () => {
     ).toBe(true);
   });
 
-  it.each(["loading", "missing", "error"] as const)(
-    "keeps standard navigation while rollout flags are %s",
-    (status) => {
-      testState.featureFlags = {
-        [FEATURE_FLAGS.explore]: unavailableFeatureFlag(status),
-      };
+  it("lists Explore and Dashboards for project readers", () => {
+    const { result } = renderHook(() => useProjectNavRoutes());
+    const scopeOf = (target: AppRoute) =>
+      result.current.find((entry) => entry.route === target)?.scope;
 
-      const { result } = renderHook(() => useProjectNavRoutes());
-      const navRoutes = result.current.map((entry) => entry.route);
-
-      expect(navRoutes).toContain(routes.assistants);
-      expect(navRoutes).toContain(routes.watchdog);
-      expect(navRoutes).not.toContain(routes.explore);
-      expect(navRoutes).toContain(routes.deployments);
-      expect(navRoutes).toContain(routes.riskEvents);
-    },
-  );
-
-  it("keeps Explore and Dashboards out of the nav until their flag is released to the organization", () => {
-    const { result: hidden } = renderHook(() => useProjectNavRoutes());
-    const hiddenRoutes = hidden.current.map((entry) => entry.route);
-    expect(hiddenRoutes).not.toContain(routes.explore);
-    expect(hiddenRoutes).not.toContain(routes.dashboards);
-
-    testState.featureFlags = {
-      ...testState.featureFlags,
-      [FEATURE_FLAGS.explore]: { status: "enabled" },
-    };
-    const { result: shown } = renderHook(() => useProjectNavRoutes());
-    const shownRoutes = shown.current.map((entry) => entry.route);
-    expect(shownRoutes).toContain(routes.explore);
-    expect(shownRoutes).toContain(routes.dashboards);
+    expect(scopeOf(routes.explore)).toEqual(["project:read"]);
+    expect(scopeOf(routes.dashboards)).toEqual(["project:read"]);
   });
 
   it("requires organization admin for Watchdog navigation, matching its page", () => {
@@ -267,21 +226,6 @@ describe("useProjectNavRoutes", () => {
     );
 
     expect(watchdog?.scope).toEqual(["org:admin"]);
-  });
-
-  it("uses resolved values for feature-gated navigation", () => {
-    testState.featureFlags = {
-      [FEATURE_FLAGS.explore]: { status: "enabled" },
-    };
-
-    const { result } = renderHook(() => useProjectNavRoutes());
-    const navRoutes = result.current.map((entry) => entry.route);
-
-    expect(navRoutes).toContain(routes.assistants);
-    expect(navRoutes).toContain(routes.watchdog);
-    expect(navRoutes).toContain(routes.explore);
-    expect(navRoutes).toContain(routes.deployments);
-    expect(navRoutes).toContain(routes.riskEvents);
   });
 
   it("uses assistant read on the active project for assistant surfaces", () => {

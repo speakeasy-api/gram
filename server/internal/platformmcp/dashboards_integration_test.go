@@ -19,7 +19,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/dashboards"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -30,14 +29,13 @@ type dashboardToolFixture struct {
 	reg       *Registrar
 	service   *DashboardsService
 	db        *pgxpool.Pool
-	flags     *feature.InMemory
 	principal Principal
 	project   ResolvedProject
 }
 
 // newDashboardToolFixture registers the live dashboard tools against a
-// cloned database, with Explore on and a caller holding project:read and
-// project:write on the project.
+// cloned database, with a caller holding project:read and project:write on
+// the project.
 func newDashboardToolFixture(t *testing.T) (context.Context, dashboardToolFixture) {
 	t.Helper()
 
@@ -48,18 +46,16 @@ func newDashboardToolFixture(t *testing.T) (context.Context, dashboardToolFixtur
 	principal.Surface = SurfacePlatformMCP
 	logger, tracer := testenv.NewLogger(t), testenv.NewTracerProvider(t)
 
-	flags := &feature.InMemory{}
-	flags.SetFlag(feature.FlagExplore, principal.OrganizationID, true)
 	engine := authz.NewEngine(logger, db, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	management := dashboards.NewService(logger, tracer, db, &sessions.Manager{}, engine, audit.NewLogger())
-	service := NewDashboardsService(logger, management, NewPostgresReader(logger, db), engine, flags, NewPostgresOrganizationSlugResolver(db), "test-dashboard-key")
+	service := NewDashboardsService(logger, management, NewPostgresReader(logger, db), engine, NewPostgresOrganizationSlugResolver(db), "test-dashboard-key")
 	require.NotNil(t, service)
-	require.Nil(t, NewDashboardsService(logger, management, NewPostgresReader(logger, db), engine, nil, NewPostgresOrganizationSlugResolver(db), "test-dashboard-key"), "without flags the tools are served as unavailable")
+	require.Nil(t, NewDashboardsService(logger, management, NewPostgresReader(logger, db), engine, nil, "test-dashboard-key"), "without an organization resolver the tools are served as unavailable")
 	reg := newRegistrar(newTestMCPServer())
 	registerDashboardTools(reg, service)
 
 	ctx := dashboardCallerContext(t.Context(), principal, project, authz.ScopeProjectRead, authz.ScopeProjectWrite)
-	return ctx, dashboardToolFixture{reg: reg, service: service, db: db, flags: flags, principal: principal, project: project}
+	return ctx, dashboardToolFixture{reg: reg, service: service, db: db, principal: principal, project: project}
 }
 
 func dashboardCallerContext(ctx context.Context, principal Principal, project ResolvedProject, scopes ...authz.Scope) context.Context {
@@ -452,15 +448,4 @@ func TestDashboardToolsCheckProjectAccessFirst(t *testing.T) {
 	nobody := dashboardCallerContext(t.Context(), other, f.project)
 	_, err = f.call(t, nobody, getDashboardToolName, map[string]any{"dashboard_id": uuid.NewString()})
 	require.Equal(t, "permission_denied", refusalCode(t, err), "without project:read a dashboard reads as denied, never as not found")
-}
-
-func TestDashboardToolsNeedExplore(t *testing.T) {
-	t.Parallel()
-	ctx, f := newDashboardToolFixture(t)
-	f.flags.SetFlag(feature.FlagExplore, f.principal.OrganizationID, false)
-
-	_, err := f.call(t, ctx, listDashboardsToolName, map[string]any{})
-	require.Equal(t, analyticsNotEnabledCode, refusalCode(t, err))
-	_, err = f.call(t, ctx, saveDashboardToolName, map[string]any{"name": "Usage", "confirmed": false})
-	require.Equal(t, analyticsNotEnabledCode, refusalCode(t, err))
 }

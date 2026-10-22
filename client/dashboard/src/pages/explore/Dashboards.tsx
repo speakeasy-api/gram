@@ -1,7 +1,6 @@
 import { Page } from "@/components/page-layout";
 import { WorkbenchPage } from "@/components/page-templates";
 import { ReleaseStageBadge } from "@/components/release-stage-badge";
-import { Skeleton } from "@/components/ui/Skeleton";
 import { useProjectSlugForRequests } from "@/contexts/Sdk";
 import { useRoutes } from "@/routes";
 import type { Dashboard } from "@gram/client/models/components/dashboard.js";
@@ -12,22 +11,19 @@ import { Outlet, useParams } from "react-router";
 import { BuiltInDashboardPage } from "./BuiltInDashboardPage";
 import { DashboardList } from "./DashboardList";
 import { DashboardPage } from "./DashboardPage";
-import { RequireExplore } from "./RequireExplore";
 
 // Dashboards: the project's dashboards and the ones Speakeasy ships, each a
 // grid of widgets under one filter bar. A card's question opens in Explore,
 // where widgets are made.
 
-/** The frame every Dashboards page sits in, behind the Explore rollout. */
+/** The frame every Dashboards page sits in. */
 export function DashboardsRoot(): JSX.Element {
   return (
     <WorkbenchPage scope="project:read">
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
         <div className="flex w-full flex-col gap-6 p-8 pb-24">
           <Page.Eyebrow />
-          <RequireExplore loading={<DashboardsSkeleton />}>
-            <Outlet />
-          </RequireExplore>
+          <Outlet />
         </div>
       </div>
     </WorkbenchPage>
@@ -107,13 +103,4 @@ export function BuiltInDashboardRoute(): JSX.Element {
 function useOpenDashboard(): (dashboard: Dashboard) => void {
   const routes = useRoutes();
   return (dashboard) => routes.dashboards.detail.goTo(dashboard.id);
-}
-
-function DashboardsSkeleton(): JSX.Element {
-  return (
-    <div className="flex flex-col gap-4" aria-busy="true">
-      <Skeleton className="h-8 w-64" />
-      <Skeleton className="h-64 w-full" />
-    </div>
-  );
 }

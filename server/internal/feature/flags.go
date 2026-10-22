@@ -68,11 +68,6 @@ const (
 	// like FlagBudgets. Evaluated server-side only; removed once the toolset
 	// is GA.
 	FlagAssistantPlatformMCP Flag = "assistant-platform-mcp"
-	// FlagExplore gates Explore and the Platform MCP analytics tools. The key
-	// matches the dashboard's page-level flag so one PostHog flag controls
-	// both surfaces; targeted by organization group (org slug), like
-	// FlagBudgets. A rollout gate, not authorization. Removed once Explore is GA.
-	FlagExplore Flag = "gram-explore"
 	// FlagRiskLLMAnalyzer selects the engine behind an organization's secret,
 	// PII, prompt injection and destructive tool call detection on both the
 	// realtime enforcement lane and the batch flag lane. It is multivariate:

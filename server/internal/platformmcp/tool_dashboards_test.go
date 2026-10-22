@@ -38,7 +38,6 @@ func TestDashboardToolErrorsAreReadable(t *testing.T) {
 		reason  string
 		message string
 	}{
-		"explore off":        {ErrDashboardsNotEnabled, analyticsNotEnabledCode, "", "Dashboards are not switched on for your organization yet. They arrive with Explore; ask your Speakeasy contact to turn it on."},
 		"built-in":           {errDashboardBuiltInReadOnly, "built_in_read_only", "", "Speakeasy-built dashboards are read-only. Use duplicate_dashboard to make a project copy, then change the copy."},
 		"stale version":      {oops.E(oops.CodeConflict, dashboards.ErrStaleVersion, "the dashboard changed since it was read; read it again"), "conflict", "", "The dashboard changed since it was read. Call get_dashboard again, preview again and confirm the new version."},
 		"preview mismatch":   {errPreviewMismatch, "conflict", "", "The preview token does not match this proposal and version. Preview again and confirm the identical proposal."},

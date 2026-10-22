@@ -10,7 +10,6 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/otel/chrepo"
 	"github.com/speakeasy-api/gram/server/internal/telemetry/analytics"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -83,11 +82,9 @@ func TestAnalyticsToolsAnswerFromClickHouse(t *testing.T) {
 
 	engine, err := analytics.NewEngine(conn, chConn)
 	require.NoError(t, err)
-	flags := &feature.InMemory{}
-	flags.SetFlag(feature.FlagExplore, principal.OrganizationID, true)
 	authzEngine := authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return false, nil }, nil)
 	reader := NewPostgresReader(testenv.NewLogger(t), conn).WithAuthorization(authzEngine)
-	service := NewAnalyticsService(testenv.NewLogger(t), engine, flags, NewPostgresOrganizationSlugResolver(conn), reader, OperationBudget{Connection: allowOperationLimiter{}, Organization: allowOperationLimiter{}})
+	service := NewAnalyticsService(testenv.NewLogger(t), engine, reader, OperationBudget{Connection: allowOperationLimiter{}, Organization: allowOperationLimiter{}})
 	require.NotNil(t, service)
 	reg := newRegistrar(newTestMCPServer())
 	registerAnalyticsTools(reg, service)
@@ -191,45 +188,4 @@ func TestAnalyticsToolsAnswerFromClickHouse(t *testing.T) {
 			require.Equal(t, "forbidden", refusal.Code, call.tool)
 		}
 	})
-}
-
-func TestAnalyticsToolsFollowTheExploreFlag(t *testing.T) {
-	t.Parallel()
-
-	ctx := t.Context()
-	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_analytics_flag")
-	require.NoError(t, err)
-	chConn, err := platformMCPInfra.NewClickhouseClient(t)
-	require.NoError(t, err)
-	principal, project := seedRegistrationLifecycle(t, ctx, conn)
-
-	engine, err := analytics.NewEngine(conn, chConn)
-	require.NoError(t, err)
-	flags := &feature.InMemory{}
-	authzEngine := authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return false, nil }, nil)
-	reader := NewPostgresReader(testenv.NewLogger(t), conn).WithAuthorization(authzEngine)
-	reg := newRegistrar(newTestMCPServer())
-	registerAnalyticsTools(reg, NewAnalyticsService(testenv.NewLogger(t), engine, flags, NewPostgresOrganizationSlugResolver(conn), reader, OperationBudget{Connection: allowOperationLimiter{}, Organization: allowOperationLimiter{}}))
-
-	actor := contextvalues.WithAuthenticatedActor(ctx, &contextvalues.AuthContext{ActiveOrganizationID: principal.OrganizationID, UserID: principal.UserID}, urn.NewPrincipal(urn.PrincipalTypeUser, principal.UserID))
-	actor = contextvalues.SetActingSurface(actor, contextvalues.ActingSurfacePlatformMCP)
-	granted := ContextWithPrincipal(authz.GrantsToContext(actor, []authz.Grant{authz.NewGrant(authz.ScopeProjectRead, project.ID.String())}), principal)
-	arguments := json.RawMessage(`{"project_id":"` + project.ID.String() + `"}`)
-
-	// Not set at all: indeterminate, and closed.
-	_, err = descriptorByName(t, reg, describeAnalyticsCatalogToolName).Invoke(granted, arguments)
-	refusal := requireAnalyticsRefusal(t, err)
-	require.Equal(t, analyticsNotEnabledCode, refusal.Code)
-	require.Contains(t, refusal.Message, "not switched on")
-
-	flags.SetFlag(feature.FlagExplore, principal.OrganizationID, false)
-	_, err = descriptorByName(t, reg, describeAnalyticsCatalogToolName).Invoke(granted, arguments)
-	require.Equal(t, analyticsNotEnabledCode, requireAnalyticsRefusal(t, err).Code)
-
-	flags.SetFlag(feature.FlagExplore, principal.OrganizationID, true)
-	raw, err := descriptorByName(t, reg, describeAnalyticsCatalogToolName).Invoke(granted, arguments)
-	require.NoError(t, err)
-	output, ok := raw.(DescribeAnalyticsCatalogOutput)
-	require.True(t, ok)
-	require.Equal(t, project.ID.String(), output.Project.ID)
 }

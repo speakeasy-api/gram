@@ -20,7 +20,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/dashboards"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
@@ -35,10 +34,6 @@ const (
 )
 
 var (
-	// ErrDashboardsNotEnabled marks a call for an organization that has
-	// Explore switched off.
-	ErrDashboardsNotEnabled = errors.New("platform mcp dashboards not enabled")
-
 	// errDashboardBuiltInReadOnly marks a write that names a Speakeasy-built
 	// dashboard, which only duplicate_dashboard may use.
 	errDashboardBuiltInReadOnly = errors.New("built-in dashboard is read only")
@@ -53,7 +48,6 @@ type DashboardsService struct {
 	management    dashboardsManagement
 	projects      *PostgresReader
 	engine        *authz.Engine
-	flags         feature.Provider
 	organizations OrganizationSlugResolver
 	db            *pgxpool.Pool
 	key           []byte
@@ -77,12 +71,12 @@ type dashboardsManagement interface {
 
 // NewDashboardsService returns nil when a dependency is missing, so the
 // tools are served as stubs.
-func NewDashboardsService(logger *slog.Logger, management *dashboards.Service, projects *PostgresReader, engine *authz.Engine, flags feature.Provider, organizations OrganizationSlugResolver, key string) *DashboardsService {
+func NewDashboardsService(logger *slog.Logger, management *dashboards.Service, projects *PostgresReader, engine *authz.Engine, organizations OrganizationSlugResolver, key string) *DashboardsService {
 	var db *pgxpool.Pool
 	if projects != nil {
 		db = projects.db
 	}
-	s := &DashboardsService{logger: logger, management: management, projects: projects, engine: engine, flags: flags, organizations: organizations, db: db, key: []byte(key), now: time.Now}
+	s := &DashboardsService{logger: logger, management: management, projects: projects, engine: engine, organizations: organizations, db: db, key: []byte(key), now: time.Now}
 	if !s.valid() {
 		return nil
 	}
@@ -90,7 +84,7 @@ func NewDashboardsService(logger *slog.Logger, management *dashboards.Service, p
 }
 
 func (s *DashboardsService) valid() bool {
-	return s != nil && s.logger != nil && s.management != nil && s.projects != nil && s.engine != nil && s.flags != nil && s.organizations != nil && s.db != nil && len(s.key) > 0 && s.now != nil
+	return s != nil && s.logger != nil && s.management != nil && s.projects != nil && s.engine != nil && s.organizations != nil && s.db != nil && len(s.key) > 0 && s.now != nil
 }
 
 // dashboardScope is the exact project a call runs in, and the organization
@@ -101,8 +95,8 @@ type dashboardScope struct {
 }
 
 // scope holds the caller to project:read on the exact project before any row
-// is read, so a denied caller cannot probe what exists, then checks the
-// Explore flag. Who may change a dashboard is the dashboards service's rule.
+// is read, so a denied caller cannot probe what exists. Who may change a
+// dashboard is the dashboards service's rule.
 // write loads the actor's email for the audit.
 func (s *DashboardsService) scope(ctx context.Context, principal Principal, projectID string, write bool) (context.Context, dashboardScope, error) {
 	var zero dashboardScope
@@ -140,12 +134,8 @@ func (s *DashboardsService) scope(ctx context.Context, principal Principal, proj
 			return ctx, zero, fmt.Errorf("%w: resolve organization slug for dashboards: %w", ErrUnavailable, err)
 		}
 	}
-	enabled, err := exploreEnabled(ctx, s.flags, principal.OrganizationID, organizationSlug, project.Slug)
-	if err != nil {
-		return ctx, zero, err
-	}
-	if !enabled {
-		return ctx, zero, ErrDashboardsNotEnabled
+	if organizationSlug == "" {
+		return ctx, zero, fmt.Errorf("%w: organization slug is unavailable", ErrUnavailable)
 	}
 
 	scoped := *auth

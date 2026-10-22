@@ -18,7 +18,7 @@ const (
 	deleteWidgetToolName    = "delete_widget"
 
 	widgetWriteNote  = "Call with confirmed:false first: nothing changes, and the result shows what would change, the version to expect and a preview_token. Show that to the user, and only after they confirm call again with the identical input plus confirmed:true, expected_version, preview_token and a stable idempotency_key. If the widget changed after it was read the write is refused as version_changed and nothing changes; read it again and preview again. Retrying with the same idempotency_key returns the first result without writing twice; a preview confirms once, and confirming it again under a new idempotency_key is refused as preview_used; a preview older than a day is refused as preview_expired. After a commit the result reports the widget from a fresh read; snapshot_scope deleted means it is gone, and delete_widget reports it with the dashboards that lost the widget. snapshot_scope verification_unavailable means the write committed but that read failed, so keep the retry inputs unchanged. "
-	widgetAccessNote = "Any member of the project can create and duplicate widgets; only a widget's creator, or someone with write access to the project, can update or delete it, and anyone else is refused as owner_or_write_required. Requires Explore to be switched on for the organization. External users only."
+	widgetAccessNote = "Any member of the project can create and duplicate widgets; only a widget's creator, or someone with write access to the project, can update or delete it, and anyone else is refused as owner_or_write_required. External users only."
 )
 
 // registerWidgetTools registers the widget tools. Without a service each still
@@ -33,14 +33,14 @@ func registerWidgetTools(reg *Registrar, service *WidgetService) {
 		Name:  listWidgetsToolName,
 		Title: "List Explore Widgets",
 		Description: "List a project's Explore widgets — saved analytics questions, each kept with the chart that draws it — most recently updated first: name, description, dataset, chart type, who created it, when it was last updated and its version, whether it still works (invalid_reason names what a catalog change broke), and the dashboards it is on. " +
-			"Use get_widget for a widget's full query and visualization. At most 200 widgets; truncated says there are more. Requires read access to the project and Explore to be switched on for the organization. External users only.",
+			"Use get_widget for a widget's full query and visualization. At most 200 widgets; truncated says there are more. Requires read access to the project. External users only.",
 		Annotations: readOnlyAnnotations(),
 	}
 	get := &mcp.Tool{
 		Name:  getWidgetToolName,
 		Title: "Read an Explore Widget",
 		Description: "Read one widget's full definition: its query in the analytics catalog's vocabulary, its visualization, whether it still works (invalid_reason), the dashboards it is on, and its version, which a later save_widget, duplicate_widget or delete_widget names as expected_version. " +
-			"Requires read access to the project and Explore to be switched on for the organization. External users only.",
+			"Requires read access to the project. External users only.",
 		Annotations: readOnlyAnnotations(),
 	}
 	save := &mcp.Tool{
