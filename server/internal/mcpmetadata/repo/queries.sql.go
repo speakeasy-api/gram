@@ -128,7 +128,6 @@ func (q *Queries) GetHeaderDisplayNamesByToolsetIDs(ctx context.Context, arg Get
 
 const getMetadataByBackendID = `-- name: GetMetadataByBackendID :one
 SELECT id,
-       toolset_id,
        mcp_server_id,
        project_id,
        external_documentation_url,
@@ -152,13 +151,27 @@ type GetMetadataByBackendIDParams struct {
 	ToolsetBackend bool
 }
 
+type GetMetadataByBackendIDRow struct {
+	ID                        uuid.UUID
+	McpServerID               uuid.NullUUID
+	ProjectID                 uuid.UUID
+	ExternalDocumentationUrl  pgtype.Text
+	ExternalDocumentationText pgtype.Text
+	LogoID                    uuid.NullUUID
+	Instructions              pgtype.Text
+	HeaderDisplayNames        []byte
+	DefaultEnvironmentID      uuid.NullUUID
+	InstallationOverrideUrl   pgtype.Text
+	CreatedAt                 pgtype.Timestamptz
+	UpdatedAt                 pgtype.Timestamptz
+}
+
 // Addressed by toolset id, the row counts only under the toolset's canonical wrapper, which shares its id.
-func (q *Queries) GetMetadataByBackendID(ctx context.Context, arg GetMetadataByBackendIDParams) (McpMetadatum, error) {
+func (q *Queries) GetMetadataByBackendID(ctx context.Context, arg GetMetadataByBackendIDParams) (GetMetadataByBackendIDRow, error) {
 	row := q.db.QueryRow(ctx, getMetadataByBackendID, arg.ProjectID, arg.BackendID, arg.ToolsetBackend)
-	var i McpMetadatum
+	var i GetMetadataByBackendIDRow
 	err := row.Scan(
 		&i.ID,
-		&i.ToolsetID,
 		&i.McpServerID,
 		&i.ProjectID,
 		&i.ExternalDocumentationUrl,
@@ -219,7 +232,6 @@ func (q *Queries) ListEnvironmentConfigs(ctx context.Context, mcpMetadataID uuid
 
 const lockMetadataByBackendID = `-- name: LockMetadataByBackendID :one
 SELECT id,
-       toolset_id,
        mcp_server_id,
        project_id,
        external_documentation_url,
@@ -244,13 +256,27 @@ type LockMetadataByBackendIDParams struct {
 	ToolsetBackend bool
 }
 
+type LockMetadataByBackendIDRow struct {
+	ID                        uuid.UUID
+	McpServerID               uuid.NullUUID
+	ProjectID                 uuid.UUID
+	ExternalDocumentationUrl  pgtype.Text
+	ExternalDocumentationText pgtype.Text
+	LogoID                    uuid.NullUUID
+	Instructions              pgtype.Text
+	HeaderDisplayNames        []byte
+	DefaultEnvironmentID      uuid.NullUUID
+	InstallationOverrideUrl   pgtype.Text
+	CreatedAt                 pgtype.Timestamptz
+	UpdatedAt                 pgtype.Timestamptz
+}
+
 // The same match as GetMetadataByBackendID.
-func (q *Queries) LockMetadataByBackendID(ctx context.Context, arg LockMetadataByBackendIDParams) (McpMetadatum, error) {
+func (q *Queries) LockMetadataByBackendID(ctx context.Context, arg LockMetadataByBackendIDParams) (LockMetadataByBackendIDRow, error) {
 	row := q.db.QueryRow(ctx, lockMetadataByBackendID, arg.ProjectID, arg.BackendID, arg.ToolsetBackend)
-	var i McpMetadatum
+	var i LockMetadataByBackendIDRow
 	err := row.Scan(
 		&i.ID,
-		&i.ToolsetID,
 		&i.McpServerID,
 		&i.ProjectID,
 		&i.ExternalDocumentationUrl,
@@ -277,7 +303,6 @@ DO UPDATE SET logo_id = EXCLUDED.logo_id,
               updated_at = clock_timestamp()
 WHERE mcp_metadata.logo_id IS NULL
 RETURNING id,
-          toolset_id,
           mcp_server_id,
           project_id,
           external_documentation_url,
@@ -297,16 +322,30 @@ type SetDefaultLogoIfUnsetParams struct {
 	LogoID      uuid.NullUUID
 }
 
+type SetDefaultLogoIfUnsetRow struct {
+	ID                        uuid.UUID
+	McpServerID               uuid.NullUUID
+	ProjectID                 uuid.UUID
+	ExternalDocumentationUrl  pgtype.Text
+	ExternalDocumentationText pgtype.Text
+	LogoID                    uuid.NullUUID
+	Instructions              pgtype.Text
+	HeaderDisplayNames        []byte
+	DefaultEnvironmentID      uuid.NullUUID
+	InstallationOverrideUrl   pgtype.Text
+	CreatedAt                 pgtype.Timestamptz
+	UpdatedAt                 pgtype.Timestamptz
+}
+
 // Used for system-assigned defaults (e.g. an unproxied server's favicon)
 // rather than a user-initiated edit: only ever touches logo_id, and only
 // when unset, so it can never race a concurrent user edit into clobbering
 // their branding/install-page settings the way a full-record upsert would.
-func (q *Queries) SetDefaultLogoIfUnset(ctx context.Context, arg SetDefaultLogoIfUnsetParams) (McpMetadatum, error) {
+func (q *Queries) SetDefaultLogoIfUnset(ctx context.Context, arg SetDefaultLogoIfUnsetParams) (SetDefaultLogoIfUnsetRow, error) {
 	row := q.db.QueryRow(ctx, setDefaultLogoIfUnset, arg.McpServerID, arg.ProjectID, arg.LogoID)
-	var i McpMetadatum
+	var i SetDefaultLogoIfUnsetRow
 	err := row.Scan(
 		&i.ID,
-		&i.ToolsetID,
 		&i.McpServerID,
 		&i.ProjectID,
 		&i.ExternalDocumentationUrl,
@@ -328,7 +367,6 @@ SET header_display_names = $1
 WHERE id = $2
   AND project_id = $3
 RETURNING id,
-          toolset_id,
           mcp_server_id,
           project_id,
           external_documentation_url,
@@ -348,12 +386,26 @@ type SetHeaderDisplayNamesParams struct {
 	ProjectID          uuid.UUID
 }
 
-func (q *Queries) SetHeaderDisplayNames(ctx context.Context, arg SetHeaderDisplayNamesParams) (McpMetadatum, error) {
+type SetHeaderDisplayNamesRow struct {
+	ID                        uuid.UUID
+	McpServerID               uuid.NullUUID
+	ProjectID                 uuid.UUID
+	ExternalDocumentationUrl  pgtype.Text
+	ExternalDocumentationText pgtype.Text
+	LogoID                    uuid.NullUUID
+	Instructions              pgtype.Text
+	HeaderDisplayNames        []byte
+	DefaultEnvironmentID      uuid.NullUUID
+	InstallationOverrideUrl   pgtype.Text
+	CreatedAt                 pgtype.Timestamptz
+	UpdatedAt                 pgtype.Timestamptz
+}
+
+func (q *Queries) SetHeaderDisplayNames(ctx context.Context, arg SetHeaderDisplayNamesParams) (SetHeaderDisplayNamesRow, error) {
 	row := q.db.QueryRow(ctx, setHeaderDisplayNames, arg.HeaderDisplayNames, arg.ID, arg.ProjectID)
-	var i McpMetadatum
+	var i SetHeaderDisplayNamesRow
 	err := row.Scan(
 		&i.ID,
-		&i.ToolsetID,
 		&i.McpServerID,
 		&i.ProjectID,
 		&i.ExternalDocumentationUrl,
@@ -442,7 +494,6 @@ DO UPDATE SET project_id = EXCLUDED.project_id,
               installation_override_url = EXCLUDED.installation_override_url,
               updated_at = clock_timestamp()
 RETURNING id,
-          toolset_id,
           mcp_server_id,
           project_id,
           external_documentation_url,
@@ -467,7 +518,22 @@ type UpsertMetadataByMcpServerIDParams struct {
 	InstallationOverrideUrl   pgtype.Text
 }
 
-func (q *Queries) UpsertMetadataByMcpServerID(ctx context.Context, arg UpsertMetadataByMcpServerIDParams) (McpMetadatum, error) {
+type UpsertMetadataByMcpServerIDRow struct {
+	ID                        uuid.UUID
+	McpServerID               uuid.NullUUID
+	ProjectID                 uuid.UUID
+	ExternalDocumentationUrl  pgtype.Text
+	ExternalDocumentationText pgtype.Text
+	LogoID                    uuid.NullUUID
+	Instructions              pgtype.Text
+	HeaderDisplayNames        []byte
+	DefaultEnvironmentID      uuid.NullUUID
+	InstallationOverrideUrl   pgtype.Text
+	CreatedAt                 pgtype.Timestamptz
+	UpdatedAt                 pgtype.Timestamptz
+}
+
+func (q *Queries) UpsertMetadataByMcpServerID(ctx context.Context, arg UpsertMetadataByMcpServerIDParams) (UpsertMetadataByMcpServerIDRow, error) {
 	row := q.db.QueryRow(ctx, upsertMetadataByMcpServerID,
 		arg.McpServerID,
 		arg.ProjectID,
@@ -478,10 +544,9 @@ func (q *Queries) UpsertMetadataByMcpServerID(ctx context.Context, arg UpsertMet
 		arg.DefaultEnvironmentID,
 		arg.InstallationOverrideUrl,
 	)
-	var i McpMetadatum
+	var i UpsertMetadataByMcpServerIDRow
 	err := row.Scan(
 		&i.ID,
-		&i.ToolsetID,
 		&i.McpServerID,
 		&i.ProjectID,
 		&i.ExternalDocumentationUrl,

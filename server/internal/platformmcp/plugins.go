@@ -164,7 +164,7 @@ type PluginServer struct {
 	// DisplayName is the name the generated package gives this server.
 	DisplayName string `json:"display_name"`
 
-	// Backend is what the entry is backed by: "mcp_server", "gateway", or "unresolved" for a leftover toolset-keyed entry.
+	// Backend is what the entry is backed by: "mcp_server", "gateway", or "unresolved" when it has no current backend.
 	Backend string `json:"backend"`
 
 	// TargetID is the exact typed backend ID. It is present only in

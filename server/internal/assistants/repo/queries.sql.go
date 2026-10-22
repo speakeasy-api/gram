@@ -106,13 +106,6 @@ type AddAssistantMcpServersParams struct {
 	ProjectID     uuid.UUID
 }
 
-type AddAssistantToolsetsParams struct {
-	AssistantID   uuid.UUID
-	ToolsetID     uuid.UUID
-	EnvironmentID uuid.NullUUID
-	ProjectID     uuid.UUID
-}
-
 const assistantHasUnsettledEvents = `-- name: AssistantHasUnsettledEvents :one
 SELECT EXISTS (
   SELECT 1 FROM assistant_thread_events e
@@ -588,42 +581,6 @@ type ClearAssistantMcpServersForServersParams struct {
 
 func (q *Queries) ClearAssistantMcpServersForServers(ctx context.Context, arg ClearAssistantMcpServersForServersParams) error {
 	_, err := q.db.Exec(ctx, clearAssistantMcpServersForServers, arg.AssistantID, arg.ProjectID, arg.McpServerIds)
-	return err
-}
-
-const clearAssistantToolsets = `-- name: ClearAssistantToolsets :exec
-DELETE FROM assistant_toolsets
-WHERE assistant_id = $1
-  AND project_id = $2
-`
-
-type ClearAssistantToolsetsParams struct {
-	AssistantID uuid.UUID
-	ProjectID   uuid.UUID
-}
-
-// Clears legacy toolset-keyed rows left behind.
-func (q *Queries) ClearAssistantToolsets(ctx context.Context, arg ClearAssistantToolsetsParams) error {
-	_, err := q.db.Exec(ctx, clearAssistantToolsets, arg.AssistantID, arg.ProjectID)
-	return err
-}
-
-const clearAssistantToolsetsForServers = `-- name: ClearAssistantToolsetsForServers :exec
-DELETE FROM assistant_toolsets
-WHERE assistant_id = $1
-  AND project_id = $2
-  AND toolset_id = ANY($3::UUID[])
-`
-
-type ClearAssistantToolsetsForServersParams struct {
-	AssistantID  uuid.UUID
-	ProjectID    uuid.UUID
-	McpServerIds []uuid.UUID
-}
-
-// Clears legacy toolset-keyed rows left behind.
-func (q *Queries) ClearAssistantToolsetsForServers(ctx context.Context, arg ClearAssistantToolsetsForServersParams) error {
-	_, err := q.db.Exec(ctx, clearAssistantToolsetsForServers, arg.AssistantID, arg.ProjectID, arg.McpServerIds)
 	return err
 }
 
@@ -3485,70 +3442,6 @@ func (q *Queries) LoadAssistantThreadForBootstrap(ctx context.Context, arg LoadA
 		&i.DeletedAt,
 	)
 	return i, err
-}
-
-const loadAssistantToolsets = `-- name: LoadAssistantToolsets :many
-SELECT
-  at.assistant_id,
-  at.toolset_id,
-  t.slug AS toolset_slug,
-  t.mcp_enabled,
-  t.mcp_slug,
-  t.default_environment_slug,
-  at.environment_id,
-  e.slug AS environment_slug
-FROM assistant_toolsets at
-JOIN toolsets t ON t.id = at.toolset_id AND t.deleted IS FALSE
-LEFT JOIN environments e ON e.id = at.environment_id
-WHERE at.assistant_id = ANY($1::UUID[])
-  AND at.project_id = $2
-ORDER BY at.created_at
-`
-
-type LoadAssistantToolsetsParams struct {
-	AssistantIds []uuid.UUID
-	ProjectID    uuid.UUID
-}
-
-type LoadAssistantToolsetsRow struct {
-	AssistantID            uuid.UUID
-	ToolsetID              uuid.UUID
-	ToolsetSlug            string
-	McpEnabled             bool
-	McpSlug                pgtype.Text
-	DefaultEnvironmentSlug pgtype.Text
-	EnvironmentID          uuid.NullUUID
-	EnvironmentSlug        pgtype.Text
-}
-
-// Test-only: legacy assistant_toolsets rows are no longer read or written; deletes still clear them until AIM-581.
-func (q *Queries) LoadAssistantToolsets(ctx context.Context, arg LoadAssistantToolsetsParams) ([]LoadAssistantToolsetsRow, error) {
-	rows, err := q.db.Query(ctx, loadAssistantToolsets, arg.AssistantIds, arg.ProjectID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []LoadAssistantToolsetsRow
-	for rows.Next() {
-		var i LoadAssistantToolsetsRow
-		if err := rows.Scan(
-			&i.AssistantID,
-			&i.ToolsetID,
-			&i.ToolsetSlug,
-			&i.McpEnabled,
-			&i.McpSlug,
-			&i.DefaultEnvironmentSlug,
-			&i.EnvironmentID,
-			&i.EnvironmentSlug,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
 }
 
 const loadAttachedAssistantSkill = `-- name: LoadAttachedAssistantSkill :one

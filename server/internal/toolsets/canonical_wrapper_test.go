@@ -396,7 +396,7 @@ func TestCanonicalWrapperSyncAcceptsAgentPrincipal(t *testing.T) {
 func makeLegacy(t *testing.T, ctx context.Context, ti *testInstance, toolset *types.Toolset) {
 	t.Helper()
 	id := uuid.MustParse(toolset.ID)
-	_, err := ti.conn.Exec(ctx, `UPDATE plugin_servers SET toolset_id = mcp_server_id, mcp_server_id = NULL WHERE mcp_server_id = $1`, id) //nolint:glint // notestingrawsql: legacy wrapper fixture
+	_, err := ti.conn.Exec(ctx, `DELETE FROM plugin_servers WHERE mcp_server_id = $1`, id) //nolint:glint // notestingrawsql: legacy wrapper fixture
 	require.NoError(t, err)
 	_, err = ti.conn.Exec(ctx, `DELETE FROM mcp_endpoints WHERE mcp_server_id = $1`, id) //nolint:glint // notestingrawsql: legacy wrapper fixture
 	require.NoError(t, err)

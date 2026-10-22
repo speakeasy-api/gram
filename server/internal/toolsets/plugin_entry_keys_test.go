@@ -1,6 +1,7 @@
 package toolsets_test
 
 import (
+	"context"
 	"testing"
 
 	"github.com/google/uuid"
@@ -69,11 +70,10 @@ func TestToolsetsService_PluginEntriesFollowRenameAndDelete(t *testing.T) {
 	require.NoError(t, err)
 
 	for _, pluginID := range []uuid.UUID{defaultPlugin.ID, other.ID} {
-		servers, err := plugins.ListPluginServers(ctx, pluginID)
-		require.NoError(t, err)
-		require.Contains(t, displayNames(servers), "Renamed Toolset", "a toolset rename reaches its entries")
+		names := displayNames(t, ctx, plugins, pluginID)
+		require.Contains(t, names, "Renamed Toolset", "a toolset rename reaches its entries")
 		if pluginID == other.ID {
-			require.Contains(t, displayNames(servers), "Bystander", "renaming one toolset leaves other server names unchanged")
+			require.Contains(t, names, "Bystander", "renaming one toolset leaves other server names unchanged")
 		}
 	}
 
@@ -81,9 +81,7 @@ func TestToolsetsService_PluginEntriesFollowRenameAndDelete(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, ti.service.DeleteToolset(ctx, &gen.DeleteToolsetPayload{Slug: created.Slug}))
 
-	defaultServers, err := plugins.ListPluginServers(ctx, defaultPlugin.ID)
-	require.NoError(t, err)
-	require.NotContains(t, displayNames(defaultServers), "Renamed Toolset", "deleting the toolset detaches its entries")
+	require.NotContains(t, displayNames(t, ctx, plugins, defaultPlugin.ID), "Renamed Toolset", "deleting the toolset detaches its entries")
 	otherServers, err := plugins.ListPluginServers(ctx, other.ID)
 	require.NoError(t, err)
 	require.Len(t, otherServers, 1, "another server's entry stays")
@@ -132,7 +130,10 @@ func TestToolsetsService_ReenableDoesNotTwinExistingEntry(t *testing.T) {
 	require.Equal(t, toolsetID, servers[0].McpServerID.UUID)
 }
 
-func displayNames(servers []pluginsrepo.PluginServer) []string {
+func displayNames(t *testing.T, ctx context.Context, q *pluginsrepo.Queries, pluginID uuid.UUID) []string {
+	t.Helper()
+	servers, err := q.ListPluginServers(ctx, pluginID)
+	require.NoError(t, err)
 	names := make([]string, 0, len(servers))
 	for _, server := range servers {
 		names = append(names, server.DisplayName)

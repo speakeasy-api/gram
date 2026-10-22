@@ -545,7 +545,6 @@ func TestToolsetsService_CreateToolset_AttachesToDefaultPlugin(t *testing.T) {
 	servers, err := pluginsQueries.ListPluginServers(ctx, defaultPlugin.ID)
 	require.NoError(t, err)
 	require.Len(t, servers, 1)
-	require.False(t, servers[0].ToolsetID.Valid, "stored under the canonical server")
 	require.Equal(t, uuid.MustParse(result.ID), servers[0].McpServerID.UUID)
 	require.Equal(t, "Attach Toolset", servers[0].DisplayName)
 	require.Equal(t, "required", servers[0].Policy)

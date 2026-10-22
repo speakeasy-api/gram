@@ -1402,8 +1402,7 @@ func toolsetIDSet(resolved []resolvedToolsetInsert) map[uuid.UUID]struct{} {
 }
 
 // writeAssistantAttachments stores every attachment in assistant_mcp_servers,
-// hosted ones under their toolset's canonical wrapper (same id), and clears
-// legacy assistant_toolsets rows for every written server.
+// hosted ones under their toolset's canonical wrapper (same id).
 // toolsets replaces the hosted servers; mcpServers replaces the other servers
 // and adds hosted ones not yet attached.
 func writeAssistantAttachments(
@@ -1457,9 +1456,6 @@ func writeAssistantAttachments(
 	}
 
 	if replaceToolsets {
-		if err := queries.ClearAssistantToolsets(ctx, assistantrepo.ClearAssistantToolsetsParams{AssistantID: assistantID, ProjectID: projectID}); err != nil {
-			return fmt.Errorf("clear assistant toolsets: %w", err)
-		}
 		if err := queries.ClearAssistantHostedMcpServers(ctx, assistantrepo.ClearAssistantHostedMcpServersParams{AssistantID: assistantID, ProjectID: projectID}); err != nil {
 			return fmt.Errorf("clear assistant hosted mcp servers: %w", err)
 		}
@@ -1470,9 +1466,6 @@ func writeAssistantAttachments(
 		}
 	}
 	if len(written) > 0 {
-		if err := queries.ClearAssistantToolsetsForServers(ctx, assistantrepo.ClearAssistantToolsetsForServersParams{AssistantID: assistantID, ProjectID: projectID, McpServerIds: written}); err != nil {
-			return fmt.Errorf("clear assistant toolsets for written servers: %w", err)
-		}
 		if err := queries.ClearAssistantMcpServersForServers(ctx, assistantrepo.ClearAssistantMcpServersForServersParams{AssistantID: assistantID, ProjectID: projectID, McpServerIds: written}); err != nil {
 			return fmt.Errorf("clear assistant mcp servers for written servers: %w", err)
 		}

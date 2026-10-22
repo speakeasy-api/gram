@@ -139,10 +139,6 @@ func (m *Migrator) migrateInTx(ctx context.Context, tx pgx.Tx, actor Actor, requ
 		return outcome, err
 	}
 
-	if _, err := queries.RekeyToolsetMetadata(ctx, repo.RekeyToolsetMetadataParams{McpServerID: conv.ToNullUUID(serverID), ProjectID: projectID, ToolsetID: conv.ToNullUUID(toolset.ID)}); err != nil {
-		return outcome, fmt.Errorf("rekey server metadata: %w", err)
-	}
-
 	if hasUpstreamClient(candidate) {
 		filled, err := queries.FillRemoteSessionResources(ctx, repo.FillRemoteSessionResourcesParams{
 			Resource: conv.ToPGText(remote.Url), UserSessionIssuerID: candidate.Row.UserSessionIssuerID.UUID, ProjectID: projectID, OrganizationID: organizationID,
