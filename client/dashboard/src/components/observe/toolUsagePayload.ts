@@ -67,7 +67,9 @@ export function useToolUsagePayload({
   const mcpServerIds = useMemo(
     () =>
       serverFilters
-        .filter((filter) => filter.type === "hosted" && isMcpServerId(filter.id))
+        .filter(
+          (filter) => filter.type === "hosted" && isMcpServerId(filter.id),
+        )
         .map((filter) => filter.id),
     [serverFilters],
   );
