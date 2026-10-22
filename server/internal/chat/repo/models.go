@@ -77,6 +77,8 @@ type ChatMessage struct {
 	CreatedAt pgtype.Timestamptz
 	// @access: confidential
 	RiskAnalyzedAt pgtype.Timestamptz
+	// @access: confidential
+	PrimaryMessageID uuid.NullUUID
 }
 
 type ChatUserFeedback struct {
