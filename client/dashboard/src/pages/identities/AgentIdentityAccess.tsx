@@ -48,8 +48,15 @@ export function AgentIdentityPermissions({
     throwOnError: false,
   });
   const { orgSlug } = useSlugs();
-  const maps = useResourceLinkMaps(canRead);
   const rows = canRead ? (grants.data ?? []) : [];
+  // Only a grant naming a specific MCP server needs the org inventories;
+  // project names come from the session.
+  const maps = useResourceLinkMaps(
+    rows.some(
+      ({ selector }) =>
+        selector.resourceKind === "mcp" && selector.resourceId !== "*",
+    ),
+  );
   let content: JSX.Element;
   if (!canRead) {
     content = (

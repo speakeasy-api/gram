@@ -260,13 +260,15 @@ export function AgentSessionsSection({
     },
   ];
 
+  // The panel supplies its own frame, so inner tables and states drop theirs.
+  const frameless = variant === "panel" ? "border-none" : undefined;
   const body = (
     <>
       {!canRead ? (
         <Text>You do not have permission to view this agent's sessions.</Text>
       ) : isLoading ? (
         <div role="status" aria-label="Loading agent sessions">
-          <SkeletonTable />
+          <SkeletonTable className={frameless} />
         </div>
       ) : isError ? (
         <div role="alert" className="space-y-3">
@@ -280,14 +282,14 @@ export function AgentSessionsSection({
           icon="key-round"
           heading="No sessions yet"
           description="Choose this agent when authorizing an MCP connection to create a session."
-          className={variant === "panel" ? "border-none" : undefined}
+          className={frameless}
         />
       ) : (
         <Table
           columns={columns}
           data={sessions}
           rowKey={(session) => session.id}
-          className={variant === "panel" ? "border-none" : undefined}
+          className={frameless}
         />
       )}
       {canRead && loadMoreError && (

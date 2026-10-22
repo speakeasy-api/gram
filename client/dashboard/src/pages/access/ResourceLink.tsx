@@ -1,4 +1,5 @@
 import { Text } from "@/components/ui/Text";
+import { mcpServerRouteParam } from "@/lib/sources";
 import type { ChallengeBucket } from "@gram/client/models/components/challengebucket.js";
 import {
   Blocks,
@@ -88,10 +89,10 @@ export function ResourceLink({
     } else if (mcpServer) {
       label = mcpServer.name ?? mcpServer.slug ?? resourceId;
       const proj = projectMap.get(mcpServer.projectId);
-      to =
-        proj && mcpServer.slug
-          ? `/${orgSlug}/projects/${proj.slug}/mcp/x/${mcpServer.slug}`
-          : null;
+      // The route accepts the row id or slug, so a slugless row still links.
+      to = proj
+        ? `/${orgSlug}/projects/${proj.slug}/mcp/x/${mcpServerRouteParam({ id: resourceId, slug: mcpServer.slug })}`
+        : null;
     } else {
       label = resourceId;
     }

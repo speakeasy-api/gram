@@ -38,9 +38,12 @@ export function AgentHeaderActions({
     <div className="-ml-2 flex items-center gap-1">
       {/* Changing what the agent reaches is the same set of questions it
           was registered with, so it is the same flow. */}
-      <Button asChild variant="tertiary" size="xs">
-        <Link to={routes.identities.agents.edit.href(agent.id)}>Edit</Link>
-      </Button>
+      {/* Same gate as rename: saving the edit flow needs write access. */}
+      {agent.permissions.write && (
+        <Button asChild variant="tertiary" size="xs">
+          <Link to={routes.identities.agents.edit.href(agent.id)}>Edit</Link>
+        </Button>
+      )}
       <RenameAgentButton
         agent={agent}
         refresh={refresh}

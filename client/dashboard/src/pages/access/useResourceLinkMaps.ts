@@ -15,19 +15,21 @@ export type ResourceLinkMaps = {
 /**
  * The org-wide lookups `ResourceLink` resolves ids against. A failed read
  * leaves a map empty, which degrades a link to its id chip rather than taking
- * the page down.
+ * the page down. A failed refetch keeps React Query's stale cached `data`, so
+ * an errored query is read as an empty list rather than its last success.
  */
 export function useResourceLinkMaps(enabled = true): ResourceLinkMaps {
   const { organization } = useSession();
-  const { data: toolsetsData } = useListToolsetsForOrg(undefined, undefined, {
+  const toolsets = useListToolsetsForOrg(undefined, undefined, {
     enabled,
     throwOnError: false,
   });
-  const { data: mcpServersData } = useListMcpServersForOrg(
-    undefined,
-    undefined,
-    { enabled, throwOnError: false },
-  );
+  const mcpServers = useListMcpServersForOrg(undefined, undefined, {
+    enabled,
+    throwOnError: false,
+  });
+  const toolsetsData = toolsets.isError ? undefined : toolsets.data;
+  const mcpServersData = mcpServers.isError ? undefined : mcpServers.data;
   const projectMap = useMemo(() => {
     const m = new Map<string, { slug: string; name: string }>();
     for (const p of organization.projects) {
