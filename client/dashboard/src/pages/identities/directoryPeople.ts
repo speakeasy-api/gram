@@ -38,7 +38,7 @@ export const DIRECTORY_STATE_DESCRIPTIONS: Record<DirectoryState, string> = {
 };
 
 /** The states that describe someone the directory knows but who is not a member. */
-export function knownDirectoryState(
+function knownDirectoryState(
   state: DirectoryPersonState,
 ): DirectoryState | undefined {
   return Object.hasOwn(DIRECTORY_STATE_LABELS, state)
