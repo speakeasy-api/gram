@@ -27,7 +27,7 @@ func authCeiling(projectID string) authz.Grant {
 	return authz.Grant{PrincipalUrn: "", Scope: authz.ScopeMCPAuth, Selector: selector, Inferred: false}
 }
 
-func noServers(string) (string, bool, error) { return "", false, nil }
+func noServers([]string) (map[string]string, error) { return map[string]string{}, nil }
 
 func mustAdmit(t *testing.T, version DelegatedPolicyVersion, policy DelegatedPolicy, resolve mcpProjectResolver) []authz.Grant {
 	t.Helper()
@@ -44,12 +44,13 @@ func TestAdmittedGrantsBoundProjectlessServerGrantsToTheServersProject(t *testin
 		authz.NewGrantWithSelector(authz.ScopeMCPConnect, connectSelector("server-gone", "")),
 	})
 	require.NoError(t, err)
-	admitted := mustAdmit(t, DelegatedPolicyVersion4, legacy, func(id string) (string, bool, error) {
-		if id == "server-1" {
-			return "project-q", true, nil
-		}
-		return "", false, nil
+	calls := 0
+	admitted := mustAdmit(t, DelegatedPolicyVersion4, legacy, func(ids []string) (map[string]string, error) {
+		calls++
+		require.ElementsMatch(t, []string{"server-1", "server-gone"}, ids)
+		return map[string]string{"server-1": "project-q"}, nil
 	})
+	require.Equal(t, 1, calls, "every server is resolved in one lookup")
 	require.Contains(t, admitted, authCeiling("project-q"), "a server grant reaches its server's project")
 	require.NotContains(t, admitted, authCeiling(""), "never the whole organization")
 	require.Len(t, admitted, len(legacy.RuntimeGrants())+1, "an unknown server reaches nothing")

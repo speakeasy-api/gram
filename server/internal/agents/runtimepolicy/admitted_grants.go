@@ -2,19 +2,17 @@ package runtimepolicy
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 )
 
-// mcpProjectResolver returns the project owning an MCP resource id, and false
-// when the organization has no such resource.
-type mcpProjectResolver func(resourceID string) (string, bool, error)
+// mcpProjectResolver maps MCP resource ids to their owning projects in one
+// lookup, leaving out ids the organization has no resource for.
+type mcpProjectResolver func(resourceIDs []string) (map[string]string, error)
 
 // admitStoredPolicy decodes a credential's stored policy for admission and
 // reports whether admission derived an auth client ceiling (see admittedGrants).
@@ -24,19 +22,25 @@ func admitStoredPolicy(ctx context.Context, tx accessrepo.DBTX, organizationID s
 	if err != nil {
 		return nil, false, err
 	}
-	resolve := func(resourceID string) (string, bool, error) {
-		id, err := uuid.Parse(resourceID)
+	resolve := func(resourceIDs []string) (map[string]string, error) {
+		ids := make([]uuid.UUID, 0, len(resourceIDs))
+		for _, resourceID := range resourceIDs {
+			if id, err := uuid.Parse(resourceID); err == nil {
+				ids = append(ids, id)
+			}
+		}
+		projects := make(map[string]string, len(ids))
+		if len(ids) == 0 {
+			return projects, nil
+		}
+		rows, err := accessrepo.New(tx).FindMCPResourceProjects(ctx, accessrepo.FindMCPResourceProjectsParams{OrganizationID: organizationID, ResourceIds: ids})
 		if err != nil {
-			return "", false, nil
+			return nil, fmt.Errorf("resolve mcp resource projects: %w", err)
 		}
-		project, err := accessrepo.New(tx).FindMCPResourceProject(ctx, accessrepo.FindMCPResourceProjectParams{OrganizationID: organizationID, ResourceID: id})
-		if errors.Is(err, pgx.ErrNoRows) {
-			return "", false, nil
+		for _, row := range rows {
+			projects[row.ResourceID.String()] = row.ProjectID.String()
 		}
-		if err != nil {
-			return "", false, fmt.Errorf("resolve mcp resource project: %w", err)
-		}
-		return project.String(), true, nil
+		return projects, nil
 	}
 	grants, err = admittedGrants(v, policy, resolve)
 	if err != nil {
@@ -56,6 +60,19 @@ func admittedGrants(version DelegatedPolicyVersion, policy DelegatedPolicy, reso
 	if version >= DelegatedPolicyVersion5 {
 		return grants, nil
 	}
+	var unresolved []string
+	for _, grant := range grants {
+		if grant.Scope == authz.ScopeMCPConnect && needsServerProject(grant.Selector) {
+			unresolved = append(unresolved, grant.Selector[authz.SelectorKeyResourceID])
+		}
+	}
+	var serverProjects map[string]string
+	if len(unresolved) > 0 {
+		var err error
+		if serverProjects, err = resolve(unresolved); err != nil {
+			return nil, err
+		}
+	}
 	seen := map[string]struct{}{}
 	for _, grant := range grants {
 		if grant.Scope != authz.ScopeMCPConnect {
@@ -63,12 +80,8 @@ func admittedGrants(version DelegatedPolicyVersion, policy DelegatedPolicy, reso
 		}
 		ceiling := authz.Selector{authz.SelectorKeyResourceKind: authz.ResourceKindMCPAuthClient, authz.SelectorKeyResourceID: authz.WildcardResource}
 		project := grant.Selector[authz.SelectorKeyProjectID]
-		resource := grant.Selector[authz.SelectorKeyResourceID]
-		if (project == "" || project == authz.WildcardResource) && resource != "" && resource != authz.WildcardResource {
-			resolved, ok, err := resolve(resource)
-			if err != nil {
-				return nil, err
-			}
+		if needsServerProject(grant.Selector) {
+			resolved, ok := serverProjects[grant.Selector[authz.SelectorKeyResourceID]]
 			if !ok {
 				continue
 			}
@@ -85,4 +98,10 @@ func admittedGrants(version DelegatedPolicyVersion, policy DelegatedPolicy, reso
 		grants = append(grants, authz.Grant{PrincipalUrn: "", Scope: authz.ScopeMCPAuth, Selector: ceiling, Inferred: false})
 	}
 	return grants, nil
+}
+
+// needsServerProject reports a grant on one server that names no project.
+func needsServerProject(selector authz.Selector) bool {
+	project, resource := selector[authz.SelectorKeyProjectID], selector[authz.SelectorKeyResourceID]
+	return (project == "" || project == authz.WildcardResource) && resource != "" && resource != authz.WildcardResource
 }
