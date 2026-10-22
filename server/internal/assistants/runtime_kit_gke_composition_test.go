@@ -189,7 +189,19 @@ func TestKitGKEEligibilityUsesPersistedAttachmentAndIssuer(t *testing.T) {
 	check(false)
 	err = assistantrepo.New(f.db).SetAttachedMCPServerIssuerForTest(t.Context(), assistantrepo.SetAttachedMCPServerIssuerForTestParams{UserSessionIssuerID: uuid.NullUUID{UUID: issuer.ID, Valid: true}, ID: f.remote.ID, ProjectID: f.projectID})
 	require.NoError(t, err)
-	check(false) // Endpoint-mode issuers do not serve the shared authorization server.
+	// Endpoint-mode issuers use the same workload provisioner, with an exact
+	// resource-specific issuer URL rather than a shared authorization URL.
+	check(true)
+	resource, issuerID, err := f.core.kitPersistedMCP(t.Context(), f.db, a)
+	require.NoError(t, err)
+	require.Equal(t, origin.JoinPath("mcp", "team-remote").String(), resource.String())
+	require.Equal(t, issuer.ID, issuerID)
+	c.PersistedMCP = true
+	check(true)
+	a.OrganizationID = "another-org"
+	check(false)
+	a.OrganizationID = "org-test"
+	c.PersistedMCP = false
 	updated, err := testrepo.New(f.db).SetUserSessionIssuerAuthorizationServerModeFixture(t.Context(), testrepo.SetUserSessionIssuerAuthorizationServerModeFixtureParams{AuthorizationServerMode: "shared", IssuerID: issuer.ID, OrganizationID: a.OrganizationID, PinnedIssuerUrl: pgtype.Text{String: "", Valid: false}})
 	require.NoError(t, err)
 	require.EqualValues(t, 1, updated)

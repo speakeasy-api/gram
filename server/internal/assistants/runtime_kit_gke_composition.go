@@ -229,7 +229,9 @@ func (s *ServiceCore) kitPersistedMCP(ctx context.Context, db assistantrepo.DBTX
 	if err != nil {
 		return nil, uuid.Nil, fmt.Errorf("get persisted assistant session issuer: %w", err)
 	}
-	if !authserver.IssuerInSharedMode(issuer.UserSessionIssuer) || issuer.ResolvedOrganizationID != assistant.OrganizationID || (issuer.UserSessionIssuer.ProjectID.Valid && issuer.UserSessionIssuer.ProjectID.UUID != assistant.ProjectID) {
+	// Both endpoint and shared issuers serve workload OAuth. The provisioner
+	// validates the exact resource's authoritative issuer URL in either mode.
+	if (!authserver.IssuerInSharedMode(issuer.UserSessionIssuer) && issuer.UserSessionIssuer.AuthorizationServerMode != string(authserver.ModeEndpoint)) || issuer.ResolvedOrganizationID != assistant.OrganizationID || (issuer.UserSessionIssuer.ProjectID.Valid && issuer.UserSessionIssuer.ProjectID.UUID != assistant.ProjectID) {
 		return nil, uuid.Nil, errKitMCPIneligible
 	}
 	return s.serverURL.JoinPath("mcp", selected.EndpointSlug), server.UserSessionIssuerID.UUID, nil
