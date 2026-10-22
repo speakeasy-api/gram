@@ -4,7 +4,7 @@ Before #7199, an automatically created remote session client stored a copy of th
 
 A client is cleared only when all of these hold:
 
-- live, with a live issuer in its project or organization, and a live project when project-scoped, created before `-created-before`, with a non-empty scope
+- live, with a live issuer that belongs to its project, its organization, or is platform-global, and a live project when project-scoped, created before `-created-before`, with a non-empty scope
 - linked to a user session issuer (every automatic create path linked one)
 - not managed by an identity provider connection, not a trusted sign-in client of a user session issuer, not bound for identity chaining (an unlinked binding does not count), owned by its subject, not on the legacy callback, and not platform-global
 - no `remote-session-client:update` audit entry changed `Scope` (an entry missing either snapshot counts as a change)
@@ -25,6 +25,7 @@ Pass `-exclude-organization=<ORG_ID>` (repeatable) to leave an organization unto
 GRAM_DATABASE_URL=... go run ./cmd/tools/migrations client-scopes \
   -environment=prod \
   -created-before=<RFC 3339 time #7199 reached the environment> \
+  -exclude-organization=<ORG_ID> \
   -report=<path>/client-scopes-preview.json
 ```
 
@@ -37,6 +38,7 @@ GRAM_DATABASE_URL=... go run ./cmd/tools/migrations client-scopes \
   -confirm-environment=prod \
   -confirm-target=<host>:<port>/<database> \
   -created-before=<same value as the preview> \
+  -exclude-organization=<ORG_ID> \
   -report=<path>/client-scopes-apply.json
 ```
 
@@ -52,6 +54,7 @@ GRAM_DATABASE_URL=... go run ./cmd/tools/migrations client-scopes \
   -environment=prod \
   -confirm-environment=prod \
   -confirm-target=<host>:<port>/<database> \
+  -exclude-organization=<ORG_ID> \
   -report=<path>/client-scopes-restore.json
 ```
 

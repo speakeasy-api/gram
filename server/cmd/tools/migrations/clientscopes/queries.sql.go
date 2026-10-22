@@ -631,12 +631,13 @@ func (q *Queries) SeedClientUpdateAuditFixture(ctx context.Context, arg SeedClie
 }
 
 const seedIssuerFixture = `-- name: SeedIssuerFixture :one
-INSERT INTO remote_session_issuers (organization_id, slug, issuer, scopes_supported)
-VALUES ($1, $2, $3, $4)
+INSERT INTO remote_session_issuers (project_id, organization_id, slug, issuer, scopes_supported)
+VALUES ($1::uuid, $2::text, $3, $4, $5)
 RETURNING id
 `
 
 type SeedIssuerFixtureParams struct {
+	ProjectID       uuid.NullUUID
 	OrganizationID  pgtype.Text
 	Slug            string
 	Issuer          string
@@ -645,6 +646,7 @@ type SeedIssuerFixtureParams struct {
 
 func (q *Queries) SeedIssuerFixture(ctx context.Context, arg SeedIssuerFixtureParams) (uuid.UUID, error) {
 	row := q.db.QueryRow(ctx, seedIssuerFixture,
+		arg.ProjectID,
 		arg.OrganizationID,
 		arg.Slug,
 		arg.Issuer,

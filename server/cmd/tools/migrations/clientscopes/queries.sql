@@ -168,8 +168,8 @@ VALUES (@slug, @slug, @organization_id)
 RETURNING id;
 
 -- name: SeedIssuerFixture :one
-INSERT INTO remote_session_issuers (organization_id, slug, issuer, scopes_supported)
-VALUES (@organization_id, @slug, @issuer, @scopes_supported)
+INSERT INTO remote_session_issuers (project_id, organization_id, slug, issuer, scopes_supported)
+VALUES (sqlc.narg('project_id')::uuid, sqlc.narg('organization_id')::text, @slug, @issuer, @scopes_supported)
 RETURNING id;
 
 -- name: SeedClientFixture :one

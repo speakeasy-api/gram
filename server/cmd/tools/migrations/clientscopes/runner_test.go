@@ -36,7 +36,7 @@ func newFixture(t *testing.T) *fixture {
 	require.NoError(t, err)
 	f := &fixture{pool: pool, orgID: "org_" + uuid.NewString(), issuerID: uuid.Nil}
 	require.NoError(t, New(pool).SeedOrganizationFixture(t.Context(), f.orgID))
-	f.issuerID, err = New(pool).SeedIssuerFixture(t.Context(), SeedIssuerFixtureParams{OrganizationID: pgtype.Text{String: f.orgID, Valid: true}, Slug: "issuer", Issuer: "https://issuer.example", ScopesSupported: issuerScopes})
+	f.issuerID, err = New(pool).SeedIssuerFixture(t.Context(), SeedIssuerFixtureParams{ProjectID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, OrganizationID: pgtype.Text{String: f.orgID, Valid: true}, Slug: "issuer", Issuer: "https://issuer.example", ScopesSupported: issuerScopes})
 	require.NoError(t, err)
 	return f
 }
@@ -291,6 +291,21 @@ func TestRunApplyClearsAuditsAndRestores(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 2, twice.Outcomes[OutcomeSkipChanged])
 	require.Equal(t, OutcomeSkipEdited, outcomes(f.run(t, false))[copied])
+}
+
+func TestRunSkipsClientsOnAnotherProjectsIssuer(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	owner, other := f.project(t), f.project(t)
+	var err error
+	f.issuerID, err = New(f.pool).SeedIssuerFixture(t.Context(), SeedIssuerFixtureParams{ProjectID: uuid.NullUUID{UUID: owner, Valid: true}, OrganizationID: pgtype.Text{String: "", Valid: false}, Slug: "project-issuer", Issuer: "https://project-issuer.example", ScopesSupported: issuerScopes})
+	require.NoError(t, err)
+	own, _ := f.projectClient(t, owner, issuerScopes)
+	foreign, _ := f.projectClient(t, other, issuerScopes)
+
+	got := outcomes(f.run(t, false))
+	require.Equal(t, OutcomeWouldClear, got[own])
+	require.NotContains(t, got, foreign)
 }
 
 func TestClearSkipsClientGoneAfterScan(t *testing.T) {
