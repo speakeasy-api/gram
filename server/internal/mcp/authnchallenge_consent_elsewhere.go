@@ -8,14 +8,7 @@ import (
 	"net/url"
 
 	"github.com/speakeasy-api/gram/server/internal/consentpage"
-	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd"
 )
-
-// finishElsewhereField is the approve form's opt-in for a client that runs on
-// another machine: a VM, a container or an SSH session. Such a client waits on
-// a loopback address that this browser cannot reach, so redirecting there
-// fails and the code never arrives.
-const finishElsewhereField = "finish_elsewhere"
 
 //go:embed consent_finish_elsewhere_template.html
 var consentFinishElsewhereTemplateHTML string
@@ -23,21 +16,6 @@ var consentFinishElsewhereTemplateHTML string
 var consentFinishElsewhereTemplate = template.Must(
 	template.Must(template.New("finish-elsewhere").Parse(consentFinishElsewhereTemplateHTML)).Parse(consentpage.LogoTemplate),
 )
-
-// isLoopbackRedirect reports whether redirectURI points at a loopback
-// listener, which only a browser on the client's own machine can reach.
-func isLoopbackRedirect(redirectURI string) bool {
-	u, err := url.Parse(redirectURI)
-	return err == nil && cimd.IsLoopbackRedirectURI(u)
-}
-
-// finishElsewhereRequested reports whether an approval should be handed to the
-// person as a command to run on the client's machine instead of redirecting
-// this browser. Only loopback redirect URIs qualify: any other redirect is one
-// the browser can follow, so the field is ignored for it.
-func finishElsewhereRequested(form url.Values, redirectURI string) bool {
-	return form.Get(finishElsewhereField) == "1" && isLoopbackRedirect(redirectURI)
-}
 
 // consentFinishElsewhereData is the field set the finish-elsewhere page
 // renders against.
@@ -82,7 +60,7 @@ func renderConsentFinishElsewhere(w http.ResponseWriter, clientName, callbackURL
 		ClientName:    clientName,
 		ListenAddress: u.Host,
 		CallbackURL:   callbackURL,
-		Command:       "curl -fsS -o /dev/null " + shellSingleQuote(callbackURL),
+		Command:       consentpage.CallbackCommand(callbackURL),
 		CodeLifetime:  fmt.Sprintf("%d minutes", minutes),
 		ScriptURL:     consentScriptURL,
 	}

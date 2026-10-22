@@ -21,7 +21,7 @@
             <h1 id="finish-heading" class="text-display-xs">
               Finish on the other machine
             </h1>
-            <p class="text-sm text-muted-foreground">
+            <p class="text-sm text-muted-foreground break-words">
               You gave <span class="text-foreground">{{.ClientName}}</span>
               access. It is waiting for this sign-in at
               <span class="text-foreground font-mono">{{.ListenAddress}}</span>
@@ -43,7 +43,7 @@
           </div>
 
           <div class="flex flex-col gap-2">
-            <p class="text-sm text-muted-foreground">
+            <p class="text-sm text-muted-foreground break-words">
               If {{.ClientName}} asks you to paste the address it was redirected
               to, paste this instead:
             </p>
@@ -69,7 +69,7 @@
         </div>
       </section>
 
-      <p class="text-xs text-muted-foreground">
+      <p class="text-xs text-muted-foreground break-words">
         Secured by Speakeasy. You can close this tab once {{.ClientName}} says
         you are signed in.
       </p>

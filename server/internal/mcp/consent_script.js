@@ -34,18 +34,27 @@
   Array.prototype.forEach.call(
     document.querySelectorAll("[data-copy-target]"),
     function (copyButton) {
+      // Read once, so a click while "Copied" shows can't make it the label.
+      var label = copyButton.textContent;
+      var restore;
       copyButton.addEventListener("click", function () {
         var source = document.getElementById(
           copyButton.getAttribute("data-copy-target"),
         );
         if (!source || !navigator.clipboard) return;
-        var label = copyButton.textContent;
-        navigator.clipboard.writeText(source.textContent).then(function () {
-          copyButton.textContent = "Copied";
-          window.setTimeout(function () {
+        navigator.clipboard.writeText(source.textContent).then(
+          function () {
+            copyButton.textContent = "Copied";
+            window.clearTimeout(restore);
+            restore = window.setTimeout(function () {
+              copyButton.textContent = label;
+            }, 2000);
+          },
+          function () {
+            // Clipboard access denied: the text stays selectable by hand.
             copyButton.textContent = label;
-          }, 2000);
-        });
+          },
+        );
       });
     },
   );

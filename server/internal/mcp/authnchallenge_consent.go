@@ -768,7 +768,7 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		FirstParty:              challengeState.FirstParty,
 		ClientIDOrigin:          clientIDOrigin,
 		LoopbackRedirectWarning: loopbackRedirectWarning,
-		LoopbackRedirect:        isLoopbackRedirect(challengeState.RedirectURI),
+		LoopbackRedirect:        consentpage.IsLoopbackRedirect(challengeState.RedirectURI),
 		AutoClose:               shouldAutoCloseFirstParty(challengeState.FirstParty, cards),
 		SessionDurationOptions:  durationOptions,
 		AutoRefreshPolicy:       autoRefreshPolicy,
@@ -1186,7 +1186,7 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageConsent)
 		return oops.E(oops.CodeUnexpected, err, "build client redirect").LogError(ctx, logger)
 	}
-	if finishElsewhereRequested(r.PostForm, challengeState.RedirectURI) {
+	if consentpage.FinishElsewhereRequested(r.PostForm, challengeState.RedirectURI) {
 		if err := renderConsentFinishElsewhere(w, clientRow.ClientName, clientRedirect); err != nil {
 			return oops.E(oops.CodeUnexpected, err, "render finish elsewhere page").LogError(ctx, logger)
 		}
