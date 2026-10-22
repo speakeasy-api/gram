@@ -59,6 +59,9 @@ func TestAuthClientRejectsInvalidValues(t *testing.T) {
 	_, err = urn.ParseAuthClient("auth_client:not-a-uuid")
 	require.ErrorIs(t, err, urn.ErrInvalid)
 
+	_, err = urn.ParseAuthClient("auth_client:" + uuid.Nil.String())
+	require.ErrorIs(t, err, urn.ErrInvalid)
+
 	_, err = urn.NewAuthClient(uuid.Nil).MarshalJSON()
 	require.ErrorIs(t, err, urn.ErrInvalid)
 }

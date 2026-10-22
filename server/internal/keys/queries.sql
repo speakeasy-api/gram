@@ -207,6 +207,13 @@ WHERE id = @id
   AND organization_id = @organization_id
 FOR UPDATE;
 
+-- name: TouchAPIKeyUpdatedAt :one
+UPDATE api_keys
+SET updated_at = clock_timestamp()
+WHERE id = @id
+  AND organization_id = @organization_id
+RETURNING updated_at;
+
 -- name: IsAPIKeyManagedByActiveLiteLLMInstance :one
 SELECT EXISTS (
   SELECT 1

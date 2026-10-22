@@ -153,6 +153,15 @@ type LogKeyPolicyUpdateEvent struct {
 func (l *Logger) LogKeyPolicyUpdate(ctx context.Context, dbtx repo.DBTX, event LogKeyPolicyUpdateEvent) error {
 	action := ActionKeyPolicyUpdate
 
+	// Both sides are whole policies, so an empty one is recorded as [].
+	emptyPolicy := json.RawMessage("[]")
+	if len(event.PolicyGrantsBefore) == 0 {
+		event.PolicyGrantsBefore = emptyPolicy
+	}
+	if len(event.PolicyGrantsAfter) == 0 {
+		event.PolicyGrantsAfter = emptyPolicy
+	}
+
 	beforeSnapshot, err := marshalAuditPayload(map[string]any{"policy_grants": event.PolicyGrantsBefore})
 	if err != nil {
 		return fmt.Errorf("marshal %s before snapshot: %w", action, err)
