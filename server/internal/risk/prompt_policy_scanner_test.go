@@ -3,6 +3,7 @@ package risk_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -15,6 +16,7 @@ import (
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	risk_analysis "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/message"
@@ -75,6 +77,11 @@ func insertPromptBasedBlockPolicy(t *testing.T, ti *testInstance, ctx context.Co
 
 func insertPromptBasedBlockPolicyWithConfig(t *testing.T, ti *testInstance, ctx context.Context, name, prompt string, modelConfig []byte) string {
 	t.Helper()
+	return insertPromptBasedBlockPolicyWithConfigs(t, ti, ctx, name, prompt, modelConfig, nil)
+}
+
+func insertPromptBasedBlockPolicyWithConfigs(t *testing.T, ti *testInstance, ctx context.Context, name, prompt string, modelConfig, analyzerConfig []byte) string {
+	t.Helper()
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	require.NotNil(t, authCtx.ProjectID)
 	policy, err := riskrepo.New(ti.conn).CreateRiskPolicy(ctx, riskrepo.CreateRiskPolicyParams{
@@ -90,6 +97,7 @@ func insertPromptBasedBlockPolicyWithConfig(t *testing.T, ti *testInstance, ctx 
 		AutoName:       false,
 		Prompt:         pgtype.Text{String: prompt, Valid: true},
 		ModelConfig:    modelConfig,
+		AnalyzerConfig: analyzerConfig,
 	})
 	require.NoError(t, err)
 	require.NoError(t, authz.GrantResourceToPrincipals(ctx, ti.conn, authz.ResourceGrant{
@@ -185,6 +193,102 @@ func TestScanner_PubsubRoutesPolicyKeyedPromptJudge(t *testing.T) {
 	require.Equal(t, promptpolicy.Source, result.Source)
 	require.Equal(t, promptpolicy.Rule, result.RuleID)
 	require.Zero(t, judge.calls.Load())
+}
+
+func TestScanner_PubsubPromptJudgeFailureHonorsPolicyFailMode(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name     string
+		failOpen bool
+		blocked  bool
+	}{
+		{name: "fail closed blocks", failOpen: false, blocked: true},
+		{name: "fail open allows", failOpen: true, blocked: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ctx, ti := newTestRiskService(t)
+			modelConfig, err := json.Marshal(map[string]any{"fail_open": tc.failOpen})
+			require.NoError(t, err)
+			insertPromptBasedBlockPolicyWithConfig(t, ti, ctx, "no-deletes", "Block destructive deletes", modelConfig)
+			authCtx, _ := contextvalues.GetAuthContext(ctx)
+			flags := promptPoliciesFlag(ctx)
+			flags.SetFlag(feature.FlagRiskEnforcementPubsub, authCtx.ActiveOrganizationID, true)
+			dispatcher := &fakeEnforcementDispatcher{fn: func(request enforcereply.DispatchRequest) (enforcereply.Outcome, error) {
+				require.Len(t, request.Lanes, 1)
+				require.Equal(t, riskv1.EnforcementScanner_ENFORCEMENT_SCANNER_JUDGE, request.Lanes[0].Scanner)
+				return enforcereply.Outcome{
+					ByLane:   map[enforcereply.Lane]*riskv1.EnforcementReply{},
+					Failed:   map[enforcereply.Lane]error{request.Lanes[0]: context.DeadlineExceeded},
+					Complete: false,
+					Deadline: true,
+				}, nil
+			}}
+			scanner, err := risk.NewScannerWithEnforcementDispatcher(
+				testenv.NewLogger(t),
+				testenv.NewTracerProvider(t),
+				testenv.NewMeterProvider(t),
+				ti.conn,
+				newTestCustomRuleAnalyzer(t, ti.conn),
+				nil,
+				nil,
+				nil,
+				flags,
+				testCELEngine(t),
+				dispatcher,
+				metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
+			)
+			require.NoError(t, err)
+
+			result, err := scanner.ScanForEnforcement(ctx, realtimeScanRequest(authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID, "delete production", message.User, ""))
+			require.NoError(t, err)
+			if tc.blocked {
+				require.NotNil(t, result)
+				require.Equal(t, promptpolicy.Rule, result.RuleID)
+				require.Contains(t, result.Description, "fail-closed")
+			} else {
+				require.Nil(t, result)
+			}
+		})
+	}
+}
+
+func TestScanner_PubsubSkipsOutOfScopePromptJudgeLane(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestRiskService(t)
+	analyzerConfig, err := risk_analysis.WithDetectionScopes(nil, []risk_analysis.DetectionScopeConfig{
+		{Category: "prompt_policy", ScopeInclude: `kind == "tool_request"`},
+	})
+	require.NoError(t, err)
+	insertPromptBasedBlockPolicyWithConfigs(t, ti, ctx, "tool requests only", "Block destructive deletes", nil, analyzerConfig)
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	flags := promptPoliciesFlag(ctx)
+	flags.SetFlag(feature.FlagRiskEnforcementPubsub, authCtx.ActiveOrganizationID, true)
+	dispatcher := &fakeEnforcementDispatcher{fn: func(enforcereply.DispatchRequest) (enforcereply.Outcome, error) {
+		return enforcereply.Outcome{}, errors.New("out-of-scope prompt judge must not dispatch")
+	}}
+	scanner, err := risk.NewScannerWithEnforcementDispatcher(
+		testenv.NewLogger(t),
+		testenv.NewTracerProvider(t),
+		testenv.NewMeterProvider(t),
+		ti.conn,
+		newTestCustomRuleAnalyzer(t, ti.conn),
+		nil,
+		nil,
+		nil,
+		flags,
+		testCELEngine(t),
+		dispatcher,
+		metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
+	)
+	require.NoError(t, err)
+
+	result, err := scanner.ScanForEnforcement(ctx, realtimeScanRequest(authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID, "ordinary user prompt", message.User, ""))
+	require.NoError(t, err)
+	require.Nil(t, result)
+	require.Equal(t, int32(0), dispatcher.calls.Load())
 }
 
 // TestScanner_PromptBasedPolicyAttributesMCPTool verifies the judge receives a

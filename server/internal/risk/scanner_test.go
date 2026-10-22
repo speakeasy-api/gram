@@ -1081,6 +1081,39 @@ func TestScanner_RecommendedScopesSkipAssistantMessages(t *testing.T) {
 	require.Equal(t, int32(0), engine.calls.Load(), "prompt injection classifier must not run for assistant_message")
 }
 
+func TestScanner_PubsubSkipsOutOfScopePromptInjectionLane(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestRiskService(t)
+	insertRealtimeBlockPolicy(t, ti, ctx, "prompt injection", []string{risk_analysis.SourcePromptInjection}, nil)
+	dispatcher := &fakeEnforcementDispatcher{fn: func(enforcereply.DispatchRequest) (enforcereply.Outcome, error) {
+		return enforcereply.Outcome{}, errors.New("out-of-scope prompt injection must not dispatch")
+	}}
+	engine := &recordingPIEngine{}
+	scanner, err := risk.NewScannerWithEnforcementDispatcher(
+		testenv.NewLogger(t),
+		testenv.NewTracerProvider(t),
+		testenv.NewMeterProvider(t),
+		ti.conn,
+		newTestCustomRuleAnalyzer(t, ti.conn),
+		nil,
+		promptinjection.NewScanner(testenv.NewLogger(t), engine.Classify),
+		nil,
+		pubsubEnforcementFlags(ctx),
+		testCELEngine(t),
+		dispatcher,
+		metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
+	)
+	require.NoError(t, err)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	result, err := scanner.ScanForEnforcement(ctx, realtimeScanRequest(authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID, "assistant echoed hostile instructions", message.Assistant, ""))
+	require.NoError(t, err)
+	require.Nil(t, result)
+	require.Equal(t, int32(0), dispatcher.calls.Load())
+	require.Equal(t, int32(0), engine.calls.Load())
+}
+
 func TestScanner_RecommendedScopesPromptInjectionRunsOnUserAndToolResponse(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestRiskService(t)
@@ -1607,4 +1640,51 @@ func TestScanner_CustomDetectionScopeLimitsIncompleteEvaluation(t *testing.T) {
 			require.Equal(t, tc.complete, outcome.Complete, "only required custom evaluation gates acceptance")
 		})
 	}
+}
+
+func TestScanner_PubsubOutOfScopeCustomRulesDoNotMarkIncomplete(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestRiskService(t)
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	analyzerConfig, err := risk_analysis.WithDetectionScopes(nil, []risk_analysis.DetectionScopeConfig{
+		{Category: "custom", ScopeInclude: `kind == "tool_request"`},
+	})
+	require.NoError(t, err)
+	policyID := uuid.New()
+	_, err = riskrepo.New(ti.conn).CreateRiskPolicy(ctx, riskrepo.CreateRiskPolicyParams{
+		ID:             policyID,
+		ProjectID:      *authCtx.ProjectID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+		Sources:        []string{},
+		Name:           "custom scoped",
+		CustomRuleIds:  []string{"custom.remote_only"},
+		AnalyzerConfig: analyzerConfig,
+		Enabled:        true,
+		Action:         "block",
+		AudienceType:   "everyone",
+	})
+	require.NoError(t, err)
+	grantRiskPolicyToAllUsers(t, ti, ctx, authCtx.ActiveOrganizationID, policyID)
+	dispatcher := &fakeEnforcementDispatcher{fn: func(request enforcereply.DispatchRequest) (enforcereply.Outcome, error) {
+		require.Len(t, request.Lanes, 1)
+		lane := request.Lanes[0]
+		reply := riskv1.EnforcementReply_builder{
+			Scanner:    new(lane.Scanner),
+			Status:     new(riskv1.EnforcementStatus_ENFORCEMENT_STATUS_OK),
+			Incomplete: new(true),
+		}.Build()
+		return enforcereply.Outcome{
+			ByLane:   map[enforcereply.Lane]*riskv1.EnforcementReply{lane: reply},
+			Complete: true,
+		}, nil
+	}}
+	scanner := newScannerWithDispatcher(t, ti, nil, pubsubEnforcementFlags(ctx), dispatcher)
+
+	outcome, err := scanner.ScanForInferenceEnforcement(ctx, realtimeScanRequest(authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID, "ordinary user prompt", message.User, ""))
+	require.NoError(t, err)
+	require.NotNil(t, outcome)
+	require.Nil(t, outcome.Result)
+	require.True(t, outcome.Complete)
+	require.Equal(t, int32(0), dispatcher.calls.Load())
 }
