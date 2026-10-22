@@ -391,3 +391,38 @@ func TestUpdateMcpEndpointHostedLeavingDomainProbesKeptSlug(t *testing.T) {
 	require.ErrorContains(t, err, "already taken")
 	require.Equal(t, placed, f.requireProjected(t, ctx))
 }
+
+func TestUpdateMcpEndpointHostedLeavingDomainChecksEndpointDomain(t *testing.T) {
+	t.Parallel()
+	ctx, f := newHostedAddressFixture(t, "pro")
+	f.placeOnDomain(t, ctx, "mcp.drifted.example.com")
+	require.NoError(t, customdomainsrepo.New(f.ti.conn).DeleteCustomDomain(ctx, f.authCtx.ActiveOrganizationID))
+	live := f.activeDomain(t, ctx, "mcp.live-drift.example.com")
+	moved, err := mcpendpointsrepo.New(f.ti.conn).UpdateMCPEndpointAddress(ctx, mcpendpointsrepo.UpdateMCPEndpointAddressParams{
+		CustomDomainID: uuid.NullUUID{UUID: live.ID, Valid: true}, Slug: f.endpoint.Slug, IsDomainRoot: pgtype.Bool{Bool: false, Valid: false}, ID: f.endpoint.ID, ProjectID: f.projectID,
+	})
+	require.NoError(t, err)
+
+	_, err = f.ti.service.UpdateMcpEndpoint(ctx, f.payload(f.endpoint.Slug, nil))
+	requireOopsCode(t, err, oops.CodeConflict)
+	after, err := mcpendpointsrepo.New(f.ti.conn).GetMCPEndpointByID(ctx, mcpendpointsrepo.GetMCPEndpointByIDParams{ID: f.endpoint.ID, ProjectID: f.projectID})
+	require.NoError(t, err)
+	require.Equal(t, moved.CustomDomainID, after.CustomDomainID, "an endpoint on a live domain stays there")
+}
+
+func TestUpdateMcpEndpointHostedLeavingDomainDropsRoot(t *testing.T) {
+	t.Parallel()
+	ctx, f := newHostedAddressFixture(t, "pro")
+	domain := f.placeOnDomain(t, ctx, "mcp.root-leave.example.com")
+	_, err := mcpendpointsrepo.New(f.ti.conn).UpdateMCPEndpointAddress(ctx, mcpendpointsrepo.UpdateMCPEndpointAddressParams{
+		CustomDomainID: uuid.NullUUID{UUID: domain.ID, Valid: true}, Slug: f.endpoint.Slug, IsDomainRoot: pgtype.Bool{Bool: true, Valid: true}, ID: f.endpoint.ID, ProjectID: f.projectID,
+	})
+	require.NoError(t, err)
+
+	_, err = f.ti.service.UpdateMcpEndpoint(ctx, f.payload(f.endpoint.Slug, nil))
+	require.NoError(t, err)
+	endpoint := f.requireProjected(t, ctx)
+	require.Equal(t, f.endpoint.ID, endpoint.ID)
+	require.False(t, endpoint.CustomDomainID.Valid)
+	require.False(t, endpoint.IsDomainRoot.Valid && endpoint.IsDomainRoot.Bool, "the platform endpoint is not a domain root")
+}
