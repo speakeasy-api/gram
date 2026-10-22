@@ -13,6 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/dashboards"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/widgets"
 )
 
 const (
@@ -386,6 +387,8 @@ func dashboardToolError(ctx context.Context, logger *slog.Logger) func(error) (*
 			refusal.Code, refusal.Message = previewExpiredCode, previewExpiredMessage
 		case errors.Is(err, ErrForbidden):
 			refusal.Code, refusal.Message = "permission_denied", "An authorized external user with project:read on the exact project is required."
+		case errors.Is(err, widgets.ErrDatasetRestricted):
+			refusal.Code, refusal.Message = widgetDatasetRestricted, "This dashboard has widgets over a dataset only organization administrators can read, so only they can copy it."
 		case isShareable && (shareable.Code == oops.CodeBadRequest || shareable.Code == oops.CodeInvalid):
 			refusal.Code, refusal.Reason, refusal.Message = "invalid_request", shareable.Error(), "Correct what the reason names and preview again."
 		case isShareable && shareable.Code == oops.CodeConflict:

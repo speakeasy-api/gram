@@ -422,4 +422,14 @@ describe("a dataset that answers aggregates only", () => {
     );
     expect(specProblem([sessions], { ...spec, dataset: "sessions" })).toBe("");
   });
+
+  it("does not count a measure still waiting for its field", () => {
+    const spec = {
+      ...specForDataset(findings),
+      measures: [{ op: "count_distinct" as const, field: "" }],
+    };
+    expect(specProblem([findings], spec)).toBe(
+      "findings answers counts and other aggregates, never its rows",
+    );
+  });
 });

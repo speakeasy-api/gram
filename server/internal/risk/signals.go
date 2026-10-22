@@ -57,7 +57,8 @@ func signalScore(policyScore float64, category string) float64 {
 
 // FindingSeverity is one finding's severity band: its policy's score, or the
 // category's fallback weight when the finding has no scored policy (a policy
-// score <= 0, which is how a deleted policy's findings are read too).
+// score <= 0, which is how pre-policy rows read). A deleted policy keeps its
+// score, so a caller must pass 0 to read its findings as the category's band.
 func FindingSeverity(policyScore float64, category string) string {
 	return severityForScore(signalScore(policyScore, category))
 }

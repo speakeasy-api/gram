@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/widgets"
 	widgetsrepo "github.com/speakeasy-api/gram/server/internal/widgets/repo"
 )
 
@@ -894,4 +895,10 @@ func TestSecurityRiskIsForOrgAdmins(t *testing.T) {
 	copied, err := ti.service.DuplicateBuiltInDashboard(ctx, &gen.DuplicateBuiltInDashboardPayload{Slug: "security-risk", SessionToken: nil, ProjectSlugInput: nil})
 	require.NoError(t, err)
 	require.Len(t, copied.Widgets, len(page.Cards), "an org admin copies it like any other")
+
+	// The admin's project copy holds risk_findings widgets; a member copying
+	// it would get widgets over a dataset they may not read.
+	_, err = ti.service.DuplicateDashboard(memberCtx, &gen.DuplicateDashboardPayload{ID: copied.ID, SessionToken: nil, ProjectSlugInput: nil})
+	requireOopsCode(t, err, oops.CodeForbidden)
+	require.ErrorIs(t, err, widgets.ErrDatasetRestricted)
 }

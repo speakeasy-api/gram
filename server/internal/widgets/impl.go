@@ -3,6 +3,7 @@ package widgets
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"maps"
 	"net/http"
@@ -274,6 +275,13 @@ func (s *Service) checkWidget(ctx context.Context, dataset string, query, visual
 // widget over a dataset only organization administrators may read is saved
 // by them alone; anyone else could save it but never see it answer.
 func (s *Service) requireDataset(ctx context.Context, ds *analytics.Dataset) error {
+	return RequireDataset(ctx, s.authz, ds)
+}
+
+// RequireDataset refuses the caller a widget over ds unless they may read ds.
+// A refusal is a forbidden error wrapping ErrDatasetRestricted. Anything that
+// creates widgets, including a dashboard copy, checks this first.
+func RequireDataset(ctx context.Context, engine *authz.Engine, ds *analytics.Dataset) error {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
 		return oops.C(oops.CodeUnauthorized)
@@ -282,7 +290,11 @@ func (s *Service) requireDataset(ctx context.Context, ds *analytics.Dataset) err
 	if !restricted {
 		return nil
 	}
-	return s.authz.Require(ctx, check)
+	err := engine.Require(ctx, check)
+	if shareable, ok := errors.AsType[*oops.ShareableError](err); ok && shareable.Code == oops.CodeForbidden {
+		return oops.E(oops.CodeForbidden, errors.Join(ErrDatasetRestricted, err), "only organization administrators can save widgets over %s", ds.Name)
+	}
+	return err
 }
 
 // lowercaseChartType returns visualization with a string type lowercased, so

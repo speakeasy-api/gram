@@ -737,6 +737,7 @@ func TestRiskFindingsWidgetsAreForOrgAdmins(t *testing.T) {
 	memberCtx := asMember(t, ctx, ti, "user_member_"+uuid.NewString())
 	_, err := ti.service.CreateWidget(memberCtx, payload)
 	requireOopsCode(t, err, oops.CodeForbidden)
+	require.ErrorIs(t, err, widgets.ErrDatasetRestricted)
 
 	created, err := ti.service.CreateWidget(ctx, payload)
 	require.NoError(t, err)
@@ -744,4 +745,5 @@ func TestRiskFindingsWidgetsAreForOrgAdmins(t *testing.T) {
 
 	_, err = ti.service.DuplicateWidget(memberCtx, &gen.DuplicateWidgetPayload{ID: created.ID, SessionToken: nil, ProjectSlugInput: nil})
 	requireOopsCode(t, err, oops.CodeForbidden)
+	require.ErrorIs(t, err, widgets.ErrDatasetRestricted)
 }

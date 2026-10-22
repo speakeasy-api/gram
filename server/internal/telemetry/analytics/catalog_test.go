@@ -245,17 +245,19 @@ func TestDimensionValuesSkipTheCollapse(t *testing.T) {
 	for _, ds := range Default.Datasets() {
 		// Only agent_events keeps raw observations to list from. A finding's
 		// later copies can withdraw it, so its values come from the live rows.
-		if ds.Source.Table.planSuffix() != "agent_events" {
-			continue
-		}
+		_, latest := ds.Source.Table.(latestCopy)
 		for _, field := range ds.Fields {
 			if field.Role != RoleDimension {
 				continue
 			}
-			require.NotEmpty(t, field.Typeahead, "%s.%s falls back to the collapsed rows", ds.Name, field.Name)
 			plan, err := CompileValues(Default, tenant, nil, ValuesRequest{Dataset: ds.Name, Dimension: field.Name, FromUnixNano: 1, ToUnixNano: 2, Limit: 0})
 			require.NoError(t, err)
 			require.NotContains(t, plan.SQL, "LIMIT 1 BY", "%s.%s", ds.Name, field.Name)
+			if latest {
+				require.Contains(t, plan.SQL, "copy_rank = 1", "%s.%s lists values from the live copy of each row", ds.Name, field.Name)
+				continue
+			}
+			require.NotEmpty(t, field.Typeahead, "%s.%s falls back to the collapsed rows", ds.Name, field.Name)
 		}
 	}
 }

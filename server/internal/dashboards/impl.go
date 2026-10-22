@@ -188,6 +188,10 @@ func (s *Service) builtInReadable(ctx context.Context, authCtx *contextvalues.Au
 		return true, nil
 	}
 	allowed, err := s.authz.Evaluate(ctx, checks...)
+	if _, mapped := errors.AsType[*oops.ShareableError](err); mapped {
+		// The engine has already mapped and logged it.
+		return false, fmt.Errorf("check built-in dashboard access: %w", err)
+	}
 	if err != nil {
 		return false, oops.E(oops.CodeUnexpected, err, "check built-in dashboard access").LogError(ctx, s.logger)
 	}
@@ -703,6 +707,11 @@ func (s *Service) copyInto(ctx context.Context, dbtx pgx.Tx, authCtx *contextval
 	now := s.now()
 	copies := make(map[string]uuid.UUID, len(source.widgets))
 	for _, widget := range source.widgets {
+		if ds, ok := s.catalog.Dataset(widget.dataset); ok {
+			if err := widgets.RequireDataset(ctx, s.authz, ds); err != nil {
+				return nil, fmt.Errorf("check widget %q dataset: %w", widget.name, err)
+			}
+		}
 		reason, err := widgets.Validate(s.catalog, widget.dataset, widget.query, widget.visualization, now)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "validate widget").LogError(ctx, s.logger)

@@ -221,13 +221,26 @@ describe("WidgetView", () => {
     // Describe leaves the dataset out for this viewer and names it instead.
     testState.datasets = [];
     testState.restricted = ["sessions"];
-    renderView(widget());
+    renderView(widget({}, { id: "widget-1" }));
     expect(screen.getByText("Only org admins can see this.")).toBeTruthy();
     expect(
       screen.queryByRole("alert"),
       "the widget works; it is not broken",
     ).toBeNull();
     expect(testState.bodies).toEqual([]);
+    // The builder could not read it either, so a saved widget offers no way in.
+    expect(screen.queryByRole("link")).toBeNull();
+  });
+
+  it("says a restricted widget is for org admins even when its query no longer works", () => {
+    testState.datasets = [];
+    testState.restricted = ["sessions"];
+    renderView(
+      widget({}, { invalidReason: 'field "user" is not a dimension' }),
+    );
+    expect(screen.getByText("Only org admins can see this.")).toBeTruthy();
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.queryByRole("link")).toBeNull();
   });
 
   it("says why when the catalog no longer has what it asks, and runs nothing", () => {

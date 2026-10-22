@@ -107,8 +107,15 @@ export function WidgetView({
     bodyStyle = { minHeight: bodyHeight ?? 0 };
   } else bodyStyle = { height: bodyHeight ?? 0 };
 
+  // The viewer may not read the widget's dataset, so neither its answer nor
+  // whether its query still works is theirs to see.
+  const restricted =
+    describe.data?.restrictedDatasets?.includes(widget.dataset) ?? false;
+
   let body: JSX.Element;
-  if (saved === null) {
+  if (restricted) {
+    body = <WidgetRestricted />;
+  } else if (saved === null) {
     body = (
       <WidgetBroken
         reason={
@@ -119,9 +126,6 @@ export function WidgetView({
     );
   } else if (widget.invalidReason) {
     body = <WidgetBroken reason={widget.invalidReason} />;
-  } else if (describe.data?.restrictedDatasets?.includes(widget.dataset)) {
-    // The widget works; this viewer may not read what it asks.
-    body = <WidgetRestricted />;
   } else if (datasets === undefined || paged === null) {
     if (describe.isError) {
       body = <WidgetError text="The catalog did not load." />;
@@ -148,7 +152,10 @@ export function WidgetView({
       specProblem(datasets, saved) !== "");
   let headerSpec = paged?.spec ?? saved;
   let headerWidgetId = paged?.changed ? undefined : widget.id;
-  if (broken) {
+  if (restricted) {
+    // No way in: the builder could not read the widget either.
+    headerSpec = null;
+  } else if (broken) {
     headerSpec = widget.id ? saved : null;
     headerWidgetId = widget.id;
   }
