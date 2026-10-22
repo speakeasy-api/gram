@@ -2,7 +2,6 @@ package chatsessions
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -73,12 +72,6 @@ func (s *Service) Create(ctx context.Context, p *gen.CreatePayload) (*gen.Create
 	}
 	if authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized).LogError(ctx, s.logger)
-	}
-
-	// Chat session tokens do not carry impersonation provenance. Deny issuance
-	// before that context can be lost at the token authentication boundary.
-	if err := authz.CheckSensitiveContentAccess(ctx); err != nil {
-		return nil, fmt.Errorf("authorize chat session token creation: %w", err)
 	}
 
 	// Extract user identity from the caller's auth context. When the dashboard
