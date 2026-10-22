@@ -9,6 +9,10 @@ import * as openEnums from "../../types/enums.js";
 import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
+import {
+  AgentPluginServer,
+  AgentPluginServer$inboundSchema,
+} from "./agentpluginserver.js";
 
 /**
  * How the agent installs the plugin. `required`: installed, and the user can't turn it off. `default`: installed, and the user can turn it off. `available`: not installed until the user turns it on. Agents that predate this field install every listed plugin.
@@ -41,6 +45,10 @@ export type AgentPlugin = {
    */
   name?: string | undefined;
   /**
+   * MCP servers the plugin contains, in display order. Display-only: the agent installs the plugin, not these entries. Empty for the synthesized observability plugin.
+   */
+  servers: Array<AgentPluginServer>;
+  /**
    * Plugin slug. Combined with marketplace_name, this identifies the plugin in the managed tool.
    */
   slug: string;
@@ -58,6 +66,7 @@ export const AgentPlugin$inboundSchema: z.ZodMiniType<AgentPlugin, unknown> = z
       install_mode: InstallMode$inboundSchema,
       marketplace_name: z.string(),
       name: z.optional(z.string()),
+      servers: z.array(AgentPluginServer$inboundSchema),
       slug: z.string(),
     }),
     z.transform((v) => {

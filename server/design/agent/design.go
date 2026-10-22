@@ -495,6 +495,18 @@ var AgentPluginModel = Type("AgentPlugin", func() {
 	})
 	Attribute("name", String, "Display name of the plugin. Absent for the synthesized observability plugin.")
 	Attribute("description", String, "Short description of the plugin, when one is set.")
+	// Required so an empty list reaches the agent: Goa omits empty optional
+	// arrays, and the menu bar shows "No servers" only for a present empty list.
+	Attribute("servers", ArrayOf(AgentPluginServerModel), "MCP servers the plugin contains, in display order. Display-only: the agent installs the plugin, not these entries. Empty for the synthesized observability plugin.")
+	Required("servers")
+})
+
+var AgentPluginServerModel = Type("AgentPluginServer", func() {
+	Required("name")
+	Attribute("name", String, "Display name of the server within its plugin.")
+	Attribute("dashboard_url", String, "Link to the server's page in the Speakeasy dashboard. Present only when the enrolled user holds mcp:read on the server; the agent tells the user that links need that scope when it is absent.", func() {
+		Format(FormatURI)
+	})
 })
 
 var SyncedAgentUserModel = Type("SyncedAgentUser", func() {

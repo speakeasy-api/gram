@@ -92208,6 +92208,11 @@ components:
                 name:
                     type: string
                     description: Display name of the plugin. Absent for the synthesized observability plugin.
+                servers:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AgentPluginServer'
+                    description: 'MCP servers the plugin contains, in display order. Display-only: the agent installs the plugin, not these entries. Empty for the synthesized observability plugin.'
                 slug:
                     type: string
                     description: Plugin slug. Combined with marketplace_name, this identifies the plugin in the managed tool.
@@ -92215,6 +92220,19 @@ components:
                 - slug
                 - marketplace_name
                 - install_mode
+                - servers
+        AgentPluginServer:
+            type: object
+            properties:
+                dashboard_url:
+                    type: string
+                    description: Link to the server's page in the Speakeasy dashboard. Present only when the enrolled user holds mcp:read on the server; the agent tells the user that links need that scope when it is absent.
+                    format: uri
+                name:
+                    type: string
+                    description: Display name of the server within its plugin.
+            required:
+                - name
         AgentPolicyGrant:
             type: object
             properties:

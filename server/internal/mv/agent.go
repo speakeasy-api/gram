@@ -51,7 +51,10 @@ import (
 //
 // marketplaceURL constructs the public marketplace git URL from a token; the
 // caller owns the URL shape so this builder stays free of server-side config.
-func BuildAgentPluginsView(rows []repo.GetAgentPluginSetRow, marketplaceURL func(token string) string) *gen.GetPluginsResult {
+//
+// servers holds each assigned plugin's MCP servers by plugin id. A plugin
+// missing from it, and the observability plugin, get an empty list.
+func BuildAgentPluginsView(rows []repo.GetAgentPluginSetRow, marketplaceURL func(token string) string, servers map[uuid.UUID][]*gen.AgentPluginServer) *gen.GetPluginsResult {
 	var marketplaces []*gen.AgentMarketplace
 	var plugins []*gen.AgentPlugin
 	etag := sha256.New()
@@ -86,6 +89,7 @@ func BuildAgentPluginsView(rows []repo.GetAgentPluginSetRow, marketplaceURL func
 					InstallMode:     string(installmode.Required),
 					Name:            nil,
 					Description:     nil,
+					Servers:         []*gen.AgentPluginServer{},
 				})
 				writeAgentPluginsETag(etag, "plugin\x00%s\x00%s\x00%d\x00%s\n", name, observabilitySlug, int64(0), installmode.Required)
 			}
@@ -93,16 +97,25 @@ func BuildAgentPluginsView(rows []repo.GetAgentPluginSetRow, marketplaceURL func
 
 		if delivered {
 			mode := installmode.FromStored(row.PluginInstallMode)
+			pluginServers := servers[row.PluginID.UUID]
+			if pluginServers == nil {
+				pluginServers = []*gen.AgentPluginServer{}
+			}
 			plugins = append(plugins, &gen.AgentPlugin{
 				Slug:            row.PluginSlug.String,
 				MarketplaceName: name,
 				InstallMode:     string(mode),
 				Name:            conv.FromPGText[string](row.PluginName),
 				Description:     conv.FromPGText[string](row.PluginDescription),
+				Servers:         pluginServers,
 			})
 			// Name and description changes bump plugins.updated_at, so the
-			// timestamp already covers them.
+			// timestamp already covers them. Server membership and the
+			// caller's dashboard access do not, so each server is hashed.
 			writeAgentPluginsETag(etag, "plugin\x00%s\x00%s\x00%d\x00%s\n", name, row.PluginSlug.String, row.PluginUpdatedAt.Time.UnixNano(), mode)
+			for _, server := range pluginServers {
+				writeAgentPluginsETag(etag, "server\x00%s\x00%s\n", server.Name, conv.PtrValOr(server.DashboardURL, ""))
+			}
 		}
 	})
 

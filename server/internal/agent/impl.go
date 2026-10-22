@@ -553,7 +553,12 @@ func (s *Service) pluginSetFor(ctx context.Context, authCtx *contextvalues.AuthC
 		return base + marketplace.RoutePrefix + token + ".git"
 	}
 
-	result := mv.BuildAgentPluginsView(rows, marketplaceURL)
+	servers, err := s.pluginServers(ctx, authCtx.ActiveOrganizationID, principals, rows)
+	if err != nil {
+		return nil, nil, oops.E(oops.CodeUnexpected, err, "error resolving agent plugin servers").LogError(ctx, s.logger)
+	}
+
+	result := mv.BuildAgentPluginsView(rows, marketplaceURL, servers)
 	configuration := defaultDeviceAgentConfigurationView()
 	if hasConfiguration {
 		built, err := buildDeviceAgentConfigurationView(configurationRow)

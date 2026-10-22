@@ -2634,6 +2634,26 @@ func unmarshalAgentPluginResponseBodyToAgentAgentPlugin(v *AgentPluginResponseBo
 		Name:            v.Name,
 		Description:     v.Description,
 	}
+	res.Servers = make([]*agent.AgentPluginServer, len(v.Servers))
+	for i, val := range v.Servers {
+		if val == nil {
+			res.Servers[i] = nil
+			continue
+		}
+		res.Servers[i] = unmarshalAgentPluginServerResponseBodyToAgentAgentPluginServer(val)
+	}
+
+	return res
+}
+
+// unmarshalAgentPluginServerResponseBodyToAgentAgentPluginServer builds a
+// value of type *agent.AgentPluginServer from a value of type
+// *AgentPluginServerResponseBody.
+func unmarshalAgentPluginServerResponseBodyToAgentAgentPluginServer(v *AgentPluginServerResponseBody) *agent.AgentPluginServer {
+	res := &agent.AgentPluginServer{
+		Name:         *v.Name,
+		DashboardURL: v.DashboardURL,
+	}
 
 	return res
 }
