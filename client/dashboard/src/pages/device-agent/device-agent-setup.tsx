@@ -39,6 +39,7 @@ const MANIFEST_URL = `${RELEASES_BASE}/releases.json`;
 const DOCS_DEVICE_AGENT =
   "https://www.speakeasy.com/docs/ai-control-plane/reference/device-agent";
 const DOCS_MDM = `${DOCS_DEVICE_AGENT}/mdm-installations`;
+const DOCS_LINUX = `${DOCS_MDM}/linux`;
 
 // Shared inline-link styling for the anchors/Links on this page.
 const LINK_CLASS = "underline underline-offset-2 hover:text-foreground";
@@ -201,6 +202,7 @@ type ScriptOsSpec = BaseOsSpec & {
   serviceNote?: React.ReactNode;
   serviceRegister: string;
   verify: string;
+  verifyNote?: React.ReactNode;
   // Manifest platform keys to surface as direct-download links for this OS.
   downloadKeys: string[];
   // The OS ships a root-helper install package (.deb/.rpm on Linux) that gets
@@ -244,12 +246,37 @@ mkdir -p ${LINUX_AGENT_DIR}
 mv speakeasyd speakeasy ${LINUX_AGENT_DIR}/`,
     serviceNote: (
       <>
-        Installs <code>speakeasyd</code> as a systemd service.
+        Run these as the person who uses the machine, without <code>sudo</code>:
+        the service is per user. The first two lines turn on self-update, unless
+        IT&apos;s <code>managed.json</code> says otherwise. The{" "}
+        <code>add-wants</code> line starts the service at every login; on a
+        machine nobody logs in to, also run{" "}
+        <code>sudo loginctl enable-linger $USER</code>.
       </>
     ),
-    serviceRegister: `${LINUX_AGENT_DIR}/speakeasyd -service install
+    // The unit `-service install` writes is wanted by multi-user.target, which
+    // a user's systemd manager never reaches, so without add-wants the daemon
+    // never starts again after a reboot or logout.
+    serviceRegister: `mkdir -p ~/.config/speakeasy
+[ -e ~/.config/speakeasy/local.json ] || echo '{"auto_update": "automatic"}' > ~/.config/speakeasy/local.json
+${LINUX_AGENT_DIR}/speakeasyd -service install
+systemctl --user add-wants default.target com.speakeasy.daemon.service
 ${LINUX_AGENT_DIR}/speakeasyd -service start`,
     verify: `${LINUX_AGENT_DIR}/speakeasy status`,
+    verifyNote: (
+      <>
+        Want a tray icon? The optional <code>speakeasy-ui</code> app (x64 only)
+        goes in the same folder, and nothing starts it for you. The{" "}
+        <ExternalLink
+          href={DOCS_LINUX}
+          target="_blank"
+          iconSuffixName="external-link"
+        >
+          Linux guide
+        </ExternalLink>{" "}
+        has the steps.
+      </>
+    ),
     downloadKeys: ["linux/amd64", "linux/arm64"],
     hasHelperPackage: true,
   },
@@ -933,9 +960,10 @@ function FleetIdentity({ os }: { os: OsKey }) {
         <SubHeading>File location</SubHeading>
         <Text small muted className="mb-3">
           Deploy the file to the fixed system path for each OS. Create the
-          directory <code>0755</code> and the file <code>0640</code> (or
-          equivalent ACLs on Windows). The file must be{" "}
-          <strong>readable by the user the agent runs as</strong> — the agent
+          directory <code>0755</code> and the file <code>0644</code>, or{" "}
+          <code>0640</code> with the user&apos;s group (equivalent ACLs on
+          Windows); <code>0600</code> silently breaks enrollment. The file must
+          be <strong>readable by the user the agent runs as</strong> — the agent
           runs as the logged-in user, not root. The agent only reads this file;
           it never writes it.
         </Text>
@@ -965,7 +993,8 @@ function FleetIdentity({ os }: { os: OsKey }) {
           don't commit it or paste it into chat. If the agent isn't picking up
           the file, confirm the path with the agent CLI&apos;s{" "}
           <code>config path</code> command (run by its install path), check that
-          it's readable by the logged-in user, and validate the JSON.
+          it's readable by the logged-in user, and validate the JSON. The agent
+          reads the file when it starts, so restart it after every change.
         </Text>
       </div>
     </div>
@@ -1472,7 +1501,12 @@ function buildSteps(platform: PlatformKey): SetupStep[] {
   });
   steps.push({
     title: "Verify it's running",
-    body: <CodeBlock language={cfg.lang}>{cfg.verify}</CodeBlock>,
+    body: (
+      <div className="flex flex-col gap-2">
+        <CodeBlock language={cfg.lang}>{cfg.verify}</CodeBlock>
+        {cfg.verifyNote && <StepNote>{cfg.verifyNote}</StepNote>}
+      </div>
+    ),
   });
   if (cfg.hasHelperPackage) {
     steps.push({
