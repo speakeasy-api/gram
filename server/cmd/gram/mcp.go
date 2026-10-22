@@ -227,6 +227,7 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 	if err != nil {
 		return err
 	}
+	callbackOrigins.OrganizationHosts = orgHosts
 	identityResolver.SetNewOrganizationDefaultHost(orgHosts.NewOrganizationDefaultHost())
 
 	enc, err := encryption.New(c.String("encryption-key"))
@@ -361,11 +362,17 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 	if err != nil {
 		return err
 	}
+	tunnelCollector, stopTunnelMetrics := newTunnelMetrics(ctx, logger, psbroker)
+	stopClient := shutdown.funcs[pubsubShutdown]
+	shutdown.funcs[pubsubShutdown] = func(ctx context.Context) error {
+		return errors.Join(stopTunnelMetrics(ctx), stopClient(ctx))
+	}
 	mcpService, err := newMCPService(c, mcpServiceDependencies{
 		CallerAssertions: callerAssertions,
 		IssuerGate:       issuerGate, IssuerSigner: issuerSigner,
 		Logger: logger, Tracer: tracerProvider, Meter: meterProvider, DB: db, Redis: redisClient,
-		Sessions: sessionManager, ChatSessions: chatSessions, Environment: env,
+		TunnelMetrics: tunnelCollector,
+		Sessions:      sessionManager, ChatSessions: chatSessions, Environment: env,
 		Posthog: posthogClient, Features: featureFlags, ServerURL: serverURL, SiteURL: siteURL,
 		Encryption: enc, Guardian: guardianPolicy, Functions: functionsOrchestrator,
 		BillingTracker: billingTracker, Billing: billingRepo, Telemetry: telemLogger, TelemetryService: telemSvc,

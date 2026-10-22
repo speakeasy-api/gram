@@ -84,6 +84,9 @@ func (s *Service) ensureHookChat(
 				return fmt.Errorf("record captured session id: %w", err)
 			}
 		}
+		if err := s.linkActingAgent(ctx, queries, chatID, projectID); err != nil {
+			return err
+		}
 		return nil
 	case !errors.Is(err, pgx.ErrNoRows):
 		return fmt.Errorf("get chat project: %w", err)
@@ -109,6 +112,34 @@ func (s *Service) ensureHookChat(
 		if err := queries.RecordCapturedSessionID(ctx, repo.RecordCapturedSessionIDParams{ChatID: chatID, ProjectID: projectID, SessionID: metadata.SessionID}); err != nil {
 			return fmt.Errorf("record captured session id: %w", err)
 		}
+	}
+	if err := s.linkActingAgent(ctx, queries, chatID, projectID); err != nil {
+		return err
+	}
+	return nil
+}
+
+// linkActingAgent records the agent principal this delivery acts for on the
+// session's chat row, so a session list can name the agent that made the calls.
+// It runs on both the create and the already-exists paths of ensureHookChat: a
+// chat is created on the session's first persisted message and reused for every
+// later delivery, so stamping only at creation would leave every session that
+// started before this landed permanently unattributed. The underlying statement
+// is fill-once and verifies the agent against the chat's own organization, so
+// repeating it per delivery is a no-op after the first success.
+//
+// A human-driven session simply has no agent to record, which is not a failure.
+func (s *Service) linkActingAgent(ctx context.Context, queries *repo.Queries, chatID, projectID uuid.UUID) error {
+	agentID, ok := actingAgentID(ctx)
+	if !ok {
+		return nil
+	}
+	if _, err := queries.LinkChatActingAgent(ctx, repo.LinkChatActingAgentParams{
+		AgentID:   uuid.NullUUID{UUID: agentID, Valid: true},
+		ID:        chatID,
+		ProjectID: projectID,
+	}); err != nil {
+		return fmt.Errorf("link chat acting agent: %w", err)
 	}
 	return nil
 }

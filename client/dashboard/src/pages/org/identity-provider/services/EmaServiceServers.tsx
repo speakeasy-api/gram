@@ -9,13 +9,18 @@ import { formatRelativeTime } from "@/lib/dates";
 import { pluralize } from "@/lib/format";
 import { mcpServerRouteParam } from "@/lib/sources";
 import { useRoutes } from "@/routes";
-import type { EMAServiceServer } from "@gram/client/models/components/emaserviceserver.js";
+import {
+  EMAServiceServerStatus,
+  type EMAServiceServer,
+} from "@gram/client/models/components/emaserviceserver.js";
+import { isKnownEnumValue } from "@/lib/enum";
 
 import { IDENTITY_CHAINING_SECTION_ID } from "@/pages/mcp/x/tabs/settings/sections/authentication/IdentityChainingSection";
 import {
   serverDisplayName,
   strandedReason,
   strandedServers,
+  supportsProvider,
 } from "./emaServiceView";
 import { type ServiceRow } from "./useEmaServices";
 
@@ -29,6 +34,8 @@ function serverStatus(
   reason?: string;
   tone: StatusDotTone;
 } {
+  if (!isKnownEnumValue(EMAServiceServerStatus, server.status))
+    return { label: "Unknown", tone: "neutral" };
   if (stranded)
     return {
       label: "Needs attention",
@@ -43,6 +50,7 @@ function serverStatus(
     case "needs_attention":
       return { label: "Needs attention", tone: "destructive" };
   }
+  return { label: "Unknown", tone: "neutral" };
 }
 
 /** The server's Enterprise Managed Authorization settings, in its own project. */
@@ -63,9 +71,12 @@ function ServerLink({ server }: { server: EMAServiceServer }): JSX.Element {
 /** Which servers connect to a service, each linking to where it is turned on or off. */
 export function EmaServiceServers({ row }: { row: ServiceRow }): JSX.Element {
   const stranded = new Set(
-    strandedServers(row.isDefault ? null : row.providers, row.servers).map(
-      (server) => server.id,
-    ),
+    strandedServers(
+      row.isDefault || !row.providers.every(supportsProvider)
+        ? null
+        : row.providers,
+      row.servers,
+    ).map((server) => server.id),
   );
   const columns: Column<EMAServiceServer>[] = [
     {

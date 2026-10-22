@@ -1,3 +1,5 @@
+import { enumPresentation, requireKnownEnumValue } from "@/lib/enum";
+import { RiskPolicyAction } from "@gram/client/models/components/riskpolicy.js";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { ShadowMCPDispositionPicker } from "@/components/shadow-mcp/ShadowMCPDispositionPicker";
@@ -85,6 +87,7 @@ import {
 } from "./PolicyStart";
 import {
   clearPolicyStartSession,
+  supportsPolicyEditing,
   invalidEmailDomains,
   draftMCPScopeValue,
   type PolicyDraft,
@@ -283,7 +286,45 @@ export default function PolicyDetail(): JSX.Element {
 
 /** The editor a stored policy opens in. Shadow AI is a presentation of the
  *  blocking Shadow MCP policy, so that policy opens the Shadow AI editor. */
-function PolicyEditorFor({ policy }: { policy: RiskPolicy }): JSX.Element {
+export function PolicyEditorFor({
+  policy,
+}: {
+  policy: RiskPolicy;
+}): JSX.Element {
+  if (!supportsPolicyEditing(policy))
+    return (
+      <Stack gap={6}>
+        <Page.Section.Title>{policy.name}</Page.Section.Title>
+        {policy.prompt && (
+          <Text className="whitespace-pre-wrap">{policy.prompt}</Text>
+        )}
+        <dl className="grid gap-4 sm:grid-cols-2">
+          <div>
+            <dt className="text-eyebrow">Action</dt>
+            <dd>
+              {enumPresentation(POLICY_ACTION_LABEL, policy.action, "Unknown")}
+            </dd>
+          </div>
+          <div>
+            <dt className="text-eyebrow">Status</dt>
+            <dd>{policy.enabled ? "Enabled" : "Disabled"}</dd>
+          </div>
+        </dl>
+        <Alert>
+          <AlertDescription>
+            This policy uses settings this dashboard cannot safely edit. Refresh
+            the page to check for an update.
+          </AlertDescription>
+        </Alert>
+        <Button
+          variant="secondary"
+          className="self-start"
+          onClick={() => window.location.reload()}
+        >
+          <Button.Text>Refresh page</Button.Text>
+        </Button>
+      </Stack>
+    );
   if (policy.policyType === "prompt_based") {
     return <PromptPolicyEditor policy={policy} />;
   }
@@ -427,7 +468,10 @@ function PromptPolicyEditor({
     policy ? [] : (draft?.mcpScope?.matchedNames ?? []),
   );
   const [action, setAction] = useState<PolicyAction>(() => {
-    const initial = policy?.action ?? draft?.action ?? "flag";
+    const initial = requireKnownEnumValue(
+      RiskPolicyAction,
+      policy?.action ?? draft?.action ?? "flag",
+    );
     return mcpScope.mode === "mcp" ? mcpCompatibleAction(initial) : initial;
   });
   const updateMCPScope = (next: PolicyMCPScopeValue) => {
@@ -1630,7 +1674,7 @@ export const LLM_ANALYZER_NOTICE =
 
 function LlmAnalyzerNotice(): JSX.Element {
   return (
-    <Alert variant="info" alignTop>
+    <Alert variant="info">
       <AlertDescription>{LLM_ANALYZER_NOTICE}</AlertDescription>
     </Alert>
   );

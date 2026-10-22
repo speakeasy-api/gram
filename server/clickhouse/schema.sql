@@ -2421,3 +2421,31 @@ ORDER BY (organization_id, project_id, occurred_at_unix_nano, canonical_metric, 
 TTL fromUnixTimestamp64Nano(occurred_at_unix_nano) + INTERVAL 730 DAY
 SETTINGS index_granularity = 8192
 COMMENT 'One row per measurement data point per measure, at the producer native grain. Carries a full dimension repeat so no join is required. Retained beyond agent_events so billing can read historical cycles. Replacing collapses only on background merges, so a reader must de-duplicate on metric_id (FINAL, or ORDER BY observed_at_unix_nano DESC then LIMIT 1 BY metric_id, since an unordered LIMIT 1 BY keeps an arbitrary version) and never sum raw rows.';
+
+-- Payload-free producer aggregates. Management reads first authorize source_id
+-- against the caller's project. UUID source IDs are globally unique.
+CREATE TABLE IF NOT EXISTS tunnel_metric_snapshots (
+    gram_project_id UUID COMMENT 'Project that owns the tunneled MCP source.\n@access: confidential',
+    source_id UUID COMMENT 'Tunneled MCP source the snapshot describes.\n@access: confidential',
+    bucket DateTime('UTC') COMMENT 'Start of the minute or 15-second sample interval.\n@access: confidential',
+    kind LowCardinality(String) COMMENT 'Snapshot kind, requests or connections.\n@access: confidential',
+    producer_id UUID COMMENT 'Tunnel gateway process that produced the snapshot.\n@access: confidential',
+    server_id UUID COMMENT 'MCP server the requests targeted, nil for connection samples.\n@access: confidential',
+    method LowCardinality(String) COMMENT 'MCP method from a fixed allowlist, other for anything else.\n@access: confidential',
+    client_family LowCardinality(String) COMMENT 'Fixed client family label derived from the MCP client name reported at initialize, falling back to the HTTP User-Agent. Never the raw client name or user agent.\n@access: confidential',
+    revision UInt64 COMMENT 'Producer revision. The highest revision of a key replaces earlier ones.\n@access: confidential',
+    attempts UInt64 COMMENT 'Requests started in the interval.\n@access: confidential',
+    successes UInt64 COMMENT 'Requests that completed with an MCP response.\n@access: confidential',
+    errors UInt64 COMMENT 'Requests that completed with an MCP error.\n@access: confidential',
+    canceled UInt64 COMMENT 'Requests canceled before completion.\n@access: confidential',
+    incomplete UInt64 COMMENT 'Requests: completions with no terminal result. Coverage and connections: the loss watermark of the producer for this source since boot. Growth since the previous row of that producer for the source marks the interval partial.\n@access: confidential',
+    rejected UInt64 COMMENT 'Requests Speakeasy rejected before they reached the MCP server.\n@access: confidential',
+    latency_bins Array(UInt64) COMMENT 'Request counts per fixed latency histogram bin.\n@access: confidential',
+    connections UInt32 COMMENT 'Connected tunnel agents at the sample time.\n@access: confidential',
+    consumers UInt32 COMMENT 'Client sessions open through the tunnel at the sample time.\n@access: confidential',
+    substreams UInt32 COMMENT 'Requests in flight through the tunnel at the sample time.\n@access: confidential',
+    connections_opened UInt64 COMMENT 'Agent connections opened since the previous sample.\n@access: confidential'
+) ENGINE = ReplacingMergeTree(revision)
+PARTITION BY toDate(bucket)
+ORDER BY (gram_project_id, source_id, bucket, kind, producer_id, server_id, method, client_family)
+TTL bucket + INTERVAL 90 DAY DELETE;

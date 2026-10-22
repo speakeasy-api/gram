@@ -19,7 +19,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	"github.com/speakeasy-api/gram/server/internal/networkaccess"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -118,15 +117,6 @@ func (s *MCPToolExposureService) CreateMCPFromFunctions(ctx context.Context, pri
 	return output, nil
 }
 
-// hostedServerKeyWrites reports whether the organization's hosted writes use the canonical server key; errors keep the toolset key.
-func (s *MCPToolExposureService) hostedServerKeyWrites(ctx context.Context, organizationID, organizationSlug string) bool {
-	enabled, err := feature.HostedMCPServerKeyWrites(ctx, s.features, organizationID, organizationSlug)
-	if err != nil {
-		s.logger.WarnContext(ctx, "evaluate hosted mcp server key writes; keeping the toolset key", attr.SlogError(err))
-	}
-	return enabled
-}
-
 // sanitizeMCPFromFunctionsError is the boundary every error crosses on its way
 // to the MCP caller. Nothing downstream of the tool rewrites an error it does
 // not recognise — the SDK returns it to the client as text — so a database or
@@ -177,8 +167,6 @@ func (s *MCPToolExposureService) createMCPFromFunctions(ctx context.Context, pri
 	if organizationSlug == "" {
 		return CreateMCPFromFunctionsOutput{}, mcpFromFunctionsUnavailable(errors.New("organization slug unavailable"))
 	}
-	// Resolved before the transaction so flag latency never holds its locks.
-	serverKey := s.hostedServerKeyWrites(ctx, principal.OrganizationID, organizationSlug)
 
 	payload, err := json.Marshal(mcpFromFunctionsRequest{ProjectID: project.ID.String(), Name: name, ToolURNs: toolURNStrings(requested)})
 	if err != nil {
@@ -217,7 +205,7 @@ func (s *MCPToolExposureService) createMCPFromFunctions(ctx context.Context, pri
 			return encoded, nil
 		},
 		Mutate: func(ctx context.Context, tx pgx.Tx) (mcpFromFunctionsReceipt, error) {
-			return s.createMCPFromFunctionsInTransaction(ctx, tx, principal, project, organizationSlug, name, requested, serverKey)
+			return s.createMCPFromFunctionsInTransaction(ctx, tx, principal, project, organizationSlug, name, requested)
 		},
 	})
 	if err != nil {
@@ -230,7 +218,7 @@ func (s *MCPToolExposureService) createMCPFromFunctions(ctx context.Context, pri
 	return s.finishMCPFromFunctions(ctx, principal, project, stored, receipt, charge), nil
 }
 
-func (s *MCPToolExposureService) createMCPFromFunctionsInTransaction(ctx context.Context, tx pgx.Tx, principal Principal, project ResolvedProject, organizationSlug, name string, requested []urn.Tool, serverKey bool) (mcpFromFunctionsReceipt, error) {
+func (s *MCPToolExposureService) createMCPFromFunctionsInTransaction(ctx context.Context, tx pgx.Tx, principal Principal, project ResolvedProject, organizationSlug, name string, requested []urn.Tool) (mcpFromFunctionsReceipt, error) {
 	txQueries := s.queries.WithTx(tx)
 	// Held to commit, so the project cannot be deleted between the tool check
 	// and the two creates.
@@ -257,7 +245,6 @@ func (s *MCPToolExposureService) createMCPFromFunctionsInTransaction(ctx context
 		ActorUserID: principal.UserID, ActorEmail: email, Name: name, Description: nil,
 		DefaultEnvironmentSlug: nil, OriginRegistrySpecifier: nil,
 		ToolURNs: values, ResourceURNs: nil,
-		HostedServerKey: serverKey,
 	})
 	if err != nil {
 		return mcpFromFunctionsReceipt{}, classifyMCPFromFunctionsError(err)

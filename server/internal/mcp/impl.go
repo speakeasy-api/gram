@@ -22,6 +22,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/networkaccess"
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
@@ -112,8 +113,11 @@ type IdentityResolver interface {
 }
 
 type Service struct {
-	federatedLoginConsumer    FederatedLoginConsumer
-	identityChainer           identityChainer
+	federatedLoginConsumer FederatedLoginConsumer
+	identityChainer        identityChainer
+	// authClientPermitter decides whether the caller may use a resolved typed
+	// auth client; nil keeps the connect-equivalent rule (connectPermitter).
+	authClientPermitter       authClientPermitter
 	logger                    *slog.Logger
 	tracer                    trace.Tracer
 	metrics                   *mcpmetrics.Metrics
@@ -201,7 +205,10 @@ type Service struct {
 	platformFeatureChecker platformtools.FeatureChecker
 	platformToolsets       map[string]platformtools.Toolset
 	authnChallengeCache    cache.TypedCacheObject[AuthnChallengeState]
-	remoteLoginCache       cache.TypedCacheObject[remotesessions.RemoteLoginState]
+	// Short-lived, single-use install codes. Holds a live agent key, so it is
+	// cache-only and never written to the database.
+	agentInstallCache cache.TypedCacheObject[agentInstallCode]
+	remoteLoginCache  cache.TypedCacheObject[remotesessions.RemoteLoginState]
 	// remoteLoginHopCache holds the single-use stops of the remote login
 	// browser hop onto a remote client's different callback host.
 	remoteLoginHopCache   cache.TypedCacheObject[remoteLoginHop]
@@ -219,6 +226,9 @@ type Service struct {
 	// so tools/call on the same session can resolve it. Always usable: without
 	// Redis it records nothing and every caller resolves as unknown.
 	sessionClientInfo *sessionclientinfo.Store
+	// tunnelClientFamilies attributes authenticated tunneled requests to the
+	// client their session reported at initialize, from the same store.
+	tunnelClientFamilies *tunnelClientFamilies
 	// userSessionSigner mints the SessionClaims JWT issued at /token.
 	// HS256 with GRAM_JWT_SIGNING_KEY -- same key the chat-session signer
 	// uses, intentionally separate signer code so each path is removable
@@ -504,10 +514,12 @@ func NewService(
 		platformtoolsruntime.WithFeatureChecker(platformFeatureChecker),
 	)
 
+	sessionClientInfo := sessionclientinfo.NewStore(redisClient, 0)
 	service := &Service{
 		replayLiveness:            nil,
 		federatedLoginConsumer:    nil,
 		identityChainer:           nil,
+		authClientPermitter:       connectPermitter{},
 		consentBindings:           nil,
 		logger:                    logger,
 		tracer:                    tracer,
@@ -527,7 +539,7 @@ func NewService(
 		auth:                      auth.New(logger, db, sessions, authzEngine),
 		env:                       env,
 		serverURL:                 serverURL,
-		callbackOrigins:           remotesessions.CallbackOrigins{Outbound: nil, Registration: nil},
+		callbackOrigins:           remotesessions.CallbackOrigins{Outbound: nil, Registration: nil, OrganizationHosts: nil},
 		authenticationHostBaseURL: "",
 		platformHosts:             nil,
 		openAIAppsChallengeToken:  "",
@@ -575,6 +587,11 @@ func NewService(
 			cacheImpl,
 			cache.SuffixNone,
 		),
+		agentInstallCache: cache.NewTypedObjectCache[agentInstallCode](
+			logger.With(attr.SlogCacheNamespace("agent_install")),
+			cacheImpl,
+			cache.SuffixNone,
+		),
 		remoteLoginCache:    cache.NewTypedObjectCache[remotesessions.RemoteLoginState](logger.With(attr.SlogCacheNamespace("remote_login")), cacheImpl, cache.SuffixNone),
 		remoteLoginHopCache: cache.NewTypedObjectCache[remoteLoginHop](logger.With(attr.SlogCacheNamespace("remote_login_hop")), cacheImpl, cache.SuffixNone),
 		userSessionGrantCache: cache.NewTypedObjectCache[UserSessionGrant](
@@ -598,7 +615,8 @@ func NewService(
 			cacheImpl,
 			cache.SuffixNone,
 		),
-		sessionClientInfo:    sessionclientinfo.NewStore(redisClient, 0),
+		sessionClientInfo:    sessionClientInfo,
+		tunnelClientFamilies: newTunnelClientFamilies(sessionClientInfo),
 		identityResolver:     identityResolver,
 		identityValidator:    mcpidentity.NewValidatorBoundary(),
 		userSessionSigner:    userSessionSigner,
@@ -733,10 +751,21 @@ func AttachPrivate(mux goahttp.Muxer, service *Service, metadataService *mcpmeta
 	}
 
 	for _, route := range netingress.PrivateRoutes(netingress.RouteSurfaceAgentMCP) {
-		if route.ID != netingress.RouteRuntime {
+		var handler http.Handler
+		// Only these three ids are declared for this surface; anything else is
+		// a routing table change that must come with its handler.
+		switch route.ID { //nolint:exhaustive // the surface declares only these routes
+		case netingress.RouteRuntime:
+			handler = oops.MCPErrHandle(service.logger, service.ServeAgentGateway)
+		case netingress.RouteInstall:
+			handler = oops.ErrHandle(service.logger, service.HandleAgentInstallCode)
+		case netingress.RouteInstallScript:
+			handler = oops.ErrHandle(service.logger, service.HandleAgentInstallScript)
+		}
+		if handler == nil {
 			panic(fmt.Sprintf("private agent MCP route %s %s has no handler", route.Method, route.Path))
 		}
-		o11y.AttachHandler(mux, route.Method, route.Path, oops.MCPErrHandle(service.logger, service.ServeAgentGateway).ServeHTTP)
+		o11y.AttachHandler(mux, route.Method, route.Path, handler.ServeHTTP)
 	}
 }
 
@@ -765,6 +794,8 @@ func Attach(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Se
 	// mounts here as well as on the private listener. Its own key is the
 	// credential, so being publicly routable is not being publicly readable.
 	o11y.AttachHandler(mux, "POST", AgentGatewayRoute, oops.MCPErrHandle(service.logger, service.ServeAgentGateway).ServeHTTP)
+	o11y.AttachHandler(mux, "POST", AgentInstallCodeRoute, oops.ErrHandle(service.logger, service.HandleAgentInstallCode).ServeHTTP)
+	o11y.AttachHandler(mux, "GET", AgentInstallScriptRoute, oops.ErrHandle(service.logger, service.HandleAgentInstallScript).ServeHTTP)
 	o11y.AttachHandler(mux, "POST", PublicServerRoute, oops.MCPErrHandle(service.logger, service.ServePublic).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", PublicServerRoute, oops.MCPErrHandle(service.logger, func(w http.ResponseWriter, r *http.Request) error {
 		return service.HandleGetServer(w, r, metadataService)
@@ -1024,7 +1055,7 @@ func (s *Service) serveProxyBackedEndpoint(w http.ResponseWriter, r *http.Reques
 		return true, err
 	}
 
-	return true, s.serveResolvedMCPEndpoint(w, r, logger, mcpEndpoint, mcpServer, mcpSlug, "mcp")
+	return true, s.serveResolvedMCPEndpoint(w, r, logger, mcpEndpoint, mcpServer, mcpSlug, mcproute.MCP)
 }
 
 // writeOAuthServerMetadataResponse builds the OAuth server metadata body and
@@ -1109,7 +1140,7 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 		if metaServer != nil {
 			return s.serveResolvedMetaMCPEndpoint(w, r, logger, mcpEndpoint, metaServer, metaMembership{agentID: uuid.Nil, organization: false}, nil)
 		}
-		return s.serveResolvedMCPEndpoint(w, r, logger, mcpEndpoint, mcpServer, mcpSlug, "mcp")
+		return s.serveResolvedMCPEndpoint(w, r, logger, mcpEndpoint, mcpServer, mcpSlug, mcproute.MCP)
 	case mcpendpoints.IsAddressMiss(err):
 		// Address miss: fall through to the legacy toolset lookup.
 	case mcpendpoints.IsPolicyDenied(err):
@@ -1142,7 +1173,7 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 	// Legacy toolset-by-slug path: hosting configuration comes from the
 	// toolset columns; the canonical wrapper, when present, keys kill switches
 	// and attribution.
-	return s.serveToolsetResolved(w, r, toolset, mcpSlug, "mcp", hostedServingFromToolset(toolset, wrapperID), nil, nil, nil, nil)
+	return s.serveToolsetResolved(w, r, toolset, mcpSlug, mcproute.MCP, hostedServingFromToolset(toolset, wrapperID), nil, nil, nil, nil)
 }
 
 // hostedServing is the hosting configuration one toolset-backed MCP request
@@ -1203,7 +1234,7 @@ func hostedServingFromToolset(toolset *toolsets_repo.Toolset, wrapperID uuid.Nul
 //
 // mcpSlug and mcpRouteBase are used to build the WWW-Authenticate
 // resource_metadata URL. mcpRouteBase is the route segment that sits
-// between the well-known prefix and the slug — "mcp" for /mcp/{slug}, no
+// between the well-known prefix and the slug — mcproute.MCP for /mcp/{slug}, no
 // leading or trailing slashes.
 //
 // extraUpstreamTokens are the upstream remote-session access tokens
@@ -1216,7 +1247,7 @@ func hostedServingFromToolset(toolset *toolsets_repo.Toolset, wrapperID uuid.Nul
 // caller-side issuer gate. Nil when the caller ran no gate or the session
 // carries no policy; the in-toolset gate below populates it for legacy-path
 // callers.
-func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, toolset *toolsets_repo.Toolset, mcpSlug, mcpRouteBase string, cfg *hostedServing, extraUpstreamTokens map[uuid.UUID]remotesessions.UpstreamToken, callerToolSelection *toolfilter.SessionSelection, pendingIssuerGate *issuerGateAuthentication, prepared *preparedMCPRequest) error {
+func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, toolset *toolsets_repo.Toolset, mcpSlug string, mcpRouteBase mcproute.Base, cfg *hostedServing, extraUpstreamTokens map[uuid.UUID]remotesessions.UpstreamToken, callerToolSelection *toolfilter.SessionSelection, pendingIssuerGate *issuerGateAuthentication, prepared *preparedMCPRequest) error {
 	ctx := r.Context()
 	var err error
 
@@ -1306,7 +1337,7 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 		}
 	}
 
-	oauthProtectedResourceURL, err := url.JoinPath(baseURL, wellknown.OAuthProtectedResourcePath, mcpRouteBase, mcpSlug)
+	oauthProtectedResourceURL, err := url.JoinPath(baseURL, wellknown.OAuthProtectedResourcePath, mcpRouteBase.String(), mcpSlug)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to build OAuth protected resource URL").LogError(ctx, s.logger)
 	}

@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
@@ -21,7 +22,7 @@ export const AgentPolicySelectorDisposition = {
 /**
  * Tool disposition filter (MCP scopes only).
  */
-export type AgentPolicySelectorDisposition = ClosedEnum<
+export type AgentPolicySelectorDisposition = OpenEnum<
   typeof AgentPolicySelectorDisposition
 >;
 
@@ -43,7 +44,7 @@ export const AgentPolicySelectorResourceKind = {
 /**
  * The kind of resource this selector targets.
  */
-export type AgentPolicySelectorResourceKind = ClosedEnum<
+export type AgentPolicySelectorResourceKind = OpenEnum<
   typeof AgentPolicySelectorResourceKind
 >;
 
@@ -82,22 +83,26 @@ export type AgentPolicySelector = {
 };
 
 /** @internal */
-export const AgentPolicySelectorDisposition$inboundSchema: z.ZodMiniEnum<
-  typeof AgentPolicySelectorDisposition
-> = z.enum(AgentPolicySelectorDisposition);
+export const AgentPolicySelectorDisposition$inboundSchema: z.ZodMiniType<
+  AgentPolicySelectorDisposition,
+  unknown
+> = openEnums.inboundSchema(AgentPolicySelectorDisposition);
 /** @internal */
-export const AgentPolicySelectorDisposition$outboundSchema: z.ZodMiniEnum<
-  typeof AgentPolicySelectorDisposition
-> = AgentPolicySelectorDisposition$inboundSchema;
+export const AgentPolicySelectorDisposition$outboundSchema: z.ZodMiniType<
+  string,
+  AgentPolicySelectorDisposition
+> = openEnums.outboundSchema(AgentPolicySelectorDisposition);
 
 /** @internal */
-export const AgentPolicySelectorResourceKind$inboundSchema: z.ZodMiniEnum<
-  typeof AgentPolicySelectorResourceKind
-> = z.enum(AgentPolicySelectorResourceKind);
+export const AgentPolicySelectorResourceKind$inboundSchema: z.ZodMiniType<
+  AgentPolicySelectorResourceKind,
+  unknown
+> = openEnums.inboundSchema(AgentPolicySelectorResourceKind);
 /** @internal */
-export const AgentPolicySelectorResourceKind$outboundSchema: z.ZodMiniEnum<
-  typeof AgentPolicySelectorResourceKind
-> = AgentPolicySelectorResourceKind$inboundSchema;
+export const AgentPolicySelectorResourceKind$outboundSchema: z.ZodMiniType<
+  string,
+  AgentPolicySelectorResourceKind
+> = openEnums.outboundSchema(AgentPolicySelectorResourceKind);
 
 /** @internal */
 export const AgentPolicySelector$inboundSchema: z.ZodMiniType<

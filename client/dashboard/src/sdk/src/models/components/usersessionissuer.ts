@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
@@ -19,9 +20,7 @@ export const AuthorizationServerMode = {
 /**
  * Which OAuth authorization server the issuer's MCP servers point clients to. 'endpoint' gives every MCP server its own authorization server, rooted at the server's URL. 'shared' serves one authorization server for the issuer, used by all of its MCP servers; issuer_url and token_endpoint locate it. A shared issuer whose authorization server this deployment does not serve falls back to per-endpoint authorization servers, and authorization_server_unavailable_reason says why.
  */
-export type AuthorizationServerMode = ClosedEnum<
-  typeof AuthorizationServerMode
->;
+export type AuthorizationServerMode = OpenEnum<typeof AuthorizationServerMode>;
 
 /**
  * Why a shared issuer's authorization server is not served, so its MCP servers fall back to per-endpoint authorization servers: the pinned issuer URL is not this issuer's shared authorization server (pinned_issuer_url_invalid), or it is on a host this deployment does not serve (host_not_served). Absent otherwise.
@@ -33,7 +32,7 @@ export const AuthorizationServerUnavailableReason = {
 /**
  * Why a shared issuer's authorization server is not served, so its MCP servers fall back to per-endpoint authorization servers: the pinned issuer URL is not this issuer's shared authorization server (pinned_issuer_url_invalid), or it is on a host this deployment does not serve (host_not_served). Absent otherwise.
  */
-export type AuthorizationServerUnavailableReason = ClosedEnum<
+export type AuthorizationServerUnavailableReason = OpenEnum<
   typeof AuthorizationServerUnavailableReason
 >;
 
@@ -49,7 +48,7 @@ export const ClientIdMetadataAdmissionMode = {
 /**
  * The EFFECTIVE CIMD admission policy in force for this issuer: disabled | presets | reporting | open. Always populated, so clients never have to reason about an unset state. 'open' is the resting policy an issuer carries unless an operator chooses otherwise: it admits any spec-valid document, and 'presets' enforcement is opt-in because a denial under it is unrecoverable for the end user. Note 'reporting' can be READ but not written: it is a legacy value that admits exactly what 'open' admits, and no issuer is created with it.
  */
-export type ClientIdMetadataAdmissionMode = ClosedEnum<
+export type ClientIdMetadataAdmissionMode = OpenEnum<
   typeof ClientIdMetadataAdmissionMode
 >;
 
@@ -132,19 +131,22 @@ export type UserSessionIssuer = {
 };
 
 /** @internal */
-export const AuthorizationServerMode$inboundSchema: z.ZodMiniEnum<
-  typeof AuthorizationServerMode
-> = z.enum(AuthorizationServerMode);
+export const AuthorizationServerMode$inboundSchema: z.ZodMiniType<
+  AuthorizationServerMode,
+  unknown
+> = openEnums.inboundSchema(AuthorizationServerMode);
 
 /** @internal */
-export const AuthorizationServerUnavailableReason$inboundSchema: z.ZodMiniEnum<
-  typeof AuthorizationServerUnavailableReason
-> = z.enum(AuthorizationServerUnavailableReason);
+export const AuthorizationServerUnavailableReason$inboundSchema: z.ZodMiniType<
+  AuthorizationServerUnavailableReason,
+  unknown
+> = openEnums.inboundSchema(AuthorizationServerUnavailableReason);
 
 /** @internal */
-export const ClientIdMetadataAdmissionMode$inboundSchema: z.ZodMiniEnum<
-  typeof ClientIdMetadataAdmissionMode
-> = z.enum(ClientIdMetadataAdmissionMode);
+export const ClientIdMetadataAdmissionMode$inboundSchema: z.ZodMiniType<
+  ClientIdMetadataAdmissionMode,
+  unknown
+> = openEnums.inboundSchema(ClientIdMetadataAdmissionMode);
 
 /** @internal */
 export const UserSessionIssuer$inboundSchema: z.ZodMiniType<

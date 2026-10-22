@@ -162,6 +162,58 @@ func BuildListServerConnectionsPayload(tunneledMcpListServerConnectionsID string
 	return v, nil
 }
 
+// BuildGetServerMetricsPayload builds the payload for the tunneledMcp
+// getServerMetrics endpoint from CLI flags.
+func BuildGetServerMetricsPayload(tunneledMcpGetServerMetricsID string, tunneledMcpGetServerMetricsWindow string, tunneledMcpGetServerMetricsSessionToken string, tunneledMcpGetServerMetricsApikeyToken string, tunneledMcpGetServerMetricsProjectSlugInput string) (*tunneledmcp.GetServerMetricsPayload, error) {
+	var err error
+	var id string
+	{
+		id = tunneledMcpGetServerMetricsID
+		err = goa.MergeErrors(err, goa.ValidateFormat("id", id, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var window string
+	{
+		if tunneledMcpGetServerMetricsWindow != "" {
+			window = tunneledMcpGetServerMetricsWindow
+			if !(window == "hour" || window == "day" || window == "week") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("window", window, []any{"hour", "day", "week"}))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var sessionToken *string
+	{
+		if tunneledMcpGetServerMetricsSessionToken != "" {
+			sessionToken = &tunneledMcpGetServerMetricsSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if tunneledMcpGetServerMetricsApikeyToken != "" {
+			apikeyToken = &tunneledMcpGetServerMetricsApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if tunneledMcpGetServerMetricsProjectSlugInput != "" {
+			projectSlugInput = &tunneledMcpGetServerMetricsProjectSlugInput
+		}
+	}
+	v := &tunneledmcp.GetServerMetricsPayload{}
+	v.ID = id
+	v.Window = window
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
 // BuildUpdateServerPayload builds the payload for the tunneledMcp updateServer
 // endpoint from CLI flags.
 func BuildUpdateServerPayload(tunneledMcpUpdateServerBody string, tunneledMcpUpdateServerSessionToken string, tunneledMcpUpdateServerApikeyToken string, tunneledMcpUpdateServerProjectSlugInput string) (*tunneledmcp.UpdateServerPayload, error) {

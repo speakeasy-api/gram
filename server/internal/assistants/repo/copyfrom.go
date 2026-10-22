@@ -75,6 +75,7 @@ func (r iteratorForAddAssistantToolsets) Err() error {
 	return nil
 }
 
+// Test-only, see LoadAssistantToolsets.
 func (q *Queries) AddAssistantToolsets(ctx context.Context, arg []AddAssistantToolsetsParams) (int64, error) {
 	return q.db.CopyFrom(ctx, []string{"assistant_toolsets"}, []string{"assistant_id", "toolset_id", "environment_id", "project_id"}, &iteratorForAddAssistantToolsets{rows: arg})
 }

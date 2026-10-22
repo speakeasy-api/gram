@@ -25,11 +25,27 @@ export type AdminUpstreamOAuthMigrationRun = {
    */
   associationsWritten: number;
   /**
+   * Server to auth client links recorded.
+   */
+  authClientLinksWritten?: number | undefined;
+  /**
+   * Why recording typed auth clients failed, when it did. The upstream OAuth migration itself is unaffected.
+   */
+  authClientsError?: string | undefined;
+  /**
+   * Typed auth clients recorded.
+   */
+  authClientsWritten?: number | undefined;
+  /**
    * Credential choices recorded.
    */
   selectionsWritten: number;
   /**
-   * Where one organization stands in the upstream OAuth migration, read from a dry run of both backfills. The organization is migrated when nothing is left to write and no server needs configuring. Credentials that must reconnect do not block it: they are asked to sign in again once serving reads their choices.
+   * Servers marked as needing upstream authentication because they offer a backfilled auth client.
+   */
+  serversMarkedRequiringUpstreamAuth?: number | undefined;
+  /**
+   * Where one organization stands in the upstream OAuth migration, read from a dry run of its backfills. The organization is migrated when nothing is left to write and no server needs configuring. Credentials that must reconnect do not block it: they are asked to sign in again once serving reads their choices. Typed auth clients are reported separately in auth_clients and never affect migrated.
    */
   status: AdminUpstreamOAuthMigrationStatus;
 };
@@ -42,14 +58,23 @@ export const AdminUpstreamOAuthMigrationRun$inboundSchema: z.ZodMiniType<
   z.object({
     associations_skipped: z.int(),
     associations_written: z.int(),
+    auth_client_links_written: z.optional(z.int()),
+    auth_clients_error: z.optional(z.string()),
+    auth_clients_written: z.optional(z.int()),
     selections_written: z.int(),
+    servers_marked_requiring_upstream_auth: z.optional(z.int()),
     status: AdminUpstreamOAuthMigrationStatus$inboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {
       "associations_skipped": "associationsSkipped",
       "associations_written": "associationsWritten",
+      "auth_client_links_written": "authClientLinksWritten",
+      "auth_clients_error": "authClientsError",
+      "auth_clients_written": "authClientsWritten",
       "selections_written": "selectionsWritten",
+      "servers_marked_requiring_upstream_auth":
+        "serversMarkedRequiringUpstreamAuth",
     });
   }),
 );

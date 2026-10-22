@@ -286,6 +286,16 @@ SELECT @org_id::text, f
 FROM unnest(@features::text[]) AS f
 ON CONFLICT (organization_id, feature_name) WHERE deleted IS FALSE DO NOTHING;
 
+-- name: OrgInsertGatewayDisabledFeature :exec
+-- Start with access review required, preserving an explicit opt-in on reseed.
+INSERT INTO organization_features (organization_id, feature_name)
+SELECT @org_id::text, 'organization_gateway_disabled'
+WHERE NOT EXISTS (
+  SELECT 1 FROM organization_features
+  WHERE organization_id = @org_id::text AND feature_name = 'organization_gateway_disabled'
+)
+ON CONFLICT (organization_id, feature_name) WHERE deleted IS FALSE DO NOTHING;
+
 -- name: OrgInsertHooksFailOpenFeature :exec
 -- Unlike demo entitlements, preserve an explicit fail-closed choice on reseed.
 INSERT INTO organization_features (organization_id, feature_name)

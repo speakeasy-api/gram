@@ -122,6 +122,7 @@ func TestService_ExportMcpMetadata_WithMetadata(t *testing.T) {
 		McpEnabled:             true,
 	})
 	require.NoError(t, err, "create toolset")
+	createCanonicalWrapper(t, ctx, ti, toolset)
 
 	// Set MCP metadata (uses toolset slug)
 	_, err = ti.service.SetMcpMetadata(ctx, &gen.SetMcpMetadataPayload{

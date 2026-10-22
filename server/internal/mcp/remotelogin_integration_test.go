@@ -217,6 +217,7 @@ func TestRemoteLoginChallenge_CustomDomainRegistersGramCallback(t *testing.T) {
 	authURL, err := mgr.BuildAuthorizationUrl(ctx, remotesessions.ParentChallenge{
 		ID:                  uuid.NewString(),
 		ProjectID:           result.Toolset.ProjectID,
+		OrganizationID:      result.Toolset.OrganizationID,
 		UserSessionIssuerID: result.UserSessionIssuer.ID,
 		Subject:             &userSubject,
 		McpSlug:             result.Toolset.McpSlug.String,
@@ -266,6 +267,7 @@ func runRemoteLoginRoundTrip(
 	parent := remotesessions.ParentChallenge{
 		ID:                  parentChallengeID,
 		ProjectID:           result.Toolset.ProjectID,
+		OrganizationID:      result.Toolset.OrganizationID,
 		UserSessionIssuerID: result.UserSessionIssuer.ID,
 		Subject:             expectedSubject,
 		McpSlug:             result.Toolset.McpSlug.String,

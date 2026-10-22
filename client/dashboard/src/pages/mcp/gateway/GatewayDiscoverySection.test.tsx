@@ -6,6 +6,7 @@ import {
   screen,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { unrecognized } from "@gram/client/types/unrecognized.js";
 import type { MetaMcpServer } from "@gram/client/models/components/metamcpserver.js";
 import { TooltipProvider } from "@/components/ui/Tooltip";
 import { GatewayDiscoverySection } from "./GatewayDiscoverySection";
@@ -131,4 +132,74 @@ describe("Gateway discovery settings", () => {
         .disabled,
     ).toBe(true);
   });
+});
+
+it.each(["future_mode", "constructor", "__proto__"])(
+  "keeps %s discovery mode read-only",
+  (value) => {
+    render(
+      <TooltipProvider>
+        <GatewayDiscoverySection
+          metaMcpServer={{ ...gateway, discoveryMode: unrecognized(value) }}
+        />
+      </TooltipProvider>,
+    );
+    const select = screen.getByRole("combobox") as HTMLButtonElement;
+    expect(select.disabled).toBe(true);
+    expect(select.textContent).toContain("Unknown mode");
+    expect(screen.getByText(/Refresh the page before changing/)).toBeTruthy();
+    const save = screen.getByRole("button", {
+      name: /save/i,
+    }) as HTMLButtonElement;
+    expect(save.disabled).toBe(true);
+    fireEvent.click(save);
+    expect(state.mutate).not.toHaveBeenCalled();
+  },
+);
+
+it("blocks a selected draft when refreshed discovery becomes unsupported", async () => {
+  const { rerender } = show();
+  fireEvent.click(screen.getByRole("combobox"));
+  fireEvent.click(await screen.findByRole("option", { name: "Direct" }));
+  rerender(
+    <TooltipProvider>
+      <GatewayDiscoverySection
+        metaMcpServer={{
+          ...gateway,
+          discoveryMode: unrecognized("future_mode"),
+        }}
+      />
+    </TooltipProvider>,
+  );
+  const save = screen.getByRole("button", {
+    name: /save/i,
+  }) as HTMLButtonElement;
+  expect(save.disabled).toBe(true);
+  expect(screen.getByRole("combobox").textContent).toContain("Unknown mode");
+  fireEvent.click(save);
+  expect(state.mutate).not.toHaveBeenCalled();
+});
+
+it("allows changing a direct gateway to progressive", async () => {
+  render(
+    <TooltipProvider>
+      <GatewayDiscoverySection
+        metaMcpServer={{ ...gateway, discoveryMode: "direct" }}
+      />
+    </TooltipProvider>,
+  );
+  fireEvent.click(screen.getByRole("combobox"));
+  fireEvent.click(await screen.findByRole("option", { name: "Progressive" }));
+  fireEvent.click(screen.getByRole("button", { name: /save/i }));
+  expect(state.mutate).toHaveBeenCalledWith(
+    expect.objectContaining({
+      request: {
+        updateMetaMcpServerForm: {
+          id: gateway.id,
+          name: gateway.name,
+          discoveryMode: "progressive",
+        },
+      },
+    }),
+  );
 });
