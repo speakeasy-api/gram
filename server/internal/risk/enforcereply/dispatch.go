@@ -67,6 +67,17 @@ const (
 	contentLimitDistinctID = "gram-server"
 )
 
+// DefaultLaneWaitTimeouts returns the production wait budget for each model-backed
+// or custom enforcement lane. The returned map is safe for callers to modify.
+func DefaultLaneWaitTimeouts() map[riskv1.EnforcementScanner]time.Duration {
+	return map[riskv1.EnforcementScanner]time.Duration{ //nolint:exhaustive // scanners without an override use DispatcherConfig.WaitTimeout
+		riskv1.EnforcementScanner_ENFORCEMENT_SCANNER_LLM_ANALYZER:     DefaultLLMAnalyzerWaitTimeout,
+		riskv1.EnforcementScanner_ENFORCEMENT_SCANNER_PROMPT_INJECTION: DefaultPromptInjectionWaitTimeout,
+		riskv1.EnforcementScanner_ENFORCEMENT_SCANNER_JUDGE:            DefaultPromptPolicyWaitTimeout,
+		riskv1.EnforcementScanner_ENFORCEMENT_SCANNER_CUSTOM_RULES:     DefaultCustomRulesWaitTimeout,
+	}
+}
+
 // EnforcementLane is the non-generic request seam used by enforcement fan-out.
 type EnforcementLane interface {
 	Request(ctx context.Context, req proto.Message) (*riskv1.EnforcementReply, error)
