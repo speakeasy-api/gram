@@ -258,13 +258,12 @@ type assistantThreadEventRecord struct {
 
 // assistantMCPServerRow is one attached server; ToolsetSlug is set for hosted servers.
 type assistantMCPServerRow struct {
-	MCPServerID  uuid.UUID
-	ServerSlug   pgtype.Text
-	ToolsetSlug  pgtype.Text
-	Visibility   string
-	EndpointSlug string
-	// EndpointDomain is the custom-domain host of the endpoint; "" for platform.
-	EndpointDomain         string
+	MCPServerID            uuid.UUID
+	ServerSlug             pgtype.Text
+	ToolsetSlug            pgtype.Text
+	Visibility             string
+	EndpointSlug           string
+	EndpointDomain         string // custom-domain host; "" for platform endpoints
 	DefaultEnvironmentSlug pgtype.Text
 	EnvironmentID          uuid.NullUUID
 	EnvironmentSlug        pgtype.Text
@@ -3763,6 +3762,7 @@ func unreachableReason(m assistantMCPServerRow) string {
 }
 
 // endpointURL is the server's own MCP address; platform endpoints live under base.
+// Platform-first selection (not endpointaddr.PrimaryEndpoint) keeps existing URLs stable.
 func (m assistantMCPServerRow) endpointURL(base *url.URL) *url.URL {
 	if m.EndpointDomain != "" {
 		return (&url.URL{Scheme: "https", Host: m.EndpointDomain}).JoinPath("mcp", m.EndpointSlug)

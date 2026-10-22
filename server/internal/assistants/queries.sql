@@ -347,6 +347,8 @@ RETURNING id;
 -- mcp_enabled and default environment, and sort first so they win runtime id
 -- collisions. The address is the server's own endpoint: platform first, else
 -- one on a verified, activated custom domain (ListAddressableMCPEndpointsByMCPServerIDs).
+-- A hosted row with neither keeps its legacy /mcp/{mcp_slug} alias until the
+-- toolset slug fallback is removed.
 SELECT
   ams.assistant_id,
   ams.mcp_server_id,
@@ -357,7 +359,7 @@ SELECT
     WHEN t.mcp_is_public THEN 'public'
     ELSE 'private'
   END ELSE ms.visibility END::text AS visibility,
-  COALESCE(ep.slug, '')::text AS endpoint_slug,
+  COALESCE(ep.slug, t.mcp_slug, '')::text AS endpoint_slug,
   COALESCE(ep.domain, '')::text AS endpoint_domain,
   t.default_environment_slug,
   ams.environment_id,
