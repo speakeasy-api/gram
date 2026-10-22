@@ -1,6 +1,8 @@
 package platformmcp
 
 import (
+	"crypto/sha256"
+	"encoding/base64"
 	"html"
 	"net/http"
 	"net/http/httptest"
@@ -14,6 +16,10 @@ import (
 	platformoauth "github.com/speakeasy-api/gram/server/internal/platformmcp/oauth"
 )
 
+// finishElsewhereVerifier is the PKCE verifier behind every fixture
+// challenge, so a test can redeem the code it is shown.
+var finishElsewhereVerifier = strings.Repeat("v", 43)
+
 // newFinishElsewhereChallenge registers a client that listens at redirectURI
 // and stores a challenge ready for the connect page.
 func newFinishElsewhereChallenge(t *testing.T, redirectURI string) (*OAuthHTTP, oauthChallenge) {
@@ -22,7 +28,8 @@ func newFinishElsewhereChallenge(t *testing.T, redirectURI string) (*OAuthHTTP, 
 	service := newTestOAuthHTTP(t)
 	store := testStore(t, service)
 	require.NoError(t, store.RegisterClient(t.Context(), platformoauth.Client{ID: "client-1", Name: "Codex", RedirectURIs: []string{redirectURI}}))
-	challenge := oauthChallenge{ID: "challenge-1", ClientID: "client-1", RedirectURI: redirectURI, State: "client-state", CSRFToken: "csrf", OrganizationID: "org-1", Subject: "user:user-1", CreatedAt: time.Now()}
+	digest := sha256.Sum256([]byte(finishElsewhereVerifier))
+	challenge := oauthChallenge{ID: "challenge-1", ClientID: "client-1", RedirectURI: redirectURI, State: "client-state", CodeChallenge: base64.RawURLEncoding.EncodeToString(digest[:]), CSRFToken: "csrf", OrganizationID: "org-1", Subject: "user:user-1", CreatedAt: time.Now()}
 	require.NoError(t, service.cache.Store(t.Context(), challenge))
 	return service, challenge
 }
@@ -92,7 +99,17 @@ func TestOAuthHTTPConnectPostFinishElsewhereShowsCallbackCommand(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "127.0.0.1:3000", callback.Host)
 	require.Equal(t, "client-state", callback.Query().Get("state"))
-	require.NotEmpty(t, callback.Query().Get("code"))
+	code := callback.Query().Get("code")
+	require.NotEmpty(t, code)
+
+	// The code the page shows is the one the client redeems.
+	form := url.Values{"grant_type": {"authorization_code"}, "code": {code}, "redirect_uri": {challenge.RedirectURI}, "code_verifier": {finishElsewhereVerifier}, "client_id": {challenge.ClientID}}
+	request := httptest.NewRequest(http.MethodPost, "/platform-mcp/token", strings.NewReader(form.Encode()))
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	exchanged := httptest.NewRecorder()
+	service.TokenHandler().ServeHTTP(exchanged, request)
+	require.Equal(t, http.StatusOK, exchanged.Code, exchanged.Body.String())
+	require.Contains(t, exchanged.Body.String(), `"access_token"`)
 }
 
 // Unticked, a loopback client keeps the redirect it always had.
