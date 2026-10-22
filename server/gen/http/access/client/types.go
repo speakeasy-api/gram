@@ -304,6 +304,17 @@ type ListDirectoryRoleMappingsResponseBody struct {
 	Mappings []*DirectoryRoleMappingResponseBody `form:"mappings,omitempty" json:"mappings,omitempty" xml:"mappings,omitempty"`
 }
 
+// ListDirectoryPeopleResponseBody is the type of the "access" service
+// "listDirectoryPeople" endpoint HTTP response body.
+type ListDirectoryPeopleResponseBody struct {
+	// One page of directory profiles, ordered by profile ID.
+	People []*DirectoryPersonResponseBody `form:"people,omitempty" json:"people,omitempty" xml:"people,omitempty"`
+	// Profiles per state across the whole organization, not just this page.
+	Counts *DirectoryPeopleStateCountsResponseBody `form:"counts,omitempty" json:"counts,omitempty" xml:"counts,omitempty"`
+	// Cursor for the next page. Absent on the last page.
+	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
+}
+
 // SyncDirectoryGroupsResponseBody is the type of the "access" service
 // "syncDirectoryGroups" endpoint HTTP response body.
 type SyncDirectoryGroupsResponseBody struct {
@@ -1734,6 +1745,192 @@ type ListDirectoryRoleMappingsUnexpectedResponseBody struct {
 // "access" service "listDirectoryRoleMappings" endpoint HTTP response body for
 // the "gateway_error" error.
 type ListDirectoryRoleMappingsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListDirectoryPeopleUnauthorizedResponseBody is the type of the "access"
+// service "listDirectoryPeople" endpoint HTTP response body for the
+// "unauthorized" error.
+type ListDirectoryPeopleUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListDirectoryPeopleForbiddenResponseBody is the type of the "access" service
+// "listDirectoryPeople" endpoint HTTP response body for the "forbidden" error.
+type ListDirectoryPeopleForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListDirectoryPeopleBadRequestResponseBody is the type of the "access"
+// service "listDirectoryPeople" endpoint HTTP response body for the
+// "bad_request" error.
+type ListDirectoryPeopleBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListDirectoryPeopleNotFoundResponseBody is the type of the "access" service
+// "listDirectoryPeople" endpoint HTTP response body for the "not_found" error.
+type ListDirectoryPeopleNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListDirectoryPeopleConflictResponseBody is the type of the "access" service
+// "listDirectoryPeople" endpoint HTTP response body for the "conflict" error.
+type ListDirectoryPeopleConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListDirectoryPeopleUnsupportedMediaResponseBody is the type of the "access"
+// service "listDirectoryPeople" endpoint HTTP response body for the
+// "unsupported_media" error.
+type ListDirectoryPeopleUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListDirectoryPeopleInvalidResponseBody is the type of the "access" service
+// "listDirectoryPeople" endpoint HTTP response body for the "invalid" error.
+type ListDirectoryPeopleInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListDirectoryPeopleInvariantViolationResponseBody is the type of the
+// "access" service "listDirectoryPeople" endpoint HTTP response body for the
+// "invariant_violation" error.
+type ListDirectoryPeopleInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListDirectoryPeopleUnexpectedResponseBody is the type of the "access"
+// service "listDirectoryPeople" endpoint HTTP response body for the
+// "unexpected" error.
+type ListDirectoryPeopleUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListDirectoryPeopleGatewayErrorResponseBody is the type of the "access"
+// service "listDirectoryPeople" endpoint HTTP response body for the
+// "gateway_error" error.
+type ListDirectoryPeopleGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -8042,6 +8239,52 @@ type DirectoryRoleMappingResponseBody struct {
 	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
+// DirectoryPersonResponseBody is used to define fields on response body types.
+type DirectoryPersonResponseBody struct {
+	// Directory profile ID.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Email the directory reports for the profile. Empty when the directory
+	// reports none.
+	Email *string `form:"email,omitempty" json:"email,omitempty" xml:"email,omitempty"`
+	// First name the directory reports, when it reports one.
+	FirstName *string `form:"first_name,omitempty" json:"first_name,omitempty" xml:"first_name,omitempty"`
+	// Last name the directory reports, when it reports one.
+	LastName *string `form:"last_name,omitempty" json:"last_name,omitempty" xml:"last_name,omitempty"`
+	// How the profile relates to Speakeasy accounts. member: linked to, or the
+	// only email match of, a member of this organization. account_not_member: an
+	// account exists but is not a member here. not_signed_in: no matching account.
+	// ambiguous_email: the email matches more than one profile or account, so it
+	// is never matched.
+	State *string `form:"state,omitempty" json:"state,omitempty" xml:"state,omitempty"`
+	// The matched Speakeasy user ID. Present only for member and
+	// account_not_member.
+	UserID *string `form:"user_id,omitempty" json:"user_id,omitempty" xml:"user_id,omitempty"`
+	// Live directory groups the profile belongs to.
+	Groups []*DirectoryPersonGroupResponseBody `form:"groups,omitempty" json:"groups,omitempty" xml:"groups,omitempty"`
+}
+
+// DirectoryPersonGroupResponseBody is used to define fields on response body
+// types.
+type DirectoryPersonGroupResponseBody struct {
+	// Directory group ID.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Directory group name.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+}
+
+// DirectoryPeopleStateCountsResponseBody is used to define fields on response
+// body types.
+type DirectoryPeopleStateCountsResponseBody struct {
+	// Profiles in the member state.
+	Member *int64 `form:"member,omitempty" json:"member,omitempty" xml:"member,omitempty"`
+	// Profiles in the account_not_member state.
+	AccountNotMember *int64 `form:"account_not_member,omitempty" json:"account_not_member,omitempty" xml:"account_not_member,omitempty"`
+	// Profiles in the not_signed_in state.
+	NotSignedIn *int64 `form:"not_signed_in,omitempty" json:"not_signed_in,omitempty" xml:"not_signed_in,omitempty"`
+	// Profiles in the ambiguous_email state.
+	AmbiguousEmail *int64 `form:"ambiguous_email,omitempty" json:"ambiguous_email,omitempty" xml:"ambiguous_email,omitempty"`
+}
+
 // DirectoryRoleMappingResponse is used to define fields on response body types.
 type DirectoryRoleMappingResponse struct {
 	// Unique mapping identifier.
@@ -10095,6 +10338,175 @@ func NewListDirectoryRoleMappingsUnexpected(body *ListDirectoryRoleMappingsUnexp
 // NewListDirectoryRoleMappingsGatewayError builds a access service
 // listDirectoryRoleMappings endpoint gateway_error error.
 func NewListDirectoryRoleMappingsGatewayError(body *ListDirectoryRoleMappingsGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListDirectoryPeopleResultOK builds a "access" service
+// "listDirectoryPeople" endpoint result from a HTTP "OK" response.
+func NewListDirectoryPeopleResultOK(body *ListDirectoryPeopleResponseBody) *access.ListDirectoryPeopleResult {
+	v := &access.ListDirectoryPeopleResult{
+		NextCursor: body.NextCursor,
+	}
+	v.People = make([]*access.DirectoryPerson, len(body.People))
+	for i, val := range body.People {
+		if val == nil {
+			v.People[i] = nil
+			continue
+		}
+		v.People[i] = unmarshalDirectoryPersonResponseBodyToAccessDirectoryPerson(val)
+	}
+	v.Counts = unmarshalDirectoryPeopleStateCountsResponseBodyToAccessDirectoryPeopleStateCounts(body.Counts)
+
+	return v
+}
+
+// NewListDirectoryPeopleUnauthorized builds a access service
+// listDirectoryPeople endpoint unauthorized error.
+func NewListDirectoryPeopleUnauthorized(body *ListDirectoryPeopleUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListDirectoryPeopleForbidden builds a access service listDirectoryPeople
+// endpoint forbidden error.
+func NewListDirectoryPeopleForbidden(body *ListDirectoryPeopleForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListDirectoryPeopleBadRequest builds a access service listDirectoryPeople
+// endpoint bad_request error.
+func NewListDirectoryPeopleBadRequest(body *ListDirectoryPeopleBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListDirectoryPeopleNotFound builds a access service listDirectoryPeople
+// endpoint not_found error.
+func NewListDirectoryPeopleNotFound(body *ListDirectoryPeopleNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListDirectoryPeopleConflict builds a access service listDirectoryPeople
+// endpoint conflict error.
+func NewListDirectoryPeopleConflict(body *ListDirectoryPeopleConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListDirectoryPeopleUnsupportedMedia builds a access service
+// listDirectoryPeople endpoint unsupported_media error.
+func NewListDirectoryPeopleUnsupportedMedia(body *ListDirectoryPeopleUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListDirectoryPeopleInvalid builds a access service listDirectoryPeople
+// endpoint invalid error.
+func NewListDirectoryPeopleInvalid(body *ListDirectoryPeopleInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListDirectoryPeopleInvariantViolation builds a access service
+// listDirectoryPeople endpoint invariant_violation error.
+func NewListDirectoryPeopleInvariantViolation(body *ListDirectoryPeopleInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListDirectoryPeopleUnexpected builds a access service listDirectoryPeople
+// endpoint unexpected error.
+func NewListDirectoryPeopleUnexpected(body *ListDirectoryPeopleUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListDirectoryPeopleGatewayError builds a access service
+// listDirectoryPeople endpoint gateway_error error.
+func NewListDirectoryPeopleGatewayError(body *ListDirectoryPeopleGatewayErrorResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -15896,6 +16308,30 @@ func ValidateListDirectoryRoleMappingsResponseBody(body *ListDirectoryRoleMappin
 	return
 }
 
+// ValidateListDirectoryPeopleResponseBody runs the validations defined on
+// ListDirectoryPeopleResponseBody
+func ValidateListDirectoryPeopleResponseBody(body *ListDirectoryPeopleResponseBody) (err error) {
+	if body.People == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("people", "body"))
+	}
+	if body.Counts == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("counts", "body"))
+	}
+	for _, e := range body.People {
+		if e != nil {
+			if err2 := ValidateDirectoryPersonResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	if body.Counts != nil {
+		if err2 := ValidateDirectoryPeopleStateCountsResponseBody(body.Counts); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	return
+}
+
 // ValidateSyncDirectoryGroupsResponseBody runs the validations defined on
 // SyncDirectoryGroupsResponseBody
 func ValidateSyncDirectoryGroupsResponseBody(body *SyncDirectoryGroupsResponseBody) (err error) {
@@ -18023,6 +18459,246 @@ func ValidateListDirectoryRoleMappingsUnexpectedResponseBody(body *ListDirectory
 // ValidateListDirectoryRoleMappingsGatewayErrorResponseBody runs the
 // validations defined on listDirectoryRoleMappings_gateway_error_response_body
 func ValidateListDirectoryRoleMappingsGatewayErrorResponseBody(body *ListDirectoryRoleMappingsGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListDirectoryPeopleUnauthorizedResponseBody runs the validations
+// defined on listDirectoryPeople_unauthorized_response_body
+func ValidateListDirectoryPeopleUnauthorizedResponseBody(body *ListDirectoryPeopleUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListDirectoryPeopleForbiddenResponseBody runs the validations
+// defined on listDirectoryPeople_forbidden_response_body
+func ValidateListDirectoryPeopleForbiddenResponseBody(body *ListDirectoryPeopleForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListDirectoryPeopleBadRequestResponseBody runs the validations
+// defined on listDirectoryPeople_bad_request_response_body
+func ValidateListDirectoryPeopleBadRequestResponseBody(body *ListDirectoryPeopleBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListDirectoryPeopleNotFoundResponseBody runs the validations defined
+// on listDirectoryPeople_not_found_response_body
+func ValidateListDirectoryPeopleNotFoundResponseBody(body *ListDirectoryPeopleNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListDirectoryPeopleConflictResponseBody runs the validations defined
+// on listDirectoryPeople_conflict_response_body
+func ValidateListDirectoryPeopleConflictResponseBody(body *ListDirectoryPeopleConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListDirectoryPeopleUnsupportedMediaResponseBody runs the validations
+// defined on listDirectoryPeople_unsupported_media_response_body
+func ValidateListDirectoryPeopleUnsupportedMediaResponseBody(body *ListDirectoryPeopleUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListDirectoryPeopleInvalidResponseBody runs the validations defined
+// on listDirectoryPeople_invalid_response_body
+func ValidateListDirectoryPeopleInvalidResponseBody(body *ListDirectoryPeopleInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListDirectoryPeopleInvariantViolationResponseBody runs the
+// validations defined on listDirectoryPeople_invariant_violation_response_body
+func ValidateListDirectoryPeopleInvariantViolationResponseBody(body *ListDirectoryPeopleInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListDirectoryPeopleUnexpectedResponseBody runs the validations
+// defined on listDirectoryPeople_unexpected_response_body
+func ValidateListDirectoryPeopleUnexpectedResponseBody(body *ListDirectoryPeopleUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListDirectoryPeopleGatewayErrorResponseBody runs the validations
+// defined on listDirectoryPeople_gateway_error_response_body
+func ValidateListDirectoryPeopleGatewayErrorResponseBody(body *ListDirectoryPeopleGatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -26226,6 +26902,72 @@ func ValidateDirectoryRoleMappingResponseBody(body *DirectoryRoleMappingResponse
 	}
 	if body.UpdatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateDirectoryPersonResponseBody runs the validations defined on
+// DirectoryPersonResponseBody
+func ValidateDirectoryPersonResponseBody(body *DirectoryPersonResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Email == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("email", "body"))
+	}
+	if body.State == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("state", "body"))
+	}
+	if body.Groups == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("groups", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if body.State != nil {
+		if !(*body.State == "member" || *body.State == "account_not_member" || *body.State == "not_signed_in" || *body.State == "ambiguous_email") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.state", *body.State, []any{"member", "account_not_member", "not_signed_in", "ambiguous_email"}))
+		}
+	}
+	for _, e := range body.Groups {
+		if e != nil {
+			if err2 := ValidateDirectoryPersonGroupResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateDirectoryPersonGroupResponseBody runs the validations defined on
+// DirectoryPersonGroupResponseBody
+func ValidateDirectoryPersonGroupResponseBody(body *DirectoryPersonGroupResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	return
+}
+
+// ValidateDirectoryPeopleStateCountsResponseBody runs the validations defined
+// on DirectoryPeopleStateCountsResponseBody
+func ValidateDirectoryPeopleStateCountsResponseBody(body *DirectoryPeopleStateCountsResponseBody) (err error) {
+	if body.Member == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("member", "body"))
+	}
+	if body.AccountNotMember == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("account_not_member", "body"))
+	}
+	if body.NotSignedIn == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("not_signed_in", "body"))
+	}
+	if body.AmbiguousEmail == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("ambiguous_email", "body"))
 	}
 	return
 }

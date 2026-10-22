@@ -47,6 +47,7 @@ trackedFiles:
   src/funcs/accessListAudienceOptions.ts: {}
   src/funcs/accessListChallengeBuckets.ts: {}
   src/funcs/accessListChallenges.ts: {}
+  src/funcs/accessListDirectoryPeople.ts: {}
   src/funcs/accessListDirectoryReviewItems.ts: {}
   src/funcs/accessListDirectoryRoleMappings.ts: {}
   src/funcs/accessListEmployeeAIDetections.ts: {}
@@ -1096,6 +1097,9 @@ trackedFiles:
   src/models/components/dimensionvaluesrequestbody.ts: {}
   src/models/components/directoryattributeoption.ts: {}
   src/models/components/directorygroupoption.ts: {}
+  src/models/components/directorypeoplestatecounts.ts: {}
+  src/models/components/directoryperson.ts: {}
+  src/models/components/directorypersongroup.ts: {}
   src/models/components/directoryreviewitem.ts: {}
   src/models/components/directoryreviewsettings.ts: {}
   src/models/components/directoryrolemapping.ts: {}
@@ -1353,6 +1357,7 @@ trackedFiles:
   src/models/components/listdestinationsresult.ts: {}
   src/models/components/listdeviceintegrationprovidersresult.ts: {}
   src/models/components/listdeviceintegrationschedulesresult.ts: {}
+  src/models/components/listdirectorypeopleresult.ts: {}
   src/models/components/listdirectoryreviewitemsresult.ts: {}
   src/models/components/listdirectoryrolemappingsresult.ts: {}
   src/models/components/listdistributionpluginsresult.ts: {}
@@ -2505,6 +2510,7 @@ trackedFiles:
   src/models/operations/listdeployments.ts: {}
   src/models/operations/listdeviceintegrationproviders.ts: {}
   src/models/operations/listdeviceintegrationschedules.ts: {}
+  src/models/operations/listdirectorypeople.ts: {}
   src/models/operations/listdirectoryreviewitems.ts: {}
   src/models/operations/listdirectoryrolemappings.ts: {}
   src/models/operations/listdismissedriskresults.ts: {}
@@ -3141,6 +3147,8 @@ trackedFiles:
   src/react-query/deviceIntegrationProviders.ts: {}
   src/react-query/deviceIntegrationSchedules.core.ts: {}
   src/react-query/deviceIntegrationSchedules.ts: {}
+  src/react-query/directoryPeople.core.ts: {}
+  src/react-query/directoryPeople.ts: {}
   src/react-query/directoryReviewItems.core.ts: {}
   src/react-query/directoryReviewItems.ts: {}
   src/react-query/directoryReviewSettings.core.ts: {}
@@ -9304,6 +9312,18 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  listDirectoryPeople:
+    speakeasy-default-list-directory-people:
+      parameters:
+        query:
+          limit: 500
+      responses:
+        "200":
+          application/json: {"counts": {"account_not_member": 582178, "ambiguous_email": 405501, "member": 228747, "not_signed_in": 949306}, "people": []}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   listDirectoryReviewItems:
     speakeasy-default-list-directory-review-items:
       responses:
