@@ -7,12 +7,14 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/oautherr"
 	"github.com/speakeasy-api/gram/server/internal/oauthtest"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
+	platformoauth "github.com/speakeasy-api/gram/server/internal/platformmcp/oauth"
 )
 
 func TestOAuthHTTPPreAuthenticationErrors(t *testing.T) {
@@ -95,12 +97,27 @@ func TestOAuthHTTPUnregisteredLoopbackPortHasNoCallback(t *testing.T) {
 	require.NotContains(t, response.Body.String(), "href=")
 }
 
-func TestOAuthHTTPPostAuthenticationErrorStillRedirectsRemoteCallback(t *testing.T) {
+func TestOAuthHTTPConnectPostDenialStillRedirectsRemoteCallback(t *testing.T) {
 	t.Parallel()
+
+	service := newTestOAuthHTTP(t)
+	store := testStore(t, service)
+	require.NoError(t, store.RegisterClient(t.Context(), platformoauth.Client{ID: "client-1", Name: "test", RedirectURIs: []string{"https://client.example/cb?keep=value"}}))
+	challenge := oauthChallenge{ID: "challenge-1", ClientID: "client-1", RedirectURI: "https://client.example/cb?keep=value", State: "client-state", CSRFToken: "csrf", OrganizationID: "org-1", Subject: "user:user-1", CreatedAt: time.Now()}
+	require.NoError(t, service.cache.Store(t.Context(), challenge))
+
+	form := url.Values{"state": {challenge.ID}, "csrf_token": {challenge.CSRFToken}, "action": {"deny"}}
+	request := httptest.NewRequest(http.MethodPost, "/platform-mcp/connect", strings.NewReader(form.Encode()))
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	response := httptest.NewRecorder()
-	redirectOAuthError(response, httptest.NewRequest(http.MethodPost, "/platform-mcp/connect", nil), "https://client.example/cb", "client-state", &oauthwire.Error{Code: oautherr.CodeAccessDenied, Description: "user denied authorization"})
+	service.ConnectHandler().ServeHTTP(response, request)
+
 	callback := oauthtest.RequireAuthorizationErrorCallback(t, response, http.StatusFound)
+	require.Equal(t, "https", callback.Scheme)
 	require.Equal(t, "client.example", callback.Host)
+	require.Equal(t, "/cb", callback.Path)
+	require.Equal(t, "value", callback.Query().Get("keep"))
 	require.Equal(t, oautherr.CodeAccessDenied, callback.Query().Get(oauthwire.ParamError))
-	require.Equal(t, "client-state", callback.Query().Get(oauthwire.ParamState))
+	require.Equal(t, "user denied authorization", callback.Query().Get(oauthwire.ParamErrorDescription))
+	require.Equal(t, challenge.State, callback.Query().Get(oauthwire.ParamState))
 }
