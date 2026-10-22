@@ -6763,6 +6763,25 @@ func (q *Queries) SoftDeleteExternalCredentialFixture(ctx context.Context, arg S
 	return err
 }
 
+const softDeleteHTTPToolDefinitionFixture = `-- name: SoftDeleteHTTPToolDefinitionFixture :exec
+UPDATE http_tool_definitions
+SET deleted_at = clock_timestamp()
+WHERE project_id = $1
+  AND deployment_id = $2
+  AND tool_urn = $3
+`
+
+type SoftDeleteHTTPToolDefinitionFixtureParams struct {
+	ProjectID    uuid.UUID
+	DeploymentID uuid.UUID
+	ToolUrn      urn.Tool
+}
+
+func (q *Queries) SoftDeleteHTTPToolDefinitionFixture(ctx context.Context, arg SoftDeleteHTTPToolDefinitionFixtureParams) error {
+	_, err := q.db.Exec(ctx, softDeleteHTTPToolDefinitionFixture, arg.ProjectID, arg.DeploymentID, arg.ToolUrn)
+	return err
+}
+
 const softDeleteNetworkIngressFixture = `-- name: SoftDeleteNetworkIngressFixture :exec
 UPDATE network_ingresses
 SET deleted_at = clock_timestamp()

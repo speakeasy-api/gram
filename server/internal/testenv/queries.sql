@@ -2192,3 +2192,10 @@ RETURNING *;
 -- The database's clock, for tests that compare against timestamps the
 -- database wrote.
 SELECT clock_timestamp()::timestamptz AS now;
+
+-- name: SoftDeleteHTTPToolDefinitionFixture :exec
+UPDATE http_tool_definitions
+SET deleted_at = clock_timestamp()
+WHERE project_id = @project_id
+  AND deployment_id = @deployment_id
+  AND tool_urn = @tool_urn;
