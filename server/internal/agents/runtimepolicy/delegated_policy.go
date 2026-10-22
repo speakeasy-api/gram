@@ -21,9 +21,20 @@ const (
 	DelegatedPolicyVersion2 DelegatedPolicyVersion = 2
 	DelegatedPolicyVersion3 DelegatedPolicyVersion = 3
 	DelegatedPolicyVersion4 DelegatedPolicyVersion = 4
+	DelegatedPolicyVersion5 DelegatedPolicyVersion = 5
 
-	CurrentDelegatedPolicyVersion = DelegatedPolicyVersion4
+	CurrentDelegatedPolicyVersion = DelegatedPolicyVersion5
+
+	// IssuedDelegatedPolicyVersion is the newest version any credential is
+	// issued at. It trails CurrentDelegatedPolicyVersion until every replica
+	// decodes the newer version, so a mixed deploy or rollback strands nothing.
+	IssuedDelegatedPolicyVersion = DelegatedPolicyVersion4
 )
+
+// IsIssuableScope reports whether a credential issued today can carry scope.
+func IsIssuableScope(scope authz.Scope) bool {
+	return IsRuntimeScopeSafe(RuntimeScopeRegistryVersion(IssuedDelegatedPolicyVersion), scope)
+}
 
 // ErrInvalidDelegatedPolicy marks a policy that must fail closed.
 var ErrInvalidDelegatedPolicy = errors.New("invalid delegated policy")

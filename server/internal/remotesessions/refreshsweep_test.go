@@ -66,6 +66,7 @@ func seedGramSession(
 		RefreshTokenHash:    conv.ToPGText("hash-" + slug),
 		RefreshExpiresAt:    conv.ToPGTimestamptz(time.Now().Add(refreshExpiresIn)),
 		ExpiresAt:           conv.ToPGTimestamptz(time.Now().Add(time.Hour)),
+		SignInID:            uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 	})
 	require.NoError(t, err)
 }

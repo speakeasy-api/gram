@@ -8,6 +8,7 @@ export const POLICY_CENTER_TABS = [
   "policies",
   "detection-rules",
   "shadow-ai-targets",
+  "mcp-approvals",
   "exclusions",
   "quarantines",
 ] as const;
@@ -18,31 +19,25 @@ const TAB_LABEL: Record<PolicyCenterTab, string> = {
   policies: "Policies",
   "detection-rules": "Detection Rules",
   "shadow-ai-targets": "Shadow AI targets",
+  "mcp-approvals": "MCP approvals",
   exclusions: "Exclusion Rules",
   quarantines: "Quarantines",
 };
 
-/** Which tabs the strip shows. The Shadow AI targets tab arrives with the
- *  Shadow AI fold-in flag; without it the page keeps its four tabs. */
-function visibleTabs(shadowAIEnabled: boolean): PolicyCenterTab[] {
-  return POLICY_CENTER_TABS.filter(
-    (tab) => shadowAIEnabled || tab !== "shadow-ai-targets",
-  );
+export function policyCenterTabLabel(tab: PolicyCenterTab): string {
+  return TAB_LABEL[tab];
 }
 
-export function policyCenterTabs(shadowAIEnabled: boolean): PageTab[] {
-  return visibleTabs(shadowAIEnabled).map((tab) => ({
+/** The query string that selects a tab, for links that land on one from
+ *  elsewhere: append it to the Guardrails href. */
+export function policyCenterTabSearch(tab: PolicyCenterTab): string {
+  return `?tab=${tab}`;
+}
+
+export function policyCenterTabs(): PageTab[] {
+  return POLICY_CENTER_TABS.map((tab) => ({
     value: tab,
     label: TAB_LABEL[tab],
-    href: `?tab=${tab}`,
+    href: policyCenterTabSearch(tab),
   }));
-}
-
-/** A `?tab=` value the strip does not show falls back to Policies, so a
- *  Shadow AI targets link opened with the flag off still lands somewhere. */
-export function visiblePolicyCenterTab(
-  tab: PolicyCenterTab,
-  shadowAIEnabled: boolean,
-): PolicyCenterTab {
-  return visibleTabs(shadowAIEnabled).includes(tab) ? tab : "policies";
 }

@@ -30,6 +30,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
+// NoServerMessage is returned when a write names a toolset that has no canonical MCP server.
+const NoServerMessage = "toolset has no hosted MCP server"
+
 // ErrAddressInUse marks a Sync conflict caused by another server holding the hosted address.
 var ErrAddressInUse = errors.New("hosted MCP address is already in use")
 
@@ -89,6 +92,16 @@ func LockDomains(ctx context.Context, tx pgx.Tx, organizationID string, ids ...u
 
 // Sync mirrors a locked toolset onto its canonical wrapper; returned domains need a post-commit reconcile.
 func Sync(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, actor Actor, toolset toolsetsrepo.Toolset, requested *networkaccess.Mode) ([]uuid.UUID, error) {
+	return syncHosted(ctx, tx, auditLogger, actor, toolset, requested, true)
+}
+
+// SyncDeferringIssuerResync is Sync without the project-wide remote-session issuer resync; the caller must
+// run remotesessions.ResyncMCPServerRemoteSessionIssuers for the old and new issuers before commit.
+func SyncDeferringIssuerResync(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, actor Actor, toolset toolsetsrepo.Toolset) ([]uuid.UUID, error) {
+	return syncHosted(ctx, tx, auditLogger, actor, toolset, nil, false)
+}
+
+func syncHosted(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, actor Actor, toolset toolsetsrepo.Toolset, requested *networkaccess.Mode, resync bool) ([]uuid.UUID, error) {
 	principal, ok := actor.principal(ctx)
 	if auditLogger == nil || !ok {
 		return nil, oops.E(oops.CodeUnauthorized, nil, "missing hosted MCP actor")
@@ -190,7 +203,7 @@ func Sync(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, actor Actor
 		}); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "audit hosted MCP creation")
 		}
-		if err := resyncIssuers(ctx, tx, toolset, toolset.UserSessionIssuerID); err != nil {
+		if err := resyncIssuersIf(ctx, tx, resync, toolset, toolset.UserSessionIssuerID); err != nil {
 			return nil, err
 		}
 	case canonical.Name.String != toolset.Name || canonical.Slug != toolset.McpSlug || canonical.Visibility != wantVisibility ||
@@ -216,7 +229,7 @@ func Sync(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, actor Actor
 			return nil, oops.E(oops.CodeUnexpected, err, "audit hosted MCP update")
 		}
 		if previous.UserSessionIssuerID != toolset.UserSessionIssuerID {
-			if err := resyncIssuers(ctx, tx, toolset, previous.UserSessionIssuerID, toolset.UserSessionIssuerID); err != nil {
+			if err := resyncIssuersIf(ctx, tx, resync, toolset, previous.UserSessionIssuerID, toolset.UserSessionIssuerID); err != nil {
 				return nil, err
 			}
 		}
@@ -262,6 +275,40 @@ func Sync(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, actor Actor
 		return nil, err
 	}
 	return tombstone.RootDomainIDs(append(clearedRoots, moved...)), nil
+}
+
+// NonIssuerDrift lists what Sync (no requested mode) would write besides the issuer; empty means an issuer-only sync.
+// endpoints are the wrapper's live endpoints and dead the custom domains LockDomains reported deleted.
+func NonIssuerDrift(toolset toolsetsrepo.Toolset, server mcpserversrepo.McpServer, endpoints []mcpendpointsrepo.McpEndpoint, dead map[uuid.UUID]bool) []string {
+	var drift []string
+	if !server.Name.Valid || server.Name.String != toolset.Name {
+		drift = append(drift, "name")
+	}
+	if server.Slug != toolset.McpSlug {
+		drift = append(drift, "slug")
+	}
+	wantVisibility := Visibility(toolset)
+	if server.Visibility != wantVisibility {
+		drift = append(drift, "visibility")
+	}
+	if server.ToolVariationsGroupID != toolset.ToolVariationsGroupID {
+		drift = append(drift, "tool_variations_group")
+	}
+	if _, err := networkaccess.Effective(server.NetworkAccessMode); err != nil {
+		drift = append(drift, "network_access_mode")
+	}
+	if wantVisibility == visibility.Disabled && slices.ContainsFunc(endpoints, isRoot) {
+		drift = append(drift, "domain_root")
+	}
+	hasSlug := toolset.McpSlug.Valid && toolset.McpSlug.String != ""
+	addressed := hasSlug && (!toolset.CustomDomainID.Valid || !dead[toolset.CustomDomainID.UUID])
+	switch {
+	case !hasSlug && len(endpoints) > 0:
+		drift = append(drift, "endpoint")
+	case addressed && (len(endpoints) != 1 || endpoints[0].Slug != toolset.McpSlug.String || endpoints[0].CustomDomainID != toolset.CustomDomainID):
+		drift = append(drift, "endpoint")
+	}
+	return drift
 }
 
 // createServerError classifies a racing slug claim without swallowing the failed write.
@@ -414,12 +461,17 @@ func Delete(ctx context.Context, tx pgx.Tx, tracerProvider trace.TracerProvider,
 	if err != nil {
 		return DeleteResult{}, oops.E(oops.CodeUnexpected, err, "lock hosted MCP server for deletion")
 	}
+	// A server that kept the toolset's id but moved to a remote MCP backend no
+	// longer belongs to the toolset, so the toolset has nothing to tombstone.
+	if !locked.Server.ToolsetID.Valid && locked.Server.RemoteMcpServerID.Valid {
+		return DeleteResult{}, nil
+	}
 	if !locked.Server.ToolsetID.Valid || locked.Server.ToolsetID.UUID != toolset.ID {
 		return DeleteResult{}, oops.E(oops.CodeConflict, nil, "hosted MCP identity belongs to another server")
 	}
 	tombstoned, err := tombstone.Tombstone(ctx, tx, auditLogger, locked, tombstone.Input{
 		OrganizationID: toolset.OrganizationID, ProjectID: toolset.ProjectID, ActorUserID: actor.UserID, ActorEmail: actor.Email,
-		TracerProvider: tracerProvider,
+		ActorSystem: "", TracerProvider: tracerProvider,
 	})
 	if err != nil {
 		return DeleteResult{}, oops.E(oops.CodeUnexpected, err, "delete hosted MCP server")
@@ -451,6 +503,13 @@ func displayName(server mcpserversrepo.McpServer) string {
 
 func isRoot(endpoint mcpendpointsrepo.McpEndpoint) bool {
 	return endpoint.IsDomainRoot.Valid && endpoint.IsDomainRoot.Bool
+}
+
+func resyncIssuersIf(ctx context.Context, tx pgx.Tx, enabled bool, toolset toolsetsrepo.Toolset, issuers ...uuid.NullUUID) error {
+	if !enabled {
+		return nil
+	}
+	return resyncIssuers(ctx, tx, toolset, issuers...)
 }
 
 // resyncIssuers recomputes the derived remote_session_issuer_id for each issuer touched.

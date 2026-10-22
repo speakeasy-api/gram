@@ -50,8 +50,7 @@ func (s *Service) GetServerScopes(ctx context.Context, payload *gen.GetServerSco
 	if err != nil {
 		return nil, err
 	}
-	discover := remotesessions.ResourceScopeDiscoveryEnabled(ctx, logger, s.features, authCtx.ActiveOrganizationID, authCtx.OrganizationSlug)
-	cached, _, err := remotesessions.CachedResourceScopes(ctx, s.db, *authCtx.ProjectID, target.resourceURL, discover)
+	cached, _, err := remotesessions.CachedResourceScopes(ctx, s.db, *authCtx.ProjectID, target.resourceURL, true)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "get protected resource").LogError(ctx, logger)
 	}
@@ -76,13 +75,6 @@ func (s *Service) SetServerScopePin(ctx context.Context, payload *gen.SetServerS
 	if err != nil {
 		return nil, err
 	}
-	// After every authorization, so the refusal reveals the flag only to a caller allowed to write.
-	// Logins ignore the pin without discovery, so it may only be cleared.
-	discover := remotesessions.ResourceScopeDiscoveryEnabled(ctx, logger, s.features, authCtx.ActiveOrganizationID, authCtx.OrganizationSlug)
-	if len(scopes) > 0 && !discover {
-		return nil, oops.E(oops.CodeBadRequest, nil, "pinned scopes are not enabled for this organization; a pin can only be cleared")
-	}
-
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
@@ -100,7 +92,7 @@ func (s *Service) SetServerScopePin(ctx context.Context, payload *gen.SetServerS
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
 
-	return s.serverScopes(ctx, logger, authCtx, target, sharedServerCount(sharing, target), true, remotesessions.ResourceScopesFromRow(row, discover))
+	return s.serverScopes(ctx, logger, authCtx, target, sharedServerCount(sharing, target), true, remotesessions.ResourceScopesFromRow(row, true))
 }
 
 type scopePinWrite struct {
@@ -313,6 +305,7 @@ func (s *Service) clientScopes(ctx context.Context, projectID uuid.UUID, orgID s
 		UserSessionIssuerID: issuerID,
 		ProjectID:           conv.ToNullUUID(projectID),
 		OrganizationID:      conv.ToPGText(orgID),
+		OrganizationWide:    false,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("list remote session clients: %w", err)
@@ -330,17 +323,7 @@ func (s *Service) clientScopes(ctx context.Context, projectID uuid.UUID, orgID s
 	}
 	out := make([]*gen.RemoteMcpServerClientScopes, 0, len(rows))
 	for _, r := range rows {
-		resource := remotesessions.ResourceScopes{Pin: nil, ChallengeScopes: nil, ScopesSupported: nil, Live: false, UseDiscovered: discover}
-		if owners[r.ClientID] {
-			resource = cached
-		}
-		resolved := (remotesessions.Client{ //nolint:exhaustruct // Only scope inputs are used by RequestedScopes.
-			ID:                      r.ClientID,
-			ClientScope:             r.ClientScope,
-			IssuerScopesSupported:   r.ScopesSupported,
-			IssuerScopeOverride:     r.ScopeOverride,
-			IssuerOmitScopeFallback: r.OmitScopeFallback.Valid && r.OmitScopeFallback.Bool,
-		}).RequestedScopes(resource)
+		resolved := remotesessions.ClientConnectionScopes(remotesessions.ConnectionScopeInputFromClientRow(r), cached, owners[r.ClientID])
 		out = append(out, &gen.RemoteMcpServerClientScopes{
 			ClientID:                 r.ClientID.String(),
 			IssuerName:               conv.PtrEmpty(strings.TrimSpace(r.IssuerName.String)),

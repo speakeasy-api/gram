@@ -106,7 +106,7 @@ func (f dashboardToolFixture) insertWidget(t *testing.T, name, visualization str
 	t.Helper()
 	row, err := widgetsrepo.New(f.db).CreateWidget(t.Context(), widgetsrepo.CreateWidgetParams{
 		ProjectID: f.project.ID, OrganizationID: f.principal.OrganizationID, CreatedByUserID: pgtype.Text{String: f.principal.UserID, Valid: true},
-		Name: name, Description: pgtype.Text{String: "", Valid: false}, Dataset: "sessions",
+		Name: name, Description: pgtype.Text{String: "", Valid: false}, Dataset: "tool_calls",
 		Query: []byte(`{"window":"7d","grain":"day","dimensions":["user"],"measures":[{"op":"count","alias":"count"}],"limit":1000}`), Visualization: []byte(visualization),
 	})
 	require.NoError(t, err)
@@ -142,14 +142,14 @@ func TestDashboardToolsCreateLayOutAndRead(t *testing.T) {
 	require.Equal(t, created.Current.Version, view.Version)
 	require.Empty(t, view.Cards)
 
-	widget := f.insertWidget(t, "Sessions by user", `{"type":"bar","options":{}}`)
+	widget := f.insertWidget(t, "Tool calls by user", `{"type":"bar","options":{}}`)
 	preview := f.write(t, ctx, editDashboardLayoutToolName, map[string]any{
 		"dashboard_id": dashboardID,
 		"operations":   []any{map[string]any{"op": "add_card", "widget_id": widget.ID.String()}},
 		"confirmed":    false,
 	})
 	require.Len(t, preview.Proposed.Cards, 1)
-	require.Equal(t, "Sessions by user", preview.Proposed.Cards[0].WidgetName, "the preview names the widget a new card shows")
+	require.Equal(t, "Tool calls by user", preview.Proposed.Cards[0].WidgetName, "the preview names the widget a new card shows")
 	require.Equal(t, widget.ID.String(), preview.Proposed.Cards[0].WidgetID)
 	require.Empty(t, preview.Proposed.Cards[0].PlacementID, "a card the preview places has no id until it is confirmed")
 	require.Empty(t, preview.Current.Cards)
@@ -159,7 +159,7 @@ func TestDashboardToolsCreateLayOutAndRead(t *testing.T) {
 	}, "layout-1")
 	require.Len(t, added.Current.Cards, 1)
 	card := added.Current.Cards[0]
-	require.Equal(t, dashboardCard{PlacementID: card.PlacementID, WidgetID: widget.ID.String(), WidgetName: "Sessions by user", Dataset: "sessions", ChartType: "bar", X: 0, Y: 0, W: 6, H: 3}, card)
+	require.Equal(t, dashboardCard{PlacementID: card.PlacementID, WidgetID: widget.ID.String(), WidgetName: "Tool calls by user", Dataset: "tool_calls", ChartType: "bar", X: 0, Y: 0, W: 6, H: 3}, card)
 
 	movePreview := f.write(t, ctx, editDashboardLayoutToolName, map[string]any{
 		"dashboard_id": dashboardID,
@@ -171,7 +171,7 @@ func TestDashboardToolsCreateLayOutAndRead(t *testing.T) {
 		"dashboard_id": dashboardID,
 		"operations":   []any{map[string]any{"op": "move_card", "placement_id": card.PlacementID, "x": 4, "y": 2, "w": 8, "h": 4}},
 	}, "layout-2")
-	require.Equal(t, dashboardCard{PlacementID: card.PlacementID, WidgetID: widget.ID.String(), WidgetName: "Sessions by user", Dataset: "sessions", ChartType: "bar", X: 4, Y: 2, W: 8, H: 4}, moved.Current.Cards[0])
+	require.Equal(t, dashboardCard{PlacementID: card.PlacementID, WidgetID: widget.ID.String(), WidgetName: "Tool calls by user", Dataset: "tool_calls", ChartType: "bar", X: 4, Y: 2, W: 8, H: 4}, moved.Current.Cards[0])
 
 	listed, err := f.call(t, ctx, listDashboardsToolName, map[string]any{})
 	require.NoError(t, err)
@@ -394,7 +394,7 @@ func TestDashboardToolsRefuseBuiltInsAndBrokenLayouts(t *testing.T) {
 	t.Parallel()
 	ctx, f := newDashboardToolFixture(t)
 	created := f.previewAndConfirm(t, ctx, saveDashboardToolName, map[string]any{"name": "Usage"}, "create-1")
-	widget := f.insertWidget(t, "Sessions by user", `{"type":"bar","options":{}}`)
+	widget := f.insertWidget(t, "Tool calls by user", `{"type":"bar","options":{}}`)
 	added := f.previewAndConfirm(t, ctx, editDashboardLayoutToolName, map[string]any{
 		"dashboard_id": created.DashboardID,
 		"operations":   []any{map[string]any{"op": "add_card", "widget_id": widget.ID.String()}},

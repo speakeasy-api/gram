@@ -18,10 +18,6 @@ export type ProductFeatures = {
    */
   authzChallengeLoggingEnabled: boolean;
   /**
-   * Whether MCP consent screens offer the tool filtering picker for the organization
-   */
-  consentToolFilteringEnabled: boolean;
-  /**
    * Whether the organization can supply its own model provider API keys (BYOK)
    */
   customModelKeysEnabled: boolean;
@@ -49,6 +45,10 @@ export type ProductFeatures = {
    * Whether the organization has the staff-managed private network ingress entitlement
    */
   networkIngressEnabled: boolean;
+  /**
+   * Whether an organization admin turned the organization gateway off, so its routes answer 404
+   */
+  organizationGatewayDisabled: boolean;
   /**
    * Whether the organization can use the Speakeasy Platform MCP capability
    */
@@ -103,7 +103,6 @@ export const ProductFeatures$inboundSchema: z.ZodMiniType<
   z.object({
     ai_platform_push_integrations_enabled: z.boolean(),
     authz_challenge_logging_enabled: z.boolean(),
-    consent_tool_filtering_enabled: z.boolean(),
     custom_model_keys_enabled: z.boolean(),
     customer_managed_encryption_keys_enabled: z.boolean(),
     device_agent: z.boolean(),
@@ -111,6 +110,7 @@ export const ProductFeatures$inboundSchema: z.ZodMiniType<
     hooks_fail_open_enabled: z.boolean(),
     logs_enabled: z.boolean(),
     network_ingress_enabled: z.boolean(),
+    organization_gateway_disabled: z.boolean(),
     platform_mcp_enabled: z.boolean(),
     remote_session_auto_refresh_enabled: z.boolean(),
     remote_session_auto_refresh_enforced_enabled: z.boolean(),
@@ -128,7 +128,6 @@ export const ProductFeatures$inboundSchema: z.ZodMiniType<
       "ai_platform_push_integrations_enabled":
         "aiPlatformPushIntegrationsEnabled",
       "authz_challenge_logging_enabled": "authzChallengeLoggingEnabled",
-      "consent_tool_filtering_enabled": "consentToolFilteringEnabled",
       "custom_model_keys_enabled": "customModelKeysEnabled",
       "customer_managed_encryption_keys_enabled":
         "customerManagedEncryptionKeysEnabled",
@@ -137,6 +136,7 @@ export const ProductFeatures$inboundSchema: z.ZodMiniType<
       "hooks_fail_open_enabled": "hooksFailOpenEnabled",
       "logs_enabled": "logsEnabled",
       "network_ingress_enabled": "networkIngressEnabled",
+      "organization_gateway_disabled": "organizationGatewayDisabled",
       "platform_mcp_enabled": "platformMcpEnabled",
       "remote_session_auto_refresh_enabled": "remoteSessionAutoRefreshEnabled",
       "remote_session_auto_refresh_enforced_enabled":

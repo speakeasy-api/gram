@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -56,6 +57,192 @@ var explainedAccessLevels = []struct {
 	{level: audienceLevelUse, scope: authz.ScopeMCPConnect},
 	{level: audienceLevelView, scope: authz.ScopeMCPRead},
 	{level: audienceLevelManage, scope: authz.ScopeMCPWrite},
+}
+
+// EffectiveMCPAccess is the compact form of the same use, view, and manage
+// decisions returned by ExplainResourceAccess. It omits the rule narrative so
+// callers can summarize many servers without exposing principals or selectors.
+type EffectiveMCPAccess struct {
+	CanConnect bool
+	ToolAccess string
+	CanView    bool
+	CanManage  bool
+}
+
+// EvaluateEffectiveMCPAccess evaluates one member's grants with the same checks
+// and tool-narrowing rules as the dashboard access explanation.
+func EvaluateEffectiveMCPAccess(grants []authz.Grant, resourceID, projectID string) (EffectiveMCPAccess, error) {
+	var result EffectiveMCPAccess
+	for _, level := range explainedAccessLevels {
+		check := authz.MCPCheck(level.scope, resourceID, projectID)
+		explanation, err := authz.ExplainGrantCheck(grants, check)
+		if err != nil {
+			return EffectiveMCPAccess{}, fmt.Errorf("evaluate %s access: %w", level.level, err)
+		}
+		switch level.level {
+		case audienceLevelUse:
+			result.CanConnect = explanation.Allowed
+			result.ToolAccess, err = effectiveToolAccess(grants, check, explanation)
+			if err != nil {
+				return EffectiveMCPAccess{}, err
+			}
+		case audienceLevelView:
+			result.CanView = explanation.Allowed
+		case audienceLevelManage:
+			result.CanManage = explanation.Allowed
+		}
+	}
+	return result, nil
+}
+
+// MCPAccessRuleSummary explains a grant without exposing member identifiers or
+// directory attribute values.
+type MCPAccessRuleSummary struct {
+	// AccessLevel is the use, view, or manage decision this rule affects.
+	AccessLevel string `json:"access_level"`
+
+	// SourceKind distinguishes direct, everyone, role, and unknown grants.
+	SourceKind string `json:"source_kind"`
+
+	// SourceName names a role or describes a non-identifying grant source.
+	SourceName string `json:"source_name"`
+
+	// Effect describes whether the rule allows, blocks, limits, or is overridden.
+	Effect string `json:"effect"`
+
+	// AppliesTo distinguishes server, project, and organization-wide rules.
+	AppliesTo string `json:"applies_to"`
+
+	// Tools names any tool restriction on the rule.
+	Tools []string `json:"tools,omitempty"`
+
+	// Dispositions names any annotation restriction on the rule.
+	Dispositions []string `json:"dispositions,omitempty"`
+
+	// Reason explains a direct grant that does not override an exclusion.
+	Reason *string `json:"reason,omitempty"`
+}
+
+// SummarizeMCPAccessRules uses the dashboard explanation to report grant and
+// block sources while withholding principal identifiers and directory data.
+func SummarizeMCPAccessRules(grants []authz.Grant, resourceID, projectID string, roleNames map[string]string) (EffectiveMCPAccess, []MCPAccessRuleSummary, error) {
+	// Filter once before tool probes: unrelated servers cannot contribute to
+	// either a resource decision or any tool decision on this server.
+	check := authz.MCPCheck(authz.ScopeMCPConnect, resourceID, projectID)
+	relevant := make([]authz.Grant, 0, len(grants))
+	for _, grant := range grants {
+		if selectorReachesMCP(grant.Selector, check) {
+			relevant = append(relevant, grant)
+		}
+	}
+	grants = relevant
+	var effective EffectiveMCPAccess
+	names := make(map[string]audienceName)
+	for _, grant := range grants {
+		kind, name := "unknown", "Unknown source"
+		switch {
+		case grant.PrincipalUrn == string(urn.PrincipalTypeUser)+":"+urn.AllUsersPrincipalID:
+			kind, name = "everyone", "Everyone"
+		case authz.IsDirectGrant(grant):
+			kind, name = "user", "Direct grant"
+		case strings.HasPrefix(grant.PrincipalUrn, string(urn.PrincipalTypeRole)+":"):
+			kind, name = "role", "Deleted role"
+			if roleName, ok := roleNames[grant.PrincipalUrn]; ok {
+				name = roleName
+			}
+		}
+		names[grant.PrincipalUrn] = audienceName{kind: kind, displayName: name, description: nil, memberCount: nil}
+	}
+	describe := explainedRuleDescriber{resourceID: resourceID, projectID: projectID, names: names, sources: nil}
+	rules := make([]MCPAccessRuleSummary, 0)
+	for _, level := range explainedAccessLevels {
+		explained, err := explainAccessLevel(grants, level.level, authz.MCPCheck(level.scope, resourceID, projectID), describe)
+		if err != nil {
+			return EffectiveMCPAccess{}, nil, err
+		}
+		switch level.level {
+		case audienceLevelUse:
+			effective.CanConnect = explained.Allowed
+			effective.ToolAccess = *explained.ToolAccess
+		case audienceLevelView:
+			effective.CanView = explained.Allowed
+		case audienceLevelManage:
+			effective.CanManage = explained.Allowed
+		}
+		for _, rule := range explained.Rules {
+			rules = append(rules, MCPAccessRuleSummary{
+				AccessLevel: level.level, SourceKind: rule.Kind, SourceName: rule.DisplayName,
+				Effect: rule.Effect, AppliesTo: rule.AppliesTo, Tools: rule.Tools,
+				Dispositions: rule.Dispositions, Reason: rule.Reason,
+			})
+		}
+	}
+	return effective, rules, nil
+}
+
+// effectiveToolAccess computes only the compact all/some/none decision. Unlike
+// explainAccessLevel it does not build, deduplicate, or sort rule narratives.
+// A narrowed effective allow is necessarily partial. With a broad allow, only
+// narrowed connection exclusions need probes; unrelated narrowed grants cannot
+// take tools away.
+func effectiveToolAccess(grants []authz.Grant, check authz.Check, explanation authz.GrantCheckExplanation) (string, error) {
+	if !explanation.Allowed {
+		return explainedToolAccessNone, nil
+	}
+	narrowed := true
+	for _, contribution := range explanation.Contributions {
+		if contribution.Effect != authz.GrantEffectAllows && contribution.Effect != authz.GrantEffectOverrides {
+			continue
+		}
+		narrowed = narrowed && isNarrowedGrant(contribution.Grant)
+	}
+	if narrowed {
+		return explainedToolAccessSome, nil
+	}
+
+	seen := make(map[string]struct{})
+	otherTool := unusedProbeTool(grants)
+	for _, grant := range grants {
+		if grant.Scope != authz.ScopeMCPBlockedConnect || !isNarrowedGrant(grant) || !selectorReachesMCP(grant.Selector, check) {
+			continue
+		}
+		tool := grant.Selector[authz.SelectorKeyTool]
+		if tool == "" || tool == authz.WildcardResource {
+			tool = otherTool
+		}
+		disposition := grant.Selector[authz.SelectorKeyDisposition]
+		if disposition == authz.WildcardResource {
+			disposition = ""
+		}
+		key := tool + "\x00" + disposition
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		allowed, err := authz.GrantsAuthorize(grants, authz.MCPToolCallCheck(check.ResourceID, authz.MCPToolCallDimensions{
+			Tool: tool, Disposition: disposition, ProjectID: check.Dimensions[authz.SelectorKeyProjectID],
+		}))
+		if err != nil {
+			return "", fmt.Errorf("evaluate tool access: %w", err)
+		}
+		if !allowed {
+			return explainedToolAccessSome, nil
+		}
+	}
+	return explainedToolAccessAll, nil
+}
+
+func selectorReachesMCP(selector authz.Selector, check authz.Check) bool {
+	for key, want := range map[string]string{
+		authz.SelectorKeyResourceKind: authz.ResourceKindForScope(check.Scope),
+		authz.SelectorKeyResourceID:   check.ResourceID,
+		authz.SelectorKeyProjectID:    check.Dimensions[authz.SelectorKeyProjectID],
+	} {
+		if value := selector[key]; value != "" && value != authz.WildcardResource && value != want {
+			return false
+		}
+	}
+	return true
 }
 
 // Deciding rules first: what proves or takes away the access, then what only
@@ -286,19 +473,7 @@ func explainAccessLevel(grants []authz.Grant, level string, check authz.Check, d
 // narrowing among grants. A rule naming only an annotation is probed with a
 // tool name no rule names, standing for any other tool carrying it.
 func toolProbes(grants []authz.Grant, check authz.Check) []authz.Check {
-	named := make(map[string]struct{})
-	for _, grant := range grants {
-		if tool := grant.Selector[authz.SelectorKeyTool]; tool != "" {
-			named[tool] = struct{}{}
-		}
-	}
-	otherTool := explainedProbeTool
-	for {
-		if _, ok := named[otherTool]; !ok {
-			break
-		}
-		otherTool += "'"
-	}
+	otherTool := unusedProbeTool(grants)
 
 	type probeKey struct {
 		tool        string
@@ -339,6 +514,22 @@ func toolProbes(grants []authz.Grant, check authz.Check) []authz.Check {
 		}
 	}
 	return probes
+}
+
+func unusedProbeTool(grants []authz.Grant) string {
+	named := make(map[string]struct{})
+	for _, grant := range grants {
+		if tool := grant.Selector[authz.SelectorKeyTool]; tool != "" {
+			named[tool] = struct{}{}
+		}
+	}
+	tool := explainedProbeTool
+	for {
+		if _, ok := named[tool]; !ok {
+			return tool
+		}
+		tool += "'"
+	}
 }
 
 // isNarrowedGrant reports whether grant covers only some of a resource's tools.

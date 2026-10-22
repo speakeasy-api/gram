@@ -13,8 +13,6 @@ import { useRBAC } from "@/hooks/useRBAC";
 import { identityRefForUserKey } from "@/lib/identity-urn";
 import { cn } from "@/lib/utils";
 import { ChatDetailSheet } from "@/pages/chatLogs/ChatDetailPanel";
-import { useFeatureFlag } from "@/hooks/useFeatureFlag";
-import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { useRoutes } from "@/routes";
 import type { RiskResult } from "@gram/client/models/components/riskresult.js";
 import { useRiskListResults } from "@gram/client/react-query/riskListResults.js";
@@ -331,16 +329,6 @@ function FindingDetail({
   const routes = useRoutes();
   const { hasScope } = useRBAC();
   const kind = findingKind(result);
-  // Folded in, the Shadow MCP inventory is the Shadow AI policy's server
-  // list under Guardrails rather than a page of its own.
-  const shadowAIFolded =
-    useFeatureFlag(FEATURE_FLAGS.shadowAiGuardrails).status === "enabled";
-  const inventoryHref = shadowAIFolded
-    ? routes.policyCenter.href()
-    : routes.shadowAI.mcps.href();
-  const inventoryLabel = shadowAIFolded
-    ? "Open Shadow AI in Guardrails"
-    : "Open Shadow MCP inventory";
   // Payload reveals need unrestricted chat:read; chat reveals follow the chat.
   const canReveal = hasScope(
     REVEAL_SCOPE,
@@ -519,8 +507,10 @@ function FindingDetail({
           )}
           {kind === "shadow" && (
             <Button asChild variant="secondary">
-              <Link to={inventoryHref}>
-                {inventoryLabel}
+              {/* The Shadow MCP inventory is the Shadow AI policy's server
+                  list under Guardrails rather than a page of its own. */}
+              <Link to={routes.policyCenter.href()}>
+                Open Shadow AI in Guardrails
                 <ArrowRight className="size-4" />
               </Link>
             </Button>

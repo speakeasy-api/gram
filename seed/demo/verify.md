@@ -131,6 +131,30 @@ remains hidden and the PAGES.md row stays `[~]`, not UI-verified.
     starts with the fictional `https://auth.example.com` issuer; live discovery
     does not need to succeed for this seeded-page check.
 
+12a. **Organization Gateway** — after seeding, open **MCP**
+(`/<org>/projects/default/mcp`). The **Organization Gateway** card leads the
+unfiltered grid and table with an **Off** badge for organization admins.
+`organizations.getGateway` reports `available: false`. Open the card and confirm
+**View assignments** opens the role and member access view for organization
+admins before enabling. Use the gateway switch to start the assignment review. Acknowledge the completed
+review and select **Enable Organization Gateway**. The same page then shows
+the endpoint `<server>/mcp/gateway/<org>` with a copy button and client install
+instructions. Derive `<org>` from the active organization slug at the start of
+the dashboard URL (`/<org>/projects/default/mcp`), for both the shared demo
+and local seed. Confirm `organizations.getGateway` returns the matching endpoint.
+The page header uses the brand-mesh background with grain texture. Its endpoint has a
+white box and copy button with the enabled/disabled switch alongside it,
+above separate **Install** and **View assignments** tabs. Organization admins
+can inspect and edit assignments without turning the gateway off. The gateway response reports `available: true` with that URL.
+The old organization settings gateway URL redirects to this page.
+
+In **MCP Assignments**, confirm one row per role with stacked server icons under
+**Connect**. Expand **Support Desk** to inspect unrestricted and
+read-only access; expand **Contractors** to see its blocked server after allowed
+servers, with red styling and a blocked icon badge. The MCP filter opens a
+searchable list directly. Click a role’s member avatars and select a person to
+open their effective assignments; the dropdown always offers compact member search and **Edit role**. Default-project labels and per-row totals stay hidden.
+
 13. **Killswitches on the identity Access tab (local rewritten seed only)** —
     Killswitch management intentionally rejects demo/support sessions. Verify this
     contract in the local organization after `mise run seed`, not through the
@@ -476,8 +500,8 @@ remains hidden and the PAGES.md row stays `[~]`, not UI-verified.
     in destructive red under the field and **Allow machine** stays disabled.
 
 26. **Explore widgets** — open `/<org>/projects/default/explore` and click
-    the **Widgets** tab, which shows a count of 5. Five widgets, most
-    recently updated first, starting with Amara Okafor's "Sessions by
+    the **Widgets** tab, which shows a count of 6. Six widgets, most
+    recently updated first, starting with Amara Okafor's "Tool calls by
     surface" with its description beneath; Hana Sato's widget of the same
     name sits further down with her name beside it. Each row shows its
     dataset and chart type, and none carries the broken-widget warning.
@@ -532,15 +556,50 @@ remains hidden and the PAGES.md row stays `[~]`, not UI-verified.
       is an invalid ciphertext, so any request would fail with the
       administrator misconfiguration error.
 
+30. **Enterprise Managed Authorization**
+    - Open **Team → IDP and SSO → Identity providers**. The Services table
+      lists Acme Tracker (default order, "Each server's own identity
+      provider", Not accepted yet) and Acme Wiki (saved order: Acme
+      Identity, Not accepted yet), one server each.
+    - Open Acme Wiki's page. It shows Acme Identity's issuer URL
+      `https://login.acme-identity.example` to copy, and the saved order with
+      **Use default**.
+    - **MCP → Acme Tracker → Settings** has no Enterprise Managed
+      Authorization section: `acme-workforce` does not trust Acme Identity,
+      on purpose, so interactive sign-in through it (GitHub, the organization
+      gateway) keeps working.
+    - Both servers are seeded disabled. Connect through the organization
+      gateway: its consent page must not list Acme Tracker or Acme Wiki.
+
+31. **Gateway discovery modes**
+    - Open a gateway with tools.
+    - In Settings, save Direct, then open Inspect: its default connection lists qualified member tools.
+    - Select Progressive and reconnect: expect three discovery tools plus `execute_tool`. Reload Inspect and confirm the selected mode is retained.
+    - Select Direct in Inspect and apply/reconnect, then restore the gateway default to Progressive. Confirm the explicit Direct connection stays Direct while a connection using the gateway default follows Progressive.
+    - Connect a client to the organization gateway (`<server>/mcp/gateway/<org>`), choose Direct under Configuration on the consent page, and confirm tools/list shows `server--tool` names from every project you can reach. Reconnect: Direct is pre-selected. A connection that keeps the default lists the Progressive tools.
+
 ## On failure
 
-Fix the seed SQL (see rules in `PAGES.md`), then re-run the target that owns
+Fix the seed (see rules in `PAGES.md`), then re-run the target that owns
 the failed check: `mise run seed` for the local-only Killswitch, managed-agent,
 and exact remote-session attachment checks, or
 `mise run seed:demo` for shared demo-org checks. Re-check only the failed pages,
-and commit the SQL change once green.
+and commit the seed change once green.
 Screenshots of failures go to `.playwright-cli/` (ignored) — reference them in
 the PR, don't commit them.
+
+## Enterprise authorization
+
+Open Organization Identity > Identity providers. The Speakeasy card shows a
+not-configured or unavailable state in the fresh demo; no synthetic signing key
+is presented as working. The Single sign-on tab no longer shows the issuer. In a
+local organization with signing configured and a verified email domain, open
+Manage Speakeasy, enable the issuer and copy its URI. Without a verified domain,
+the page links to the Single sign-on tab. Disable the issuer and confirm the URI
+remains visible. Disabling must remain possible after removing the last verified
+domain; re-enabling requires one. Read-only and support sessions show
+the URI without mutation controls; check status messages in states that render one. At a 400px viewport, the URI wraps
+and the copy control remains visible.
 
 ## Slack workspaces
 
@@ -568,3 +627,7 @@ In shared Explore Demo, verify the mapping dialog shows its read-only notice and
 4. Do not run workloads using the illustrative issuer/JWKS URLs: these fixtures
    are display-only, not usable credentials. Leave the page marked `[~]` until
    the browser checks above are performed.
+
+## Tunnel observability
+
+Open MCP Servers → Private inventory → Overview. Verify request, connection and latency charts contain history, the latest missing intervals stay gaps, and the current agent count is zero. The marketplace callout appears above the tunnel status, which reads "No connected tunnel agents" with a View tunnel agent setup action. The sidebar Readiness card does not call the server ready: its Tunnel agent item says no tunnel agent is connected and links to tunnel agent setup. Check 1 hour / 24 hours / 7 days, the Requests by client list, and the data table under About these numbers. The synthetic source must not initiate any network connection.

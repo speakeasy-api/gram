@@ -17,6 +17,7 @@ import (
 
 	"github.com/go-jose/go-jose/v4/jwt"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
@@ -73,6 +74,28 @@ type workloadGrant struct {
 	issuers    *workloadIssuerAdmission
 	identities workloadIdentityLookup
 	verifier   *workload.Verifier
+	// deviceKeys resolves the key registered for a device subject, for issuers
+	// whose assertions verify per device. Nil refuses every such assertion.
+	deviceKeys workloadDeviceKeyLookup
+}
+
+// workloadDeviceKeyLookup returns the key registered for a device subject under
+// an issuer, or workloadidentity.ErrDeviceKeyNotFound.
+type workloadDeviceKeyLookup func(ctx context.Context, organizationID string, issuerID uuid.UUID, subject string) (workloadidentity.DeviceKey, error)
+
+// workloadDeviceKeyStoreLookup reads a device's registered key from the store.
+func workloadDeviceKeyStoreLookup(db workloadidentity_repo.DBTX) workloadDeviceKeyLookup {
+	return func(ctx context.Context, organizationID string, issuerID uuid.UUID, subject string) (workloadidentity.DeviceKey, error) {
+		key, err := workloadidentity.DeviceKeySet(ctx, db, workloadidentity.DeviceKeyParams{
+			OrganizationID:   organizationID,
+			WorkloadIssuerID: issuerID,
+			Subject:          subject,
+		})
+		if err != nil {
+			return workloadidentity.DeviceKey{}, fmt.Errorf("resolve workload device key: %w", err)
+		}
+		return key, nil
+	}
 }
 
 // newWorkloadGrant assembles the grant over the database and the shared Redis
@@ -109,6 +132,7 @@ func newWorkloadGrant(db *pgxpool.Pool, redisClient *redis.Client, policy *guard
 		issuers:    newWorkloadIssuerAdmission(workloadIssuerStoreLookup(db), newWorkloadIssuerLookupBudget(redisClient, meterProvider)),
 		identities: workloadIdentityStoreLookup(db),
 		verifier:   verifier,
+		deviceKeys: budgetedDeviceKeyLookup(workloadDeviceKeyStoreLookup(db), newWorkloadDeviceKeyLookupBudget(redisClient, meterProvider)),
 	}
 }
 
@@ -243,9 +267,13 @@ func admitWorkloadAssertion(
 	}
 	presented.issuerID = issuer.ID
 
-	source, err := workloadIssuerKeySource(tenancy, &issuer)
+	keyID := ""
+	if len(token.Headers) == 1 {
+		keyID = token.Headers[0].KeyID
+	}
+	source, err := grant.assertionKeySource(ctx, tenancy, &issuer, claims.Subject, keyID)
 	if err != nil {
-		return presented, refuseWorkloadGrant("issuer_jwks_uri_invalid", err)
+		return presented, err
 	}
 
 	if _, err := grant.verifier.Verify(ctx, raw, workload.Expectation{
@@ -283,6 +311,49 @@ func admitWorkloadAssertion(
 	}
 
 	return presented, nil
+}
+
+// assertionKeySource returns the keys an assertion must verify against: the one
+// key registered for a device subject, or the issuer's remote key set. The
+// unverified sub and kid only select the key; Verify checks the signed sub.
+func (grant *workloadGrant) assertionKeySource(ctx context.Context, tenancy workloadTenancy, issuer *workloadidentity_repo.WorkloadIssuer, subject, keyID string) (jwks.Source, error) {
+	// Any key_source other than none or device_keys fails closed rather than
+	// quietly falling back to the remote key set.
+	if issuer.KeySource.Valid && !workloadidentity.IsDeviceKeyIssuer(*issuer) {
+		return jwks.Source{}, refuseWorkloadGrant("issuer_key_source_unknown", fmt.Errorf("unknown issuer key source %q", issuer.KeySource.String))
+	}
+	if !workloadidentity.IsDeviceKeyIssuer(*issuer) {
+		source, err := workloadIssuerKeySource(tenancy, issuer)
+		if err != nil {
+			return jwks.Source{}, refuseWorkloadGrant("issuer_jwks_uri_invalid", err)
+		}
+		return source, nil
+	}
+
+	if grant.deviceKeys == nil {
+		return jwks.Source{}, refuseWorkloadGrant("device_key_not_registered", errors.New("no device key store is configured"))
+	}
+	key, err := grant.deviceKeys(ctx, tenancy.OrganizationID, issuer.ID, subject)
+	switch {
+	case errors.Is(err, workloadidentity.ErrDeviceKeyNotFound):
+		return jwks.Source{}, refuseWorkloadGrant("device_key_not_registered", err)
+	case errors.Is(err, errWorkloadDeviceKeyLookupRateLimited):
+		refusal := &workloadGrantError{reason: "device_key_lookup_rate_limited", outcome: workloadGrantRateLimited, retryAfter: 0, err: err}
+		if limited, ok := errors.AsType[*workloadDeviceKeyRateLimitedError](err); ok {
+			refusal.retryAfter = limited.retryAfter
+		}
+		return jwks.Source{}, refusal
+	case err != nil:
+		return jwks.Source{}, workloadGrantStageUnavailable("device_key_unavailable", err)
+	}
+	if keyID == "" || keyID != key.Thumbprint {
+		return jwks.Source{}, refuseWorkloadGrant("device_key_id_mismatch", errors.New("assertion kid does not name the device's registered key"))
+	}
+	source, err := jwks.NewInlineSource(key.KeySet)
+	if err != nil {
+		return jwks.Source{}, fmt.Errorf("build device key source: %w", err)
+	}
+	return source, nil
 }
 
 // workloadAssertionGrantAdvertised reports whether the endpoint's metadata
@@ -358,7 +429,7 @@ func (s *Service) handleWorkloadAssertionGrant(
 	if !ok {
 		return s.writeWorkloadGrantRefusal(ctx, w, logger, presented, refuseWorkloadGrant("endpoint_not_agent_addressable", errors.New("endpoint cannot carry an agent session policy")))
 	}
-	version := runtimepolicy.CurrentDelegatedPolicyVersion
+	version := runtimepolicy.IssuedDelegatedPolicyVersion
 	delegatedGrants, err := encodeAgentSessionPolicy(*target, version)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "encode workload session policy").LogError(ctx, logger)
@@ -379,6 +450,7 @@ func (s *Service) handleWorkloadAssertionGrant(
 
 	projectID := endpoint.ProjectID
 	return s.issueWorkloadGrantSession(ctx, w, logger, workloadGrantIssuance{
+		client: nil, beforeCommit: nil,
 		presented:  presented,
 		credential: credential,
 		projectID:  &projectID,
@@ -412,6 +484,9 @@ func (s *Service) refuseUnservedWorkloadGrant(
 // workloadGrantIssuance is a workload grant whose assertion verified, ready
 // for admission and minting.
 type workloadGrantIssuance struct {
+	client       *usersessions_repo.UserSessionClient
+	beforeCommit func(context.Context, pgx.Tx, *mintedSession) error
+
 	// presented is the identity the assertion presented, for logs.
 	presented presentedWorkload
 
@@ -471,6 +546,9 @@ func workloadSessionIssuance(target workloadSessionTarget, subject urn.SessionSu
 		AuthorizationExpiresAt: nil,
 		DesiredSessionDuration: &lifetime,
 		Replayable:             false,
+		SignInID:               uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		CredentialID:           uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		UpstreamClientPicks:    nil,
 	}
 }
 
@@ -483,40 +561,12 @@ func workloadSessionIssuance(target workloadSessionTarget, subject urn.SessionSu
 // not exist yet, but authz treats an AuthContext without a session as an
 // internal call, so a namespaced id makes this context session-like.
 func (s *Service) issueWorkloadGrantSession(ctx context.Context, w http.ResponseWriter, logger *slog.Logger, grant workloadGrantIssuance) error {
-	organizationID := grant.session.OrganizationID
-	subject := grant.session.Subject
-
-	authCtx, err := s.sessionAuthContext(ctx, organizationID, grant.projectID, "workload-grant:"+uuid.NewString())
+	minted, err := s.mintWorkloadGrantSession(ctx, logger, grant)
 	if err != nil {
-		return s.writeWorkloadGrantRefusal(ctx, w, logger, grant.presented, workloadGrantStageUnavailable("agent_admission_unavailable", err))
-	}
-	authorizationCtx := contextvalues.WithAuthenticatedActor(ctx, authCtx, urn.NewWorkloadPrincipal(grant.presented.issuerID, grant.presented.subject))
-	authorizationCtx, err = s.admitWorkloadSession(authorizationCtx, organizationID, subject, grant.credential)
-	if err == nil && grant.endpoint != nil {
-		authorizationCtx, err = s.requireWorkloadSessionAuthorization(authorizationCtx, grant.endpoint, workloadSessionReachResource)
-	}
-	switch {
-	case errors.Is(err, errCredentialRejected), err != nil && isCredentialDenial(err):
-		return s.writeWorkloadGrantRefusal(ctx, w, logger, grant.presented, refuseWorkloadGrant("agent_admission_denied", err))
-	case err != nil:
-		return s.writeWorkloadGrantRefusal(ctx, w, logger, grant.presented, workloadGrantStageUnavailable("agent_admission_unavailable", err))
-	}
-
-	// A database that cannot start or commit the transaction is an outage,
-	// not a verdict on the assertion: the caller is told to retry rather than
-	// handed a permanent failure.
-	dbtx, err := s.db.Begin(ctx)
-	if err != nil {
-		return s.writeWorkloadGrantRefusal(ctx, w, logger, grant.presented, workloadGrantStageUnavailable("session_persist_unavailable", err))
-	}
-	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
-
-	minted, err := s.issueSession(authorizationCtx, nil, usersessions_repo.New(dbtx), grant.session, logger)
-	if err != nil {
+		if _, ok := errors.AsType[*workloadGrantError](err); ok {
+			return s.writeWorkloadGrantRefusal(ctx, w, logger, grant.presented, err)
+		}
 		return err
-	}
-	if err := dbtx.Commit(ctx); err != nil {
-		return s.writeWorkloadGrantRefusal(ctx, w, logger, grant.presented, workloadGrantStageUnavailable("session_persist_unavailable", err))
 	}
 
 	if err := writeTokenSuccess(ctx, w, logger, minted.Body); err != nil {
@@ -530,6 +580,53 @@ func (s *Service) issueWorkloadGrantSession(ctx context.Context, w http.Response
 		attr.SlogUserSessionID(minted.ID.String()),
 	)
 	return nil
+}
+
+// mintWorkloadGrantSession shares live workload admission and transactional issuance.
+func (s *Service) mintWorkloadGrantSession(ctx context.Context, logger *slog.Logger, grant workloadGrantIssuance) (*mintedSession, error) {
+	organizationID := grant.session.OrganizationID
+	subject := grant.session.Subject
+
+	authCtx, err := s.sessionAuthContext(ctx, organizationID, grant.projectID, "workload-grant:"+uuid.NewString())
+	if err != nil {
+		return nil, workloadGrantStageUnavailable("agent_admission_unavailable", err)
+	}
+	authorizationCtx := contextvalues.WithAuthenticatedActor(ctx, authCtx, urn.NewWorkloadPrincipal(grant.presented.issuerID, grant.presented.subject))
+	authorizationCtx, err = s.admitWorkloadSession(authorizationCtx, organizationID, subject, grant.credential)
+	if err == nil && grant.endpoint != nil {
+		authorizationCtx, err = s.requireWorkloadSessionAuthorization(authorizationCtx, grant.endpoint, workloadSessionReachResource)
+	}
+	switch {
+	case errors.Is(err, errCredentialRejected), err != nil && isCredentialDenial(err):
+		return nil, refuseWorkloadGrant("agent_admission_denied", err)
+	case err != nil:
+		return nil, workloadGrantStageUnavailable("agent_admission_unavailable", err)
+	}
+
+	// A database that cannot start or commit the transaction is an outage,
+	// not a verdict on the assertion: the caller is told to retry rather than
+	// handed a permanent failure.
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, workloadGrantStageUnavailable("session_persist_unavailable", err)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
+	minted, err := s.issueSession(authorizationCtx, grant.client, usersessions_repo.New(dbtx), grant.session, logger)
+	if err != nil {
+		return nil, err
+	}
+	if grant.beforeCommit != nil {
+		if err := grant.beforeCommit(authorizationCtx, dbtx, minted); err != nil {
+			return nil, err
+		}
+	}
+
+	if err := dbtx.Commit(ctx); err != nil {
+		return nil, workloadGrantStageUnavailable("session_persist_unavailable", err)
+	}
+
+	return minted, nil
 }
 
 // writeWorkloadGrantRefusal logs a refused grant with its reason and the

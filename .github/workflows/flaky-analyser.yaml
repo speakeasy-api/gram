@@ -15,11 +15,12 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
-  actions: read
+  actions: read # reads past workflow runs and their logs
   contents: read
 
 jobs:
   analyse:
+    name: analyse
     runs-on: blacksmith-2vcpu-ubuntu-2404
     timeout-minutes: 60
     steps:

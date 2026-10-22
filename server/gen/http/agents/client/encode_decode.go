@@ -505,6 +505,28 @@ func EncodeListRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.R
 			head := *p.SessionToken
 			req.Header.Set("Gram-Session", head)
 		}
+		values := req.URL.Query()
+		if p.Cursor != nil {
+			values.Add("cursor", *p.Cursor)
+		}
+		values.Add("limit", fmt.Sprintf("%v", p.Limit))
+		if p.Search != nil {
+			values.Add("search", *p.Search)
+		}
+		values.Add("name_order", p.NameOrder)
+		for _, value := range p.Lifecycle {
+			values.Add("lifecycle", value)
+		}
+		for _, value := range p.OwnerUserIds {
+			values.Add("owner_user_ids", value)
+		}
+		if p.RegisteredAfter != nil {
+			values.Add("registered_after", *p.RegisteredAfter)
+		}
+		if p.RegisteredBefore != nil {
+			values.Add("registered_before", *p.RegisteredBefore)
+		}
+		req.URL.RawQuery = values.Encode()
 		return nil
 	}
 }
@@ -541,24 +563,18 @@ func DecodeListResponse(decoder func(*http.Response) goahttp.Decoder, restoreBod
 		switch resp.StatusCode {
 		case http.StatusOK:
 			var (
-				body []*ManagedAgentResponse
+				body ListResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
 				return nil, goahttp.ErrDecodingError("agents", "list", err)
 			}
-			for _, e := range body {
-				if e != nil {
-					if err2 := ValidateManagedAgentResponse(e); err2 != nil {
-						err = goa.MergeErrors(err, err2)
-					}
-				}
-			}
+			err = ValidateListResponseBody(&body)
 			if err != nil {
 				return nil, goahttp.ErrValidationError("agents", "list", err)
 			}
-			res := NewListManagedAgentOK(body)
+			res := NewListAgentsResultOK(&body)
 			return res, nil
 		case http.StatusUnauthorized:
 			var (
@@ -3999,9 +4015,9 @@ func unmarshalAgentSessionResponseBodyToAgentsAgentSession(v *AgentSessionRespon
 	return res
 }
 
-// unmarshalManagedAgentResponseToAgentsManagedAgent builds a value of type
-// *agents.ManagedAgent from a value of type *ManagedAgentResponse.
-func unmarshalManagedAgentResponseToAgentsManagedAgent(v *ManagedAgentResponse) *agents.ManagedAgent {
+// unmarshalManagedAgentResponseBodyToAgentsManagedAgent builds a value of type
+// *agents.ManagedAgent from a value of type *ManagedAgentResponseBody.
+func unmarshalManagedAgentResponseBodyToAgentsManagedAgent(v *ManagedAgentResponseBody) *agents.ManagedAgent {
 	res := &agents.ManagedAgent{
 		ID:                          *v.ID,
 		OwnerUserID:                 *v.OwnerUserID,
@@ -4014,107 +4030,9 @@ func unmarshalManagedAgentResponseToAgentsManagedAgent(v *ManagedAgentResponse) 
 		UpdatedAt:                   *v.UpdatedAt,
 	}
 	if v.OwnerProfile != nil {
-		res.OwnerProfile = unmarshalAgentOwnerProfileResponseToAgentsAgentOwnerProfile(v.OwnerProfile)
+		res.OwnerProfile = unmarshalAgentOwnerProfileResponseBodyToAgentsAgentOwnerProfile(v.OwnerProfile)
 	}
-	res.Permissions = unmarshalAgentPermissionsResponseToAgentsAgentPermissions(v.Permissions)
-
-	return res
-}
-
-// unmarshalAgentOwnerProfileResponseToAgentsAgentOwnerProfile builds a value
-// of type *agents.AgentOwnerProfile from a value of type
-// *AgentOwnerProfileResponse.
-func unmarshalAgentOwnerProfileResponseToAgentsAgentOwnerProfile(v *AgentOwnerProfileResponse) *agents.AgentOwnerProfile {
-	if v == nil {
-		return nil
-	}
-	res := &agents.AgentOwnerProfile{
-		DisplayName: *v.DisplayName,
-		PhotoURL:    v.PhotoURL,
-	}
-
-	return res
-}
-
-// unmarshalAgentPermissionsResponseToAgentsAgentPermissions builds a value of
-// type *agents.AgentPermissions from a value of type *AgentPermissionsResponse.
-func unmarshalAgentPermissionsResponseToAgentsAgentPermissions(v *AgentPermissionsResponse) *agents.AgentPermissions {
-	res := &agents.AgentPermissions{
-		Read:      *v.Read,
-		Write:     *v.Write,
-		Authorize: *v.Authorize,
-		Transfer:  *v.Transfer,
-	}
-
-	return res
-}
-
-// marshalAgentsAgentPolicyGrantFormToAgentPolicyGrantFormRequestBodyRequestBody
-// builds a value of type *AgentPolicyGrantFormRequestBodyRequestBody from a
-// value of type *agents.AgentPolicyGrantForm.
-func marshalAgentsAgentPolicyGrantFormToAgentPolicyGrantFormRequestBodyRequestBody(v *agents.AgentPolicyGrantForm) *AgentPolicyGrantFormRequestBodyRequestBody {
-	if v == nil {
-		return nil
-	}
-	res := &AgentPolicyGrantFormRequestBodyRequestBody{
-		Scope:  v.Scope,
-		Effect: v.Effect,
-	}
-	if v.Selector != nil {
-		res.Selector = marshalAgentsAgentPolicySelectorToAgentPolicySelectorRequestBodyRequestBody(v.Selector)
-	}
-
-	return res
-}
-
-// marshalAgentsAgentPolicySelectorToAgentPolicySelectorRequestBodyRequestBody
-// builds a value of type *AgentPolicySelectorRequestBodyRequestBody from a
-// value of type *agents.AgentPolicySelector.
-func marshalAgentsAgentPolicySelectorToAgentPolicySelectorRequestBodyRequestBody(v *agents.AgentPolicySelector) *AgentPolicySelectorRequestBodyRequestBody {
-	res := &AgentPolicySelectorRequestBodyRequestBody{
-		ResourceKind:   v.ResourceKind,
-		ResourceID:     v.ResourceID,
-		Disposition:    v.Disposition,
-		Tool:           v.Tool,
-		ProjectID:      v.ProjectID,
-		ServerURL:      v.ServerURL,
-		ServerIdentity: v.ServerIdentity,
-	}
-
-	return res
-}
-
-// marshalAgentPolicyGrantFormRequestBodyRequestBodyToAgentsAgentPolicyGrantForm
-// builds a value of type *agents.AgentPolicyGrantForm from a value of type
-// *AgentPolicyGrantFormRequestBodyRequestBody.
-func marshalAgentPolicyGrantFormRequestBodyRequestBodyToAgentsAgentPolicyGrantForm(v *AgentPolicyGrantFormRequestBodyRequestBody) *agents.AgentPolicyGrantForm {
-	if v == nil {
-		return nil
-	}
-	res := &agents.AgentPolicyGrantForm{
-		Scope:  v.Scope,
-		Effect: v.Effect,
-	}
-	if v.Selector != nil {
-		res.Selector = marshalAgentPolicySelectorRequestBodyRequestBodyToAgentsAgentPolicySelector(v.Selector)
-	}
-
-	return res
-}
-
-// marshalAgentPolicySelectorRequestBodyRequestBodyToAgentsAgentPolicySelector
-// builds a value of type *agents.AgentPolicySelector from a value of type
-// *AgentPolicySelectorRequestBodyRequestBody.
-func marshalAgentPolicySelectorRequestBodyRequestBodyToAgentsAgentPolicySelector(v *AgentPolicySelectorRequestBodyRequestBody) *agents.AgentPolicySelector {
-	res := &agents.AgentPolicySelector{
-		ResourceKind:   v.ResourceKind,
-		ResourceID:     v.ResourceID,
-		Disposition:    v.Disposition,
-		Tool:           v.Tool,
-		ProjectID:      v.ProjectID,
-		ServerURL:      v.ServerURL,
-		ServerIdentity: v.ServerIdentity,
-	}
+	res.Permissions = unmarshalAgentPermissionsResponseBodyToAgentsAgentPermissions(v.Permissions)
 
 	return res
 }
@@ -4148,6 +4066,80 @@ func unmarshalAgentPermissionsResponseBodyToAgentsAgentPermissions(v *AgentPermi
 	return res
 }
 
+// marshalAgentsAgentPolicyGrantFormToAgentPolicyGrantFormRequestBodyRequestBody
+// builds a value of type *AgentPolicyGrantFormRequestBodyRequestBody from a
+// value of type *agents.AgentPolicyGrantForm.
+func marshalAgentsAgentPolicyGrantFormToAgentPolicyGrantFormRequestBodyRequestBody(v *agents.AgentPolicyGrantForm) *AgentPolicyGrantFormRequestBodyRequestBody {
+	if v == nil {
+		return nil
+	}
+	res := &AgentPolicyGrantFormRequestBodyRequestBody{
+		Scope:  v.Scope,
+		Effect: v.Effect,
+	}
+	if v.Selector != nil {
+		res.Selector = marshalAgentsAgentPolicySelectorToAgentPolicySelectorRequestBodyRequestBody(v.Selector)
+	}
+
+	return res
+}
+
+// marshalAgentsAgentPolicySelectorToAgentPolicySelectorRequestBodyRequestBody
+// builds a value of type *AgentPolicySelectorRequestBodyRequestBody from a
+// value of type *agents.AgentPolicySelector.
+func marshalAgentsAgentPolicySelectorToAgentPolicySelectorRequestBodyRequestBody(v *agents.AgentPolicySelector) *AgentPolicySelectorRequestBodyRequestBody {
+	res := &AgentPolicySelectorRequestBodyRequestBody{
+		ResourceKind:    v.ResourceKind,
+		ResourceID:      v.ResourceID,
+		ClientType:      v.ClientType,
+		ConnectionOwner: v.ConnectionOwner,
+		Disposition:     v.Disposition,
+		Tool:            v.Tool,
+		ProjectID:       v.ProjectID,
+		ServerURL:       v.ServerURL,
+		ServerIdentity:  v.ServerIdentity,
+	}
+
+	return res
+}
+
+// marshalAgentPolicyGrantFormRequestBodyRequestBodyToAgentsAgentPolicyGrantForm
+// builds a value of type *agents.AgentPolicyGrantForm from a value of type
+// *AgentPolicyGrantFormRequestBodyRequestBody.
+func marshalAgentPolicyGrantFormRequestBodyRequestBodyToAgentsAgentPolicyGrantForm(v *AgentPolicyGrantFormRequestBodyRequestBody) *agents.AgentPolicyGrantForm {
+	if v == nil {
+		return nil
+	}
+	res := &agents.AgentPolicyGrantForm{
+		Scope:  v.Scope,
+		Effect: v.Effect,
+	}
+	if v.Selector != nil {
+		res.Selector = marshalAgentPolicySelectorRequestBodyRequestBodyToAgentsAgentPolicySelector(v.Selector)
+	}
+
+	return res
+}
+
+// marshalAgentPolicySelectorRequestBodyRequestBodyToAgentsAgentPolicySelector
+// builds a value of type *agents.AgentPolicySelector from a value of type
+// *AgentPolicySelectorRequestBodyRequestBody.
+func marshalAgentPolicySelectorRequestBodyRequestBodyToAgentsAgentPolicySelector(v *AgentPolicySelectorRequestBodyRequestBody) *agents.AgentPolicySelector {
+	res := &agents.AgentPolicySelector{
+		ResourceKind:    v.ResourceKind,
+		ResourceID:      v.ResourceID,
+		ClientType:      v.ClientType,
+		ConnectionOwner: v.ConnectionOwner,
+		Disposition:     v.Disposition,
+		Tool:            v.Tool,
+		ProjectID:       v.ProjectID,
+		ServerURL:       v.ServerURL,
+		ServerIdentity:  v.ServerIdentity,
+	}
+
+	return res
+}
+
 // unmarshalAgentPolicyGrantFormResponseToAgentsAgentPolicyGrantForm builds a
 // value of type *agents.AgentPolicyGrantForm from a value of type
 // *AgentPolicyGrantFormResponse.
@@ -4166,13 +4158,15 @@ func unmarshalAgentPolicyGrantFormResponseToAgentsAgentPolicyGrantForm(v *AgentP
 // *AgentPolicySelectorResponse.
 func unmarshalAgentPolicySelectorResponseToAgentsAgentPolicySelector(v *AgentPolicySelectorResponse) *agents.AgentPolicySelector {
 	res := &agents.AgentPolicySelector{
-		ResourceKind:   *v.ResourceKind,
-		ResourceID:     *v.ResourceID,
-		Disposition:    v.Disposition,
-		Tool:           v.Tool,
-		ProjectID:      v.ProjectID,
-		ServerURL:      v.ServerURL,
-		ServerIdentity: v.ServerIdentity,
+		ResourceKind:    *v.ResourceKind,
+		ResourceID:      *v.ResourceID,
+		ClientType:      v.ClientType,
+		ConnectionOwner: v.ConnectionOwner,
+		Disposition:     v.Disposition,
+		Tool:            v.Tool,
+		ProjectID:       v.ProjectID,
+		ServerURL:       v.ServerURL,
+		ServerIdentity:  v.ServerIdentity,
 	}
 
 	return res
@@ -4197,13 +4191,15 @@ func unmarshalAgentPolicyGrantResponseToAgentsAgentPolicyGrant(v *AgentPolicyGra
 // *AgentPolicySelector from a value of type *agents.AgentPolicySelector.
 func marshalAgentsAgentPolicySelectorToAgentPolicySelector(v *agents.AgentPolicySelector) *AgentPolicySelector {
 	res := &AgentPolicySelector{
-		ResourceKind:   v.ResourceKind,
-		ResourceID:     v.ResourceID,
-		Disposition:    v.Disposition,
-		Tool:           v.Tool,
-		ProjectID:      v.ProjectID,
-		ServerURL:      v.ServerURL,
-		ServerIdentity: v.ServerIdentity,
+		ResourceKind:    v.ResourceKind,
+		ResourceID:      v.ResourceID,
+		ClientType:      v.ClientType,
+		ConnectionOwner: v.ConnectionOwner,
+		Disposition:     v.Disposition,
+		Tool:            v.Tool,
+		ProjectID:       v.ProjectID,
+		ServerURL:       v.ServerURL,
+		ServerIdentity:  v.ServerIdentity,
 	}
 
 	return res
@@ -4213,13 +4209,15 @@ func marshalAgentsAgentPolicySelectorToAgentPolicySelector(v *agents.AgentPolicy
 // *agents.AgentPolicySelector from a value of type *AgentPolicySelector.
 func marshalAgentPolicySelectorToAgentsAgentPolicySelector(v *AgentPolicySelector) *agents.AgentPolicySelector {
 	res := &agents.AgentPolicySelector{
-		ResourceKind:   v.ResourceKind,
-		ResourceID:     v.ResourceID,
-		Disposition:    v.Disposition,
-		Tool:           v.Tool,
-		ProjectID:      v.ProjectID,
-		ServerURL:      v.ServerURL,
-		ServerIdentity: v.ServerIdentity,
+		ResourceKind:    v.ResourceKind,
+		ResourceID:      v.ResourceID,
+		ClientType:      v.ClientType,
+		ConnectionOwner: v.ConnectionOwner,
+		Disposition:     v.Disposition,
+		Tool:            v.Tool,
+		ProjectID:       v.ProjectID,
+		ServerURL:       v.ServerURL,
+		ServerIdentity:  v.ServerIdentity,
 	}
 
 	return res
@@ -4230,13 +4228,15 @@ func marshalAgentPolicySelectorToAgentsAgentPolicySelector(v *AgentPolicySelecto
 // *AgentPolicySelectorResponseBody.
 func unmarshalAgentPolicySelectorResponseBodyToAgentsAgentPolicySelector(v *AgentPolicySelectorResponseBody) *agents.AgentPolicySelector {
 	res := &agents.AgentPolicySelector{
-		ResourceKind:   *v.ResourceKind,
-		ResourceID:     *v.ResourceID,
-		Disposition:    v.Disposition,
-		Tool:           v.Tool,
-		ProjectID:      v.ProjectID,
-		ServerURL:      v.ServerURL,
-		ServerIdentity: v.ServerIdentity,
+		ResourceKind:    *v.ResourceKind,
+		ResourceID:      *v.ResourceID,
+		ClientType:      v.ClientType,
+		ConnectionOwner: v.ConnectionOwner,
+		Disposition:     v.Disposition,
+		Tool:            v.Tool,
+		ProjectID:       v.ProjectID,
+		ServerURL:       v.ServerURL,
+		ServerIdentity:  v.ServerIdentity,
 	}
 
 	return res

@@ -11,9 +11,9 @@ func registerToolCallSearchTools(reg *Registrar, diagnostics *DiagnosticsService
 	addTool(reg, &mcp.Tool{
 		Name:        "search_tool_calls",
 		Title:       "Search Tool Calls",
-		Description: "Search one project's tool calls across every MCP server over up to 30 days, newest first. Narrow by tool name text, error text, outcome, one configured MCP server, a person reference, and attribute filters discovered with list_attribute_keys. Each call is reduced to when it happened, the tool and configured server, how it ended, the calling app, and, when the call is recorded under a person rather than an agent or an unknown actor, a masked identity and a short-lived person reference that narrows a follow-up search. Paging with the returned cursor keeps the same observation window the first page read, so a relative window does not drift as time passes. Constraints: this is not a log reader; no arguments, results, bodies, headers, URLs, trace IDs, or raw identities are returned, attribute filters over a system key that carries tool content, an HTTP header, or a person's identity are refused while an @-prefixed custom key allows every operator, one search walks at most 500 calls in total and then stops returning a cursor, so an exhausted walk is not evidence that nothing else matches, and cursors and references expire and are bound to this session.",
+		Description: "Search one project's tool calls across every MCP server over up to 30 days, newest first. Requires log:read on the project. Narrow by tool name text, error text, outcome, one configured MCP server, a person reference, and attribute filters discovered with list_attribute_keys. Each call is reduced to when it happened, the tool and configured server, how it ended, the calling app, and, when the call is recorded under a person rather than an agent or an unknown actor, a masked identity and a short-lived person reference that narrows a follow-up search. Paging with the returned cursor keeps the same observation window the first page read, so a relative window does not drift as time passes. Constraints: this is not a log reader; no arguments, results, bodies, headers, URLs, trace IDs, or raw identities are returned, attribute filters over a system key that carries tool content, an HTTP header, or a person's identity are refused while an @-prefixed custom key allows every operator, one search walks at most 500 calls in total and then stops returning a cursor, so an exhausted walk is not evidence that nothing else matches, and cursors and references expire and are bound to this session.",
 		Annotations: readOnlyAnnotations(),
-	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input SearchToolCallsInput) (*mcp.CallToolResult, SearchToolCallsOutput, error) {
+	}, ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit, DiscoveryScopes: discoveryLogRead}, func(ctx context.Context, _ *mcp.CallToolRequest, input SearchToolCallsInput) (*mcp.CallToolResult, SearchToolCallsOutput, error) {
 		principal, err := principalFromToolContext(ctx)
 		if err != nil {
 			return nil, SearchToolCallsOutput{}, err
@@ -55,7 +55,7 @@ func registerUnavailableToolCallSearchTools(reg *Registrar) {
 		Title:       "Search Tool Calls",
 		Description: "Search one project's tool calls across every MCP server. This is not switched on for your organization yet.",
 		Annotations: readOnlyAnnotations(),
-	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, unavailableTool("tool_call_search"))
+	}, ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit, DiscoveryScopes: discoveryLogRead}, unavailableTool("tool_call_search"))
 	addTool(reg, &mcp.Tool{
 		Name:        "list_attribute_keys",
 		Title:       "List Attribute Keys",

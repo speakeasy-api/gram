@@ -1,4 +1,10 @@
 import type { AdminInferenceKey } from "@gram/admin-client/models/components/admininferencekey";
+import { buildAdminGetUpstreamOAuthMigrationStatusQuery } from "@gram/admin-client/react-query/adminGetUpstreamOAuthMigrationStatus.core";
+import { buildAdminListUpstreamOAuthMigrationOrganizationsQuery } from "@gram/admin-client/react-query/adminListUpstreamOAuthMigrationOrganizations.core";
+import { buildAdminRunUpstreamOAuthMigrationMutation } from "@gram/admin-client/react-query/adminRunUpstreamOAuthMigration";
+import type { AdminUpstreamOAuthMigrationOrganizations } from "@gram/admin-client/models/components/adminupstreamoauthmigrationorganizations";
+import type { AdminUpstreamOAuthMigrationRun } from "@gram/admin-client/models/components/adminupstreamoauthmigrationrun";
+import type { AdminUpstreamOAuthMigrationStatus } from "@gram/admin-client/models/components/adminupstreamoauthmigrationstatus";
 import { buildAdminGetInferenceKeysQuery } from "@gram/admin-client/react-query/adminGetInferenceKeys.core";
 import type { AdminInferenceKeyRepairResult } from "@gram/admin-client/models/components/admininferencekeyrepairresult";
 import { buildAdminRepairInferenceKeyMutation } from "@gram/admin-client/react-query/adminRepairInferenceKey";
@@ -40,6 +46,15 @@ import { buildAdminDescribeMcpServerHealthQuery } from "@gram/admin-client/react
 import { buildAdminGetMcpServerToolCallsQuery } from "@gram/admin-client/react-query/adminGetMcpServerToolCalls.core";
 import { buildAdminChangeTrialEndDateMutation } from "@gram/admin-client/react-query/adminChangeTrialEndDate";
 import type { ChangeTrialEndDateRequestBody } from "@gram/admin-client/models/components/changetrialenddaterequestbody";
+import { buildAdminListExternalMcpMigrationCandidatesQuery } from "@gram/admin-client/react-query/adminListExternalMcpMigrationCandidates.core";
+import {
+  buildAdminPreviewExternalMcpMigrationMutation,
+  type AdminPreviewExternalMcpMigrationMutationVariables,
+} from "@gram/admin-client/react-query/adminPreviewExternalMcpMigration";
+import {
+  buildAdminMigrateExternalMcpServersMutation,
+  type AdminMigrateExternalMcpServersMutationVariables,
+} from "@gram/admin-client/react-query/adminMigrateExternalMcpServers";
 import {
   buildAdminUploadPlatformImageMutation,
   type AdminUploadPlatformImageMutationVariables,
@@ -506,6 +521,8 @@ export function organizationFromSdk(
     workos_dashboard_url: org.workosDashboardUrl,
     stripe_customer_id: org.stripeCustomerId,
     stripe_subscription_id: org.stripeSubscriptionId,
+    stripe_customer_dashboard_url: org.stripeCustomerDashboardUrl,
+    stripe_subscription_dashboard_url: org.stripeSubscriptionDashboardUrl,
     whitelisted: org.whitelisted,
     disabled_at: org.disabledAt?.toISOString(),
     trial_state: org.trialState,
@@ -1063,4 +1080,85 @@ export function inferenceKeysQuery(
     queryFn: (context) => redirecting(generated.queryFn(context)),
     retry: false,
   });
+}
+
+export function upstreamOAuthMigrationOrganizationsQuery(): UseQueryOptions<AdminUpstreamOAuthMigrationOrganizations> {
+  const generated = buildAdminListUpstreamOAuthMigrationOrganizationsQuery(
+    redirectingClient,
+    { retries: { strategy: "none" } },
+  );
+  return queryOptions({
+    ...generated,
+    queryFn: (context) => redirecting(generated.queryFn(context)),
+    retry: false,
+  });
+}
+
+export function upstreamOAuthMigrationStatusQuery(
+  organizationID: string,
+): UseQueryOptions<AdminUpstreamOAuthMigrationStatus> {
+  const generated = buildAdminGetUpstreamOAuthMigrationStatusQuery(
+    redirectingClient,
+    { organizationId: organizationID },
+    { retries: { strategy: "none" } },
+  );
+  return queryOptions({
+    ...generated,
+    queryFn: (context) => redirecting(generated.queryFn(context)),
+    retry: false,
+  });
+}
+
+const generatedRunUpstreamOAuthMigrationMutation =
+  buildAdminRunUpstreamOAuthMigrationMutation(redirectingClient, {
+    retries: { strategy: "none" },
+  });
+
+export function runUpstreamOAuthMigration(
+  organizationID: string,
+): Promise<AdminUpstreamOAuthMigrationRun> {
+  return redirecting(
+    generatedRunUpstreamOAuthMigrationMutation.mutationFn({
+      request: { organizationId: organizationID },
+    }),
+  );
+}
+
+function createAdminListExternalMcpMigrationCandidatesQuery() {
+  const generated =
+    buildAdminListExternalMcpMigrationCandidatesQuery(redirectingClient);
+  return queryOptions({
+    ...generated,
+    queryFn: (context) => redirecting(generated.queryFn(context)),
+  });
+}
+
+export function adminListExternalMcpMigrationCandidatesQuery(): ReturnType<
+  typeof createAdminListExternalMcpMigrationCandidatesQuery
+> {
+  return createAdminListExternalMcpMigrationCandidatesQuery();
+}
+
+export function adminPreviewExternalMcpMigration(
+  request: AdminPreviewExternalMcpMigrationMutationVariables["request"],
+): ReturnType<
+  ReturnType<typeof buildAdminPreviewExternalMcpMigrationMutation>["mutationFn"]
+> {
+  return redirecting(
+    buildAdminPreviewExternalMcpMigrationMutation(redirectingClient).mutationFn(
+      { request },
+    ),
+  );
+}
+
+export function adminMigrateExternalMcpServers(
+  request: AdminMigrateExternalMcpServersMutationVariables["request"],
+): ReturnType<
+  ReturnType<typeof buildAdminMigrateExternalMcpServersMutation>["mutationFn"]
+> {
+  return redirecting(
+    buildAdminMigrateExternalMcpServersMutation(redirectingClient).mutationFn({
+      request,
+    }),
+  );
 }

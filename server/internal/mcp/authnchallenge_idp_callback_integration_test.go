@@ -137,10 +137,13 @@ func TestHandleIDPCallback_RealResolverMembershipReconciliation(t *testing.T) {
 			require.NoError(t, err)
 			p, err := pylon.NewPylon(ti.logger, "")
 			require.NoError(t, err)
+			// Failed listings still exhaust their retries, without the production backoff between them.
+			retryCfg := guardian.DefaultRetryConfig()
+			retryCfg.WaitMin, retryCfg.WaitMax = time.Millisecond, time.Millisecond
 			*resolver = *identity.NewResolver(
 				ti.logger, ti.tracerProvider, ti.cacheAdapter, remote.URL, "test-client",
 				identity.NewWorkOSAdapter(sdk),
-				workos.NewClient(policy, "test-key", workos.ClientOpts{Endpoint: remote.URL}),
+				workos.NewClient(policy, "test-key", workos.ClientOpts{Endpoint: remote.URL, RetryConfig: retryCfg}),
 				orgrepo.New(ti.conn), userrepo.New(ti.conn), p, nil, nil,
 				testenv.NewCacheSuffix(t, cache.Suffix("idp-callback")),
 			)

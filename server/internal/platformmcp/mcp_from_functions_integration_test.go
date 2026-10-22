@@ -334,7 +334,7 @@ func TestCreateMCPFromFunctionsReportsTheFirstServerJoiningTheDefaultPlugin(t *t
 	toolsetID := uuid.MustParse(created.Exposure.ToolsetID)
 	joined := false
 	for _, member := range members {
-		joined = joined || member.ToolsetID == uuid.NullUUID{UUID: toolsetID, Valid: true}
+		joined = joined || member.McpServerID == uuid.NullUUID{UUID: toolsetID, Valid: true}
 	}
 	require.True(t, joined, "the new tool list is in the Default plugin")
 

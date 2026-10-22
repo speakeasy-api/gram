@@ -28,9 +28,9 @@ import { ResponseValidationError } from "../models/errors/responsevalidationerro
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import { ServiceError } from "../models/errors/serviceerror.js";
 import {
+  ListRemoteSessionIssuersQueryParamTier,
   ListRemoteSessionIssuersRequest,
   ListRemoteSessionIssuersSecurity,
-  QueryParamTier,
 } from "../models/operations/listremotesessionissuers.js";
 import { useGramContext } from "./_context.js";
 import {
@@ -226,7 +226,7 @@ export function setRemoteSessionIssuersData(
       limit?: number | undefined;
       search?: string | undefined;
       upstreamHost?: string | undefined;
-      tier?: QueryParamTier | undefined;
+      tier?: ListRemoteSessionIssuersQueryParamTier | undefined;
       gramSession?: string | undefined;
       gramKey?: string | undefined;
       gramProject?: string | undefined;
@@ -247,7 +247,7 @@ export function invalidateRemoteSessionIssuers(
       limit?: number | undefined;
       search?: string | undefined;
       upstreamHost?: string | undefined;
-      tier?: QueryParamTier | undefined;
+      tier?: ListRemoteSessionIssuersQueryParamTier | undefined;
       gramSession?: string | undefined;
       gramKey?: string | undefined;
       gramProject?: string | undefined;

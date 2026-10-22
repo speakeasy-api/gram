@@ -10,7 +10,9 @@ import (
 	"unicode/utf8"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 
 	gen "github.com/speakeasy-api/gram/server/gen/keys"
@@ -222,7 +224,7 @@ func (s *Service) prepareAgentKey(ctx context.Context, agentIDRaw, name string, 
 	if utf8.RuneCountInString(name) > maxAPIKeyNameRunes {
 		return preparedAgentKey{}, oops.E(oops.CodeBadRequest, nil, "key name must not exceed %d characters", maxAPIKeyNameRunes)
 	}
-	if versionRaw < int(runtimepolicy.DelegatedPolicyVersion1) || versionRaw > int(runtimepolicy.CurrentDelegatedPolicyVersion) {
+	if versionRaw < int(runtimepolicy.DelegatedPolicyVersion1) || versionRaw > int(runtimepolicy.IssuedDelegatedPolicyVersion) {
 		return preparedAgentKey{}, oops.E(oops.CodeBadRequest, runtimepolicy.ErrInvalidDelegatedPolicy, "unsupported delegated grants version")
 	}
 
@@ -300,7 +302,9 @@ func (s *Service) authorizeAgentKeyIssuance(ctx context.Context, tx pgx.Tx, agen
 	authorizerPolicy := human.LiveGrants()
 
 	// A broad selector must not hide a narrower exclusion in any parent policy.
-	contained, err := runtimepolicy.DelegationContained(policy, agentPolicy, ownerPolicy, authorizerPolicy)
+	// The key acts for the issuing user, so restrictions on other users'
+	// connections do not overlap it.
+	contained, err := runtimepolicy.DelegationContainedFor(human.Auth.UserID, policy, agentPolicy, ownerPolicy, authorizerPolicy)
 	if err != nil {
 		return agentmanagement.HumanContext{}, oops.E(oops.CodeUnexpected, err, "check delegated policy containment").LogError(ctx, s.logger)
 	}
@@ -323,6 +327,13 @@ func (s *Service) createPreparedAgentKey(ctx context.Context, tx pgx.Tx, human a
 		ExpiresAt:              pgtype.Timestamptz{Time: prepared.expiresAt, InfinityModifier: pgtype.Finite, Valid: true},
 	})
 	if err != nil {
+		// A name already in use is the caller's to fix, and the only thing that
+		// tells them so is this message: an unexpected error here reads as a
+		// policy failure and sends them back through the whole wizard.
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation && pgErr.ConstraintName == "api_keys_organization_id_name_key" {
+			return repo.ApiKey{}, oops.E(oops.CodeConflict, err, "An API key named %q already exists in this organization. Choose another name.", prepared.name)
+		}
 		return repo.ApiKey{}, oops.E(oops.CodeUnexpected, err, "create agent API key").LogError(ctx, s.logger)
 	}
 	expiresAt := prepared.expiresAt.Format(time.RFC3339Nano)
@@ -417,6 +428,7 @@ func selectorFromForm(selector *gen.AgentPolicySelector) authz.Selector {
 	for key, value := range map[string]*string{
 		authz.SelectorKeyDisposition: selector.Disposition, authz.SelectorKeyTool: selector.Tool, authz.SelectorKeyProjectID: selector.ProjectID,
 		authz.SelectorKeyServerURL: selector.ServerURL, authz.SelectorKeyServerIdentity: selector.ServerIdentity,
+		authz.SelectorKeyClientType: selector.ClientType, authz.SelectorKeyConnectionOwner: selector.ConnectionOwner,
 	} {
 		if value != nil {
 			result[key] = *value
@@ -427,13 +439,15 @@ func selectorFromForm(selector *gen.AgentPolicySelector) authz.Selector {
 
 func selectorModel(selector authz.Selector) *gen.AgentPolicySelector {
 	model := &gen.AgentPolicySelector{
-		ResourceKind:   selector[authz.SelectorKeyResourceKind],
-		ResourceID:     selector[authz.SelectorKeyResourceID],
-		Disposition:    mapStringPtr(selector, authz.SelectorKeyDisposition),
-		Tool:           mapStringPtr(selector, authz.SelectorKeyTool),
-		ProjectID:      mapStringPtr(selector, authz.SelectorKeyProjectID),
-		ServerURL:      mapStringPtr(selector, authz.SelectorKeyServerURL),
-		ServerIdentity: mapStringPtr(selector, authz.SelectorKeyServerIdentity),
+		ResourceKind:    selector[authz.SelectorKeyResourceKind],
+		ResourceID:      selector[authz.SelectorKeyResourceID],
+		Disposition:     mapStringPtr(selector, authz.SelectorKeyDisposition),
+		Tool:            mapStringPtr(selector, authz.SelectorKeyTool),
+		ProjectID:       mapStringPtr(selector, authz.SelectorKeyProjectID),
+		ServerURL:       mapStringPtr(selector, authz.SelectorKeyServerURL),
+		ServerIdentity:  mapStringPtr(selector, authz.SelectorKeyServerIdentity),
+		ClientType:      mapStringPtr(selector, authz.SelectorKeyClientType),
+		ConnectionOwner: mapStringPtr(selector, authz.SelectorKeyConnectionOwner),
 	}
 	return model
 }

@@ -44,6 +44,7 @@ import (
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 	roledistributionv1 "github.com/speakeasy-api/gram/infra/gen/gram/role_distribution/v1"
 	telemetryv1 "github.com/speakeasy-api/gram/infra/gen/gram/telemetry/v1"
+	tunnelv1 "github.com/speakeasy-api/gram/infra/gen/gram/tunnel/v1"
 	webhooksv1 "github.com/speakeasy-api/gram/infra/gen/gram/webhooks/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/infra/pkg/storage"
@@ -58,7 +59,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/control"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/growthsignals"
 	"github.com/speakeasy-api/gram/server/internal/metering"
 	meteringchrepo "github.com/speakeasy-api/gram/server/internal/metering/chrepo"
@@ -75,20 +75,31 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/risk/chrepo"
 	"github.com/speakeasy-api/gram/server/internal/risk/enforcereply"
+	"github.com/speakeasy-api/gram/server/internal/risk/presetlib"
 	"github.com/speakeasy-api/gram/server/internal/roledistribution"
-	"github.com/speakeasy-api/gram/server/internal/scanners"
+	"github.com/speakeasy-api/gram/server/internal/scanners/accountidentity"
+	"github.com/speakeasy-api/gram/server/internal/scanners/clidestructive"
 	"github.com/speakeasy-api/gram/server/internal/scanners/customruleanalyzer"
+	"github.com/speakeasy-api/gram/server/internal/scanners/destructivetool"
 	"github.com/speakeasy-api/gram/server/internal/scanners/gitleaks"
 	"github.com/speakeasy-api/gram/server/internal/scanners/llmanalyzer"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy"
 	ppopenrouter "github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy/openrouter"
+	"github.com/speakeasy-api/gram/server/internal/scanners/shadowmcpscan"
+	"github.com/speakeasy-api/gram/server/internal/scanners/toolcall"
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
+	"github.com/speakeasy-api/gram/server/internal/sigint"
+	sigintchrepo "github.com/speakeasy-api/gram/server/internal/sigint/chrepo"
 	"github.com/speakeasy-api/gram/server/internal/streams"
 	"github.com/speakeasy-api/gram/server/internal/subscribers"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
+	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
+	tunnelrepo "github.com/speakeasy-api/gram/server/internal/tunneledmcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/tunnelmetrics"
 	"github.com/speakeasy-api/gram/server/internal/usage"
 	"github.com/speakeasy-api/gram/server/internal/webhooks/svixrelay"
 )
@@ -276,6 +287,11 @@ func newStreamsCommand() *cli.Command {
 			EnvVars: []string{"GRAM_SITE_URL"},
 		},
 		&cli.StringFlag{
+			Name:    "server-url",
+			Usage:   "The public URL of the server, trusted as a Speakeasy-hosted MCP host by the shadow MCP scanner",
+			EnvVars: []string{"GRAM_SERVER_URL"},
+		},
+		&cli.StringFlag{
 			Name:    "sigint-openrouter-api-key",
 			Usage:   "Platform OpenRouter inference key for sensor evaluation; unset leaves the receiver stopped unless sigint-ack-only is enabled",
 			EnvVars: []string{"GRAM_SIGINT_OPENROUTER_API_KEY"},
@@ -421,10 +437,7 @@ func newStreamsCommand() *cli.Command {
 			}
 
 			posthogClient := posthog.New(ctx, logger, c.String("posthog-api-key"), c.String("posthog-endpoint"), c.String("posthog-personal-api-key"))
-			var featureFlags feature.Provider = posthogClient
-			if c.String("environment") == "local" {
-				featureFlags = newLocalFeatureFlags(ctx, logger, c.String("local-feature-flags-csv"))
-			}
+			featureFlags := newFeatureFlags(ctx, c, logger, posthogClient)
 
 			productFeatures := productfeatures.NewClient(logger, tracerProvider, db, redisClient)
 			assetStorage, assetShutdown, err := newAssetStorage(ctx, logger, assetStorageOptions{assetsBackend: c.String("assets-backend"), assetsURI: c.String("assets-uri")})
@@ -480,9 +493,10 @@ func newStreamsCommand() *cli.Command {
 				riskMeterPub  gcp.Publisher[*meteringv1.MeterReading]
 				sessionLogPub gcp.Publisher[*telemetryv1.LogRecord]
 				readingsPub   gcp.Publisher[*sigintv1.Reading]
+				outcomesPub   gcp.Publisher[*sigintv1.Outcome]
 			)
 			shutdownFuncs = append(shutdownFuncs, func(ctx context.Context) error {
-				return shutdownPubSubPublishers(ctx, pubsubShutdown, findingsPub, logPub, metricPub, spanPub, riskMeterPub, sessionLogPub, readingsPub)
+				return shutdownPubSubPublishers(ctx, pubsubShutdown, findingsPub, logPub, metricPub, spanPub, riskMeterPub, sessionLogPub, readingsPub, outcomesPub)
 			})
 
 			riskFingerprinter, err := risk.ParsePepperKeyRing([]byte(c.String("risk-fingerprint-pepper-keyring")))
@@ -491,6 +505,13 @@ func newStreamsCommand() *cli.Command {
 			}
 
 			enableCHRiskWrites := !c.Bool("disable-clickhouse-risk-writes")
+			var builtinPresets *presetlib.Library
+			if enableCHRiskWrites {
+				builtinPresets, err = presetlib.New()
+				if err != nil {
+					return fmt.Errorf("load built-in exclusion library: %w", err)
+				}
+			}
 			chConn, shutdown, err := newClickhouseClient(ctx, logger, c)
 			if err != nil {
 				return fmt.Errorf("failed to create clickhouse client: %w", err)
@@ -517,9 +538,37 @@ func newStreamsCommand() *cli.Command {
 				return fmt.Errorf("create risk meter publisher: %w", err)
 			}
 			riskRecorder := metering.NewRiskRecorder(riskMeterPub)
+			var serverURL *url.URL
+			if raw := c.String("server-url"); raw != "" {
+				serverURL, err = url.Parse(raw)
+				if err != nil {
+					return fmt.Errorf("parse server url: %w", err)
+				}
+			}
+			shadowMCPClient := shadowmcp.NewClient(logger, replicaDB, cache.NewRedisCacheAdapter(redisClient), serverURL)
+			toolCallHandler := toolcall.NewHandler(
+				logger,
+				shadowmcpscan.NewScanner(
+					logger,
+					shadowMCPClient,
+					shadowMCPClient,
+					telemetryrepo.New(chConn),
+					nil,
+					shadowmcpscan.WithShadowMCPBypass(background.NewShadowMCPPolicyBypassChecker(logger, replicaDB)),
+				),
+				destructivetool.NewScanner(shadowMCPClient),
+				clidestructive.NewScanner(),
+				findingsPub,
+				riskRecorder,
+			)
+			accountIdentityHandler := accountidentity.NewHandler(logger, findingsPub)
 			readingsPub, err = gcp.PubSubPublisherForMessage(ctx, psbroker, &sigintv1.Reading{}, gcp.WithPubSubPublishSettings(&meterPublishSettings))
 			if err != nil {
 				return fmt.Errorf("create sensor readings publisher: %w", err)
+			}
+			outcomesPub, err = gcp.PubSubPublisherForMessage(ctx, psbroker, &sigintv1.Outcome{}, gcp.WithPubSubPublishSettings(&meterPublishSettings))
+			if err != nil {
+				return fmt.Errorf("create sensor outcomes publisher: %w", err)
 			}
 
 			sensorClassifier, err := jev.New(guardianPolicy, conv.NewSecret([]byte(c.String("sigint-openrouter-api-key"))))
@@ -527,7 +576,7 @@ func newStreamsCommand() *cli.Command {
 				return fmt.Errorf("create sensor classifier: %w", err)
 			}
 
-			sensorEvaluator, err := evaluation.NewEvaluator(logger, meterProvider, evaluation.NewRepository(db), productFeatures, readingsPub, sensorClassifier)
+			sensorEvaluator, err := evaluation.NewEvaluator(logger, meterProvider, evaluation.NewRepository(db), productFeatures, readingsPub, outcomesPub, sensorClassifier)
 			if err != nil {
 				return fmt.Errorf("create sensor evaluator: %w", err)
 			}
@@ -556,10 +605,10 @@ func newStreamsCommand() *cli.Command {
 			}
 			promptInjectionScanner := promptinjection.NewScanner(logger, newPICascade(logger, tracerProvider, meterProvider, completionsClient, guardianPolicy, openRouter, db).Classify)
 			promptInjectionStubScanner := promptinjection.NewScanner(logger, promptinjection.NoopClassifier)
-			promptInjectionHandler := promptinjection.NewHandler(logger, meterProvider, promptInjectionScanner, promptInjectionStubScanner, findingsPub, scanners.NewAsyncShadowGate(logger, featureFlags, replicaDB), riskRecorder)
+			promptInjectionHandler := promptinjection.NewHandler(logger, meterProvider, promptInjectionScanner, promptInjectionStubScanner, findingsPub, riskRecorder)
 			promptPolicyScanner := promptpolicy.NewScanner(logger, ppopenrouter.New(logger, tracerProvider, meterProvider, completionsClient, judgeRateLimiter).Evaluate)
 			promptPolicyStubScanner := promptpolicy.NewScanner(logger, promptpolicy.NoopEvaluator)
-			promptPolicyHandler := promptpolicy.NewHandler(logger, meterProvider, promptPolicyScanner, promptPolicyStubScanner, findingsPub, scanners.NewAsyncShadowGate(logger, featureFlags, replicaDB), riskRecorder)
+			promptPolicyHandler := promptpolicy.NewHandler(logger, meterProvider, promptPolicyScanner, promptPolicyStubScanner, findingsPub, riskRecorder)
 
 			// Fine-tuned risk model analyzer: both its lanes run here. Without a
 			// model URL the analyzer is disabled and its handlers ack untouched.
@@ -746,6 +795,8 @@ func newStreamsCommand() *cli.Command {
 				if lakeStore != nil {
 					mustStreamToStorage(rg, storagebindings.GramSigintV1LakePrimary())
 				}
+				mustReceiveBatch(rg, &sigintv1.Reading{}, &sigintv1.ReadingCHWriter{}, sigint.NewReadingCHWriter(logger, sigintchrepo.New(chConn)), gcp.BatchReceiveSettings{MaxMessages: 1000, MaxBytes: 10 * constants.MiB, MaxLatency: time.Second, MaxBufferedMessages: 0, MaxBufferedBytes: 0})
+				mustReceiveBatch(rg, &sigintv1.Outcome{}, &sigintv1.OutcomeCHWriter{}, sigint.NewOutcomeCHWriter(logger, sigintchrepo.New(chConn)), gcp.BatchReceiveSettings{MaxMessages: 1000, MaxBytes: 10 * constants.MiB, MaxLatency: time.Second, MaxBufferedMessages: 0, MaxBufferedBytes: 0})
 
 				mustReceive(rg, &pingv2.Message{}, &pingv2.Processor{}, ping.NewHandler(logger, slog.LevelDebug))
 				roleDistributionGuard := admission.NewGuard()
@@ -780,6 +831,8 @@ func newStreamsCommand() *cli.Command {
 				mustReceive(rg, &riskv1.PromptPolicyAnalysis{}, &riskv1.PromptPolicyAnalyzer{}, promptPolicyHandler)
 				mustReceive(rg, &riskv1.LLMAnalysis{}, &riskv1.LLMAnalyzer{}, llmAnalyzerHandler)
 				mustReceive(rg, &riskv1.CustomRulesAnalysis{}, &riskv1.CustomRulesAnalyzer{}, customRulesHandler)
+				mustReceive(rg, &riskv1.ToolCallAnalysis{}, &riskv1.ToolCallAnalyzer{}, toolCallHandler)
+				mustReceive(rg, &riskv1.AccountIdentityAnalysis{}, &riskv1.AccountIdentityAnalyzer{}, accountIdentityHandler)
 
 				mustReceiveBatch(rg, &telemetryv1.SessionObserved{}, &telemetryv1.SessionObservedCHWriter{}, telemetry.NewSessionObservedHandler(db, sessionLogger), gcp.BatchReceiveSettings{MaxMessages: 1000, MaxBytes: 10 * constants.MiB, MaxLatency: time.Second, MaxBufferedMessages: 0, MaxBufferedBytes: 0})
 
@@ -798,6 +851,7 @@ func newStreamsCommand() *cli.Command {
 					}
 					mustReceiveBatchWithResult(rg, &conversationv1.MessageEvent{}, &sigintv1.Evaluator{}, handler, gcp.BatchReceiveSettings{MaxMessages: 20, MaxBytes: 10 * constants.MiB, MaxLatency: time.Second, MaxBufferedMessages: 0, MaxBufferedBytes: 0})
 				}
+				mustReceiveBatch(rg, &tunnelv1.MetricsSnapshot{}, &tunnelv1.MetricsCHWriter{}, tunnelmetrics.NewWriter(chConn, logger, tunnelrepo.New(db).ListMetricSourceOwners), gcp.BatchReceiveSettings{MaxMessages: 10000, MaxBytes: 10 * constants.MiB, MaxLatency: 5 * time.Second, MaxBufferedMessages: 0, MaxBufferedBytes: 0})
 				mustReceiveBatchWithResult(rg, &authzv1.Challenge{}, &authzv1.ChallengeCHWriter{}, authz.NewChallengeCHWriter(logger, meterProvider, chConn), gcp.BatchReceiveSettings{MaxMessages: 1000, MaxBytes: 10 * constants.MiB, MaxLatency: 1 * time.Second, MaxBufferedMessages: 0, MaxBufferedBytes: 0})
 				mustReceiveBatch(rg, &meteringv1.MeterReading{}, &meteringv1.MeterReadingCHWriter{}, metering.NewMeterReadingCHWriter(logger, db, meteringchrepo.New(chConn)), gcp.BatchReceiveSettings{MaxMessages: 1000, MaxBytes: 10 * constants.MiB, MaxLatency: time.Second, MaxBufferedMessages: 0, MaxBufferedBytes: 0})
 				mustReceive(rg, &meteringv1.MeterReading{}, &meteringv1.MeterReadingStripeExporter{}, metering.NewMeterReadingStripeExporter(logger, meterProvider, replicaDB, stripeMeterEvents, stripeCatalog, c.Bool(stripeMeterEventExportFlagName)))
@@ -848,7 +902,7 @@ func newStreamsCommand() *cli.Command {
 				mustReceiveBatch(rg, &otelv1.Span{}, &otelv1.AgentEventSpanCHWriter{}, otelsvc.NewAgentEventSpanCHWriter(logger, meterProvider, otelchrepo.New(chConn)), gcp.BatchReceiveSettings{MaxMessages: 10000, MaxBytes: 10 * constants.MiB, MaxLatency: 5 * time.Second, MaxBufferedMessages: 0, MaxBufferedBytes: 0})
 
 				if enableCHRiskWrites {
-					mustReceiveBatchWithResult(rg, &riskv1.Finding{}, &riskv1.FindingCHWriter{}, risk.NewFindingCHWriter(logger, replicaDB, meterProvider, chrepo.New(chConn), riskFingerprinter), gcp.BatchReceiveSettings{MaxMessages: 1000, MaxBytes: 10 * constants.MiB, MaxLatency: 1 * time.Second, MaxBufferedMessages: 0, MaxBufferedBytes: 0})
+					mustReceiveBatchWithResult(rg, &riskv1.Finding{}, &riskv1.FindingCHWriter{}, risk.NewFindingCHWriter(logger, replicaDB, meterProvider, chrepo.New(chConn), riskFingerprinter, builtinPresets, risk.NewOutboxRiskFindingCreatedEmitter(logger, db, featureFlags)), gcp.BatchReceiveSettings{MaxMessages: 1000, MaxBytes: 10 * constants.MiB, MaxLatency: 1 * time.Second, MaxBufferedMessages: 0, MaxBufferedBytes: 0})
 				}
 			}
 

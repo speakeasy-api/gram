@@ -5,9 +5,28 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
+
+/**
+ * Auth client type filter (mcp:auth scopes only).
+ */
+export const AgentPolicySelectorClientType = {
+  RemoteSession: "remote_session",
+  ServiceAccount: "service_account",
+  StaticCredential: "static_credential",
+  PassThrough: "pass_through",
+  Ema: "ema",
+  Wildcard: "*",
+} as const;
+/**
+ * Auth client type filter (mcp:auth scopes only).
+ */
+export type AgentPolicySelectorClientType = OpenEnum<
+  typeof AgentPolicySelectorClientType
+>;
 
 /**
  * Tool disposition filter (MCP scopes only).
@@ -21,7 +40,7 @@ export const AgentPolicySelectorDisposition = {
 /**
  * Tool disposition filter (MCP scopes only).
  */
-export type AgentPolicySelectorDisposition = ClosedEnum<
+export type AgentPolicySelectorDisposition = OpenEnum<
   typeof AgentPolicySelectorDisposition
 >;
 
@@ -38,12 +57,13 @@ export const AgentPolicySelectorResourceKind = {
   RiskPolicy: "risk_policy",
   Chat: "chat",
   Agent: "agent",
+  McpAuthClient: "mcp_auth_client",
   Wildcard: "*",
 } as const;
 /**
  * The kind of resource this selector targets.
  */
-export type AgentPolicySelectorResourceKind = ClosedEnum<
+export type AgentPolicySelectorResourceKind = OpenEnum<
   typeof AgentPolicySelectorResourceKind
 >;
 
@@ -52,11 +72,19 @@ export type AgentPolicySelectorResourceKind = ClosedEnum<
  */
 export type AgentPolicySelector = {
   /**
+   * Auth client type filter (mcp:auth scopes only).
+   */
+  clientType?: AgentPolicySelectorClientType | undefined;
+  /**
+   * Personal connection owner filter (mcp:auth scopes on remote_session clients only): a user ID, '*', or '$represented_user'.
+   */
+  connectionOwner?: string | undefined;
+  /**
    * Tool disposition filter (MCP scopes only).
    */
   disposition?: AgentPolicySelectorDisposition | undefined;
   /**
-   * Project filter (MCP, environment, and assistant scopes).
+   * Project filter (MCP, environment, assistant, and mcp:auth scopes).
    */
   projectId?: string | undefined;
   /**
@@ -82,22 +110,37 @@ export type AgentPolicySelector = {
 };
 
 /** @internal */
-export const AgentPolicySelectorDisposition$inboundSchema: z.ZodMiniEnum<
-  typeof AgentPolicySelectorDisposition
-> = z.enum(AgentPolicySelectorDisposition);
+export const AgentPolicySelectorClientType$inboundSchema: z.ZodMiniType<
+  AgentPolicySelectorClientType,
+  unknown
+> = openEnums.inboundSchema(AgentPolicySelectorClientType);
 /** @internal */
-export const AgentPolicySelectorDisposition$outboundSchema: z.ZodMiniEnum<
-  typeof AgentPolicySelectorDisposition
-> = AgentPolicySelectorDisposition$inboundSchema;
+export const AgentPolicySelectorClientType$outboundSchema: z.ZodMiniType<
+  string,
+  AgentPolicySelectorClientType
+> = openEnums.outboundSchema(AgentPolicySelectorClientType);
 
 /** @internal */
-export const AgentPolicySelectorResourceKind$inboundSchema: z.ZodMiniEnum<
-  typeof AgentPolicySelectorResourceKind
-> = z.enum(AgentPolicySelectorResourceKind);
+export const AgentPolicySelectorDisposition$inboundSchema: z.ZodMiniType<
+  AgentPolicySelectorDisposition,
+  unknown
+> = openEnums.inboundSchema(AgentPolicySelectorDisposition);
 /** @internal */
-export const AgentPolicySelectorResourceKind$outboundSchema: z.ZodMiniEnum<
-  typeof AgentPolicySelectorResourceKind
-> = AgentPolicySelectorResourceKind$inboundSchema;
+export const AgentPolicySelectorDisposition$outboundSchema: z.ZodMiniType<
+  string,
+  AgentPolicySelectorDisposition
+> = openEnums.outboundSchema(AgentPolicySelectorDisposition);
+
+/** @internal */
+export const AgentPolicySelectorResourceKind$inboundSchema: z.ZodMiniType<
+  AgentPolicySelectorResourceKind,
+  unknown
+> = openEnums.inboundSchema(AgentPolicySelectorResourceKind);
+/** @internal */
+export const AgentPolicySelectorResourceKind$outboundSchema: z.ZodMiniType<
+  string,
+  AgentPolicySelectorResourceKind
+> = openEnums.outboundSchema(AgentPolicySelectorResourceKind);
 
 /** @internal */
 export const AgentPolicySelector$inboundSchema: z.ZodMiniType<
@@ -105,6 +148,8 @@ export const AgentPolicySelector$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
+    client_type: z.optional(AgentPolicySelectorClientType$inboundSchema),
+    connection_owner: z.optional(z.string()),
     disposition: z.optional(AgentPolicySelectorDisposition$inboundSchema),
     project_id: z.optional(z.string()),
     resource_id: z.string(),
@@ -115,6 +160,8 @@ export const AgentPolicySelector$inboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
+      "client_type": "clientType",
+      "connection_owner": "connectionOwner",
       "project_id": "projectId",
       "resource_id": "resourceId",
       "resource_kind": "resourceKind",
@@ -125,6 +172,8 @@ export const AgentPolicySelector$inboundSchema: z.ZodMiniType<
 );
 /** @internal */
 export type AgentPolicySelector$Outbound = {
+  client_type?: string | undefined;
+  connection_owner?: string | undefined;
   disposition?: string | undefined;
   project_id?: string | undefined;
   resource_id: string;
@@ -140,6 +189,8 @@ export const AgentPolicySelector$outboundSchema: z.ZodMiniType<
   AgentPolicySelector
 > = z.pipe(
   z.object({
+    clientType: z.optional(AgentPolicySelectorClientType$outboundSchema),
+    connectionOwner: z.optional(z.string()),
     disposition: z.optional(AgentPolicySelectorDisposition$outboundSchema),
     projectId: z.optional(z.string()),
     resourceId: z.string(),
@@ -150,6 +201,8 @@ export const AgentPolicySelector$outboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
+      clientType: "client_type",
+      connectionOwner: "connection_owner",
       projectId: "project_id",
       resourceId: "resource_id",
       resourceKind: "resource_kind",

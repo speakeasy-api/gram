@@ -49,14 +49,18 @@ var PolicySelector = Type("AgentPolicySelector", func() {
 	Description("A constraint that narrows which resources an agent grant applies to.")
 	Required("resource_kind", "resource_id")
 	Attribute("resource_kind", String, "The kind of resource this selector targets.", func() {
-		Enum("project", "mcp", "org", "environment", "skill", "assistant", "risk_policy", "chat", "agent", "*")
+		Enum("project", "mcp", "org", "environment", "skill", "assistant", "risk_policy", "chat", "agent", "mcp_auth_client", "*")
 	})
 	Attribute("resource_id", String, "The resource identifier, or '*' for all resources of this kind.")
+	Attribute("client_type", String, "Auth client type filter (mcp:auth scopes only).", func() {
+		Enum("remote_session", "service_account", "static_credential", "pass_through", "ema", "*")
+	})
+	Attribute("connection_owner", String, "Personal connection owner filter (mcp:auth scopes on remote_session clients only): a user ID, '*', or '$represented_user'.")
 	Attribute("disposition", String, "Tool disposition filter (MCP scopes only).", func() {
 		Enum("read_only", "destructive", "idempotent", "open_world")
 	})
 	Attribute("tool", String, "Specific tool name filter (MCP scopes only).")
-	Attribute("project_id", String, "Project filter (MCP, environment, and assistant scopes).")
+	Attribute("project_id", String, "Project filter (MCP, environment, assistant, and mcp:auth scopes).")
 	Attribute("server_url", String, "Server URL filter (risk policy scopes only).", func() { Format(FormatURI) })
 	Attribute("server_identity", String, "Server identity filter (risk policy scopes only).")
 })
@@ -122,6 +126,14 @@ var Agent = Type("ManagedAgent", func() {
 	Attribute("updated_at", String, func() { Format(FormatDateTime) })
 })
 
+var ListAgentsResult = Type("ListAgentsResult", func() {
+	Description("A page of managed agents, ordered by name.")
+
+	Attribute("items", ArrayOf(Agent), "The agents in this page.")
+	Attribute("next_cursor", String, "Cursor for the next page; absent when exhausted.")
+	Required("items")
+})
+
 var _ = Service("agents", func() {
 	Description("Human-only management of first-class agent principals.")
 	Security(security.Session)
@@ -129,14 +141,46 @@ var _ = Service("agents", func() {
 	sessionMethods()
 
 	Method("list", func() {
+		shared.CursorPagination()
 		Meta("openapi:operationId", "listAgents")
 		Meta("openapi:extension:x-speakeasy-name-override", "list")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "Agents"}`)
-		Payload(func() { security.SessionPayload() })
-		Result(ArrayOf(Agent))
+		Payload(func() {
+			security.SessionPayload()
+			Attribute("cursor", String, "Cursor for the next page of agents.")
+			Attribute("limit", Int, "The number of agents to return per page.", func() {
+				Default(50)
+				Minimum(1)
+				Maximum(200)
+			})
+			Attribute("search", String, "Case-insensitive substring match on the agent name.")
+			Attribute("lifecycle", ArrayOf(String), "Keep only agents in these lifecycle states.", func() {
+				Elem(func() { Enum("active", "suspended", "revoked") })
+			})
+			Attribute("owner_user_ids", ArrayOf(String), "Keep only agents owned by these users.")
+			Attribute("registered_after", String, "Keep only agents registered at or after this moment.", func() {
+				Format(FormatDateTime)
+			})
+			Attribute("registered_before", String, "Keep only agents registered before this moment.", func() {
+				Format(FormatDateTime)
+			})
+			Attribute("name_order", String, "Name order for the page.", func() {
+				Enum("asc", "desc")
+				Default("asc")
+			})
+		})
+		Result(ListAgentsResult)
 		HTTP(func() {
 			GET("/rpc/agents.list")
 			security.SessionHeader()
+			Param("cursor")
+			Param("limit")
+			Param("search")
+			Param("name_order")
+			Param("lifecycle")
+			Param("owner_user_ids")
+			Param("registered_after")
+			Param("registered_before")
 			Response(StatusOK)
 		})
 	})

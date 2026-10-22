@@ -8,6 +8,7 @@ import (
 	"time"
 
 	redisCache "github.com/go-redis/cache/v9"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/assert"
@@ -18,6 +19,7 @@ import (
 	accessRepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
 	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/identity"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
@@ -27,11 +29,15 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgid "github.com/speakeasy-api/gram/server/internal/organizations/id"
 	"github.com/speakeasy-api/gram/server/internal/organizations/orgprovision"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	"github.com/speakeasy-api/gram/server/internal/signins"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/pylon"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
@@ -771,10 +777,10 @@ func TestE2E_Callback_NewUserNoWorkOSOrgs_AssistantsDisposition(t *testing.T) {
 
 	// An assistants organization is a live product for a user who never asked for
 	// a trial, so arming one here would strip entitlements two weeks later. The
-	// account type stays whatever the billing provider reports, the stub's "pro".
+	// stub reports no tier, so the account type stays free.
 	org, err := orgRepo.New(inst.conn).GetOrganizationMetadata(ctx, organizationID)
 	require.NoError(t, err)
-	require.NotEqual(t, "enterprise", org.GramAccountType)
+	require.Equal(t, string(billing.TierBase), org.GramAccountType)
 	require.True(t, org.Whitelisted)
 
 	// Not "signup": an operator looking at this organization is looking at a
@@ -1543,6 +1549,177 @@ func TestE2E_Logout(t *testing.T) {
 	assert.Error(t, err, "session should be invalidated after logout")
 }
 
+func TestE2E_LoginRecordsSignInAndLogoutRevokesIt(t *testing.T) {
+	t.Parallel()
+
+	const (
+		workosUserID    = "user_01SIGNIN"
+		workosOrgID     = "org_01SIGNIN"
+		workosSessionID = "session_01SIGNIN"
+	)
+	fetcher := &mockWorkOSFetcher{
+		members: map[string][]workos.Member{
+			workosUserID: {
+				{ID: "om_SIGNIN", UserID: workosUserID, OrganizationID: workosOrgID, Organization: "Sign-in Corp", RoleSlugs: []string{"admin"}},
+			},
+		},
+		orgs: map[string]*workos.Organization{
+			workosOrgID: {ID: workosOrgID, Name: "Sign-in Corp"},
+		},
+	}
+	userInfo := &MockUserInfo{
+		UserID:               workosUserID,
+		Email:                "sso@example.com",
+		OrganizationID:       workosOrgID,
+		WorkOSSessionID:      workosSessionID,
+		AuthenticationMethod: signins.MethodSSO,
+		Organizations:        []MockOrganizationEntry{},
+	}
+	ctx, inst := newE2EAuthService(t, userInfo, fetcher)
+
+	callbackResult, err := inst.callbackWithNonce(ctx, t)
+	require.NoError(t, err)
+	require.NotContains(t, callbackResult.Location, "signin_error=")
+	ctx, err = inst.sessionManager.Authenticate(ctx, callbackResult.SessionToken)
+	require.NoError(t, err)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	signIn, err := signins.LiveSignInForSession(ctx, inst.conn, authCtx.ActiveOrganizationID, authCtx.UserID, workosSessionID)
+	require.NoError(t, err)
+	require.True(t, signIn.Valid, "the dashboard login records the sign-in in the WorkOS-selected organization")
+
+	_, err = inst.service.Logout(ctx, &gen.LogoutPayload{})
+	require.NoError(t, err)
+
+	revoked, err := signins.LiveSignInForSession(ctx, inst.conn, authCtx.ActiveOrganizationID, authCtx.UserID, workosSessionID)
+	require.NoError(t, err)
+	require.False(t, revoked.Valid, "signing out revokes that session's sign-in")
+	audited, err := audittest.AuditLogCountByAction(ctx, inst.conn, audit.ActionAccessMemberSignInsRevoke)
+	require.NoError(t, err)
+	require.Zero(t, audited, "a user's own sign-out is not a member-access change")
+}
+
+func enableSignInEnforcement(inst *e2eInstance, organizationID string) {
+	flags := &feature.InMemory{}
+	signins.EnableForTests(flags, organizationID)
+	inst.sessionManager.SetFlags(flags)
+}
+
+func TestE2E_LogoutEverywhereEndsEveryDashboardSession(t *testing.T) {
+	t.Parallel()
+
+	const (
+		workosUserID    = "user_01EVERYWHERE"
+		workosOrgID     = "org_01EVERYWHERE"
+		workosSessionID = "session_01EVERYWHERE"
+	)
+	fetcher := &mockWorkOSFetcher{
+		members: map[string][]workos.Member{
+			workosUserID: {
+				{ID: "om_EVERYWHERE", UserID: workosUserID, OrganizationID: workosOrgID, Organization: "Everywhere Corp", RoleSlugs: []string{"admin"}},
+			},
+		},
+		orgs: map[string]*workos.Organization{
+			workosOrgID: {ID: workosOrgID, Name: "Everywhere Corp"},
+		},
+	}
+	// A second browser holds WorkOS sessions with no recorded sign-in.
+	idpSessions := &MockIDPSessions{Listed: []string{workosSessionID, "session_02OTHERBROWSER", "session_03OTHERBROWSER"}}
+	userInfo := &MockUserInfo{
+		UserID:               workosUserID,
+		Email:                "everywhere@example.com",
+		OrganizationID:       workosOrgID,
+		WorkOSSessionID:      workosSessionID,
+		AuthenticationMethod: signins.MethodSSO,
+		Organizations:        []MockOrganizationEntry{},
+		IDPSessions:          idpSessions,
+	}
+	ctx, inst := newE2EAuthService(t, userInfo, fetcher)
+
+	first, err := inst.callbackWithNonce(ctx, t)
+	require.NoError(t, err)
+	second, err := inst.callbackWithNonce(ctx, t)
+	require.NoError(t, err)
+	ctx, err = inst.sessionManager.Authenticate(ctx, first.SessionToken)
+	require.NoError(t, err)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	enableSignInEnforcement(inst, authCtx.ActiveOrganizationID)
+
+	result, err := inst.service.LogoutEverywhere(ctx, &gen.LogoutEverywherePayload{SessionToken: nil})
+	require.NoError(t, err)
+	require.Empty(t, result.SessionCookie)
+	require.Equal(t, 1, result.RevokedSignIns)
+	inst.service.WaitForDeliveries()
+	pending, err := testrepo.New(inst.conn).CountPendingSignInRevocationDeliveries(ctx, authCtx.ActiveOrganizationID)
+	require.NoError(t, err)
+	require.Zero(t, pending, "the epoch and every WorkOS session were delivered durably")
+
+	for _, token := range []string{first.SessionToken, second.SessionToken} {
+		_, err := inst.sessionManager.Authenticate(t.Context(), token)
+		require.Error(t, err, "every dashboard session issued before signing out everywhere is rejected")
+	}
+	require.ElementsMatch(t, idpSessions.Listed, idpSessions.Revoked(), "every listed WorkOS session is ended, across pages")
+	live, err := signins.LiveSignInForSession(ctx, inst.conn, authCtx.ActiveOrganizationID, authCtx.UserID, workosSessionID)
+	require.NoError(t, err)
+	require.False(t, live.Valid)
+	audited, err := audittest.AuditLogCountByAction(ctx, inst.conn, audit.ActionAccessMemberSignInsRevoke)
+	require.NoError(t, err)
+	require.Equal(t, int64(1), audited)
+
+	reused, err := inst.callbackWithNonce(t.Context(), t)
+	require.NoError(t, err)
+	require.Contains(t, reused.Location, "signin_error=sign_in_revoked", "a WorkOS session from before is sent back to sign in afresh")
+	require.Empty(t, reused.SessionToken)
+
+	userInfo.WorkOSSessionID = "session_04FRESHSIGNIN"
+	fresh, err := inst.callbackWithNonce(t.Context(), t)
+	require.NoError(t, err)
+	_, err = inst.sessionManager.Authenticate(t.Context(), fresh.SessionToken)
+	require.NoError(t, err, "a later sign-in works")
+}
+
+func TestE2E_LogoutEverywhereIsUnavailableWhileEnforcementIsOff(t *testing.T) {
+	t.Parallel()
+
+	const (
+		workosUserID = "user_01EVERYWHEREOFF"
+		workosOrgID  = "org_01EVERYWHEREOFF"
+	)
+	fetcher := &mockWorkOSFetcher{
+		members: map[string][]workos.Member{
+			workosUserID: {
+				{ID: "om_EVERYWHEREOFF", UserID: workosUserID, OrganizationID: workosOrgID, Organization: "Everywhere Off Corp", RoleSlugs: []string{"admin"}},
+			},
+		},
+		orgs: map[string]*workos.Organization{
+			workosOrgID: {ID: workosOrgID, Name: "Everywhere Off Corp"},
+		},
+	}
+	userInfo := &MockUserInfo{
+		UserID:               workosUserID,
+		Email:                "everywhere-off@example.com",
+		OrganizationID:       workosOrgID,
+		WorkOSSessionID:      "session_01EVERYWHEREOFF",
+		AuthenticationMethod: signins.MethodSSO,
+		Organizations:        []MockOrganizationEntry{},
+	}
+	ctx, inst := newE2EAuthService(t, userInfo, fetcher)
+
+	first, err := inst.callbackWithNonce(ctx, t)
+	require.NoError(t, err)
+	ctx, err = inst.sessionManager.Authenticate(ctx, first.SessionToken)
+	require.NoError(t, err)
+
+	_, err = inst.service.LogoutEverywhere(ctx, &gen.LogoutEverywherePayload{SessionToken: nil})
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
+	_, err = inst.sessionManager.Authenticate(t.Context(), first.SessionToken)
+	require.NoError(t, err, "nothing changes while enforcement is off")
+}
+
 // TestE2E_Register_ZeroOrgUserCreatesOrg exercises the full onboarding flow:
 // callback with zero orgs → register a new org → info returns the new org.
 func TestE2E_Register_ZeroOrgUserCreatesOrg(t *testing.T) {
@@ -1793,4 +1970,194 @@ func TestE2E_FullOnboardingFlow(t *testing.T) {
 	logoutResult, err := inst.service.Logout(ctx, &gen.LogoutPayload{})
 	require.NoError(t, err)
 	assert.Empty(t, logoutResult.SessionCookie)
+}
+
+// A WorkOS session shared with a live sign-in in another organization is
+// still ended when it blocks a login here, so the next login is fresh.
+func TestE2E_RevokedSignInOnASharedWorkOSSessionLetsTheNextLoginThrough(t *testing.T) {
+	t.Parallel()
+
+	const (
+		workosUserID    = "user_01SHAREDSESSION"
+		workosOrgID     = "org_01SHAREDSESSION"
+		workosSessionID = "session_01SHAREDSESSION"
+	)
+	fetcher := &mockWorkOSFetcher{
+		members: map[string][]workos.Member{
+			workosUserID: {
+				{ID: "om_SHAREDSESSION", UserID: workosUserID, OrganizationID: workosOrgID, Organization: "Shared Corp", RoleSlugs: []string{"admin"}},
+			},
+		},
+		orgs: map[string]*workos.Organization{
+			workosOrgID: {ID: workosOrgID, Name: "Shared Corp"},
+		},
+	}
+	idpSessions := &MockIDPSessions{Listed: []string{workosSessionID}}
+	userInfo := &MockUserInfo{
+		UserID:               workosUserID,
+		Email:                "shared@example.com",
+		OrganizationID:       workosOrgID,
+		WorkOSSessionID:      workosSessionID,
+		AuthenticationMethod: signins.MethodSSO,
+		Organizations:        []MockOrganizationEntry{},
+		IDPSessions:          idpSessions,
+	}
+	ctx, inst := newE2EAuthService(t, userInfo, fetcher)
+
+	first, err := inst.callbackWithNonce(ctx, t)
+	require.NoError(t, err)
+	ctx, err = inst.sessionManager.Authenticate(ctx, first.SessionToken)
+	require.NoError(t, err)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	enableSignInEnforcement(inst, authCtx.ActiveOrganizationID)
+
+	otherOrg := "org-" + uuid.NewString()
+	_, err = orgRepo.New(inst.conn).UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
+		ID:             otherOrg,
+		Name:           "Other org",
+		Slug:           "other-" + uuid.NewString()[:8],
+		WorkosID:       pgtype.Text{String: "", Valid: false},
+		Whitelisted:    pgtype.Bool{Bool: false, Valid: false},
+		CreationSource: pgtype.Text{String: "", Valid: false},
+		DefaultHost:    pgtype.Text{String: "", Valid: false},
+	})
+	require.NoError(t, err)
+	_, err = signins.Record(ctx, inst.conn, signins.RecordParams{OrganizationID: otherOrg, UserID: authCtx.UserID, WorkOSSessionID: workosSessionID, AuthenticationMethod: signins.MethodSSO, Evidence: signins.Evidence{HostedDomain: "", TenantID: "", VerifiedEmail: "", IDPAuthenticatedAt: time.Time{}}, AuthenticatedAt: time.Now()})
+	require.NoError(t, err)
+	_, err = signins.RevokeUser(ctx, inst.conn, []string{authCtx.ActiveOrganizationID}, authCtx.UserID, signins.RevokeReasonAdmin)
+	require.NoError(t, err)
+
+	blocked, err := inst.callbackWithNonce(t.Context(), t)
+	require.NoError(t, err)
+	require.Contains(t, blocked.Location, "signin_error=sign_in_revoked")
+	require.Contains(t, idpSessions.Revoked(), workosSessionID, "the shared WorkOS session is ended so the user is not stuck")
+
+	userInfo.WorkOSSessionID = "session_02SHAREDFRESH"
+	fresh, err := inst.callbackWithNonce(t.Context(), t)
+	require.NoError(t, err)
+	require.NotEmpty(t, fresh.SessionToken, "the next login gets a fresh session")
+	_, err = inst.sessionManager.Authenticate(t.Context(), fresh.SessionToken)
+	require.NoError(t, err)
+}
+
+func TestE2E_LogoutEverywhereIsRefusedFromASupportSession(t *testing.T) {
+	t.Parallel()
+
+	const workosUserID = "user_01EVERYWHERESUPPORT"
+	const workosOrgID = "org_01EVERYWHERESUPPORT"
+	fetcher := &mockWorkOSFetcher{
+		members: map[string][]workos.Member{
+			workosUserID: {
+				{ID: "om_EVERYWHERESUPPORT", UserID: workosUserID, OrganizationID: workosOrgID, Organization: "Support Corp", RoleSlugs: []string{"admin"}},
+			},
+		},
+		orgs: map[string]*workos.Organization{workosOrgID: {ID: workosOrgID, Name: "Support Corp"}},
+	}
+	userInfo := &MockUserInfo{
+		UserID:               workosUserID,
+		Email:                "support@example.com",
+		OrganizationID:       workosOrgID,
+		WorkOSSessionID:      "session_01EVERYWHERESUPPORT",
+		AuthenticationMethod: signins.MethodSSO,
+		Organizations:        []MockOrganizationEntry{},
+	}
+	ctx, inst := newE2EAuthService(t, userInfo, fetcher)
+	first, err := inst.callbackWithNonce(ctx, t)
+	require.NoError(t, err)
+	ctx, err = inst.sessionManager.Authenticate(ctx, first.SessionToken)
+	require.NoError(t, err)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	enableSignInEnforcement(inst, authCtx.ActiveOrganizationID)
+
+	support := *authCtx
+	support.SupportOrganizationID = authCtx.ActiveOrganizationID
+	_, err = inst.service.LogoutEverywhere(contextvalues.SetAuthContext(ctx, &support), &gen.LogoutEverywherePayload{SessionToken: nil})
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
+	_, err = inst.sessionManager.Authenticate(t.Context(), first.SessionToken)
+	require.NoError(t, err, "nothing was signed out")
+}
+
+func TestE2E_LogoutEverywhereStillRevokesWhenWorkOSCannotListSessions(t *testing.T) {
+	t.Parallel()
+
+	const (
+		workosUserID    = "user_01LISTFAILS"
+		workosOrgID     = "org_01LISTFAILS"
+		workosSessionID = "session_01LISTFAILS"
+	)
+	fetcher := &mockWorkOSFetcher{
+		members: map[string][]workos.Member{
+			workosUserID: {{ID: "om_LISTFAILS", UserID: workosUserID, OrganizationID: workosOrgID, Organization: "List Fails Corp", RoleSlugs: []string{"admin"}}},
+		},
+		orgs: map[string]*workos.Organization{workosOrgID: {ID: workosOrgID, Name: "List Fails Corp"}},
+	}
+	idpSessions := &MockIDPSessions{Listed: []string{workosSessionID, "session_02UNRECORDED"}, ListFails: true}
+	userInfo := &MockUserInfo{
+		UserID:               workosUserID,
+		Email:                "list-fails@example.com",
+		OrganizationID:       workosOrgID,
+		WorkOSSessionID:      workosSessionID,
+		AuthenticationMethod: signins.MethodSSO,
+		Organizations:        []MockOrganizationEntry{},
+		IDPSessions:          idpSessions,
+	}
+	ctx, inst := newE2EAuthService(t, userInfo, fetcher)
+	first, err := inst.callbackWithNonce(ctx, t)
+	require.NoError(t, err)
+	ctx, err = inst.sessionManager.Authenticate(ctx, first.SessionToken)
+	require.NoError(t, err)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	enableSignInEnforcement(inst, authCtx.ActiveOrganizationID)
+
+	result, err := inst.service.LogoutEverywhere(ctx, &gen.LogoutEverywherePayload{SessionToken: nil})
+	require.NoError(t, err, "a WorkOS listing failure must not stop the local revocation")
+	require.Equal(t, 1, result.RevokedSignIns)
+	inst.service.WaitForDeliveries()
+	_, err = inst.sessionManager.Authenticate(t.Context(), first.SessionToken)
+	require.Error(t, err, "the dashboard session is ended")
+	require.Contains(t, idpSessions.Revoked(), workosSessionID, "the recorded WorkOS session is still ended")
+}
+
+func TestE2E_LogoutFromASupportSessionRevokesNoSignIn(t *testing.T) {
+	t.Parallel()
+
+	const (
+		workosUserID    = "user_01SUPPORTLOGOUT"
+		workosOrgID     = "org_01SUPPORTLOGOUT"
+		workosSessionID = "session_01SUPPORTLOGOUT"
+	)
+	fetcher := &mockWorkOSFetcher{
+		members: map[string][]workos.Member{
+			workosUserID: {{ID: "om_SUPPORTLOGOUT", UserID: workosUserID, OrganizationID: workosOrgID, Organization: "Support Logout Corp", RoleSlugs: []string{"admin"}}},
+		},
+		orgs: map[string]*workos.Organization{workosOrgID: {ID: workosOrgID, Name: "Support Logout Corp"}},
+	}
+	userInfo := &MockUserInfo{
+		UserID:               workosUserID,
+		Email:                "support-logout@example.com",
+		OrganizationID:       workosOrgID,
+		WorkOSSessionID:      workosSessionID,
+		AuthenticationMethod: signins.MethodSSO,
+		Organizations:        []MockOrganizationEntry{},
+	}
+	ctx, inst := newE2EAuthService(t, userInfo, fetcher)
+	first, err := inst.callbackWithNonce(ctx, t)
+	require.NoError(t, err)
+	ctx, err = inst.sessionManager.Authenticate(ctx, first.SessionToken)
+	require.NoError(t, err)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	support := *authCtx
+	support.SupportOrganizationID = authCtx.ActiveOrganizationID
+	_, err = inst.service.Logout(contextvalues.SetAuthContext(ctx, &support), &gen.LogoutPayload{})
+	require.NoError(t, err)
+	live, err := signins.LiveSignInForSession(ctx, inst.conn, authCtx.ActiveOrganizationID, authCtx.UserID, workosSessionID)
+	require.NoError(t, err)
+	require.True(t, live.Valid, "a support or impersonated sign-out revokes nothing on the customer's behalf")
 }

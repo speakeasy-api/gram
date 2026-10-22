@@ -6,7 +6,7 @@ Gives every live hosted toolset (non-empty `mcp_slug`) created before eager wrap
 go run ./server/cmd/tools/migrations hosted-mcp-wrappers -h
 ```
 
-Flags: `-apply` (default is a dry run), `-project <PROJECT_ID>`, `-limit N`, `-cursor <TOOLSET_ID>`, `-report <path>`.
+Flags: `-apply` (default is a dry run), `-project <PROJECT_ID>` or `-all-projects` (one is required), `-limit N`, `-cursor <TOOLSET_ID>`, `-report <path>`.
 
 ## Precondition
 
@@ -16,7 +16,7 @@ Flags: `-apply` (default is a dry run), `-project <PROJECT_ID>`, `-limit N`, `-c
 
 Candidates are walked in toolset id order. Each toolset runs in its own transaction: a per-toolset advisory lock, the toolset row `FOR UPDATE` (the lock every `hostedmcp.Sync` caller holds; Sync then locks custom domains, endpoints, and the server in that order), the guards re-checked, then Sync. A dry run executes the same transaction and always rolls it back, so it briefly holds the same row locks but commits nothing.
 
-Writes are audited as the system principal `system:hosted-mcp-wrapper-backfill`. The toolset's `mcp_slug` is used verbatim, including platform slugs that predate the org-prefix rule; neither Sync nor the address check rewrites or rejects them.
+Writes are audited as the system principal `system:hosted-mcp-wrapper-backfill`. Audit rows are recorded without publishing audit webhook events to the outbox. A transient database error (deadlock, lock or statement timeout, cancellation, lost connection) stops the run instead of being reported as a Sync refusal; resume with `-cursor`. The toolset's `mcp_slug` is used verbatim, including platform slugs that predate the org-prefix rule; neither Sync nor the address check rewrites or rejects them.
 
 Toolset-backed `mcp_servers` rows with a fresh id (gateway members, create-from-source, Platform MCP) are separate servers. They are never adopted, modified, or deleted; they are only counted.
 
@@ -36,7 +36,7 @@ Toolset-backed `mcp_servers` rows with a fresh id (gateway members, create-from-
 
 Every row also carries `fresh_id_servers` (other live toolset-backed servers for the toolset), and the summary counts `fresh_id_servers_present`. Rows list `domains_to_reconcile` when Sync cleared a domain root; start a custom domain reconcile for each.
 
-Stdout carries the mode, outcome counts, writes, and the last toolset id processed. The `-report` file holds ids, slugs, outcomes, reasons, and counts; it never holds names or emails.
+Stdout carries the mode, phase, outcome counts, rows scanned, toolsets walked, writes, and the last toolset id processed. The `-report` file holds ids, slugs, outcomes, reasons, and counts; it never holds names or emails.
 
 ## Run book
 
@@ -44,16 +44,13 @@ Stdout carries the mode, outcome counts, writes, and the last toolset id process
 2. Dev: `-apply`; rerun `-apply` and confirm `writes` is 0 and every row is `already_complete` (or a repeated `dead_custom_domain` / `blocked_*`).
 3. Prod: dry run with `-report`. Review every `blocked_*` row and the `fresh_id_servers_present` count before going on.
 4. Prod canary: `-apply -project <PROJECT_ID>`; confirm the project's hosted servers still serve through their endpoints.
-5. Prod: `-apply -limit N` in batches, resuming with `-cursor` from the summary's `last_cursor`.
-6. Prod: a final unfiltered `-apply` must report `writes: 0`.
+5. Prod: `-apply -all-projects -limit N` in batches, resuming with `-cursor` from the summary's `last_cursor`. Give each batch its own `-report` path: an `-apply` refuses an existing file.
+6. Prod: a final `-apply -all-projects` without `-limit` must report `writes: 0`.
 
 Failed runs exit nonzero; rows commit one toolset at a time, and an `-apply` run prints the resume cursor (a dry run commits nothing, so its cursor is never reused).
 
 ## Post-run checks
 
 - The `mcp.toolset_slug_fallback` counter drops for traffic to the covered toolsets.
+- The AIM-7 removal gate requires zero new increments to `mcp.toolset_slug_fallback` summed over every `gram.mcp.entry_point` value, and to `mcp.legacy_audience_accepted`, for at least the longest access-token lifetime (720h): entry points such as `shared_resource` and `org_gateway_probe` were split out of `oauth`, so no single tag covers all traffic.
 - Plugin publication logs no `mcp_server_ambiguous` or "ambiguous toolset MCP serving wrapper".
-
-## Later phase
-
-Moving toolset-keyed dependents (`mcp_metadata`, `plugin_servers`, `assistant_toolsets`) onto the wrapper is a separate, later phase that waits on AIM-16; this command does not touch them.

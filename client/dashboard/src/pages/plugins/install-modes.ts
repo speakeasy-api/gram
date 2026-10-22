@@ -1,5 +1,6 @@
 import type { BadgeVariant } from "@/components/ui/lib/types";
 import { PluginAssignmentInstallMode } from "@gram/client/models/components/pluginassignment.js";
+import { InstallModes } from "@gram/client/models/components/setpluginassignmentsform.js";
 import { isIndividualMemberPrincipal } from "./principals";
 
 export type InstallMode = PluginAssignmentInstallMode;
@@ -39,6 +40,14 @@ export function installModeOption(
   mode: InstallMode,
 ): (typeof INSTALL_MODES)[number] {
   return INSTALL_MODES.find((option) => option.value === mode)!;
+}
+
+// Saving takes only the modes this dashboard knows; anything newer saves as
+// the default rather than failing the request.
+export function toSavedInstallMode(mode: InstallMode): InstallModes {
+  return Object.values<string>(InstallModes).includes(mode)
+    ? (mode as InstallModes)
+    : InstallModes.Default;
 }
 
 // A row in the install mode list: one audience, or every individually

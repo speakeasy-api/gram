@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"log/slog"
 	"net/http"
@@ -19,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -193,7 +195,7 @@ func newRefreshTokenReplayTestFixture(
 		McpServerID:          uuid.NullUUID{},
 		OrganizationID:       "org_test",
 		ProjectID:            uuid.New(),
-		RouteBase:            "mcp",
+		RouteBase:            mcproute.MCP,
 		Slug:                 "test",
 		ToolsetID:            uuid.NullUUID{},
 		UpstreamResource:     "",
@@ -228,6 +230,7 @@ func newRefreshTokenReplayTestFixture(
 	service.enc = enc
 	service.metrics = &mcpmetrics.Metrics{}
 	service.userSessionSigner = sessiontokens.NewSigner("test-jwt-secret")
+	service.replayLiveness = func(context.Context, *ResolvedMcpEndpoint, string) (string, bool) { return "", true }
 	return service, endpoint, &clientRow, userSessionRefreshReplay{
 		Key:        payload.ReplayKey,
 		Ciphertext: ciphertext,

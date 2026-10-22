@@ -113,7 +113,17 @@ func (s *Service) armSelfServeTrialForExistingOrganization(ctx context.Context, 
 		return org, false, nil
 	}
 
-	_, err := trialsRepo.New(s.db).GetTrial(ctx, org.ID)
+	// Durable partner attribution excludes both pending and redeemed signups,
+	// even when a later login carries no partner intent.
+	partnerSignup, err := s.hasPartnerSignup(ctx, org.ID)
+	if err != nil {
+		return org, false, err
+	}
+	if partnerSignup {
+		return org, false, nil
+	}
+
+	_, err = trialsRepo.New(s.db).GetTrial(ctx, org.ID)
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 	case err != nil:

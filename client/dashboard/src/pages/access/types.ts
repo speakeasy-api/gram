@@ -29,7 +29,8 @@ export type ResourceType =
   | "risk_policy"
   | "chat"
   | "agent"
-  | "workload";
+  | "workload"
+  | "mcp_auth_client";
 
 export function isUnrestrictedResourceType(
   resourceType: ResourceType,
@@ -121,15 +122,12 @@ export interface RoleGrant {
 
 /** Maps annotation hint keys to disposition values stored in selectors.
  * Must match the backend constants in authz/selector.go. */
-export const ANNOTATION_TO_DISPOSITION: Record<
-  AnnotationHint,
-  SelectorDisposition
-> = {
+export const ANNOTATION_TO_DISPOSITION = {
   readOnlyHint: "read_only",
   destructiveHint: "destructive",
   idempotentHint: "idempotent",
   openWorldHint: "open_world",
-};
+} as const satisfies Record<AnnotationHint, SelectorDisposition>;
 
 /** Reverse map: disposition value → annotation hint key. */
 export const DISPOSITION_TO_ANNOTATION: Record<string, AnnotationHint> = {
@@ -138,3 +136,18 @@ export const DISPOSITION_TO_ANNOTATION: Record<string, AnnotationHint> = {
   idempotent: "idempotentHint",
   open_world: "openWorldHint",
 };
+
+export function isKnownResourceType(value: string): value is ResourceType {
+  return [
+    "org",
+    "project",
+    "mcp",
+    "environment",
+    "skill",
+    "assistant",
+    "risk_policy",
+    "chat",
+    "agent",
+    "workload",
+  ].includes(value);
+}

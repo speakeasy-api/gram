@@ -1,6 +1,10 @@
-import { shellQuote } from "@/lib/shell";
+import {
+  claudeCodeAddCommand,
+  codexAddCommand,
+} from "@/lib/mcp-client-install";
 import {
   catalogBackedMcpServers,
+  findMcpServerActivity,
   hasDefaultPluginServer,
 } from "@/components/project-guide/journeyStatus";
 import { AUTOMATIC_CATALOG_SERVER_NAMES } from "@/components/project-guide/journeys";
@@ -16,6 +20,7 @@ import {
   useProjectGuideMcpServerSelection,
 } from "@/components/project-guide/projectGuideStores";
 import { useProjectSlugForRequests, useSlugs } from "@/contexts/Sdk";
+import { mcpServerRouteParam } from "@/lib/sources";
 import { getServerURL } from "@/lib/utils";
 import { type PulseMCPServer, useListMCPCatalog } from "@/pages/catalog/hooks";
 import {
@@ -28,15 +33,18 @@ import {
   normalizeRemoteUrl,
 } from "@/pages/catalog/remotes";
 import { useRemoteMcpInstallWorkflow } from "@/pages/catalog/useRemoteMcpInstallWorkflow";
+import { useCanViewToolLogs } from "@/components/observe/observeDeepLink";
 import { useRoutes } from "@/routes";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import type { McpEndpoint } from "@gram/client/models/components/mcpendpoint.js";
 import type { Plugin } from "@gram/client/models/components/plugin.js";
 import type { RemoteMcpServer } from "@gram/client/models/components/remotemcpserver.js";
-import type { ToolUsageTraceSummary } from "@gram/client/models/components/toolusagetracesummary.js";
+import type { McpServerActivity } from "@gram/client/models/components/mcpserveractivity.js";
 import type { ExternalMCPServer } from "@gram/client/models/components/externalmcpserver.js";
-import { invalidateAllGetMcpServerActivity } from "@gram/client/react-query/getMcpServerActivity.js";
-import { useListToolUsageTraces } from "@gram/client/react-query/listToolUsageTraces.js";
+import {
+  invalidateAllGetMcpServerActivity,
+  useGetMcpServerActivity,
+} from "@gram/client/react-query/getMcpServerActivity.js";
 import { useMcpEndpoints } from "@gram/client/react-query/mcpEndpoints.js";
 import { useMcpServers } from "@gram/client/react-query/mcpServers.js";
 import { usePlugins } from "@gram/client/react-query/plugins.js";
@@ -52,10 +60,18 @@ type ActiveOperation = {
   paused: boolean;
 };
 
+// The server's call count and latest call time when the guide started
+// listening. Detection reads the project:read activity aggregate rather than
+// individual calls, which need log:read and so are closed to most guide users.
 type ActivityBaseline = {
   capturedAtMs: number;
-  traceIds: Set<string>;
+  totalToolCalls: number;
+  lastToolCallAtMs: number;
 };
+
+// The activity aggregate reports the last call to the second, so a call made
+// in the second listening started can read as up to a second earlier.
+const LAST_CALL_PRECISION_MS = 1_000;
 
 const CLIENTS: McpGuideClient[] = ["claude", "codex", "cursor"];
 
@@ -114,9 +130,9 @@ function connectionCommandFor(
 ): string {
   switch (client) {
     case "claude":
-      return `claude mcp add --transport http --scope user ${shellQuote(serverName)} ${shellQuote(endpointUrl)}`;
+      return claudeCodeAddCommand(serverName, endpointUrl);
     case "codex":
-      return `codex mcp add ${shellQuote(serverName)} --url ${shellQuote(endpointUrl)}`;
+      return codexAddCommand(serverName, endpointUrl);
     case "cursor":
       return JSON.stringify(
         {
@@ -145,36 +161,39 @@ function promptFor(name: string, endpointUrl: string): string {
   return `Using the ${name} MCP server at this exact URL, ${endpointUrl}, first list the available tools. If multiple servers have the same name, use only the one at this URL. Then choose one tool marked read-only and call it with a harmless request. Do not create, update, or delete anything. Summarize the result, and do not call any tool unless it is marked read-only.`;
 }
 
-function traceTimeMs(trace: ToolUsageTraceSummary): number | undefined {
-  try {
-    return Number(BigInt(trace.startTimeUnixNano) / 1_000_000n);
-  } catch {
-    return undefined;
-  }
+function lastToolCallAtMs(entry: McpServerActivity | undefined): number {
+  const ms = entry?.lastToolCallAt?.getTime();
+  return ms === undefined || Number.isNaN(ms) ? 0 : ms;
 }
 
-function firstNewTrace(
+function activityBaselineFor(
+  entry: McpServerActivity | undefined,
+  capturedAtMs: number,
+): ActivityBaseline {
+  return {
+    capturedAtMs,
+    totalToolCalls: entry?.totalToolCalls ?? 0,
+    lastToolCallAtMs: lastToolCallAtMs(entry),
+  };
+}
+
+// A later call shows up as a higher count or a later last-call time. Either is
+// enough: the count is over a sliding lookback window, so an old call aging out
+// can cancel a new one, while the last-call time only has second precision.
+// The last call must also fall after listening started, so a call made before
+// then but ingested late, or history on a server the baseline could not yet
+// see, does not count as the new call.
+function hasNewActivity(
   baseline: ActivityBaseline,
-  traces: ToolUsageTraceSummary[] | undefined,
-  server: McpServer | undefined,
-): ToolUsageTraceSummary | undefined {
-  if (!server?.slug) return undefined;
-  return traces
-    ?.filter((trace) => {
-      const observedAtMs = traceTimeMs(trace);
-      return (
-        trace.targetType === "hosted_mcp_server" &&
-        trace.targetId === server.slug &&
-        !baseline.traceIds.has(trace.id) &&
-        observedAtMs !== undefined &&
-        observedAtMs >= baseline.capturedAtMs
-      );
-    })
-    .sort(
-      (left, right) =>
-        (traceTimeMs(left) ?? Number.POSITIVE_INFINITY) -
-        (traceTimeMs(right) ?? Number.POSITIVE_INFINITY),
-    )[0];
+  entry: McpServerActivity | undefined,
+): entry is McpServerActivity {
+  if (!entry) return false;
+  const lastCallMs = lastToolCallAtMs(entry);
+  if (lastCallMs < baseline.capturedAtMs - LAST_CALL_PRECISION_MS) return false;
+  return (
+    entry.totalToolCalls > baseline.totalToolCalls ||
+    lastCallMs > baseline.lastToolCallAtMs
+  );
 }
 
 function selectedServerReadiness(
@@ -240,11 +259,15 @@ export function useMcpGuideOperations(): {
   serverName: string | undefined;
   setClient: (client: McpGuideClient) => void;
   connectionPrompts: Record<McpGuideClient, string> | undefined;
-  toolLogsHref: string;
+  /** Undefined when the caller cannot open Tool Logs (it needs log:read). */
+  toolLogsHref: string | undefined;
+  /** The governed server's overview, where its call activity is shown. */
+  mcpServerHref: string;
 } {
   const gramProject = useProjectSlugForRequests();
   const { orgSlug, projectSlug } = useSlugs();
   const routes = useRoutes();
+  const canViewToolLogs = useCanViewToolLogs();
   const queryClient = useQueryClient();
   const [selectedServerOverride, setSelectedServerOverride] = useState<
     PulseMCPServer | undefined
@@ -370,30 +393,18 @@ export function useMcpGuideOperations(): {
     serverNameSuffix: "_Governed",
   });
 
-  const tracesRequest = useMemo(
-    () => ({
-      gramProject,
-      listToolUsageTracesPayload: {
-        from: new Date(0),
-        to: new Date(),
-        hostedToolsetSlugs: mcpServer?.slug ? [mcpServer.slug] : undefined,
-        targetTypes: ["hosted_mcp_server"] as Array<"hosted_mcp_server">,
-        limit: 20,
-        sort: "asc" as const,
-      },
-    }),
-    [gramProject, mcpServer?.slug],
-  );
-  const activityQuery = useListToolUsageTraces(tracesRequest, undefined, {
-    enabled: Boolean(endpointUrl && mcpServer?.slug),
-    refetchInterval: () => {
-      tracesRequest.listToolUsageTracesPayload.to = new Date();
-      return activeOperation?.scope.step === 3 && !activeOperation.paused
-        ? 5_000
-        : false;
+  const activityQuery = useGetMcpServerActivity(
+    { gramProject, getMcpServerActivityPayload: {} },
+    undefined,
+    {
+      enabled: Boolean(endpointUrl && mcpServer?.slug),
+      refetchInterval: () =>
+        activeOperation?.scope.step === 3 && !activeOperation.paused
+          ? 5_000
+          : false,
+      throwOnError: false,
     },
-    throwOnError: false,
-  });
+  );
   const queryActivityError =
     activityQuery.isError ||
     (Boolean(endpointUrl && mcpServer?.slug) &&
@@ -424,7 +435,6 @@ export function useMcpGuideOperations(): {
     setBaselineCaptureError(false);
     setBaselineCapturePending(true);
     setSuppressActivityError(true);
-    tracesRequest.listToolUsageTracesPayload.to = new Date();
     try {
       const result = await activityQuery.refetch();
       if (activityBaselineGenerationRef.current !== generation) return false;
@@ -432,20 +442,12 @@ export function useMcpGuideOperations(): {
         setBaselineCaptureError(true);
         return false;
       }
-      const latestTraceMs = result.data.traces.reduce(
-        (latest, trace) => Math.max(latest, traceTimeMs(trace) ?? 0),
-        0,
+      const baseline = activityBaselineFor(
+        findMcpServerActivity(result.data.activity, mcpServer),
+        Date.now(),
       );
-      const baseline = {
-        capturedAtMs: Math.max(Date.now(), latestTraceMs),
-        traceIds: new Set(result.data.traces.map((trace) => trace.id)),
-      };
       activityBaselineRef.current = baseline;
       setActivityBaseline(baseline);
-      tracesRequest.listToolUsageTracesPayload.from = new Date(
-        baseline.capturedAtMs,
-      );
-      tracesRequest.listToolUsageTracesPayload.to = new Date();
       return true;
     } catch {
       if (activityBaselineGenerationRef.current !== generation) return false;
@@ -457,7 +459,7 @@ export function useMcpGuideOperations(): {
         setSuppressActivityError(false);
       }
     }
-  }, [activityQuery, tracesRequest]);
+  }, [activityQuery, mcpServer]);
   captureActivityBaselineRef.current = captureActivityBaseline;
 
   const refetchSelectedServerReadiness = useCallback(async (): Promise<
@@ -535,12 +537,11 @@ export function useMcpGuideOperations(): {
         return;
       }
       setSuppressActivityError(true);
-      tracesRequest.listToolUsageTracesPayload.to = new Date();
       void activityQuery
         .refetch()
         .finally(() => setSuppressActivityError(false));
     },
-    [activityQuery, reportBaselineFailure, tracesRequest],
+    [activityQuery, reportBaselineFailure],
   );
 
   const handleSignal = useCallback(
@@ -790,29 +791,23 @@ export function useMcpGuideOperations(): {
       });
       return;
     }
-    const trace = firstNewTrace(
-      baseline,
-      activityQuery.data?.traces,
+    const entry = findMcpServerActivity(
+      activityQuery.data?.activity,
       mcpServer,
     );
-    if (!trace || !endpointUrl) return;
+    if (!hasNewActivity(baseline, entry) || !endpointUrl) return;
 
     const event: ProjectGuideEventCard = {
       kind: "Governed call",
       tone: "allow",
-      title: trace.toolName,
+      title: "tool call recorded",
       rows: [
-        { key: "server", value: trace.targetLabel },
+        { key: "server", value: entry.targetLabel },
         { key: "endpoint", value: endpointUrl },
-        {
-          key: "result",
-          value:
-            trace.httpStatusCode === undefined
-              ? trace.eventSource
-              : `HTTP ${trace.httpStatusCode}`,
-        },
       ],
-      note: "The first new call is recorded in Tool Logs.",
+      note: canViewToolLogs
+        ? "The first new call is recorded in Tool Logs."
+        : "The first new call is counted in the server's activity.",
     };
     updateActiveOperation(undefined);
     void invalidateAllGetMcpServerActivity(queryClient);
@@ -820,8 +815,9 @@ export function useMcpGuideOperations(): {
   }, [
     activeOperation,
     activityError,
-    activityQuery.data?.traces,
+    activityQuery.data?.activity,
     activityQuery.isPending,
+    canViewToolLogs,
     endpointUrl,
     mcpServer,
     suppressActivityError,
@@ -875,7 +871,10 @@ export function useMcpGuideOperations(): {
       setPromptCopied(false);
     },
     connectionPrompts,
-    toolLogsHref: routes.logs.href(),
+    toolLogsHref: canViewToolLogs ? routes.logs.href() : undefined,
+    mcpServerHref: mcpServer
+      ? routes.mcp.x.overview.href(mcpServerRouteParam(mcpServer))
+      : routes.home.href(),
   };
 }
 

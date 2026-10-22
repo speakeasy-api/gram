@@ -37,8 +37,6 @@ import type { TestDetectionRuleResult } from "@gram/client/models/components/tes
 import { chatLoad } from "@gram/client/funcs/chatLoad.js";
 import { unwrapAsync } from "@gram/client/types/fp.js";
 import { useSdkClient } from "@/contexts/Sdk";
-import { useFeatureFlag } from "@/hooks/useFeatureFlag";
-import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/RadioGroup";
 import {
   BUILTIN_RULES_BY_CATEGORY,
@@ -127,10 +125,6 @@ function DetectionRulesContent({
   const [expanded, setExpanded] = useState<RuleCategory | "custom" | null>(
     null,
   );
-  // Once Shadow AI is folded into Guardrails its targets have their own tab,
-  // so the catalog stops listing it; flag off, the catalog is unchanged.
-  const shadowAIFolded =
-    useFeatureFlag(FEATURE_FLAGS.shadowAiGuardrails).status === "enabled";
 
   // Deep-link support: `?rule=<id>` opens that rule's detail sheet (and expands
   // its category). The command palette uses this since rules have no per-item
@@ -192,7 +186,7 @@ function DetectionRulesContent({
         )}
 
         <BuiltinRulesSection
-          categories={detectionRulesTabCategories(shadowAIFolded)}
+          categories={detectionRulesTabCategories()}
           expanded={expanded}
           onToggle={(cat) => setExpanded(expanded === cat ? null : cat)}
           onSelect={(rule) => setSelected({ kind: "builtin", rule })}

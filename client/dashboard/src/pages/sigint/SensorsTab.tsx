@@ -1,3 +1,12 @@
+import {
+  enumPresentation,
+  isKnownEnumValue,
+  requireKnownEnumValue,
+} from "@/lib/enum";
+import {
+  InputStrategy,
+  Mode,
+} from "@gram/client/models/components/createsigintsensorform.js";
 import { duplicateNameCounts } from "./signal-names";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
@@ -240,7 +249,20 @@ export function SensorsTab(): JSX.Element {
       key: "mode",
       header: "Mode",
       width: "160px",
-      render: (sensor) => <Text small>{MODE_LABELS[sensor.mode]}</Text>,
+      render: (sensor) => (
+        <div>
+          <Text small>
+            {enumPresentation(MODE_LABELS, sensor.mode, "Unknown mode")}
+          </Text>
+          <Text small muted>
+            {sensor.inputStrategy === "sliding_window"
+              ? `Up to ${sensor.windowSize} messages`
+              : sensor.inputStrategy === "single_message"
+                ? "Current message only"
+                : "Unknown message context"}
+          </Text>
+        </div>
+      ),
     },
     {
       key: "signals",
@@ -280,6 +302,14 @@ export function SensorsTab(): JSX.Element {
                 {
                   label: "Edit",
                   icon: "pencil",
+                  disabled:
+                    !isKnownEnumValue(Mode, sensor.mode) ||
+                    !isKnownEnumValue(InputStrategy, sensor.inputStrategy),
+                  description:
+                    !isKnownEnumValue(Mode, sensor.mode) ||
+                    !isKnownEnumValue(InputStrategy, sensor.inputStrategy)
+                      ? "Refresh the page before editing this sensor."
+                      : undefined,
                   onClick: () => {
                     setEditorError(null);
                     setEditorSensor(sensor);
@@ -306,13 +336,30 @@ export function SensorsTab(): JSX.Element {
       if (editorSensor) {
         await update.mutateAsync({
           request: {
-            updateSigintSensorForm: { id: editorSensor.id, ...draft },
+            updateSigintSensorForm: {
+              id: editorSensor.id,
+              ...draft,
+              inputStrategy: requireKnownEnumValue(
+                InputStrategy,
+                draft.inputStrategy,
+              ),
+              mode: requireKnownEnumValue(Mode, draft.mode),
+            },
           },
         });
         toast.success("Sensor updated");
       } else {
         await create.mutateAsync({
-          request: { createSigintSensorForm: draft },
+          request: {
+            createSigintSensorForm: {
+              ...draft,
+              inputStrategy: requireKnownEnumValue(
+                InputStrategy,
+                draft.inputStrategy,
+              ),
+              mode: requireKnownEnumValue(Mode, draft.mode),
+            },
+          },
         });
         toast.success("Sensor created");
       }

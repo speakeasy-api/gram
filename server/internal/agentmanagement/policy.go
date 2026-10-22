@@ -70,7 +70,7 @@ func (s *Service) CreatePolicyGrant(ctx context.Context, payload *gen.CreatePoli
 
 	var result *gen.AgentPolicyGrant
 	err = pgx.BeginFunc(ctx, s.db, func(tx pgx.Tx) error {
-		human, agent, err := s.authorizer.RequireAgentForUpdate(ctx, tx, agentID, OwnedAgentSetup)
+		human, agent, err := s.authorizer.RequireAgentOwnerForUpdate(ctx, tx, agentID, OwnedAgentSetup)
 		if err != nil {
 			return err
 		}
@@ -84,6 +84,10 @@ func (s *Service) CreatePolicyGrant(ctx context.Context, payload *gen.CreatePoli
 }
 
 func (s *Service) createPolicyGrant(ctx context.Context, tx pgx.Tx, human HumanContext, agent repo.Agent, scope authz.Scope, selectorRaw []byte) (*gen.AgentPolicyGrant, error) {
+	if err := requirePolicyContainment(ctx, tx, human, agent, scope, selectorRaw); err != nil {
+		return nil, err
+	}
+
 	row, err := repo.New(tx).CreateAgentPolicyGrant(ctx, repo.CreateAgentPolicyGrantParams{
 		OrganizationID: human.Auth.ActiveOrganizationID,
 		AgentID:        agent.ID,
@@ -120,7 +124,7 @@ func (s *Service) UpdatePolicyGrant(ctx context.Context, payload *gen.UpdatePoli
 
 	var result *gen.AgentPolicyGrant
 	err = pgx.BeginFunc(ctx, s.db, func(tx pgx.Tx) error {
-		human, agent, err := s.authorizer.RequireAgentForUpdate(ctx, tx, agentID, OwnedAgentSetup)
+		human, agent, err := s.authorizer.RequireAgentOwnerForUpdate(ctx, tx, agentID, OwnedAgentSetup)
 		if err != nil {
 			return err
 		}
@@ -135,6 +139,10 @@ func (s *Service) UpdatePolicyGrant(ctx context.Context, payload *gen.UpdatePoli
 			return fmt.Errorf("load agent policy grant: %w", err)
 		}
 		before := policyGrantRow{ID: beforeRow.ID, Scope: beforeRow.Scope, Selectors: beforeRow.Selectors, CreatedAt: beforeRow.CreatedAt.Time, UpdatedAt: beforeRow.UpdatedAt.Time}
+
+		if err := requirePolicyContainment(ctx, tx, human, agent, scope, selectorRaw); err != nil {
+			return err
+		}
 
 		row, err := q.UpdateAgentPolicyGrant(ctx, repo.UpdateAgentPolicyGrantParams{
 			OrganizationID: human.Auth.ActiveOrganizationID, AgentID: agent.ID, GrantID: grantID,
@@ -189,6 +197,47 @@ func (s *Service) DeletePolicyGrant(ctx context.Context, payload *gen.DeletePoli
 	return nil
 }
 
+// requirePolicyContainment checks the complete authority of one allow grant,
+// including implied scopes and overlapping exclusions. The caller and current
+// owner memberships must be pinned before the agent lock is acquired. No agent
+// policy is a parent here: setup may expand policy, but never human authority.
+func requirePolicyContainment(ctx context.Context, tx pgx.Tx, human HumanContext, agent repo.Agent, scope authz.Scope, selectorRaw []byte) error {
+	selector, err := authz.SelectorFromRow(selectorRaw)
+	if err != nil {
+		return fmt.Errorf("parse requested policy selector: %w", err)
+	}
+	policy, err := runtimepolicy.NewDelegatedPolicy(runtimepolicy.CurrentDelegatedPolicyVersion, []authz.Grant{authz.NewGrantWithSelector(scope, selector)})
+	if err != nil {
+		return fmt.Errorf("construct requested policy authority: %w", err)
+	}
+	contained, err := runtimepolicy.DelegationContained(policy, human.grants)
+	if err != nil {
+		return fmt.Errorf("check caller policy containment: %w", err)
+	}
+	if !contained {
+		return oops.E(oops.CodeForbidden, nil, "requested agent access exceeds your permissions; choose a narrower scope or ask an administrator for access")
+	}
+	if agent.OwnerUserID == human.Auth.UserID {
+		return nil
+	}
+	principals, err := authz.ResolveUserPrincipals(ctx, tx, human.Auth.ActiveOrganizationID, agent.OwnerUserID)
+	if err != nil {
+		return fmt.Errorf("resolve policy owner principals: %w", err)
+	}
+	ownerGrants, err := authz.LoadGrants(ctx, tx, human.Auth.ActiveOrganizationID, principals)
+	if err != nil {
+		return fmt.Errorf("load policy owner grants: %w", err)
+	}
+	contained, err = runtimepolicy.DelegationContained(policy, ownerGrants)
+	if err != nil {
+		return fmt.Errorf("check owner policy containment: %w", err)
+	}
+	if !contained {
+		return oops.E(oops.CodeForbidden, nil, "requested agent access exceeds the owner's permissions; choose a narrower scope or ask an administrator to review the owner's access")
+	}
+	return nil
+}
+
 func validatePolicyGrant(rawScope, effect string, input *gen.AgentPolicySelector) (authz.Scope, []byte, error) {
 	if effect != "allow" {
 		return "", nil, oops.E(oops.CodeBadRequest, nil, "agent policy grants must use allow effect")
@@ -221,11 +270,13 @@ func policySelector(input *gen.AgentPolicySelector) authz.Selector {
 		authz.SelectorKeyResourceID:   input.ResourceID,
 	}
 	for key, value := range map[string]*string{
-		authz.SelectorKeyDisposition:    input.Disposition,
-		authz.SelectorKeyTool:           input.Tool,
-		authz.SelectorKeyProjectID:      input.ProjectID,
-		authz.SelectorKeyServerURL:      input.ServerURL,
-		authz.SelectorKeyServerIdentity: input.ServerIdentity,
+		authz.SelectorKeyDisposition:     input.Disposition,
+		authz.SelectorKeyTool:            input.Tool,
+		authz.SelectorKeyProjectID:       input.ProjectID,
+		authz.SelectorKeyServerURL:       input.ServerURL,
+		authz.SelectorKeyServerIdentity:  input.ServerIdentity,
+		authz.SelectorKeyClientType:      input.ClientType,
+		authz.SelectorKeyConnectionOwner: input.ConnectionOwner,
 	} {
 		if value != nil {
 			selector[key] = *value
@@ -247,20 +298,24 @@ func policyGrantView(row policyGrantRow) (*gen.AgentPolicyGrant, error) {
 
 func policySelectorView(selector authz.Selector) *gen.AgentPolicySelector {
 	result := &gen.AgentPolicySelector{
-		ResourceKind:   selector[authz.SelectorKeyResourceKind],
-		ResourceID:     selector[authz.SelectorKeyResourceID],
-		Disposition:    nil,
-		Tool:           nil,
-		ProjectID:      nil,
-		ServerURL:      nil,
-		ServerIdentity: nil,
+		ResourceKind:    selector[authz.SelectorKeyResourceKind],
+		ResourceID:      selector[authz.SelectorKeyResourceID],
+		Disposition:     nil,
+		Tool:            nil,
+		ProjectID:       nil,
+		ServerURL:       nil,
+		ServerIdentity:  nil,
+		ClientType:      nil,
+		ConnectionOwner: nil,
 	}
 	for key, target := range map[string]**string{
-		authz.SelectorKeyDisposition:    &result.Disposition,
-		authz.SelectorKeyTool:           &result.Tool,
-		authz.SelectorKeyProjectID:      &result.ProjectID,
-		authz.SelectorKeyServerURL:      &result.ServerURL,
-		authz.SelectorKeyServerIdentity: &result.ServerIdentity,
+		authz.SelectorKeyDisposition:     &result.Disposition,
+		authz.SelectorKeyTool:            &result.Tool,
+		authz.SelectorKeyProjectID:       &result.ProjectID,
+		authz.SelectorKeyServerURL:       &result.ServerURL,
+		authz.SelectorKeyServerIdentity:  &result.ServerIdentity,
+		authz.SelectorKeyClientType:      &result.ClientType,
+		authz.SelectorKeyConnectionOwner: &result.ConnectionOwner,
 	} {
 		if value, ok := selector[key]; ok {
 			value := value

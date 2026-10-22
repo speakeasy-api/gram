@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/internalsessionissuers"
 	"github.com/speakeasy-api/gram/server/internal/management/readmodel"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
@@ -353,6 +354,7 @@ func (r *PostgresReadinessRecorder) RecordReady(ctx context.Context, principal P
 
 type PostgresReader struct {
 	xaaReadiness              *xaaReadinessService
+	issuerGate                *internalsessionissuers.Gate
 	logger                    *slog.Logger
 	db                        *pgxpool.Pool
 	reader                    *readmodel.Reader
@@ -364,6 +366,8 @@ type PostgresReader struct {
 	riskFindings              riskFindingsLister
 	riskFindingList           riskFindingListLister
 	chatMetadata              *ChatMetadataService
+	chatSearch                *ChatSearchService
+	organizationGateway       *OrganizationGatewayService
 	dataExports               *DataExportReadService
 	dataExportMutations       *dataExportMutationService
 	dataExportRouteToggle     *DataExportRouteToggleService
@@ -380,6 +384,8 @@ type PostgresReader struct {
 	reviewRequestBudget       OperationBudget
 	reviewLinks               ShadowMCPReviewLinker
 	toolExposure              *MCPToolExposureService
+	gateways                  *GatewayService
+	deploymentRedeploy        *DeploymentRedeployService
 	projectLifecycle          *ProjectLifecycleService
 	analytics                 *AnalyticsService
 	widgets                   *WidgetService
@@ -399,6 +405,8 @@ func NewPostgresReader(logger *slog.Logger, db *pgxpool.Pool) *PostgresReader {
 		riskFindings:              nil,
 		riskFindingList:           nil,
 		chatMetadata:              nil,
+		chatSearch:                nil,
+		organizationGateway:       nil,
 		dataExports:               nil,
 		dataExportMutations:       nil,
 		dataExportRouteToggle:     nil,
@@ -408,6 +416,7 @@ func NewPostgresReader(logger *slog.Logger, db *pgxpool.Pool) *PostgresReader {
 		eventFeed:                 nil,
 		networkIngress:            nil,
 		xaaReadiness:              nil,
+		issuerGate:                nil,
 		authz:                     nil,
 		shadowInventory:           nil,
 		shadowDecisions:           nil,
@@ -416,6 +425,8 @@ func NewPostgresReader(logger *slog.Logger, db *pgxpool.Pool) *PostgresReader {
 		reviewRequestBudget:       OperationBudget{Connection: nil, Organization: nil},
 		reviewLinks:               nil,
 		toolExposure:              nil,
+		gateways:                  nil,
+		deploymentRedeploy:        nil,
 		projectLifecycle:          nil,
 		analytics:                 nil,
 		widgets:                   nil,
@@ -430,12 +441,30 @@ func (r *PostgresReader) WithAuthorization(engine *authz.Engine) *PostgresReader
 	return r
 }
 
+// WithDeploymentRedeploy composes project snapshot redeployment; without it the
+// tool retains its contract and returns a bounded unavailable refusal.
+func (r *PostgresReader) WithDeploymentRedeploy(service *DeploymentRedeployService) *PostgresReader {
+	if r != nil {
+		r.deploymentRedeploy = service
+	}
+	return r
+}
+
 // WithToolExposure composes the reads and writes that decide which tools a
 // hosted MCP server exposes. Without it the tools stay in the catalogue as
 // stable refusals rather than disappearing from it.
 func (r *PostgresReader) WithToolExposure(service *MCPToolExposureService) *PostgresReader {
 	if r != nil {
 		r.toolExposure = service
+	}
+	return r
+}
+
+// WithGateways composes gateway creation and membership changes. Without it
+// the tools stay in the catalogue as stable refusals rather than disappearing.
+func (r *PostgresReader) WithGateways(service *GatewayService) *PostgresReader {
+	if r != nil {
+		r.gateways = service
 	}
 	return r
 }
@@ -591,6 +620,22 @@ func (r *PostgresReader) WithRiskFindingList(service *RiskFindingListService, bu
 func (r *PostgresReader) WithChatMetadata(service *ChatMetadataService) *PostgresReader {
 	if r != nil && service.valid() {
 		r.chatMetadata = service
+	}
+	return r
+}
+
+// WithChatSearch attaches explicitly authorized transcript search and reads.
+func (r *PostgresReader) WithChatSearch(service *ChatSearchService) *PostgresReader {
+	if r != nil && service.valid() {
+		r.chatSearch = service
+	}
+	return r
+}
+
+// WithOrganizationGateway serves get_my_organization_gateway.
+func (r *PostgresReader) WithOrganizationGateway(service *OrganizationGatewayService) *PostgresReader {
+	if r != nil && service.valid() {
+		r.organizationGateway = service
 	}
 	return r
 }
@@ -946,6 +991,17 @@ func (r *PostgresReader) allowedMCPIDs(ctx context.Context, organizationID strin
 // organization and enforces the existing project:read scope before callers read
 // project-operational data.
 func (r *PostgresReader) ResolveProjectRead(ctx context.Context, principal Principal, input FindMCPInput) (ResolvedProject, error) {
+	return r.resolveProjectWithScope(ctx, principal, input, authz.ScopeProjectRead)
+}
+
+// ResolveProjectLogRead resolves one exact project under the principal's
+// organization and enforces log:read before callers list that project's
+// individual tool calls. project:read alone does not satisfy it.
+func (r *PostgresReader) ResolveProjectLogRead(ctx context.Context, principal Principal, input FindMCPInput) (ResolvedProject, error) {
+	return r.resolveProjectWithScope(ctx, principal, input, authz.ScopeLogRead)
+}
+
+func (r *PostgresReader) resolveProjectWithScope(ctx context.Context, principal Principal, input FindMCPInput, scope authz.Scope) (ResolvedProject, error) {
 	if r == nil || r.reader == nil || r.authz == nil {
 		return ResolvedProject{}, ErrUnavailable
 	}
@@ -953,7 +1009,7 @@ func (r *PostgresReader) ResolveProjectRead(ctx context.Context, principal Princ
 	if err != nil {
 		return ResolvedProject{}, err
 	}
-	if err := r.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: project.ID.String(), Dimensions: nil}); err != nil {
+	if err := r.authz.Require(ctx, authz.Check{Scope: scope, ResourceKind: "", ResourceID: project.ID.String(), Dimensions: nil}); err != nil {
 		if isAuthorizationDenied(err) {
 			return ResolvedProject{}, ErrForbidden
 		}

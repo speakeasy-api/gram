@@ -268,3 +268,12 @@ WHERE project_id = @project_id
   AND target_ref = @target_ref
   AND correlation_id = @correlation_id
   AND deleted IS FALSE;
+
+-- name: GetWakeWorkloadSessionClient :one
+-- Classify authenticated workload sessions without filtering revoked rows: a
+-- retired runtime registration must not fall back to legacy workload behavior.
+SELECT user_session_client_id
+FROM user_sessions
+WHERE jti = @jti AND subject_urn = @subject_urn
+  AND organization_id = @organization_id
+  AND (project_id = @project_id OR project_id IS NULL);

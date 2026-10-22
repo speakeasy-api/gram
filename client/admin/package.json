@@ -1,7 +1,7 @@
 {
   "name": "admin",
   "private": true,
-  "version": "0.9.2",
+  "version": "0.9.4",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -32,7 +32,7 @@
     "jsonc-parser": "^3.3.1",
     "lucide-react": "catalog:",
     "monaco-editor": "^0.57.0",
-    "radix-ui": "^1.6.7",
+    "radix-ui": "^1.8.1",
     "react": "^19.3.0",
     "react-day-picker": "^10.0.1",
     "react-dom": "^19.3.0",
@@ -54,7 +54,7 @@
     "@vitejs/plugin-react": "catalog:",
     "happy-dom": "^20.11.2",
     "oxlint": "^1.87.0",
-    "oxlint-tsgolint": "^7.0.2003",
+    "oxlint-tsgolint": "^7.0.2004",
     "react-grab": "^0.2.0",
     "typescript": "catalog:",
     "vite": "catalog:",

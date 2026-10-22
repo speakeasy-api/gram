@@ -9,6 +9,7 @@ interface Call {
   body: AnalyticsQueryPayload;
   signal: AbortSignal | undefined;
   resolve: (rows: unknown[]) => void;
+  reject: (error: Error) => void;
 }
 
 const testState = vi.hoisted(() => ({
@@ -31,6 +32,7 @@ vi.mock("@gram/client/funcs/analyticsQuery.js", () => ({
       testState.calls.push({
         body: request.analyticsQueryPayload,
         signal: options?.fetchOptions?.signal,
+        reject,
         resolve: (rows) =>
           resolve({
             ok: true,
@@ -59,7 +61,8 @@ function body(limit: number): AnalyticsQueryPayload {
 
 function wrapper({ children }: { children: ReactNode }) {
   const client = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
+    // The app's client throws query errors to the route boundary.
+    defaultOptions: { queries: { retry: false, throwOnError: true } },
   });
   return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
 }
@@ -123,6 +126,16 @@ describe("useRunQuery", () => {
     );
     expect(result.current.error).toBeNull();
     expect(result.current.isError).toBe(false);
+  });
+
+  it("reports a failed query rather than throwing it to the page", async () => {
+    const { result } = renderHook(() => useRunQuery(body(10)), { wrapper });
+    await waitFor(() => expect(testState.calls).toHaveLength(1));
+    act(() => {
+      testState.calls[0]?.reject(new Error("memory limit exceeded"));
+    });
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(result.current.error?.message).toBe("memory limit exceeded");
   });
 
   it("asks again on refetch even though the body is unchanged", async () => {

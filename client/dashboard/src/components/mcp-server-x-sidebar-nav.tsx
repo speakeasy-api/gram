@@ -31,7 +31,12 @@ import {
   activeTabFromPath,
   mcpServerTabHref,
 } from "@/pages/mcp/x/MCPServerDetailsRouting";
+import { MCP_AGENT_SETUP_SECTION_ID } from "@/pages/mcp/x/tabs/settings/sections/AgentSetupSection";
 import { MCP_AUTHENTICATION_SECTION_ID } from "@/pages/mcp/x/tabs/settings/sections/authentication/AuthenticationSection";
+import {
+  tunnelAgentReadiness,
+  useTunneledMcpConnections,
+} from "@/pages/mcp/x/tabs/tunnelStatus";
 import { useAllRemoteSessionClients } from "@/lib/remote-identity";
 import {
   deriveIdentityMode,
@@ -87,7 +92,7 @@ function remoteIdentityLabel(mode: IdentityMode): string {
     case "agent":
       return "Service Account";
     case "none":
-      return "None";
+      return "Manual";
   }
 }
 
@@ -347,6 +352,11 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
     { enabled: unproxiedMcpServerId !== "" },
   );
   const upstreamUrl = remoteMcpServer?.url ?? unproxiedMcpServer?.url;
+  // Reads the snapshot the Overview's tunnel status polls, so the readiness
+  // card and the status beside it agree without a second poller.
+  const tunnelConnections = useTunneledMcpConnections(
+    mcpServer?.tunneledMcpServerId ?? "",
+  );
 
   const userSessionIssuerId = mcpServer?.userSessionIssuerId;
   // A remote identity provider is attached when this server's issuer has at
@@ -435,13 +445,13 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
     (remoteIdentityMode !== "none" || identityProbeStatus === "available");
 
   let authenticationDescription =
-    "Attach a remote identity provider so users can access the upstream service.";
+    "Attach an authorization server so users can access the upstream service.";
   if (isUnproxied) {
     authenticationDescription =
       "Not applicable — the customer connects directly using the vendor's own credentials.";
   } else if (remoteIdentityMode === "user" && hasRemoteIdentityProvider) {
     authenticationDescription =
-      "A remote identity provider is attached to this server.";
+      "An authorization server is attached to this server.";
   } else if (remoteIdentityMode === "agent" && isRemoteBacked) {
     authenticationDescription =
       "A shared credential is configured for the upstream service.";
@@ -450,7 +460,7 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
       "The upstream service accepts requests without credentials.";
   } else if (isTunneledBacked) {
     authenticationDescription =
-      "Speakeasy authentication is configured; upstream identity providers are optional.";
+      "Speakeasy authentication is configured; upstream authorization servers are optional.";
   }
 
   // Source detail pages are gone; the description still explains the backend,
@@ -507,6 +517,17 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
           description: sourceDescription,
           ready: isSourceBacked,
         },
+        ...(isTunneledBacked
+          ? [
+              tunnelAgentReadiness({
+                connections: tunnelConnections.data,
+                loading: tunnelConnections.isLoading,
+                error: tunnelConnections.isError,
+                agentSetupHref: `${mcpServerTabHref(routes, idOrSlug, "settings")}#${MCP_AGENT_SETUP_SECTION_ID}`,
+                overviewHref: mcpServerTabHref(routes, idOrSlug, "overview"),
+              }),
+            ]
+          : []),
         ...(canReadPlugins
           ? [
               {

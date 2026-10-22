@@ -103,6 +103,9 @@ func (s *Service) mintFromExternalKey(ctx context.Context, logger *slog.Logger, 
 		return nil, oops.E(oops.CodeUnexpected, err, "error loading external key").LogError(ctx, logger)
 	}
 
+	if row.EmaIssuerManaged {
+		return nil, oops.E(oops.CodeForbidden, nil, "enterprise authorization issuer keys are managed by Speakeasy")
+	}
 	if row.ExternalKey.Provider != externalKeyProviderGcpKms {
 		return nil, oops.E(oops.CodeBadRequest, nil, "AWS KMS keys cannot back a JSON Web Key Set yet; choose a GCP KMS key").LogError(ctx, logger)
 	}

@@ -104,6 +104,11 @@ func newTestPluginsService(t *testing.T) (context.Context, *testInstance) {
 
 func newTestPluginsServiceWithLockTimeout(t *testing.T, lockTimeout time.Duration) (context.Context, *testInstance) {
 	t.Helper()
+	return newTestPluginsServiceWithOptions(t, lockTimeout, nil)
+}
+
+func newTestPluginsServiceWithOptions(t *testing.T, lockTimeout time.Duration, features feature.Provider) (context.Context, *testInstance) {
+	t.Helper()
 
 	ctx := context.Background()
 
@@ -136,7 +141,7 @@ func newTestPluginsServiceWithLockTimeout(t *testing.T, lockTimeout time.Duratio
 
 	auditLogger := audit.NewLogger()
 
-	svc := plugins.NewService(logger, tracerProvider, conn, sessionManager, cache.NewRedisCacheAdapter(redisClient), authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()), auditLogger, nil, "local", "https://app.getgram.ai", nil, nil)
+	svc := plugins.NewService(logger, tracerProvider, conn, sessionManager, cache.NewRedisCacheAdapter(redisClient), authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()), auditLogger, nil, "local", "https://app.getgram.ai", features, nil)
 
 	return ctx, &testInstance{
 		service:        svc,
@@ -332,7 +337,36 @@ func orgObservabilitySlugs(t *testing.T, ctx context.Context, ti *testInstance) 
 	return plugins.ClaudeObservabilitySlug(cfg), plugins.CursorObservabilitySlug(cfg)
 }
 
+// createTestToolset creates an MCP-enabled toolset with its canonical server and endpoint, as toolset creation does.
 func createTestToolset(t *testing.T, ctx context.Context, conn *pgxpool.Pool, name string) toolsetsrepo.Toolset {
+	t.Helper()
+	ts := createUnwrappedTestToolset(t, ctx, conn, name)
+	_, err := mcpserversrepo.New(conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
+		ID: ts.ID, ProjectID: ts.ProjectID, Name: pgtype.Text{String: ts.Name, Valid: true}, Slug: ts.McpSlug,
+		ToolsetID: uuid.NullUUID{UUID: ts.ID, Valid: true}, Visibility: mcpservers.VisibilityPrivate,
+	})
+	require.NoError(t, err)
+	_, err = mcpendpointsrepo.New(conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
+		ProjectID: ts.ProjectID, McpServerID: uuid.NullUUID{UUID: ts.ID, Valid: true}, CustomDomainID: uuid.NullUUID{}, Slug: ts.McpSlug.String,
+	})
+	require.NoError(t, err)
+	return ts
+}
+
+// setTestToolsetMCPPublic sets a toolset's MCP visibility and mirrors it onto its canonical server.
+func setTestToolsetMCPPublic(ctx context.Context, conn *pgxpool.Pool, params toolsetsrepo.SetToolsetMCPPublicByIDParams) error {
+	if err := toolsetsrepo.New(conn).SetToolsetMCPPublicByID(ctx, params); err != nil {
+		return fmt.Errorf("set toolset mcp public: %w", err)
+	}
+	//nolint:glint // notestingrawsql: mirrors hostedmcp.Sync without its audit and address checks.
+	if _, err := conn.Exec(ctx, `UPDATE mcp_servers SET visibility = CASE WHEN $1 THEN 'public' ELSE 'private' END WHERE id = $2 AND toolset_id = $2 AND visibility <> 'disabled'`, params.McpIsPublic, params.ID); err != nil {
+		return fmt.Errorf("sync canonical server visibility: %w", err)
+	}
+	return nil
+}
+
+// createUnwrappedTestToolset creates an MCP-enabled toolset with no MCP server.
+func createUnwrappedTestToolset(t *testing.T, ctx context.Context, conn *pgxpool.Pool, name string) toolsetsrepo.Toolset {
 	t.Helper()
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
@@ -381,7 +415,7 @@ func createTestMcpServerWithEndpoint(t *testing.T, ctx context.Context, conn *pg
 
 	// Back the mcp_server with a toolset to satisfy the backend-exclusivity
 	// check; the plugin path does not distinguish remote- vs toolset-backed.
-	backing := createTestToolset(t, ctx, conn, name+"-backing")
+	backing := createUnwrappedTestToolset(t, ctx, conn, name+"-backing")
 	if visibility == mcpservers.VisibilityPublic {
 		err := toolsetsrepo.New(conn).SetToolsetMCPPublicByID(ctx, toolsetsrepo.SetToolsetMCPPublicByIDParams{McpIsPublic: true, ID: backing.ID, ProjectID: backing.ProjectID})
 		require.NoError(t, err)

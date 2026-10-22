@@ -6,13 +6,18 @@ import {
   mcpServerVisibilityUpdateForm,
 } from "@/lib/mcp-server-visibility";
 import { mcpServerRouteParam } from "@/lib/sources";
+import { isCanonicalHostedWrapper } from "@/pages/mcp/x/MCPServerDetailsRouting";
 import { useRoutes } from "@/routes";
+import {
+  canonicalToolset,
+  listedMcpServers,
+  mcpServerDisplayName,
+} from "@/components/mcp/mcp-server-kind";
 import type {
   McpServer,
   McpServerVisibility,
 } from "@gram/client/models/components/mcpserver.js";
 import { buildGetMcpServerQuery } from "@gram/client/react-query/getMcpServer.js";
-import { useListToolsets } from "@gram/client/react-query/listToolsets.js";
 import { useMcpServers } from "@gram/client/react-query/mcpServers.js";
 import { useUpdateMcpServerMutation } from "@gram/client/react-query/updateMcpServer.js";
 import { useQueryClient } from "@tanstack/react-query";
@@ -34,13 +39,7 @@ function verbsFor(server: McpServer, canWrite: boolean): Verb[] {
 }
 
 /**
- * MCP server candidates, mirroring the /mcp listing: toolset-backed (hosted)
- * servers from listToolsets and the non-toolset backends from mcpServers.
- * Toolset-backed mcp_servers rows are not listed on their own so hosted
- * servers aren't doubled (see the TODO(AGE-1902) note in the MCP page), but
- * they are the rows that carry a hosted server's visibility: each toolset
- * candidate reads its linked row's state and flips that row on
- * enable/disable. A toolset with no linked row is open-only.
+ * MCP server candidates, one per /mcp listing row; a canonical hosted wrapper opens (and enables on) its toolset page.
  *
  * Verbs are gated per server (`hasScope("mcp:write", <grant resource>)`),
  * the same check the server's own pages apply, so a grant scoped to some
@@ -57,13 +56,7 @@ export function useMcpServerCandidates({
   const client = useSdkClient();
   const { hasScope } = useRBAC();
   const gramProject = useProjectSlugForRequests();
-  // Both lists are keyed by project: the SDK folds gramProject into the query
-  // key, so omitting it would share one cache entry across projects. Neither
-  // throws: a failed list degrades to no candidates, not a blank palette.
-  const { data: toolsetsData } = useListToolsets({ gramProject }, undefined, {
-    enabled,
-    throwOnError: false,
-  });
+  // Keyed by project so caches never cross projects; a failed list yields no candidates.
   const { data: mcpServersData } = useMcpServers({ gramProject }, undefined, {
     enabled,
     throwOnError: false,
@@ -71,20 +64,7 @@ export function useMcpServerCandidates({
   const { mutateAsync: updateMcpServer } = useUpdateMcpServerMutation();
 
   return useMemo(() => {
-    const toolsets = toolsetsData?.toolsets ?? [];
-    const allServers = mcpServersData?.mcpServers ?? [];
-    const servers = allServers.filter(
-      (server) =>
-        !!server.remoteMcpServerId ||
-        !!server.tunneledMcpServerId ||
-        !!server.unproxiedMcpServerId,
-    );
-    const byToolsetId = new Map<string, McpServer>();
-    for (const server of allServers) {
-      if (server.toolsetId && !byToolsetId.has(server.toolsetId)) {
-        byToolsetId.set(server.toolsetId, server);
-      }
-    }
+    const servers = listedMcpServers(mcpServersData?.mcpServers ?? []);
     // A hosted server is granted under its toolset id, not its wrapper row's
     // (the server resolves the grant the same way: grantResourceID in
     // server/internal/mcpservers/impl.go), so that is the id to check.
@@ -155,51 +135,33 @@ export function useMcpServerCandidates({
     const setVisibility = (server: McpServer, verb: Verb) =>
       applyVisibility(server, verb === "enable" ? "private" : "disabled", true);
 
-    const toolsetCandidates: LauncherCandidate[] = toolsets.map((toolset) => {
-      const linked = byToolsetId.get(toolset.id);
+    return servers.map(({ server }): LauncherCandidate => {
+      // Without a summary the server page redirects a canonical wrapper to its toolset.
+      const toolsetSlug = canonicalToolset(server)?.slug;
       return {
-        id: `mcp:${toolset.id}`,
+        id: `mcp:${server.id}`,
         kind: "mcp_server",
-        title: toolset.name,
-        detail: linked ? detailFor(linked) : "MCP server · enabled",
-        keywords: ["mcp", toolset.slug, toolset.id],
-        verbs: linked ? verbsFor(linked, canWrite(linked)) : ["open"],
+        title: mcpServerDisplayName(server),
+        detail: detailFor(server),
+        keywords: ["mcp", server.slug, server.toolset?.slug, server.id].filter(
+          (keyword): keyword is string => !!keyword,
+        ),
+        verbs: verbsFor(server, canWrite(server)),
         icon: "network",
         group: GROUP,
         run: (verb) => {
-          if (linked && (verb === "enable" || verb === "disable")) {
-            return setVisibility(linked, verb);
+          const opensToolsetPage =
+            verb === "enable" && isCanonicalHostedWrapper(server);
+          if (!opensToolsetPage && (verb === "enable" || verb === "disable")) {
+            return setVisibility(server, verb);
           }
-          routes.mcp.details.goTo(toolset.slug);
+          if (toolsetSlug) {
+            routes.mcp.details.goTo(toolsetSlug);
+          } else {
+            routes.mcp.x.overview.goTo(mcpServerRouteParam(server));
+          }
         },
       };
     });
-
-    const serverCandidates: LauncherCandidate[] = servers.map((server) => ({
-      id: `mcp:${server.id}`,
-      kind: "mcp_server",
-      title: server.name || "MCP Server",
-      detail: detailFor(server),
-      keywords: ["mcp", server.slug ?? "", server.id].filter(Boolean),
-      verbs: verbsFor(server, canWrite(server)),
-      icon: "network",
-      group: GROUP,
-      run: (verb) => {
-        if (verb === "enable" || verb === "disable") {
-          return setVisibility(server, verb);
-        }
-        routes.mcp.x.overview.goTo(mcpServerRouteParam(server));
-      },
-    }));
-
-    return [...toolsetCandidates, ...serverCandidates];
-  }, [
-    toolsetsData,
-    mcpServersData,
-    hasScope,
-    routes,
-    queryClient,
-    client,
-    updateMcpServer,
-  ]);
+  }, [mcpServersData, hasScope, routes, queryClient, client, updateMcpServer]);
 }

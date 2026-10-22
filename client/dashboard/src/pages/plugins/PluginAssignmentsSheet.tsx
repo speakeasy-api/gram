@@ -23,7 +23,11 @@ import { useMemo, useState } from "react";
 import { Users } from "lucide-react";
 import { toast } from "sonner";
 import { InstallModeList } from "./InstallModeList";
-import { DEFAULT_INSTALL_MODE, type InstallMode } from "./install-modes";
+import {
+  DEFAULT_INSTALL_MODE,
+  toSavedInstallMode,
+  type InstallMode,
+} from "./install-modes";
 import {
   audienceKindForPrincipal,
   audienceMapByUrn,
@@ -361,7 +365,7 @@ function AssignmentsEditor({
           installModes: Object.fromEntries(
             principalUrns.map((urn) => [
               urn,
-              modeByUrn[urn] ?? DEFAULT_INSTALL_MODE,
+              toSavedInstallMode(modeByUrn[urn] ?? DEFAULT_INSTALL_MODE),
             ]),
           ),
         },

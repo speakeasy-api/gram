@@ -111,7 +111,7 @@ func TestRemoteLogin_ScopeOverrideIsRequestedVerbatim(t *testing.T) {
 		withIssuerScopes("channels:history", "openid", "offline_access"),
 		withClientScope("channels:history"),
 		withScopeOverride("custom:one", "custom:two"),
-		withProber(), withLiveResourceScopes(),
+		withProber(),
 	)
 	require.Equal(t, "channels:history", scopeOf(t, scoped.authURL))
 }

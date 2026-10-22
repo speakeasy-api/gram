@@ -1,3 +1,4 @@
+import { isKnownEnumValue } from "@/lib/enum";
 import type { FacepileMember } from "@/components/member-facepile";
 import type { AccessMember } from "@gram/client/models/components/accessmember.js";
 import type { PluginAudience } from "@gram/client/models/components/pluginaudience.js";
@@ -70,7 +71,23 @@ export function describePrincipal(
   }
   const audience = audienceByUrn.get(urn);
   if (audience) {
-    return { kind: audience.kind, label: audience.displayName };
+    return {
+      kind: isKnownEnumValue(
+        {
+          everyone: "everyone",
+          email: "email",
+          role: "role",
+          user: "user",
+          directory_group: "directory_group",
+          directory_attribute: "directory_attribute",
+          unknown: "unknown",
+        } as const,
+        audience.kind,
+      )
+        ? audience.kind
+        : "unknown",
+      label: audience.displayName,
+    };
   }
   if (urn.startsWith(DIRECTORY_GROUP_PREFIX)) {
     return {

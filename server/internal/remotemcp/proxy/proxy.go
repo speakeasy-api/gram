@@ -182,6 +182,10 @@ func ChainUpstreamResponseRetryers(retryers ...UpstreamResponseRetryer) Upstream
 // request so the SessionID and interceptor state stay tied to a single
 // client exchange.
 type Proxy struct {
+	RequestObserver RequestObserver
+	// SessionClients, when set, attributes observed requests to the client
+	// their session reported at initialize. Nil attributes them by User-Agent.
+	SessionClients SessionClients
 	// GuardianPolicy is used to build a fresh, non-pooled HTTP client per
 	// upstream request. Pooling is inappropriate here because each Proxy
 	// instance handles a single upstream host and discards the connection
@@ -348,6 +352,11 @@ type Proxy struct {
 	// originating request ID is seen. Responses to non-tools/call requests
 	// skip this loop entirely.
 	ToolsCallResponseInterceptors []ToolsCallResponseInterceptor
+
+	// ToolsCallFailureInterceptors run once for a forwarded "tools/call"
+	// whose reply never reached ToolsCallResponseInterceptors. See
+	// [ToolsCallFailureInterceptor].
+	ToolsCallFailureInterceptors []ToolsCallFailureInterceptor
 
 	// ToolsListRequestInterceptors run for inbound "tools/list" JSON-RPC
 	// requests only, after the generic UserRequestInterceptors chain has
@@ -561,6 +570,26 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 		return oops.E(oops.CodeBadRequest, parseErr, "invalid jsonrpc request").LogError(ctx, p.Logger)
 	}
 
+	// Decoded before the generic chain so the requested version is recorded
+	// even when an interceptor rejects the request. A rejected handshake is
+	// still a handshake worth attributing to a protocol revision.
+	initializeReq, _ := initializeRequestFromUserRequest(userReq)
+	recordRequestedProtocolVersion(span, initializeReq)
+
+	ctx, observation := beginObservation(ctx, p.RequestObserver, p.SessionClients, userReq, initializeReq)
+	defer func() {
+		if observation == nil {
+			return
+		}
+		outcome := "incomplete"
+		if r.Context().Err() != nil {
+			outcome = "canceled"
+		} else if err != nil {
+			outcome = "error"
+		}
+		observation.finish(outcome)
+	}()
+
 	// Extract the originating request id once. Used as the correlation id
 	// on any rejection envelope written back to the user — invalid id
 	// (notification) leads writeRejection to omit the field and use HTTP
@@ -577,12 +606,6 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 		}
 	}
 
-	// Decoded before the generic chain so the requested version is recorded
-	// even when an interceptor rejects the request. A rejected handshake is
-	// still a handshake worth attributing to a protocol revision.
-	initializeReq, _ := initializeRequestFromUserRequest(userReq)
-	recordRequestedProtocolVersion(span, initializeReq)
-
 	if err := p.runUserRequestInterceptors(ctx, userReq, p.UserRequestObservationInterceptors); err != nil {
 		return p.dispatchInterceptorError(ctx, w, span, userReqID, err, &responseBytes)
 	}
@@ -590,7 +613,7 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 	toolsCallReq, toolsCallDecodeErr := toolsCallRequestFromUserRequest(userReq)
 	toolsCallPreflightReq := toolsCallReq
 	if toolsCallPreflightReq == nil && len(p.ToolsCallPreForwardInterceptors) > 0 && hasTopLevelJSONRPCMethod(userReq.body, methodToolsCall) {
-		toolsCallPreflightReq = &ToolsCallRequest{Params: nil, UserRequest: userReq}
+		toolsCallPreflightReq = &ToolsCallRequest{Params: nil, UserRequest: userReq, responded: false}
 		// The decoded method differs from an earlier tools/call member. Keep the
 		// synthetic request recognized after preflight so private proxies reject
 		// the ambiguous bytes instead of forwarding them past typed policy.
@@ -662,7 +685,7 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 	if toolsCallReq != nil {
 		// Attach the tool name to the parent Post span so the existing
 		// `tool_name` materialized column on ClickHouse `telemetry_logs`
-		// populates for /x/mcp traffic without any further plumbing —
+		// populates for proxied traffic without any further plumbing —
 		// matching how /mcp aggregations already work.
 		span.SetAttributes(attr.ToolName(toolsCallReq.Params.Name))
 		if err := p.runToolsCallRequestInterceptors(ctx, toolsCallReq); err != nil {
@@ -691,7 +714,7 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 	resourcesReadReq, _ := resourcesReadRequestFromUserRequest(userReq)
 	if resourcesReadReq != nil {
 		// Attach the resource URI to the parent Post span so the
-		// `gram.resource.uri` attribute on traces populates for /x/mcp
+		// `gram.resource.uri` attribute on traces populates for proxied
 		// resource reads, mirroring how tools/call sets `tool_name`.
 		span.SetAttributes(attr.ResourceURI(resourcesReadReq.Params.URI))
 		if err := p.runResourcesReadRequestInterceptors(ctx, resourcesReadReq); err != nil {
@@ -716,6 +739,18 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 			attr.SlogComponent("remotemcp.proxy"))
 	}
 
+	// A forwarded tools/call whose reply never reaches the typed response
+	// chain below still failed: the remote server was unreachable, answered
+	// with something other than a tools/call reply, or ended its stream
+	// first. A notification is owed no reply, and a call the user canceled
+	// did not fail.
+	toolsCallForwarded := toolsCallReq != nil && userReqID.IsValid()
+	defer func() {
+		if toolsCallForwarded && !toolsCallReq.responded && r.Context().Err() == nil {
+			p.runToolsCallFailureInterceptors(ctx, &ToolsCallFailure{Request: toolsCallReq, StatusCode: upstreamStatus, Err: err})
+		}
+	}()
+
 	validateUpstreamRequest := func(upstreamReq *http.Request) error {
 		if rejection := validateMirroredHeaders(upstreamReq, userReq); rejection != nil {
 			return rejection
@@ -726,6 +761,9 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 	upstreamReq, upstreamResp, err := p.forwardRequestWithRetry(ctx, r, userReq.BodyReader, validateUpstreamRequest)
 	if err != nil {
 		if rejection, ok := errors.AsType[*RejectError](err); ok {
+			// Refused before it was sent, like a request interceptor
+			// rejection: the remote server never saw the call.
+			toolsCallForwarded = false
 			responseBytes = p.writeRejection(ctx, w, span, userReqID, rejection)
 			return nil
 		}
@@ -734,6 +772,9 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 	defer o11y.NoLogDefer(upstreamResp.Body.Close)
 
 	upstreamStatus = upstreamResp.StatusCode
+	if upstreamStatus < 200 || upstreamStatus >= 300 {
+		observation.finish("error")
+	}
 	span.SetAttributes(attr.RemoteMCPProxyRemoteStatusCode(upstreamStatus))
 
 	if p.UpstreamResponseInterceptor != nil {
@@ -743,6 +784,15 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 				return nil
 			}
 			return fmt.Errorf("upstream response interceptor: %w", err)
+		}
+	}
+
+	// Recorded after the response interceptor so the session id is the one
+	// the client is answered with, and before the relay so a follow-up request
+	// on another replica finds it.
+	if initializeReq != nil && p.SessionClients != nil && upstreamStatus >= 200 && upstreamStatus < 300 {
+		if sessionID := upstreamResp.Header.Get(McpSessionIDHeader); sessionID != "" {
+			p.SessionClients.RecordInitialize(ctx, sessionID, initializeReq.Params)
 		}
 	}
 
@@ -762,6 +812,7 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 			// owed a terminal response event. Surface it as an upstream
 			// fault with the idle bound named, not a bare context error.
 			if streamIdledOut(upstreamResp.Body) {
+				observation.finish("incomplete")
 				return oops.E(oops.CodeGatewayError, streamErr,
 					"remote MCP server went idle mid-response (no data for %s)", p.StreamingTimeout,
 				).LogWarn(ctx, p.Logger)
@@ -911,6 +962,7 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 	if err != nil {
 		return err
 	}
+	observeResponse(ctx, msg)
 	return nil
 }
 
@@ -1301,6 +1353,7 @@ func (p *Proxy) relaySSEStream(
 				return fmt.Errorf("write substitute sse event: %w", writeErr)
 			}
 			total += int64(len(substitute))
+			observeRejection(ctx)
 			if flusher != nil {
 				flusher.Flush()
 			}
@@ -1327,6 +1380,7 @@ func (p *Proxy) relaySSEStream(
 			return fmt.Errorf("stream sse event: %w", writeErr)
 		}
 		total += int64(len(emit))
+		observeResponse(ctx, msg)
 		if flusher != nil {
 			flusher.Flush()
 		}
@@ -1447,6 +1501,7 @@ func (p *Proxy) runToolsCallRequestInterceptorChain(ctx context.Context, call *T
 // ToolsCallResponseInterceptor in order, returning the first wrapped
 // rejection error or nil if all interceptors accept the response.
 func (p *Proxy) runToolsCallResponseInterceptors(ctx context.Context, call *ToolsCallResponse) error {
+	call.Request.responded = true
 	for _, interceptor := range p.ToolsCallResponseInterceptors {
 		iterCtx, span := p.Tracer.Start(ctx, "remotemcp.proxy.ToolsCallResponseInterceptor",
 			trace.WithAttributes(attr.RemoteMCPProxyInterceptor(interceptor.Name())))
@@ -1459,6 +1514,18 @@ func (p *Proxy) runToolsCallResponseInterceptors(ctx context.Context, call *Tool
 		span.End()
 	}
 	return nil
+}
+
+// runToolsCallFailureInterceptors invokes each configured
+// ToolsCallFailureInterceptor in order. They observe only, so there is
+// nothing to return.
+func (p *Proxy) runToolsCallFailureInterceptors(ctx context.Context, failure *ToolsCallFailure) {
+	for _, interceptor := range p.ToolsCallFailureInterceptors {
+		iterCtx, span := p.Tracer.Start(ctx, "remotemcp.proxy.ToolsCallFailureInterceptor",
+			trace.WithAttributes(attr.RemoteMCPProxyInterceptor(interceptor.Name())))
+		interceptor.InterceptToolsCallFailure(iterCtx, failure)
+		span.End()
+	}
 }
 
 // runToolsListRequestInterceptors invokes each configured
@@ -1613,6 +1680,7 @@ func (p *Proxy) runUserRequestInterceptors(ctx context.Context, req *UserRequest
 // cause [oops.ErrHandle] to attempt a second WriteHeader on top of the
 // one this helper already issued.
 func (p *Proxy) writeRejection(ctx context.Context, w http.ResponseWriter, span trace.Span, id jsonrpc.ID, cause error) int64 {
+	observeRejection(ctx)
 	rejectErr := RejectErrorFromCause(cause)
 	payload, err := marshalErrorResponse(id, rejectErr)
 	if err != nil {

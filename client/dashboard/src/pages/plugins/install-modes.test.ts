@@ -4,6 +4,8 @@ import {
   MEMBERS_ROW_KEY,
   rowInstallMode,
   summarizeInstallModes,
+  toSavedInstallMode,
+  type InstallMode,
 } from "./install-modes";
 
 describe("installModeRows", () => {
@@ -81,5 +83,15 @@ describe("summarizeInstallModes", () => {
     expect(
       summarizeInstallModes([{ label: "12 members", mode: undefined }]),
     ).toBe("Mixed: 12 members");
+  });
+});
+
+describe("toSavedInstallMode", () => {
+  it("keeps a known mode", () => {
+    expect(toSavedInstallMode("required")).toBe("required");
+  });
+
+  it("saves an unknown mode as the default", () => {
+    expect(toSavedInstallMode("pinned" as InstallMode)).toBe("default");
   });
 });

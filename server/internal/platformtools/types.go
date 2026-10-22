@@ -76,6 +76,13 @@ type FeatureChecker func(ctx context.Context, organizationID string, feature str
 type ExternalTool struct {
 	Executor        PlatformToolExecutor
 	RequiredFeature string // empty string = always available
+
+	// RequiredScope hides the tool from callers that do not hold this
+	// authorization scope (an authz.Scope value) on the active project, so an
+	// assistant is not offered a tool every call to which would be refused.
+	// Empty means no scope beyond toolset access. It is a string because this
+	// package cannot import authz without a cycle through mv.
+	RequiredScope string
 }
 
 type ToolDescriptor = core.ToolDescriptor

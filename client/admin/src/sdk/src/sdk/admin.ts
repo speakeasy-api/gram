@@ -12,6 +12,7 @@ import { adminCreateOnboardingPlaybook } from "../funcs/adminCreateOnboardingPla
 import { adminCreateOnboardingUseCase } from "../funcs/adminCreateOnboardingUseCase.js";
 import { adminCreateOrganization } from "../funcs/adminCreateOrganization.js";
 import { adminCreateRegistryEntry } from "../funcs/adminCreateRegistryEntry.js";
+import { adminCreateSignupOffer } from "../funcs/adminCreateSignupOffer.js";
 import { adminDeleteGlobalIssuer } from "../funcs/adminDeleteGlobalIssuer.js";
 import { adminDeleteOnboardingPlaybook } from "../funcs/adminDeleteOnboardingPlaybook.js";
 import { adminDeleteOnboardingUseCase } from "../funcs/adminDeleteOnboardingUseCase.js";
@@ -23,6 +24,7 @@ import { adminFetchGlobalIssuerMetadata } from "../funcs/adminFetchGlobalIssuerM
 import { adminGetGlobalIssuer } from "../funcs/adminGetGlobalIssuer.js";
 import { adminGetGlobalIssuerDuplicatePreflight } from "../funcs/adminGetGlobalIssuerDuplicatePreflight.js";
 import { adminGetGlobalIssuerMigratePreflight } from "../funcs/adminGetGlobalIssuerMigratePreflight.js";
+import { adminGetHookClients } from "../funcs/adminGetHookClients.js";
 import { adminGetInferenceKeys } from "../funcs/adminGetInferenceKeys.js";
 import { adminGetInferenceSpendHistory } from "../funcs/adminGetInferenceSpendHistory.js";
 import { adminGetMcpServerToolCalls } from "../funcs/adminGetMcpServerToolCalls.js";
@@ -45,7 +47,9 @@ import { adminGetStripeSubscription } from "../funcs/adminGetStripeSubscription.
 import { adminGetStripeSubscriptionCandidate } from "../funcs/adminGetStripeSubscriptionCandidate.js";
 import { adminGetSupportCoverage } from "../funcs/adminGetSupportCoverage.js";
 import { adminGetSupportMatrix } from "../funcs/adminGetSupportMatrix.js";
+import { adminGetUpstreamOAuthMigrationStatus } from "../funcs/adminGetUpstreamOAuthMigrationStatus.js";
 import { adminListCustomerUsage } from "../funcs/adminListCustomerUsage.js";
+import { adminListExternalMcpMigrationCandidates } from "../funcs/adminListExternalMcpMigrationCandidates.js";
 import { adminListGlobalIssuerConvergenceCandidates } from "../funcs/adminListGlobalIssuerConvergenceCandidates.js";
 import { adminListGlobalIssuers } from "../funcs/adminListGlobalIssuers.js";
 import { adminListOnboardingPlaybooks } from "../funcs/adminListOnboardingPlaybooks.js";
@@ -58,15 +62,20 @@ import { adminListOrganizations } from "../funcs/adminListOrganizations.js";
 import { adminListProjectMcpServers } from "../funcs/adminListProjectMcpServers.js";
 import { adminListRegistryEntries } from "../funcs/adminListRegistryEntries.js";
 import { adminListRegistryOktaUnmapped } from "../funcs/adminListRegistryOktaUnmapped.js";
+import { adminListSignupOffers } from "../funcs/adminListSignupOffers.js";
+import { adminListUpstreamOAuthMigrationOrganizations } from "../funcs/adminListUpstreamOAuthMigrationOrganizations.js";
 import { adminListUserOrganizations } from "../funcs/adminListUserOrganizations.js";
 import { adminListUsers } from "../funcs/adminListUsers.js";
 import { adminLogout } from "../funcs/adminLogout.js";
 import { adminMarkEnterpriseTrialConverted } from "../funcs/adminMarkEnterpriseTrialConverted.js";
+import { adminMigrateExternalMcpServers } from "../funcs/adminMigrateExternalMcpServers.js";
 import { adminMigrateToGlobalIssuer } from "../funcs/adminMigrateToGlobalIssuer.js";
+import { adminPreviewExternalMcpMigration } from "../funcs/adminPreviewExternalMcpMigration.js";
 import { adminRearmTrial } from "../funcs/adminRearmTrial.js";
 import { adminRefreshGlobalIssuerMetadata } from "../funcs/adminRefreshGlobalIssuerMetadata.js";
 import { adminRepairInferenceKey } from "../funcs/adminRepairInferenceKey.js";
 import { adminResumeStripeSubscription } from "../funcs/adminResumeStripeSubscription.js";
+import { adminRunUpstreamOAuthMigration } from "../funcs/adminRunUpstreamOAuthMigration.js";
 import { adminSaveRegistryEntry } from "../funcs/adminSaveRegistryEntry.js";
 import { adminServeImage } from "../funcs/adminServeImage.js";
 import { adminSetInferenceKeyMonthlyLimit } from "../funcs/adminSetInferenceKeyMonthlyLimit.js";
@@ -82,6 +91,7 @@ import { adminUpdateGlobalIssuer } from "../funcs/adminUpdateGlobalIssuer.js";
 import { adminUpdateOnboardingPlaybook } from "../funcs/adminUpdateOnboardingPlaybook.js";
 import { adminUpdateOnboardingUseCase } from "../funcs/adminUpdateOnboardingUseCase.js";
 import { adminUpdateOrganization } from "../funcs/adminUpdateOrganization.js";
+import { adminUpdateSignupOffer } from "../funcs/adminUpdateSignupOffer.js";
 import { adminUpdateSupportMatrix } from "../funcs/adminUpdateSupportMatrix.js";
 import { adminUploadPlatformImage } from "../funcs/adminUploadPlatformImage.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
@@ -89,10 +99,13 @@ import { AdminBulkUpdateAccountTypeResult } from "../models/components/adminbulk
 import { AdminChatAnalysisSettings } from "../models/components/adminchatanalysissettings.js";
 import { AdminChatAnalysisTriggerResult } from "../models/components/adminchatanalysistriggerresult.js";
 import { AdminCustomerUsageResponse } from "../models/components/admincustomerusageresponse.js";
+import { AdminExternalMcpMigrationResult } from "../models/components/adminexternalmcpmigrationresult.js";
+import { AdminHookClientsResult } from "../models/components/adminhookclientsresult.js";
 import { AdminInferenceKey } from "../models/components/admininferencekey.js";
 import { AdminInferenceKeyLimit } from "../models/components/admininferencekeylimit.js";
 import { AdminInferenceKeyRepairResult } from "../models/components/admininferencekeyrepairresult.js";
 import { AdminInferenceSpendMonth } from "../models/components/admininferencespendmonth.js";
+import { AdminListExternalMcpMigrationCandidatesResult } from "../models/components/adminlistexternalmcpmigrationcandidatesresult.js";
 import { AdminListOrganizationMembersResult } from "../models/components/adminlistorganizationmembersresult.js";
 import { AdminListOrganizationProjectsResult } from "../models/components/adminlistorganizationprojectsresult.js";
 import { AdminListProjectMcpServersResult } from "../models/components/adminlistprojectmcpserversresult.js";
@@ -118,10 +131,14 @@ import { AdminRegistryOktaCandidates } from "../models/components/adminregistryo
 import { AdminRegistryOktaUnmapped } from "../models/components/adminregistryoktaunmapped.js";
 import { AdminRegistryPage } from "../models/components/adminregistrypage.js";
 import { AdminSession } from "../models/components/adminsession.js";
+import { AdminSignupOffer } from "../models/components/adminsignupoffer.js";
 import { AdminSpendBreakdownResponse } from "../models/components/adminspendbreakdownresponse.js";
 import { AdminStripeCustomer } from "../models/components/adminstripecustomer.js";
 import { AdminStripeSubscription } from "../models/components/adminstripesubscription.js";
 import { AdminStripeSubscriptionCandidate } from "../models/components/adminstripesubscriptioncandidate.js";
+import { AdminUpstreamOAuthMigrationOrganizations } from "../models/components/adminupstreamoauthmigrationorganizations.js";
+import { AdminUpstreamOAuthMigrationRun } from "../models/components/adminupstreamoauthmigrationrun.js";
+import { AdminUpstreamOAuthMigrationStatus } from "../models/components/adminupstreamoauthmigrationstatus.js";
 import { AssignOrganizationOnboardingPlaybookRequestBody } from "../models/components/assignorganizationonboardingplaybookrequestbody.js";
 import { BulkUpdateAccountTypeRequestBody } from "../models/components/bulkupdateaccounttyperequestbody.js";
 import { CancelStripeSubscriptionRequestBody } from "../models/components/cancelstripesubscriptionrequestbody.js";
@@ -132,6 +149,7 @@ import { CreateOnboardingUseCaseRequestBody } from "../models/components/createo
 import { CreateOrganizationRequestBody } from "../models/components/createorganizationrequestbody.js";
 import { CreateRegistryEntryRequestBody } from "../models/components/createregistryentryrequestbody.js";
 import { CreateRemoteSessionIssuerForm } from "../models/components/createremotesessionissuerform.js";
+import { CreateSignupOfferRequestBody } from "../models/components/createsignupofferrequestbody.js";
 import { DeleteOnboardingPlaybookRequestBody } from "../models/components/deleteonboardingplaybookrequestbody.js";
 import { DeleteOnboardingUseCaseRequestBody } from "../models/components/deleteonboardingusecaserequestbody.js";
 import { DisableOrganizationRequestBody } from "../models/components/disableorganizationrequestbody.js";
@@ -140,10 +158,13 @@ import { ExtendTrialRequestBody } from "../models/components/extendtrialrequestb
 import { FetchIssuerMetadataRequestBody } from "../models/components/fetchissuermetadatarequestbody.js";
 import { GlobalRemoteSessionIssuer } from "../models/components/globalremotesessionissuer.js";
 import { IssuerMigratePreflight } from "../models/components/issuermigratepreflight.js";
+import { ListSignupOffersResponseBody } from "../models/components/listsignupoffersresponsebody.js";
 import { MarkEnterpriseTrialConvertedRequestBody } from "../models/components/markenterprisetrialconvertedrequestbody.js";
 import { MarkEnterpriseTrialConvertedResult } from "../models/components/markenterprisetrialconvertedresult.js";
+import { MigrateExternalMcpServersRequestBody } from "../models/components/migrateexternalmcpserversrequestbody.js";
 import { MigrateRemoteSessionIssuerRequestBody } from "../models/components/migrateremotesessionissuerrequestbody.js";
 import { MigrateRemoteSessionIssuerResult } from "../models/components/migrateremotesessionissuerresult.js";
+import { PreviewExternalMcpMigrationRequestBody } from "../models/components/previewexternalmcpmigrationrequestbody.js";
 import { ProductFeatures } from "../models/components/productfeatures.js";
 import { RearmTrialRequestBody } from "../models/components/rearmtrialrequestbody.js";
 import { RemoteSessionIssuer } from "../models/components/remotesessionissuer.js";
@@ -153,6 +174,7 @@ import { RemoteSessionIssuerRefresh } from "../models/components/remotesessionis
 import { RepairInferenceKeyRequestBody } from "../models/components/repairinferencekeyrequestbody.js";
 import { ResumeStripeSubscriptionRequestBody } from "../models/components/resumestripesubscriptionrequestbody.js";
 import { RiskIDRequestBody } from "../models/components/riskidrequestbody.js";
+import { RunUpstreamOAuthMigrationRequestBody } from "../models/components/runupstreamoauthmigrationrequestbody.js";
 import { SaveRegistryEntryRequestBody } from "../models/components/saveregistryentryrequestbody.js";
 import { SetInferenceKeyMonthlyLimitRequestBody } from "../models/components/setinferencekeymonthlylimitrequestbody.js";
 import { SetOrganizationChatAnalysisSettingsRequestBody } from "../models/components/setorganizationchatanalysissettingsrequestbody.js";
@@ -169,6 +191,7 @@ import { UpdateOnboardingPlaybookRequestBody } from "../models/components/update
 import { UpdateOnboardingUseCaseRequestBody } from "../models/components/updateonboardingusecaserequestbody.js";
 import { UpdateOrganizationRequestBody } from "../models/components/updateorganizationrequestbody.js";
 import { UpdateRemoteSessionIssuerForm } from "../models/components/updateremotesessionissuerform.js";
+import { UpdateSignupOfferRequestBody } from "../models/components/updatesignupofferrequestbody.js";
 import { UpdateSupportMatrixRequestBody } from "../models/components/updatesupportmatrixrequestbody.js";
 import { UploadImageResult } from "../models/components/uploadimageresult.js";
 import { AdminDeleteGlobalIssuerRequest } from "../models/operations/admindeleteglobalissuer.js";
@@ -176,6 +199,7 @@ import { AdminDescribeMcpServerHealthRequest } from "../models/operations/admind
 import { AdminGetGlobalIssuerRequest } from "../models/operations/admingetglobalissuer.js";
 import { AdminGetGlobalIssuerDuplicatePreflightRequest } from "../models/operations/admingetglobalissuerduplicatepreflight.js";
 import { AdminGetGlobalIssuerMigratePreflightRequest } from "../models/operations/admingetglobalissuermigratepreflight.js";
+import { AdminGetHookClientsRequest } from "../models/operations/admingethookclients.js";
 import { AdminGetInferenceKeysRequest } from "../models/operations/admingetinferencekeys.js";
 import { AdminGetInferenceSpendHistoryRequest } from "../models/operations/admingetinferencespendhistory.js";
 import { AdminGetMcpServerToolCallsRequest } from "../models/operations/admingetmcpservertoolcalls.js";
@@ -194,6 +218,7 @@ import { AdminGetStripeCustomerRequest } from "../models/operations/admingetstri
 import { AdminGetStripeSubscriptionRequest } from "../models/operations/admingetstripesubscription.js";
 import { AdminGetStripeSubscriptionCandidateRequest } from "../models/operations/admingetstripesubscriptioncandidate.js";
 import { AdminGetSupportCoverageRequest } from "../models/operations/admingetsupportcoverage.js";
+import { AdminGetUpstreamOAuthMigrationStatusRequest } from "../models/operations/admingetupstreamoauthmigrationstatus.js";
 import { AdminListCustomerUsageRequest } from "../models/operations/adminlistcustomerusage.js";
 import {
   AdminListGlobalIssuerConvergenceCandidatesRequest,
@@ -268,6 +293,72 @@ export class Admin extends ClientSDK {
   ): Promise<void> {
     return unwrapAsync(adminLogout(
       this,
+      options,
+    ));
+  }
+
+  /**
+   * listExternalMcpMigrationCandidates admin
+   *
+   * @remarks
+   * Lists every live server across all organizations whose latest toolset version proxies an external MCP attachment on its project's active deployment, with the blockers that stop each one from migrating.
+   */
+  async listExternalMcpMigrationCandidates(
+    options?: RequestOptions,
+  ): Promise<AdminListExternalMcpMigrationCandidatesResult> {
+    return unwrapAsync(adminListExternalMcpMigrationCandidates(
+      this,
+      options,
+    ));
+  }
+
+  /**
+   * migrateExternalMcpServers admin
+   *
+   * @remarks
+   * Switches each server in place from its external MCP attachment to a remote MCP source on the same sign-in provider, keeping its ID, address and everything that references it, and disables the old toolset. A candidate left with nothing to migrate is deleted instead, with its server, addresses and plugin entries, as the toolset delete API does. Servers run one at a time, each in its own transaction, and the run stops at the first failure. Never creates a sign-in provider or a client and never registers one with the upstream.
+   */
+  async migrateExternalMcpServers(
+    request: MigrateExternalMcpServersRequestBody,
+    options?: RequestOptions,
+  ): Promise<AdminExternalMcpMigrationResult> {
+    return unwrapAsync(adminMigrateExternalMcpServers(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * previewExternalMcpMigration admin
+   *
+   * @remarks
+   * Runs each server's migration or deletion inside a transaction that is rolled back, reporting what would happen without changing anything.
+   */
+  async previewExternalMcpMigration(
+    request: PreviewExternalMcpMigrationRequestBody,
+    options?: RequestOptions,
+  ): Promise<AdminExternalMcpMigrationResult> {
+    return unwrapAsync(adminPreviewExternalMcpMigration(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * getHookClients admin
+   *
+   * @remarks
+   * Fleet-wide client health grids: which hook client (legacy curl or hooks binary version) each organization's new sessions use per day, inference hook traffic per Claude app, and device agent versions per day.
+   */
+  async getHookClients(
+    request?: AdminGetHookClientsRequest | undefined,
+    options?: RequestOptions,
+  ): Promise<AdminHookClientsResult> {
+    return unwrapAsync(adminGetHookClients(
+      this,
+      request,
       options,
     ));
   }
@@ -1427,6 +1518,55 @@ export class Admin extends ClientSDK {
   }
 
   /**
+   * listSignupOffers admin
+   *
+   * @remarks
+   * List staff-managed signup offers. Stripe owns all promotion terms.
+   */
+  async listSignupOffers(
+    options?: RequestOptions,
+  ): Promise<ListSignupOffersResponseBody> {
+    return unwrapAsync(adminListSignupOffers(
+      this,
+      options,
+    ));
+  }
+
+  /**
+   * createSignupOffer admin
+   *
+   * @remarks
+   * Create a disabled signup offer mapped to an exact Stripe promotion code ID.
+   */
+  async createSignupOffer(
+    request: CreateSignupOfferRequestBody,
+    options?: RequestOptions,
+  ): Promise<AdminSignupOffer> {
+    return unwrapAsync(adminCreateSignupOffer(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * updateSignupOffer admin
+   *
+   * @remarks
+   * Edit, enable or disable a signup offer. Existing accepted promotion applications are unchanged.
+   */
+  async updateSignupOffer(
+    request: UpdateSignupOfferRequestBody,
+    options?: RequestOptions,
+  ): Promise<AdminSignupOffer> {
+    return unwrapAsync(adminUpdateSignupOffer(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
    * getSupportCoverage admin
    *
    * @remarks
@@ -1554,6 +1694,55 @@ export class Admin extends ClientSDK {
     options?: RequestOptions,
   ): Promise<AdminOrganization> {
     return unwrapAsync(adminStartTrial(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * listUpstreamOAuthMigrationOrganizations admin
+   *
+   * @remarks
+   * Lists every organization the upstream OAuth migration applies to, so staff can check and migrate them one by one.
+   */
+  async listUpstreamOAuthMigrationOrganizations(
+    options?: RequestOptions,
+  ): Promise<AdminUpstreamOAuthMigrationOrganizations> {
+    return unwrapAsync(adminListUpstreamOAuthMigrationOrganizations(
+      this,
+      options,
+    ));
+  }
+
+  /**
+   * runUpstreamOAuthMigration admin
+   *
+   * @remarks
+   * Migrates one organization's upstream OAuth configuration: records the server to client associations its configuration proves, then each live credential's client choice. Idempotent, so it is safe to run again; a server the configuration does not prove is reported and never guessed.
+   */
+  async runUpstreamOAuthMigration(
+    request: RunUpstreamOAuthMigrationRequestBody,
+    options?: RequestOptions,
+  ): Promise<AdminUpstreamOAuthMigrationRun> {
+    return unwrapAsync(adminRunUpstreamOAuthMigration(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * getUpstreamOAuthMigrationStatus admin
+   *
+   * @remarks
+   * Reports where one organization stands in the upstream OAuth migration from a dry run that writes nothing.
+   */
+  async getUpstreamOAuthMigrationStatus(
+    request: AdminGetUpstreamOAuthMigrationStatusRequest,
+    options?: RequestOptions,
+  ): Promise<AdminUpstreamOAuthMigrationStatus> {
+    return unwrapAsync(adminGetUpstreamOAuthMigrationStatus(
       this,
       request,
       options,

@@ -72,6 +72,7 @@ type CanonicalIdentityGate interface {
 // without coupling diagnostics to one Reader implementation.
 type DiagnosticsProjectReader interface {
 	ResolveProjectRead(ctx context.Context, principal Principal, input FindMCPInput) (ResolvedProject, error)
+	ResolveProjectLogRead(ctx context.Context, principal Principal, input FindMCPInput) (ResolvedProject, error)
 	GetMCPForDiagnostics(ctx context.Context, principal Principal, input GetMCPInput) (MCP, error)
 }
 

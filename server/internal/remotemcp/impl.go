@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/google/uuid"
@@ -56,6 +57,11 @@ type Service struct {
 	provisioning          *RemoteMCPProvisioningService
 	distributionAdmission *admission.Guard
 	features              feature.Provider
+
+	// serverURL is the public Speakeasy origin that platform-domain MCP
+	// endpoint URLs resolve under; nil omits those URLs.
+	serverURL *url.URL
+
 	// beforeClaim runs between the claim's list and re-read with the locked previous URL; tests only.
 	beforeClaim func(holderPID uint32, previousURL string)
 	// beforeScopePinLock runs inside the pin transaction before it locks anything; tests only.
@@ -91,9 +97,15 @@ func NewService(
 		provisioning:          NewRemoteMCPProvisioningService(db, policy, auditLogger, iconSetter),
 		distributionAdmission: admission.NewGuard(),
 		features:              features,
+		serverURL:             nil,
 		beforeClaim:           nil,
 		beforeScopePinLock:    nil,
 	}
+}
+
+func (s *Service) WithServerURL(serverURL *url.URL) *Service {
+	s.serverURL = serverURL
+	return s
 }
 
 func Attach(mux goahttp.Muxer, service *Service) {
@@ -184,9 +196,11 @@ func (s *Service) CreateServerAndMcpServer(ctx context.Context, payload *gen.Cre
 			result.MCPServer = refreshed
 		}
 	}
+	mcpServerView := mv.BuildMcpServerView(result.MCPServer)
+	mcpservers.EnrichViews(ctx, logger, s.db, s.serverURL, authCtx.ActiveOrganizationID, []mcpserversrepo.McpServer{result.MCPServer}, []*types.McpServer{mcpServerView})
 	return &gen.CreateServerAndMcpServerResult{
 		RemoteMcpServer: mv.BuildRemoteMcpServerView(result.RemoteMCPServer),
-		McpServer:       mv.BuildMcpServerView(result.MCPServer),
+		McpServer:       mcpServerView,
 	}, nil
 }
 
@@ -955,6 +969,8 @@ func validateHeaderWrite(name string, value *string, valueFromRequestHeader *str
 	switch err := proxy.CheckRemoteHeader(check); {
 	case err == nil:
 		return headerName, source, nil
+	case errors.Is(err, proxy.ErrAuthorizationSource):
+		return "", nil, fmt.Errorf("header %q cannot read request header %q: it may carry the caller's Speakeasy credential, so it is never forwarded to remote MCP servers. Have callers send the upstream credential in a separate request header and read it from there", headerName, *source)
 	case errors.Is(err, proxy.ErrProtectedSource):
 		return "", nil, fmt.Errorf("header %q cannot read request header %q: Speakeasy credentials and cookies are never forwarded to remote MCP servers", headerName, *source)
 	case errors.Is(err, proxy.ErrProtectedDestination):

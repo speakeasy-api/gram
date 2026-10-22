@@ -30,6 +30,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	"github.com/speakeasy-api/gram/server/internal/httpcache"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints"
 	mcpendpoints_repo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
@@ -136,9 +137,9 @@ func (s *Service) HandleGetProtectedResource(w http.ResponseWriter, r *http.Requ
 	switch {
 	case err == nil:
 		if metaServer != nil {
-			return s.ServeWellKnownProtectedResourceForMetaServer(ctx, w, r, logger, mcpEndpoint, metaServer, "mcp")
+			return s.ServeWellKnownProtectedResourceForMetaServer(ctx, w, r, logger, mcpEndpoint, metaServer, mcproute.MCP)
 		}
-		return s.ServeWellKnownProtectedResourceForServer(w, r, logger, mcpEndpoint, mcpServer, "mcp")
+		return s.ServeWellKnownProtectedResourceForServer(w, r, logger, mcpEndpoint, mcpServer, mcproute.MCP)
 	case mcpendpoints.IsAddressMiss(err):
 		// Address miss: fall through to the legacy toolset lookup.
 	default:
@@ -159,14 +160,14 @@ func (s *Service) HandleGetProtectedResource(w http.ResponseWriter, r *http.Requ
 	s.recordToolsetSlugFallback(ctx, s.logger, mcpmetrics.LegacyFallbackWellKnownProtectedResource, mcpSlug, toolset, wrapperID)
 
 	if toolset.UserSessionIssuerID.Valid {
-		endpoint := newResolvedMcpEndpointFromToolset(toolset, "mcp")
+		endpoint := newResolvedMcpEndpointFromToolset(toolset, mcproute.MCP)
 		if err := s.RequireUserSessionIssuer(ctx, endpoint); err != nil {
 			return err
 		}
 		return s.ServeGetProtectedResource(w, r, endpoint)
 	}
 
-	resourceURL, err := url.JoinPath(s.BaseURLForRequest(r), "mcp", mcpSlug)
+	resourceURL, err := url.JoinPath(s.BaseURLForRequest(r), mcproute.MCP.String(), mcpSlug)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "build legacy resource URL").LogError(ctx, s.logger)
 	}
@@ -191,9 +192,9 @@ func (s *Service) HandleGetAuthorizationServer(w http.ResponseWriter, r *http.Re
 	switch {
 	case err == nil:
 		if metaServer != nil {
-			return s.ServeWellKnownAuthorizationServerForMetaServer(ctx, w, r, logger, mcpEndpoint, metaServer, "mcp")
+			return s.ServeWellKnownAuthorizationServerForMetaServer(ctx, w, r, logger, mcpEndpoint, metaServer, mcproute.MCP)
 		}
-		return s.ServeWellKnownAuthorizationServerForServer(w, r, logger, mcpEndpoint, mcpServer, "mcp")
+		return s.ServeWellKnownAuthorizationServerForServer(w, r, logger, mcpEndpoint, mcpServer, mcproute.MCP)
 	case mcpendpoints.IsAddressMiss(err):
 		// Address miss: fall through to the legacy toolset lookup.
 	default:
@@ -214,7 +215,7 @@ func (s *Service) HandleGetAuthorizationServer(w http.ResponseWriter, r *http.Re
 	s.recordToolsetSlugFallback(ctx, s.logger, mcpmetrics.LegacyFallbackWellKnownAuthorizationServer, mcpSlug, toolset, wrapperID)
 
 	if toolset.UserSessionIssuerID.Valid {
-		endpoint := newResolvedMcpEndpointFromToolset(toolset, "mcp")
+		endpoint := newResolvedMcpEndpointFromToolset(toolset, mcproute.MCP)
 		if err := s.RequireUserSessionIssuer(ctx, endpoint); err != nil {
 			return err
 		}
@@ -225,7 +226,7 @@ func (s *Service) HandleGetAuthorizationServer(w http.ResponseWriter, r *http.Re
 	// which equals the requested slug on this fallback path. The resource URL
 	// mirrors HandleGetProtectedResource so the served issuer matches the
 	// protected-resource metadata's authorization_servers entry.
-	resourceURL, err := url.JoinPath(s.BaseURLForRequest(r), "mcp", mcpSlug)
+	resourceURL, err := url.JoinPath(s.BaseURLForRequest(r), mcproute.MCP.String(), mcpSlug)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "build legacy resource URL").LogError(ctx, s.logger)
 	}
@@ -234,8 +235,7 @@ func (s *Service) HandleGetAuthorizationServer(w http.ResponseWriter, r *http.Re
 
 // ServeWellKnownProtectedResourceForServer serves RFC 9728 protected-resource
 // metadata for an already-resolved (mcp_endpoint, mcp_server) pair. It is the
-// single per-backend dispatch shared by the /mcp (routeBase "mcp") and /x/mcp
-// (routeBase "x/mcp") well-known surfaces:
+// single per-backend dispatch for the /mcp well-known surface:
 //
 //   - Issuer-gated (any backend): emit the Speakeasy-hosted metadata shape rooted
 //     at the resolved endpoint's URL on routeBase's surface.
@@ -249,7 +249,7 @@ func (s *Service) ServeWellKnownProtectedResourceForServer(
 	logger *slog.Logger,
 	mcpEndpoint *mcpendpoints_repo.McpEndpoint,
 	mcpServer *mcpservers_repo.McpServer,
-	routeBase string,
+	routeBase mcproute.Base,
 ) error {
 	ctx := r.Context()
 
@@ -277,7 +277,7 @@ func (s *Service) ServeWellKnownProtectedResourceForServer(
 		if err != nil {
 			return err
 		}
-		resourceURL, err := url.JoinPath(s.BaseURLForRequest(r), routeBase, mcpEndpoint.Slug)
+		resourceURL, err := url.JoinPath(s.BaseURLForRequest(r), routeBase.String(), mcpEndpoint.Slug)
 		if err != nil {
 			return oops.E(oops.CodeUnexpected, err, "build resource URL").LogError(ctx, logger)
 		}
@@ -297,7 +297,7 @@ func (s *Service) ServeWellKnownAuthorizationServerForServer(
 	logger *slog.Logger,
 	mcpEndpoint *mcpendpoints_repo.McpEndpoint,
 	mcpServer *mcpservers_repo.McpServer,
-	routeBase string,
+	routeBase mcproute.Base,
 ) error {
 	ctx := r.Context()
 
@@ -330,7 +330,7 @@ func (s *Service) ServeWellKnownAuthorizationServerForServer(
 		// served issuer matches the protected-resource metadata's
 		// authorization_servers entry.
 		oauthSlug := mcpEndpoint.Slug
-		resourceURL, err := url.JoinPath(s.BaseURLForRequest(r), routeBase, mcpEndpoint.Slug)
+		resourceURL, err := url.JoinPath(s.BaseURLForRequest(r), routeBase.String(), mcpEndpoint.Slug)
 		if err != nil {
 			return oops.E(oops.CodeUnexpected, err, "build resource URL").LogError(ctx, logger)
 		}
@@ -423,9 +423,8 @@ func (s *Service) serveLegacyToolsetAuthorizationServer(ctx context.Context, w h
 }
 
 // ServeGetProtectedResource is the post-resolution entry point for the
-// RFC 9728 protected-resource metadata response, shared by /mcp's
-// HandleGetProtectedResource (toolset-keyed) and /x/mcp's mcp_endpoint-
-// keyed route registration. Emits the issuer-gated metadata shape; the
+// RFC 9728 protected-resource metadata response, called by
+// HandleGetProtectedResource after slug resolution. Emits the issuer-gated metadata shape; the
 // legacy non-issuer-gated fallback stays in HandleGetProtectedResource
 // because it depends on the toolsets row directly.
 func (s *Service) ServeGetProtectedResource(w http.ResponseWriter, r *http.Request, endpoint *ResolvedMcpEndpoint) error {
@@ -448,15 +447,14 @@ func (s *Service) ServeGetProtectedResource(w http.ResponseWriter, r *http.Reque
 }
 
 // ServeGetAuthorizationServer is the post-resolution entry point for the
-// RFC 8414 authorization-server metadata response, shared by /mcp's
-// HandleGetAuthorizationServer (toolset-keyed) and /x/mcp's
-// mcp_endpoint-keyed route registration. Emits the issuer-gated
+// RFC 8414 authorization-server metadata response, called by
+// HandleGetAuthorizationServer after slug resolution. Emits the issuer-gated
 // metadata shape; the legacy non-issuer-gated fallback stays in
 // HandleGetAuthorizationServer.
 func (s *Service) ServeGetAuthorizationServer(w http.ResponseWriter, r *http.Request, endpoint *ResolvedMcpEndpoint) error {
 	ctx := r.Context()
 	baseURL := s.BaseURLForRequest(r)
-	if !s.servesAuthorizationServerMetadata(ctx, endpoint, baseURL) {
+	if !s.arrivedAtAuthorizationServer(ctx, endpoint, baseURL) {
 		return oops.E(oops.CodeNotFound, nil, "authorization server metadata is served on the issuer's host")
 	}
 	urls, err := endpoint.AuthorizationServerURLs(s.authorizationServerBaseURL(endpoint, baseURL))
@@ -466,6 +464,9 @@ func (s *Service) ServeGetAuthorizationServer(w http.ResponseWriter, r *http.Req
 	grantTypes := []string{
 		oauthwire.GrantTypeAuthorizationCode,
 		oauthwire.GrantTypeRefreshToken,
+	}
+	if s.assistantWorkloadTokens != nil && !endpoint.IsOrganizationGateway() {
+		grantTypes = append(grantTypes, "client_credentials")
 	}
 	var grantProfiles []string
 	if endpoint.idJAGConfigured {
@@ -547,7 +548,7 @@ func (s *Service) ServeWellKnownProtectedResourceForMetaServer(
 	logger *slog.Logger,
 	mcpEndpoint *mcpendpoints_repo.McpEndpoint,
 	metaServer *metamcp_repo.MetaMcpServer,
-	routeBase string,
+	routeBase mcproute.Base,
 ) error {
 	if !metaServer.UserSessionIssuerID.Valid {
 		return oops.E(oops.CodeNotFound, nil, "no OAuth configuration found for this MCP server")
@@ -569,7 +570,7 @@ func (s *Service) ServeWellKnownAuthorizationServerForMetaServer(
 	logger *slog.Logger,
 	mcpEndpoint *mcpendpoints_repo.McpEndpoint,
 	metaServer *metamcp_repo.MetaMcpServer,
-	routeBase string,
+	routeBase mcproute.Base,
 ) error {
 	if !metaServer.UserSessionIssuerID.Valid {
 		return oops.E(oops.CodeNotFound, nil, "no OAuth configuration found for this MCP server")

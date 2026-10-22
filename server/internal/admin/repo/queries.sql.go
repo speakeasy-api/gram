@@ -249,7 +249,10 @@ WITH latest_arm AS (
     FROM audit_logs AS armed
     WHERE armed.organization_id = $1
       AND armed.project_id IS NULL
-      AND armed.action = 'organization:enterprise_trial_armed'
+      AND armed.action IN (
+          'organization:enterprise_trial_armed',
+          'organization:enterprise_trial_started'
+      )
       AND armed.subject_id = $1
       AND armed.subject_type = 'organization'
     ORDER BY armed.seq DESC, armed.id DESC
@@ -291,9 +294,10 @@ type AdminGetEnterpriseTrialRetryOperationIDsRow struct {
 	MatchingRearmCount  int64
 }
 
-// The arm audit id is the immutable generation token. Every production trial
-// creation writes exactly one arm audit in the creation transaction; extension
-// writes neither. seq orders generations; id breaks any equal-seq tie.
+// The creation audit id is the immutable generation token. Self-service trial
+// creation records an armed action, while an admin grant records a started
+// action. Extension writes neither. seq orders generations; id breaks any
+// equal-seq tie.
 func (q *Queries) AdminGetEnterpriseTrialRetryOperationIDs(ctx context.Context, targetOrganizationID string) (AdminGetEnterpriseTrialRetryOperationIDsRow, error) {
 	row := q.db.QueryRow(ctx, adminGetEnterpriseTrialRetryOperationIDs, targetOrganizationID)
 	var i AdminGetEnterpriseTrialRetryOperationIDsRow
@@ -415,7 +419,7 @@ type AdminGetMcpServerAuthRow struct {
 // wrapper's calls. A live canonical wrapper (id = toolset id) owns the slug
 // outright: it counts as one, and any other wrapper of that toolset as two.
 // url_slug is the slug in the /mcp/<slug> path clients call: the primary live
-// endpoint's (custom domain first, as mcpendpoints.PrimaryEndpoint ranks them;
+// endpoint's (custom domain first, as endpointaddr.PrimaryEndpoint ranks them;
 // a domain root has no such path), else the server's own slug, else the
 // toolset's mcp_slug when no other wrapper shares that toolset.
 func (q *Queries) AdminGetMcpServerAuth(ctx context.Context, arg AdminGetMcpServerAuthParams) (AdminGetMcpServerAuthRow, error) {
@@ -701,6 +705,9 @@ SELECT
     i.attachment_scope,
     i.client_id_metadata_admission_mode,
     i.use_authentication_host,
+    i.authorization_server_mode,
+    -- Matches authserver.IssuerURLPinned: a pin only counts in shared mode.
+    (i.authorization_server_mode = 'shared' AND i.pinned_issuer_url IS NOT NULL AND i.pinned_issuer_url <> '')::boolean AS issuer_url_pinned,
     i.trusted_remote_session_issuer_id,
     i.trusted_remote_session_client_id,
     i.created_at
@@ -726,6 +733,8 @@ type AdminGetUserSessionIssuerRow struct {
 	AttachmentScope               pgtype.Text
 	ClientIDMetadataAdmissionMode pgtype.Text
 	UseAuthenticationHost         bool
+	AuthorizationServerMode       string
+	IssuerUrlPinned               bool
 	TrustedRemoteSessionIssuerID  uuid.NullUUID
 	TrustedRemoteSessionClientID  uuid.NullUUID
 	CreatedAt                     pgtype.Timestamptz
@@ -746,6 +755,8 @@ func (q *Queries) AdminGetUserSessionIssuer(ctx context.Context, arg AdminGetUse
 		&i.AttachmentScope,
 		&i.ClientIDMetadataAdmissionMode,
 		&i.UseAuthenticationHost,
+		&i.AuthorizationServerMode,
+		&i.IssuerUrlPinned,
 		&i.TrustedRemoteSessionIssuerID,
 		&i.TrustedRemoteSessionClientID,
 		&i.CreatedAt,
@@ -1117,6 +1128,39 @@ func (q *Queries) AdminListOrganizationMembersPage(ctx context.Context, arg Admi
 	return items, nil
 }
 
+const adminListOrganizationNamesByIDs = `-- name: AdminListOrganizationNamesByIDs :many
+SELECT id, name, slug
+FROM organization_metadata
+WHERE id = ANY($1::text[])
+`
+
+type AdminListOrganizationNamesByIDsRow struct {
+	ID   string
+	Name string
+	Slug string
+}
+
+// Labels the hook client grids, whose rows carry only organization ids.
+func (q *Queries) AdminListOrganizationNamesByIDs(ctx context.Context, ids []string) ([]AdminListOrganizationNamesByIDsRow, error) {
+	rows, err := q.db.Query(ctx, adminListOrganizationNamesByIDs, ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AdminListOrganizationNamesByIDsRow
+	for rows.Next() {
+		var i AdminListOrganizationNamesByIDsRow
+		if err := rows.Scan(&i.ID, &i.Name, &i.Slug); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const adminListOrganizations = `-- name: AdminListOrganizations :many
 WITH search AS (
     -- Escaped once here rather than per arm so the name and the slug arm cannot
@@ -1462,7 +1506,7 @@ type AdminListProjectMcpServerRowsRow struct {
 
 // One row per live endpoint, and one with no endpoint columns for a server that
 // has none. custom_domain is null for an endpoint whose domain cannot serve it;
-// the caller skips those and picks the address with mcpendpoints.PrimaryEndpoint.
+// the caller skips those and picks the address with endpointaddr.PrimaryEndpoint.
 func (q *Queries) AdminListProjectMcpServerRows(ctx context.Context, projectID uuid.UUID) ([]AdminListProjectMcpServerRowsRow, error) {
 	rows, err := q.db.Query(ctx, adminListProjectMcpServerRows, projectID)
 	if err != nil {
@@ -1694,6 +1738,97 @@ func (q *Queries) AdminListRegistryOktaMappings(ctx context.Context) ([]AdminLis
 	for rows.Next() {
 		var i AdminListRegistryOktaMappingsRow
 		if err := rows.Scan(&i.RegistryEntryID, &i.EntryName, &i.OinName); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const adminListUpstreamOAuthMigrationOrganizations = `-- name: AdminListUpstreamOAuthMigrationOrganizations :many
+WITH reached AS (
+    SELECT p.organization_id, s.id AS server_id
+    FROM mcp_servers AS s
+    JOIN projects AS p
+      ON p.id = s.project_id
+     AND p.deleted IS FALSE
+    JOIN user_session_issuers AS usi
+      ON usi.id = s.user_session_issuer_id
+     AND usi.deleted IS FALSE
+     AND (usi.project_id = p.id
+          OR (usi.project_id IS NULL AND usi.organization_id = p.organization_id))
+    WHERE s.deleted IS FALSE
+    UNION
+    SELECT g.organization_id, m.mcp_server_id AS server_id
+    FROM meta_mcp_servers AS g
+    JOIN projects AS gp
+      ON gp.id = g.project_id
+     AND gp.deleted IS FALSE
+    JOIN user_session_issuers AS usi
+      ON usi.id = g.user_session_issuer_id
+     AND usi.deleted IS FALSE
+    JOIN meta_mcp_server_members AS m
+      ON m.meta_mcp_server_id = g.id
+     AND m.project_id = g.project_id
+     AND m.deleted IS FALSE
+    JOIN mcp_servers AS s
+      ON s.id = m.mcp_server_id
+     AND s.deleted IS FALSE
+     AND (s.remote_mcp_server_id IS NOT NULL OR s.tunneled_mcp_server_id IS NOT NULL)
+    WHERE g.deleted IS FALSE
+    UNION
+    SELECT oi.organization_id, s.id AS server_id
+    FROM user_session_issuers AS oi
+    JOIN projects AS p
+      ON p.organization_id = oi.organization_id
+     AND p.deleted IS FALSE
+    JOIN mcp_servers AS s
+      ON s.project_id = p.id
+     AND s.deleted IS FALSE
+     AND (s.remote_mcp_server_id IS NOT NULL OR s.tunneled_mcp_server_id IS NOT NULL)
+    WHERE oi.project_id IS NULL
+      AND oi.deleted IS FALSE
+)
+SELECT
+    om.id,
+    om.name,
+    om.slug,
+    count(DISTINCT reached.server_id)::bigint AS servers
+FROM organization_metadata AS om
+JOIN reached
+  ON reached.organization_id = om.id
+GROUP BY om.id, om.name, om.slug
+ORDER BY om.name, om.id
+`
+
+type AdminListUpstreamOAuthMigrationOrganizationsRow struct {
+	ID      string
+	Name    string
+	Slug    string
+	Servers int64
+}
+
+// The organizations the upstream OAuth migration writes for: those with a
+// live MCP server on a live user session issuer of its own tenant, or a live
+// proxied server fronted by a gateway issuer. servers counts those servers.
+func (q *Queries) AdminListUpstreamOAuthMigrationOrganizations(ctx context.Context) ([]AdminListUpstreamOAuthMigrationOrganizationsRow, error) {
+	rows, err := q.db.Query(ctx, adminListUpstreamOAuthMigrationOrganizations)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AdminListUpstreamOAuthMigrationOrganizationsRow
+	for rows.Next() {
+		var i AdminListUpstreamOAuthMigrationOrganizationsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Slug,
+			&i.Servers,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -2081,6 +2216,12 @@ WHERE billing_metadata.organization_id = organization_metadata.id
   AND billing_metadata.stripe_customer_id = $5::text
   AND billing_metadata.stripe_subscription_id IS NULL
   AND organization_metadata.gram_account_type = 'payg'
+  -- A redeemed partner's retained anchor is immutable accounting provenance.
+  AND NOT EXISTS (
+    SELECT 1 FROM organization_promotion_applications application
+    WHERE application.organization_id = billing_metadata.organization_id
+      AND application.redeemed_at IS NOT NULL
+  )
   AND NOT EXISTS (
     SELECT 1
     FROM billing_metadata AS other
@@ -2172,6 +2313,33 @@ func (q *Queries) AdminUserSessionStats(ctx context.Context, arg AdminUserSessio
 	return i, err
 }
 
+const createSignupOffer = `-- name: CreateSignupOffer :one
+INSERT INTO signup_offers (name, stripe_promotion_code_id, signup_flow)
+VALUES ($1, $2, $3)
+RETURNING created_at, updated_at, name, stripe_promotion_code_id, signup_flow, id, enabled
+`
+
+type CreateSignupOfferParams struct {
+	Name                  string
+	StripePromotionCodeID string
+	SignupFlow            string
+}
+
+func (q *Queries) CreateSignupOffer(ctx context.Context, arg CreateSignupOfferParams) (SignupOffer, error) {
+	row := q.db.QueryRow(ctx, createSignupOffer, arg.Name, arg.StripePromotionCodeID, arg.SignupFlow)
+	var i SignupOffer
+	err := row.Scan(
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Name,
+		&i.StripePromotionCodeID,
+		&i.SignupFlow,
+		&i.ID,
+		&i.Enabled,
+	)
+	return i, err
+}
+
 const getProjectByID = `-- name: GetProjectByID :one
 SELECT id, slug
 FROM projects
@@ -2208,6 +2376,38 @@ func (q *Queries) GetProjectBySlug(ctx context.Context, slug string) (GetProject
 	var i GetProjectBySlugRow
 	err := row.Scan(&i.ID, &i.Slug)
 	return i, err
+}
+
+const listSignupOffers = `-- name: ListSignupOffers :many
+SELECT created_at, updated_at, name, stripe_promotion_code_id, signup_flow, id, enabled FROM signup_offers ORDER BY created_at DESC, id DESC
+`
+
+func (q *Queries) ListSignupOffers(ctx context.Context) ([]SignupOffer, error) {
+	rows, err := q.db.Query(ctx, listSignupOffers)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SignupOffer
+	for rows.Next() {
+		var i SignupOffer
+		if err := rows.Scan(
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.Name,
+			&i.StripePromotionCodeID,
+			&i.SignupFlow,
+			&i.ID,
+			&i.Enabled,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const lockEnterpriseTrialInOrganizations = `-- name: LockEnterpriseTrialInOrganizations :one
@@ -2522,6 +2722,41 @@ func (q *Queries) SetOrganizationWhitelist(ctx context.Context, arg SetOrganizat
 	var whitelisted bool
 	err := row.Scan(&whitelisted)
 	return whitelisted, err
+}
+
+const updateSignupOffer = `-- name: UpdateSignupOffer :one
+UPDATE signup_offers SET name = $1, stripe_promotion_code_id = $2,
+ signup_flow = $3, enabled = $4, updated_at = clock_timestamp()
+WHERE id = $5 RETURNING created_at, updated_at, name, stripe_promotion_code_id, signup_flow, id, enabled
+`
+
+type UpdateSignupOfferParams struct {
+	Name                  string
+	StripePromotionCodeID string
+	SignupFlow            string
+	Enabled               bool
+	ID                    uuid.UUID
+}
+
+func (q *Queries) UpdateSignupOffer(ctx context.Context, arg UpdateSignupOfferParams) (SignupOffer, error) {
+	row := q.db.QueryRow(ctx, updateSignupOffer,
+		arg.Name,
+		arg.StripePromotionCodeID,
+		arg.SignupFlow,
+		arg.Enabled,
+		arg.ID,
+	)
+	var i SignupOffer
+	err := row.Scan(
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Name,
+		&i.StripePromotionCodeID,
+		&i.SignupFlow,
+		&i.ID,
+		&i.Enabled,
+	)
+	return i, err
 }
 
 const upsertSupportCoverage = `-- name: UpsertSupportCoverage :exec

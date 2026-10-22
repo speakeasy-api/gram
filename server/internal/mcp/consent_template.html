@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="robots" content="noindex, nofollow" />
     <title>
-      {{if .FirstParty}}Connect {{.MCPSlug}}{{else}}Authorize
+      {{if and .Gateway .Gateway.Focus}}Connect {{.Gateway.Focus.Name}}{{else if .FirstParty}}Connect {{.MCPSlug}}{{else}}Authorize
       {{.ClientName}}{{end}}
     </title>
     {{/* The stylesheet is compiled from the dashboard design system by
@@ -28,6 +28,16 @@
 
       <section class="bg-card border">
         <header class="flex flex-col gap-2 border-b px-6 py-6 sm:px-8">
+          {{if and .Gateway .Gateway.Focus}}
+          {{/* One server's connect page. Connecting a service is the whole
+          job here: the gateway is approved on its own page, so this page
+          has no approve step of its own. */}}
+          <p class="text-eyebrow">Connect a server</p>
+          <h1 class="text-display-xs break-all">{{.Gateway.Focus.Name}}</h1>
+          <p class="text-sm text-muted-foreground">
+            <span class="text-foreground font-mono">{{.Gateway.Focus.Slug}}</span>, a server on <span class="text-foreground">{{.MCPSlug}}</span>.
+          </p>
+          {{else}}
           <p class="text-eyebrow">
             {{if .FirstParty}}Connect{{else}}Authorize{{end}}
           </p>
@@ -48,11 +58,12 @@
           {{end}}
           <p class="text-sm text-muted-foreground">
             {{if .FirstParty}}
-            {{if .RemoteSessionCards}}Link the services this MCP server needs to access on your behalf.{{else}}This MCP server needs no per-user service connections — you're all set.{{end}}
+            {{if .Gateway}}Connect the servers you want to use through this gateway.{{else if .RemoteSessionCards}}Link the services this MCP server needs to access on your behalf.{{else}}This MCP server needs no per-user service connections — you're all set.{{end}}
             {{else}}
             <span class="text-foreground">{{.ClientName}}</span> is requesting
-            access to this MCP server. {{end}}
+            access to {{if .Gateway}}this gateway and the servers on it{{else}}this MCP server{{end}}. {{end}}
           </p>
+          {{end}}
         </header>
 
         {{if .LoopbackRedirectWarning}}
@@ -202,6 +213,106 @@
         {{end}}
         {{end}}
 
+        {{if and .Gateway (not .Gateway.Focus)}}
+        {{/* A gateway lists servers, not services: approving the gateway
+        needs no connection, and each server connects on its own page, now or
+        the first time one of its tools needs it. Collapsed so the decision
+        stays the approval itself. */}}
+        <div class="border-b" data-gateway-servers>
+          {{if .Gateway.FocusUnavailable}}
+          <p class="text-xs text-default-warning px-6 pt-4 sm:px-8" data-gateway-focus-unavailable>
+            That server isn't available to you on this gateway.
+          </p>
+          {{end}}
+          {{if .Gateway.Servers}}
+          <details
+            class="group"
+            data-gateway-list
+            data-state="{{.State}}"
+            {{if .Gateway.ListOpen}}open{{end}}
+          >
+            <summary
+              class="interact:bg-accent group-open:border-b flex cursor-pointer list-none items-center justify-between gap-3 px-6 py-4 sm:px-8"
+            >
+              <span class="text-sm" data-gateway-summary
+                >{{.Gateway.ReadyCount}} of {{len .Gateway.Servers}} {{if eq (len .Gateway.Servers) 1}}server{{else}}servers{{end}} connected</span
+              >
+              <span class="text-eyebrow shrink-0 group-open:hidden" aria-hidden="true"
+                >Show servers</span
+              >
+              <span class="text-eyebrow hidden shrink-0 group-open:inline" aria-hidden="true"
+                >Hide</span
+              >
+            </summary>
+            <div class="flex flex-col gap-3 px-6 pt-4 pb-6 sm:px-8">
+              <p class="text-xs text-muted-foreground">
+                A server that needs you to sign in works as soon as you connect
+                it, now or the first time you use it.
+              </p>
+              <ul class="m-0 flex max-h-96 list-none flex-col overflow-y-auto border p-0">
+                {{range .Gateway.Servers}}
+                <li
+                  class="flex items-center justify-between gap-3 px-4 py-3 not-first:border-t"
+                  data-gateway-server="{{.Slug}}"
+                >
+                  <span class="flex min-w-0 flex-col gap-0.5">
+                    <span class="flex min-w-0 items-baseline gap-2">
+                      <span class="truncate text-sm">{{.Name}}</span>
+                      {{if ne .Name .Slug}}<span class="text-muted-foreground truncate font-mono text-xs">{{.Slug}}</span>{{end}}
+                    </span>
+                    <span
+                      class="text-xs {{if .NeedsAttention}}text-default-warning{{else if .Ready}}text-default-success{{else}}text-muted-foreground{{end}}"
+                      data-gateway-server-status="{{.Status}}"
+                      >{{.StatusLabel}}</span
+                    >
+                  </span>
+                  {{if .ConnectClientID}}
+                  <form
+                    method="POST"
+                    action="{{$.ConsentPath}}/remote-session"
+                    class="shrink-0"
+                  >
+                    <input type="hidden" name="state" value="{{$.State}}" />
+                    <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}" />
+                    <input type="hidden" name="client_id" value="{{.ConnectClientID}}" />
+                    <button
+                      type="submit"
+                      name="action"
+                      value="connect"
+                      class="bg-primary text-primary-foreground interact:bg-foreground flex h-8 items-center px-3 text-sm"
+                      data-connect-link
+                    >
+                      {{if .NeedsAttention}}Reconnect{{else}}Connect{{end}}
+                    </button>
+                  </form>
+                  {{else if .NeedsSignIn}}
+                  <a
+                    href="{{$.ConsentPath}}?state={{$.State}}&server={{.Slug}}"
+                    class="text-muted-foreground interact:text-foreground shrink-0 text-xs"
+                    data-gateway-server-page
+                    >{{if .Ready}}Manage{{else}}Connect{{end}} &rsaquo;</a
+                  >
+                  {{else if .NotSetUp}}
+                  <a
+                    href="{{$.ConsentPath}}?state={{$.State}}&server={{.Slug}}"
+                    class="text-muted-foreground interact:text-foreground shrink-0 text-xs"
+                    data-gateway-server-page
+                    >View &rsaquo;</a
+                  >
+                  {{end}}
+                </li>
+                {{end}}
+              </ul>
+            </div>
+          </details>
+          {{else}}
+          <p class="text-sm text-muted-foreground px-6 py-4 sm:px-8">
+            You don't have access to any servers on this gateway yet.
+          </p>
+          {{end}}
+        </div>
+        {{end}}
+
         {{if .RemoteSessionCards}}
         <div
           data-service-connections
@@ -209,7 +320,7 @@
           class="flex flex-col gap-3 border-b px-6 py-6 sm:px-8"
         >
           <div class="flex items-baseline justify-between gap-3">
-            <h2 class="text-eyebrow">Connected services</h2>
+            <h2 class="text-eyebrow">Service connections</h2>
             <p
               class="text-xs text-muted-foreground"
               data-connected-summary
@@ -219,6 +330,12 @@
               {{.ConnectedCardCount}} of {{len .RemoteSessionCards}} connected
             </p>
           </div>
+          {{if and (not .FirstParty) (not .Gateway)}}
+          <p class="text-sm text-muted-foreground">
+            These connections sign you in to services. Choose Give access below
+            to approve {{.ClientName}}’s access.
+          </p>
+          {{end}}
           <ul
             class="m-0 flex list-none flex-col border p-0"
             {{if .ValidationDeadlineMS}}data-verify-deadline-ms="{{.ValidationDeadlineMS}}"{{end}}
@@ -255,7 +372,7 @@
                   >
                   {{else}}
                   <span class="text-xs text-default-success" data-card-status
-                    >Connected{{if .Pending}}<span class="text-muted-foreground" data-validation="pending"
+                    >Service connected{{if .Pending}}<span class="text-muted-foreground" data-validation="pending"
                       > · Verifying…</span
                     >{{else if .Verified}}<span class="text-muted-foreground" data-validation="valid"
                       > · Verified
@@ -281,7 +398,7 @@
                   script; the script shows checking and settles it. */}}
                   {{if eq .ChainCheck "connected"}}
                   <span class="text-xs text-default-success" data-card-status data-identity-chained data-chain-check="connected"
-                    >Connected through your identity provider</span
+                    >Service connected through your identity provider</span
                   >
                   {{else if eq .ChainCheck "rejected"}}
                   <span class="text-xs text-default-warning" data-card-status data-identity-chained data-chain-check="rejected"
@@ -304,6 +421,10 @@
                   <span class="text-xs text-muted-foreground"
                     >Not connected</span
                   >
+                  {{end}} {{if .SharedServerNote}}
+                  <span class="text-xs text-muted-foreground" data-shared-server-note
+                    >{{.SharedServerNote}}</span
+                  >
                   {{end}}
                 </div>
               </div>
@@ -320,6 +441,7 @@
                   value="{{$.CSRFToken}}"
                 />
                 <input type="hidden" name="client_id" value="{{.ClientID}}" />
+                {{if and $.Gateway $.Gateway.Focus}}<input type="hidden" name="server" value="{{$.Gateway.Focus.Slug}}" />{{end}}
                 <input
                   type="hidden"
                   name="auto_refresh"
@@ -540,6 +662,7 @@
             data-form-id="consent-approve-form"
             data-approve-button-id="consent-approve-button"
             data-consent-enabled="{{if .ConsentEnabled}}true{{else}}false{{end}}"
+            data-inventory-deferred="{{if .ConsentToolsDeferred}}true{{else}}false{{end}}"
             data-server-name="{{.MCPSlug}}"
             {{if
             .ConsentToolsPrefill}}data-prefill="{{.ConsentToolsPrefill}}"
@@ -619,6 +742,31 @@
                 </select>
               </dd>
             </div>
+            {{end}} {{if .ShowDiscoveryMode}}
+            <div data-agent-self-only>
+              <dt class="text-eyebrow">Tool discovery</dt>
+              <dd class="mt-1 ml-0">
+                <select
+                  name="discovery_mode"
+                  form="consent-approve-form"
+                  aria-label="Tool discovery"
+                  aria-describedby="discovery-mode-help"
+                  class="bg-card border px-2 py-1.5 font-mono text-sm"
+                >
+                  <option value="">Use gateway default</option>
+                  <option value="progressive" {{if eq .PrefillDiscoveryMode "progressive"}}selected{{end}}>Progressive</option>
+                  <option value="direct" {{if eq .PrefillDiscoveryMode "direct"}}selected{{end}}>Direct</option>
+                </select>
+                <p
+                  id="discovery-mode-help"
+                  class="text-muted-foreground mt-2 text-sm"
+                >
+                  Progressive discovers tools as needed. Direct lists every
+                  available tool. Use Direct if your client cannot discover
+                  tools progressively.
+                </p>
+              </dd>
+            </div>
             {{end}} {{if .RemoteSessionCards}}
             <div>
               <dt class="text-eyebrow">Auto refresh</dt>
@@ -671,12 +819,30 @@
           <input type="hidden" name="state" value="{{.State}}" />
           <input type="hidden" name="csrf_token" value="{{.CSRFToken}}" />
           <input type="hidden" name="action" value="set_auto_refresh" />
+          {{if and .Gateway .Gateway.Focus}}<input type="hidden" name="server" value="{{.Gateway.Focus.Slug}}" />{{end}}
           <button type="submit" tabindex="-1" aria-hidden="true"></button>
         </form>
         {{end}} {{if .AutoClose}}
         <p class="text-sm text-muted-foreground px-6 py-6 sm:px-8">
           Connection complete. This tab will close automatically.
         </p>
+        {{else if and .Gateway .Gateway.Focus}}
+        {{/* No approve button: connecting a service above is what makes the
+        server usable, so the page says that instead of offering an approval
+        that would do nothing. */}}
+        <div class="flex flex-col gap-4 px-6 py-6 sm:px-8" data-gateway-focus-footer>
+          <p class="text-sm text-muted-foreground">
+            {{if .Gateway.Focus.NotSetUp}}{{.Gateway.Focus.Name}} signs people in through a service that isn't set up on this gateway yet, so it can't be connected here. Ask an administrator to set up sign-in for it.
+            {{else if .Gateway.Focus.NeedsSignIn}}Connecting is all {{.Gateway.Focus.Name}} needs. As soon as a service above is connected, it works through this gateway, with nothing else to approve.
+            {{if .FirstParty}}Go back to your AI client and try again. You can close this tab.{{else}}Go back to all servers to finish giving {{.ClientName}} access.{{end}}{{else}}{{.Gateway.Focus.Name}} needs no sign-in, so it works through this gateway with nothing to connect.{{end}}
+          </p>
+          <a
+            href="{{.ConsentPath}}?state={{.State}}&server="
+            class="bg-card interact:bg-accent flex h-10 w-full items-center justify-center border px-6 text-sm sm:w-fit"
+            data-gateway-back
+            >Back to all servers</a
+          >
+        </div>
         {{else if .FirstParty}}
         <p class="text-sm text-muted-foreground px-6 py-6 sm:px-8">
           {{if .RemoteSessionCards}}When you've connected the services above, you can close this tab.{{else}}You can close this tab.{{end}}
@@ -728,7 +894,7 @@
 
       <p class="text-xs text-muted-foreground">
         Secured by Speakeasy. Speakeasy never sees your credentials for the services
-        above — they stay with the provider.
+        {{if and .Gateway (not .Gateway.Focus)}}you connect{{else}}above{{end}} — they stay with the provider.
       </p>
     </main>
     <script src="{{.ScriptURL}}"></script>

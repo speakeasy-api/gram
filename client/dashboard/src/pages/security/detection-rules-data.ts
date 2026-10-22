@@ -147,19 +147,15 @@ export const BUILTIN_RULES_BY_CATEGORY: Record<RuleCategory, BuiltinRule[]> = (
 
 /** Categories the Detection Rules tab lists, in display order. The Presidio
  *  categories keep the order the policy form uses so the two surfaces read
- *  the same way. Once the Shadow AI fold-in is on, Shadow AI leaves the
- *  catalog: its targets live on the Shadow AI targets tab. With the fold-in
- *  off the catalog is what it always was. */
-export function detectionRulesTabCategories(
-  shadowAIFolded: boolean,
-): RuleCategory[] {
+ *  the same way. Shadow AI is not listed: its targets live on the Shadow AI
+ *  targets tab. */
+export function detectionRulesTabCategories(): RuleCategory[] {
   return [
     "secrets",
     "financial",
     "pii",
     "government_ids",
     "healthcare",
-    ...(shadowAIFolded ? [] : (["shadow_mcp"] as const)),
     "destructive_tool",
     "account_identity",
     "prompt_injection",
@@ -168,8 +164,8 @@ export function detectionRulesTabCategories(
 
 /** Built-in rule ids the Detection Rules tab lists, derived from the tab's
  *  category order so the tab and its insights context never disagree. */
-export function detectionRulesTabRuleIds(shadowAIFolded: boolean): string[] {
-  return detectionRulesTabCategories(shadowAIFolded).flatMap((category) =>
+export function detectionRulesTabRuleIds(): string[] {
+  return detectionRulesTabCategories().flatMap((category) =>
     BUILTIN_RULES_BY_CATEGORY[category].map((rule) => rule.id),
   );
 }

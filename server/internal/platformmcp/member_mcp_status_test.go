@@ -3,6 +3,8 @@ package platformmcp
 import (
 	"context"
 	"encoding/json"
+	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"net/url"
 	"strings"
 	"testing"
@@ -14,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
@@ -83,9 +86,13 @@ func TestMemberMCPAccessUsesLiveRBACAndTenantQualifiedTarget(t *testing.T) {
 	require.ErrorIs(t, err, ErrMemberMCPStatusTargetNotFound)
 }
 
+// testMemberMCPConnectionReader serves clients and statuses through the
+// sign-in link, and authClients and authStatuses to the auth client resolver.
 type testMemberMCPConnectionReader struct {
-	clients  []remotesessions.Client
-	statuses map[uuid.UUID]remotesessions.RemoteSessionState
+	clients      []remotesessions.Client
+	statuses     map[uuid.UUID]remotesessions.RemoteSessionState
+	authClients  []remotesessions.Client
+	authStatuses map[uuid.UUID]remotesessions.RemoteSessionState
 }
 
 func (r testMemberMCPConnectionReader) ListClients(context.Context, uuid.UUID, string, uuid.UUID) ([]remotesessions.Client, error) {
@@ -94,6 +101,14 @@ func (r testMemberMCPConnectionReader) ListClients(context.Context, uuid.UUID, s
 
 func (r testMemberMCPConnectionReader) RemoteSessionStatuses(context.Context, urn.SessionSubject, uuid.UUID, string, uuid.UUID) (map[uuid.UUID]remotesessions.RemoteSessionState, error) {
 	return r.statuses, nil
+}
+
+func (r testMemberMCPConnectionReader) ListAuthClientRegistrations(context.Context, uuid.UUID, string, []uuid.UUID) ([]remotesessions.Client, error) {
+	return r.authClients, nil
+}
+
+func (r testMemberMCPConnectionReader) AuthClientRemoteSessionStatuses(context.Context, urn.SessionSubject, uuid.UUID, string, []uuid.UUID) (map[uuid.UUID]remotesessions.RemoteSessionState, error) {
+	return r.authStatuses, nil
 }
 
 func TestMemberMCPConnectionStatusProjectsOnlyCallerState(t *testing.T) {
@@ -130,16 +145,25 @@ func TestMemberMCPConnectionStatusProjectsOnlyCallerState(t *testing.T) {
 	ctx = authz.GrantsToContext(ctx, []authz.Grant{authz.NewGrant(authz.ScopeMCPConnect, mcpID.String())})
 	serverURL, err := url.Parse("https://gram.example.test")
 	require.NoError(t, err)
-	clientID := uuid.New()
+	clientID := associateMemberMCPClient(t, ctx, conn, principal.OrganizationID, project.ID, mcpID, remoteIssuerID)
 	input := GetMyMCPStatusInput{ProjectID: project.ID.String(), MCPID: mcpID.String()}
+	client := remotesessions.Client{ID: clientID, RemoteSessionIssuerID: remoteIssuerID}
+	active := map[uuid.UUID]remotesessions.RemoteSessionState{clientID: {Status: remotesessions.RemoteSessionActive}}
+	resolverFlags := &feature.InMemory{}
+	resolverFlags.SetFlag(feature.FlagAuthClientResolver, principal.OrganizationID, true)
 
 	for _, test := range []struct {
 		name       string
 		reader     testMemberMCPConnectionReader
+		resolver   bool
 		state      string
 		reason     string
 		nextAction string
 	}{
+		{name: "resolver serves a registration without the sign-in link", reader: testMemberMCPConnectionReader{authClients: []remotesessions.Client{client}, authStatuses: active}, resolver: true, state: MCPConnectionStateActive, nextAction: "use_mcp"},
+		{name: "resolver does not report a grant it would not serve", reader: testMemberMCPConnectionReader{clients: []remotesessions.Client{client}, statuses: active, authClients: []remotesessions.Client{client}}, resolver: true, state: MCPConnectionStateNotConnected, nextAction: "connect"},
+		{name: "resolver with no reachable registration", reader: testMemberMCPConnectionReader{clients: []remotesessions.Client{client}, statuses: active}, resolver: true, state: MCPConnectionStateSetupRequired, reason: "upstream_authorization_not_configured", nextAction: "ask_administrator"},
+		{name: "resolver off reads the sign-in link", reader: testMemberMCPConnectionReader{authClients: []remotesessions.Client{client}, authStatuses: active}, state: MCPConnectionStateSetupRequired, reason: "upstream_authorization_not_configured", nextAction: "ask_administrator"},
 		{name: "not connected", reader: testMemberMCPConnectionReader{clients: []remotesessions.Client{{ID: clientID, RemoteSessionIssuerID: remoteIssuerID}}}, state: MCPConnectionStateNotConnected, nextAction: "connect"},
 		{name: "active", reader: testMemberMCPConnectionReader{clients: []remotesessions.Client{{ID: clientID, RemoteSessionIssuerID: remoteIssuerID}}, statuses: map[uuid.UUID]remotesessions.RemoteSessionState{clientID: {Status: remotesessions.RemoteSessionActive}}}, state: MCPConnectionStateActive, nextAction: "use_mcp"},
 		{name: "rejected", reader: testMemberMCPConnectionReader{clients: []remotesessions.Client{{ID: clientID, RemoteSessionIssuerID: remoteIssuerID}}, statuses: map[uuid.UUID]remotesessions.RemoteSessionState{clientID: {Status: remotesessions.RemoteSessionActive, ValidationStatus: remotesessions.ValidationOutcomeInactive, ValidationReason: "sensitive provider reason"}}}, state: MCPConnectionStateReauthorizationRequired, reason: "authorization_rejected", nextAction: "reconnect"},
@@ -149,6 +173,9 @@ func TestMemberMCPConnectionStatusProjectsOnlyCallerState(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 			service := NewPluginsService(conn, allowBudget(), "member-connection-status-key").WithAuthorization(authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return false, nil }, nil)).withMemberMCPConnectionReader(test.reader).WithInstallLinks(serverURL, serverURL)
+			if test.resolver {
+				service.WithAuthClientResolver(resolverFlags)
+			}
 			output, err := service.GetMyMCPConnectionStatus(ctx, principal, input)
 			require.NoError(t, err)
 			require.Equal(t, test.state, output.State)
@@ -197,9 +224,20 @@ func TestMemberMCPConnectionClientsSelectTargetIssuer(t *testing.T) {
 	targetClient := remotesessions.Client{ID: uuid.New(), RemoteSessionIssuerID: targetIssuer}
 	otherClient := remotesessions.Client{ID: uuid.New(), RemoteSessionIssuerID: uuid.New()}
 
-	require.Equal(t, []remotesessions.Client{targetClient}, memberMCPConnectionClients([]remotesessions.Client{otherClient, targetClient}, targetIssuer))
-	require.Empty(t, memberMCPConnectionClients([]remotesessions.Client{otherClient, targetClient}, uuid.Nil))
-	require.Empty(t, memberMCPConnectionClients([]remotesessions.Client{otherClient}, targetIssuer))
+	byIssuer := func(issuer uuid.UUID) memberMCPStatusTarget {
+		return memberMCPStatusTarget{remoteSessionIssuerID: issuer}
+	}
+	require.Equal(t, []remotesessions.Client{targetClient}, matchTargetClients([]remotesessions.Client{otherClient, targetClient}, byIssuer(targetIssuer)))
+	require.Empty(t, matchTargetClients([]remotesessions.Client{otherClient, targetClient}, byIssuer(uuid.Nil)))
+	require.Empty(t, matchTargetClients([]remotesessions.Client{otherClient}, byIssuer(targetIssuer)))
+
+	// A proxied server's own clients count whatever authorization server was
+	// derived for it.
+	sameIssuerOther := remotesessions.Client{ID: uuid.New(), RemoteSessionIssuerID: targetIssuer}
+	associated := memberMCPStatusTarget{remoteSessionIssuerID: uuid.Nil, associatedClients: map[uuid.UUID]bool{otherClient.ID: true}}
+	require.Equal(t, []remotesessions.Client{otherClient}, matchTargetClients([]remotesessions.Client{otherClient, targetClient, sameIssuerOther}, associated))
+	require.True(t, associated.signInRequired())
+	require.False(t, memberMCPStatusTarget{remoteSessionIssuerID: targetIssuer, associatedClients: map[uuid.UUID]bool{}}.signInRequired(), "no associated client means no sign-in, even with a derived issuer")
 }
 
 func TestMemberMCPStatusOutputsContainOnlyBoundedCallerFields(t *testing.T) {
@@ -256,4 +294,26 @@ func TestMemberMCPStatusNotFoundIsSafe(t *testing.T) {
 	require.NotContains(t, string(payload), "permission")
 	require.NotContains(t, string(payload), "organization")
 	require.NotContains(t, string(payload), "grant")
+}
+
+// associateMemberMCPClient creates a client of remoteIssuerID in the project
+// and associates it with the MCP server, as configuring the server's User
+// Identity does.
+func associateMemberMCPClient(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string, projectID, mcpID, remoteIssuerID uuid.UUID) uuid.UUID {
+	t.Helper()
+	client, err := remotesessionsrepo.New(conn).CreateRemoteSessionClient(ctx, remotesessionsrepo.CreateRemoteSessionClientParams{
+		ProjectID:             conv.ToNullUUID(projectID),
+		OrganizationID:        conv.ToPGTextEmpty(organizationID),
+		RemoteSessionIssuerID: remoteIssuerID,
+		ClientID:              "member-client-" + uuid.NewString()[:8],
+		ClientIDIssuedAt:      pgtype.Timestamptz{Time: time.Now(), Valid: true},
+	})
+	require.NoError(t, err)
+	require.NoError(t, testrepo.New(conn).InsertMCPServerRemoteSessionClientFixture(ctx, testrepo.InsertMCPServerRemoteSessionClientFixtureParams{
+		ProjectID:             projectID,
+		OrganizationID:        organizationID,
+		McpServerID:           mcpID,
+		RemoteSessionClientID: client.ID,
+	}))
+	return client.ID
 }

@@ -34,7 +34,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/oauth/protectedresource"
@@ -172,6 +172,7 @@ type syntheticExpiryEnv struct {
 	// test can observe recorded metrics or simulate a degraded lock cache.
 	newRefresher   func(metric.MeterProvider, cache.Cache) *remotesessions.RefreshService
 	db             *pgxpool.Pool
+	enc            *encryption.Client
 	q              *repo.Queries
 	projectID      uuid.UUID
 	organizationID string
@@ -266,12 +267,13 @@ type syntheticLoginOptions struct {
 	// remoteServerURL, when set, seeds a remote-backed MCP server at that URL
 	// and makes the login for it, so scope resolution consults its resource row.
 	remoteServerURL string
+	// gatewayMember logs in as a gateway would: the seeded server is the
+	// qualified member, not the login's own server.
+	gatewayMember bool
 	// protectedResource, when set, seeds the resource row for remoteServerURL.
 	protectedResource *protectedResourceSeed
 	// prober wires a fresh protected resource prober into the manager.
 	prober bool
-	// liveResourceScopes enrols the organization in resource-first scope discovery.
-	liveResourceScopes bool
 }
 
 // protectedResourceSeed is a remote_protected_resources row as a login finds it.
@@ -300,10 +302,6 @@ func withProtectedResource(seed protectedResourceSeed) syntheticLoginOption {
 
 func withProber() syntheticLoginOption {
 	return func(o *syntheticLoginOptions) { o.prober = true }
-}
-
-func withLiveResourceScopes() syntheticLoginOption {
-	return func(o *syntheticLoginOptions) { o.liveResourceScopes = true }
 }
 
 func withTunnels(tunnels *tunnelrouting.HTTPClient) syntheticLoginOption {
@@ -346,6 +344,10 @@ func withResourceIndicatorSupported(supported bool) syntheticLoginOption {
 	return func(o *syntheticLoginOptions) {
 		o.resourceIndicatorSupported = pgtype.Bool{Bool: supported, Valid: true}
 	}
+}
+
+func withGatewayMember() syntheticLoginOption {
+	return func(o *syntheticLoginOptions) { o.gatewayMember = true }
 }
 
 func withResource(resource string) syntheticLoginOption {
@@ -481,11 +483,6 @@ func driveSyntheticLogin(t *testing.T, slugSuffix string, tokenHandler http.Hand
 	}
 	if options.prober {
 		managerOptions = append(managerOptions, remotesessions.WithProtectedResourceProber(protectedresource.NewProber(ti.conn, policy)))
-	}
-	if options.liveResourceScopes {
-		flags := &feature.InMemory{}
-		flags.SetFlag(feature.FlagRemoteSessionLiveResourceScopes, feature.AnyDistinctID, true)
-		managerOptions = append(managerOptions, remotesessions.WithFeatureFlags(flags))
 	}
 	if options.issuerMetadataRefresh {
 		issuerMetadataReader = sdkmetric.NewManualReader()
@@ -629,7 +626,7 @@ func driveSyntheticLogin(t *testing.T, slugSuffix string, tokenHandler http.Hand
 	// BuildAuthorizationUrl mints + stores the RemoteLoginState; the returned
 	// URL carries the opaque state id the callback exchanges against.
 	subject := urn.NewUserSubject("synthetic-subject-" + slugSuffix)
-	authURL, err := mgr.BuildAuthorizationUrl(ctx, remotesessions.ParentChallenge{
+	parent := remotesessions.ParentChallenge{
 		ID:                  uuid.NewString(),
 		ProjectID:           *authCtx.ProjectID,
 		OrganizationID:      authCtx.ActiveOrganizationID,
@@ -639,7 +636,11 @@ func driveSyntheticLogin(t *testing.T, slugSuffix string, tokenHandler http.Hand
 		McpServerID:         mcpServerID,
 		FinalRedirectURI:    "",
 		Resource:            options.resource,
-	}, clients[0])
+	}
+	if options.gatewayMember {
+		parent.McpServerID, parent.ResourceMcpServerID = uuid.NullUUID{UUID: uuid.Nil, Valid: false}, mcpServerID
+	}
+	authURL, err := mgr.BuildAuthorizationUrl(ctx, parent, clients[0])
 	require.NoError(t, err)
 
 	parsed, err := url.Parse(authURL)
@@ -667,6 +668,7 @@ func driveSyntheticLogin(t *testing.T, slugSuffix string, tokenHandler http.Hand
 			return r
 		},
 		db:             ti.conn,
+		enc:            enc,
 		q:              q,
 		projectID:      *authCtx.ProjectID,
 		organizationID: authCtx.ActiveOrganizationID,

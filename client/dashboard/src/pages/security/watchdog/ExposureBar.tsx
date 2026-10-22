@@ -7,7 +7,7 @@ import { Text } from "@/components/ui/Text";
 import { cn } from "@/lib/utils";
 import type { RiskExposureSlice } from "@gram/client/models/components/riskexposureslice.js";
 import { ruleCategoryLabel } from "../policy-data";
-import { getRiskCategoryChartColor } from "../riskTrendChartData";
+import { getRiskCategoryChartColor } from "../riskCategoryChartColors";
 
 const FALLBACK_SLICE_COLOR = "hsl(0, 0%, 60%)";
 // The dimmed state has to recede on both canvases, so it takes a neutral per

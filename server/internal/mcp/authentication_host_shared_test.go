@@ -8,13 +8,17 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	mockidp "github.com/speakeasy-api/gram/dev-idp/pkg/testidp"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/speakeasy-api/gram/server/internal/usersessions"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/authserver"
+	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
 // authenticationHostSharedIssuerURL is the shared authorization server issuer
@@ -136,6 +140,9 @@ func TestAuthenticationHostSharedAuthorizationServer_NotServedOnServerURL(t *tes
 	err = f.ti.service.HandleSharedToken(httptest.NewRecorder(), sharedRequest(t.Context(), http.MethodPost, "/oauth/usi/"+issuerID+"/token", issuerID, strings.NewReader(form.Encode())))
 	requireNotFound(t, err)
 	require.Empty(t, f.workloadSessions(t))
+
+	err = f.ti.service.HandleSharedAuthorize(httptest.NewRecorder(), sharedRequest(t.Context(), http.MethodGet, "/oauth/usi/"+issuerID+"/authorize?"+url.Values{oauthwire.ParamResource: {f.resource}}.Encode(), issuerID, nil))
+	requireNotFound(t, err)
 }
 
 // A shared authorization server whose issuer is not on the authentication host
@@ -162,6 +169,9 @@ func TestAuthenticationHostSharedAuthorizationServer_OtherIssuersNotFound(t *tes
 		{name: "appended metadata", method: http.MethodGet, path: "/oauth/usi/" + issuerID + "/.well-known/oauth-authorization-server", form: nil},
 		{name: "token", method: http.MethodPost, path: "/oauth/usi/" + issuerID + "/token", form: url.Values{oauthwire.ParamGrantType: {oauthwire.GrantTypeJWTBearer}, oauthwire.ParamAssertion: {"header.payload.signature"}, oauthwire.ParamResource: {f.resource(ti, f.slugA)}}},
 		{name: "revoke", method: http.MethodPost, path: "/oauth/usi/" + issuerID + "/revoke", form: url.Values{oauthwire.ParamToken: {"opaque"}, oauthwire.ParamClientID: {f.client.ClientID}}},
+		{name: "register", method: http.MethodPost, path: "/oauth/usi/" + issuerID + "/register", form: url.Values{}},
+		{name: "authorize", method: http.MethodGet, path: "/oauth/usi/" + issuerID + "/authorize?" + url.Values{oauthwire.ParamResource: {f.resource(ti, f.slugA)}}.Encode(), form: nil},
+		{name: "consent", method: http.MethodGet, path: "/oauth/usi/" + issuerID + "/connect?state=" + uuid.NewString(), form: nil},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -172,30 +182,25 @@ func TestAuthenticationHostSharedAuthorizationServer_OtherIssuersNotFound(t *tes
 	}
 }
 
-// authenticationHostSharedMetadata is the RFC 8414 document a shared
-// authorization server serves on the authentication host, with every field
-// that document must omit.
+// authenticationHostSharedMetadata is the part of the RFC 8414 document a
+// shared authorization server serves on the authentication host that names
+// its endpoints and grants.
 type authenticationHostSharedMetadata struct {
-	Issuer                          string    `json:"issuer"`
-	TokenEndpoint                   string    `json:"token_endpoint"`
-	RevocationEndpoint              string    `json:"revocation_endpoint"`
-	GrantTypes                      []string  `json:"grant_types_supported"`
-	TokenEndpointAuthMethods        []string  `json:"token_endpoint_auth_methods_supported"`
-	ResponseTypes                   *[]string `json:"response_types_supported"`
-	AuthorizationEndpoint           *string   `json:"authorization_endpoint"`
-	RegistrationEndpoint            *string   `json:"registration_endpoint"`
-	TokenEndpointAuthSigningAlgs    *[]string `json:"token_endpoint_auth_signing_alg_values_supported"`
-	GrantProfiles                   *[]string `json:"authorization_grant_profiles_supported"`
-	CodeChallengeMethods            *[]string `json:"code_challenge_methods_supported"`
-	RefreshTokenExpirationTypes     *[]string `json:"refresh_token_expiration_types_supported"`
-	AuthorizationResponseIss        *bool     `json:"authorization_response_iss_parameter_supported"`
-	ClientIDMetadataDocumentSupport *bool     `json:"client_id_metadata_document_supported"`
+	Issuer                   string   `json:"issuer"`
+	AuthorizationEndpoint    string   `json:"authorization_endpoint"`
+	TokenEndpoint            string   `json:"token_endpoint"`
+	RegistrationEndpoint     string   `json:"registration_endpoint"`
+	RevocationEndpoint       string   `json:"revocation_endpoint"`
+	TokenEndpointAuthMethods []string `json:"token_endpoint_auth_methods_supported"`
+	ResponseTypes            []string `json:"response_types_supported"`
+	GrantTypes               []string `json:"grant_types_supported"`
+	GrantProfiles            []string `json:"authorization_grant_profiles_supported"`
 }
 
-// On the authentication host, metadata advertises the token and revocation
-// endpoints, the workload grant, and no client authentication, at both
-// metadata locations, even for an issuer with an ID-JAG trust link.
-func TestAuthenticationHostSharedAuthorizationServer_MetadataAdvertisesWorkloadGrantOnly(t *testing.T) {
+// On the authentication host, metadata advertises browser sign-in alongside
+// the ID-JAG exchange of an issuer with a trust link, at both metadata
+// locations, with every endpoint on the authentication host.
+func TestAuthenticationHostSharedAuthorizationServer_MetadataAdvertisesBrowserSignIn(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti, _, f := sharedIDJAGFixture(t)
@@ -219,29 +224,89 @@ func TestAuthenticationHostSharedAuthorizationServer_MetadataAdvertisesWorkloadG
 
 			var metadata authenticationHostSharedMetadata
 			require.NoError(t, json.Unmarshal(w.Body.Bytes(), &metadata))
-			require.Equal(t, issuerURL, metadata.Issuer)
-			require.Equal(t, issuerURL+"/token", metadata.TokenEndpoint)
-			require.Equal(t, issuerURL+"/revoke", metadata.RevocationEndpoint)
-			require.Equal(t, []string{oauthwire.GrantTypeJWTBearer}, metadata.GrantTypes)
-			require.Equal(t, []string{oauthwire.AuthMethodNone}, metadata.TokenEndpointAuthMethods)
-			require.NotNil(t, metadata.ResponseTypes, "RFC 8414 requires response_types_supported")
-			require.Empty(t, *metadata.ResponseTypes)
-			require.Nil(t, metadata.AuthorizationEndpoint)
-			require.Nil(t, metadata.RegistrationEndpoint)
-			require.Nil(t, metadata.TokenEndpointAuthSigningAlgs)
-			require.Nil(t, metadata.GrantProfiles)
-			require.Nil(t, metadata.CodeChallengeMethods)
-			require.Nil(t, metadata.RefreshTokenExpirationTypes)
-			require.Nil(t, metadata.AuthorizationResponseIss)
-			require.Nil(t, metadata.ClientIDMetadataDocumentSupport)
+			require.Equal(t, authenticationHostSharedMetadata{
+				Issuer:                   issuerURL,
+				AuthorizationEndpoint:    issuerURL + "/authorize",
+				TokenEndpoint:            issuerURL + "/token",
+				RegistrationEndpoint:     issuerURL + "/register",
+				RevocationEndpoint:       issuerURL + "/revoke",
+				TokenEndpointAuthMethods: usersessions.SupportedAuthMethods,
+				ResponseTypes:            []string{"code"},
+				GrantTypes:               []string{oauthwire.GrantTypeAuthorizationCode, oauthwire.GrantTypeRefreshToken, oauthwire.GrantTypeClientCredentials, oauthwire.GrantTypeJWTBearer},
+				GrantProfiles:            []string{oauthwire.GrantProfileIDJAG},
+			}, metadata)
 		})
 	}
 }
 
-// The authentication host serves no authorization, consent, or registration
-// endpoint for a shared authorization server; a request that fell through to
-// the main mux would answer 418 instead of 404.
-func TestAuthenticationHostSharedAuthorizationServer_BrowserFlowRoutesNotServed(t *testing.T) {
+// A person signs in through a shared authorization server on the
+// authentication host: authorization, consent, and the code and refresh grants
+// all run there, for an issuer pinned there without opting in to
+// use_authentication_host.
+func TestAuthenticationHostSharedAuthorizationServer_BrowserSignIn(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	f := seedSharedIssuer(t, ctx, ti)
+	harness := newAuthenticationHostHarness(t, ti)
+	issuerID := f.issuer.ID.String()
+	issuerURL := authenticationHostSharedIssuerURL(issuerID)
+	setIssuerMode(t, ctx, ti, f.issuer.ID, string(authserver.ModeShared), issuerURL)
+	resource := f.resource(ti, f.slugA)
+	verifier := pkceVerifier(t)
+
+	query := url.Values{
+		"response_type":         {"code"},
+		oauthwire.ParamClientID: {f.client.ClientID},
+		"redirect_uri":          {sharedTestRedirectURI},
+		oauthwire.ParamState:    {"client-state"},
+		"code_challenge":        {pkceChallenge(verifier)},
+		"code_challenge_method": {"S256"},
+		oauthwire.ParamResource: {resource},
+	}
+	authorized := harness.serve(t, http.MethodGet, "auth.example.com", "/oauth/usi/"+issuerID+"/authorize?"+query.Encode(), nil)
+	require.Equal(t, http.StatusFound, authorized.Code, authorized.Body.String())
+	consentURL, err := url.Parse(authorized.Header().Get("Location"))
+	require.NoError(t, err)
+	require.Equal(t, issuerURL+"/connect", consentURL.Scheme+"://"+consentURL.Host+consentURL.Path)
+	stored, err := ti.authnChallengeCache.Get(ctx, "authnChallenge:"+consentURL.Query().Get("state"))
+	require.NoError(t, err)
+
+	page := harness.serve(t, http.MethodGet, "auth.example.com", consentURL.RequestURI(), nil)
+	require.Equal(t, http.StatusOK, page.Code, page.Body.String())
+
+	consented := harness.serve(t, http.MethodPost, "auth.example.com", "/oauth/usi/"+issuerID+"/connect", url.Values{"state": {stored.ID}, "csrf_token": {stored.CSRFToken}, "action": {"approve"}})
+	require.Equal(t, http.StatusSeeOther, consented.Code, consented.Body.String())
+	redirect, err := url.Parse(consented.Header().Get("Location"))
+	require.NoError(t, err)
+	require.Equal(t, issuerURL, redirect.Query().Get("iss"))
+	code := redirect.Query().Get(oauthwire.ParamCode)
+	require.NotEmpty(t, code, redirect.String())
+
+	exchanged := harness.serve(t, http.MethodPost, "auth.example.com", "/oauth/usi/"+issuerID+"/token", url.Values{
+		oauthwire.ParamGrantType: {oauthwire.GrantTypeAuthorizationCode},
+		oauthwire.ParamCode:      {code},
+		"redirect_uri":           {sharedTestRedirectURI},
+		oauthwire.ParamClientID:  {f.client.ClientID},
+		"code_verifier":          {verifier},
+	})
+	require.Equal(t, http.StatusOK, exchanged.Code, exchanged.Body.String())
+	claims := accessTokenClaims(t, exchanged.Body.Bytes())
+	require.Equal(t, issuerURL, claims["iss"])
+	require.Equal(t, []any{resource}, claims["aud"])
+
+	refreshed := harness.serve(t, http.MethodPost, "auth.example.com", "/oauth/usi/"+issuerID+"/token", url.Values{
+		oauthwire.ParamGrantType:    {oauthwire.GrantTypeRefreshToken},
+		oauthwire.ParamRefreshToken: {decodeSharedTokenResponse(t, exchanged).RefreshToken},
+		oauthwire.ParamClientID:     {f.client.ClientID},
+	})
+	require.Equal(t, http.StatusOK, refreshed.Code, refreshed.Body.String())
+	require.False(t, *harness.passedThrough)
+}
+
+// Dynamic client registration on the authentication host registers the client
+// with the issuer pinned there.
+func TestAuthenticationHostSharedAuthorizationServer_Registers(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
@@ -250,74 +315,44 @@ func TestAuthenticationHostSharedAuthorizationServer_BrowserFlowRoutesNotServed(
 	issuerID := f.issuer.ID.String()
 	setIssuerMode(t, ctx, ti, f.issuer.ID, string(authserver.ModeShared), authenticationHostSharedIssuerURL(issuerID))
 
-	for _, tc := range []struct {
-		method string
-		path   string
-	}{
-		{method: http.MethodGet, path: "/authorize"},
-		{method: http.MethodPost, path: "/register"},
-		{method: http.MethodGet, path: "/connect"},
-		{method: http.MethodPost, path: "/connect"},
-		{method: http.MethodPost, path: "/connect/remote-session"},
-		{method: http.MethodPost, path: "/connect/mcp"},
-		{method: http.MethodDelete, path: "/connect/mcp"},
-	} {
-		t.Run(tc.method+" "+tc.path, func(t *testing.T) {
-			t.Parallel()
-
-			w := harness.serve(t, tc.method, "auth.example.com", "/oauth/usi/"+issuerID+tc.path, url.Values{})
-			require.Equal(t, http.StatusNotFound, w.Code, w.Body.String())
-		})
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/oauth/usi/"+issuerID+"/register", strings.NewReader(`{"client_name":"authentication host dcr","redirect_uris":["`+sharedTestRedirectURI+`"],"token_endpoint_auth_method":"none"}`))
+	req.Header.Set("Content-Type", "application/json")
+	registered := harness.serveRequest("auth.example.com", req)
+	require.Equal(t, http.StatusCreated, registered.Code, registered.Body.String())
+	var registration struct {
+		ClientID string `json:"client_id"`
 	}
+	require.NoError(t, json.Unmarshal(registered.Body.Bytes(), &registration))
+	_, err := usersessions_repo.New(ti.conn).GetUserSessionClientByClientID(ctx, usersessions_repo.GetUserSessionClientByClientIDParams{
+		UserSessionIssuerID: f.issuer.ID,
+		ClientID:            registration.ClientID,
+	})
+	require.NoError(t, err)
 }
 
-// The token endpoint on the authentication host refuses the grants the
-// browser flows it does not serve would start.
-func TestAuthenticationHostSharedAuthorizationServer_BrowserGrantsRefused(t *testing.T) {
+// The ID-JAG exchange on the authentication host accepts an assertion
+// addressed to the issuer pinned there.
+func TestAuthenticationHostSharedAuthorizationServer_IDJAGExchange(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti := newTestMCPService(t)
-	f := seedSharedIssuer(t, ctx, ti)
+	ctx, ti, signer, f := sharedIDJAGFixture(t)
 	harness := newAuthenticationHostHarness(t, ti)
 	issuerID := f.issuer.ID.String()
-	setIssuerMode(t, ctx, ti, f.issuer.ID, string(authserver.ModeShared), authenticationHostSharedIssuerURL(issuerID))
-
-	for _, tc := range []struct {
-		name string
-		form url.Values
-	}{
-		{name: "authorization code", form: url.Values{oauthwire.ParamGrantType: {oauthwire.GrantTypeAuthorizationCode}, oauthwire.ParamCode: {"code"}, oauthwire.ParamClientID: {f.client.ClientID}}},
-		{name: "refresh token", form: url.Values{oauthwire.ParamGrantType: {oauthwire.GrantTypeRefreshToken}, oauthwire.ParamRefreshToken: {"refresh"}, oauthwire.ParamClientID: {f.client.ClientID}}},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-
-			w := harness.serve(t, http.MethodPost, "auth.example.com", "/oauth/usi/"+issuerID+"/token", tc.form)
-			require.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
-			require.Equal(t, "unsupported_grant_type", decodeSharedTokenResponse(t, w).Error)
-		})
-	}
-}
-
-// The ID-JAG exchange stays refused on the authentication host for a shared
-// authorization server, as it is for per-endpoint ones.
-func TestAuthenticationHostSharedAuthorizationServer_IDJAGExchangeRefused(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti, _, f := sharedIDJAGFixture(t)
-	harness := newAuthenticationHostHarness(t, ti)
-	issuerID := f.issuer.ID.String()
-	setIssuerMode(t, ctx, ti, f.issuer.ID, string(authserver.ModeShared), authenticationHostSharedIssuerURL(issuerID))
+	issuerURL := authenticationHostSharedIssuerURL(issuerID)
+	setIssuerMode(t, ctx, ti, f.issuer.ID, string(authserver.ModeShared), issuerURL)
+	resource := f.resource(ti, f.slugA)
 
 	form := url.Values{
 		oauthwire.ParamGrantType: {oauthwire.GrantTypeJWTBearer},
 		oauthwire.ParamClientID:  {f.client.ClientID},
-		oauthwire.ParamAssertion: {"header.payload.signature"},
-		oauthwire.ParamResource:  {f.resource(ti, f.slugA)},
+		oauthwire.ParamAssertion: {signer.sign(t, sharedTestUpstreamIssuer, issuerURL, resource, f.client.ClientID, mockidp.MockUserEmail, uuid.NewString())},
+		oauthwire.ParamResource:  {resource},
 	}
 	w := harness.serve(t, http.MethodPost, "auth.example.com", "/oauth/usi/"+issuerID+"/token", form)
-	require.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
-	require.Equal(t, "unsupported_grant_type", decodeSharedTokenResponse(t, w).Error)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	claims := accessTokenClaims(t, w.Body.Bytes())
+	require.Equal(t, issuerURL, claims["iss"])
+	require.Equal(t, []any{resource}, claims["aud"])
 }
 
 // The revocation endpoint on the authentication host revokes the issuer's
@@ -353,17 +388,17 @@ func TestAuthenticationHostSharedAuthorizationServer_Revokes(t *testing.T) {
 }
 
 // MCP clients of an issuer whose shared authorization server is on the
-// authentication host keep discovering the per-endpoint authorization server,
-// which still serves browser sign-in.
-func TestAuthenticationHostSharedAuthorizationServer_ProtectedResourceMetadataKeepsPerEndpoint(t *testing.T) {
+// authentication host discover it there.
+func TestAuthenticationHostSharedAuthorizationServer_ProtectedResourceMetadataNamesAuthenticationHost(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
 	f := seedSharedIssuer(t, ctx, ti)
 	newAuthenticationHostHarness(t, ti)
-	setIssuerMode(t, ctx, ti, f.issuer.ID, string(authserver.ModeShared), authenticationHostSharedIssuerURL(f.issuer.ID.String()))
+	issuerURL := authenticationHostSharedIssuerURL(f.issuer.ID.String())
+	setIssuerMode(t, ctx, ti, f.issuer.ID, string(authserver.ModeShared), issuerURL)
 
-	require.Equal(t, []string{f.resource(ti, f.slugA)}, protectedResourceAuthorizationServers(t, ctx, ti, f.slugA))
+	require.Equal(t, []string{issuerURL}, protectedResourceAuthorizationServers(t, ctx, ti, f.slugA))
 }
 
 // An unpinned issuer that opts in to the authentication host derives its

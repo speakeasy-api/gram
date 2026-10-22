@@ -191,6 +191,37 @@ WHERE id = @id
   AND user_account_id IS NULL
   AND deleted IS FALSE;
 
+-- name: LinkChatActingAgent :execrows
+-- Records the Speakeasy agent principal that produced a captured session, so a
+-- session list can name the agent that made the calls. A channel session has no
+-- assistant record, and agent-actor capture deliberately blanks the human
+-- identity columns, so without this the acting agent is invisible.
+--
+-- Fill-once, like the user_accounts link above: a chat row is created on the
+-- session's first persisted message and reused for every later delivery, so
+-- stamping only at creation would leave every chat created before this landed
+-- unattributed forever. Never overwrites an agent an earlier delivery set, so a
+-- later caller cannot reassign an existing session to a different agent.
+--
+-- The agent id arrives from the server-stamped authenticated actor, never from
+-- client input, and the EXISTS guard resolves it against a live agent row in the
+-- chat's own organization at write time. chats.agent_id carries no foreign key
+-- (agents is declared after chats), so this guard is what keeps the column from
+-- naming a deleted agent or one belonging to another tenant.
+UPDATE chats
+SET agent_id = @agent_id
+  , updated_at = NOW()
+WHERE chats.id = @id
+  AND chats.project_id = @project_id
+  AND chats.agent_id IS NULL
+  AND chats.deleted IS FALSE
+  AND EXISTS (
+    SELECT 1 FROM agents a
+    WHERE a.id = @agent_id
+      AND a.organization_id = chats.organization_id
+      AND a.deleted IS FALSE
+  );
+
 -- name: UpsertUserAccount :one
 -- Records the external AI provider account observed for a session, keyed by the
 -- provider's stable per-account id. COALESCE on conflict keeps a previously

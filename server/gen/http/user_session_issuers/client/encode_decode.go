@@ -1006,6 +1006,259 @@ func DecodeGetUserSessionIssuerResponse(decoder func(*http.Response) goahttp.Dec
 	}
 }
 
+// BuildGetAttachImpactRequest instantiates a HTTP request object with method
+// and path set to call the "userSessionIssuers" service "getAttachImpact"
+// endpoint
+func (c *Client) BuildGetAttachImpactRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetAttachImpactUserSessionIssuersPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("userSessionIssuers", "getAttachImpact", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGetAttachImpactRequest returns an encoder for requests sent to the
+// userSessionIssuers getAttachImpact server.
+func EncodeGetAttachImpactRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*usersessionissuers.GetAttachImpactPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("userSessionIssuers", "getAttachImpact", "*usersessionissuers.GetAttachImpactPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		values := req.URL.Query()
+		if p.McpServerID != nil {
+			values.Add("mcp_server_id", *p.McpServerID)
+		}
+		if p.ToolsetID != nil {
+			values.Add("toolset_id", *p.ToolsetID)
+		}
+		if p.MetaMcpServerID != nil {
+			values.Add("meta_mcp_server_id", *p.MetaMcpServerID)
+		}
+		if p.UserSessionIssuerID != nil {
+			values.Add("user_session_issuer_id", *p.UserSessionIssuerID)
+		}
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeGetAttachImpactResponse returns a decoder for responses returned by
+// the userSessionIssuers getAttachImpact endpoint. restoreBody controls
+// whether the response body should be restored after having been read.
+// DecodeGetAttachImpactResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeGetAttachImpactResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body GetAttachImpactResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("userSessionIssuers", "getAttachImpact", err)
+			}
+			err = ValidateGetAttachImpactResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("userSessionIssuers", "getAttachImpact", err)
+			}
+			res := NewGetAttachImpactUserSessionIssuerAttachImpactOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body GetAttachImpactUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("userSessionIssuers", "getAttachImpact", err)
+			}
+			err = ValidateGetAttachImpactUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("userSessionIssuers", "getAttachImpact", err)
+			}
+			return nil, NewGetAttachImpactUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetAttachImpactForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("userSessionIssuers", "getAttachImpact", err)
+			}
+			err = ValidateGetAttachImpactForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("userSessionIssuers", "getAttachImpact", err)
+			}
+			return nil, NewGetAttachImpactForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetAttachImpactBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("userSessionIssuers", "getAttachImpact", err)
+			}
+			err = ValidateGetAttachImpactBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("userSessionIssuers", "getAttachImpact", err)
+			}
+			return nil, NewGetAttachImpactBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetAttachImpactNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("userSessionIssuers", "getAttachImpact", err)
+			}
+			err = ValidateGetAttachImpactNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("userSessionIssuers", "getAttachImpact", err)
+			}
+			return nil, NewGetAttachImpactNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetAttachImpactConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("userSessionIssuers", "getAttachImpact", err)
+			}
+			err = ValidateGetAttachImpactConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("userSessionIssuers", "getAttachImpact", err)
+			}
+			return nil, NewGetAttachImpactConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetAttachImpactUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("userSessionIssuers", "getAttachImpact", err)
+			}
+			err = ValidateGetAttachImpactUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("userSessionIssuers", "getAttachImpact", err)
+			}
+			return nil, NewGetAttachImpactUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetAttachImpactInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("userSessionIssuers", "getAttachImpact", err)
+			}
+			err = ValidateGetAttachImpactInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("userSessionIssuers", "getAttachImpact", err)
+			}
+			return nil, NewGetAttachImpactInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetAttachImpactInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("userSessionIssuers", "getAttachImpact", err)
+				}
+				err = ValidateGetAttachImpactInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("userSessionIssuers", "getAttachImpact", err)
+				}
+				return nil, NewGetAttachImpactInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetAttachImpactUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("userSessionIssuers", "getAttachImpact", err)
+				}
+				err = ValidateGetAttachImpactUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("userSessionIssuers", "getAttachImpact", err)
+				}
+				return nil, NewGetAttachImpactUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("userSessionIssuers", "getAttachImpact", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GetAttachImpactGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("userSessionIssuers", "getAttachImpact", err)
+			}
+			err = ValidateGetAttachImpactGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("userSessionIssuers", "getAttachImpact", err)
+			}
+			return nil, NewGetAttachImpactGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("userSessionIssuers", "getAttachImpact", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildDeleteUserSessionIssuerRequest instantiates a HTTP request object with
 // method and path set to call the "userSessionIssuers" service
 // "deleteUserSessionIssuer" endpoint
@@ -1241,17 +1494,25 @@ func DecodeDeleteUserSessionIssuerResponse(decoder func(*http.Response) goahttp.
 // *UserSessionIssuerResponseBody.
 func unmarshalUserSessionIssuerResponseBodyToTypesUserSessionIssuer(v *UserSessionIssuerResponseBody) *types.UserSessionIssuer {
 	res := &types.UserSessionIssuer{
-		ID:                            *v.ID,
-		ProjectID:                     *v.ProjectID,
-		OrganizationID:                *v.OrganizationID,
-		Slug:                          *v.Slug,
-		AuthnChallengeMode:            *v.AuthnChallengeMode,
-		SessionDurationHours:          *v.SessionDurationHours,
-		ClientIDMetadataAdmissionMode: *v.ClientIDMetadataAdmissionMode,
-		TrustedRemoteSessionIssuerID:  v.TrustedRemoteSessionIssuerID,
-		TrustedRemoteSessionClientID:  v.TrustedRemoteSessionClientID,
-		CreatedAt:                     *v.CreatedAt,
-		UpdatedAt:                     *v.UpdatedAt,
+		ID:                                   *v.ID,
+		ProjectID:                            *v.ProjectID,
+		OrganizationID:                       *v.OrganizationID,
+		Slug:                                 *v.Slug,
+		AuthnChallengeMode:                   *v.AuthnChallengeMode,
+		SessionDurationHours:                 *v.SessionDurationHours,
+		ClientIDMetadataAdmissionMode:        *v.ClientIDMetadataAdmissionMode,
+		TrustedRemoteSessionIssuerID:         v.TrustedRemoteSessionIssuerID,
+		TrustedRemoteSessionClientID:         v.TrustedRemoteSessionClientID,
+		AuthorizationServerMode:              *v.AuthorizationServerMode,
+		UseAuthenticationHost:                *v.UseAuthenticationHost,
+		IssuerURLPinned:                      *v.IssuerURLPinned,
+		IssuerURL:                            v.IssuerURL,
+		TokenEndpoint:                        v.TokenEndpoint,
+		AuthorizationServerUnavailableReason: v.AuthorizationServerUnavailableReason,
+		ProjectName:                          v.ProjectName,
+		AuthenticationHostAvailable:          v.AuthenticationHostAvailable,
+		CreatedAt:                            *v.CreatedAt,
+		UpdatedAt:                            *v.UpdatedAt,
 	}
 
 	return res

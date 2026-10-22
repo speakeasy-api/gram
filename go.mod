@@ -1,6 +1,6 @@
 module github.com/speakeasy-api/gram
 
-go 1.27.1
+go 1.27.3
 
 tool goa.design/goa/v3/cmd/goa
 
@@ -19,6 +19,7 @@ require (
 	github.com/Masterminds/squirrel v1.5.4
 	github.com/Microsoft/go-winio v0.6.2
 	github.com/OpenRouterTeam/go-sdk v0.8.32
+	github.com/agenthooksprotocol/go-sdk v0.8.0
 	github.com/alicebob/miniredis/v2 v2.38.0
 	github.com/aws/aws-sdk-go-v2 v1.47.0
 	github.com/aws/aws-sdk-go-v2/config v1.33.4
@@ -74,7 +75,7 @@ require (
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2
 	github.com/sourcegraph/conc v0.3.0
 	github.com/speakeasy-api/agenthooks v0.7.3
-	github.com/speakeasy-api/mcp-setup-docs/go v0.3.0
+	github.com/speakeasy-api/mcp-setup-docs/go v0.3.9
 	github.com/speakeasy-api/openapi v1.24.0
 	github.com/standard-webhooks/standard-webhooks/libraries v0.0.0-20250711233419-a173a6c0125c
 	github.com/stretchr/testify v1.12.1
@@ -290,6 +291,7 @@ require (
 	github.com/sagikazarmark/locafero v0.7.0 // indirect
 	github.com/sagikazarmark/slog-shim v0.1.0 // indirect
 	github.com/samber/slog-common v0.21.0 // indirect
+	github.com/santhosh-tekuri/jsonschema/v5 v5.3.1 // indirect
 	github.com/segmentio/asm v1.2.1 // indirect
 	github.com/segmentio/encoding v0.5.4 // indirect
 	github.com/shirou/gopsutil/v4 v4.26.5 // indirect

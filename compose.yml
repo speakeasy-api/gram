@@ -72,7 +72,7 @@ services:
       retries: 5
 
   gram-db:
-    image: pgvector/pgvector:pg17
+    image: pgvector/pgvector:0.8.7-pg18-bookworm@sha256:2358fcba361ed2233a5ed81b5fe4ca779ccb304120ce531a3bf51c0ed7e2bc11
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${DB_USER}
@@ -81,7 +81,10 @@ services:
     ports:
       - "${DB_PORT}:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      # Postgres 18 images keep PGDATA under /var/lib/postgresql/18/docker,
+      # so the volume mounts the parent directory. The volume is versioned
+      # because a Postgres 17 data directory cannot be read by 18.
+      - postgres18_data:/var/lib/postgresql
       # Init scripts run only on FIRST container start (empty data volume).
       # Currently used to create the gram_devidp database for the dev-idp
       # binary; see local/postgres-init/01-create-gram-devidp.sql.
@@ -122,7 +125,7 @@ services:
       retries: 12
 
   clickhouse:
-    image: clickhouse/clickhouse-server:26.4.5.143-distroless@sha256:d7c4cf5575c3d0d49cf1beb7ce8d938d64f707789d9fa3fa538c7d3f898b0649
+    image: clickhouse/clickhouse-server:26.6.8.7-distroless@sha256:31f67400c46f94f7d9236728f369faa125067f13f98fa2ad620ee190fe70eed5
     restart: unless-stopped
     ports:
       - "${CLICKHOUSE_HTTP_PORT}:8123"
@@ -165,7 +168,7 @@ services:
 volumes:
   temporal_local_data:
     driver: local
-  postgres_data:
+  postgres18_data:
     driver: local
   cache_data:
     driver: local

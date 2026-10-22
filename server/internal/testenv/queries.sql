@@ -683,6 +683,12 @@ INSERT INTO audit_logs (organization_id, actor_id, actor_type, action, subject_i
 VALUES (@organization_id, 'system', 'user', 'organization:enterprise_trial_armed', @organization_id, 'organization')
 RETURNING id::text;
 
+-- name: SeedTrialStartAuditFixture :one
+-- Test-only fixture: records an admin-started trial generation.
+INSERT INTO audit_logs (organization_id, actor_id, actor_type, action, subject_id, subject_type)
+VALUES (@organization_id, 'system', 'user', 'organization:enterprise_trial_started', @organization_id, 'organization')
+RETURNING id::text;
+
 -- name: SeedTrialDemotionAuditFixture :exec
 -- Test-only fixture: records the committed demotion boundary for a retry cycle.
 INSERT INTO audit_logs (organization_id, actor_id, actor_type, action, subject_id, subject_type)
@@ -806,10 +812,10 @@ RETURNING id;
 
 -- name: SeedCapturedAgentChatMessageFixture :one
 -- Test-only fixture: inserts a captured transcript row with the full recall
--- shape — generation, tool_calls, capture source, asset offload marker, and
--- risk-analysis completion — at a deterministic created_at.
-INSERT INTO chat_messages (chat_id, project_id, role, content, generation, tool_calls, source, content_asset_url, risk_analyzed_at, created_at)
-VALUES (@chat_id, @project_id, @role, @content, @generation, sqlc.narg(tool_calls), sqlc.narg(source), sqlc.narg(content_asset_url), sqlc.narg(risk_analyzed_at), @created_at)
+-- shape — generation, tool_calls, stored payload, sender, capture source, asset
+-- offload marker, and risk-analysis completion — at a deterministic created_at.
+INSERT INTO chat_messages (chat_id, project_id, role, content, generation, tool_calls, content_raw, user_id, source, content_asset_url, risk_analyzed_at, created_at)
+VALUES (@chat_id, @project_id, @role, @content, @generation, sqlc.narg(tool_calls), sqlc.narg(content_raw), sqlc.narg(user_id), sqlc.narg(source), sqlc.narg(content_asset_url), sqlc.narg(risk_analyzed_at), @created_at)
 RETURNING id;
 
 -- name: SeedUserAccountFixture :one
@@ -1103,11 +1109,8 @@ WHERE key_hash = @key_hash;
 
 -- name: CountAssistantAttachments :one
 -- Count stored attachments, including those whose targets are soft-deleted.
-SELECT
-  (SELECT count(*) FROM assistant_toolsets at
-   WHERE at.project_id = @project_id AND at.assistant_id = @assistant_id) AS toolsets,
-  (SELECT count(*) FROM assistant_mcp_servers ams
-   WHERE ams.project_id = @project_id AND ams.assistant_id = @assistant_id) AS mcp_servers;
+SELECT count(*) AS mcp_servers FROM assistant_mcp_servers ams
+WHERE ams.project_id = @project_id AND ams.assistant_id = @assistant_id;
 
 -- name: SetUserSessionIssuerUseAuthenticationHostFixture :execrows
 -- Project-scoped issuers carry no organization_id, so their tenancy is read
@@ -1142,6 +1145,50 @@ UPDATE workload_issuers
 SET deleted_at = clock_timestamp()
 WHERE id = @id
   AND organization_id = @organization_id;
+
+-- name: CreateWorkloadDeviceIssuerFixture :one
+INSERT INTO workload_issuers (organization_id, name, issuer, jwks_uri, allow_wildcard_admission, key_source)
+VALUES (@organization_id, @name, @issuer, @jwks_uri, false, 'device_keys')
+RETURNING id;
+
+-- name: CreateWorkloadDeviceKeyFixture :exec
+INSERT INTO workload_device_keys (organization_id, workload_issuer_id, subject, public_jwk, thumbprint)
+VALUES (@organization_id, @workload_issuer_id, @subject, @public_jwk, @thumbprint);
+
+-- name: SetWorkloadIssuerKeySourceFixture :execrows
+UPDATE workload_issuers
+SET key_source = @key_source
+WHERE id = @id
+  AND organization_id = @organization_id;
+
+-- name: SoftDeleteWorkloadDeviceKeyFixture :execrows
+UPDATE workload_device_keys
+SET deleted_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND workload_issuer_id = @workload_issuer_id
+  AND subject = @subject
+  AND deleted IS FALSE;
+
+-- name: SoftDeleteWorkloadAdmissionFixture :execrows
+UPDATE workload_identity_admissions
+SET deleted_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND workload_issuer_id = @workload_issuer_id
+  AND subject = @subject
+  AND deleted IS FALSE;
+
+-- name: CountLiveWorkloadDeviceKeysFixture :one
+SELECT count(*)
+FROM workload_device_keys
+WHERE organization_id = @organization_id
+  AND subject = @subject
+  AND deleted IS FALSE;
+
+-- name: ExpireWorkloadDeviceJoinTokensFixture :execrows
+UPDATE workload_device_join_tokens
+SET expires_at = clock_timestamp() - interval '1 minute'
+WHERE organization_id = @organization_id;
+
 
 -- Shared attachment fixtures exercise authorization boundaries in remote-session,
 -- issuer-gate, and user-session projection tests.
@@ -1627,6 +1674,29 @@ UPDATE user_session_issuers SET trusted_remote_session_issuer_id = @issuer_id WH
 UPDATE organization_metadata SET disabled_at = clock_timestamp()
 WHERE id = @organization_id::text;
 
+-- name: TombstoneInternalSessionIssuerFixture :exec
+-- Test-only tombstone of an organization's internal session issuer.
+UPDATE internal_session_issuers SET deleted_at = clock_timestamp()
+WHERE organization_id = @organization_id::text;
+
+-- name: SoftDeleteExternalCredentialFixture :exec
+-- Test-only soft delete of an external credential in its tier: a NULL
+-- organization_id names the platform tier.
+UPDATE external_credentials SET deleted_at = clock_timestamp()
+WHERE id = @id
+  AND organization_id IS NOT DISTINCT FROM sqlc.narg(organization_id)::text
+  AND project_id IS NULL;
+
+-- name: SetGcpIamCredentialServiceAccountFixture :exec
+-- Test-only re-point of a credential's impersonated account in its tier,
+-- tombstones included: a NULL organization_id names the platform tier.
+UPDATE gcp_iam_credentials AS gic SET impersonate_service_account = sqlc.narg(impersonate_service_account)::text
+FROM external_credentials AS ec
+WHERE gic.external_credential_id = @external_credential_id
+  AND ec.id = gic.external_credential_id
+  AND ec.organization_id IS NOT DISTINCT FROM sqlc.narg(organization_id)::text
+  AND ec.project_id IS NULL;
+
 -- name: RevokeDelegationUserIssuersFixture :exec
 -- Test-only revocation of organization-scoped delegation authority.
 UPDATE user_session_issuers SET deleted_at = clock_timestamp()
@@ -1919,20 +1989,198 @@ WHERE id = @id
   AND project_id IS NOT DISTINCT FROM sqlc.narg(project_id)::uuid
   AND organization_id IS NOT DISTINCT FROM sqlc.narg(organization_id)::text;
 
+-- name: SetOrganizationVerifiedDomainsFixture :exec
+UPDATE organization_metadata
+SET verified_domains = @verified_domains::text[]
+WHERE id = @id;
+
+-- name: SeedInternalSessionIssuerFixture :one
+-- An organization's Speakeasy issuer over an existing key set, for tests that
+-- reference the issuer row without signing.
+INSERT INTO internal_session_issuers (organization_id, issuer, json_web_key_set_id)
+VALUES (@organization_id, @issuer, @json_web_key_set_id)
+RETURNING id;
+
+-- name: DisableInternalSessionIssuerFixture :execrows
+UPDATE internal_session_issuers
+SET disabled_at = clock_timestamp(), updated_at = clock_timestamp()
+WHERE organization_id = @organization_id AND id = @id AND deleted IS FALSE;
+
+-- name: WithdrawJsonWebKeyKeepingUpdatedAtFixture :execrows
+-- Soft-deletes one key without moving its updated_at, so a test can show a
+-- cache notices a key change that leaves every timestamp unchanged.
+UPDATE json_web_keys
+SET deleted_at = updated_at
+WHERE organization_id = @organization_id AND kid = @kid AND deleted IS FALSE;
+
+-- name: CountWaitingAdvisoryLocksFixture :one
+-- Advisory lock requests still waiting, so a test can tell a writer blocked.
+SELECT count(*)::bigint AS waiting FROM pg_catalog.pg_locks
+WHERE locktype = 'advisory' AND NOT granted
+  AND database = (SELECT oid FROM pg_catalog.pg_database WHERE datname = current_database());
+
 -- name: CountMcpMetadataForBackendIDFixture :one
 SELECT count(*)
 FROM mcp_metadata
 WHERE project_id = @project_id
-  AND (toolset_id = @backend_id::uuid OR mcp_server_id = @backend_id::uuid);
-
--- name: RekeyMcpMetadataToMcpServerFixture :execrows
-UPDATE mcp_metadata
-SET toolset_id = NULL, mcp_server_id = toolset_id
-WHERE project_id = @project_id
-  AND toolset_id = @toolset_id;
+  AND mcp_server_id = @backend_id::uuid;
 
 -- name: SetMcpMetadataHeaderDisplayNamesFixture :execrows
 UPDATE mcp_metadata
 SET header_display_names = @header_display_names
 WHERE id = @id
   AND project_id = @project_id;
+
+-- name: CountPendingSignInRevocationDeliveries :one
+SELECT count(*)
+FROM sign_in_revocation_deliveries
+WHERE organization_id = @organization_id
+  AND delivered_at IS NULL;
+
+-- name: SeedInternalSessionIssuerSignInMethodsFixture :exec
+-- Plants an organization's internal session issuer limited to the given
+-- sign-in tiers, skipping the KMS provisioning the real enable performs.
+WITH credential AS (
+    INSERT INTO external_credentials (organization_id, provider, name)
+    VALUES (@organization_id, 'gcp_iam', @name || '-credential')
+    RETURNING id
+), key AS (
+    INSERT INTO external_keys (organization_id, external_credential_id, provider, algorithm, name)
+    SELECT @organization_id, credential.id, 'gcp_kms', 'RS256', @name || '-key' FROM credential
+    RETURNING id
+), key_set AS (
+    INSERT INTO json_web_key_sets (organization_id, external_key_id, name)
+    SELECT @organization_id, key.id, @name FROM key
+    RETURNING id
+)
+INSERT INTO internal_session_issuers (organization_id, issuer, json_web_key_set_id, allowed_sign_in_methods, allowed_microsoft_tenant_ids)
+SELECT @organization_id, @issuer, key_set.id, sqlc.narg(allowed_sign_in_methods)::text[], sqlc.narg(allowed_microsoft_tenant_ids)::text[] FROM key_set;
+
+-- name: MakeSignInRevocationDeliveriesDueFixture :exec
+-- Skips the backoff so a test can retry failed deliveries at once.
+UPDATE sign_in_revocation_deliveries
+SET next_attempt_at = NULL,
+    claimed_until = NULL
+WHERE organization_id = @organization_id
+  AND delivered_at IS NULL;
+
+-- name: ListSignInRevocationDeliveriesFixture :many
+SELECT id, kind, target, attempts, effective_at, next_attempt_at, claimed_until, delivered_at
+FROM sign_in_revocation_deliveries
+WHERE organization_id = @organization_id
+ORDER BY created_at, id;
+
+-- name: SetDirectoryGroupWorkOSDeletedFixture :exec
+-- Deletes a directory group as a WorkOS deletion does, setting both markers,
+-- or with deleted false brings it back by clearing them.
+UPDATE directory_groups
+SET workos_deleted_at = CASE WHEN @deleted::boolean THEN clock_timestamp() END,
+    deleted_at = CASE WHEN @deleted::boolean THEN clock_timestamp() END
+WHERE id = @id;
+
+-- name: SetDirectoryUserAttributesFixture :exec
+UPDATE directory_users
+SET attributes = @attributes::jsonb
+WHERE workos_directory_user_id = @workos_directory_user_id;
+
+-- name: SetDirectoryUserWorkOSDeletedFixture :exec
+-- Deletes a directory user as a WorkOS deletion does, setting both markers.
+UPDATE directory_users
+SET workos_deleted_at = clock_timestamp(),
+    deleted_at = clock_timestamp()
+WHERE workos_directory_user_id = @workos_directory_user_id;
+
+-- name: SoftDeleteDirectoryGroupRoleMappingsFixture :exec
+UPDATE directory_role_mappings
+SET deleted_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND directory_group_id = @directory_group_id
+  AND deleted IS FALSE;
+
+-- name: ListDirectoryReviewItemsFixture :many
+-- Every review item of an organization, oldest first, with its source as a
+-- group's WorkOS ID or key=value.
+SELECT
+  i.kind,
+  COALESCE(dg.workos_directory_group_id, i.attribute_key || '=' || i.attribute_value)::text AS source,
+  i.occurrence,
+  i.state
+FROM directory_review_items AS i
+LEFT JOIN directory_groups AS dg ON dg.id = i.directory_group_id
+WHERE i.organization_id = @organization_id
+ORDER BY i.created_at, i.id;
+
+-- name: SetPendingDirectoryReviewItemsStateFixture :exec
+-- Resolves an organization's pending items of one kind, as an admin would.
+UPDATE directory_review_items
+SET state = @state, resolved_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND kind = @kind
+  AND state = 'pending';
+
+-- name: GetDirectoryReviewItemStateFixture :one
+SELECT state FROM directory_review_items WHERE id = @id;
+
+-- name: ListDirectoryReviewOrgStateIDsFixture :many
+SELECT organization_id FROM directory_review_org_states ORDER BY organization_id;
+
+-- name: DirectoryReviewAttributeOptedOutFixture :one
+SELECT EXISTS (
+  SELECT 1 FROM directory_review_attribute_opt_outs
+  WHERE organization_id = @organization_id
+    AND attribute_key = @attribute_key
+    AND deleted IS FALSE
+);
+
+-- name: InsertMCPServerRemoteSessionClientFixture :exec
+-- Test-only fixture: inserts an MCP server upstream client association with
+-- no application checks, so a test can prove the schema itself refuses a
+-- cross-tenant row.
+INSERT INTO mcp_server_remote_session_clients (project_id, organization_id, mcp_server_id, remote_session_client_id, client_attachment_scope)
+VALUES (
+    @project_id, @organization_id, @mcp_server_id, @remote_session_client_id,
+    (SELECT c.attachment_scope FROM remote_session_clients AS c WHERE c.id = @remote_session_client_id)
+);
+
+-- name: ClearMCPServerRemoteSessionClientsFixture :exec
+-- Test-only fixture: removes every upstream client association of one MCP
+-- server, so a table-driven test can set each case's associations afresh.
+DELETE FROM mcp_server_remote_session_clients WHERE mcp_server_id = @mcp_server_id;
+
+-- name: ListUserSessionCredentialsForSubjectFixture :many
+-- Test-only fixture: every session row of one subject, oldest first, with the
+-- credential it belongs to, so a test can follow refresh rotation.
+SELECT id, COALESCE(credential_id, id)::uuid AS credential_id, deleted
+FROM user_sessions
+WHERE subject_urn = @subject_urn
+ORDER BY created_at, id;
+
+-- name: CountDatabasesWithPrefixFixture :one
+-- Databases whose name starts with a prefix, so a test can show clones are dropped.
+SELECT count(*)::bigint AS databases FROM pg_catalog.pg_database
+WHERE starts_with(datname, @prefix::text);
+
+-- name: SeedChatMessageParticipantFixture :exec
+-- Test-only fixture: records one participant snapshot on a captured message.
+INSERT INTO chat_message_participants (project_id, chat_id, message_id, provider, provider_user_id, user_id)
+VALUES (@project_id, @chat_id, @message_id, @provider, @provider_user_id, sqlc.narg(user_id));
+-- name: ExpireAssistantInferenceCredentialForTest :exec
+UPDATE api_keys SET expires_at = clock_timestamp() - interval '1 hour'
+WHERE organization_id = @organization_id AND id IN (SELECT c.api_key_id FROM assistant_inference_credentials c WHERE c.project_id = @project_id AND c.id = @id);
+
+-- name: CountOutboxRows :one
+-- Counts all legacy events in an isolated cloned test database.
+SELECT count(*) FROM outbox;
+
+
+-- name: CurrentDatabaseTime :one
+-- The database's clock, for tests that compare against timestamps the
+-- database wrote.
+SELECT clock_timestamp()::timestamptz AS now;
+
+-- name: SoftDeleteHTTPToolDefinitionFixture :exec
+UPDATE http_tool_definitions
+SET deleted_at = clock_timestamp()
+WHERE project_id = @project_id
+  AND deployment_id = @deployment_id
+  AND tool_urn = @tool_urn;

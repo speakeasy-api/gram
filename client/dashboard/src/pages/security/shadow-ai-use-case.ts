@@ -13,7 +13,7 @@ export function isShadowAIUseCase(
   );
 }
 
-/** With the Shadow AI fold-in on, that use case is the Shadow AI policy: it
+/** That use case is the Shadow AI policy: it
  *  opens the Shadow AI editor, which pins the action to deny, so the row says
  *  so instead of the server's flag-only wording. Everything else about the
  *  preset is left alone. */

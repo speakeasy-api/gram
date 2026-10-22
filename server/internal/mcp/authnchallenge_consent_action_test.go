@@ -20,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	remotemcp_repo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
@@ -43,6 +44,9 @@ type consentActionFixture struct {
 	clientB uuid.UUID
 	clientC uuid.UUID
 	clientD uuid.UUID
+	// server is the gateway server whose connect page a render opens, empty
+	// for the endpoint's own consent page.
+	server string
 }
 
 const (
@@ -129,7 +133,7 @@ func mintConsentEndpointState(t *testing.T, ctx context.Context, ti *testInstanc
 		McpServerID:          uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		OrganizationID:       orgID,
 		ProjectID:            projectID,
-		RouteBase:            "mcp",
+		RouteBase:            mcproute.MCP,
 		Slug:                 slug,
 		ToolsetID:            uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		// Deliberately matches no client: the action must never thread it in.
@@ -208,6 +212,9 @@ func postConnectAction(t *testing.T, fx consentActionFixture, clientID uuid.UUID
 	form.Set("csrf_token", "csrf-token")
 	form.Set("action", "connect")
 	form.Set("client_id", clientID.String())
+	if fx.server != "" {
+		form.Set("server", fx.server)
+	}
 
 	req := httptest.NewRequest(http.MethodPost, "/mcp/"+fx.endpoint.Slug+"/connect/remote-session", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
@@ -396,6 +403,57 @@ func TestServeConsentAction_ConnectDerivationErrorFailsClosed(t *testing.T) {
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeUnexpected, oopsErr.Code)
 	require.Empty(t, w.Header().Get("Location"), "fail closed: no upstream redirect may be minted")
+}
+
+// A connect to an authorization server with no authorization endpoint is a 400
+// that names the problem, and mints no upstream redirect.
+func TestServeConsentAction_ConnectWithoutAuthorizationEndpointIsBadRequest(t *testing.T) {
+	t.Parallel()
+
+	ctx, fx := seedMultiClientConsentEndpoint(t)
+
+	q := remotesessions_repo.New(fx.ti.conn)
+	rsi, err := q.CreateRemoteSessionIssuer(ctx, remotesessions_repo.CreateRemoteSessionIssuerParams{
+		ProjectID:                         uuid.NullUUID{UUID: fx.projectID, Valid: true},
+		Slug:                              "noauthz-rsi",
+		Issuer:                            "https://noauthz-as.example.com",
+		TokenEndpoint:                     conv.ToPGText("https://noauthz-as.example.com/token"),
+		ScopesSupported:                   []string{},
+		GrantTypesSupported:               []string{"authorization_code"},
+		ResponseTypesSupported:            []string{"code"},
+		TokenEndpointAuthMethodsSupported: []string{"none"},
+		CodeChallengeMethodsSupported:     []string{"S256"},
+	})
+	require.NoError(t, err)
+	rsc, err := q.CreateRemoteSessionClient(ctx, remotesessions_repo.CreateRemoteSessionClientParams{
+		ProjectID:             conv.ToNullUUID(fx.projectID),
+		OrganizationID:        conv.ToPGTextEmpty(fx.orgID),
+		RemoteSessionIssuerID: rsi.ID,
+		ClientID:              "noauthz-external-client",
+		ClientIDIssuedAt:      pgtype.Timestamptz{Time: time.Now(), Valid: true},
+	})
+	require.NoError(t, err)
+	require.NoError(t, q.AttachRemoteSessionClientToUserSessionIssuer(ctx, remotesessions_repo.AttachRemoteSessionClientToUserSessionIssuerParams{
+		RemoteSessionClientID: rsc.ID,
+		UserSessionIssuerID:   fx.shared,
+	}))
+
+	form := url.Values{}
+	form.Set("state", fx.stateID)
+	form.Set("csrf_token", "csrf-token")
+	form.Set("action", "connect")
+	form.Set("client_id", rsc.ID.String())
+	req := httptest.NewRequest(http.MethodPost, "/mcp/"+fx.endpoint.Slug+"/connect/remote-session", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	w := httptest.NewRecorder()
+
+	err = fx.ti.service.ServeConsentAction(w, req, fx.endpoint)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
+	require.Equal(t, "This service doesn't support signing in from Speakeasy.", oopsErr.Error())
+	require.ErrorIs(t, err, remotesessions.ErrIssuerNoAuthorizationEndpoint)
+	require.Empty(t, w.Header().Get("Location"))
 }
 
 // consentExchangeCapture records the resource param of a token POST.

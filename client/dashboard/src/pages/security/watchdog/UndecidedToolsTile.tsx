@@ -7,7 +7,7 @@ import {
 } from "../shadow-ai/use-undecided-tool-count";
 
 const UNDECIDED_TOOLS_TOOLTIP =
-  "Harnesses and assistants the device agent found, and MCP servers seen in agent traffic, that nobody has approved or disallowed yet. Decide in the Shadow AI policy under Guardrails.";
+  "Harnesses and assistants the device agent found, and MCP servers seen in agent traffic, that nobody has approved or denied yet. Decide tools in the Shadow AI policy and MCP servers on the MCP approvals tab, both under Guardrails.";
 
 /** What the tile shows for a count: a dash when a read failed (unknown is
  *  not zero), a floor when the inventory has more pages, the number
@@ -32,8 +32,7 @@ function tileFacts(
   };
 }
 
-/** The Watchdog tile for the Shadow AI backlog. Rendered only while the
- *  Shadow AI fold-in is on, so its reads run only where they are shown. */
+/** The Watchdog tile for the Shadow AI backlog. */
 export function UndecidedToolsTile(): JSX.Element {
   const routes = useRoutes();
   const undecided = useUndecidedToolCount();

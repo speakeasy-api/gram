@@ -1,3 +1,4 @@
+import { enumPresentation } from "@/lib/enum";
 import { Page } from "@/components/page-layout";
 import { Alert } from "@/components/ui/Alert";
 import { Badge } from "@/components/ui/Badge";
@@ -35,6 +36,7 @@ import {
 } from "./use-shadow-ai-policy-slot";
 import {
   actionBadgeVariant,
+  supportsPolicyDraft,
   draftFromPreset,
   draftFromSuggestion,
   draftKind,
@@ -91,7 +93,9 @@ function presetIcon(presetId: string, policyType: string): IconName {
 
 /** What turns a draft on, in the detect step's own category names. */
 function detectsSummary(
-  draft: Pick<PolicyDraft, "policyType" | "sources" | "presidioEntities">,
+  draft: Pick<PolicyDraft, "sources" | "presidioEntities"> & {
+    policyType: string;
+  },
   mode: DetectorMode,
 ): string {
   if (draft.policyType === "prompt_based") return "Policy model (LLM judge)";
@@ -137,7 +141,9 @@ function IconTile({
 function ActionBadge({ action }: { action: string }): JSX.Element {
   return (
     <Badge variant={actionBadgeVariant(action)}>
-      <Badge.Text>{ACTION_LABEL[action] ?? action}</Badge.Text>
+      <Badge.Text>
+        {enumPresentation(ACTION_LABEL, action, "Unknown")}
+      </Badge.Text>
     </Badge>
   );
 }
@@ -171,13 +177,6 @@ export function PolicyStartChooser(): JSX.Element {
   const mode = useDetectorMode();
   const promptPoliciesEnabled =
     telemetry.isFeatureEnabled("gram-prompt-policies") ?? false;
-  // The Shadow AI policy kind arrives with the fold-in of the Shadow AI
-  // section into Guardrails.
-  const shadowAIFlag = useFeatureFlag(FEATURE_FLAGS.shadowAiGuardrails).status;
-  const shadowAIEnabled = shadowAIFlag === "enabled";
-  // Until the flag resolves, the Shadow AI use case must not open the
-  // standard editor it leaves behind once the flag reads enabled.
-  const shadowAIFlagPending = shadowAIFlag === "loading";
   const [, setKind] = useQueryState("kind");
   // "Change starting point" hands the state over in the route; otherwise
   // pick up a description left behind earlier in this browser session.
@@ -194,13 +193,10 @@ export function PolicyStartChooser(): JSX.Element {
     savePolicyStartSession(gramProject, { description, review });
   }, [gramProject, description, review]);
   const { data, isLoading, isError, refetch } = useRiskPresets();
-  // With the fold-in on, the server's "Unapproved MCP servers" use case is
-  // presented as Shadow AI and opens the Shadow AI editor instead of seeding
-  // the standard one.
-  const allPresets = shadowAIEnabled
-    ? (data?.presets ?? []).map(presentShadowAIUseCase)
-    : (data?.presets ?? []);
-  const shadowAISlot = useShadowAIPolicySlot({ enabled: shadowAIEnabled });
+  // The server's "Unapproved MCP servers" use case is presented as Shadow AI
+  // and opens the Shadow AI editor instead of seeding the standard one.
+  const allPresets = (data?.presets ?? []).map(presentShadowAIUseCase);
+  const shadowAISlot = useShadowAIPolicySlot();
   const presets = allPresets.filter(
     (preset) => promptPoliciesEnabled || preset.policyType !== "prompt_based",
   );
@@ -244,11 +240,15 @@ export function PolicyStartChooser(): JSX.Element {
     const override = state.overridePresetId
       ? allPresets.find((preset) => preset.id === state.overridePresetId)
       : undefined;
+    if (!supportsPolicyDraft(override ?? state.suggestion)) {
+      toast.error("Refresh the page to use this policy's newer settings.");
+      return;
+    }
     const base = override
       ? draftFromPreset(override)
       : draftFromSuggestion(state.suggestion);
     const preset = allPresets.find((p) => p.id === base.presetId);
-    if (shadowAIEnabled && preset && isShadowAIUseCase(preset)) {
+    if (preset && isShadowAIUseCase(preset)) {
       openShadowAI();
       return;
     }
@@ -348,8 +348,6 @@ export function PolicyStartChooser(): JSX.Element {
                 onRetry={() => void refetch()}
                 mode={mode}
                 promptPoliciesEnabled={promptPoliciesEnabled}
-                shadowAIEnabled={shadowAIEnabled}
-                shadowAIFlagPending={shadowAIFlagPending}
                 shadowAISlot={shadowAISlot}
                 onSelect={(preset) => openDraft(draftFromPreset(preset))}
                 onShadowAI={openShadowAI}
@@ -377,8 +375,6 @@ function UseCaseTable({
   onRetry,
   mode,
   promptPoliciesEnabled,
-  shadowAIEnabled,
-  shadowAIFlagPending,
   shadowAISlot,
   onSelect,
   onShadowAI,
@@ -390,8 +386,6 @@ function UseCaseTable({
   onRetry: () => void;
   mode: DetectorMode;
   promptPoliciesEnabled: boolean;
-  shadowAIEnabled: boolean;
-  shadowAIFlagPending: boolean;
   shadowAISlot: ShadowAIPolicySlot;
   onSelect: (preset: RiskPreset) => void;
   onShadowAI: () => void;
@@ -425,19 +419,16 @@ function UseCaseTable({
           // The Shadow AI use case follows the project's one slot: it opens
           // the existing policy when there is one, and waits while that is
           // unknown, the same as the from-scratch option below.
-          const shadowAI =
-            isShadowAIUseCase(preset) &&
-            (shadowAIEnabled || shadowAIFlagPending);
-          const slotMessage = !shadowAI
-            ? undefined
-            : shadowAIFlagPending
-              ? "Checking this project's settings…"
-              : shadowAISlotMessage(shadowAISlot);
+          const supported = supportsPolicyDraft(preset);
+          const shadowAI = isShadowAIUseCase(preset);
+          const slotMessage = shadowAI
+            ? shadowAISlotMessage(shadowAISlot)
+            : undefined;
           return (
             <button
               key={preset.id}
               type="button"
-              disabled={slotMessage !== undefined}
+              disabled={!supported || slotMessage !== undefined}
               onClick={() => (shadowAI ? onShadowAI() : onSelect(preset))}
               className="hover:bg-muted/40 group grid w-full grid-cols-[minmax(0,1fr)_16px] items-center gap-4 border-b p-4 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-60 sm:grid-cols-[minmax(0,1fr)_80px_128px_16px]"
             >
@@ -464,8 +455,10 @@ function UseCaseTable({
                     {preset.description}
                   </span>
                   <span className="text-muted-foreground block font-mono text-[11px] leading-4">
-                    {slotMessage ??
-                      `Detected by ${detectsSummary(preset, mode)}`}
+                    {!supported
+                      ? "Refresh the page to use this policy's newer settings."
+                      : (slotMessage ??
+                        `Detected by ${detectsSummary(preset, mode)}`)}
                   </span>
                   <span className="flex items-center gap-2 pt-1 sm:hidden">
                     <ActionBadge action={preset.action} />
@@ -504,9 +497,7 @@ function UseCaseTable({
             Prompt-based
           </Button>
         ) : null}
-        {shadowAIEnabled ? (
-          <ShadowAIScratchOption onPick={() => onScratch("shadow-ai")} />
-        ) : null}
+        <ShadowAIScratchOption onPick={() => onScratch("shadow-ai")} />
       </div>
     </div>
   );
@@ -635,7 +626,7 @@ function DescribePanel({
 
 // ── Review step ──────────────────────────────────────────────────────────────
 
-function DraftReview({
+export function DraftReview({
   description,
   review,
   presets,
@@ -658,6 +649,25 @@ function DraftReview({
   const byId = (id: string) => presets.find((preset) => preset.id === id);
   const override = overridePresetId ? byId(overridePresetId) : undefined;
   const suggested = suggestion.presetId ? byId(suggestion.presetId) : undefined;
+  if (!supportsPolicyDraft(override ?? suggestion)) {
+    return (
+      <Stack gap={4} className="mx-auto w-full max-w-[800px]">
+        <Page.Section.Title>Review the draft</Page.Section.Title>
+        <Text>
+          This draft uses newer policy settings. Refresh the page to continue,
+          or choose another starting point.
+        </Text>
+        <div className="flex gap-2">
+          <Button variant="secondary" onClick={() => window.location.reload()}>
+            Refresh page
+          </Button>
+          <Button variant="tertiary" onClick={onBack}>
+            Choose another starting point
+          </Button>
+        </div>
+      </Stack>
+    );
+  }
   const draft = override
     ? draftFromPreset(override)
     : draftFromSuggestion(suggestion);
@@ -673,7 +683,9 @@ function DraftReview({
     draft.policyType === "prompt_based" && !promptPoliciesEnabled;
 
   const enabled = (p: RiskPreset | undefined): p is RiskPreset =>
-    !!p && (promptPoliciesEnabled || p.policyType !== "prompt_based");
+    !!p &&
+    supportsPolicyDraft(p) &&
+    (promptPoliciesEnabled || p.policyType !== "prompt_based");
   // The suggested use case stays on offer after an override, so the swap can
   // be undone from the same list.
   const alsoClose = [
@@ -781,7 +793,7 @@ function DraftReview({
             ) : null}
           </dl>
           {blockedByFlag ? (
-            <Alert variant="warning" alignTop>
+            <Alert variant="warning">
               Prompt-based policies aren't switched on for this project.
               {alsoClose.length > 0
                 ? " Pick one of the use cases below instead."

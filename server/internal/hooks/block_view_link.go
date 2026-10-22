@@ -57,9 +57,10 @@ func (s *Service) blockViewURL(ctx context.Context, organizationID string, block
 // insertToolCallBlock persists the durable block row for a pre-minted id. It is
 // meant to run detached (the deny response doesn't wait on it); the row becomes
 // visible to the block page within moments. Best-effort: logs and returns on
-// failure.
+// failure. Skipped when the event was already answered as a pass-through
+// (isVerdictSuperseded), since no block reached the user.
 func (s *Service) insertToolCallBlock(ctx context.Context, blockID uuid.UUID, p toolCallBlockParams) {
-	if s.repo == nil || strings.TrimSpace(p.OrganizationID) == "" || p.ProjectID == uuid.Nil {
+	if s.repo == nil || strings.TrimSpace(p.OrganizationID) == "" || p.ProjectID == uuid.Nil || isVerdictSuperseded(ctx) {
 		return
 	}
 	ctx, cancel := context.WithTimeout(ctx, toolCallBlockWriteTimeout)
@@ -170,7 +171,8 @@ func clearRejectedBlockLink(links []blockLink, err error) (string, bool) {
 func (s *Service) recordToolCallBlockAsync(ctx context.Context, p toolCallBlockParams) string {
 	// Only mint a URL when the block row can actually be persisted; otherwise
 	// the link would resolve to a /blocks/<id> page with no backing row. These
-	// preconditions must mirror insertToolCallBlock's guard.
+	// preconditions must mirror insertToolCallBlock's guard (except
+	// isVerdictSuperseded, which only the legacy Claude path sets).
 	if s.repo == nil || strings.TrimSpace(p.OrganizationID) == "" || p.ProjectID == uuid.Nil {
 		return ""
 	}

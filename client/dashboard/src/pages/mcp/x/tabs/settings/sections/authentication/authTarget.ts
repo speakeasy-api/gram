@@ -1,4 +1,8 @@
+import { UpdateMcpServerFormNetworkAccessMode as KnownUpdateMcpServerFormNetworkAccessMode } from "@gram/client/models/components/updatemcpserverform.js";
+import { requireKnownEnumValue } from "@/lib/enum";
+import { UpdateMcpServerFormVisibility as KnownUpdateMcpServerFormVisibility } from "@gram/client/models/components/updatemcpserverform.js";
 import { useSdkClient } from "@/contexts/Sdk";
+import { useMcpUrl } from "@/hooks/useToolsetUrl";
 import type { Toolset } from "@/lib/toolTypes";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import type { MetaMcpServer } from "@gram/client/models/components/metamcpserver.js";
@@ -39,6 +43,16 @@ export type AuthTarget = {
   remoteMcpServerId?: string;
   /** Attach an existing or freshly created issuer to the target. */
   linkUserSessionIssuer?: (userSessionIssuerId: string) => Promise<void>;
+  /** Names the target to the attach impact preview, which reports what
+   * changing its issuer does to its connected clients. */
+  attachImpactTarget: {
+    mcpServerId?: string;
+    toolsetId?: string;
+    metaMcpServerId?: string;
+  };
+  /** The URL clients connect to, which a shared authorization server takes as
+   * the server's resource. Undefined while it is unknown. */
+  mcpUrl?: string;
   /** True when the target's issuer may bind several upstream providers
    * (gateways front many members). Remote/tunneled servers have exactly one
    * upstream and must not offer additional attachments. */
@@ -47,7 +61,10 @@ export type AuthTarget = {
   invalidate: (queryClient: QueryClient) => Promise<void>;
 };
 
-export function useMcpServerAuthTarget(mcpServer: McpServer): AuthTarget {
+export function useMcpServerAuthTarget(
+  mcpServer: McpServer,
+  mcpUrl?: string,
+): AuthTarget {
   const client = useSdkClient();
 
   return useMemo(
@@ -59,6 +76,8 @@ export function useMcpServerAuthTarget(mcpServer: McpServer): AuthTarget {
       mcpServerId: mcpServer.id,
       supportsOrganizationIssuers: true,
       userSessionIssuerId: mcpServer.userSessionIssuerId ?? null,
+      attachImpactTarget: { mcpServerId: mcpServer.id },
+      mcpUrl,
       remoteMcpServerId: mcpServer.remoteMcpServerId,
       linkUserSessionIssuer: async (userSessionIssuerId: string) => {
         const latest = await client.mcpServers.get({ id: mcpServer.id });
@@ -66,14 +85,20 @@ export function useMcpServerAuthTarget(mcpServer: McpServer): AuthTarget {
           updateMcpServerForm: {
             id: latest.id,
             environmentId: latest.environmentId,
-            networkAccessMode: latest.networkAccessMode,
+            networkAccessMode: requireKnownEnumValue(
+              KnownUpdateMcpServerFormNetworkAccessMode,
+              latest.networkAccessMode,
+            ),
             remoteMcpServerId: latest.remoteMcpServerId,
             tunneledMcpServerId: latest.tunneledMcpServerId,
             toolsetId: latest.toolsetId,
             unproxiedMcpServerId: latest.unproxiedMcpServerId,
             toolVariationsGroupId: latest.toolVariationsGroupId,
             userSessionIssuerId,
-            visibility: latest.visibility,
+            visibility: requireKnownEnumValue(
+              KnownUpdateMcpServerFormVisibility,
+              latest.visibility,
+            ),
           },
         });
       },
@@ -84,12 +109,19 @@ export function useMcpServerAuthTarget(mcpServer: McpServer): AuthTarget {
         ]);
       },
     }),
-    [client, mcpServer],
+    [client, mcpServer, mcpUrl],
   );
 }
 
 export function useToolsetAuthTarget(toolset: Toolset): AuthTarget {
   const client = useSdkClient();
+  const { url, customServerURL } = useMcpUrl(toolset);
+  // A custom-domain URL takes the platform host until the domain resolves;
+  // that address is not the one clients use, so leave it unknown until then.
+  const mcpUrl =
+    toolset.customDomainId && toolset.mcpSlug && !customServerURL
+      ? undefined
+      : url;
 
   return useMemo(
     () => ({
@@ -99,6 +131,8 @@ export function useToolsetAuthTarget(toolset: Toolset): AuthTarget {
       permissionResourceId: toolset.id,
       supportsOrganizationIssuers: true,
       userSessionIssuerId: toolset.userSessionIssuerId ?? null,
+      attachImpactTarget: { toolsetId: toolset.id },
+      mcpUrl,
       linkUserSessionIssuer: async (userSessionIssuerId: string) => {
         // Toolsets are already live, so linking only flips auth gating —
         // mcpEnabled / mcpIsPublic stay untouched.
@@ -111,16 +145,18 @@ export function useToolsetAuthTarget(toolset: Toolset): AuthTarget {
         await Promise.all([
           invalidateAllToolset(queryClient, { refetchType: "all" }),
           invalidateAllListToolsets(queryClient, { refetchType: "all" }),
+          invalidateAllMcpServers(queryClient, { refetchType: "all" }),
         ]);
       },
     }),
-    [client, toolset],
+    [client, toolset, mcpUrl],
   );
 }
 
 export function useMetaMcpAuthTarget(
   metaMcpServer: MetaMcpServer,
   slugSeed: string,
+  mcpUrl?: string,
 ): AuthTarget {
   const client = useSdkClient();
 
@@ -132,6 +168,8 @@ export function useMetaMcpAuthTarget(
       permissionResourceId: metaMcpServer.projectId,
       supportsOrganizationIssuers: false,
       userSessionIssuerId: metaMcpServer.userSessionIssuerId ?? null,
+      attachImpactTarget: { metaMcpServerId: metaMcpServer.id },
+      mcpUrl,
       multipleProviders: true,
       linkUserSessionIssuer: async (userSessionIssuerId: string) => {
         // update is a full-record replace, so the name rides along.
@@ -150,6 +188,6 @@ export function useMetaMcpAuthTarget(
         ]);
       },
     }),
-    [client, metaMcpServer, slugSeed],
+    [client, metaMcpServer, slugSeed, mcpUrl],
   );
 }

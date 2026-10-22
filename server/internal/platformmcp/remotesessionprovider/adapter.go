@@ -18,6 +18,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
 	"github.com/speakeasy-api/gram/server/internal/platformmcp"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
@@ -176,11 +177,13 @@ func (a *Adapter) BeginSetup(ctx context.Context, request platformmcp.ProviderSe
 		UserSessionIssuerID: request.UserSessionIssuerID,
 		Subject:             &subject,
 		McpSlug:             request.MCPSlug,
-		RouteBase:           "mcp",
+		RouteBase:           mcproute.MCP,
 		McpServerID:         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		MetaMcpServerID:     uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		ResourceMcpServerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		FinalRedirectURI:    descriptor.ProviderSetupCompletionURL,
 		ConsentURL:          "",
+		ConsentServer:       "",
 		Resource:            descriptor.Resource,
 		AutoRefresh:         nil,
 		Authority: networkingress.Authority{
