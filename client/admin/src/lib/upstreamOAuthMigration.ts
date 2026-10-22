@@ -10,6 +10,7 @@ export function needsMigrationRun(
 ): boolean {
   if (status === undefined) return false;
   if (!status.migrated) return true;
+  if ((status.executionProfiles?.pendingVersions ?? 0) > 0) return true;
   const a = status.authClients;
   if (a === undefined || a.inProgress) return false;
   return (

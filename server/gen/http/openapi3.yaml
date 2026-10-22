@@ -93336,6 +93336,49 @@ components:
                 - warnings
                 - kinds
                 - failed_phases
+        AdminUpstreamOAuthMigrationExecutionProfileGap:
+            type: object
+            properties:
+                execution_context:
+                    type: string
+                    description: user_backed for turns run for a user the event identified, userless for turns run as the trigger's workload.
+                reason:
+                    type: string
+                    description: 'Why there is no choice: selection_required (several clients could serve it), personal_requires_user (only a personal client serves it, and the turn has no user), no_client or setup_incomplete.'
+                servers:
+                    type: integer
+                    description: Profile and server pairs with no choice for this reason.
+                    format: int64
+            description: MCP servers execution-selection profiles hold no choice for, for one execution context and reason.
+            required:
+                - execution_context
+                - reason
+                - servers
+        AdminUpstreamOAuthMigrationExecutionProfiles:
+            type: object
+            properties:
+                complete:
+                    type: boolean
+                    description: Whether every profile is recorded and holds a choice for every server its assistant reaches.
+                gaps:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AdminUpstreamOAuthMigrationExecutionProfileGap'
+                    description: 'Servers the profiles hold no choice for, by execution context and reason. They are never guessed: configure the server''s auth clients.'
+                pending_versions:
+                    type: integer
+                    description: Profile versions not yet recorded.
+                    format: int64
+                targets:
+                    type: integer
+                    description: Assistant and trigger pairs, each with a profile per execution context.
+                    format: int64
+            description: Where one organization stands in recording, for each assistant, trigger and execution context, the versioned auth client choices its turns use.
+            required:
+                - complete
+                - targets
+                - pending_versions
+                - gaps
         AdminUpstreamOAuthMigrationOrganization:
             type: object
             properties:
@@ -93393,6 +93436,10 @@ components:
                 auth_permission_grants_written:
                     type: integer
                     description: 'Default auth permissions this run granted across the organization: the personal default and shared client grants for every recorded client, and API key policies once every client is recorded. The auth-permission-defaults backfill grants the rest.'
+                    format: int64
+                execution_profile_versions_written:
+                    type: integer
+                    description: Execution-selection profile versions this run recorded.
                     format: int64
                 selections_mapped:
                     type: integer
@@ -93520,6 +93567,8 @@ components:
                     type: integer
                     description: Live user session credentials scanned.
                     format: int64
+                execution_profiles:
+                    $ref: '#/components/schemas/AdminUpstreamOAuthMigrationExecutionProfiles'
                 migrated:
                     type: boolean
                     description: Whether the organization has nothing left to write and no server needing configuration.

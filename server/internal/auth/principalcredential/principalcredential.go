@@ -66,6 +66,11 @@ type Credential struct {
 	// AuthorizerUserID is the user an agent acts for. Agents require one;
 	// workloads never carry one.
 	AuthorizerUserID string
+
+	// SelectionProfileVersionID is the execution-selection profile version an
+	// assistant turn's credential binds, whose choices name the auth client
+	// each MCP server is served with. Absent on credentials no profile binds.
+	SelectionProfileVersionID uuid.NullUUID
 }
 
 // Authenticated is a verified credential and its token ID.
@@ -78,9 +83,10 @@ type Authenticated struct {
 }
 
 type claims struct {
-	OrganizationID   string    `json:"org_id"`
-	ProjectID        uuid.UUID `json:"project_id"`
-	AuthorizerUserID string    `json:"authorizer_user_id,omitempty"`
+	OrganizationID            string     `json:"org_id"`
+	ProjectID                 uuid.UUID  `json:"project_id"`
+	AuthorizerUserID          string     `json:"authorizer_user_id,omitempty"`
+	SelectionProfileVersionID *uuid.UUID `json:"selection_profile_version_id,omitempty"`
 	jwt.RegisteredClaims
 }
 
@@ -97,6 +103,9 @@ func New(signer *mcpauthz.Issuer, db *pgxpool.Pool) *Issuer {
 
 func checkShape(c Credential) error {
 	if c.OrganizationID == "" || c.ProjectID == uuid.Nil {
+		return ErrInvalid
+	}
+	if c.SelectionProfileVersionID.Valid && c.SelectionProfileVersionID.UUID == uuid.Nil {
 		return ErrInvalid
 	}
 	switch c.Principal.Type {
@@ -121,8 +130,13 @@ func (i *Issuer) Mint(c Credential) (string, string, error) {
 	}
 	now := time.Now()
 	id := uuid.NewString()
+	var profileVersion *uuid.UUID
+	if c.SelectionProfileVersionID.Valid {
+		profileVersion = &c.SelectionProfileVersionID.UUID
+	}
 	raw, err := i.signer.SignRS256(claims{
 		OrganizationID: c.OrganizationID, ProjectID: c.ProjectID, AuthorizerUserID: c.AuthorizerUserID,
+		SelectionProfileVersionID: profileVersion,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Issuer: i.signer.URL(), Subject: c.Principal.String(), Audience: jwt.ClaimStrings{Audience},
 			ExpiresAt: jwt.NewNumericDate(now.Add(Lifetime)), NotBefore: nil, IssuedAt: jwt.NewNumericDate(now), ID: id,
@@ -164,7 +178,11 @@ func (i *Issuer) Validate(raw string) (Authenticated, error) {
 	if err != nil {
 		return Authenticated{}, fmt.Errorf("%w: %w", ErrInvalid, err)
 	}
-	credential := Credential{OrganizationID: c.OrganizationID, ProjectID: c.ProjectID, Principal: principal, AuthorizerUserID: c.AuthorizerUserID}
+	profileVersion := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+	if c.SelectionProfileVersionID != nil {
+		profileVersion = uuid.NullUUID{UUID: *c.SelectionProfileVersionID, Valid: true}
+	}
+	credential := Credential{OrganizationID: c.OrganizationID, ProjectID: c.ProjectID, Principal: principal, AuthorizerUserID: c.AuthorizerUserID, SelectionProfileVersionID: profileVersion}
 	if err := checkShape(credential); err != nil {
 		return Authenticated{}, err
 	}

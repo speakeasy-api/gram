@@ -24575,6 +24575,45 @@ func unmarshalAdminUpstreamOAuthMigrationSelectionGapResponseBodyToAdminAdminUps
 	return res
 }
 
+// unmarshalAdminUpstreamOAuthMigrationExecutionProfilesResponseBodyToAdminAdminUpstreamOAuthMigrationExecutionProfiles
+// builds a value of type *admin.AdminUpstreamOAuthMigrationExecutionProfiles
+// from a value of type
+// *AdminUpstreamOAuthMigrationExecutionProfilesResponseBody.
+func unmarshalAdminUpstreamOAuthMigrationExecutionProfilesResponseBodyToAdminAdminUpstreamOAuthMigrationExecutionProfiles(v *AdminUpstreamOAuthMigrationExecutionProfilesResponseBody) *admin.AdminUpstreamOAuthMigrationExecutionProfiles {
+	if v == nil {
+		return nil
+	}
+	res := &admin.AdminUpstreamOAuthMigrationExecutionProfiles{
+		Complete:        *v.Complete,
+		Targets:         *v.Targets,
+		PendingVersions: *v.PendingVersions,
+	}
+	res.Gaps = make([]*admin.AdminUpstreamOAuthMigrationExecutionProfileGap, len(v.Gaps))
+	for i, val := range v.Gaps {
+		if val == nil {
+			res.Gaps[i] = nil
+			continue
+		}
+		res.Gaps[i] = unmarshalAdminUpstreamOAuthMigrationExecutionProfileGapResponseBodyToAdminAdminUpstreamOAuthMigrationExecutionProfileGap(val)
+	}
+
+	return res
+}
+
+// unmarshalAdminUpstreamOAuthMigrationExecutionProfileGapResponseBodyToAdminAdminUpstreamOAuthMigrationExecutionProfileGap
+// builds a value of type *admin.AdminUpstreamOAuthMigrationExecutionProfileGap
+// from a value of type
+// *AdminUpstreamOAuthMigrationExecutionProfileGapResponseBody.
+func unmarshalAdminUpstreamOAuthMigrationExecutionProfileGapResponseBodyToAdminAdminUpstreamOAuthMigrationExecutionProfileGap(v *AdminUpstreamOAuthMigrationExecutionProfileGapResponseBody) *admin.AdminUpstreamOAuthMigrationExecutionProfileGap {
+	res := &admin.AdminUpstreamOAuthMigrationExecutionProfileGap{
+		ExecutionContext: *v.ExecutionContext,
+		Reason:           *v.Reason,
+		Servers:          *v.Servers,
+	}
+
+	return res
+}
+
 // unmarshalAdminUpstreamOAuthMigrationStatusResponseBodyToAdminAdminUpstreamOAuthMigrationStatus
 // builds a value of type *admin.AdminUpstreamOAuthMigrationStatus from a value
 // of type *AdminUpstreamOAuthMigrationStatusResponseBody.
@@ -24598,6 +24637,9 @@ func unmarshalAdminUpstreamOAuthMigrationStatusResponseBodyToAdminAdminUpstreamO
 	}
 	if v.AuthClients != nil {
 		res.AuthClients = unmarshalAdminUpstreamOAuthMigrationAuthClientsResponseBodyToAdminAdminUpstreamOAuthMigrationAuthClients(v.AuthClients)
+	}
+	if v.ExecutionProfiles != nil {
+		res.ExecutionProfiles = unmarshalAdminUpstreamOAuthMigrationExecutionProfilesResponseBodyToAdminAdminUpstreamOAuthMigrationExecutionProfiles(v.ExecutionProfiles)
 	}
 
 	return res

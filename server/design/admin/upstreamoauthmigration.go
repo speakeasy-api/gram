@@ -43,6 +43,26 @@ var AdminUpstreamOAuthMigrationStatus = Type("AdminUpstreamOAuthMigrationStatus"
 	Attribute("pending_selections", Int64, "Credential choices the configuration decides that are not yet recorded.")
 	Attribute("reconnect_credentials", Int64, "Credentials with at least one server they will be asked to reconnect to, because no single client is decided for them.")
 	Attribute("auth_clients", AdminUpstreamOAuthMigrationAuthClients, "Where the organization stands in recording typed auth clients. Separate from migrated: it never gates the upstream OAuth cutover. Absent when its check failed.")
+	Attribute("execution_profiles", AdminUpstreamOAuthMigrationExecutionProfiles, "Where the organization stands in recording the auth client choices its assistants' turns use. Separate from migrated. Absent when its check failed.")
+})
+
+var AdminUpstreamOAuthMigrationExecutionProfileGap = Type("AdminUpstreamOAuthMigrationExecutionProfileGap", func() {
+	Description("MCP servers execution-selection profiles hold no choice for, for one execution context and reason.")
+	Required("execution_context", "reason", "servers")
+
+	Attribute("execution_context", String, "user_backed for turns run for a user the event identified, userless for turns run as the trigger's workload.")
+	Attribute("reason", String, "Why there is no choice: selection_required (several clients could serve it), personal_requires_user (only a personal client serves it, and the turn has no user), no_client or setup_incomplete.")
+	Attribute("servers", Int64, "Profile and server pairs with no choice for this reason.")
+})
+
+var AdminUpstreamOAuthMigrationExecutionProfiles = Type("AdminUpstreamOAuthMigrationExecutionProfiles", func() {
+	Description("Where one organization stands in recording, for each assistant, trigger and execution context, the versioned auth client choices its turns use.")
+	Required("complete", "targets", "pending_versions", "gaps")
+
+	Attribute("complete", Boolean, "Whether every profile is recorded and holds a choice for every server its assistant reaches.")
+	Attribute("targets", Int64, "Assistant and trigger pairs, each with a profile per execution context.")
+	Attribute("pending_versions", Int64, "Profile versions not yet recorded.")
+	Attribute("gaps", ArrayOf(AdminUpstreamOAuthMigrationExecutionProfileGap), "Servers the profiles hold no choice for, by execution context and reason. They are never guessed: configure the server's auth clients.")
 })
 
 var AdminUpstreamOAuthMigrationUnresolvedAssociation = Type("AdminUpstreamOAuthMigrationUnresolvedAssociation", func() {
@@ -139,6 +159,7 @@ var AdminUpstreamOAuthMigrationRun = Type("AdminUpstreamOAuthMigrationRun", func
 	Attribute("auth_client_links_written", Int64, "Server to auth client links recorded.")
 	Attribute("servers_marked_requiring_upstream_auth", Int64, "Servers marked as needing upstream authentication because they offer a backfilled auth client.")
 	Attribute("selections_mapped", Int64, "Credential choices this run named a typed auth client on.")
+	Attribute("execution_profile_versions_written", Int64, "Execution-selection profile versions this run recorded.")
 	Attribute("auth_permission_grants_written", Int64, "Default auth permissions this run granted across the organization: the personal default and shared client grants for every recorded client, and API key policies once every client is recorded. The auth-permission-defaults backfill grants the rest.")
 	Attribute("auth_clients_error", String, "Why recording typed auth clients failed, when it did. The upstream OAuth migration itself is unaffected.")
 	Attribute("status", AdminUpstreamOAuthMigrationStatus, "The organization's status after the run.")

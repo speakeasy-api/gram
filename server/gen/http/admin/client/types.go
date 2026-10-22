@@ -2396,6 +2396,9 @@ type GetUpstreamOAuthMigrationStatusResponseBody struct {
 	// migrated: it never gates the upstream OAuth cutover. Absent when its check
 	// failed.
 	AuthClients *AdminUpstreamOAuthMigrationAuthClientsResponseBody `form:"auth_clients,omitempty" json:"auth_clients,omitempty" xml:"auth_clients,omitempty"`
+	// Where the organization stands in recording the auth client choices its
+	// assistants' turns use. Separate from migrated. Absent when its check failed.
+	ExecutionProfiles *AdminUpstreamOAuthMigrationExecutionProfilesResponseBody `form:"execution_profiles,omitempty" json:"execution_profiles,omitempty" xml:"execution_profiles,omitempty"`
 }
 
 // RunUpstreamOAuthMigrationResponseBody is the type of the "admin" service
@@ -2417,6 +2420,8 @@ type RunUpstreamOAuthMigrationResponseBody struct {
 	ServersMarkedRequiringUpstreamAuth *int64 `form:"servers_marked_requiring_upstream_auth,omitempty" json:"servers_marked_requiring_upstream_auth,omitempty" xml:"servers_marked_requiring_upstream_auth,omitempty"`
 	// Credential choices this run named a typed auth client on.
 	SelectionsMapped *int64 `form:"selections_mapped,omitempty" json:"selections_mapped,omitempty" xml:"selections_mapped,omitempty"`
+	// Execution-selection profile versions this run recorded.
+	ExecutionProfileVersionsWritten *int64 `form:"execution_profile_versions_written,omitempty" json:"execution_profile_versions_written,omitempty" xml:"execution_profile_versions_written,omitempty"`
 	// Default auth permissions this run granted across the organization: the
 	// personal default and shared client grants for every recorded client, and API
 	// key policies once every client is recorded. The auth-permission-defaults
@@ -21983,6 +21988,35 @@ type AdminUpstreamOAuthMigrationSelectionGapResponseBody struct {
 	Outcome *string `form:"outcome,omitempty" json:"outcome,omitempty" xml:"outcome,omitempty"`
 }
 
+// AdminUpstreamOAuthMigrationExecutionProfilesResponseBody is used to define
+// fields on response body types.
+type AdminUpstreamOAuthMigrationExecutionProfilesResponseBody struct {
+	// Whether every profile is recorded and holds a choice for every server its
+	// assistant reaches.
+	Complete *bool `form:"complete,omitempty" json:"complete,omitempty" xml:"complete,omitempty"`
+	// Assistant and trigger pairs, each with a profile per execution context.
+	Targets *int64 `form:"targets,omitempty" json:"targets,omitempty" xml:"targets,omitempty"`
+	// Profile versions not yet recorded.
+	PendingVersions *int64 `form:"pending_versions,omitempty" json:"pending_versions,omitempty" xml:"pending_versions,omitempty"`
+	// Servers the profiles hold no choice for, by execution context and reason.
+	// They are never guessed: configure the server's auth clients.
+	Gaps []*AdminUpstreamOAuthMigrationExecutionProfileGapResponseBody `form:"gaps,omitempty" json:"gaps,omitempty" xml:"gaps,omitempty"`
+}
+
+// AdminUpstreamOAuthMigrationExecutionProfileGapResponseBody is used to define
+// fields on response body types.
+type AdminUpstreamOAuthMigrationExecutionProfileGapResponseBody struct {
+	// user_backed for turns run for a user the event identified, userless for
+	// turns run as the trigger's workload.
+	ExecutionContext *string `form:"execution_context,omitempty" json:"execution_context,omitempty" xml:"execution_context,omitempty"`
+	// Why there is no choice: selection_required (several clients could serve it),
+	// personal_requires_user (only a personal client serves it, and the turn has
+	// no user), no_client or setup_incomplete.
+	Reason *string `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
+	// Profile and server pairs with no choice for this reason.
+	Servers *int64 `form:"servers,omitempty" json:"servers,omitempty" xml:"servers,omitempty"`
+}
+
 // AdminUpstreamOAuthMigrationStatusResponseBody is used to define fields on
 // response body types.
 type AdminUpstreamOAuthMigrationStatusResponseBody struct {
@@ -22009,6 +22043,9 @@ type AdminUpstreamOAuthMigrationStatusResponseBody struct {
 	// migrated: it never gates the upstream OAuth cutover. Absent when its check
 	// failed.
 	AuthClients *AdminUpstreamOAuthMigrationAuthClientsResponseBody `form:"auth_clients,omitempty" json:"auth_clients,omitempty" xml:"auth_clients,omitempty"`
+	// Where the organization stands in recording the auth client choices its
+	// assistants' turns use. Separate from migrated. Absent when its check failed.
+	ExecutionProfiles *AdminUpstreamOAuthMigrationExecutionProfilesResponseBody `form:"execution_profiles,omitempty" json:"execution_profiles,omitempty" xml:"execution_profiles,omitempty"`
 }
 
 // NewSetOrganizationFeatureRequestBody builds the HTTP request body from the
@@ -39140,6 +39177,9 @@ func NewGetUpstreamOAuthMigrationStatusAdminUpstreamOAuthMigrationStatusOK(body 
 	if body.AuthClients != nil {
 		v.AuthClients = unmarshalAdminUpstreamOAuthMigrationAuthClientsResponseBodyToAdminAdminUpstreamOAuthMigrationAuthClients(body.AuthClients)
 	}
+	if body.ExecutionProfiles != nil {
+		v.ExecutionProfiles = unmarshalAdminUpstreamOAuthMigrationExecutionProfilesResponseBodyToAdminAdminUpstreamOAuthMigrationExecutionProfiles(body.ExecutionProfiles)
+	}
 
 	return v
 }
@@ -39306,6 +39346,7 @@ func NewRunUpstreamOAuthMigrationAdminUpstreamOAuthMigrationRunOK(body *RunUpstr
 		AuthClientLinksWritten:             body.AuthClientLinksWritten,
 		ServersMarkedRequiringUpstreamAuth: body.ServersMarkedRequiringUpstreamAuth,
 		SelectionsMapped:                   body.SelectionsMapped,
+		ExecutionProfileVersionsWritten:    body.ExecutionProfileVersionsWritten,
 		AuthPermissionGrantsWritten:        body.AuthPermissionGrantsWritten,
 		AuthClientsError:                   body.AuthClientsError,
 	}
@@ -42092,6 +42133,11 @@ func ValidateGetUpstreamOAuthMigrationStatusResponseBody(body *GetUpstreamOAuthM
 	}
 	if body.AuthClients != nil {
 		if err2 := ValidateAdminUpstreamOAuthMigrationAuthClientsResponseBody(body.AuthClients); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.ExecutionProfiles != nil {
+		if err2 := ValidateAdminUpstreamOAuthMigrationExecutionProfilesResponseBody(body.ExecutionProfiles); err2 != nil {
 			err = goa.MergeErrors(err, err2)
 		}
 	}
@@ -67957,6 +68003,48 @@ func ValidateAdminUpstreamOAuthMigrationSelectionGapResponseBody(body *AdminUpst
 	return
 }
 
+// ValidateAdminUpstreamOAuthMigrationExecutionProfilesResponseBody runs the
+// validations defined on
+// AdminUpstreamOAuthMigrationExecutionProfilesResponseBody
+func ValidateAdminUpstreamOAuthMigrationExecutionProfilesResponseBody(body *AdminUpstreamOAuthMigrationExecutionProfilesResponseBody) (err error) {
+	if body.Complete == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("complete", "body"))
+	}
+	if body.Targets == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("targets", "body"))
+	}
+	if body.PendingVersions == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("pending_versions", "body"))
+	}
+	if body.Gaps == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("gaps", "body"))
+	}
+	for _, e := range body.Gaps {
+		if e != nil {
+			if err2 := ValidateAdminUpstreamOAuthMigrationExecutionProfileGapResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateAdminUpstreamOAuthMigrationExecutionProfileGapResponseBody runs the
+// validations defined on
+// AdminUpstreamOAuthMigrationExecutionProfileGapResponseBody
+func ValidateAdminUpstreamOAuthMigrationExecutionProfileGapResponseBody(body *AdminUpstreamOAuthMigrationExecutionProfileGapResponseBody) (err error) {
+	if body.ExecutionContext == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("execution_context", "body"))
+	}
+	if body.Reason == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("reason", "body"))
+	}
+	if body.Servers == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("servers", "body"))
+	}
+	return
+}
+
 // ValidateAdminUpstreamOAuthMigrationStatusResponseBody runs the validations
 // defined on AdminUpstreamOAuthMigrationStatusResponseBody
 func ValidateAdminUpstreamOAuthMigrationStatusResponseBody(body *AdminUpstreamOAuthMigrationStatusResponseBody) (err error) {
@@ -67993,6 +68081,11 @@ func ValidateAdminUpstreamOAuthMigrationStatusResponseBody(body *AdminUpstreamOA
 	}
 	if body.AuthClients != nil {
 		if err2 := ValidateAdminUpstreamOAuthMigrationAuthClientsResponseBody(body.AuthClients); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.ExecutionProfiles != nil {
+		if err2 := ValidateAdminUpstreamOAuthMigrationExecutionProfilesResponseBody(body.ExecutionProfiles); err2 != nil {
 			err = goa.MergeErrors(err, err2)
 		}
 	}
