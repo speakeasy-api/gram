@@ -36,7 +36,9 @@ export function DirectoryPeopleSummary({
   const canOpenIdentities =
     project !== undefined && hasScope("project:read", project.id);
 
-  if (!canRead || !query.data) return null;
+  // A failed refetch keeps the last data, so an error hides the count rather
+  // than showing a stale one.
+  if (!canRead || query.isError || !query.data) return null;
   const { counts } = query.data;
   const notMembers =
     counts.accountNotMember + counts.notSignedIn + counts.ambiguousEmail;

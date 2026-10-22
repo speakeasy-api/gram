@@ -3,7 +3,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 const { scopes, query } = vi.hoisted(() => ({
   scopes: new Set<string>(),
-  query: { enabled: vi.fn() },
+  query: { enabled: vi.fn(), isError: false },
 }));
 
 vi.mock("@/contexts/Auth", () => ({
@@ -39,6 +39,7 @@ vi.mock("@gram/client/react-query/directoryPeople.js", () => ({
   ) => {
     query.enabled(options.enabled);
     return {
+      isError: query.isError,
       data: options.enabled
         ? {
             people: [],
@@ -59,6 +60,7 @@ import { DirectoryPeopleSummary } from "./DirectoryPeopleSummary";
 afterEach(cleanup);
 beforeEach(() => {
   scopes.clear();
+  query.isError = false;
   vi.clearAllMocks();
 });
 
@@ -91,4 +93,12 @@ it("keeps the count but drops the link without project:read", () => {
     screen.getByText(/3 people in your directory aren't members yet/),
   ).toBeDefined();
   expect(screen.queryByRole("link")).toBeNull();
+});
+
+it("hides a stale count when the latest read failed", () => {
+  scopes.add("org:admin@org-1");
+  scopes.add("project:read@project-1");
+  query.isError = true;
+  const { container } = render(<DirectoryPeopleSummary />);
+  expect(container.textContent).toBe("");
 });
