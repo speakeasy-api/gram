@@ -211,6 +211,36 @@ func TestDirectRemoteSDKProtocolSequence(t *testing.T) {
 	}
 }
 
+func TestDirectRemoteSDKAcceptsOpenSSEStream(t *testing.T) {
+	t.Parallel()
+	var requests atomic.Int32
+	inspector := directRemoteHTTPFixture(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests.Add(1)
+		var request struct {
+			ID     json.RawMessage `json:"id"`
+			Method string          `json:"method"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Error(err)
+			return
+		}
+		result := `{"type":"complete","supportedVersions":["2026-07-28"],"capabilities":{"tools":{}}}`
+		if request.Method == "tools/list" {
+			result = `{"type":"complete","tools":[]}`
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = fmt.Fprintf(w, "event: message\ndata: {\"jsonrpc\":\"2.0\",\"id\":%s,\"result\":%s}\n\n", request.ID, result)
+		if flusher, ok := w.(http.Flusher); ok {
+			flusher.Flush()
+		}
+		<-r.Context().Done()
+	}))
+	result, err := inspector.Inspect(t.Context(), "https://remote.example.test/mcp")
+	require.NoError(t, err)
+	require.Empty(t, result.ToolNames)
+	require.Equal(t, int32(2), requests.Load())
+}
+
 func TestDirectRemoteSDKRejectsInvalidSSE(t *testing.T) {
 	t.Parallel()
 	var requests atomic.Int32
@@ -341,15 +371,13 @@ func TestDirectRemoteSDKRejectsOversizedBodyWithoutFallback(t *testing.T) {
 	require.Equal(t, int32(1), requests.Load())
 }
 
-func TestDirectRemoteBudgetedBodyExhaustion(t *testing.T) {
+func TestDirectRemoteSSEBufferExhaustion(t *testing.T) {
 	t.Parallel()
-	transport := &directRemoteRoundTripper{budget: directRemoteResponseBudget{remaining: 4}}
-	body := &directRemoteBudgetedBody{body: io.NopCloser(strings.NewReader("12345")), transport: transport}
-	payload, err := io.ReadAll(body)
-	require.Equal(t, "1234", string(payload))
+	transport := &directRemoteRoundTripper{ctx: t.Context(), budget: directRemoteResponseBudget{remaining: 4}}
+	payload, err := transport.bufferSSEThroughResponse(strings.NewReader("12345"))
+	require.Nil(t, payload)
 	require.Equal(t, SetupCategoryTemporarilyUnavailable, setupCategoryFromError(err))
-	_, _, _, failure := transport.observation()
-	require.Equal(t, SetupCategoryTemporarilyUnavailable, setupCategoryFromError(failure))
+	require.Zero(t, transport.budget.remaining)
 }
 
 func TestDirectRemoteSDKRedirectLimitIsTerminal(t *testing.T) {
