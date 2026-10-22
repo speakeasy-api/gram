@@ -304,7 +304,7 @@ export function HostedToolsTab({
               await refetch();
               void invalidateAllToolset(queryClient);
               void invalidateAllMcpServers(queryClient);
-      void invalidateAllGetMcpServer(queryClient);
+              void invalidateAllGetMcpServer(queryClient);
             })(toolUrns);
           }}
         />

@@ -253,7 +253,9 @@ export function DangerZoneSection({
                   <Switch
                     checked={enabled}
                     // Hosted servers change availability through the visibility dropdown's confirmations.
-                    disabled={isUpdatingVisibility || standsInForToolset(mcpServer)}
+                    disabled={
+                      isUpdatingVisibility || standsInForToolset(mcpServer)
+                    }
                     aria-label="Enable MCP server"
                     onCheckedChange={requestAvailabilityChange}
                   />

@@ -7,9 +7,7 @@ import {
 } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import {
-  AttachedUserSessions,
-} from "./AttachedUserSessions";
+import { AttachedUserSessions } from "./AttachedUserSessions";
 
 const mocks = vi.hoisted(() => ({
   organization: { id: "org", slug: "org" },
