@@ -77,7 +77,7 @@ Scope vocabulary, grant types, and enforcement logic are defined here. `authz`'s
 
 **Scope metadata.** `ListScopes` in `server/internal/access/impl.go` supplies scope slugs, descriptions, resource types, and visibility to dashboard scope pickers. The RBAC override toolbar also uses this catalog: user-visible scopes and groups appear automatically, and `resourceType` controls narrowing (plugin scopes use `project`). Do not maintain a duplicate frontend scope list.
 
-**Override recovery.** `ListScopes` requires `org:read`. The override editor always renders an `org:read` toggle, but does not force it on. If catalog access is denied, saved choices and cached metadata remain available. Re-enable `org:read` to clear stale organization restrictions and persist recovery before refetching, or disable the override.
+**Override recovery.** `ListScopes` requires `org:read`. The override editor always renders an `org:read` toggle, but does not force it on. If catalog access is denied, saved choices and cached metadata remain available. With no cached catalog, the editor still shows `org:read` and saved scopes under a fallback group; undiscovered catalog scopes appear after recovery. Re-enabling `org:read` automatically clears stale organization restrictions and persists the change before refetching. Alternatively, disable the override.
 
 **Full-access grant list.** `ListGrants` returns a hard-coded full-access scope list when enforcement is intentionally skipped, such as sessionless or API-key requests. That inline list in `server/internal/access/impl.go` must grow whenever a new scope is added. The parallel test expectation is `expectedFullAccessScopes` in `server/internal/access/listusergrants_test.go`.
 
