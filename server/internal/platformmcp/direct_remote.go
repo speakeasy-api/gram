@@ -360,7 +360,7 @@ func (r *directRemoteCountingReader) Read(p []byte) (int, error) {
 
 func (rt *directRemoteRoundTripper) bufferSSEThroughResponse(body io.Reader) ([]byte, error) {
 	available := rt.budget.remaining
-	counted := &directRemoteCountingReader{reader: io.LimitReader(body, int64(available)+1)}
+	counted := &directRemoteCountingReader{reader: io.LimitReader(body, int64(available)+1), read: 0}
 	reader := bufio.NewReader(counted)
 	payload := make([]byte, 0, min(4096, available))
 	eventName := ""
