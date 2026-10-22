@@ -29,8 +29,12 @@ export type AgentSessionRow = {
 };
 
 export type AgentSessionsSectionProps = {
-  /** "bare" drops the section chrome for a caller that supplies its own. */
-  variant?: "section" | "bare";
+  /**
+   * "bare" drops the section chrome for a caller that supplies its own.
+   * "panel" also drops the table's frame, for a caller whose panel border
+   * already encloses it.
+   */
+  variant?: "section" | "bare" | "panel";
   sessions: AgentSessionRow[];
   isLoading: boolean;
   isError: boolean;
@@ -256,13 +260,15 @@ export function AgentSessionsSection({
     },
   ];
 
+  // The panel supplies its own frame, so inner tables and states drop theirs.
+  const frameless = variant === "panel" ? "border-none" : undefined;
   const body = (
     <>
       {!canRead ? (
         <Text>You do not have permission to view this agent's sessions.</Text>
       ) : isLoading ? (
         <div role="status" aria-label="Loading agent sessions">
-          <SkeletonTable />
+          <SkeletonTable className={frameless} />
         </div>
       ) : isError ? (
         <div role="alert" className="space-y-3">
@@ -276,12 +282,14 @@ export function AgentSessionsSection({
           icon="key-round"
           heading="No sessions yet"
           description="Choose this agent when authorizing an MCP connection to create a session."
+          className={frameless}
         />
       ) : (
         <Table
           columns={columns}
           data={sessions}
           rowKey={(session) => session.id}
+          className={frameless}
         />
       )}
       {canRead && loadMoreError && (
@@ -306,7 +314,7 @@ export function AgentSessionsSection({
 
   return (
     <>
-      {variant === "bare" ? (
+      {variant !== "section" ? (
         // No border and no padding: the table draws its own, and the caller
         // supplying "bare" has already drawn the panel around it. Three
         // nested rectangles read as a mistake, which it was.
