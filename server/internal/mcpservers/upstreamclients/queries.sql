@@ -436,8 +436,8 @@ WHERE a.mcp_server_id = ANY(@mcp_server_ids::uuid[])
   AND a.organization_id = @organization_id::text
   AND a.deleted IS FALSE;
 
--- name: GetAuthClientSelection :one
--- One credential's choice for one MCP server, read the way the typed auth
+-- name: GetAuthClientSelection :many
+-- One credential's choices for MCP servers, read the way the typed auth
 -- client resolver reads it: the auth client the choice names, whether that
 -- client is still usable for the server, and what the server says about
 -- needing upstream authentication. A client outside the server's tenant reads
@@ -446,7 +446,45 @@ WHERE a.mcp_server_id = ANY(@mcp_server_ids::uuid[])
 -- checked against them: an OAuth client's registration must still be attached
 -- to the server, header copies must still match the server's headers, and the
 -- server's credential headers must be carried by the chosen client.
-SELECT sel.no_auth,
+WITH selected AS (
+  SELECT no_auth, auth_client_id, remote_session_client_id, mcp_server_id, project_id, organization_id,
+         FALSE AS ambiguous
+  FROM upstream_client_selections
+  WHERE NOT @proposed::boolean
+    AND credential_kind = @credential_kind::text
+    AND credential_id = @credential_id::uuid
+    AND mcp_server_id = ANY(@mcp_server_ids::uuid[])
+    AND organization_id = @organization_id::text
+    AND deleted IS FALSE
+  UNION ALL
+  SELECT sqlc.narg('proposed_registration_id')::uuid IS NULL,
+         candidates.auth_client_id,
+         sqlc.narg('proposed_registration_id')::uuid, m.id, m.project_id, p.organization_id,
+         candidates.ambiguous
+  FROM mcp_servers AS m
+  JOIN projects AS p ON p.id = m.project_id
+   AND p.organization_id = @organization_id::text AND p.deleted IS FALSE
+  CROSS JOIN LATERAL (
+    SELECT CASE WHEN count(*) = 1 THEN min(c.id::text)::uuid END AS auth_client_id,
+           count(*) > 1 AS ambiguous
+    FROM mcp_server_auth_clients AS link
+    JOIN mcp_auth_clients AS c ON c.id = link.auth_client_id
+     AND c.organization_id = link.organization_id
+     AND (c.project_id IS NULL OR c.project_id = m.project_id)
+     AND c.deleted IS FALSE
+    WHERE link.mcp_server_id = m.id AND link.organization_id = p.organization_id
+      AND link.deleted IS FALSE
+      AND ((sqlc.narg('proposed_registration_id')::uuid IS NOT NULL
+            AND c.remote_session_client_id = sqlc.narg('proposed_registration_id')::uuid
+            AND c.client_type IN ('remote_session', 'service_account'))
+           OR (sqlc.narg('proposed_registration_id')::uuid IS NULL
+               AND c.client_type IN ('static_credential', 'pass_through')))
+  ) AS candidates
+  WHERE @proposed::boolean AND m.id = ANY(@mcp_server_ids::uuid[]) AND m.deleted IS FALSE
+)
+SELECT sel.mcp_server_id,
+       sel.ambiguous,
+       sel.no_auth,
        sel.auth_client_id,
        m.name AS server_name,
        (m.tunneled_mcp_server_id IS NOT NULL)::boolean AS tunneled,
@@ -454,7 +492,7 @@ SELECT sel.no_auth,
        ac.client_type,
        ac.enabled AS client_enabled,
        ac.deleted AS client_deleted,
-       ac.remote_session_client_id AS registration_id,
+       reg.id AS registration_id,
        reg.remote_session_issuer_id AS registration_issuer_id,
        (
          reg.id IS NOT NULL
@@ -595,7 +633,7 @@ SELECT sel.no_auth,
            AND link.deleted IS FALSE
            AND e.remote_session_client_id = ac.remote_session_client_id
        )::boolean AS registration_has_ema
-FROM upstream_client_selections AS sel
+FROM selected AS sel
 JOIN mcp_servers AS m
   ON m.id = sel.mcp_server_id
  AND m.project_id = sel.project_id
@@ -605,25 +643,20 @@ LEFT JOIN mcp_auth_clients AS ac
  AND ac.organization_id = sel.organization_id
  AND (ac.project_id IS NULL OR ac.project_id = sel.project_id)
 LEFT JOIN remote_session_clients AS reg
-  ON reg.id = ac.remote_session_client_id
+  ON reg.id = COALESCE(ac.remote_session_client_id, CASE WHEN @proposed::boolean THEN sel.remote_session_client_id END)
 LEFT JOIN remote_session_issuers AS rsi
-  ON rsi.id = reg.remote_session_issuer_id
-WHERE sel.credential_kind = @credential_kind::text
-  AND sel.credential_id = @credential_id::uuid
-  AND sel.mcp_server_id = @mcp_server_id::uuid
-  AND sel.organization_id = @organization_id::text
-  AND sel.deleted IS FALSE;
+  ON rsi.id = reg.remote_session_issuer_id;
 
 -- name: ListAuthClientHeaders :many
 -- A live auth client's own headers, for the proxy to send after the server's
 -- non-credential headers. Values stay as stored; secret ones are encrypted.
-SELECT h.name, h.is_required, h.is_secret, h.value, h.value_from_request_header
+SELECT h.auth_client_id, h.name, h.is_required, h.is_secret, h.value, h.value_from_request_header
 FROM mcp_auth_client_headers AS h
 JOIN mcp_auth_clients AS ac
   ON ac.id = h.auth_client_id
  AND ac.organization_id = h.organization_id
  AND ac.deleted IS FALSE
-WHERE h.auth_client_id = @auth_client_id::uuid
+WHERE h.auth_client_id = ANY(@auth_client_ids::uuid[])
   AND h.organization_id = @organization_id::text
   AND h.deleted IS FALSE
 ORDER BY h.name, h.id;

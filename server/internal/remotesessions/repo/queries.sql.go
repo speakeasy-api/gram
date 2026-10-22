@@ -13210,16 +13210,15 @@ func (q *Queries) RetireSpeakeasyConsentEMACredentials(ctx context.Context, arg 
 const retireSpeakeasySignInConsentEMACredentials = `-- name: RetireSpeakeasySignInConsentEMACredentials :execrows
 UPDATE remote_session_ema_credentials
 SET access_token_encrypted = NULL, deleted_at = clock_timestamp(), updated_at = clock_timestamp()
-WHERE organization_id = $1::text AND project_id = $2::uuid
-  AND user_session_issuer_id = $3::uuid
-  AND subject_urn = $4::text AND sign_in_id = $5::uuid
+WHERE organization_id = $1::text
+  AND user_session_issuer_id = $2::uuid
+  AND subject_urn = $3::text AND sign_in_id = $4::uuid
   AND ema_provider = 'speakeasy' AND user_session_id IS NULL
   AND deleted IS FALSE
 `
 
 type RetireSpeakeasySignInConsentEMACredentialsParams struct {
 	OrganizationID      string
-	ProjectID           uuid.UUID
 	UserSessionIssuerID uuid.UUID
 	SubjectUrn          string
 	SignInID            uuid.UUID
@@ -13230,7 +13229,6 @@ type RetireSpeakeasySignInConsentEMACredentialsParams struct {
 func (q *Queries) RetireSpeakeasySignInConsentEMACredentials(ctx context.Context, arg RetireSpeakeasySignInConsentEMACredentialsParams) (int64, error) {
 	result, err := q.db.Exec(ctx, retireSpeakeasySignInConsentEMACredentials,
 		arg.OrganizationID,
-		arg.ProjectID,
 		arg.UserSessionIssuerID,
 		arg.SubjectUrn,
 		arg.SignInID,

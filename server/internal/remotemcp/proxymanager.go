@@ -2,6 +2,7 @@ package remotemcp
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"time"
@@ -462,4 +463,13 @@ func (f *ProxyManager) BuildTarget(
 		ResourcesListRequestInterceptors:  nil,
 		ResourcesListResponseInterceptors: nil,
 	}
+}
+
+// Dispositions supplies the proxy's shared metadata resolver to gateway discovery.
+func (f *ProxyManager) Dispositions(ctx context.Context, mcpServerID, projectID string) (map[string]string, error) {
+	dispositions, err := f.toolDispositions.Dispositions(ctx, mcpServerID, projectID)
+	if err != nil {
+		return nil, fmt.Errorf("resolve gateway tool dispositions: %w", err)
+	}
+	return dispositions, nil
 }

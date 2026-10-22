@@ -301,9 +301,13 @@ const agentAuthorizationCodePrefix = "agent-v1."
 
 const gatewayAuthorizationCodePrefix = "gateway-v1."
 
-// CacheKey implements cache.CacheableObject. Agent authorization grants use a
-// namespace that older binaries do not read, so a mixed-version deployment
-// cannot silently redeem one as a human session.
+const catalogAuthorizationCodePrefix = "gateway-v2."
+
+// userSessionGrantTTL bounds authorization-code redemption.
+const userSessionGrantTTL = 10 * time.Minute
+
+// CacheKey implements cache.CacheableObject. Agent and catalogue grants use
+// namespaces that older binaries cannot redeem without their restrictions.
 func (g UserSessionGrant) CacheKey() string {
 	return userSessionGrantCacheKey(g.UserSessionIssuerID, g.Code, g.AgentAuthorization != nil)
 }
@@ -312,6 +316,8 @@ func userSessionGrantCacheKey(issuerID uuid.UUID, code string, agentAuthorizatio
 	prefix := "userSessionGrant:"
 	if strings.HasPrefix(code, gatewayAuthorizationCodePrefix) {
 		prefix = "gatewayUserSessionGrant:"
+	} else if strings.HasPrefix(code, catalogAuthorizationCodePrefix) {
+		prefix = "gatewayCatalogGrant:"
 	}
 	if agentAuthorization {
 		prefix = "agentUserSessionGrant:"
@@ -322,7 +328,7 @@ func userSessionGrantCacheKey(issuerID uuid.UUID, code string, agentAuthorizatio
 // TTL implements cache.CacheableObject. 10 minutes is the standard OAuth code
 // lifetime — enough for a slow round trip from the MCP client to /token, short
 // enough to limit exposure if the code leaks.
-func (g UserSessionGrant) TTL() time.Duration { return 10 * time.Minute }
+func (g UserSessionGrant) TTL() time.Duration { return userSessionGrantTTL }
 
 // errIssuerGateOrgLookup marks the post-validation operational path in
 // validateUserSessionToken: the bearer token itself was accepted but the

@@ -119,6 +119,22 @@ func (s *Service) customDomainLockdownApplies(ctx context.Context, logger *slog.
 	return s.organizationCustomDomainLockdown(ctx, logger, project.OrganizationID)
 }
 
+// endpointCustomDomainLockdown is customDomainLockdownApplies for a resolved
+// endpoint. The organization gateway has no project, so it asks at its
+// organization's scope with the exemptions the agent gateway applies.
+func (s *Service) endpointCustomDomainLockdown(ctx context.Context, logger *slog.Logger, endpoint *ResolvedMcpEndpoint) (bool, error) {
+	if !endpoint.IsOrganizationGateway() {
+		return s.customDomainLockdownApplies(ctx, logger, endpoint.ProjectID)
+	}
+	if origin, ok := requestorigin.FromContext(ctx); ok && origin.Surface == requestorigin.SurfacePrivateNetwork {
+		return false, nil
+	}
+	if domainCtx := customdomains.FromContext(ctx); domainCtx != nil && domainCtx.OrganizationID == endpoint.OrganizationID {
+		return false, nil
+	}
+	return s.organizationCustomDomainLockdown(ctx, logger, endpoint.OrganizationID)
+}
+
 // organizationCustomDomainLockdown is the lockdown rule itself: whether the
 // organization's custom domain carries an IP allowlist. The policy is owned by
 // the organization, not the project — enforceCustomDomainLockdown takes a
