@@ -13518,6 +13518,81 @@ func (q *Queries) RotateLocalFixtureOrganizationRemoteSessionClient(ctx context.
 	return i, err
 }
 
+const setDuplicatedCIMDRemoteSessionClientAuthentication = `-- name: SetDuplicatedCIMDRemoteSessionClientAuthentication :one
+UPDATE remote_session_clients
+SET
+    token_endpoint_auth_method = $1,
+    token_endpoint_auth_audience_format = $2,
+    json_web_key_set_id = $3::uuid,
+    grant_types = $4::text[],
+    updated_at = clock_timestamp()
+WHERE id = $5
+  AND organization_id = $6
+  AND client_id_metadata_uri IS NOT NULL
+  AND deleted IS FALSE
+RETURNING id, project_id, organization_id, attachment_scope, remote_session_issuer_id, client_id, client_secret_encrypted, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, json_web_key_set_id, scope, grant_types, audience, token_endpoint_auth_audience_format, client_id_metadata_uri, legacy_callback_url, callback_base_url, resource_identifier, resource_name, resource_documentation, resource_policy_uri, resource_tos_uri, upstream_rejected_at, identity_provider_connection_id, credential_owner, created_at, updated_at, deleted_at, deleted
+`
+
+type SetDuplicatedCIMDRemoteSessionClientAuthenticationParams struct {
+	TokenEndpointAuthMethod         pgtype.Text
+	TokenEndpointAuthAudienceFormat pgtype.Text
+	JsonWebKeySetID                 uuid.NullUUID
+	GrantTypes                      []string
+	ID                              uuid.UUID
+	OrganizationID                  pgtype.Text
+}
+
+// Gives a duplicated client metadata document client the authentication
+// settings of the client it copies. CreateRemoteSessionClientCIMD always
+// creates a public client, while a document client may sign private_key_jwt
+// assertions with a key set, which its document then publishes. Scoped to the
+// caller's organization like the other organization-surface client writes, and
+// matches only a document client.
+func (q *Queries) SetDuplicatedCIMDRemoteSessionClientAuthentication(ctx context.Context, arg SetDuplicatedCIMDRemoteSessionClientAuthenticationParams) (RemoteSessionClient, error) {
+	row := q.db.QueryRow(ctx, setDuplicatedCIMDRemoteSessionClientAuthentication,
+		arg.TokenEndpointAuthMethod,
+		arg.TokenEndpointAuthAudienceFormat,
+		arg.JsonWebKeySetID,
+		arg.GrantTypes,
+		arg.ID,
+		arg.OrganizationID,
+	)
+	var i RemoteSessionClient
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.OrganizationID,
+		&i.AttachmentScope,
+		&i.RemoteSessionIssuerID,
+		&i.ClientID,
+		&i.ClientSecretEncrypted,
+		&i.ClientIDIssuedAt,
+		&i.ClientSecretExpiresAt,
+		&i.TokenEndpointAuthMethod,
+		&i.JsonWebKeySetID,
+		&i.Scope,
+		&i.GrantTypes,
+		&i.Audience,
+		&i.TokenEndpointAuthAudienceFormat,
+		&i.ClientIDMetadataUri,
+		&i.LegacyCallbackUrl,
+		&i.CallbackBaseUrl,
+		&i.ResourceIdentifier,
+		&i.ResourceName,
+		&i.ResourceDocumentation,
+		&i.ResourcePolicyUri,
+		&i.ResourceTosUri,
+		&i.UpstreamRejectedAt,
+		&i.IdentityProviderConnectionID,
+		&i.CredentialOwner,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const setEMABinding = `-- name: SetEMABinding :one
 UPDATE remote_session_ema_bindings b SET remote_session_client_id = CASE WHEN $1::text = 'unlinked' THEN NULL ELSE $2::uuid END,
  generation = $3, state = $1, grant_source = $4, requested_scopes = $5,
