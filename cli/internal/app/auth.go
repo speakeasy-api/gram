@@ -91,6 +91,7 @@ func DoAuth(ctx context.Context, opts AuthOptions) (*AuthResult, error) {
 		dashboardURL,
 		keysClient,
 		opts.ProfilePath,
+		auth.OpenSystemBrowser,
 	); err != nil {
 		return nil, err
 	}
@@ -218,11 +219,13 @@ func canRefreshProfile(prof *profile.Profile) bool {
 }
 
 // mintKey starts a local HTTP listener while the user authenticates in the web
-// app. The user's new API key is returned to the listener as a query param.
+// app. The user's new API key is returned to the listener as a query param,
+// and only a callback carrying this attempt's state token is accepted.
 func mintKey(
 	ctx context.Context,
 	logger *slog.Logger,
 	apiURL string,
+	openBrowser auth.BrowserOpener,
 ) (*auth.CallbackResult, error) {
 	listener, err := auth.NewListener()
 	if err != nil {
@@ -240,10 +243,12 @@ func mintKey(
 	callbackURL := listener.URL()
 	listener.Start()
 
-	dispatcher := auth.NewDispatcher(logger)
-	if err := dispatcher.Dispatch(ctx, apiURL, callbackURL); err != nil {
+	dispatcher := auth.NewDispatcher(logger, openBrowser)
+	cleanup, err := dispatcher.Dispatch(ctx, apiURL, callbackURL)
+	if err != nil {
 		return nil, fmt.Errorf("failed to dispatch auth request: %w", err)
 	}
+	defer cleanup()
 
 	result, err := listener.Wait(ctx)
 	if err != nil {
@@ -314,8 +319,9 @@ func authenticateNewProfile(
 	dashboardURL string,
 	keysClient *api.KeysClient,
 	profilePath string,
+	openBrowser auth.BrowserOpener,
 ) error {
-	callbackResult, err := mintKey(ctx, logger, dashboardURL)
+	callbackResult, err := mintKey(ctx, logger, dashboardURL, openBrowser)
 	if err != nil {
 		return err
 	}
