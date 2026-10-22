@@ -54,7 +54,7 @@ export type UserSession = {
   clientTokenEndpointAuthMethod?: string | undefined;
   createdAt: Date;
   /**
-   * Terminal session expiry; ceiling on refresh_expires_at.
+   * Current access-token expiry. An expired access token may still be refreshed before refresh_expires_at.
    */
   expiresAt: Date;
   /**
@@ -74,7 +74,7 @@ export type UserSession = {
    */
   lastUsedAt?: Date | undefined;
   /**
-   * Next refresh deadline.
+   * Inbound authorization deadline. A session can refresh its access token until this time.
    */
   refreshExpiresAt: Date;
   /**

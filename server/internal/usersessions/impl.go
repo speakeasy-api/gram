@@ -17,6 +17,8 @@ import (
 	goa "goa.design/goa/v3/pkg"
 	"goa.design/goa/v3/security"
 
+	gatewaygen "github.com/speakeasy-api/gram/server/gen/gateway_sessions"
+	gatewaysrv "github.com/speakeasy-api/gram/server/gen/http/gateway_sessions/server"
 	organizationissuerssrv "github.com/speakeasy-api/gram/server/gen/http/organization_user_session_issuers/server"
 	clientssrv "github.com/speakeasy-api/gram/server/gen/http/user_session_clients/server"
 	consentssrv "github.com/speakeasy-api/gram/server/gen/http/user_session_consents/server"
@@ -99,6 +101,8 @@ type Service struct {
 }
 
 var (
+	_ gatewaygen.Service             = (*Service)(nil)
+	_ gatewaygen.Auther              = (*Service)(nil)
 	_ issuersgen.Service             = (*Service)(nil)
 	_ issuersgen.Auther              = (*Service)(nil)
 	_ organizationissuersgen.Service = (*Service)(nil)
@@ -153,6 +157,12 @@ func Attach(mux goahttp.Muxer, service *Service) {
 		middleware.MapErrors(),
 		middleware.TraceMethods(service.tracer),
 	}
+
+	gatewayEndpoints := gatewaygen.NewEndpoints(service)
+	for _, m := range mw {
+		gatewayEndpoints.Use(m)
+	}
+	gatewaysrv.Mount(mux, gatewaysrv.New(gatewayEndpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil))
 
 	issuerEndpoints := issuersgen.NewEndpoints(service)
 	for _, m := range mw {

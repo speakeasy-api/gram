@@ -617,25 +617,37 @@ WHERE u.project_id = $1::uuid AND u.deleted IS FALSE
     AND (
       (u.mcp_server_id = $2::uuid AND u.remote_session_client_id = $3::uuid)
       OR (u.mcp_server_id = $4::uuid AND u.no_auth)
+      OR (u.credential_id = ANY($5::uuid[])
+          AND u.mcp_server_id = ANY($6::uuid[]) AND u.no_auth)
+      OR (u.credential_id = ANY($5::uuid[]) AND NOT u.no_auth
+          AND EXISTS (SELECT 1 FROM mcp_server_remote_session_clients a
+                      WHERE a.mcp_server_id = u.mcp_server_id
+                        AND a.remote_session_client_id = u.remote_session_client_id
+                        AND a.deleted IS FALSE))
     )
   )
 `
 
 type PostflightIDMisassignedUpstreamClientChoicesParams struct {
-	ProjectID      uuid.UUID
-	LinearServerID uuid.UUID
-	LinearClientID uuid.UUID
-	SlackServerID  uuid.UUID
+	ProjectID          uuid.UUID
+	LinearServerID     uuid.UUID
+	LinearClientID     uuid.UUID
+	SlackServerID      uuid.UUID
+	OrgSessionIds      []uuid.UUID
+	OrgNoAuthServerIds []uuid.UUID
 }
 
 // Live choices that are not the intended ones: Linear through its main
-// client, Slack with no upstream authentication, each on a seeded session.
+// client, Slack with no upstream authentication, and the organization gateway's
+// GitHub and tunneled inventory choices, each on a seeded session.
 func (q *Queries) PostflightIDMisassignedUpstreamClientChoices(ctx context.Context, arg PostflightIDMisassignedUpstreamClientChoicesParams) (int64, error) {
 	row := q.db.QueryRow(ctx, postflightIDMisassignedUpstreamClientChoices,
 		arg.ProjectID,
 		arg.LinearServerID,
 		arg.LinearClientID,
 		arg.SlackServerID,
+		arg.OrgSessionIds,
+		arg.OrgNoAuthServerIds,
 	)
 	var count int64
 	err := row.Scan(&count)
@@ -1202,10 +1214,10 @@ func (q *Queries) PostflightIDUnregisteredConnections(ctx context.Context, proje
 const postflightIDUpstreamClientChoices = `-- name: PostflightIDUpstreamClientChoices :one
 WITH live AS (
   SELECT id, project_id, organization_id, credential_kind, credential_id, mcp_server_id, remote_session_client_id, client_attachment_scope, no_auth, source, auth_client_id, auth_client_attachment_scope, created_at, updated_at, deleted_at, deleted FROM upstream_client_selections
-  WHERE project_id = $6::uuid AND deleted IS FALSE
+  WHERE project_id = $8::uuid AND deleted IS FALSE
 )
 SELECT count(*) FROM live
-WHERE (SELECT count(*) FROM live) = 8
+WHERE (SELECT count(*) FROM live) = 26
   AND credential_kind = 'user_session'
   AND (
     (credential_id = ANY($1::uuid[])
@@ -1218,16 +1230,31 @@ WHERE (SELECT count(*) FROM live) = 8
      AND remote_session_client_id IS NULL
      AND client_attachment_scope IS NULL
      AND no_auth IS TRUE)
+    OR
+    (credential_id = ANY($6::uuid[])
+     AND mcp_server_id = ANY($7::uuid[])
+     AND remote_session_client_id IS NULL
+     AND client_attachment_scope IS NULL
+     AND no_auth IS TRUE)
+    OR
+    (credential_id = ANY($6::uuid[])
+     AND no_auth IS FALSE
+     AND EXISTS (SELECT 1 FROM mcp_server_remote_session_clients a
+                 WHERE a.mcp_server_id = live.mcp_server_id
+                   AND a.remote_session_client_id = live.remote_session_client_id
+                   AND a.deleted IS FALSE))
   )
 `
 
 type PostflightIDUpstreamClientChoicesParams struct {
-	LinearSessionIds []uuid.UUID
-	LinearServerID   uuid.UUID
-	LinearClientID   uuid.UUID
-	SlackSessionIds  []uuid.UUID
-	SlackServerID    uuid.UUID
-	ProjectID        uuid.UUID
+	LinearSessionIds   []uuid.UUID
+	LinearServerID     uuid.UUID
+	LinearClientID     uuid.UUID
+	SlackSessionIds    []uuid.UUID
+	SlackServerID      uuid.UUID
+	OrgSessionIds      []uuid.UUID
+	OrgNoAuthServerIds []uuid.UUID
+	ProjectID          uuid.UUID
 }
 
 // Check both the total and the expected credential/server/client tuples so
@@ -1239,6 +1266,8 @@ func (q *Queries) PostflightIDUpstreamClientChoices(ctx context.Context, arg Pos
 		arg.LinearClientID,
 		arg.SlackSessionIds,
 		arg.SlackServerID,
+		arg.OrgSessionIds,
+		arg.OrgNoAuthServerIds,
 		arg.ProjectID,
 	)
 	var count int64
