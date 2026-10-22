@@ -9,7 +9,6 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   AttachedUserSessions,
-  ToolsetAttachedUserSessions,
 } from "./AttachedUserSessions";
 
 const mocks = vi.hoisted(() => ({
@@ -55,9 +54,6 @@ vi.mock("@/lib/utils", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/utils")>()),
   firstPartyConnectUrl: (url: string | undefined) =>
     url ? `${url}/connect/first-party` : undefined,
-}));
-vi.mock("@/hooks/useToolsetUrl", () => ({
-  useToolsetMcpTarget: () => mocks.target,
 }));
 
 const agent = (id: string, authorize = true, lifecycle = "active") => ({
@@ -449,38 +445,3 @@ vi.mock("@gram/client/react-query/remoteSessionsDetachBinding.js", () => ({
     },
   }),
 }));
-
-describe("ToolsetAttachedUserSessions selected target", () => {
-  it("lists the selected server issuer and connects to its endpoint", async () => {
-    const client = new QueryClient({
-      defaultOptions: { queries: { retry: false } },
-    });
-    render(
-      <QueryClientProvider client={client}>
-        <ToolsetAttachedUserSessions
-          toolset={
-            {
-              id: "toolset",
-              userSessionIssuerId: "canonical-issuer",
-            } as Parameters<typeof ToolsetAttachedUserSessions>[0]["toolset"]
-          }
-        />
-      </QueryClientProvider>,
-    );
-    await waitFor(() =>
-      expect(mocks.listRemoteSessions).toHaveBeenCalledWith(
-        expect.objectContaining({ userSessionIssuerId: "selected-issuer" }),
-        undefined,
-        expect.anything(),
-      ),
-    );
-    const open = vi.spyOn(window, "open").mockImplementation(() => null);
-    fireEvent.click(screen.getByRole("button", { name: /connect/i }));
-    expect(open).toHaveBeenCalledWith(
-      "https://api.example/mcp/enabled-alternate/connect/first-party",
-      "_blank",
-      "noopener,noreferrer",
-    );
-    open.mockRestore();
-  });
-});

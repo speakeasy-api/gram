@@ -16,7 +16,6 @@ export function PageSection({
 }: {
   heading: string;
   description: string;
-  fullWidth?: boolean;
   featureType?: "experimental" | "beta";
   action?: React.ReactNode;
   headingExtra?: React.ReactNode;

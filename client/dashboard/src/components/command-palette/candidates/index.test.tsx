@@ -495,7 +495,7 @@ describe("useMcpServerCandidates", () => {
     expect(mocks.goToToolsetDetails).not.toHaveBeenCalled();
   });
 
-  it("names the hosting server of a toolset with no canonical wrapper by its toolset", async () => {
+  it("opens the hosting server of a toolset with no canonical wrapper under its own name", async () => {
     mocks.mcpServers = [
       {
         ...HOSTED_ROW,
@@ -511,7 +511,7 @@ describe("useMcpServerCandidates", () => {
     const { result } = renderCandidates();
     const [hosted] = byKind(result.current, "mcp_server");
 
-    expect(hosted?.title).toBe("Hosted tools");
+    expect(hosted?.title).toBe("Hosted wrapper");
     await act(async () => {
       await hosted?.run("open");
     });

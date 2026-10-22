@@ -1,6 +1,9 @@
 import type { ExternalMcpOAuthConfigStatus } from "@/components/sources/sources-hooks";
 import { mcpServerRouteParam } from "@/lib/sources";
-import { standsInForToolset } from "@/pages/mcp/x/MCPServerDetailsRouting";
+import {
+  isCanonicalHostedWrapper,
+  standsInForToolset,
+} from "@/pages/mcp/x/MCPServerDetailsRouting";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import type { McpServerToolsetSummary } from "@gram/client/models/components/mcpservertoolsetsummary.js";
 import type { useRoutes } from "@/routes";
@@ -60,7 +63,8 @@ export function standInToolset(
 }
 
 export function mcpServerDisplayName(server: McpServer): string {
-  const preferred = standInToolset(server)
+  // A canonical server's name is its toolset's; any other server is renamed on its own row.
+  const preferred = isCanonicalHostedWrapper(server)
     ? server.toolset?.name || server.name
     : server.name || server.toolset?.name;
   return preferred || "MCP Server";

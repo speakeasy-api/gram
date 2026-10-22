@@ -353,7 +353,7 @@ export function PlaygroundAuth({
       <Text variant="small" className="text-muted-foreground pt-2">
         <routes.mcp.details.Link
           params={[toolset.slug]}
-          hash="authentication"
+          hash="environment"
           className="hover:text-foreground underline"
         >
           Configure auth

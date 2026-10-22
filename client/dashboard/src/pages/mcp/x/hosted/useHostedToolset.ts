@@ -8,6 +8,8 @@ import { useListToolsets } from "@gram/client/react-query/listToolsets.js";
 export function useHostedToolset(server: McpServer | undefined): {
   toolset: Toolset | undefined;
   isLoading: boolean;
+  isError: boolean;
+  refetch: () => void;
 } {
   const gramProject = useProjectSlugForRequests();
   const summarySlug = server?.toolset?.slug;
@@ -20,7 +22,12 @@ export function useHostedToolset(server: McpServer | undefined): {
   const slug =
     summarySlug ??
     toolsetsResult?.toolsets.find((t) => t.id === server?.toolsetId)?.slug;
-  const { data: toolset, isLoading: isLoadingToolset } = useToolset(slug, {
+  const {
+    data: toolset,
+    isLoading: isLoadingToolset,
+    isError,
+    refetch,
+  } = useToolset(slug, {
     enabled: slug !== undefined,
     throwOnError: false,
   });
@@ -29,5 +36,7 @@ export function useHostedToolset(server: McpServer | undefined): {
     isLoading:
       server !== undefined &&
       ((!summarySlug && isLoadingList) || (!!slug && isLoadingToolset)),
+    isError,
+    refetch: () => void refetch(),
   };
 }

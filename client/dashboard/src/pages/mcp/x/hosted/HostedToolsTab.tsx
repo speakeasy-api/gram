@@ -24,6 +24,7 @@ import {
   invalidateListToolsetToolFilters,
   useListToolsetToolFilters,
 } from "@gram/client/react-query/listToolsetToolFilters.js";
+import { invalidateAllGetMcpServer } from "@gram/client/react-query/getMcpServer.js";
 import { invalidateAllMcpServers } from "@gram/client/react-query/mcpServers.js";
 import { invalidateAllToolset } from "@gram/client/react-query/toolset.js";
 import { useUpdateToolsetMutation } from "@gram/client/react-query/updateToolset.js";
@@ -98,6 +99,7 @@ export function HostedToolsTab({
       void refetch();
       void invalidateAllToolset(queryClient);
       void invalidateAllMcpServers(queryClient);
+      void invalidateAllGetMcpServer(queryClient);
     },
     onError: (error) => {
       telemetry.capture("toolset_event", {
@@ -302,6 +304,7 @@ export function HostedToolsTab({
               await refetch();
               void invalidateAllToolset(queryClient);
               void invalidateAllMcpServers(queryClient);
+      void invalidateAllGetMcpServer(queryClient);
             })(toolUrns);
           }}
         />

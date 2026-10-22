@@ -499,8 +499,7 @@ const ROUTE_STRUCTURE = {
           },
         },
       },
-      // Every MCP server's page, hosted ones included; old `:toolsetSlug`
-      // links redirect here. Retiring the `x/` prefix is AIS-643.
+      // Every MCP server's page; `:toolsetSlug` links redirect here (prefix retired in AIS-643).
       x: {
         title: "MCP Server Details",
         url: "x/:mcpServerSlug",
@@ -514,15 +513,12 @@ const ROUTE_STRUCTURE = {
             title: "MCP Server Inspect",
             url: "inspect",
           },
-          // Legacy route: MCPServerDetails redirects `authentication` to
-          // settings#authentication now that authentication lives under
-          // Settings.
+          // Legacy: redirects to settings#authentication.
           authentication: {
             title: "MCP Server Authentication",
             url: "authentication",
           },
-          // Hosted servers manage their toolset here; on other servers `tools`
-          // is the old name of Inspect and redirects there.
+          // Hosted servers' tools; on other servers this redirects to Inspect.
           tools: {
             title: "MCP Server Tools",
             url: "tools",

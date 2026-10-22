@@ -45,6 +45,7 @@ describe("serverTabForToolsetTab", () => {
     ["performance", "", "settings", "#performance"],
     [undefined, "#authentication", "settings", "#authentication"],
     [undefined, "#tools", "tools", ""],
+    [undefined, "#environment", "settings", "#environment"],
     ["unknown", "", "overview", ""],
   ] as const)("maps %s%s to %s%s", (segment, hash, tab, targetHash) => {
     expect(serverTabForToolsetTab(segment, hash)).toEqual({

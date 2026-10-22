@@ -44,7 +44,14 @@ export function ToolsetRedirectPage(): React.JSX.Element | null {
     return <ToolsetNotFound title="MCP server not found" />;
   }
   if (toolsetError) throw toolsetError;
-  if (serversError) throw serversError;
+  if (serversError) {
+    return (
+      <ToolsetNotFound
+        title="MCP server could not be loaded"
+        description="Reload the page to try again."
+      />
+    );
+  }
   if (isLoadingToolset || isLoadingServers || !toolset || !serversResult) {
     return null;
   }
@@ -56,7 +63,7 @@ export function ToolsetRedirectPage(): React.JSX.Element | null {
     return (
       <ToolsetNotFound
         title={`${toolset.name} has no MCP server`}
-        description="No MCP server in this project serves this toolset. It may only be reachable through a gateway."
+        description="No MCP server in this project serves these tools. They may only be reachable through a gateway."
       />
     );
   }

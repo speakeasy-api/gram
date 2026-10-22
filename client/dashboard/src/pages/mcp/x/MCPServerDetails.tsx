@@ -10,6 +10,7 @@ import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { AttachedUserSessions } from "@/components/sessions/AttachedUserSessions";
 import { useRBAC } from "@/hooks/useRBAC";
+import { useTelemetry } from "@/contexts/Telemetry";
 import { useTabScrollReset } from "@/hooks/useTabScrollReset";
 import { platformEndpointSlug } from "@/hooks/useToolsetUrl";
 import {
@@ -36,6 +37,10 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/Dropdown";
 import { Switch } from "@/components/ui/Switch";
+import { Alert } from "@/components/ui/Alert";
+import { Button } from "@/components/ui/Button";
+import { Stack } from "@/components/ui/Stack";
+import { Text } from "@/components/ui/Text";
 import { useQueryClient } from "@tanstack/react-query";
 import { ArrowRight, Check, ChevronDown } from "lucide-react";
 import { Link, Navigate, useLocation, useParams } from "react-router";
@@ -92,8 +97,12 @@ export default function MCPServerDetails(): JSX.Element {
 
   const mcpServerId = mcpServer?.id ?? "";
   const hosted = mcpServer !== undefined && standsInForToolset(mcpServer);
-  const { toolset: hostedToolset, isLoading: isLoadingToolset } =
-    useHostedToolset(hosted ? mcpServer : undefined);
+  const {
+    toolset: hostedToolset,
+    isLoading: isLoadingToolset,
+    isError: toolsetFailed,
+    refetch: refetchToolset,
+  } = useHostedToolset(hosted ? mcpServer : undefined);
 
   const { data: endpointsResult, isLoading: isLoadingEndpoints } =
     useMcpEndpoints({ mcpServerId }, undefined, {
@@ -161,25 +170,53 @@ export default function MCPServerDetails(): JSX.Element {
     );
   }
   const renderTabContent = () => {
+    // Hosted tabs and settings need the toolset; never fall back to another layout.
+    if (hosted && activeTab !== "overview" && !hostedToolset) {
+      if (isLoadingToolset) return null;
+      return (
+        <div className="mx-auto w-full max-w-[1270px] px-8 py-8">
+          <Alert variant="error" dismissible={false}>
+            <Stack gap={2}>
+              <Text small>
+                {toolsetFailed
+                  ? "This server's tools could not be loaded."
+                  : "This server's tools are no longer available."}
+              </Text>
+              <div>
+                <Button variant="secondary" size="sm" onClick={refetchToolset}>
+                  <Button.Text>Retry</Button.Text>
+                </Button>
+              </div>
+            </Stack>
+          </Alert>
+        </div>
+      );
+    }
     switch (activeTab) {
       case "tools":
-        return hostedToolset ? (
-          <div className="px-8 py-8">
-            <HostedToolsTab toolset={hostedToolset} />
-          </div>
-        ) : null;
+        return (
+          hostedToolset && (
+            <div className="mx-auto w-full max-w-[1270px] px-8 py-8">
+              <HostedToolsTab toolset={hostedToolset} />
+            </div>
+          )
+        );
       case "resources":
-        return hostedToolset ? (
-          <div className="px-8 py-8">
-            <HostedResourcesTab toolset={hostedToolset} />
-          </div>
-        ) : null;
+        return (
+          hostedToolset && (
+            <div className="mx-auto w-full max-w-[1270px] px-8 py-8">
+              <HostedResourcesTab toolset={hostedToolset} />
+            </div>
+          )
+        );
       case "prompts":
-        return hostedToolset ? (
-          <div className="px-8 py-8">
-            <HostedPromptsTab toolset={hostedToolset} />
-          </div>
-        ) : null;
+        return (
+          hostedToolset && (
+            <div className="mx-auto w-full max-w-[1270px] px-8 py-8">
+              <HostedPromptsTab toolset={hostedToolset} />
+            </div>
+          )
+        );
       case "overview":
         return (
           mcpServer && (
@@ -205,19 +242,15 @@ export default function MCPServerDetails(): JSX.Element {
             <RequireScope scope="org:read" level="page">
               <RequireScope
                 scope="mcp:read"
-                resourceId={mcpServer.id}
+                resourceId={mcpServer.toolsetId ?? mcpServer.id}
                 level="page"
               >
-                {/* Endpoint calls check access on this server's id, which a
-                  canonical hosted server shares with its toolset. Only a
-                  hosted server has a tool catalog for per-tool rules. */}
-                {hosted && isLoadingToolset ? null : (
-                  <MCPTeamAccessTab
-                    resourceId={mcpServer.id}
-                    serverName={mcpServer.name ?? undefined}
-                    tools={hostedToolset?.tools}
-                  />
-                )}
+                {/* Reads gate on the toolset id like the API; grants key on the server id that endpoint calls check. */}
+                <MCPTeamAccessTab
+                  resourceId={mcpServer.id}
+                  serverName={mcpServer.name ?? undefined}
+                  tools={hostedToolset?.tools}
+                />
               </RequireScope>
             </RequireScope>
           )
@@ -351,8 +384,8 @@ export function MCPServerStatusDropdown({
     useMcpServerVisibilityUpdate(server);
   const hosted = standsInForToolset(server);
   const guard = useHostedVisibilityGuard({
-    toolsetSlug: hosted ? server.toolset?.slug : undefined,
-    current: server.visibility,
+    server,
+    hosted,
     apply: updateVisibility,
     isApplying: updating,
   });
@@ -513,7 +546,8 @@ export function MCPServerAvailabilityToggle({
     >
       <Switch
         checked={available}
-        disabled={!canWrite || updating}
+        // Hosted servers change availability through the dropdown's confirmations.
+        disabled={!canWrite || updating || standsInForToolset(server)}
         aria-label={label}
         onCheckedChange={(checked) => {
           updateVisibility(checked ? "private" : "disabled");
@@ -545,11 +579,24 @@ function useMcpServerVisibilityUpdate(server: McpServer): {
     hasScope("mcp:write") &&
     isKnownEnumValue(KnownUpdateMcpServerFormVisibility, server.visibility);
   const queryClient = useQueryClient();
+  const telemetry = useTelemetry();
   const update = useUpdateMcpServerMutation({
     onSuccess: async (_data, variables) => {
       await invalidateMcpServerQueries(queryClient);
       const next = variables.request.updateMcpServerForm.visibility;
       toast.success(mcpServerVisibilityToast(next));
+      // Keeps the toolset page's visibility events for hosted servers.
+      if (standsInForToolset(server)) {
+        telemetry.capture("mcp_event", {
+          action:
+            next === "disabled"
+              ? "mcp_disabled"
+              : next === "public"
+                ? "mcp_made_public"
+                : "mcp_made_private",
+          slug: server.toolset?.slug,
+        });
+      }
     },
     onError: (error) => {
       toast.error(

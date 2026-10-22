@@ -39,6 +39,8 @@ export function serverTabForToolsetTab(
       return { tab: "settings", hash: "#authentication" };
     case "performance":
       return { tab: "settings", hash: "#performance" };
+    case "environment":
+      return { tab: "settings", hash: "#environment" };
     case "settings":
       // Keep a section anchor the settings tab may know (#authentication, ...).
       return { tab: "settings", hash: segment ? hash : "" };

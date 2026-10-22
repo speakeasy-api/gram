@@ -19,7 +19,7 @@ import { getServerURL } from "@/lib/utils";
 import { useMcpSlugValidation } from "@/pages/mcp/mcp-details-utils";
 import { PageSection } from "@/pages/mcp/PageSection";
 import { useRoutes } from "@/routes";
-import { invalidateAllMcpServers } from "@gram/client/react-query/mcpServers.js";
+import { invalidateMcpServerQueries } from "@/lib/mcp-server-visibility";
 import { invalidateAllToolset } from "@gram/client/react-query/toolset.js";
 import { useUpdateToolsetMutation } from "@gram/client/react-query/updateToolset.js";
 import { useQueryClient } from "@tanstack/react-query";
@@ -28,10 +28,7 @@ import React, { useState } from "react";
 import { useParams } from "react-router";
 import { toast } from "sonner";
 
-/**
- * The canonical hosted server's address. Its endpoint is still owned by the
- * toolset, so the slug and custom domain write through toolsets.update.
- */
+// A canonical server's endpoint is still toolset-owned, so these write through toolsets.update.
 export function HostedAddressSections({
   toolset,
 }: {
@@ -49,7 +46,7 @@ export function HostedAddressSections({
   const updateToolsetMutation = useUpdateToolsetMutation({
     onSuccess: () => {
       void invalidateAllToolset(queryClient);
-      void invalidateAllMcpServers(queryClient);
+      void invalidateMcpServerQueries(queryClient);
       toast.success("MCP settings saved successfully");
       telemetry.capture("mcp_event", {
         action: "mcp_settings_saved",
@@ -68,7 +65,7 @@ export function HostedAddressSections({
 
   const mcpSlugError = useMcpSlugValidation(mcpSlug, toolset.mcpSlug);
 
-  const { url: _mcpUrl, customServerURL } = useMcpUrl(toolset);
+  const { customServerURL } = useMcpUrl(toolset);
 
   const handleMcpSlugChange = (value: string) => {
     value = value.slice(0, 40);

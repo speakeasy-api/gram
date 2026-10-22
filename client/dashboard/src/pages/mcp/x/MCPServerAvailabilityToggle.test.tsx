@@ -13,6 +13,7 @@ import {
 const mocks = vi.hoisted(() => ({
   hasScope: vi.fn(),
   guardRequest: vi.fn(),
+  capture: vi.fn(),
   mutate: vi.fn(),
   mutationOptions: vi.fn(),
   invalidateAudience: vi.fn(() => Promise.resolve()),
@@ -23,16 +24,19 @@ vi.mock("@gram/client/react-query/resourceAudience.js", () => ({
   invalidateAllResourceAudience: mocks.invalidateAudience,
 }));
 
+vi.mock("@/contexts/Telemetry", () => ({
+  useTelemetry: () => ({ capture: mocks.capture }),
+}));
 vi.mock("./hosted/useHostedVisibilityGuard", () => ({
   useHostedVisibilityGuard: ({
-    toolsetSlug,
+    server,
     apply,
   }: {
-    toolsetSlug?: string;
+    server: { toolset?: { slug: string } };
     apply: (next: string) => void;
   }) => ({
     request: (next: string) => {
-      mocks.guardRequest(toolsetSlug, next);
+      mocks.guardRequest(server.toolset?.slug, next);
       apply(next);
     },
     publicUnavailable: false,
@@ -277,20 +281,12 @@ describe("hosted MCP server visibility", () => {
     visibility: "private",
   } as McpServer;
 
-  it("lets the availability switch disable a hosted server", () => {
+  it("keeps the availability switch on the dropdown's confirmations", () => {
     renderToggle(hosted);
 
-    fireEvent.click(screen.getByRole("switch", { name: "Disable MCP server" }));
-
-    expect(mocks.mutate).toHaveBeenCalledWith({
-      request: {
-        updateMcpServerForm: expect.objectContaining({
-          id: "hosted-1",
-          toolsetId: "hosted-1",
-          visibility: "disabled",
-        }),
-      },
-    });
+    expect(
+      screen.getByRole("switch", { name: "Disable MCP server" }),
+    ).toHaveProperty("disabled", true);
   });
 
   it("offers Public through the hosted confirmations", () => {

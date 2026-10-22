@@ -1,26 +1,28 @@
 import { PublicMcpWarningDialog } from "@/components/public-mcp-warning-dialog";
 import { ServerEnableDialog } from "@/components/server-enable-dialog";
+import { Button } from "@/components/ui/Button";
+import { Dialog } from "@/components/ui/Dialog";
 import { useToolset } from "@/hooks/toolTypes";
 import { getSystemProvidedVariables } from "@/pages/mcp/environmentVariableUtils";
 import { useEnvironmentVariables } from "@/pages/mcp/useEnvironmentVariables";
-import type { McpServerVisibility } from "@gram/client/models/components/mcpserver.js";
+import { isCanonicalHostedWrapper } from "@/pages/mcp/x/MCPServerDetailsRouting";
+import type {
+  McpServer,
+  McpServerVisibility,
+} from "@gram/client/models/components/mcpserver.js";
 import { useGetMcpMetadata } from "@gram/client/react-query/getMcpMetadata.js";
 import { useListEnvironments } from "@gram/client/react-query/listEnvironments.js";
 import React, { useMemo, useState } from "react";
 
-/**
- * The confirmations a hosted server's visibility change goes through: a
- * warning before going public with system-provided variables, and the enable
- * dialog (with its free-tier gate) when enabling or disabling.
- */
+// Confirmations before a hosted server's visibility changes, as the toolset page had.
 export function useHostedVisibilityGuard({
-  toolsetSlug,
-  current,
+  server,
+  hosted,
   apply,
   isApplying,
 }: {
-  toolsetSlug: string | undefined;
-  current: McpServerVisibility;
+  server: McpServer;
+  hosted: boolean;
   apply: (next: McpServerVisibility) => void;
   isApplying: boolean;
 }): {
@@ -28,6 +30,8 @@ export function useHostedVisibilityGuard({
   publicUnavailable: boolean;
   dialogs: React.ReactNode;
 } {
+  const toolsetSlug = hosted ? server.toolset?.slug : undefined;
+  const canonical = hosted && isCanonicalHostedWrapper(server);
   const enabled = toolsetSlug !== undefined;
   const { data: toolset } = useToolset(toolsetSlug, {
     enabled,
@@ -36,8 +40,9 @@ export function useHostedVisibilityGuard({
   const { data: environmentsData } = useListEnvironments(undefined, undefined, {
     enabled,
   });
+  // A canonical server shares its toolset's metadata; any other host has its own.
   const { data: metadataData, isLoading: metadataLoading } = useGetMcpMetadata(
-    { toolsetSlug: toolsetSlug ?? "" },
+    canonical ? { toolsetSlug: toolsetSlug ?? "" } : { mcpServerId: server.id },
     undefined,
     // 404 means no attached environment, so it must not lock Public.
     { enabled, retry: false, throwOnError: false },
@@ -59,20 +64,30 @@ export function useHostedVisibilityGuard({
     [envVars, attachedEnvironment],
   );
 
+  const current = server.visibility;
   const [publicPending, setPublicPending] =
     useState<McpServerVisibility | null>(null);
   const [enablePending, setEnablePending] =
     useState<McpServerVisibility | null>(null);
+  const [oauthBlockOpen, setOauthBlockOpen] = useState(false);
   // Until the attached environment resolves, Public could skip the warning.
   const publicUnavailable =
     enabled && (metadataLoading || !environmentsData || !toolset);
 
   const needsEnableDialog = (next: McpServerVisibility) =>
     next === "disabled" || current === "disabled";
+  // The server refuses to flip public access while toolset OAuth is attached.
+  const blockedByOAuth = (next: McpServerVisibility) =>
+    canonical &&
+    !!toolset?.externalOauthServer &&
+    next !== "disabled" &&
+    (next === "public") !== (toolset.mcpIsPublic ?? false);
 
   const request = (next: McpServerVisibility) => {
     if (next === current) return;
-    if (next === "public") {
+    if (blockedByOAuth(next)) {
+      setOauthBlockOpen(true);
+    } else if (next === "public") {
       setPublicPending(next);
     } else if (needsEnableDialog(next)) {
       setEnablePending(next);
@@ -83,6 +98,21 @@ export function useHostedVisibilityGuard({
 
   const dialogs = toolsetSlug ? (
     <>
+      <Dialog open={oauthBlockOpen} onOpenChange={setOauthBlockOpen}>
+        <Dialog.Content className="max-w-md">
+          <Dialog.Header>
+            <Dialog.Title>Remove external OAuth first</Dialog.Title>
+            <Dialog.Description>
+              This server has an external OAuth configuration. Remove it or
+              convert it to a session issuer in Settings before changing who can
+              reach the server.
+            </Dialog.Description>
+          </Dialog.Header>
+          <Dialog.Footer>
+            <Button onClick={() => setOauthBlockOpen(false)}>Close</Button>
+          </Dialog.Footer>
+        </Dialog.Content>
+      </Dialog>
       <PublicMcpWarningDialog
         isOpen={publicPending !== null}
         onClose={() => setPublicPending(null)}

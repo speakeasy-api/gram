@@ -14,6 +14,9 @@ const mocks = vi.hoisted(() => ({
   invalidateAllMcpEndpoints: vi.fn(() => Promise.resolve()),
   invalidateAllPlugins: vi.fn(() => Promise.resolve()),
   invalidateAllPublishStatus: vi.fn(() => Promise.resolve()),
+  invalidateAllToolset: vi.fn(() => Promise.resolve()),
+  invalidateAllListToolsets: vi.fn(() => Promise.resolve()),
+  invalidateAllGetPeriodUsage: vi.fn(() => Promise.resolve()),
 }));
 
 vi.mock("@gram/client/react-query/resourceAudience.js", () => ({
@@ -33,6 +36,15 @@ vi.mock("@gram/client/react-query/plugins.js", () => ({
 }));
 vi.mock("@gram/client/react-query/publishStatus.js", () => ({
   invalidateAllPublishStatus: mocks.invalidateAllPublishStatus,
+}));
+vi.mock("@gram/client/react-query/toolset.js", () => ({
+  invalidateAllToolset: mocks.invalidateAllToolset,
+}));
+vi.mock("@gram/client/react-query/listToolsets.js", () => ({
+  invalidateAllListToolsets: mocks.invalidateAllListToolsets,
+}));
+vi.mock("@gram/client/react-query/getPeriodUsage.js", () => ({
+  invalidateAllGetPeriodUsage: mocks.invalidateAllGetPeriodUsage,
 }));
 
 function mcpServer(overrides: Partial<McpServer> = {}): McpServer {
@@ -173,6 +185,10 @@ describe("invalidateMcpServerQueries", () => {
       queryClient,
       filters,
     );
+    // A hosted server's visibility writes through to its toolset.
+    expect(mocks.invalidateAllToolset).toHaveBeenCalledWith(queryClient);
+    expect(mocks.invalidateAllListToolsets).toHaveBeenCalledWith(queryClient);
+    expect(mocks.invalidateAllGetPeriodUsage).toHaveBeenCalledWith(queryClient);
   });
 
   it("waits for every invalidation before resolving", async () => {

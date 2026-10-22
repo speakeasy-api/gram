@@ -40,7 +40,10 @@ import {
   type SourceBackedDeleteTarget,
 } from "./sourceDelete";
 import { invalidateWrapperDeleteAuthViews } from "./sourceInvalidation";
-import { isCanonicalHostedWrapper } from "@/pages/mcp/x/MCPServerDetailsRouting";
+import {
+  isCanonicalHostedWrapper,
+  standsInForToolset,
+} from "@/pages/mcp/x/MCPServerDetailsRouting";
 import { DeleteHostedServerButton } from "@/pages/mcp/x/hosted/DeleteHostedServerButton";
 import type { Toolset } from "@/lib/toolTypes";
 
@@ -249,7 +252,8 @@ export function DangerZoneSection({
                 >
                   <Switch
                     checked={enabled}
-                    disabled={isUpdatingVisibility}
+                    // Hosted servers change availability through the visibility dropdown's confirmations.
+                    disabled={isUpdatingVisibility || standsInForToolset(mcpServer)}
                     aria-label="Enable MCP server"
                     onCheckedChange={requestAvailabilityChange}
                   />

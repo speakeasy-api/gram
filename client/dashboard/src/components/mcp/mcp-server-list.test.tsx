@@ -181,7 +181,7 @@ describe("hosted wrappers", () => {
     expect(screen.getByText("Support (unknown)")).toBeTruthy();
   });
 
-  it("lists the hosting server of a toolset with no canonical wrapper under the toolset's name", () => {
+  it("lists the hosting server of a toolset with no canonical wrapper as hosted", () => {
     renderRows([
       server({
         id: "wrapper-2",
@@ -193,7 +193,7 @@ describe("hosted wrappers", () => {
       }),
     ]);
     const link = screen.getByRole("link", {
-      name: "Open MCP server Hosted tools",
+      name: "Open MCP server Support",
     });
     expect(link.getAttribute("href")).toBe("/mcp/x/wrapper-2");
     expect(screen.getByText("12 tools")).toBeTruthy();

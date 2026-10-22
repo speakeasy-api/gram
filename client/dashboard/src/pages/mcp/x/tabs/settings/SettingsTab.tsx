@@ -7,6 +7,7 @@ import {
   ServerUrlSection,
 } from "./sections/ServerUrlSection";
 
+import { RequireScope } from "@/components/require-scope";
 import { useResolvedMcpServerUrl } from "@/hooks/useToolsetUrl";
 import type { Toolset } from "@/lib/toolTypes";
 import {
@@ -61,8 +62,8 @@ import {
 
 // Every section that can be deep-linked from elsewhere in the dashboard
 // (readiness bar, visibility picker, rate-limit hint, connections panel).
-export const MCP_PERFORMANCE_SECTION_ID = "performance";
-export const MCP_ENVIRONMENT_SECTION_ID = "environment";
+const MCP_PERFORMANCE_SECTION_ID = "performance";
+const MCP_ENVIRONMENT_SECTION_ID = "environment";
 
 const SCROLLABLE_SECTION_IDS: readonly string[] = [
   MCP_SERVER_URL_SECTION_ID,
@@ -160,14 +161,17 @@ export function SettingsTab({
   }
 
   if (hostedToolset) {
-    // Toolset columns sync onto the canonical server only, so another hosting
-    // server keeps its own address and sign-in sections.
+    // Toolset columns sync onto the canonical server only.
     const canonical = isCanonicalHostedWrapper(mcpServer);
     return (
       <div className="mx-auto w-full max-w-[1270px] space-y-10 px-8 py-8">
         <GeneralSection mcpServer={mcpServer} />
         {canonical ? (
-          <>
+          <RequireScope
+            scope="mcp:write"
+            resourceId={hostedToolset.id}
+            level="section"
+          >
             <HostedAddressSections toolset={hostedToolset} />
             <NetworkAccessSection toolset={hostedToolset} />
             <div id={MCP_AUTHENTICATION_SECTION_ID}>
@@ -176,7 +180,7 @@ export function SettingsTab({
             <div id={MCP_ENVIRONMENT_SECTION_ID}>
               <MCPAuthenticationTab toolset={hostedToolset} showOAuth={false} />
             </div>
-          </>
+          </RequireScope>
         ) : (
           <>
             <ServerUrlSection
@@ -189,9 +193,15 @@ export function SettingsTab({
             <AuthenticationSection mcpServer={mcpServer} mcpUrl={mcpUrl} />
           </>
         )}
-        <div id={MCP_PERFORMANCE_SECTION_ID}>
-          <MCPPerformanceTab toolset={hostedToolset} />
-        </div>
+        <RequireScope
+          scope="mcp:write"
+          resourceId={hostedToolset.id}
+          level="section"
+        >
+          <div id={MCP_PERFORMANCE_SECTION_ID}>
+            <MCPPerformanceTab toolset={hostedToolset} />
+          </div>
+        </RequireScope>
         <PageSection
           heading="Server Instructions"
           description="Instructions returned to LLMs when they connect to your MCP server. Describe how your tools work together, required workflows, and any constraints."

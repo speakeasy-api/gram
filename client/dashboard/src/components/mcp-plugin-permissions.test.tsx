@@ -122,6 +122,16 @@ vi.mock("@/pages/mcp/x/MCPServerDetailsRouting", () => ({
   activeTabFromPath: () => "overview",
   mcpServerTabHref: () => "/mcp",
   standsInForToolset: () => false,
+  isCanonicalHostedWrapper: () => false,
+}));
+vi.mock("@/hooks/toolTypes", () => ({
+  useToolset: () => ({ data: undefined }),
+}));
+vi.mock("@gram/client/react-query/listEnvironments.js", () => ({
+  useListEnvironments: () => ({ data: undefined }),
+}));
+vi.mock("@gram/client/react-query/getMcpMetadata.js", () => ({
+  useGetMcpMetadata: () => ({ data: undefined }),
 }));
 vi.mock(
   "@/pages/mcp/x/tabs/settings/sections/authentication/AuthenticationSection",

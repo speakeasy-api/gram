@@ -29,9 +29,14 @@ import {
 } from "@/pages/mcp/x/MCPServerDetails";
 import {
   activeTabFromPath,
+  isCanonicalHostedWrapper,
   mcpServerTabHref,
   standsInForToolset,
 } from "@/pages/mcp/x/MCPServerDetailsRouting";
+import { useToolset } from "@/hooks/toolTypes";
+import { useMissingRequiredEnvVars } from "@/hooks/useMissingEnvironmentVariables";
+import { useGetMcpMetadata } from "@gram/client/react-query/getMcpMetadata.js";
+import { useListEnvironments } from "@gram/client/react-query/listEnvironments.js";
 import { hostedToolCountLabel } from "@/components/mcp/mcp-server-kind";
 import { MCP_AGENT_SETUP_SECTION_ID } from "@/pages/mcp/x/tabs/settings/sections/AgentSetupSection";
 import { MCP_AUTHENTICATION_SECTION_ID } from "@/pages/mcp/x/tabs/settings/sections/authentication/AuthenticationSection";
@@ -59,6 +64,7 @@ import { useRemoteMcpServerHeaders } from "@gram/client/react-query/remoteMcpSer
 import { usePlugins } from "@gram/client/react-query/plugins";
 import { usePublishStatus } from "@gram/client/react-query/publishStatus";
 import {
+  AlertTriangle,
   ArrowRight,
   ExternalLink,
   Info,
@@ -419,6 +425,30 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
   );
   const isTrulyIncluded = isPluginMember && marketplaceReady;
 
+  const canonicalToolsetSlug =
+    mcpServer && isCanonicalHostedWrapper(mcpServer)
+      ? mcpServer.toolset?.slug
+      : undefined;
+  const { data: canonicalToolset } = useToolset(canonicalToolsetSlug, {
+    enabled: canonicalToolsetSlug !== undefined,
+    throwOnError: false,
+  });
+  const { data: environmentsData } = useListEnvironments(undefined, undefined, {
+    enabled: canonicalToolsetSlug !== undefined,
+  });
+  const { data: canonicalMetadata } = useGetMcpMetadata(
+    { toolsetSlug: canonicalToolsetSlug ?? "" },
+    undefined,
+    { enabled: canonicalToolsetSlug !== undefined, throwOnError: false },
+  );
+  // Settings carries the warning the toolset page put on Authentication.
+  const missingRequiredEnvVars = useMissingRequiredEnvVars(
+    canonicalToolset,
+    environmentsData?.environments ?? [],
+    canonicalToolset?.defaultEnvironmentSlug || "default",
+    canonicalMetadata?.metadata,
+  );
+
   if (!idOrSlug) return null;
 
   const activeTab = activeTabFromPath(location.pathname, idOrSlug);
@@ -640,6 +670,16 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
       key: "settings",
       title: "Settings",
       Icon: SettingsIcon,
+      titleNode:
+        missingRequiredEnvVars > 0 ? (
+          <span className="flex items-center gap-1.5">
+            Settings
+            <AlertTriangle
+              className="text-warning h-3.5 w-3.5 shrink-0"
+              aria-label="Required environment variables not configured"
+            />
+          </span>
+        ) : undefined,
       href: mcpServerTabHref(routes, idOrSlug, "settings"),
       active: activeTab === "settings",
     },

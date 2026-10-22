@@ -43,6 +43,7 @@ export function ExportJsonSection({
       URL.revokeObjectURL(url);
       telemetry.capture("mcp_event", {
         action: "mcp_json_exported",
+        slug: mcpServer.toolset?.slug,
         mcp_server_id: mcpServer.id,
       });
       toast.success("MCP configuration exported", { id: toastId });
