@@ -92712,7 +92712,7 @@ components:
                     type: array
                     items:
                         type: string
-                    description: 'Phases whose check failed: oauth, headers, ema, reconcile or mark. The counts cover the other phases.'
+                    description: 'Phases whose check failed: oauth, headers, ema, reconcile, mark or selections. The counts cover the other phases.'
                 in_progress:
                     type: boolean
                     description: Whether a run is recording typed auth clients for the organization right now. The other counts are then empty; check again when it finishes.
@@ -92741,6 +92741,27 @@ components:
                     type: integer
                     description: Backfilled auth clients and server links the configuration no longer yields, not yet retired.
                     format: int64
+                pending_selection_mappings:
+                    type: integer
+                    description: Live credential choices with exactly one auth client to name, not yet named.
+                    format: int64
+                selection_classes:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AdminUpstreamOAuthMigrationSelectionClass'
+                    description: Credential choice coverage for each credential class.
+                selection_gap_count:
+                    type: integer
+                    description: Every live credential choice left without a usable auth client, including those beyond selection_gaps.
+                    format: int64
+                selection_gaps:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AdminUpstreamOAuthMigrationSelectionGap'
+                    description: The first live credential choices left without a usable auth client.
+                selections_complete:
+                    type: boolean
+                    description: Whether every live credential choice names a usable auth client or is an explicit no-auth choice, and the selections check did not fail.
                 unresolved:
                     type: integer
                     description: Configured identities that cannot be recorded without a guess and need attention.
@@ -92770,6 +92791,11 @@ components:
                 - warnings
                 - kinds
                 - failed_phases
+                - selections_complete
+                - pending_selection_mappings
+                - selection_classes
+                - selection_gaps
+                - selection_gap_count
         AdminUpstreamOAuthMigrationOrganization:
             type: object
             properties:
@@ -92828,6 +92854,10 @@ components:
                     type: integer
                     description: 'Default auth permissions this run granted across the organization: the personal default and shared client grants for every recorded client, and API key policies once every client is recorded. The auth-permission-defaults backfill grants the rest.'
                     format: int64
+                selections_mapped:
+                    type: integer
+                    description: Credential choices this run named a typed auth client on.
+                    format: int64
                 selections_written:
                     type: integer
                     description: Credential choices recorded.
@@ -92844,6 +92874,88 @@ components:
                 - associations_skipped
                 - selections_written
                 - status
+        AdminUpstreamOAuthMigrationSelectionClass:
+            type: object
+            properties:
+                ambiguous:
+                    type: integer
+                    description: 'Choices several auth clients could serve. They are never guessed: configure the server or ask the credential to reconnect.'
+                    format: int64
+                credential_class:
+                    type: string
+                    description: 'The class: interactive, id_jag, dashboard_mint, workload or agent.'
+                mapped:
+                    type: integer
+                    description: Choices that already name a usable auth client.
+                    format: int64
+                no_auth:
+                    type: integer
+                    description: Explicit no-auth choices on servers with no auth client.
+                    format: int64
+                no_client:
+                    type: integer
+                    description: Choices whose upstream OAuth client has no live, enabled auth client linked to the server.
+                    format: int64
+                pending:
+                    type: integer
+                    description: Choices with exactly one auth client to name, not yet named.
+                    format: int64
+                selections:
+                    type: integer
+                    description: Live credential choices of this class.
+                    format: int64
+                stale_no_auth:
+                    type: integer
+                    description: No-auth choices on servers that now offer an OAuth-backed client; the credential reconnects.
+                    format: int64
+                unusable:
+                    type: integer
+                    description: Choices naming an auth client that is no longer usable for the server; the credential reconnects.
+                    format: int64
+            description: How the live credential choices of one credential class map onto typed auth clients.
+            required:
+                - credential_class
+                - selections
+                - mapped
+                - pending
+                - no_auth
+                - ambiguous
+                - no_client
+                - stale_no_auth
+                - unusable
+        AdminUpstreamOAuthMigrationSelectionGap:
+            type: object
+            properties:
+                credential_class:
+                    type: string
+                    description: The class of the credential the choice belongs to.
+                credential_id:
+                    type: string
+                    description: The credential.
+                    format: uuid
+                mcp_server_id:
+                    type: string
+                    description: The server the choice is for.
+                    format: uuid
+                outcome:
+                    type: string
+                    description: 'Why the choice has no usable auth client: ambiguous, no_client, stale_no_auth, unusable or skipped_race.'
+                project_id:
+                    type: string
+                    description: The server's project.
+                    format: uuid
+                selection_id:
+                    type: string
+                    description: The choice.
+                    format: uuid
+            description: One live credential choice left without a usable typed auth client.
+            required:
+                - selection_id
+                - credential_class
+                - credential_id
+                - mcp_server_id
+                - project_id
+                - outcome
         AdminUpstreamOAuthMigrationServer:
             type: object
             properties:

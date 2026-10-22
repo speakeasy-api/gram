@@ -227,6 +227,8 @@ trackedFiles:
   src/models/components/adminupstreamoauthmigrationorganization.ts: {}
   src/models/components/adminupstreamoauthmigrationorganizations.ts: {}
   src/models/components/adminupstreamoauthmigrationrun.ts: {}
+  src/models/components/adminupstreamoauthmigrationselectionclass.ts: {}
+  src/models/components/adminupstreamoauthmigrationselectiongap.ts: {}
   src/models/components/adminupstreamoauthmigrationserver.ts: {}
   src/models/components/adminupstreamoauthmigrationstatus.ts: {}
   src/models/components/adminupstreamoauthmigrationunresolvedassociation.ts: {}

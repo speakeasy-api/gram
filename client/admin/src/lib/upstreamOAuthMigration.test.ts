@@ -35,6 +35,11 @@ function status(
             warnings: [],
             kinds: [],
             failedPhases: [],
+            selectionsComplete: true,
+            pendingSelectionMappings: 0,
+            selectionClasses: [],
+            selectionGaps: [],
+            selectionGapCount: 0,
           },
   };
 }
@@ -78,6 +83,25 @@ describe("needsMigrationRun", () => {
     }
     expect(needsMigrationRun(headers)).toBe(true);
     expect(needsMigrationRun(failed)).toBe(true);
+  });
+
+  it("includes an organization with credential choices to map", () => {
+    const s = status(true, false);
+    if (s.authClients) {
+      s.authClients.pendingClients = 0;
+      s.authClients.pendingSelectionMappings = 1;
+    }
+    expect(needsMigrationRun(s)).toBe(true);
+  });
+
+  it("skips an organization whose only choice gaps need a reconnect", () => {
+    const s = status(true, false);
+    if (s.authClients) {
+      s.authClients.pendingClients = 0;
+      s.authClients.selectionsComplete = false;
+      s.authClients.selectionGapCount = 3;
+    }
+    expect(needsMigrationRun(s)).toBe(false);
   });
 
   it("skips an organization whose auth clients a run is recording", () => {

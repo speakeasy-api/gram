@@ -1533,6 +1533,133 @@ WHERE p.id = s.project_id
   )
 RETURNING s.id;
 
+-- name: ListLiveCredentialClasses :many
+-- One row per live user session credential in the organization after the
+-- cursor, with the class coverage is reported by. A credential is live while a
+-- row of it is not deleted and can still refresh; its class is read from its
+-- latest row. The refresh token hash prefixes are the ones issuance writes:
+-- id-jag: for an inbound ID-JAG exchange and dashboard-mint for a session the
+-- dashboard minted. A workload session stores no refresh token hash.
+SELECT DISTINCT ON (COALESCE(s.credential_id, s.id))
+       COALESCE(s.credential_id, s.id)::uuid AS credential_id,
+       (CASE
+         WHEN s.subject_urn LIKE 'agent:%' THEN 'agent'
+         WHEN s.subject_urn LIKE 'workload:%' OR s.refresh_token_hash IS NULL THEN 'workload'
+         WHEN s.refresh_token_hash LIKE 'id-jag:%' THEN 'id_jag'
+         WHEN s.refresh_token_hash LIKE 'dashboard-mint%' THEN 'dashboard_mint'
+         ELSE 'interactive'
+       END)::text AS credential_class
+FROM user_sessions AS s
+JOIN user_session_issuers AS usi
+  ON usi.id = s.user_session_issuer_id
+LEFT JOIN projects AS p
+  ON p.id = usi.project_id
+WHERE s.deleted IS FALSE
+  AND s.refresh_expires_at > clock_timestamp()
+  AND COALESCE(s.credential_id, s.id) > @cursor::uuid
+  AND COALESCE(usi.organization_id, p.organization_id) = @organization_id::text
+ORDER BY COALESCE(s.credential_id, s.id), s.created_at DESC
+LIMIT @page_size::int;
+
+-- name: ListSelectionMappings :many
+-- Every live choice in the organization after the cursor, with what mapping
+-- it onto a typed auth client decides from. An OAuth choice can name the live
+-- remote_session or service_account clients of its registration that are
+-- linked to the server. A no-auth choice can name the server's linked
+-- static_credential or pass_through clients while the server has no linked
+-- OAuth-backed client: that is the server's own headers, which the no-auth
+-- choice was served with before the server's headers became auth clients. A
+-- mapped choice is usable while its client is live, enabled, linked to the
+-- server and, for an OAuth choice, still the registration's.
+SELECT sel.id,
+       sel.project_id,
+       sel.credential_kind,
+       sel.credential_id,
+       sel.mcp_server_id,
+       sel.remote_session_client_id,
+       sel.no_auth,
+       sel.auth_client_id,
+       (sel.auth_client_id IS NOT NULL AND EXISTS (
+         SELECT 1
+         FROM mcp_auth_clients AS ac
+         JOIN mcp_server_auth_clients AS l
+           ON l.auth_client_id = ac.id
+          AND l.mcp_server_id = sel.mcp_server_id
+          AND l.deleted IS FALSE
+         WHERE ac.id = sel.auth_client_id
+           AND ac.organization_id = sel.organization_id
+           AND ac.deleted IS FALSE
+           AND ac.enabled
+           AND (sel.remote_session_client_id IS NULL OR ac.remote_session_client_id = sel.remote_session_client_id)
+       ))::boolean AS mapped_usable,
+       ARRAY(
+         SELECT ac.id
+         FROM mcp_auth_clients AS ac
+         JOIN mcp_server_auth_clients AS l
+           ON l.auth_client_id = ac.id
+          AND l.mcp_server_id = sel.mcp_server_id
+          AND l.deleted IS FALSE
+         WHERE ac.organization_id = sel.organization_id
+           AND ac.deleted IS FALSE
+           AND ac.enabled
+           AND (
+             (sel.remote_session_client_id IS NOT NULL
+              AND ac.remote_session_client_id = sel.remote_session_client_id
+              AND ac.client_type IN ('remote_session', 'service_account'))
+             OR (sel.no_auth
+                 AND ac.client_type IN ('static_credential', 'pass_through'))
+           )
+         ORDER BY ac.id
+       )::uuid[] AS candidate_ids,
+       EXISTS (
+         SELECT 1
+         FROM mcp_auth_clients AS ac
+         JOIN mcp_server_auth_clients AS l
+           ON l.auth_client_id = ac.id
+          AND l.mcp_server_id = sel.mcp_server_id
+          AND l.deleted IS FALSE
+         WHERE ac.organization_id = sel.organization_id
+           AND ac.deleted IS FALSE
+           AND ac.client_type IN ('remote_session', 'service_account', 'ema')
+       )::boolean AS server_has_oauth_clients
+FROM upstream_client_selections AS sel
+WHERE sel.organization_id = @organization_id::text
+  AND sel.deleted IS FALSE
+  AND sel.id > @cursor::uuid
+ORDER BY sel.id
+LIMIT @page_size::int;
+
+-- name: MapSelectionToAuthClient :execrows
+-- Names a typed auth client on one choice, conditional on the evidence it was
+-- decided from: the choice is still unmapped and unchanged, and the client is
+-- still live, enabled and linked to the server. Naming a client is never
+-- no-auth, so a no-auth choice served by the server's headers stops being one;
+-- the upstream client choice reads a choice naming a header client as no-auth,
+-- as before.
+UPDATE upstream_client_selections AS sel
+SET auth_client_id = ac.id,
+    auth_client_attachment_scope = ac.attachment_scope,
+    no_auth = FALSE,
+    updated_at = clock_timestamp()
+FROM mcp_auth_clients AS ac
+WHERE sel.id = @id::uuid
+  AND sel.organization_id = @organization_id::text
+  AND sel.deleted IS FALSE
+  AND sel.auth_client_id IS NULL
+  AND sel.no_auth = @no_auth::boolean
+  AND sel.remote_session_client_id IS NOT DISTINCT FROM sqlc.narg('remote_session_client_id')::uuid
+  AND ac.id = @auth_client_id::uuid
+  AND ac.organization_id = sel.organization_id
+  AND ac.deleted IS FALSE
+  AND ac.enabled
+  AND EXISTS (
+    SELECT 1
+    FROM mcp_server_auth_clients AS l
+    WHERE l.auth_client_id = ac.id
+      AND l.mcp_server_id = sel.mcp_server_id
+      AND l.deleted IS FALSE
+  );
+
 -- name: SeedOrganizationFixture :exec
 INSERT INTO organization_metadata (id, name, slug) VALUES (@id, @id, @id);
 
@@ -1858,3 +1985,18 @@ INSERT INTO principal_remote_session_bindings (project_id, organization_id, prin
 SELECT @project_id, @organization_id, @agent_id, @user_session_issuer_id, @remote_session_client_id, session.id, session.grant_generation + @generation_offset::bigint, @attached_by::text
 FROM session
 RETURNING id;
+
+-- name: SeedOAuthSelectionFixture :exec
+INSERT INTO upstream_client_selections (project_id, organization_id, credential_kind, credential_id, mcp_server_id, remote_session_client_id, client_attachment_scope, no_auth, source)
+SELECT @project_id, @organization_id, 'user_session', @credential_id, @mcp_server_id, c.id, c.attachment_scope, FALSE, 'issuance'
+FROM remote_session_clients AS c
+WHERE c.id = @remote_session_client_id::uuid;
+
+-- name: SeedUserSessionFixture :exec
+INSERT INTO user_sessions (project_id, organization_id, user_session_issuer_id, subject_urn, jti, refresh_token_hash, refresh_expires_at, expires_at, credential_id)
+VALUES (@project_id, @organization_id, @user_session_issuer_id, @subject_urn, @jti, sqlc.narg('refresh_token_hash'), clock_timestamp() + interval '1 day', clock_timestamp() + interval '1 hour', @credential_id);
+
+-- name: GetSelectionFixture :one
+SELECT remote_session_client_id, auth_client_id, no_auth
+FROM upstream_client_selections
+WHERE credential_id = @credential_id AND mcp_server_id = @mcp_server_id AND deleted IS FALSE;

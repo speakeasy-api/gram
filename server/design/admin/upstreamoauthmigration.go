@@ -75,9 +75,36 @@ var AdminUpstreamOAuthMigrationAuthClientKind = Type("AdminUpstreamOAuthMigratio
 	Attribute("unresolved", Int64, "Configuration that cannot be recorded without a guess.")
 })
 
+var AdminUpstreamOAuthMigrationSelectionClass = Type("AdminUpstreamOAuthMigrationSelectionClass", func() {
+	Description("How the live credential choices of one credential class map onto typed auth clients.")
+	Required("credential_class", "selections", "mapped", "pending", "no_auth", "ambiguous", "no_client", "stale_no_auth", "unusable")
+
+	Attribute("credential_class", String, "The class: interactive, id_jag, dashboard_mint, workload or agent.")
+	Attribute("selections", Int64, "Live credential choices of this class.")
+	Attribute("mapped", Int64, "Choices that already name a usable auth client.")
+	Attribute("pending", Int64, "Choices with exactly one auth client to name, not yet named.")
+	Attribute("no_auth", Int64, "Explicit no-auth choices on servers with no auth client.")
+	Attribute("ambiguous", Int64, "Choices several auth clients could serve. They are never guessed: configure the server or ask the credential to reconnect.")
+	Attribute("no_client", Int64, "Choices whose upstream OAuth client has no live, enabled auth client linked to the server.")
+	Attribute("stale_no_auth", Int64, "No-auth choices on servers that now offer an OAuth-backed client; the credential reconnects.")
+	Attribute("unusable", Int64, "Choices naming an auth client that is no longer usable for the server; the credential reconnects.")
+})
+
+var AdminUpstreamOAuthMigrationSelectionGap = Type("AdminUpstreamOAuthMigrationSelectionGap", func() {
+	Description("One live credential choice left without a usable typed auth client.")
+	Required("selection_id", "credential_class", "credential_id", "mcp_server_id", "project_id", "outcome")
+
+	Attribute("selection_id", String, "The choice.", func() { Format(FormatUUID) })
+	Attribute("credential_class", String, "The class of the credential the choice belongs to.")
+	Attribute("credential_id", String, "The credential.", func() { Format(FormatUUID) })
+	Attribute("mcp_server_id", String, "The server the choice is for.", func() { Format(FormatUUID) })
+	Attribute("project_id", String, "The server's project.", func() { Format(FormatUUID) })
+	Attribute("outcome", String, "Why the choice has no usable auth client: ambiguous, no_client, stale_no_auth, unusable or skipped_race.")
+})
+
 var AdminUpstreamOAuthMigrationAuthClients = Type("AdminUpstreamOAuthMigrationAuthClients", func() {
 	Description("Where one organization stands in recording a typed auth client for every upstream identity its servers are configured with (upstream OAuth clients, source credential headers and identity chaining upstreams), and in retiring backfilled records the configuration no longer yields. Nothing reads these records yet.")
-	Required("complete", "in_progress", "associations", "pending_clients", "pending_links", "pending_headers", "pending_retirements", "pending_marked_servers", "unresolved", "unresolved_associations", "warnings", "kinds", "failed_phases")
+	Required("complete", "in_progress", "associations", "pending_clients", "pending_links", "pending_headers", "pending_retirements", "pending_marked_servers", "unresolved", "unresolved_associations", "warnings", "kinds", "failed_phases", "selections_complete", "pending_selection_mappings", "selection_classes", "selection_gaps", "selection_gap_count")
 
 	Attribute("complete", Boolean, "Whether every configured identity has its auth client, server links and header copies recorded, no backfilled record is left to retire, no server offering one is left undecided, and no phase failed.")
 	Attribute("in_progress", Boolean, "Whether a run is recording typed auth clients for the organization right now. The other counts are then empty; check again when it finishes.")
@@ -91,7 +118,12 @@ var AdminUpstreamOAuthMigrationAuthClients = Type("AdminUpstreamOAuthMigrationAu
 	Attribute("unresolved_associations", ArrayOf(AdminUpstreamOAuthMigrationUnresolvedAssociation), "The configuration counted in unresolved.")
 	Attribute("warnings", ArrayOf(AdminUpstreamOAuthMigrationUnresolvedAssociation), "Configuration worth a look that needs no action and does not hold back complete, such as a server at an identity chaining upstream's origin that only live discovery could confirm.")
 	Attribute("kinds", ArrayOf(AdminUpstreamOAuthMigrationAuthClientKind), "The same counts for each kind of configured identity.")
-	Attribute("failed_phases", ArrayOf(String), "Phases whose check failed: oauth, headers, ema, reconcile or mark. The counts cover the other phases.")
+	Attribute("failed_phases", ArrayOf(String), "Phases whose check failed: oauth, headers, ema, reconcile, mark or selections. The counts cover the other phases.")
+	Attribute("selections_complete", Boolean, "Whether every live credential choice names a usable auth client or is an explicit no-auth choice, and the selections check did not fail.")
+	Attribute("pending_selection_mappings", Int64, "Live credential choices with exactly one auth client to name, not yet named.")
+	Attribute("selection_classes", ArrayOf(AdminUpstreamOAuthMigrationSelectionClass), "Credential choice coverage for each credential class.")
+	Attribute("selection_gaps", ArrayOf(AdminUpstreamOAuthMigrationSelectionGap), "The first live credential choices left without a usable auth client.")
+	Attribute("selection_gap_count", Int64, "Every live credential choice left without a usable auth client, including those beyond selection_gaps.")
 })
 
 var AdminUpstreamOAuthMigrationRun = Type("AdminUpstreamOAuthMigrationRun", func() {
@@ -104,6 +136,7 @@ var AdminUpstreamOAuthMigrationRun = Type("AdminUpstreamOAuthMigrationRun", func
 	Attribute("auth_clients_written", Int64, "Typed auth clients recorded.")
 	Attribute("auth_client_links_written", Int64, "Server to auth client links recorded.")
 	Attribute("servers_marked_requiring_upstream_auth", Int64, "Servers marked as needing upstream authentication because they offer a backfilled auth client.")
+	Attribute("selections_mapped", Int64, "Credential choices this run named a typed auth client on.")
 	Attribute("auth_permission_grants_written", Int64, "Default auth permissions this run granted across the organization: the personal default and shared client grants for every recorded client, and API key policies once every client is recorded. The auth-permission-defaults backfill grants the rest.")
 	Attribute("auth_clients_error", String, "Why recording typed auth clients failed, when it did. The upstream OAuth migration itself is unaffected.")
 	Attribute("status", AdminUpstreamOAuthMigrationStatus, "The organization's status after the run.")

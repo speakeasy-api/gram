@@ -12,6 +12,14 @@ import {
   AdminUpstreamOAuthMigrationAuthClientKind$inboundSchema,
 } from "./adminupstreamoauthmigrationauthclientkind.js";
 import {
+  AdminUpstreamOAuthMigrationSelectionClass,
+  AdminUpstreamOAuthMigrationSelectionClass$inboundSchema,
+} from "./adminupstreamoauthmigrationselectionclass.js";
+import {
+  AdminUpstreamOAuthMigrationSelectionGap,
+  AdminUpstreamOAuthMigrationSelectionGap$inboundSchema,
+} from "./adminupstreamoauthmigrationselectiongap.js";
+import {
   AdminUpstreamOAuthMigrationUnresolvedAssociation,
   AdminUpstreamOAuthMigrationUnresolvedAssociation$inboundSchema,
 } from "./adminupstreamoauthmigrationunresolvedassociation.js";
@@ -29,7 +37,7 @@ export type AdminUpstreamOAuthMigrationAuthClients = {
    */
   complete: boolean;
   /**
-   * Phases whose check failed: oauth, headers, ema, reconcile or mark. The counts cover the other phases.
+   * Phases whose check failed: oauth, headers, ema, reconcile, mark or selections. The counts cover the other phases.
    */
   failedPhases: Array<string>;
   /**
@@ -61,6 +69,26 @@ export type AdminUpstreamOAuthMigrationAuthClients = {
    */
   pendingRetirements: number;
   /**
+   * Live credential choices with exactly one auth client to name, not yet named.
+   */
+  pendingSelectionMappings: number;
+  /**
+   * Credential choice coverage for each credential class.
+   */
+  selectionClasses: Array<AdminUpstreamOAuthMigrationSelectionClass>;
+  /**
+   * Every live credential choice left without a usable auth client, including those beyond selection_gaps.
+   */
+  selectionGapCount: number;
+  /**
+   * The first live credential choices left without a usable auth client.
+   */
+  selectionGaps: Array<AdminUpstreamOAuthMigrationSelectionGap>;
+  /**
+   * Whether every live credential choice names a usable auth client or is an explicit no-auth choice, and the selections check did not fail.
+   */
+  selectionsComplete: boolean;
+  /**
    * Configured identities that cannot be recorded without a guess and need attention.
    */
   unresolved: number;
@@ -90,6 +118,15 @@ export const AdminUpstreamOAuthMigrationAuthClients$inboundSchema:
       pending_links: z.int(),
       pending_marked_servers: z.int(),
       pending_retirements: z.int(),
+      pending_selection_mappings: z.int(),
+      selection_classes: z.array(
+        AdminUpstreamOAuthMigrationSelectionClass$inboundSchema,
+      ),
+      selection_gap_count: z.int(),
+      selection_gaps: z.array(
+        AdminUpstreamOAuthMigrationSelectionGap$inboundSchema,
+      ),
+      selections_complete: z.boolean(),
       unresolved: z.int(),
       unresolved_associations: z.array(
         AdminUpstreamOAuthMigrationUnresolvedAssociation$inboundSchema,
@@ -107,6 +144,11 @@ export const AdminUpstreamOAuthMigrationAuthClients$inboundSchema:
         "pending_links": "pendingLinks",
         "pending_marked_servers": "pendingMarkedServers",
         "pending_retirements": "pendingRetirements",
+        "pending_selection_mappings": "pendingSelectionMappings",
+        "selection_classes": "selectionClasses",
+        "selection_gap_count": "selectionGapCount",
+        "selection_gaps": "selectionGaps",
+        "selections_complete": "selectionsComplete",
         "unresolved_associations": "unresolvedAssociations",
       });
     }),

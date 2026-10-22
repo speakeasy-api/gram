@@ -422,6 +422,30 @@ func (q *Queries) GetRequiresUpstreamAuthFixture(ctx context.Context, id uuid.UU
 	return requires_upstream_auth, err
 }
 
+const getSelectionFixture = `-- name: GetSelectionFixture :one
+SELECT remote_session_client_id, auth_client_id, no_auth
+FROM upstream_client_selections
+WHERE credential_id = $1 AND mcp_server_id = $2 AND deleted IS FALSE
+`
+
+type GetSelectionFixtureParams struct {
+	CredentialID uuid.UUID
+	McpServerID  uuid.UUID
+}
+
+type GetSelectionFixtureRow struct {
+	RemoteSessionClientID uuid.NullUUID
+	AuthClientID          uuid.NullUUID
+	NoAuth                bool
+}
+
+func (q *Queries) GetSelectionFixture(ctx context.Context, arg GetSelectionFixtureParams) (GetSelectionFixtureRow, error) {
+	row := q.db.QueryRow(ctx, getSelectionFixture, arg.CredentialID, arg.McpServerID)
+	var i GetSelectionFixtureRow
+	err := row.Scan(&i.RemoteSessionClientID, &i.AuthClientID, &i.NoAuth)
+	return i, err
+}
+
 const hardDeleteAssociationFixture = `-- name: HardDeleteAssociationFixture :exec
 DELETE FROM mcp_server_remote_session_clients WHERE id = $1
 `
@@ -1824,6 +1848,66 @@ func (q *Queries) ListLiveAuthClientIDsFixture(ctx context.Context, organization
 	return items, nil
 }
 
+const listLiveCredentialClasses = `-- name: ListLiveCredentialClasses :many
+SELECT DISTINCT ON (COALESCE(s.credential_id, s.id))
+       COALESCE(s.credential_id, s.id)::uuid AS credential_id,
+       (CASE
+         WHEN s.subject_urn LIKE 'agent:%' THEN 'agent'
+         WHEN s.subject_urn LIKE 'workload:%' OR s.refresh_token_hash IS NULL THEN 'workload'
+         WHEN s.refresh_token_hash LIKE 'id-jag:%' THEN 'id_jag'
+         WHEN s.refresh_token_hash LIKE 'dashboard-mint%' THEN 'dashboard_mint'
+         ELSE 'interactive'
+       END)::text AS credential_class
+FROM user_sessions AS s
+JOIN user_session_issuers AS usi
+  ON usi.id = s.user_session_issuer_id
+LEFT JOIN projects AS p
+  ON p.id = usi.project_id
+WHERE s.deleted IS FALSE
+  AND s.refresh_expires_at > clock_timestamp()
+  AND COALESCE(s.credential_id, s.id) > $1::uuid
+  AND COALESCE(usi.organization_id, p.organization_id) = $2::text
+ORDER BY COALESCE(s.credential_id, s.id), s.created_at DESC
+LIMIT $3::int
+`
+
+type ListLiveCredentialClassesParams struct {
+	Cursor         uuid.UUID
+	OrganizationID string
+	PageSize       int32
+}
+
+type ListLiveCredentialClassesRow struct {
+	CredentialID    uuid.UUID
+	CredentialClass string
+}
+
+// One row per live user session credential in the organization after the
+// cursor, with the class coverage is reported by. A credential is live while a
+// row of it is not deleted and can still refresh; its class is read from its
+// latest row. The refresh token hash prefixes are the ones issuance writes:
+// id-jag: for an inbound ID-JAG exchange and dashboard-mint for a session the
+// dashboard minted. A workload session stores no refresh token hash.
+func (q *Queries) ListLiveCredentialClasses(ctx context.Context, arg ListLiveCredentialClassesParams) ([]ListLiveCredentialClassesRow, error) {
+	rows, err := q.db.Query(ctx, listLiveCredentialClasses, arg.Cursor, arg.OrganizationID, arg.PageSize)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListLiveCredentialClassesRow
+	for rows.Next() {
+		var i ListLiveCredentialClassesRow
+		if err := rows.Scan(&i.CredentialID, &i.CredentialClass); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listLiveLinkIDsFixture = `-- name: ListLiveLinkIDsFixture :many
 SELECT id FROM mcp_server_auth_clients WHERE organization_id = $1 AND deleted IS FALSE ORDER BY id
 `
@@ -2057,6 +2141,127 @@ func (q *Queries) ListRemoteSourceServers(ctx context.Context, arg ListRemoteSou
 	for rows.Next() {
 		var i ListRemoteSourceServersRow
 		if err := rows.Scan(&i.McpServerID, &i.ProjectID, &i.HasOauth); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listSelectionMappings = `-- name: ListSelectionMappings :many
+SELECT sel.id,
+       sel.project_id,
+       sel.credential_kind,
+       sel.credential_id,
+       sel.mcp_server_id,
+       sel.remote_session_client_id,
+       sel.no_auth,
+       sel.auth_client_id,
+       (sel.auth_client_id IS NOT NULL AND EXISTS (
+         SELECT 1
+         FROM mcp_auth_clients AS ac
+         JOIN mcp_server_auth_clients AS l
+           ON l.auth_client_id = ac.id
+          AND l.mcp_server_id = sel.mcp_server_id
+          AND l.deleted IS FALSE
+         WHERE ac.id = sel.auth_client_id
+           AND ac.organization_id = sel.organization_id
+           AND ac.deleted IS FALSE
+           AND ac.enabled
+           AND (sel.remote_session_client_id IS NULL OR ac.remote_session_client_id = sel.remote_session_client_id)
+       ))::boolean AS mapped_usable,
+       ARRAY(
+         SELECT ac.id
+         FROM mcp_auth_clients AS ac
+         JOIN mcp_server_auth_clients AS l
+           ON l.auth_client_id = ac.id
+          AND l.mcp_server_id = sel.mcp_server_id
+          AND l.deleted IS FALSE
+         WHERE ac.organization_id = sel.organization_id
+           AND ac.deleted IS FALSE
+           AND ac.enabled
+           AND (
+             (sel.remote_session_client_id IS NOT NULL
+              AND ac.remote_session_client_id = sel.remote_session_client_id
+              AND ac.client_type IN ('remote_session', 'service_account'))
+             OR (sel.no_auth
+                 AND ac.client_type IN ('static_credential', 'pass_through'))
+           )
+         ORDER BY ac.id
+       )::uuid[] AS candidate_ids,
+       EXISTS (
+         SELECT 1
+         FROM mcp_auth_clients AS ac
+         JOIN mcp_server_auth_clients AS l
+           ON l.auth_client_id = ac.id
+          AND l.mcp_server_id = sel.mcp_server_id
+          AND l.deleted IS FALSE
+         WHERE ac.organization_id = sel.organization_id
+           AND ac.deleted IS FALSE
+           AND ac.client_type IN ('remote_session', 'service_account', 'ema')
+       )::boolean AS server_has_oauth_clients
+FROM upstream_client_selections AS sel
+WHERE sel.organization_id = $1::text
+  AND sel.deleted IS FALSE
+  AND sel.id > $2::uuid
+ORDER BY sel.id
+LIMIT $3::int
+`
+
+type ListSelectionMappingsParams struct {
+	OrganizationID string
+	Cursor         uuid.UUID
+	PageSize       int32
+}
+
+type ListSelectionMappingsRow struct {
+	ID                    uuid.UUID
+	ProjectID             uuid.UUID
+	CredentialKind        string
+	CredentialID          uuid.UUID
+	McpServerID           uuid.UUID
+	RemoteSessionClientID uuid.NullUUID
+	NoAuth                bool
+	AuthClientID          uuid.NullUUID
+	MappedUsable          bool
+	CandidateIds          []uuid.UUID
+	ServerHasOauthClients bool
+}
+
+// Every live choice in the organization after the cursor, with what mapping
+// it onto a typed auth client decides from. An OAuth choice can name the live
+// remote_session or service_account clients of its registration that are
+// linked to the server. A no-auth choice can name the server's linked
+// static_credential or pass_through clients while the server has no linked
+// OAuth-backed client: that is the server's own headers, which the no-auth
+// choice was served with before the server's headers became auth clients. A
+// mapped choice is usable while its client is live, enabled, linked to the
+// server and, for an OAuth choice, still the registration's.
+func (q *Queries) ListSelectionMappings(ctx context.Context, arg ListSelectionMappingsParams) ([]ListSelectionMappingsRow, error) {
+	rows, err := q.db.Query(ctx, listSelectionMappings, arg.OrganizationID, arg.Cursor, arg.PageSize)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListSelectionMappingsRow
+	for rows.Next() {
+		var i ListSelectionMappingsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.CredentialKind,
+			&i.CredentialID,
+			&i.McpServerID,
+			&i.RemoteSessionClientID,
+			&i.NoAuth,
+			&i.AuthClientID,
+			&i.MappedUsable,
+			&i.CandidateIds,
+			&i.ServerHasOauthClients,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -2574,6 +2779,60 @@ SELECT pg_advisory_xact_lock(hashtext('authclientbackfill:' || $1::text))
 func (q *Queries) LockOrganizationBackfill(ctx context.Context, organizationID string) error {
 	_, err := q.db.Exec(ctx, lockOrganizationBackfill, organizationID)
 	return err
+}
+
+const mapSelectionToAuthClient = `-- name: MapSelectionToAuthClient :execrows
+UPDATE upstream_client_selections AS sel
+SET auth_client_id = ac.id,
+    auth_client_attachment_scope = ac.attachment_scope,
+    no_auth = FALSE,
+    updated_at = clock_timestamp()
+FROM mcp_auth_clients AS ac
+WHERE sel.id = $1::uuid
+  AND sel.organization_id = $2::text
+  AND sel.deleted IS FALSE
+  AND sel.auth_client_id IS NULL
+  AND sel.no_auth = $3::boolean
+  AND sel.remote_session_client_id IS NOT DISTINCT FROM $4::uuid
+  AND ac.id = $5::uuid
+  AND ac.organization_id = sel.organization_id
+  AND ac.deleted IS FALSE
+  AND ac.enabled
+  AND EXISTS (
+    SELECT 1
+    FROM mcp_server_auth_clients AS l
+    WHERE l.auth_client_id = ac.id
+      AND l.mcp_server_id = sel.mcp_server_id
+      AND l.deleted IS FALSE
+  )
+`
+
+type MapSelectionToAuthClientParams struct {
+	ID                    uuid.UUID
+	OrganizationID        string
+	NoAuth                bool
+	RemoteSessionClientID uuid.NullUUID
+	AuthClientID          uuid.UUID
+}
+
+// Names a typed auth client on one choice, conditional on the evidence it was
+// decided from: the choice is still unmapped and unchanged, and the client is
+// still live, enabled and linked to the server. Naming a client is never
+// no-auth, so a no-auth choice served by the server's headers stops being one;
+// the upstream client choice reads a choice naming a header client as no-auth,
+// as before.
+func (q *Queries) MapSelectionToAuthClient(ctx context.Context, arg MapSelectionToAuthClientParams) (int64, error) {
+	result, err := q.db.Exec(ctx, mapSelectionToAuthClient,
+		arg.ID,
+		arg.OrganizationID,
+		arg.NoAuth,
+		arg.RemoteSessionClientID,
+		arg.AuthClientID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const markServersRequiringUpstreamAuth = `-- name: MarkServersRequiringUpstreamAuth :many
@@ -3339,6 +3598,32 @@ func (q *Queries) SeedMCPServerFixture(ctx context.Context, arg SeedMCPServerFix
 	return err
 }
 
+const seedOAuthSelectionFixture = `-- name: SeedOAuthSelectionFixture :exec
+INSERT INTO upstream_client_selections (project_id, organization_id, credential_kind, credential_id, mcp_server_id, remote_session_client_id, client_attachment_scope, no_auth, source)
+SELECT $1, $2, 'user_session', $3, $4, c.id, c.attachment_scope, FALSE, 'issuance'
+FROM remote_session_clients AS c
+WHERE c.id = $5::uuid
+`
+
+type SeedOAuthSelectionFixtureParams struct {
+	ProjectID             uuid.UUID
+	OrganizationID        string
+	CredentialID          uuid.UUID
+	McpServerID           uuid.UUID
+	RemoteSessionClientID uuid.UUID
+}
+
+func (q *Queries) SeedOAuthSelectionFixture(ctx context.Context, arg SeedOAuthSelectionFixtureParams) error {
+	_, err := q.db.Exec(ctx, seedOAuthSelectionFixture,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.CredentialID,
+		arg.McpServerID,
+		arg.RemoteSessionClientID,
+	)
+	return err
+}
+
 const seedOrganizationFixture = `-- name: SeedOrganizationFixture :exec
 INSERT INTO organization_metadata (id, name, slug) VALUES ($1, $1, $1)
 `
@@ -3603,6 +3888,34 @@ func (q *Queries) SeedUpstreamSelectionFixture(ctx context.Context, arg SeedUpst
 		arg.McpServerID,
 		arg.NoAuth,
 		arg.AuthClientID,
+	)
+	return err
+}
+
+const seedUserSessionFixture = `-- name: SeedUserSessionFixture :exec
+INSERT INTO user_sessions (project_id, organization_id, user_session_issuer_id, subject_urn, jti, refresh_token_hash, refresh_expires_at, expires_at, credential_id)
+VALUES ($1, $2, $3, $4, $5, $6, clock_timestamp() + interval '1 day', clock_timestamp() + interval '1 hour', $7)
+`
+
+type SeedUserSessionFixtureParams struct {
+	ProjectID           uuid.NullUUID
+	OrganizationID      pgtype.Text
+	UserSessionIssuerID uuid.UUID
+	SubjectUrn          urn.SessionSubject
+	Jti                 string
+	RefreshTokenHash    pgtype.Text
+	CredentialID        uuid.NullUUID
+}
+
+func (q *Queries) SeedUserSessionFixture(ctx context.Context, arg SeedUserSessionFixtureParams) error {
+	_, err := q.db.Exec(ctx, seedUserSessionFixture,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.UserSessionIssuerID,
+		arg.SubjectUrn,
+		arg.Jti,
+		arg.RefreshTokenHash,
+		arg.CredentialID,
 	)
 	return err
 }

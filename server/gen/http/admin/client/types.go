@@ -2415,6 +2415,8 @@ type RunUpstreamOAuthMigrationResponseBody struct {
 	// Servers marked as needing upstream authentication because they offer a
 	// backfilled auth client.
 	ServersMarkedRequiringUpstreamAuth *int64 `form:"servers_marked_requiring_upstream_auth,omitempty" json:"servers_marked_requiring_upstream_auth,omitempty" xml:"servers_marked_requiring_upstream_auth,omitempty"`
+	// Credential choices this run named a typed auth client on.
+	SelectionsMapped *int64 `form:"selections_mapped,omitempty" json:"selections_mapped,omitempty" xml:"selections_mapped,omitempty"`
 	// Default auth permissions this run granted across the organization: the
 	// personal default and shared client grants for every recorded client, and API
 	// key policies once every client is recorded. The auth-permission-defaults
@@ -21866,9 +21868,21 @@ type AdminUpstreamOAuthMigrationAuthClientsResponseBody struct {
 	Warnings []*AdminUpstreamOAuthMigrationUnresolvedAssociationResponseBody `form:"warnings,omitempty" json:"warnings,omitempty" xml:"warnings,omitempty"`
 	// The same counts for each kind of configured identity.
 	Kinds []*AdminUpstreamOAuthMigrationAuthClientKindResponseBody `form:"kinds,omitempty" json:"kinds,omitempty" xml:"kinds,omitempty"`
-	// Phases whose check failed: oauth, headers, ema, reconcile or mark. The
-	// counts cover the other phases.
+	// Phases whose check failed: oauth, headers, ema, reconcile, mark or
+	// selections. The counts cover the other phases.
 	FailedPhases []string `form:"failed_phases,omitempty" json:"failed_phases,omitempty" xml:"failed_phases,omitempty"`
+	// Whether every live credential choice names a usable auth client or is an
+	// explicit no-auth choice, and the selections check did not fail.
+	SelectionsComplete *bool `form:"selections_complete,omitempty" json:"selections_complete,omitempty" xml:"selections_complete,omitempty"`
+	// Live credential choices with exactly one auth client to name, not yet named.
+	PendingSelectionMappings *int64 `form:"pending_selection_mappings,omitempty" json:"pending_selection_mappings,omitempty" xml:"pending_selection_mappings,omitempty"`
+	// Credential choice coverage for each credential class.
+	SelectionClasses []*AdminUpstreamOAuthMigrationSelectionClassResponseBody `form:"selection_classes,omitempty" json:"selection_classes,omitempty" xml:"selection_classes,omitempty"`
+	// The first live credential choices left without a usable auth client.
+	SelectionGaps []*AdminUpstreamOAuthMigrationSelectionGapResponseBody `form:"selection_gaps,omitempty" json:"selection_gaps,omitempty" xml:"selection_gaps,omitempty"`
+	// Every live credential choice left without a usable auth client, including
+	// those beyond selection_gaps.
+	SelectionGapCount *int64 `form:"selection_gap_count,omitempty" json:"selection_gap_count,omitempty" xml:"selection_gap_count,omitempty"`
 }
 
 // AdminUpstreamOAuthMigrationUnresolvedAssociationResponseBody is used to
@@ -21921,6 +21935,51 @@ type AdminUpstreamOAuthMigrationAuthClientKindResponseBody struct {
 	PendingRetirements *int64 `form:"pending_retirements,omitempty" json:"pending_retirements,omitempty" xml:"pending_retirements,omitempty"`
 	// Configuration that cannot be recorded without a guess.
 	Unresolved *int64 `form:"unresolved,omitempty" json:"unresolved,omitempty" xml:"unresolved,omitempty"`
+}
+
+// AdminUpstreamOAuthMigrationSelectionClassResponseBody is used to define
+// fields on response body types.
+type AdminUpstreamOAuthMigrationSelectionClassResponseBody struct {
+	// The class: interactive, id_jag, dashboard_mint, workload or agent.
+	CredentialClass *string `form:"credential_class,omitempty" json:"credential_class,omitempty" xml:"credential_class,omitempty"`
+	// Live credential choices of this class.
+	Selections *int64 `form:"selections,omitempty" json:"selections,omitempty" xml:"selections,omitempty"`
+	// Choices that already name a usable auth client.
+	Mapped *int64 `form:"mapped,omitempty" json:"mapped,omitempty" xml:"mapped,omitempty"`
+	// Choices with exactly one auth client to name, not yet named.
+	Pending *int64 `form:"pending,omitempty" json:"pending,omitempty" xml:"pending,omitempty"`
+	// Explicit no-auth choices on servers with no auth client.
+	NoAuth *int64 `form:"no_auth,omitempty" json:"no_auth,omitempty" xml:"no_auth,omitempty"`
+	// Choices several auth clients could serve. They are never guessed: configure
+	// the server or ask the credential to reconnect.
+	Ambiguous *int64 `form:"ambiguous,omitempty" json:"ambiguous,omitempty" xml:"ambiguous,omitempty"`
+	// Choices whose upstream OAuth client has no live, enabled auth client linked
+	// to the server.
+	NoClient *int64 `form:"no_client,omitempty" json:"no_client,omitempty" xml:"no_client,omitempty"`
+	// No-auth choices on servers that now offer an OAuth-backed client; the
+	// credential reconnects.
+	StaleNoAuth *int64 `form:"stale_no_auth,omitempty" json:"stale_no_auth,omitempty" xml:"stale_no_auth,omitempty"`
+	// Choices naming an auth client that is no longer usable for the server; the
+	// credential reconnects.
+	Unusable *int64 `form:"unusable,omitempty" json:"unusable,omitempty" xml:"unusable,omitempty"`
+}
+
+// AdminUpstreamOAuthMigrationSelectionGapResponseBody is used to define fields
+// on response body types.
+type AdminUpstreamOAuthMigrationSelectionGapResponseBody struct {
+	// The choice.
+	SelectionID *string `form:"selection_id,omitempty" json:"selection_id,omitempty" xml:"selection_id,omitempty"`
+	// The class of the credential the choice belongs to.
+	CredentialClass *string `form:"credential_class,omitempty" json:"credential_class,omitempty" xml:"credential_class,omitempty"`
+	// The credential.
+	CredentialID *string `form:"credential_id,omitempty" json:"credential_id,omitempty" xml:"credential_id,omitempty"`
+	// The server the choice is for.
+	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
+	// The server's project.
+	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	// Why the choice has no usable auth client: ambiguous, no_client,
+	// stale_no_auth, unusable or skipped_race.
+	Outcome *string `form:"outcome,omitempty" json:"outcome,omitempty" xml:"outcome,omitempty"`
 }
 
 // AdminUpstreamOAuthMigrationStatusResponseBody is used to define fields on
@@ -39245,6 +39304,7 @@ func NewRunUpstreamOAuthMigrationAdminUpstreamOAuthMigrationRunOK(body *RunUpstr
 		AuthClientsWritten:                 body.AuthClientsWritten,
 		AuthClientLinksWritten:             body.AuthClientLinksWritten,
 		ServersMarkedRequiringUpstreamAuth: body.ServersMarkedRequiringUpstreamAuth,
+		SelectionsMapped:                   body.SelectionsMapped,
 		AuthPermissionGrantsWritten:        body.AuthPermissionGrantsWritten,
 		AuthClientsError:                   body.AuthClientsError,
 	}
@@ -67698,6 +67758,21 @@ func ValidateAdminUpstreamOAuthMigrationAuthClientsResponseBody(body *AdminUpstr
 	if body.FailedPhases == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("failed_phases", "body"))
 	}
+	if body.SelectionsComplete == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("selections_complete", "body"))
+	}
+	if body.PendingSelectionMappings == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("pending_selection_mappings", "body"))
+	}
+	if body.SelectionClasses == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("selection_classes", "body"))
+	}
+	if body.SelectionGaps == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("selection_gaps", "body"))
+	}
+	if body.SelectionGapCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("selection_gap_count", "body"))
+	}
 	for _, e := range body.UnresolvedAssociations {
 		if e != nil {
 			if err2 := ValidateAdminUpstreamOAuthMigrationUnresolvedAssociationResponseBody(e); err2 != nil {
@@ -67715,6 +67790,20 @@ func ValidateAdminUpstreamOAuthMigrationAuthClientsResponseBody(body *AdminUpstr
 	for _, e := range body.Kinds {
 		if e != nil {
 			if err2 := ValidateAdminUpstreamOAuthMigrationAuthClientKindResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.SelectionClasses {
+		if e != nil {
+			if err2 := ValidateAdminUpstreamOAuthMigrationSelectionClassResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.SelectionGaps {
+		if e != nil {
+			if err2 := ValidateAdminUpstreamOAuthMigrationSelectionGapResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -67809,6 +67898,75 @@ func ValidateAdminUpstreamOAuthMigrationAuthClientKindResponseBody(body *AdminUp
 	}
 	if body.Unresolved == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("unresolved", "body"))
+	}
+	return
+}
+
+// ValidateAdminUpstreamOAuthMigrationSelectionClassResponseBody runs the
+// validations defined on AdminUpstreamOAuthMigrationSelectionClassResponseBody
+func ValidateAdminUpstreamOAuthMigrationSelectionClassResponseBody(body *AdminUpstreamOAuthMigrationSelectionClassResponseBody) (err error) {
+	if body.CredentialClass == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("credential_class", "body"))
+	}
+	if body.Selections == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("selections", "body"))
+	}
+	if body.Mapped == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("mapped", "body"))
+	}
+	if body.Pending == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("pending", "body"))
+	}
+	if body.NoAuth == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("no_auth", "body"))
+	}
+	if body.Ambiguous == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("ambiguous", "body"))
+	}
+	if body.NoClient == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("no_client", "body"))
+	}
+	if body.StaleNoAuth == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("stale_no_auth", "body"))
+	}
+	if body.Unusable == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("unusable", "body"))
+	}
+	return
+}
+
+// ValidateAdminUpstreamOAuthMigrationSelectionGapResponseBody runs the
+// validations defined on AdminUpstreamOAuthMigrationSelectionGapResponseBody
+func ValidateAdminUpstreamOAuthMigrationSelectionGapResponseBody(body *AdminUpstreamOAuthMigrationSelectionGapResponseBody) (err error) {
+	if body.SelectionID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("selection_id", "body"))
+	}
+	if body.CredentialClass == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("credential_class", "body"))
+	}
+	if body.CredentialID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("credential_id", "body"))
+	}
+	if body.McpServerID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("mcp_server_id", "body"))
+	}
+	if body.ProjectID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "body"))
+	}
+	if body.Outcome == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("outcome", "body"))
+	}
+	if body.SelectionID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.selection_id", *body.SelectionID, goa.FormatUUID))
+	}
+	if body.CredentialID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.credential_id", *body.CredentialID, goa.FormatUUID))
+	}
+	if body.McpServerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", *body.McpServerID, goa.FormatUUID))
+	}
+	if body.ProjectID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
 	}
 	return
 }

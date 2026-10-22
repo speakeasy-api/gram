@@ -9,6 +9,7 @@ import { CheckCircle2Icon, CircleDashedIcon, Loader2Icon } from "lucide-react";
 import { toast } from "sonner";
 
 import type { AdminUpstreamOAuthMigrationOrganization } from "@gram/admin-client/models/components/adminupstreamoauthmigrationorganization";
+import type { AdminUpstreamOAuthMigrationAuthClients } from "@gram/admin-client/models/components/adminupstreamoauthmigrationauthclients";
 import type { AdminUpstreamOAuthMigrationStatus } from "@gram/admin-client/models/components/adminupstreamoauthmigrationstatus";
 import type { AdminUpstreamOAuthMigrationUnresolvedAssociation } from "@gram/admin-client/models/components/adminupstreamoauthmigrationunresolvedassociation";
 
@@ -392,6 +393,7 @@ function AuthClientStatus({
       <div className="space-y-1">
         <p className="text-muted-foreground text-xs">Auth clients: recorded</p>
         <AuthClientItems items={a.warnings} label="Worth a look" />
+        <SelectionCoverage authClients={a} />
       </div>
     );
   }
@@ -445,6 +447,56 @@ function AuthClientStatus({
       ) : null}
       <AuthClientItems items={a.unresolvedAssociations} />
       <AuthClientItems items={a.warnings} label="Worth a look" />
+      <SelectionCoverage authClients={a} />
+    </div>
+  );
+}
+
+// Which typed auth client each live credential's choice names, by credential
+// class. Gaps are never guessed: the server's configuration decides them, or
+// the credential reconnects.
+function SelectionCoverage({
+  authClients: a,
+}: {
+  authClients: AdminUpstreamOAuthMigrationAuthClients;
+}): JSX.Element | null {
+  if (a.selectionClasses.length === 0) {
+    return null;
+  }
+  return (
+    <div className="space-y-1">
+      <p className="text-muted-foreground text-xs">
+        Credential choices:{" "}
+        {a.selectionsComplete
+          ? "every choice names an auth client"
+          : `${a.pendingSelectionMappings} to name, ${a.selectionGapCount} without a usable auth client`}
+      </p>
+      <ul className="text-muted-foreground text-xs">
+        {a.selectionClasses.map((c) => (
+          <li key={c.credentialClass}>
+            {c.credentialClass}: {c.mapped} of {c.selections} named, {c.noAuth}{" "}
+            no-auth, {c.pending} to name
+            {c.ambiguous > 0 ? `, ${c.ambiguous} ambiguous` : ""}
+            {c.noClient > 0 ? `, ${c.noClient} without a client` : ""}
+            {c.staleNoAuth + c.unusable > 0
+              ? `, ${c.staleNoAuth + c.unusable} to reconnect`
+              : ""}
+          </li>
+        ))}
+      </ul>
+      {a.selectionGaps.length > 0 ? (
+        <ul className="text-muted-foreground font-mono text-xs">
+          {a.selectionGaps.map((gap) => (
+            <li key={gap.selectionId}>
+              {gap.credentialClass} {gap.outcome}: credential {gap.credentialId}
+              , server {gap.mcpServerId} in project {gap.projectId}
+            </li>
+          ))}
+          {a.selectionGapCount > a.selectionGaps.length ? (
+            <li>and {a.selectionGapCount - a.selectionGaps.length} more</li>
+          ) : null}
+        </ul>
+      ) : null}
     </div>
   );
 }

@@ -158,7 +158,15 @@ SELECT r.id AS mcp_server_id,
            AND sel.mcp_server_id = r.id
            AND sel.deleted IS FALSE
            AND CASE
-             WHEN sel.no_auth THEN NOT EXISTS (
+             WHEN sel.no_auth OR EXISTS (
+               SELECT 1
+               FROM mcp_auth_clients AS headers_only
+               WHERE headers_only.id = sel.auth_client_id
+                 AND sel.remote_session_client_id IS NULL
+                 AND headers_only.organization_id = sel.organization_id
+                 AND (headers_only.project_id IS NULL OR headers_only.project_id = sel.project_id)
+                 AND headers_only.client_type IN ('static_credential', 'pass_through')
+             ) THEN NOT EXISTS (
                SELECT 1
                FROM mcp_server_remote_session_clients AS a
                WHERE a.mcp_server_id = r.id
@@ -183,7 +191,10 @@ SELECT r.id AS mcp_server_id,
        -- by another client, so one that is not also selected is resolved only
        -- by a reconnection. A no-auth choice is not one: when unusable,
        -- RecordUpstreamClientSelections replaces it once a client is decided,
-       -- so it is classified like a missing choice.
+       -- so it is classified like a missing choice. A choice naming a
+       -- static_credential or pass_through auth client is the server's
+       -- headers, which reads as no-auth, as GetUpstreamClientSelection reads
+       -- it.
        EXISTS (
          SELECT 1
          FROM upstream_client_selections AS sel
@@ -192,6 +203,15 @@ SELECT r.id AS mcp_server_id,
            AND sel.mcp_server_id = r.id
            AND sel.deleted IS FALSE
            AND NOT sel.no_auth
+           AND NOT EXISTS (
+             SELECT 1
+             FROM mcp_auth_clients AS headers_only
+             WHERE headers_only.id = sel.auth_client_id
+               AND sel.remote_session_client_id IS NULL
+               AND headers_only.organization_id = sel.organization_id
+               AND (headers_only.project_id IS NULL OR headers_only.project_id = sel.project_id)
+               AND headers_only.client_type IN ('static_credential', 'pass_through')
+           )
        )::boolean AS chose_client,
        (
          SELECT count(*)
@@ -259,6 +279,29 @@ func (q *Queries) ListUpstreamClientSelectionCoverage(ctx context.Context, arg L
 	return items, nil
 }
 
+const nameAuthClientOnSelectionFixture = `-- name: NameAuthClientOnSelectionFixture :exec
+UPDATE upstream_client_selections AS sel
+SET auth_client_id = ac.id,
+    auth_client_attachment_scope = ac.attachment_scope,
+    no_auth = FALSE
+FROM mcp_auth_clients AS ac
+WHERE ac.id = $1
+  AND sel.credential_id = $2
+  AND sel.mcp_server_id = $3
+  AND sel.deleted IS FALSE
+`
+
+type NameAuthClientOnSelectionFixtureParams struct {
+	AuthClientID uuid.UUID
+	CredentialID uuid.UUID
+	McpServerID  uuid.UUID
+}
+
+func (q *Queries) NameAuthClientOnSelectionFixture(ctx context.Context, arg NameAuthClientOnSelectionFixtureParams) error {
+	_, err := q.db.Exec(ctx, nameAuthClientOnSelectionFixture, arg.AuthClientID, arg.CredentialID, arg.McpServerID)
+	return err
+}
+
 const removeAssociationFixture = `-- name: RemoveAssociationFixture :exec
 UPDATE mcp_server_remote_session_clients SET deleted_at = clock_timestamp()
 WHERE mcp_server_id = $1 AND remote_session_client_id = $2 AND deleted IS FALSE
@@ -312,6 +355,24 @@ type SeedClientBindingFixtureParams struct {
 func (q *Queries) SeedClientBindingFixture(ctx context.Context, arg SeedClientBindingFixtureParams) error {
 	_, err := q.db.Exec(ctx, seedClientBindingFixture, arg.RemoteSessionClientID, arg.UserSessionIssuerID)
 	return err
+}
+
+const seedHeaderAuthClientFixture = `-- name: SeedHeaderAuthClientFixture :one
+INSERT INTO mcp_auth_clients (organization_id, project_id, client_type, source, name)
+VALUES ($1, $2, 'static_credential', 'backfill', 'headers')
+RETURNING id
+`
+
+type SeedHeaderAuthClientFixtureParams struct {
+	OrganizationID string
+	ProjectID      uuid.NullUUID
+}
+
+func (q *Queries) SeedHeaderAuthClientFixture(ctx context.Context, arg SeedHeaderAuthClientFixtureParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, seedHeaderAuthClientFixture, arg.OrganizationID, arg.ProjectID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
 }
 
 const seedMCPServerFixture = `-- name: SeedMCPServerFixture :exec

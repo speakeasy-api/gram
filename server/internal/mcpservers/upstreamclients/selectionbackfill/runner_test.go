@@ -472,3 +472,27 @@ func TestRecordUpstreamClientSelectionsRecordsTheConsentPick(t *testing.T) {
 	require.Empty(t, f.selections(unpicked))
 	require.Empty(t, f.selections(foreign))
 }
+
+func TestChoiceNamingTheServersHeadersReadsAsNoAuth(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	issuer := f.projectIssuer()
+	server := f.server(issuer)
+	credential := f.session(issuer)
+	f.record(issuer, credential)
+	headers, err := f.q.SeedHeaderAuthClientFixture(t.Context(), SeedHeaderAuthClientFixtureParams{OrganizationID: f.orgID, ProjectID: uuid.NullUUID{UUID: f.projectID, Valid: true}})
+	require.NoError(t, err)
+	require.NoError(t, f.q.NameAuthClientOnSelectionFixture(t.Context(), NameAuthClientOnSelectionFixtureParams{AuthClientID: headers, CredentialID: credential, McpServerID: server}))
+
+	covered, err := Run(t.Context(), f.pool, Options{OrganizationID: f.orgID, Apply: false, PageSize: 0})
+	require.NoError(t, err)
+	require.Equal(t, 1, covered.Pairs[OutcomeSelected], "the server's headers serve it while it has no associated client")
+
+	client := f.client(issuer)
+	f.associate(server, client)
+	require.Equal(t, int64(1), f.record(issuer, credential), "a client decided later replaces it, as it replaces a no-auth choice")
+	row := f.selection(issuer, credential, server)
+	require.Equal(t, uuid.NullUUID{UUID: client, Valid: true}, row.RemoteSessionClientID)
+	require.True(t, row.Usable)
+	require.False(t, row.NoAuth)
+}
