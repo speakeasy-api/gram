@@ -161,14 +161,25 @@ func (s *ServiceCore) kitProtocolFactory(c KitLocalCompositionConfig, cidrs []st
 type kitExecutionEventKey struct{}
 type kitExecutionTriggerKey struct{}
 
+var errKitStartupUndispatched = errors.New("kit startup did not dispatch event")
+
 type kitConfiguredRuntimeProtocol struct{ *KitRuntimeProtocol }
 
 func (p *kitConfiguredRuntimeProtocol) RunTurn(ctx context.Context, r assistantRuntimeRecord, turn runTurnRequest) error {
-	// The default runner can rotate its bearer independently of MCP discovery.
-	// Kit's bearer lives in each connection: never retain an old turn credential
-	// when metadata resolution could not supply a current desired set.
+	// Nil means discovery was unavailable, not an intentionally empty set.
+	// Retry authoritative discovery before changing any resident connection.
 	if turn.MCPServers == nil {
-		turn.MCPServers = []runtimeMCPServer{}
+		assistant, err := p.config.Core.getAssistantForDispatch(ctx, r.AssistantID)
+		if err != nil {
+			return fmt.Errorf("retry Kit MCP discovery: %w", err)
+		}
+		if assistant.ProjectID != r.ProjectID {
+			return ErrKitRuntimeBinding
+		}
+		turn.MCPServers = p.config.Core.currentRuntimeMCPServers(ctx, assistant)
+		if turn.MCPServers == nil {
+			return errors.New("kit MCP discovery unavailable; existing connections retained")
+		}
 	}
 	return p.KitRuntimeProtocol.RunTurn(ctx, r, turn)
 }

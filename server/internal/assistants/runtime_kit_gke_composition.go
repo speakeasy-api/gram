@@ -176,8 +176,8 @@ func (s *ServiceCore) kitGKELifecycle(ctx context.Context, r assistantRuntimeRec
 	return operationErr
 }
 
-// kitGKEAssistantEligible reads the attachment written by creation, rather than
-// trusting request flags or selecting Kit globally before attachments exist.
+// kitGKEAssistantEligible verifies the assistant exists in the selected project
+// and organization without imposing tool-availability requirements.
 // Tool availability is not runtime eligibility. Per-turn credentials and the
 // existing MCP admission path authorize each connection independently.
 func (s *ServiceCore) kitGKEAssistantEligible(ctx context.Context, tx pgx.Tx, assistant assistantRecord, _ KitLocalCompositionConfig) (bool, error) {
@@ -186,7 +186,7 @@ func (s *ServiceCore) kitGKEAssistantEligible(ctx context.Context, tx pgx.Tx, as
 		return false, nil
 	}
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("read Kit assistant eligibility: %w", err)
 	}
 	return row.OrganizationID == assistant.OrganizationID, nil
 }

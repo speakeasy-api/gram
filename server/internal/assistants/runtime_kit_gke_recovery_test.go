@@ -51,7 +51,7 @@ func TestKitGKEExpiredAuthorityAllowsLifecycleButNotTurns(t *testing.T) {
 	require.NoError(t, err)
 	// An unavailable checkpoint must not bypass expiration with live credential rotation.
 	_, err = k.Ensure(t.Context(), r)
-	require.ErrorContains(t, err, "checkpoint expired Kit authority")
+	require.ErrorContains(t, err, "checkpoint Kit authority for refresh")
 }
 
 func TestKitGKEReapTombstoneFenceFailurePreservesResources(t *testing.T) {

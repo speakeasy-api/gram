@@ -238,7 +238,9 @@ func (k *KitGKERuntimeBackend) Ensure(ctx context.Context, r assistantRuntimeRec
 			// Finish an interrupted legacy admission before checkpointing it;
 			// never overwrite its live bootstrap secret or discard its lineage.
 			r.BackendMetadataJSON = result.BackendMetadataJSON
-			return k.Ensure(ctx, r)
+			refreshed, err := k.Ensure(ctx, r)
+			refreshed.ColdStart = result.ColdStart
+			return refreshed, err
 		}
 		state, obj, e := k.loadAuthority(ctx, r)
 		if e != nil {
@@ -252,7 +254,7 @@ func (k *KitGKERuntimeBackend) Ensure(ctx context.Context, r assistantRuntimeRec
 			// checkpoint and fresh-process restore;
 			// never rotate credentials beneath an existing process.
 			if err := k.Stop(ctx, r); err != nil {
-				return RuntimeBackendEnsureResult{}, fmt.Errorf("checkpoint expired Kit authority: %w", err)
+				return RuntimeBackendEnsureResult{}, fmt.Errorf("checkpoint Kit authority for refresh: %w", err)
 			}
 			state, obj, err = k.loadAuthority(ctx, r)
 			if err != nil {

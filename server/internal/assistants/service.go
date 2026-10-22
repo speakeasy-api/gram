@@ -3010,6 +3010,15 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 		if err != nil {
 			return ProcessThreadEventsResult{}, err
 		}
+		if !firstClaimed && thread.SourceKind != sourceKindWarmup {
+			// A concurrent worker may own the event. Only genuine warmup may
+			// bootstrap without a claimed execution identity.
+			return ProcessThreadEventsResult{
+				AssistantID: assistant.ID, WarmUntil: runtimeRecord.WarmUntil.Time,
+				WarmTTLSeconds: assistant.WarmTTLSeconds, RuntimeActive: true,
+				RetryAdmission: false, ProcessedAnyEvent: false, BootstrappedRuntime: false,
+			}, nil
+		}
 		if firstClaimed {
 			ctx = context.WithValue(ctx, kitExecutionEventKey{}, firstEvent)
 			stopStartupHeartbeat = s.startProcessingLeaseHeartbeat(ctx, thread.ProjectID, runtimeRecord.ID, firstEvent.ID)
@@ -3018,7 +3027,7 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 				if firstClaimed {
 					cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
 					defer cancel()
-					_ = s.resetEventToPending(cleanup, thread.ProjectID, firstEvent.ID, errors.New("kit startup did not dispatch event"))
+					_ = s.resetEventToPending(cleanup, thread.ProjectID, firstEvent.ID, errKitStartupUndispatched)
 				}
 			}()
 		}
@@ -4395,7 +4404,7 @@ func (s *ServiceCore) failEvent(ctx context.Context, projectID, eventID uuid.UUI
 
 func (s *ServiceCore) resetEventToPending(ctx context.Context, projectID, eventID uuid.UUID, runErr error) error {
 	err := assistantrepo.New(s.db).ResetAssistantThreadEventToPending(ctx, assistantrepo.ResetAssistantThreadEventToPendingParams{
-		RestoreAttempt: errors.Is(runErr, ErrRuntimeInvocationBusy),
+		RestoreAttempt: errors.Is(runErr, ErrRuntimeInvocationBusy) || errors.Is(runErr, errKitStartupUndispatched),
 		PendingStatus:  eventStatusPending,
 		LastError:      conv.ToPGText(runErr.Error()),
 		EventID:        eventID,

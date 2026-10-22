@@ -192,3 +192,13 @@ func TestKitCompositionBootstrapWithoutAttachments(t *testing.T) {
 	}
 
 }
+
+func TestKitCompositionUnavailableDiscoveryPreservesConnections(t *testing.T) {
+	t.Parallel()
+	_, db, key, _ := kitSessionFixture(t)
+	core := newProvisioningCore(t, db)
+	core.runtime = &stubRuntimeBackend{serverURL: nil}
+	protocol := &kitConfiguredRuntimeProtocol{KitRuntimeProtocol: &KitRuntimeProtocol{config: KitRuntimeProtocolConfig{Core: core}}}
+	err := protocol.RunTurn(t.Context(), assistantRuntimeRecord{ProjectID: key.ProjectID, AssistantID: key.AssistantID, RuntimeVersion: 3}, runTurnRequest{AuthToken: "new-turn", MCPServers: nil})
+	require.ErrorContains(t, err, "MCP discovery unavailable; existing connections retained")
+}

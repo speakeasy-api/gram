@@ -63,4 +63,17 @@ func TestRuntimeEventAdmissionClaimsStartingKitAuthority(t *testing.T) {
 	require.True(t, claimed)
 	require.Equal(t, assistantID, event.AssistantID)
 	require.Equal(t, eventStatusProcessing, event.Status)
+	require.Equal(t, 1, event.Attempts)
+	require.NoError(t, core.resetEventToPending(t.Context(), projectID, event.ID, errKitStartupUndispatched))
+	event, claimed, err = core.claimRuntimeEvent(t.Context(), runtime, threadID)
+	require.NoError(t, err)
+	require.True(t, claimed)
+	require.Equal(t, 1, event.Attempts, "startup failure must not consume a turn attempt")
+	kit := &stubRuntimeBackend{name: runtimeBackendLocal}
+	core.runtime = &versionedRuntimeBackend{legacy: kit, kit: kit}
+	result, err := core.ProcessThreadEvents(t.Context(), projectID, threadID)
+	require.NoError(t, err)
+	require.False(t, result.BootstrappedRuntime, "a worker without a claimed event must not bootstrap a dashboard identity")
+	require.False(t, result.ProcessedAnyEvent)
+	require.Empty(t, kit.ensureRecords)
 }
