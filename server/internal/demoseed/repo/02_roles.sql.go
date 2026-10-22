@@ -581,8 +581,8 @@ func (q *Queries) RolesInsertDirectoryUser(ctx context.Context, arg RolesInsertD
 }
 
 const rolesInsertEveryonePluginAssignment = `-- name: RolesInsertEveryonePluginAssignment :exec
-INSERT INTO plugin_assignments (plugin_id, organization_id, principal_urn)
-VALUES ($1, $2, '*')
+INSERT INTO plugin_assignments (plugin_id, organization_id, principal_urn, install_mode)
+VALUES ($1, $2, '*', 'available')
 `
 
 type RolesInsertEveryonePluginAssignmentParams struct {
@@ -748,8 +748,8 @@ func (q *Queries) RolesInsertRolePlugin(ctx context.Context, arg RolesInsertRole
 }
 
 const rolesInsertRolePluginAssignment = `-- name: RolesInsertRolePluginAssignment :exec
-INSERT INTO plugin_assignments (plugin_id, organization_id, principal_urn)
-VALUES ($1, $2, $3)
+INSERT INTO plugin_assignments (plugin_id, organization_id, principal_urn, install_mode)
+VALUES ($1, $2, $3, 'default')
 ON CONFLICT (plugin_id, principal_urn) DO NOTHING
 `
 

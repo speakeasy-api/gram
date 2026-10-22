@@ -47,8 +47,8 @@ VALUES (@organization_id, @project_id, 'Default', 'default', true)
 RETURNING id;
 
 -- name: RolesInsertEveryonePluginAssignment :exec
-INSERT INTO plugin_assignments (plugin_id, organization_id, principal_urn)
-VALUES (@plugin_id, @organization_id, '*');
+INSERT INTO plugin_assignments (plugin_id, organization_id, principal_urn, install_mode)
+VALUES (@plugin_id, @organization_id, '*', 'available');
 
 -- Every role (the tenant's custom ones, then the global ones) with the plugin
 -- slug it maps to. The slug matches conv.ToSlug, including Go's ASCII-only
@@ -78,8 +78,8 @@ VALUES (@organization_id, @project_id, @name, @slug, true)
 RETURNING id;
 
 -- name: RolesInsertRolePluginAssignment :exec
-INSERT INTO plugin_assignments (plugin_id, organization_id, principal_urn)
-VALUES (@plugin_id, @organization_id, @principal_urn)
+INSERT INTO plugin_assignments (plugin_id, organization_id, principal_urn, install_mode)
+VALUES (@plugin_id, @organization_id, @principal_urn, 'default')
 ON CONFLICT (plugin_id, principal_urn) DO NOTHING;
 
 -- The Read-only Tools role is the disposition case: it reaches every server,
