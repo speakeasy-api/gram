@@ -1,0 +1,42 @@
+pystreams/src/pystreams/risk/enforce_handler.py
+  h_e404c1a6a54184 115-119,193
+pystreams/tests/test_risk_enforce.py
+  h_e404c1a6a54184 643-645,648-656,664
+server/cmd/gram/mcp_risk.go
+  h_e404c1a6a54184 65-68
+server/cmd/gram/streams.go
+  h_e404c1a6a54184 608,622,658
+server/internal/risk/enforcereply/dispatch.go
+  h_e404c1a6a54184 12,62-63,421,488,556-558,566
+server/internal/risk/enforcereply/dispatch_test.go
+  h_e404c1a6a54184 248-278,417,450-476
+server/internal/scanners/customruleanalyzer/enforce_handler.go
+  h_e404c1a6a54184 11,48,55,62-64,75,109-113,147
+server/internal/scanners/customruleanalyzer/enforce_handler_test.go
+  h_e404c1a6a54184 10,13,44,47
+server/internal/scanners/enforcement/helpers.go
+  h_e404c1a6a54184 4,16-17,28-44
+server/internal/scanners/gitleaks/enforce_handler.go
+  h_e404c1a6a54184 56,97,136-140
+server/internal/scanners/gitleaks/enforce_handler_test.go
+  h_e404c1a6a54184 308,325,328,339-340
+server/internal/scanners/promptinjection/enforce_handler.go
+  h_e404c1a6a54184 11,49,56,63-65,76,113-115,153
+server/internal/scanners/promptinjection/enforce_handler_test.go
+  h_e404c1a6a54184 9-10,12,16,42-62,68-70,73,76,99
+server/internal/scanners/promptpolicy/enforce_handler.go
+  h_e404c1a6a54184 11,49,56,63-65,76,115-117,150
+server/internal/scanners/promptpolicy/enforce_handler_test.go
+  h_e404c1a6a54184 10,14,48,51
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "7c8e30f154840042a4cfb6d780eaf55fa9c5ea4f",
+  "prompts": {},
+  "humans": {
+    "h_e404c1a6a54184": {
+      "author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
