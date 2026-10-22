@@ -190,7 +190,7 @@ func (s *Service) resolveMetaMemberSnapshot(
 // an organization gateway's derived members.
 func (s *Service) resolveEndpointMemberSnapshot(ctx context.Context, logger *slog.Logger, surface string, endpoint *ResolvedMcpEndpoint) (context.Context, []metaMember, error) {
 	if endpoint.IsOrganizationGateway() {
-		return s.resolveOrganizationMemberSnapshot(ctx, logger, surface, endpoint.OrganizationID, endpoint.UserSessionIssuerID)
+		return s.resolveOrganizationMemberSnapshot(ctx, logger, surface, endpoint.OrganizationID, endpoint.UserSessionIssuerID, endpoint.ProjectID)
 	}
 	ctx, members, err := s.resolveMetaMemberSnapshot(ctx, logger, surface, endpoint.OrganizationID, endpoint.MetaMcpServerID.UUID, endpoint.ProjectID)
 	if err != nil {
@@ -219,10 +219,12 @@ func (s *Service) resolveGateMemberSnapshot(ctx context.Context, logger *slog.Lo
 		ctx, members, err = s.resolveMetaMemberSnapshot(ctx, logger, mandatorySurfaceGatewayMember, gate.organizationID, metaServerID, projectID)
 	} else {
 		issuer := uuid.Nil
+		scopeProjectID := uuid.Nil
 		if gate.organizationGateway {
 			issuer = gate.userSessionIssuerID
+			scopeProjectID = gate.projectID
 		}
-		ctx, members, err = s.resolveOrganizationMemberSnapshot(ctx, logger, mandatorySurfaceGatewayMember, gate.organizationID, issuer)
+		ctx, members, err = s.resolveOrganizationMemberSnapshot(ctx, logger, mandatorySurfaceGatewayMember, gate.organizationID, issuer, scopeProjectID)
 	}
 	if err == nil && gate.memberChoices != nil {
 		gate.memberChoices.apply(ctx, logger, members)
@@ -241,7 +243,8 @@ func (s *Service) resolveGateMemberSnapshot(ctx context.Context, logger *slog.Lo
 //
 // userSessionIssuerID is the organization gateway's issuer, whose clients are
 // the only way a person connects a member that signs in upstream. uuid.Nil
-// (the agent gateway) skips that check.
+// (the agent gateway) skips that check. A nonzero scopeProjectID restricts
+// candidates before admission and credential association for project gateways.
 //
 // The organization gateway also drops servers backed by a toolset with
 // Platform tools, mirroring automatic plugin delivery: those toolsets serve
@@ -254,6 +257,7 @@ func (s *Service) resolveOrganizationMemberSnapshot(
 	authzSurface string,
 	organizationID string,
 	userSessionIssuerID uuid.UUID,
+	scopeProjectID uuid.UUID,
 ) (context.Context, []metaMember, error) {
 	// Unconditional for the same reason resolveMetaMemberSnapshot prepares it.
 	ctx, err := s.authz.PrepareContext(ctx)
@@ -276,6 +280,9 @@ func (s *Service) resolveOrganizationMemberSnapshot(
 
 	candidates := make([]metaMemberCandidate, 0, len(rows))
 	for _, row := range rows {
+		if scopeProjectID != uuid.Nil && row.McpServerProjectID != scopeProjectID {
+			continue
+		}
 		if !servableOnSurface(row.McpServerNetworkAccessMode, surface) {
 			continue
 		}

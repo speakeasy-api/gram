@@ -121,6 +121,9 @@ func (s *Service) claimingMetaMembers(
 		// are members of it here.
 		surface := requestNetworkSurface(ctx)
 		for _, row := range organizationRows {
+			if endpoint.ProjectID != uuid.Nil && row.ProjectID != endpoint.ProjectID {
+				continue
+			}
 			if servableOnSurface(row.McpServerNetworkAccessMode, surface) {
 				rows = append(rows, metamcprepo.ListMetaMCPMembersForRemoteSessionClientRow(row))
 			}
