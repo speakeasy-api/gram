@@ -1,0 +1,14 @@
+client/dashboard/src/sdk/src/models/components/directoryperson.ts
+  h_9630b74bdac540 8-9,29,63-66
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "4a66e0d68a055d44cc9871a18abc580c32ded12f",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}
