@@ -4,12 +4,14 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"strings"
 	"sync"
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/attribute"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
@@ -328,4 +330,35 @@ func TestWithMandatoryAdmissionIsIdempotentForOneCaller(t *testing.T) {
 	require.Equal(t, ctx, withMandatoryAdmission(ctx), "the same caller keeps its one admission")
 	other := withMandatoryAdmission(sessionContext(t, shadowOrg))
 	require.NotSame(t, ctx.Value(mandatoryAdmissionKey{}), other.Value(mandatoryAdmissionKey{}))
+}
+
+func TestShadowMandatoryLabelsLegacyAuthCeilings(t *testing.T) {
+	t.Parallel()
+
+	for _, legacy := range []bool{true, false} {
+		h := newShadowHarness(t, true)
+		connect := authz.NewGrant(authz.ScopeMCPConnect, authz.WildcardResource)
+		h.service.authz = authz.NewEngine(testenv.NewLogger(t), nil, func(context.Context, string) (bool, error) { return false, nil }, workos.NewStubClient(), authz.EngineOpts{
+			AdmitPrincipalCredential: func(context.Context, *pgxpool.Pool) (authz.PrincipalCredentialAdmission, error) {
+				return authz.PrincipalCredentialAdmission{
+					OwnerUserID: "user_owner", Credential: []authz.Grant{connect}, Agent: []authz.Grant{connect}, Owner: []authz.Grant{connect},
+					Authorizer: authz.RepresentedUserPolicy{UserID: "user_owner", Policy: []authz.Grant{connect}}, LegacyAuthCeiling: legacy,
+				}, nil
+			},
+		})
+		ctx := contextvalues.WithPrincipalCredentialAuthorization(t.Context(), &contextvalues.AuthContext{ActiveOrganizationID: shadowOrg},
+			urn.NewPrincipal(urn.PrincipalTypeAgent, uuid.NewString()), contextvalues.PrincipalCredential{AuthorizerUserID: "user_owner"})
+		h.service.shadowMandatory(ctx, mandatorySurfaceProxiedConnect, shadowOrg, true, authz.MCPCheck(authz.ScopeMCPConnect, "server_1", "project_1"))
+
+		points := h.points(t)
+		require.Len(t, points, 1)
+		for set := range points {
+			value, ok := set.Value("gram.authz.mandatory.legacy_auth_ceiling")
+			require.True(t, ok)
+			require.Equal(t, legacy, value.AsBool())
+			principal, _ := set.Value("gram.authz.mandatory.principal")
+			require.Equal(t, "agent", principal.AsString())
+		}
+		require.Contains(t, h.logs.String(), fmt.Sprintf(`"gram.authz.mandatory.legacy_auth_ceiling":%t`, legacy))
+	}
 }
