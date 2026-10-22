@@ -113,12 +113,28 @@ func agentNames(agents *agentsRepo.Queries) LookupLoader {
 		if err != nil {
 			return nil, fmt.Errorf("list agent names: %w", err)
 		}
-		names := make(map[string]string, len(rows))
+		pairs := make(map[string]string, len(rows))
 		for _, row := range rows {
-			names[row.ID.String()] = row.Name
+			pairs[row.ID.String()] = row.Name
 		}
-		return names, nil
+		return uniqueAgentNames(pairs), nil
 	}
+}
+
+// uniqueAgentNames suffixes a shared name with each agent's short id, so reads never merge two agents.
+func uniqueAgentNames(names map[string]string) map[string]string {
+	shared := make(map[string]int, len(names))
+	for _, name := range names {
+		shared[name]++
+	}
+	unique := make(map[string]string, len(names))
+	for id, name := range names {
+		if shared[name] > 1 {
+			name = name + " (" + id[:min(len(id), 8)] + ")"
+		}
+		unique[id] = name
+	}
+	return unique
 }
 
 // UnixNano is undefined outside the years 1678 to 2262, so a bound is checked
