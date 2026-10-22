@@ -52,16 +52,16 @@ var PolicySelector = Type("AgentPolicySelector", func() {
 		Enum("project", "mcp", "org", "environment", "skill", "assistant", "risk_policy", "chat", "agent", "mcp_auth_client", "*")
 	})
 	Attribute("resource_id", String, "The resource identifier, or '*' for all resources of this kind.")
-	Attribute("client_type", String, "Auth client type filter (mcp:auth scopes only).", func() {
+	Attribute("client_type", String, "Auth client type filter (mcp:auth and mcp:blocked_auth scopes only).", func() {
 		Enum("remote_session", "service_account", "static_credential", "pass_through", "ema", "*")
 	})
-	Attribute("connection_owner", String, "Personal connection owner filter (mcp:auth scopes on remote_session clients only): a user ID, '*', or '$represented_user'.")
-	Attribute("upstream_client", String, "Upstream OAuth client filter (mcp:auth scopes on remote_session clients only). Together with connection_owner it names one person's connection across every auth client sharing that upstream client.")
+	Attribute("connection_owner", String, "Personal connection owner filter (mcp:auth and mcp:blocked_auth scopes on remote_session clients only): a user ID, '*', or '$represented_user'.")
+	Attribute("upstream_client", String, "Upstream OAuth client filter (mcp:auth and mcp:blocked_auth scopes on remote_session clients only). Together with connection_owner it names one person's connection across every auth client sharing that upstream client.")
 	Attribute("disposition", String, "Tool disposition filter (MCP scopes only).", func() {
 		Enum("read_only", "destructive", "idempotent", "open_world")
 	})
 	Attribute("tool", String, "Specific tool name filter (MCP scopes only).")
-	Attribute("project_id", String, "Project filter (MCP, environment, assistant, and mcp:auth scopes).")
+	Attribute("project_id", String, "Project filter (MCP, environment, assistant, mcp:auth and mcp:blocked_auth scopes).")
 	Attribute("server_url", String, "Server URL filter (risk policy scopes only).", func() { Format(FormatURI) })
 	Attribute("server_identity", String, "Server identity filter (risk policy scopes only).")
 })
@@ -105,29 +105,30 @@ var UpdatePolicyGrantForm = Type("UpdateAgentPolicyGrantForm", func() {
 	Extend(PolicyGrantForm)
 })
 
-var ConnectionRestriction = Type("AgentConnectionRestriction", func() {
+var ConnectionBlock = Type("AgentConnectionBlock", func() {
 	Description("An agent the caller blocked from their own connection through one upstream OAuth client.")
 	Required("id", "agent_id", "remote_session_client_id", "created_at")
 	Attribute("id", String, func() { Format(FormatUUID) })
 	Attribute("agent_id", String, "The blocked agent", func() { Format(FormatUUID) })
-	Attribute("remote_session_client_id", String, "The upstream OAuth client the connection uses; the restriction covers every auth client sharing it", func() { Format(FormatUUID) })
+	Attribute("remote_session_client_id", String, "The upstream OAuth client the connection uses; the block covers every auth client sharing it", func() { Format(FormatUUID) })
 	Attribute("created_at", String, func() { Format(FormatDateTime) })
 })
 
-var ListConnectionRestrictionsResult = Type("ListAgentConnectionRestrictionsResult", func() {
+var ListConnectionBlocksResult = Type("ListAgentConnectionBlocksResult", func() {
 	Required("items")
-	Attribute("items", ArrayOf(ConnectionRestriction), "Restrictions the caller wrote on their own connections")
+	Attribute("items", ArrayOf(ConnectionBlock), "Blocks the caller wrote on their own connections")
+	Attribute("next_cursor", String, "Cursor for the next page; absent when exhausted.")
 })
 
-var RestrictAgentOnConnectionForm = Type("RestrictAgentOnConnectionForm", func() {
+var BlockAgentOnConnectionForm = Type("BlockAgentOnConnectionForm", func() {
 	Attribute("agent_id", String, "The agent to block; any agent in the caller's organization", func() { Format(FormatUUID) })
 	Attribute("remote_session_client_id", String, "The upstream OAuth client of the caller's own connection", func() { Format(FormatUUID) })
 	Required("agent_id", "remote_session_client_id")
 })
 
-var ConnectionRestrictionIDForm = Type("AgentConnectionRestrictionIDForm", func() {
-	Attribute("restriction_id", String, "Connection restriction identifier", func() { Format(FormatUUID) })
-	Required("restriction_id")
+var ConnectionBlockIDForm = Type("AgentConnectionBlockIDForm", func() {
+	Attribute("block_id", String, "Connection block identifier", func() { Format(FormatUUID) })
+	Required("block_id")
 })
 
 var OwnerProfile = Type("AgentOwnerProfile", func() {
@@ -347,53 +348,62 @@ var _ = Service("agents", func() {
 			Response(StatusNoContent)
 		})
 	})
-	Method("listConnectionRestrictions", func() {
+	Method("listConnectionBlocks", func() {
+		shared.CursorPagination()
 		Description("List the agents the caller blocked from their own connections. Needs no agent management access.")
-		Meta("openapi:operationId", "listAgentConnectionRestrictions")
-		Meta("openapi:extension:x-speakeasy-name-override", "listConnectionRestrictions")
-		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "AgentConnectionRestrictions"}`)
+		Meta("openapi:operationId", "listAgentConnectionBlocks")
+		Meta("openapi:extension:x-speakeasy-name-override", "listConnectionBlocks")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "AgentConnectionBlocks"}`)
 		Payload(func() {
 			security.SessionPayload()
+			Attribute("cursor", String, "Cursor for the next page of blocks.")
+			Attribute("limit", Int, "The number of blocks to return per page.", func() {
+				Default(50)
+				Minimum(1)
+				Maximum(100)
+			})
 		})
-		Result(ListConnectionRestrictionsResult)
+		Result(ListConnectionBlocksResult)
 		HTTP(func() {
-			GET("/rpc/agents.listConnectionRestrictions")
+			GET("/rpc/agents.listConnectionBlocks")
 			security.SessionHeader()
+			Param("cursor")
+			Param("limit")
 			Response(StatusOK)
 		})
 	})
 
-	Method("restrictAgentOnConnection", func() {
+	Method("blockAgentOnConnection", func() {
 		Description("Block one agent in the caller's organization from the caller's own connection through an upstream OAuth client, across every auth client sharing it. Only the connection owner can do this, and it needs no agent management access. Blocks only; it never grants access.")
-		Meta("openapi:operationId", "restrictAgentOnConnection")
-		Meta("openapi:extension:x-speakeasy-name-override", "restrictOnConnection")
-		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RestrictAgentOnConnection"}`)
+		Meta("openapi:operationId", "blockAgentOnConnection")
+		Meta("openapi:extension:x-speakeasy-name-override", "blockOnConnection")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "BlockAgentOnConnection"}`)
 		Payload(func() {
 			security.SessionPayload()
-			Extend(RestrictAgentOnConnectionForm)
+			Extend(BlockAgentOnConnectionForm)
 		})
-		Result(ConnectionRestriction)
+		Result(ConnectionBlock)
 		HTTP(func() {
-			POST("/rpc/agents.restrictOnConnection")
+			POST("/rpc/agents.blockOnConnection")
 			security.SessionHeader()
-			Body(RestrictAgentOnConnectionForm)
+			Body(BlockAgentOnConnectionForm)
 			Response(StatusOK)
 		})
 	})
 
-	Method("removeConnectionRestriction", func() {
-		Description("Remove a restriction the caller wrote on their own connection. Restrictions written by an agent manager are not affected.")
-		Meta("openapi:operationId", "removeAgentConnectionRestriction")
-		Meta("openapi:extension:x-speakeasy-name-override", "removeConnectionRestriction")
-		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RemoveAgentConnectionRestriction"}`)
+	Method("removeConnectionBlock", func() {
+		Description("Remove a block the caller wrote on their own connection. Blocks written by an agent manager are not affected.")
+		Meta("openapi:operationId", "removeAgentConnectionBlock")
+		Meta("openapi:extension:x-speakeasy-name-override", "removeConnectionBlock")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RemoveAgentConnectionBlock"}`)
 		Payload(func() {
 			security.SessionPayload()
-			Extend(ConnectionRestrictionIDForm)
+			Extend(ConnectionBlockIDForm)
 		})
 		HTTP(func() {
-			POST("/rpc/agents.removeConnectionRestriction")
+			POST("/rpc/agents.removeConnectionBlock")
 			security.SessionHeader()
-			Body(ConnectionRestrictionIDForm)
+			Body(ConnectionBlockIDForm)
 			Response(StatusNoContent)
 		})
 	})

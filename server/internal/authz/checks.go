@@ -104,8 +104,11 @@ func validateAuthClientCheck(c Check) error {
 	personal := clientType == AuthClientTypeRemoteSession
 	for _, key := range []string{SelectorKeyConnectionOwner, SelectorKeyUpstreamClient} {
 		value, has := c.Dimensions[key]
-		if has != personal || (has && value == "") {
-			return invalidCheckReason(c.Scope, c.ResourceID, key+" is required for remote_session clients only")
+		if personal && (!has || value == "") {
+			return invalidCheckReason(c.Scope, c.ResourceID, "missing "+key+" for a remote_session client")
+		}
+		if !personal && has {
+			return invalidCheckReason(c.Scope, c.ResourceID, key+" is allowed for remote_session clients only")
 		}
 	}
 	for key, value := range c.Dimensions {

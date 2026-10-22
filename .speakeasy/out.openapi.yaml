@@ -7949,6 +7949,94 @@ paths:
       x-speakeasy-name-override: upsertAiScanTarget
       x-speakeasy-react-hook:
         name: UpsertAiScanTarget
+  /rpc/agents.blockOnConnection:
+    post:
+      description: Block one agent in the caller's organization from the caller's own connection through an upstream OAuth client, across every auth client sharing it. Only the connection owner can do this, and it needs no agent management access. Blocks only; it never grants access.
+      operationId: blockAgentOnConnection
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BlockAgentOnConnectionForm'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentConnectionBlock'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: blockAgentOnConnection agents
+      tags:
+        - agents
+      x-speakeasy-name-override: blockOnConnection
+      x-speakeasy-react-hook:
+        name: BlockAgentOnConnection
   /rpc/agents.create:
     post:
       operationId: createAgent
@@ -8534,11 +8622,29 @@ paths:
         type: cursor
       x-speakeasy-react-hook:
         name: Agents
-  /rpc/agents.listConnectionRestrictions:
+  /rpc/agents.listConnectionBlocks:
     get:
       description: List the agents the caller blocked from their own connections. Needs no agent management access.
-      operationId: listAgentConnectionRestrictions
+      operationId: listAgentConnectionBlocks
       parameters:
+        - allowEmptyValue: true
+          description: Cursor for the next page of blocks.
+          in: query
+          name: cursor
+          schema:
+            description: Cursor for the next page of blocks.
+            type: string
+        - allowEmptyValue: true
+          description: The number of blocks to return per page.
+          in: query
+          name: limit
+          schema:
+            default: 50
+            description: The number of blocks to return per page.
+            format: int64
+            maximum: 100
+            minimum: 1
+            type: integer
         - allowEmptyValue: true
           description: Session header
           in: header
@@ -8551,7 +8657,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ListAgentConnectionRestrictionsResult'
+                $ref: '#/components/schemas/ListAgentConnectionBlocksResult'
           description: OK response.
         "400":
           content:
@@ -8610,12 +8716,20 @@ paths:
       security:
         - session_header_Gram-Session: []
         - {}
-      summary: listConnectionRestrictions agents
+      summary: listConnectionBlocks agents
       tags:
         - agents
-      x-speakeasy-name-override: listConnectionRestrictions
+      x-speakeasy-name-override: listConnectionBlocks
+      x-speakeasy-pagination:
+        inputs:
+          - in: parameters
+            name: cursor
+            type: cursor
+        outputs:
+          nextCursor: $.next_cursor
+        type: cursor
       x-speakeasy-react-hook:
-        name: AgentConnectionRestrictions
+        name: AgentConnectionBlocks
   /rpc/agents.listDelegableGrants:
     get:
       description: List safe allow-only credential grant candidates shared by the live agent, owner, and current authorizer. Candidates with unrepresentable exclusions are conservatively omitted. Issuance revalidates every grant.
@@ -9018,10 +9132,10 @@ paths:
       x-speakeasy-name-override: reassign
       x-speakeasy-react-hook:
         name: ReassignAgent
-  /rpc/agents.removeConnectionRestriction:
+  /rpc/agents.removeConnectionBlock:
     post:
-      description: Remove a restriction the caller wrote on their own connection. Restrictions written by an agent manager are not affected.
-      operationId: removeAgentConnectionRestriction
+      description: Remove a block the caller wrote on their own connection. Blocks written by an agent manager are not affected.
+      operationId: removeAgentConnectionBlock
       parameters:
         - allowEmptyValue: true
           description: Session header
@@ -9034,7 +9148,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/AgentConnectionRestrictionIDForm'
+              $ref: '#/components/schemas/AgentConnectionBlockIDForm'
         required: true
       responses:
         "204":
@@ -9096,12 +9210,12 @@ paths:
       security:
         - session_header_Gram-Session: []
         - {}
-      summary: removeConnectionRestriction agents
+      summary: removeConnectionBlock agents
       tags:
         - agents
-      x-speakeasy-name-override: removeConnectionRestriction
+      x-speakeasy-name-override: removeConnectionBlock
       x-speakeasy-react-hook:
-        name: RemoveAgentConnectionRestriction
+        name: RemoveAgentConnectionBlock
   /rpc/agents.rename:
     post:
       operationId: renameAgent
@@ -9189,94 +9303,6 @@ paths:
       x-speakeasy-name-override: rename
       x-speakeasy-react-hook:
         name: RenameAgent
-  /rpc/agents.restrictOnConnection:
-    post:
-      description: Block one agent in the caller's organization from the caller's own connection through an upstream OAuth client, across every auth client sharing it. Only the connection owner can do this, and it needs no agent management access. Blocks only; it never grants access.
-      operationId: restrictAgentOnConnection
-      parameters:
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/RestrictAgentOnConnectionForm'
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AgentConnectionRestriction'
-          description: OK response.
-        "400":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'bad_request: request is invalid'
-        "401":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unauthorized: unauthorized access'
-        "403":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'forbidden: permission denied'
-        "404":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'not_found: resource not found'
-        "409":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'conflict: resource already exists'
-        "415":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unsupported_media: unsupported media type'
-        "422":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'invalid: request contains one or more invalidation fields'
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unexpected: an unexpected error occurred'
-        "502":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'gateway_error: an unexpected error occurred'
-      security:
-        - session_header_Gram-Session: []
-        - {}
-      summary: restrictAgentOnConnection agents
-      tags:
-        - agents
-      x-speakeasy-name-override: restrictOnConnection
-      x-speakeasy-react-hook:
-        name: RestrictAgentOnConnection
   /rpc/agents.resume:
     post:
       operationId: resumeAgent
@@ -83337,7 +83363,7 @@ components:
         - issuer
         - subject
         - agent_id
-    AgentConnectionRestriction:
+    AgentConnectionBlock:
       type: object
       properties:
         agent_id:
@@ -83352,7 +83378,7 @@ components:
           format: uuid
         remote_session_client_id:
           type: string
-          description: The upstream OAuth client the connection uses; the restriction covers every auth client sharing it
+          description: The upstream OAuth client the connection uses; the block covers every auth client sharing it
           format: uuid
       description: An agent the caller blocked from their own connection through one upstream OAuth client.
       required:
@@ -83360,15 +83386,15 @@ components:
         - agent_id
         - remote_session_client_id
         - created_at
-    AgentConnectionRestrictionIDForm:
+    AgentConnectionBlockIDForm:
       type: object
       properties:
-        restriction_id:
+        block_id:
           type: string
-          description: Connection restriction identifier
+          description: Connection block identifier
           format: uuid
       required:
-        - restriction_id
+        - block_id
     AgentDelegatedGrant:
       type: object
       properties:
@@ -83573,7 +83599,7 @@ components:
       properties:
         client_type:
           type: string
-          description: Auth client type filter (mcp:auth scopes only).
+          description: Auth client type filter (mcp:auth and mcp:blocked_auth scopes only).
           enum:
             - remote_session
             - service_account
@@ -83583,7 +83609,7 @@ components:
             - '*'
         connection_owner:
           type: string
-          description: 'Personal connection owner filter (mcp:auth scopes on remote_session clients only): a user ID, ''*'', or ''$represented_user''.'
+          description: 'Personal connection owner filter (mcp:auth and mcp:blocked_auth scopes on remote_session clients only): a user ID, ''*'', or ''$represented_user''.'
         disposition:
           type: string
           description: Tool disposition filter (MCP scopes only).
@@ -83594,7 +83620,7 @@ components:
             - open_world
         project_id:
           type: string
-          description: Project filter (MCP, environment, assistant, and mcp:auth scopes).
+          description: Project filter (MCP, environment, assistant, mcp:auth and mcp:blocked_auth scopes).
         resource_id:
           type: string
           description: The resource identifier, or '*' for all resources of this kind.
@@ -83625,7 +83651,7 @@ components:
           description: Specific tool name filter (MCP scopes only).
         upstream_client:
           type: string
-          description: Upstream OAuth client filter (mcp:auth scopes on remote_session clients only). Together with connection_owner it names one person's connection across every auth client sharing that upstream client.
+          description: Upstream OAuth client filter (mcp:auth and mcp:blocked_auth scopes on remote_session clients only). Together with connection_owner it names one person's connection across every auth client sharing that upstream client.
       description: A constraint that narrows which resources an agent grant applies to.
       required:
         - resource_kind
@@ -85301,6 +85327,20 @@ components:
           description: The configured billing notification email. Omitted when organization administrators receive billing notifications.
           format: email
           nullable: true
+    BlockAgentOnConnectionForm:
+      type: object
+      properties:
+        agent_id:
+          type: string
+          description: The agent to block; any agent in the caller's organization
+          format: uuid
+        remote_session_client_id:
+          type: string
+          description: The upstream OAuth client of the caller's own connection
+          format: uuid
+      required:
+        - agent_id
+        - remote_session_client_id
     BuiltInCard:
       type: object
       properties:
@@ -95406,14 +95446,17 @@ components:
           description: The member attributes available to target conditions, in editor display order.
       required:
         - attributes
-    ListAgentConnectionRestrictionsResult:
+    ListAgentConnectionBlocksResult:
       type: object
       properties:
         items:
           type: array
           items:
-            $ref: '#/components/schemas/AgentConnectionRestriction'
-          description: Restrictions the caller wrote on their own connections
+            $ref: '#/components/schemas/AgentConnectionBlock'
+          description: Blocks the caller wrote on their own connections
+        next_cursor:
+          type: string
+          description: Cursor for the next page; absent when exhausted.
       required:
         - items
     ListAgentsResult:
@@ -104136,20 +104179,6 @@ components:
       required:
         - id
         - version_id
-    RestrictAgentOnConnectionForm:
-      type: object
-      properties:
-        agent_id:
-          type: string
-          description: The agent to block; any agent in the caller's organization
-          format: uuid
-        remote_session_client_id:
-          type: string
-          description: The upstream OAuth client of the caller's own connection
-          format: uuid
-      required:
-        - agent_id
-        - remote_session_client_id
     RetryScheduleRequestBody:
       type: object
       properties:
@@ -106647,7 +106676,7 @@ components:
       properties:
         client_type:
           type: string
-          description: Auth client type filter (mcp:auth scopes only).
+          description: Auth client type filter (mcp:auth and mcp:blocked_auth scopes only).
           enum:
             - remote_session
             - service_account
@@ -106657,7 +106686,7 @@ components:
             - '*'
         connection_owner:
           type: string
-          description: Personal connection owner filter (mcp:auth scopes on remote_session clients only). A user ID, '*', or '$represented_user' for the user the request acts for. Never lets a caller use another user's connection.
+          description: Personal connection owner filter (mcp:auth and mcp:blocked_auth scopes on remote_session clients only). A user ID, '*', or '$represented_user' for the user the request acts for. Never lets a caller use another user's connection.
         disposition:
           type: string
           description: Tool disposition filter (MCP scopes only).
@@ -106668,7 +106697,7 @@ components:
             - open_world
         project_id:
           type: string
-          description: Project filter (MCP, environment, assistant, and mcp:auth scopes). When set with resource_id='*', grants access to every resource of the kind in the project. For mcp:auth it is the project of the server using the client.
+          description: Project filter (MCP, environment, assistant, mcp:auth and mcp:blocked_auth scopes). When set with resource_id='*', grants access to every resource of the kind in the project. For the auth-client scopes it is the project of the server using the client.
         resource_id:
           type: string
           description: The resource identifier, or '*' for all resources of this kind.
@@ -106697,7 +106726,7 @@ components:
           description: Specific tool name filter (MCP scopes only).
         upstream_client:
           type: string
-          description: Upstream OAuth client filter (mcp:auth scopes on remote_session clients only). Together with connection_owner it names one person's connection across every auth client sharing that upstream client.
+          description: Upstream OAuth client filter (mcp:auth and mcp:blocked_auth scopes on remote_session clients only). Together with connection_owner it names one person's connection across every auth client sharing that upstream client.
       description: A constraint that narrows which resources a grant applies to.
       required:
         - resource_kind

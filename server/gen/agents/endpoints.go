@@ -16,26 +16,26 @@ import (
 
 // Endpoints wraps the "agents" service endpoints.
 type Endpoints struct {
-	ListSessions                goa.Endpoint
-	RevokeSession               goa.Endpoint
-	List                        goa.Endpoint
-	Create                      goa.Endpoint
-	Get                         goa.Endpoint
-	Rename                      goa.Endpoint
-	ListDelegableGrants         goa.Endpoint
-	ListPolicyGrants            goa.Endpoint
-	CreatePolicyGrant           goa.Endpoint
-	UpdatePolicyGrant           goa.Endpoint
-	DeletePolicyGrant           goa.Endpoint
-	ListConnectionRestrictions  goa.Endpoint
-	RestrictAgentOnConnection   goa.Endpoint
-	RemoveConnectionRestriction goa.Endpoint
-	Transfer                    goa.Endpoint
-	Reassign                    goa.Endpoint
-	Suspend                     goa.Endpoint
-	Resume                      goa.Endpoint
-	Revoke                      goa.Endpoint
-	Delete                      goa.Endpoint
+	ListSessions           goa.Endpoint
+	RevokeSession          goa.Endpoint
+	List                   goa.Endpoint
+	Create                 goa.Endpoint
+	Get                    goa.Endpoint
+	Rename                 goa.Endpoint
+	ListDelegableGrants    goa.Endpoint
+	ListPolicyGrants       goa.Endpoint
+	CreatePolicyGrant      goa.Endpoint
+	UpdatePolicyGrant      goa.Endpoint
+	DeletePolicyGrant      goa.Endpoint
+	ListConnectionBlocks   goa.Endpoint
+	BlockAgentOnConnection goa.Endpoint
+	RemoveConnectionBlock  goa.Endpoint
+	Transfer               goa.Endpoint
+	Reassign               goa.Endpoint
+	Suspend                goa.Endpoint
+	Resume                 goa.Endpoint
+	Revoke                 goa.Endpoint
+	Delete                 goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "agents" service with endpoints.
@@ -43,26 +43,26 @@ func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
 	a := s.(Auther)
 	return &Endpoints{
-		ListSessions:                NewListSessionsEndpoint(s, a.APIKeyAuth),
-		RevokeSession:               NewRevokeSessionEndpoint(s, a.APIKeyAuth),
-		List:                        NewListEndpoint(s, a.APIKeyAuth),
-		Create:                      NewCreateEndpoint(s, a.APIKeyAuth),
-		Get:                         NewGetEndpoint(s, a.APIKeyAuth),
-		Rename:                      NewRenameEndpoint(s, a.APIKeyAuth),
-		ListDelegableGrants:         NewListDelegableGrantsEndpoint(s, a.APIKeyAuth),
-		ListPolicyGrants:            NewListPolicyGrantsEndpoint(s, a.APIKeyAuth),
-		CreatePolicyGrant:           NewCreatePolicyGrantEndpoint(s, a.APIKeyAuth),
-		UpdatePolicyGrant:           NewUpdatePolicyGrantEndpoint(s, a.APIKeyAuth),
-		DeletePolicyGrant:           NewDeletePolicyGrantEndpoint(s, a.APIKeyAuth),
-		ListConnectionRestrictions:  NewListConnectionRestrictionsEndpoint(s, a.APIKeyAuth),
-		RestrictAgentOnConnection:   NewRestrictAgentOnConnectionEndpoint(s, a.APIKeyAuth),
-		RemoveConnectionRestriction: NewRemoveConnectionRestrictionEndpoint(s, a.APIKeyAuth),
-		Transfer:                    NewTransferEndpoint(s, a.APIKeyAuth),
-		Reassign:                    NewReassignEndpoint(s, a.APIKeyAuth),
-		Suspend:                     NewSuspendEndpoint(s, a.APIKeyAuth),
-		Resume:                      NewResumeEndpoint(s, a.APIKeyAuth),
-		Revoke:                      NewRevokeEndpoint(s, a.APIKeyAuth),
-		Delete:                      NewDeleteEndpoint(s, a.APIKeyAuth),
+		ListSessions:           NewListSessionsEndpoint(s, a.APIKeyAuth),
+		RevokeSession:          NewRevokeSessionEndpoint(s, a.APIKeyAuth),
+		List:                   NewListEndpoint(s, a.APIKeyAuth),
+		Create:                 NewCreateEndpoint(s, a.APIKeyAuth),
+		Get:                    NewGetEndpoint(s, a.APIKeyAuth),
+		Rename:                 NewRenameEndpoint(s, a.APIKeyAuth),
+		ListDelegableGrants:    NewListDelegableGrantsEndpoint(s, a.APIKeyAuth),
+		ListPolicyGrants:       NewListPolicyGrantsEndpoint(s, a.APIKeyAuth),
+		CreatePolicyGrant:      NewCreatePolicyGrantEndpoint(s, a.APIKeyAuth),
+		UpdatePolicyGrant:      NewUpdatePolicyGrantEndpoint(s, a.APIKeyAuth),
+		DeletePolicyGrant:      NewDeletePolicyGrantEndpoint(s, a.APIKeyAuth),
+		ListConnectionBlocks:   NewListConnectionBlocksEndpoint(s, a.APIKeyAuth),
+		BlockAgentOnConnection: NewBlockAgentOnConnectionEndpoint(s, a.APIKeyAuth),
+		RemoveConnectionBlock:  NewRemoveConnectionBlockEndpoint(s, a.APIKeyAuth),
+		Transfer:               NewTransferEndpoint(s, a.APIKeyAuth),
+		Reassign:               NewReassignEndpoint(s, a.APIKeyAuth),
+		Suspend:                NewSuspendEndpoint(s, a.APIKeyAuth),
+		Resume:                 NewResumeEndpoint(s, a.APIKeyAuth),
+		Revoke:                 NewRevokeEndpoint(s, a.APIKeyAuth),
+		Delete:                 NewDeleteEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -79,9 +79,9 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.CreatePolicyGrant = m(e.CreatePolicyGrant)
 	e.UpdatePolicyGrant = m(e.UpdatePolicyGrant)
 	e.DeletePolicyGrant = m(e.DeletePolicyGrant)
-	e.ListConnectionRestrictions = m(e.ListConnectionRestrictions)
-	e.RestrictAgentOnConnection = m(e.RestrictAgentOnConnection)
-	e.RemoveConnectionRestriction = m(e.RemoveConnectionRestriction)
+	e.ListConnectionBlocks = m(e.ListConnectionBlocks)
+	e.BlockAgentOnConnection = m(e.BlockAgentOnConnection)
+	e.RemoveConnectionBlock = m(e.RemoveConnectionBlock)
 	e.Transfer = m(e.Transfer)
 	e.Reassign = m(e.Reassign)
 	e.Suspend = m(e.Suspend)
@@ -343,11 +343,11 @@ func NewDeletePolicyGrantEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFun
 	}
 }
 
-// NewListConnectionRestrictionsEndpoint returns an endpoint function that
-// calls the method "listConnectionRestrictions" of service "agents".
-func NewListConnectionRestrictionsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+// NewListConnectionBlocksEndpoint returns an endpoint function that calls the
+// method "listConnectionBlocks" of service "agents".
+func NewListConnectionBlocksEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
 	return func(ctx context.Context, req any) (any, error) {
-		p := req.(*ListConnectionRestrictionsPayload)
+		p := req.(*ListConnectionBlocksPayload)
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "session",
@@ -362,15 +362,15 @@ func NewListConnectionRestrictionsEndpoint(s Service, authAPIKeyFn security.Auth
 		if err != nil {
 			return nil, err
 		}
-		return s.ListConnectionRestrictions(ctx, p)
+		return s.ListConnectionBlocks(ctx, p)
 	}
 }
 
-// NewRestrictAgentOnConnectionEndpoint returns an endpoint function that calls
-// the method "restrictAgentOnConnection" of service "agents".
-func NewRestrictAgentOnConnectionEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+// NewBlockAgentOnConnectionEndpoint returns an endpoint function that calls
+// the method "blockAgentOnConnection" of service "agents".
+func NewBlockAgentOnConnectionEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
 	return func(ctx context.Context, req any) (any, error) {
-		p := req.(*RestrictAgentOnConnectionPayload)
+		p := req.(*BlockAgentOnConnectionPayload)
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "session",
@@ -385,15 +385,15 @@ func NewRestrictAgentOnConnectionEndpoint(s Service, authAPIKeyFn security.AuthA
 		if err != nil {
 			return nil, err
 		}
-		return s.RestrictAgentOnConnection(ctx, p)
+		return s.BlockAgentOnConnection(ctx, p)
 	}
 }
 
-// NewRemoveConnectionRestrictionEndpoint returns an endpoint function that
-// calls the method "removeConnectionRestriction" of service "agents".
-func NewRemoveConnectionRestrictionEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+// NewRemoveConnectionBlockEndpoint returns an endpoint function that calls the
+// method "removeConnectionBlock" of service "agents".
+func NewRemoveConnectionBlockEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
 	return func(ctx context.Context, req any) (any, error) {
-		p := req.(*RemoveConnectionRestrictionPayload)
+		p := req.(*RemoveConnectionBlockPayload)
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "session",
@@ -408,7 +408,7 @@ func NewRemoveConnectionRestrictionEndpoint(s Service, authAPIKeyFn security.Aut
 		if err != nil {
 			return nil, err
 		}
-		return nil, s.RemoveConnectionRestriction(ctx, p)
+		return nil, s.RemoveConnectionBlock(ctx, p)
 	}
 }
 

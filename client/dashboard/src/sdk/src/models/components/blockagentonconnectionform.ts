@@ -5,7 +5,7 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 
-export type RestrictAgentOnConnectionForm = {
+export type BlockAgentOnConnectionForm = {
   /**
    * The agent to block; any agent in the caller's organization
    */
@@ -17,15 +17,15 @@ export type RestrictAgentOnConnectionForm = {
 };
 
 /** @internal */
-export type RestrictAgentOnConnectionForm$Outbound = {
+export type BlockAgentOnConnectionForm$Outbound = {
   agent_id: string;
   remote_session_client_id: string;
 };
 
 /** @internal */
-export const RestrictAgentOnConnectionForm$outboundSchema: z.ZodMiniType<
-  RestrictAgentOnConnectionForm$Outbound,
-  RestrictAgentOnConnectionForm
+export const BlockAgentOnConnectionForm$outboundSchema: z.ZodMiniType<
+  BlockAgentOnConnectionForm$Outbound,
+  BlockAgentOnConnectionForm
 > = z.pipe(
   z.object({
     agentId: z.string(),
@@ -39,12 +39,10 @@ export const RestrictAgentOnConnectionForm$outboundSchema: z.ZodMiniType<
   }),
 );
 
-export function restrictAgentOnConnectionFormToJSON(
-  restrictAgentOnConnectionForm: RestrictAgentOnConnectionForm,
+export function blockAgentOnConnectionFormToJSON(
+  blockAgentOnConnectionForm: BlockAgentOnConnectionForm,
 ): string {
   return JSON.stringify(
-    RestrictAgentOnConnectionForm$outboundSchema.parse(
-      restrictAgentOnConnectionForm,
-    ),
+    BlockAgentOnConnectionForm$outboundSchema.parse(blockAgentOnConnectionForm),
   );
 }

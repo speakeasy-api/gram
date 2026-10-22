@@ -142,7 +142,7 @@ func (s *Service) UpdatePolicyGrant(ctx context.Context, payload *gen.UpdatePoli
 			return fmt.Errorf("load agent policy grant: %w", err)
 		}
 		before := policyGrantRow{ID: beforeRow.ID, Scope: beforeRow.Scope, Selectors: beforeRow.Selectors, CreatedAt: beforeRow.CreatedAt.Time, UpdatedAt: beforeRow.UpdatedAt.Time}
-		if err := requireNotConnectionOwnerRestriction(ctx, tx, human.Auth.ActiveOrganizationID, agent.ID, beforeRow.Scope, beforeRow.Selectors); err != nil {
+		if err := requireNotConnectionOwnerBlock(ctx, tx, human.Auth.ActiveOrganizationID, agent.ID, beforeRow.Scope, beforeRow.Selectors); err != nil {
 			return err
 		}
 
@@ -198,7 +198,7 @@ func (s *Service) DeletePolicyGrant(ctx context.Context, payload *gen.DeletePoli
 		if err != nil {
 			return fmt.Errorf("load agent policy grant: %w", err)
 		}
-		if err := requireNotConnectionOwnerRestriction(ctx, tx, human.Auth.ActiveOrganizationID, agent.ID, existing.Scope, existing.Selectors); err != nil {
+		if err := requireNotConnectionOwnerBlock(ctx, tx, human.Auth.ActiveOrganizationID, agent.ID, existing.Scope, existing.Selectors); err != nil {
 			return err
 		}
 		row, err := q.DeleteAgentPolicyGrant(ctx, repo.DeleteAgentPolicyGrantParams{

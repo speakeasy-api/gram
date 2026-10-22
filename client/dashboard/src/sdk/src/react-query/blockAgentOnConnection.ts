@@ -8,10 +8,10 @@ import {
   UseMutationResult,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { agentsRestrictOnConnection } from "../funcs/agentsRestrictOnConnection.js";
+import { agentsBlockOnConnection } from "../funcs/agentsBlockOnConnection.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import { AgentConnectionRestriction } from "../models/components/agentconnectionrestriction.js";
+import { AgentConnectionBlock } from "../models/components/agentconnectionblock.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -24,22 +24,22 @@ import { ResponseValidationError } from "../models/errors/responsevalidationerro
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import { ServiceError } from "../models/errors/serviceerror.js";
 import {
-  RestrictAgentOnConnectionRequest,
-  RestrictAgentOnConnectionSecurity,
-} from "../models/operations/restrictagentonconnection.js";
+  BlockAgentOnConnectionRequest,
+  BlockAgentOnConnectionSecurity,
+} from "../models/operations/blockagentonconnection.js";
 import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
-export type RestrictAgentOnConnectionMutationVariables = {
-  request: RestrictAgentOnConnectionRequest;
-  security?: RestrictAgentOnConnectionSecurity | undefined;
+export type BlockAgentOnConnectionMutationVariables = {
+  request: BlockAgentOnConnectionRequest;
+  security?: BlockAgentOnConnectionSecurity | undefined;
   options?: RequestOptions;
 };
 
-export type RestrictAgentOnConnectionMutationData = AgentConnectionRestriction;
+export type BlockAgentOnConnectionMutationData = AgentConnectionBlock;
 
-export type RestrictAgentOnConnectionMutationError =
+export type BlockAgentOnConnectionMutationError =
   | ServiceError
   | GramError
   | ResponseValidationError
@@ -51,49 +51,49 @@ export type RestrictAgentOnConnectionMutationError =
   | SDKValidationError;
 
 /**
- * restrictAgentOnConnection agents
+ * blockAgentOnConnection agents
  *
  * @remarks
  * Block one agent in the caller's organization from the caller's own connection through an upstream OAuth client, across every auth client sharing it. Only the connection owner can do this, and it needs no agent management access. Blocks only; it never grants access.
  */
-export function useRestrictAgentOnConnectionMutation(
+export function useBlockAgentOnConnectionMutation(
   options?: MutationHookOptions<
-    RestrictAgentOnConnectionMutationData,
-    RestrictAgentOnConnectionMutationError,
-    RestrictAgentOnConnectionMutationVariables
+    BlockAgentOnConnectionMutationData,
+    BlockAgentOnConnectionMutationError,
+    BlockAgentOnConnectionMutationVariables
   >,
 ): UseMutationResult<
-  RestrictAgentOnConnectionMutationData,
-  RestrictAgentOnConnectionMutationError,
-  RestrictAgentOnConnectionMutationVariables
+  BlockAgentOnConnectionMutationData,
+  BlockAgentOnConnectionMutationError,
+  BlockAgentOnConnectionMutationVariables
 > {
   const client = useGramContext();
   return useMutation({
-    ...buildRestrictAgentOnConnectionMutation(client, options),
+    ...buildBlockAgentOnConnectionMutation(client, options),
     ...options,
   });
 }
 
-export function mutationKeyRestrictAgentOnConnection(): MutationKey {
-  return ["@gram/client", "agents", "restrictOnConnection"];
+export function mutationKeyBlockAgentOnConnection(): MutationKey {
+  return ["@gram/client", "agents", "blockOnConnection"];
 }
 
-export function buildRestrictAgentOnConnectionMutation(
+export function buildBlockAgentOnConnectionMutation(
   client$: GramCore,
   hookOptions?: RequestOptions,
 ): {
   mutationKey: MutationKey;
   mutationFn: (
-    variables: RestrictAgentOnConnectionMutationVariables,
-  ) => Promise<RestrictAgentOnConnectionMutationData>;
+    variables: BlockAgentOnConnectionMutationVariables,
+  ) => Promise<BlockAgentOnConnectionMutationData>;
 } {
   return {
-    mutationKey: mutationKeyRestrictAgentOnConnection(),
-    mutationFn: function restrictAgentOnConnectionMutationFn({
+    mutationKey: mutationKeyBlockAgentOnConnection(),
+    mutationFn: function blockAgentOnConnectionMutationFn({
       request,
       security,
       options,
-    }): Promise<RestrictAgentOnConnectionMutationData> {
+    }): Promise<BlockAgentOnConnectionMutationData> {
       const mergedOptions = {
         ...hookOptions,
         ...options,
@@ -106,7 +106,7 @@ export function buildRestrictAgentOnConnectionMutation(
           ),
         },
       };
-      return unwrapAsync(agentsRestrictOnConnection(
+      return unwrapAsync(agentsBlockOnConnection(
         client$,
         request,
         security,

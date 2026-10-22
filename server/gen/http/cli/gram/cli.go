@@ -123,7 +123,7 @@ func UsageCommands() []string {
 		"about openapi",
 		"access (list-roles|get-role|create-role|update-role|delete-role|list-directory-role-mappings|sync-directory-groups|set-directory-role-mapping|set-directory-role-mappings|delete-directory-role-mapping|preview-directory-role-setup|apply-directory-role-setup|list-directory-review-items|resolve-directory-review-item|get-directory-review-settings|update-directory-review-settings|list-scopes|list-members|list-grants|update-member-roles|list-shadow-mcp-inventory|get-shadow-mcp-inventory-server|update-shadow-mcp-inventory-server-name|list-shadow-mcp-inventory-users|list-shadow-mcp-inventory-servers-for-user|resolve-shadow-mcp-inventory-request|list-ai-detections|list-employee-ai-detections|list-ai-detection-users|set-ai-tool-decision|list-resource-audience|set-resource-audience|list-audience-options|explain-resource-access|request-access|list-challenges|list-challenge-buckets|resolve-challenge|list-identity-access)",
 		"agent (get-plugins|list-synced-users|get-configuration|update-configuration|list-ai-scan-targets|upsert-ai-scan-target|delete-ai-scan-target|get-session-meta|report-session-moved|report-ai-scan|create-session-handoff)",
-		"agents (list-sessions|revoke-session|list|create|get|rename|list-delegable-grants|list-policy-grants|create-policy-grant|update-policy-grant|delete-policy-grant|list-connection-restrictions|restrict-agent-on-connection|remove-connection-restriction|transfer|reassign|suspend|resume|revoke|delete)",
+		"agents (list-sessions|revoke-session|list|create|get|rename|list-delegable-grants|list-policy-grants|create-policy-grant|update-policy-grant|delete-policy-grant|list-connection-blocks|block-agent-on-connection|remove-connection-block|transfer|reassign|suspend|resume|revoke|delete)",
 		"ai-integrations (get-anthropic-inference-config|upsert-anthropic-inference-config|delete-anthropic-inference-config|get-config|upsert-config|delete-config|list-schedules|set-schedule-enabled|retry-schedule)",
 		"analytics (query|describe|dimension-values)",
 		"assets (serve-image|upload-image|upload-functions|upload-open-ap-iv3|fetch-image-from-url|fetch-open-ap-iv3-from-url|serve-open-ap-iv3|serve-function|list-assets|upload-chat-attachment|serve-chat-attachment|create-signed-chat-attachment-url|serve-chat-attachment-signed)",
@@ -604,16 +604,18 @@ func ParseEndpoint(
 		agentsDeletePolicyGrantBodyFlag         = agentsDeletePolicyGrantFlags.String("body", "REQUIRED", "")
 		agentsDeletePolicyGrantSessionTokenFlag = agentsDeletePolicyGrantFlags.String("session-token", "", "")
 
-		agentsListConnectionRestrictionsFlags            = flag.NewFlagSet("list-connection-restrictions", flag.ExitOnError)
-		agentsListConnectionRestrictionsSessionTokenFlag = agentsListConnectionRestrictionsFlags.String("session-token", "", "")
+		agentsListConnectionBlocksFlags            = flag.NewFlagSet("list-connection-blocks", flag.ExitOnError)
+		agentsListConnectionBlocksCursorFlag       = agentsListConnectionBlocksFlags.String("cursor", "", "")
+		agentsListConnectionBlocksLimitFlag        = agentsListConnectionBlocksFlags.String("limit", "50", "")
+		agentsListConnectionBlocksSessionTokenFlag = agentsListConnectionBlocksFlags.String("session-token", "", "")
 
-		agentsRestrictAgentOnConnectionFlags            = flag.NewFlagSet("restrict-agent-on-connection", flag.ExitOnError)
-		agentsRestrictAgentOnConnectionBodyFlag         = agentsRestrictAgentOnConnectionFlags.String("body", "REQUIRED", "")
-		agentsRestrictAgentOnConnectionSessionTokenFlag = agentsRestrictAgentOnConnectionFlags.String("session-token", "", "")
+		agentsBlockAgentOnConnectionFlags            = flag.NewFlagSet("block-agent-on-connection", flag.ExitOnError)
+		agentsBlockAgentOnConnectionBodyFlag         = agentsBlockAgentOnConnectionFlags.String("body", "REQUIRED", "")
+		agentsBlockAgentOnConnectionSessionTokenFlag = agentsBlockAgentOnConnectionFlags.String("session-token", "", "")
 
-		agentsRemoveConnectionRestrictionFlags            = flag.NewFlagSet("remove-connection-restriction", flag.ExitOnError)
-		agentsRemoveConnectionRestrictionBodyFlag         = agentsRemoveConnectionRestrictionFlags.String("body", "REQUIRED", "")
-		agentsRemoveConnectionRestrictionSessionTokenFlag = agentsRemoveConnectionRestrictionFlags.String("session-token", "", "")
+		agentsRemoveConnectionBlockFlags            = flag.NewFlagSet("remove-connection-block", flag.ExitOnError)
+		agentsRemoveConnectionBlockBodyFlag         = agentsRemoveConnectionBlockFlags.String("body", "REQUIRED", "")
+		agentsRemoveConnectionBlockSessionTokenFlag = agentsRemoveConnectionBlockFlags.String("session-token", "", "")
 
 		agentsTransferFlags            = flag.NewFlagSet("transfer", flag.ExitOnError)
 		agentsTransferBodyFlag         = agentsTransferFlags.String("body", "REQUIRED", "")
@@ -5296,9 +5298,9 @@ func ParseEndpoint(
 	agentsCreatePolicyGrantFlags.Usage = agentsCreatePolicyGrantUsage
 	agentsUpdatePolicyGrantFlags.Usage = agentsUpdatePolicyGrantUsage
 	agentsDeletePolicyGrantFlags.Usage = agentsDeletePolicyGrantUsage
-	agentsListConnectionRestrictionsFlags.Usage = agentsListConnectionRestrictionsUsage
-	agentsRestrictAgentOnConnectionFlags.Usage = agentsRestrictAgentOnConnectionUsage
-	agentsRemoveConnectionRestrictionFlags.Usage = agentsRemoveConnectionRestrictionUsage
+	agentsListConnectionBlocksFlags.Usage = agentsListConnectionBlocksUsage
+	agentsBlockAgentOnConnectionFlags.Usage = agentsBlockAgentOnConnectionUsage
+	agentsRemoveConnectionBlockFlags.Usage = agentsRemoveConnectionBlockUsage
 	agentsTransferFlags.Usage = agentsTransferUsage
 	agentsReassignFlags.Usage = agentsReassignUsage
 	agentsSuspendFlags.Usage = agentsSuspendUsage
@@ -6780,14 +6782,14 @@ func ParseEndpoint(
 			case "delete-policy-grant":
 				epf = agentsDeletePolicyGrantFlags
 
-			case "list-connection-restrictions":
-				epf = agentsListConnectionRestrictionsFlags
+			case "list-connection-blocks":
+				epf = agentsListConnectionBlocksFlags
 
-			case "restrict-agent-on-connection":
-				epf = agentsRestrictAgentOnConnectionFlags
+			case "block-agent-on-connection":
+				epf = agentsBlockAgentOnConnectionFlags
 
-			case "remove-connection-restriction":
-				epf = agentsRemoveConnectionRestrictionFlags
+			case "remove-connection-block":
+				epf = agentsRemoveConnectionBlockFlags
 
 			case "transfer":
 				epf = agentsTransferFlags
@@ -9932,15 +9934,15 @@ func ParseEndpoint(
 			case "delete-policy-grant":
 				endpoint = c.DeletePolicyGrant()
 				data, err = agentsc.BuildDeletePolicyGrantPayload(*agentsDeletePolicyGrantBodyFlag, *agentsDeletePolicyGrantSessionTokenFlag)
-			case "list-connection-restrictions":
-				endpoint = c.ListConnectionRestrictions()
-				data, err = agentsc.BuildListConnectionRestrictionsPayload(*agentsListConnectionRestrictionsSessionTokenFlag)
-			case "restrict-agent-on-connection":
-				endpoint = c.RestrictAgentOnConnection()
-				data, err = agentsc.BuildRestrictAgentOnConnectionPayload(*agentsRestrictAgentOnConnectionBodyFlag, *agentsRestrictAgentOnConnectionSessionTokenFlag)
-			case "remove-connection-restriction":
-				endpoint = c.RemoveConnectionRestriction()
-				data, err = agentsc.BuildRemoveConnectionRestrictionPayload(*agentsRemoveConnectionRestrictionBodyFlag, *agentsRemoveConnectionRestrictionSessionTokenFlag)
+			case "list-connection-blocks":
+				endpoint = c.ListConnectionBlocks()
+				data, err = agentsc.BuildListConnectionBlocksPayload(*agentsListConnectionBlocksCursorFlag, *agentsListConnectionBlocksLimitFlag, *agentsListConnectionBlocksSessionTokenFlag)
+			case "block-agent-on-connection":
+				endpoint = c.BlockAgentOnConnection()
+				data, err = agentsc.BuildBlockAgentOnConnectionPayload(*agentsBlockAgentOnConnectionBodyFlag, *agentsBlockAgentOnConnectionSessionTokenFlag)
+			case "remove-connection-block":
+				endpoint = c.RemoveConnectionBlock()
+				data, err = agentsc.BuildRemoveConnectionBlockPayload(*agentsRemoveConnectionBlockBodyFlag, *agentsRemoveConnectionBlockSessionTokenFlag)
 			case "transfer":
 				endpoint = c.Transfer()
 				data, err = agentsc.BuildTransferPayload(*agentsTransferBodyFlag, *agentsTransferSessionTokenFlag)
@@ -14315,9 +14317,9 @@ func agentsUsage() {
 	fmt.Fprintln(os.Stderr, `    create-policy-grant: CreatePolicyGrant implements createPolicyGrant.`)
 	fmt.Fprintln(os.Stderr, `    update-policy-grant: UpdatePolicyGrant implements updatePolicyGrant.`)
 	fmt.Fprintln(os.Stderr, `    delete-policy-grant: DeletePolicyGrant implements deletePolicyGrant.`)
-	fmt.Fprintln(os.Stderr, `    list-connection-restrictions: List the agents the caller blocked from their own connections. Needs no agent management access.`)
-	fmt.Fprintln(os.Stderr, `    restrict-agent-on-connection: Block one agent in the caller's organization from the caller's own connection through an upstream OAuth client, across every auth client sharing it. Only the connection owner can do this, and it needs no agent management access. Blocks only; it never grants access.`)
-	fmt.Fprintln(os.Stderr, `    remove-connection-restriction: Remove a restriction the caller wrote on their own connection. Restrictions written by an agent manager are not affected.`)
+	fmt.Fprintln(os.Stderr, `    list-connection-blocks: List the agents the caller blocked from their own connections. Needs no agent management access.`)
+	fmt.Fprintln(os.Stderr, `    block-agent-on-connection: Block one agent in the caller's organization from the caller's own connection through an upstream OAuth client, across every auth client sharing it. Only the connection owner can do this, and it needs no agent management access. Blocks only; it never grants access.`)
+	fmt.Fprintln(os.Stderr, `    remove-connection-block: Remove a block the caller wrote on their own connection. Blocks written by an agent manager are not affected.`)
 	fmt.Fprintln(os.Stderr, `    transfer: Transfer implements transfer.`)
 	fmt.Fprintln(os.Stderr, `    reassign: Reassign implements reassign.`)
 	fmt.Fprintln(os.Stderr, `    suspend: Suspend implements suspend.`)
@@ -14570,9 +14572,11 @@ func agentsDeletePolicyGrantUsage() {
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "agents delete-policy-grant --body '{\n      \"agent_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"grant_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\"")
 }
 
-func agentsListConnectionRestrictionsUsage() {
+func agentsListConnectionBlocksUsage() {
 	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] agents list-connection-restrictions", os.Args[0])
+	fmt.Fprintf(os.Stderr, "%s [flags] agents list-connection-blocks", os.Args[0])
+	fmt.Fprint(os.Stderr, " -cursor STRING")
+	fmt.Fprint(os.Stderr, " -limit INT")
 	fmt.Fprint(os.Stderr, " -session-token STRING")
 	fmt.Fprintln(os.Stderr)
 
@@ -14581,16 +14585,18 @@ func agentsListConnectionRestrictionsUsage() {
 	fmt.Fprintln(os.Stderr, `List the agents the caller blocked from their own connections. Needs no agent management access.`)
 
 	// Flags list
+	fmt.Fprintln(os.Stderr, `    -cursor STRING: `)
+	fmt.Fprintln(os.Stderr, `    -limit INT: `)
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "agents list-connection-restrictions --session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "agents list-connection-blocks --cursor \"abc123\" --limit 2 --session-token \"abc123\"")
 }
 
-func agentsRestrictAgentOnConnectionUsage() {
+func agentsBlockAgentOnConnectionUsage() {
 	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] agents restrict-agent-on-connection", os.Args[0])
+	fmt.Fprintf(os.Stderr, "%s [flags] agents block-agent-on-connection", os.Args[0])
 	fmt.Fprint(os.Stderr, " -body JSON")
 	fmt.Fprint(os.Stderr, " -session-token STRING")
 	fmt.Fprintln(os.Stderr)
@@ -14605,19 +14611,19 @@ func agentsRestrictAgentOnConnectionUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "agents restrict-agent-on-connection --body '{\n      \"agent_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"remote_session_client_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "agents block-agent-on-connection --body '{\n      \"agent_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"remote_session_client_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\"")
 }
 
-func agentsRemoveConnectionRestrictionUsage() {
+func agentsRemoveConnectionBlockUsage() {
 	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] agents remove-connection-restriction", os.Args[0])
+	fmt.Fprintf(os.Stderr, "%s [flags] agents remove-connection-block", os.Args[0])
 	fmt.Fprint(os.Stderr, " -body JSON")
 	fmt.Fprint(os.Stderr, " -session-token STRING")
 	fmt.Fprintln(os.Stderr)
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Remove a restriction the caller wrote on their own connection. Restrictions written by an agent manager are not affected.`)
+	fmt.Fprintln(os.Stderr, `Remove a block the caller wrote on their own connection. Blocks written by an agent manager are not affected.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
@@ -14625,7 +14631,7 @@ func agentsRemoveConnectionRestrictionUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "agents remove-connection-restriction --body '{\n      \"restriction_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "agents remove-connection-block --body '{\n      \"block_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\"")
 }
 
 func agentsTransferUsage() {
