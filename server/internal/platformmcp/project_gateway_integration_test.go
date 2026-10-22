@@ -9,6 +9,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	featuresrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
@@ -22,6 +23,7 @@ func TestOrganizationGatewayProjectDiscovery(t *testing.T) {
 		Name: "Gateway project", Slug: "gateway-project", OrganizationID: principal.OrganizationID,
 	})
 	require.NoError(t, err)
+	ctx = authz.GrantsToContext(ctx, []authz.Grant{authz.NewGrant(authz.ScopeProjectRead, project.ID.String())})
 	input := GetMyProjectGatewayInput{ProjectSlug: project.Slug}
 	output, err := service.GetProject(ctx, principal, input)
 	require.NoError(t, err)
@@ -38,6 +40,7 @@ func TestOrganizationGatewayProjectDiscovery(t *testing.T) {
 	server := newTestMCPServer()
 	server.AddReceivingMiddleware(func(next mcp.MethodHandler) mcp.MethodHandler {
 		return func(ctx context.Context, method string, req mcp.Request) (mcp.Result, error) {
+			ctx = authz.GrantsToContext(ctx, []authz.Grant{authz.NewGrant(authz.ScopeProjectRead, project.ID.String())})
 			return next(contextWithPrincipal(ctx, principal), method, req)
 		}
 	})
@@ -84,6 +87,7 @@ func TestOrganizationGatewayProjectRejectsMissingDeletedAndForeign(t *testing.T)
 	require.NoError(t, err)
 	_, err = projectsrepo.New(conn).DeleteProject(ctx, deleted.ID)
 	require.NoError(t, err)
+	ctx = authz.GrantsToContext(ctx, []authz.Grant{authz.NewGrant(authz.ScopeProjectRead, authz.WildcardResource)})
 	for _, slug := range []string{"missing-project", "foreign-project", "deleted-project"} {
 		output, err := service.GetProject(ctx, principal, GetMyProjectGatewayInput{ProjectSlug: slug})
 		require.ErrorIs(t, err, ErrUnavailable)
@@ -118,6 +122,60 @@ func TestOrganizationGatewayProjectContract(t *testing.T) {
 				require.Equal(t, getMyOrganizationGatewayName, d.Name)
 				require.Equal(t, ProjectScopeNone, d.Meta.ProjectScope)
 			}
+		}
+	}
+}
+
+func TestOrganizationGatewayProjectReadRequired(t *testing.T) {
+	t.Parallel()
+	ctx, conn, service, principal, _ := newOrganizationGatewayFixture(t)
+	project, err := projectsrepo.New(conn).CreateProject(ctx, projectsrepo.CreateProjectParams{Name: "Restricted project", Slug: "restricted", OrganizationID: principal.OrganizationID})
+	require.NoError(t, err)
+	createOrganizationIssuerForGateway(t, ctx, conn, principal.OrganizationID)
+	input := GetMyProjectGatewayInput{ProjectSlug: project.Slug}
+	for _, grants := range [][]authz.Grant{
+		nil,
+		{authz.NewGrant(authz.ScopeOrgRead, principal.OrganizationID)},
+		{authz.NewGrant(authz.ScopeProjectRead, uuid.NewString())},
+		{authz.NewGrant(authz.ScopeMCPConnect, authz.WildcardResource)},
+	} {
+		deniedCtx := authz.GrantsToContext(ctx, grants)
+		output, err := service.GetProject(deniedCtx, principal, input)
+		require.ErrorIs(t, err, ErrUnavailable)
+		require.Empty(t, output.URL)
+		_, missingErr := service.GetProject(deniedCtx, principal, GetMyProjectGatewayInput{ProjectSlug: "missing"})
+		require.ErrorIs(t, missingErr, ErrUnavailable)
+	}
+	output, err := service.GetProject(ctx, principal, input)
+	require.ErrorIs(t, err, ErrUnavailable)
+	require.Empty(t, output.URL)
+	allowedCtx := authz.GrantsToContext(ctx, []authz.Grant{authz.NewGrant(authz.ScopeProjectRead, project.ID.String())})
+	output, err = service.GetProject(allowedCtx, principal, input)
+	require.NoError(t, err)
+	require.True(t, output.Available)
+}
+
+func TestOrganizationGatewayProjectReadableRefusals(t *testing.T) {
+	t.Parallel()
+	ctx, _, service, principal, _ := newOrganizationGatewayFixture(t)
+	ctx = contextWithPrincipal(ctx, principal)
+	for _, svc := range []*OrganizationGatewayService{nil, service} {
+		reg := newRegistrar(newTestMCPServer())
+		reg.withExternalAuthorizer(allowExternalCallAuthorizer{})
+		registerOrganizationGatewayTool(reg, svc)
+		d := descriptorByName(t, reg, "get_my_project_gateway")
+		_, err := d.Invoke(ctx, json.RawMessage(`{"project_slug":""}`))
+		var refusal *ToolRefusalError
+		require.ErrorAs(t, err, &refusal)
+		if svc == nil {
+			require.Equal(t, unavailableCode, refusal.Code)
+			var payload featureUnavailableResult
+			require.NoError(t, json.Unmarshal([]byte(refusal.Payload), &payload))
+			require.Equal(t, "organization_gateway", payload.Feature)
+			require.Equal(t, "This is not switched on for your organization yet.", payload.Message)
+		} else {
+			require.Equal(t, "invalid_request", refusal.Code)
+			require.JSONEq(t, `{"code":"invalid_request","message":"project_slug is required"}`, refusal.Payload)
 		}
 	}
 }

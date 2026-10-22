@@ -3,6 +3,7 @@ package platformmcp
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/url"
@@ -11,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/orggateway"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
@@ -138,7 +140,11 @@ type GetMyProjectGatewayInput struct {
 // live project. Missing, deleted, and foreign projects have the same refusal.
 func (s *OrganizationGatewayService) GetProject(ctx context.Context, principal Principal, input GetMyProjectGatewayInput) (GetMyOrganizationGatewayOutput, error) {
 	if input.ProjectSlug == "" {
-		return GetMyOrganizationGatewayOutput{}, fmt.Errorf("project_slug is required")
+		return GetMyOrganizationGatewayOutput{}, &ToolRefusalError{Code: "invalid_request", Payload: `{"code":"invalid_request","message":"project_slug is required"}`}
+	}
+	grants, ok := authz.GrantsFromContext(ctx)
+	if !ok {
+		return GetMyOrganizationGatewayOutput{}, ErrUnavailable
 	}
 	project, err := projectsrepo.New(s.db).GetProjectBySlug(ctx, projectsrepo.GetProjectBySlugParams{
 		Slug: input.ProjectSlug, OrganizationID: principal.OrganizationID,
@@ -148,6 +154,15 @@ func (s *OrganizationGatewayService) GetProject(ctx context.Context, principal P
 	}
 	if err != nil {
 		return GetMyOrganizationGatewayOutput{}, fmt.Errorf("load project: %w", err)
+	}
+	// Match ResolveProjectRead's exact project:read check using the live grants
+	// loaded by external admission. Refuse hidden projects like absent projects.
+	allowed, err := authz.GrantsAuthorize(grants, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: project.ID.String(), Dimensions: nil})
+	if err != nil {
+		return GetMyOrganizationGatewayOutput{}, fmt.Errorf("authorize project gateway discovery: %w", err)
+	}
+	if !allowed {
+		return GetMyOrganizationGatewayOutput{}, ErrUnavailable
 	}
 	output, err := s.Get(ctx, principal)
 	if err != nil || !output.Available {
@@ -169,10 +184,14 @@ func registerProjectGatewayTool(reg *Registrar, service *OrganizationGatewayServ
 		Title:       "Get My Project Gateway",
 		Description: "Get one MCP URL for the servers you are allowed to reach in an exact project. Requires project_slug. Uses the organization's gateway availability and organization sign-in, but lists and calls servers only in that project. Add the returned url to your MCP client and sign in with your organization account. Returns available=false and next_action when the organization gateway is unavailable. No tokens, credentials, server names, or other members' access are returned. For all projects, use get_my_organization_gateway.",
 		Annotations: readOnlyAnnotations(),
-	}, ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input GetMyProjectGatewayInput) (*mcp.CallToolResult, GetMyOrganizationGatewayOutput, error) {
+	}, ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: externalOnly, ProjectScope: ProjectScopeExplicit, DiscoveryScopes: discoveryProjectRead}, func(ctx context.Context, _ *mcp.CallToolRequest, input GetMyProjectGatewayInput) (*mcp.CallToolResult, GetMyOrganizationGatewayOutput, error) {
 		return principalToolCall(ctx, func(error) (*mcp.CallToolResult, bool) { return nil, false }, func(principal Principal) (GetMyOrganizationGatewayOutput, error) {
 			if !service.valid() {
-				return GetMyOrganizationGatewayOutput{}, ErrUnavailable
+				payload, err := json.Marshal(featureUnavailableResult{Code: unavailableCode, Feature: "organization_gateway", Message: "This is not switched on for your organization yet."})
+				if err != nil {
+					return GetMyOrganizationGatewayOutput{}, fmt.Errorf("encode gateway unavailable result: %w", err)
+				}
+				return GetMyOrganizationGatewayOutput{}, &ToolRefusalError{Code: unavailableCode, Payload: string(payload)}
 			}
 			return service.GetProject(ctx, principal, input)
 		})
