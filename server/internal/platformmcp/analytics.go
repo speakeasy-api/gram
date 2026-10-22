@@ -116,11 +116,8 @@ type AnalyticsDataset struct {
 	Grain       string `json:"grain"`
 	Description string `json:"description"`
 	// MaxTimeRangeDays is the longest window a query may span.
-	MaxTimeRangeDays int `json:"max_time_range_days"`
-	// AggregatesOnly is true when an ungrouped query against the dataset is
-	// refused: it answers counts and other aggregates, never its rows.
-	AggregatesOnly bool             `json:"aggregates_only,omitempty"`
-	Fields         []AnalyticsField `json:"fields"`
+	MaxTimeRangeDays int              `json:"max_time_range_days"`
+	Fields           []AnalyticsField `json:"fields"`
 }
 
 // AnalyticsLimits restates the compiler's guardrails so a caller can stay
@@ -240,7 +237,6 @@ func describeAnalyticsCatalog(project ResolvedProject, catalog *analytics.Catalo
 			Grain:            ds.Grain,
 			Description:      ds.Description,
 			MaxTimeRangeDays: ds.MaxTimeRangeDays(),
-			AggregatesOnly:   ds.AggregatesOnly,
 			Fields:           fields,
 		})
 	}

@@ -82928,10 +82928,6 @@ components:
     AnalyticsDataset:
       type: object
       properties:
-        aggregates_only:
-          type: boolean
-          description: True when the dataset answers aggregates only, so an ungrouped query against it is refused
-          default: false
         description:
           type: string
         fields:

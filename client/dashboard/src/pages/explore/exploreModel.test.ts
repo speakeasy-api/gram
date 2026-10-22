@@ -34,7 +34,6 @@ const sessions: AnalyticsDataset = {
   name: "sessions",
   kind: "event",
   grain: "session",
-  aggregatesOnly: false,
   description: "One row per agent session.",
   fields: [
     {
@@ -74,7 +73,6 @@ const usage: AnalyticsDataset = {
   name: "usage",
   kind: "metric",
   grain: "reading",
-  aggregatesOnly: false,
   description: "One row per metric reading.",
   fields: [
     {
@@ -402,11 +400,11 @@ describe("longestWindow", () => {
   });
 });
 
-describe("a dataset that answers aggregates only", () => {
+describe("a metric dataset", () => {
   const findings: AnalyticsDataset = {
     ...sessions,
     name: "findings",
-    aggregatesOnly: true,
+    kind: "metric",
   };
 
   it("opens on a count, never on rows", () => {

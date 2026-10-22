@@ -15,7 +15,6 @@ const dataset: AnalyticsDataset = {
   name: "sessions",
   kind: "event",
   grain: "session",
-  aggregatesOnly: false,
   description: "",
   fields: [
     {

@@ -194,13 +194,12 @@ var Skills = &Dataset{
 // the only ones the rest of the product shows findings to; the matched value
 // and the chat it came from are not in it at all.
 var RiskFindings = &Dataset{
-	Name:           "risk_findings",
-	Kind:           KindEvent,
-	Grain:          "finding",
-	Description:    "One row per live risk finding: something a risk policy caught in an agent session, such as a secret, personal data, prompt injection or an unreviewed MCP server. Dismissed, excluded and false-positive findings are left out. count counts findings; people affected is count_distinct over user. It answers aggregates only, never individual findings, and only organization administrators can read it.",
-	TimeExpr:       "detected_at",
-	Access:         AccessOrgAdmin,
-	AggregatesOnly: true,
+	Name:        "risk_findings",
+	Kind:        KindMetric,
+	Grain:       "finding",
+	Description: "One row per live risk finding: something a risk policy caught in an agent session, such as a secret, personal data, prompt injection or an unreviewed MCP server. Dismissed, excluded and false-positive findings are left out. count counts findings; people affected is count_distinct over user. It answers aggregates only, never individual findings, and only organization administrators can read it.",
+	TimeExpr:    "detected_at",
+	Access:      AccessOrgAdmin,
 	Fields: []Field{
 		{
 			Name:         "category",
@@ -230,25 +229,23 @@ var RiskFindings = &Dataset{
 			Description: "Which detector raised the finding, such as gitleaks, presidio, shadow_mcp, prompt_injection or llm_judge.",
 		},
 		{
-			Name:           "severity",
-			Type:           TypeString,
-			Role:           RoleDimension,
-			Operators:      equalsIn,
-			Expr:           "risk_policy_id",
-			Description:    "critical, high, medium or low: the band of the score set on the policy that caught the finding, as on the Watchdog page. A finding whose policy has no score, or was deleted, takes its category's usual band.",
-			Lookup:         RiskPolicySeveritiesLookup,
-			LookupFallback: categorySeverityExpr("category"),
+			Name:        "severity",
+			Type:        TypeString,
+			Role:        RoleDimension,
+			Operators:   equalsIn,
+			Expr:        riskSeverityKeyExpr,
+			Description: "critical, high, medium or low: the band of the score set on the policy that caught the finding, as on the Watchdog page. A finding whose policy has no score, or was deleted, takes its category's usual band.",
+			Lookup:      RiskPolicySeveritiesLookup,
 		},
 		{
-			Name:           "policy",
-			Type:           TypeString,
-			Role:           RoleDimension,
-			Operators:      equalsIn,
-			Aggregations:   countDistinct,
-			Expr:           "risk_policy_id",
-			Description:    "The risk policy that caught the finding, by name. A deleted policy's findings still count, under its name marked deleted.",
-			Lookup:         RiskPolicyNamesLookup,
-			LookupFallback: "''",
+			Name:         "policy",
+			Type:         TypeString,
+			Role:         RoleDimension,
+			Operators:    equalsIn,
+			Aggregations: countDistinct,
+			Expr:         "risk_policy_id",
+			Description:  "The risk policy that caught the finding, by name. A deleted policy's findings still count, under its name marked deleted.",
+			Lookup:       RiskPolicyNamesLookup,
 		},
 		{
 			Name:         "surface",
@@ -289,8 +286,15 @@ var RiskFindings = &Dataset{
 	Source: riskFindingsSource,
 }
 
+// riskSeverityKeyExpr is what a finding's severity is looked up by: its
+// policy and the band its category reads as without one, as
+// "<policy id>:<band>". The severities lookup maps every such key a
+// project's findings can have, so each reads as a band, never as the key.
+var riskSeverityKeyExpr = "concat(risk_policy_id, ':', " + categorySeverityExpr("category") + ")"
+
 // categorySeverityExpr is the severity band each category reads as when its
-// finding has no scored policy, as SQL over the category column.
+// finding has no scored policy, as SQL over the category column. A category
+// it does not know reads as the default weight's band.
 func categorySeverityExpr(column string) string {
 	bands, unknown := risk.CategoryFallbackSeverities()
 	categories := make([]string, 0, len(bands))
@@ -332,7 +336,9 @@ const MCPServerDisplayNamesLookup = "mcp_server_display_names"
 const RiskPolicyNamesLookup = "risk_policy_names"
 
 // RiskPolicySeveritiesLookup names the lookup a finding's severity reads
-// through: the project's scored, live risk policies, id to severity band.
+// through: every riskSeverityKeyExpr key the project's findings can have, to
+// the band of its policy's score, or to its category's band when the policy
+// has no score, was deleted or is absent.
 const RiskPolicySeveritiesLookup = "risk_policy_severities"
 
 // Lookups is every map a dimension of the catalog reads through. The service
@@ -348,7 +354,7 @@ var Lookups = []*Lookup{
 	},
 	{
 		Name:        RiskPolicySeveritiesLookup,
-		Description: "The severity band of each risk policy's score: critical from 9, high from 7, medium from 4, low below.",
+		Description: "The severity band of each risk policy's score: critical from 9, high from 7, medium from 4, low below. A finding whose policy has no score, or was deleted, reads as its category's band.",
 	},
 }
 

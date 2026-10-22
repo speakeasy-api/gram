@@ -1,12 +1,15 @@
 package analytics
 
 import (
+	"strings"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/authz"
-	"github.com/speakeasy-api/gram/server/internal/risk/chrepo"
+	"github.com/speakeasy-api/gram/server/internal/risk"
+	riskRepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 )
 
 func TestRiskFindingsIsForOrgAdmins(t *testing.T) {
@@ -43,9 +46,9 @@ func TestRiskFindingsRefusesRows(t *testing.T) {
 	require.Equal(t, ErrAggregatesOnly, compileErr.Code)
 }
 
-// TestRiskFindingsReadsTheLiveCopy: the dataset reads each finding the way
-// every risk surface does, so its counts agree with the Watchdog page.
-func TestRiskFindingsReadsTheLiveCopy(t *testing.T) {
+// TestRiskFindingsReadsTheFoldedTable: the dataset reads one folded row per
+// finding and keeps the live ones, so nothing is sorted at read time.
+func TestRiskFindingsReadsTheFoldedTable(t *testing.T) {
 	t.Parallel()
 
 	plan, err := Compile(Default, Tenant{OrganizationID: "org", ProjectID: "proj"}, nil, Request{
@@ -62,11 +65,10 @@ func TestRiskFindingsReadsTheLiveCopy(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Equal(t, "risk_findings.risk_findings", plan.Name)
-	require.Contains(t, plan.SQL, "ROW_NUMBER() OVER (PARTITION BY id ORDER BY "+chrepo.LatestCopyOrderSQL+") AS copy_rank FROM risk_findings")
-	require.Contains(t, plan.SQL, chrepo.NotShadowCond)
-	require.Contains(t, plan.SQL, "copy_rank = 1 AND "+chrepo.LiveStateCond+" AND "+chrepo.NotDeadLetterCond)
-	require.Contains(t, plan.SQL, "created_at >= fromUnixTimestamp64Nano(toInt64(?), 'UTC')")
-	require.Equal(t, []any{"org", "proj", int64(1), int64(2)}, plan.Args)
+	require.Contains(t, plan.SQL, "FROM risk_finding_states WHERE organization_id = ? AND project_id = ? AND id IN (SELECT id FROM risk_finding_states")
+	require.Contains(t, plan.SQL, "HAVING min(created_at_unix_nano) >= ? AND min(created_at_unix_nano) < ? AND argMaxMerge(live) = 1")
+	require.NotContains(t, plan.SQL, "ROW_NUMBER")
+	require.NotContains(t, plan.SQL, "LIMIT 1 BY")
 }
 
 // TestRiskFindingsNamesNothingFound: no column the dataset reads can say what
@@ -86,28 +88,55 @@ func TestRiskFindingsSeverity(t *testing.T) {
 
 	severity, ok := RiskFindings.Field("severity")
 	require.True(t, ok)
+	require.Equal(t, RiskPolicySeveritiesLookup, severity.Lookup)
+
+	t.Run("it looks a finding up by its policy and its category's band", func(t *testing.T) {
+		t.Parallel()
+		require.Equal(t, riskSeverityKeyExpr, severity.Expr)
+		require.True(t, strings.HasPrefix(severity.Expr, "concat(risk_policy_id, ':', transform(category, ["))
+		require.Contains(t, severity.Expr, "'secrets'")
+		require.True(t, strings.HasSuffix(severity.Expr, ", 'medium'))"), "an unknown category reads as the default weight's band")
+	})
+
+	live := uuid.New()
+	unscored := uuid.New()
+	deleted := uuid.New()
+	severities := severitiesByKey([]riskRepo.ListRiskPolicyAnalyticsLabelsRow{
+		{ID: live, Name: "Secrets", Score: 9.5, Deleted: false},
+		{ID: unscored, Name: "Unscored", Score: 0, Deleted: false},
+		{ID: deleted, Name: "Old", Score: 9.5, Deleted: true},
+	})
+
+	t.Run("a live, scored policy's band wins over the category's", func(t *testing.T) {
+		t.Parallel()
+		require.Equal(t, "critical", severities[live.String()+":medium"])
+		require.Equal(t, "critical", severities[live.String()+":high"])
+	})
 
 	t.Run("a finding with no scored policy reads as its category's band", func(t *testing.T) {
 		t.Parallel()
-		expr, args := readExpr(QueryContext{Tenant: Tenant{OrganizationID: "", ProjectID: ""}, Window: Window{FromUnixNano: 0, ToUnixNano: 0}, Lookups: nil}, severity)
-		require.Nil(t, args)
-		require.Equal(t, severity.LookupFallback, expr)
-		require.Contains(t, expr, "transform(category, [")
-		require.Contains(t, expr, "'secrets'")
-		require.Contains(t, expr, ", 'medium')", "an unknown category reads as the default weight's band")
+		require.Equal(t, "high", severities[":high"], "no policy")
+		require.Equal(t, "medium", severities[unscored.String()+":medium"], "a policy with no score")
+		require.Equal(t, "high", severities[deleted.String()+":high"], "a deleted policy contributes no score")
 	})
 
-	t.Run("a scored policy's band wins over the category's", func(t *testing.T) {
+	t.Run("every key a finding can have reads as a band", func(t *testing.T) {
 		t.Parallel()
-		lookups := LookupMaps{RiskPolicySeveritiesLookup: {"policy-1": "critical"}}
-		expr, args := readExpr(QueryContext{Tenant: Tenant{OrganizationID: "", ProjectID: ""}, Window: Window{FromUnixNano: 0, ToUnixNano: 0}, Lookups: lookups}, severity)
-		require.Equal(t, "transform(risk_policy_id, ?, ?, "+severity.LookupFallback+")", expr)
-		require.Equal(t, []any{[]string{"policy-1"}, []string{"critical"}}, args)
+		for _, policy := range []string{"", live.String(), unscored.String(), deleted.String()} {
+			for _, band := range riskCategoryBands() {
+				require.Contains(t, []string{"critical", "high", "medium", "low"}, severities[policy+":"+band], "%s:%s", policy, band)
+			}
+		}
+		fallbacks, unknown := risk.CategoryFallbackSeverities()
+		for category, band := range fallbacks {
+			require.Contains(t, riskCategoryBands(), band, category)
+		}
+		require.Contains(t, riskCategoryBands(), unknown)
 	})
 
-	t.Run("a filter compares the band, not the policy", func(t *testing.T) {
+	t.Run("a filter compares the band, not the key", func(t *testing.T) {
 		t.Parallel()
-		plan, err := Compile(Default, Tenant{OrganizationID: "org", ProjectID: "proj"}, LookupMaps{RiskPolicySeveritiesLookup: {"policy-1": "high"}}, Request{
+		plan, err := Compile(Default, Tenant{OrganizationID: "org", ProjectID: "proj"}, LookupMaps{RiskPolicySeveritiesLookup: severities}, Request{
 			Dataset:      "risk_findings",
 			FromUnixNano: 1,
 			ToUnixNano:   2,
@@ -120,19 +149,21 @@ func TestRiskFindingsSeverity(t *testing.T) {
 			Ungrouped:    false,
 		})
 		require.NoError(t, err)
-		require.Contains(t, plan.SQL, "transform(risk_policy_id, ?, ?, transform(category, [")
+		require.Contains(t, plan.SQL, "transform("+riskSeverityKeyExpr+", ?, ?, "+riskSeverityKeyExpr+") IN (?,?)")
 		require.Contains(t, plan.Args, "critical")
 		require.Contains(t, plan.Args, "high")
 	})
 }
 
-func TestRiskFindingsPolicyWithoutANameReadsAsEmpty(t *testing.T) {
+func TestRiskPolicyNamesMarkTheDeleted(t *testing.T) {
 	t.Parallel()
 
-	policy, ok := RiskFindings.Field("policy")
-	require.True(t, ok)
-	expr, _ := readExpr(QueryContext{Tenant: Tenant{OrganizationID: "", ProjectID: ""}, Window: Window{FromUnixNano: 0, ToUnixNano: 0}, Lookups: nil}, policy)
-	require.Equal(t, "''", expr, "a policy id is never shown in place of a name")
+	live, deleted := uuid.New(), uuid.New()
+	names := namesByPolicy([]riskRepo.ListRiskPolicyAnalyticsLabelsRow{
+		{ID: live, Name: "Secrets", Score: 9.5, Deleted: false},
+		{ID: deleted, Name: "Old", Score: 0, Deleted: true},
+	})
+	require.Equal(t, map[string]string{live.String(): "Secrets", deleted.String(): "Old (deleted)"}, names)
 }
 
 func TestSQLStringEscapes(t *testing.T) {

@@ -16,7 +16,11 @@ import (
 type Kind string
 
 const (
-	KindEvent  Kind = "event"
+	// KindEvent rows are occurrences, which a query can count, aggregate or
+	// list one by one.
+	KindEvent Kind = "event"
+	// KindMetric rows are measurements, answered in aggregate only: a query
+	// that asks for the rows themselves is refused.
 	KindMetric Kind = "metric"
 )
 
@@ -112,12 +116,11 @@ const (
 	MaxLimit     = 1000
 	MaxRowsLimit = 200
 
-	// How long each kind's table keeps a row, from server/clickhouse/schema.sql:
-	// agent_events 90 days, agent_metrics 730 so billing can read historical
-	// cycles. A window reaching past a table's retention reads rows the TTL
-	// has already dropped and comes back silently incomplete, so a dataset
-	// caps its window at what its table still holds. These are the schema's
-	// numbers restated, and a test holds them to it.
+	// How long the agent tables keep a row, from server/clickhouse/schema.sql:
+	// agent_events and the tables folded from it 90 days, agent_metrics 730
+	// so billing can read historical cycles. A dataset caps its window at
+	// what its source table still holds. These are the schema's numbers
+	// restated, and a test holds every source table to its TTL.
 	MaxEventTimeRangeDays  = 90
 	MaxMetricTimeRangeDays = 730
 
@@ -151,12 +154,8 @@ type Field struct {
 	// shown by describe and the builder's pickers; most fields need none.
 	Description string
 	// Lookup names the lookup every read of this dimension folds Expr through;
-	// empty reads it as reported.
+	// empty reads it as reported, as does a value the lookup has no entry for.
 	Lookup string
-	// LookupFallback is the SQL a value with no entry in the lookup reads as.
-	// Empty leaves such a value as reported, which suits a lookup of display
-	// names but not one that turns an id into a label.
-	LookupFallback string
 	// Typeahead is the agent_events column a dimension's values are listed
 	// from, read off Source.Observations. Empty lists them from Source.Rows.
 	Typeahead string
@@ -180,11 +179,8 @@ type Dataset struct {
 	// Access is who may read the dataset. Describe, query and value listing
 	// all enforce it, and so does saving a widget over the dataset.
 	Access Access
-	// AggregatesOnly refuses ungrouped queries: the dataset answers counts
-	// and other aggregates, never its rows.
-	AggregatesOnly bool
-	Fields         []Field
-	Source         Source
+	Fields []Field
+	Source Source
 }
 
 // AccessCheck is the check a caller must pass to read the dataset, beyond
@@ -198,12 +194,9 @@ func (d *Dataset) AccessCheck(organizationID string) (check authz.Check, ok bool
 }
 
 // MaxTimeRangeDays is the longest window this dataset can answer honestly:
-// the retention of the table its kind reads.
+// the retention of the table its source reads.
 func (d *Dataset) MaxTimeRangeDays() int {
-	if d.Kind == KindMetric {
-		return MaxMetricTimeRangeDays
-	}
-	return MaxEventTimeRangeDays
+	return d.Source.Table.retentionDays()
 }
 
 // MaxTimeRangeNanos is MaxTimeRangeDays as a span of nanoseconds, the unit a
@@ -329,9 +322,6 @@ func (d *Dataset) validate(lookups map[string]struct{}) error {
 	for _, f := range d.Fields {
 		if f.Name == "" || f.Expr == "" {
 			return fmt.Errorf("catalog: dataset %q has a field with an empty name or expression", d.Name)
-		}
-		if f.LookupFallback != "" && f.Lookup == "" {
-			return fmt.Errorf("catalog: dataset %q field %q has a lookup fallback but no lookup", d.Name, f.Name)
 		}
 		if _, dup := names[f.Name]; dup {
 			return fmt.Errorf("catalog: dataset %q declares field %q twice", d.Name, f.Name)

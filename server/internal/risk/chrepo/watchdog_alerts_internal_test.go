@@ -30,7 +30,7 @@ func TestWatchdogAlertsQuery(t *testing.T) {
 	for _, clause := range []string{
 		"organization_id = ?", "project_id = ?",
 		"created_at >= toDateTime64(?, 9, 'UTC')", "created_at < toDateTime64(?, 9, 'UTC')",
-		"ROW_NUMBER() OVER (PARTITION BY id ORDER BY " + LatestCopyOrderSQL + ") AS rn",
+		"ROW_NUMBER() OVER (PARTITION BY id ORDER BY " + latestCopyOrderSQL + ") AS rn",
 		") AS latest WHERE rn = 1 AND dead_letter_reason = '' AND excluded_at IS NULL AND false_positive_at IS NULL",
 		"uniqExactIf(" + signalUserExpr + ", " + signalUserNonEmpty + ")",
 		"arraySort(groupUniqArrayIf(201)(risk_policy_id, risk_policy_id != ''))",

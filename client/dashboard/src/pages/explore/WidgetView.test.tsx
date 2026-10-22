@@ -74,7 +74,6 @@ const sessions: AnalyticsDataset = {
   name: "sessions",
   kind: "event",
   grain: "session",
-  aggregatesOnly: false,
   description: "One row per agent session.",
   fields: [
     {

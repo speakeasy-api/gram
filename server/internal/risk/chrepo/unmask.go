@@ -98,7 +98,7 @@ var riskFindingRevealLatestColumns = append(slices.Clone(riskFindingRevealColumn
 	"dead_letter_reason",
 	"excluded_at",
 	"false_positive_at",
-	"ROW_NUMBER() OVER (PARTITION BY id ORDER BY "+LatestCopyOrderSQL+") AS rn",
+	"ROW_NUMBER() OVER (PARTITION BY id ORDER BY "+latestCopyOrderSQL+") AS rn",
 )
 
 // liveRiskFindingRevealQuery ranks each id's newest state before visibility gates.
@@ -108,7 +108,7 @@ func liveRiskFindingRevealQuery(organizationID, projectID, chatID string, ids []
 		From("risk_findings").
 		Where("organization_id = ?", organizationID).
 		Where("project_id = ?", projectID).
-		Where(NotShadowCond)
+		Where(notShadowCond)
 	if chatID != "" {
 		inner = inner.Where("chat_id = ?", chatID)
 	}
@@ -255,7 +255,7 @@ func (q *Queries) ListPolicyFilterSweepCandidates(ctx context.Context, p ListPol
 		From("risk_findings").
 		Where("organization_id = ?", p.OrganizationID).
 		Where("project_id = ?", p.ProjectID).
-		Where(NotShadowCond).
+		Where(notShadowCond).
 		Where("created_at >= ?", p.From).
 		Where("created_at < ?", p.To)
 	if p.PolicyID != "" {
@@ -266,7 +266,7 @@ func (q *Queries) ListPolicyFilterSweepCandidates(ctx context.Context, p ListPol
 		FromSelect(inner, "latest").
 		Where("rn = 1").
 		Where("dead_letter_reason = ''").
-		Where(LiveStateCond).
+		Where(liveStateCond).
 		Where("(created_at, id) > (?, ?)", p.CursorTime, p.CursorID).
 		OrderBy("created_at ASC", "id ASC").
 		Suffix("LIMIT ?", p.Limit)

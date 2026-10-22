@@ -23,7 +23,6 @@ func TestDescribe(t *testing.T) {
 	require.Empty(t, result.RestrictedDatasets)
 
 	toolCalls := datasetNamed(t, result.Datasets, "tool_calls")
-	require.False(t, toolCalls.AggregatesOnly)
 	require.Equal(t, "event", toolCalls.Kind)
 	require.NotEmpty(t, toolCalls.Grain)
 
@@ -59,7 +58,7 @@ func TestDescribe(t *testing.T) {
 	require.Equal(t, []string{"count_distinct"}, skillFields["user"].Aggregations)
 
 	riskFindings := datasetNamed(t, result.Datasets, "risk_findings")
-	require.True(t, riskFindings.AggregatesOnly, "describe says the dataset answers aggregates only")
+	require.Equal(t, "metric", riskFindings.Kind, "describe says the dataset answers aggregates only")
 	require.Equal(t, []string{"category"}, defaultFields(riskFindings))
 	riskFields := fieldsByName(riskFindings)
 	require.Equal(t, RiskPolicySeveritiesLookup, riskFields["severity"].Lookup.Name)
@@ -92,7 +91,6 @@ func TestDescribeDatasetsCarriesFieldDescriptions(t *testing.T) {
 	})
 	described := describeDatasets(catalog, catalog.Datasets())
 	require.Len(t, described, 1)
-	require.False(t, described[0].AggregatesOnly)
 	require.NotNil(t, described[0].Fields[0].Description)
 	require.Equal(t, "Which producers fill it.", *described[0].Fields[0].Description)
 	require.Nil(t, described[0].Fields[1].Description, "a field with nothing to add has no description")

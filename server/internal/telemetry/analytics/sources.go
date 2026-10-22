@@ -2,8 +2,6 @@ package analytics
 
 import (
 	"github.com/Masterminds/squirrel"
-
-	"github.com/speakeasy-api/gram/server/internal/risk/chrepo"
 )
 
 // sq is the squirrel builder pre-configured for ClickHouse (? placeholders).
@@ -48,8 +46,9 @@ type Source struct {
 	Where   []squirrel.Sqlizer
 	Key     string
 	Columns []string
-	// Having keeps a folded row. It must name columns the fold keeps any
-	// non-empty value of, so Observations can test it on the raw rows.
+	// Having keeps a folded row. On a source a Typeahead field lists values
+	// from, it must name columns the fold keeps any non-empty value of, so
+	// Observations can test it on the raw rows.
 	Having string
 }
 
@@ -78,56 +77,42 @@ type engine interface {
 	// planSuffix names how a query is answered in its plan name, a stable
 	// diagnostic identifier rather than a table a client could depend on.
 	planSuffix() string
+	// retentionDays is how long the table keeps a row, from its TTL in
+	// server/clickhouse/schema.sql. A window reaching past it reads rows the
+	// TTL has already dropped and comes back silently incomplete.
+	retentionDays() int
 }
 
 // mergeTree rows are facts as appended. Its fold must be idempotent, so a
 // redelivered row changes nothing: argMax, min, max, uniqExact, never count
 // or sum over raw rows.
-type mergeTree struct{ table, time string }
+type mergeTree struct {
+	table, time, plan string
+	retention         int
+}
 
 // aggregatingMergeTree rows are partial states per key until merges catch
 // up, so keys are picked by start and every row of those keys is merged.
-type aggregatingMergeTree struct{ table, start string }
-
-// latestCopy rows are an event log of copies per key, where a later copy
-// records a change of state, so each key reads as its winning copy under
-// order. shared are predicates every copy of a key agrees on, which may prune
-// the scan before the dedup; Source.Where applies to the winning copy, since
-// it can test state a later copy changed.
-type latestCopy struct {
-	table, time, order string
-	shared             []squirrel.Sqlizer
+type aggregatingMergeTree struct {
+	table, start, plan string
+	retention          int
 }
 
 var (
-	agentEvents = mergeTree{table: "agent_events", time: "occurred_at_unix_nano"}
-	toolCalls   = aggregatingMergeTree{table: "tool_calls", start: "started_at_unix_nano"}
-	// riskFindings is the risk scanners' findings log, read the way every
-	// risk surface reads it: the winning copy per finding, with the shadow
-	// engine's comparison rows set aside.
-	riskFindings = latestCopy{
-		table:  "risk_findings",
-		time:   "created_at",
-		order:  chrepo.LatestCopyOrderSQL,
-		shared: []squirrel.Sqlizer{squirrel.Expr(chrepo.NotShadowCond)},
-	}
+	agentEvents = mergeTree{table: "agent_events", time: "occurred_at_unix_nano", plan: "agent_events", retention: MaxEventTimeRangeDays}
+	// The tool_calls plan name predates the move off agent_events and stays,
+	// being a stable identifier.
+	toolCalls = aggregatingMergeTree{table: "tool_calls", start: "started_at_unix_nano", plan: "agent_events", retention: MaxEventTimeRangeDays}
+	// riskFindingStates is one row per finding, each column the winning
+	// copy's value, folded by risk_finding_states_mv with the shadow engine's
+	// comparison rows set aside.
+	riskFindingStates = aggregatingMergeTree{table: "risk_finding_states", start: "created_at_unix_nano", plan: "risk_findings", retention: MaxEventTimeRangeDays}
 )
 
-// The plan names of the agent_events datasets predate their move onto the
-// tool_calls table and stay as they were, being stable identifiers.
-func (mergeTree) planSuffix() string            { return "agent_events" }
-func (aggregatingMergeTree) planSuffix() string { return "agent_events" }
-func (t latestCopy) planSuffix() string         { return t.table }
-
-func (t latestCopy) rows(qc QueryContext, s Source) squirrel.SelectBuilder {
-	copies := sq.Select("*", "ROW_NUMBER() OVER (PARTITION BY "+s.Key+" ORDER BY "+t.order+") AS copy_rank").
-		From(t.table).
-		Where(tenant(qc)).
-		Where(t.time+" >= fromUnixTimestamp64Nano(toInt64(?), 'UTC')", qc.Window.FromUnixNano).
-		Where(t.time+" < fromUnixTimestamp64Nano(toInt64(?), 'UTC')", qc.Window.ToUnixNano)
-	copies = where(copies, t.shared)
-	return where(sq.Select(s.Columns...).FromSelect(copies, "copies").Where("copy_rank = 1"), s.Where)
-}
+func (t mergeTree) planSuffix() string            { return t.plan }
+func (t aggregatingMergeTree) planSuffix() string { return t.plan }
+func (t mergeTree) retentionDays() int            { return t.retention }
+func (t aggregatingMergeTree) retentionDays() int { return t.retention }
 
 func (t mergeTree) scan(qc QueryContext) squirrel.SelectBuilder {
 	return sq.Select("*").
@@ -153,8 +138,8 @@ func (t aggregatingMergeTree) rows(qc QueryContext, s Source) squirrel.SelectBui
 		Where(tenant(qc)).
 		Where(squirrel.Expr(s.Key+" IN (?)", keys)).
 		GroupBy("organization_id", "project_id", s.Key).
-		Having("started_at >= ?", qc.Window.FromUnixNano).
-		Having("started_at < ?", qc.Window.ToUnixNano)
+		Having("min("+t.start+") >= ?", qc.Window.FromUnixNano).
+		Having("min("+t.start+") < ?", qc.Window.ToUnixNano)
 }
 
 func tenant(qc QueryContext) squirrel.Eq {
@@ -209,29 +194,27 @@ var skillsSource = Source{
 }
 
 // riskFindingsSource is one row per live finding: not suppressed, not marked
-// a false positive and not a could-not-analyze sentinel. It reads no matched
-// value, redacted or not, and no chat or message id, so nothing a dataset
-// declares over it can name what was found or where.
+// a false positive and not a could-not-analyze sentinel. Its table keeps no
+// matched value, redacted or not, and no chat or message id, so nothing a
+// dataset declares over it can name what was found or where.
 var riskFindingsSource = Source{
-	Table: riskFindings,
-	Where: []squirrel.Sqlizer{
-		squirrel.Expr(chrepo.LiveStateCond),
-		squirrel.Expr(chrepo.NotDeadLetterCond),
-	},
-	Key: "id",
+	Table: riskFindingStates,
+	Where: nil,
+	Key:   "id",
 	Columns: []string{
 		"organization_id",
 		"project_id",
 		"id",
-		"toUnixTimestamp64Nano(created_at) AS detected_at",
-		"category",
-		"rule_id",
-		"source",
-		"risk_policy_id",
-		"chat_source",
-		"team",
-		"if(user_email != '', user_email, external_user_id) AS user_label",
-		"toString(enforcement_outcome) AS enforcement_outcome",
+		"min(created_at_unix_nano) AS detected_at",
+		"argMaxIfMerge(category) AS category",
+		"argMaxIfMerge(rule_id) AS rule_id",
+		"argMaxIfMerge(source) AS source",
+		"argMaxIfMerge(risk_policy_id) AS risk_policy_id",
+		"argMaxIfMerge(chat_source) AS chat_source",
+		"argMaxIfMerge(team) AS team",
+		// Neither email column is aliased, so both still name the state.
+		"if(argMaxIfMerge(user_email) != '', argMaxIfMerge(user_email), argMaxIfMerge(external_user_id)) AS user_label",
+		"argMaxIfMerge(enforcement_outcome) AS enforcement_outcome",
 	},
-	Having: "",
+	Having: "argMaxMerge(live) = 1",
 }

@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	riskchrepo "github.com/speakeasy-api/gram/server/internal/risk/chrepo"
+	riskRepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 )
 
 func riskFindingFixture(orgID, projectID, category, ruleID, policyID, email string, at time.Time) riskchrepo.RiskFindingRow {
@@ -38,7 +39,8 @@ func TestRiskFindingsCountsLiveFindingsOnce(t *testing.T) {
 
 	orgID, projectID := "org_"+uuid.NewString(), uuid.NewString()
 	at := time.Now().UTC().Add(-time.Hour)
-	criticalPolicy := uuid.NewString()
+	criticalPolicyID := uuid.New()
+	criticalPolicy := criticalPolicyID.String()
 
 	secret := riskFindingFixture(orgID, projectID, "secrets", "secret.github_pat", criticalPolicy, "alice@example.com", at)
 	email := riskFindingFixture(orgID, projectID, "pii", "pii.email_address", "", "bob@example.com", at)
@@ -61,7 +63,9 @@ func TestRiskFindingsCountsLiveFindingsOnce(t *testing.T) {
 	}))
 
 	tenant := Tenant{OrganizationID: orgID, ProjectID: projectID}
-	lookups := LookupMaps{RiskPolicySeveritiesLookup: {criticalPolicy: "critical"}}
+	lookups := LookupMaps{RiskPolicySeveritiesLookup: severitiesByKey([]riskRepo.ListRiskPolicyAnalyticsLabelsRow{
+		{ID: criticalPolicyID, Name: "Secrets", Score: 9.5, Deleted: false},
+	})}
 	query := func(t *testing.T, dimensions []string, measures []Measure) []Row {
 		t.Helper()
 		plan, err := Compile(Default, tenant, lookups, Request{

@@ -54,14 +54,14 @@ func chatFindingsLatest(p ChatFindingParams, columns ...string) (squirrel.Select
 		Where("organization_id = ?", p.OrganizationID).
 		Where("project_id = ?", p.ProjectID).
 		Where("dead_letter_reason = ''").
-		Where(NotShadowCond).
+		Where(notShadowCond).
 		Where(squirrel.Eq{"risk_policy_id": p.PolicyIDs})
 	if len(p.ChatIDs) > 0 {
 		inner = inner.Where(squirrel.Eq{"chat_id": p.ChatIDs})
 	}
-	inner = inner.OrderBy(LatestCopyOrderSQL).Suffix("LIMIT 1 BY id")
+	inner = inner.OrderBy(latestCopyOrderSQL).Suffix("LIMIT 1 BY id")
 
-	return sq.Select(columns...).FromSelect(inner, "latest").Where(LiveStateCond), nil
+	return sq.Select(columns...).FromSelect(inner, "latest").Where(liveStateCond), nil
 }
 
 // ListChatFindingCounts returns live finding counts grouped by chat.

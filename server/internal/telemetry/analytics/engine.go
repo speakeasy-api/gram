@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"slices"
 	"time"
 
 	"github.com/google/uuid"
@@ -27,8 +28,8 @@ type Engine struct {
 func NewEngine(db *pgxpool.Pool, ch Querier) (*Engine, error) {
 	catalog, err := Default.WithLoaders(map[string]LookupLoader{
 		MCPServerDisplayNamesLookup: mcpServerDisplayNames(hooksRepo.New(db)),
-		RiskPolicyNamesLookup:       riskPolicyLabels(riskRepo.New(db), riskPolicyName),
-		RiskPolicySeveritiesLookup:  riskPolicyLabels(riskRepo.New(db), riskPolicySeverity),
+		RiskPolicyNamesLookup:       riskPolicyNames(riskRepo.New(db)),
+		RiskPolicySeveritiesLookup:  riskPolicySeverities(riskRepo.New(db)),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("bind catalog lookups: %w", err)
@@ -107,47 +108,90 @@ func mcpServerDisplayNames(hooks *hooksRepo.Queries) LookupLoader {
 	}
 }
 
-// riskPolicyLabels loads the project's risk policies, deleted ones included,
-// and maps each id to the label label gives it; an empty label leaves the
-// policy out, so its findings read as the field's fallback.
-func riskPolicyLabels(policies *riskRepo.Queries, label func(riskRepo.ListRiskPolicyAnalyticsLabelsRow) string) LookupLoader {
+// riskPolicyNames loads the project's risk policies, deleted ones included,
+// id to name.
+func riskPolicyNames(policies *riskRepo.Queries) LookupLoader {
 	return func(ctx context.Context, tenant Tenant) (map[string]string, error) {
-		projectID, err := uuid.Parse(tenant.ProjectID)
+		rows, err := riskPolicyRows(ctx, policies, tenant)
 		if err != nil {
-			return nil, fmt.Errorf("parse project id: %w", err)
+			return nil, err
 		}
-		rows, err := policies.ListRiskPolicyAnalyticsLabels(ctx, riskRepo.ListRiskPolicyAnalyticsLabelsParams{
-			ProjectID:      projectID,
-			OrganizationID: tenant.OrganizationID,
-		})
+		return namesByPolicy(rows), nil
+	}
+}
+
+// namesByPolicy maps each policy id to its name, a deleted one marked as such.
+func namesByPolicy(rows []riskRepo.ListRiskPolicyAnalyticsLabelsRow) map[string]string {
+	names := make(map[string]string, len(rows))
+	for _, row := range rows {
+		name := row.Name
+		if row.Deleted {
+			name += " (deleted)"
+		}
+		names[row.ID.String()] = name
+	}
+	return names
+}
+
+// riskPolicySeverities loads the project's risk policies, deleted ones
+// included, as severitiesByKey.
+func riskPolicySeverities(policies *riskRepo.Queries) LookupLoader {
+	return func(ctx context.Context, tenant Tenant) (map[string]string, error) {
+		rows, err := riskPolicyRows(ctx, policies, tenant)
 		if err != nil {
-			return nil, fmt.Errorf("list risk policy labels: %w", err)
+			return nil, err
 		}
-		labels := make(map[string]string, len(rows))
-		for _, row := range rows {
-			if value := label(row); value != "" {
-				labels[row.ID.String()] = value
+		return severitiesByKey(rows), nil
+	}
+}
+
+// severitiesByKey maps every riskSeverityKeyExpr key the project's findings
+// can have to the band the finding reads as: its policy's, when the policy is
+// live and scored, as on the Watchdog page, or else the category band the key
+// carries. Findings without a policy key on the empty id.
+func severitiesByKey(rows []riskRepo.ListRiskPolicyAnalyticsLabelsRow) map[string]string {
+	bands := riskCategoryBands()
+	severities := make(map[string]string, (len(rows)+1)*len(bands))
+	for _, band := range bands {
+		severities[":"+band] = band
+	}
+	for _, row := range rows {
+		for _, band := range bands {
+			severity := band
+			if !row.Deleted && row.Score > 0 {
+				severity = risk.FindingSeverity(row.Score, "")
 			}
+			severities[row.ID.String()+":"+band] = severity
 		}
-		return labels, nil
 	}
+	return severities
 }
 
-func riskPolicyName(row riskRepo.ListRiskPolicyAnalyticsLabelsRow) string {
-	if row.Deleted {
-		return row.Name + " (deleted)"
+// riskCategoryBands are the bands categorySeverityExpr can read a category as.
+func riskCategoryBands() []string {
+	fallbacks, unknown := risk.CategoryFallbackSeverities()
+	bands := []string{unknown}
+	for _, band := range fallbacks {
+		if !slices.Contains(bands, band) {
+			bands = append(bands, band)
+		}
 	}
-	return row.Name
+	return bands
 }
 
-// riskPolicySeverity is a live, scored policy's severity band. A deleted
-// policy contributes no score, as on the Watchdog page, so its findings take
-// their category's band.
-func riskPolicySeverity(row riskRepo.ListRiskPolicyAnalyticsLabelsRow) string {
-	if row.Deleted || row.Score <= 0 {
-		return ""
+func riskPolicyRows(ctx context.Context, policies *riskRepo.Queries, tenant Tenant) ([]riskRepo.ListRiskPolicyAnalyticsLabelsRow, error) {
+	projectID, err := uuid.Parse(tenant.ProjectID)
+	if err != nil {
+		return nil, fmt.Errorf("parse project id: %w", err)
 	}
-	return risk.FindingSeverity(row.Score, "")
+	rows, err := policies.ListRiskPolicyAnalyticsLabels(ctx, riskRepo.ListRiskPolicyAnalyticsLabelsParams{
+		ProjectID:      projectID,
+		OrganizationID: tenant.OrganizationID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list risk policy labels: %w", err)
+	}
+	return rows, nil
 }
 
 // UnixNano is undefined outside the years 1678 to 2262, so a bound is checked

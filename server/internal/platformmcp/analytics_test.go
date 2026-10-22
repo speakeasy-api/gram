@@ -557,8 +557,8 @@ func TestDescribeAnalyticsCatalogListsRiskFindingsToOrgAdmins(t *testing.T) {
 		}
 	}
 	require.NotNil(t, riskFindings, "an org admin is described the risk dataset")
-	require.True(t, riskFindings.AggregatesOnly)
-	require.False(t, output.Datasets[0].AggregatesOnly, "tool_calls answers rows too")
+	require.Equal(t, "metric", riskFindings.Kind, "it answers aggregates only")
+	require.Equal(t, "event", output.Datasets[0].Kind, "tool_calls answers rows too")
 
 	raw, err = h.invokeWithGrants(t, describeAnalyticsCatalogToolName, h.projectArguments(), authz.NewGrant(authz.ScopeProjectRead, h.project.ID.String()))
 	require.NoError(t, err)

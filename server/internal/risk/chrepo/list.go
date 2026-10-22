@@ -179,7 +179,7 @@ func listRiskFindingsBase(p ListRiskFindingsParams, columns ...string) (squirrel
 		Where("organization_id = ?", p.OrganizationID).
 		Where("project_id = ?", p.ProjectID).
 		Where("dead_letter_reason = ''").
-		Where(NotShadowCond).
+		Where(notShadowCond).
 		Where(squirrel.Eq{"risk_policy_id": p.PolicyIDs})
 	if p.ChatID != "" {
 		sb = sb.Where("chat_id = ?", p.ChatID)
@@ -201,7 +201,7 @@ func listRiskFindingsBase(p ListRiskFindingsParams, columns ...string) (squirrel
 	return sb, nil
 }
 
-// NotShadowCond hides engine-comparison rows. Findings the LLM analyzer
+// notShadowCond hides engine-comparison rows. Findings the LLM analyzer
 // produced under the shadow risk engine mode are stored with shadow = 1 so
 // the two engines' verdicts can be compared per message, but they were never
 // enforced and must never surface to users: every read path serving the Risk
@@ -212,7 +212,7 @@ func listRiskFindingsBase(p ListRiskFindingsParams, columns ...string) (squirrel
 // stamp it and every INSERT ... SELECT state transition passes it through.
 // It is therefore safe to apply before per-id dedup, next to tenancy filters,
 // where it also prunes the scan.
-const NotShadowCond = "shadow = 0"
+const notShadowCond = "shadow = 0"
 
 // withMCPServerCond narrows to one concrete server AFTER the latest-copy
 // dedup. Legacy suppression copies mirrored from Postgres carry no execution
@@ -235,7 +235,7 @@ func withMCPServerFilter(sb squirrel.SelectBuilder, mcpServerID string) squirrel
 	return sb.Where("mcp_server_id = ?", mcpServerID)
 }
 
-// LiveStateCond gates the latest copy of a finding to live rows only — not
+// liveStateCond gates the latest copy of a finding to live rows only — not
 // suppressed, not marked a false positive. Applied after the per-id dedup.
 //
 // Two columns for one meaning, for the length of the suppression convergence.
@@ -247,12 +247,7 @@ func withMCPServerFilter(sb squirrel.SelectBuilder, mcpServerID string) squirrel
 // carry one expire under the table's 90-day created_at TTL. The contract phase
 // drops this half of the condition, and then the column, once that window
 // closes.
-const LiveStateCond = "excluded_at IS NULL AND false_positive_at IS NULL"
-
-// NotDeadLetterCond keeps real findings and drops the could-not-analyze
-// sentinels the scanner writes in their place. Applied after the per-id dedup,
-// beside LiveStateCond.
-const NotDeadLetterCond = "dead_letter_reason = ''"
+const liveStateCond = "excluded_at IS NULL AND false_positive_at IS NULL"
 
 // ListRiskFindings returns one page of findings ordered by
 // (message_created_at, id) descending — the same sort and cursor semantics as
@@ -261,7 +256,7 @@ const NotDeadLetterCond = "dead_letter_reason = ''"
 //
 // Dedup, always on: the table is a plain append-only MergeTree fed by
 // at-least-once Pub/Sub delivery, so redelivered rows sharing an id are
-// expected; LatestCopyOrderSQL in the sort order plus LIMIT 1 BY id keeps the
+// expected; latestCopyOrderSQL in the sort order plus LIMIT 1 BY id keeps the
 // winning copy (state-change copies outrank finding copies, latest inserted
 // within a rank). With UniqueMatch the LIMIT BY key widens to
 // (risk_policy_id, rule_id, tenant-fingerprint) keeping the newest occurrence,
@@ -304,7 +299,7 @@ func (q *Queries) ListRiskFindings(ctx context.Context, p ListRiskFindingsParams
 	} else if p.NonAssistant {
 		sb = sb.Where("assistant_id = ''")
 	}
-	sb = sb.OrderBy("message_created_at DESC", "id DESC", LatestCopyOrderSQL)
+	sb = sb.OrderBy("message_created_at DESC", "id DESC", latestCopyOrderSQL)
 
 	// cursorCond resumes strictly after a prior page's last row; both branches
 	// below share it so the cursor shape cannot drift between them.
@@ -324,7 +319,7 @@ func (q *Queries) ListRiskFindings(ctx context.Context, p ListRiskFindingsParams
 			Suffix("LIMIT 1 BY id")
 		grouped := withMCPServerCond(sq.Select(riskFindingListColumns...).
 			FromSelect(sb, "latest").
-			Where(LiveStateCond), p).
+			Where(liveStateCond), p).
 			OrderBy("message_created_at DESC", "id DESC").
 			Suffix("LIMIT 1 BY (risk_policy_id, rule_id, " + uniqueMatchKey + ")")
 		outer := sq.Select(riskFindingListColumns...).FromSelect(grouped, "deduped")
@@ -349,7 +344,7 @@ func (q *Queries) ListRiskFindings(ctx context.Context, p ListRiskFindingsParams
 			Suffix("LIMIT 1 BY id")
 		sb = withMCPServerCond(sq.Select(riskFindingListColumns...).
 			FromSelect(sb, "latest").
-			Where(LiveStateCond), p).
+			Where(liveStateCond), p).
 			OrderBy("message_created_at DESC", "id DESC").
 			Limit(p.Limit)
 	}
@@ -390,10 +385,10 @@ func (q *Queries) CountRiskFindings(ctx context.Context, p ListRiskFindingsParam
 	if err != nil {
 		return 0, err
 	}
-	inner = inner.OrderBy(LatestCopyOrderSQL).Suffix("LIMIT 1 BY id")
+	inner = inner.OrderBy(latestCopyOrderSQL).Suffix("LIMIT 1 BY id")
 	sb := withMCPServerCond(sq.Select("count() AS findings").
 		FromSelect(inner, "latest").
-		Where(LiveStateCond), p)
+		Where(liveStateCond), p)
 
 	query, args, err := sb.ToSql()
 	if err != nil {

@@ -33,17 +33,17 @@ type RiskOverviewWindowParams struct {
 // double-count an id with two rows and, worse, a stale first row would still
 // satisfy "false_positive_at IS NULL" even after a second row dismissed it.
 // The inner select keeps only each id's winning copy (ROW_NUMBER() OVER ...
-// ORDER BY LatestCopyOrderSQL — state-change copies outrank finding copies,
+// ORDER BY latestCopyOrderSQL — state-change copies outrank finding copies,
 // latest inserted within a rank); dead-letter sentinels and
 // exclusion/dismissal annotations are then filtered on that latest state.
 // The shadow marker is immutable across copies, so it is filtered with the
 // tenancy scope before the dedup.
 func overviewFindings(p RiskOverviewWindowParams, columns ...string) squirrel.SelectBuilder {
-	latest := sq.Select("*", "ROW_NUMBER() OVER (PARTITION BY id ORDER BY "+LatestCopyOrderSQL+") AS rn").
+	latest := sq.Select("*", "ROW_NUMBER() OVER (PARTITION BY id ORDER BY "+latestCopyOrderSQL+") AS rn").
 		From("risk_findings").
 		Where("organization_id = ?", p.OrganizationID).
 		Where("project_id = ?", p.ProjectID).
-		Where(NotShadowCond).
+		Where(notShadowCond).
 		Where("created_at >= ?", p.From).
 		Where("created_at < ?", p.To)
 

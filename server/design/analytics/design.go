@@ -111,9 +111,6 @@ var DatasetType = Type("AnalyticsDataset", func() {
 	Attribute("kind", String, func() { Enum("event", "metric") })
 	Attribute("grain", String, "What one row represents, as a noun", func() { Example("tool call") })
 	Attribute("description", String)
-	Attribute("aggregates_only", Boolean, "True when the dataset answers aggregates only, so an ungrouped query against it is refused", func() {
-		Default(false)
-	})
 	Attribute("fields", ArrayOf(FieldType))
 	Required("name", "kind", "grain", "description", "fields")
 })

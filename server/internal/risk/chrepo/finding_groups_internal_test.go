@@ -16,10 +16,10 @@ func TestGroupRiskFindingsByChatQuery(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, []any{"org-test", "project-test", "policy-a", "policy-b", "chat-cursor"}, args)
 	for _, clause := range []string{
-		"organization_id = ?", "project_id = ?", "dead_letter_reason = ''", NotShadowCond,
+		"organization_id = ?", "project_id = ?", "dead_letter_reason = ''", notShadowCond,
 		"risk_policy_id IN (?,?)", "chat_id != ''", "chat_id <= ?",
-		"ORDER BY " + LatestCopyOrderSQL + " LIMIT 1 BY id",
-		") AS latest WHERE " + LiveStateCond,
+		"ORDER BY " + latestCopyOrderSQL + " LIMIT 1 BY id",
+		") AS latest WHERE " + liveStateCond,
 		"argMax(external_user_id, created_at) AS external_user_id", "count() AS findings_count", "max(created_at) AS latest_detected",
 		"GROUP BY chat_id ORDER BY chat_id DESC LIMIT 26",
 	} {
@@ -51,7 +51,7 @@ func TestRuleCountsByCategoryQuery(t *testing.T) {
 	require.Equal(t, []any{"org-test", "project-test", p.From, p.To, "secrets", "policy-a", "policy-b"}, args)
 	for _, clause := range []string{
 		"created_at >= ?", "created_at < ?",
-		"ROW_NUMBER() OVER (PARTITION BY id ORDER BY " + LatestCopyOrderSQL + ") AS rn",
+		"ROW_NUMBER() OVER (PARTITION BY id ORDER BY " + latestCopyOrderSQL + ") AS rn",
 		"rn = 1 AND dead_letter_reason = '' AND excluded_at IS NULL AND false_positive_at IS NULL AND category = ? AND risk_policy_id IN (?,?)",
 		"uniqExact(id) AS findings", "GROUP BY rule_id, source ORDER BY findings DESC, rule_id ASC LIMIT 1001",
 	} {

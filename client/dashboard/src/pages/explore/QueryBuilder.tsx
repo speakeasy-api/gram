@@ -266,9 +266,9 @@ function Sentence({
               )
             }
             onRemove={
-              // A dataset that answers aggregates only has no rows to fall
-              // back to, so its last complete measure stays.
-              dataset?.aggregatesOnly &&
+              // A metric dataset has no rows to fall back to, so its last
+              // complete measure stays.
+              dataset?.kind === "metric" &&
               completeMeasures(removeAt(spec.measures, index)).length === 0
                 ? undefined
                 : () => patch(withMeasures(removeAt(spec.measures, index)))

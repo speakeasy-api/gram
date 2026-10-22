@@ -635,12 +635,9 @@ type AnalyticsDatasetResponseBody struct {
 	Name string `form:"name" json:"name" xml:"name"`
 	Kind string `form:"kind" json:"kind" xml:"kind"`
 	// What one row represents, as a noun
-	Grain       string `form:"grain" json:"grain" xml:"grain"`
-	Description string `form:"description" json:"description" xml:"description"`
-	// True when the dataset answers aggregates only, so an ungrouped query against
-	// it is refused
-	AggregatesOnly bool                          `form:"aggregates_only" json:"aggregates_only" xml:"aggregates_only"`
-	Fields         []*AnalyticsFieldResponseBody `form:"fields" json:"fields" xml:"fields"`
+	Grain       string                        `form:"grain" json:"grain" xml:"grain"`
+	Description string                        `form:"description" json:"description" xml:"description"`
+	Fields      []*AnalyticsFieldResponseBody `form:"fields" json:"fields" xml:"fields"`
 }
 
 // AnalyticsFieldResponseBody is used to define fields on response body types.

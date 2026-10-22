@@ -59,10 +59,7 @@ type AnalyticsDataset struct {
 	// What one row represents, as a noun
 	Grain       string
 	Description string
-	// True when the dataset answers aggregates only, so an ungrouped query against
-	// it is refused
-	AggregatesOnly bool
-	Fields         []*AnalyticsField
+	Fields      []*AnalyticsField
 }
 
 // AnalyticsDescribeResult is the result type of the analytics service describe

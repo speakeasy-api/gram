@@ -3,7 +3,6 @@
  */
 
 import * as z from "zod/v4-mini";
-import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 import * as openEnums from "../../types/enums.js";
 import { OpenEnum } from "../../types/enums.js";
@@ -24,10 +23,6 @@ export type AnalyticsDatasetKind = OpenEnum<typeof AnalyticsDatasetKind>;
  * A dataset and the fields it exposes. The builder is generated from this.
  */
 export type AnalyticsDataset = {
-  /**
-   * True when the dataset answers aggregates only, so an ungrouped query against it is refused
-   */
-  aggregatesOnly: boolean;
   description: string;
   fields: Array<AnalyticsField>;
   /**
@@ -48,21 +43,13 @@ export const AnalyticsDatasetKind$inboundSchema: z.ZodMiniType<
 export const AnalyticsDataset$inboundSchema: z.ZodMiniType<
   AnalyticsDataset,
   unknown
-> = z.pipe(
-  z.object({
-    aggregates_only: z._default(z.boolean(), false),
-    description: z.string(),
-    fields: z.array(AnalyticsField$inboundSchema),
-    grain: z.string(),
-    kind: AnalyticsDatasetKind$inboundSchema,
-    name: z.string(),
-  }),
-  z.transform((v) => {
-    return remap$(v, {
-      "aggregates_only": "aggregatesOnly",
-    });
-  }),
-);
+> = z.object({
+  description: z.string(),
+  fields: z.array(AnalyticsField$inboundSchema),
+  grain: z.string(),
+  kind: AnalyticsDatasetKind$inboundSchema,
+  name: z.string(),
+});
 
 export function analyticsDatasetFromJSON(
   jsonString: string,

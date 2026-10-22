@@ -247,12 +247,11 @@ func describeDatasets(catalog *Catalog, datasets []*Dataset) []*gen.AnalyticsDat
 			fields = append(fields, field)
 		}
 		out = append(out, &gen.AnalyticsDataset{
-			Name:           ds.Name,
-			Kind:           string(ds.Kind),
-			Grain:          ds.Grain,
-			Description:    ds.Description,
-			AggregatesOnly: ds.AggregatesOnly,
-			Fields:         fields,
+			Name:        ds.Name,
+			Kind:        string(ds.Kind),
+			Grain:       ds.Grain,
+			Description: ds.Description,
+			Fields:      fields,
 		})
 	}
 	return out
