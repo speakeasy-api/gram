@@ -77,7 +77,11 @@ export function Skeleton({
 }
 
 /** A five-row placeholder shaped like a three-column data table. */
-export function SkeletonTable(): React.JSX.Element {
+export function SkeletonTable({
+  className,
+}: {
+  className?: string;
+} = {}): React.JSX.Element {
   const columns: Column<{ a: string }>[] = [
     {
       header: "Name",
@@ -116,6 +120,7 @@ export function SkeletonTable(): React.JSX.Element {
       data={[{ a: "a" }, { a: "b" }, { a: "c" }, { a: "d" }, { a: "e" }]}
       rowKey={(row) => row.a}
       hideHeader
+      className={className}
     />
   );
 }

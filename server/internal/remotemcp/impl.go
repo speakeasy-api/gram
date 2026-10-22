@@ -969,6 +969,8 @@ func validateHeaderWrite(name string, value *string, valueFromRequestHeader *str
 	switch err := proxy.CheckRemoteHeader(check); {
 	case err == nil:
 		return headerName, source, nil
+	case errors.Is(err, proxy.ErrAuthorizationSource):
+		return "", nil, fmt.Errorf("header %q cannot read request header %q: it may carry the caller's Speakeasy credential, so it is never forwarded to remote MCP servers. Have callers send the upstream credential in a separate request header and read it from there", headerName, *source)
 	case errors.Is(err, proxy.ErrProtectedSource):
 		return "", nil, fmt.Errorf("header %q cannot read request header %q: Speakeasy credentials and cookies are never forwarded to remote MCP servers", headerName, *source)
 	case errors.Is(err, proxy.ErrProtectedDestination):

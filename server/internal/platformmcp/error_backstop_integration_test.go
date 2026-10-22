@@ -122,8 +122,8 @@ func composeRegistryOnPool(t *testing.T, logger *slog.Logger, pool, live *pgxpoo
 		WithDataExportMutations(auditLogger, dashboardURL).
 		WithDataExportRouteToggle(routeToggle).
 		WithNetworkIngressStatus(dashboardURL).
-		WithRiskAnalysisStatus(NewRiskAnalysisStatusService(logger, pool, nil, flags, slugs)).
-		WithRiskFindings(NewRiskFindingsService(pool, nil, flags, slugs, key), budget).
+		WithRiskAnalysisStatus(NewRiskAnalysisStatusService(logger, pool, nil)).
+		WithRiskFindings(NewRiskFindingsService(pool, nil, key), budget).
 		WithRiskFindingList(NewRiskFindingListService(pool, nil, key), budget).
 		WithChatMetadata(NewChatMetadataService(pool, budget, key)).
 		WithToolExposure(toolExposure).

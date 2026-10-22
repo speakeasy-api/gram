@@ -1,8 +1,24 @@
+import { unrecognized } from "@gram/client/types/unrecognized.js";
 import { describe, expect, it } from "vitest";
 import type { RiskResult } from "@gram/client/models/components/riskresult.js";
 import { callOutcome, callPathFor } from "./call-path";
 
 describe("callPathFor", () => {
+  it.each([
+    "logged",
+    "denied",
+    unrecognized("future_outcome"),
+    undefined,
+  ] as const)(
+    "does not infer direction for an unknown phase with outcome %s",
+    (outcome) => {
+      const path = callPathFor("future_phase", outcome, "Example server");
+      expect(path.left).toEqual({ blocked: null, label: "Unknown" });
+      expect(path.right).toEqual({ blocked: null, label: "Unknown" });
+      expect(path.serverReached).toBeNull();
+      expect(path.caption).toBe("The call path is unavailable for this phase.");
+    },
+  );
   it("blocks the gateway → server link for a denied request", () => {
     const path = callPathFor("request", "denied", "Datadog");
     expect(path.left).toEqual({ blocked: false, label: "request →" });
@@ -89,4 +105,36 @@ describe("callOutcome", () => {
     });
     expect(callOutcome(logged, [logged, withheld])).toBe("logged");
   });
+
+  it("keeps an unknown sibling outcome neutral unless another policy blocked", () => {
+    const logged = finding("a", { enforcementOutcome: "logged" });
+    const unknown = finding("b", {
+      enforcementOutcome: unrecognized("future_outcome"),
+    });
+    const denied = finding("c", { enforcementOutcome: "denied" });
+    expect(callOutcome(logged, [logged, unknown])).toBe("future_outcome");
+    expect(callOutcome(logged, [logged, unknown, denied])).toBe("denied");
+    expect(
+      callOutcome(logged, [logged, { ...unknown, executionId: "exec-2" }]),
+    ).toBe("logged");
+    expect(
+      callOutcome(logged, [logged, { ...unknown, phase: "response" }]),
+    ).toBe("logged");
+  });
 });
+
+it.each(["future_outcome", "constructor"])(
+  "does not infer delivery for %s",
+  (value) => {
+    const outcome = unrecognized(value);
+    const request = callPathFor("request", outcome, "Example server");
+    expect(request.right).toEqual({
+      blocked: null,
+      label: "Forwarding unknown",
+    });
+    expect(request.serverReached).toBeNull();
+    const response = callPathFor("response", outcome, "Example server");
+    expect(response.left).toEqual({ blocked: null, label: "Delivery unknown" });
+    expect(response.serverReached).toBe(true);
+  },
+);

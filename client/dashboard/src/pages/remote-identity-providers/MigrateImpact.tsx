@@ -217,7 +217,7 @@ export function MigrateImpact({
       )}
 
       {endpointMismatches && endpointMismatches.length > 0 && (
-        <Alert variant="error" dismissible={false} alignTop>
+        <Alert variant="error" dismissible={false}>
           <Stack gap={2}>
             <p className="text-sm">
               {`These point at different upstream authorization servers (${mismatchFieldNames(endpointMismatches).join(", ")} differ). Consolidating them would break existing sessions.`}
@@ -238,7 +238,7 @@ export function MigrateImpact({
       )}
 
       {warnings && warnings.length > 0 && (
-        <Alert variant="warning" dismissible={false} alignTop>
+        <Alert variant="warning" dismissible={false}>
           <Stack gap={2}>
             {warnings.map((mismatch) => (
               <WarningDetail key={mismatch.field} mismatch={mismatch} />

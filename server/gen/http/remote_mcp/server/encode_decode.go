@@ -3772,6 +3772,7 @@ func marshalTypesMcpServerToMcpServerResponseBody(v *types.McpServer) *McpServer
 		NetworkAccessMode:     string(v.NetworkAccessMode),
 		PrimaryEndpointID:     v.PrimaryEndpointID,
 		PrimaryEndpointURL:    v.PrimaryEndpointURL,
+		HasEndpoint:           v.HasEndpoint,
 		CreatedAt:             v.CreatedAt,
 		UpdatedAt:             v.UpdatedAt,
 	}
@@ -3793,6 +3794,7 @@ func marshalTypesMcpServerToolsetSummaryToMcpServerToolsetSummaryResponseBody(v 
 		ID:                    v.ID,
 		Slug:                  v.Slug,
 		Name:                  v.Name,
+		Description:           v.Description,
 		ToolCount:             v.ToolCount,
 		ToolSelectionMode:     v.ToolSelectionMode,
 		ExternalMcpProxyOnly:  v.ExternalMcpProxyOnly,

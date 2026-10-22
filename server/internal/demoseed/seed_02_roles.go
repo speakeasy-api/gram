@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/demoseed/repo"
 )
 
@@ -372,6 +373,15 @@ func (s *seeder) rolesSlackMemberID(n int) uuid.UUID {
 func (s *seeder) seedRolesDirectory(ctx context.Context) error {
 	org := s.orgID()
 
+	if err := s.q.RolesDeleteDirectoryReviewItems(ctx, org); err != nil {
+		return fmt.Errorf("delete demo directory review items: %w", err)
+	}
+	if err := s.q.RolesDeleteDirectoryReviewOrgState(ctx, org); err != nil {
+		return fmt.Errorf("delete demo directory review state: %w", err)
+	}
+	if err := s.q.RolesDeleteDirectoryReviewOptOuts(ctx, org); err != nil {
+		return fmt.Errorf("delete demo directory review opt-outs: %w", err)
+	}
 	if err := s.q.RolesDeleteDirectoryRoleMappings(ctx, org); err != nil {
 		return fmt.Errorf("delete demo directory role mappings: %w", err)
 	}
@@ -399,11 +409,14 @@ func (s *seeder) seedRolesDirectory(ctx context.Context) error {
 
 	for _, u := range demoUsers {
 		dirUserID := "demo_dir_" + s.userID(u.handle)
+		firstName, lastName := splitDemoName(u.name)
 		if err := s.q.RolesInsertDirectoryUser(ctx, repo.RolesInsertDirectoryUserParams{
 			OrganizationID:        org,
-			UserID:                s.userID(u.handle),
+			UserID:                conv.ToPGText(s.userID(u.handle)),
 			WorkosDirectoryUserID: dirUserID,
 			Email:                 s.email(u.handle),
+			FirstName:             conv.ToPGText(firstName),
+			LastName:              conv.ToPGText(lastName),
 			DivisionName:          u.division,
 			DepartmentName:        u.department,
 			JobTitle:              u.title,
@@ -418,6 +431,34 @@ func (s *seeder) seedRolesDirectory(ctx context.Context) error {
 			Team:                  u.team,
 		}); err != nil {
 			return fmt.Errorf("insert demo directory group membership %s: %w", u.handle, err)
+		}
+	}
+
+	// Directory people who have not signed in, including one address the
+	// directory reports twice.
+	for _, p := range demoDirectoryPeople {
+		dirUserID := "demo_dir_" + s.userID(p.handle)
+		if err := s.q.RolesInsertDirectoryUser(ctx, repo.RolesInsertDirectoryUserParams{
+			OrganizationID:        org,
+			UserID:                conv.ToPGTextEmpty(""),
+			WorkosDirectoryUserID: dirUserID,
+			Email:                 s.email(p.emailHandle),
+			FirstName:             conv.ToPGText(p.firstName),
+			LastName:              conv.ToPGText(p.lastName),
+			DivisionName:          "",
+			DepartmentName:        p.department,
+			JobTitle:              p.title,
+			EmployeeType:          "full-time",
+			CostCenterName:        "",
+		}); err != nil {
+			return fmt.Errorf("insert demo directory person %s: %w", p.handle, err)
+		}
+		if err := s.q.RolesInsertDirectoryGroupMembership(ctx, repo.RolesInsertDirectoryGroupMembershipParams{
+			WorkosDirectoryUserID: dirUserID,
+			OrganizationID:        org,
+			Team:                  p.team,
+		}); err != nil {
+			return fmt.Errorf("insert demo directory group membership %s: %w", p.handle, err)
 		}
 	}
 
@@ -440,6 +481,23 @@ func (s *seeder) seedRolesDirectory(ctx context.Context) error {
 	}); err != nil {
 		return fmt.Errorf("insert demo department role mapping: %w", err)
 	}
+	// A group deleted from the directory keeps its mapping, which grants
+	// nothing; the mappings page lists it as a missing source.
+	if err := s.q.RolesInsertDeletedDirectoryGroup(ctx, repo.RolesInsertDeletedDirectoryGroupParams{
+		OrganizationID: org,
+		GroupPrefix:    s.spec.GroupPrefix,
+		Slug:           "legacy-platform",
+		Name:           "Legacy Platform",
+	}); err != nil {
+		return fmt.Errorf("insert demo deleted directory group: %w", err)
+	}
+	if err := s.q.RolesInsertGroupRoleMapping(ctx, repo.RolesInsertGroupRoleMappingParams{
+		OrganizationID: org,
+		GroupName:      "Legacy Platform",
+		RoleSlug:       "analyst",
+	}); err != nil {
+		return fmt.Errorf("insert demo deleted group role mapping: %w", err)
+	}
 	// Contractors arrive through the directory, so Check Access on GitHub can
 	// name the mapping that put a person in the role that blocks them.
 	if err := s.q.RolesInsertAttributeRoleMapping(ctx, repo.RolesInsertAttributeRoleMappingParams{
@@ -449,6 +507,55 @@ func (s *seeder) seedRolesDirectory(ctx context.Context) error {
 		RoleSlug:       "contractors",
 	}); err != nil {
 		return fmt.Errorf("insert demo contractor role mapping: %w", err)
+	}
+	return s.seedRolesDirectoryReview(ctx)
+}
+
+// seedRolesDirectoryReview starts directory review after the groups above
+// exist, then raises one change of each kind for the SSO tab's review list:
+// a group first seen since, a new value of a mapped attribute key, and the
+// deleted group that still has a mapping.
+func (s *seeder) seedRolesDirectoryReview(ctx context.Context) error {
+	org := s.orgID()
+
+	if err := s.q.RolesInsertDirectoryReviewOrgState(ctx, org); err != nil {
+		return fmt.Errorf("insert demo directory review state: %w", err)
+	}
+	if err := s.q.RolesInsertNewDirectoryGroup(ctx, repo.RolesInsertNewDirectoryGroupParams{
+		OrganizationID: org,
+		GroupPrefix:    s.spec.GroupPrefix,
+		Slug:           "field-engineering",
+		Name:           "Field Engineering",
+	}); err != nil {
+		return fmt.Errorf("insert demo new directory group: %w", err)
+	}
+	for _, handle := range []string{"priya", "mateo"} {
+		if err := s.q.RolesInsertDirectoryGroupMembership(ctx, repo.RolesInsertDirectoryGroupMembershipParams{
+			WorkosDirectoryUserID: "demo_dir_" + s.userID(handle),
+			OrganizationID:        org,
+			Team:                  "Field Engineering",
+		}); err != nil {
+			return fmt.Errorf("insert demo new directory group membership %s: %w", handle, err)
+		}
+	}
+
+	for _, item := range []repo.RolesInsertDirectoryReviewGroupItemParams{
+		{OrganizationID: org, Kind: "new_group", GroupName: "Field Engineering"},
+		{OrganizationID: org, Kind: "source_missing", GroupName: "Legacy Platform"},
+	} {
+		if err := s.q.RolesInsertDirectoryReviewGroupItem(ctx, item); err != nil {
+			return fmt.Errorf("insert demo directory review item for %s: %w", item.GroupName, err)
+		}
+	}
+	// department_name already has a mapping, so a value nobody has mapped is
+	// raised when the directory first gives it to someone.
+	if err := s.q.RolesInsertDirectoryReviewAttributeItem(ctx, repo.RolesInsertDirectoryReviewAttributeItemParams{
+		OrganizationID: org,
+		Kind:           "new_attribute_value",
+		AttributeKey:   "department_name",
+		AttributeValue: "Platform Engineering",
+	}); err != nil {
+		return fmt.Errorf("insert demo directory review attribute item: %w", err)
 	}
 	return nil
 }

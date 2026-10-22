@@ -43,6 +43,12 @@ daemons = [
   "idle-pause",
 ]
 
+# Opt-in only: intentionally excluded from the default/application groups.
+[daemons.agentation]
+run = "mise run start:agentation-server"
+ready_output = "Agentation server listening on"
+retry = 0
+
 [daemons.park]
 run = "mise run park"
 ready_output = "Parked on port"

@@ -112,7 +112,7 @@ func registerAssistantRuntimeTool(reg *Registrar, service *AssistantIdentityServ
 		Name:        selectAssistantRuntimeToolName,
 		Title:       "Select Assistant Runtime",
 		Description: "Select the persisted runtime for one assistant in an exact project. Select 2 for the legacy runtime or explicitly opt into Kit with 3. First call with confirmed:false to preview the current runtime_version without changing it, then obtain explicit confirmation of the exact target and choice. Supply that value as expected_runtime_version. Requires organization administrator access and assistant:write authorization on the selected assistant; a frontend feature flag is not authorization. The shared service rejects stale versions and unsettled active or background work. On conflict read again and reconfirm; never automatically overwrite. Returns committed runtime configuration, not runtime readiness, instructions or credentials. Managed assistants cannot change their own runtime through this tool.",
-		Annotations: &mcp.ToolAnnotations{DestructiveHint: new(true), ReadOnlyHint: false, IdempotentHint: false, OpenWorldHint: nil, Title: ""},
+		Annotations: &mcp.ToolAnnotations{DestructiveHint: new(true), ReadOnlyHint: false, IdempotentHint: false, OpenWorldHint: new(false), Title: ""},
 	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: externalOnly, ProjectScope: ProjectScopeExplicit, DiscoveryScopes: nil}, func(ctx context.Context, _ *mcp.CallToolRequest, input SelectAssistantRuntimeInput) (*mcp.CallToolResult, SelectAssistantRuntimeOutput, error) {
 		return principalToolCall(ctx, assistantRuntimeToolResult, func(principal Principal) (SelectAssistantRuntimeOutput, error) {
 			return service.selectRuntime(ctx, principal, input)

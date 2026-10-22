@@ -627,3 +627,24 @@ func TestMutatorRejectsRetiredRoleDistributionFlag(t *testing.T) {
 		requireOopsCode(t, err, oops.CodeInvalid)
 	}
 }
+
+func TestOrganizationGatewayRequiresExplicitOptIn(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestProductFeaturesService(t)
+	orgID := requestedOrganizationID(ctx)
+	require.True(t, ti.client.Snapshot(ctx, orgID).OrganizationGatewayDisabled)
+	requireDisabled := func(want bool) {
+		t.Helper()
+		live, err := ti.client.IsFeatureEnabledUncached(ctx, orgID, productfeatures.FeatureOrganizationGatewayDisabled)
+		require.NoError(t, err)
+		require.Equal(t, want, live)
+		require.Equal(t, want, ti.client.Snapshot(ctx, orgID).OrganizationGatewayDisabled)
+	}
+	requireDisabled(true)
+	for _, disabled := range []bool{false, false, true, true, false} {
+		require.NoError(t, ti.service.SetProductFeature(ctx, &gen.SetProductFeaturePayload{
+			OrganizationID: orgID, FeatureName: gen.ProductFeatureName(productfeatures.FeatureOrganizationGatewayDisabled), Enabled: disabled,
+		}))
+		requireDisabled(disabled)
+	}
+}

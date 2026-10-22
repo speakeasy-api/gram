@@ -996,12 +996,11 @@ func (s *Service) attachToDefaultPlugin(ctx context.Context, dbtx pgx.Tx, authCt
 	// Role plugins are checked by the same guard inside the attachment, so the
 	// administrator's write must be marked there too.
 	outcome, err := plugins.AttachToDefaultAndRolePluginsAuditedWithOutcome(admissionCtx, dbtx, s.audit, authCtx, plugins.AttachToDefaultPluginParams{
-		OrganizationID:  authCtx.ActiveOrganizationID,
-		ProjectID:       *authCtx.ProjectID,
-		ToolsetID:       uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		McpServerID:     uuid.NullUUID{UUID: server.ID, Valid: true},
-		DisplayName:     ServerDisplayName(server),
-		HostedServerKey: false,
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      *authCtx.ProjectID,
+		ToolsetID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		McpServerID:    uuid.NullUUID{UUID: server.ID, Valid: true},
+		DisplayName:    ServerDisplayName(server),
 	}, s.distributionAdmission)
 	if err != nil {
 		if errors.Is(err, admission.ErrApprovalRequired) {
@@ -1115,6 +1114,7 @@ func (s *Service) DeleteMcpServer(ctx context.Context, payload *gen.DeleteMcpSer
 		ProjectID:      *authCtx.ProjectID,
 		ActorUserID:    authCtx.UserID,
 		ActorEmail:     authCtx.Email,
+		ActorSystem:    "",
 		TracerProvider: s.tracerProvider,
 	})
 	if err != nil {

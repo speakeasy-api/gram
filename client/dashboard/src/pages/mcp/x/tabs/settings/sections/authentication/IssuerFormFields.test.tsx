@@ -2,7 +2,10 @@ import { CreateRemoteSessionClientFormTokenEndpointAuthMethod as AuthMethod } fr
 import { TooltipProvider } from "@/components/ui/Tooltip";
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ClientCredentialsFields } from "./IssuerFormFields";
+import {
+  ClientCredentialsFields,
+  ClientAssertionAudienceField,
+} from "./IssuerFormFields";
 
 vi.mock(
   "@gram/client/react-query/newRemoteSessionClientCallbackUrl.js",
@@ -70,4 +73,39 @@ describe("ClientCredentialsFields", () => {
       screen.getByText("https://pinned.example.com/mcp/remote_login_callback"),
     ).toBeTruthy();
   });
+});
+
+it("shows unsupported assertion audiences instead of an empty select", () => {
+  render(
+    <ClientAssertionAudienceField
+      value="future_audience"
+      onChange={vi.fn<(value: string) => void>()}
+      disabled
+    />,
+  );
+  expect(screen.getByRole("combobox").textContent).toContain(
+    "Unsupported audience format",
+  );
+  expect(screen.getByRole("combobox")).toHaveProperty("disabled", true);
+});
+
+it("shows an unsupported method instead of the default in credential fields", () => {
+  render(
+    <TooltipProvider>
+      <ClientCredentialsFields
+        clientId="synthetic-client"
+        clientSecret=""
+        tokenEndpointAuthMethod=""
+        unsupportedAuthMethod
+        onClientIdChange={vi.fn<(value: string) => void>()}
+        onClientSecretChange={vi.fn<(value: string) => void>()}
+        onTokenEndpointAuthMethodChange={vi.fn<
+          (method: AuthMethod | "") => void
+        >()}
+      />
+    </TooltipProvider>,
+  );
+  expect(screen.getByText("Unsupported authentication method")).toBeTruthy();
+  expect(screen.queryByText("client_secret_basic (default)")).toBeNull();
+  expect(screen.queryByRole("combobox")).toBeNull();
 });

@@ -200,10 +200,10 @@ function standingDecisionOf(
     request.standingDecision === "approved" ||
     request.standingDecision === "denied"
   ) {
-    return request.standingDecision;
+    return request.standingDecision === "approved" ? "approved" : "denied";
   }
   if (request.status === "approved" || request.status === "denied") {
-    return request.status;
+    return request.status === "approved" ? "approved" : "denied";
   }
   return undefined;
 }

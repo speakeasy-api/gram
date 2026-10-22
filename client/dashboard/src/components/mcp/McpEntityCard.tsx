@@ -2,10 +2,14 @@ import { useIconDither } from "@/components/icon-dither";
 import { Card } from "@/components/ui/Card";
 import type { ComponentProps } from "react";
 
-export function McpEntityCard(
-  props: ComponentProps<typeof Card.Entity>,
-): JSX.Element {
-  const { canvasRef, start, stop } = useIconDither();
+export function McpEntityCard({
+  ditherPalette,
+  ...props
+}: ComponentProps<typeof Card.Entity> & {
+  /** Colors for the hover sea; the theme's ink when omitted. */
+  ditherPalette?: readonly string[];
+}): JSX.Element {
+  const { canvasRef, start, stop } = useIconDither({ palette: ditherPalette });
   return (
     <div className="h-full" onMouseEnter={start} onMouseLeave={stop}>
       <Card.Entity

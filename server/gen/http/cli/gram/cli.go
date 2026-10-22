@@ -120,7 +120,7 @@ func UsageCommands() []string {
 		"external receive-work-os-webhook",
 		"killswitches (list-capabilities|list-mcp-servers|list|get|create|edit|lift|preview-overlaps|batch-user-badges)",
 		"about openapi",
-		"access (list-roles|get-role|create-role|update-role|delete-role|list-directory-role-mappings|sync-directory-groups|set-directory-role-mapping|set-directory-role-mappings|delete-directory-role-mapping|list-scopes|list-members|list-grants|update-member-roles|list-shadow-mcp-inventory|get-shadow-mcp-inventory-server|update-shadow-mcp-inventory-server-name|list-shadow-mcp-inventory-users|list-shadow-mcp-inventory-servers-for-user|resolve-shadow-mcp-inventory-request|list-ai-detections|list-employee-ai-detections|list-ai-detection-users|set-ai-tool-decision|list-resource-audience|set-resource-audience|list-audience-options|explain-resource-access|request-access|list-challenges|list-challenge-buckets|resolve-challenge|list-identity-access)",
+		"access (list-roles|get-role|create-role|update-role|delete-role|list-directory-role-mappings|list-directory-people|sync-directory-groups|set-directory-role-mapping|set-directory-role-mappings|delete-directory-role-mapping|preview-directory-role-setup|apply-directory-role-setup|list-directory-review-items|resolve-directory-review-item|get-directory-review-settings|update-directory-review-settings|list-scopes|list-members|list-grants|update-member-roles|list-shadow-mcp-inventory|get-shadow-mcp-inventory-server|update-shadow-mcp-inventory-server-name|list-shadow-mcp-inventory-users|list-shadow-mcp-inventory-servers-for-user|resolve-shadow-mcp-inventory-request|list-ai-detections|list-employee-ai-detections|list-ai-detection-users|set-ai-tool-decision|list-resource-audience|set-resource-audience|list-audience-options|explain-resource-access|request-access|list-challenges|list-challenge-buckets|resolve-challenge|list-identity-access)",
 		"agent (get-plugins|list-synced-users|get-configuration|update-configuration|list-ai-scan-targets|upsert-ai-scan-target|delete-ai-scan-target|get-session-meta|report-session-moved|report-ai-scan|create-session-handoff)",
 		"agents (list-sessions|revoke-session|list|create|get|rename|list-delegable-grants|list-policy-grants|create-policy-grant|update-policy-grant|delete-policy-grant|transfer|reassign|suspend|resume|revoke|delete)",
 		"ai-integrations (get-anthropic-inference-config|upsert-anthropic-inference-config|delete-anthropic-inference-config|get-config|upsert-config|delete-config|list-schedules|set-schedule-enabled|retry-schedule)",
@@ -199,10 +199,10 @@ func UsageCommands() []string {
 		"tools list-tools",
 		"toolsets (create-toolset|list-toolsets|list-toolsets-for-org|update-toolset|delete-toolset|get-toolset|list-tool-filters|list-tool-schema-static-values|check-mcp-slug-availability|clone-toolset|add-externaloauth-server|update-externaloauth-server|removeoauth-server|set-user-session-issuer|set-tool-variations-group)",
 		"triggers (list-trigger-definitions|list-trigger-instances|list-trigger-events|get-trigger-instance|create-trigger-instance|update-trigger-instance|delete-trigger-instance|pause-trigger-instance|resume-trigger-instance)",
-		"tunneled-mcp (create-server|list-servers|get-server|list-server-connections|update-server|rotate-server-key|delete-server)",
+		"tunneled-mcp (create-server|list-servers|get-server|list-server-connections|get-server-metrics|update-server|rotate-server-key|delete-server)",
 		"unproxied-mcp (create-server|list-servers|get-server|delete-server)",
 		"usage (get-period-usage|get-meter-usage|get-spend-breakdown|get-tokens-under-management|set-billing-metadata|get-billing-email|set-billing-email|set-spend-cap|get-inference-spend-caps|get-usage-tiers|create-customer-session|create-checkout|create-stripe-checkout|get-stripe-subscription|get-payg-billing-summary|create-stripe-portal-session|cancel-stripe-subscription|resume-stripe-subscription|create-top-up-checkout)",
-		"admin (login|callback|logout|get-session|get-organization-features|set-organization-feature|get-organization-chat-analysis-settings|set-organization-chat-analysis-settings|trigger-organization-chat-analysis|open-organization-in-dashboard|get-project|update-organization|bulk-update-account-type|disable-organization|enable-organization|get-organization|list-organization-members|list-organization-projects|list-project-mcp-servers|list-organization-activity|list-users|list-user-organizations|list-organizations|extend-trial|create-organization|rearm-trial|get-organization-stats|repair-inference-key|get-inference-keys|set-inference-key-monthly-limit|get-inference-spend-history|get-payg-billing-summary|get-stripe-customer|set-stripe-customer|get-stripe-subscription|cancel-stripe-subscription|resume-stripe-subscription|mark-enterprise-trial-converted|create-global-issuer|get-global-issuer-duplicate-preflight|list-global-issuers|get-global-issuer|update-global-issuer|delete-global-issuer|fetch-global-issuer-metadata|refresh-global-issuer-metadata|list-global-issuer-convergence-candidates|get-global-issuer-migrate-preflight|migrate-to-global-issuer|upload-platform-image|serve-image|start-trial|change-trial-end-date|get-meter-usage|get-spend-breakdown|get-support-matrix|update-support-matrix|get-support-coverage|describe-mcp-server-health|get-mcp-server-tool-calls|get-hook-clients|list-external-mcp-migration-candidates|preview-external-mcp-migration|migrate-external-mcp-servers|get-registry-okta-candidates|list-registry-okta-unmapped|list-registry-entries|get-registry-entry|create-registry-entry|save-registry-entry|set-registry-entry-published|list-onboarding-steps|get-onboarding-stack-options|get-organization-onboarding-stack|set-organization-onboarding-stack|list-onboarding-use-cases|create-onboarding-use-case|update-onboarding-use-case|delete-onboarding-use-case|list-onboarding-playbooks|create-onboarding-playbook|update-onboarding-playbook|delete-onboarding-playbook|clone-onboarding-playbook|get-organization-onboarding-playbook|assign-organization-onboarding-playbook|list-signup-offers|create-signup-offer|update-signup-offer|get-stripe-subscription-candidate|set-stripe-subscription|list-customer-usage)",
+		"admin (login|callback|logout|get-session|get-organization-features|set-organization-feature|get-organization-chat-analysis-settings|set-organization-chat-analysis-settings|trigger-organization-chat-analysis|open-organization-in-dashboard|get-project|update-organization|bulk-update-account-type|disable-organization|enable-organization|get-organization|list-organization-members|list-organization-projects|list-project-mcp-servers|list-organization-activity|list-users|list-user-organizations|list-organizations|extend-trial|create-organization|rearm-trial|get-organization-stats|repair-inference-key|get-inference-keys|set-inference-key-monthly-limit|get-inference-spend-history|get-payg-billing-summary|get-stripe-customer|set-stripe-customer|get-stripe-subscription|cancel-stripe-subscription|resume-stripe-subscription|mark-enterprise-trial-converted|create-global-issuer|get-global-issuer-duplicate-preflight|list-global-issuers|get-global-issuer|update-global-issuer|delete-global-issuer|fetch-global-issuer-metadata|refresh-global-issuer-metadata|list-global-issuer-convergence-candidates|get-global-issuer-migrate-preflight|migrate-to-global-issuer|upload-platform-image|serve-image|start-trial|change-trial-end-date|get-meter-usage|get-spend-breakdown|get-support-matrix|update-support-matrix|get-support-coverage|describe-mcp-server-health|get-mcp-server-tool-calls|get-hook-clients|list-external-mcp-migration-candidates|preview-external-mcp-migration|migrate-external-mcp-servers|get-registry-okta-candidates|list-registry-okta-unmapped|list-registry-entries|get-registry-entry|create-registry-entry|save-registry-entry|set-registry-entry-published|list-onboarding-steps|get-onboarding-stack-options|get-organization-onboarding-stack|set-organization-onboarding-stack|list-onboarding-use-cases|create-onboarding-use-case|update-onboarding-use-case|delete-onboarding-use-case|list-onboarding-playbooks|create-onboarding-playbook|update-onboarding-playbook|delete-onboarding-playbook|clone-onboarding-playbook|get-organization-onboarding-playbook|assign-organization-onboarding-playbook|list-signup-offers|create-signup-offer|update-signup-offer|get-stripe-subscription-candidate|set-stripe-subscription|list-customer-usage|list-upstreamoauth-migration-organizations|get-upstreamoauth-migration-status|run-upstreamoauth-migration)",
 		"user-session-clients (list-user-session-clients|get-user-session-client|refresh-user-session-client-cimd|revoke-user-session-client)",
 		"user-session-consents (list-user-session-consents|revoke-user-session-consent)",
 		"user-session-issuers-cimd-clients (list-presets|create-user-session-issuer-cimd-client|verify-url|list-user-session-issuer-cimd-clients|get-user-session-issuer-cimd-client|delete-user-session-issuer-cimd-client)",
@@ -315,6 +315,11 @@ func ParseEndpoint(
 		accessListDirectoryRoleMappingsApikeyTokenFlag  = accessListDirectoryRoleMappingsFlags.String("apikey-token", "", "")
 		accessListDirectoryRoleMappingsSessionTokenFlag = accessListDirectoryRoleMappingsFlags.String("session-token", "", "")
 
+		accessListDirectoryPeopleFlags            = flag.NewFlagSet("list-directory-people", flag.ExitOnError)
+		accessListDirectoryPeopleLimitFlag        = accessListDirectoryPeopleFlags.String("limit", "500", "")
+		accessListDirectoryPeopleCursorFlag       = accessListDirectoryPeopleFlags.String("cursor", "", "")
+		accessListDirectoryPeopleSessionTokenFlag = accessListDirectoryPeopleFlags.String("session-token", "", "")
+
 		accessSyncDirectoryGroupsFlags            = flag.NewFlagSet("sync-directory-groups", flag.ExitOnError)
 		accessSyncDirectoryGroupsApikeyTokenFlag  = accessSyncDirectoryGroupsFlags.String("apikey-token", "", "")
 		accessSyncDirectoryGroupsSessionTokenFlag = accessSyncDirectoryGroupsFlags.String("session-token", "", "")
@@ -333,6 +338,33 @@ func ParseEndpoint(
 		accessDeleteDirectoryRoleMappingIDFlag           = accessDeleteDirectoryRoleMappingFlags.String("id", "REQUIRED", "")
 		accessDeleteDirectoryRoleMappingApikeyTokenFlag  = accessDeleteDirectoryRoleMappingFlags.String("apikey-token", "", "")
 		accessDeleteDirectoryRoleMappingSessionTokenFlag = accessDeleteDirectoryRoleMappingFlags.String("session-token", "", "")
+
+		accessPreviewDirectoryRoleSetupFlags            = flag.NewFlagSet("preview-directory-role-setup", flag.ExitOnError)
+		accessPreviewDirectoryRoleSetupApikeyTokenFlag  = accessPreviewDirectoryRoleSetupFlags.String("apikey-token", "", "")
+		accessPreviewDirectoryRoleSetupSessionTokenFlag = accessPreviewDirectoryRoleSetupFlags.String("session-token", "", "")
+
+		accessApplyDirectoryRoleSetupFlags            = flag.NewFlagSet("apply-directory-role-setup", flag.ExitOnError)
+		accessApplyDirectoryRoleSetupBodyFlag         = accessApplyDirectoryRoleSetupFlags.String("body", "REQUIRED", "")
+		accessApplyDirectoryRoleSetupApikeyTokenFlag  = accessApplyDirectoryRoleSetupFlags.String("apikey-token", "", "")
+		accessApplyDirectoryRoleSetupSessionTokenFlag = accessApplyDirectoryRoleSetupFlags.String("session-token", "", "")
+
+		accessListDirectoryReviewItemsFlags            = flag.NewFlagSet("list-directory-review-items", flag.ExitOnError)
+		accessListDirectoryReviewItemsApikeyTokenFlag  = accessListDirectoryReviewItemsFlags.String("apikey-token", "", "")
+		accessListDirectoryReviewItemsSessionTokenFlag = accessListDirectoryReviewItemsFlags.String("session-token", "", "")
+
+		accessResolveDirectoryReviewItemFlags            = flag.NewFlagSet("resolve-directory-review-item", flag.ExitOnError)
+		accessResolveDirectoryReviewItemBodyFlag         = accessResolveDirectoryReviewItemFlags.String("body", "REQUIRED", "")
+		accessResolveDirectoryReviewItemApikeyTokenFlag  = accessResolveDirectoryReviewItemFlags.String("apikey-token", "", "")
+		accessResolveDirectoryReviewItemSessionTokenFlag = accessResolveDirectoryReviewItemFlags.String("session-token", "", "")
+
+		accessGetDirectoryReviewSettingsFlags            = flag.NewFlagSet("get-directory-review-settings", flag.ExitOnError)
+		accessGetDirectoryReviewSettingsApikeyTokenFlag  = accessGetDirectoryReviewSettingsFlags.String("apikey-token", "", "")
+		accessGetDirectoryReviewSettingsSessionTokenFlag = accessGetDirectoryReviewSettingsFlags.String("session-token", "", "")
+
+		accessUpdateDirectoryReviewSettingsFlags            = flag.NewFlagSet("update-directory-review-settings", flag.ExitOnError)
+		accessUpdateDirectoryReviewSettingsBodyFlag         = accessUpdateDirectoryReviewSettingsFlags.String("body", "REQUIRED", "")
+		accessUpdateDirectoryReviewSettingsApikeyTokenFlag  = accessUpdateDirectoryReviewSettingsFlags.String("apikey-token", "", "")
+		accessUpdateDirectoryReviewSettingsSessionTokenFlag = accessUpdateDirectoryReviewSettingsFlags.String("session-token", "", "")
 
 		accessListScopesFlags            = flag.NewFlagSet("list-scopes", flag.ExitOnError)
 		accessListScopesApikeyTokenFlag  = accessListScopesFlags.String("apikey-token", "", "")
@@ -530,8 +562,16 @@ func ParseEndpoint(
 		agentsRevokeSessionBodyFlag         = agentsRevokeSessionFlags.String("body", "REQUIRED", "")
 		agentsRevokeSessionSessionTokenFlag = agentsRevokeSessionFlags.String("session-token", "", "")
 
-		agentsListFlags            = flag.NewFlagSet("list", flag.ExitOnError)
-		agentsListSessionTokenFlag = agentsListFlags.String("session-token", "", "")
+		agentsListFlags                = flag.NewFlagSet("list", flag.ExitOnError)
+		agentsListCursorFlag           = agentsListFlags.String("cursor", "", "")
+		agentsListLimitFlag            = agentsListFlags.String("limit", "50", "")
+		agentsListSearchFlag           = agentsListFlags.String("search", "", "")
+		agentsListNameOrderFlag        = agentsListFlags.String("name-order", "asc", "")
+		agentsListLifecycleFlag        = agentsListFlags.String("lifecycle", "", "")
+		agentsListOwnerUserIdsFlag     = agentsListFlags.String("owner-user-ids", "", "")
+		agentsListRegisteredAfterFlag  = agentsListFlags.String("registered-after", "", "")
+		agentsListRegisteredBeforeFlag = agentsListFlags.String("registered-before", "", "")
+		agentsListSessionTokenFlag     = agentsListFlags.String("session-token", "", "")
 
 		agentsCreateFlags            = flag.NewFlagSet("create", flag.ExitOnError)
 		agentsCreateBodyFlag         = agentsCreateFlags.String("body", "REQUIRED", "")
@@ -875,10 +915,11 @@ func ParseEndpoint(
 		authTransferOutRedirectFlag     = authTransferOutFlags.String("redirect", "", "")
 		authTransferOutSessionTokenFlag = authTransferOutFlags.String("session-token", "", "")
 
-		authTransferInFlags          = flag.NewFlagSet("transfer-in", flag.ExitOnError)
-		authTransferInSourceHostFlag = authTransferInFlags.String("source-host", "", "")
-		authTransferInCodeFlag       = authTransferInFlags.String("code", "", "")
-		authTransferInRedirectFlag   = authTransferInFlags.String("redirect", "", "")
+		authTransferInFlags              = flag.NewFlagSet("transfer-in", flag.ExitOnError)
+		authTransferInSourceHostFlag     = authTransferInFlags.String("source-host", "", "")
+		authTransferInCodeFlag           = authTransferInFlags.String("code", "", "")
+		authTransferInRedirectFlag       = authTransferInFlags.String("redirect", "", "")
+		authTransferInReplaceSessionFlag = authTransferInFlags.String("replace-session", "", "")
 
 		businessMemoriesFlags = flag.NewFlagSet("business-memories", flag.ContinueOnError)
 
@@ -4230,6 +4271,13 @@ func ParseEndpoint(
 		tunneledMcpListServerConnectionsApikeyTokenFlag      = tunneledMcpListServerConnectionsFlags.String("apikey-token", "", "")
 		tunneledMcpListServerConnectionsProjectSlugInputFlag = tunneledMcpListServerConnectionsFlags.String("project-slug-input", "", "")
 
+		tunneledMcpGetServerMetricsFlags                = flag.NewFlagSet("get-server-metrics", flag.ExitOnError)
+		tunneledMcpGetServerMetricsIDFlag               = tunneledMcpGetServerMetricsFlags.String("id", "REQUIRED", "")
+		tunneledMcpGetServerMetricsWindowFlag           = tunneledMcpGetServerMetricsFlags.String("window", "day", "")
+		tunneledMcpGetServerMetricsSessionTokenFlag     = tunneledMcpGetServerMetricsFlags.String("session-token", "", "")
+		tunneledMcpGetServerMetricsApikeyTokenFlag      = tunneledMcpGetServerMetricsFlags.String("apikey-token", "", "")
+		tunneledMcpGetServerMetricsProjectSlugInputFlag = tunneledMcpGetServerMetricsFlags.String("project-slug-input", "", "")
+
 		tunneledMcpUpdateServerFlags                = flag.NewFlagSet("update-server", flag.ExitOnError)
 		tunneledMcpUpdateServerBodyFlag             = tunneledMcpUpdateServerFlags.String("body", "REQUIRED", "")
 		tunneledMcpUpdateServerSessionTokenFlag     = tunneledMcpUpdateServerFlags.String("session-token", "", "")
@@ -4746,6 +4794,17 @@ func ParseEndpoint(
 		adminListCustomerUsageIntervalFlag          = adminListCustomerUsageFlags.String("interval", "monthly", "")
 		adminListCustomerUsageAdminSessionTokenFlag = adminListCustomerUsageFlags.String("admin-session-token", "", "")
 
+		adminListUpstreamOAuthMigrationOrganizationsFlags                 = flag.NewFlagSet("list-upstreamoauth-migration-organizations", flag.ExitOnError)
+		adminListUpstreamOAuthMigrationOrganizationsAdminSessionTokenFlag = adminListUpstreamOAuthMigrationOrganizationsFlags.String("admin-session-token", "", "")
+
+		adminGetUpstreamOAuthMigrationStatusFlags                 = flag.NewFlagSet("get-upstreamoauth-migration-status", flag.ExitOnError)
+		adminGetUpstreamOAuthMigrationStatusOrganizationIDFlag    = adminGetUpstreamOAuthMigrationStatusFlags.String("organization-id", "REQUIRED", "")
+		adminGetUpstreamOAuthMigrationStatusAdminSessionTokenFlag = adminGetUpstreamOAuthMigrationStatusFlags.String("admin-session-token", "", "")
+
+		adminRunUpstreamOAuthMigrationFlags                 = flag.NewFlagSet("run-upstreamoauth-migration", flag.ExitOnError)
+		adminRunUpstreamOAuthMigrationBodyFlag              = adminRunUpstreamOAuthMigrationFlags.String("body", "REQUIRED", "")
+		adminRunUpstreamOAuthMigrationAdminSessionTokenFlag = adminRunUpstreamOAuthMigrationFlags.String("admin-session-token", "", "")
+
 		userSessionClientsFlags = flag.NewFlagSet("user-session-clients", flag.ContinueOnError)
 
 		userSessionClientsListUserSessionClientsFlags                   = flag.NewFlagSet("list-user-session-clients", flag.ExitOnError)
@@ -5129,10 +5188,17 @@ func ParseEndpoint(
 	accessUpdateRoleFlags.Usage = accessUpdateRoleUsage
 	accessDeleteRoleFlags.Usage = accessDeleteRoleUsage
 	accessListDirectoryRoleMappingsFlags.Usage = accessListDirectoryRoleMappingsUsage
+	accessListDirectoryPeopleFlags.Usage = accessListDirectoryPeopleUsage
 	accessSyncDirectoryGroupsFlags.Usage = accessSyncDirectoryGroupsUsage
 	accessSetDirectoryRoleMappingFlags.Usage = accessSetDirectoryRoleMappingUsage
 	accessSetDirectoryRoleMappingsFlags.Usage = accessSetDirectoryRoleMappingsUsage
 	accessDeleteDirectoryRoleMappingFlags.Usage = accessDeleteDirectoryRoleMappingUsage
+	accessPreviewDirectoryRoleSetupFlags.Usage = accessPreviewDirectoryRoleSetupUsage
+	accessApplyDirectoryRoleSetupFlags.Usage = accessApplyDirectoryRoleSetupUsage
+	accessListDirectoryReviewItemsFlags.Usage = accessListDirectoryReviewItemsUsage
+	accessResolveDirectoryReviewItemFlags.Usage = accessResolveDirectoryReviewItemUsage
+	accessGetDirectoryReviewSettingsFlags.Usage = accessGetDirectoryReviewSettingsUsage
+	accessUpdateDirectoryReviewSettingsFlags.Usage = accessUpdateDirectoryReviewSettingsUsage
 	accessListScopesFlags.Usage = accessListScopesUsage
 	accessListMembersFlags.Usage = accessListMembersUsage
 	accessListGrantsFlags.Usage = accessListGrantsUsage
@@ -5985,6 +6051,7 @@ func ParseEndpoint(
 	tunneledMcpListServersFlags.Usage = tunneledMcpListServersUsage
 	tunneledMcpGetServerFlags.Usage = tunneledMcpGetServerUsage
 	tunneledMcpListServerConnectionsFlags.Usage = tunneledMcpListServerConnectionsUsage
+	tunneledMcpGetServerMetricsFlags.Usage = tunneledMcpGetServerMetricsUsage
 	tunneledMcpUpdateServerFlags.Usage = tunneledMcpUpdateServerUsage
 	tunneledMcpRotateServerKeyFlags.Usage = tunneledMcpRotateServerKeyUsage
 	tunneledMcpDeleteServerFlags.Usage = tunneledMcpDeleteServerUsage
@@ -6109,6 +6176,9 @@ func ParseEndpoint(
 	adminGetStripeSubscriptionCandidateFlags.Usage = adminGetStripeSubscriptionCandidateUsage
 	adminSetStripeSubscriptionFlags.Usage = adminSetStripeSubscriptionUsage
 	adminListCustomerUsageFlags.Usage = adminListCustomerUsageUsage
+	adminListUpstreamOAuthMigrationOrganizationsFlags.Usage = adminListUpstreamOAuthMigrationOrganizationsUsage
+	adminGetUpstreamOAuthMigrationStatusFlags.Usage = adminGetUpstreamOAuthMigrationStatusUsage
+	adminRunUpstreamOAuthMigrationFlags.Usage = adminRunUpstreamOAuthMigrationUsage
 
 	userSessionClientsFlags.Usage = userSessionClientsUsage
 	userSessionClientsListUserSessionClientsFlags.Usage = userSessionClientsListUserSessionClientsUsage
@@ -6474,6 +6544,9 @@ func ParseEndpoint(
 			case "list-directory-role-mappings":
 				epf = accessListDirectoryRoleMappingsFlags
 
+			case "list-directory-people":
+				epf = accessListDirectoryPeopleFlags
+
 			case "sync-directory-groups":
 				epf = accessSyncDirectoryGroupsFlags
 
@@ -6485,6 +6558,24 @@ func ParseEndpoint(
 
 			case "delete-directory-role-mapping":
 				epf = accessDeleteDirectoryRoleMappingFlags
+
+			case "preview-directory-role-setup":
+				epf = accessPreviewDirectoryRoleSetupFlags
+
+			case "apply-directory-role-setup":
+				epf = accessApplyDirectoryRoleSetupFlags
+
+			case "list-directory-review-items":
+				epf = accessListDirectoryReviewItemsFlags
+
+			case "resolve-directory-review-item":
+				epf = accessResolveDirectoryReviewItemFlags
+
+			case "get-directory-review-settings":
+				epf = accessGetDirectoryReviewSettingsFlags
+
+			case "update-directory-review-settings":
+				epf = accessUpdateDirectoryReviewSettingsFlags
 
 			case "list-scopes":
 				epf = accessListScopesFlags
@@ -8884,6 +8975,9 @@ func ParseEndpoint(
 			case "list-server-connections":
 				epf = tunneledMcpListServerConnectionsFlags
 
+			case "get-server-metrics":
+				epf = tunneledMcpGetServerMetricsFlags
+
 			case "update-server":
 				epf = tunneledMcpUpdateServerFlags
 
@@ -9250,6 +9344,15 @@ func ParseEndpoint(
 			case "list-customer-usage":
 				epf = adminListCustomerUsageFlags
 
+			case "list-upstreamoauth-migration-organizations":
+				epf = adminListUpstreamOAuthMigrationOrganizationsFlags
+
+			case "get-upstreamoauth-migration-status":
+				epf = adminGetUpstreamOAuthMigrationStatusFlags
+
+			case "run-upstreamoauth-migration":
+				epf = adminRunUpstreamOAuthMigrationFlags
+
 			}
 
 		case "user-session-clients":
@@ -9559,6 +9662,9 @@ func ParseEndpoint(
 			case "list-directory-role-mappings":
 				endpoint = c.ListDirectoryRoleMappings()
 				data, err = accessc.BuildListDirectoryRoleMappingsPayload(*accessListDirectoryRoleMappingsApikeyTokenFlag, *accessListDirectoryRoleMappingsSessionTokenFlag)
+			case "list-directory-people":
+				endpoint = c.ListDirectoryPeople()
+				data, err = accessc.BuildListDirectoryPeoplePayload(*accessListDirectoryPeopleLimitFlag, *accessListDirectoryPeopleCursorFlag, *accessListDirectoryPeopleSessionTokenFlag)
 			case "sync-directory-groups":
 				endpoint = c.SyncDirectoryGroups()
 				data, err = accessc.BuildSyncDirectoryGroupsPayload(*accessSyncDirectoryGroupsApikeyTokenFlag, *accessSyncDirectoryGroupsSessionTokenFlag)
@@ -9571,6 +9677,24 @@ func ParseEndpoint(
 			case "delete-directory-role-mapping":
 				endpoint = c.DeleteDirectoryRoleMapping()
 				data, err = accessc.BuildDeleteDirectoryRoleMappingPayload(*accessDeleteDirectoryRoleMappingIDFlag, *accessDeleteDirectoryRoleMappingApikeyTokenFlag, *accessDeleteDirectoryRoleMappingSessionTokenFlag)
+			case "preview-directory-role-setup":
+				endpoint = c.PreviewDirectoryRoleSetup()
+				data, err = accessc.BuildPreviewDirectoryRoleSetupPayload(*accessPreviewDirectoryRoleSetupApikeyTokenFlag, *accessPreviewDirectoryRoleSetupSessionTokenFlag)
+			case "apply-directory-role-setup":
+				endpoint = c.ApplyDirectoryRoleSetup()
+				data, err = accessc.BuildApplyDirectoryRoleSetupPayload(*accessApplyDirectoryRoleSetupBodyFlag, *accessApplyDirectoryRoleSetupApikeyTokenFlag, *accessApplyDirectoryRoleSetupSessionTokenFlag)
+			case "list-directory-review-items":
+				endpoint = c.ListDirectoryReviewItems()
+				data, err = accessc.BuildListDirectoryReviewItemsPayload(*accessListDirectoryReviewItemsApikeyTokenFlag, *accessListDirectoryReviewItemsSessionTokenFlag)
+			case "resolve-directory-review-item":
+				endpoint = c.ResolveDirectoryReviewItem()
+				data, err = accessc.BuildResolveDirectoryReviewItemPayload(*accessResolveDirectoryReviewItemBodyFlag, *accessResolveDirectoryReviewItemApikeyTokenFlag, *accessResolveDirectoryReviewItemSessionTokenFlag)
+			case "get-directory-review-settings":
+				endpoint = c.GetDirectoryReviewSettings()
+				data, err = accessc.BuildGetDirectoryReviewSettingsPayload(*accessGetDirectoryReviewSettingsApikeyTokenFlag, *accessGetDirectoryReviewSettingsSessionTokenFlag)
+			case "update-directory-review-settings":
+				endpoint = c.UpdateDirectoryReviewSettings()
+				data, err = accessc.BuildUpdateDirectoryReviewSettingsPayload(*accessUpdateDirectoryReviewSettingsBodyFlag, *accessUpdateDirectoryReviewSettingsApikeyTokenFlag, *accessUpdateDirectoryReviewSettingsSessionTokenFlag)
 			case "list-scopes":
 				endpoint = c.ListScopes()
 				data, err = accessc.BuildListScopesPayload(*accessListScopesApikeyTokenFlag, *accessListScopesSessionTokenFlag)
@@ -9689,7 +9813,7 @@ func ParseEndpoint(
 				data, err = agentsc.BuildRevokeSessionPayload(*agentsRevokeSessionBodyFlag, *agentsRevokeSessionSessionTokenFlag)
 			case "list":
 				endpoint = c.List()
-				data, err = agentsc.BuildListPayload(*agentsListSessionTokenFlag)
+				data, err = agentsc.BuildListPayload(*agentsListCursorFlag, *agentsListLimitFlag, *agentsListSearchFlag, *agentsListNameOrderFlag, *agentsListLifecycleFlag, *agentsListOwnerUserIdsFlag, *agentsListRegisteredAfterFlag, *agentsListRegisteredBeforeFlag, *agentsListSessionTokenFlag)
 			case "create":
 				endpoint = c.Create()
 				data, err = agentsc.BuildCreatePayload(*agentsCreateBodyFlag, *agentsCreateSessionTokenFlag)
@@ -9931,7 +10055,7 @@ func ParseEndpoint(
 				data, err = authc.BuildTransferOutPayload(*authTransferOutTargetHostFlag, *authTransferOutNonceFlag, *authTransferOutRedirectFlag, *authTransferOutSessionTokenFlag)
 			case "transfer-in":
 				endpoint = c.TransferIn()
-				data, err = authc.BuildTransferInPayload(*authTransferInSourceHostFlag, *authTransferInCodeFlag, *authTransferInRedirectFlag)
+				data, err = authc.BuildTransferInPayload(*authTransferInSourceHostFlag, *authTransferInCodeFlag, *authTransferInRedirectFlag, *authTransferInReplaceSessionFlag)
 			}
 		case "business-memories":
 			c := businessmemoriesc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -11996,6 +12120,9 @@ func ParseEndpoint(
 			case "list-server-connections":
 				endpoint = c.ListServerConnections()
 				data, err = tunneledmcpc.BuildListServerConnectionsPayload(*tunneledMcpListServerConnectionsIDFlag, *tunneledMcpListServerConnectionsSessionTokenFlag, *tunneledMcpListServerConnectionsApikeyTokenFlag, *tunneledMcpListServerConnectionsProjectSlugInputFlag)
+			case "get-server-metrics":
+				endpoint = c.GetServerMetrics()
+				data, err = tunneledmcpc.BuildGetServerMetricsPayload(*tunneledMcpGetServerMetricsIDFlag, *tunneledMcpGetServerMetricsWindowFlag, *tunneledMcpGetServerMetricsSessionTokenFlag, *tunneledMcpGetServerMetricsApikeyTokenFlag, *tunneledMcpGetServerMetricsProjectSlugInputFlag)
 			case "update-server":
 				endpoint = c.UpdateServer()
 				data, err = tunneledmcpc.BuildUpdateServerPayload(*tunneledMcpUpdateServerBodyFlag, *tunneledMcpUpdateServerSessionTokenFlag, *tunneledMcpUpdateServerApikeyTokenFlag, *tunneledMcpUpdateServerProjectSlugInputFlag)
@@ -12364,6 +12491,15 @@ func ParseEndpoint(
 			case "list-customer-usage":
 				endpoint = c.ListCustomerUsage()
 				data, err = adminc.BuildListCustomerUsagePayload(*adminListCustomerUsageIntervalFlag, *adminListCustomerUsageAdminSessionTokenFlag)
+			case "list-upstreamoauth-migration-organizations":
+				endpoint = c.ListUpstreamOAuthMigrationOrganizations()
+				data, err = adminc.BuildListUpstreamOAuthMigrationOrganizationsPayload(*adminListUpstreamOAuthMigrationOrganizationsAdminSessionTokenFlag)
+			case "get-upstreamoauth-migration-status":
+				endpoint = c.GetUpstreamOAuthMigrationStatus()
+				data, err = adminc.BuildGetUpstreamOAuthMigrationStatusPayload(*adminGetUpstreamOAuthMigrationStatusOrganizationIDFlag, *adminGetUpstreamOAuthMigrationStatusAdminSessionTokenFlag)
+			case "run-upstreamoauth-migration":
+				endpoint = c.RunUpstreamOAuthMigration()
+				data, err = adminc.BuildRunUpstreamOAuthMigrationPayload(*adminRunUpstreamOAuthMigrationBodyFlag, *adminRunUpstreamOAuthMigrationAdminSessionTokenFlag)
 			}
 		case "user-session-clients":
 			c := usersessionclientsc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -12863,10 +12999,17 @@ func accessUsage() {
 	fmt.Fprintln(os.Stderr, `    update-role: Update an existing custom role.`)
 	fmt.Fprintln(os.Stderr, `    delete-role: Delete a custom role (system roles cannot be deleted).`)
 	fmt.Fprintln(os.Stderr, `    list-directory-role-mappings: List the organization's directory groups and attribute values, and the roles mapped to them.`)
+	fmt.Fprintln(os.Stderr, `    list-directory-people: List every live directory profile in the active organization with its name, groups and whether it belongs to a member. Requires an authenticated session authorized for org:admin, because it names people who are not members; API keys cannot enumerate it. Attribute values are not returned.`)
 	fmt.Fprintln(os.Stderr, `    sync-directory-groups: Fetch the organization's directory groups from WorkOS and save any that are new or changed.`)
 	fmt.Fprintln(os.Stderr, `    set-directory-role-mapping: Deprecated compatibility endpoint for older dashboard clients. Use setDirectoryRoleMappings. Rejects replacement when the source already grants multiple roles.`)
 	fmt.Fprintln(os.Stderr, `    set-directory-role-mappings: Replace the full set of roles granted by a directory group or attribute value. An empty role list removes all mappings for the source.`)
 	fmt.Fprintln(os.Stderr, `    delete-directory-role-mapping: Remove a directory role mapping.`)
+	fmt.Fprintln(os.Stderr, `    preview-directory-role-setup: Propose roles for every live directory group and mappable attribute value, for bulk setup. An unmapped source is proposed one role: the live role whose slug matches the source name, or a new role named after the source. A mapped source is listed with its current roles. Nothing is written. Each item carries a version that applyDirectoryRoleSetup checks to detect changes since the preview; the version authorizes nothing.`)
+	fmt.Fprintln(os.Stderr, `    apply-directory-role-setup: Apply a reviewed bulk setup in one transaction: create the requested new roles and replace each listed source's role set. New roles get no grants unless grant_set is given, in which case every new role in the batch gets exactly that set. If any item's version no longer matches, nothing is written and the request returns conflict; preview again. WorkOS role sync for new roles is requested after commit and reported as requested, not done. Creating roles sets up no plugin distribution.`)
+	fmt.Fprintln(os.Stderr, `    list-directory-review-items: List the directory changes waiting for an admin decision, oldest first: a directory group first seen after review started, with no mapping; a new value of an attribute key that already has mappings; and a mapped group or attribute value that has gone from the directory. Each item carries the same proposal and version as previewDirectoryRoleSetup, for resolveDirectoryReviewItem. Nothing is written.`)
+	fmt.Fprintln(os.Stderr, `    resolve-directory-review-item: Decide one pending directory review item. approve on a new group or attribute value maps it to the given role set, creating new roles as applyDirectoryRoleSetup does; approve on a missing source removes its mappings. dismiss leaves a new source unmapped, or keeps a missing source's mappings. opt_out_key dismisses a new attribute value and stops raising new values of its key. approve checks version as applyDirectoryRoleSetup does and returns conflict if the source changed. An item that is no longer pending returns conflict.`)
+	fmt.Fprintln(os.Stderr, `    get-directory-review-settings: Get the organization's directory review settings: whether its admins are emailed when directory changes are waiting for a decision.`)
+	fmt.Fprintln(os.Stderr, `    update-directory-review-settings: Turn the organization's directory review emails on or off. Pending items stay listed in the dashboard either way, and webhooks are unaffected.`)
 	fmt.Fprintln(os.Stderr, `    list-scopes: List all available scopes and their resource types.`)
 	fmt.Fprintln(os.Stderr, `    list-members: List all team members with their role assignments.`)
 	fmt.Fprintln(os.Stderr, `    list-grants: List the current user's effective grants, including inherited role grants.`)
@@ -13022,6 +13165,28 @@ func accessListDirectoryRoleMappingsUsage() {
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access list-directory-role-mappings --apikey-token \"abc123\" --session-token \"abc123\"")
 }
 
+func accessListDirectoryPeopleUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] access list-directory-people", os.Args[0])
+	fmt.Fprint(os.Stderr, " -limit INT")
+	fmt.Fprint(os.Stderr, " -cursor STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List every live directory profile in the active organization with its name, groups and whether it belongs to a member. Requires an authenticated session authorized for org:admin, because it names people who are not members; API keys cannot enumerate it. Attribute values are not returned.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -limit INT: `)
+	fmt.Fprintln(os.Stderr, `    -cursor STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access list-directory-people --limit 2 --cursor \"abc123\" --session-token \"abc123\"")
+}
+
 func accessSyncDirectoryGroupsUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] access sync-directory-groups", os.Args[0])
@@ -13106,6 +13271,132 @@ func accessDeleteDirectoryRoleMappingUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access delete-directory-role-mapping --id \"550e8400-e29b-41d4-a716-446655440000\" --apikey-token \"abc123\" --session-token \"abc123\"")
+}
+
+func accessPreviewDirectoryRoleSetupUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] access preview-directory-role-setup", os.Args[0])
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Propose roles for every live directory group and mappable attribute value, for bulk setup. An unmapped source is proposed one role: the live role whose slug matches the source name, or a new role named after the source. A mapped source is listed with its current roles. Nothing is written. Each item carries a version that applyDirectoryRoleSetup checks to detect changes since the preview; the version authorizes nothing.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access preview-directory-role-setup --apikey-token \"abc123\" --session-token \"abc123\"")
+}
+
+func accessApplyDirectoryRoleSetupUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] access apply-directory-role-setup", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Apply a reviewed bulk setup in one transaction: create the requested new roles and replace each listed source's role set. New roles get no grants unless grant_set is given, in which case every new role in the batch gets exactly that set. If any item's version no longer matches, nothing is written and the request returns conflict; preview again. WorkOS role sync for new roles is requested after commit and reported as requested, not done. Creating roles sets up no plugin distribution.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access apply-directory-role-setup --body '{\n      \"grant_set\": [\n         {\n            \"scope\": \"org:blocked_read\",\n            \"selectors\": [\n               {\n                  \"disposition\": \"destructive\",\n                  \"project_id\": \"abc123\",\n                  \"resource_id\": \"abc123\",\n                  \"resource_kind\": \"mcp\",\n                  \"server_url\": \"https://example.com/foo\",\n                  \"tool\": \"abc123\"\n               }\n            ]\n         }\n      ],\n      \"items\": [\n         {\n            \"roles\": [\n               {\n                  \"create_name\": \"aa\",\n                  \"role_urn\": \"abc123\"\n               }\n            ],\n            \"source\": {\n               \"attribute_key\": \"aa\",\n               \"attribute_value\": \"aa\",\n               \"directory_group_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n               \"source_kind\": \"attribute\"\n            },\n            \"version\": \"abc123\"\n         },\n         {\n            \"roles\": [\n               {\n                  \"create_name\": \"aa\",\n                  \"role_urn\": \"abc123\"\n               }\n            ],\n            \"source\": {\n               \"attribute_key\": \"aa\",\n               \"attribute_value\": \"aa\",\n               \"directory_group_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n               \"source_kind\": \"attribute\"\n            },\n            \"version\": \"abc123\"\n         }\n      ]\n   }' --apikey-token \"abc123\" --session-token \"abc123\"")
+}
+
+func accessListDirectoryReviewItemsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] access list-directory-review-items", os.Args[0])
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List the directory changes waiting for an admin decision, oldest first: a directory group first seen after review started, with no mapping; a new value of an attribute key that already has mappings; and a mapped group or attribute value that has gone from the directory. Each item carries the same proposal and version as previewDirectoryRoleSetup, for resolveDirectoryReviewItem. Nothing is written.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access list-directory-review-items --apikey-token \"abc123\" --session-token \"abc123\"")
+}
+
+func accessResolveDirectoryReviewItemUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] access resolve-directory-review-item", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Decide one pending directory review item. approve on a new group or attribute value maps it to the given role set, creating new roles as applyDirectoryRoleSetup does; approve on a missing source removes its mappings. dismiss leaves a new source unmapped, or keeps a missing source's mappings. opt_out_key dismisses a new attribute value and stops raising new values of its key. approve checks version as applyDirectoryRoleSetup does and returns conflict if the source changed. An item that is no longer pending returns conflict.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access resolve-directory-review-item --body '{\n      \"decision\": \"dismiss\",\n      \"grant_set\": [\n         {\n            \"scope\": \"org:blocked_read\",\n            \"selectors\": [\n               {\n                  \"disposition\": \"destructive\",\n                  \"project_id\": \"abc123\",\n                  \"resource_id\": \"abc123\",\n                  \"resource_kind\": \"mcp\",\n                  \"server_url\": \"https://example.com/foo\",\n                  \"tool\": \"abc123\"\n               }\n            ]\n         }\n      ],\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"roles\": [\n         {\n            \"create_name\": \"aa\",\n            \"role_urn\": \"abc123\"\n         }\n      ],\n      \"version\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\"")
+}
+
+func accessGetDirectoryReviewSettingsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] access get-directory-review-settings", os.Args[0])
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get the organization's directory review settings: whether its admins are emailed when directory changes are waiting for a decision.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access get-directory-review-settings --apikey-token \"abc123\" --session-token \"abc123\"")
+}
+
+func accessUpdateDirectoryReviewSettingsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] access update-directory-review-settings", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Turn the organization's directory review emails on or off. Pending items stay listed in the dashboard either way, and webhooks are unaffected.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access update-directory-review-settings --body '{\n      \"emails_enabled\": false\n   }' --apikey-token \"abc123\" --session-token \"abc123\"")
 }
 
 func accessListScopesUsage() {
@@ -13973,6 +14264,14 @@ func agentsRevokeSessionUsage() {
 func agentsListUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] agents list", os.Args[0])
+	fmt.Fprint(os.Stderr, " -cursor STRING")
+	fmt.Fprint(os.Stderr, " -limit INT")
+	fmt.Fprint(os.Stderr, " -search STRING")
+	fmt.Fprint(os.Stderr, " -name-order STRING")
+	fmt.Fprint(os.Stderr, " -lifecycle JSON")
+	fmt.Fprint(os.Stderr, " -owner-user-ids JSON")
+	fmt.Fprint(os.Stderr, " -registered-after STRING")
+	fmt.Fprint(os.Stderr, " -registered-before STRING")
 	fmt.Fprint(os.Stderr, " -session-token STRING")
 	fmt.Fprintln(os.Stderr)
 
@@ -13981,11 +14280,19 @@ func agentsListUsage() {
 	fmt.Fprintln(os.Stderr, `List implements list.`)
 
 	// Flags list
+	fmt.Fprintln(os.Stderr, `    -cursor STRING: `)
+	fmt.Fprintln(os.Stderr, `    -limit INT: `)
+	fmt.Fprintln(os.Stderr, `    -search STRING: `)
+	fmt.Fprintln(os.Stderr, `    -name-order STRING: `)
+	fmt.Fprintln(os.Stderr, `    -lifecycle JSON: `)
+	fmt.Fprintln(os.Stderr, `    -owner-user-ids JSON: `)
+	fmt.Fprintln(os.Stderr, `    -registered-after STRING: `)
+	fmt.Fprintln(os.Stderr, `    -registered-before STRING: `)
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "agents list --session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "agents list --cursor \"abc123\" --limit 2 --search \"abc123\" --name-order \"desc\" --lifecycle '[\n      \"suspended\"\n   ]' --owner-user-ids '[\n      \"abc123\"\n   ]' --registered-after \"1970-01-01T00:00:01Z\" --registered-before \"1970-01-01T00:00:01Z\" --session-token \"abc123\"")
 }
 
 func agentsCreateUsage() {
@@ -15348,7 +15655,7 @@ func authUsage() {
 	fmt.Fprintln(os.Stderr, `    register: Register a new org for a user with their session information.`)
 	fmt.Fprintln(os.Stderr, `    info: Provides information about the current authentication status.`)
 	fmt.Fprintln(os.Stderr, `    transfer-out: Step 2/3 (authorize) of a cross-domain session transfer, on the source platform host. Reached from Step 1/3, transferIn's start mode on the target host; redirects to Step 3/3, transferIn's callback mode there. Authenticates the session from the session cookie or header, checks that its active organization's default host is the target, and stores a one-time transfer code bound to the browser's nonce. Only an ordinary session whose organization lives on the target host can transfer. On any failure the browser is sent to a login page with a signin_error code instead of an error. See the flow diagram in server/internal/auth/transfer.go.`)
-	fmt.Fprintln(os.Stderr, `    transfer-in: Steps 1/3 and 3/3 of a cross-domain session transfer, on the target platform host. Step 1/3 (start: source_host, no code) sets a short-lived cookie that binds the transfer to this browser and redirects to Step 2/3, transferOut on the source host. Step 3/3 (callback: code, no source_host) redeems the one-time code that transferOut issued, checks it against that cookie, and sets a new session cookie on this host. The cookie exists because a code alone would let anyone who holds one sign another person into the code's account (login CSRF). A request with both or neither, and any failed check, lands on this host's login page with a signin_error code; a failed callback never starts a new transfer. See the flow diagram in server/internal/auth/transfer.go.`)
+	fmt.Fprintln(os.Stderr, `    transfer-in: Steps 1/3 and 3/3 of a cross-domain session transfer, on the target platform host. Step 1/3 (start: source_host, no code) sets a short-lived cookie that binds the transfer to this browser and redirects to Step 2/3, transferOut on the source host. Step 3/3 (callback: code, no source_host) redeems the one-time code that transferOut issued, checks it against that cookie, and sets a new session cookie on this host, unless the browser already holds a valid session here for the same user and start mode did not set replace_session; that session is then kept. The cookie exists because a code alone would let anyone who holds one sign another person into the code's account (login CSRF). A request with both or neither, and any failed check, lands on this host's login page with a signin_error code; a failed callback never starts a new transfer. See the flow diagram in server/internal/auth/transfer.go.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s auth COMMAND --help\n", os.Args[0])
@@ -15543,20 +15850,22 @@ func authTransferInUsage() {
 	fmt.Fprint(os.Stderr, " -source-host STRING")
 	fmt.Fprint(os.Stderr, " -code STRING")
 	fmt.Fprint(os.Stderr, " -redirect STRING")
+	fmt.Fprint(os.Stderr, " -replace-session BOOL")
 	fmt.Fprintln(os.Stderr)
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Steps 1/3 and 3/3 of a cross-domain session transfer, on the target platform host. Step 1/3 (start: source_host, no code) sets a short-lived cookie that binds the transfer to this browser and redirects to Step 2/3, transferOut on the source host. Step 3/3 (callback: code, no source_host) redeems the one-time code that transferOut issued, checks it against that cookie, and sets a new session cookie on this host. The cookie exists because a code alone would let anyone who holds one sign another person into the code's account (login CSRF). A request with both or neither, and any failed check, lands on this host's login page with a signin_error code; a failed callback never starts a new transfer. See the flow diagram in server/internal/auth/transfer.go.`)
+	fmt.Fprintln(os.Stderr, `Steps 1/3 and 3/3 of a cross-domain session transfer, on the target platform host. Step 1/3 (start: source_host, no code) sets a short-lived cookie that binds the transfer to this browser and redirects to Step 2/3, transferOut on the source host. Step 3/3 (callback: code, no source_host) redeems the one-time code that transferOut issued, checks it against that cookie, and sets a new session cookie on this host, unless the browser already holds a valid session here for the same user and start mode did not set replace_session; that session is then kept. The cookie exists because a code alone would let anyone who holds one sign another person into the code's account (login CSRF). A request with both or neither, and any failed check, lands on this host's login page with a signin_error code; a failed callback never starts a new transfer. See the flow diagram in server/internal/auth/transfer.go.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -source-host STRING: `)
 	fmt.Fprintln(os.Stderr, `    -code STRING: `)
 	fmt.Fprintln(os.Stderr, `    -redirect STRING: `)
+	fmt.Fprintln(os.Stderr, `    -replace-session BOOL: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "auth transfer-in --source-host \"abc123\" --code \"abc123\" --redirect \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "auth transfer-in --source-host \"abc123\" --code \"abc123\" --redirect \"abc123\" --replace-session false")
 }
 
 // businessMemoriesUsage displays the usage of the business-memories command
@@ -30295,6 +30604,7 @@ func tunneledMcpUsage() {
 	fmt.Fprintln(os.Stderr, `    list-servers: List all tunneled MCP server sources for a project`)
 	fmt.Fprintln(os.Stderr, `    get-server: Get a tunneled MCP server by ID`)
 	fmt.Fprintln(os.Stderr, `    list-server-connections: List live tunnel connections for a tunneled MCP server`)
+	fmt.Fprintln(os.Stderr, `    get-server-metrics: Read seven-day payload-free tunnel activity aggregates`)
 	fmt.Fprintln(os.Stderr, `    update-server: Update a tunneled MCP server source`)
 	fmt.Fprintln(os.Stderr, `    rotate-server-key: Rotate a tunneled MCP server source key. Returns the new tunnel key once.`)
 	fmt.Fprintln(os.Stderr, `    delete-server: Delete a tunneled MCP server source`)
@@ -30394,6 +30704,32 @@ func tunneledMcpListServerConnectionsUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "tunneled-mcp list-server-connections --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func tunneledMcpGetServerMetricsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] tunneled-mcp get-server-metrics", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -window STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Read seven-day payload-free tunnel activity aggregates`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -window STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "tunneled-mcp get-server-metrics --id \"550e8400-e29b-41d4-a716-446655440000\" --window \"day\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func tunneledMcpUpdateServerUsage() {
@@ -31065,6 +31401,9 @@ func adminUsage() {
 	fmt.Fprintln(os.Stderr, `    get-stripe-subscription-candidate: Returns live Stripe subscription details for confirmation before recording the subscription on a PAYG organization that has a customer and no subscription.`)
 	fmt.Fprintln(os.Stderr, `    set-stripe-subscription: Records a Stripe subscription ID on a PAYG organization when its subscription ID is empty, after verifying the subscription belongs to the organization's Stripe customer.`)
 	fmt.Fprintln(os.Stderr, `    list-customer-usage: Returns estimated usage at current PAYG list prices for every active paying organization: enterprise organizations not on a running or ending trial, and pro or payg organizations that never trialled.`)
+	fmt.Fprintln(os.Stderr, `    list-upstreamoauth-migration-organizations: Lists every organization the upstream OAuth migration applies to, so staff can check and migrate them one by one.`)
+	fmt.Fprintln(os.Stderr, `    get-upstreamoauth-migration-status: Reports where one organization stands in the upstream OAuth migration from a dry run that writes nothing.`)
+	fmt.Fprintln(os.Stderr, `    run-upstreamoauth-migration: Migrates one organization's upstream OAuth configuration: records the server to client associations its configuration proves, then each live credential's client choice. Idempotent, so it is safe to run again; a server the configuration does not prove is reported and never guessed.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s admin COMMAND --help\n", os.Args[0])
@@ -32983,6 +33322,64 @@ func adminListCustomerUsageUsage() {
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin list-customer-usage --interval \"weekly\" --admin-session-token \"abc123\"")
 }
 
+func adminListUpstreamOAuthMigrationOrganizationsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin list-upstreamoauth-migration-organizations", os.Args[0])
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Lists every organization the upstream OAuth migration applies to, so staff can check and migrate them one by one.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin list-upstreamoauth-migration-organizations --admin-session-token \"abc123\"")
+}
+
+func adminGetUpstreamOAuthMigrationStatusUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin get-upstreamoauth-migration-status", os.Args[0])
+	fmt.Fprint(os.Stderr, " -organization-id STRING")
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Reports where one organization stands in the upstream OAuth migration from a dry run that writes nothing.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -organization-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin get-upstreamoauth-migration-status --organization-id \"abc123\" --admin-session-token \"abc123\"")
+}
+
+func adminRunUpstreamOAuthMigrationUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin run-upstreamoauth-migration", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Migrates one organization's upstream OAuth configuration: records the server to client associations its configuration proves, then each live credential's client choice. Idempotent, so it is safe to run again; a server the configuration does not prove is reported and never guessed.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin run-upstreamoauth-migration --body '{\n      \"organization_id\": \"abc123\"\n   }' --admin-session-token \"abc123\"")
+}
+
 // userSessionClientsUsage displays the usage of the user-session-clients
 // command and its subcommands.
 func userSessionClientsUsage() {
@@ -34129,7 +34526,7 @@ func workloadIdentitiesUsage() {
 	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] workload-identities COMMAND [flags]\n\n", os.Args[0])
 	fmt.Fprintln(os.Stderr, "COMMAND:")
 	fmt.Fprintln(os.Stderr, `    list: Read the whole trust policy: every trusted issuer and every admitted subject at the organization tier, plus the selected project's tier when the caller names a project, with the agent each subject resolves to. Requires workload:read.`)
-	fmt.Fprintln(os.Stderr, `    list-platforms: List the platforms the catalog offers to trust without looking anything up, each with the guided setup that connects it. The same for every organization. Requires workload:read.`)
+	fmt.Fprintln(os.Stderr, `    list-platforms: List the platforms the catalog offers to trust without looking anything up, each with the policy that trusting it writes: the issuer and signing keys it is recognised by, the values the operator supplies, and the access rule it produces. How the setup is explained belongs to the dashboard. The same for every organization. Requires workload:read.`)
 	fmt.Fprintln(os.Stderr, `    get-custom-flows: Get the forms for trusting a platform the catalog does not list and allowing its workloads: registering and editing a trusted platform, and allowing and editing access. The same for every organization. Requires workload:read.`)
 	fmt.Fprintln(os.Stderr, `    list-token-endpoints: List the token endpoints an external platform can be pointed at: one per user session issuer in shared mode, at the organization level and in each project, with the issuer it serves. Issuers this deployment does not serve a shared authorization server for are left out. Requires workload:read.`)
 	fmt.Fprintln(os.Stderr, `    register-issuer: Trust an external issuer to vouch for workloads. Requires workload:write. Returns the whole policy, so a caller replaces its view rather than merging into it.`)
@@ -34176,7 +34573,7 @@ func workloadIdentitiesListPlatformsUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `List the platforms the catalog offers to trust without looking anything up, each with the guided setup that connects it. The same for every organization. Requires workload:read.`)
+	fmt.Fprintln(os.Stderr, `List the platforms the catalog offers to trust without looking anything up, each with the policy that trusting it writes: the issuer and signing keys it is recognised by, the values the operator supplies, and the access rule it produces. How the setup is explained belongs to the dashboard. The same for every organization. Requires workload:read.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)

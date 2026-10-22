@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
@@ -32,7 +33,7 @@ export const IdentityState = {
 /**
  * NEVER_CONFIGURED when the assistant has no dedicated agent, ACTIVE when its dedicated agent is usable, and UNAVAILABLE when that agent is suspended, revoked, or deleted. This is configuration state, not permission to execute.
  */
-export type IdentityState = ClosedEnum<typeof IdentityState>;
+export type IdentityState = OpenEnum<typeof IdentityState>;
 
 /**
  * Desired runtime protocol version: 2 is the default runtime, 3 is Kit. Runtime changes require a settled assistant and available destination.
@@ -44,7 +45,7 @@ export const RuntimeVersion = {
 /**
  * Desired runtime protocol version: 2 is the default runtime, 3 is Kit. Runtime changes require a settled assistant and available destination.
  */
-export type RuntimeVersion = ClosedEnum<typeof RuntimeVersion>;
+export type RuntimeVersion = OpenEnum<typeof RuntimeVersion>;
 
 /**
  * The assistant status.
@@ -56,7 +57,7 @@ export const AssistantStatus = {
 /**
  * The assistant status.
  */
-export type AssistantStatus = ClosedEnum<typeof AssistantStatus>;
+export type AssistantStatus = OpenEnum<typeof AssistantStatus>;
 
 export type Assistant = {
   /**
@@ -130,18 +131,22 @@ export type Assistant = {
 };
 
 /** @internal */
-export const IdentityState$inboundSchema: z.ZodMiniEnum<typeof IdentityState> =
-  z.enum(IdentityState);
+export const IdentityState$inboundSchema: z.ZodMiniType<
+  IdentityState,
+  unknown
+> = openEnums.inboundSchema(IdentityState);
 
 /** @internal */
-export const RuntimeVersion$inboundSchema: z.ZodMiniEnum<
-  typeof RuntimeVersion
-> = z.enum(RuntimeVersion);
+export const RuntimeVersion$inboundSchema: z.ZodMiniType<
+  RuntimeVersion,
+  unknown
+> = openEnums.inboundSchemaInt(RuntimeVersion);
 
 /** @internal */
-export const AssistantStatus$inboundSchema: z.ZodMiniEnum<
-  typeof AssistantStatus
-> = z.enum(AssistantStatus);
+export const AssistantStatus$inboundSchema: z.ZodMiniType<
+  AssistantStatus,
+  unknown
+> = openEnums.inboundSchema(AssistantStatus);
 
 /** @internal */
 export const Assistant$inboundSchema: z.ZodMiniType<Assistant, unknown> = z

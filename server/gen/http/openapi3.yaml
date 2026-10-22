@@ -7529,6 +7529,234 @@ paths:
                                 $ref: '#/components/schemas/Error'
             security:
                 - admin_auth_header_Authorization: []
+    /admin/upstreamOAuthMigration.organizations:
+        get:
+            description: Lists every organization the upstream OAuth migration applies to, so staff can check and migrate them one by one.
+            operationId: adminListUpstreamOAuthMigrationOrganizations
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminUpstreamOAuthMigrationOrganizations'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - admin_auth_header_Authorization: []
+            summary: listUpstreamOAuthMigrationOrganizations admin
+            tags:
+                - admin
+            x-speakeasy-name-override: listUpstreamOAuthMigrationOrganizations
+    /admin/upstreamOAuthMigration.run:
+        post:
+            description: 'Migrates one organization''s upstream OAuth configuration: records the server to client associations its configuration proves, then each live credential''s client choice. Idempotent, so it is safe to run again; a server the configuration does not prove is reported and never guessed.'
+            operationId: adminRunUpstreamOAuthMigration
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/RunUpstreamOAuthMigrationRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminUpstreamOAuthMigrationRun'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - admin_auth_header_Authorization: []
+            summary: runUpstreamOAuthMigration admin
+            tags:
+                - admin
+            x-speakeasy-name-override: runUpstreamOAuthMigration
+    /admin/upstreamOAuthMigration.status:
+        get:
+            description: Reports where one organization stands in the upstream OAuth migration from a dry run that writes nothing.
+            operationId: adminGetUpstreamOAuthMigrationStatus
+            parameters:
+                - allowEmptyValue: true
+                  description: The organization ID.
+                  in: query
+                  name: organization_id
+                  required: true
+                  schema:
+                    description: The organization ID.
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminUpstreamOAuthMigrationStatus'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - admin_auth_header_Authorization: []
+            summary: getUpstreamOAuthMigrationStatus admin
+            tags:
+                - admin
+            x-speakeasy-name-override: getUpstreamOAuthMigrationStatus
     /admin/users.list:
         get:
             tags:
@@ -7988,6 +8216,102 @@ paths:
             x-speakeasy-name-override: uploadTraces
             x-speakeasy-react-hook:
                 name: UploadOpenTelemetryTraces
+    /rpc/access.applyDirectoryRoleSetup:
+        post:
+            description: 'Apply a reviewed bulk setup in one transaction: create the requested new roles and replace each listed source''s role set. New roles get no grants unless grant_set is given, in which case every new role in the batch gets exactly that set. If any item''s version no longer matches, nothing is written and the request returns conflict; preview again. WorkOS role sync for new roles is requested after commit and reported as requested, not done. Creating roles sets up no plugin distribution.'
+            operationId: applyDirectoryRoleSetup
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/ApplyDirectoryRoleSetupForm'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ApplyDirectoryRoleSetupResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                - session_header_Gram-Session: []
+            summary: applyDirectoryRoleSetup access
+            tags:
+                - access
+            x-speakeasy-name-override: applyDirectoryRoleSetup
+            x-speakeasy-react-hook:
+                name: ApplyDirectoryRoleSetup
+                type: mutation
     /rpc/access.createRole:
         post:
             description: Create a new custom role.
@@ -8378,6 +8702,95 @@ paths:
             x-speakeasy-name-override: explainResourceAccess
             x-speakeasy-react-hook:
                 name: ExplainResourceAccess
+    /rpc/access.getDirectoryReviewSettings:
+        get:
+            description: 'Get the organization''s directory review settings: whether its admins are emailed when directory changes are waiting for a decision.'
+            operationId: getDirectoryReviewSettings
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/DirectoryReviewSettings'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                - session_header_Gram-Session: []
+            summary: getDirectoryReviewSettings access
+            tags:
+                - access
+            x-speakeasy-name-override: getDirectoryReviewSettings
+            x-speakeasy-react-hook:
+                name: DirectoryReviewSettings
     /rpc/access.getRole:
         get:
             description: Get a role by ID.
@@ -9172,6 +9585,194 @@ paths:
             x-speakeasy-name-override: listChallenges
             x-speakeasy-react-hook:
                 name: Challenges
+    /rpc/access.listDirectoryPeople:
+        get:
+            description: List every live directory profile in the active organization with its name, groups and whether it belongs to a member. Requires an authenticated session authorized for org:admin, because it names people who are not members; API keys cannot enumerate it. Attribute values are not returned.
+            operationId: listDirectoryPeople
+            parameters:
+                - allowEmptyValue: true
+                  description: Maximum number of people to return.
+                  in: query
+                  name: limit
+                  schema:
+                    default: 500
+                    description: Maximum number of people to return.
+                    format: int64
+                    maximum: 1000
+                    minimum: 1
+                    type: integer
+                - allowEmptyValue: true
+                  description: Cursor for the next page of results.
+                  in: query
+                  name: cursor
+                  schema:
+                    description: Cursor for the next page of results.
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListDirectoryPeopleResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: listDirectoryPeople access
+            tags:
+                - access
+            x-speakeasy-name-override: listDirectoryPeople
+            x-speakeasy-react-hook:
+                name: DirectoryPeople
+    /rpc/access.listDirectoryReviewItems:
+        get:
+            description: 'List the directory changes waiting for an admin decision, oldest first: a directory group first seen after review started, with no mapping; a new value of an attribute key that already has mappings; and a mapped group or attribute value that has gone from the directory. Each item carries the same proposal and version as previewDirectoryRoleSetup, for resolveDirectoryReviewItem. Nothing is written.'
+            operationId: listDirectoryReviewItems
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListDirectoryReviewItemsResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                - session_header_Gram-Session: []
+            summary: listDirectoryReviewItems access
+            tags:
+                - access
+            x-speakeasy-name-override: listDirectoryReviewItems
+            x-speakeasy-react-hook:
+                name: DirectoryReviewItems
     /rpc/access.listDirectoryRoleMappings:
         get:
             description: List the organization's directory groups and attribute values, and the roles mapped to them.
@@ -10254,6 +10855,95 @@ paths:
             x-speakeasy-name-override: listShadowMCPInventoryUsers
             x-speakeasy-react-hook:
                 name: ShadowMCPInventoryUsers
+    /rpc/access.previewDirectoryRoleSetup:
+        get:
+            description: 'Propose roles for every live directory group and mappable attribute value, for bulk setup. An unmapped source is proposed one role: the live role whose slug matches the source name, or a new role named after the source. A mapped source is listed with its current roles. Nothing is written. Each item carries a version that applyDirectoryRoleSetup checks to detect changes since the preview; the version authorizes nothing.'
+            operationId: previewDirectoryRoleSetup
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/DirectoryRoleSetupPreviewResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                - session_header_Gram-Session: []
+            summary: previewDirectoryRoleSetup access
+            tags:
+                - access
+            x-speakeasy-name-override: previewDirectoryRoleSetup
+            x-speakeasy-react-hook:
+                name: DirectoryRoleSetupPreview
     /rpc/access.requestAccess:
         post:
             description: Request access to a scope by sending an email notification to organization administrators.
@@ -10445,6 +11135,102 @@ paths:
             x-speakeasy-name-override: resolveChallenge
             x-speakeasy-react-hook:
                 name: ResolveChallenge
+    /rpc/access.resolveDirectoryReviewItem:
+        post:
+            description: Decide one pending directory review item. approve on a new group or attribute value maps it to the given role set, creating new roles as applyDirectoryRoleSetup does; approve on a missing source removes its mappings. dismiss leaves a new source unmapped, or keeps a missing source's mappings. opt_out_key dismisses a new attribute value and stops raising new values of its key. approve checks version as applyDirectoryRoleSetup does and returns conflict if the source changed. An item that is no longer pending returns conflict.
+            operationId: resolveDirectoryReviewItem
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/ResolveDirectoryReviewItemForm'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ResolveDirectoryReviewItemResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                - session_header_Gram-Session: []
+            summary: resolveDirectoryReviewItem access
+            tags:
+                - access
+            x-speakeasy-name-override: resolveDirectoryReviewItem
+            x-speakeasy-react-hook:
+                name: ResolveDirectoryReviewItem
+                type: mutation
     /rpc/access.resolveShadowMCPInventoryRequest:
         post:
             description: Review the latest pending Shadow MCP URL request and resolve all pending requests for that URL.
@@ -11001,6 +11787,102 @@ paths:
             x-speakeasy-name-override: syncDirectoryGroups
             x-speakeasy-react-hook:
                 name: SyncDirectoryGroups
+                type: mutation
+    /rpc/access.updateDirectoryReviewSettings:
+        post:
+            description: Turn the organization's directory review emails on or off. Pending items stay listed in the dashboard either way, and webhooks are unaffected.
+            operationId: updateDirectoryReviewSettings
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/DirectoryReviewSettings'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/DirectoryReviewSettings'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                - session_header_Gram-Session: []
+            summary: updateDirectoryReviewSettings access
+            tags:
+                - access
+            x-speakeasy-name-override: updateDirectoryReviewSettings
+            x-speakeasy-react-hook:
+                name: UpdateDirectoryReviewSettings
                 type: mutation
     /rpc/access.updateMemberRoles:
         put:
@@ -15536,6 +16418,80 @@ paths:
             operationId: listAgents
             parameters:
                 - allowEmptyValue: true
+                  description: Cursor for the next page of agents.
+                  in: query
+                  name: cursor
+                  schema:
+                    description: Cursor for the next page of agents.
+                    type: string
+                - allowEmptyValue: true
+                  description: The number of agents to return per page.
+                  in: query
+                  name: limit
+                  schema:
+                    default: 50
+                    description: The number of agents to return per page.
+                    format: int64
+                    maximum: 200
+                    minimum: 1
+                    type: integer
+                - allowEmptyValue: true
+                  description: Case-insensitive substring match on the agent name.
+                  in: query
+                  name: search
+                  schema:
+                    description: Case-insensitive substring match on the agent name.
+                    type: string
+                - allowEmptyValue: true
+                  description: Name order for the page.
+                  in: query
+                  name: name_order
+                  schema:
+                    default: asc
+                    description: Name order for the page.
+                    enum:
+                        - asc
+                        - desc
+                    type: string
+                - allowEmptyValue: true
+                  description: Keep only agents in these lifecycle states.
+                  in: query
+                  name: lifecycle
+                  schema:
+                    description: Keep only agents in these lifecycle states.
+                    items:
+                        enum:
+                            - active
+                            - suspended
+                            - revoked
+                        type: string
+                    type: array
+                - allowEmptyValue: true
+                  description: Keep only agents owned by these users.
+                  in: query
+                  name: owner_user_ids
+                  schema:
+                    description: Keep only agents owned by these users.
+                    items:
+                        type: string
+                    type: array
+                - allowEmptyValue: true
+                  description: Keep only agents registered at or after this moment.
+                  in: query
+                  name: registered_after
+                  schema:
+                    description: Keep only agents registered at or after this moment.
+                    format: date-time
+                    type: string
+                - allowEmptyValue: true
+                  description: Keep only agents registered before this moment.
+                  in: query
+                  name: registered_before
+                  schema:
+                    description: Keep only agents registered before this moment.
+                    format: date-time
+                    type: string
+                - allowEmptyValue: true
                   description: Session header
                   in: header
                   name: Gram-Session
@@ -15547,9 +16503,7 @@ paths:
                     content:
                         application/json:
                             schema:
-                                items:
-                                    $ref: '#/components/schemas/ManagedAgent'
-                                type: array
+                                $ref: '#/components/schemas/ListAgentsResult'
                     description: OK response.
                 "400":
                     content:
@@ -15611,6 +16565,14 @@ paths:
             tags:
                 - agents
             x-speakeasy-name-override: list
+            x-speakeasy-pagination:
+                inputs:
+                    - in: parameters
+                      name: cursor
+                      type: cursor
+                outputs:
+                    nextCursor: $.next_cursor
+                type: cursor
             x-speakeasy-react-hook:
                 name: Agents
     /rpc/agents.listDelegableGrants:
@@ -21412,7 +22374,7 @@ paths:
                 name: SwitchScopes
     /rpc/auth.transferIn:
         get:
-            description: 'Steps 1/3 and 3/3 of a cross-domain session transfer, on the target platform host. Step 1/3 (start: source_host, no code) sets a short-lived cookie that binds the transfer to this browser and redirects to Step 2/3, transferOut on the source host. Step 3/3 (callback: code, no source_host) redeems the one-time code that transferOut issued, checks it against that cookie, and sets a new session cookie on this host. The cookie exists because a code alone would let anyone who holds one sign another person into the code''s account (login CSRF). A request with both or neither, and any failed check, lands on this host''s login page with a signin_error code; a failed callback never starts a new transfer. See the flow diagram in server/internal/auth/transfer.go.'
+            description: 'Steps 1/3 and 3/3 of a cross-domain session transfer, on the target platform host. Step 1/3 (start: source_host, no code) sets a short-lived cookie that binds the transfer to this browser and redirects to Step 2/3, transferOut on the source host. Step 3/3 (callback: code, no source_host) redeems the one-time code that transferOut issued, checks it against that cookie, and sets a new session cookie on this host, unless the browser already holds a valid session here for the same user and start mode did not set replace_session; that session is then kept. The cookie exists because a code alone would let anyone who holds one sign another person into the code''s account (login CSRF). A request with both or neither, and any failed check, lands on this host''s login page with a signin_error code; a failed callback never starts a new transfer. See the flow diagram in server/internal/auth/transfer.go.'
             operationId: authTransferIn
             parameters:
                 - allowEmptyValue: true
@@ -21436,6 +22398,13 @@ paths:
                   schema:
                     description: Optional URL path to land on once the session is established on this host
                     type: string
+                - allowEmptyValue: true
+                  description: 'Start mode: replace a session this browser already holds on this host for the same user. Without it, the callback keeps that session and its organization, so a stale source session cannot undo an organization switch made here. Set it right after switching organization on the source host.'
+                  in: query
+                  name: replace_session
+                  schema:
+                    description: 'Start mode: replace a session this browser already holds on this host for the same user. Without it, the callback keeps that session and its organization, so a stale source session cannot undo an organization switch made here. Set it right after switching organization on the source host.'
+                    type: boolean
             responses:
                 "307":
                     description: Temporary Redirect response.
@@ -21451,9 +22420,9 @@ paths:
                                 description: 'The URL to redirect to: the source host''s transferOut (start mode), the requested page (callback mode), or this host''s login page when a check fails'
                                 type: string
                         Set-Cookie:
-                            description: The new authentication session on this host. Set only when callback mode succeeds.
+                            description: The new authentication session on this host. Set only when callback mode mints one.
                             schema:
-                                description: The new authentication session on this host. Set only when callback mode succeeds.
+                                description: The new authentication session on this host. Set only when callback mode mints one.
                                 type: string
                 "400":
                     content:
@@ -80140,6 +81109,121 @@ paths:
             x-speakeasy-name-override: getServer
             x-speakeasy-react-hook:
                 name: GetTunneledMcpServer
+    /rpc/tunneledMcp.getServerMetrics:
+        get:
+            description: Read seven-day payload-free tunnel activity aggregates
+            operationId: getTunneledMcpServerMetrics
+            parameters:
+                - allowEmptyValue: true
+                  in: query
+                  name: id
+                  required: true
+                  schema:
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  in: query
+                  name: window
+                  schema:
+                    default: day
+                    enum:
+                        - hour
+                        - day
+                        - week
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/TunnelMetrics'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: getServerMetrics tunneledMcp
+            tags:
+                - tunneledMcp
+            x-speakeasy-name-override: getServerMetrics
+            x-speakeasy-react-hook:
+                name: GetTunneledMcpServerMetrics
     /rpc/tunneledMcp.listServerConnections:
         get:
             description: List live tunnel connections for a tunneled MCP server
@@ -86521,7 +87605,7 @@ paths:
                 name: WorkloadIdentities
     /rpc/workloadIdentities.listPlatforms:
         get:
-            description: List the platforms the catalog offers to trust without looking anything up, each with the guided setup that connects it. The same for every organization. Requires workload:read.
+            description: 'List the platforms the catalog offers to trust without looking anything up, each with the policy that trusting it writes: the issuer and signing keys it is recognised by, the values the operator supplies, and the access rule it produces. How the setup is explained belongs to the dashboard. The same for every organization. Requires workload:read.'
             operationId: listWorkloadPlatforms
             parameters:
                 - allowEmptyValue: true
@@ -87960,11 +89044,21 @@ components:
                 department:
                     type: string
                     description: Department name as reported by the identity provider.
+                directory_groups:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AccessMemberDirectoryGroup'
+                    description: The directory groups the member belongs to, by stable ID. Prefer this to groups when matching a member to a group, since two groups can share a name.
                 directory_role_ids:
                     type: array
                     items:
                         type: string
                     description: Role IDs this member holds through directory role mappings. They follow the member's directory groups and attributes, so updating the member's roles does not change them.
+                directory_role_sources:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AccessMemberDirectoryRoleSource'
+                    description: 'Where each role in directory_role_ids comes from: one entry per directory role mapping that currently gives the member that role, so a role reached through two groups appears twice. Set by listMembers.'
                 email:
                     type: string
                     description: Email address.
@@ -87976,6 +89070,9 @@ components:
                 id:
                     type: string
                     description: User ID.
+                in_directory:
+                    type: boolean
+                    description: Whether the member has a live profile in the organization's synced directory. Set by listMembers.
                 joined_at:
                     type: string
                     description: When the member joined the organization.
@@ -88002,6 +89099,45 @@ components:
                 - role_ids
                 - directory_role_ids
                 - joined_at
+        AccessMemberDirectoryGroup:
+            type: object
+            properties:
+                id:
+                    type: string
+                    description: Directory group identifier.
+                    format: uuid
+                name:
+                    type: string
+                    description: Directory group name.
+            description: A live directory group a member belongs to.
+            required:
+                - id
+                - name
+        AccessMemberDirectoryRoleSource:
+            type: object
+            properties:
+                directory_group_id:
+                    type: string
+                    description: The mapped directory group. Set when source_kind is group.
+                    format: uuid
+                mapping_id:
+                    type: string
+                    description: The directory role mapping.
+                    format: uuid
+                role_id:
+                    type: string
+                    description: The role the mapping grants.
+                source_kind:
+                    type: string
+                    description: 'What the mapping matches: a directory group or an attribute value.'
+                    enum:
+                        - group
+                        - attribute
+            description: 'One directory role mapping that currently gives a member a role. Attribute keys and values are not included: they can carry personal directory data, so admins resolve them through listDirectoryRoleMappings by mapping_id.'
+            required:
+                - role_id
+                - mapping_id
+                - source_kind
         AccessibleMCPServer:
             type: object
             properties:
@@ -90554,6 +91690,311 @@ components:
                 - id
                 - customer_id
                 - status
+        AdminUpstreamOAuthMigrationAuthClientKind:
+            type: object
+            properties:
+                decided:
+                    type: integer
+                    description: Configuration and server links decided.
+                    format: int64
+                kind:
+                    type: string
+                    description: 'The kind: oauth, header or ema.'
+                pending_clients:
+                    type: integer
+                    description: Auth clients not yet recorded.
+                    format: int64
+                pending_headers:
+                    type: integer
+                    description: Header copies and EMA scope sets not yet up to date.
+                    format: int64
+                pending_links:
+                    type: integer
+                    description: Server to auth client links not yet recorded.
+                    format: int64
+                pending_retirements:
+                    type: integer
+                    description: Backfilled auth clients and server links the configuration no longer yields, not yet retired.
+                    format: int64
+                unresolved:
+                    type: integer
+                    description: Configuration that cannot be recorded without a guess.
+                    format: int64
+            description: Where one kind of configured upstream identity stands.
+            required:
+                - kind
+                - decided
+                - pending_clients
+                - pending_links
+                - pending_headers
+                - pending_retirements
+                - unresolved
+        AdminUpstreamOAuthMigrationAuthClients:
+            type: object
+            properties:
+                associations:
+                    type: integer
+                    description: Configured identities and server links decided.
+                    format: int64
+                complete:
+                    type: boolean
+                    description: Whether every configured identity has its auth client, server links and header copies recorded, no backfilled record is left to retire, no server offering one is left undecided, and no phase failed.
+                failed_phases:
+                    type: array
+                    items:
+                        type: string
+                    description: 'Phases whose check failed: oauth, headers, ema, reconcile or mark. The counts cover the other phases.'
+                in_progress:
+                    type: boolean
+                    description: Whether a run is recording typed auth clients for the organization right now. The other counts are then empty; check again when it finishes.
+                kinds:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AdminUpstreamOAuthMigrationAuthClientKind'
+                    description: The same counts for each kind of configured identity.
+                pending_clients:
+                    type: integer
+                    description: Auth clients not yet recorded.
+                    format: int64
+                pending_headers:
+                    type: integer
+                    description: Header copies and EMA scope sets not yet up to date.
+                    format: int64
+                pending_links:
+                    type: integer
+                    description: Server to auth client links not yet recorded.
+                    format: int64
+                pending_marked_servers:
+                    type: integer
+                    description: Servers offering a backfilled auth client whose need for upstream authentication is still undecided, not yet marked as needing it.
+                    format: int64
+                pending_retirements:
+                    type: integer
+                    description: Backfilled auth clients and server links the configuration no longer yields, not yet retired.
+                    format: int64
+                unresolved:
+                    type: integer
+                    description: Configured identities that cannot be recorded without a guess and need attention.
+                    format: int64
+                unresolved_associations:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AdminUpstreamOAuthMigrationUnresolvedAssociation'
+                    description: The configuration counted in unresolved.
+                warnings:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AdminUpstreamOAuthMigrationUnresolvedAssociation'
+                    description: Configuration worth a look that needs no action and does not hold back complete, such as a server at an identity chaining upstream's origin that only live discovery could confirm.
+            description: Where one organization stands in recording a typed auth client for every upstream identity its servers are configured with (upstream OAuth clients, source credential headers and identity chaining upstreams), and in retiring backfilled records the configuration no longer yields. Nothing reads these records yet.
+            required:
+                - complete
+                - in_progress
+                - associations
+                - pending_clients
+                - pending_links
+                - pending_headers
+                - pending_retirements
+                - pending_marked_servers
+                - unresolved
+                - unresolved_associations
+                - warnings
+                - kinds
+                - failed_phases
+        AdminUpstreamOAuthMigrationOrganization:
+            type: object
+            properties:
+                id:
+                    type: string
+                    description: The organization ID.
+                name:
+                    type: string
+                    description: The organization name.
+                servers:
+                    type: integer
+                    description: Live MCP servers in the organization signed in through a user session issuer.
+                    format: int64
+                slug:
+                    type: string
+                    description: The organization slug.
+            description: 'An organization the upstream OAuth migration applies to: it has a live MCP server signed in through a user session issuer.'
+            required:
+                - id
+                - name
+                - slug
+                - servers
+        AdminUpstreamOAuthMigrationOrganizations:
+            type: object
+            properties:
+                organizations:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AdminUpstreamOAuthMigrationOrganization'
+                    description: Every organization the migration applies to, by name.
+            required:
+                - organizations
+        AdminUpstreamOAuthMigrationRun:
+            type: object
+            properties:
+                associations_skipped:
+                    type: integer
+                    description: Associations not recorded because their configuration changed during the run. Run again to pick them up.
+                    format: int64
+                associations_written:
+                    type: integer
+                    description: Server to client associations recorded.
+                    format: int64
+                auth_client_links_written:
+                    type: integer
+                    description: Server to auth client links recorded.
+                    format: int64
+                auth_clients_error:
+                    type: string
+                    description: Why recording typed auth clients failed, when it did. The upstream OAuth migration itself is unaffected.
+                auth_clients_written:
+                    type: integer
+                    description: Typed auth clients recorded.
+                    format: int64
+                selections_written:
+                    type: integer
+                    description: Credential choices recorded.
+                    format: int64
+                servers_marked_requiring_upstream_auth:
+                    type: integer
+                    description: Servers marked as needing upstream authentication because they offer a backfilled auth client.
+                    format: int64
+                status:
+                    $ref: '#/components/schemas/AdminUpstreamOAuthMigrationStatus'
+            description: What one migration run wrote, and the organization's status after it.
+            required:
+                - associations_written
+                - associations_skipped
+                - selections_written
+                - status
+        AdminUpstreamOAuthMigrationServer:
+            type: object
+            properties:
+                mcp_server_id:
+                    type: string
+                    description: The MCP server ID.
+                    format: uuid
+                project_id:
+                    type: string
+                    description: The server's project ID.
+                    format: uuid
+            description: An MCP server whose upstream OAuth client the existing configuration does not prove. An administrator must associate its client before the organization is migrated.
+            required:
+                - mcp_server_id
+                - project_id
+        AdminUpstreamOAuthMigrationStatus:
+            type: object
+            properties:
+                auth_clients:
+                    $ref: '#/components/schemas/AdminUpstreamOAuthMigrationAuthClients'
+                credentials:
+                    type: integer
+                    description: Live user session credentials scanned.
+                    format: int64
+                migrated:
+                    type: boolean
+                    description: Whether the organization has nothing left to write and no server needing configuration.
+                organization_id:
+                    type: string
+                    description: The organization ID.
+                pending_associations:
+                    type: integer
+                    description: Server to client associations the configuration proves that are not yet recorded.
+                    format: int64
+                pending_selections:
+                    type: integer
+                    description: Credential choices the configuration decides that are not yet recorded.
+                    format: int64
+                reconnect_credentials:
+                    type: integer
+                    description: Credentials with at least one server they will be asked to reconnect to, because no single client is decided for them.
+                    format: int64
+                servers:
+                    type: integer
+                    description: MCP servers on a user session issuer that the association backfill decided.
+                    format: int64
+                unresolved_servers:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AdminUpstreamOAuthMigrationServer'
+                    description: Servers whose upstream OAuth client must be associated by an administrator.
+            description: 'Where one organization stands in the upstream OAuth migration, read from a dry run of its backfills. The organization is migrated when nothing is left to write and no server needs configuring. Credentials that must reconnect do not block it: they are asked to sign in again once serving reads their choices. Typed auth clients are reported separately in auth_clients and never affect migrated.'
+            required:
+                - organization_id
+                - migrated
+                - servers
+                - pending_associations
+                - unresolved_servers
+                - credentials
+                - pending_selections
+                - reconnect_credentials
+        AdminUpstreamOAuthMigrationUnresolvedAssociation:
+            type: object
+            properties:
+                association_id:
+                    type: string
+                    description: The server to upstream OAuth client association ID, for an oauth association.
+                    format: uuid
+                auth_client_id:
+                    type: string
+                    description: The auth client already recorded, if any.
+                    format: uuid
+                binding_ids:
+                    type: array
+                    items:
+                        type: string
+                        format: uuid
+                    description: Every identity chaining binding decided together, for ema.
+                kind:
+                    type: string
+                    description: 'What was decided: oauth, header or ema.'
+                mcp_server_id:
+                    type: string
+                    description: The MCP server ID, when one server is concerned.
+                    format: uuid
+                project_id:
+                    type: string
+                    description: The project the configuration belongs to.
+                    format: uuid
+                reason:
+                    type: string
+                    description: 'Why it cannot be recorded: unknown_owner, type_mismatch, project_mismatch, multiple_authorization_headers, duplicate_header_names, denied_source, mixed_credential_headers, oauth_client_shared_across_sources, ema_client_shared_across_sources, conflicting_scopes, resource_variants, resource_not_matched, issuer_not_allowed or registration_out_of_reach; for a warning, server_not_matched.'
+                remote_session_client_id:
+                    type: string
+                    description: The upstream OAuth client ID, for oauth and ema.
+                    format: uuid
+                server_ids:
+                    type: array
+                    items:
+                        type: string
+                        format: uuid
+                    description: The servers concerned, for an upstream OAuth client shared across sources.
+                source_ids:
+                    type: array
+                    items:
+                        type: string
+                        format: uuid
+                    description: The sources concerned, for an upstream OAuth client shared across sources.
+                subject_id:
+                    type: string
+                    description: The association, source, upstream OAuth client or first binding decided.
+                    format: uuid
+            description: Configuration the typed auth client backfill cannot record without a guess, and why. ID fields that do not apply to its kind are the nil UUID.
+            required:
+                - kind
+                - reason
+                - subject_id
+                - association_id
+                - mcp_server_id
+                - project_id
+                - remote_session_client_id
+                - binding_ids
+                - source_ids
+                - server_ids
         AdminUser:
             type: object
             properties:
@@ -90667,6 +92108,33 @@ components:
                     format: uuid
             required:
                 - agent_id
+        AgentMCPServer:
+            type: object
+            properties:
+                audience:
+                    type: string
+                    description: The exact `aud` the identity assertion must carry for token_endpoint. Present exactly when token_endpoint is.
+                name:
+                    type: string
+                    description: 'Stable key the agent writes the server under in each tool''s MCP configuration: `speakeasy-` followed by the server''s slug, using only lowercase letters, digits and `-`. Unique within the response; a second server with the same name gets a numeric suffix such as `speakeasy-linear-2`.'
+                    pattern: ^speakeasy-[a-z0-9-]+$
+                resource:
+                    type: string
+                    description: Resource indicator (RFC 8707) to send with the grant. Present only when token_endpoint mints sessions for this one server; absent when it mints one session for every server of its issuer.
+                token_endpoint:
+                    type: string
+                    description: Token endpoint where a workload exchanges an identity assertion (RFC 7523 JWT bearer grant) for a session that reaches this server. Absent when the server's authorization server offers no workload grant, so the server cannot be reached without a person.
+                tools:
+                    type: array
+                    items:
+                        type: string
+                    description: Stable IDs of the managed tools this server applies to. Absent or empty means every managed tool.
+                url:
+                    type: string
+                    description: The server's streamable-HTTP URL.
+            required:
+                - name
+                - url
         AgentMarketplace:
             type: object
             properties:
@@ -91391,6 +92859,73 @@ components:
             required:
                 - has_signing_secret
                 - enabled
+        ApplyDirectoryRoleSetupForm:
+            type: object
+            properties:
+                grant_set:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/RoleGrant'
+                    description: Optional grants given to every role this request creates. Omit to create roles with no grants. Existing roles are never changed.
+                items:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ApplyDirectoryRoleSetupItem'
+                    description: The sources to set up. Each source may appear once.
+                    minItems: 1
+                    maxItems: 500
+            required:
+                - items
+        ApplyDirectoryRoleSetupItem:
+            type: object
+            properties:
+                roles:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ApplyDirectoryRoleSetupRole'
+                    description: The complete role set for the source. Empty removes every mapping for the source.
+                source:
+                    $ref: '#/components/schemas/DirectoryRoleSetupSource'
+                version:
+                    type: string
+                    description: The item version from previewDirectoryRoleSetup.
+            required:
+                - source
+                - version
+                - roles
+        ApplyDirectoryRoleSetupResult:
+            type: object
+            properties:
+                created_roles:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/Role'
+                    description: Roles this request created.
+                mappings:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/DirectoryRoleMapping'
+                    description: The resulting mappings of every source in the request.
+                side_effects:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/DirectoryRoleSetupSideEffect'
+                    description: Work requested after commit.
+            required:
+                - created_roles
+                - mappings
+                - side_effects
+        ApplyDirectoryRoleSetupRole:
+            type: object
+            properties:
+                create_name:
+                    type: string
+                    description: Name of a role to create. Items in the batch that name the same new role share it.
+                    minLength: 1
+                role_urn:
+                    type: string
+                    description: Principal URN of an existing role.
+            description: 'One role in an item''s role set: an existing role by principal URN, or a new role by name. Set exactly one.'
         ApprovalDecision:
             type: object
             properties:
@@ -92909,6 +94444,12 @@ components:
                 account_type:
                     type: string
                     description: Account type that produced the chat ('team', 'personal', or empty), resolved from the linked AI account.
+                agent_id:
+                    type: string
+                    description: The ID of the agent that produced this session, recorded from the authenticated actor at capture. Set for sessions an agent drove directly, such as a channel session, which has no assistant record.
+                agent_name:
+                    type: string
+                    description: The current name of the agent that produced this session. Absent when the agent has since been deleted, in which case agent_id is still reported.
                 agent_usage:
                     $ref: '#/components/schemas/AgentUsage'
                 assistant_agent_id:
@@ -93190,6 +94731,12 @@ components:
                 account_type:
                     type: string
                     description: Account type that produced the chat ('team', 'personal', or empty), resolved from the linked AI account.
+                agent_id:
+                    type: string
+                    description: The ID of the agent that produced this session, recorded from the authenticated actor at capture. Set for sessions an agent drove directly, such as a channel session, which has no assistant record.
+                agent_name:
+                    type: string
+                    description: The current name of the agent that produced this session. Absent when the agent has since been deleted, in which case agent_id is still reported.
                 assistant_agent_id:
                     type: string
                     description: The ID of the agent the assistant acts as, when the assistant has a dedicated agent identity
@@ -97289,6 +98836,118 @@ components:
                 - id
                 - name
                 - member_count
+        DirectoryPeopleStateCounts:
+            type: object
+            properties:
+                account_not_member:
+                    type: integer
+                    description: Profiles in the account_not_member state.
+                    format: int64
+                ambiguous_email:
+                    type: integer
+                    description: Profiles in the ambiguous_email state.
+                    format: int64
+                member:
+                    type: integer
+                    description: Profiles in the member state.
+                    format: int64
+                not_signed_in:
+                    type: integer
+                    description: Profiles in the not_signed_in state.
+                    format: int64
+            required:
+                - member
+                - account_not_member
+                - not_signed_in
+                - ambiguous_email
+        DirectoryPerson:
+            type: object
+            properties:
+                email:
+                    type: string
+                    description: Email the directory reports for the profile. Empty when the directory reports none.
+                first_name:
+                    type: string
+                    description: First name the directory reports, when it reports one.
+                groups:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/DirectoryPersonGroup'
+                    description: Live directory groups the profile belongs to.
+                id:
+                    type: string
+                    description: Directory profile ID.
+                    format: uuid
+                last_name:
+                    type: string
+                    description: Last name the directory reports, when it reports one.
+                state:
+                    type: string
+                    description: 'How the profile relates to Speakeasy accounts. member: linked to, or the only email match of, a member of this organization. account_not_member: an account exists but is not a member here. not_signed_in: no matching account. ambiguous_email: the email matches more than one profile or account, so it is never matched.'
+                    enum:
+                        - member
+                        - account_not_member
+                        - not_signed_in
+                        - ambiguous_email
+                user_id:
+                    type: string
+                    description: The matched Speakeasy user ID. Present only for member and account_not_member.
+            required:
+                - id
+                - email
+                - state
+                - groups
+        DirectoryPersonGroup:
+            type: object
+            properties:
+                id:
+                    type: string
+                    description: Directory group ID.
+                    format: uuid
+                name:
+                    type: string
+                    description: Directory group name.
+            required:
+                - id
+                - name
+        DirectoryReviewItem:
+            type: object
+            properties:
+                created_at:
+                    type: string
+                    description: When the item was raised.
+                    format: date-time
+                id:
+                    type: string
+                    description: The review item.
+                    format: uuid
+                item:
+                    $ref: '#/components/schemas/DirectoryRoleSetupPreviewItem'
+                kind:
+                    type: string
+                    description: 'new_group: an unmapped group first seen after review started. new_attribute_value: a new value of an attribute key that has mappings. source_missing: a mapped group or attribute value that has gone.'
+                    enum:
+                        - new_group
+                        - new_attribute_value
+                        - source_missing
+                occurrence:
+                    type: integer
+                    description: 1 the first time a source is raised for this kind, then one more each time it recurs.
+                    format: int32
+            required:
+                - id
+                - kind
+                - occurrence
+                - created_at
+                - item
+        DirectoryReviewSettings:
+            type: object
+            properties:
+                emails_enabled:
+                    type: boolean
+                    description: Whether organization admins are emailed when directory changes are waiting for a decision. On by default.
+            required:
+                - emails_enabled
         DirectoryRoleMapping:
             type: object
             properties:
@@ -97321,15 +98980,158 @@ components:
                     enum:
                         - group
                         - attribute
+                source_status:
+                    type: string
+                    description: Whether the mapped source still exists. missing means the group was deleted from the directory, or no live directory user has the attribute value. A missing source matches nobody, so the mapping grants nothing until the source returns.
+                    enum:
+                        - active
+                        - missing
                 updated_at:
                     type: string
                     format: date-time
             required:
                 - id
                 - source_kind
+                - source_status
                 - role_urn
                 - created_at
                 - updated_at
+        DirectoryRoleSetupHiddenAttributeKey:
+            type: object
+            properties:
+                key:
+                    type: string
+                    description: Directory attribute key with too many distinct values to offer in bulk setup.
+                value_count:
+                    type: integer
+                    description: Number of distinct values the key has on live directory profiles.
+                    format: int64
+            required:
+                - key
+                - value_count
+        DirectoryRoleSetupPreviewItem:
+            type: object
+            properties:
+                directory_people:
+                    type: integer
+                    description: People with a live directory profile that matches the source, counted once per email address, so someone with profiles in two directories counts once and a profile with no email is not counted. These are directory people, not organization members or role members.
+                    format: int64
+                existing_role_urns:
+                    type: array
+                    items:
+                        type: string
+                    description: Roles the source already maps to. Empty for an unmapped source.
+                proposed_roles:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/DirectoryRoleSetupProposedRole'
+                    description: The suggested role set. For a mapped source this is its current set; for an unmapped source, one reused or new role.
+                source:
+                    $ref: '#/components/schemas/DirectoryRoleSetupSource'
+                source_name:
+                    type: string
+                    description: The group name, or key=value for an attribute value.
+                version:
+                    type: string
+                    description: Opaque version of the source and its current mappings. Send it back with applyDirectoryRoleSetup.
+            required:
+                - source
+                - source_name
+                - directory_people
+                - existing_role_urns
+                - proposed_roles
+                - version
+        DirectoryRoleSetupPreviewResult:
+            type: object
+            properties:
+                hidden_attribute_keys:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/DirectoryRoleSetupHiddenAttributeKey'
+                    description: Attribute keys left out of items because they have more than max_values_per_attribute_key distinct values. Their values can still be mapped one at a time with setDirectoryRoleMappings.
+                items:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/DirectoryRoleSetupPreviewItem'
+                    description: One item per live directory group and mappable attribute value.
+                max_values_per_attribute_key:
+                    type: integer
+                    description: The limit on distinct values above which an attribute key is left out.
+                    format: int64
+            required:
+                - items
+                - hidden_attribute_keys
+                - max_values_per_attribute_key
+        DirectoryRoleSetupProposedRole:
+            type: object
+            properties:
+                current_grants:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/RoleGrant'
+                    description: Grants the existing role already has. Applying the proposal approves them for the source's members. Empty for a new role.
+                role_action:
+                    type: string
+                    description: reuse an existing role, or create a new one.
+                    enum:
+                        - reuse
+                        - create
+                role_id:
+                    type: string
+                    description: The existing role. Set when role_action is reuse.
+                role_name:
+                    type: string
+                    description: The existing role's name, or the name a new role would get.
+                role_urn:
+                    type: string
+                    description: Principal URN of the existing role. Set when role_action is reuse.
+            required:
+                - role_action
+                - role_name
+                - current_grants
+        DirectoryRoleSetupSideEffect:
+            type: object
+            properties:
+                kind:
+                    type: string
+                    description: What was requested.
+                    enum:
+                        - workos_role_sync
+                request_status:
+                    type: string
+                    description: Requested work runs after the response and is never reported as done.
+                    enum:
+                        - requested
+                role_id:
+                    type: string
+                    description: The role the request is for.
+            required:
+                - kind
+                - role_id
+                - request_status
+        DirectoryRoleSetupSource:
+            type: object
+            properties:
+                attribute_key:
+                    type: string
+                    description: The directory attribute key. Set when source_kind is attribute.
+                    minLength: 1
+                attribute_value:
+                    type: string
+                    description: The directory attribute value. Set when source_kind is attribute.
+                    minLength: 1
+                directory_group_id:
+                    type: string
+                    description: The directory group. Set when source_kind is group.
+                    format: uuid
+                source_kind:
+                    type: string
+                    description: 'What the source is: a directory group or an attribute value.'
+                    enum:
+                        - group
+                        - attribute
+            required:
+                - source_kind
         DisableOpenRouterKeyRequestBody:
             type: object
             properties:
@@ -99990,12 +101792,17 @@ components:
                     $ref: '#/components/schemas/DeviceAgentConfiguration'
                 etag:
                     type: string
-                    description: Opaque revision identifier covering the marketplace, plugin, remote-configuration, and organization-gateway set. The agent stores this to detect changes between polls.
+                    description: Opaque revision identifier covering the marketplace, plugin, MCP server (including each server's token endpoint, audience and resource), remote-configuration, and organization-gateway set. The agent stores this to detect changes between polls.
                 marketplaces:
                     type: array
                     items:
                         $ref: '#/components/schemas/AgentMarketplace'
                     description: Plugin marketplaces the agent should register with the tools it manages. Sorted by name.
+                mcp_servers:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AgentMCPServer'
+                    description: 'Speakeasy-hosted MCP servers the agent registers directly in each managed tool''s configuration, authorized by the device''s own mcp:connect credential. Populated only when the caller polls as an agent (an agent API key, or a workload acting for its assigned agent), from the MCP servers in the plugins assigned to that agent; always empty for people, who reach these servers through their plugins. Always present: an empty list tells the agent to remove the entries it wrote earlier.'
                 organization_gateway_url:
                     type: string
                     description: URL of the active organization's gateway. Absent when the organization gateway is unavailable.
@@ -100011,6 +101818,7 @@ components:
                 - etag
                 - marketplaces
                 - plugins
+                - mcp_servers
         GetProjectForm:
             type: object
             properties:
@@ -102859,6 +104667,20 @@ components:
                     description: The member attributes available to target conditions, in editor display order.
             required:
                 - attributes
+        ListAgentsResult:
+            type: object
+            properties:
+                items:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ManagedAgent'
+                    description: The agents in this page.
+                next_cursor:
+                    type: string
+                    description: Cursor for the next page; absent when exhausted.
+            description: A page of managed agents, ordered by name.
+            required:
+                - items
         ListAiScanTargetsResult:
             type: object
             properties:
@@ -103319,6 +105141,32 @@ components:
                 - organization_id
                 - provider
                 - schedules
+        ListDirectoryPeopleResult:
+            type: object
+            properties:
+                counts:
+                    $ref: '#/components/schemas/DirectoryPeopleStateCounts'
+                next_cursor:
+                    type: string
+                    description: Cursor for the next page. Absent on the last page.
+                people:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/DirectoryPerson'
+                    description: One page of directory profiles, ordered by profile ID.
+            required:
+                - people
+                - counts
+        ListDirectoryReviewItemsResult:
+            type: object
+            properties:
+                items:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/DirectoryReviewItem'
+                    description: Pending items, oldest first.
+            required:
+                - items
         ListDirectoryRoleMappingsResult:
             type: object
             properties:
@@ -105797,6 +107645,9 @@ components:
                     type: string
                     description: The ID of the environment associated with the server
                     format: uuid
+                has_endpoint:
+                    type: boolean
+                    description: Whether any endpoint routes to this server, including one on a custom domain that is not live yet. Absent when it could not be read.
                 id:
                     type: string
                     description: The ID of the MCP server
@@ -105911,6 +107762,9 @@ components:
         McpServerToolsetSummary:
             type: object
             properties:
+                description:
+                    type: string
+                    description: The toolset's description, if any
                 external_mcp_proxy_only:
                     type: boolean
                     description: Whether every configured tool is an external MCP proxy tool, so the real tool count is unknown until a user signs in
@@ -111458,6 +113312,65 @@ components:
                     description: The created resolution records.
             required:
                 - resolutions
+        ResolveDirectoryReviewItemForm:
+            type: object
+            properties:
+                decision:
+                    type: string
+                    description: approve, dismiss, or opt_out_key (new attribute values only).
+                    enum:
+                        - approve
+                        - dismiss
+                        - opt_out_key
+                grant_set:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/RoleGrant'
+                    description: Optional grants given to every role the approval creates. Existing roles are never changed.
+                id:
+                    type: string
+                    description: The review item.
+                    format: uuid
+                roles:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ApplyDirectoryRoleSetupRole'
+                    description: The role set to map a new source to. Required and non-empty to approve a new source; must be empty or omitted otherwise.
+                version:
+                    type: string
+                    description: The item version from listDirectoryReviewItems. Required to approve.
+            required:
+                - id
+                - decision
+        ResolveDirectoryReviewItemResult:
+            type: object
+            properties:
+                created_roles:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/Role'
+                    description: Roles the approval created.
+                mappings:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/DirectoryRoleMapping'
+                    description: The mappings an approval of a new source wrote. Empty for every other decision.
+                side_effects:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/DirectoryRoleSetupSideEffect'
+                    description: Work requested after commit.
+                state:
+                    type: string
+                    description: The item's state after the decision.
+                    enum:
+                        - approved
+                        - dismissed
+            required:
+                - state
+                - created_roles
+                - mappings
+                - side_effects
         ResolveIdentityForm:
             type: object
             properties:
@@ -113574,6 +115487,14 @@ components:
                 - id
                 - name
                 - key_prefix
+        RunUpstreamOAuthMigrationRequestBody:
+            type: object
+            properties:
+                organization_id:
+                    type: string
+                    description: The organization ID.
+            required:
+                - organization_id
         SaveDashboardFiltersRequestBody:
             type: object
             properties:
@@ -120766,6 +122687,230 @@ components:
                 - output_tokens
                 - cache_creation_tokens
                 - total_tokens
+        TunnelClientCount:
+            type: object
+            properties:
+                family:
+                    type: string
+                requests:
+                    type: integer
+                    format: int64
+            required:
+                - family
+                - requests
+        TunnelDiagnosticStep:
+            type: object
+            properties:
+                duration_ms:
+                    type: integer
+                    description: Elapsed probe time in milliseconds
+                    format: int64
+                failure:
+                    type: string
+                    description: Bounded failure category, never raw error text
+                state:
+                    type: string
+                    description: Probe state
+                    enum:
+                        - pass
+                        - fail
+                        - not_applicable
+                        - not_tested
+            required:
+                - state
+                - duration_ms
+                - failure
+        TunnelDiagnostics:
+            type: object
+            properties:
+                consecutive_failures:
+                    type: integer
+                    description: Consecutive failed transport probes
+                    format: int64
+                dns:
+                    $ref: '#/components/schemas/TunnelDiagnosticStep'
+                http_progress:
+                    $ref: '#/components/schemas/TunnelHTTPProgress'
+                last_http_response_age_ms:
+                    type: integer
+                    description: HTTP response age at view time, -1 if absent
+                    format: int64
+                last_http_status:
+                    type: integer
+                    description: Last observed HTTP status, including authentication challenges
+                    format: int64
+                last_transport_error:
+                    type: string
+                    description: Last transport failure category
+                last_transport_error_age_ms:
+                    type: integer
+                    description: Transport failure age at view time, -1 if absent
+                    format: int64
+                received_at:
+                    type: string
+                    description: Gateway receipt time
+                    format: date-time
+                requests_total:
+                    type: integer
+                    description: HTTP attempts since agent process start
+                    format: int64
+                sample_age_ms:
+                    type: integer
+                    description: Probe age at view time, -1 if never sampled
+                    format: int64
+                state:
+                    type: string
+                    description: Diagnostic collection state
+                    enum:
+                        - pending
+                        - available
+                        - stale
+                        - unavailable
+                        - unsupported
+                        - disabled
+                target_state:
+                    type: string
+                    description: Reachable means transport only, not MCP success.
+                    enum:
+                        - pending
+                        - reachable
+                        - unreachable
+                        - unknown
+                tcp:
+                    $ref: '#/components/schemas/TunnelDiagnosticStep'
+                tls:
+                    $ref: '#/components/schemas/TunnelDiagnosticStep'
+                transport_errors_total:
+                    type: integer
+                    description: Transport errors since agent process start
+                    format: int64
+            required:
+                - state
+        TunnelHTTPProgress:
+            type: object
+            properties:
+                open_responses:
+                    type: integer
+                    description: Open HTTP response bodies at the last sample; long-lived SSE may be expected
+                    format: int64
+                waiting_headers:
+                    type: integer
+                    description: Requests awaiting final HTTP response headers at the last sample
+                    format: int64
+            required:
+                - waiting_headers
+                - open_responses
+        TunnelMetricPoint:
+            type: object
+            properties:
+                active_requests:
+                    type: number
+                    format: double
+                canceled:
+                    type: integer
+                    format: int64
+                collection_partial:
+                    type: boolean
+                    description: An observed producer reported aggregate loss since its last restart
+                connections:
+                    type: number
+                    description: Average of time-aligned sums of observed gateway connections. Missing owners are not zero.
+                    format: double
+                connections_opened:
+                    type: integer
+                    format: int64
+                consumer_sessions:
+                    type: number
+                    format: double
+                coverage_samples:
+                    type: integer
+                    description: Number of observed 15-second gateway sampling slots
+                    format: int64
+                errors:
+                    type: integer
+                    description: Terminal errors completed in this bucket
+                    format: int64
+                incomplete:
+                    type: integer
+                    format: int64
+                other_requests:
+                    type: integer
+                    description: Other observed MCP request attempts
+                    format: int64
+                p50_ms:
+                    type: integer
+                    description: Histogram upper bound for median completion latency, -1 means above 60 seconds
+                    format: int64
+                p95_ms:
+                    type: integer
+                    description: Histogram upper bound for p95 completion latency, -1 means above 60 seconds
+                    format: int64
+                rejected:
+                    type: integer
+                    description: Requests Speakeasy rejected before they reached the MCP server, for example by policy. Not counted as errors.
+                    format: int64
+                request_coverage_samples:
+                    type: integer
+                    description: Observed producer-minute heartbeats; proves only observed coverage, not every replica
+                    format: int64
+                successes:
+                    type: integer
+                    description: Terminal MCP successes completed in this bucket
+                    format: int64
+                time:
+                    type: string
+                    format: date-time
+                tool_calls:
+                    type: integer
+                    description: Observed tools/call attempts
+                    format: int64
+                tools_list:
+                    type: integer
+                    description: Observed tools/list attempts
+                    format: int64
+            required:
+                - time
+                - coverage_samples
+                - request_coverage_samples
+                - collection_partial
+        TunnelMetrics:
+            type: object
+            properties:
+                active_servers:
+                    type: integer
+                    description: Distinct fronting MCP servers with requests in this range
+                    format: int64
+                bucket_seconds:
+                    type: integer
+                    format: int64
+                clients:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/TunnelClientCount'
+                last_sample_at:
+                    type: string
+                    format: date-time
+                observed_at:
+                    type: string
+                    format: date-time
+                points:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/TunnelMetricPoint'
+                state:
+                    type: string
+                    description: History availability
+                    enum:
+                        - available
+                        - unavailable
+                        - too_large
+            required:
+                - state
+                - observed_at
+                - bucket_seconds
+                - points
+                - clients
+                - active_servers
         TunneledMcpConnection:
             type: object
             properties:
@@ -120784,6 +122929,8 @@ components:
                     type: string
                     description: When this tunnel session connected
                     format: date-time
+                diagnostics:
+                    $ref: '#/components/schemas/TunnelDiagnostics'
                 gateway_session_id:
                     type: string
                     description: Gateway session ID for a live tunnel connection
@@ -120802,6 +122949,9 @@ components:
                 service_version:
                     type: string
                     description: Customer-declared version of the MCP service behind this tunnel connection
+                target_display:
+                    type: string
+                    description: Agent target scheme, hostname and port. The path, credentials, query and fragment are never shown, because some MCP servers put secrets in the path.
             required:
                 - gateway_session_id
                 - service_version
@@ -120912,11 +123062,18 @@ components:
                     type: integer
                     description: Total MCP consumer sessions currently pinned across active tunnel connections
                     format: int64
+                collection_state:
+                    type: string
+                    description: 'available or unavailable: whether live connection storage could be read'
                 connections:
                     type: array
                     items:
                         $ref: '#/components/schemas/TunneledMcpConnection'
                     description: Live tunnel connections currently visible in Redis
+                observed_at:
+                    type: string
+                    description: Server time when this view was read
+                    format: date-time
             description: Live connection details for a tunneled MCP server
             required:
                 - connections
@@ -124956,11 +127113,6 @@ components:
                 key:
                     type: string
                     description: Identifies the entry permanently.
-                steps:
-                    type: array
-                    items:
-                        $ref: '#/components/schemas/WorkloadPlatformStep'
-                    description: The guided setup. Empty for a platform without one, which is listed as coming soon and cannot be opened.
                 subject:
                     $ref: '#/components/schemas/WorkloadPlatformSubject'
                 variables:
@@ -124968,7 +127120,7 @@ components:
                     items:
                         $ref: '#/components/schemas/WorkloadPlatformVariable'
                     description: What the operator supplies.
-            description: A platform the catalog offers to trust, with what the operator supplies and the guided setup that connects it.
+            description: A platform the catalog offers to trust, with what the operator supplies to connect it. How the setup is explained belongs to the dashboard, not to this policy.
             required:
                 - key
                 - display_name
@@ -124979,68 +127131,6 @@ components:
                 - jwks_uri
                 - variables
                 - subject
-                - steps
-        WorkloadPlatformBlock:
-            type: object
-            properties:
-                alt:
-                    type: string
-                    description: An image's alternative text.
-                caption:
-                    type: string
-                    description: Shown under an image.
-                help:
-                    type: string
-                    description: Shown under a computed value or checklist item.
-                href:
-                    type: string
-                    description: A link's https target.
-                label:
-                    type: string
-                    description: A link's or computed value's label, or the console field or control a checklist item names.
-                markdown:
-                    type: string
-                    description: A text block's Markdown, or what a checklist item without a value asks the operator to do. Raw HTML in it must not be rendered.
-                src:
-                    type: string
-                    description: An image's path on the dashboard's origin.
-                type:
-                    type: string
-                    description: The kind of content.
-                    enum:
-                        - text
-                        - image
-                        - link
-                        - field
-                        - subject_rule
-                        - agent_picker
-                        - tags
-                        - computed_status
-                        - computed
-                        - checklist_item
-                value:
-                    type: string
-                    description: The value a computed block or checklist item shows.
-                    enum:
-                        - ""
-                        - token_endpoint
-                        - issuer_url
-                        - mcp_host
-                variable:
-                    type: string
-                    description: The variable key a field collects.
-            description: One piece of a guided setup step. Which fields are set depends on type; the rest are empty.
-            required:
-                - type
-                - markdown
-                - src
-                - alt
-                - caption
-                - href
-                - label
-                - variable
-                - value
-                - help
         WorkloadPlatformCatalog:
             type: object
             properties:
@@ -125068,33 +127158,6 @@ components:
             required:
                 - value
                 - visibility
-        WorkloadPlatformStep:
-            type: object
-            properties:
-                blocks:
-                    type: array
-                    items:
-                        $ref: '#/components/schemas/WorkloadPlatformBlock'
-                    description: Rendered in order.
-                id:
-                    type: string
-                    description: Stable within the platform; used in the dashboard URL.
-                phase:
-                    type: string
-                    description: collect steps gather values, the create step writes the rows, connect steps describe the platform's side.
-                    enum:
-                        - collect
-                        - create
-                        - connect
-                title:
-                    type: string
-                    description: Heads the step.
-            description: One screen of a guided setup.
-            required:
-                - id
-                - title
-                - phase
-                - blocks
         WorkloadPlatformSubject:
             type: object
             properties:

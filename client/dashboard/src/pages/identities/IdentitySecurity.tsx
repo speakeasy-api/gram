@@ -51,7 +51,7 @@ export default function IdentitySecurity(): JSX.Element {
     project.id,
   );
   const { identity, urn } = useIdentityOutlet();
-  // Only an enrolled person has device scans behind them; an API key or an
+  // Only a person with an account here has device scans behind them; an API key or an
   // external identity has nothing to show.
   const isEmployee = identity.kind === "user" && identity.userIds.length > 0;
   const employeeEmail = isEmployee ? (identity.emails[0] ?? null) : null;

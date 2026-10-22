@@ -2,6 +2,7 @@ package demoseed
 
 import (
 	"strconv"
+	"strings"
 
 	"github.com/google/uuid"
 )
@@ -32,6 +33,35 @@ var demoUsers = []demoUser{
 	{"mateo", "Mateo Alvarez", "R&D", "Platform Engineering", "Site Reliability Engineer", "contractor", "CC-ENG-2200", "Reliability", "mateo-mbp.local"},
 	{"hana", "Hana Sato", "Customer Experience", "Billing Operations", "Billing Analyst", "part-time", "CC-OPS-3300", "Billing Ops", "hana-mbp.local"},
 	{"lucas", "Lucas Meyer", "R&D", "Engineering Leadership", "Engineering Manager", "full-time", "CC-ENG-2200", "Leadership", "lucas-mbp.local"},
+}
+
+// demoDirectoryPerson is a directory profile with no Speakeasy member behind
+// it, so the directory people view shows more than members. Profiles that
+// share an emailHandle are deliberately ambiguous: the same address appears
+// twice in the directory, so neither is matched to an account.
+type demoDirectoryPerson struct {
+	handle      string
+	emailHandle string
+	firstName   string
+	lastName    string
+	department  string
+	title       string
+	team        string
+}
+
+// demoDirectoryPeople reuse roster teams, so their groups already exist.
+var demoDirectoryPeople = []demoDirectoryPerson{
+	{"noor", "noor", "Noor", "Haddad", "Support Engineering", "Support Engineer", "Frontline Support"},
+	{"tomas", "tomas", "Tomás", "Novak", "Platform Engineering", "Platform Engineer", "Infra"},
+	{"ines-a", "ines", "Inês", "Costa", "Billing Operations", "Billing Analyst", "Billing Ops"},
+	{"ines-b", "ines", "Inês", "Costa", "Billing Operations", "Billing Analyst", "Billing Ops"},
+}
+
+// splitDemoName splits a roster display name into the first and last names a
+// directory reports.
+func splitDemoName(name string) (string, string) {
+	first, last, _ := strings.Cut(name, " ")
+	return first, last
 }
 
 // bulkChats is how many generated chats the seed writes.

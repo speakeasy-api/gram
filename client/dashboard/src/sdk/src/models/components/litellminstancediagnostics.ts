@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
@@ -20,7 +21,7 @@ export const LastErrorKind = {
 /**
  * Safe category for the latest observed ingest error.
  */
-export type LastErrorKind = ClosedEnum<typeof LastErrorKind>;
+export type LastErrorKind = OpenEnum<typeof LastErrorKind>;
 
 /**
  * Derived health of a LiteLLM integration's latest ingest activity.
@@ -33,7 +34,7 @@ export const LiteLLMInstanceDiagnosticsStatus = {
 /**
  * Derived health of a LiteLLM integration's latest ingest activity.
  */
-export type LiteLLMInstanceDiagnosticsStatus = ClosedEnum<
+export type LiteLLMInstanceDiagnosticsStatus = OpenEnum<
   typeof LiteLLMInstanceDiagnosticsStatus
 >;
 
@@ -64,13 +65,16 @@ export type LiteLLMInstanceDiagnostics = {
 };
 
 /** @internal */
-export const LastErrorKind$inboundSchema: z.ZodMiniEnum<typeof LastErrorKind> =
-  z.enum(LastErrorKind);
+export const LastErrorKind$inboundSchema: z.ZodMiniType<
+  LastErrorKind,
+  unknown
+> = openEnums.inboundSchema(LastErrorKind);
 
 /** @internal */
-export const LiteLLMInstanceDiagnosticsStatus$inboundSchema: z.ZodMiniEnum<
-  typeof LiteLLMInstanceDiagnosticsStatus
-> = z.enum(LiteLLMInstanceDiagnosticsStatus);
+export const LiteLLMInstanceDiagnosticsStatus$inboundSchema: z.ZodMiniType<
+  LiteLLMInstanceDiagnosticsStatus,
+  unknown
+> = openEnums.inboundSchema(LiteLLMInstanceDiagnosticsStatus);
 
 /** @internal */
 export const LiteLLMInstanceDiagnostics$inboundSchema: z.ZodMiniType<
