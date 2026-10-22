@@ -768,11 +768,25 @@ function ConfigurationProfileNote() {
   );
 }
 
+// managedAutoUpdate picks the update mode the example managed.json ships with.
+// The macOS pkg and the per-user Linux install update themselves, so they get
+// "automatic". Windows self-update is not yet validated on real hardware
+// (DNO-1122), so Windows fleets keep "notify" and re-push the msi. Without an
+// OS (onboarding covers every platform) the example uses "automatic" and the
+// help text calls out Windows.
+function managedAutoUpdate(os?: OsKey): "automatic" | "notify" {
+  return os === "windows" ? "notify" : "automatic";
+}
+
 // ManagedProfileExample is the managed.json template plus the inline
 // mint action for its org_token. Shared by the setup sheet's identity
-// step and onboarding's MDM rollout breakdown, so the file an admin copies is
-// identical wherever they meet it.
-export function ManagedProfileExample(): React.JSX.Element {
+// step, which passes its OS, and onboarding's MDM rollout breakdown, which
+// covers every platform.
+export function ManagedProfileExample({
+  os,
+}: {
+  os?: OsKey;
+}): React.JSX.Element {
   const { name: orgName, slug: orgSlug } = useOrganization();
   const apiKeysHref = useOrgRoutes().apiKeys.href();
 
@@ -789,7 +803,7 @@ export function ManagedProfileExample(): React.JSX.Element {
         org_token: orgToken,
         org_slug: orgSlug || "acme-corp",
         org_name: orgName || "Acme Corporation",
-        auto_update: "notify",
+        auto_update: managedAutoUpdate(os),
       },
       null,
       2,
@@ -850,6 +864,12 @@ export function ManagedProfileExample(): React.JSX.Element {
         </strong>{" "}
         in the example to mint the <code>org_token</code>.
       </Text>
+      {os === undefined && (
+        <Text small muted className="mt-2">
+          On Windows, set <code>auto_update</code> to <code>"notify"</code> for
+          now and re-push the msi for new versions.
+        </Text>
+      )}
 
       <div className="mt-4 flex flex-col gap-3">
         {generatedToken && (
@@ -932,7 +952,7 @@ function FleetIdentity({ os }: { os: OsKey }) {
 
       <div>
         <SubHeading>Example managed.json</SubHeading>
-        <ManagedProfileExample />
+        <ManagedProfileExample os={os} />
       </div>
 
       <div>

@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { DeviceAgentSetup } from "./device-agent-setup";
+import { DeviceAgentSetup, ManagedProfileExample } from "./device-agent-setup";
 
 const agentToken = vi.hoisted(() => ({ current: {} as UseAgentToken }));
 
@@ -14,11 +14,17 @@ vi.mock("@/contexts/Auth", () => ({
 vi.mock("@/routes", () => ({
   useOrgRoutes: () => ({ apiKeys: { href: () => "/example-corp/api-keys" } }),
 }));
+vi.mock("@/components/code", () => ({
+  CodeBlock: ({ children }: { children: string }) => <pre>{children}</pre>,
+}));
 vi.mock("@/hooks/useAgentToken", () => ({
   useAgentToken: () => agentToken.current,
 }));
 
-function renderSetup(token: Partial<UseAgentToken>) {
+function renderSetup(
+  token: Partial<UseAgentToken>,
+  ui: React.ReactElement = <DeviceAgentSetup />,
+) {
   agentToken.current = {
     generatedToken: null,
     autoCopied: false,
@@ -32,9 +38,7 @@ function renderSetup(token: Partial<UseAgentToken>) {
   render(
     <QueryClientProvider client={new QueryClient()}>
       <TooltipProvider>
-        <MemoryRouter>
-          <DeviceAgentSetup />
-        </MemoryRouter>
+        <MemoryRouter>{ui}</MemoryRouter>
       </TooltipProvider>
     </QueryClientProvider>,
   );
@@ -81,5 +85,25 @@ describe("DeviceAgentSetup organization values", () => {
 
     const button = screen.getByRole("button", { name: /Generate token/ });
     expect((button as HTMLButtonElement).disabled).toBe(true);
+  });
+});
+
+describe("ManagedProfileExample auto_update", () => {
+  it.each([
+    ["macos", "automatic"],
+    ["linux", "automatic"],
+    ["windows", "notify"],
+  ] as const)("ships %s fleets with %s", (os, mode) => {
+    renderSetup({}, <ManagedProfileExample os={os} />);
+
+    expect(document.body.textContent).toContain(`"auto_update": "${mode}"`);
+    expect(screen.queryByText(/On Windows, set/)).toBeNull();
+  });
+
+  it("uses automatic and calls out Windows when no OS is given", () => {
+    renderSetup({}, <ManagedProfileExample />);
+
+    expect(document.body.textContent).toContain(`"auto_update": "automatic"`);
+    expect(screen.getByText(/On Windows, set/)).toBeTruthy();
   });
 });
