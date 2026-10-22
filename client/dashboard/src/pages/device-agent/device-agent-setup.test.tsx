@@ -6,7 +6,12 @@ import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { DeviceAgentSetup, ManagedProfileExample } from "./device-agent-setup";
 
-const agentToken = vi.hoisted(() => ({ current: {} as UseAgentToken }));
+// buildCopyText is what useAgentToken writes to the clipboard after minting,
+// captured so tests can check the copied managed.json.
+const agentToken = vi.hoisted(() => ({
+  current: {} as UseAgentToken,
+  buildCopyText: (_token: string): string => "",
+}));
 
 vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({ slug: "example-corp", name: "Example Corp" }),
@@ -18,7 +23,10 @@ vi.mock("@/components/code", () => ({
   CodeBlock: ({ children }: { children: string }) => <pre>{children}</pre>,
 }));
 vi.mock("@/hooks/useAgentToken", () => ({
-  useAgentToken: () => agentToken.current,
+  useAgentToken: (opts: { buildCopyText: (token: string) => string }) => {
+    agentToken.buildCopyText = opts.buildCopyText;
+    return agentToken.current;
+  },
 }));
 
 function renderSetup(
@@ -99,6 +107,28 @@ describe("ManagedProfileExample auto_update", () => {
     expect(document.body.textContent).toContain(`"auto_update": "${mode}"`);
     expect(screen.queryByText(/On Windows, set/)).toBeNull();
   });
+
+  it.each([
+    ["macos", "automatic"],
+    ["linux", "automatic"],
+    ["windows", "notify"],
+  ] as const)(
+    "shows and copies a minted token with %s's %s mode",
+    (os, mode) => {
+      renderSetup(
+        { generatedToken: "spk_org_test" },
+        <ManagedProfileExample os={os} />,
+      );
+
+      expect(document.body.textContent).toContain(
+        `"org_token": "spk_org_test"`,
+      );
+      expect(document.body.textContent).toContain(`"auto_update": "${mode}"`);
+      expect(
+        JSON.parse(agentToken.buildCopyText("spk_org_test")),
+      ).toMatchObject({ org_token: "spk_org_test", auto_update: mode });
+    },
+  );
 
   it("uses automatic and calls out Windows when no OS is given", () => {
     renderSetup({}, <ManagedProfileExample />);
