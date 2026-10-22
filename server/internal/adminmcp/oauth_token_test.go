@@ -18,6 +18,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 )
@@ -255,13 +256,15 @@ func TestStaffOAuthPublicClientCannotPresentCredentials(t *testing.T) {
 	require.Contains(t, response.Body.String(), `"error":"invalid_client"`)
 	require.Empty(t, response.Header().Get("WWW-Authenticate"))
 
-	// Any other Authorization header is an ambiguous presentation, not absent.
+	// Unsupported or malformed header credentials cannot become public authentication.
 	for _, header := range []string{"Bearer some-token", "Basic not-base64", "Basic"} {
 		request := publicStaffTokenRequest("authorization_code", url.Values{"code": {"one-time-code"}, "redirect_uri": {"http://localhost:5555/callback"}, "code_verifier": {strings.Repeat("x", 43)}})
 		request.Header.Set("Authorization", header)
 		response = httptest.NewRecorder()
 		tokens.TokenHandler().ServeHTTP(response, request)
-		require.Equal(t, http.StatusBadRequest, response.Code, header)
+		require.Equal(t, http.StatusUnauthorized, response.Code, header)
+		require.Contains(t, response.Body.String(), `"error":"invalid_client"`)
+		require.NotEmpty(t, response.Header().Get("WWW-Authenticate"))
 	}
 	require.Zero(t, store.validate)
 }
@@ -276,6 +279,54 @@ func TestStaffOAuthConfidentialClientCannotDowngradeToPublic(t *testing.T) {
 	require.Zero(t, store.validate)
 }
 
+func TestStaffOAuthBasicAcceptsMatchingIdentifierAndEmptyParameters(t *testing.T) {
+	t.Parallel()
+	for _, grantType := range []string{oauthwire.GrantTypeAuthorizationCode, oauthwire.GrantTypeRefreshToken} {
+		for _, tc := range []struct {
+			name   string
+			fields url.Values
+		}{
+			{name: "matching identifier", fields: url.Values{oauthwire.ParamClientID: {staffClient}}},
+			{name: "empty identifier", fields: url.Values{oauthwire.ParamClientID: {""}}},
+			{name: "empty secret", fields: url.Values{oauthwire.ParamClientSecret: {""}}},
+			{name: "empty assertion", fields: url.Values{oauthwire.ParamClientAssertion: {""}, oauthwire.ParamClientAssertionType: {""}}},
+		} {
+			t.Run(grantType+"/"+tc.name, func(t *testing.T) {
+				t.Parallel()
+				tokens, store, _ := staffTokensFixture(t)
+				form := url.Values{
+					oauthwire.ParamCode:         {"one-time-code"},
+					"redirect_uri":              {"http://localhost:5555/callback"},
+					"code_verifier":             {strings.Repeat("x", 43)},
+					oauthwire.ParamRefreshToken: {"old-refresh-token"},
+				}
+				maps.Copy(form, tc.fields)
+				response := httptest.NewRecorder()
+				tokens.TokenHandler().ServeHTTP(response, staffTokenRequest(grantType, form))
+				require.Equal(t, http.StatusOK, response.Code, response.Body.String())
+				require.Empty(t, response.Header().Get("WWW-Authenticate"))
+				require.Equal(t, 1, store.exchange+store.rotate)
+			})
+		}
+	}
+}
+
+func TestStaffOAuthPublicClientAcceptsEmptyCredentials(t *testing.T) {
+	t.Parallel()
+	tokens, store, _ := staffTokensFixture(t)
+	usePublicStaffClient(t, tokens)
+	request := publicStaffTokenRequest(oauthwire.GrantTypeRefreshToken, url.Values{
+		oauthwire.ParamRefreshToken:        {"old-refresh-token"},
+		oauthwire.ParamClientSecret:        {""},
+		oauthwire.ParamClientAssertion:     {""},
+		oauthwire.ParamClientAssertionType: {""},
+	})
+	response := httptest.NewRecorder()
+	tokens.TokenHandler().ServeHTTP(response, request)
+	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
+	require.Equal(t, 1, store.rotate)
+}
+
 func TestStaffOAuthTokenRejectsPublicAndBodyClientCredentials(t *testing.T) {
 	t.Parallel()
 	tokens, store, _ := staffTokensFixture(t)
@@ -285,7 +336,7 @@ func TestStaffOAuthTokenRejectsPublicAndBodyClientCredentials(t *testing.T) {
 	tokens.TokenHandler().ServeHTTP(response, request)
 	require.Equal(t, http.StatusBadRequest, response.Code)
 
-	request = staffTokenRequest("authorization_code", url.Values{"code": {"one-time-code"}, "client_id": {staffClient}})
+	request = staffTokenRequest("authorization_code", url.Values{"code": {"one-time-code"}, "client_id": {"different-client"}})
 	response = httptest.NewRecorder()
 	tokens.TokenHandler().ServeHTTP(response, request)
 	require.Equal(t, http.StatusBadRequest, response.Code)
@@ -317,10 +368,11 @@ func TestStaffOAuthClientErrorResponses(t *testing.T) {
 		{name: "public presentation", form: url.Values{"client_id": {staffClient}}, status: http.StatusBadRequest, code: "invalid_client"},
 		{name: "unsupported body secret", form: url.Values{"client_id": {staffClient}, "client_secret": {"wrong"}}, status: http.StatusBadRequest, code: "invalid_client"},
 		{name: "mixed methods", headers: []string{"Basic dW5rbm93bjp3cm9uZw=="}, form: url.Values{"client_id": {staffClient}}, status: http.StatusBadRequest, code: "invalid_request"},
-		{name: "malformed basic with body", headers: []string{"Basic invalid"}, form: url.Values{"client_id": {staffClient}}, status: http.StatusBadRequest, code: "invalid_request"},
+		{name: "malformed basic with body", headers: []string{"Basic invalid"}, form: url.Values{"client_id": {staffClient}}, status: http.StatusUnauthorized, code: "invalid_client", challenge: `Basic realm="Speakeasy"`},
 		{name: "duplicate authorization", headers: []string{"Basic invalid", "Basic invalid"}, status: http.StatusBadRequest, code: "invalid_request"},
 		{name: "duplicate client id", form: url.Values{"client_id": {staffClient, staffClient}}, status: http.StatusBadRequest, code: "invalid_request"},
 		{name: "duplicate secret", form: url.Values{"client_secret": {"one", "two"}}, status: http.StatusBadRequest, code: "invalid_request"},
+		{name: "duplicate empty secret", form: url.Values{"client_secret": {"", ""}}, status: http.StatusBadRequest, code: "invalid_request"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()

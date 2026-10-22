@@ -347,19 +347,27 @@ func (s *Service) serveTokenGrant(
 	// derived from it.
 	baseURL := s.resourceBaseURL(r, endpoint)
 
+	var grantErr error
+	clientID := creds.clientID
 	switch {
 	case grant.clientAuth == tokenClientAuthRequired && grant.authenticated != nil:
 		clientRow, err := s.authenticateTokenClient(ctx, w, r, endpoint, logger, grantType, creds, grant.resolveMode, baseURL)
 		if clientRow == nil {
 			return err
 		}
-		return grant.authenticated(ctx, w, r, endpoint, clientRow, baseURL, creds.method, logger)
+		clientID = clientRow.ClientID
+		grantErr = grant.authenticated(ctx, w, r, endpoint, clientRow, baseURL, creds.method, logger)
 	case grant.clientAuth == tokenClientAuthNone && grant.clientless != nil:
-		return grant.clientless(ctx, w, r, endpoint, creds, baseURL, logger)
+		grantErr = grant.clientless(ctx, w, r, endpoint, creds, baseURL, logger)
 	default:
 		err := fmt.Errorf("token grant %q has client authentication %q without a matching handler", grantType, grant.clientAuth)
 		return oops.E(oops.CodeUnexpected, err, "dispatch token grant").LogError(ctx, logger)
 	}
+	if errors.Is(grantErr, errAuthorizationExpired) {
+		logOAuthClientCredentialEvent(ctx, logger, r, "oauth token request rejected", clientID, creds.method, grantType, "authorization_expired")
+		return writeTokenError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeInvalidGrant, "user authorization has expired")
+	}
+	return grantErr
 }
 
 // refuseClientlessTokenGrant answers a JWT bearer request that presents no
@@ -2002,7 +2010,7 @@ func (s *Service) issueSession(
 	}
 	authorizationLifetime := issuance.AuthorizationExpiresAt.Sub(now)
 	if authorizationLifetime <= 0 {
-		return nil, oops.E(oops.CodeUnauthorized, nil, "user authorization has expired").LogError(ctx, logger)
+		return nil, errAuthorizationExpired
 	}
 	accessExpiresAt := now.Add(accessTokenLifetime)
 	if issuance.AuthorizationExpiresAt.Before(accessExpiresAt) {
@@ -2220,6 +2228,9 @@ func grantSignInID(grant UserSessionGrant) uuid.NullUUID {
 }
 
 var errSignInRevoked = errors.New("sign-in revoked")
+
+// errAuthorizationExpired distinguishes an elapsed grant from issuance failures.
+var errAuthorizationExpired = errors.New("user authorization has expired")
 
 // signInUserID is the user a linked sign-in must belong to: the session's
 // own human subject. Other subjects never keep a link.

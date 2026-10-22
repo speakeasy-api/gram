@@ -5,12 +5,15 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"strings"
 	"testing"
+	"testing/synctest"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -18,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/assertion/privatekeyjwt"
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
@@ -248,4 +252,59 @@ func TestServeTokenRefusalsBeforeClientAuthenticationLogReasons(t *testing.T) {
 		require.Equal(t, oauthwire.AuthMethodNone, credentialEvents[0][string(attr.OAuthPresentedAuthMethodKey)], tc.name)
 		require.NotContains(t, credentialEvents[0], string(attr.OAuthClientIDKey), tc.name)
 	}
+}
+
+func TestServeTokenGrantExpiredAuthorizationReturnsInvalidGrant(t *testing.T) {
+	t.Parallel()
+
+	synctest.Test(t, func(t *testing.T) {
+		service, endpoint, logs := newTokenDispatchTestService(t)
+		deadline := time.Now().Add(time.Minute)
+		grant := tokenGrant{
+			clientAuth: tokenClientAuthNone,
+			clientless: func(ctx context.Context, _ http.ResponseWriter, _ *http.Request, endpoint *ResolvedMcpEndpoint, _ presentedClientCredentials, baseURL string, logger *slog.Logger) error {
+				require.True(t, deadline.After(time.Now()), "authorization is valid before issuance")
+				time.Sleep(time.Minute) //nolint:forbidigo // synctest advances the fake clock without a wall-clock wait.
+				// A carried authorization deadline can elapse after validation.
+				// No database is supplied: expired issuance must stop before writes.
+				minted, err := service.mintSession(ctx, endpoint, &usersessions_repo.UserSessionClient{ClientID: "test-client"}, nil, mintSessionParams{
+					AuthorizationExpiresAt: &deadline,
+					BaseURL:                baseURL,
+					Policy:                 sessionIssuancePolicyIssuerScoped,
+					Subject:                urn.NewUserSubject("test-user"),
+				}, logger)
+				require.Nil(t, minted)
+				require.ErrorIs(t, err, errAuthorizationExpired)
+				return err
+			},
+		}
+		request := newTokenDispatchRequest(t, url.Values{oauthwire.ParamGrantType: {oauthwire.GrantTypeJWTBearer}})
+		response := httptest.NewRecorder()
+		require.NoError(t, service.serveTokenGrant(t.Context(), response, request, endpoint, service.logger, oauthwire.GrantTypeJWTBearer, presentedClientCredentials{}, grant))
+		require.Equal(t, http.StatusBadRequest, response.Code)
+		require.JSONEq(t, `{"error":"invalid_grant","error_description":"user authorization has expired"}`, response.Body.String())
+		require.Empty(t, response.Header().Get("WWW-Authenticate"))
+		require.Equal(t, "no-store", response.Header().Get("Cache-Control"))
+		require.Equal(t, "no-cache", response.Header().Get("Pragma"))
+		events := tokenDispatchLogEvents(t, logs)
+		require.Len(t, events, 2)
+		require.Equal(t, "authorization_expired", events[0][string(attr.OAuthFailureReasonKey)])
+	})
+}
+
+func TestServeTokenGrantPreservesUnexpectedIssuanceErrors(t *testing.T) {
+	t.Parallel()
+
+	service, endpoint, _ := newTokenDispatchTestService(t)
+	issuanceErr := errors.New("session persistence unavailable")
+	grant := tokenGrant{
+		clientAuth: tokenClientAuthNone,
+		clientless: func(context.Context, http.ResponseWriter, *http.Request, *ResolvedMcpEndpoint, presentedClientCredentials, string, *slog.Logger) error {
+			return issuanceErr
+		},
+	}
+	request := newTokenDispatchRequest(t, url.Values{oauthwire.ParamGrantType: {oauthwire.GrantTypeJWTBearer}})
+	response := httptest.NewRecorder()
+	require.ErrorIs(t, service.serveTokenGrant(t.Context(), response, request, endpoint, service.logger, oauthwire.GrantTypeJWTBearer, presentedClientCredentials{}, grant), issuanceErr)
+	require.Empty(t, response.Body.String())
 }

@@ -122,25 +122,16 @@ type staffPresentedClient struct {
 	Public bool
 }
 
-// staffClientCredentials accepts exactly one presentation: HTTP Basic for
-// confidential clients, or a single form client_id with no secret and no
-// Authorization header for public clients. A form client_secret, a Basic
-// header mixed with a form client_id, a client assertion, or any other
-// Authorization header is refused. The returned OAuth error code distinguishes
-// duplicate or mixed credentials from a failed authentication method; an empty
-// code means success.
+// staffClientCredentials accepts HTTP Basic for confidential clients or a
+// single form client_id for public clients. Basic may include a matching form
+// client_id; empty parameters are treated as omitted. Nonempty body credentials
+// and other Authorization schemes are unsupported. Shared validation rejects
+// duplicate credentials, conflicting identifiers, and mixed methods first.
 func staffClientCredentials(r *http.Request) (staffPresentedClient, string) {
-	authorization := r.Header.Values("Authorization")
-	ids := r.PostForm[oauthwire.ParamClientID]
-	secrets := r.PostForm[oauthwire.ParamClientSecret]
-	if len(authorization) > 1 || len(ids) > 1 || len(secrets) > 1 ||
-		(len(authorization) > 0 && (r.PostForm.Has(oauthwire.ParamClientID) || r.PostForm.Has(oauthwire.ParamClientSecret))) {
-		return staffPresentedClient{ID: "", Secret: "", Public: false}, oautherr.CodeInvalidRequest
-	}
 	if code := oauthwire.ClientAuthenticationError(r); code != "" {
 		return staffPresentedClient{ID: "", Secret: "", Public: false}, code
 	}
-	if r.PostForm.Has(oauthwire.ParamClientSecret) || r.PostForm.Has(oauthwire.ParamClientAssertion) || r.PostForm.Has(oauthwire.ParamClientAssertionType) {
+	if r.PostForm.Get(oauthwire.ParamClientSecret) != "" || r.PostForm.Get(oauthwire.ParamClientAssertion) != "" || r.PostForm.Get(oauthwire.ParamClientAssertionType) != "" {
 		return staffPresentedClient{ID: "", Secret: "", Public: false}, oautherr.CodeInvalidClient
 	}
 	if id, secret, basic := r.BasicAuth(); basic {
@@ -149,10 +140,11 @@ func staffClientCredentials(r *http.Request) (staffPresentedClient, string) {
 		}
 		return staffPresentedClient{ID: id, Secret: secret, Public: false}, ""
 	}
-	if len(authorization) != 0 || len(ids) != 1 || ids[0] == "" {
+	id := r.PostForm.Get(oauthwire.ParamClientID)
+	if id == "" {
 		return staffPresentedClient{ID: "", Secret: "", Public: false}, oautherr.CodeInvalidClient
 	}
-	return staffPresentedClient{ID: ids[0], Secret: "", Public: true}, ""
+	return staffPresentedClient{ID: id, Secret: "", Public: true}, ""
 }
 
 // authenticateClient enforces the method implied by the stored client: a
