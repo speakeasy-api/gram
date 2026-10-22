@@ -247,7 +247,12 @@ CREATE TABLE IF NOT EXISTS trace_summaries (
     -- it, so a non-empty value must win over empty siblings across part
     -- merges, exactly as toolset_slug and meta_mcp_server_id do.
     mcp_client_name SimpleAggregateFunction(max, String) COMMENT '@access: opaque-confidential',
-    mcp_client_version SimpleAggregateFunction(max, String) COMMENT '@access: confidential'
+    mcp_client_version SimpleAggregateFunction(max, String) COMMENT '@access: confidential',
+    -- Concrete MCP server the trace was served by, materialized on
+    -- telemetry_logs from attributes.gram.mcp_server.id. Empty on traces
+    -- recorded before hosted servers stamped it. Carried, max() keeps the
+    -- non-empty value over empty siblings.
+    mcp_server_id SimpleAggregateFunction(max, String) COMMENT '@access: confidential'
 ) ENGINE = AggregatingMergeTree
 ORDER BY (gram_project_id, trace_id)
 TTL fromUnixTimestamp64Nano(start_time_unix_nano) + INTERVAL 90 DAY
@@ -301,7 +306,8 @@ SELECT
     anyIf(provider, provider != '') AS provider,
     anyIf(meta_mcp_server_id, meta_mcp_server_id != '') AS meta_mcp_server_id,
     anyIf(mcp_client_name, mcp_client_name != '') AS mcp_client_name,
-    anyIf(mcp_client_version, mcp_client_version != '') AS mcp_client_version
+    anyIf(mcp_client_version, mcp_client_version != '') AS mcp_client_version,
+    anyIf(mcp_server_id, mcp_server_id != '') AS mcp_server_id
 FROM telemetry_logs
 WHERE trace_id IS NOT NULL AND trace_id != '' AND NOT startsWith(telemetry_logs.gram_urn, 'urn:uuid:')
 GROUP BY trace_id, gram_project_id;
