@@ -52,6 +52,14 @@ const (
 	// AttachmentConnectionGone is an attachment whose connection was removed
 	// or authorized again since.
 	AttachmentConnectionGone = "connection_gone"
+	// AttachmentAgentInactive is an attachment of an agent that is suspended,
+	// revoked or waiting for a new owner, or whose owner is no longer an
+	// active member.
+	AttachmentAgentInactive = "agent_inactive"
+	// AttachmentConfigurationGone is an attachment whose sign-in, project,
+	// upstream client or issuer was removed, or no longer reaches the
+	// attachment's project.
+	AttachmentConfigurationGone = "configuration_gone"
 	// AttachmentClientUnrecorded is an attachment whose upstream OAuth client
 	// no personal auth client in the organization uses yet.
 	AttachmentClientUnrecorded = "client_unrecorded"
@@ -438,8 +446,12 @@ func attachmentRemediationReason(row ListLiveAgentAttachmentsRow) string {
 		return AttachmentOwnerChanged
 	case row.ConnectionSubject != row.AttachedBySubjectID:
 		return AttachmentForeignConnection
+	case !row.AgentActive:
+		return AttachmentAgentInactive
 	case !row.ConnectionLive:
 		return AttachmentConnectionGone
+	case !row.ConfigurationLive:
+		return AttachmentConfigurationGone
 	case !row.ClientRecorded:
 		return AttachmentClientUnrecorded
 	default:
