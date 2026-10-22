@@ -83,6 +83,43 @@ func TestClaudeCodeLogAppliesToEveryClaudeCodeScope(t *testing.T) {
 	}
 }
 
+func TestClaudeCodeLogClientReadsTheTerminal(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		terminal string
+		wantKey  string
+		want     string
+	}{
+		{name: "it reads an editor terminal as the IDE", terminal: "vscode", wantKey: "terminal.type", want: "ide"},
+		{name: "it reads tmux as the CLI", terminal: "tmux", wantKey: "terminal.type", want: "cli"},
+		{name: "it says nothing without a terminal type", terminal: "", wantKey: "", want: ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			var attributes []*otelv1.InboundLogRecord_KeyValue
+			if tt.terminal != "" {
+				attributes = append(attributes, logDialectStringAttribute("terminal.type", tt.terminal))
+			}
+			record := (&otelv1.InboundLogRecord_builder{
+				Scope: (&otelv1.InboundLogRecord_InstrumentationScope_builder{
+					Name: new("com.anthropic.claude_code.events"),
+				}).Build(),
+				Attributes: attributes,
+			}).Build()
+
+			key, value, err := ClaudeCodeLog{}.Client(record)
+			require.NoError(t, err)
+			require.Equal(t, tt.wantKey, key)
+			require.Equal(t, tt.want, value)
+		})
+	}
+}
+
 // TestClaudeCodeLogOutcomeMessageLooksPastARedactedError: Claude Code gates the
 // full error behind tool-detail logging but still sends the category, so a
 // redacted error must not take error_type down with it.

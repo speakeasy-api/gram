@@ -19,12 +19,14 @@ func TestLogClassificationNamesWhatARecordIs(t *testing.T) {
 		record := inboundTestLog(claudeCodeScopeName, "claude-code", "api_request", logStringAttribute("model", "claude-sonnet-4"))
 
 		attrs := enriched(t, enricher, record)
-		require.Len(t, attrs, 5)
+		require.Len(t, attrs, 6)
 		require.Equal(t, dialect.EventTypeAPIRequest, attrs[AgentEventTypeKey].AsString())
 		require.Equal(t, "api_request", attrs[AgentRawEventNameKey].AsString())
 		require.Equal(t, "claude-code", attrs[AgentSourceKey].AsString())
 		require.Equal(t, "anthropic", attrs[AgentProviderKey].AsString())
 		require.Equal(t, "claude-code", attrs[AgentSurfaceKey].AsString())
+		require.Equal(t, "claude-code", attrs[AgentProductKey].AsString())
+		require.NotContains(t, attrs, AgentClientKey, "no terminal.type, so nothing says where it ran")
 	})
 
 	t.Run("a Codex response.completed is an api_request from openai on codex", func(t *testing.T) {
@@ -115,6 +117,77 @@ func TestLogClassificationNamesWhatARecordIs(t *testing.T) {
 
 		require.Equal(t, "anthropic", enriched(t, enricher, record)[AgentProviderKey].AsString())
 	})
+}
+
+func TestLogClassificationPlacesTheProductAndClient(t *testing.T) {
+	t.Parallel()
+
+	enricher := &logClassification{}
+
+	tests := []struct {
+		name    string
+		record  *otelv1.InboundLogRecord
+		product string
+		client  string
+	}{
+		{
+			name:    "it reads Claude Code in an editor terminal as the IDE",
+			record:  inboundTestLog(claudeCodeScopeName, "claude-code", "tool_result", logStringAttribute("terminal.type", "vscode")),
+			product: "claude-code",
+			client:  "ide",
+		},
+		{
+			name:    "it reads Claude Code in any other terminal as the CLI",
+			record:  inboundTestLog(claudeCodeScopeName, "claude-code", "tool_result", logStringAttribute("terminal.type", "iTerm.app")),
+			product: "claude-code",
+			client:  "cli",
+		},
+		{
+			name:    "it places a hook source that names its client",
+			record:  inboundTestLog(dialect.HooksLogScope, "claude-code-desktop", "PostToolUse", logStringAttribute("gram.hook.source", "claude-code-desktop")),
+			product: "claude-code",
+			client:  "desktop",
+		},
+		{
+			name:    "it places a gateway call by the MCP client's name",
+			record:  inboundTestLog(dialect.GatewayLogScope, "gram", "execute_tool", logStringAttribute("gen_ai.operation.name", "execute_tool"), logStringAttribute("gram.mcp.client.name", "cursor-vscode")),
+			product: "cursor",
+			client:  "ide",
+		},
+		{
+			name:    "it leaves the client empty when claude.ai says nothing about the device",
+			record:  inboundTestLog(dialect.GatewayLogScope, "gram", "execute_tool", logStringAttribute("gen_ai.operation.name", "execute_tool"), logStringAttribute("gram.mcp.client.name", "claude-ai")),
+			product: "claude-chat",
+			client:  "",
+		},
+		{
+			name:    "it places a surface it does not know nowhere",
+			record:  inboundTestLog(dialect.HooksLogScope, "x", "PostToolUse", logStringAttribute("gram.hook.source", "my-custom-agent-7")),
+			product: "",
+			client:  "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			attrs := enriched(t, enricher, tt.record)
+			require.Equal(t, tt.product, attrs[AgentProductKey].AsString(), "product")
+			require.Equal(t, tt.client, attrs[AgentClientKey].AsString(), "client")
+		})
+	}
+}
+
+func TestClassifyLetsAStatedClientWinOverTheSurfaceName(t *testing.T) {
+	t.Parallel()
+
+	attrs := indexed(classify("claude-code", "", "", "", "", "claude-code-desktop", "ide"))
+	require.Equal(t, "claude-code", attrs[AgentProductKey].AsString())
+	require.Equal(t, "ide", attrs[AgentClientKey].AsString())
+
+	attrs = indexed(classify("claude-code", "", "", "", "", "claude-code-desktop", ""))
+	require.Equal(t, "desktop", attrs[AgentClientKey].AsString())
 }
 
 // A session lifecycle hook row has no type in the vocabulary, whichever

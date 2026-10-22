@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
+	"github.com/speakeasy-api/gram/server/internal/agentsurface"
 	"github.com/speakeasy-api/gram/server/internal/genaiconv"
 )
 
@@ -113,6 +114,16 @@ func (ClaudeCodeLog) Provider(*otelv1.InboundLogRecord) (string, string, error) 
 
 func (ClaudeCodeLog) Surface(*otelv1.InboundLogRecord) (string, string, error) {
 	return scopeNameKey, claudeCodeSurface, nil
+}
+
+// Client is the IDE when Claude Code runs in an editor's terminal and the CLI
+// in any other. terminal.type rides on every Claude Code event.
+func (ClaudeCodeLog) Client(record *otelv1.InboundLogRecord) (string, string, error) {
+	key, value := getOneLogAttr(record, "terminal.type")
+	if client := agentsurface.ClientForTerminal(value); client != "" {
+		return key, client, nil
+	}
+	return "", "", nil
 }
 
 // claudeCodeEventName is the producer's own name for the event: the OTLP

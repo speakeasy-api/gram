@@ -82,6 +82,10 @@ func (f LogFallback) Surface(record *otelv1.InboundLogRecord) (string, string, e
 	return firstLogFallback(f, record, func(d LogDialect, r *otelv1.InboundLogRecord) (string, string, error) { return d.Surface(r) })
 }
 
+func (f LogFallback) Client(record *otelv1.InboundLogRecord) (string, string, error) {
+	return firstLogFallback(f, record, func(d LogDialect, r *otelv1.InboundLogRecord) (string, string, error) { return d.Client(r) })
+}
+
 func (f LogFallback) EventName(record *otelv1.InboundLogRecord) (string, string, error) {
 	return firstLogFallback(f, record, func(d LogDialect, r *otelv1.InboundLogRecord) (string, string, error) { return d.EventName(r) })
 }

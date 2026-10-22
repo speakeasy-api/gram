@@ -130,6 +130,9 @@ func TestAgentEventRowFromLogCopiesTheCanonicalColumns(t *testing.T) {
 		logEventTestKV(string(enrich.AgentSourceKey), "example-app"),
 		logEventTestKV(string(enrich.AgentProviderKey), "openai"),
 		logEventTestKV(string(enrich.AgentSurfaceKey), "example"),
+		logEventTestKV(string(enrich.AgentProductKey), "claude-code"),
+		logEventTestKV(string(enrich.AgentClientKey), "desktop"),
+		logEventTestKV(string(enrich.AgentAgentIDKey), "agent-1"),
 	})
 
 	row, skip := agentEventRowFromLog(record, testObservedAt)
@@ -139,6 +142,9 @@ func TestAgentEventRowFromLogCopiesTheCanonicalColumns(t *testing.T) {
 	require.Equal(t, "example-app", row.Source)
 	require.Equal(t, "openai", row.Provider)
 	require.Equal(t, "example", row.Surface)
+	require.Equal(t, "claude-code", row.Product)
+	require.Equal(t, "desktop", row.Client)
+	require.Equal(t, "agent-1", row.AgentID)
 }
 
 func TestAgentEventRowFromLog(t *testing.T) {
@@ -586,6 +592,9 @@ func TestAgentEventRowFromLogReadsWhatClaudeCodeActuallySends(t *testing.T) {
 	require.Equal(t, "turn-1", row.TurnID)
 	require.Equal(t, "anthropic", row.Provider)
 	require.Equal(t, "claude-code", row.Surface)
+	require.Equal(t, "claude-code", row.Product)
+	require.Equal(t, "cli", row.Client, "tmux is a terminal, not an editor")
+	require.Empty(t, row.AgentID, "a producer's own record never names a Speakeasy agent")
 	require.Equal(t, "dev@example.com", row.UserEmail)
 	require.Equal(t, "acct-1", row.ExternalUserID)
 	require.Equal(t, "anthropic-org-1", row.ExternalOrgID)

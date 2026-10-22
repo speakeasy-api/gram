@@ -20,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/otel/dialect"
+	"github.com/speakeasy-api/gram/server/internal/otel/enrich"
 	"github.com/speakeasy-api/gram/server/internal/otelpub"
 )
 
@@ -104,6 +105,9 @@ func TestToolCallRecordIsASemconvToolCallUnderTheCallID(t *testing.T) {
 	require.False(t, recordHasAttribute(record, "gram.chat.id"), "an unknown value leaves its attribute off")
 	require.False(t, recordHasAttribute(record, "error.type"))
 	require.False(t, recordHasAttribute(record, "error.message"))
+	require.False(t, recordHasAttribute(record, "gram.authorization.actor.type"), "a person made the call, so no agent is named")
+	require.False(t, recordHasAttribute(record, "gram.authorization.actor.id"))
+	require.Equal(t, enrich.InternalProvenanceSource, record.GetProvenance().GetSource(), "Speakeasy emitted the record itself")
 	for _, kv := range record.GetAttributes() {
 		switch kv.GetKey() {
 		case "http.response.status_code":
@@ -113,6 +117,16 @@ func TestToolCallRecordIsASemconvToolCallUnderTheCallID(t *testing.T) {
 		}
 	}
 	require.True(t, recordHasAttribute(record, "gram.tool_call.duration"))
+}
+
+func TestToolCallRecordNamesTheAgentTheCallRanAs(t *testing.T) {
+	t.Parallel()
+
+	call := toolCall{id: "call-5", start: time.Unix(1_700_000_000, 0), organizationID: "org-1", projectID: "project-1", agentID: "agent-1"}
+
+	record, _ := publishedToolCallRecord(t, gcp.NewSuccessPublishResult(), call, call.record(call.start, http.StatusOK, false, nil))
+	require.Equal(t, "agent", recordStringAttribute(record, "gram.authorization.actor.type"))
+	require.Equal(t, "agent-1", recordStringAttribute(record, "gram.authorization.actor.id"))
 }
 
 func TestToolCallRecordCarriesTheGatewaysOwnFailure(t *testing.T) {

@@ -138,6 +138,10 @@ func (SemconvLog) Surface(*otelv1.InboundLogRecord) (string, string, error) {
 	return "", "", nil
 }
 
+func (SemconvLog) Client(*otelv1.InboundLogRecord) (string, string, error) {
+	return "", "", nil
+}
+
 func (SemconvLog) EventName(record *otelv1.InboundLogRecord) (string, string, error) {
 	key, name := logRawEventName(record)
 	return key, name, nil
