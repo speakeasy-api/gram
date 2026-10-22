@@ -4,12 +4,15 @@
 
 import { authClientsDetachFromMcpServer } from "../funcs/authClientsDetachFromMcpServer.js";
 import { authClientsGet } from "../funcs/authClientsGet.js";
+import { authClientsGetAudience } from "../funcs/authClientsGetAudience.js";
 import { authClientsGetMcpServerAuthentication } from "../funcs/authClientsGetMcpServerAuthentication.js";
 import { authClientsList } from "../funcs/authClientsList.js";
+import { authClientsSetAudience } from "../funcs/authClientsSetAudience.js";
 import { authClientsSetMcpServerUpstreamAuthRequirement } from "../funcs/authClientsSetMcpServerUpstreamAuthRequirement.js";
 import { authClientsUpdate } from "../funcs/authClientsUpdate.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { AuthClient } from "../models/components/authclient.js";
+import { AuthClientAudience } from "../models/components/authclientaudience.js";
 import { McpServerAuthentication } from "../models/components/mcpserverauthentication.js";
 import {
   DetachAuthClientFromMcpServerRequest,
@@ -20,6 +23,10 @@ import {
   GetAuthClientSecurity,
 } from "../models/operations/getauthclient.js";
 import {
+  GetAuthClientAudienceRequest,
+  GetAuthClientAudienceSecurity,
+} from "../models/operations/getauthclientaudience.js";
+import {
   GetMcpServerAuthenticationRequest,
   GetMcpServerAuthenticationSecurity,
 } from "../models/operations/getmcpserverauthentication.js";
@@ -28,6 +35,10 @@ import {
   ListAuthClientsResponse,
   ListAuthClientsSecurity,
 } from "../models/operations/listauthclients.js";
+import {
+  SetAuthClientAudienceRequest,
+  SetAuthClientAudienceSecurity,
+} from "../models/operations/setauthclientaudience.js";
 import {
   SetMcpServerUpstreamAuthRequirementRequest,
   SetMcpServerUpstreamAuthRequirementSecurity,
@@ -79,6 +90,25 @@ export class AuthClients extends ClientSDK {
   }
 
   /**
+   * getAuthClientAudience authClients
+   *
+   * @remarks
+   * List who may use an auth client: the rules naming it and the broader rules that reach it. Requires org:read.
+   */
+  async getAudience(
+    request: GetAuthClientAudienceRequest,
+    security?: GetAuthClientAudienceSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<AuthClientAudience> {
+    return unwrapAsync(authClientsGetAudience(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
    * getMcpServerAuthentication authClients
    *
    * @remarks
@@ -109,6 +139,25 @@ export class AuthClients extends ClientSDK {
     options?: RequestOptions,
   ): Promise<PageIterator<ListAuthClientsResponse, { cursor: string }>> {
     return unwrapResultIterator(authClientsList(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * setAuthClientAudience authClients
+   *
+   * @remarks
+   * Replace the rules naming an auth client. Use grants mcp:auth on the client and Blocked writes mcp:blocked_auth; both apply on every server that offers the client. Server access is unchanged and still needs mcp:connect. Administering a client gives nobody permission to use it. Requires org:admin.
+   */
+  async setAudience(
+    request: SetAuthClientAudienceRequest,
+    security?: SetAuthClientAudienceSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<AuthClientAudience> {
+    return unwrapAsync(authClientsSetAudience(
       this,
       request,
       security,

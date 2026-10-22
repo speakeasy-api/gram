@@ -9,11 +9,14 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 
 	gen "github.com/speakeasy-api/gram/server/gen/keys"
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/keys/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	project_repo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -193,4 +196,48 @@ func policyAuditPayload(grants []*authz.RoleGrant) (json.RawMessage, error) {
 		return nil, fmt.Errorf("encode key policy for audit: %w", err)
 	}
 	return encoded, nil
+}
+
+// validatedKeyPolicy checks a requested policy against the key and the
+// caller's organization: every project and auth client it names must belong
+// to the organization, so no grant is stored that reaches another tenant or
+// can never match.
+func (s *Service) validatedKeyPolicy(ctx context.Context, organizationID string, forms []*gen.APIKeyPolicyGrant, keyProject uuid.NullUUID) ([]*authz.RoleGrant, error) {
+	policy, policyProjects, err := keyPolicyGrants(forms, keyProject)
+	if err != nil {
+		return nil, err
+	}
+	for _, raw := range policyProjects {
+		id, err := uuid.Parse(raw)
+		if err != nil {
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid project ID in key policy")
+		}
+		if _, err := s.projectRepo.GetProjectByIDAndOrganizationID(ctx, project_repo.GetProjectByIDAndOrganizationIDParams{ID: id, OrganizationID: organizationID}); errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeBadRequest, nil, "key policy names a project outside this organization")
+		} else if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "load key policy project").LogError(ctx, s.logger)
+		}
+	}
+
+	var clientIDs []uuid.UUID
+	for _, grant := range policy {
+		if grant.Scope != string(authz.ScopeMCPAuth) && grant.Scope != string(authz.ScopeMCPBlockedAuth) {
+			continue
+		}
+		for _, selector := range grant.Selectors {
+			if id, err := uuid.Parse(selector.ResourceID()); err == nil && !slices.Contains(clientIDs, id) {
+				clientIDs = append(clientIDs, id)
+			}
+		}
+	}
+	if len(clientIDs) > 0 {
+		live, err := s.repo.CountLiveAuthClientsInOrganization(ctx, repo.CountLiveAuthClientsInOrganizationParams{OrganizationID: organizationID, Ids: clientIDs})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "load key policy auth clients").LogError(ctx, s.logger)
+		}
+		if live != int64(len(clientIDs)) {
+			return nil, oops.E(oops.CodeBadRequest, nil, "key policy names an auth client outside this organization")
+		}
+	}
+	return policy, nil
 }

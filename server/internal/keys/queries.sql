@@ -257,3 +257,10 @@ WHERE id = @id
   -- This check reduces writes to the database to at most once per minute per
   -- key as a way to mitigate excessive write spikes.
   AND (last_accessed_at IS NULL OR last_accessed_at < clock_timestamp() - interval '1 minute');
+
+-- name: CountLiveAuthClientsInOrganization :one
+SELECT COUNT(*)
+FROM mcp_auth_clients
+WHERE organization_id = @organization_id
+  AND id = ANY(@ids::uuid[])
+  AND deleted IS FALSE;

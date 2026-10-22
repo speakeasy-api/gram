@@ -14809,6 +14809,105 @@ paths:
       x-speakeasy-name-override: get
       x-speakeasy-react-hook:
         name: AuthClient
+  /rpc/authClients.getAudience:
+    get:
+      description: 'List who may use an auth client: the rules naming it and the broader rules that reach it. Requires org:read.'
+      operationId: getAuthClientAudience
+      parameters:
+        - allowEmptyValue: true
+          description: The auth client id.
+          in: query
+          name: id
+          required: true
+          schema:
+            description: The auth client id.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthClientAudience'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+        - {}
+      summary: getAuthClientAudience authClients
+      tags:
+        - authClients
+      x-speakeasy-name-override: getAudience
+      x-speakeasy-react-hook:
+        name: AuthClientAudience
   /rpc/authClients.getMcpServerAuthentication:
     get:
       description: 'Get how an MCP server authenticates to its upstream: whether authentication is required and which auth clients it offers. Requires org:read.'
@@ -15042,6 +15141,102 @@ paths:
         type: cursor
       x-speakeasy-react-hook:
         name: AuthClients
+  /rpc/authClients.setAudience:
+    post:
+      description: Replace the rules naming an auth client. Use grants mcp:auth on the client and Blocked writes mcp:blocked_auth; both apply on every server that offers the client. Server access is unchanged and still needs mcp:connect. Administering a client gives nobody permission to use it. Requires org:admin.
+      operationId: setAuthClientAudience
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetAuthClientAudienceRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthClientAudience'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+        - {}
+      summary: setAuthClientAudience authClients
+      tags:
+        - authClients
+      x-speakeasy-name-override: setAudience
+      x-speakeasy-react-hook:
+        name: SetAuthClientAudience
   /rpc/authClients.setMcpServerUpstreamAuthRequirement:
     post:
       description: Declare whether an MCP server's upstream needs authentication. A server that needs none is served without upstream credentials; a server that needs it and offers no enabled client is unavailable until setup is complete. Not available for hosted toolsets. Requires org:admin.
@@ -29943,6 +30138,94 @@ paths:
       tags:
         - keys
       x-speakeasy-name-override: rotate
+  /rpc/keys.updatePolicy:
+    post:
+      description: 'Replace an ordinary key''s own policy: the mcp:connect and mcp:auth grants, and their blocks, its server and auth client access is evaluated against. Agent keys keep their delegated grants. Requires org admin.'
+      operationId: updateAPIKeyPolicy
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateKeyPolicyRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Key'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: updateKeyPolicy keys
+      tags:
+        - keys
+      x-speakeasy-name-override: updatePolicy
+      x-speakeasy-react-hook:
+        name: UpdateAPIKeyPolicy
   /rpc/keys.verify:
     get:
       description: Verify an api key
@@ -84333,6 +84616,79 @@ components:
         - servers
         - created_at
         - updated_at
+    AuthClientAudience:
+      type: object
+      properties:
+        auth_client_id:
+          type: string
+          description: The auth client id.
+          format: uuid
+        entries:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuthClientAudienceEntry'
+          description: The rules deciding who may use the client.
+        public_servers:
+          type: array
+          items:
+            type: string
+          description: Ids of public servers that offer the client. Anonymous callers on them never acquire these rules.
+        version:
+          type: string
+          description: Pass back as expected_version when saving, so an edit made against a stale list is refused.
+      description: Who may use an auth client.
+      required:
+        - auth_client_id
+        - entries
+        - version
+        - public_servers
+    AuthClientAudienceEntry:
+      type: object
+      properties:
+        applies_to:
+          type: string
+          description: client when the rule names this client and can be edited here; client_type when it covers every client of this type; all_clients when it covers every client. Rules that do not name this client are shown for context and edited elsewhere.
+          enum:
+            - client
+            - client_type
+            - all_clients
+        connection_note:
+          type: string
+          description: 'For personal clients: how the rule relates to other people''s connections. A grant never lets anyone use another user''s connection.'
+        level:
+          type: string
+          description: use grants mcp:auth on the client; blocked writes mcp:blocked_auth, which outranks grants.
+          enum:
+            - use
+            - blocked
+        principal_urn:
+          type: string
+          description: 'The principal the rule names: user:<id>, user:all, role:<id> or agent:<id>.'
+        project_id:
+          type: string
+          description: The project the rule is confined to, when it is.
+          format: uuid
+      description: One rule deciding who may use an auth client. The rule applies wherever the client is used, on every server that offers it.
+      required:
+        - principal_urn
+        - level
+        - applies_to
+    AuthClientAudienceRule:
+      type: object
+      properties:
+        level:
+          type: string
+          description: use or blocked.
+          enum:
+            - use
+            - blocked
+        principal_urn:
+          type: string
+          description: user:<id>, user:all, role:<id> or agent:<id>.
+      description: A rule to store for an auth client.
+      required:
+        - principal_urn
+        - level
     AuthClientHeader:
       type: object
       properties:
@@ -106507,6 +106863,25 @@ components:
       required:
         - target_id
         - access
+    SetAuthClientAudienceRequestBody:
+      type: object
+      properties:
+        entries:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuthClientAudienceRule'
+          description: Every rule that should name the client.
+        expected_version:
+          type: string
+          description: The version returned by getAudience.
+        id:
+          type: string
+          description: The auth client id.
+          format: uuid
+      required:
+        - id
+        - expected_version
+        - entries
     SetAuthenticationHostRequestBody:
       type: object
       properties:
@@ -112663,6 +113038,22 @@ components:
         - id
         - name
         - external_key_id
+    UpdateKeyPolicyRequestBody:
+      type: object
+      properties:
+        id:
+          type: string
+          description: The ID of the key.
+          format: uuid
+        policy_grants:
+          type: array
+          items:
+            $ref: '#/components/schemas/APIKeyPolicyGrant'
+          description: The key's complete policy. An empty list removes every grant.
+          maxItems: 100
+      required:
+        - id
+        - policy_grants
     UpdateMarketplaceSettingsRequestBody:
       type: object
       properties:

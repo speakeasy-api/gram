@@ -37,6 +37,14 @@ type Service interface {
 	// and offers no enabled client is unavailable until setup is complete. Not
 	// available for hosted toolsets. Requires org:admin.
 	SetMcpServerUpstreamAuthRequirement(context.Context, *SetMcpServerUpstreamAuthRequirementPayload) (res *types.McpServerAuthentication, err error)
+	// List who may use an auth client: the rules naming it and the broader rules
+	// that reach it. Requires org:read.
+	GetAuthClientAudience(context.Context, *GetAuthClientAudiencePayload) (res *types.AuthClientAudience, err error)
+	// Replace the rules naming an auth client. Use grants mcp:auth on the client
+	// and Blocked writes mcp:blocked_auth; both apply on every server that offers
+	// the client. Server access is unchanged and still needs mcp:connect.
+	// Administering a client gives nobody permission to use it. Requires org:admin.
+	SetAuthClientAudience(context.Context, *SetAuthClientAudiencePayload) (res *types.AuthClientAudience, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -59,7 +67,15 @@ const ServiceName = "authClients"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [6]string{"listAuthClients", "getAuthClient", "updateAuthClient", "detachAuthClientFromMcpServer", "getMcpServerAuthentication", "setMcpServerUpstreamAuthRequirement"}
+var MethodNames = [8]string{"listAuthClients", "getAuthClient", "updateAuthClient", "detachAuthClientFromMcpServer", "getMcpServerAuthentication", "setMcpServerUpstreamAuthRequirement", "getAuthClientAudience", "setAuthClientAudience"}
+
+// A rule to store for an auth client.
+type AuthClientAudienceRule struct {
+	// user:<id>, user:all, role:<id> or agent:<id>.
+	PrincipalUrn string
+	// use or blocked.
+	Level string
+}
 
 // DetachAuthClientFromMcpServerPayload is the payload type of the authClients
 // service detachAuthClientFromMcpServer method.
@@ -68,6 +84,15 @@ type DetachAuthClientFromMcpServerPayload struct {
 	ID string
 	// The MCP server id.
 	McpServerID  string
+	SessionToken *string
+	ApikeyToken  *string
+}
+
+// GetAuthClientAudiencePayload is the payload type of the authClients service
+// getAuthClientAudience method.
+type GetAuthClientAudiencePayload struct {
+	// The auth client id.
+	ID           string
 	SessionToken *string
 	ApikeyToken  *string
 }
@@ -110,6 +135,19 @@ type ListAuthClientsPayload struct {
 type ListAuthClientsResult struct {
 	Items      []*types.AuthClient
 	NextCursor *string
+}
+
+// SetAuthClientAudiencePayload is the payload type of the authClients service
+// setAuthClientAudience method.
+type SetAuthClientAudiencePayload struct {
+	// The auth client id.
+	ID string
+	// The version returned by getAudience.
+	ExpectedVersion string
+	// Every rule that should name the client.
+	Entries      []*AuthClientAudienceRule
+	SessionToken *string
+	ApikeyToken  *string
 }
 
 // SetMcpServerUpstreamAuthRequirementPayload is the payload type of the

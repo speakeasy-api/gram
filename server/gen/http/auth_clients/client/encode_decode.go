@@ -1462,6 +1462,483 @@ func DecodeSetMcpServerUpstreamAuthRequirementResponse(decoder func(*http.Respon
 	}
 }
 
+// BuildGetAuthClientAudienceRequest instantiates a HTTP request object with
+// method and path set to call the "authClients" service
+// "getAuthClientAudience" endpoint
+func (c *Client) BuildGetAuthClientAudienceRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetAuthClientAudienceAuthClientsPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("authClients", "getAuthClientAudience", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGetAuthClientAudienceRequest returns an encoder for requests sent to
+// the authClients getAuthClientAudience server.
+func EncodeGetAuthClientAudienceRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*authclients.GetAuthClientAudiencePayload)
+		if !ok {
+			return goahttp.ErrInvalidType("authClients", "getAuthClientAudience", "*authclients.GetAuthClientAudiencePayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		values := req.URL.Query()
+		values.Add("id", p.ID)
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeGetAuthClientAudienceResponse returns a decoder for responses returned
+// by the authClients getAuthClientAudience endpoint. restoreBody controls
+// whether the response body should be restored after having been read.
+// DecodeGetAuthClientAudienceResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeGetAuthClientAudienceResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body GetAuthClientAudienceResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("authClients", "getAuthClientAudience", err)
+			}
+			err = ValidateGetAuthClientAudienceResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("authClients", "getAuthClientAudience", err)
+			}
+			res := NewGetAuthClientAudienceAuthClientAudienceOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body GetAuthClientAudienceUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("authClients", "getAuthClientAudience", err)
+			}
+			err = ValidateGetAuthClientAudienceUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("authClients", "getAuthClientAudience", err)
+			}
+			return nil, NewGetAuthClientAudienceUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetAuthClientAudienceForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("authClients", "getAuthClientAudience", err)
+			}
+			err = ValidateGetAuthClientAudienceForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("authClients", "getAuthClientAudience", err)
+			}
+			return nil, NewGetAuthClientAudienceForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetAuthClientAudienceBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("authClients", "getAuthClientAudience", err)
+			}
+			err = ValidateGetAuthClientAudienceBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("authClients", "getAuthClientAudience", err)
+			}
+			return nil, NewGetAuthClientAudienceBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetAuthClientAudienceNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("authClients", "getAuthClientAudience", err)
+			}
+			err = ValidateGetAuthClientAudienceNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("authClients", "getAuthClientAudience", err)
+			}
+			return nil, NewGetAuthClientAudienceNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetAuthClientAudienceConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("authClients", "getAuthClientAudience", err)
+			}
+			err = ValidateGetAuthClientAudienceConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("authClients", "getAuthClientAudience", err)
+			}
+			return nil, NewGetAuthClientAudienceConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetAuthClientAudienceUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("authClients", "getAuthClientAudience", err)
+			}
+			err = ValidateGetAuthClientAudienceUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("authClients", "getAuthClientAudience", err)
+			}
+			return nil, NewGetAuthClientAudienceUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetAuthClientAudienceInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("authClients", "getAuthClientAudience", err)
+			}
+			err = ValidateGetAuthClientAudienceInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("authClients", "getAuthClientAudience", err)
+			}
+			return nil, NewGetAuthClientAudienceInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetAuthClientAudienceInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("authClients", "getAuthClientAudience", err)
+				}
+				err = ValidateGetAuthClientAudienceInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("authClients", "getAuthClientAudience", err)
+				}
+				return nil, NewGetAuthClientAudienceInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetAuthClientAudienceUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("authClients", "getAuthClientAudience", err)
+				}
+				err = ValidateGetAuthClientAudienceUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("authClients", "getAuthClientAudience", err)
+				}
+				return nil, NewGetAuthClientAudienceUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("authClients", "getAuthClientAudience", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GetAuthClientAudienceGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("authClients", "getAuthClientAudience", err)
+			}
+			err = ValidateGetAuthClientAudienceGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("authClients", "getAuthClientAudience", err)
+			}
+			return nil, NewGetAuthClientAudienceGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("authClients", "getAuthClientAudience", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildSetAuthClientAudienceRequest instantiates a HTTP request object with
+// method and path set to call the "authClients" service
+// "setAuthClientAudience" endpoint
+func (c *Client) BuildSetAuthClientAudienceRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: SetAuthClientAudienceAuthClientsPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("authClients", "setAuthClientAudience", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeSetAuthClientAudienceRequest returns an encoder for requests sent to
+// the authClients setAuthClientAudience server.
+func EncodeSetAuthClientAudienceRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*authclients.SetAuthClientAudiencePayload)
+		if !ok {
+			return goahttp.ErrInvalidType("authClients", "setAuthClientAudience", "*authclients.SetAuthClientAudiencePayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		body := NewSetAuthClientAudienceRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("authClients", "setAuthClientAudience", err)
+		}
+		return nil
+	}
+}
+
+// DecodeSetAuthClientAudienceResponse returns a decoder for responses returned
+// by the authClients setAuthClientAudience endpoint. restoreBody controls
+// whether the response body should be restored after having been read.
+// DecodeSetAuthClientAudienceResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeSetAuthClientAudienceResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body SetAuthClientAudienceResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("authClients", "setAuthClientAudience", err)
+			}
+			err = ValidateSetAuthClientAudienceResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("authClients", "setAuthClientAudience", err)
+			}
+			res := NewSetAuthClientAudienceAuthClientAudienceOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body SetAuthClientAudienceUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("authClients", "setAuthClientAudience", err)
+			}
+			err = ValidateSetAuthClientAudienceUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("authClients", "setAuthClientAudience", err)
+			}
+			return nil, NewSetAuthClientAudienceUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body SetAuthClientAudienceForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("authClients", "setAuthClientAudience", err)
+			}
+			err = ValidateSetAuthClientAudienceForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("authClients", "setAuthClientAudience", err)
+			}
+			return nil, NewSetAuthClientAudienceForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body SetAuthClientAudienceBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("authClients", "setAuthClientAudience", err)
+			}
+			err = ValidateSetAuthClientAudienceBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("authClients", "setAuthClientAudience", err)
+			}
+			return nil, NewSetAuthClientAudienceBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body SetAuthClientAudienceNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("authClients", "setAuthClientAudience", err)
+			}
+			err = ValidateSetAuthClientAudienceNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("authClients", "setAuthClientAudience", err)
+			}
+			return nil, NewSetAuthClientAudienceNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body SetAuthClientAudienceConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("authClients", "setAuthClientAudience", err)
+			}
+			err = ValidateSetAuthClientAudienceConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("authClients", "setAuthClientAudience", err)
+			}
+			return nil, NewSetAuthClientAudienceConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body SetAuthClientAudienceUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("authClients", "setAuthClientAudience", err)
+			}
+			err = ValidateSetAuthClientAudienceUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("authClients", "setAuthClientAudience", err)
+			}
+			return nil, NewSetAuthClientAudienceUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body SetAuthClientAudienceInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("authClients", "setAuthClientAudience", err)
+			}
+			err = ValidateSetAuthClientAudienceInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("authClients", "setAuthClientAudience", err)
+			}
+			return nil, NewSetAuthClientAudienceInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body SetAuthClientAudienceInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("authClients", "setAuthClientAudience", err)
+				}
+				err = ValidateSetAuthClientAudienceInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("authClients", "setAuthClientAudience", err)
+				}
+				return nil, NewSetAuthClientAudienceInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body SetAuthClientAudienceUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("authClients", "setAuthClientAudience", err)
+				}
+				err = ValidateSetAuthClientAudienceUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("authClients", "setAuthClientAudience", err)
+				}
+				return nil, NewSetAuthClientAudienceUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("authClients", "setAuthClientAudience", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body SetAuthClientAudienceGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("authClients", "setAuthClientAudience", err)
+			}
+			err = ValidateSetAuthClientAudienceGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("authClients", "setAuthClientAudience", err)
+			}
+			return nil, NewSetAuthClientAudienceGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("authClients", "setAuthClientAudience", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // unmarshalAuthClientResponseBodyToTypesAuthClient builds a value of type
 // *types.AuthClient from a value of type *AuthClientResponseBody.
 func unmarshalAuthClientResponseBodyToTypesAuthClient(v *AuthClientResponseBody) *types.AuthClient {
@@ -1523,6 +2000,45 @@ func unmarshalAuthClientServerResponseBodyToTypesAuthClientServer(v *AuthClientS
 		Name:      v.Name,
 		Slug:      v.Slug,
 		Public:    *v.Public,
+	}
+
+	return res
+}
+
+// unmarshalAuthClientAudienceEntryResponseBodyToTypesAuthClientAudienceEntry
+// builds a value of type *types.AuthClientAudienceEntry from a value of type
+// *AuthClientAudienceEntryResponseBody.
+func unmarshalAuthClientAudienceEntryResponseBodyToTypesAuthClientAudienceEntry(v *AuthClientAudienceEntryResponseBody) *types.AuthClientAudienceEntry {
+	res := &types.AuthClientAudienceEntry{
+		PrincipalUrn:   *v.PrincipalUrn,
+		Level:          *v.Level,
+		AppliesTo:      *v.AppliesTo,
+		ProjectID:      v.ProjectID,
+		ConnectionNote: v.ConnectionNote,
+	}
+
+	return res
+}
+
+// marshalAuthclientsAuthClientAudienceRuleToAuthClientAudienceRuleRequestBody
+// builds a value of type *AuthClientAudienceRuleRequestBody from a value of
+// type *authclients.AuthClientAudienceRule.
+func marshalAuthclientsAuthClientAudienceRuleToAuthClientAudienceRuleRequestBody(v *authclients.AuthClientAudienceRule) *AuthClientAudienceRuleRequestBody {
+	res := &AuthClientAudienceRuleRequestBody{
+		PrincipalUrn: v.PrincipalUrn,
+		Level:        v.Level,
+	}
+
+	return res
+}
+
+// marshalAuthClientAudienceRuleRequestBodyToAuthclientsAuthClientAudienceRule
+// builds a value of type *authclients.AuthClientAudienceRule from a value of
+// type *AuthClientAudienceRuleRequestBody.
+func marshalAuthClientAudienceRuleRequestBodyToAuthclientsAuthClientAudienceRule(v *AuthClientAudienceRuleRequestBody) *authclients.AuthClientAudienceRule {
+	res := &authclients.AuthClientAudienceRule{
+		PrincipalUrn: v.PrincipalUrn,
+		Level:        v.Level,
 	}
 
 	return res

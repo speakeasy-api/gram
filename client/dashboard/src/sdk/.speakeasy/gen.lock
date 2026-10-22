@@ -174,8 +174,10 @@ trackedFiles:
   src/funcs/authCallback.ts: {}
   src/funcs/authClientsDetachFromMcpServer.ts: {}
   src/funcs/authClientsGet.ts: {}
+  src/funcs/authClientsGetAudience.ts: {}
   src/funcs/authClientsGetMcpServerAuthentication.ts: {}
   src/funcs/authClientsList.ts: {}
+  src/funcs/authClientsSetAudience.ts: {}
   src/funcs/authClientsSetMcpServerUpstreamAuthRequirement.ts: {}
   src/funcs/authClientsUpdate.ts: {}
   src/funcs/authEnterDemo.ts: {}
@@ -341,6 +343,7 @@ trackedFiles:
   src/funcs/keysList.ts: {}
   src/funcs/keysRevokeById.ts: {}
   src/funcs/keysRotate.ts: {}
+  src/funcs/keysUpdatePolicy.ts: {}
   src/funcs/keysValidate.ts: {}
   src/funcs/killswitchesBatchUserBadges.ts: {}
   src/funcs/killswitchesCreate.ts: {}
@@ -953,6 +956,9 @@ trackedFiles:
   src/models/components/auditlog.ts: {}
   src/models/components/auditlogfacetoption.ts: {}
   src/models/components/authclient.ts: {}
+  src/models/components/authclientaudience.ts: {}
+  src/models/components/authclientaudienceentry.ts: {}
+  src/models/components/authclientaudiencerule.ts: {}
   src/models/components/authclientheader.ts: {}
   src/models/components/authclientserver.ts: {}
   src/models/components/authorizerequestbody.ts: {}
@@ -1786,6 +1792,7 @@ trackedFiles:
   src/models/components/sessionsummary.ts: {}
   src/models/components/setaitooldecisionrequestbody.ts: {}
   src/models/components/setaitooldecisionresult.ts: {}
+  src/models/components/setauthclientaudiencerequestbody.ts: {}
   src/models/components/setauthenticationhostrequestbody.ts: {}
   src/models/components/setbillingmetadatarequestbody.ts: {}
   src/models/components/setdirectoryrolemappingsform.ts: {}
@@ -1993,6 +2000,7 @@ trackedFiles:
   src/models/components/updateingressrequestbody.ts: {}
   src/models/components/updateinviterolerequestbody.ts: {}
   src/models/components/updatejsonwebkeysetrequestbody.ts: {}
+  src/models/components/updatekeypolicyrequestbody.ts: {}
   src/models/components/updatemarketplacesettingsrequestbody.ts: {}
   src/models/components/updatemarketplacesettingsresult.ts: {}
   src/models/components/updatemcpendpointform.ts: {}
@@ -2330,6 +2338,7 @@ trackedFiles:
   src/models/operations/getassistantmemory.ts: {}
   src/models/operations/getassistantsessionsummary.ts: {}
   src/models/operations/getauthclient.ts: {}
+  src/models/operations/getauthclientaudience.ts: {}
   src/models/operations/getawsiamcredential.ts: {}
   src/models/operations/getawskmskey.ts: {}
   src/models/operations/getbillingemail.ts: {}
@@ -2770,6 +2779,7 @@ trackedFiles:
   src/models/operations/sessioninfo.ts: {}
   src/models/operations/setaiintegrationscheduleenabled.ts: {}
   src/models/operations/setaitooldecision.ts: {}
+  src/models/operations/setauthclientaudience.ts: {}
   src/models/operations/setbillingemail.ts: {}
   src/models/operations/setbillingmetadata.ts: {}
   src/models/operations/setchatpinned.ts: {}
@@ -2830,6 +2840,7 @@ trackedFiles:
   src/models/operations/unmaskriskresult.ts: {}
   src/models/operations/unshareskill.ts: {}
   src/models/operations/updateagentpolicygrant.ts: {}
+  src/models/operations/updateapikeypolicy.ts: {}
   src/models/operations/updateassistant.ts: {}
   src/models/operations/updateauthclient.ts: {}
   src/models/operations/updateawsiamcredential.ts: {}
@@ -3000,6 +3011,8 @@ trackedFiles:
   src/react-query/auditLogs.ts: {}
   src/react-query/authClient.core.ts: {}
   src/react-query/authClient.ts: {}
+  src/react-query/authClientAudience.core.ts: {}
+  src/react-query/authClientAudience.ts: {}
   src/react-query/authClients.core.ts: {}
   src/react-query/authClients.ts: {}
   src/react-query/batchKillswitchUserBadges.ts: {}
@@ -3837,6 +3850,7 @@ trackedFiles:
   src/react-query/sessionInfo.ts: {}
   src/react-query/setAIIntegrationScheduleEnabled.ts: {}
   src/react-query/setAIToolDecision.ts: {}
+  src/react-query/setAuthClientAudience.ts: {}
   src/react-query/setBillingEmail.ts: {}
   src/react-query/setBillingMetadata.ts: {}
   src/react-query/setDeviceIntegrationScheduleEnabled.ts: {}
@@ -3965,6 +3979,7 @@ trackedFiles:
   src/react-query/unproxiedMcpServers.core.ts: {}
   src/react-query/unproxiedMcpServers.ts: {}
   src/react-query/unshareSkill.ts: {}
+  src/react-query/updateAPIKeyPolicy.ts: {}
   src/react-query/updateAuthClient.ts: {}
   src/react-query/updateAwsIamCredential.ts: {}
   src/react-query/updateAwsKmsKey.ts: {}
@@ -6973,6 +6988,18 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  getAuthClientAudience:
+    speakeasy-default-get-auth-client-audience:
+      parameters:
+        query:
+          id: "fecb4972-eca0-48ff-bc00-9e7b7866c2e6"
+      responses:
+        "200":
+          application/json: {"auth_client_id": "45202bd4-e9b4-4364-9ba5-2bd83e5e506f", "entries": [{"applies_to": "client_type", "level": "blocked", "principal_urn": "<value>"}], "public_servers": ["<value 1>", "<value 2>"], "version": "<value>"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   getAwsIamCredential:
     speakeasy-default-get-aws-iam-credential:
       parameters:
@@ -12224,6 +12251,17 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  setAuthClientAudience:
+    speakeasy-default-set-auth-client-audience:
+      requestBody:
+        application/json: {"entries": [{"level": "use", "principal_urn": "<value>"}], "expected_version": "<value>", "id": "28571ce2-26f5-4fc3-bc36-f3af6d3eb51d"}
+      responses:
+        "200":
+          application/json: {"auth_client_id": "d712452a-6c75-42a8-8f1f-e240751173f9", "entries": [], "public_servers": ["<value 1>"], "version": "<value>"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   setBillingEmail:
     speakeasy-default-set-billing-email:
       requestBody:
@@ -12891,6 +12929,17 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  updateAPIKeyPolicy:
+    speakeasy-default-update-API-key-policy:
+      requestBody:
+        application/json: {"id": "d804944e-a918-428d-bd35-d3457092f70b", "policy_grants": [{"scope": "mcp:blocked_connect", "selector": {"resource_id": "<id>", "resource_kind": "mcp_auth_client"}}]}
+      responses:
+        "200":
+          application/json: {"created_at": "2026-01-19T22:50:58.625Z", "created_by_user_id": "<id>", "id": "<id>", "key_prefix": "<value>", "name": "<value>", "organization_id": "<id>", "scopes": ["<value 1>"], "updated_at": "2024-11-28T08:11:19.958Z"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   updateAgentPolicyGrant:
     speakeasy-default-update-agent-policy-grant:
       requestBody:
