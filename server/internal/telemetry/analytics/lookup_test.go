@@ -153,6 +153,21 @@ func TestDefaultCatalogLookups(t *testing.T) {
 	require.Equal(t, LookupMaps{}, must(Default.LoadLookups(t.Context(), Tenant{OrganizationID: "org", ProjectID: "project"}, ToolCalls.Name, []string{"mcp_server"})), "the bare catalog loads nothing, which is what widget validation plans against")
 }
 
+func TestUniqueAgentNames(t *testing.T) {
+	t.Parallel()
+
+	got := uniqueAgentNames(map[string]string{
+		"0b7a1c2e-0000-0000-0000-000000000001": "Release assistant",
+		"4f9d8e7c-0000-0000-0000-000000000002": "Release assistant",
+		"9a1b2c3d-0000-0000-0000-000000000003": "Triage bot",
+	})
+	require.Equal(t, map[string]string{
+		"0b7a1c2e-0000-0000-0000-000000000001": "Release assistant (0b7a1c2e)",
+		"4f9d8e7c-0000-0000-0000-000000000002": "Release assistant (4f9d8e7c)",
+		"9a1b2c3d-0000-0000-0000-000000000003": "Triage bot",
+	}, got, "it keeps a unique name and tells a shared one apart by id")
+}
+
 func must[T any](v T, err error) T {
 	if err != nil {
 		panic(err)
