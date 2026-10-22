@@ -119,20 +119,21 @@ type AgentPolicySelector struct {
 	ResourceKind string
 	// The resource identifier, or '*' for all resources of this kind.
 	ResourceID string
-	// Auth client type filter (mcp:auth scopes only).
+	// Auth client type filter (mcp:auth and mcp:blocked_auth scopes only).
 	ClientType *string
-	// Personal connection owner filter (mcp:auth scopes on remote_session clients
-	// only): a user ID, '*', or '$represented_user'.
+	// Personal connection owner filter (mcp:auth and mcp:blocked_auth scopes on
+	// remote_session clients only): a user ID, '*', or '$represented_user'.
 	ConnectionOwner *string
-	// Upstream OAuth client filter (mcp:auth scopes on remote_session clients
-	// only). Together with connection_owner it names one person's connection
-	// across every auth client sharing that upstream client.
+	// Upstream OAuth client filter (mcp:auth and mcp:blocked_auth scopes on
+	// remote_session clients only). Together with connection_owner it names one
+	// person's connection across every auth client sharing that upstream client.
 	UpstreamClient *string
 	// Tool disposition filter (MCP scopes only).
 	Disposition *string
 	// Specific tool name filter (MCP scopes only).
 	Tool *string
-	// Project filter (MCP, environment, assistant, and mcp:auth scopes).
+	// Project filter (MCP, environment, assistant, mcp:auth and mcp:blocked_auth
+	// scopes).
 	ProjectID *string
 	// Server URL filter (risk policy scopes only).
 	ServerURL *string

@@ -93001,7 +93001,7 @@ components:
             properties:
                 client_type:
                     type: string
-                    description: Auth client type filter (mcp:auth scopes only).
+                    description: Auth client type filter (mcp:auth and mcp:blocked_auth scopes only).
                     enum:
                         - remote_session
                         - service_account
@@ -93011,7 +93011,7 @@ components:
                         - '*'
                 connection_owner:
                     type: string
-                    description: 'Personal connection owner filter (mcp:auth scopes on remote_session clients only): a user ID, ''*'', or ''$represented_user''.'
+                    description: 'Personal connection owner filter (mcp:auth and mcp:blocked_auth scopes on remote_session clients only): a user ID, ''*'', or ''$represented_user''.'
                 disposition:
                     type: string
                     description: Tool disposition filter (MCP scopes only).
@@ -93022,7 +93022,7 @@ components:
                         - open_world
                 project_id:
                     type: string
-                    description: Project filter (MCP, environment, assistant, and mcp:auth scopes).
+                    description: Project filter (MCP, environment, assistant, mcp:auth and mcp:blocked_auth scopes).
                 resource_id:
                     type: string
                     description: The resource identifier, or '*' for all resources of this kind.
@@ -93053,7 +93053,7 @@ components:
                     description: Specific tool name filter (MCP scopes only).
                 upstream_client:
                     type: string
-                    description: Upstream OAuth client filter (mcp:auth scopes on remote_session clients only). Together with connection_owner it names one person's connection across every auth client sharing that upstream client.
+                    description: Upstream OAuth client filter (mcp:auth and mcp:blocked_auth scopes on remote_session clients only). Together with connection_owner it names one person's connection across every auth client sharing that upstream client.
             description: A constraint that narrows which resources an agent grant applies to.
             required:
                 - resource_kind
@@ -117020,7 +117020,7 @@ components:
             properties:
                 client_type:
                     type: string
-                    description: Auth client type filter (mcp:auth scopes only).
+                    description: Auth client type filter (mcp:auth and mcp:blocked_auth scopes only).
                     enum:
                         - remote_session
                         - service_account
@@ -117030,7 +117030,7 @@ components:
                         - '*'
                 connection_owner:
                     type: string
-                    description: Personal connection owner filter (mcp:auth scopes on remote_session clients only). A user ID, '*', or '$represented_user' for the user the request acts for. Never lets a caller use another user's connection.
+                    description: Personal connection owner filter (mcp:auth and mcp:blocked_auth scopes on remote_session clients only). A user ID, '*', or '$represented_user' for the user the request acts for. Never lets a caller use another user's connection.
                 disposition:
                     type: string
                     description: Tool disposition filter (MCP scopes only).
@@ -117041,7 +117041,7 @@ components:
                         - open_world
                 project_id:
                     type: string
-                    description: Project filter (MCP, environment, assistant, and mcp:auth scopes). When set with resource_id='*', grants access to every resource of the kind in the project. For mcp:auth it is the project of the server using the client.
+                    description: Project filter (MCP, environment, assistant, mcp:auth and mcp:blocked_auth scopes). When set with resource_id='*', grants access to every resource of the kind in the project. For the auth-client scopes it is the project of the server using the client.
                 resource_id:
                     type: string
                     description: The resource identifier, or '*' for all resources of this kind.
@@ -117070,7 +117070,7 @@ components:
                     description: Specific tool name filter (MCP scopes only).
                 upstream_client:
                     type: string
-                    description: Upstream OAuth client filter (mcp:auth scopes on remote_session clients only). Together with connection_owner it names one person's connection across every auth client sharing that upstream client.
+                    description: Upstream OAuth client filter (mcp:auth and mcp:blocked_auth scopes on remote_session clients only). Together with connection_owner it names one person's connection across every auth client sharing that upstream client.
             description: A constraint that narrows which resources a grant applies to.
             required:
                 - resource_kind

@@ -11,7 +11,7 @@ import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 /**
- * Auth client type filter (mcp:auth scopes only).
+ * Auth client type filter (mcp:auth and mcp:blocked_auth scopes only).
  */
 export const ClientType = {
   RemoteSession: "remote_session",
@@ -22,7 +22,7 @@ export const ClientType = {
   Wildcard: "*",
 } as const;
 /**
- * Auth client type filter (mcp:auth scopes only).
+ * Auth client type filter (mcp:auth and mcp:blocked_auth scopes only).
  */
 export type ClientType = OpenEnum<typeof ClientType>;
 
@@ -67,11 +67,11 @@ export type ResourceKind = OpenEnum<typeof ResourceKind>;
  */
 export type Selector = {
   /**
-   * Auth client type filter (mcp:auth scopes only).
+   * Auth client type filter (mcp:auth and mcp:blocked_auth scopes only).
    */
   clientType?: ClientType | undefined;
   /**
-   * Personal connection owner filter (mcp:auth scopes on remote_session clients only). A user ID, '*', or '$represented_user' for the user the request acts for. Never lets a caller use another user's connection.
+   * Personal connection owner filter (mcp:auth and mcp:blocked_auth scopes on remote_session clients only). A user ID, '*', or '$represented_user' for the user the request acts for. Never lets a caller use another user's connection.
    */
   connectionOwner?: string | undefined;
   /**
@@ -79,7 +79,7 @@ export type Selector = {
    */
   disposition?: Disposition | undefined;
   /**
-   * Project filter (MCP, environment, assistant, and mcp:auth scopes). When set with resource_id='*', grants access to every resource of the kind in the project. For mcp:auth it is the project of the server using the client.
+   * Project filter (MCP, environment, assistant, mcp:auth and mcp:blocked_auth scopes). When set with resource_id='*', grants access to every resource of the kind in the project. For the auth-client scopes it is the project of the server using the client.
    */
   projectId?: string | undefined;
   /**
@@ -99,7 +99,7 @@ export type Selector = {
    */
   tool?: string | undefined;
   /**
-   * Upstream OAuth client filter (mcp:auth scopes on remote_session clients only). Together with connection_owner it names one person's connection across every auth client sharing that upstream client.
+   * Upstream OAuth client filter (mcp:auth and mcp:blocked_auth scopes on remote_session clients only). Together with connection_owner it names one person's connection across every auth client sharing that upstream client.
    */
   upstreamClient?: string | undefined;
 };
