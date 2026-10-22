@@ -177,6 +177,33 @@ func AuthenticatedActor(ctx context.Context) (urn.Principal, bool) {
 	return actor, err == nil
 }
 
+type workloadAgentKey struct{}
+
+// WithWorkloadAgent records the agent an admitted workload acts for. Only
+// workload admission sets it, with the agent whose policy it admitted; the
+// workload stays the actor.
+func WithWorkloadAgent(ctx context.Context, agent urn.Principal) context.Context {
+	return context.WithValue(ctx, workloadAgentKey{}, agent)
+}
+
+// EffectiveAgent returns the agent a request acts for: the actor itself when an
+// agent authenticated it, or the recorded agent when an admitted workload did.
+// Policy audiences, bypass, plugin selection and spend use this agent.
+func EffectiveAgent(ctx context.Context) (urn.Principal, bool) {
+	actor, ok := AuthenticatedActor(ctx)
+	switch {
+	case !ok:
+	case actor.Type == urn.PrincipalTypeAgent:
+		return actor, true
+	case actor.Type == urn.PrincipalTypeWorkload:
+		if agent, found := ctx.Value(workloadAgentKey{}).(urn.Principal); found && agent.Type == urn.PrincipalTypeAgent {
+			return agent, true
+		}
+	}
+	var zero urn.Principal
+	return zero, false
+}
+
 // APIKeyAuthorization returns the profile selected by trusted API-key
 // authentication. APIKeyID remains independent credential provenance.
 func APIKeyAuthorization(ctx context.Context) (APIKeyAuthorizationMode, bool) {

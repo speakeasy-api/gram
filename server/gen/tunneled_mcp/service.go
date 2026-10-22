@@ -25,6 +25,8 @@ type Service interface {
 	GetServer(context.Context, *GetServerPayload) (res *types.TunneledMcpServer, err error)
 	// List live tunnel connections for a tunneled MCP server
 	ListServerConnections(context.Context, *ListServerConnectionsPayload) (res *types.TunneledMcpServerConnections, err error)
+	// Read seven-day payload-free tunnel activity aggregates
+	GetServerMetrics(context.Context, *GetServerMetricsPayload) (res *types.TunnelMetrics, err error)
 	// Update a tunneled MCP server source
 	UpdateServer(context.Context, *UpdateServerPayload) (res *types.TunneledMcpServer, err error)
 	// Rotate a tunneled MCP server source key. Returns the new tunnel key once.
@@ -53,7 +55,7 @@ const ServiceName = "tunneledMcp"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [7]string{"createServer", "listServers", "getServer", "listServerConnections", "updateServer", "rotateServerKey", "deleteServer"}
+var MethodNames = [8]string{"createServer", "listServers", "getServer", "listServerConnections", "getServerMetrics", "updateServer", "rotateServerKey", "deleteServer"}
 
 // CreateServerPayload is the payload type of the tunneledMcp service
 // createServer method.
@@ -85,6 +87,16 @@ type CreateTunneledMcpServerResult struct {
 type DeleteServerPayload struct {
 	// The ID of the tunneled MCP server to delete
 	ID               string
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
+}
+
+// GetServerMetricsPayload is the payload type of the tunneledMcp service
+// getServerMetrics method.
+type GetServerMetricsPayload struct {
+	ID               string
+	Window           string
 	SessionToken     *string
 	ApikeyToken      *string
 	ProjectSlugInput *string

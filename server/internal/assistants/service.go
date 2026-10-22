@@ -199,10 +199,12 @@ type assistantRecord struct {
 	Skills          []assistantSkillRow
 	WarmTTLSeconds  int
 	MaxConcurrency  int
-	Status          string
-	CreatedAt       time.Time
-	UpdatedAt       time.Time
-	DeletedAt       pgtype.Timestamptz
+	// RuntimeVersion is the desired protocol for the next runtime, not a live row mutation.
+	RuntimeVersion int16
+	Status         string
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
+	DeletedAt      pgtype.Timestamptz
 }
 
 type assistantThreadRecord struct {
@@ -217,14 +219,20 @@ type assistantThreadRecord struct {
 }
 
 type assistantRuntimeRecord struct {
-	ID uuid.UUID
+	// LifecycleTx is the explicit assistant advisory-lock holder, never persisted.
+	LifecycleTx pgx.Tx
+	// Retired is freshly loaded tombstone authority for permanent cleanup only.
+	Retired bool
+	ID      uuid.UUID
 	// AssistantThreadID is uuid.Nil on v2 runtime rows — one VM serves
 	// every thread under the assistant, so the binding is via AssistantID
 	// and the foreign key to assistant_threads is dropped on this column
 	// (so the sentinel does not have to back to a real row).
-	AssistantThreadID   uuid.UUID
-	AssistantID         uuid.UUID
-	ProjectID           uuid.UUID
+	AssistantThreadID uuid.UUID
+	AssistantID       uuid.UUID
+	ProjectID         uuid.UUID
+	// RuntimeVersion is immutable for the lifetime of this runtime row.
+	RuntimeVersion      int16
 	Backend             string
 	BackendMetadataJSON []byte
 	State               string
@@ -283,6 +291,7 @@ func assistantRecordFromCreateRow(row assistantrepo.CreateAssistantRow) assistan
 		Skills:          nil,
 		WarmTTLSeconds:  conv.SafeInt(row.WarmTtlSeconds),
 		MaxConcurrency:  conv.SafeInt(row.MaxConcurrency),
+		RuntimeVersion:  row.RuntimeVersion,
 		Status:          row.Status,
 		CreatedAt:       row.CreatedAt.Time,
 		UpdatedAt:       row.UpdatedAt.Time,
@@ -305,6 +314,7 @@ func assistantRecordFromListRow(row assistantrepo.ListAssistantsRow) assistantRe
 		Skills:          nil,
 		WarmTTLSeconds:  conv.SafeInt(row.WarmTtlSeconds),
 		MaxConcurrency:  conv.SafeInt(row.MaxConcurrency),
+		RuntimeVersion:  row.RuntimeVersion,
 		Status:          row.Status,
 		CreatedAt:       row.CreatedAt.Time,
 		UpdatedAt:       row.UpdatedAt.Time,
@@ -327,6 +337,7 @@ func assistantRecordFromGetRow(row assistantrepo.GetAssistantRow) assistantRecor
 		Skills:          nil,
 		WarmTTLSeconds:  conv.SafeInt(row.WarmTtlSeconds),
 		MaxConcurrency:  conv.SafeInt(row.MaxConcurrency),
+		RuntimeVersion:  row.RuntimeVersion,
 		Status:          row.Status,
 		CreatedAt:       row.CreatedAt.Time,
 		UpdatedAt:       row.UpdatedAt.Time,
@@ -349,6 +360,7 @@ func assistantRecordFromDispatchRow(row assistantrepo.GetAssistantForDispatchRow
 		Skills:          nil,
 		WarmTTLSeconds:  conv.SafeInt(row.WarmTtlSeconds),
 		MaxConcurrency:  conv.SafeInt(row.MaxConcurrency),
+		RuntimeVersion:  row.RuntimeVersion,
 		Status:          row.Status,
 		CreatedAt:       row.CreatedAt.Time,
 		UpdatedAt:       row.UpdatedAt.Time,
@@ -371,6 +383,7 @@ func assistantRecordFromUpdateRow(row assistantrepo.UpdateAssistantRow) assistan
 		Skills:          nil,
 		WarmTTLSeconds:  conv.SafeInt(row.WarmTtlSeconds),
 		MaxConcurrency:  conv.SafeInt(row.MaxConcurrency),
+		RuntimeVersion:  row.RuntimeVersion,
 		Status:          row.Status,
 		CreatedAt:       row.CreatedAt.Time,
 		UpdatedAt:       row.UpdatedAt.Time,
@@ -432,6 +445,10 @@ type DashboardIngestor interface {
 }
 
 type ServiceCore struct {
+	// Set only by production Kit composition; existing assistants are untouched.
+	newAssistantRuntimeVersion  int16
+	newAssistantRuntimeEligible func(context.Context, pgx.Tx, assistantRecord) (bool, error)
+
 	identities        *assistantidentity.Service
 	authz             *authz.Engine
 	logger            *slog.Logger
@@ -490,31 +507,33 @@ func NewServiceCore(
 	}
 
 	return &ServiceCore{
-		identities:        identities,
-		authz:             authzEngine,
-		logger:            logger,
-		tracer:            tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/assistants"),
-		db:                db,
-		audit:             auditLogger,
-		guardianPolicy:    guardianPolicy,
-		encryptionClient:  encryptionClient,
-		runtime:           newTelemetryRuntimeBackend(runtime, telemetryLogger),
-		slackClient:       slackClient,
-		assistantTokens:   assistantTokens,
-		serverURL:         serverURL,
-		siteURL:           nil,
-		telemetryLogger:   telemetryLogger,
-		contextWindow:     contextWindow,
-		wakeCanceller:     nil,
-		chatWriter:        nil,
-		assetStorage:      nil,
-		assetSigningKey:   "",
-		envLoader:         nil,
-		slackImages:       nil,
-		dashboardIngestor: nil,
-		featureFlags:      nil,
-		turnClassified:    turnClassified,
-		outboundOrigin:    nil,
+		newAssistantRuntimeVersion:  0,
+		newAssistantRuntimeEligible: nil,
+		identities:                  identities,
+		authz:                       authzEngine,
+		logger:                      logger,
+		tracer:                      tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/assistants"),
+		db:                          db,
+		audit:                       auditLogger,
+		guardianPolicy:              guardianPolicy,
+		encryptionClient:            encryptionClient,
+		runtime:                     newTelemetryRuntimeBackend(runtime, telemetryLogger),
+		slackClient:                 slackClient,
+		assistantTokens:             assistantTokens,
+		serverURL:                   serverURL,
+		siteURL:                     nil,
+		telemetryLogger:             telemetryLogger,
+		contextWindow:               contextWindow,
+		wakeCanceller:               nil,
+		chatWriter:                  nil,
+		assetStorage:                nil,
+		assetSigningKey:             "",
+		envLoader:                   nil,
+		slackImages:                 nil,
+		dashboardIngestor:           nil,
+		featureFlags:                nil,
+		turnClassified:              turnClassified,
+		outboundOrigin:              nil,
 	}
 }
 
@@ -727,10 +746,13 @@ func (s *ServiceCore) ReapStuckRuntimes(ctx context.Context) (ReapStuckRuntimesR
 				continue
 			}
 			record := assistantRuntimeRecord{
+				LifecycleTx:         nil,
+				Retired:             false,
 				ID:                  row.ID,
 				AssistantThreadID:   row.AssistantThreadID,
 				AssistantID:         row.AssistantID,
 				ProjectID:           row.ProjectID,
+				RuntimeVersion:      row.RuntimeVersion,
 				Backend:             row.Backend,
 				BackendMetadataJSON: row.BackendMetadataJson,
 				State:               row.State,
@@ -802,6 +824,9 @@ func (s *ServiceCore) ReapStuckRuntimes(ctx context.Context) (ReapStuckRuntimesR
 	// exited without expiring, died before their warm timer fired, or gave up
 	// mid-expire.
 	out.IdleRuntimesStopped = s.sweepIdleRuntimes(ctx, now, affected)
+	// Kit checkpoints preserve runtime/session authority and must not kick
+	// admission merely because the physical process was stopped.
+	out.IdleRuntimesStopped += s.sweepIdleKitRuntimes(ctx, now)
 
 	if len(affected) > 0 {
 		out.AffectedAssistantIDs = make([]uuid.UUID, 0, len(affected))
@@ -852,6 +877,17 @@ func (s *ServiceCore) sweepIdleRuntimes(ctx context.Context, now time.Time, affe
 			break
 		}
 
+		// Runtime versions are immutable. Never let the legacy idle sweep
+		// transition Kit authority based on a foreground-only idle observation.
+		runtime, err := queries.GetAssistantRuntime(ctx, assistantrepo.GetAssistantRuntimeParams{ID: candidate.ID, ProjectID: candidate.ProjectID})
+		if err != nil {
+			s.logger.WarnContext(ctx, "read idle runtime version failed", attr.SlogError(err))
+			continue
+		}
+		if !legacyRuntimeIdleExpiryAllowed(runtime.RuntimeVersion) {
+			continue
+		}
+
 		row, err := queries.BeginExpireIdleAssistantRuntime(ctx, assistantrepo.BeginExpireIdleAssistantRuntimeParams{
 			ExpiringState:  runtimeStateExpiring,
 			RuntimeID:      candidate.ID,
@@ -872,10 +908,13 @@ func (s *ServiceCore) sweepIdleRuntimes(ctx context.Context, now time.Time, affe
 
 		rowCtx, cancel := context.WithTimeout(ctx, runtimeIdleSweepRowTimeout)
 		result, err := s.expireRuntime(rowCtx, assistantRuntimeRecord{
+			LifecycleTx:         nil,
+			Retired:             false,
 			ID:                  row.ID,
 			AssistantThreadID:   row.AssistantThreadID,
 			AssistantID:         row.AssistantID,
 			ProjectID:           row.ProjectID,
+			RuntimeVersion:      row.RuntimeVersion,
 			Backend:             row.Backend,
 			BackendMetadataJSON: row.BackendMetadataJson,
 			State:               row.State,
@@ -949,8 +988,8 @@ func normalizeMaxConcurrency(v *int) int {
 	return *v
 }
 
-// resolvedToolsetInsert captures the FK values we need to write one row in
-// assistant_toolsets for a single (toolset_slug, environment_slug?) ref
+// resolvedToolsetInsert captures the FK values we need to write one hosted row
+// in assistant_mcp_servers for a single (toolset_slug, environment_slug?) ref
 // supplied by the user.
 type resolvedToolsetInsert struct {
 	ToolsetID     uuid.UUID
@@ -1226,7 +1265,7 @@ func (s *ServiceCore) resolveMcpServerRefsForWrite(
 	return out, nil
 }
 
-// loadAssistantMcpServers loads attachments from both tables, one row per server.
+// loadAssistantMcpServers loads the assistants' attached MCP servers.
 func (s *ServiceCore) loadAssistantMcpServers(ctx context.Context, projectID uuid.UUID, assistantIDs []uuid.UUID) (map[uuid.UUID][]assistantMCPServerRow, error) {
 	out := map[uuid.UUID][]assistantMCPServerRow{}
 	if len(assistantIDs) == 0 {
@@ -1239,10 +1278,8 @@ func (s *ServiceCore) loadAssistantMcpServers(ctx context.Context, projectID uui
 	if err != nil {
 		return nil, fmt.Errorf("load assistant mcp servers: %w", err)
 	}
-	seen := map[[2]uuid.UUID]int{}
 	for _, row := range rows {
-		key := [2]uuid.UUID{row.AssistantID, row.McpServerID}
-		item := assistantMCPServerRow{
+		out[row.AssistantID] = append(out[row.AssistantID], assistantMCPServerRow{
 			MCPServerID:            row.McpServerID,
 			ServerSlug:             row.ServerSlug,
 			ToolsetSlug:            row.ToolsetSlug,
@@ -1251,16 +1288,7 @@ func (s *ServiceCore) loadAssistantMcpServers(ctx context.Context, projectID uui
 			DefaultEnvironmentSlug: row.DefaultEnvironmentSlug,
 			EnvironmentID:          row.EnvironmentID,
 			EnvironmentSlug:        row.EnvironmentSlug,
-		}
-		// The legacy row of a twin keeps its environment, as the old toolset arm did.
-		if i, dup := seen[key]; dup {
-			if row.Legacy {
-				out[row.AssistantID][i] = item
-			}
-			continue
-		}
-		seen[key] = len(out[row.AssistantID])
-		out[row.AssistantID] = append(out[row.AssistantID], item)
+		})
 	}
 	return out, nil
 }
@@ -1314,6 +1342,9 @@ func (s *ServiceCore) hydrateAssistantSkills(ctx context.Context, projectID uuid
 // errMCPEnableForbidden rejects a write that would turn MCP on for a toolset
 // the caller cannot write.
 var errMCPEnableForbidden = errors.New("attaching a toolset with MCP disabled requires mcp:write on it")
+
+// errToolsetNoMCPServer rejects attaching a toolset that has no canonical MCP server.
+var errToolsetNoMCPServer = errors.New(hostedmcp.NoServerMessage)
 
 // enableAssistantToolsets turns MCP on for newly attached toolsets that have it
 // off, so every attached hosted server is reachable at runtime, and syncs their
@@ -1370,17 +1401,9 @@ func toolsetIDSet(resolved []resolvedToolsetInsert) map[uuid.UUID]struct{} {
 	return out
 }
 
-// assistantAttachmentRow is one attachment in write order; exactly one row is set.
-type assistantAttachmentRow struct {
-	toolset *assistantrepo.AddAssistantToolsetsParams
-	server  *assistantrepo.AddAssistantMcpServersParams
-}
-
-// writeAssistantAttachments stores hosted servers under their wrapper when
-// serverKey is on, keeping toolsets without a dialable wrapper in
-// assistant_toolsets; with serverKey off every hosted server stays in
-// assistant_toolsets. It clears both tables for every written server so none
-// is stored twice.
+// writeAssistantAttachments stores every attachment in assistant_mcp_servers,
+// hosted ones under their toolset's canonical wrapper (same id), and clears
+// legacy assistant_toolsets rows for every written server.
 // toolsets replaces the hosted servers; mcpServers replaces the other servers
 // and adds hosted ones not yet attached.
 func writeAssistantAttachments(
@@ -1391,11 +1414,10 @@ func writeAssistantAttachments(
 	replaceToolsets bool,
 	servers []resolvedMcpServerInsert,
 	replaceServers bool,
-	serverKey bool,
 ) error {
 	queries := assistantrepo.New(tx)
 	wrapped := map[uuid.UUID]bool{}
-	if serverKey && len(toolsets) > 0 {
+	if len(toolsets) > 0 {
 		toolsetIDs := make([]uuid.UUID, 0, len(toolsets))
 		for _, r := range toolsets {
 			toolsetIDs = append(toolsetIDs, r.ToolsetID)
@@ -1408,38 +1430,27 @@ func writeAssistantAttachments(
 			wrapped[id] = true
 		}
 	}
-	addServer := func(id uuid.UUID, environmentID uuid.NullUUID) assistantAttachmentRow {
-		return assistantAttachmentRow{toolset: nil, server: &assistantrepo.AddAssistantMcpServersParams{
-			AssistantID: assistantID, McpServerID: id, EnvironmentID: environmentID, ProjectID: projectID,
-		}}
+	addServer := func(id uuid.UUID, environmentID uuid.NullUUID) assistantrepo.AddAssistantMcpServersParams {
+		return assistantrepo.AddAssistantMcpServersParams{AssistantID: assistantID, McpServerID: id, EnvironmentID: environmentID, ProjectID: projectID}
 	}
-	// Hosted rows come first, in request order, as they did in one assistant_toolsets insert.
-	hostedRows := make([]assistantAttachmentRow, 0, len(toolsets)+len(servers))
-	serverRows := make([]assistantAttachmentRow, 0, len(servers))
+	// Hosted rows come first, in request order, so created_at keeps that order.
+	hostedRows := make([]assistantrepo.AddAssistantMcpServersParams, 0, len(toolsets)+len(servers))
+	serverRows := make([]assistantrepo.AddAssistantMcpServersParams, 0, len(servers))
 	written := make([]uuid.UUID, 0, len(toolsets)+len(servers))
 	for _, r := range toolsets {
-		written = append(written, r.ToolsetID)
-		if wrapped[r.ToolsetID] {
-			hostedRows = append(hostedRows, addServer(r.ToolsetID, r.EnvironmentID))
-			continue
+		if !wrapped[r.ToolsetID] {
+			return fmt.Errorf("toolset %q: %w", r.Slug, errToolsetNoMCPServer)
 		}
-		hostedRows = append(hostedRows, assistantAttachmentRow{server: nil, toolset: &assistantrepo.AddAssistantToolsetsParams{
-			AssistantID: assistantID, ToolsetID: r.ToolsetID, EnvironmentID: r.EnvironmentID, ProjectID: projectID,
-		}})
+		written = append(written, r.ToolsetID)
+		hostedRows = append(hostedRows, addServer(r.ToolsetID, r.EnvironmentID))
 	}
 	for _, r := range servers {
 		if slices.Contains(written, r.MCPServerID) {
 			continue
 		}
 		written = append(written, r.MCPServerID)
-		if r.Hosted && serverKey {
-			hostedRows = append(hostedRows, addServer(r.MCPServerID, r.EnvironmentID))
-			continue
-		}
 		if r.Hosted {
-			hostedRows = append(hostedRows, assistantAttachmentRow{server: nil, toolset: &assistantrepo.AddAssistantToolsetsParams{
-				AssistantID: assistantID, ToolsetID: r.MCPServerID, EnvironmentID: r.EnvironmentID, ProjectID: projectID,
-			}})
+			hostedRows = append(hostedRows, addServer(r.MCPServerID, r.EnvironmentID))
 			continue
 		}
 		serverRows = append(serverRows, addServer(r.MCPServerID, r.EnvironmentID))
@@ -1466,36 +1477,12 @@ func writeAssistantAttachments(
 			return fmt.Errorf("clear assistant mcp servers for written servers: %w", err)
 		}
 	}
-	return insertAssistantAttachments(ctx, queries, append(hostedRows, serverRows...))
-}
-
-// insertAssistantAttachments batches runs of one table so created_at keeps request order.
-func insertAssistantAttachments(ctx context.Context, queries *assistantrepo.Queries, rows []assistantAttachmentRow) error {
-	for len(rows) > 0 {
-		toolsetRun := rows[0].toolset != nil
-		n := 1
-		for n < len(rows) && (rows[n].toolset != nil) == toolsetRun {
-			n++
-		}
-		run := rows[:n]
-		rows = rows[n:]
-		if toolsetRun {
-			params := make([]assistantrepo.AddAssistantToolsetsParams, 0, len(run))
-			for _, row := range run {
-				params = append(params, *row.toolset)
-			}
-			if _, err := queries.AddAssistantToolsets(ctx, params); err != nil {
-				return fmt.Errorf("insert assistant toolsets: %w", err)
-			}
-			continue
-		}
-		params := make([]assistantrepo.AddAssistantMcpServersParams, 0, len(run))
-		for _, row := range run {
-			params = append(params, *row.server)
-		}
-		if _, err := queries.AddAssistantMcpServers(ctx, params); err != nil {
-			return fmt.Errorf("insert assistant mcp servers: %w", err)
-		}
+	rows := slices.Concat(hostedRows, serverRows)
+	if len(rows) == 0 {
+		return nil
+	}
+	if _, err := queries.AddAssistantMcpServers(ctx, rows); err != nil {
+		return fmt.Errorf("insert assistant mcp servers: %w", err)
 	}
 	return nil
 }
@@ -1505,7 +1492,7 @@ func deterministicChatID(assistantID uuid.UUID, correlationID string) uuid.UUID 
 }
 
 func toHTTPAssistant(record assistantRecord) (*types.Assistant, error) {
-	// Phase A keeps main's shape: hosted servers are listed only under toolsets.
+	// Hosted servers are listed only under toolsets.
 	toolsets := make([]*types.AssistantToolsetRef, 0, len(record.MCPServers))
 	mcpServers := make([]*types.AssistantMCPServerRef, 0, len(record.MCPServers))
 	for _, row := range record.MCPServers {
@@ -1552,6 +1539,7 @@ func toHTTPAssistant(record assistantRecord) (*types.Assistant, error) {
 		Skills:          skills,
 		WarmTTLSeconds:  record.WarmTTLSeconds,
 		MaxConcurrency:  record.MaxConcurrency,
+		RuntimeVersion:  int(record.RuntimeVersion),
 		Status:          record.Status,
 		CreatedAt:       record.CreatedAt.UTC().Format(time.RFC3339),
 		UpdatedAt:       record.UpdatedAt.UTC().Format(time.RFC3339),
@@ -1578,8 +1566,6 @@ func (s *ServiceCore) CreateAssistant(
 		return assistantRecord{}, fmt.Errorf("create assistant: missing user id")
 	}
 
-	// Resolved before the transaction: the lookup takes its own pool connection.
-	serverKey := s.hostedServerKeyWrites(ctx, projectID)
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return assistantRecord{}, fmt.Errorf("begin assistant tx: %w", err)
@@ -1605,6 +1591,19 @@ func (s *ServiceCore) CreateAssistant(
 	if err != nil {
 		return assistantRecord{}, fmt.Errorf("insert assistant: %w", err)
 	}
+	if s.newAssistantRuntimeVersion == 3 {
+		// This row is new and uncommitted: there is no conversation to migrate.
+		changed, err := queries.SetAssistantDesiredRuntimeVersion(ctx, assistantrepo.SetAssistantDesiredRuntimeVersionParams{
+			RuntimeVersion: 3, AssistantID: created.ID, ProjectID: projectID, ExpectedRuntimeVersion: created.RuntimeVersion,
+		})
+		if err != nil {
+			return assistantRecord{}, fmt.Errorf("select new assistant Kit runtime: %w", err)
+		}
+		if changed != 1 {
+			return assistantRecord{}, fmt.Errorf("select new assistant Kit runtime: authority changed")
+		}
+		created.RuntimeVersion = 3
+	}
 	record := assistantRecordFromCreateRow(created)
 
 	if err := enableAssistantToolsets(ctx, tx, s.audit, assistantActor(ctx, createdByUserID), projectID, resolved, nil, canEnableMCP); err != nil {
@@ -1615,13 +1614,29 @@ func (s *ServiceCore) CreateAssistant(
 	if err != nil {
 		return assistantRecord{}, err
 	}
-	if err := writeAssistantAttachments(ctx, tx, record.ID, projectID, resolved, true, resolvedMcpServers, true, serverKey); err != nil {
+	if err := writeAssistantAttachments(ctx, tx, record.ID, projectID, resolved, true, resolvedMcpServers, true); err != nil {
 		return assistantRecord{}, err
 	}
 
 	if provisionIdentity {
 		if err := s.identities.Provision(ctx, tx, assistantidentity.ProvisionParams{OrganizationID: organizationID, ProjectID: projectID, AssistantID: record.ID, ActorUserID: createdByUserID, AgentID: uuid.Nil, AgentName: ""}); err != nil {
 			return assistantRecord{}, fmt.Errorf("provision assistant identity: %w", err)
+		}
+	}
+	if provisionIdentity && s.newAssistantRuntimeEligible != nil {
+		eligible, err := s.newAssistantRuntimeEligible(ctx, tx, record)
+		if err != nil {
+			return assistantRecord{}, fmt.Errorf("check new assistant Kit eligibility: %w", err)
+		}
+		if eligible {
+			changed, err := queries.SetAssistantDesiredRuntimeVersion(ctx, assistantrepo.SetAssistantDesiredRuntimeVersionParams{RuntimeVersion: 3, AssistantID: record.ID, ProjectID: projectID, ExpectedRuntimeVersion: record.RuntimeVersion})
+			if err != nil {
+				return assistantRecord{}, fmt.Errorf("select eligible assistant Kit runtime: %w", err)
+			}
+			if changed != 1 {
+				return assistantRecord{}, errRuntimeSwitchConflict
+			}
+			record.RuntimeVersion = 3
 		}
 	}
 	if err := tx.Commit(ctx); err != nil {
@@ -1715,20 +1730,42 @@ func (s *ServiceCore) UpdateAssistant(
 	maxConcurrency *int,
 	status *string,
 	canEnableMCP func(toolsetID uuid.UUID) bool,
+	selection ...runtimeSelectionChange,
 ) (assistantRecord, error) {
-	// Resolved before the transaction: the lookup takes its own pool connection.
-	serverKey := s.hostedServerKeyWrites(ctx, projectID)
+	change := runtimeSelectionChange{Version: nil, ExpectedVersion: nil}
+	if len(selection) > 1 {
+		return assistantRecord{}, fmt.Errorf("%w: one runtime selection is required", errAssistantValidation)
+	}
+	if len(selection) == 1 {
+		change = selection[0]
+	}
+	if err := validateRuntimeSelection(change); err != nil {
+		return assistantRecord{}, err
+	}
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return assistantRecord{}, fmt.Errorf("begin assistant tx: %w", err)
 	}
-	defer func() { _ = tx.Rollback(ctx) }()
+	var releaseRuntimeFence func()
+	defer func() {
+		_ = tx.Rollback(ctx)
+		if releaseRuntimeFence != nil {
+			releaseRuntimeFence()
+		}
+	}()
+	queries := assistantrepo.New(tx)
+	if err := queries.AcquireAssistantAdvisoryLock(ctx, assistantID.String()); err != nil {
+		return assistantRecord{}, fmt.Errorf("lock assistant update: %w", err)
+	}
 
 	resolved, err := s.resolveToolsetRefsForWrite(ctx, tx, projectID, toolsets, mcpServers)
 	if err != nil {
 		return assistantRecord{}, err
 	}
-	queries := assistantrepo.New(tx)
+	releaseRuntimeFence, err = s.prepareRuntimeSelection(ctx, queries, tx, projectID, assistantID, change)
+	if err != nil {
+		return assistantRecord{}, err
+	}
 	updated, err := queries.UpdateAssistant(ctx, assistantrepo.UpdateAssistantParams{
 		Name:           conv.PtrToPGText(name),
 		Model:          conv.PtrToPGText(model),
@@ -1774,7 +1811,7 @@ func (s *ServiceCore) UpdateAssistant(
 		}
 	}
 	if toolsets != nil || mcpServers != nil {
-		if err := writeAssistantAttachments(ctx, tx, record.ID, projectID, resolved, toolsets != nil, resolvedMcpServers, mcpServers != nil, serverKey); err != nil {
+		if err := writeAssistantAttachments(ctx, tx, record.ID, projectID, resolved, toolsets != nil, resolvedMcpServers, mcpServers != nil); err != nil {
 			return assistantRecord{}, err
 		}
 	}
@@ -1832,6 +1869,9 @@ func (s *ServiceCore) DeleteAssistant(ctx context.Context, projectID uuid.UUID, 
 		return fmt.Errorf("begin delete assistant tx: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	if err := assistantrepo.New(tx).AcquireAssistantAdvisoryLock(ctx, assistantID.String()); err != nil {
+		return fmt.Errorf("lock assistant deletion: %w", err)
+	}
 	if err := s.identities.TombstoneAssistant(ctx, tx, projectID, assistantID, actor, actorDisplayName); err != nil {
 		return fmt.Errorf("withdraw assistant workload identity: %w", err)
 	}
@@ -1921,10 +1961,13 @@ func (s *ServiceCore) ReapAssistantRuntimes(ctx context.Context, projectID, assi
 	result := ReapAssistantRuntimesResult{Reaped: 0, Errors: 0}
 	for _, row := range rows {
 		if s.reapRuntimeRow(ctx, assistantRuntimeRecord{
+			LifecycleTx:         nil,
+			Retired:             false,
 			ID:                  row.ID,
 			AssistantThreadID:   row.AssistantThreadID,
 			AssistantID:         row.AssistantID,
 			ProjectID:           row.ProjectID,
+			RuntimeVersion:      row.RuntimeVersion,
 			Backend:             row.Backend,
 			BackendMetadataJSON: row.BackendMetadataJson,
 			State:               row.State,
@@ -1983,10 +2026,13 @@ func (s *ServiceCore) ReapInactiveAssistantRuntimes(ctx context.Context, params 
 	result := ReapAssistantRuntimesResult{Reaped: 0, Errors: 0}
 	for _, row := range rows {
 		if s.reapRuntimeRow(ctx, assistantRuntimeRecord{
+			LifecycleTx:         nil,
+			Retired:             false,
 			ID:                  row.ID,
 			AssistantThreadID:   row.AssistantThreadID,
 			AssistantID:         row.AssistantID,
 			ProjectID:           row.ProjectID,
+			RuntimeVersion:      row.RuntimeVersion,
 			Backend:             row.Backend,
 			BackendMetadataJSON: row.BackendMetadataJson,
 			State:               row.State,
@@ -2025,24 +2071,53 @@ func (s *ServiceCore) ReapStoppedAssistantRuntimes(ctx context.Context, params R
 		return ReapAssistantRuntimesResult{}, fmt.Errorf("batch size must be positive")
 	}
 
+	// Switch retirement intent is committed with the selection update before
+	// any backend stop. Retry it independently of TTL and newer runtimes.
+	pending, err := assistantrepo.New(s.db).ListPendingRuntimeSwitchRetirements(ctx, params.BatchSize)
+	if err != nil {
+		return ReapAssistantRuntimesResult{}, fmt.Errorf("list pending switch retirements: %w", err)
+	}
+	retirementErrors := 0
+	remaining := params.BatchSize
+	for _, row := range pending {
+		remaining--
+		if err := s.finishRuntimeSwitchRetirement(ctx, assistantRuntimeRecord{
+			LifecycleTx: nil,
+			Retired:     false,
+			ID:          row.ID, AssistantThreadID: row.AssistantThreadID, AssistantID: row.AssistantID,
+			ProjectID: row.ProjectID, RuntimeVersion: row.RuntimeVersion, Backend: row.Backend,
+			BackendMetadataJSON: row.BackendMetadataJson, State: row.State, WarmUntil: row.WarmUntil,
+		}); err != nil {
+			retirementErrors++
+		}
+	}
+
+	result := ReapAssistantRuntimesResult{Reaped: 0, Errors: retirementErrors}
+	// Every retirement attempt consumes the shared cleanup budget, even on failure.
+	if remaining <= 0 {
+		return result, nil
+	}
+
 	rows, err := assistantrepo.New(s.db).ListStoppedRuntimesForReap(ctx, assistantrepo.ListStoppedRuntimesForReapParams{
 		StoppedState:  runtimeStateStopped,
 		FailedState:   runtimeStateFailed,
 		StoppedBefore: conv.ToPGTimestamptz(time.Now().UTC().Add(-params.StoppedTTL)),
 		ReapedState:   runtimeStateReaped,
-		LimitCount:    params.BatchSize,
+		LimitCount:    remaining,
 	})
 	if err != nil {
 		return ReapAssistantRuntimesResult{}, fmt.Errorf("list stopped assistant runtimes for reap: %w", err)
 	}
 
-	result := ReapAssistantRuntimesResult{Reaped: 0, Errors: 0}
 	for _, row := range rows {
 		if s.reapStoppedRuntimeRow(ctx, assistantRuntimeRecord{
+			LifecycleTx:         nil,
+			Retired:             false,
 			ID:                  row.ID,
 			AssistantThreadID:   row.AssistantThreadID,
 			AssistantID:         row.AssistantID,
 			ProjectID:           row.ProjectID,
+			RuntimeVersion:      row.RuntimeVersion,
 			Backend:             row.Backend,
 			BackendMetadataJSON: row.BackendMetadataJson,
 			State:               row.State,
@@ -2091,10 +2166,13 @@ func (s *ServiceCore) RecycleActiveRuntimeImages(ctx context.Context, params Rec
 	result := RecycleAssistantRuntimeImagesResult{Recycled: 0, Skipped: 0, Errors: 0}
 	for _, row := range rows {
 		record := assistantRuntimeRecord{
+			LifecycleTx:         nil,
+			Retired:             false,
 			ID:                  row.ID,
 			AssistantThreadID:   row.AssistantThreadID,
 			AssistantID:         row.AssistantID,
 			ProjectID:           row.ProjectID,
+			RuntimeVersion:      row.RuntimeVersion,
 			Backend:             row.Backend,
 			BackendMetadataJSON: row.BackendMetadataJson,
 			State:               row.State,
@@ -2314,6 +2392,20 @@ func (s *ServiceCore) EnqueueTriggerTask(ctx context.Context, task bgtriggers.Ta
 	}()
 
 	queries := assistantrepo.New(tx)
+	if err := queries.AcquireAssistantAdvisoryLock(ctx, assistant.ID.String()); err != nil {
+		return EnqueueResult{}, fmt.Errorf("lock assistant ingestion: %w", err)
+	}
+	current, err := queries.GetAssistantForDispatch(ctx, assistant.ID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return EnqueueResult{AssistantID: assistant.ID, ThreadID: uuid.Nil, ShouldSignal: false}, nil
+	}
+	if err != nil {
+		return EnqueueResult{}, fmt.Errorf("revalidate assistant ingestion: %w", err)
+	}
+	if current.Status != StatusActive {
+		return EnqueueResult{AssistantID: assistant.ID, ThreadID: uuid.Nil, ShouldSignal: false}, nil
+	}
+	assistant = assistantRecordFromDispatchRow(current)
 	if err := queries.UpsertAssistantChat(ctx, assistantrepo.UpsertAssistantChatParams{
 		ChatID:         chatID,
 		ProjectID:      assistant.ProjectID,
@@ -2612,6 +2704,21 @@ func (s *ServiceCore) admitPendingThreadsV2(ctx context.Context, assistant assis
 		return AdmitPendingThreadsResult{}, fmt.Errorf("acquire assistant advisory lock: %w", err)
 	}
 
+	// Re-read selection under the admission lock. A future runtime switch uses
+	// this same lock; a pre-lock configuration snapshot must not launch legacy.
+	fresh, err := queries.GetAssistantForDispatch(ctx, assistant.ID)
+	if err != nil {
+		return AdmitPendingThreadsResult{}, fmt.Errorf("reload assistant during admission: %w", err)
+	}
+	assistant = assistantRecordFromDispatchRow(fresh)
+	if assistant.Status != StatusActive {
+		return AdmitPendingThreadsResult{ProjectID: assistant.ProjectID, ThreadIDs: nil}, nil
+	}
+	selectedBackend, err := runtimeBackendForVersion(s.runtime, assistant.RuntimeVersion)
+	if err != nil {
+		return AdmitPendingThreadsResult{}, err
+	}
+
 	threads, err := queries.ListAssistantPendingThreads(ctx, assistantrepo.ListAssistantPendingThreadsParams{
 		ProjectID:     assistant.ProjectID,
 		AssistantID:   assistant.ID,
@@ -2643,7 +2750,7 @@ func (s *ServiceCore) admitPendingThreadsV2(ctx context.Context, assistant assis
 			AssistantThreadID: threads[0].ID,
 			AssistantID:       assistant.ID,
 			ProjectID:         assistant.ProjectID,
-			Backend:           s.runtime.Backend(),
+			Backend:           selectedBackend,
 			State:             runtimeStateStarting,
 		}); err != nil {
 			return AdmitPendingThreadsResult{}, fmt.Errorf("reserve v2 assistant runtime: %w", err)
@@ -2745,6 +2852,19 @@ func (s *ServiceCore) EnsureWarmupThread(ctx context.Context, assistantID uuid.U
 		return noop, fmt.Errorf("acquire assistant advisory lock: %w", err)
 	}
 
+	fresh, err := queries.GetAssistantForDispatch(ctx, assistant.ID)
+	if err != nil {
+		return noop, fmt.Errorf("reload assistant during warmup: %w", err)
+	}
+	assistant = assistantRecordFromDispatchRow(fresh)
+	if assistant.Status != StatusActive {
+		return noop, nil
+	}
+	selectedBackend, err := runtimeBackendForVersion(s.runtime, assistant.RuntimeVersion)
+	if err != nil {
+		return noop, err
+	}
+
 	chatID := deterministicChatID(assistant.ID, warmupCorrelationID)
 	if err := queries.UpsertAssistantChat(ctx, assistantrepo.UpsertAssistantChatParams{
 		ChatID:         chatID,
@@ -2779,7 +2899,7 @@ func (s *ServiceCore) EnsureWarmupThread(ctx context.Context, assistantID uuid.U
 			AssistantThreadID: threadID,
 			AssistantID:       assistant.ID,
 			ProjectID:         assistant.ProjectID,
-			Backend:           s.runtime.Backend(),
+			Backend:           selectedBackend,
 			State:             runtimeStateStarting,
 		}); err != nil {
 			return noop, fmt.Errorf("reserve v2 assistant runtime for warmup: %w", err)
@@ -2867,6 +2987,11 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 		return ProcessThreadEventsResult{}, err
 	}
 
+	protocol, err := boundRuntimeProtocol(s.runtime, runtimeRecord)
+	if err != nil {
+		return ProcessThreadEventsResult{}, err
+	}
+
 	ctx = withAssistantLogContext(ctx, assistantLogContext{
 		OrganizationID:    assistant.OrganizationID,
 		ProjectID:         assistant.ProjectID.String(),
@@ -2882,8 +3007,19 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 		Attempt:           0,
 	})
 
-	ensureResult, err := s.runtime.Ensure(ctx, runtimeRecord)
+	ensureCtx := ctx
+	if kitProductionRuntime(runtimeRecord.RuntimeVersion, runtimeRecord.Backend) {
+		ensureCtx = context.WithValue(ctx, kitAdmissionProgressKey{}, kitAdmissionProgressWriter(func(progressCtx context.Context, raw []byte) error {
+			return s.updateRuntimeEnsureResult(progressCtx, &runtimeRecord, RuntimeBackendEnsureResult{ColdStart: false, BackendMetadataJSON: raw})
+		}))
+	}
+	ensureResult, err := s.runtime.Ensure(ensureCtx, runtimeRecord)
 	if err != nil {
+		if kitProductionRuntime(runtimeRecord.RuntimeVersion, runtimeRecord.Backend) {
+			// A failed restore must not retire the canonical Kit session owner
+			// or silently create a fresh conversation on the next admission.
+			return ProcessThreadEventsResult{}, fmt.Errorf("ensure Kit runtime without retiring session authority: %w", err)
+		}
 		// Ensure failed: mark the runtime row failed so the coordinator's
 		// admit query can re-admit this thread, and return RetryAdmission
 		// rather than propagating an error. Propagating would trigger activity
@@ -2901,11 +3037,17 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 			BootstrappedRuntime: bootstrappedRuntime,
 		}, nil
 	}
-	if err := s.updateRuntimeEnsureResult(ctx, &runtimeRecord, ensureResult); err != nil {
+	if kitProductionRuntime(runtimeRecord.RuntimeVersion, runtimeRecord.Backend) {
+		// The lifecycle transaction already persisted this authority. A second
+		// write after releasing the fence could overwrite a newer checkpoint.
+		if len(ensureResult.BackendMetadataJSON) != 0 {
+			runtimeRecord.BackendMetadataJSON = append([]byte(nil), ensureResult.BackendMetadataJSON...)
+		}
+	} else if err := s.updateRuntimeEnsureResult(ctx, &runtimeRecord, ensureResult); err != nil {
 		return ProcessThreadEventsResult{}, err
 	}
 
-	if runtimeRecord.State == runtimeStateStarting {
+	if runtimeRecord.State == runtimeStateStarting || (kitProductionRuntime(runtimeRecord.RuntimeVersion, runtimeRecord.Backend) && !runtimeRecord.WarmUntil.Valid) {
 		if err := s.setRuntimeActive(ctx, thread.ProjectID, runtimeRecord.ID, time.Now().UTC().Add(time.Duration(assistant.WarmTTLSeconds)*time.Second)); err != nil {
 			return ProcessThreadEventsResult{}, err
 		}
@@ -2914,7 +3056,7 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 
 	processedAny := false
 	for {
-		event, ok, err := s.claimNextPendingEvent(ctx, thread.ProjectID, thread.ID)
+		event, ok, err := s.claimRuntimeEvent(ctx, runtimeRecord, thread.ID)
 		if err != nil {
 			return ProcessThreadEventsResult{}, err
 		}
@@ -2926,7 +3068,7 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 		s.emitAssistantTelemetry(turnCtx, assistant, thread, &runtimeRecord, &event, "turn_start", "assistant turn started", "INFO", nil)
 
 		stopLeaseHeartbeat := s.startProcessingLeaseHeartbeat(turnCtx, thread.ProjectID, runtimeRecord.ID, event.ID)
-		currentSkillSnapshot, runErr := s.processEventTurn(turnCtx, thread, assistant, runtimeRecord, event)
+		currentSkillSnapshot, runErr := s.processEventTurnWithProtocol(turnCtx, thread, assistant, runtimeRecord, event, protocol)
 		stopLeaseHeartbeat()
 		if runErr != nil {
 			s.logger.WarnContext(ctx, "assistant turn failed",
@@ -2936,6 +3078,14 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 				attr.SlogError(runErr),
 			)
 			s.emitAssistantTelemetry(turnCtx, assistant, thread, &runtimeRecord, &event, "turn_failed", "assistant turn failed", "ERROR", runErr)
+
+			if kitProductionRuntime(runtimeRecord.RuntimeVersion, runtimeRecord.Backend) &&
+				(errors.Is(runErr, ErrRuntimeUnhealthy) || errors.Is(runErr, ErrHistoryCorrupted)) {
+				// Legacy replacement/self-heal would discard the session owner and
+				// its transcript cursor. Kit recovery must use its fenced checkpoint,
+				// never silently start a new conversation after a transport failure.
+				return ProcessThreadEventsResult{}, fmt.Errorf("preserve Kit session authority after turn failure: %w", runErr)
+			}
 
 			teardownExhausted := errors.Is(runErr, ErrRuntimeUnhealthy) && event.Attempts >= maxRuntimeTeardowns
 			outcome := turnErrorBucket(runErr)
@@ -3162,12 +3312,13 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 	}, nil
 }
 
-func (s *ServiceCore) processEventTurn(
+func (s *ServiceCore) processEventTurnWithProtocol(
 	ctx context.Context,
 	thread assistantThreadRecord,
 	assistant assistantRecord,
 	runtime assistantRuntimeRecord,
 	event assistantThreadEventRecord,
+	protocol runtimeProtocol,
 ) ([]byte, error) {
 	skills, err := s.loadAssistantSkills(ctx, assistant.ProjectID, []uuid.UUID{assistant.ID})
 	if err != nil {
@@ -3228,13 +3379,30 @@ func (s *ServiceCore) processEventTurn(
 	if err != nil {
 		return nil, err
 	}
-	if err := s.runtime.RunTurn(ctx, runtime, runTurnRequest{
-		ThreadID:       thread.ID,
-		IdempotencyKey: event.ID.String(),
-		AuthToken:      turnToken,
-		Prompt:         prompt,
-		InputParts:     inputParts,
-		MCPServers:     mcpServers,
+	var canonicalUserMessageID uuid.UUID
+	if runtime.RuntimeVersion == 3 {
+		ids, err := assistantrepo.New(s.db).ResolveKitCurrentUserMessage(ctx, assistantrepo.ResolveKitCurrentUserMessageParams{ProjectID: assistant.ProjectID, AssistantID: assistant.ID, EventID: event.ID})
+		if err != nil {
+			return nil, fmt.Errorf("resolve canonical Kit input: %w", err)
+		}
+		if len(ids) > 1 {
+			return nil, fmt.Errorf("ambiguous canonical Kit input")
+		}
+		if len(ids) == 1 {
+			canonicalUserMessageID = ids[0]
+		}
+	}
+	if err := protocol.RunTurn(ctx, runtime, runTurnRequest{
+		EventID:                event.ID,
+		EventAttempt:           event.Attempts,
+		CanonicalUserMessageID: canonicalUserMessageID,
+		Model:                  assistant.Model,
+		ThreadID:               thread.ID,
+		IdempotencyKey:         event.ID.String(),
+		AuthToken:              turnToken,
+		Prompt:                 prompt,
+		InputParts:             inputParts,
+		MCPServers:             mcpServers,
 	}); err != nil {
 		return nil, fmt.Errorf("run assistant turn: %w", err)
 	}
@@ -3287,23 +3455,6 @@ func (s *ServiceCore) assistantPlatformSlugs(ctx context.Context, assistant assi
 		return nil, fmt.Errorf("resolve managed assistant: %w", mErr)
 	}
 	return platformSlugs, nil
-}
-
-// hostedServerKeyWrites reports whether the project's organization writes hosted attachments under the canonical server key; any failure keeps assistant_toolsets.
-func (s *ServiceCore) hostedServerKeyWrites(ctx context.Context, projectID uuid.UUID) bool {
-	if s.featureFlags == nil {
-		return false
-	}
-	project, err := projectsrepo.New(s.db).GetProjectWithOrganizationMetadata(ctx, projectID)
-	if err != nil {
-		s.logger.WarnContext(ctx, "resolve organization for hosted mcp server key writes; keeping the toolset key", attr.SlogError(err))
-		return false
-	}
-	enabled, err := feature.HostedMCPServerKeyWrites(ctx, s.featureFlags, project.ID, project.Slug)
-	if err != nil {
-		s.logger.WarnContext(ctx, "evaluate hosted mcp server key writes; keeping the toolset key", attr.SlogError(err))
-	}
-	return enabled
 }
 
 // assistantToolsVariant reports which managed-assistant platform toolset the
@@ -3442,6 +3593,7 @@ func (s *ServiceCore) BuildThreadBootstrap(ctx context.Context, projectID, threa
 		Skills:          nil,
 		WarmTTLSeconds:  conv.SafeInt(row.WarmTtlSeconds),
 		MaxConcurrency:  conv.SafeInt(row.MaxConcurrency),
+		RuntimeVersion:  row.AssistantRuntimeVersion,
 		Status:          row.Status,
 		CreatedAt:       row.CreatedAt.Time,
 		UpdatedAt:       row.UpdatedAt.Time,
@@ -3670,8 +3822,8 @@ func resolveAssistantMCPServers(ctx context.Context, logger *slog.Logger, server
 	}
 
 	// Platform toolsets granted to this runtime (caller-determined); not
-	// surfaced as user-managed toolsets and not persisted in
-	// assistant_toolsets so users can't detach them. The "_p-" prefix
+	// surfaced as user-managed toolsets and not persisted as
+	// attachments so users can't detach them. The "_p-" prefix
 	// marks the runtime server ID as platform-issued and gives it enough
 	// distance from any plausible user toolset slug (the current SlugPattern
 	// still allows leading "_", so this is convention, not a hard fence —
@@ -3699,7 +3851,14 @@ func (s *ServiceCore) ProcessThreadEventsByThreadID(ctx context.Context, project
 // `expiring` blocks new dispatches; the post-CAS /state poll catches any turn
 // that slipped in (the runner clears idle_seconds synchronously inside /turn).
 func (s *ServiceCore) ExpireThreadRuntime(ctx context.Context, projectID, threadID uuid.UUID, warmTTLSeconds int) (ExpireThreadRuntimeResult, error) {
-	row, err := assistantrepo.New(s.db).BeginExpireAssistantRuntime(ctx, assistantrepo.BeginExpireAssistantRuntimeParams{
+	// Keep the CAS provisional until its immutable runtime version is known.
+	// Rolling back Kit leaves admission active and ends only this legacy timer.
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return ExpireThreadRuntimeResult{}, fmt.Errorf("begin idle expiry transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	row, err := assistantrepo.New(tx).BeginExpireAssistantRuntime(ctx, assistantrepo.BeginExpireAssistantRuntimeParams{
 		ExpiringState:        runtimeStateExpiring,
 		ProjectID:            projectID,
 		ThreadID:             threadID,
@@ -3717,11 +3876,21 @@ func (s *ServiceCore) ExpireThreadRuntime(ctx context.Context, projectID, thread
 		return ExpireThreadRuntimeResult{}, fmt.Errorf("begin expire assistant runtime: %w", err)
 	}
 
+	if !legacyRuntimeIdleExpiryAllowed(row.RuntimeVersion) {
+		return ExpireThreadRuntimeResult{Stopped: true, RemainingSeconds: 0}, nil
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return ExpireThreadRuntimeResult{}, fmt.Errorf("commit idle expiry transition: %w", err)
+	}
+
 	return s.expireRuntime(ctx, assistantRuntimeRecord{
+		LifecycleTx:         nil,
+		Retired:             false,
 		ID:                  row.ID,
 		AssistantThreadID:   row.AssistantThreadID,
 		AssistantID:         row.AssistantID,
 		ProjectID:           row.ProjectID,
+		RuntimeVersion:      row.RuntimeVersion,
 		Backend:             row.Backend,
 		BackendMetadataJSON: row.BackendMetadataJson,
 		State:               row.State,
@@ -3729,10 +3898,18 @@ func (s *ServiceCore) ExpireThreadRuntime(ctx context.Context, projectID, thread
 	}, warmTTLSeconds)
 }
 
+// legacyRuntimeIdleExpiryAllowed fails closed for Kit and unknown versions.
+func legacyRuntimeIdleExpiryAllowed(version int16) bool { return version == 1 || version == 2 }
+
 // expireRuntime finishes an expire on a row already moved to `expiring`. It
 // polls the runner's idle clock and either reverts the row to `active` with
 // the remaining warm window, or stops the backend and retires the row.
 func (s *ServiceCore) expireRuntime(ctx context.Context, runtimeRecord assistantRuntimeRecord, warmTTLSeconds int) (ExpireThreadRuntimeResult, error) {
+	if !legacyRuntimeIdleExpiryAllowed(runtimeRecord.RuntimeVersion) {
+		// Unknown settlement (including a failed status probe) cannot authorize
+		// stopping Kit. Its lifecycle needs a separate all-session admission fence.
+		return ExpireThreadRuntimeResult{Stopped: false, RemainingSeconds: busyRuntimeRecheckSeconds}, nil
+	}
 	statusCtx, cancelStatus := context.WithTimeout(ctx, runtimeExpireStatusTimeout)
 	status, statusErr := s.runtime.Status(statusCtx, runtimeRecord)
 	cancelStatus()
@@ -3809,16 +3986,20 @@ func (s *ServiceCore) loadThreadContext(ctx context.Context, projectID, threadID
 		Skills:          nil,
 		WarmTTLSeconds:  conv.SafeInt(row.WarmTtlSeconds),
 		MaxConcurrency:  conv.SafeInt(row.MaxConcurrency),
+		RuntimeVersion:  row.AssistantRuntimeVersion,
 		Status:          row.Status,
 		CreatedAt:       row.CreatedAt.Time,
 		UpdatedAt:       row.UpdatedAt.Time,
 		DeletedAt:       row.DeletedAt,
 	}
 	runtime := assistantRuntimeRecord{
+		LifecycleTx:         nil,
+		Retired:             false,
 		ID:                  row.RuntimeID,
 		AssistantThreadID:   uuid.Nil,
 		AssistantID:         row.RuntimeAssistantID,
 		ProjectID:           row.RuntimeProjectID,
+		RuntimeVersion:      row.RuntimeVersion,
 		Backend:             row.Backend,
 		BackendMetadataJSON: row.BackendMetadataJson,
 		State:               row.State,
@@ -4103,8 +4284,12 @@ func decodePersistedToolCalls(raw []byte) ([]runtimeToolCall, error) {
 }
 
 func (s *ServiceCore) claimNextPendingEvent(ctx context.Context, projectID, threadID uuid.UUID) (assistantThreadEventRecord, bool, error) {
+	return claimNextPendingEventWithQueries(ctx, assistantrepo.New(s.db), projectID, threadID)
+}
+
+func claimNextPendingEventWithQueries(ctx context.Context, queries *assistantrepo.Queries, projectID, threadID uuid.UUID) (assistantThreadEventRecord, bool, error) {
 	var zero assistantThreadEventRecord
-	row, err := assistantrepo.New(s.db).ClaimNextPendingEvent(ctx, assistantrepo.ClaimNextPendingEventParams{
+	row, err := queries.ClaimNextPendingEvent(ctx, assistantrepo.ClaimNextPendingEventParams{
 		ProcessingStatus: eventStatusProcessing,
 		ProjectID:        projectID,
 		ThreadID:         threadID,

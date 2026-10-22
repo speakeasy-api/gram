@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
@@ -22,7 +23,7 @@ export const OrganizationGatewayUnavailableReason = {
 /**
  * Why the gateway is not served. Set only when not available.
  */
-export type OrganizationGatewayUnavailableReason = ClosedEnum<
+export type OrganizationGatewayUnavailableReason = OpenEnum<
   typeof OrganizationGatewayUnavailableReason
 >;
 
@@ -45,9 +46,10 @@ export type OrganizationGateway = {
 };
 
 /** @internal */
-export const OrganizationGatewayUnavailableReason$inboundSchema: z.ZodMiniEnum<
-  typeof OrganizationGatewayUnavailableReason
-> = z.enum(OrganizationGatewayUnavailableReason);
+export const OrganizationGatewayUnavailableReason$inboundSchema: z.ZodMiniType<
+  OrganizationGatewayUnavailableReason,
+  unknown
+> = openEnums.inboundSchema(OrganizationGatewayUnavailableReason);
 
 /** @internal */
 export const OrganizationGateway$inboundSchema: z.ZodMiniType<

@@ -52,6 +52,7 @@ ${body}
         CALLS: calls,
         GRAM_SERVER_URL: "https://localhost:8080",
         GRAM_SITE_URL: "https://localhost:5173",
+        GRAM_DEVIDP_EXTERNAL_URL: "https://localhost:35291",
         ...overrides,
       },
       encoding: "utf8",
@@ -115,17 +116,105 @@ for (const value of ["flag.example.com", ""]) {
   });
 }
 
-test("extra hosts do not enable TLS for HTTP-only endpoints", (t) => {
+for (const host of ["localhost", "dev-machine.example.ts.net"]) {
+  test(`HTTP-only development endpoints disable TLS (${host})`, (t) => {
+    const f = fixture(t);
+    const calls = f.run({
+      GRAM_SERVER_URL: `http://${host}:8080`,
+      GRAM_SITE_URL: `http://${host}:5173`,
+      GRAM_DEVIDP_EXTERNAL_URL: `http://${host}:35291`,
+      GRAM_SSL_EXTRA_HOSTS: "dev-machine.example.ts.net,100.64.0.1",
+    });
+    assert.equal(
+      calls.some((call) => call.name === "mkcert"),
+      false,
+    );
+    assert.ok(
+      calls.some(
+        (call) =>
+          call.name === "mise" && call.args.includes("GRAM_HTTP_SCHEME=http"),
+      ),
+    );
+    for (const name of ["GRAM_SSL_CERT_FILE", "GRAM_SSL_KEY_FILE"]) {
+      assert.ok(
+        calls.some(
+          (call) => call.name === "mise" && call.args.includes(`${name}=`),
+        ),
+      );
+    }
+  });
+}
+
+test("uppercase dev-idp HTTPS enables TLS when the app URLs use HTTP", (t) => {
   const f = fixture(t);
-  const calls = f.run({
+  const { result, calls } = f.runResult({
     GRAM_SERVER_URL: "http://localhost:8080",
     GRAM_SITE_URL: "http://localhost:5173",
-    GRAM_SSL_EXTRA_HOSTS: "dev-machine.example.ts.net,100.64.0.1",
+    GRAM_DEVIDP_EXTERNAL_URL: "HTTPS://idp.example.ts.net:35291",
   });
-  assert.equal(
-    calls.some((call) => call.name === "mkcert"),
-    false,
+  assert.equal(result.status, 0, result.stderr);
+  assert.ok(
+    calls.some(
+      (call) =>
+        call.name === "mise" && call.args.includes("GRAM_HTTP_SCHEME=https"),
+    ),
   );
+  const generated = calls.find(
+    (call) => call.name === "mkcert" && call.args[0] === "-cert-file",
+  );
+  assert.ok(generated);
+  assert.ok(generated.args.slice(4).includes("idp.example.ts.net"));
+});
+
+test("TLS setup omits URL userinfo from output and certificate arguments", (t) => {
+  const f = fixture(t);
+  const { result, calls } = f.runResult({
+    GRAM_DEVIDP_EXTERNAL_URL:
+      "https://fixture-user:fixture-secret@idp.example.ts.net:35291",
+  });
+  assert.equal(result.status, 0, result.stderr);
+  assert.doesNotMatch(
+    result.stdout + result.stderr + JSON.stringify(calls),
+    /fixture-user|fixture-secret/,
+  );
+  const generated = calls.find(
+    (call) => call.name === "mkcert" && call.args[0] === "-cert-file",
+  );
+  assert.ok(generated);
+  assert.ok(generated.args.slice(4).includes("idp.example.ts.net"));
+});
+
+test("mkcert includes a separately configured dev-idp hostname", (t) => {
+  const f = fixture(t);
+  const calls = f.run({
+    GRAM_DEVIDP_EXTERNAL_URL: "https://idp.example.ts.net:35291",
+  });
+  const generated = calls.find(
+    (call) => call.name === "mkcert" && call.args[0] === "-cert-file",
+  );
+  assert.ok(generated);
+  assert.deepEqual(generated.args.slice(4), [
+    "localhost",
+    "idp.example.ts.net",
+    "host.docker.internal",
+    "127.0.0.1",
+    "::1",
+  ]);
+});
+
+test("TLS setup also works without a dev-idp URL", (t) => {
+  const f = fixture(t);
+  const calls = f.run({ GRAM_DEVIDP_EXTERNAL_URL: undefined });
+  const generated = calls.find(
+    (call) => call.name === "mkcert" && call.args[0] === "-cert-file",
+  );
+  assert.ok(generated);
+  assert.deepEqual(generated.args.slice(4), [
+    "localhost",
+    "host.docker.internal",
+    "127.0.0.1",
+    "::1",
+  ]);
 });
 
 for (const host of [

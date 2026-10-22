@@ -23,6 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
@@ -85,6 +86,13 @@ func seedOrganizationGateway(t *testing.T, ctx context.Context, ti *testInstance
 	userID := seedConsentMember(t, ctx, ti, authCtx.ActiveOrganizationID)
 	subject := urn.NewUserSubject(userID)
 	seedUserMCPConnectGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, userID, mcpServerBySlug(t, ctx, ti, *authCtx.ProjectID, grantedSlug).String())
+
+	featureQuery := featuresrepo.New(ti.conn)
+	setting := featuresrepo.EnableFeatureParams{OrganizationID: authCtx.ActiveOrganizationID, FeatureName: string(productfeatures.FeatureOrganizationGatewayDisabled)}
+	_, err := featureQuery.EnableFeature(ctx, setting)
+	require.NoError(t, err)
+	_, err = featureQuery.DeleteFeature(ctx, featuresrepo.DeleteFeatureParams(setting))
+	require.NoError(t, err)
 
 	return organizationGatewayFixture{
 		organizationSlug: authCtx.OrganizationSlug,
@@ -373,7 +381,7 @@ func TestServeConsentAction_OrganizationGatewayConnectsAnotherProjectsClient(t *
 	require.NoError(t, err)
 	require.Equal(t, client, login.RemoteSessionClientID)
 	require.Equal(t, otherProject.ID, login.ProjectID, "the login runs in the project that owns the client")
-	require.Equal(t, "mcp/gateway", login.RouteBase, "the login returns to the gateway's consent page")
+	require.Equal(t, mcproute.OrganizationGateway, login.RouteBase, "the login returns to the gateway's consent page")
 	require.Equal(t, fx.organizationSlug, login.McpSlug)
 }
 
@@ -429,7 +437,7 @@ func TestOrganizationGatewayRoutes_ShadowedEndpointKeepsItsRoutes(t *testing.T) 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	router := goahttp.NewMuxer()
-	mcp.Attach(router, ti.service, nil)
+	mcp.Attach(router, ti.service.Service, nil)
 
 	w := postRegistration(t, router, "/mcp/gateway/register")
 	require.Equal(t, http.StatusNotFound, w.Code, "without such an endpoint the path names an organization")
@@ -585,7 +593,7 @@ func TestServeOrganizationGateway_TurnedOffIsNotFound(t *testing.T) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	router := goahttp.NewMuxer()
-	mcp.Attach(router, ti.service, nil)
+	mcp.Attach(router, ti.service.Service, nil)
 	metadataPath := "/.well-known/oauth-protected-resource/mcp/gateway/" + fx.organizationSlug
 	getMetadata := func() int {
 		w := httptest.NewRecorder()

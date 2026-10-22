@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net"
 	"net/url"
+	"regexp"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/urfave/cli/v2"
@@ -17,12 +18,14 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/k8s"
 )
 
+var assistantRuntimeImageTagPattern = regexp.MustCompile(`^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$`)
+
 // Flag groups are built per call rather than kept in package-level slices
 // because urfave/cli writes the resolved value back onto the flag when it is
 // applied to a flag set. Sharing definitions across flag sets means sharing
 // mutable state.
 func assistantRuntimeFlags() []cli.Flag {
-	return []cli.Flag{
+	return append([]cli.Flag{
 		&cli.StringFlag{
 			Name:    "assistant-runtime-provider",
 			Usage:   "Assistant runtime provider. Allowed values: gke, local.",
@@ -77,7 +80,12 @@ func assistantRuntimeFlags() []cli.Flag {
 			Usage:   "The OCI image repository for the assistant runtime image. It must not include a tag.",
 			EnvVars: []string{"GRAM_ASSISTANT_RUNTIME_OCI_IMAGE"},
 		},
-	}
+		&cli.StringFlag{
+			Name:    "assistant-runtime-image-tag",
+			Usage:   "Optional assistant runtime image tag. Defaults to the compiled assistant runtime image hash.",
+			EnvVars: []string{"GRAM_ASSISTANT_RUNTIME_IMAGE_TAG"},
+		},
+	}, assistantKitRuntimeFlags()...)
 }
 
 func assistantRuntimeConfigFromCLI(c *cli.Context, serverURL *url.URL) (assistants.RuntimeBackendConfig, error) {
@@ -97,6 +105,14 @@ func assistantRuntimeConfigFromCLI(c *cli.Context, serverURL *url.URL) (assistan
 	case assistants.RuntimeProviderLocal:
 	default:
 		return assistants.RuntimeBackendConfig{}, fmt.Errorf("invalid assistant runtime provider: %s", provider)
+	}
+
+	imageTag := c.String("assistant-runtime-image-tag")
+	if imageTag == "" {
+		imageTag = AssistantRuntimeImageHash
+	}
+	if !assistantRuntimeImageTagPattern.MatchString(imageTag) {
+		return assistants.RuntimeBackendConfig{}, fmt.Errorf("invalid assistant runtime image tag: %q", imageTag)
 	}
 
 	environment := c.String("environment")
@@ -131,7 +147,7 @@ func assistantRuntimeConfigFromCLI(c *cli.Context, serverURL *url.URL) (assistan
 			SandboxTemplate:  c.String("assistant-runtime-gke-sandbox-template"),
 			GuestPort:        0,
 			OCIImage:         c.String("assistant-runtime-oci-image"),
-			ImageTag:         AssistantRuntimeImageHash,
+			ImageTag:         imageTag,
 			ServerURL:        resolvedServerURL,
 			RunnerCIDRBlocks: c.StringSlice("assistant-runtime-gke-runner-cidr"),
 		},
@@ -142,7 +158,7 @@ func assistantRuntimeConfigFromCLI(c *cli.Context, serverURL *url.URL) (assistan
 			Enabled:         provider == assistants.RuntimeProviderLocal || environment == "local",
 			Environment:     environment,
 			OCIImage:        c.String("assistant-runtime-oci-image"),
-			ImageTag:        AssistantRuntimeImageHash,
+			ImageTag:        imageTag,
 			GuestPort:       0,
 			ServerURL:       localRuntimeServerURL,
 			ExtraCACertFile: c.String("assistant-runtime-local-ca-file"),

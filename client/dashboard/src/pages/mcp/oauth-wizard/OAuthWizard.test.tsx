@@ -26,6 +26,7 @@ const mocks = vi.hoisted(() => {
     setToolsetUserSessionIssuer: vi.fn().mockResolvedValue(undefined),
     capture: vi.fn(),
     invalidateAllToolset: vi.fn(),
+    invalidateAllMcpServers: vi.fn(),
     invalidateAllGetMcpMetadata: vi.fn(),
     invalidateAllListEnvironments: vi.fn(),
     isFeatureEnabled: vi.fn(() => false),
@@ -37,6 +38,9 @@ vi.mock("@gram/client/react-query/toolset.js", () => ({
   invalidateAllToolset: mocks.invalidateAllToolset,
 }));
 
+vi.mock("@gram/client/react-query/mcpServers.js", () => ({
+  invalidateAllMcpServers: mocks.invalidateAllMcpServers,
+}));
 vi.mock("@gram/client/react-query/getMcpMetadata.js", () => ({
   invalidateAllGetMcpMetadata: mocks.invalidateAllGetMcpMetadata,
 }));
@@ -381,6 +385,7 @@ describe("OAuthWizard — existing external OAuth config", () => {
       expect(mocks.updateExternalOAuth).toHaveBeenCalledTimes(1),
     );
     expect(mocks.invalidateAllToolset).toHaveBeenCalled();
+    expect(mocks.invalidateAllMcpServers).toHaveBeenCalled();
     expect(mocks.invalidateAllGetMcpMetadata).toHaveBeenCalled();
   });
 
@@ -670,6 +675,7 @@ describe("OAuthWizard — happy proxy create", () => {
     expect(mocks.createRemoteSessionClient).toHaveBeenCalledTimes(1);
     expect(mocks.setToolsetUserSessionIssuer).toHaveBeenCalledTimes(1);
     expect(mocks.invalidateAllToolset).toHaveBeenCalled();
+    expect(mocks.invalidateAllMcpServers).toHaveBeenCalled();
     expect(mocks.invalidateAllGetMcpMetadata).toHaveBeenCalled();
     expect(mocks.invalidateAllListEnvironments).toHaveBeenCalled();
     expect(mocks.capture).toHaveBeenCalledWith(

@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
@@ -14,7 +15,7 @@ export const LiteLLMGuardrailAction = {
   None: "NONE",
   GuardrailIntervened: "GUARDRAIL_INTERVENED",
 } as const;
-export type LiteLLMGuardrailAction = ClosedEnum<typeof LiteLLMGuardrailAction>;
+export type LiteLLMGuardrailAction = OpenEnum<typeof LiteLLMGuardrailAction>;
 
 /**
  * LiteLLM Generic Guardrail decision.
@@ -29,9 +30,10 @@ export type LitellmIngestResult = {
 };
 
 /** @internal */
-export const LiteLLMGuardrailAction$inboundSchema: z.ZodMiniEnum<
-  typeof LiteLLMGuardrailAction
-> = z.enum(LiteLLMGuardrailAction);
+export const LiteLLMGuardrailAction$inboundSchema: z.ZodMiniType<
+  LiteLLMGuardrailAction,
+  unknown
+> = openEnums.inboundSchema(LiteLLMGuardrailAction);
 
 /** @internal */
 export const LitellmIngestResult$inboundSchema: z.ZodMiniType<

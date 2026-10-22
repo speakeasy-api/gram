@@ -15,6 +15,7 @@ import (
 	"mime"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"time"
 
@@ -24,13 +25,18 @@ import (
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/identity"
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/consentpage"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
+	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/organizations/orgprovision"
 	platformoauth "github.com/speakeasy-api/gram/server/internal/platformmcp/oauth"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
+	"github.com/speakeasy-api/gram/server/internal/signins"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd"
@@ -48,7 +54,7 @@ const (
 var oauthPageHTML string
 
 var (
-	oauthPageTemplate      = template.Must(template.New("platform-mcp-oauth-page").Parse(oauthPageHTML))
+	oauthPageTemplate      = template.Must(template.Must(template.New("platform-mcp-oauth-page").Parse(oauthPageHTML)).Parse(consentpage.LogoTemplate))
 	errPlatformMCPDisabled = fmt.Errorf("platform mcp disabled: %w", ErrForbidden)
 	supportedGrantTypes    = []string{oauthwire.GrantTypeAuthorizationCode, oauthwire.GrantTypeRefreshToken}
 
@@ -70,6 +76,9 @@ var (
 type oauthPageData struct {
 	Title string
 	Kind  string
+	// Styles is the shared authorization page stylesheet. renderOAuthPage
+	// sets it.
+	Styles template.CSS
 	// ClientName is attacker-chosen for any CIMD-resolved client: it comes
 	// from a document served at a URL the client picked. ClientIDOrigin is
 	// the trust anchor that name lacks — the host the document was fetched
@@ -86,6 +95,13 @@ type oauthPageData struct {
 	CSRFToken        string
 	ScriptNonce      string
 	AutoClose        bool
+	// WorkspaceName prefills the workspace form, and WorkspaceError explains
+	// why a submitted name was refused.
+	WorkspaceName  string
+	WorkspaceError string
+	// Invitations are the organizations a user with none may join instead
+	// of creating a workspace.
+	Invitations []WorkspaceInvitation
 }
 
 // BrowserIdentity resolves a real Speakeasy user from the product identity provider.
@@ -104,6 +120,34 @@ type OrganizationSelector interface {
 	EligibleOrganizations(ctx context.Context, userID string) ([]OrganizationOption, error)
 }
 
+// WorkspaceInvitation is a live invitation to an existing organization.
+type WorkspaceInvitation struct {
+	ID               string
+	OrganizationName string
+	// RequiresSSO marks an organization whose SSO connection covers the
+	// invitee's email when this sign-in did not go through it. It cannot be
+	// joined until the user signs in with that SSO.
+	RequiresSSO bool
+}
+
+// ErrInvitationRequiresSSO refuses to join an organization whose SSO
+// connection covers the invitee's email when the user did not sign in
+// through it.
+var ErrInvitationRequiresSSO = errors.New("invitation requires signing in with SSO")
+
+// WorkspaceProvisioner creates the first organization for a user who signs in
+// with no organization, so a new user can connect without visiting the
+// dashboard first. A user with a pending invitation to their verified email
+// joins that organization instead. ProvisionWorkspace must refuse a user who
+// already belongs to an organization or has a pending invitation. A nil provisioner in
+// OAuthHTTPConfig refuses a user with no organization instead.
+type WorkspaceProvisioner interface {
+	SuggestedWorkspaceName(ctx context.Context, userID string) (string, error)
+	ProvisionWorkspace(ctx context.Context, userID, name string) (OrganizationOption, error)
+	PendingInvitations(ctx context.Context, verifiedEmail, ssoOrganizationID string) ([]WorkspaceInvitation, error)
+	JoinInvitedWorkspace(ctx context.Context, userID, verifiedEmail, ssoOrganizationID, invitationID string) (OrganizationOption, error)
+}
+
 type oauthChallenge struct {
 	ID             string    `json:"id"`
 	ClientID       string    `json:"client_id"`
@@ -120,6 +164,15 @@ type oauthChallenge struct {
 	// authorization code is bound to that origin's resource. Empty means the
 	// configured base URL.
 	BaseURL string `json:"base_url,omitempty"`
+
+	// VerifiedEmail is the signed-in user's email when the identity provider
+	// reports it verified. Only it may claim an organization invitation, as
+	// following the emailed invite link would.
+	VerifiedEmail string `json:"verified_email,omitempty"`
+	// SSOOrganizationID is the WorkOS organization whose SSO connection the
+	// user signed in through, empty for any other method. An invitation that
+	// organization's SSO covers can be joined only from such a sign-in.
+	SSOOrganizationID string `json:"sso_organization_id,omitempty"`
 }
 
 func (c oauthChallenge) CacheKey() string              { return platformOAuthChallengePrefix + c.ID }
@@ -146,6 +199,7 @@ type OAuthHTTP struct {
 	gate          Gate
 	authorizer    Authorizer
 	organizations OrganizationSelector
+	workspaces    WorkspaceProvisioner
 	signer        *sessiontokens.Signer
 	credentials   *CredentialCodec
 	telemetry     OAuthTelemetry
@@ -172,6 +226,7 @@ type OAuthHTTPConfig struct {
 	Gate          Gate
 	Authorizer    Authorizer
 	Organizations OrganizationSelector
+	Workspaces    WorkspaceProvisioner
 	Signer        *sessiontokens.Signer
 	Encryption    *encryption.Client
 	Telemetry     OAuthTelemetry
@@ -221,6 +276,7 @@ func NewOAuthHTTP(config OAuthHTTPConfig) (*OAuthHTTP, error) {
 		gate:          config.Gate,
 		authorizer:    config.Authorizer,
 		organizations: config.Organizations,
+		workspaces:    config.Workspaces,
 		signer:        config.Signer,
 		credentials:   credentials,
 		telemetry:     config.Telemetry,
@@ -250,6 +306,8 @@ func (s *OAuthHTTP) Attach(mux interface {
 	mux.Handle("GET", "/platform-mcp/idp_callback", handlerFunc(s.IDPCallbackHandler()))
 	mux.Handle("GET", "/platform-mcp/select-organization", handlerFunc(s.OrganizationSelectionHandler()))
 	mux.Handle("POST", "/platform-mcp/select-organization", handlerFunc(s.OrganizationSelectionHandler()))
+	mux.Handle("POST", "/platform-mcp/create-workspace", handlerFunc(s.CreateWorkspaceHandler()))
+	mux.Handle("POST", "/platform-mcp/join-workspace", handlerFunc(s.JoinWorkspaceHandler()))
 	mux.Handle("GET", "/platform-mcp/connect", handlerFunc(s.ConnectHandler()))
 	mux.Handle("POST", "/platform-mcp/connect", handlerFunc(s.ConnectHandler()))
 	mux.Handle("GET", "/platform-mcp/provider-setup-complete", handlerFunc(s.ProviderSetupCompleteHandler()))
@@ -423,6 +481,10 @@ func (s *OAuthHTTP) IDPCallbackHandler() http.Handler {
 		}
 		challenge.ID = uuid.NewString()
 		challenge.Subject = urn.NewUserSubject(login.UserID).String()
+		challenge.VerifiedEmail = idpUser.Evidence.VerifiedEmail
+		if idpUser.AuthenticationMethod == signins.MethodSSO {
+			challenge.SSOOrganizationID = idpUser.OrganizationID
+		}
 		if err := s.cache.Store(r.Context(), challenge); err != nil {
 			writeOAuthError(w, http.StatusServiceUnavailable, "temporarily_unavailable", "could not continue authorization")
 			return
@@ -461,7 +523,7 @@ func (s *OAuthHTTP) organizationSelectionGet(w http.ResponseWriter, r *http.Requ
 		writeOAuthError(w, http.StatusInternalServerError, "server_error", "could not load eligible organizations")
 		return
 	}
-	if len(organizations) == 0 {
+	if len(organizations) == 0 && s.workspaces == nil {
 		writeOAuthError(w, http.StatusForbidden, "access_denied", "no eligible organizations are available")
 		return
 	}
@@ -474,8 +536,20 @@ func (s *OAuthHTTP) organizationSelectionGet(w http.ResponseWriter, r *http.Requ
 		writeOAuthError(w, http.StatusUnauthorized, "invalid_client", "authorization client is unavailable")
 		return
 	}
+	if len(organizations) == 0 {
+		if s.renderPendingInvitations(w, r, client.Name, challenge) {
+			return
+		}
+		// A suggestion is a convenience. Without one the user types a name.
+		suggestion, err := s.workspaces.SuggestedWorkspaceName(r.Context(), subject.ID)
+		if err != nil {
+			s.logger.WarnContext(r.Context(), "could not suggest a Platform MCP workspace name", attr.SlogError(err))
+		}
+		s.renderWorkspacePage(w, client.Name, challenge, suggestion, "")
+		return
+	}
 	s.renderOAuthPage(w, oauthPageData{
-		Title:         "Choose an organization · Platform MCP",
+		Title:         "Choose an organization · Speakeasy",
 		Kind:          "organization",
 		ClientName:    client.Name,
 		Organizations: organizations,
@@ -525,6 +599,205 @@ func (s *OAuthHTTP) organizationSelectionPost(w http.ResponseWriter, r *http.Req
 	writeOAuthError(w, http.StatusForbidden, "access_denied", "selected organization is not available")
 }
 
+func (s *OAuthHTTP) renderWorkspacePage(w http.ResponseWriter, clientName string, challenge oauthChallenge, name, problem string) {
+	s.renderOAuthPage(w, oauthPageData{
+		Title:          "Name your organization · Speakeasy",
+		Kind:           "workspace",
+		ClientName:     clientName,
+		RedirectURI:    challenge.RedirectURI,
+		State:          challenge.ID,
+		CSRFToken:      challenge.CSRFToken,
+		WorkspaceName:  name,
+		WorkspaceError: problem,
+	})
+}
+
+func (s *OAuthHTTP) renderInvitationPage(w http.ResponseWriter, clientName string, challenge oauthChallenge, invitations []WorkspaceInvitation) {
+	s.renderOAuthPage(w, oauthPageData{
+		Title:       "Join your team · Speakeasy",
+		Kind:        "invitation",
+		ClientName:  clientName,
+		RedirectURI: challenge.RedirectURI,
+		State:       challenge.ID,
+		CSRFToken:   challenge.CSRFToken,
+		Invitations: invitations,
+	})
+}
+
+const ssoRequiredDescription = "Your invitation requires your company's single sign-on. Sign in with SSO, then connect again."
+
+// renderPendingInvitations shows a user with no organization the
+// invitations waiting for their verified email, so an invited user joins
+// their team rather than starting a second organization beside it. An
+// invitation that requires SSO is offered only after an SSO sign-in; when
+// every invitation needs one, the user is told to sign in with SSO instead.
+// It reports whether it wrote a response.
+func (s *OAuthHTTP) renderPendingInvitations(w http.ResponseWriter, r *http.Request, clientName string, challenge oauthChallenge) bool {
+	if challenge.VerifiedEmail == "" {
+		return false
+	}
+	invitations, err := s.workspaces.PendingInvitations(r.Context(), challenge.VerifiedEmail, challenge.SSOOrganizationID)
+	if err != nil {
+		s.logger.ErrorContext(r.Context(), "could not load Platform MCP workspace invitations", attr.SlogError(err))
+		writeOAuthError(w, http.StatusInternalServerError, "server_error", "could not load pending invitations")
+		return true
+	}
+	if len(invitations) == 0 {
+		return false
+	}
+	if !slices.ContainsFunc(invitations, func(invitation WorkspaceInvitation) bool { return !invitation.RequiresSSO }) {
+		s.renderOAuthPage(w, oauthPageData{
+			Title:       "Sign in with SSO · Speakeasy",
+			Kind:        "sso-required",
+			ClientName:  clientName,
+			Invitations: invitations,
+		})
+		return true
+	}
+	s.renderInvitationPage(w, clientName, challenge, invitations)
+	return true
+}
+
+// workspaceFormChallenge reads the challenge a workspace form posts back. It
+// accepts only the state and CSRF token of a challenge that already carries
+// the user and no organization, so the form cannot be driven from outside the
+// flow. The challenge is not consumed. ok is false once an error is written.
+func (s *OAuthHTTP) workspaceFormChallenge(w http.ResponseWriter, r *http.Request) (challenge oauthChallenge, userID string, ok bool) {
+	if s.workspaces == nil {
+		writeOAuthError(w, http.StatusNotFound, "invalid_request", "organization creation is not available")
+		return challenge, "", false
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, 16<<10)
+	if err := r.ParseForm(); err != nil {
+		writeOAuthError(w, http.StatusBadRequest, "invalid_request", "could not parse organization form")
+		return challenge, "", false
+	}
+	challenge, err := s.cache.Get(r.Context(), platformOAuthChallengePrefix+r.PostForm.Get("state"))
+	if err != nil || challenge.Subject == "" || challenge.OrganizationID != "" {
+		writeOAuthError(w, http.StatusUnauthorized, "invalid_request", "authorization state is invalid or expired")
+		return challenge, "", false
+	}
+	if challenge.CSRFToken == "" || subtle.ConstantTimeCompare([]byte(r.PostForm.Get("csrf_token")), []byte(challenge.CSRFToken)) != 1 {
+		writeOAuthError(w, http.StatusUnauthorized, "invalid_request", "organization request is invalid")
+		return challenge, "", false
+	}
+	subject, err := urn.ParseSessionSubject(challenge.Subject)
+	if err != nil || subject.Kind != urn.SessionSubjectKindUser {
+		writeOAuthError(w, http.StatusUnauthorized, "access_denied", "authorization identity is invalid")
+		return challenge, "", false
+	}
+	return challenge, subject.ID, true
+}
+
+// consumeWorkspaceChallenge deletes the challenge before anything is created
+// or joined, so a replayed or doubled submit cannot act twice. It checks the
+// challenge again, because another submit can change it between the read and
+// the delete. ok is false once an error is written.
+func (s *OAuthHTTP) consumeWorkspaceChallenge(w http.ResponseWriter, r *http.Request) (oauthChallenge, bool) {
+	challenge, err := s.cache.GetAndDelete(r.Context(), platformOAuthChallengePrefix+r.PostForm.Get("state"))
+	if err != nil || challenge.Subject == "" || challenge.OrganizationID != "" {
+		writeOAuthError(w, http.StatusUnauthorized, "invalid_request", "authorization state is invalid or expired")
+		return challenge, false
+	}
+	return challenge, true
+}
+
+// continueWithOrganization moves a consumed challenge on to the consent page
+// for the organization the user just created or joined. A fresh state means a
+// stale submit that still holds the old one cannot consume the challenge this
+// request continues with.
+func (s *OAuthHTTP) continueWithOrganization(w http.ResponseWriter, r *http.Request, challenge oauthChallenge, organization OrganizationOption) {
+	challenge.ID = uuid.NewString()
+	challenge.OrganizationID = organization.ID
+	if err := s.cache.Store(r.Context(), challenge); err != nil {
+		writeOAuthError(w, http.StatusServiceUnavailable, "temporarily_unavailable", "could not continue authorization")
+		return
+	}
+	http.Redirect(w, r, endpointURL(s.challengeBaseURL(challenge), "connect")+"?state="+url.QueryEscape(challenge.ID), http.StatusSeeOther)
+}
+
+// CreateWorkspaceHandler creates the first organization for a signed-in user
+// who has none, then continues to the consent page for it. A user with a
+// pending invitation is shown the invitation instead.
+func (s *OAuthHTTP) CreateWorkspaceHandler() http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		challenge, userID, ok := s.workspaceFormChallenge(w, r)
+		if !ok {
+			return
+		}
+
+		client, err := s.resolveClient(r.Context(), challenge.ClientID, lookupClientOnly)
+		if err != nil {
+			writeOAuthError(w, http.StatusUnauthorized, "invalid_client", "authorization client is unavailable")
+			return
+		}
+		if s.renderPendingInvitations(w, r, client.Name, challenge) {
+			return
+		}
+
+		// A refused name keeps the challenge, so the user can correct it.
+		submitted := r.PostForm.Get("workspace_name")
+		if _, err := orgprovision.ValidateName(submitted); err != nil {
+			// An empty name gets the page's own wording rather than the
+			// validator's "org name is required".
+			problem := "Enter an organization name."
+			if shareable, ok := errors.AsType[*oops.ShareableError](err); ok && strings.TrimSpace(submitted) != "" {
+				problem = shareable.Error()
+			}
+			s.renderWorkspacePage(w, client.Name, challenge, submitted, problem)
+			return
+		}
+
+		challenge, ok = s.consumeWorkspaceChallenge(w, r)
+		if !ok {
+			return
+		}
+		organization, err := s.workspaces.ProvisionWorkspace(r.Context(), userID, submitted)
+		switch {
+		case errors.Is(err, auth.ErrUserHasPendingInvitation):
+			redirectOAuthError(w, r, challenge.RedirectURI, challenge.State, &oauthwire.Error{Code: "access_denied", Description: "You have a pending invitation to a Speakeasy organization. Accept it from the invitation email, then connect again."})
+			return
+		case errors.Is(err, auth.ErrUserHasOrganization), errors.Is(err, auth.ErrWorkspaceCreationInProgress):
+			s.logger.WarnContext(r.Context(), "Platform MCP workspace creation refused", attr.SlogError(err))
+			redirectOAuthError(w, r, challenge.RedirectURI, challenge.State, &oauthwire.Error{Code: "access_denied", Description: "Your account already has a Speakeasy organization, or one is being created. Connect again to choose it."})
+			return
+		}
+		if err != nil {
+			s.logger.ErrorContext(r.Context(), "could not create Platform MCP workspace", attr.SlogError(err))
+			redirectOAuthError(w, r, challenge.RedirectURI, challenge.State, &oauthwire.Error{Code: "access_denied", Description: "Your organization could not be created. Sign in to the Speakeasy dashboard to create one, then connect again."})
+			return
+		}
+		s.continueWithOrganization(w, r, challenge, organization)
+	})
+}
+
+// JoinWorkspaceHandler accepts a pending invitation for a signed-in user who
+// has no organization, then continues to the consent page for the
+// organization they joined.
+func (s *OAuthHTTP) JoinWorkspaceHandler() http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, userID, ok := s.workspaceFormChallenge(w, r)
+		if !ok {
+			return
+		}
+		challenge, ok := s.consumeWorkspaceChallenge(w, r)
+		if !ok {
+			return
+		}
+		organization, err := s.workspaces.JoinInvitedWorkspace(r.Context(), userID, challenge.VerifiedEmail, challenge.SSOOrganizationID, r.PostForm.Get("invitation_id"))
+		if errors.Is(err, ErrInvitationRequiresSSO) {
+			redirectOAuthError(w, r, challenge.RedirectURI, challenge.State, &oauthwire.Error{Code: "access_denied", Description: ssoRequiredDescription})
+			return
+		}
+		if err != nil {
+			s.logger.ErrorContext(r.Context(), "could not join Platform MCP workspace by invitation", attr.SlogError(err))
+			redirectOAuthError(w, r, challenge.RedirectURI, challenge.State, &oauthwire.Error{Code: "access_denied", Description: "Your invitation could not be accepted. Ask your teammate for a new invitation, then connect again."})
+			return
+		}
+		s.continueWithOrganization(w, r, challenge, organization)
+	})
+}
+
 func (s *OAuthHTTP) selectedOrganization(ctx context.Context, challenge oauthChallenge) (OrganizationOption, error) {
 	subject, err := urn.ParseSessionSubject(challenge.Subject)
 	if err != nil || subject.Kind != urn.SessionSubjectKindUser || challenge.OrganizationID == "" {
@@ -548,7 +821,7 @@ func (s *OAuthHTTP) selectedOrganization(ctx context.Context, challenge oauthCha
 func (s *OAuthHTTP) ProviderSetupCompleteHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		s.renderOAuthPage(w, oauthPageData{
-			Title:     "Provider connected · Platform MCP",
+			Title:     "Sign-in complete · Speakeasy",
 			Kind:      "provider-complete",
 			AutoClose: true,
 		})
@@ -589,7 +862,7 @@ func (s *OAuthHTTP) connectGet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.renderOAuthPage(w, oauthPageData{
-		Title:            "Connect Platform MCP",
+		Title:            "Connect to Speakeasy",
 		Kind:             "connect",
 		ClientName:       client.Name,
 		ClientIDOrigin:   clientIDOrigin(client),
@@ -1150,6 +1423,7 @@ func (s *OAuthHTTP) renderOAuthPage(w http.ResponseWriter, data oauthPageData) {
 		return
 	}
 	data.ScriptNonce = scriptNonce
+	data.Styles = consentpage.Styles
 
 	var page strings.Builder
 	if err := oauthPageTemplate.Execute(&page, data); err != nil {
@@ -1168,7 +1442,7 @@ func oauthPageContentSecurityPolicy(redirectURI, scriptNonce string) string {
 	if uri, err := url.Parse(redirectURI); err == nil && (uri.Scheme == "http" || uri.Scheme == "https") && uri.Host != "" {
 		formAction += " " + uri.Scheme + "://" + uri.Host
 	}
-	return "default-src 'none'; style-src 'unsafe-inline'; img-src data:; script-src 'nonce-" + scriptNonce + "'; base-uri 'none'; form-action " + formAction + "; frame-ancestors 'none'"
+	return "default-src 'none'; style-src 'unsafe-inline'; font-src 'self'; img-src data:; script-src 'nonce-" + scriptNonce + "'; base-uri 'none'; form-action " + formAction + "; frame-ancestors 'none'"
 }
 
 func writeOAuthError(w http.ResponseWriter, status int, code, description string) {

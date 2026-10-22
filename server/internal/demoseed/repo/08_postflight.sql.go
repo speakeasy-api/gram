@@ -28,6 +28,30 @@ func (q *Queries) PostflightCountActiveQuarantines(ctx context.Context, arg Post
 	return count, err
 }
 
+const postflightCountAgentAttributedChats = `-- name: PostflightCountAgentAttributedChats :one
+SELECT count(*)
+FROM chats c
+JOIN agents a ON a.id = c.agent_id AND a.organization_id = c.organization_id
+  AND a.deleted IS FALSE
+WHERE c.project_id = $1::uuid AND c.organization_id = $2::text
+`
+
+type PostflightCountAgentAttributedChatsParams struct {
+	ProjectID uuid.UUID
+	OrgID     string
+}
+
+// Channel sessions carry the agent that produced them; without that stamp the
+// session list cannot name an actor for them at all, because they have no
+// assistant record. The join to agents is what proves the stamp still resolves:
+// an id pointing at an agent the seed no longer creates renders as a bare id.
+func (q *Queries) PostflightCountAgentAttributedChats(ctx context.Context, arg PostflightCountAgentAttributedChatsParams) (int64, error) {
+	row := q.db.QueryRow(ctx, postflightCountAgentAttributedChats, arg.ProjectID, arg.OrgID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const postflightCountChats = `-- name: PostflightCountChats :one
 SELECT count(*) FROM chats WHERE organization_id = $1::text
 `
@@ -781,6 +805,21 @@ type PostflightCountShadowPolicyGrantsParams struct {
 
 func (q *Queries) PostflightCountShadowPolicyGrants(ctx context.Context, arg PostflightCountShadowPolicyGrantsParams) (int64, error) {
 	row := q.db.QueryRow(ctx, postflightCountShadowPolicyGrants, arg.OrgID, arg.PolicyID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const postflightCountTunnelEndpoints = `-- name: PostflightCountTunnelEndpoints :one
+SELECT count(*)
+FROM mcp_endpoints e
+JOIN mcp_servers s ON s.id = e.mcp_server_id
+WHERE e.project_id = $1::uuid AND e.deleted IS FALSE
+  AND s.tunneled_mcp_server_id IS NOT NULL
+`
+
+func (q *Queries) PostflightCountTunnelEndpoints(ctx context.Context, projectID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, postflightCountTunnelEndpoints, projectID)
 	var count int64
 	err := row.Scan(&count)
 	return count, err

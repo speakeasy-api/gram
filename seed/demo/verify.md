@@ -131,14 +131,29 @@ remains hidden and the PAGES.md row stays `[~]`, not UI-verified.
     starts with the fictional `https://auth.example.com` issuer; live discovery
     does not need to succeed for this seeded-page check.
 
-12a. **Organization gateway** — open **MCP** (`/<org>/projects/default/mcp`).
-The title row shows **Connect all servers**, because `acme-workforce` is the
-organization's only organization-wide authorization server. Clicking it opens
-**Connect all your servers at once** with the URL `<server>/mcp/gateway/<org>`
-and a copy button, where `<org>` is the organization's slug (`acme-demo` in the
-demo org, your own org's slug after `mise run seed`);
-`organizations.getGateway` in the network panel returns `available: true` with
-that URL.
+12a. **Organization Gateway** — after seeding, open **MCP**
+(`/<org>/projects/default/mcp`). The **Organization Gateway** card leads the
+unfiltered grid and table with an **Off** badge for organization admins.
+`organizations.getGateway` reports `available: false`. Open the card and confirm
+**View assignments** opens the role and member access view for organization
+admins before enabling. Use the gateway switch to start the assignment review. Acknowledge the completed
+review and select **Enable Organization Gateway**. The same page then shows
+the endpoint `<server>/mcp/gateway/<org>` with a copy button and client install
+instructions. Derive `<org>` from the active organization slug at the start of
+the dashboard URL (`/<org>/projects/default/mcp`), for both the shared demo
+and local seed. Confirm `organizations.getGateway` returns the matching endpoint.
+The page header uses the brand-mesh background with grain texture. Its endpoint has a
+white box and copy button with the enabled/disabled switch alongside it,
+above separate **Install** and **View assignments** tabs. Organization admins
+can inspect and edit assignments without turning the gateway off. The gateway response reports `available: true` with that URL.
+The old organization settings gateway URL redirects to this page.
+
+In **MCP Assignments**, confirm one row per role with stacked server icons under
+**Connect**. Expand **Support Desk** to inspect unrestricted and
+read-only access; expand **Contractors** to see its blocked server after allowed
+servers, with red styling and a blocked icon badge. The MCP filter opens a
+searchable list directly. Click a role’s member avatars and select a person to
+open their effective assignments; the dropdown always offers compact member search and **Edit role**. Default-project labels and per-row totals stay hidden.
 
 13. **Killswitches on the identity Access tab (local rewritten seed only)** —
     Killswitch management intentionally rejects demo/support sessions. Verify this
@@ -612,3 +627,7 @@ In shared Explore Demo, verify the mapping dialog shows its read-only notice and
 4. Do not run workloads using the illustrative issuer/JWKS URLs: these fixtures
    are display-only, not usable credentials. Leave the page marked `[~]` until
    the browser checks above are performed.
+
+## Tunnel observability
+
+Open MCP Servers → Private inventory → Overview. Verify request, connection and latency charts contain history, the latest missing intervals stay gaps, and the current agent count is zero. The marketplace callout appears above the tunnel status, which reads "No connected tunnel agents" with a View tunnel agent setup action. The sidebar Readiness card does not call the server ready: its Tunnel agent item says no tunnel agent is connected and links to tunnel agent setup. Check 1 hour / 24 hours / 7 days, the Requests by client list, and the data table under About these numbers. The synthetic source must not initiate any network connection.

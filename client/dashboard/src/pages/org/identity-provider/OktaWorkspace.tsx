@@ -1,3 +1,4 @@
+import { enumPresentation } from "@/lib/enum";
 import { ArrowLeft } from "lucide-react";
 import { parseAsStringLiteral, useQueryState } from "nuqs";
 import { Link, useNavigate } from "react-router";
@@ -27,7 +28,18 @@ import {
 
 export function OktaProviderCard(): JSX.Element {
   const { query, connection } = useOktaConnection();
-  const connected = isConnected(connection);
+  const unknownProvider = connection != null && connection.provider !== "okta";
+  const connected = !unknownProvider && isConnected(connection);
+  const unknownStatus =
+    connection != null && !connected && connection.status !== "revoked";
+  const status = enumPresentation(CONNECTION_STATUS, connection?.status ?? "", {
+    variant: "neutral",
+    label: "Unknown",
+  });
+  const statusLabel =
+    connection == null || connection.status === "revoked"
+      ? "Not connected"
+      : status.label;
   return (
     <article
       aria-label="Okta identity provider"
@@ -36,25 +48,17 @@ export function OktaProviderCard(): JSX.Element {
       <div className="flex flex-wrap items-center gap-3">
         <Icon name="plug" className="h-5 w-5" />
         <Heading variant="h3">Okta</Heading>
-        {!query.isPending && query.data !== undefined && (
-          <Badge
-            variant={
-              connected
-                ? CONNECTION_STATUS[connection.status].variant
-                : "neutral"
-            }
-          >
-            {connected
-              ? CONNECTION_STATUS[connection.status].label
-              : "Not connected"}
-          </Badge>
+        {!unknownProvider && !query.isPending && query.data !== undefined && (
+          <Badge variant={status.variant}>{statusLabel}</Badge>
         )}
       </div>
       <Text muted small>
         Sync applications from Okta and set up Enterprise Managed Auth for your
         AI agents.
       </Text>
-      {query.isPending ? (
+      {unknownProvider ? (
+        <UnknownConnectionProvider />
+      ) : query.isPending ? (
         <SkeletonParagraph />
       ) : (
         <>
@@ -76,16 +80,19 @@ export function OktaProviderCard(): JSX.Element {
                   {connection.orgUrl}
                 </Text>
               )}
-              <Button
-                asChild
-                variant={connected ? "secondary" : "primary"}
-                size="sm"
-                className="self-start"
-              >
-                <Link to={oktaViewHref("setup")}>
-                  {connected ? "Manage Okta" : "Connect Okta"}
-                </Link>
-              </Button>
+              {unknownStatus && <UnknownConnectionStatus />}
+              {!unknownStatus && (
+                <Button
+                  asChild
+                  variant={connected ? "secondary" : "primary"}
+                  size="sm"
+                  className="self-start"
+                >
+                  <Link to={oktaViewHref("setup")}>
+                    {connected ? "Manage Okta" : "Connect Okta"}
+                  </Link>
+                </Button>
+              )}
             </>
           )}
         </>
@@ -107,7 +114,10 @@ export function OktaWorkspace(): JSX.Element {
   );
   const navigate = useNavigate();
   const { query, connection } = useOktaConnection();
-  const connected = isConnected(connection);
+  const unknownProvider = connection != null && connection.provider !== "okta";
+  const connected = !unknownProvider && isConnected(connection);
+  const unknownStatus =
+    connection != null && !connected && connection.status !== "revoked";
   return (
     <section className="flex min-w-0 flex-col gap-6" aria-label="Okta">
       <div className="flex flex-col gap-3">
@@ -125,7 +135,9 @@ export function OktaWorkspace(): JSX.Element {
           </Text>
         )}
       </div>
-      {query.isPending ? (
+      {unknownProvider ? (
+        <UnknownConnectionProvider />
+      ) : query.isPending ? (
         <div className="flex flex-col gap-8">
           <SkeletonParagraph />
           <SkeletonParagraph />
@@ -133,7 +145,11 @@ export function OktaWorkspace(): JSX.Element {
       ) : (
         <div className="flex flex-col gap-6">
           <ApiErrorAlert error={query.error} />
+          {query.data !== undefined && unknownStatus && (
+            <UnknownConnectionStatus />
+          )}
           {query.data !== undefined &&
+            !unknownStatus &&
             (connected ? (
               <ChecklistOverridesProvider key={connection.id}>
                 <Tabs
@@ -185,4 +201,20 @@ function ViewContent({
     case "cross-app-access":
       return <CrossAppAccessTab connection={connection} />;
   }
+}
+
+function UnknownConnectionStatus(): JSX.Element {
+  return (
+    <Text small muted>
+      Connection status is unknown. Refresh the page before managing Okta.
+    </Text>
+  );
+}
+
+function UnknownConnectionProvider(): JSX.Element {
+  return (
+    <Text small muted>
+      Refresh the page before managing this unsupported identity provider.
+    </Text>
+  );
 }

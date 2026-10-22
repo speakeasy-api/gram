@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
 	"log/slog"
 	"strings"
 
@@ -65,7 +66,7 @@ func NewChatMessageCaptureStrategy(
 
 func (s *ChatMessageCaptureStrategy) StartOrResumeChat(ctx context.Context, request openrouter.CompletionRequest) (openrouter.CaptureSession, error) {
 	chatID := request.ChatID
-	if chatID == uuid.Nil {
+	if chatID == uuid.Nil || assistanttokens.InferenceTranscriptOwned(ctx) {
 		return nil, nil // No chat ID, so no need to start or resume a chat
 	}
 
@@ -296,7 +297,7 @@ func (s *ChatMessageCaptureStrategy) CaptureMessage(
 	response openrouter.CompletionResponse,
 ) error {
 	// Skip if no chat ID
-	if request.ChatID == uuid.Nil {
+	if request.ChatID == uuid.Nil || assistanttokens.InferenceTranscriptOwned(ctx) {
 		return nil
 	}
 

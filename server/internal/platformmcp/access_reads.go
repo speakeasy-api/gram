@@ -122,6 +122,9 @@ type GetMemberMCPAccessInput struct {
 }
 
 type MemberMCPAccessRow struct {
+	// Rules explains live grant and block sources without member identifiers.
+	Rules []access.MCPAccessRuleSummary `json:"rules"`
+
 	ProjectID         string `json:"project_id"`
 	ProjectName       string `json:"project_name"`
 	MCPID             string `json:"mcp_id"`
@@ -205,11 +208,14 @@ type AccessReadService struct {
 	references *subjectReferenceCodec
 	now        func() time.Time
 	versionKey []byte
+	// directoryReview backs the directory review tools; nil leaves them
+	// reporting unavailable.
+	directoryReview DirectoryReviewBackend
 }
 
 func NewAccessReadService(logger *slog.Logger, db *pgxpool.Pool, budget OperationBudget, keyMaterial string) *AccessReadService {
 	if logger == nil {
-		return &AccessReadService{logger: nil, db: nil, roles: nil, budget: OperationBudget{Connection: nil, Organization: nil}, references: nil, now: nil, versionKey: nil}
+		return &AccessReadService{logger: nil, db: nil, roles: nil, budget: OperationBudget{Connection: nil, Organization: nil}, references: nil, now: nil, versionKey: nil, directoryReview: nil}
 	}
 	references, err := newSubjectReferenceCodec(keyMaterial)
 	if err != nil {
@@ -224,6 +230,8 @@ func NewAccessReadService(logger *slog.Logger, db *pgxpool.Pool, budget Operatio
 		references: references,
 		now:        time.Now,
 		versionKey: versionKey[:],
+
+		directoryReview: nil,
 	}
 }
 
@@ -335,24 +343,20 @@ func (s *AccessReadService) ListMembers(ctx context.Context, principal Principal
 	if input.Limit > 0 {
 		limit = min(input.Limit, maxAccessMembers)
 	}
-	rows, err := platformrepo.New(s.db).SearchPlatformMCPAccessMembers(ctx, platformrepo.SearchPlatformMCPAccessMembersParams{
-		ResultLimit:    int32(limit),
-		OrganizationID: principal.OrganizationID,
-		RoleID:         roleID,
-		Query:          query,
+	// Filtering and limiting share the dashboard's member query; privacy and
+	// masking remain at the MCP boundary.
+	page, err := s.roles.ListMembersFiltered(ctx, principal.OrganizationID, access.MemberListFilter{
+		Query: query, RoleID: roleID, Limit: int32(limit),
 	})
 	if err != nil {
-		return ListAccessMembersOutput{}, fmt.Errorf("search platform mcp access members: %w", err)
+		return ListAccessMembersOutput{}, fmt.Errorf("list platform mcp access members: %w", err)
 	}
-	var total int64
-	if len(rows) > 0 {
-		total = rows[0].TotalMatches
-	}
+	members, total := page.Members, page.TotalMatches
 	output := ListAccessMembersOutput{
 		Members:         []AccessMember{},
 		TotalMatches:    NewSubjectCount(total),
 		Suppressed:      total > 0 && total < SubjectSuppressionThreshold,
-		Truncated:       total > int64(len(rows)),
+		Truncated:       total > int64(len(members)),
 		ExactEmailMatch: false,
 		ExpiresAt:       "",
 	}
@@ -367,10 +371,10 @@ func (s *AccessReadService) ListMembers(ctx context.Context, principal Principal
 	// that differ only in case name several members; those stay suppressed so
 	// the caller is never handed a reference to the wrong person.
 	if output.Suppressed {
-		if !rows[0].ExactEmailMatch.Bool || rows[0].ExactEmailMatches != 1 {
+		if page.ExactEmailMatches != 1 {
 			return output, nil
 		}
-		rows = rows[:1]
+		members = members[:1]
 		output.TotalMatches = NewSubjectCount(1)
 		output.Suppressed = false
 		output.Truncated = false
@@ -379,24 +383,24 @@ func (s *AccessReadService) ListMembers(ctx context.Context, principal Principal
 
 	now := s.now().UTC()
 	output.ExpiresAt = now.Add(SubjectReferenceTTL).Format(time.RFC3339)
-	for _, row := range rows {
-		reference, err := s.references.Encode(principal, subjectKindAccessMember, row.ID, now)
-		if err != nil {
-			return ListAccessMembersOutput{}, fmt.Errorf("issue access member reference: %w", err)
-		}
-		names := make([]string, 0, len(row.RoleIds))
-		for _, id := range row.RoleIds {
+	for _, member := range members {
+		names := make([]string, 0, len(member.RoleIds)+len(member.DirectoryRoleIds))
+		for _, id := range slices.Concat(member.RoleIds, member.DirectoryRoleIds) {
 			if name := roleNames[id]; name != "" {
 				names = append(names, name)
 			}
 		}
 		slices.Sort(names)
-		version, err := accessMemberRoleVersion(s.versionKey, row.ID, row.RoleIds)
+		reference, err := s.references.Encode(principal, subjectKindAccessMember, member.ID, now)
+		if err != nil {
+			return ListAccessMembersOutput{}, fmt.Errorf("issue access member reference: %w", err)
+		}
+		version, err := accessMemberRoleVersion(s.versionKey, member.ID, member.RoleIds)
 		if err != nil {
 			return ListAccessMembersOutput{}, fmt.Errorf("version access member roles: %w", err)
 		}
 		output.Members = append(output.Members, AccessMember{
-			MaskedIdentity: maskSubject(conv.Default(row.Email, row.DisplayName)),
+			MaskedIdentity: maskSubject(conv.Default(member.Email, member.Name)),
 			Roles:          slices.Compact(names),
 			Reference:      reference,
 			Version:        version,
@@ -444,6 +448,14 @@ func (s *AccessReadService) getMemberMCPAccess(ctx context.Context, principal Pr
 	if err != nil {
 		return GetMemberMCPAccessOutput{}, fmt.Errorf("load platform mcp access member grants: %w", err)
 	}
+	roles, err := s.roles.ListRoles(ctx, principal.OrganizationID)
+	if err != nil {
+		return GetMemberMCPAccessOutput{}, fmt.Errorf("list member access role names: %w", err)
+	}
+	roleNames := make(map[string]string, len(roles.Roles))
+	for _, role := range roles.Roles {
+		roleNames[role.PrincipalUrn] = role.Name
+	}
 	//nolint:exhaustruct // Optional inventory filters intentionally stay unset.
 	rows, err := platformrepo.New(s.db).ListPlatformMCPInventory(ctx, platformrepo.ListPlatformMCPInventoryParams{
 		OrganizationID: principal.OrganizationID, SkipAuthorizationFilter: true, LimitValue: maxMemberMCPAccessServers + 1,
@@ -461,9 +473,9 @@ func (s *AccessReadService) getMemberMCPAccess(ctx context.Context, principal Pr
 		if name == "" {
 			name = row.McpServerID.String()
 		}
-		effective, err := access.EvaluateEffectiveMCPAccess(grants, row.McpServerID.String(), row.ProjectID.String())
+		effective, rules, err := access.SummarizeMCPAccessRules(grants, row.McpServerID.String(), row.ProjectID.String(), roleNames)
 		if err != nil {
-			return GetMemberMCPAccessOutput{}, fmt.Errorf("evaluate member access to MCP %q: %w", name, err)
+			return GetMemberMCPAccessOutput{}, fmt.Errorf("explain member access to MCP %q: %w", name, err)
 		}
 		//nolint:exhaustruct // Access mode helpers only consume endpoint-kind fields.
 		item := platformrepo.GetPlatformMCPInventoryItemRow{
@@ -487,7 +499,7 @@ func (s *AccessReadService) getMemberMCPAccess(ctx context.Context, principal Pr
 		output.Servers = append(output.Servers, MemberMCPAccessRow{
 			ProjectID: row.ProjectID.String(), ProjectName: row.ProjectName, MCPID: row.McpServerID.String(), MCPName: name,
 			Backend: accessBackend(item), Visibility: row.Visibility, AuthorizationMode: mode, ConnectionAccess: connectionAccess,
-			CanConnect: canConnect, ToolAccess: toolAccess, CanView: effective.CanView, CanManage: effective.CanManage,
+			CanConnect: canConnect, ToolAccess: toolAccess, CanView: effective.CanView, CanManage: effective.CanManage, Rules: rules,
 		})
 	}
 	sort.Slice(output.Servers, func(i, j int) bool {

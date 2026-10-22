@@ -11,7 +11,6 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/risk/analysisstatus"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
@@ -34,17 +33,14 @@ func (s *stubAnalysisDescriber) Describe(_ context.Context, projectID uuid.UUID)
 
 var riskAnalysisTestNow = time.Date(2026, time.September, 15, 12, 0, 0, 0, time.UTC)
 
-func testRiskAnalysisStatusService(t *testing.T, project ResolvedProject, describer *stubAnalysisDescriber, evaluation feature.Evaluation) (*RiskAnalysisStatusService, *riskMutationFlagProvider) {
+func testRiskAnalysisStatusService(t *testing.T, project ResolvedProject, describer *stubAnalysisDescriber) *RiskAnalysisStatusService {
 	t.Helper()
-	flags := &riskMutationFlagProvider{evaluation: evaluation, err: nil, flag: "", groups: nil}
 	return &RiskAnalysisStatusService{
-		logger:        testenv.NewLogger(t),
-		describer:     describer,
-		flags:         flags,
-		organizations: riskMutationOrganizationResolver{slug: "org", err: nil},
-		projects:      &stubRiskProjects{project: project, expected: []riskProjectCall{{organizationID: "<ORG_ID>", projectID: "", projectSlug: "project"}}, calls: nil, err: nil},
-		now:           func() time.Time { return riskAnalysisTestNow },
-	}, flags
+		logger:    testenv.NewLogger(t),
+		describer: describer,
+		projects:  &stubRiskProjects{project: project, expected: []riskProjectCall{{organizationID: "<ORG_ID>", projectID: "", projectSlug: "project"}}, calls: nil, err: nil},
+		now:       func() time.Time { return riskAnalysisTestNow },
+	}
 }
 
 func TestRiskAnalysisStatusNeverRun(t *testing.T) {
@@ -52,13 +48,11 @@ func TestRiskAnalysisStatusNeverRun(t *testing.T) {
 
 	project := ResolvedProject{ID: uuid.New(), Name: "Project", Slug: "project"}
 	describer := &stubAnalysisDescriber{status: analysisstatus.Status{State: analysisstatus.StateNever, RunningSince: nil, LastRunStartedAt: nil, LastRunAt: nil, LastRunOutcome: ""}, err: nil, projectID: uuid.Nil, calls: 0}
-	service, flags := testRiskAnalysisStatusService(t, project, describer, feature.EvaluationEnabled)
+	service := testRiskAnalysisStatusService(t, project, describer)
 
 	output, err := service.Get(t.Context(), testRiskPrincipal("user"), GetRiskAnalysisStatusInput{ProjectID: "", ProjectSlug: "project"})
 	require.NoError(t, err)
 	require.Equal(t, project.ID, describer.projectID)
-	require.Equal(t, feature.FlagRiskWatchdog, flags.flag)
-	require.Equal(t, map[string]string{"organization": "org", "slug": "org/project"}, flags.groups)
 	require.Equal(t, GetRiskAnalysisStatusOutput{
 		Project:          RiskProject{ID: project.ID.String(), Name: "Project", Slug: "project"},
 		State:            "never",
@@ -77,7 +71,7 @@ func TestRiskAnalysisStatusIdleCompleted(t *testing.T) {
 	startedAt := riskAnalysisTestNow.Add(-6 * time.Minute)
 	finishedAt := riskAnalysisTestNow.Add(-5 * time.Minute)
 	describer := &stubAnalysisDescriber{status: analysisstatus.Status{State: analysisstatus.StateIdle, RunningSince: nil, LastRunStartedAt: &startedAt, LastRunAt: &finishedAt, LastRunOutcome: "completed"}, err: nil, projectID: uuid.Nil, calls: 0}
-	service, _ := testRiskAnalysisStatusService(t, project, describer, feature.EvaluationEnabled)
+	service := testRiskAnalysisStatusService(t, project, describer)
 
 	output, err := service.Get(t.Context(), testRiskPrincipal("user"), GetRiskAnalysisStatusInput{ProjectID: "", ProjectSlug: "project"})
 	require.NoError(t, err)
@@ -96,7 +90,7 @@ func TestRiskAnalysisStatusIdleWithFailedOutcome(t *testing.T) {
 	startedAt := riskAnalysisTestNow.Add(-3 * time.Hour)
 	finishedAt := riskAnalysisTestNow.Add(-2 * time.Hour)
 	describer := &stubAnalysisDescriber{status: analysisstatus.Status{State: analysisstatus.StateIdle, RunningSince: nil, LastRunStartedAt: &startedAt, LastRunAt: &finishedAt, LastRunOutcome: "timed_out"}, err: nil, projectID: uuid.Nil, calls: 0}
-	service, _ := testRiskAnalysisStatusService(t, project, describer, feature.EvaluationEnabled)
+	service := testRiskAnalysisStatusService(t, project, describer)
 
 	output, err := service.Get(t.Context(), testRiskPrincipal("user"), GetRiskAnalysisStatusInput{ProjectID: "", ProjectSlug: "project"})
 	require.NoError(t, err)
@@ -111,7 +105,7 @@ func TestRiskAnalysisStatusRunning(t *testing.T) {
 	project := ResolvedProject{ID: uuid.New(), Name: "Project", Slug: "project"}
 	runningSince := riskAnalysisTestNow.Add(-12 * time.Second)
 	describer := &stubAnalysisDescriber{status: analysisstatus.Status{State: analysisstatus.StateRunning, RunningSince: &runningSince, LastRunStartedAt: nil, LastRunAt: nil, LastRunOutcome: ""}, err: nil, projectID: uuid.Nil, calls: 0}
-	service, _ := testRiskAnalysisStatusService(t, project, describer, feature.EvaluationEnabled)
+	service := testRiskAnalysisStatusService(t, project, describer)
 
 	output, err := service.Get(t.Context(), testRiskPrincipal("user"), GetRiskAnalysisStatusInput{ProjectID: "", ProjectSlug: "project"})
 	require.NoError(t, err)
@@ -128,36 +122,18 @@ func TestRiskAnalysisStatusDescriberErrorIsUnavailable(t *testing.T) {
 	project := ResolvedProject{ID: uuid.New(), Name: "Project", Slug: "project"}
 	describeErr := errors.New("describe failed")
 	describer := &stubAnalysisDescriber{status: analysisstatus.Status{}, err: describeErr, projectID: uuid.Nil, calls: 0}
-	service, _ := testRiskAnalysisStatusService(t, project, describer, feature.EvaluationEnabled)
+	service := testRiskAnalysisStatusService(t, project, describer)
 
 	_, err := service.Get(t.Context(), testRiskPrincipal("user"), GetRiskAnalysisStatusInput{ProjectID: "", ProjectSlug: "project"})
 	require.ErrorIs(t, err, ErrUnavailable)
 	require.ErrorIs(t, err, describeErr)
 }
 
-func TestRiskAnalysisStatusFlagOffFailsClosedBeforeDescribing(t *testing.T) {
-	t.Parallel()
-
-	project := ResolvedProject{ID: uuid.New(), Name: "Project", Slug: "project"}
-	describer := &stubAnalysisDescriber{status: analysisstatus.Status{}, err: nil, projectID: uuid.Nil, calls: 0}
-	service, _ := testRiskAnalysisStatusService(t, project, describer, feature.EvaluationDisabled)
-
-	_, err := service.Get(t.Context(), testRiskPrincipal("user"), GetRiskAnalysisStatusInput{ProjectID: "", ProjectSlug: "project"})
-	require.ErrorIs(t, err, ErrRiskFeatureNotEnabled)
-	require.Zero(t, describer.calls)
-
-	// An indeterminate evaluation is not an enablement either.
-	service, _ = testRiskAnalysisStatusService(t, project, describer, feature.EvaluationIndeterminate)
-	_, err = service.Get(t.Context(), testRiskPrincipal("user"), GetRiskAnalysisStatusInput{ProjectID: "", ProjectSlug: "project"})
-	require.ErrorIs(t, err, ErrRiskFeatureNotEnabled)
-	require.Zero(t, describer.calls)
-}
-
 func TestRiskAnalysisStatusProjectNotFound(t *testing.T) {
 	t.Parallel()
 
 	describer := &stubAnalysisDescriber{status: analysisstatus.Status{}, err: nil, projectID: uuid.Nil, calls: 0}
-	service, _ := testRiskAnalysisStatusService(t, ResolvedProject{}, describer, feature.EvaluationEnabled)
+	service := testRiskAnalysisStatusService(t, ResolvedProject{}, describer)
 	service.projects = &stubRiskProjects{project: ResolvedProject{}, expected: nil, calls: nil, err: ErrRiskReadNotFound}
 
 	_, err := service.Get(t.Context(), testRiskPrincipal("user"), GetRiskAnalysisStatusInput{ProjectID: "", ProjectSlug: "missing"})
@@ -171,8 +147,8 @@ func TestRiskAnalysisStatusToolServesLiveAndRefusals(t *testing.T) {
 	project := ResolvedProject{ID: uuid.New(), Name: "Project", Slug: "project"}
 	finishedAt := riskAnalysisTestNow.Add(-90 * time.Second)
 	describer := &stubAnalysisDescriber{status: analysisstatus.Status{State: analysisstatus.StateIdle, RunningSince: nil, LastRunStartedAt: &finishedAt, LastRunAt: &finishedAt, LastRunOutcome: "completed"}, err: nil, projectID: uuid.Nil, calls: 0}
-	service, flags := testRiskAnalysisStatusService(t, project, describer, feature.EvaluationEnabled)
-	// The live call and the flag-off call each resolve the project; the
+	service := testRiskAnalysisStatusService(t, project, describer)
+	// The live call and the unavailable-describer call each resolve the project; the
 	// schema violation between them is rejected before resolution.
 	resolution := riskProjectCall{organizationID: "<ORG_ID>", projectID: "", projectSlug: "project"}
 	service.projects = &stubRiskProjects{project: project, expected: []riskProjectCall{resolution, resolution}, calls: nil, err: nil}
@@ -203,12 +179,12 @@ func TestRiskAnalysisStatusToolServesLiveAndRefusals(t *testing.T) {
 	_, err = descriptor.Invoke(ContextWithPrincipal(t.Context(), testRiskPrincipal("user")), json.RawMessage(`{"project_slug":"project","project_id":"`+project.ID.String()+`"}`))
 	require.ErrorContains(t, err, "arguments do not match the tool schema")
 
-	flags.evaluation = feature.EvaluationDisabled
+	describer.err = errors.New("describer unavailable")
 	_, err = descriptor.Invoke(ContextWithPrincipal(t.Context(), testRiskPrincipal("user")), json.RawMessage(`{"project_slug":"project"}`))
 	var refusal *ToolRefusalError
 	require.ErrorAs(t, err, &refusal)
 	require.Contains(t, refusal.Payload, `"code":"feature_unavailable"`)
-	require.Contains(t, refusal.Payload, "not switched on")
+	require.Contains(t, refusal.Payload, "temporarily unavailable")
 }
 
 func TestRiskAnalysisStatusToolStubWithoutDescriber(t *testing.T) {
@@ -226,7 +202,7 @@ func TestRiskAnalysisStatusToolStubWithoutDescriber(t *testing.T) {
 	require.ErrorAs(t, err, &refusal)
 	require.Contains(t, refusal.Payload, `"code":"feature_unavailable"`)
 
-	require.Nil(t, NewRiskAnalysisStatusService(testenv.NewLogger(t), nil, &stubAnalysisDescriber{status: analysisstatus.Status{}, err: nil, projectID: uuid.Nil, calls: 0}, nil, riskMutationOrganizationResolver{slug: "org", err: nil}))
+	require.Nil(t, NewRiskAnalysisStatusService(testenv.NewLogger(t), nil, &stubAnalysisDescriber{status: analysisstatus.Status{}, err: nil, projectID: uuid.Nil, calls: 0}))
 }
 
 func TestHumanDurationUnits(t *testing.T) {
@@ -260,7 +236,7 @@ func TestRiskAnalysisStatusToolLiveWhenPolicyReadsUnavailable(t *testing.T) {
 	project := ResolvedProject{ID: uuid.New(), Name: "Project", Slug: "project"}
 	startedAt := riskAnalysisTestNow.Add(-12 * time.Second)
 	describer := &stubAnalysisDescriber{status: analysisstatus.Status{State: analysisstatus.StateRunning, RunningSince: &startedAt, LastRunStartedAt: nil, LastRunAt: nil, LastRunOutcome: ""}, err: nil, projectID: uuid.Nil, calls: 0}
-	service, _ := testRiskAnalysisStatusService(t, project, describer, feature.EvaluationEnabled)
+	service := testRiskAnalysisStatusService(t, project, describer)
 
 	server := mcp.NewServer(&mcp.Implementation{Name: "risk-analysis-status-independent-test", Version: "0.0.1"}, nil)
 	reg := newRegistrar(server)

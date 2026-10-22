@@ -200,13 +200,9 @@ func (s *Service) GetInstance(ctx context.Context, payload *gen.GetInstanceForm)
 	case wrapperURL != "":
 		mcpServers = append(mcpServers, &gen.InstanceMcpServer{URL: wrapperURL})
 	case toolset.McpSlug != nil:
-		baseURL := s.serverURL.String()
-		if toolset.CustomDomainID != nil {
-			customDomain, err := s.customDomainsRepo.GetCustomDomainByID(ctx, uuid.MustParse(*toolset.CustomDomainID))
-			if err != nil {
-				return nil, oops.E(oops.CodeUnexpected, err, "failed to get custom domain").LogError(ctx, s.logger)
-			}
-			baseURL = fmt.Sprintf("https://%s", customDomain.Domain)
+		baseURL, err := s.legacyToolsetBaseURL(ctx, toolset, authCtx.ActiveOrganizationID)
+		if err != nil {
+			return nil, err
 		}
 		mcpServers = append(mcpServers, &gen.InstanceMcpServer{
 			URL: fmt.Sprintf("%s/mcp/%s", baseURL, string(*toolset.McpSlug)),
@@ -224,6 +220,31 @@ func (s *Service) GetInstance(ctx context.Context, payload *gen.GetInstanceForm)
 		PromptTemplates:              promptTemplates,
 		McpServers:                   mcpServers,
 	}, nil
+}
+
+// legacyToolsetBaseURL names the toolset's custom domain only when the
+// custom-domain middleware would serve it, else the platform URL.
+func (s *Service) legacyToolsetBaseURL(ctx context.Context, toolset *types.Toolset, organizationID string) (string, error) {
+	if toolset.CustomDomainID == nil {
+		return s.serverURL.String(), nil
+	}
+	domainID, err := uuid.Parse(*toolset.CustomDomainID)
+	if err != nil {
+		return "", oops.E(oops.CodeUnexpected, err, "parse custom domain id").LogError(ctx, s.logger)
+	}
+	domain, err := s.customDomainsRepo.GetCustomDomainByIDAndOrganization(ctx, customdomainsRepo.GetCustomDomainByIDAndOrganizationParams{
+		ID:             domainID,
+		OrganizationID: organizationID,
+	})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return s.serverURL.String(), nil
+	case err != nil:
+		return "", oops.E(oops.CodeUnexpected, err, "failed to get custom domain").LogError(ctx, s.logger)
+	case !domain.Verified || !domain.Activated:
+		return s.serverURL.String(), nil
+	}
+	return fmt.Sprintf("https://%s", domain.Domain), nil
 }
 
 // resolveWrapperMCPURL builds the toolset's hosted MCP URL from its wrapper's

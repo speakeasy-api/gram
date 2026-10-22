@@ -3,9 +3,11 @@ package authz
 import (
 	"context"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 // WorkloadSessionAdmission contains the policy sets a workload session acts
@@ -51,6 +53,27 @@ func (e *Engine) AdmitWorkloadSession(ctx context.Context) (context.Context, err
 	if admission.AgentPrincipal == "" || admission.OwnerUserID == "" {
 		return ctx, oops.C(oops.CodeUnauthorized)
 	}
+	principal, err := urn.ParsePrincipal(admission.AgentPrincipal)
+	if err != nil || principal.Type != urn.PrincipalTypeAgent {
+		return ctx, oops.C(oops.CodeUnauthorized)
+	}
+	agentID, err := uuid.Parse(principal.ID)
+	if err != nil || agentID == uuid.Nil {
+		return ctx, oops.C(oops.CodeUnauthorized)
+	}
+	ctx = context.WithValue(ctx, admittedWorkloadAgentKey{}, agentID)
+	// Record the agent whose policy was admitted, so every later use reads this
+	// one value instead of resolving the assignment again.
+	ctx = contextvalues.WithWorkloadAgent(ctx, principal)
 	ctx = contextvalues.WithPrincipalCredentialOwner(ctx, admission.OwnerUserID)
 	return admittedPoliciesToContext(ctx, admission.Ceiling, admission.Agent, admission.Owner), nil
 }
+
+// AdmittedWorkloadAgent returns the agent resolved by live workload admission,
+// not an identity inferred from the credential owner or caller input.
+func AdmittedWorkloadAgent(ctx context.Context) (uuid.UUID, bool) {
+	id, ok := ctx.Value(admittedWorkloadAgentKey{}).(uuid.UUID)
+	return id, ok && id != uuid.Nil
+}
+
+type admittedWorkloadAgentKey struct{}

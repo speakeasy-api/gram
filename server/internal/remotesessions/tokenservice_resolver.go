@@ -46,21 +46,24 @@ func remoteSessionCallerPrincipal(ctx context.Context, subject urn.SessionSubjec
 // resolveCallerUpstreamToken separates admission identity from credential
 // source. Only scoped callers can use attachments; a missing or revoked
 // attachment never falls back to the agent's, owner's, or authorizer's grant.
-func (m *ChallengeManager) resolveCallerUpstreamToken(ctx context.Context, projectID uuid.UUID, organizationID string, userSessionIssuerID, clientID uuid.UUID, caller urn.SessionSubject, resource string) (resolvedUpstreamToken, error) {
+func (m *ChallengeManager) resolveCallerUpstreamToken(ctx context.Context, lookup tokenLookup, projectID uuid.UUID, organizationID string, userSessionIssuerID, clientID uuid.UUID, caller urn.SessionSubject, resource string) (resolvedUpstreamToken, error) {
 	var zero resolvedUpstreamToken
 	if actor, ok := contextvalues.AuthenticatedActor(ctx); ok && actor.Type == urn.PrincipalTypeWorkload {
-		return m.resolveWorkloadUpstreamToken(ctx, projectID, organizationID, userSessionIssuerID, clientID, caller, resource)
+		return m.resolveWorkloadUpstreamToken(ctx, lookup, projectID, organizationID, userSessionIssuerID, clientID, caller, resource)
 	}
 	// A subject alone is not authority to select a workload owner's grant.
 	if caller.Kind == urn.SessionSubjectKindWorkload {
 		return zero, ErrInvalidAuthorizationRequest
 	}
 	if credential, ok := principalcredential.FromContext(ctx); ok {
-		return m.resolveAuthorizerUpstreamToken(ctx, projectID, organizationID, userSessionIssuerID, clientID, resource, credential.Credential.AuthorizerUserID)
+		return m.resolveAuthorizerUpstreamToken(ctx, lookup, projectID, organizationID, userSessionIssuerID, clientID, resource, credential.Credential.AuthorizerUserID)
 	}
 	principalID, attached, err := remoteSessionCallerPrincipal(ctx, caller)
 	if err != nil {
 		return zero, err
+	}
+	if !attached && lookup == lookupAuthClient {
+		return m.resolveTenantUpstreamToken(ctx, projectID, organizationID, clientID, caller, resource)
 	}
 	if !attached {
 		return m.resolveUpstreamToken(ctx, clientID, caller, resource)
@@ -106,17 +109,51 @@ func (m *ChallengeManager) resolveCallerUpstreamToken(ctx context.Context, proje
 	return resolved, nil
 }
 
+// resolveTenantUpstreamToken is resolveUpstreamToken for the auth client
+// resolver: a plain caller's own session, only when its consent came through
+// the server's organization.
+func (m *ChallengeManager) resolveTenantUpstreamToken(ctx context.Context, projectID uuid.UUID, organizationID string, clientID uuid.UUID, caller urn.SessionSubject, resource string) (resolvedUpstreamToken, error) {
+	var zero resolvedUpstreamToken
+	q := remotesessions_repo.New(m.db)
+	sess, err := activeUserRemoteSession(ctx, q, lookupAuthClient, caller, clientID, projectID, organizationID)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return zero, nil
+	case err != nil:
+		return zero, err
+	}
+	resolved, err := m.resolveCredentialToken(ctx, sess, resource)
+	if err != nil || resolved.Token == "" {
+		return resolved, err
+	}
+	// Recheck after a possibly blocking refresh, without adopting a reconnected grant.
+	current, err := activeUserRemoteSession(ctx, q, lookupAuthClient, caller, clientID, projectID, organizationID)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return zero, nil
+	case err != nil:
+		return zero, fmt.Errorf("recheck caller credential: %w", err)
+	}
+	if current.ID != sess.ID || current.GrantGeneration != sess.GrantGeneration {
+		return zero, nil
+	}
+	m.touchResolvedCredential(ctx, sess)
+	return resolved, nil
+}
+
 // resolveAuthorizerUpstreamToken serves a request made with a principal
 // credential from the upstream session of the user the credential acts for,
 // on the fly: the session is the user's own, never bound to the credential's
 // principal. A credential with no authorizing user has no session to use.
 // This path never falls back to an owner or the principal's own sessions.
-func (m *ChallengeManager) resolveAuthorizerUpstreamToken(ctx context.Context, projectID uuid.UUID, organizationID string, userSessionIssuerID, clientID uuid.UUID, resource, authorizerUserID string) (resolvedUpstreamToken, error) {
+func (m *ChallengeManager) resolveAuthorizerUpstreamToken(ctx context.Context, lookup tokenLookup, projectID uuid.UUID, organizationID string, userSessionIssuerID, clientID uuid.UUID, resource, authorizerUserID string) (resolvedUpstreamToken, error) {
 	var zero resolvedUpstreamToken
 	if authorizerUserID == "" {
 		return zero, nil
 	}
-	selected, err := remotesessions_repo.New(m.db).GetTenantUserRemoteSession(ctx, remotesessions_repo.GetTenantUserRemoteSessionParams{SubjectUrn: urn.NewUserSubject(authorizerUserID), RemoteSessionClientID: clientID, ProjectID: projectID, OrganizationID: organizationID, UserSessionIssuerID: userSessionIssuerID})
+	q := remotesessions_repo.New(m.db)
+	authorizer := urn.NewUserSubject(authorizerUserID)
+	selected, err := tenantUserRemoteSession(ctx, q, lookup, authorizer, clientID, projectID, organizationID, userSessionIssuerID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return zero, nil
 	}
@@ -126,6 +163,17 @@ func (m *ChallengeManager) resolveAuthorizerUpstreamToken(ctx context.Context, p
 	resolved, err := m.resolveCredentialToken(ctx, selected, resource)
 	if err != nil || resolved.Token == "" {
 		return resolved, err
+	}
+	// Recheck after a possibly blocking refresh, without adopting a reconnected grant.
+	current, err := tenantUserRemoteSession(ctx, q, lookup, authorizer, clientID, projectID, organizationID, userSessionIssuerID)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return zero, nil
+	case err != nil:
+		return zero, fmt.Errorf("recheck authorizing user credential: %w", err)
+	}
+	if current.ID != selected.ID || current.GrantGeneration != selected.GrantGeneration {
+		return zero, nil
 	}
 	m.touchResolvedCredential(ctx, selected)
 	return resolved, nil
@@ -158,15 +206,15 @@ func (m *ChallengeManager) workloadCredentialOwner(ctx context.Context, projectI
 	return admission, nil
 }
 
-func (m *ChallengeManager) resolveWorkloadUpstreamToken(ctx context.Context, projectID uuid.UUID, organizationID string, userSessionIssuerID, clientID uuid.UUID, caller urn.SessionSubject, resource string) (resolvedUpstreamToken, error) {
+func (m *ChallengeManager) resolveWorkloadUpstreamToken(ctx context.Context, lookup tokenLookup, projectID uuid.UUID, organizationID string, userSessionIssuerID, clientID uuid.UUID, caller urn.SessionSubject, resource string) (resolvedUpstreamToken, error) {
 	var zero resolvedUpstreamToken
 	admission, err := m.workloadCredentialOwner(ctx, projectID, organizationID, caller)
 	if err != nil {
 		return zero, err
 	}
 	q := remotesessions_repo.New(m.db)
-	params := remotesessions_repo.GetTenantUserRemoteSessionParams{SubjectUrn: urn.NewUserSubject(admission.OwnerUserID), RemoteSessionClientID: clientID, ProjectID: projectID, OrganizationID: organizationID, UserSessionIssuerID: userSessionIssuerID}
-	selected, err := q.GetTenantUserRemoteSession(ctx, params)
+	owner := urn.NewUserSubject(admission.OwnerUserID)
+	selected, err := tenantUserRemoteSession(ctx, q, lookup, owner, clientID, projectID, organizationID, userSessionIssuerID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return zero, nil
 	}
@@ -186,7 +234,7 @@ func (m *ChallengeManager) resolveWorkloadUpstreamToken(ctx context.Context, pro
 	}
 	// Recheck the tenant binding, membership and grant after refresh, without
 	// adopting a replacement session or a reconnected grant.
-	session, err := q.GetTenantUserRemoteSession(ctx, params)
+	session, err := tenantUserRemoteSession(ctx, q, lookup, owner, clientID, projectID, organizationID, userSessionIssuerID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return zero, nil
 	}

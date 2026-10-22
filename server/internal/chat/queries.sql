@@ -600,6 +600,15 @@ candidate_chats AS (
       OR u.email ILIKE '%' || @search || '%'
       OR ua.email ILIKE '%' || @search || '%'
     )
+    -- Eager runtime warmup persists a blank chat, not a user session.
+    -- Apply this outside the optional assistant filter for ordinary lists too.
+    AND NOT EXISTS (
+      SELECT 1 FROM assistant_threads warmup
+      WHERE warmup.chat_id = c.id
+        AND warmup.project_id = c.project_id
+        AND warmup.deleted IS FALSE
+        AND warmup.source_kind = 'warmup'
+    )
     AND (
       @assistant_id = ''
       OR EXISTS (
@@ -731,6 +740,7 @@ candidate_chats AS (
     c.updated_at,
     c.pinned_at,
     c.litellm_proxied,
+    c.agent_id,
     COALESCE(ua.account_type, '')::text AS account_type,
     COALESCE(ua.email, '')::text AS account_email
   FROM chats c
@@ -758,6 +768,15 @@ candidate_chats AS (
       OR u.display_name ILIKE '%' || @search || '%'
       OR u.email ILIKE '%' || @search || '%'
       OR ua.email ILIKE '%' || @search || '%'
+    )
+    -- Eager runtime warmup persists a blank chat, not a user session.
+    -- Apply this outside the optional assistant filter for ordinary lists too.
+    AND NOT EXISTS (
+      SELECT 1 FROM assistant_threads warmup
+      WHERE warmup.chat_id = c.id
+        AND warmup.project_id = c.project_id
+        AND warmup.deleted IS FALSE
+        AND warmup.source_kind = 'warmup'
     )
     AND (
       @assistant_id = ''
@@ -865,6 +884,7 @@ filtered_chats AS (
     cc.updated_at,
     cc.pinned_at,
     cc.litellm_proxied,
+    cc.agent_id,
     cs.sort_num_messages,
     cs.last_message_timestamp,
     cc.account_type,
@@ -892,6 +912,7 @@ limited_chats AS (
     fc.updated_at,
     fc.pinned_at,
     fc.litellm_proxied,
+    fc.agent_id,
     fc.sort_num_messages,
     fc.session_surface,
     fc.last_message_timestamp,
@@ -950,6 +971,14 @@ page_chats AS (
     -- The agent identity the assistant acts as, when it has one. At most one
     -- live binding exists per assistant, so this join adds no rows.
     b.original_agent_id AS assistant_agent_id,
+    -- The agent principal that produced the session, stamped at capture from
+    -- the authenticated actor. A channel session has no assistant record, so
+    -- the assistant columns above stay NULL and this is the only thing naming
+    -- the agent that made the calls. The name comes from the agents row rather
+    -- than the stamp so a rename is reflected, and a deleted agent reports its
+    -- id with no name rather than disappearing from the session's history.
+    lc.agent_id,
+    acting_agent.name AS agent_name,
     lc.total_count,
     lc.page_position
   FROM limited_chats lc
@@ -970,6 +999,13 @@ page_chats AS (
   LEFT JOIN assistant_threads thread ON thread.id = picked.thread_id AND thread.project_id = @project_id
   LEFT JOIN assistants a ON a.id = thread.assistant_id AND a.project_id = @project_id AND a.deleted IS FALSE
   LEFT JOIN assistant_agent_bindings b ON b.original_assistant_id = a.id AND b.project_id = @project_id AND b.deleted IS FALSE
+  -- Agents are organization-scoped (their project_id is nullable), so the
+  -- lookup is pinned to the listed project's organization. chats.agent_id
+  -- carries no foreign key, so this is what keeps a stale or cross-tenant stamp
+  -- from resolving to a name here.
+  LEFT JOIN agents acting_agent ON acting_agent.id = lc.agent_id
+    AND acting_agent.organization_id = (SELECT p.organization_id FROM projects p WHERE p.id = @project_id::uuid)
+    AND acting_agent.deleted IS FALSE
 ),
 chat_attribution AS (
   SELECT
@@ -1020,6 +1056,8 @@ SELECT
   lc.assistant_id,
   lc.assistant_name,
   lc.assistant_agent_id,
+  lc.agent_id,
+  lc.agent_name,
   lc.total_count
 FROM chat_attribution lc
 ORDER BY lc.page_position;
@@ -1043,7 +1081,7 @@ assistant_chats AS MATERIALIZED (
     AND c.project_id = at.project_id
     AND c.deleted IS FALSE
   WHERE at.project_id = @project_id
-    AND at.source_kind <> 'setup'
+    AND at.source_kind NOT IN ('setup', 'warmup')
     AND at.deleted IS FALSE
     AND (@external_user_id::text = '' OR c.external_user_id = @external_user_id::text)
     AND (@user_id::text = '' OR c.user_id = @user_id::text)
@@ -1092,7 +1130,7 @@ JOIN chats c
   AND c.deleted IS FALSE
 WHERE at.assistant_id = @assistant_id
   AND at.project_id = @project_id
-  AND at.source_kind <> 'setup'
+  AND at.source_kind NOT IN ('setup', 'warmup')
   AND at.deleted IS FALSE
   AND at.correlation_id > @after_correlation_id
   AND (@external_user_id::text = '' OR c.external_user_id = @external_user_id::text)
@@ -1150,6 +1188,10 @@ ORDER BY source;
 -- is unclassified.
 SELECT c.*, COALESCE(ua.account_type, '')::text AS account_type, COALESCE(ua.email, '')::text AS account_email,
   a.id AS assistant_id, a.name AS assistant_name, b.original_agent_id AS assistant_agent_id,
+  -- Name of the agent principal that produced the session (chats.agent_id,
+  -- selected by c.*). Resolved live so a rename shows, and NULL for a deleted
+  -- agent, whose id the session still reports.
+  acting_agent.name AS agent_name,
   coalesce(c.session_surface, CASE WHEN EXISTS (SELECT 1 FROM chat_session_links l
     WHERE l.project_id = c.project_id AND l.child_chat_id = c.id AND l.kind = 'subagent'
       AND l.source_surface = 'claude-tag') THEN 'claude-tag' END, '')::text AS captured_surface
@@ -1158,6 +1200,12 @@ LEFT JOIN user_accounts ua ON ua.id = c.user_account_id AND ua.organization_id =
 LEFT JOIN assistant_threads at ON at.chat_id = c.id AND at.project_id = c.project_id AND at.deleted IS FALSE
 LEFT JOIN assistants a ON a.id = at.assistant_id AND a.project_id = c.project_id AND a.deleted IS FALSE
 LEFT JOIN assistant_agent_bindings b ON b.original_assistant_id = a.id AND b.project_id = c.project_id AND b.deleted IS FALSE
+-- Agents are organization-scoped, so the lookup is pinned to the chat's own
+-- organization. chats.agent_id carries no foreign key, so this is what keeps a
+-- stale or cross-tenant stamp from resolving to a name here.
+LEFT JOIN agents acting_agent ON acting_agent.id = c.agent_id
+  AND acting_agent.organization_id = c.organization_id
+  AND acting_agent.deleted IS FALSE
 WHERE c.id = @id AND c.project_id = @project_id AND c.deleted IS FALSE;
 
 -- name: GetChatTitlesByIDs :many
@@ -2081,15 +2129,6 @@ WHERE chat_id = @chat_id AND project_id = @project_id
   AND origin = 'anthropic-inference' AND external_message_id IS NOT NULL
   AND external_message_id NOT LIKE '%/block:%';
 
--- name: GetInferenceAcceptedCheckpoint :one
-SELECT inference_accepted_checkpoint FROM chats
-WHERE project_id = @project_id AND external_chat_id = @external_chat_id;
-
--- name: SetInferenceAcceptedCheckpoint :execrows
-UPDATE chats SET inference_accepted_checkpoint = @checkpoint
-WHERE project_id = @project_id AND external_chat_id = @external_chat_id
-  AND inference_accepted_checkpoint IS NOT DISTINCT FROM sqlc.narg('expected_checkpoint')::bytea;
-
 -- name: FindInferenceChatsByNewestMessageIdentity :many
 -- The actor's live chats whose newest stored Anthropic inference message
 -- carries one of these chain identities, with the identity each matched. A
@@ -2128,23 +2167,6 @@ SELECT EXISTS (
 UPDATE chats SET inference_actor_key = @inference_actor_key
 WHERE id = @id AND project_id = @project_id
   AND inference_actor_key IS NULL;
-
--- name: InferencePolicyRevision :one
--- Include mutable exclusions and custom rules, which do not bump policy
--- versions. Strict inference scans cannot accept in-scope prompt-policy
--- content while its feature flag is disabled or its evaluation is incomplete.
-WITH policies AS (
-  SELECT * FROM risk_policies
-  WHERE project_id = @project_id AND enabled IS TRUE AND deleted IS FALSE
-    AND action IN ('block', 'warn', 'quarantine')
-)
-SELECT jsonb_build_object(
-    'policies', (SELECT coalesce(jsonb_agg(to_jsonb(p) ORDER BY p.id), '[]'::jsonb) FROM policies p),
-    'exclusions', (SELECT coalesce(jsonb_agg(to_jsonb(e) ORDER BY e.id), '[]'::jsonb)
-      FROM risk_exclusions e WHERE e.project_id = @project_id AND e.enabled IS TRUE AND e.deleted IS FALSE),
-    'custom_rules', (SELECT coalesce(jsonb_agg(to_jsonb(r) ORDER BY r.id), '[]'::jsonb)
-      FROM risk_custom_detection_rules r WHERE r.project_id = @project_id AND r.deleted IS FALSE)
-  )::text AS revision;
 
 -- name: RecordSlackMessageParticipant :exec
 -- Without a workspace hint, only a unique organization-local directory match
@@ -2253,3 +2275,37 @@ FROM ancestry ORDER BY root_id, (slack_channel_id IS NULL), depth;
 -- name: LockChatRowForTest :exec
 -- Test fixture: hold the lock an ordinary helper capture takes on its own row.
 SELECT id FROM chats WHERE id = @id AND project_id = @project_id FOR NO KEY UPDATE;
+
+-- name: GetKitProjectionMessage :one
+SELECT * FROM chat_messages WHERE project_id = @project_id AND id = @id;
+
+-- name: PatchKitProjectionMessage :execrows
+UPDATE chat_messages SET content = @content, content_raw = @content_raw,
+ tool_calls = @tool_calls, content_hash = @content_hash, finish_reason = @finish_reason,
+ risk_analyzed_at = CASE WHEN content IS DISTINCT FROM @content OR content_raw IS DISTINCT FROM @content_raw OR tool_calls IS DISTINCT FROM @tool_calls THEN NULL ELSE risk_analyzed_at END
+WHERE project_id = @project_id AND chat_id = @chat_id AND id = @id AND source = 'kit'
+AND (content IS DISTINCT FROM @content OR content_raw IS DISTINCT FROM @content_raw OR tool_calls IS DISTINCT FROM @tool_calls OR finish_reason IS DISTINCT FROM @finish_reason);
+
+-- name: ValidateKitTranscriptBinding :one
+SELECT t.id FROM assistant_threads t
+JOIN assistant_runtimes r ON r.assistant_id = t.assistant_id AND r.project_id = t.project_id
+JOIN assistants a ON a.id = t.assistant_id AND a.project_id = t.project_id
+JOIN chats c ON c.id = t.chat_id AND c.project_id = t.project_id
+WHERE t.project_id = @project_id AND t.assistant_id = @assistant_id AND t.id = @thread_id AND t.chat_id = @chat_id
+AND r.id = @runtime_id AND r.runtime_version = 3 AND NOT r.deleted AND NOT r.ended
+AND NOT t.deleted AND NOT c.deleted AND NOT a.deleted AND a.status = 'active';
+
+-- name: SetKitCompletionRuntimeFixture :exec
+-- Test fixture: exercise live runtime admission independently of key validity.
+UPDATE assistant_runtimes
+SET runtime_version = @runtime_version, ended_at = sqlc.narg(ended_at)::timestamptz
+WHERE id = @runtime_id AND project_id = @project_id;
+
+-- name: RevokeKitCompletionBindingFixture :exec
+-- Test fixture: revoke only the binding, keeping the principal API key live.
+UPDATE assistant_inference_credentials SET revoked_at = clock_timestamp()
+WHERE api_key_id = @id::uuid AND project_id = @project_id;
+
+-- name: DeleteKitCompletionBindingFixture :exec
+-- Test fixture: remove only the binding, keeping the principal API key live.
+DELETE FROM assistant_inference_credentials WHERE api_key_id = @id::uuid AND project_id = @project_id;

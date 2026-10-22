@@ -46,6 +46,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auditapi"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
+	"github.com/speakeasy-api/gram/server/internal/auth/deviceagenttoken"
 	"github.com/speakeasy-api/gram/server/internal/auth/principalcredential"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/background"
@@ -65,6 +66,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/dashboards"
 	"github.com/speakeasy-api/gram/server/internal/dataexports"
 	"github.com/speakeasy-api/gram/server/internal/deployments"
+	"github.com/speakeasy-api/gram/server/internal/deviceagentversions"
 	"github.com/speakeasy-api/gram/server/internal/deviceintegrations"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/environments"
@@ -181,6 +183,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/trialemails"
 	"github.com/speakeasy-api/gram/server/internal/triggers"
 	"github.com/speakeasy-api/gram/server/internal/tunneledmcp"
+	"github.com/speakeasy-api/gram/server/internal/tunnelmetrics"
 	"github.com/speakeasy-api/gram/server/internal/unproxiedmcp"
 	"github.com/speakeasy-api/gram/server/internal/usage"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
@@ -343,6 +346,11 @@ func mcpRuntimeFlags() []cli.Flag {
 			Name:    "openai-apps-challenge-token",
 			Usage:   "Token served at /.well-known/openai-apps-challenge on the platform hosts, for OpenAI's app directory domain verification. Empty serves not found.",
 			EnvVars: []string{"GRAM_OPENAI_APPS_CHALLENGE_TOKEN"},
+		},
+		&cli.StringFlag{
+			Name:    "mcp-registry-auth",
+			Usage:   "Proof record served at /.well-known/mcp-registry-auth on the platform hosts, for the official MCP registry's HTTP ownership check (\"v=MCPv1; k=ed25519; p=<public key>\"). Empty serves not found.",
+			EnvVars: []string{"GRAM_MCP_REGISTRY_AUTH"},
 		},
 		&cli.StringFlag{
 			Name:    "presidio-analyzer-url",
@@ -901,6 +909,7 @@ func newStartCommand() *cli.Command {
 			if err != nil {
 				return err
 			}
+			callbackOrigins.OrganizationHosts = orgHosts
 			identityResolver.SetNewOrganizationDefaultHost(orgHosts.NewOrganizationDefaultHost())
 
 			trialEmailNotifier := &background.TemporalTrialEmailNotifier{TemporalEnv: temporalEnv}
@@ -941,6 +950,7 @@ func newStartCommand() *cli.Command {
 				pubsubShutdown          func(context.Context) error
 				enforcementDispatcher   risk.EnforcementDispatcher
 				enforcementShutdown     func(context.Context) error
+				tunnelMetricsShutdown   func(context.Context) error
 			)
 			shutdownFuncs = append(shutdownFuncs, func(ctx context.Context) error {
 				var errs []error
@@ -964,6 +974,9 @@ func newStartCommand() *cli.Command {
 				}
 				if enforcementShutdown != nil {
 					errs = append(errs, enforcementShutdown(ctx))
+				}
+				if tunnelMetricsShutdown != nil {
+					errs = append(errs, tunnelMetricsShutdown(ctx))
 				}
 				if publishersShutdown != nil {
 					errs = append(errs, publishersShutdown(ctx))
@@ -1089,6 +1102,7 @@ func newStartCommand() *cli.Command {
 			}
 
 			principalCredentials := principalcredential.New(callerAssertions, db)
+			deviceAgentTokens := deviceagenttoken.New(callerAssertions, db)
 
 			assistantTokenManager := assistanttokens.New(c.String(usersessions.JWTSigningKeyFlag), db, authzEngine, principalCredentials, cache.NewRedisCacheAdapter(redisClient))
 			assistantRuntime, err := newAssistantRuntime(ctx, logger, tracerProvider, c, guardianPolicy, db, serverURL)
@@ -1202,11 +1216,14 @@ func newStartCommand() *cli.Command {
 				mcpriskscan.DefaultPolicyConfig,
 				mcpriskscan.WithMCPFindingEvidenceWriter(mcpFindingEvidence, toolIOLogsEnabled),
 			)
+			tunnelCollector, stopTunnelMetrics := newTunnelMetrics(ctx, logger, psbroker)
+			tunnelMetricsShutdown = stopTunnelMetrics
 			mcpService, err := newMCPService(c, mcpServiceDependencies{
 				CallerAssertions: callerAssertions,
 				IssuerGate:       issuerGate, IssuerSigner: issuerSigner,
 				Logger: logger, Tracer: tracerProvider, Meter: meterProvider, DB: db, Redis: redisClient,
-				Sessions: sessionManager, ChatSessions: chatSessionsManager, Environment: env,
+				TunnelMetrics: tunnelCollector,
+				Sessions:      sessionManager, ChatSessions: chatSessionsManager, Environment: env,
 				Posthog: posthogClient, Features: featureFlags, ServerURL: serverURL, SiteURL: siteURL,
 				Encryption: encryptionClient, Guardian: guardianPolicy, Functions: functionsOrchestrator,
 				BillingTracker: billingTracker, Billing: billingRepo, Telemetry: telemLogger, TelemetryService: telemSvc,
@@ -1233,6 +1250,9 @@ func newStartCommand() *cli.Command {
 			assistantsCore.SetWakeCanceller(triggerApp)
 			assistantsCore.SetDashboardIngestor(triggerApp)
 			assistantsCore.SetChatMessageWriter(chatWriter)
+			if err := installKitLocalRuntimeFromCLI(c, assistantsCore, db, auditLogger, redisClient, serverURL); err != nil {
+				return err
+			}
 			assistantsCore.SetAssetStorage(assetStorage)
 			assistantsCore.SetAssetSigningKey(c.String(usersessions.JWTSigningKeyFlag))
 			assistantsCore.SetSlackImageInlining(env, slackapi.NewClient("", guardianPolicy.PooledClient()))
@@ -1469,7 +1489,10 @@ func newStartCommand() *cli.Command {
 			roleManager := access.NewRoleManager(logger, db, roleClient, auditLogger, plugins.PublicationRequests{Enabled: publicationEmit}, distributionAdmission)
 			accessService := access.NewService(logger, tracerProvider, db, chDB, sessionManager, roleManager, authzEngine, auditLogger, emailService, orgHosts, telemSvc)
 			access.Attach(mux, accessService)
-			agent.Attach(mux, agent.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, productFeatures, serverURL.String(), orgHosts, assetStorage, telemLogger, growthEmitter))
+			agentService := agent.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, productFeatures, serverURL.String(), orgHosts, assetStorage, telemLogger, growthEmitter, deviceAgentTokens).
+				WithWorkloadTokenTargets(mcpService)
+			agentService.SetAgentVersions(deviceagentversions.NewStore(redisClient))
+			agent.Attach(mux, agentService)
 			upstreamRevoker := remotesessions.NewUpstreamRevoker(logger, tracerProvider, meterProvider, db, encryptionClient, guardianPolicy, tunnelHTTPClient, clientAssertionSigner)
 			agentmanagement.Attach(mux, agentmanagement.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, chatSessionsManager, upstreamRevoker))
 			assistants.Attach(mux, assistantsSvc)
@@ -1523,6 +1546,7 @@ func newStartCommand() *cli.Command {
 				orgHosts,
 				c.String("jwt-signing-key"),
 				metering.NewRiskRecorder(publishers.MeterReadings),
+				deviceAgentTokens,
 			)
 			hooks.Attach(mux, hooksService)
 			if err := hooks.AttachAHP(mux, hooksService); err != nil {
@@ -1693,8 +1717,8 @@ func newStartCommand() *cli.Command {
 				&background.TemporalSkillSuggestionSignaler{TemporalEnv: temporalEnv, Logger: logger, StartDelay: 0}, skillsPublishSignaler, siteURL)
 			skills.Attach(mux, skillsService)
 			toolsetsSvc := toolsets.NewService(logger, tracerProvider, guardianPolicy, db, sessionManager, cache.NewRedisCacheAdapter(redisClient), authzEngine, auditLogger, temporalEnv, pluginsGitHub != nil).WithNetworkAccessEligibility(networkIngressAdmission).
-				WithPublicationRequests(publicationEmit).WithFeatureProvider(featureFlags)
-			mcpMetadataService.WithPluginPublication(publicationEmit, pluginsPublishSignaler).WithFeatureProvider(featureFlags)
+				WithPublicationRequests(publicationEmit)
+			mcpMetadataService.WithPluginPublication(publicationEmit, pluginsPublishSignaler)
 			toolsets.Attach(mux, toolsetsSvc)
 			integrations.Attach(mux, integrations.NewService(logger, tracerProvider, db, sessionManager, authzEngine))
 			templates.Attach(mux, templates.NewService(logger, tracerProvider, db, sessionManager, toolsetsSvc, authzEngine, auditLogger))
@@ -1781,7 +1805,9 @@ func newStartCommand() *cli.Command {
 				WithDistributionAdmission(distributionAdmission)
 			remotemcp.Attach(mux, remoteMcpService)
 			unproxiedmcp.Attach(mux, unproxiedmcp.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger))
-			tunneledmcp.Attach(mux, tunneledmcp.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, route.NewRedis(redisClient), redisClient))
+			tunnelService := tunneledmcp.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, route.NewRedis(redisClient), redisClient)
+			tunnelService.Metrics = tunnelmetrics.NewStore(chDB)
+			tunneledmcp.Attach(mux, tunnelService)
 			mcpRuntime, err := buildMCPServerRuntime(mcpServerRuntimeDependencies{
 				MCP:      mcpService,
 				Metadata: mcpMetadataService,
@@ -1827,7 +1853,9 @@ func newStartCommand() *cli.Command {
 					return fmt.Errorf("registry discovery readiness: %w", err)
 				}
 			}
-			externalmcp.Attach(mux, externalmcp.NewService(logger, tracerProvider, db, sessionManager, mcpRegistryClient, mcpCatalog, authzEngine, callbackOrigins.ForNewClient(true)))
+			externalMCPService := externalmcp.NewService(logger, tracerProvider, db, sessionManager, mcpRegistryClient, mcpCatalog, authzEngine, callbackOrigins.Outbound)
+			externalMCPService.SetCallbackOrigins(callbackOrigins)
+			externalmcp.Attach(mux, externalMCPService)
 			riskSignaler := background.NewThrottledSignaler(
 				&background.TemporalRiskAnalysisSignaler{TemporalEnv: temporalEnv, Logger: logger},
 				analysisstatus.SignalCooldown,
@@ -1848,7 +1876,9 @@ func newStartCommand() *cli.Command {
 			widgetsSvc := widgets.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger)
 			dashboardsSvc := dashboards.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger)
 			platformMCPAssistant, err := configurePlatformMCP(ctx, platformMCPConfig{
+				DeploymentRedeploy:        deploymentsService,
 				AssistantIdentity:         assistantsSvc,
+				Workspaces:                platformMCPWorkspaces{auth: authService, organizations: organizationsService},
 				SignalAuthoring:           sigintSvc,
 				Logger:                    logger,
 				MeterProvider:             meterProvider,
@@ -1857,7 +1887,7 @@ func newStartCommand() *cli.Command {
 				DB:                        db,
 				Redis:                     redisClient,
 				ServerURL:                 serverURL,
-				CallbackOrigin:            callbackOrigins.ForNewClient(true),
+				CallbackOrigins:           callbackOrigins,
 				OutboundCallbackOrigin:    callbackOrigins.Outbound,
 				IssuerGate:                issuerGate,
 				IssuerSigner:              issuerSigner,
@@ -1879,6 +1909,7 @@ func newStartCommand() *cli.Command {
 				AuditLogger:               auditLogger,
 				AccessRoles:               roleClient,
 				PluginManagement:          pluginsSvc,
+				DirectoryReview:           accessService,
 				PluginPublisher:           pluginPublisher,
 				PluginPublishSignaler:     pluginsPublishSignaler,
 				NetworkAccessAdmission:    networkIngressAdmission,

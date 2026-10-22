@@ -18,9 +18,14 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/killswitches"
+	"github.com/speakeasy-api/gram/server/internal/killswitches/mcptoolexecution"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
+	"github.com/speakeasy-api/gram/server/internal/mcpidentity"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
@@ -127,7 +132,7 @@ func workloadSessionEndpoint(fx agentConsentFixture) *mcp.ResolvedMcpEndpoint {
 		AudienceURN:         urn.NewToolset(fx.toolset.ID).String(),
 		OrganizationID:      fx.orgID,
 		ProjectID:           fx.target.ProjectID,
-		RouteBase:           "mcp",
+		RouteBase:           mcproute.MCP,
 		Slug:                fx.toolset.McpSlug.String,
 		ToolsetID:           uuid.NullUUID{UUID: fx.toolset.ID, Valid: true},
 		UserSessionIssuerID: fx.target.UserSessionIssuerID,
@@ -187,6 +192,47 @@ func TestApplyIssuerGate_WorkloadSessionActsThroughItsAssignedAgent(t *testing.T
 	require.True(t, ok)
 	require.Empty(t, authorizer, "a workload session records no approving human")
 	require.Equal(t, fx.userID, owner)
+
+	identity, ok := mcpidentity.FromContext(admittedCtx)
+	require.True(t, ok)
+	require.Equal(t, mcpidentity.KindAgent, identity.Kind())
+	require.Equal(t, agent.ID.String(), identity.AgentID())
+	require.Equal(t, session.Jti, identity.SessionJTI())
+	require.WithinDuration(t, session.ExpiresAt.Time, identity.ExpiresAt(), time.Second)
+
+	// Exercise the actual hosted checkpoint, not just context getters. The
+	// machine retains its workload actor but is controlled by its assigned agent.
+	serverID, err := testrepo.New(ti.conn).CreateRemoteMCPServerFixture(ctx, testrepo.CreateRemoteMCPServerFixtureParams{
+		ID: uuid.New(), ProjectID: fx.target.ProjectID, ToolsetID: conv.ToNullUUID(fx.toolset.ID), Visibility: "private",
+	})
+	require.NoError(t, err)
+	checkpoint, err := mcptoolexecution.NewHostedCheckpoint(ti.conn, nil, testenv.NewLogger(t), nil)
+	require.NoError(t, err)
+	source := mcptoolexecution.ServerSource{FrontingServerID: conv.ToNullUUID(serverID)}
+	disposition, err := checkpoint.Evaluate(admittedCtx, fx.orgID, source)
+	require.NoError(t, err)
+	require.Equal(t, killswitches.TransportDispositionContinue, disposition.Kind())
+
+	require.NoError(t, testrepo.New(ti.conn).InsertKillswitchPrescriptionFixture(ctx, testrepo.InsertKillswitchPrescriptionFixtureParams{
+		PrescriptionID: uuid.New(), OrganizationID: fx.orgID,
+		DefinitionKey: string(mcptoolexecution.DefinitionKeyMCPToolExecution),
+		PrincipalKind: string(mcptoolexecution.PrincipalKindAgent), PrincipalKey: agent.ID.String(),
+		ResourceKind: string(mcptoolexecution.ResourceKindMCPServer), ResourceScope: "all",
+		InternalNote: "Machine regression", ExternalNote: "Agent paused.",
+	}))
+	disposition, err = checkpoint.Evaluate(admittedCtx, fx.orgID, source)
+	require.NoError(t, err)
+	require.Equal(t, killswitches.TransportDispositionMatchedDenial, disposition.Kind())
+
+	_, err = agentsrepo.New(ti.conn).SuspendAgent(ctx, agentsrepo.SuspendAgentParams{OrganizationID: fx.orgID, ID: agent.ID})
+	require.NoError(t, err)
+	disposition, err = checkpoint.Evaluate(admittedCtx, fx.orgID, source)
+	require.NoError(t, err)
+	require.Equal(t, killswitches.TransportDispositionInfrastructureRejection, disposition.Kind(), "even an already admitted context must fail closed after suspension")
+	_, _, _, err = ti.service.ApplyIssuerGate(t.Context(), httptest.NewRecorder(), mintSessionBearerExpiringAt(t, ti, fx, session, session.ExpiresAt.Time), ti.serverURL.String(), endpoint)
+	var suspended *oops.ShareableError
+	require.ErrorAs(t, err, &suspended)
+	require.Equal(t, oops.CodeUnauthorized, suspended.Code)
 }
 
 func TestApplyIssuerGate_WorkloadSessionFollowsLiveOwnerPermissions(t *testing.T) {

@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 
 	hooks "github.com/speakeasy-api/gram/server/gen/hooks"
 	goahttp "goa.design/goa/v3/http"
@@ -41,6 +42,10 @@ func EncodeClaudeRequest(encoder func(*http.Request) goahttp.Encoder) func(*http
 		p, ok := v.(*hooks.ClaudePayload)
 		if !ok {
 			return goahttp.ErrInvalidType("hooks", "claude", "*hooks.ClaudePayload", v)
+		}
+		if p.DeviceAgentToken != nil {
+			head := *p.DeviceAgentToken
+			req.Header.Set("Authorization", head)
 		}
 		if p.ApikeyToken != nil {
 			head := *p.ApikeyToken
@@ -284,6 +289,14 @@ func EncodeCursorRequest(encoder func(*http.Request) goahttp.Encoder) func(*http
 		if !ok {
 			return goahttp.ErrInvalidType("hooks", "cursor", "*hooks.CursorPayload", v)
 		}
+		if p.DeviceAgentToken != nil {
+			head := *p.DeviceAgentToken
+			if !strings.Contains(head, " ") {
+				req.Header.Set("Authorization", "Bearer "+head)
+			} else {
+				req.Header.Set("Authorization", head)
+			}
+		}
 		if p.ApikeyToken != nil {
 			head := *p.ApikeyToken
 			req.Header.Set("Gram-Key", head)
@@ -526,6 +539,14 @@ func EncodeCodexRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.
 		if !ok {
 			return goahttp.ErrInvalidType("hooks", "codex", "*hooks.CodexPayload", v)
 		}
+		if p.DeviceAgentToken != nil {
+			head := *p.DeviceAgentToken
+			if !strings.Contains(head, " ") {
+				req.Header.Set("Authorization", "Bearer "+head)
+			} else {
+				req.Header.Set("Authorization", head)
+			}
+		}
 		if p.ApikeyToken != nil {
 			head := *p.ApikeyToken
 			req.Header.Set("Gram-Key", head)
@@ -767,6 +788,10 @@ func EncodeIngestRequest(encoder func(*http.Request) goahttp.Encoder) func(*http
 		p, ok := v.(*hooks.IngestPayload)
 		if !ok {
 			return goahttp.ErrInvalidType("hooks", "ingest", "*hooks.IngestPayload", v)
+		}
+		if p.DeviceAgentToken != nil {
+			head := *p.DeviceAgentToken
+			req.Header.Set("Authorization", head)
 		}
 		if p.ApikeyToken != nil {
 			head := *p.ApikeyToken
@@ -1465,6 +1490,14 @@ func EncodeLogsRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.R
 		if !ok {
 			return goahttp.ErrInvalidType("hooks", "logs", "*hooks.LogsPayload", v)
 		}
+		if p.DeviceAgentToken != nil {
+			head := *p.DeviceAgentToken
+			if !strings.Contains(head, " ") {
+				req.Header.Set("Authorization", "Bearer "+head)
+			} else {
+				req.Header.Set("Authorization", head)
+			}
+		}
 		if p.ApikeyToken != nil {
 			head := *p.ApikeyToken
 			req.Header.Set("Gram-Key", head)
@@ -1689,6 +1722,14 @@ func EncodeMetricsRequest(encoder func(*http.Request) goahttp.Encoder) func(*htt
 		p, ok := v.(*hooks.MetricsPayload)
 		if !ok {
 			return goahttp.ErrInvalidType("hooks", "metrics", "*hooks.MetricsPayload", v)
+		}
+		if p.DeviceAgentToken != nil {
+			head := *p.DeviceAgentToken
+			if !strings.Contains(head, " ") {
+				req.Header.Set("Authorization", "Bearer "+head)
+			} else {
+				req.Header.Set("Authorization", head)
+			}
 		}
 		if p.ApikeyToken != nil {
 			head := *p.ApikeyToken

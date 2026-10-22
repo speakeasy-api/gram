@@ -67,7 +67,7 @@ vi.mock("./sections/TunnelKeySection", () => ({
 }));
 vi.mock("./sections/AgentSetupSection", () => ({
   MCP_AGENT_SETUP_SECTION_ID: "agent-setup",
-  AgentSetupSection: () => <h2>Agent Setup</h2>,
+  AgentSetupSection: () => <h2>Tunnel agent setup</h2>,
 }));
 
 // The source rows the tab fetches for the sections that edit them. Only the
@@ -158,7 +158,7 @@ describe("SettingsTab", () => {
       "Public Access",
       "Public Rate Limits",
       "Tunnel Key",
-      "Agent Setup",
+      "Tunnel agent setup",
       "Tool Filtering",
       "Danger Zone",
     ]);

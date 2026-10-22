@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import { MemoryRouter, useLocation } from "react-router";
+import { unrecognized } from "@gram/client/types/unrecognized.js";
 import type { MetaMcpServer } from "@gram/client/models/components/metamcpserver.js";
 import { TooltipProvider } from "@/components/ui/Tooltip";
 import { GatewayInspectTab } from "./GatewayInspectTab";
@@ -122,3 +123,42 @@ it("applies discovery choices to the URL and the minted connection", async () =>
   );
   expect(screen.getByLabelText("location").textContent).toBe("?keep=value");
 });
+
+it.each([
+  ["direct", "Direct"],
+  ["progressive", "Progressive"],
+  ["future_mode", "Unknown"],
+  ["constructor", "Unknown"],
+  ["__proto__", "Unknown"],
+])(
+  "labels gateway default %s as %s without choosing an override",
+  (mode, label) => {
+    state.mint.mockClear();
+    render(
+      <TooltipProvider>
+        <MemoryRouter>
+          <GatewayInspectTab
+            metaMcpServer={
+              {
+                id: "gateway-test",
+                userSessionIssuerId: "issuer-test",
+                discoveryMode: unrecognized(mode),
+              } as MetaMcpServer
+            }
+            endpoints={[]}
+            isLoadingEndpoints={false}
+          />
+        </MemoryRouter>
+      </TooltipProvider>,
+    );
+    expect(
+      screen.getByRole("combobox", { name: "Inspect discovery mode" })
+        .textContent,
+    ).toBe(`Use gateway default (${label})`);
+    expect(state.mint).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        target: expect.objectContaining({ discoveryMode: undefined }),
+      }),
+    );
+  },
+);

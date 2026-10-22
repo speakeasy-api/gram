@@ -17,6 +17,10 @@ import { useDeleteRemoteMcpServerHeaderMutation } from "@gram/client/react-query
 import { useDetachUserSessionIssuerMutation } from "@gram/client/react-query/detachUserSessionIssuer.js";
 import { useUserSessionIssuer } from "@gram/client/react-query/userSessionIssuer.js";
 import { invalidateAllRemoteSessionClients } from "@gram/client/react-query/remoteSessionClients.js";
+import {
+  invalidateAllServerClientAssociations,
+  useServerClientAssociations,
+} from "@gram/client/react-query/serverClientAssociations.js";
 import { useGetRemoteMcpServer } from "@gram/client/react-query/getRemoteMcpServer.js";
 import {
   invalidateAllGetRemoteMcpServerScopes,
@@ -239,6 +243,26 @@ export function RemoteMcpIdentitySectionBody({
     configured: actualMode === "user",
     enabled: identityResolved && selectedMode === "user",
   });
+  // mcp:write satisfies mcp:read, but a read block applies independently.
+  const canRead =
+    !rbacLoading && hasScope("mcp:read", target.permissionResourceId);
+  const associationsQuery = useServerClientAssociations(
+    { mcpServerId: target.permissionResourceId },
+    undefined,
+    {
+      enabled: canRead && identityResolved && selectedMode === "user",
+      throwOnError: false,
+    },
+  );
+  // Other servers using this server's client: rotating or replacing the
+  // client changes their sign-in too.
+  const connectedAssociation = associationsQuery.data?.associations.find(
+    (association) =>
+      association.remoteSessionClientId === userDraft.connectedClientId,
+  );
+  const otherServersOnClient = connectedAssociation
+    ? connectedAssociation.serverCount - 1
+    : 0;
   const agentDraft = useAgentCredentialDraft({
     remoteMcpServerId,
     authorizationHeader,
@@ -279,9 +303,6 @@ export function RemoteMcpIdentitySectionBody({
   const showScopePin = scopePinSlot && !!scopePin.data && !scopePinUnusable;
   const scopePinDirty = showScopePin && scopePin.dirty;
   // Writers get the same answer in the pin's status line when the pin shows.
-  // mcp:write satisfies mcp:read, but a read block applies independently.
-  const canRead =
-    !rbacLoading && hasScope("mcp:read", target.permissionResourceId);
   const showScopesSummary =
     canRead &&
     (!scopePinSlot || scopePinUnusable) &&
@@ -397,6 +418,7 @@ export function RemoteMcpIdentitySectionBody({
     }
     await Promise.all([
       invalidateAllRemoteSessionClients(queryClient),
+      invalidateAllServerClientAssociations(queryClient),
       invalidateAllGetRemoteMcpServerScopes(queryClient),
       invalidateSharedIssuerImpact(queryClient),
     ]);
@@ -438,7 +460,10 @@ export function RemoteMcpIdentitySectionBody({
         attachUserSessionIssuerForm: { id: selfClient.id, userSessionIssuerId },
       },
     });
-    await invalidateAllRemoteSessionClients(queryClient);
+    await Promise.all([
+      invalidateAllRemoteSessionClients(queryClient),
+      invalidateAllServerClientAssociations(queryClient),
+    ]);
   };
 
   // Switching to User commits a client; without one, removing the old
@@ -793,6 +818,15 @@ export function RemoteMcpIdentitySectionBody({
                   )
                 }
               />
+              {otherServersOnClient > 0 ? (
+                <Text muted small className="mt-4 block pl-[52px]">
+                  This client also signs in{" "}
+                  {otherServersOnClient === 1
+                    ? "1 other MCP server"
+                    : `${otherServersOnClient} other MCP servers`}
+                  . Changing or rotating it changes their sign-in too.
+                </Text>
+              ) : null}
               {showScopePin && scopePin.data ? (
                 // Commits with the footer's Save, like the rest of the panel.
                 <div className="mt-4 pl-[52px]">

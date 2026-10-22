@@ -100,6 +100,7 @@ var chPurgeProjectTables = []string{
 	"attribute_keys",
 	"shadow_mcp_inventory_urls",
 	"mcp_network_traffic_hourly_summaries",
+	"tunnel_metric_snapshots",
 }
 
 // chPurgeOrgTables are deleted by organization_id.
@@ -432,8 +433,19 @@ func (s *seeder) chToolCallRows() []chTelemetryRow {
 				`,"gram.tool.name":"` + toolName + `"`
 			// Managed-agent calls retain the approving human email too: the
 			// actor must win.
+			//
+			// The authorizer rides along beside the actor. An agent acts
+			// under someone's authority, and a call that records only the
+			// machine cannot be read back to the person accountable for it —
+			// which is what the log detail sheet shows as "<agent> on behalf
+			// of <person>". Not every agent call has one: a key or a
+			// federated platform signs the agent in as itself, so a third of
+			// them deliberately carry no authorizer.
 			if i%4 == 0 {
 				attrs += `,"gram.event.source":"tool_call","gram.authorization.actor.type":"agent","gram.authorization.actor.id":"` + managedAgentID + `"`
+				if hash64("authz", i)%3 != 0 {
+					attrs += `,"gram.authorization.authorizer_user_id":"` + s.userID(u.handle) + `"`
+				}
 			}
 			attrs += `,"gram.toolset.slug":"` + chIf(i%5 == 0, "acme-ops", "acme-support-tools") + `"` +
 				`,"http.response.status_code":` + chIf(failed, "500", "200") +

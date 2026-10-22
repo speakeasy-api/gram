@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgtype"
 	"go.opentelemetry.io/otel/trace"
 
 	gen "github.com/speakeasy-api/gram/server/gen/access"
@@ -17,9 +18,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/directory"
 	directoryrepo "github.com/speakeasy-api/gram/server/internal/directory/repo"
+	"github.com/speakeasy-api/gram/server/internal/directoryreview"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
@@ -30,13 +33,34 @@ const (
 	directoryRoleMappingSourceGroup     = "group"
 	directoryRoleMappingSourceAttribute = "attribute"
 
+	// directoryRoleMappingSourceActive and directoryRoleMappingSourceMissing
+	// are the source_status values on a listed mapping. A missing source
+	// matches nobody, so its mappings grant nothing.
+	directoryRoleMappingSourceActive  = "active"
+	directoryRoleMappingSourceMissing = "missing"
+
 	// maxDirectoryAttributeOptionsPerKey keeps the option list usable: a key
 	// with more distinct values than this (emails, employee ids) is no use as
 	// a mapping source, so it is left out. It is not a privacy boundary; the
 	// admin-only scope on ListDirectoryRoleMappings is. SetDirectoryRoleMappings
 	// still accepts any existing key and value.
 	maxDirectoryAttributeOptionsPerKey = 100
+
+	// maxDirectoryRolesPerSource is a sanity cap on how many roles one group
+	// or attribute value can grant. A source granting more than this is far
+	// more likely a mistake than a deliberate setup, and every role it grants
+	// widens access for everyone the source matches.
+	maxDirectoryRolesPerSource = 20
 )
+
+// requireDirectoryRoleSetWithinCap rejects a role set larger than
+// maxDirectoryRolesPerSource. count is the number of distinct roles.
+func (s *Service) requireDirectoryRoleSetWithinCap(ctx context.Context, count int) error {
+	if count > maxDirectoryRolesPerSource {
+		return oops.E(oops.CodeBadRequest, nil, "a directory group or attribute value can grant at most %d roles; this request asks for %d", maxDirectoryRolesPerSource, count).LogWarn(ctx, s.logger)
+	}
+	return nil
+}
 
 // ListDirectoryRoleMappings returns the organization's live mappings together
 // with the directory groups and attribute values an admin can map.
@@ -91,6 +115,10 @@ func (s *Service) ListDirectoryRoleMappings(ctx context.Context, _ *gen.ListDire
 	}
 	mappings := make([]*gen.DirectoryRoleMapping, 0, len(mappingRows))
 	for _, row := range mappingRows {
+		sourceStatus := directoryRoleMappingSourceActive
+		if row.SourceMissing {
+			sourceStatus = directoryRoleMappingSourceMissing
+		}
 		mappings = append(mappings, &gen.DirectoryRoleMapping{
 			ID:                 row.ID.String(),
 			SourceKind:         row.SourceKind,
@@ -98,6 +126,7 @@ func (s *Service) ListDirectoryRoleMappings(ctx context.Context, _ *gen.ListDire
 			DirectoryGroupName: conv.FromPGText[string](row.DirectoryGroupName),
 			AttributeKey:       conv.FromPGText[string](row.AttributeKey),
 			AttributeValue:     conv.FromPGText[string](row.AttributeValue),
+			SourceStatus:       sourceStatus,
 			RoleUrn:            row.RoleUrn,
 			CreatedAt:          conv.FromPGTimestamptz(row.CreatedAt),
 			UpdatedAt:          conv.FromPGTimestamptz(row.UpdatedAt),
@@ -123,13 +152,17 @@ func (s *Service) SyncDirectoryGroups(ctx context.Context, _ *gen.SyncDirectoryG
 		return nil, err
 	}
 
+	snapshot, err := directory.SnapshotOrganizationSync(ctx, s.db, workosOrgID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "snapshot organization sync").LogError(ctx, s.logger)
+	}
+
 	directories, err := s.roleMgr.roles.ListDirectories(ctx, workosOrgID)
 	if err != nil {
 		return nil, oops.E(oops.CodeGatewayError, err, "list directories").LogError(ctx, s.logger)
 	}
 
-	dirQueries := directoryrepo.New(s.db)
-	groupCount := 0
+	var inventory []directoryrepo.UpsertListedDirectoryGroupParams
 	for _, directory := range directories {
 		if !workos.HasActiveDirectory([]workos.Directory{directory}) {
 			continue
@@ -139,31 +172,50 @@ func (s *Service) SyncDirectoryGroups(ctx context.Context, _ *gen.SyncDirectoryG
 		if err != nil {
 			return nil, oops.E(oops.CodeGatewayError, err, "list directory groups").LogError(ctx, s.logger)
 		}
-		groupCount += len(groups)
 
 		for _, group := range groups {
 			attributes := []byte(group.RawAttributes)
 			if len(attributes) == 0 || string(attributes) == "null" {
 				attributes = []byte("{}")
 			}
-			if _, err := dirQueries.UpsertListedDirectoryGroup(ctx, directoryrepo.UpsertListedDirectoryGroupParams{
+			inventory = append(inventory, directoryrepo.UpsertListedDirectoryGroupParams{
 				OrganizationID:         ac.ActiveOrganizationID,
 				WorkosDirectoryGroupID: group.ID,
+				DirectoryID:            conv.ToPGText(directory.ID),
 				Name:                   group.Name,
 				Attributes:             attributes,
 				WorkosCreatedAt:        conv.ToPGTimestamptz(workosTimeOrNow(group.CreatedAt)),
 				WorkosUpdatedAt:        conv.ToPGTimestamptz(workosTimeOrNow(group.UpdatedAt)),
-			}); err != nil {
-				return nil, oops.E(oops.CodeUnexpected, err, "save directory group").LogError(ctx, s.logger)
-			}
-
-			if err := s.reconcileDirectoryGroupMembers(ctx, ac.ActiveOrganizationID, group.ID); err != nil {
-				return nil, err
-			}
+			})
 		}
 	}
 
-	return &gen.SyncDirectoryGroupsResult{GroupCount: groupCount}, nil
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "begin directory group sync").LogError(ctx, s.logger)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	if err := snapshot.LockAndValidate(ctx, tx); err != nil {
+		return nil, oops.E(oops.CodeConflict, err, "directory inventory changed; retry sync").LogError(ctx, s.logger)
+	}
+	dirQueries := directoryrepo.New(tx)
+	for _, group := range inventory {
+		if _, err := dirQueries.UpsertListedDirectoryGroup(ctx, group); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "save directory group").LogError(ctx, s.logger)
+		}
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "commit directory group sync").LogError(ctx, s.logger)
+	}
+
+	// Member listings call WorkOS, so they run after the inventory commits.
+	// A group the inventory left tombstoned is skipped by the reconcile.
+	for _, group := range inventory {
+		if err := s.reconcileDirectoryGroupMembers(ctx, ac.ActiveOrganizationID, group.WorkosDirectoryGroupID); err != nil {
+			return nil, err
+		}
+	}
+	return &gen.SyncDirectoryGroupsResult{GroupCount: len(inventory)}, nil
 }
 
 // reconcileDirectoryGroupMembers makes a group's memberships match its full
@@ -233,47 +285,86 @@ func (s *Service) setDirectoryRoleMappings(ctx context.Context, payload *gen.Set
 		attr.UserID(ac.UserID),
 	)
 
-	var groupID uuid.NullUUID
-	switch payload.SourceKind {
-	case directoryRoleMappingSourceGroup:
-		if payload.DirectoryGroupID == nil || payload.AttributeKey != nil || payload.AttributeValue != nil {
-			return nil, oops.E(oops.CodeBadRequest, nil, "a group mapping needs directory_group_id and no attribute fields").LogError(ctx, s.logger)
-		}
-		id, err := uuid.Parse(*payload.DirectoryGroupID)
-		if err != nil {
-			return nil, oops.E(oops.CodeBadRequest, err, "invalid directory group ID").LogError(ctx, s.logger)
-		}
-		groupID = uuid.NullUUID{UUID: id, Valid: true}
-	case directoryRoleMappingSourceAttribute:
-		if payload.AttributeKey == nil || payload.AttributeValue == nil || payload.DirectoryGroupID != nil {
-			return nil, oops.E(oops.CodeBadRequest, nil, "an attribute mapping needs attribute_key and attribute_value and no directory_group_id").LogError(ctx, s.logger)
-		}
-	default:
-		return nil, oops.E(oops.CodeBadRequest, nil, "unknown source kind").LogError(ctx, s.logger)
-	}
-
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, s.logger)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
-	queries := repo.New(dbtx)
-
-	lockKey := ac.ActiveOrganizationID + ":attr:" + conv.PtrValOr(payload.AttributeKey, "") + "=" + conv.PtrValOr(payload.AttributeValue, "")
-	if groupID.Valid {
-		lockKey = ac.ActiveOrganizationID + ":group:" + groupID.UUID.String()
+	mappings, err := s.setDirectoryRoleMappingsTx(ctx, dbtx, ac, payload, legacy)
+	if err != nil {
+		return nil, err
 	}
-	if err := queries.LockDirectoryRoleMappingSource(ctx, lockKey); err != nil {
+	if err := dbtx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "commit directory role mappings").LogError(ctx, s.logger)
+	}
+	return mappings, nil
+}
+
+// setDirectoryRoleMappingsTx locks one source, checks the actor is a live
+// organization admin and replaces the source's role set on dbtx. The caller
+// commits.
+func (s *Service) setDirectoryRoleMappingsTx(ctx context.Context, dbtx pgx.Tx, ac *contextvalues.AuthContext, payload *gen.SetDirectoryRoleMappingsPayload, legacy bool) ([]*gen.DirectoryRoleMapping, error) {
+	groupID, err := s.directoryRoleSourceGroupID(ctx, payload.SourceKind, payload.DirectoryGroupID, payload.AttributeKey, payload.AttributeValue)
+	if err != nil {
+		return nil, err
+	}
+
+	lockKey := directoryRoleSourceLockKey(ac.ActiveOrganizationID, groupID, payload.AttributeKey, payload.AttributeValue)
+	if err := repo.New(dbtx).LockDirectoryRoleMappingSource(ctx, lockKey); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "lock directory role mapping source").LogError(ctx, s.logger)
 	}
 	if err := s.requireLiveOrgAdminWithDBTX(ctx, ac, dbtx); err != nil {
 		return nil, err
 	}
 
+	return s.writeDirectoryRoleSetTx(ctx, dbtx, ac, payload, groupID, legacy)
+}
+
+// directoryRoleSourceGroupID checks that a source names exactly one of a group
+// or an attribute value, and parses the group ID when it is a group.
+func (s *Service) directoryRoleSourceGroupID(ctx context.Context, sourceKind string, directoryGroupID, attributeKey, attributeValue *string) (uuid.NullUUID, error) {
+	switch sourceKind {
+	case directoryRoleMappingSourceGroup:
+		if directoryGroupID == nil || attributeKey != nil || attributeValue != nil {
+			return uuid.NullUUID{UUID: uuid.Nil, Valid: false}, oops.E(oops.CodeBadRequest, nil, "a group mapping needs directory_group_id and no attribute fields").LogError(ctx, s.logger)
+		}
+		id, err := uuid.Parse(*directoryGroupID)
+		if err != nil {
+			return uuid.NullUUID{UUID: uuid.Nil, Valid: false}, oops.E(oops.CodeBadRequest, err, "invalid directory group ID").LogError(ctx, s.logger)
+		}
+		return uuid.NullUUID{UUID: id, Valid: true}, nil
+	case directoryRoleMappingSourceAttribute:
+		if attributeKey == nil || attributeValue == nil || directoryGroupID != nil {
+			return uuid.NullUUID{UUID: uuid.Nil, Valid: false}, oops.E(oops.CodeBadRequest, nil, "an attribute mapping needs attribute_key and attribute_value and no directory_group_id").LogError(ctx, s.logger)
+		}
+		return uuid.NullUUID{UUID: uuid.Nil, Valid: false}, nil
+	default:
+		return uuid.NullUUID{UUID: uuid.Nil, Valid: false}, oops.E(oops.CodeBadRequest, nil, "unknown source kind").LogError(ctx, s.logger)
+	}
+}
+
+// directoryRoleSourceLockKey names the advisory lock that serializes writes
+// to one source's role set.
+func directoryRoleSourceLockKey(organizationID string, groupID uuid.NullUUID, attributeKey, attributeValue *string) string {
+	if groupID.Valid {
+		return organizationID + ":group:" + groupID.UUID.String()
+	}
+	return organizationID + ":attr:" + conv.PtrValOr(attributeKey, "") + "=" + conv.PtrValOr(attributeValue, "")
+}
+
+// writeDirectoryRoleSetTx replaces one source's role set on dbtx. The caller
+// holds the source's lock, has checked the actor is a live organization admin,
+// and commits.
+func (s *Service) writeDirectoryRoleSetTx(ctx context.Context, dbtx pgx.Tx, ac *contextvalues.AuthContext, payload *gen.SetDirectoryRoleMappingsPayload, groupID uuid.NullUUID, legacy bool) ([]*gen.DirectoryRoleMapping, error) {
+	queries := repo.New(dbtx)
+
 	roleURNs := slices.Clone(payload.RoleUrns)
 	slices.Sort(roleURNs)
 	roleURNs = slices.Compact(roleURNs)
+	if err := s.requireDirectoryRoleSetWithinCap(ctx, len(roleURNs)); err != nil {
+		return nil, err
+	}
 	roles, err := queries.ListLiveDirectoryMappingRoles(ctx, repo.ListLiveDirectoryMappingRolesParams{
 		OrganizationID: ac.ActiveOrganizationID, RoleUrns: roleURNs,
 	})
@@ -416,22 +507,47 @@ func (s *Service) setDirectoryRoleMappings(ctx context.Context, payload *gen.Set
 			if err := s.audit.LogDirectoryRoleMappingSet(ctx, dbtx, audit.LogDirectoryRoleMappingSetEvent{
 				OrganizationID: ac.ActiveOrganizationID,
 				Actor:          urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID), ActorDisplayName: ac.Email, ActorSlug: nil,
-				MappingURN: urn.NewDirectoryRoleMapping(mappingID), SourceLabel: sourceLabel, RoleURN: roleURN, PreviousRoleURN: nil,
+				MappingURN: urn.NewDirectoryRoleMapping(mappingID), SourceLabel: sourceLabel, RoleURN: roleURN,
 			}); err != nil {
 				return nil, oops.E(oops.CodeUnexpected, err, "log directory role mapping addition").LogError(ctx, s.logger)
 			}
 		}
+		// A non-empty set is refused above unless its source is live, so
+		// every mapping returned here has an active source.
 		mappings = append(mappings, &gen.DirectoryRoleMapping{
 			ID: mappingID.String(), SourceKind: payload.SourceKind, DirectoryGroupID: conv.FromNullableUUID(groupID),
 			DirectoryGroupName: groupName, AttributeKey: payload.AttributeKey, AttributeValue: payload.AttributeValue,
-			RoleUrn: roleURN, CreatedAt: createdAt, UpdatedAt: updatedAt,
+			SourceStatus: directoryRoleMappingSourceActive,
+			RoleUrn:      roleURN, CreatedAt: createdAt, UpdatedAt: updatedAt,
 		})
 	}
 
-	if err := dbtx.Commit(ctx); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "commit directory role mappings").LogError(ctx, s.logger)
+	if err := s.reviewDirectorySourceTx(ctx, dbtx, ac.ActiveOrganizationID, groupID, conv.PtrToPGText(payload.AttributeKey), conv.PtrToPGText(payload.AttributeValue)); err != nil {
+		return nil, err
 	}
+
 	return mappings, nil
+}
+
+// reviewDirectorySourceTx settles the review items a mapping change resolves
+// for one source, such as a new group an admin has now mapped, in the
+// mapping change's transaction.
+func (s *Service) reviewDirectorySourceTx(ctx context.Context, dbtx pgx.Tx, organizationID string, groupID uuid.NullUUID, attributeKey, attributeValue pgtype.Text) error {
+	if groupID.Valid {
+		if _, err := directoryreview.ReconcileGroup(ctx, dbtx, organizationID, groupID.UUID); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "review directory group mappings").LogError(ctx, s.logger)
+		}
+		return nil
+	}
+	// A key's first or last mapping changes whether its other values are
+	// decisions at all, so settle the whole key, then the value itself.
+	if _, err := directoryreview.SupersedeAttributeKey(ctx, dbtx, organizationID, attributeKey.String); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "review directory attribute mappings").LogError(ctx, s.logger)
+	}
+	if _, err := directoryreview.ReconcileAttributeValue(ctx, dbtx, organizationID, attributeKey.String, attributeValue.String); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "review directory attribute mappings").LogError(ctx, s.logger)
+	}
+	return nil
 }
 
 func isLegacyDirectoryMappingConflict(err error) bool {
@@ -538,6 +654,10 @@ func (s *Service) DeleteDirectoryRoleMapping(ctx context.Context, payload *gen.D
 		RoleURN:          mapping.RoleUrn,
 	}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "log directory role mapping delete").LogError(ctx, s.logger)
+	}
+
+	if err := s.reviewDirectorySourceTx(ctx, dbtx, ac.ActiveOrganizationID, mapping.DirectoryGroupID, mapping.AttributeKey, mapping.AttributeValue); err != nil {
+		return err
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {

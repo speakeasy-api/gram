@@ -17,6 +17,7 @@ import (
 
 	"github.com/go-jose/go-jose/v4/jwt"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
@@ -449,6 +450,7 @@ func (s *Service) handleWorkloadAssertionGrant(
 
 	projectID := endpoint.ProjectID
 	return s.issueWorkloadGrantSession(ctx, w, logger, workloadGrantIssuance{
+		client: nil, beforeCommit: nil,
 		presented:  presented,
 		credential: credential,
 		projectID:  &projectID,
@@ -482,6 +484,9 @@ func (s *Service) refuseUnservedWorkloadGrant(
 // workloadGrantIssuance is a workload grant whose assertion verified, ready
 // for admission and minting.
 type workloadGrantIssuance struct {
+	client       *usersessions_repo.UserSessionClient
+	beforeCommit func(context.Context, pgx.Tx, *mintedSession) error
+
 	// presented is the identity the assertion presented, for logs.
 	presented presentedWorkload
 
@@ -542,6 +547,8 @@ func workloadSessionIssuance(target workloadSessionTarget, subject urn.SessionSu
 		DesiredSessionDuration: &lifetime,
 		Replayable:             false,
 		SignInID:               uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		CredentialID:           uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		UpstreamClientPicks:    nil,
 	}
 }
 
@@ -554,40 +561,12 @@ func workloadSessionIssuance(target workloadSessionTarget, subject urn.SessionSu
 // not exist yet, but authz treats an AuthContext without a session as an
 // internal call, so a namespaced id makes this context session-like.
 func (s *Service) issueWorkloadGrantSession(ctx context.Context, w http.ResponseWriter, logger *slog.Logger, grant workloadGrantIssuance) error {
-	organizationID := grant.session.OrganizationID
-	subject := grant.session.Subject
-
-	authCtx, err := s.sessionAuthContext(ctx, organizationID, grant.projectID, "workload-grant:"+uuid.NewString())
+	minted, err := s.mintWorkloadGrantSession(ctx, logger, grant)
 	if err != nil {
-		return s.writeWorkloadGrantRefusal(ctx, w, logger, grant.presented, workloadGrantStageUnavailable("agent_admission_unavailable", err))
-	}
-	authorizationCtx := contextvalues.WithAuthenticatedActor(ctx, authCtx, urn.NewWorkloadPrincipal(grant.presented.issuerID, grant.presented.subject))
-	authorizationCtx, err = s.admitWorkloadSession(authorizationCtx, organizationID, subject, grant.credential)
-	if err == nil && grant.endpoint != nil {
-		authorizationCtx, err = s.requireWorkloadSessionAuthorization(authorizationCtx, grant.endpoint, workloadSessionReachResource)
-	}
-	switch {
-	case errors.Is(err, errCredentialRejected), err != nil && isCredentialDenial(err):
-		return s.writeWorkloadGrantRefusal(ctx, w, logger, grant.presented, refuseWorkloadGrant("agent_admission_denied", err))
-	case err != nil:
-		return s.writeWorkloadGrantRefusal(ctx, w, logger, grant.presented, workloadGrantStageUnavailable("agent_admission_unavailable", err))
-	}
-
-	// A database that cannot start or commit the transaction is an outage,
-	// not a verdict on the assertion: the caller is told to retry rather than
-	// handed a permanent failure.
-	dbtx, err := s.db.Begin(ctx)
-	if err != nil {
-		return s.writeWorkloadGrantRefusal(ctx, w, logger, grant.presented, workloadGrantStageUnavailable("session_persist_unavailable", err))
-	}
-	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
-
-	minted, err := s.issueSession(authorizationCtx, nil, usersessions_repo.New(dbtx), grant.session, logger)
-	if err != nil {
+		if _, ok := errors.AsType[*workloadGrantError](err); ok {
+			return s.writeWorkloadGrantRefusal(ctx, w, logger, grant.presented, err)
+		}
 		return err
-	}
-	if err := dbtx.Commit(ctx); err != nil {
-		return s.writeWorkloadGrantRefusal(ctx, w, logger, grant.presented, workloadGrantStageUnavailable("session_persist_unavailable", err))
 	}
 
 	if err := writeTokenSuccess(ctx, w, logger, minted.Body); err != nil {
@@ -601,6 +580,53 @@ func (s *Service) issueWorkloadGrantSession(ctx context.Context, w http.Response
 		attr.SlogUserSessionID(minted.ID.String()),
 	)
 	return nil
+}
+
+// mintWorkloadGrantSession shares live workload admission and transactional issuance.
+func (s *Service) mintWorkloadGrantSession(ctx context.Context, logger *slog.Logger, grant workloadGrantIssuance) (*mintedSession, error) {
+	organizationID := grant.session.OrganizationID
+	subject := grant.session.Subject
+
+	authCtx, err := s.sessionAuthContext(ctx, organizationID, grant.projectID, "workload-grant:"+uuid.NewString())
+	if err != nil {
+		return nil, workloadGrantStageUnavailable("agent_admission_unavailable", err)
+	}
+	authorizationCtx := contextvalues.WithAuthenticatedActor(ctx, authCtx, urn.NewWorkloadPrincipal(grant.presented.issuerID, grant.presented.subject))
+	authorizationCtx, err = s.admitWorkloadSession(authorizationCtx, organizationID, subject, grant.credential)
+	if err == nil && grant.endpoint != nil {
+		authorizationCtx, err = s.requireWorkloadSessionAuthorization(authorizationCtx, grant.endpoint, workloadSessionReachResource)
+	}
+	switch {
+	case errors.Is(err, errCredentialRejected), err != nil && isCredentialDenial(err):
+		return nil, refuseWorkloadGrant("agent_admission_denied", err)
+	case err != nil:
+		return nil, workloadGrantStageUnavailable("agent_admission_unavailable", err)
+	}
+
+	// A database that cannot start or commit the transaction is an outage,
+	// not a verdict on the assertion: the caller is told to retry rather than
+	// handed a permanent failure.
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, workloadGrantStageUnavailable("session_persist_unavailable", err)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
+	minted, err := s.issueSession(authorizationCtx, grant.client, usersessions_repo.New(dbtx), grant.session, logger)
+	if err != nil {
+		return nil, err
+	}
+	if grant.beforeCommit != nil {
+		if err := grant.beforeCommit(authorizationCtx, dbtx, minted); err != nil {
+			return nil, err
+		}
+	}
+
+	if err := dbtx.Commit(ctx); err != nil {
+		return nil, workloadGrantStageUnavailable("session_persist_unavailable", err)
+	}
+
+	return minted, nil
 }
 
 // writeWorkloadGrantRefusal logs a refused grant with its reason and the

@@ -158,6 +158,9 @@ type CreateMcpServerResponseBody struct {
 	// The public MCP URL of the primary endpoint. Absent when the server has no
 	// addressable endpoint.
 	PrimaryEndpointURL *string `form:"primary_endpoint_url,omitempty" json:"primary_endpoint_url,omitempty" xml:"primary_endpoint_url,omitempty"`
+	// Whether any endpoint routes to this server, including one on a custom domain
+	// that is not live yet. Absent when it could not be read.
+	HasEndpoint *bool `form:"has_endpoint,omitempty" json:"has_endpoint,omitempty" xml:"has_endpoint,omitempty"`
 	// When the MCP server was created
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// When the MCP server was last updated
@@ -210,6 +213,9 @@ type GetMcpServerResponseBody struct {
 	// The public MCP URL of the primary endpoint. Absent when the server has no
 	// addressable endpoint.
 	PrimaryEndpointURL *string `form:"primary_endpoint_url,omitempty" json:"primary_endpoint_url,omitempty" xml:"primary_endpoint_url,omitempty"`
+	// Whether any endpoint routes to this server, including one on a custom domain
+	// that is not live yet. Absent when it could not be read.
+	HasEndpoint *bool `form:"has_endpoint,omitempty" json:"has_endpoint,omitempty" xml:"has_endpoint,omitempty"`
 	// When the MCP server was created
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// When the MCP server was last updated
@@ -274,6 +280,9 @@ type UpdateMcpServerResponseBody struct {
 	// The public MCP URL of the primary endpoint. Absent when the server has no
 	// addressable endpoint.
 	PrimaryEndpointURL *string `form:"primary_endpoint_url,omitempty" json:"primary_endpoint_url,omitempty" xml:"primary_endpoint_url,omitempty"`
+	// Whether any endpoint routes to this server, including one on a custom domain
+	// that is not live yet. Absent when it could not be read.
+	HasEndpoint *bool `form:"has_endpoint,omitempty" json:"has_endpoint,omitempty" xml:"has_endpoint,omitempty"`
 	// When the MCP server was created
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// When the MCP server was last updated
@@ -2830,6 +2839,8 @@ type McpServerToolsetSummaryResponseBody struct {
 	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 	// The name of the toolset
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// The toolset's description, if any
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// The number of distinct configured tools in the latest toolset version,
 	// excluding external MCP proxy tools. Counts configured tool URNs, so it may
 	// differ from the number of tools that resolve against the active deployment.
@@ -2893,6 +2904,9 @@ type McpServerResponseBody struct {
 	// The public MCP URL of the primary endpoint. Absent when the server has no
 	// addressable endpoint.
 	PrimaryEndpointURL *string `form:"primary_endpoint_url,omitempty" json:"primary_endpoint_url,omitempty" xml:"primary_endpoint_url,omitempty"`
+	// Whether any endpoint routes to this server, including one on a custom domain
+	// that is not live yet. Absent when it could not be read.
+	HasEndpoint *bool `form:"has_endpoint,omitempty" json:"has_endpoint,omitempty" xml:"has_endpoint,omitempty"`
 	// When the MCP server was created
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// When the MCP server was last updated
@@ -3081,6 +3095,7 @@ func NewCreateMcpServerMcpServerOK(body *CreateMcpServerResponseBody) *types.Mcp
 		NetworkAccessMode:     types.NetworkAccessMode(*body.NetworkAccessMode),
 		PrimaryEndpointID:     body.PrimaryEndpointID,
 		PrimaryEndpointURL:    body.PrimaryEndpointURL,
+		HasEndpoint:           body.HasEndpoint,
 		CreatedAt:             *body.CreatedAt,
 		UpdatedAt:             *body.UpdatedAt,
 	}
@@ -3276,6 +3291,7 @@ func NewGetMcpServerMcpServerOK(body *GetMcpServerResponseBody) *types.McpServer
 		NetworkAccessMode:     types.NetworkAccessMode(*body.NetworkAccessMode),
 		PrimaryEndpointID:     body.PrimaryEndpointID,
 		PrimaryEndpointURL:    body.PrimaryEndpointURL,
+		HasEndpoint:           body.HasEndpoint,
 		CreatedAt:             *body.CreatedAt,
 		UpdatedAt:             *body.UpdatedAt,
 	}
@@ -3833,6 +3849,7 @@ func NewUpdateMcpServerMcpServerOK(body *UpdateMcpServerResponseBody) *types.Mcp
 		NetworkAccessMode:     types.NetworkAccessMode(*body.NetworkAccessMode),
 		PrimaryEndpointID:     body.PrimaryEndpointID,
 		PrimaryEndpointURL:    body.PrimaryEndpointURL,
+		HasEndpoint:           body.HasEndpoint,
 		CreatedAt:             *body.CreatedAt,
 		UpdatedAt:             *body.UpdatedAt,
 	}

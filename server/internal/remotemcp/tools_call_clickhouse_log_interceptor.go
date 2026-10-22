@@ -3,7 +3,9 @@ package remotemcp
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
+	"net/http"
 	"strings"
 	"time"
 
@@ -14,6 +16,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/otel/dialect"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
@@ -32,14 +35,15 @@ var DurationMissingKey = attribute.Key("gram.telemetry.duration_missing")
 // "tools:", per-tool failure derived from http.response.status_code, latency
 // from http.server.request.duration).
 //
-// One instance implements both [proxy.ToolsCallRequestInterceptor] and
-// [proxy.ToolsCallResponseInterceptor]. The proxy constructs a fresh interceptor
-// per HTTP request inside [ProxyManager.BuildTarget], and [proxy.Proxy.Post] fires
-// the request and response chains sequentially on a single goroutine for at
-// most one tools/call per request — so a single nilable start timestamp is
-// enough state to compute duration, no map or mutex required. If a future
-// refactor makes [proxy.Proxy] (or this interceptor) long-lived across
-// requests, this needs to revert to per-call keying.
+// One instance implements [proxy.ToolsCallRequestInterceptor],
+// [proxy.ToolsCallResponseInterceptor] and [proxy.ToolsCallFailureInterceptor].
+// The proxy constructs a fresh interceptor per HTTP request inside
+// [ProxyManager.BuildTarget], and [proxy.Proxy.Post] fires the request chain
+// and then either the response or the failure chain sequentially on a single
+// goroutine for at most one tools/call per request — so a single nilable
+// start timestamp is enough state to compute duration, no map or mutex
+// required. If a future refactor makes [proxy.Proxy] (or this interceptor)
+// long-lived across requests, this needs to revert to per-call keying.
 //
 // Emission is fire-and-forget on a goroutine bound to
 // [context.WithoutCancel] so ClickHouse latency never appears in the user's
@@ -50,14 +54,15 @@ type ToolsCallClickHouseLogInterceptor struct {
 	logger      *slog.Logger
 
 	// start is set by the request interceptor and consumed by the
-	// response interceptor. Nil means the request side never fired, in
-	// which case the response path emits the duration-missing sentinel.
+	// response or failure interceptor. Nil means the request side never
+	// fired, in which case the row carries the duration-missing sentinel.
 	start *time.Time
 }
 
 var (
 	_ proxy.ToolsCallRequestInterceptor  = (*ToolsCallClickHouseLogInterceptor)(nil)
 	_ proxy.ToolsCallResponseInterceptor = (*ToolsCallClickHouseLogInterceptor)(nil)
+	_ proxy.ToolsCallFailureInterceptor  = (*ToolsCallClickHouseLogInterceptor)(nil)
 )
 
 // NewToolsCallClickHouseLogInterceptor constructs an interceptor bound to the
@@ -73,8 +78,8 @@ func NewToolsCallClickHouseLogInterceptor(telemLogger *tm.Logger, identity proxy
 	}
 }
 
-// Name implements [proxy.ToolsCallRequestInterceptor] and
-// [proxy.ToolsCallResponseInterceptor].
+// Name implements [proxy.ToolsCallRequestInterceptor],
+// [proxy.ToolsCallResponseInterceptor] and [proxy.ToolsCallFailureInterceptor].
 func (i *ToolsCallClickHouseLogInterceptor) Name() string {
 	return "tools-call-clickhouse-log"
 }
@@ -93,23 +98,6 @@ func (i *ToolsCallClickHouseLogInterceptor) InterceptToolsCallResponse(ctx conte
 	if call == nil || call.Request == nil || call.Request.Params == nil {
 		return nil
 	}
-
-	serverCtx, ok := GetServerContext(ctx)
-	if !ok || serverCtx.OrganizationID == "" || serverCtx.ProjectID == uuid.Nil {
-		i.logger.WarnContext(ctx, "skipping tools/call clickhouse log: missing server context",
-			attr.SlogComponent("xmcp"))
-		return nil
-	}
-
-	end := time.Now()
-	var durationSec float64
-	durationMissing := i.start == nil
-	if i.start != nil {
-		durationSec = end.Sub(*i.start).Seconds()
-	}
-
-	toolName := call.Request.Params.Name
-	requestBytes := int64(len(call.Request.Params.Arguments))
 
 	var outputBytes int64
 	var outputContent []byte
@@ -130,8 +118,40 @@ func (i *ToolsCallClickHouseLogInterceptor) InterceptToolsCallResponse(ctx conte
 		}
 	}
 
-	statusCode := upstreamStatusCode(call)
-	resultIsError := call.Result != nil && call.Result.IsError
+	i.emit(ctx, call.Request, upstreamStatusCode(call), call.Result != nil && call.Result.IsError, outputBytes, outputContent)
+	return nil
+}
+
+// InterceptToolsCallFailure emits the row for a forwarded call whose reply
+// never arrived, so an unreachable or failing upstream reads as a failed call
+// rather than leaving no trace. There is no reply to record as output.
+func (i *ToolsCallClickHouseLogInterceptor) InterceptToolsCallFailure(ctx context.Context, failure *proxy.ToolsCallFailure) {
+	if failure == nil || failure.Request == nil || failure.Request.Params == nil {
+		return
+	}
+	i.emit(ctx, failure.Request, failedCallStatusCode(ctx, failure), false, 0, nil)
+}
+
+// emit builds the telemetry_logs row for one tools/call and writes it
+// asynchronously to ClickHouse.
+func (i *ToolsCallClickHouseLogInterceptor) emit(ctx context.Context, request *proxy.ToolsCallRequest, statusCode int, resultIsError bool, outputBytes int64, outputContent []byte) {
+	serverCtx, ok := GetServerContext(ctx)
+	if !ok || serverCtx.OrganizationID == "" || serverCtx.ProjectID == uuid.Nil {
+		i.logger.WarnContext(ctx, "skipping tools/call clickhouse log: missing server context",
+			attr.SlogComponent("xmcp"))
+		return
+	}
+
+	end := time.Now()
+	var durationSec float64
+	durationMissing := i.start == nil
+	if i.start != nil {
+		durationSec = end.Sub(*i.start).Seconds()
+	}
+
+	toolName := request.Params.Name
+	requestBytes := int64(len(request.Params.Arguments))
+
 	if resultIsError {
 		// Warn, not error: an isError result is the upstream tool's verdict, not a
 		// Speakeasy fault. The body stays out: it is upstream-controlled content.
@@ -175,7 +195,7 @@ func (i *ToolsCallClickHouseLogInterceptor) InterceptToolsCallResponse(ctx conte
 	logAttrs[attr.OutcomeKey] = dialect.ToolCallOutcome(statusCode, resultIsError)
 	logAttrs.RecordRequestBody(requestBytes)
 	logAttrs.RecordResponseBody(outputBytes)
-	logAttrs.RecordRequestBodyContent(call.Request.Params.Arguments)
+	logAttrs.RecordRequestBodyContent(request.Params.Arguments)
 	logAttrs.RecordResponseBodyContent(outputContent)
 	logAttrs.RecordTraceContext(ctx)
 	ensureTraceContext(logAttrs)
@@ -219,8 +239,6 @@ func (i *ToolsCallClickHouseLogInterceptor) InterceptToolsCallResponse(ctx conte
 	// context but detaches from request cancellation, and the logger
 	// itself runs the insert against its own shutdown context.
 	go i.telemLogger.Log(context.WithoutCancel(ctx), params)
-
-	return nil
 }
 
 // ensureTraceContext fills trace/span ids when this telemetry row has no
@@ -255,15 +273,33 @@ func ensureTraceContext(logAttrs tm.HTTPLogAttributes) {
 // the response writer's status code, not the tool's inner error flag, which
 // is recorded separately as gram.outcome.
 func upstreamStatusCode(call *proxy.ToolsCallResponse) int {
+	failed := call.Error != nil
 	if call.RemoteMessage != nil && call.RemoteMessage.RemoteHTTPResponse != nil {
 		code := call.RemoteMessage.RemoteHTTPResponse.StatusCode
-		if call.Error != nil && code < 400 {
-			return 500
+		if failed && code < 400 {
+			return http.StatusInternalServerError
 		}
 		return code
 	}
-	if call.Error != nil {
-		return 500
+	if failed {
+		return http.StatusInternalServerError
 	}
-	return 200
+	return http.StatusOK
+}
+
+// failedCallStatusCode returns the status code recorded for a call whose
+// reply never arrived: the upstream's error status when it sent one, else
+// the status of the error the proxy answered with, else 502 for an upstream
+// that was unreachable or replied with something other than a tools/call
+// result.
+func failedCallStatusCode(ctx context.Context, failure *proxy.ToolsCallFailure) int {
+	if failure.StatusCode >= 400 {
+		return failure.StatusCode
+	}
+	if shareable, ok := errors.AsType[*oops.ShareableError](failure.Err); ok {
+		if code := shareable.HTTPStatus(ctx); code >= 400 {
+			return code
+		}
+	}
+	return http.StatusBadGateway
 }
