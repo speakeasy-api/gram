@@ -11,6 +11,7 @@ import (
 	toolsetsgen "github.com/speakeasy-api/gram/server/gen/toolsets"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -157,7 +158,7 @@ func TestUpdateMcpEndpointHostedMovesOntoVerifiedDomain(t *testing.T) {
 	require.Equal(t, uuid.NullUUID{UUID: domain.ID, Valid: true}, endpoint.CustomDomainID)
 	require.Equal(t, "on-domain", endpoint.Slug)
 
-	// The toolset path cannot clear a custom domain, so neither can this one.
+	// A live domain cannot be left: clients may hold URLs on it.
 	_, err = f.ti.service.UpdateMcpEndpoint(ctx, f.payload(f.authCtx.OrganizationSlug+"-off-domain", nil))
 	requireOopsCode(t, err, oops.CodeInvalid)
 	require.ErrorContains(t, err, "cannot leave its custom domain")
@@ -236,4 +237,102 @@ func TestUpdateMcpEndpointHostedRejectedWithoutWriter(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeInvalid)
 	require.ErrorContains(t, err, "manage hosted MCP endpoint addresses through the toolset")
 	require.Equal(t, f.endpoint, f.requireProjected(t, ctx))
+}
+
+// placeOnDomain puts the hosted toolset and its endpoint on a domain directly, as legacy rows sit today.
+func (f *hostedAddressFixture) placeOnDomain(t *testing.T, ctx context.Context, name string, slug string) customdomainsrepo.CustomDomain {
+	t.Helper()
+
+	domain, err := customdomainsrepo.New(f.ti.conn).CreateCustomDomain(ctx, customdomainsrepo.CreateCustomDomainParams{
+		OrganizationID: f.authCtx.ActiveOrganizationID, Domain: name, IngressName: conv.ToPGText("ingress-" + name),
+		CertSecretName: conv.ToPGText("cert-" + name), ProvisionerKind: "ingress", IpAllowlist: []string{},
+	})
+	require.NoError(t, err)
+	_, err = f.ti.conn.Exec(ctx, `UPDATE toolsets SET custom_domain_id = $1, mcp_slug = $2 WHERE id = $3 AND project_id = $4`, domain.ID, slug, f.toolset.ID, f.projectID)
+	require.NoError(t, err)
+	_, err = f.ti.conn.Exec(ctx, `UPDATE mcp_servers SET slug = $1 WHERE id = $2 AND project_id = $3`, slug, f.toolset.ID, f.projectID)
+	require.NoError(t, err)
+	_, err = f.ti.conn.Exec(ctx, `UPDATE mcp_endpoints SET custom_domain_id = $1, slug = $2 WHERE id = $3 AND project_id = $4`, domain.ID, slug, f.endpoint.ID, f.projectID)
+	require.NoError(t, err)
+	f.requireProjected(t, ctx)
+	return domain
+}
+
+func TestUpdateMcpEndpointHostedLeavesUnservableDomain(t *testing.T) {
+	t.Parallel()
+
+	cases := map[string]func(t *testing.T, ctx context.Context, f *hostedAddressFixture, domain customdomainsrepo.CustomDomain){
+		"never verified": func(*testing.T, context.Context, *hostedAddressFixture, customdomainsrepo.CustomDomain) {},
+		"verified, not activated": func(t *testing.T, ctx context.Context, f *hostedAddressFixture, domain customdomainsrepo.CustomDomain) {
+			_, err := customdomainsrepo.New(f.ti.conn).SetCustomDomainVerified(ctx, domain.ID)
+			require.NoError(t, err)
+		},
+		"soft-deleted": func(t *testing.T, ctx context.Context, f *hostedAddressFixture, domain customdomainsrepo.CustomDomain) {
+			_, err := f.ti.conn.Exec(ctx, `UPDATE custom_domains SET deleted_at = clock_timestamp() WHERE id = $1`, domain.ID)
+			require.NoError(t, err)
+		},
+	}
+	for name, setup := range cases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			ctx, f := newHostedAddressFixture(t, "free")
+			slug := f.authCtx.OrganizationSlug + "-mcp"
+			domain := f.placeOnDomain(t, ctx, "mcp.unservable.example.com", slug)
+			setup(t, ctx, f, domain)
+
+			input, err := mcpendpoints.FromContext(ctx, slug)
+			require.NoError(t, err)
+			resolved, err := mcpendpoints.Resolve(ctx, f.ti.conn, testenv.NewLogger(t), input)
+			require.NoError(t, err)
+			require.False(t, resolved.Found, "the platform address has no endpoint yet")
+
+			view, err := f.ti.service.UpdateMcpEndpoint(ctx, f.payload(slug, nil))
+			require.NoError(t, err)
+			require.Equal(t, f.endpoint.ID.String(), view.ID, "the endpoint moves in place")
+			require.Nil(t, view.CustomDomainID)
+
+			endpoint := f.requireProjected(t, ctx)
+			require.False(t, endpoint.CustomDomainID.Valid)
+			require.Equal(t, slug, endpoint.Slug)
+
+			resolved, err = mcpendpoints.Resolve(ctx, f.ti.conn, testenv.NewLogger(t), input)
+			require.NoError(t, err)
+			require.True(t, resolved.Found)
+			require.True(t, resolved.Allowed)
+
+			record, err := audittest.LatestAuditLogByActionAndSubject(ctx, f.ti.conn, audit.ActionMcpEndpointUpdate, f.endpoint.ID.String())
+			require.NoError(t, err)
+			require.Contains(t, string(record.BeforeSnapshot), domain.ID.String())
+			require.NotContains(t, string(record.AfterSnapshot), domain.ID.String())
+			_, err = audittest.LatestAuditLogByActionAndSubject(ctx, f.ti.conn, audit.ActionToolsetUpdate, f.toolset.ID.String())
+			require.NoError(t, err)
+		})
+	}
+}
+
+func TestUpdateMcpEndpointHostedLeavingDomainAppliesPlatformRules(t *testing.T) {
+	t.Parallel()
+	ctx, f := newHostedAddressFixture(t, "pro")
+	slug := "unprefixed"
+	f.placeOnDomain(t, ctx, "mcp.leave-rules.example.com", slug)
+	placed := f.requireProjected(t, ctx)
+
+	_, err := f.ti.service.UpdateMcpEndpoint(ctx, f.payload(slug, nil))
+	requireOopsCode(t, err, oops.CodeInvalid)
+	require.ErrorContains(t, err, "invalid slug")
+
+	other, err := f.toolsets.CreateToolset(ctx, &toolsetsgen.CreateToolsetPayload{Name: "Platform neighbour", ToolUrns: []string{}})
+	require.NoError(t, err)
+	require.NotNil(t, other.McpSlug)
+	_, err = f.ti.service.UpdateMcpEndpoint(ctx, f.payload(string(*other.McpSlug), nil))
+	requireOopsCode(t, err, oops.CodeConflict)
+	require.Equal(t, placed, f.requireProjected(t, ctx), "rejected moves leave the address untouched")
+
+	renamed := f.authCtx.OrganizationSlug + "-moved"
+	view, err := f.ti.service.UpdateMcpEndpoint(ctx, f.payload(renamed, nil))
+	require.NoError(t, err)
+	require.Equal(t, f.endpoint.ID.String(), view.ID)
+	endpoint := f.requireProjected(t, ctx)
+	require.False(t, endpoint.CustomDomainID.Valid)
+	require.Equal(t, renamed, endpoint.Slug)
 }
