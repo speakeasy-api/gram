@@ -43,7 +43,9 @@ function percent(rate: number): string {
   return `${(rate * 100).toFixed(1)}%`;
 }
 
-function targetScope(target: ToolUsageTargetSummary): ObserveDeepLinkScope {
+export function targetScope(
+  target: ToolUsageTargetSummary,
+): ObserveDeepLinkScope {
   switch (target.targetType) {
     case "hosted_mcp_server":
       return {
@@ -54,9 +56,7 @@ function targetScope(target: ToolUsageTargetSummary): ObserveDeepLinkScope {
     case "shadow_mcp_server":
       return { target: { type: "shadow", id: target.targetId } };
     case "tunneled_mcp_server":
-      return target.mcpServerId
-        ? { target: { type: "hosted", id: target.mcpServerId } }
-        : { target: { type: "shadow", id: target.targetId } };
+      return { target: { type: "shadow", id: target.targetId } };
     case "skill":
       return { targetTypes: ["skill"] };
     case "local_tool":

@@ -97,14 +97,12 @@ export function encodeHostedServerFilter(idOrSlug: string): string {
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+// Toolset slugs are never UUID-shaped, so the shape tells the two apart.
 export function isMcpServerId(id: string): boolean {
   return UUID_PATTERN.test(id);
 }
 
-/**
- * The filter value for a hosted server option. A selection still carried as a
- * legacy slug keeps that value, so the option shows as selected and toggles off.
- */
+/** Hosted option value; a selected legacy slug value is kept so it stays selected. */
 export function hostedServerFilterValue(
   server: { toolsetSlug: string; mcpServerId?: string | undefined },
   selectedValues: string[],
@@ -134,6 +132,21 @@ export function parseTargetFilter(value: string): ParsedTargetFilter {
     return { type: "gateway", id: value.slice(GATEWAY_SERVER_PREFIX.length) };
   }
   return { type: "shadow", id: value };
+}
+
+/** Splits hosted filters into server ids and legacy toolset slugs. */
+export function splitHostedTargets(filters: ParsedTargetFilter[]): {
+  mcpServerIds: string[];
+  hostedToolsetSlugs: string[];
+} {
+  const mcpServerIds: string[] = [];
+  const hostedToolsetSlugs: string[] = [];
+  for (const filter of filters) {
+    if (filter.type !== "hosted") continue;
+    if (isMcpServerId(filter.id)) mcpServerIds.push(filter.id);
+    else hostedToolsetSlugs.push(filter.id);
+  }
+  return { mcpServerIds, hostedToolsetSlugs };
 }
 
 export function selectedTargetValues(activeFilters: FilterChip[]): string[] {

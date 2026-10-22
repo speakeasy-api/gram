@@ -3,11 +3,11 @@ import type {
   ObserveTypeFilterValue,
 } from "@/components/observe/ObserveFilterBar";
 import {
-  isMcpServerId,
   parseTargetFilter,
   selectedHookSources,
   selectedTargetValues,
   selectedUserEmails,
+  splitHostedTargets,
   toTargetTypes,
 } from "@/components/observe/observeTargetFilters";
 import { useSlugs } from "@/contexts/Sdk";
@@ -64,22 +64,8 @@ export function useToolUsagePayload({
     () => selectedTargetValues(activeFilters).map(parseTargetFilter),
     [activeFilters],
   );
-  const mcpServerIds = useMemo(
-    () =>
-      serverFilters
-        .filter(
-          (filter) => filter.type === "hosted" && isMcpServerId(filter.id),
-        )
-        .map((filter) => filter.id),
-    [serverFilters],
-  );
-  const hostedToolsetSlugs = useMemo(
-    () =>
-      serverFilters
-        .filter(
-          (filter) => filter.type === "hosted" && !isMcpServerId(filter.id),
-        )
-        .map((filter) => filter.id),
+  const { mcpServerIds, hostedToolsetSlugs } = useMemo(
+    () => splitHostedTargets(serverFilters),
     [serverFilters],
   );
   const shadowServerNames = useMemo(

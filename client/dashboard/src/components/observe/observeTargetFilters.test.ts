@@ -6,6 +6,7 @@ import {
   isMcpServerId,
   parseTargetFilter,
   selectedUserEmails,
+  splitHostedTargets,
 } from "./observeTargetFilters";
 
 describe("selectedUserEmails", () => {
@@ -134,5 +135,19 @@ describe("hosted target filters", () => {
     expect(groups[0]?.options).toEqual([
       { value: `hosted:${serverId}`, label: "Payments (4)" },
     ]);
+  });
+});
+
+describe("splitHostedTargets", () => {
+  it("sends server ids and legacy slugs to separate fields", () => {
+    const id = "0198a3b2-7c4d-7e5f-8a9b-0c1d2e3f4a5b";
+    expect(
+      splitHostedTargets([
+        { type: "hosted", id },
+        { type: "hosted", id: "payments" },
+        { type: "shadow", id: "db" },
+        { type: "gateway", id: "gw-1" },
+      ]),
+    ).toEqual({ mcpServerIds: [id], hostedToolsetSlugs: ["payments"] });
   });
 });
