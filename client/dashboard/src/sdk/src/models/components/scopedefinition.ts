@@ -21,6 +21,7 @@ export const ExclusionScope = {
   McpBlockedRead: "mcp:blocked_read",
   McpBlockedWrite: "mcp:blocked_write",
   McpBlockedConnect: "mcp:blocked_connect",
+  McpBlockedAuth: "mcp:blocked_auth",
   EnvironmentBlockedRead: "environment:blocked_read",
   EnvironmentBlockedWrite: "environment:blocked_write",
   SkillBlockedRead: "skill:blocked_read",
@@ -51,6 +52,7 @@ export const ResourceType = {
   Chat: "chat",
   Agent: "agent",
   Workload: "workload",
+  McpAuthClient: "mcp_auth_client",
 } as const;
 /**
  * The type of resource this scope applies to.
@@ -75,6 +77,8 @@ export const Slug = {
   McpBlockedWrite: "mcp:blocked_write",
   McpConnect: "mcp:connect",
   McpBlockedConnect: "mcp:blocked_connect",
+  McpAuth: "mcp:auth",
+  McpBlockedAuth: "mcp:blocked_auth",
   EnvironmentRead: "environment:read",
   EnvironmentBlockedRead: "environment:blocked_read",
   EnvironmentWrite: "environment:write",
