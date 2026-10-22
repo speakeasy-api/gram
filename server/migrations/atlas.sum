@@ -1,4 +1,4 @@
-h1:Bc/gQi6J15SSHkRStyhzdItrD7KAoyksbs/Kdw+9PL0=
+h1:SjySg3QD/sTpqQ6zvGhP4lg/cvAK7tynA9aXRRANmPM=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -491,3 +491,4 @@ h1:Bc/gQi6J15SSHkRStyhzdItrD7KAoyksbs/Kdw+9PL0=
 20261021161050_chats-add-agent-id.sql h1:+01omxeacIcLAy/dHZQgi54MjhYLyqwUrg14T8i6VxM=
 20261022000714_directory-users-add-names.sql h1:fZwT3+YRip75UfixXKwzcReAAUytZKmwE8rOc9zGA4k=
 20261022140708_assistant_kit_runtime_authority.sql h1:uhS6VYBQqRnH193QF9B8fwgRngFfuKXLJV5ThSoeQ1I=
+20261022164959_chats-drop-inference-accepted-checkpoint.sql h1:Ti0ZnU/XJyl8O8CVlRg4R2TvcC+pvv4jWR1AIBi1Bj8=
