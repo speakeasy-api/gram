@@ -473,7 +473,7 @@ describe("useMcpServerCandidates", () => {
     expect(jira?.verbs).toEqual(["open"]);
   });
 
-  it("names a canonical wrapper by its toolset and opens the toolset page", async () => {
+  it("names a canonical wrapper by its toolset and opens its server page", async () => {
     mocks.mcpServers = [
       {
         ...HOSTED_ROW,
@@ -491,7 +491,31 @@ describe("useMcpServerCandidates", () => {
     await act(async () => {
       await hosted?.run("open");
     });
-    expect(mocks.goToToolsetDetails).toHaveBeenCalledWith("hosted");
+    expect(mocks.goToMcpServerOverview).toHaveBeenCalledWith("hosted-x1");
+    expect(mocks.goToToolsetDetails).not.toHaveBeenCalled();
+  });
+
+  it("names the hosting server of a toolset with no canonical wrapper by its toolset", async () => {
+    mocks.mcpServers = [
+      {
+        ...HOSTED_ROW,
+        name: "Hosted wrapper",
+        toolset: {
+          ...HOSTED_ROW.toolset,
+          name: "Hosted tools",
+          hostingMcpServerId: "server-hosted",
+        },
+        visibility: "private",
+      },
+    ];
+    const { result } = renderCandidates();
+    const [hosted] = byKind(result.current, "mcp_server");
+
+    expect(hosted?.title).toBe("Hosted tools");
+    await act(async () => {
+      await hosted?.run("open");
+    });
+    expect(mocks.goToMcpServerOverview).toHaveBeenCalledWith("hosted-x1");
   });
 
   // Without the summary there is no toolset slug; the server page redirects.
@@ -558,7 +582,7 @@ describe("useMcpServerCandidates", () => {
     );
   });
 
-  it("sends hosted server enables to the toolset page", async () => {
+  it("sends hosted server enables to the server page", async () => {
     mocks.scopes = ["mcp:write"];
     mocks.mcpServers = [
       {
@@ -576,7 +600,7 @@ describe("useMcpServerCandidates", () => {
       await hosted?.run("enable");
     });
     expect(mocks.updateMcpServer).not.toHaveBeenCalled();
-    expect(mocks.goToToolsetDetails).toHaveBeenCalledWith("hosted");
+    expect(mocks.goToMcpServerOverview).toHaveBeenCalledWith("hosted-x1");
   });
 
   // A hosted server is granted under its toolset id (the server resolves the

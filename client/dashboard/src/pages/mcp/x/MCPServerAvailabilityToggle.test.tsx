@@ -12,6 +12,7 @@ import {
 
 const mocks = vi.hoisted(() => ({
   hasScope: vi.fn(),
+  guardRequest: vi.fn(),
   mutate: vi.fn(),
   mutationOptions: vi.fn(),
   invalidateAudience: vi.fn(() => Promise.resolve()),
@@ -22,6 +23,22 @@ vi.mock("@gram/client/react-query/resourceAudience.js", () => ({
   invalidateAllResourceAudience: mocks.invalidateAudience,
 }));
 
+vi.mock("./hosted/useHostedVisibilityGuard", () => ({
+  useHostedVisibilityGuard: ({
+    toolsetSlug,
+    apply,
+  }: {
+    toolsetSlug?: string;
+    apply: (next: string) => void;
+  }) => ({
+    request: (next: string) => {
+      mocks.guardRequest(toolsetSlug, next);
+      apply(next);
+    },
+    publicUnavailable: false,
+    dialogs: null,
+  }),
+}));
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({ hasScope: mocks.hasScope }),
 }));
@@ -248,24 +265,48 @@ describe("hosted MCP server visibility", () => {
     id: "hosted-1",
     remoteMcpServerId: undefined,
     toolsetId: "hosted-1",
-    visibility: "public",
+    toolset: {
+      id: "hosted-1",
+      slug: "hosted-tools",
+      name: "Hosted tools",
+      toolCount: 1,
+      toolSelectionMode: "static",
+      externalMcpSlugs: [],
+      externalMcpProxyOnly: false,
+    },
+    visibility: "private",
   } as McpServer;
 
-  it("keeps the availability switch read-only", () => {
+  it("lets the availability switch disable a hosted server", () => {
     renderToggle(hosted);
 
-    expect(
-      screen.getByRole("switch", { name: "Disable MCP server" }),
-    ).toHaveProperty("disabled", true);
+    fireEvent.click(screen.getByRole("switch", { name: "Disable MCP server" }));
+
+    expect(mocks.mutate).toHaveBeenCalledWith({
+      request: {
+        updateMcpServerForm: expect.objectContaining({
+          id: "hosted-1",
+          toolsetId: "hosted-1",
+          visibility: "disabled",
+        }),
+      },
+    });
   });
 
-  it("keeps the status dropdown read-only", () => {
+  it("offers Public through the hosted confirmations", () => {
     renderInApp(<MCPServerStatusDropdown server={hosted} />);
 
-    expect(screen.getByRole("button", { name: /Public/ })).toHaveProperty(
-      "disabled",
-      true,
-    );
+    fireEvent.click(screen.getByRole("menuitem", { name: /^Public/ }));
+
+    expect(mocks.guardRequest).toHaveBeenCalledWith("hosted-tools", "public");
+    expect(mocks.mutate).toHaveBeenCalledWith({
+      request: {
+        updateMcpServerForm: expect.objectContaining({
+          id: "hosted-1",
+          visibility: "public",
+        }),
+      },
+    });
   });
 });
 

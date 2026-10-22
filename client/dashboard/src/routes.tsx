@@ -46,7 +46,7 @@ import Login from "./pages/login/Login";
 import ExploreDemo from "./pages/demo/ExploreDemo";
 import SignUp from "./pages/login/SignUp";
 import { LogsRoot } from "./pages/logs/Logs";
-import { MCPDetailPage } from "./pages/mcp/MCPDetails";
+import { ToolsetRedirectPage } from "./pages/mcp/ToolsetRedirect";
 import { MCPPage, MCPRoot } from "./pages/mcp/MCP";
 import AddMcpServer, { AddMcpServerRoot } from "./pages/mcp/add/AddMcpServer";
 import CreateFromSource from "./pages/mcp/add/CreateFromSource";
@@ -499,12 +499,8 @@ const ROUTE_STRUCTURE = {
           },
         },
       },
-      // TODO(AGE-1902): collapse with :toolsetSlug once Hosted (toolset-backed)
-      // MCP data moves to mcp_servers/mcp_endpoints. Until then this route is
-      // distinct so the new mcp_servers-backed details page renders against
-      // mcp_servers without disturbing the existing toolset-backed path. The
-      // `x/` prefix is the dashboard's generic experimental namespace; the
-      // runtime path for these servers is `/mcp/{slug}` (see AGE-2555).
+      // Every MCP server's page, hosted ones included; old `:toolsetSlug`
+      // links redirect here. Retiring the `x/` prefix is AIS-643.
       x: {
         title: "MCP Server Details",
         url: "x/:mcpServerSlug",
@@ -518,16 +514,26 @@ const ROUTE_STRUCTURE = {
             title: "MCP Server Inspect",
             url: "inspect",
           },
-          // Legacy routes. MCPServerDetails redirects `authentication` to
+          // Legacy route: MCPServerDetails redirects `authentication` to
           // settings#authentication now that authentication lives under
-          // Settings, and `tools` to `inspect`.
+          // Settings.
           authentication: {
             title: "MCP Server Authentication",
             url: "authentication",
           },
+          // Hosted servers manage their toolset here; on other servers `tools`
+          // is the old name of Inspect and redirects there.
           tools: {
             title: "MCP Server Tools",
             url: "tools",
+          },
+          resources: {
+            title: "MCP Server Resources",
+            url: "resources",
+          },
+          prompts: {
+            title: "MCP Server Prompts",
+            url: "prompts",
           },
           teamAccess: {
             title: "MCP Server Team Access",
@@ -592,10 +598,11 @@ const ROUTE_STRUCTURE = {
           },
         },
       },
+      // Legacy toolset URLs: every tab redirects to the hosting MCP server's page.
       details: {
         title: "MCP Details",
         url: ":toolsetSlug",
-        component: MCPDetailPage,
+        component: ToolsetRedirectPage,
         subPages: {
           overview: {
             title: "MCP Overview",

@@ -20,8 +20,6 @@ import {
 } from "@/lib/utils";
 import { getMcpServerArgs, mcpServerRouteParam } from "@/lib/sources";
 import { useRoutes } from "@/routes";
-import { useProjectSlugForRequests } from "@/contexts/Sdk";
-import { useListToolsets } from "@gram/client/react-query/listToolsets.js";
 import type {
   McpServer,
   McpServerVisibility,
@@ -46,14 +44,19 @@ import { MCPTeamAccessTab } from "../MCPTeamAccessTab";
 import {
   activeTabFromPath,
   initialTabFromHash,
-  isCanonicalHostedWrapper,
   isLegacyAuthenticationTabPath,
-  isLegacyToolsTabPath,
   mcpServerTabHref,
   MCP_SERVER_TAB_URLS,
-  toolsetTabForServerPath,
+  standsInForToolset,
+  tabForServer,
 } from "./MCPServerDetailsRouting";
-import { mcpDetailTabHref } from "../MCPDetailsRouting";
+import {
+  HostedPromptsTab,
+  HostedResourcesTab,
+} from "./hosted/HostedContentTabs";
+import { HostedToolsTab } from "./hosted/HostedToolsTab";
+import { useHostedToolset } from "./hosted/useHostedToolset";
+import { useHostedVisibilityGuard } from "./hosted/useHostedVisibilityGuard";
 import { InspectTab } from "./tabs/InspectTab";
 import { OverviewTab } from "./tabs/OverviewTab";
 import { MCP_AGENT_SETUP_SECTION_ID } from "./tabs/settings/sections/AgentSetupSection";
@@ -78,7 +81,6 @@ export default function MCPServerDetails(): JSX.Element {
     location.pathname,
     idOrSlug,
   );
-  const legacyToolsPath = isLegacyToolsTabPath(location.pathname, idOrSlug);
 
   const {
     data: mcpServer,
@@ -89,25 +91,9 @@ export default function MCPServerDetails(): JSX.Element {
   });
 
   const mcpServerId = mcpServer?.id ?? "";
-
-  const toolsetTab = toolsetTabForServerPath(
-    location.pathname,
-    idOrSlug,
-    location.hash,
-  );
-  const canonicalWrapper =
-    mcpServer !== undefined &&
-    toolsetTab !== undefined &&
-    isCanonicalHostedWrapper(mcpServer);
-  const gramProject = useProjectSlugForRequests();
-  const { data: toolsetsResult, isLoading: isLoadingToolsets } =
-    useListToolsets({ gramProject }, undefined, {
-      enabled: canonicalWrapper,
-      throwOnError: false,
-    });
-  const wrappedToolsetSlug = canonicalWrapper
-    ? toolsetsResult?.toolsets.find((t) => t.id === mcpServer?.toolsetId)?.slug
-    : undefined;
+  const hosted = mcpServer !== undefined && standsInForToolset(mcpServer);
+  const { toolset: hostedToolset, isLoading: isLoadingToolset } =
+    useHostedToolset(hosted ? mcpServer : undefined);
 
   const { data: endpointsResult, isLoading: isLoadingEndpoints } =
     useMcpEndpoints({ mcpServerId }, undefined, {
@@ -132,25 +118,12 @@ export default function MCPServerDetails(): JSX.Element {
   if (isError || (!isLoading && !mcpServer)) {
     return <Navigate to={routes.mcp.href()} replace />;
   }
-  if (wrappedToolsetSlug && toolsetTab) {
-    return (
-      <Navigate
-        to={mcpDetailTabHref(routes, wrappedToolsetSlug, toolsetTab)}
-        replace
-      />
-    );
-  }
   if (legacyAuthenticationPath) {
     return (
       <Navigate
         to={`${mcpServerTabHref(routes, idOrSlug, "settings")}#${MCP_AUTHENTICATION_SECTION_ID}`}
         replace
       />
-    );
-  }
-  if (legacyToolsPath) {
-    return (
-      <Navigate to={mcpServerTabHref(routes, idOrSlug, "inspect")} replace />
     );
   }
   // Inspect and Clients and Sessions are hidden from the nav for unproxied
@@ -165,8 +138,19 @@ export default function MCPServerDetails(): JSX.Element {
       <Navigate to={mcpServerTabHref(routes, idOrSlug, "overview")} replace />
     );
   }
+  if (activeTab && mcpServer && tabForServer(activeTab, hosted) !== activeTab) {
+    return (
+      <Navigate
+        to={`${mcpServerTabHref(routes, idOrSlug, tabForServer(activeTab, hosted))}${location.search}`}
+        replace
+      />
+    );
+  }
   if (!activeTab) {
-    const initialTab = initialTabFromHash(location.hash);
+    const initialTab = tabForServer(
+      initialTabFromHash(location.hash),
+      hosted,
+    );
     const hash =
       location.hash === `#${MCP_AUTHENTICATION_SECTION_ID}`
         ? `#${MCP_AUTHENTICATION_SECTION_ID}`
@@ -180,8 +164,25 @@ export default function MCPServerDetails(): JSX.Element {
     );
   }
   const renderTabContent = () => {
-    if (canonicalWrapper && isLoadingToolsets) return null;
     switch (activeTab) {
+      case "tools":
+        return hostedToolset ? (
+          <div className="px-8 py-8">
+            <HostedToolsTab toolset={hostedToolset} />
+          </div>
+        ) : null;
+      case "resources":
+        return hostedToolset ? (
+          <div className="px-8 py-8">
+            <HostedResourcesTab toolset={hostedToolset} />
+          </div>
+        ) : null;
+      case "prompts":
+        return hostedToolset ? (
+          <div className="px-8 py-8">
+            <HostedPromptsTab toolset={hostedToolset} />
+          </div>
+        ) : null;
       case "overview":
         return (
           mcpServer && (
@@ -210,16 +211,16 @@ export default function MCPServerDetails(): JSX.Element {
                 resourceId={mcpServer.id}
                 level="page"
               >
-                {/* mcp_servers-backed servers grant under the same `mcp:*`
-                  scope kind as toolset-backed ones (see selector.go), so
-                  MCPTeamAccessTab is reused as-is with the mcp_server's
-                  id as the resource id. No `tools` prop because the
-                  Remote MCP backend doesn't expose a Speakeasy-side tool
-                  catalog. */}
-                <MCPTeamAccessTab
-                  resourceId={mcpServer.id}
-                  serverName={mcpServer.name ?? undefined}
-                />
+                {/* Endpoint calls check access on this server's id, which a
+                  canonical hosted server shares with its toolset. Only a
+                  hosted server has a tool catalog for per-tool rules. */}
+                {hosted && isLoadingToolset ? null : (
+                  <MCPTeamAccessTab
+                    resourceId={mcpServer.id}
+                    serverName={mcpServer.name ?? undefined}
+                    tools={hostedToolset?.tools}
+                  />
+                )}
               </RequireScope>
             </RequireScope>
           )
@@ -263,6 +264,7 @@ export default function MCPServerDetails(): JSX.Element {
               mcpServer={mcpServer}
               endpoints={endpoints}
               isLoadingEndpoints={isLoadingEndpoints}
+              hostedToolset={hosted ? hostedToolset : undefined}
             />
           )
         );
@@ -324,8 +326,8 @@ const VISIBILITY_OPTIONS: VisibilityOption[] = [
   },
 ];
 
-// Public visibility is only offered for tunneled-backed servers, and only
-// once the tunnel source owner has consented (double opt-in).
+// Public visibility is offered for hosted servers, and for tunneled-backed
+// servers once the tunnel source owner has consented (double opt-in).
 const PUBLIC_VISIBILITY_OPTION: VisibilityOption = {
   value: "public",
   label: "Public",
@@ -334,6 +336,9 @@ const PUBLIC_VISIBILITY_OPTION: VisibilityOption = {
   dotClass: "bg-green-400",
   hoverDotClass: "group-hover:bg-green-400",
 };
+
+const HOSTED_PUBLIC_DESCRIPTION =
+  "Anyone with the URL can read the tools hosted by this server. Authentication is still required to use the tools.";
 
 const ALL_VISIBILITY_OPTIONS = [
   ...VISIBILITY_OPTIONS,
@@ -347,6 +352,13 @@ export function MCPServerStatusDropdown({
 }): JSX.Element {
   const { canWrite, updateVisibility, updating } =
     useMcpServerVisibilityUpdate(server);
+  const hosted = standsInForToolset(server);
+  const guard = useHostedVisibilityGuard({
+    toolsetSlug: hosted ? server.toolset?.slug : undefined,
+    current: server.visibility,
+    apply: updateVisibility,
+    isApplying: updating,
+  });
   const isTunneled = Boolean(server.tunneledMcpServerId);
   const { data: tunneledSource } = useGetTunneledMcpServer(
     getTunneledMcpServerArgs(server.tunneledMcpServerId ?? ""),
@@ -354,7 +366,8 @@ export function MCPServerStatusDropdown({
     { enabled: isTunneled },
   );
   const sourceAllowsPublic = tunneledSource?.allowPublic ?? false;
-  const options = isTunneled ? ALL_VISIBILITY_OPTIONS : VISIBILITY_OPTIONS;
+  const options =
+    isTunneled || hosted ? ALL_VISIBILITY_OPTIONS : VISIBILITY_OPTIONS;
   const currentLabel = visibilityLabel(server.visibility);
   const currentDotClass =
     ALL_VISIBILITY_OPTIONS.find((option) => option.value === server.visibility)
@@ -382,6 +395,7 @@ export function MCPServerStatusDropdown({
   }
 
   return (
+    <>
     <DropdownMenu>
       <DropdownMenuTrigger asChild disabled={!canWrite || updating}>
         <button
@@ -406,14 +420,17 @@ export function MCPServerStatusDropdown({
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-[320px] p-1">
         {options.map((option) => {
-          const optionBlocked = option.value === "public" && publicBlocked;
+          const optionBlocked =
+            option.value === "public" &&
+            (publicBlocked || guard.publicUnavailable);
           return (
             <DropdownMenuItem
               key={option.value}
               disabled={optionBlocked}
               onSelect={() => {
                 if (optionBlocked) return;
-                updateVisibility(option.value);
+                if (hosted) guard.request(option.value);
+                else updateVisibility(option.value);
               }}
               className="group flex cursor-pointer items-start gap-2.5 p-2 data-[disabled]:cursor-not-allowed data-[disabled]:opacity-60"
             >
@@ -444,8 +461,12 @@ export function MCPServerStatusDropdown({
                 </span>
                 <span className="text-muted-foreground text-xs">
                   {optionBlocked
-                    ? "Enable public access on the tunnel source first to allow anonymous serving."
-                    : option.description}
+                    ? publicBlocked
+                      ? "Enable public access on the tunnel source first to allow anonymous serving."
+                      : "Loading environment data…"
+                    : hosted && option.value === "public"
+                      ? HOSTED_PUBLIC_DESCRIPTION
+                      : option.description}
                 </span>
               </div>
             </DropdownMenuItem>
@@ -464,6 +485,8 @@ export function MCPServerStatusDropdown({
         )}
       </DropdownMenuContent>
     </DropdownMenu>
+    {guard.dialogs}
+    </>
   );
 }
 
@@ -521,10 +544,8 @@ function useMcpServerVisibilityUpdate(server: McpServer): {
   updating: boolean;
 } {
   const { hasScope } = useRBAC();
-  // These controls offer no public state for hosted servers; their visibility stays on the toolset page.
   const canWrite =
     hasScope("mcp:write") &&
-    !isCanonicalHostedWrapper(server) &&
     isKnownEnumValue(KnownUpdateMcpServerFormVisibility, server.visibility);
   const queryClient = useQueryClient();
   const update = useUpdateMcpServerMutation({

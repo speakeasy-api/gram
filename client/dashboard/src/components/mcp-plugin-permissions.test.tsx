@@ -121,6 +121,7 @@ vi.mock("@/pages/mcp/x/MCPServerDetails", () => ({
 vi.mock("@/pages/mcp/x/MCPServerDetailsRouting", () => ({
   activeTabFromPath: () => "overview",
   mcpServerTabHref: () => "/mcp",
+  standsInForToolset: () => false,
 }));
 vi.mock(
   "@/pages/mcp/x/tabs/settings/sections/authentication/AuthenticationSection",

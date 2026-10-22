@@ -4,8 +4,8 @@ import {
   initialTabFromHash,
   isCanonicalHostedWrapper,
   isLegacyAuthenticationTabPath,
-  isLegacyToolsTabPath,
-  toolsetTabForServerPath,
+  standsInForToolset,
+  tabForServer,
 } from "./MCPServerDetailsRouting";
 
 describe("activeTabFromPath", () => {
@@ -72,33 +72,6 @@ describe("activeTabFromPath", () => {
     ).toBe(true);
   });
 
-  it("does not treat the legacy tools path as an active tab", () => {
-    expect(
-      activeTabFromPath(
-        "/acme/projects/default/mcp/x/my-server/tools",
-        "my-server",
-      ),
-    ).toBeUndefined();
-  });
-
-  it("detects the legacy tools path for redirects", () => {
-    expect(
-      isLegacyToolsTabPath(
-        "/acme/projects/default/mcp/x/my-server/tools",
-        "my-server",
-      ),
-    ).toBe(true);
-  });
-
-  it("does not confuse the inspect tab with the legacy tools path", () => {
-    expect(
-      isLegacyToolsTabPath(
-        "/acme/projects/default/mcp/x/my-server/inspect",
-        "my-server",
-      ),
-    ).toBe(false);
-  });
-
   it("matches decoded server slug segments", () => {
     expect(
       activeTabFromPath(
@@ -123,8 +96,8 @@ describe("initialTabFromHash", () => {
     expect(initialTabFromHash("#authentication")).toBe("settings");
   });
 
-  it("maps the legacy tools hash to inspect", () => {
-    expect(initialTabFromHash("#tools")).toBe("inspect");
+  it("reads the tools hash as the tools tab", () => {
+    expect(initialTabFromHash("#tools")).toBe("tools");
   });
 
   it("supports team access", () => {
@@ -158,32 +131,60 @@ describe("isCanonicalHostedWrapper", () => {
   });
 });
 
-describe("toolsetTabForServerPath", () => {
-  const base = "/acme/projects/default/mcp/x/my-server";
+describe("standsInForToolset", () => {
+  const toolsetId = "7f1c2a9e-1111-4c4c-9a9a-000000000001";
+  const freshId = "7f1c2a9e-2222-4c4c-9a9a-000000000002";
 
-  it.each([
-    ["", "", "overview"],
-    ["/overview", "", "overview"],
-    ["/inspect", "", "tools"],
-    ["/tools", "", "tools"],
-    ["/authentication", "", "authentication"],
-    ["/team-access", "", "team-access"],
-    ["/guardrails", "", undefined],
-    ["/sessions", "", "sessions"],
-    ["/settings", "", "settings"],
-    ["/settings", "#authentication", "authentication"],
-    ["/settings", "#agent-setup", undefined],
-    ["/settings", "#server-url", undefined],
-    ["/settings", "#public-access", undefined],
-    ["/settings", "#resource-identifier", undefined],
-    ["/settings", "#tunnel-key", undefined],
-    ["/settings", "#unknown-section", undefined],
-    ["", "#settings", "settings"],
-    ["", "#authentication", "authentication"],
-    ["", "#tools", "tools"],
-  ] as const)("maps %s%s to toolset tab %s", (suffix, hash, expected) => {
-    expect(toolsetTabForServerPath(`${base}${suffix}`, "my-server", hash)).toBe(
-      expected,
+  it("treats the server the API names as the toolset's host as hosted", () => {
+    expect(
+      standsInForToolset({
+        id: freshId,
+        toolsetId,
+        toolset: { hostingMcpServerId: freshId },
+      }),
+    ).toBe(true);
+  });
+
+  it("leaves a server beside the toolset's host unhosted", () => {
+    expect(
+      standsInForToolset({
+        id: freshId,
+        toolsetId,
+        toolset: { hostingMcpServerId: toolsetId },
+      }),
+    ).toBe(false);
+  });
+
+  it("falls back to the canonical rule when the API names no host", () => {
+    expect(standsInForToolset({ id: toolsetId, toolsetId, toolset: {} })).toBe(
+      true,
     );
+    expect(standsInForToolset({ id: freshId, toolsetId })).toBe(false);
+  });
+
+  it("never treats a server without a toolset as hosted", () => {
+    expect(
+      standsInForToolset({
+        id: freshId,
+        toolsetId: undefined,
+        toolset: { hostingMcpServerId: freshId },
+      }),
+    ).toBe(false);
+  });
+});
+
+describe("tabForServer", () => {
+  it("shows a hosted server's tools instead of Inspect", () => {
+    expect(tabForServer("inspect", true)).toBe("tools");
+    for (const tab of ["tools", "resources", "prompts", "settings"] as const) {
+      expect(tabForServer(tab, true)).toBe(tab);
+    }
+  });
+
+  it("keeps the old tools URL of any other server on Inspect", () => {
+    expect(tabForServer("tools", false)).toBe("inspect");
+    expect(tabForServer("resources", false)).toBe("overview");
+    expect(tabForServer("prompts", false)).toBe("overview");
+    expect(tabForServer("inspect", false)).toBe("inspect");
   });
 });

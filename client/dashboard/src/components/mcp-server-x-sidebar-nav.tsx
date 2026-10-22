@@ -30,7 +30,9 @@ import {
 import {
   activeTabFromPath,
   mcpServerTabHref,
+  standsInForToolset,
 } from "@/pages/mcp/x/MCPServerDetailsRouting";
+import { hostedToolCountLabel } from "@/components/mcp/mcp-server-kind";
 import { MCP_AGENT_SETUP_SECTION_ID } from "@/pages/mcp/x/tabs/settings/sections/AgentSetupSection";
 import { MCP_AUTHENTICATION_SECTION_ID } from "@/pages/mcp/x/tabs/settings/sections/authentication/AuthenticationSection";
 import {
@@ -66,6 +68,8 @@ import {
   ShieldCheck,
   Users,
   Wrench,
+  Database,
+  MessageSquareText,
 } from "lucide-react";
 import {
   HoverCard,
@@ -422,10 +426,13 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
   const isTunneledBacked = !!mcpServer?.tunneledMcpServerId;
   const isUnproxied = !!mcpServer?.unproxiedMcpServerId;
   const isSourceBacked = isRemoteBacked || isTunneledBacked || isUnproxied;
+  const hosted = !!mcpServer && standsInForToolset(mcpServer);
+  // A hosted server is granted under its toolset id, like the API checks it.
+  const grantResourceId = mcpServer?.toolsetId ?? mcpServer?.id ?? "";
   const canViewTeamAccess =
     !!mcpServer &&
     hasScope("org:read", organization.id) &&
-    hasScope("mcp:read", mcpServer.id);
+    hasScope("mcp:read", grantResourceId);
 
   // Guardrails police traffic that passes through Speakeasy, so unproxied servers
   // (which never do) have none. Admin-only, like the policies it manages.
@@ -434,7 +441,7 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
     !!mcpServer &&
     !isUnproxied &&
     hasScope("org:admin", organization.id) &&
-    hasScope("mcp:read", mcpServer.id);
+    hasScope("mcp:read", grantResourceId);
 
   // A Remote MCP server's identity is derived, so the readiness item reads the
   // same answer the pill does. Judging it on a bound client alone reported
@@ -558,17 +565,41 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
     // their tools yet (the vendor's own auth blocks an anonymous probe, and
     // there's no fallback source wired up), so the tab had nothing useful to
     // show.
-    ...(isUnproxied
-      ? []
-      : [
+    ...(hosted
+      ? [
           {
-            key: "inspect",
-            title: "Inspect",
+            key: "tools",
+            title: "Tools",
             Icon: Wrench,
-            href: mcpServerTabHref(routes, idOrSlug, "inspect"),
-            active: activeTab === "inspect",
+            href: mcpServerTabHref(routes, idOrSlug, "tools"),
+            active: activeTab === "tools",
           },
-        ]),
+          {
+            key: "resources",
+            title: "Resources",
+            Icon: Database,
+            href: mcpServerTabHref(routes, idOrSlug, "resources"),
+            active: activeTab === "resources",
+          },
+          {
+            key: "prompts",
+            title: "Prompts",
+            Icon: MessageSquareText,
+            href: mcpServerTabHref(routes, idOrSlug, "prompts"),
+            active: activeTab === "prompts",
+          },
+        ]
+      : isUnproxied
+        ? []
+        : [
+            {
+              key: "inspect",
+              title: "Inspect",
+              Icon: Wrench,
+              href: mcpServerTabHref(routes, idOrSlug, "inspect"),
+              active: activeTab === "inspect",
+            },
+          ]),
     ...(canViewTeamAccess
       ? [
           {
@@ -635,6 +666,9 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
             {isUnproxied && (
               <DetailSidebarInfoLabel>Unproxied MCP</DetailSidebarInfoLabel>
             )}
+            {hosted && (
+              <DetailSidebarInfoLabel>Hosted MCP</DetailSidebarInfoLabel>
+            )}
           </div>
         </div>
         {isRemoteBacked ? <McpServerCardStatus server={mcpServer} /> : null}
@@ -688,6 +722,15 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
         </div>
       )}
 
+      {hosted && mcpServer.toolset ? (
+        <div className="flex flex-col gap-1">
+          <DetailSidebarInfoLabel>Tools</DetailSidebarInfoLabel>
+          <Text variant="small">
+            {hostedToolCountLabel(mcpServer.toolset)}
+          </Text>
+        </div>
+      ) : null}
+
       {upstreamUrl ? (
         <SidebarUrlRow
           label="Remote URL"
@@ -733,7 +776,9 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
             queryParams={
               isRemoteBacked || isTunneledBacked
                 ? { mcpServer: mcpServer.id }
-                : undefined
+                : hosted && mcpServer.toolset
+                  ? { toolset: mcpServer.toolset.slug }
+                  : undefined
             }
             className="flex items-center hover:no-underline"
           >

@@ -41,6 +41,8 @@ import {
 } from "./sourceDelete";
 import { invalidateWrapperDeleteAuthViews } from "./sourceInvalidation";
 import { isCanonicalHostedWrapper } from "@/pages/mcp/x/MCPServerDetailsRouting";
+import { DeleteHostedServerButton } from "@/pages/mcp/x/hosted/DeleteHostedServerButton";
+import type { Toolset } from "@/lib/toolTypes";
 
 function ServerControlRow({
   title,
@@ -111,9 +113,12 @@ export function DangerZoneSection({
   endpoints,
   deleteTarget,
   sourceUnavailable = false,
+  hostedToolset,
 }: {
   mcpServer: McpServer;
   endpoints: McpEndpoint[];
+  /** A canonical hosted server's toolset; deleting the server deletes it. */
+  hostedToolset?: Toolset;
   /**
    * The source row behind a remote/tunneled/unproxied server, once loaded.
    * Deleting such a server must delete its source too, so the button waits
@@ -212,7 +217,6 @@ export function DangerZoneSection({
   };
 
   const enabled = mcpServer.visibility !== "disabled";
-  // The switch has no public state; a hosted server's availability stays on the toolset page.
   const hostedWrapper = isCanonicalHostedWrapper(mcpServer);
 
   return (
@@ -245,15 +249,29 @@ export function DangerZoneSection({
                 >
                   <Switch
                     checked={enabled}
-                    disabled={isUpdatingVisibility || hostedWrapper}
+                    disabled={isUpdatingVisibility}
                     aria-label="Enable MCP server"
                     onCheckedChange={requestAvailabilityChange}
                   />
                 </RequireScope>
               </ServerControlRow>
 
-              {/* A hosted server's lifecycle stays on the toolset page. */}
-              {hostedWrapper ? null : (
+              {hostedWrapper ? (
+                hostedToolset && (
+                  <ServerControlRow
+                    title="Delete MCP server"
+                    description="Permanently delete this MCP server and its toolset. This action cannot be undone."
+                  >
+                    <RequireScope
+                      scope="mcp:write"
+                      resourceId={mcpServer.projectId}
+                      level="component"
+                    >
+                      <DeleteHostedServerButton toolset={hostedToolset} />
+                    </RequireScope>
+                  </ServerControlRow>
+                )
+              ) : (
                 <ServerControlRow
                   title={deleteRow.title}
                   description={deleteRow.description}

@@ -51,7 +51,7 @@ afterEach(() => {
 });
 
 describe("DangerZoneSection availability", () => {
-  it("keeps a hosted server's availability switch read-only", () => {
+  it("lets a hosted server's availability switch change it", () => {
     renderSection({
       ...base,
       id: "hosted-1",
@@ -60,7 +60,7 @@ describe("DangerZoneSection availability", () => {
 
     expect(
       screen.getByRole("switch", { name: "Enable MCP server" }),
-    ).toHaveProperty("disabled", true);
+    ).toHaveProperty("disabled", false);
   });
 
   it("leaves other servers' availability switch editable", () => {
@@ -77,7 +77,7 @@ describe("DangerZoneSection availability", () => {
 });
 
 describe("DangerZoneSection delete", () => {
-  it("offers no delete for a hosted server", () => {
+  it("offers no server-row delete for a hosted server without its toolset", () => {
     renderSection({
       ...base,
       id: "hosted-1",
