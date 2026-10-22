@@ -89,7 +89,7 @@ function renderStep() {
 }
 
 describe("AnthropicAdminControlsStep", () => {
-  it("gives Cowork, Claude Code and Cursor a section of their own, Cowork first", () => {
+  it("gives Cowork and Claude Code a section of their own, Cowork first", () => {
     publishStatus.current = {
       data: {
         connected: true,
@@ -109,25 +109,20 @@ describe("AnthropicAdminControlsStep", () => {
       flows.find(([id]) => id === "claude-cowork")![1],
     );
     expect(flows.find(([id]) => id === "claude")![1]).toBeDefined();
-    expect(flows.find(([id]) => id === "cursor")![1]).toBeUndefined();
     expect(
       screen.getByText(/One Hooks API key is generated automatically/),
     ).toBeTruthy();
     expect(screen.getByText("Set up Anthropic admin controls")).toBeTruthy();
     expect(screen.getByText("Enable logging section")).toBeTruthy();
     expect(screen.getByText("Marketplace section")).toBeTruthy();
-    expect(screen.getByText("Optional")).toBeTruthy();
     expect(
       screen.getAllByRole("heading", { level: 3 }).map((h) => h.textContent),
-    ).toEqual([
-      "Connect Claude Cowork",
-      "Connect Claude Code",
-      "Connect Cursor",
-    ]);
+    ).toEqual(["Connect Claude Cowork", "Connect Claude Code"]);
 
     expect(screen.getByText("Steps for claude")).toBeTruthy();
     expect(screen.getByText("Steps for claude-cowork")).toBeTruthy();
-    expect(screen.getByText("Steps for cursor")).toBeTruthy();
+    expect(flows.some(([id]) => id === "cursor")).toBe(false);
+    expect(screen.queryByText(/Cursor/)).toBeNull();
   });
 
   it("calls out that Cowork hook delivery needs runtime verification", () => {
@@ -165,10 +160,10 @@ describe("AnthropicAdminControlsStep", () => {
     expect(screen.getAllByText("Complete")).toHaveLength(1);
   });
 
-  it("holds back only the GitHub-synced org rollouts when the repo has no collaborators", () => {
-    // Cowork's GitHub App and Cursor's import read the repo through GitHub, so
-    // their org rollouts wait on a collaborator. Claude Code clones through
-    // Speakeasy's proxy and the personal-plan paths use it or a ZIP.
+  it("holds back only the GitHub-synced org rollout when the repo has no collaborators", () => {
+    // Cowork's GitHub App reads the repo through GitHub, so its org rollout
+    // waits on a collaborator. Claude Code clones through Speakeasy's proxy and
+    // the personal-plan paths use it or a ZIP.
     publishStatus.current = {
       data: {
         connected: true,
@@ -180,9 +175,8 @@ describe("AnthropicAdminControlsStep", () => {
 
     renderStep();
 
-    expect(screen.getAllByText(/Add a collaborator/)).toHaveLength(2);
+    expect(screen.getAllByText(/Add a collaborator/)).toHaveLength(1);
     expect(screen.getByText(/^claude-cowork org rollout:/)).toBeTruthy();
-    expect(screen.getByText(/^cursor org rollout:/)).toBeTruthy();
     expect(screen.getByText("Steps for claude")).toBeTruthy();
   });
 
@@ -205,7 +199,7 @@ describe("AnthropicAdminControlsStep", () => {
 
     expect(
       screen.getAllByText(/Publish the marketplace above first/),
-    ).toHaveLength(3);
+    ).toHaveLength(2);
   });
 
   it("still holds them when a connection has no marketplace URL yet", () => {
@@ -224,6 +218,6 @@ describe("AnthropicAdminControlsStep", () => {
 
     expect(
       screen.getAllByText(/Publish the marketplace above first/),
-    ).toHaveLength(3);
+    ).toHaveLength(2);
   });
 });

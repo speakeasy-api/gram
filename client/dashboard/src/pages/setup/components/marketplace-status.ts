@@ -13,3 +13,26 @@ export function isMarketplacePublished(
 ): boolean {
   return !!(status?.connected && status.marketplaceUrl);
 }
+
+/**
+ * Why a card's platform instructions are held back. Every set references the
+ * published marketplace. Org rollouts that read the repo through GitHub
+ * (Cowork's GitHub App, Cursor's team marketplace import) also need a
+ * collaborator: a repo nobody has been given access to is as unusable there as
+ * one that was never published. A missing flag means the collaborator lookup
+ * failed, not that there are none, so only a definite "no" holds them back.
+ */
+export function marketplaceHoldBacks(status: PublishStatusResult | undefined): {
+  heldBack: string | undefined;
+  orgHeldBack: string | undefined;
+} {
+  return {
+    heldBack: isMarketplacePublished(status)
+      ? undefined
+      : "Publish the marketplace above first — these instructions reference it.",
+    orgHeldBack:
+      status?.hasCollaborators === false
+        ? "Add a collaborator to the marketplace repo above first — the organization rollout cannot sync a repo nobody has access to."
+        : undefined,
+  };
+}

@@ -7,6 +7,7 @@ import { AnthropicInferenceHooksStep } from "./components/steps/anthropic-infere
 import { ConfigurePoliciesStep } from "./components/steps/configure-policies-step";
 import { ConfirmTrafficStep } from "./components/steps/confirm-traffic-step";
 import { CreateMarketplaceStep } from "./components/steps/create-marketplace-step";
+import { CursorAdminControlsStep } from "./components/steps/cursor-admin-controls-step";
 import { DistributeServersStep } from "./components/steps/distribute-servers-step";
 import { IdentityProviderStep } from "./components/steps/identity-provider-step";
 import { InstrumentAgentsStep } from "./components/steps/instrument-agents-step";
@@ -75,6 +76,11 @@ export const SETUP_CARDS: Record<string, SetupCard> = {
   "anthropic-admin-controls": {
     Step: ({ onComplete }) => (
       <AnthropicAdminControlsStep onComplete={onComplete} />
+    ),
+  },
+  "cursor-admin-controls": {
+    Step: ({ onComplete }) => (
+      <CursorAdminControlsStep onComplete={onComplete} />
     ),
   },
   "instrument-agents": {
