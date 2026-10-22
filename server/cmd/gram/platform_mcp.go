@@ -67,6 +67,7 @@ import (
 )
 
 type platformMCPConfig struct {
+	DeploymentRedeploy     platformmcp.DeploymentRedeployManagement
 	AssistantIdentity      platformmcp.AssistantIdentityManagement
 	SignalAuthoring        *sigint.Service
 	Logger                 *slog.Logger
@@ -522,6 +523,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		WithToolExposure(newPlatformMCPToolExposure(config, authorizer, limitStore)).
 		WithGateways(newPlatformMCPGateways(config, authorizer, limitStore)).
 		WithProjectLifecycle(newPlatformMCPProjectLifecycle(config, authorizer, limitStore))
+	platformReader.WithDeploymentRedeploy(newPlatformMCPDeploymentRedeploy(config, platformReader, limitStore))
 	// Metered on the diagnostics allowance, like the other aggregate reads.
 	platformReader.WithAnalytics(platformmcp.NewAnalyticsService(config.Logger, config.Analytics, config.FeatureFlags, organizationSlugs, platformReader, budgets.Diagnostics))
 	platformReader.WithWidgets(platformmcp.NewWidgetService(config.Logger, config.Widgets, platformReader, config.Authz, config.FeatureFlags, organizationSlugs, config.JWTSigningKey))
@@ -1164,6 +1166,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		WithToolExposure(newPlatformMCPToolExposure(config, authorizer, limitStore)).
 		WithGateways(newPlatformMCPGateways(config, authorizer, limitStore)).
 		WithProjectLifecycle(newPlatformMCPProjectLifecycle(config, authorizer, limitStore))
+	platformReader.WithDeploymentRedeploy(newPlatformMCPDeploymentRedeploy(config, platformReader, limitStore))
 	// Metered on the diagnostics allowance, like the other aggregate reads.
 	platformReader.WithAnalytics(platformmcp.NewAnalyticsService(config.Logger, config.Analytics, config.FeatureFlags, organizationSlugs, platformReader, budgets.Diagnostics))
 	platformReader.WithWidgets(platformmcp.NewWidgetService(config.Logger, config.Widgets, platformReader, config.Authz, config.FeatureFlags, organizationSlugs, config.JWTSigningKey))
@@ -1238,4 +1241,14 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 	platformmcp.AttachManagement(config.Mux, platformmcp.NewManagementService(config.Logger, config.TracerProvider, config.DB, config.Sessions, config.Authz, gate, authorizer, config.ServerURL.JoinPath("platform-mcp").String(), registrations, readiness, distributions, config.JWTSigningKey, catalog))
 	o11y.AttachHandler(config.Mux, http.MethodPost, platformmcp.Path, runtime.Handler().ServeHTTP)
 	return AssistantSurface{Tools: runtime.AssistantTools(), Authorizer: authorizer}, nil
+}
+
+func newPlatformMCPDeploymentRedeploy(config platformMCPConfig, projects *platformmcp.PostgresReader, limitStore ratelimit.Store) *platformmcp.DeploymentRedeployService {
+	if config.TemporalEnv == nil {
+		return nil
+	}
+	return platformmcp.NewDeploymentRedeployService(config.DB, config.DeploymentRedeploy, projects, platformmcp.OperationBudget{
+		Connection:   ratelimit.New(limitStore, platformmcp.DeploymentRedeployConnectionLimitName, ratelimit.PerMinute(platformmcp.DeploymentRedeploysPerConnectionPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
+		Organization: ratelimit.New(limitStore, platformmcp.DeploymentRedeployOrganizationLimitName, ratelimit.PerMinute(platformmcp.DeploymentRedeploysPerOrganizationPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
+	})
 }
