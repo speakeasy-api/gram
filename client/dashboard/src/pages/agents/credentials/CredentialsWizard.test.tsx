@@ -237,6 +237,25 @@ describe("Provisioning a new agent", () => {
     expect(mocks.createAgent).not.toHaveBeenCalled();
   });
 
+  it("starts the draft over from a link past the last step", async () => {
+    setup(undefined, "/?step=9");
+
+    expect(await screen.findByLabelText("Name")).toBeTruthy();
+    expect(
+      screen.queryByRole("button", { name: /Done|Skip for now/ }),
+    ).toBeNull();
+  });
+
+  it("starts a named platform's draft over at its servers", async () => {
+    mocks.platforms.mockReturnValue([platform]);
+    setup(platform.key, "/?step=3");
+
+    expect(
+      await screen.findByRole("heading", { name: "Server selection" }),
+    ).toBeTruthy();
+    expect(mocks.createAgent).not.toHaveBeenCalled();
+  });
+
   it("will not move on without a name or a server", async () => {
     setup();
     expect(
