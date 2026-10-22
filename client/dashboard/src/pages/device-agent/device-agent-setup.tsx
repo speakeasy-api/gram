@@ -170,10 +170,7 @@ curl -fSL -o speakeasy  "$BASE/speakeasy_\${VERSION}_linux_amd64"`;
 // so the snippet never goes stale. Without it (a non-HTTPS server URL) it
 // builds the versioned bucket URL; like linuxDownload, with a resolved version
 // that snippet uses no shell variables, so every form also runs in fish.
-export function macInstall(
-  version: string | null,
-  stablePkgURL: string | null,
-) {
+function macInstall(version: string | null, stablePkgURL: string | null) {
   if (stablePkgURL) {
     return `curl -fSL -o speakeasy-agent.pkg ${stablePkgURL} && \\
 sudo installer -pkg speakeasy-agent.pkg -target /`;

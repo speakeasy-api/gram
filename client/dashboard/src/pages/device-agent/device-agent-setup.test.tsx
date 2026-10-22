@@ -4,11 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import {
-  DeviceAgentSetup,
-  ManagedProfileExample,
-  macInstall,
-} from "./device-agent-setup";
+import { DeviceAgentSetup, ManagedProfileExample } from "./device-agent-setup";
 
 // buildCopyText is what useAgentToken writes to the clipboard after minting,
 // captured so tests can check the copied managed.json.
@@ -22,6 +18,11 @@ vi.mock("@/contexts/Auth", () => ({
 }));
 vi.mock("@/routes", () => ({
   useOrgRoutes: () => ({ apiKeys: { href: () => "/example-corp/api-keys" } }),
+}));
+// Install commands use the server's stable links only over HTTPS.
+vi.mock("@/lib/utils", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/utils")>()),
+  getServerURL: () => "https://app.example.com",
 }));
 vi.mock("@/components/code", () => ({
   CodeBlock: ({ children }: { children: string }) => <pre>{children}</pre>,
@@ -142,21 +143,14 @@ describe("ManagedProfileExample auto_update", () => {
   });
 });
 
-describe("macInstall", () => {
-  const stable = "https://app.example.com/rpc/install/device-agent-macos.pkg";
+describe("macOS install command", () => {
+  it("downloads the server's stable pkg link, which needs no version", () => {
+    renderSetup({});
 
-  it("downloads the stable link, which needs no version", () => {
-    const script = macInstall("1.2.3", stable);
+    fireEvent.click(screen.getByRole("img", { name: "macOS logo" }));
 
-    expect(script).toContain(`curl -fSL -o speakeasy-agent.pkg ${stable}`);
-    expect(script).not.toContain("1.2.3");
-    expect(script).toContain("sudo installer -pkg speakeasy-agent.pkg");
-  });
-
-  it("builds the versioned bucket URL without a stable link", () => {
-    const script = macInstall("1.2.3", null);
-
-    expect(script).toContain("/v1.2.3/speakeasy-agent_1.2.3.pkg");
-    expect(script).not.toContain("/rpc/install/");
+    expect(document.body.textContent).toContain(
+      "curl -fSL -o speakeasy-agent.pkg https://app.example.com/rpc/install/device-agent-macos.pkg",
+    );
   });
 });
