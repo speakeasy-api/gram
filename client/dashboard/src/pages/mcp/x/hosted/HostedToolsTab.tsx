@@ -10,6 +10,7 @@ import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useToolset } from "@/hooks/toolTypes";
 import { useRBAC } from "@/hooks/useRBAC";
+import { handleAPIError } from "@/lib/errors";
 import { useToolUpdate } from "@/hooks/useToolUpdate";
 import { type Toolset, useGroupedTools } from "@/lib/toolTypes";
 import {
@@ -302,11 +303,7 @@ export function HostedToolsTab({
                   },
                 });
               } catch (error) {
-                toast.error(
-                  error instanceof Error
-                    ? error.message
-                    : "Failed to add tools",
-                );
+                handleAPIError(error, "Failed to add tools");
                 return;
               }
 

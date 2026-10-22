@@ -42,7 +42,7 @@ export function useHostedToolset(server: McpServer | undefined): {
       ((!summarySlug && isLoadingList) || (!!slug && isLoadingToolset)),
     isError: isError || (!summarySlug && listFailed),
     refetch: () => {
-      if (!summarySlug && listFailed) void refetchList();
+      if (!slug) void refetchList();
       else void refetch();
     },
   };
