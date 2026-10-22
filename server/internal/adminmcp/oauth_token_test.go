@@ -462,3 +462,13 @@ func TestStaffOAuthRejectsMultipleValidCredentials(t *testing.T) {
 		})
 	}
 }
+
+func TestStaffOAuthMissingGrantType(t *testing.T) {
+	t.Parallel()
+	tokens, _, _ := staffTokensFixture(t)
+	response := httptest.NewRecorder()
+	tokens.TokenHandler().ServeHTTP(response, staffTokenRequest("", nil))
+	require.Equal(t, http.StatusBadRequest, response.Code)
+	require.Contains(t, response.Body.String(), `"error":"invalid_request"`)
+	require.Equal(t, "no-store", response.Header().Get("Cache-Control"))
+}

@@ -957,6 +957,10 @@ func (s *OAuthHTTP) TokenHandler() http.Handler {
 			writeOAuthError(w, http.StatusBadRequest, "invalid_request", "could not parse token request")
 			return
 		}
+		if r.PostForm.Get(oauthwire.ParamGrantType) == "" {
+			writeOAuthError(w, http.StatusBadRequest, oautherr.CodeInvalidRequest, "grant_type is required")
+			return
+		}
 		operation, ok := tokenOperation(r.PostForm.Get("grant_type"))
 		if ok {
 			defer func() {
@@ -1332,7 +1336,7 @@ func writeTokenGateError(w http.ResponseWriter, err error) {
 		writeOAuthError(w, http.StatusServiceUnavailable, "temporarily_unavailable", "organization access could not be verified")
 		return
 	}
-	writeOAuthError(w, http.StatusForbidden, "access_denied", "organization access is not available")
+	writeOAuthError(w, http.StatusBadRequest, oautherr.CodeInvalidGrant, "organization access is not available")
 }
 
 // ProviderSetupCompletionURL is the only callback landing page accepted for
