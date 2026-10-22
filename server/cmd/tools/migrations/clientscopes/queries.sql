@@ -67,6 +67,37 @@ WHERE link.remote_session_client_id = @client_id
   AND (sqlc.narg('project_id')::uuid IS NULL OR m.project_id = sqlc.narg('project_id')::uuid)
 ORDER BY m.id ASC;
 
+-- name: ListClientMemberServers :many
+-- Servers the client is attached to directly, which gateway member logins read with it; url is empty when not remote-backed.
+SELECT
+  x.project_id,
+  COALESCE(rms.url, '')::text AS url
+FROM mcp_server_remote_session_clients AS x
+JOIN mcp_servers AS m ON m.id = x.mcp_server_id AND m.project_id = x.project_id AND m.deleted IS FALSE
+JOIN projects AS mp ON mp.id = x.project_id AND mp.deleted IS FALSE
+LEFT JOIN remote_mcp_servers AS rms ON rms.id = m.remote_mcp_server_id AND rms.project_id = m.project_id AND rms.deleted IS FALSE
+WHERE x.remote_session_client_id = @client_id
+  AND x.organization_id = @organization_id
+  AND x.deleted IS FALSE
+  AND (sqlc.narg('project_id')::uuid IS NULL OR x.project_id = sqlc.narg('project_id')::uuid)
+ORDER BY m.id ASC;
+
+-- name: AttachMemberClientFixture :exec
+WITH rms AS (
+  INSERT INTO remote_mcp_servers (project_id, transport_type, url)
+  VALUES (@project_id, 'streamable-http', @url)
+  RETURNING id
+), srv AS (
+  INSERT INTO mcp_servers (project_id, remote_mcp_server_id, visibility)
+  SELECT @project_id, rms.id, 'private' FROM rms
+  RETURNING id, project_id
+), attach AS (
+  INSERT INTO mcp_server_remote_session_clients (project_id, organization_id, mcp_server_id, remote_session_client_id, client_attachment_scope)
+  SELECT srv.project_id, @organization_id, srv.id, @client_id, 'project:' || srv.project_id::text FROM srv
+)
+INSERT INTO remote_protected_resources (project_id, organization_id, resource_identifier, scopes_supported, scope_override, metadata_fetched_at)
+VALUES (@project_id, @organization_id, @url, @scopes_supported, sqlc.narg('scope_override')::text[], clock_timestamp());
+
 -- name: LockClientForScopeWrite :one
 SELECT *
 FROM remote_session_clients
@@ -163,8 +194,8 @@ WITH rms AS (
   INSERT INTO mcp_servers (project_id, user_session_issuer_id, remote_mcp_server_id, visibility)
   SELECT @project_id, @user_session_issuer_id, rms.id, 'private' FROM rms
 )
-INSERT INTO remote_protected_resources (project_id, organization_id, resource_identifier, scopes_supported)
-VALUES (@project_id, @organization_id, @url, @scopes_supported);
+INSERT INTO remote_protected_resources (project_id, organization_id, resource_identifier, scopes_supported, metadata_fetched_at)
+VALUES (@project_id, @organization_id, @url, @scopes_supported, @metadata_fetched_at);
 
 -- name: SeedClientUpdateAuditFixture :exec
 INSERT INTO audit_logs (organization_id, project_id, actor_id, actor_type, action, subject_id, subject_type, before_snapshot, after_snapshot)

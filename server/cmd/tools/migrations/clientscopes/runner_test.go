@@ -86,8 +86,15 @@ func (f *fixture) linkTo(t *testing.T, clientID, usi uuid.UUID) {
 
 func (f *fixture) server(t *testing.T, project, usi uuid.UUID, scopes []string) {
 	t.Helper()
+	f.serverReadAt(t, project, usi, scopes, time.Now())
+}
+
+func (f *fixture) serverReadAt(t *testing.T, project, usi uuid.UUID, scopes []string, readAt time.Time) {
+	t.Helper()
 	require.NoError(t, New(f.pool).SeedServerResourceFixture(t.Context(), SeedServerResourceFixtureParams{
-		ProjectID: project, OrganizationID: f.orgID, Url: "https://mcp.example/" + uuid.NewString(), ScopesSupported: scopes, UserSessionIssuerID: uuid.NullUUID{UUID: usi, Valid: true},
+		ProjectID: project, OrganizationID: f.orgID, Url: "https://mcp.example/" + uuid.NewString(), ScopesSupported: scopes,
+		MetadataFetchedAt:   pgtype.Timestamptz{Time: readAt, InfinityModifier: pgtype.Finite, Valid: true},
+		UserSessionIssuerID: uuid.NullUUID{UUID: usi, Valid: true},
 	}))
 }
 
@@ -155,6 +162,16 @@ func TestRunClassifiesCandidates(t *testing.T) {
 	foreign, foreignUsi := f.projectClient(t, project, []string{"mail"})
 	f.server(t, f.project(t), foreignUsi, []string{"mail"})
 
+	// A list past its last-good window is ignored by a login whose probe fails, which would then fall to the issuer list.
+	stale, staleUsi := f.projectClient(t, project, []string{"docs"})
+	f.serverReadAt(t, project, staleUsi, []string{"docs"}, time.Now().Add(-30*24*time.Hour))
+
+	// A gateway member login reads the member's pin with this client.
+	member, _ := f.projectClient(t, project, issuerScopes)
+	require.NoError(t, q.AttachMemberClientFixture(t.Context(), AttachMemberClientFixtureParams{
+		ProjectID: project, OrganizationID: f.orgID, Url: "https://member.example/" + uuid.NewString(), ScopesSupported: issuerScopes, ScopeOverride: []string{"read"}, ClientID: member,
+	}))
+
 	subset, _ := f.projectClient(t, project, []string{"read", "write"})
 
 	edited, _ := f.projectClient(t, project, issuerScopes)
@@ -186,6 +203,8 @@ func TestRunClassifiesCandidates(t *testing.T) {
 		pinned:          OutcomeSkipRequestChanges,
 		notOwned:        OutcomeSkipRequestChanges,
 		foreign:         OutcomeSkipUnmatched,
+		stale:           OutcomeSkipRequestChanges,
+		member:          OutcomeSkipRequestChanges,
 		subset:          OutcomeSkipUnmatched,
 		edited:          OutcomeSkipEdited,
 		missingSnapshot: OutcomeSkipEdited,
@@ -250,6 +269,9 @@ func TestRunApplyClearsAuditsAndRestores(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 2, preview.Outcomes[OutcomeWouldRestore])
 	require.Nil(t, f.scope(t, copied))
+	previewEntries, err := New(f.pool).ListClientAuditActionsFixture(t.Context(), copied.String())
+	require.NoError(t, err)
+	require.Len(t, previewEntries, 1)
 
 	restored, err := NewRunner(f.pool, Options{CreatedBefore: time.Time{}, PageSize: 0, Apply: true}).Restore(t.Context())
 	require.NoError(t, err)
@@ -262,6 +284,9 @@ func TestRunApplyClearsAuditsAndRestores(t *testing.T) {
 	require.Equal(t, ActorComponent, entries[1].ActorID)
 
 	// A second restore leaves set scopes alone, and the backfill treats the restore as an edit.
+	twicePreview, err := NewRunner(f.pool, Options{CreatedBefore: time.Time{}, PageSize: 0, Apply: false}).Restore(t.Context())
+	require.NoError(t, err)
+	require.Equal(t, 2, twicePreview.Outcomes[OutcomeSkipChanged])
 	twice, err := NewRunner(f.pool, Options{CreatedBefore: time.Time{}, PageSize: 0, Apply: true}).Restore(t.Context())
 	require.NoError(t, err)
 	require.Equal(t, 2, twice.Outcomes[OutcomeSkipChanged])

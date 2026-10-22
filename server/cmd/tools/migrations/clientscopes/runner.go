@@ -177,12 +177,9 @@ func (r *Runner) Restore(ctx context.Context) (Report, error) {
 		return report, fmt.Errorf("list backfill clears: %w", err)
 	}
 	for _, entry := range clears {
-		outcome := OutcomeWouldRestore
-		if r.options.Apply {
-			outcome, err = r.restore(ctx, entry)
-			if err != nil {
-				return report, fmt.Errorf("restore client %s scope: %w", entry.ClientID, err)
-			}
+		outcome, err := r.restore(ctx, entry)
+		if err != nil {
+			return report, fmt.Errorf("restore client %s scope: %w", entry.ClientID, err)
 		}
 		report.add(RowReport{
 			ClientID:       entry.ClientID,
@@ -215,8 +212,9 @@ func (r *Runner) listParams(after uuid.UUID, clientID uuid.NullUUID) ListClientS
 	}
 }
 
-// loginsAfterClear resolves, per server signing in through the client, what a
-// login would request with no client scope, the way the login itself does.
+// loginsAfterClear resolves, per server signing in through the client or
+// reached through it as a gateway member, what a login would request with no
+// client scope, the way the login itself does.
 func loginsAfterClear(ctx context.Context, db remotesessionsrepo.DBTX, row ListClientScopeCandidatesRow) ([]Login, error) {
 	input := remotesessions.ConnectionScopeInput{
 		ClientID:                row.ID,
@@ -225,49 +223,78 @@ func loginsAfterClear(ctx context.Context, db remotesessionsrepo.DBTX, row ListC
 		IssuerScopeOverride:     row.IssuerScopeOverride,
 		IssuerOmitScopeFallback: row.IssuerOmitScopeFallback,
 	}
-	noResource := remotesessions.ResourceScopes{Pin: nil, ChallengeScopes: nil, ScopesSupported: nil, Live: false, UseDiscovered: true}
+	login := func(project uuid.UUID, url string, owns bool) (Login, error) {
+		resource, advertised, err := cachedResource(ctx, db, project, url)
+		if err != nil {
+			return Login{}, err
+		}
+		return Login{Request: remotesessions.ClientConnectionScopes(input, resource, owns).Scopes, ResourceCopy: sameSet(row.Scope, advertised)}, nil
+	}
+
 	servers, err := New(db).ListClientLoginServers(ctx, ListClientLoginServersParams{ClientID: row.ID, OrganizationID: row.OrganizationID, ProjectID: row.ProjectID})
 	if err != nil {
 		return nil, fmt.Errorf("list login servers: %w", err)
 	}
-	if len(servers) == 0 {
-		return []Login{{Request: remotesessions.ClientConnectionScopes(input, noResource, false).Scopes, ResourceCopy: false}}, nil
+	members, err := New(db).ListClientMemberServers(ctx, ListClientMemberServersParams{ClientID: row.ID, OrganizationID: row.OrganizationID, ProjectID: row.ProjectID})
+	if err != nil {
+		return nil, fmt.Errorf("list member servers: %w", err)
 	}
-	logins := make([]Login, 0, len(servers))
+	logins := make([]Login, 0, len(servers)+len(members)+1)
 	for _, server := range servers {
-		if server.Url == "" {
-			logins = append(logins, Login{Request: remotesessions.ClientConnectionScopes(input, noResource, false).Scopes, ResourceCopy: false})
-			continue
+		owns := false
+		if server.Url != "" {
+			siblings, err := remotesessionsrepo.New(db).ListRemoteSessionClientIDsForUserSessionIssuer(ctx, remotesessionsrepo.ListRemoteSessionClientIDsForUserSessionIssuerParams{
+				UserSessionIssuerID: server.UserSessionIssuerID,
+				ProjectID:           server.ProjectID,
+				OrganizationID:      row.OrganizationID,
+			})
+			if err != nil {
+				return nil, fmt.Errorf("list sibling clients: %w", err)
+			}
+			if owns, err = remotesessions.ResourceAppliesAtUpstream(ctx, db, row.OrganizationID, row.ID, siblings, server.Url); err != nil {
+				return nil, fmt.Errorf("decide resource ownership: %w", err)
+			}
 		}
-		siblings, err := remotesessionsrepo.New(db).ListRemoteSessionClientIDsForUserSessionIssuer(ctx, remotesessionsrepo.ListRemoteSessionClientIDsForUserSessionIssuerParams{
-			UserSessionIssuerID: server.UserSessionIssuerID,
-			ProjectID:           server.ProjectID,
-			OrganizationID:      row.OrganizationID,
-		})
+		l, err := login(server.ProjectID, server.Url, owns)
 		if err != nil {
-			return nil, fmt.Errorf("list sibling clients: %w", err)
+			return nil, err
 		}
-		owns, err := remotesessions.ResourceAppliesAtUpstream(ctx, db, row.OrganizationID, row.ID, siblings, server.Url)
+		logins = append(logins, l)
+	}
+	// A member login reads the member's resource with the client it was qualified to.
+	for _, member := range members {
+		l, err := login(member.ProjectID, member.Url, member.Url != "")
 		if err != nil {
-			return nil, fmt.Errorf("decide resource ownership: %w", err)
+			return nil, err
 		}
-		cached := noResource
-		resource, err := remotemcprepo.New(db).GetRemoteProtectedResource(ctx, remotemcprepo.GetRemoteProtectedResourceParams{ProjectID: server.ProjectID, ResourceIdentifier: server.Url})
-		switch {
-		case errors.Is(err, pgx.ErrNoRows):
-		case err != nil:
-			return nil, fmt.Errorf("read protected resource: %w", err)
-		default:
-			// The last document read stands in for the live read a login makes once the cached list ages out.
-			cached = remotesessions.ResourceScopesFromRow(&resource, true)
-			cached.ScopesSupported = resource.ScopesSupported
+		logins = append(logins, l)
+	}
+	if len(logins) == 0 {
+		l, err := login(uuid.Nil, "", false)
+		if err != nil {
+			return nil, err
 		}
-		logins = append(logins, Login{
-			Request:      remotesessions.ClientConnectionScopes(input, cached, owns).Scopes,
-			ResourceCopy: sameSet(row.Scope, cached.ScopesSupported),
-		})
+		logins = append(logins, l)
 	}
 	return logins, nil
+}
+
+// cachedResource is the resource row a login reads without probing, plus the
+// list the row last advertised. Only the former predicts the request: a login
+// whose probe fails ignores a list past its last-good window.
+func cachedResource(ctx context.Context, db remotesessionsrepo.DBTX, project uuid.UUID, url string) (remotesessions.ResourceScopes, []string, error) {
+	none := remotesessions.ResourceScopesFromRow(nil, true)
+	if url == "" {
+		return none, nil, nil
+	}
+	row, err := remotemcprepo.New(db).GetRemoteProtectedResource(ctx, remotemcprepo.GetRemoteProtectedResourceParams{ProjectID: project, ResourceIdentifier: url})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return none, nil, nil
+	case err != nil:
+		return none, nil, fmt.Errorf("read protected resource: %w", err)
+	}
+	return remotesessions.ResourceScopesFromRow(&row, true), row.ScopesSupported, nil
 }
 
 // clear rechecks the evidence under the row lock, then clears and audits in one transaction.
@@ -342,6 +369,10 @@ func (r *Runner) restore(ctx context.Context, entry ListBackfillClearsRow) (Outc
 	}
 	if err := r.auditWrite(ctx, tx, entry.OrganizationID, before, after); err != nil {
 		return "", err
+	}
+	// A dry run takes the same path and rolls it back, so it reports what apply would do.
+	if !r.options.Apply {
+		return OutcomeWouldRestore, nil
 	}
 	if err := tx.Commit(context.WithoutCancel(ctx)); err != nil {
 		return "", fmt.Errorf("commit: %w", err)

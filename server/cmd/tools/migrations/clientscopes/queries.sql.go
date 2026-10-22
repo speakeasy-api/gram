@@ -12,6 +12,44 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const attachMemberClientFixture = `-- name: AttachMemberClientFixture :exec
+WITH rms AS (
+  INSERT INTO remote_mcp_servers (project_id, transport_type, url)
+  VALUES ($1, 'streamable-http', $3)
+  RETURNING id
+), srv AS (
+  INSERT INTO mcp_servers (project_id, remote_mcp_server_id, visibility)
+  SELECT $1, rms.id, 'private' FROM rms
+  RETURNING id, project_id
+), attach AS (
+  INSERT INTO mcp_server_remote_session_clients (project_id, organization_id, mcp_server_id, remote_session_client_id, client_attachment_scope)
+  SELECT srv.project_id, $2, srv.id, $6, 'project:' || srv.project_id::text FROM srv
+)
+INSERT INTO remote_protected_resources (project_id, organization_id, resource_identifier, scopes_supported, scope_override, metadata_fetched_at)
+VALUES ($1, $2, $3, $4, $5::text[], clock_timestamp())
+`
+
+type AttachMemberClientFixtureParams struct {
+	ProjectID       uuid.UUID
+	OrganizationID  string
+	Url             string
+	ScopesSupported []string
+	ScopeOverride   []string
+	ClientID        uuid.UUID
+}
+
+func (q *Queries) AttachMemberClientFixture(ctx context.Context, arg AttachMemberClientFixtureParams) error {
+	_, err := q.db.Exec(ctx, attachMemberClientFixture,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.Url,
+		arg.ScopesSupported,
+		arg.ScopeOverride,
+		arg.ClientID,
+	)
+	return err
+}
+
 const clearClientScope = `-- name: ClearClientScope :one
 UPDATE remote_session_clients
 SET scope = NULL,
@@ -225,6 +263,53 @@ func (q *Queries) ListClientLoginServers(ctx context.Context, arg ListClientLogi
 	for rows.Next() {
 		var i ListClientLoginServersRow
 		if err := rows.Scan(&i.UserSessionIssuerID, &i.ProjectID, &i.Url); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listClientMemberServers = `-- name: ListClientMemberServers :many
+SELECT
+  x.project_id,
+  COALESCE(rms.url, '')::text AS url
+FROM mcp_server_remote_session_clients AS x
+JOIN mcp_servers AS m ON m.id = x.mcp_server_id AND m.project_id = x.project_id AND m.deleted IS FALSE
+JOIN projects AS mp ON mp.id = x.project_id AND mp.deleted IS FALSE
+LEFT JOIN remote_mcp_servers AS rms ON rms.id = m.remote_mcp_server_id AND rms.project_id = m.project_id AND rms.deleted IS FALSE
+WHERE x.remote_session_client_id = $1
+  AND x.organization_id = $2
+  AND x.deleted IS FALSE
+  AND ($3::uuid IS NULL OR x.project_id = $3::uuid)
+ORDER BY m.id ASC
+`
+
+type ListClientMemberServersParams struct {
+	ClientID       uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.NullUUID
+}
+
+type ListClientMemberServersRow struct {
+	ProjectID uuid.UUID
+	Url       string
+}
+
+// Servers the client is attached to directly, which gateway member logins read with it; url is empty when not remote-backed.
+func (q *Queries) ListClientMemberServers(ctx context.Context, arg ListClientMemberServersParams) ([]ListClientMemberServersRow, error) {
+	rows, err := q.db.Query(ctx, listClientMemberServers, arg.ClientID, arg.OrganizationID, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListClientMemberServersRow
+	for rows.Next() {
+		var i ListClientMemberServersRow
+		if err := rows.Scan(&i.ProjectID, &i.Url); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -580,10 +665,10 @@ WITH rms AS (
   RETURNING id
 ), srv AS (
   INSERT INTO mcp_servers (project_id, user_session_issuer_id, remote_mcp_server_id, visibility)
-  SELECT $1, $5, rms.id, 'private' FROM rms
+  SELECT $1, $6, rms.id, 'private' FROM rms
 )
-INSERT INTO remote_protected_resources (project_id, organization_id, resource_identifier, scopes_supported)
-VALUES ($1, $2, $3, $4)
+INSERT INTO remote_protected_resources (project_id, organization_id, resource_identifier, scopes_supported, metadata_fetched_at)
+VALUES ($1, $2, $3, $4, $5)
 `
 
 type SeedServerResourceFixtureParams struct {
@@ -591,6 +676,7 @@ type SeedServerResourceFixtureParams struct {
 	OrganizationID      string
 	Url                 string
 	ScopesSupported     []string
+	MetadataFetchedAt   pgtype.Timestamptz
 	UserSessionIssuerID uuid.NullUUID
 }
 
@@ -600,6 +686,7 @@ func (q *Queries) SeedServerResourceFixture(ctx context.Context, arg SeedServerR
 		arg.OrganizationID,
 		arg.Url,
 		arg.ScopesSupported,
+		arg.MetadataFetchedAt,
 		arg.UserSessionIssuerID,
 	)
 	return err
