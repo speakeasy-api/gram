@@ -46,7 +46,7 @@ func (s *seeder) seedSignalConversations(ctx context.Context) error {
 		owner := demoUsers[(n/signalSessionSize)%len(demoUsers)]
 		if n%signalSessionSize == signalSessionSize-1 {
 			age := int(s.now.Sub(at) / time.Minute)
-			if err := s.q.ActivityInsertChat(ctx, repo.ActivityInsertChatParams{ID: chat, ProjectID: s.projectID(), OrganizationID: s.orgID(), UserID: s.userID(owner.handle), ExternalUserID: s.email(owner.handle), Title: "Signal exploration example", SessionSurface: activityText("claude-code"), CreatedAge: activityMinutes(age), UpdatedAge: activityMinutes(age - (signalSessionSize-1)*10)}); err != nil {
+			if err := s.q.ActivityInsertChat(ctx, repo.ActivityInsertChatParams{ID: chat, ProjectID: s.projectID(), OrganizationID: s.orgID(), UserID: s.userID(owner.handle), ExternalUserID: s.email(owner.handle), Title: "Signal exploration example", SessionSurface: activityText("claude-code"), AgentID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, CreatedAge: activityMinutes(age), UpdatedAge: activityMinutes(age - (signalSessionSize-1)*10)}); err != nil {
 				return fmt.Errorf("seed signal conversation: %w", err)
 			}
 		}
