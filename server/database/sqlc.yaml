@@ -454,6 +454,16 @@ sql:
         omit_unused_structs: true
 
   - schema: schema.sql
+    queries: ../cmd/tools/migrations/clientscopes/queries.sql
+    engine: postgresql
+    gen:
+      go:
+        package: "clientscopes"
+        out: "../cmd/tools/migrations/clientscopes"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true
+
+  - schema: schema.sql
     queries: ../cmd/tools/migrations/openrouterdisablecauses/queries.sql
     engine: postgresql
     gen:

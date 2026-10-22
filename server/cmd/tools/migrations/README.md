@@ -11,6 +11,7 @@ the shared harness. The migrations shipped today:
 | Postgres `risk_results` → ClickHouse `risk_findings`                                | [RISK_RESULTS_MIGRATION.md](./RISK_RESULTS_MIGRATION.md)               |
 | `risk_findings` `message_created_at`/`assistant_id` column backfill (via mutations) | [RISKFINDINGS_COLS_MIGRATION.md](./RISKFINDINGS_COLS_MIGRATION.md)     |
 | Canonical hosted MCP wrappers for legacy toolsets                                   | [HOSTED_MCP_WRAPPERS_MIGRATION.md](./HOSTED_MCP_WRAPPERS_MIGRATION.md) |
+| Clear scopes copied onto remote session clients before #7199                        | [CLIENT_SCOPES_BACKFILL.md](./CLIENT_SCOPES_BACKFILL.md)               |
 
 ## Concepts
 
