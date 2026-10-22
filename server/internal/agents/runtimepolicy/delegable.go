@@ -229,7 +229,7 @@ func DelegationContainedFor(representedUserID string, delegated DelegatedPolicy,
 			}
 			for _, overlap := range liveOverlaps(policy, grant, exclusion, representedUserID) {
 				covered := slices.ContainsFunc(grants, func(carried authz.Grant) bool {
-					return carried.Scope == exclusion && carried.Selector.StrictMatches(overlap.selector)
+					return carried.Scope == exclusion && carried.Selector.StrictMatchesFor(overlap.selector, representedUserID)
 				})
 				if !covered {
 					return false, nil

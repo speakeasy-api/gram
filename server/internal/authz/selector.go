@@ -82,6 +82,13 @@ func (s Selector) StrictMatches(check Selector) bool {
 	return s.strictMatches(check, "")
 }
 
+// StrictMatchesFor is StrictMatches with $represented_user bound to
+// representedUser on either side. An empty representedUser binds nothing, so
+// the marker matches only itself.
+func (s Selector) StrictMatchesFor(check Selector, representedUser string) bool {
+	return s.strictMatches(check, representedUser)
+}
+
 func (s Selector) strictMatches(check Selector, representedUser string) bool {
 	for k, grantVal := range s {
 		checkVal, ok := check[k]

@@ -260,3 +260,28 @@ func TestDirectOwnConnectionGrantOutranksInheritedSymbolicBlock(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, contained, "the principal's own block is never outranked")
 }
+
+func TestCarriedSymbolicBlockCoversRepresentedUsersPinnedBlock(t *testing.T) {
+	t.Parallel()
+
+	allow := authGrant("user:user_u", authz.ScopeMCPAuth, "*", ownedBy(authz.SelectorValueRepresentedUser))
+	restriction := authGrant("agent:agent_1", authz.ScopeMCPBlockedAuth, "client_a", ownedBy("user_u"))
+	parent := []authz.Grant{allow, restriction}
+	policy := mustAuthPolicy(t,
+		authGrant("", authz.ScopeMCPAuth, "*", ownedBy(authz.SelectorValueRepresentedUser)),
+		authGrant("", authz.ScopeMCPBlockedAuth, "client_a", ownedBy(authz.SelectorValueRepresentedUser)),
+	)
+
+	contained, err := DelegationContainedFor("user_u", policy, parent)
+	require.NoError(t, err)
+	require.True(t, contained, "acting for user_u, the symbolic block covers user_u's pinned block")
+
+	contained, err = DelegationContained(policy, parent)
+	require.NoError(t, err)
+	require.False(t, contained, "without a known represented user the symbolic carry does not cover a concrete pin")
+
+	uncarried := mustAuthPolicy(t, authGrant("", authz.ScopeMCPAuth, "*", ownedBy(authz.SelectorValueRepresentedUser)))
+	contained, err = DelegationContainedFor("user_u", uncarried, parent)
+	require.NoError(t, err)
+	require.False(t, contained, "the pinned block must still be carried for user_u")
+}
