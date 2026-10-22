@@ -13,7 +13,6 @@ import { PaygPortalButton } from "@/components/billing/payg-portal-button";
 import { ResumePaygButton } from "@/components/billing/resume-payg-button";
 import { StartPaygCheckoutCTA } from "@/components/billing/start-payg-checkout-cta";
 import { useStripeSubscription } from "@/components/billing/use-stripe-subscription";
-import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
@@ -24,6 +23,7 @@ import { useSession } from "@/contexts/Auth";
 import { useProductTier } from "@/hooks/useProductTier";
 import { isNotFoundError } from "@/lib/route-errors";
 import type { ReactNode } from "react";
+import { Heading } from "../ui/Heading";
 
 /**
  * Offers checkout during an active trial or when Free/Base or PAYG has no subscription.
@@ -33,7 +33,9 @@ import type { ReactNode } from "react";
  */
 export function PaygPlanSection({
   paymentDetails = false,
-}: { paymentDetails?: boolean } = {}): JSX.Element | null {
+}: {
+  paymentDetails?: boolean;
+} = {}): JSX.Element | null {
   const productTier = useProductTier();
   const { eligible, trialLifecycle } = usePaygCheckoutAccess("active-trial");
 
@@ -56,7 +58,7 @@ export function PaygPlanSection({
   if (productTier !== "payg" && !paymentDetails) return null;
 
   return (
-    <PaymentSection description="Your pay-as-you-go subscription, payment method, and invoices.">
+    <PaymentSection>
       <PaygPlanBody />
     </PaymentSection>
   );
@@ -107,16 +109,17 @@ function PaymentSection({
   description,
   children,
 }: {
-  description: string;
+  description?: string;
   children: ReactNode;
 }): JSX.Element {
   return (
-    <Page.Section>
-      {/* Secondary section: suppress the area eyebrow. */}
-      <Page.Section.Title area="">Payment</Page.Section.Title>
-      <Page.Section.Description>{description}</Page.Section.Description>
-      <Page.Section.Body>{children}</Page.Section.Body>
-    </Page.Section>
+    <section className="space-y-6">
+      <div className="border-b border-border pb-2">
+        <Heading variant="h3">Payment</Heading>
+      </div>
+      {description && <Text muted>{description}</Text>}
+      {children}
+    </section>
   );
 }
 
@@ -214,8 +217,8 @@ function PaygPlanDetails({
   const copy = planCopy(state, subscription);
 
   return (
-    <Stack gap={4}>
-      <Stack gap={1}>
+    <Stack gap={6}>
+      <Stack gap={2}>
         <Text className="font-medium">{copy.headline}</Text>
         <Text muted small>
           {copy.detail}

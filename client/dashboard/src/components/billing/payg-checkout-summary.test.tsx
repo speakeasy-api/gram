@@ -96,7 +96,7 @@ it("uses the small pricing heading without repeating trial copy", () => {
   expect(
     screen.queryByText("No charge today. Billing starts when your trial ends."),
   ).toBeNull();
-  expectRate("$0.35 per M tokens");
+  expectRate("$0.35 per million tokens");
 });
 
 it.each([
@@ -112,7 +112,7 @@ it.each([
         checkout={checkout({ unitLabel, minorUnitsAmount })}
       />,
     );
-    expectRate(`${expected} per M tokens`);
+    expectRate(`${expected} per million tokens`);
   },
 );
 
@@ -161,10 +161,10 @@ it("does not advertise a trial when Stripe has none", () => {
 });
 
 it.each([
-  ["Tokens under management", 0.000035, "$0.35 per M tokens"],
-  ["Sandbox MCP egress", 0.000001862645, "$20.00 per GiB"],
-  ["Sandbox risk scans", 0.000099, "$0.99 per M tokens scanned"],
-  ["AI Control Plane PAYG", 0.000035, "$0.35 per M tokens"],
+  ["Tokens under management", 0.000035, "$0.35 per million tokens"],
+  ["Sandbox MCP egress", 0.000001862645, "$20.00 per GiB of egress"],
+  ["Sandbox risk scans", 0.000099, "$0.99 per million tokens scanned"],
+  ["AI Control Plane PAYG", 0.000035, "$0.35 per million tokens"],
   ["Unknown tokens", 0.000035, "$0.00000035 per unit"],
   ["Unknown egress", 0.000001862645, "$0.00000001862645 per unit"],
 ])("handles unlabeled catalog item %s", (name, minorUnitsAmount, expected) => {
@@ -180,9 +180,14 @@ it.each([
   ["Sandbox MCP egress", "GiB", 2000, "$20.00 per GiB"],
   ["Tokens under management", "request", 35, "$0.35 per request"],
   ["Sandbox risk scans", "million tokens", 99, "$0.99 per million tokens"],
-  ["Usage", "bytes", 0.000001862645, "$20.00 per GiB"],
-  ["Sandbox risk scans", null, 0.00000001, "$0.0001 per M tokens scanned"],
-  ["Sandbox MCP egress", null, 0.000002, "$21.47 per GiB"],
+  ["Usage", "bytes", 0.000001862645, "$20.00 per GiB of egress"],
+  [
+    "Sandbox risk scans",
+    null,
+    0.00000001,
+    "$0.0001 per million tokens scanned",
+  ],
+  ["Sandbox MCP egress", null, 0.000002, "$21.47 per GiB of egress"],
 ])(
   "uses Stripe's rate and explicit units for %s (%s)",
   (name, unitLabel, minorUnitsAmount, expected) => {
@@ -292,8 +297,8 @@ it.each([
     const heading = screen.getByRole("heading", { name: "Usage" });
     expect(heading.nextElementSibling).toBeNull();
     expect(item.querySelectorAll("p")).toHaveLength(1);
-    expectRate("$0.35 per M tokens");
-    expect(item.textContent).toBe("Usage$0.35 per M tokens");
+    expectRate("$0.35 per million tokens");
+    expect(item.textContent).toBe("Usage$0.35 per million tokens");
   },
 );
 
