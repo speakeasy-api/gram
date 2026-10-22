@@ -65,7 +65,7 @@ const KIND_OPTIONS = [
   { label: "Spans", value: EventLogEntryKind.Span },
 ];
 
-function isEventKind(value: string): value is EventLogEntryKind {
+function isEventKind(value: string): value is "log" | "span" {
   return value === EventLogEntryKind.Log || value === EventLogEntryKind.Span;
 }
 

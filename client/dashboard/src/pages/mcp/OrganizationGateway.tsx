@@ -1,3 +1,16 @@
+import {
+  BRAND_MESH_SURFACE_CLASS,
+  BrandMeshLayers,
+} from "@/components/brand-mesh";
+import {
+  PageTabsList,
+  PageTabsTrigger,
+  Tabs,
+  TabsContent,
+} from "@/components/ui/Tabs";
+import { cn } from "@/lib/utils";
+import { MCPAssignments } from "../access/MCPAssignments";
+import { GatewayAccessReview } from "./GatewayAccessReview";
 import { SpeakeasyMark } from "@/components/mcp/OrganizationGatewayCard";
 import {
   GatewayNotServed,
@@ -15,6 +28,7 @@ import { CopyButton } from "@/components/ui/CopyButton";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
 import { useOrganization } from "@/contexts/Auth";
+import { useRBAC } from "@/hooks/useRBAC";
 import { useIsCurrentOrganization } from "@/hooks/useIsCurrentOrganization";
 import { AgentPlatformPickerItem } from "@/pages/setup/components/agent-platform-picker-item";
 import { PlatformInstrumentationSheet } from "@/pages/setup/components/platform-instrumentation-sheet";
@@ -55,6 +69,26 @@ function OrganizationGatewayContent({
     isPending,
   } = useOrganizationGatewaySetting({ organizationId, isCurrentOrganization });
 
+  const { hasScope, isLoading: permissionsLoading } = useRBAC();
+  const canManage =
+    !permissionsLoading && hasScope("org:admin", organizationId);
+  const [reviewing, setReviewing] = useState(false);
+  const [selectedTab, setTab] = useState<string>();
+  const tab =
+    selectedTab ?? (isOn === false && canManage ? "assignments" : "install");
+  const endpointUrl =
+    isOn && gateway.data?.available ? gateway.data.url : undefined;
+
+  let installStatus =
+    "Organization Gateway installation is unavailable. Check the gateway status above.";
+  if (isOn === false) {
+    installStatus = canManage
+      ? "Enable Organization Gateway to get your endpoint and installation steps."
+      : "An organization admin must enable Organization Gateway before installation details are available.";
+  } else if (gateway.isLoading || isOn === undefined) {
+    installStatus = "Loading Organization Gateway installation details…";
+  }
+
   return (
     <SettingsPage
       title={
@@ -67,34 +101,114 @@ function OrganizationGatewayContent({
       }
       description={
         <span className="block max-w-2xl">
-          A single endpoint through which your team can access all of their
-          servers. Each person signs in once with their Speakeasy account and
-          gets every MCP server they have access to, across all projects. As
-          their access changes, so does what they see.
+          One unified MCP server containing every MCP server each person can
+          access across all projects. Each person signs in with their Speakeasy
+          account. As their access changes, so does what they can use.
         </span>
       }
-      primaryAction={
-        isOn !== undefined && !features.isLoading ? (
-          // Not a <label>: label activation would forward clicks on the text
-          // to the switch past RequireScope's pointer-events guard.
-          <div className="flex items-center gap-3">
-            <Text small muted as="span">
-              {isOn ? "Enabled" : "Off"}
-            </Text>
-            <OrganizationGatewaySwitch
-              on={isOn}
-              setOn={setOn}
-              isPending={isPending}
-            />
-          </div>
-        ) : undefined
-      }
+      renderHeader={(header) => (
+        <section
+          className={cn(
+            BRAND_MESH_SURFACE_CLASS,
+            "border-border mb-8 border px-6 py-6 sm:px-8 sm:py-8",
+          )}
+        >
+          <BrandMeshLayers />
+          {header}
+          <section
+            aria-label={endpointUrl ? "Gateway endpoint" : "Gateway status"}
+            className="border-border flex min-w-0 flex-col gap-4 border bg-white px-5 py-4 text-black sm:flex-row sm:items-center"
+          >
+            <div className="min-w-0 flex-1">
+              <GatewayBody gateway={gateway} isOn={isOn} />
+            </div>
+            <div className="flex shrink-0 items-stretch self-end divide-x divide-black/10 border border-black/10 bg-black/5 sm:self-auto">
+              {isOn !== undefined && !!features.data && !features.error ? (
+                // Not a <label>: label activation would forward clicks on the text
+                // to the switch past RequireScope's pointer-events guard.
+                <div className="flex items-center gap-3 px-4 py-2">
+                  <Text small as="span" className="text-black/60">
+                    {isOn ? "Enabled" : "Disabled"}
+                  </Text>
+                  <OrganizationGatewaySwitch
+                    on={isOn}
+                    setOn={(enabled, options) => {
+                      if (enabled) {
+                        setReviewing(true);
+                        setTab("assignments");
+                      } else setOn(false, options);
+                    }}
+                    isPending={isPending}
+                  />
+                </div>
+              ) : undefined}
+              {endpointUrl && (
+                <CopyButton
+                  text={endpointUrl}
+                  size="lg"
+                  tooltip="Copy endpoint"
+                  className="h-auto shrink-0 rounded-none text-black hover:bg-black/5 hover:text-black"
+                />
+              )}
+            </div>
+          </section>
+        </section>
+      )}
     >
-      <GatewayBody
-        gateway={gateway}
-        isOn={isOn}
-        serverName={organizationSlug}
-      />
+      {features.error && (
+        <Alert variant="error">
+          <AlertDescription>
+            Couldn&apos;t load the gateway setting.
+            <Button variant="secondary" onClick={() => void features.refetch()}>
+              Retry
+            </Button>
+          </AlertDescription>
+        </Alert>
+      )}
+      <div className="space-y-8">
+        <Tabs value={tab} onValueChange={setTab}>
+          <div className="border-border border-b">
+            <PageTabsList>
+              <PageTabsTrigger value="install">Install</PageTabsTrigger>
+              <RequireScope scope="org:admin" level="component">
+                <PageTabsTrigger value="assignments">
+                  View assignments
+                </PageTabsTrigger>
+              </RequireScope>
+            </PageTabsList>
+          </div>
+          <TabsContent value="install" className="mt-6">
+            {endpointUrl ? (
+              <OrganizationGatewayInstall
+                serverName={organizationSlug}
+                url={endpointUrl}
+              />
+            ) : (
+              <Text small muted>
+                {installStatus}
+              </Text>
+            )}
+          </TabsContent>
+          <TabsContent value="assignments" className="mt-6">
+            <RequireScope scope="org:admin" level="section">
+              {reviewing &&
+              isOn === false &&
+              !!features.data &&
+              !features.error ? (
+                <GatewayAccessReview
+                  isPending={isPending}
+                  onCancel={() => setReviewing(false)}
+                  onEnable={() =>
+                    setOn(true, { onSuccess: () => setReviewing(false) })
+                  }
+                />
+              ) : (
+                <MCPAssignments />
+              )}
+            </RequireScope>
+          </TabsContent>
+        </Tabs>
+      </div>
     </SettingsPage>
   );
 }
@@ -102,19 +216,12 @@ function OrganizationGatewayContent({
 function GatewayBody({
   gateway,
   isOn,
-  serverName,
 }: {
   gateway: OrganizationGatewaySetting["gateway"];
   isOn: boolean | undefined;
-  serverName: string;
 }): JSX.Element {
   if (gateway.isLoading) {
-    return (
-      <div className="space-y-8">
-        <Skeleton className="h-16 w-full" />
-        <Skeleton className="h-72 w-full" />
-      </div>
-    );
+    return <Skeleton className="h-6 w-full" />;
   }
 
   if (gateway.error || !gateway.data) {
@@ -143,8 +250,8 @@ function GatewayBody({
     return (
       <Alert variant="warning">
         <AlertDescription>
-          Your team can&apos;t reach their servers through this endpoint until
-          it is turned back on.
+          Organization Gateway is off. An organization admin must review MCP
+          assignments before enabling this endpoint for the team.
         </AlertDescription>
       </Alert>
     );
@@ -163,18 +270,11 @@ function GatewayBody({
   }
 
   return (
-    <div className="space-y-10">
-      <section>
-        <h2 className="text-eyebrow mb-3">Endpoint</h2>
-        <div className="border-border bg-card flex items-center gap-3 border px-4 py-3">
-          <Text className="min-w-0 flex-1 truncate font-mono text-sm">
-            {url}
-          </Text>
-          <CopyButton text={url} size="sm" tooltip="Copy endpoint" />
-        </div>
-      </section>
-
-      <OrganizationGatewayInstall serverName={serverName} url={url} />
+    <div className="min-w-0 space-y-2">
+      <h2 className="text-eyebrow text-black/60">Endpoint URL</h2>
+      <code className="block font-mono text-sm break-all sm:text-base">
+        {url}
+      </code>
     </div>
   );
 }
@@ -193,8 +293,7 @@ function OrganizationGatewayInstall({
   const [openPlatformId, setOpenPlatformId] = useState<string | null>(null);
   return (
     <section>
-      <h2 className="text-eyebrow">Install</h2>
-      <Text small muted className="mt-1 mb-4">
+      <Text small muted className="mb-4">
         Pick your agent for its steps. The first time it connects, it opens your
         browser to sign in.
       </Text>

@@ -12,7 +12,11 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { ActionIconTile } from "@/components/auditlogs/feed";
 import { subjectHref } from "@/components/auditlogs/subject-href";
 import { useSlugs } from "@/contexts/Sdk";
-import { formatSubjectLabel, renderVerb } from "@/lib/audit-log-format";
+import {
+  formatSubjectLabel,
+  getActorLabel,
+  renderVerb,
+} from "@/lib/audit-log-format";
 import { format, formatDistanceToNow, isToday, isYesterday } from "date-fns";
 import type { AuditLog } from "@gram/client/models/components/auditlog.js";
 
@@ -60,8 +64,10 @@ export function ActivityTimelineCard({
               <p className="text-eyebrow mb-2">{group.label}</p>
               <ul className="divide-border divide-y">
                 {group.logs.map((log) => {
-                  const actor =
-                    log.actorDisplayName ?? log.actorSlug ?? "Unknown";
+                  // Via the shared helper: an agent actor carries no
+                  // display name, and this read "Unknown" for every change
+                  // an agent made.
+                  const actor = getActorLabel(log);
                   const actionLabel = renderVerb(log);
                   const subjectPrincipal = auditSubjectPrincipal(log);
                   const subjectLabel = log.subjectDisplayName

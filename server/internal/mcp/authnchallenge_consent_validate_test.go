@@ -765,7 +765,7 @@ func TestServeConsentAction_ValidateRefusesUnconnectedAndUnroutable(t *testing.T
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
-	require.ErrorContains(t, err, "Connect this service before verifying it.")
+	require.ErrorContains(t, err, "unknown remote session client", "a client no member is associated with is not offered at all")
 	require.Empty(t, w.Header().Get("Location"))
 
 	// A grant qualified to another upstream is unroutable on this gateway.

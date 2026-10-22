@@ -75,6 +75,8 @@ func chatListRow(id uuid.UUID, createdAt time.Time, userID, externalUserID, acco
 		AccountEmail:         accountEmail,
 		AssistantID:          uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		AssistantName:        pgtype.Text{String: "", Valid: false},
+		AgentID:              uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		AgentName:            pgtype.Text{String: "", Valid: false},
 		TotalCount:           total,
 	}
 }

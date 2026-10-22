@@ -8,7 +8,7 @@ import { FormPage } from "@/components/page-templates";
 import { useRoutes } from "@/routes";
 import { encodeIdentityUrn } from "@/lib/identity-urn";
 
-import { ProvisionWizard } from "./provision/ProvisionWizard";
+import { CredentialsWizard } from "./credentials/CredentialsWizard";
 
 /**
  * Registering an agent, which is the one thing about an agent that is a
@@ -72,7 +72,7 @@ export default function NewAgentIdentity(): JSX.Element {
       {/* The dock floats over the bottom of the content, which on this page
           is the wizard's own footer and its Continue button. */}
       <InsightsConfig hideTrigger />
-      <ProvisionWizard
+      <CredentialsWizard
         initialPlatformKey={platformKey}
         onDone={done}
         onBusy={setBusy}

@@ -227,6 +227,7 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 	if err != nil {
 		return err
 	}
+	callbackOrigins.OrganizationHosts = orgHosts
 	identityResolver.SetNewOrganizationDefaultHost(orgHosts.NewOrganizationDefaultHost())
 
 	enc, err := encryption.New(c.String("encryption-key"))

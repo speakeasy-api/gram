@@ -84433,6 +84433,12 @@ components:
         account_type:
           type: string
           description: Account type that produced the chat ('team', 'personal', or empty), resolved from the linked AI account.
+        agent_id:
+          type: string
+          description: The ID of the agent that produced this session, recorded from the authenticated actor at capture. Set for sessions an agent drove directly, such as a channel session, which has no assistant record.
+        agent_name:
+          type: string
+          description: The current name of the agent that produced this session. Absent when the agent has since been deleted, in which case agent_id is still reported.
         agent_usage:
           $ref: '#/components/schemas/AgentUsage'
         assistant_agent_id:
@@ -84714,6 +84720,12 @@ components:
         account_type:
           type: string
           description: Account type that produced the chat ('team', 'personal', or empty), resolved from the linked AI account.
+        agent_id:
+          type: string
+          description: The ID of the agent that produced this session, recorded from the authenticated actor at capture. Set for sessions an agent drove directly, such as a channel session, which has no assistant record.
+        agent_name:
+          type: string
+          description: The current name of the agent that produced this session. Absent when the agent has since been deleted, in which case agent_id is still reported.
         assistant_agent_id:
           type: string
           description: The ID of the agent the assistant acts as, when the assistant has a dedicated agent identity
@@ -115073,10 +115085,10 @@ components:
       enum: [security, tools, server]
     KillswitchScopeAllServersType: {type: string, enum: [all_servers]}
     KillswitchScopeSelectedServersType: {type: string, enum: [selected_servers]}
-    KillswitchScheduleStartNow: {type: string, enum: [now]}
-    KillswitchScheduleStartScheduled: {type: string, enum: [scheduled]}
-    KillswitchScheduleEndUntilLifted: {type: string, enum: [until_lifted]}
-    KillswitchScheduleEndBounded: {type: string, enum: [bounded]}
+    KillswitchScheduleStartNow: {type: string, enum: [now], x-speakeasy-unknown-values: disallow}
+    KillswitchScheduleStartScheduled: {type: string, enum: [scheduled], x-speakeasy-unknown-values: disallow}
+    KillswitchScheduleEndUntilLifted: {type: string, enum: [until_lifted], x-speakeasy-unknown-values: disallow}
+    KillswitchScheduleEndBounded: {type: string, enum: [bounded], x-speakeasy-unknown-values: disallow}
     KillswitchScope:
       oneOf:
         - title: KillswitchAllServersScope

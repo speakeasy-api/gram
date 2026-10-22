@@ -2,6 +2,7 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ManagedAgent } from "@gram/client/models/components/managedagent.js";
 import type { WorkloadAdmission } from "@gram/client/models/components/workloadadmission.js";
+import { unrecognized } from "@gram/client/types/unrecognized.js";
 import { afterEach, expect, it, vi } from "vitest";
 import { AgentFederatedAccess } from "./AgentFederatedAccess";
 
@@ -154,3 +155,24 @@ it("flags a wildcard rule the platform has not turned on", () => {
   const { container } = renderPanel();
   expect(container.querySelector(".bg-warning")).toBeTruthy();
 });
+
+it.each([
+  ["exact", "One workload"],
+  ["wildcard", "Any workload in the connected organization"],
+  [unrecognized("future_match"), "Unknown workload coverage"],
+] as const)(
+  "describes %s admission coverage without guessing",
+  (matchKind, label) => {
+    mocks.admissions = [admission({ matchKind })];
+    const { container } = renderPanel();
+    expect(screen.getByText(label)).toBeTruthy();
+    expect(container.querySelector(".bg-warning")).toBeNull();
+    if (matchKind !== "exact" && matchKind !== "wildcard") {
+      expect(screen.queryByText("One workload")).toBeNull();
+      expect(
+        screen.queryByText("Any workload in the connected organization"),
+      ).toBeNull();
+      expect(screen.queryByText("future_match")).toBeNull();
+    }
+  },
+);

@@ -32,8 +32,20 @@ import (
 
 func attachedMCPMux(ti *testInstance) goahttp.Muxer {
 	mux := goahttp.NewMuxer()
-	mcp.Attach(mux, ti.service, nil)
-	return mux
+	mcp.Attach(mux, ti.service.Service, nil)
+	return migratedMux{Muxer: mux, service: ti.service}
+}
+
+// migratedMux serves the attached routes as migratedService serves its entry
+// points: each request first runs the migration.
+type migratedMux struct {
+	goahttp.Muxer
+	service *migratedService
+}
+
+func (m migratedMux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	m.service.migrate(r.Context())
+	m.Muxer.ServeHTTP(w, r)
 }
 
 func serveAttached(t *testing.T, ctx context.Context, mux goahttp.Muxer, method, target, bearer string, body []byte, headers map[string]string) *httptest.ResponseRecorder {

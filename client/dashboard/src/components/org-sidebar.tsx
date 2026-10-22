@@ -25,7 +25,6 @@ import { Wrench } from "lucide-react";
 import { useCanSetUpOrg } from "@/hooks/useCanSetUpOrg";
 import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
 import { useRBAC } from "@/hooks/useRBAC";
-import { useTelemetry } from "@/contexts/Telemetry";
 import { useFeatureFlag } from "@/hooks/useFeatureFlag";
 import { FEATURE_FLAGS } from "@/lib/featureFlags";
 
@@ -62,7 +61,6 @@ export function OrgSidebar({
   const { isLoading: rbacLoading, hasScope } = useRBAC();
   const canReadFeatures = !rbacLoading && hasScope("org:read", organization.id);
   const canSetUpOrg = useCanSetUpOrg();
-  const telemetry = useTelemetry();
   const { data: featuresData } = useProductFeatures(
     { organizationId: organization.id },
     undefined,
@@ -74,8 +72,6 @@ export function OrgSidebar({
   );
   const productFeatures = canReadFeatures ? featuresData : undefined;
   const isPlatformAdmin = useIsPlatformAdmin();
-  const isDeviceAgentEnabled =
-    telemetry.isFeatureEnabled("gram-device-agent") ?? false;
   const isUserSessionIssuersEnabled =
     useFeatureFlag(FEATURE_FLAGS.userSessionIssuerDashboard).status ===
     "enabled";
@@ -245,9 +241,7 @@ export function OrgSidebar({
                 Icon={(p) => <Icon {...p} name="shield-check" />}
                 items={[
                   { item: orgRoutes.auditLogs, scope: orgReadOrAdmin },
-                  ...(isDeviceAgentEnabled
-                    ? [{ item: orgRoutes.deviceAgent, scope: orgReadOrAdmin }]
-                    : []),
+                  { item: orgRoutes.deviceAgent, scope: orgReadOrAdmin },
                 ]}
               />
 

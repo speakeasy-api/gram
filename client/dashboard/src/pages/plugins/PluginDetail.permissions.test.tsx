@@ -415,11 +415,7 @@ describe("plugin detail permission boundary", () => {
         expect(screen.getByText("Example server")).toBeTruthy();
       }
       expect(adminQuery).toHaveBeenCalled();
-      expect(features).toHaveBeenLastCalledWith(
-        { organizationId: "org-a" },
-        undefined,
-        { enabled: false },
-      );
+      expect(features).not.toHaveBeenCalled();
       expect(screen.queryByText("Distribution-only skills")).toBeNull();
       for (const query of Object.values(assignments))
         expect(query).not.toHaveBeenCalled();
