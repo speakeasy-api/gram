@@ -37,11 +37,13 @@ the Homebrew `cli` formula no longer conflicts with the SDK generator formula
 
 - Homebrew and npm: upgrade as usual. The upgrade replaces `speakeasy` with
   `speakeasy-ai`.
-- Install script: run it again. It installs `speakeasy-ai` and tells you how to
-  remove the old `speakeasy` copy.
-- An older copy still run as `speakeasy` prints a deprecation notice. Running
-  an SDK generator command such as `speakeasy run` with it says how to install
-  `speakeasy-ai`, or how to install the SDK generator as `speakeasy-sdks`.
+- Install script: run it again. It installs `speakeasy-ai`, and warns when an
+  old `speakeasy` copy of this CLI is in the same folder. Remove old copies in
+  other folders yourself.
+- A copy updated to this release and still run as `speakeasy` prints a
+  deprecation notice. Running an SDK generator command such as `speakeasy run`
+  with it says how to install `speakeasy-ai`, or how to install the SDK
+  generator as `speakeasy-sdks`.
 
 ### Migrating from `gram`
 

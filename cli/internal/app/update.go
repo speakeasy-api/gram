@@ -26,7 +26,7 @@ const (
 	githubReleasesAPI = "https://api.github.com/repos/speakeasy-api/gram/releases"
 	githubDownloadURL = "https://github.com/speakeasy-api/gram/releases/download"
 
-	// homebrewFormula is the Homebrew formula that installs the speakeasy
+	// homebrewFormula is the Homebrew formula that installs the speakeasy-ai
 	// command.
 	homebrewFormula = "speakeasy-api/tap/cli"
 
@@ -344,14 +344,11 @@ func homebrewFormulaFor(arg0 string) string {
 	return homebrewFormula
 }
 
-// versionHint tells the user how to check the version they now have, using
-// the command name they ran.
-func versionHint() string {
-	name := commandName
-	if invokedAs(os.Args[0]) == legacyCommandName {
-		name = legacyCommandName
-	}
-	return fmt.Sprintf("  Run '%s --version' to verify the new version", name)
+// versionHint tells the user how to check the version they now have. An
+// update keeps the name a copy runs under, such as gram or speakeasy, so the
+// hint names the command they ran.
+func versionHint(arg0 string) string {
+	return fmt.Sprintf("  Run '%s --version' to verify the new version", invokedAs(arg0))
 }
 
 func updateViaHomebrew(ctx context.Context, logger *slog.Logger) error {
@@ -367,7 +364,7 @@ func updateViaHomebrew(ctx context.Context, logger *slog.Logger) error {
 
 	successStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("2")).Bold(true)
 	fmt.Println(successStyle.Render("✓ Successfully updated the speakeasy-ai CLI via Homebrew"))
-	fmt.Println(versionHint())
+	fmt.Println(versionHint(os.Args[0]))
 	return nil
 }
 
@@ -384,7 +381,7 @@ func updateViaNPM(ctx context.Context, logger *slog.Logger) error {
 
 	successStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("2")).Bold(true)
 	fmt.Println(successStyle.Render("✓ Successfully updated the speakeasy-ai CLI via npm"))
-	fmt.Println(versionHint())
+	fmt.Println(versionHint(os.Args[0]))
 	return nil
 }
 
@@ -401,7 +398,7 @@ func updateViaAqua(ctx context.Context, logger *slog.Logger) error {
 
 	successStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("2")).Bold(true)
 	fmt.Println(successStyle.Render("✓ Successfully updated the speakeasy-ai CLI via Aqua"))
-	fmt.Println(versionHint())
+	fmt.Println(versionHint(os.Args[0]))
 	return nil
 }
 
@@ -457,7 +454,7 @@ func updateManual(ctx context.Context, logger *slog.Logger, release *githubRelea
 
 	successStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("2")).Bold(true)
 	fmt.Println(successStyle.Render(fmt.Sprintf("✓ Successfully updated the speakeasy-ai CLI to version %s", version)))
-	fmt.Println(versionHint())
+	fmt.Println(versionHint(os.Args[0]))
 	return nil
 }
 
