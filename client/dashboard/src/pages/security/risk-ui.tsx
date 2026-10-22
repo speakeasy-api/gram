@@ -1,3 +1,5 @@
+import { RiskContentNotice } from "./RiskContentNotice";
+import { useRiskContentRestricted } from "./use-risk-content-restricted";
 import { Eye, EyeOff, Loader2, Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -160,8 +162,10 @@ export function RevealAllToggle({
   className?: string;
 }): JSX.Element | null {
   const { hasScope } = useRBAC();
+  const restricted = useRiskContentRestricted();
   const ctx = useRevealAll();
   if (!ctx) return null;
+  if (restricted) return <RiskContentNotice />;
   // No point offering a reveal-all control when every value stays masked.
   if (!hasScope(REVEAL_SCOPE)) return null;
   const { revealAll, setRevealAll } = ctx;
@@ -303,7 +307,8 @@ export function MaskedMatch({
 }): JSX.Element {
   const contrast = tone === "contrast";
   const { hasScope } = useRBAC();
-  const canReveal = hasScope(REVEAL_SCOPE, chatId);
+  const restricted = useRiskContentRestricted();
+  const canReveal = !restricted && hasScope(REVEAL_SCOPE, chatId);
   const ctx = useRevealAll();
   const generation = ctx?.generation;
   const revealAll = ctx?.revealAll ?? false;
@@ -327,6 +332,7 @@ export function MaskedMatch({
     if (revealAll && canReveal) reveal();
   }, [generation, revealAll, canReveal, reveal]);
 
+  if (restricted) return <RiskContentNotice />;
   if (!resultId || !matchRedacted) return <span>-</span>;
 
   // Without chat:read the plaintext can never be revealed, so say which
@@ -525,13 +531,23 @@ export function EventMatchDialog({
   rationale: string | undefined;
 }): JSX.Element {
   const { hasScope } = useRBAC();
-  const canReveal = hasScope(REVEAL_SCOPE);
+  const restricted = useRiskContentRestricted();
+  const canReveal = !restricted && hasScope(REVEAL_SCOPE);
   const [open, setOpen] = useState(false);
   const { value, evidenceNotStored, isLoading, reveal } = useUnmaskedMatch(
     resultId ?? "",
   );
 
   const summary = rationale?.trim() ? rationale.trim() : null;
+
+  if (restricted) {
+    return (
+      <span className="flex min-w-0 flex-col gap-1">
+        {summary && <RationaleText text={summary} />}
+        <RiskContentNotice />
+      </span>
+    );
+  }
 
   if (!resultId || !matchRedacted || !hasRevealableEvent(matchRedacted)) {
     return summary ? <RationaleText text={summary} /> : <span>-</span>;

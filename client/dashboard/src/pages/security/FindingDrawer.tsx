@@ -1,3 +1,4 @@
+import { useRiskContentRestricted } from "./use-risk-content-restricted";
 import { IdentityLink } from "@/components/identity-link";
 import { Button } from "@/components/ui/Button";
 import { CopyButton } from "@/components/ui/CopyButton";
@@ -330,10 +331,10 @@ function FindingDetail({
   const { hasScope } = useRBAC();
   const kind = findingKind(result);
   // Payload reveals need unrestricted chat:read; chat reveals follow the chat.
-  const canReveal = hasScope(
-    REVEAL_SCOPE,
-    kind === "mcp" ? "*" : (result.chatId ?? "*"),
-  );
+  const restricted = useRiskContentRestricted();
+  const canReveal =
+    !restricted &&
+    hasScope(REVEAL_SCOPE, kind === "mcp" ? "*" : (result.chatId ?? "*"));
   const chatLike = isChatLikeKind(kind);
   const [revealed, setRevealed] = useDrawerReveal(result.id);
 
