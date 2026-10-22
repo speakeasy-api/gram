@@ -76,9 +76,9 @@ type DirectRemoteInspector interface {
 }
 
 // GuardianDirectRemoteInspector canonicalizes, validates, and probes one
-// direct remote MCP using Guardian before every network hop. It supports only
-// Streamable HTTP's JSON response form; standalone SSE is intentionally not a
-// D1 admission path.
+// direct remote MCP using Guardian before every network hop. It supports both
+// JSON and SSE responses to Streamable HTTP POST requests; standalone SSE is
+// intentionally not an admission path.
 type GuardianDirectRemoteInspector struct {
 	policy *guardian.Policy
 }
@@ -196,8 +196,9 @@ func (b *directRemoteResponseBudget) consumeRequest() error {
 }
 
 // directRemoteRoundTripper serializes accounting across SDK requests, redirects,
-// OAuth discovery and session cleanup. Bodies are buffered within the aggregate
-// cap so redirects and SDK-discarded error bodies also consume the same budget.
+// OAuth discovery and session cleanup. Finite bodies are buffered within the
+// aggregate cap. SSE bodies are metered as the SDK reads through the first
+// complete JSON-RPC response, so an open stream cannot hold inspection forever.
 type directRemoteRoundTripper struct {
 	base   http.RoundTripper
 	policy *guardian.Policy
@@ -308,7 +309,13 @@ func (rt *directRemoteRoundTripper) roundTrip(req *http.Request) (*http.Response
 		return nil, directRemoteTransportError(rt.ctx, err)
 	}
 	body := resp.Body
-	defer o11y.NoLogDefer(func() error { return body.Close() })
+	closeBody := true
+	defer o11y.NoLogDefer(func() error {
+		if closeBody {
+			return body.Close()
+		}
+		return nil
+	})
 	if purpose == directRemoteMCPRequest {
 		rt.finalURL, rt.status = target, resp.StatusCode
 		if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
@@ -320,9 +327,10 @@ func (rt *directRemoteRoundTripper) roundTrip(req *http.Request) (*http.Response
 	}
 	mediaType := strings.ToLower(strings.TrimSpace(strings.Split(resp.Header.Get("Content-Type"), ";")[0]))
 	successfulMCP := purpose == directRemoteMCPRequest && resp.StatusCode >= http.StatusOK && resp.StatusCode < http.StatusMultipleChoices
-	// Reject SSE before buffering: a stream would otherwise hold the body open.
 	if successfulMCP && mediaType == "text/event-stream" {
-		return nil, setupFailure(SetupCategoryInvalidMCPResponse, ErrDirectRemoteRejected)
+		resp.Body = &directRemoteBudgetedBody{body: body, transport: rt}
+		closeBody = false
+		return resp, nil
 	}
 	payload, err := io.ReadAll(io.LimitReader(resp.Body, int64(rt.budget.remaining)+1))
 	exceeded := len(payload) > rt.budget.remaining
@@ -339,6 +347,40 @@ func (rt *directRemoteRoundTripper) roundTrip(req *http.Request) (*http.Response
 	}
 	resp.Body = io.NopCloser(bytes.NewReader(payload))
 	return resp, nil
+}
+
+type directRemoteBudgetedBody struct {
+	body      io.ReadCloser
+	transport *directRemoteRoundTripper
+}
+
+func (b *directRemoteBudgetedBody) Read(p []byte) (int, error) {
+	if len(p) == 0 {
+		return 0, nil
+	}
+	b.transport.mu.Lock()
+	defer b.transport.mu.Unlock()
+	if b.transport.budget.remaining <= 0 {
+		var extra [1]byte
+		if n, err := b.body.Read(extra[:]); n == 0 && errors.Is(err, io.EOF) {
+			return 0, io.EOF
+		}
+		err := setupFailure(SetupCategoryTemporarilyUnavailable, ErrDirectRemoteUnavailable)
+		if b.transport.failure == nil {
+			b.transport.failure = err
+		}
+		return 0, err
+	}
+	if len(p) > b.transport.budget.remaining {
+		p = p[:b.transport.budget.remaining]
+	}
+	n, err := b.body.Read(p)
+	b.transport.budget.remaining -= n
+	return n, err
+}
+
+func (b *directRemoteBudgetedBody) Close() error {
+	return b.body.Close()
 }
 
 func directRemoteValidationError(ctx context.Context, err error) error {
