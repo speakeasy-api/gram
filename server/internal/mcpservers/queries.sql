@@ -789,3 +789,32 @@ JOIN projects p
 WHERE e.project_id = ANY(@project_ids::uuid[])
   AND e.mcp_server_id = ANY(@mcp_server_ids::uuid[])
   AND e.deleted IS FALSE;
+
+-- name: ListToolsetHostingMCPServerIDs :many
+-- A toolset's host is its canonical wrapper (id = toolset id); without one, its
+-- oldest server with an endpoint. Visibility is ignored so a toggle never moves it.
+SELECT DISTINCT ON (ms.toolset_id)
+    ms.toolset_id::uuid AS toolset_id
+  , ms.id AS mcp_server_id
+FROM mcp_servers ms
+JOIN projects p
+  ON p.id = ms.project_id
+  AND p.organization_id = @organization_id
+  AND p.deleted IS FALSE
+WHERE ms.toolset_id = ANY(@toolset_ids::uuid[])
+  AND ms.project_id = ANY(@project_ids::uuid[])
+  AND ms.deleted IS FALSE
+  AND (
+    ms.id = ms.toolset_id
+    OR (
+      NOT EXISTS (
+        SELECT 1 FROM mcp_servers c
+        WHERE c.id = ms.toolset_id AND c.project_id = ms.project_id AND c.deleted IS FALSE
+      )
+      AND EXISTS (
+        SELECT 1 FROM mcp_endpoints e
+        WHERE e.mcp_server_id = ms.id AND e.project_id = ms.project_id AND e.deleted IS FALSE
+      )
+    )
+  )
+ORDER BY ms.toolset_id, (ms.id = ms.toolset_id) DESC, ms.created_at, ms.id;

@@ -63,5 +63,6 @@ func BuildMcpServerToolsetSummaryView(row repo.ListToolsetSummariesByIDsRow) *ty
 		ExternalMcpProxyOnly:  row.ExternalMcpProxyOnly,
 		ExternalOauthServerID: conv.FromNullableUUID(row.ExternalOauthServerID),
 		RegistrySpecifier:     conv.PtrEmpty(row.RegistrySpecifier),
+		HostingMcpServerID:    nil,
 	}
 }
