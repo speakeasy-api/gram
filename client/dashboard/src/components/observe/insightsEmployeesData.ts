@@ -1,7 +1,6 @@
 import { dateTimeFormatters } from "@/lib/dates";
-import { mergeUserSummaries } from "@/components/observe/mergeUserSummaries";
 import type { AccessMember } from "@gram/client/models/components/accessmember.js";
-import type { DirectoryPersonState } from "@gram/client/models/components/directoryperson.js";
+import type { DirectoryState } from "@/pages/identities/directoryPeople";
 import type { Role } from "@gram/client/models/components/role.js";
 import type { UserSummary } from "@gram/client/models/components/usersummary.js";
 import { allMemberRoleIds } from "@/lib/member-roles";
@@ -37,7 +36,7 @@ export type Employee = {
   // directory people read has been folded in (see
   // pages/identities/directoryPeople). Absent when that read is unavailable or
   // the identity has no directory profile.
-  directoryState?: DirectoryPersonState;
+  directoryState?: DirectoryState;
   // Whether activity has been observed for this identity (hook or MCP
   // telemetry), at any time.
   seen: boolean;
@@ -251,29 +250,6 @@ function groupSummariesByMember(
       (summary) => !matchedSummaryIds.has(summary.userId),
     ),
   };
-}
-
-// foldSummariesForMembers collapses the raw searchUsers result to one summary
-// per person for pages that render summaries directly (the agents page): each
-// member's matched summaries merge into one keyed by the member id, and
-// unmatched summaries pass through as-is.
-export function foldSummariesForMembers(
-  members: AccessMember[],
-  summaries: UserSummary[],
-): UserSummary[] {
-  const { groups, unmatched } = groupSummariesByMember(members, summaries);
-  const folded: UserSummary[] = [];
-  for (const { member, matched } of groups) {
-    const merged = mergeUserSummaries(matched);
-    if (merged) {
-      folded.push({
-        ...merged,
-        userId: member.id,
-        userEmail: merged.userEmail || member.email,
-      });
-    }
-  }
-  return [...folded, ...unmatched];
 }
 
 export function buildEmployees(

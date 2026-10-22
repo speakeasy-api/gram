@@ -49,4 +49,5 @@ export function useUpstreamProbe(
     case "unreachable":
       return "unknown";
   }
+  return "unknown";
 }

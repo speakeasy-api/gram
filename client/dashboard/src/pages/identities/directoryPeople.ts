@@ -7,8 +7,19 @@ import type { Employee } from "@/components/observe/insightsEmployeesData";
 import { accessListDirectoryPeople } from "@gram/client/funcs/accessListDirectoryPeople";
 import { unwrapAsync } from "@gram/client/types/fp";
 
+/**
+ * The states this dashboard knows how to show. The SDK's enum is open, so a
+ * newer server could send one it does not; knownDirectoryState drops those
+ * rather than rendering a raw value.
+ */
+export type DirectoryState =
+  | "member"
+  | "account_not_member"
+  | "not_signed_in"
+  | "ambiguous_email";
+
 /** How each directory state reads, wherever it is shown. */
-export const DIRECTORY_STATE_LABELS: Record<DirectoryPersonState, string> = {
+export const DIRECTORY_STATE_LABELS: Record<DirectoryState, string> = {
   member: "Member",
   account_not_member: "Account, not a member",
   not_signed_in: "Not signed in",
@@ -16,10 +27,7 @@ export const DIRECTORY_STATE_LABELS: Record<DirectoryPersonState, string> = {
 };
 
 /** What each state means, for tooltips. */
-export const DIRECTORY_STATE_DESCRIPTIONS: Record<
-  DirectoryPersonState,
-  string
-> = {
+export const DIRECTORY_STATE_DESCRIPTIONS: Record<DirectoryState, string> = {
   member:
     "Linked to, or the only email match of, a member of this organization.",
   account_not_member:
@@ -30,7 +38,15 @@ export const DIRECTORY_STATE_DESCRIPTIONS: Record<
 };
 
 /** The states that describe someone the directory knows but who is not a member. */
-const NOT_MEMBER_DIRECTORY_STATES: DirectoryPersonState[] = [
+export function knownDirectoryState(
+  state: DirectoryPersonState,
+): DirectoryState | undefined {
+  return Object.hasOwn(DIRECTORY_STATE_LABELS, state)
+    ? (state as DirectoryState)
+    : undefined;
+}
+
+const NOT_MEMBER_DIRECTORY_STATES: DirectoryState[] = [
   "account_not_member",
   "not_signed_in",
   "ambiguous_email",
@@ -72,7 +88,7 @@ export function directoryPersonName(person: DirectoryPerson): string {
 // When one row stands for several profiles, the state that most needs a
 // reader's attention wins: an ambiguous address is never matched, so it says
 // more than any single profile's state.
-const STATE_PRIORITY: Record<DirectoryPersonState, number> = {
+const STATE_PRIORITY: Record<DirectoryState, number> = {
   ambiguous_email: 3,
   account_not_member: 2,
   not_signed_in: 1,
@@ -80,9 +96,9 @@ const STATE_PRIORITY: Record<DirectoryPersonState, number> = {
 };
 
 function strongerState(
-  current: DirectoryPersonState | undefined,
-  next: DirectoryPersonState,
-): DirectoryPersonState {
+  current: DirectoryState | undefined,
+  next: DirectoryState,
+): DirectoryState {
   if (!current) return next;
   return STATE_PRIORITY[next] > STATE_PRIORITY[current] ? next : current;
 }
@@ -120,7 +136,9 @@ export function mergeDirectoryPeople(
 
   const added: Employee[] = [];
   for (const person of people) {
-    if (person.state === "member" && person.userId) {
+    const state = knownDirectoryState(person.state);
+    if (!state) continue;
+    if (state === "member" && person.userId) {
       const member = byUserId.get(person.userId);
       if (member) {
         member.directoryState = strongerState(member.directoryState, "member");
@@ -133,10 +151,7 @@ export function mergeDirectoryPeople(
     const existing = byEmail.get(email);
     if (existing) {
       existing.inDirectory = true;
-      existing.directoryState = strongerState(
-        existing.directoryState,
-        person.state,
-      );
+      existing.directoryState = strongerState(existing.directoryState, state);
       existing.teams = unionTeams(existing.teams, person);
       if (existing.name === existing.email || !existing.name) {
         existing.name = directoryPersonName(person);
@@ -151,7 +166,7 @@ export function mergeDirectoryPeople(
       role: "",
       inDirectory: true,
       seen: false,
-      directoryState: person.state,
+      directoryState: state,
       tokenCount: 0,
       lastActivity: "\u2014",
       lastActivityTimestamp: null,

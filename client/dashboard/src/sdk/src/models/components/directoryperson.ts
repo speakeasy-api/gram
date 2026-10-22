@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
@@ -25,7 +26,7 @@ export const DirectoryPersonState = {
 /**
  * How the profile relates to Speakeasy accounts. member: linked to, or the only email match of, a member of this organization. account_not_member: an account exists but is not a member here. not_signed_in: no matching account. ambiguous_email: the email matches more than one profile or account, so it is never matched.
  */
-export type DirectoryPersonState = ClosedEnum<typeof DirectoryPersonState>;
+export type DirectoryPersonState = OpenEnum<typeof DirectoryPersonState>;
 
 export type DirectoryPerson = {
   /**
@@ -59,9 +60,10 @@ export type DirectoryPerson = {
 };
 
 /** @internal */
-export const DirectoryPersonState$inboundSchema: z.ZodMiniEnum<
-  typeof DirectoryPersonState
-> = z.enum(DirectoryPersonState);
+export const DirectoryPersonState$inboundSchema: z.ZodMiniType<
+  DirectoryPersonState,
+  unknown
+> = openEnums.inboundSchema(DirectoryPersonState);
 
 /** @internal */
 export const DirectoryPerson$inboundSchema: z.ZodMiniType<

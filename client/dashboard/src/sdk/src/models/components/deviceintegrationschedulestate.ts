@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
@@ -22,7 +23,7 @@ export const DeviceIntegrationScheduleStateStatus = {
 /**
  * Derived status for the schedule's latest sync state.
  */
-export type DeviceIntegrationScheduleStateStatus = ClosedEnum<
+export type DeviceIntegrationScheduleStateStatus = OpenEnum<
   typeof DeviceIntegrationScheduleStateStatus
 >;
 
@@ -69,9 +70,10 @@ export type DeviceIntegrationScheduleState = {
 };
 
 /** @internal */
-export const DeviceIntegrationScheduleStateStatus$inboundSchema: z.ZodMiniEnum<
-  typeof DeviceIntegrationScheduleStateStatus
-> = z.enum(DeviceIntegrationScheduleStateStatus);
+export const DeviceIntegrationScheduleStateStatus$inboundSchema: z.ZodMiniType<
+  DeviceIntegrationScheduleStateStatus,
+  unknown
+> = openEnums.inboundSchema(DeviceIntegrationScheduleStateStatus);
 
 /** @internal */
 export const DeviceIntegrationScheduleState$inboundSchema: z.ZodMiniType<
