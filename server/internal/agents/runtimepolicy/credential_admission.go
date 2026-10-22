@@ -73,7 +73,7 @@ func AdmitPrincipalCredentialWithDBTX(ctx context.Context, tx accessrepo.DBTX) (
 		}
 	} else {
 		var err error
-		storedPolicy, legacyAuthCeiling, err = admitStoredPolicy(credential.DelegatedGrantsVersion, credential.DelegatedGrants)
+		storedPolicy, legacyAuthCeiling, err = admitStoredPolicy(ctx, tx, authCtx.ActiveOrganizationID, credential.DelegatedGrantsVersion, credential.DelegatedGrants)
 		if err != nil {
 			if errors.Is(err, ErrInvalidDelegatedPolicy) {
 				return authz.PrincipalCredentialAdmission{}, oops.C(oops.CodeUnauthorized)

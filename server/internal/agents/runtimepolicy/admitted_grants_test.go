@@ -27,6 +27,34 @@ func authCeiling(projectID string) authz.Grant {
 	return authz.Grant{PrincipalUrn: "", Scope: authz.ScopeMCPAuth, Selector: selector, Inferred: false}
 }
 
+func noServers(string) (string, bool, error) { return "", false, nil }
+
+func mustAdmit(t *testing.T, version DelegatedPolicyVersion, policy DelegatedPolicy, resolve mcpProjectResolver) []authz.Grant {
+	t.Helper()
+	grants, err := admittedGrants(version, policy, resolve)
+	require.NoError(t, err)
+	return grants
+}
+
+func TestAdmittedGrantsBoundProjectlessServerGrantsToTheServersProject(t *testing.T) {
+	t.Parallel()
+
+	legacy, err := NewDelegatedPolicy(DelegatedPolicyVersion4, []authz.Grant{
+		authz.NewGrantWithSelector(authz.ScopeMCPConnect, connectSelector("server-1", "")),
+		authz.NewGrantWithSelector(authz.ScopeMCPConnect, connectSelector("server-gone", "")),
+	})
+	require.NoError(t, err)
+	admitted := mustAdmit(t, DelegatedPolicyVersion4, legacy, func(id string) (string, bool, error) {
+		if id == "server-1" {
+			return "project-q", true, nil
+		}
+		return "", false, nil
+	})
+	require.Contains(t, admitted, authCeiling("project-q"), "a server grant reaches its server's project")
+	require.NotContains(t, admitted, authCeiling(""), "never the whole organization")
+	require.Len(t, admitted, len(legacy.RuntimeGrants())+1, "an unknown server reaches nothing")
+}
+
 func TestAdmittedGrantsPrepareLegacyPoliciesInPlace(t *testing.T) {
 	t.Parallel()
 
@@ -37,7 +65,8 @@ func TestAdmittedGrantsPrepareLegacyPoliciesInPlace(t *testing.T) {
 		authz.NewGrant(authz.ScopeProjectRead, "project-p"),
 	})
 	require.NoError(t, err)
-	admitted := admittedGrants(DelegatedPolicyVersion4, legacy)
+	admitted, err := admittedGrants(DelegatedPolicyVersion4, legacy, noServers)
+	require.NoError(t, err)
 	require.Contains(t, admitted, authCeiling("project-p"), "connecting in a project reaches that project's clients")
 	require.Contains(t, admitted, authCeiling(""), "organization-wide connect reaches every client")
 	auth := 0
@@ -51,16 +80,16 @@ func TestAdmittedGrantsPrepareLegacyPoliciesInPlace(t *testing.T) {
 
 	noConnect, err := NewDelegatedPolicy(DelegatedPolicyVersion4, []authz.Grant{authz.NewGrant(authz.ScopeProjectRead, "project-p")})
 	require.NoError(t, err)
-	require.Equal(t, noConnect.RuntimeGrants(), admittedGrants(DelegatedPolicyVersion4, noConnect), "no server access, no clients")
+	require.Equal(t, noConnect.RuntimeGrants(), mustAdmit(t, DelegatedPolicyVersion4, noConnect, noServers), "no server access, no clients")
 
 	current, err := NewDelegatedPolicy(CurrentDelegatedPolicyVersion, []authz.Grant{authz.NewGrantWithSelector(authz.ScopeMCPConnect, connectSelector("server-1", "project-p"))})
 	require.NoError(t, err)
-	require.Equal(t, current.RuntimeGrants(), admittedGrants(CurrentDelegatedPolicyVersion, current), "a version 5 policy states its auth clients itself")
+	require.Equal(t, current.RuntimeGrants(), mustAdmit(t, CurrentDelegatedPolicyVersion, current, noServers), "a version 5 policy states its auth clients itself")
 
 	for _, version := range []DelegatedPolicyVersion{DelegatedPolicyVersion1, DelegatedPolicyVersion2, DelegatedPolicyVersion3, DelegatedPolicyVersion4} {
 		writer, err := NewDelegatedPolicy(version, []authz.Grant{authz.NewGrantWithSelector(authz.ScopeMCPWrite, connectSelector("server-1", "project-p"))})
 		require.NoError(t, err)
-		require.Contains(t, admittedGrants(version, writer), authCeiling("project-p"), "write implies connect at version %d", version)
+		require.Contains(t, mustAdmit(t, version, writer, noServers), authCeiling("project-p"), "write implies connect at version %d", version)
 	}
 }
 
@@ -79,7 +108,7 @@ func TestAdmitStoredPolicyFlagsOnlyDerivedCeilings(t *testing.T) {
 		require.NoError(t, err)
 		raw, err := EncodeDelegatedPolicy(DelegatedPolicyVersion4, policy)
 		require.NoError(t, err)
-		_, derived, err := admitStoredPolicy(int32(DelegatedPolicyVersion4), raw)
+		_, derived, err := admitStoredPolicy(t.Context(), nil, "org-1", int32(DelegatedPolicyVersion4), raw)
 		require.NoError(t, err)
 		require.Equal(t, tc.derived, derived, tc.name)
 	}

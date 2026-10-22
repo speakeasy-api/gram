@@ -92,7 +92,7 @@ func admitWorkloadSessionInTx(ctx context.Context, tx accessrepo.DBTX) (authz.Wo
 		}
 	} else {
 		var err error
-		storedCeiling, legacyAuthCeiling, err = admitStoredPolicy(credential.DelegatedGrantsVersion, credential.DelegatedGrants)
+		storedCeiling, legacyAuthCeiling, err = admitStoredPolicy(ctx, tx, authCtx.ActiveOrganizationID, credential.DelegatedGrantsVersion, credential.DelegatedGrants)
 		if err != nil {
 			if errors.Is(err, ErrInvalidDelegatedPolicy) {
 				return authz.WorkloadSessionAdmission{}, oops.C(oops.CodeUnauthorized)
