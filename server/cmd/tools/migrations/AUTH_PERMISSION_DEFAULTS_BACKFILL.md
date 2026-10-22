@@ -46,7 +46,7 @@ A rollback deletes the provisioned grants that are still live, then their ledger
 - grants an admin took over by writing them (`taken_over_at` set), and
 - every grant of an API key whose provisioned policy an admin took over in part. Removing the rest would leave the key a narrower policy than it had before the backfill.
 
-Run it in a transaction, preview first, and scope it to one organization unless you mean all of them. After a rollback the ledger is gone, so a later run provisions again, including defaults admins had removed.
+Run it in a transaction, with no apply running for the organization (apply holds the organization lock, which this rollback does not take), preview first, and scope it to one organization unless you mean all of them. After a rollback the ledger is gone, so a later run provisions again, including defaults admins had removed.
 
 ```sql
 BEGIN;
