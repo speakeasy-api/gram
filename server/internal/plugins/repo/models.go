@@ -81,6 +81,33 @@ type PluginGithubConnection struct {
 	UpdatedAt pgtype.Timestamptz
 }
 
+type PluginServer struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	PluginID uuid.UUID
+	// @access: confidential
+	ProjectID uuid.NullUUID
+	// @access: confidential
+	McpServerID uuid.NullUUID
+	// @access: confidential
+	MetaMcpServerID uuid.NullUUID
+	// @access: confidential
+	DisplayName string
+	// @access: confidential
+	Policy string
+	// @access: confidential
+	SortOrder int32
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
+}
+
 type ProjectMarketplaceSetting struct {
 	// @access: confidential
 	ProjectID uuid.UUID
