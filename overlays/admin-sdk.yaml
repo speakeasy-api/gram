@@ -101,6 +101,15 @@ actions:
   - target: $.paths.*[?@.operationId=='adminGetOrganizationFeatures']
     update:
       x-speakeasy-name-override: getOrganizationFeatures
+  - target: $.paths.*[?@.operationId=='adminListSignupOffers']
+    update:
+      x-speakeasy-name-override: listSignupOffers
+  - target: $.paths.*[?@.operationId=='adminCreateSignupOffer']
+    update:
+      x-speakeasy-name-override: createSignupOffer
+  - target: $.paths.*[?@.operationId=='adminUpdateSignupOffer']
+    update:
+      x-speakeasy-name-override: updateSignupOffer
   - target: $.paths.*[?@.operationId=='adminListOnboardingUseCases']
     update:
       x-speakeasy-name-override: listOnboardingUseCases

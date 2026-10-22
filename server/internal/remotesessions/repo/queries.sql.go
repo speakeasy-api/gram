@@ -13,6 +13,40 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
+const adoptSpeakeasyConsentEMACredential = `-- name: AdoptSpeakeasyConsentEMACredential :execrows
+UPDATE remote_session_ema_credentials
+SET user_session_id = $1::uuid
+WHERE id = $2::uuid AND organization_id = $3::text AND project_id = $4::uuid
+  AND sign_in_id = $5::uuid AND user_session_id IS NULL
+  AND ema_provider = 'speakeasy' AND deleted IS FALSE
+`
+
+type AdoptSpeakeasyConsentEMACredentialParams struct {
+	UserSessionID  uuid.UUID
+	ID             uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.UUID
+	SignInID       uuid.UUID
+}
+
+// Binds a consent credential to a grant backed by the same sign-in. The caller
+// holds the publish locks and read the row as usable under them; this only
+// guards against a concurrent adoption or retirement. updated_at is left
+// unchanged: it records when the vendor issued the token.
+func (q *Queries) AdoptSpeakeasyConsentEMACredential(ctx context.Context, arg AdoptSpeakeasyConsentEMACredentialParams) (int64, error) {
+	result, err := q.db.Exec(ctx, adoptSpeakeasyConsentEMACredential,
+		arg.UserSessionID,
+		arg.ID,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.SignInID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const attachPrincipalRemoteSessionBinding = `-- name: AttachPrincipalRemoteSessionBinding :one
 INSERT INTO principal_remote_session_bindings
 (project_id, organization_id, principal_id, user_session_issuer_id, remote_session_client_id, remote_session_id, grant_generation, attached_by_subject_id)
@@ -3009,6 +3043,72 @@ func (q *Queries) GetActiveRemoteSession(ctx context.Context, arg GetActiveRemot
 	return i, err
 }
 
+const getActiveRemoteSessionInTenant = `-- name: GetActiveRemoteSessionInTenant :one
+SELECT s.id, s.grant_generation, s.subject_urn, s.user_session_issuer_id, s.remote_session_client_id, s.access_token_encrypted, s.access_expires_at, s.refresh_token_encrypted, s.authorization_expires_at, s.refresh_expires_at, s.scopes, s.resource, s.auto_refresh, s.last_refresh_attempt_at, s.last_used_at, s.upstream_subject, s.upstream_email, s.upstream_display_name, s.identity_source, s.enrichment, s.last_validated_at, s.validation_status, s.validation_reason, s.created_at, s.updated_at, s.deleted_at, s.deleted FROM remote_sessions s
+JOIN remote_session_clients c ON c.id = s.remote_session_client_id AND NOT c.deleted
+JOIN remote_session_issuers i ON i.id = c.remote_session_issuer_id AND NOT i.deleted
+JOIN user_session_issuers u ON u.id = s.user_session_issuer_id
+LEFT JOIN projects up ON up.id = u.project_id
+JOIN projects p ON p.id = $1 AND p.organization_id = $2 AND NOT p.deleted
+WHERE s.subject_urn = $3 AND s.remote_session_client_id = $4 AND NOT s.deleted
+ AND (c.project_id = p.id OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = p.organization_id)))
+ AND (i.project_id = p.id OR (i.project_id IS NULL AND (i.organization_id IS NULL OR i.organization_id = p.organization_id)))
+ AND (up.organization_id = p.organization_id OR (u.project_id IS NULL AND u.organization_id = p.organization_id))
+`
+
+type GetActiveRemoteSessionInTenantParams struct {
+	ProjectID             uuid.UUID
+	OrganizationID        string
+	SubjectUrn            urn.SessionSubject
+	RemoteSessionClientID uuid.UUID
+}
+
+// GetActiveRemoteSession for the auth client resolver, which takes no user
+// session issuer link. The client's reach pins a project registration to its
+// project; the consent must have come through a live sign-in of the server's
+// organization, so an organization or global registration never crosses
+// organizations.
+// A deleted sign-in still names the organization the consent was made in.
+func (q *Queries) GetActiveRemoteSessionInTenant(ctx context.Context, arg GetActiveRemoteSessionInTenantParams) (RemoteSession, error) {
+	row := q.db.QueryRow(ctx, getActiveRemoteSessionInTenant,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.SubjectUrn,
+		arg.RemoteSessionClientID,
+	)
+	var i RemoteSession
+	err := row.Scan(
+		&i.ID,
+		&i.GrantGeneration,
+		&i.SubjectUrn,
+		&i.UserSessionIssuerID,
+		&i.RemoteSessionClientID,
+		&i.AccessTokenEncrypted,
+		&i.AccessExpiresAt,
+		&i.RefreshTokenEncrypted,
+		&i.AuthorizationExpiresAt,
+		&i.RefreshExpiresAt,
+		&i.Scopes,
+		&i.Resource,
+		&i.AutoRefresh,
+		&i.LastRefreshAttemptAt,
+		&i.LastUsedAt,
+		&i.UpstreamSubject,
+		&i.UpstreamEmail,
+		&i.UpstreamDisplayName,
+		&i.IdentitySource,
+		&i.Enrichment,
+		&i.LastValidatedAt,
+		&i.ValidationStatus,
+		&i.ValidationReason,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const getClientCredentialsGrantClient = `-- name: GetClientCredentialsGrantClient :one
 SELECT
     c.id                                   AS client_id,
@@ -3578,6 +3678,47 @@ func (q *Queries) GetEMAProjectOrganization(ctx context.Context, projectID uuid.
 	var organization_id string
 	err := row.Scan(&organization_id)
 	return organization_id, err
+}
+
+const getEMAVendorIssuerRecord = `-- name: GetEMAVendorIssuerRecord :one
+SELECT i.id, COALESCE(i.name, '')::text AS name,
+  COALESCE(i.organization_id = $1::text OR (i.organization_id IS NULL AND i.project_id IS NULL), FALSE)::boolean AS settable
+FROM remote_session_issuers i
+LEFT JOIN projects p ON p.id = i.project_id
+WHERE i.issuer = ANY($2::text[]) AND i.deleted IS FALSE
+  AND (
+    i.organization_id = $1::text
+    OR (i.organization_id IS NULL AND i.project_id IS NULL)
+    OR (i.organization_id IS NULL AND p.organization_id = $1::text AND p.deleted IS FALSE)
+  )
+ORDER BY COALESCE(i.organization_id = $1::text OR (i.organization_id IS NULL AND i.project_id IS NULL), FALSE) DESC,
+  COALESCE(i.organization_id = $1::text, FALSE) DESC, (i.project_id IS NULL) DESC, i.created_at, i.id
+LIMIT 1
+`
+
+type GetEMAVendorIssuerRecordParams struct {
+	OrganizationID string
+	Issuers        []string
+}
+
+type GetEMAVendorIssuerRecordRow struct {
+	ID       uuid.UUID
+	Name     string
+	Settable bool
+}
+
+// Any issuer record the organization can name for a vendor, so its saved order
+// can be changed after its last binding is gone: the organization's own
+// records (including legacy project-owned ones with no organization_id,
+// resolved through their project), then the platform catalog. A record with
+// no organization and a project belongs to that project's organization, never
+// the platform. Records setEMAProviders accepts come first, the organization's
+// own before the catalog, then organization-level.
+func (q *Queries) GetEMAVendorIssuerRecord(ctx context.Context, arg GetEMAVendorIssuerRecordParams) (GetEMAVendorIssuerRecordRow, error) {
+	row := q.db.QueryRow(ctx, getEMAVendorIssuerRecord, arg.OrganizationID, arg.Issuers)
+	var i GetEMAVendorIssuerRecordRow
+	err := row.Scan(&i.ID, &i.Name, &i.Settable)
+	return i, err
 }
 
 const getGlobalRemoteSessionClientByID = `-- name: GetGlobalRemoteSessionClientByID :one
@@ -4342,6 +4483,184 @@ func (q *Queries) GetProjectOrganizationID(ctx context.Context, id uuid.UUID) (s
 	var organization_id string
 	err := row.Scan(&organization_id)
 	return organization_id, err
+}
+
+const getReachableRemoteSessionClient = `-- name: GetReachableRemoteSessionClient :one
+SELECT
+    c.id                                   AS client_id,
+    c.project_id                           AS client_project_id,
+    c.client_id                            AS external_client_id,
+    c.client_secret_encrypted              AS client_secret_encrypted,
+    c.token_endpoint_auth_method           AS token_endpoint_auth_method,
+    c.scope                                AS client_scope,
+    c.audience                             AS client_audience,
+    c.legacy_callback_url                  AS legacy_callback_url,
+    c.callback_base_url                    AS callback_base_url,
+    c.resource_identifier                  AS resource_identifier,
+    c.resource_name                        AS resource_name,
+    c.resource_documentation               AS resource_documentation,
+    c.resource_policy_uri                  AS resource_policy_uri,
+    c.resource_tos_uri                     AS resource_tos_uri,
+    c.client_secret_expires_at             AS client_secret_expires_at,
+    c.upstream_rejected_at                 AS upstream_rejected_at,
+    c.credential_owner                     AS credential_owner,
+    c.remote_session_issuer_id             AS remote_session_issuer_id,
+    i.tunneled_mcp_server_id               AS tunneled_mcp_server_id,
+    i.slug                                 AS issuer_slug,
+    i.name                                 AS issuer_name,
+    i.registration_endpoint                AS issuer_registration_endpoint,
+    i.logo_asset_id                        AS issuer_logo_asset_id,
+    i.service_documentation                AS issuer_service_documentation,
+    i.op_policy_uri                        AS issuer_op_policy_uri,
+    i.op_tos_uri                           AS issuer_op_tos_uri,
+    i.issuer                               AS issuer_url,
+    i.authorization_endpoint               AS authorization_endpoint,
+    i.token_endpoint                       AS token_endpoint,
+    i.scopes_supported                     AS scopes_supported,
+    i.scope_override                       AS scope_override,
+    i.omit_scope_fallback                  AS omit_scope_fallback,
+    i.code_challenge_methods_supported     AS code_challenge_methods_supported,
+    i.resource_indicator_supported         AS resource_indicator_supported,
+    i.authorization_response_iss_parameter_supported AS authorization_response_iss_parameter_supported,
+    i.metadata                             AS issuer_metadata,
+    i.passthrough                          AS passthrough,
+    i.oidc                                 AS oidc,
+    i.project_id                           AS issuer_project_id,
+    i.organization_id                      AS issuer_organization_id,
+    i.metadata_fetched_at                  AS metadata_fetched_at,
+    i.metadata_last_error_at               AS metadata_last_error_at,
+    i.metadata_last_error_url              AS metadata_last_error_url,
+    (
+      i.metadata IS NOT NULL AND (
+        i.introspection_endpoint_auth_methods_supported IS NULL
+        OR i.id_token_signing_alg_values_supported IS NULL
+        OR i.claims_supported IS NULL
+        OR i.backchannel_logout_supported IS NULL
+        OR i.authorization_response_iss_parameter_supported IS NULL
+        OR i.code_challenge_methods_supported IS NULL
+        OR (jsonb_typeof(COALESCE(NULLIF(i.metadata->'authorization_grant_profiles_supported', 'null'::jsonb), '[]'::jsonb)) IS DISTINCT FROM 'array'
+          OR COALESCE(NULLIF(i.metadata->'authorization_grant_profiles_supported', 'null'::jsonb), '[]'::jsonb) IS DISTINCT FROM to_jsonb(i.authorization_grant_profiles_supported)
+        )
+      )
+    )::boolean                             AS metadata_needs_reprojection
+FROM remote_session_clients AS c
+JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id
+JOIN projects AS p ON p.id = $1::uuid AND p.organization_id = $2::text AND p.deleted IS FALSE
+WHERE c.id = $3
+  AND (c.project_id = p.id OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = p.organization_id)))
+  AND (i.project_id = p.id OR (i.project_id IS NULL AND (i.organization_id IS NULL OR i.organization_id = p.organization_id)))
+  AND c.deleted IS FALSE
+  AND i.deleted IS FALSE
+`
+
+type GetReachableRemoteSessionClientParams struct {
+	ProjectID             uuid.UUID
+	OrganizationID        string
+	RemoteSessionClientID uuid.UUID
+}
+
+type GetReachableRemoteSessionClientRow struct {
+	ClientID                                   uuid.UUID
+	ClientProjectID                            uuid.NullUUID
+	ExternalClientID                           string
+	ClientSecretEncrypted                      pgtype.Text
+	TokenEndpointAuthMethod                    pgtype.Text
+	ClientScope                                []string
+	ClientAudience                             pgtype.Text
+	LegacyCallbackUrl                          bool
+	CallbackBaseUrl                            pgtype.Text
+	ResourceIdentifier                         pgtype.Text
+	ResourceName                               pgtype.Text
+	ResourceDocumentation                      pgtype.Text
+	ResourcePolicyUri                          pgtype.Text
+	ResourceTosUri                             pgtype.Text
+	ClientSecretExpiresAt                      pgtype.Timestamptz
+	UpstreamRejectedAt                         pgtype.Timestamptz
+	CredentialOwner                            string
+	RemoteSessionIssuerID                      uuid.UUID
+	TunneledMcpServerID                        uuid.NullUUID
+	IssuerSlug                                 string
+	IssuerName                                 pgtype.Text
+	IssuerRegistrationEndpoint                 pgtype.Text
+	IssuerLogoAssetID                          uuid.NullUUID
+	IssuerServiceDocumentation                 pgtype.Text
+	IssuerOpPolicyUri                          pgtype.Text
+	IssuerOpTosUri                             pgtype.Text
+	IssuerUrl                                  string
+	AuthorizationEndpoint                      pgtype.Text
+	TokenEndpoint                              pgtype.Text
+	ScopesSupported                            []string
+	ScopeOverride                              []string
+	OmitScopeFallback                          pgtype.Bool
+	CodeChallengeMethodsSupported              []string
+	ResourceIndicatorSupported                 pgtype.Bool
+	AuthorizationResponseIssParameterSupported pgtype.Bool
+	IssuerMetadata                             []byte
+	Passthrough                                bool
+	Oidc                                       bool
+	IssuerProjectID                            uuid.NullUUID
+	IssuerOrganizationID                       pgtype.Text
+	MetadataFetchedAt                          pgtype.Timestamptz
+	MetadataLastErrorAt                        pgtype.Timestamptz
+	MetadataLastErrorUrl                       pgtype.Text
+	MetadataNeedsReprojection                  bool
+}
+
+// One live client and its live issuer, when both are within the project's or
+// its organization's reach, with the columns of
+// ListRemoteSessionClientsForUserSessionIssuer. Unlike that query it requires
+// no link to a user session issuer: the auth client resolver has already
+// checked the client against the server, which authorizes it instead.
+func (q *Queries) GetReachableRemoteSessionClient(ctx context.Context, arg GetReachableRemoteSessionClientParams) (GetReachableRemoteSessionClientRow, error) {
+	row := q.db.QueryRow(ctx, getReachableRemoteSessionClient, arg.ProjectID, arg.OrganizationID, arg.RemoteSessionClientID)
+	var i GetReachableRemoteSessionClientRow
+	err := row.Scan(
+		&i.ClientID,
+		&i.ClientProjectID,
+		&i.ExternalClientID,
+		&i.ClientSecretEncrypted,
+		&i.TokenEndpointAuthMethod,
+		&i.ClientScope,
+		&i.ClientAudience,
+		&i.LegacyCallbackUrl,
+		&i.CallbackBaseUrl,
+		&i.ResourceIdentifier,
+		&i.ResourceName,
+		&i.ResourceDocumentation,
+		&i.ResourcePolicyUri,
+		&i.ResourceTosUri,
+		&i.ClientSecretExpiresAt,
+		&i.UpstreamRejectedAt,
+		&i.CredentialOwner,
+		&i.RemoteSessionIssuerID,
+		&i.TunneledMcpServerID,
+		&i.IssuerSlug,
+		&i.IssuerName,
+		&i.IssuerRegistrationEndpoint,
+		&i.IssuerLogoAssetID,
+		&i.IssuerServiceDocumentation,
+		&i.IssuerOpPolicyUri,
+		&i.IssuerOpTosUri,
+		&i.IssuerUrl,
+		&i.AuthorizationEndpoint,
+		&i.TokenEndpoint,
+		&i.ScopesSupported,
+		&i.ScopeOverride,
+		&i.OmitScopeFallback,
+		&i.CodeChallengeMethodsSupported,
+		&i.ResourceIndicatorSupported,
+		&i.AuthorizationResponseIssParameterSupported,
+		&i.IssuerMetadata,
+		&i.Passthrough,
+		&i.Oidc,
+		&i.IssuerProjectID,
+		&i.IssuerOrganizationID,
+		&i.MetadataFetchedAt,
+		&i.MetadataLastErrorAt,
+		&i.MetadataLastErrorUrl,
+		&i.MetadataNeedsReprojection,
+	)
+	return i, err
 }
 
 const getRemoteSessionByID = `-- name: GetRemoteSessionByID :one
@@ -5584,6 +5903,101 @@ func (q *Queries) GetRemoteURLForMcpServer(ctx context.Context, arg GetRemoteURL
 	return url, err
 }
 
+const getSpeakeasyConsentEMACredentialForUse = `-- name: GetSpeakeasyConsentEMACredentialForUse :one
+SELECT c.id, c.updated_at, c.access_token_encrypted, c.access_expires_at, c.granted_scopes,
+  COALESCE(
+    c.ema_provider = 'speakeasy'
+    AND c.remote_session_issuer_id = $1::uuid
+    AND c.client_selection = 'binding'
+    AND c.remote_session_ema_binding_id = $2::uuid
+    AND c.ema_binding_generation = $3::bigint
+    AND c.requested_scopes = $4::text[]
+    AND c.internal_session_issuer_id = $5::uuid
+    AND c.internal_session_issuer_updated_at = $6::timestamptz
+    AND c.internal_session_issuer_key_id = $7::uuid
+    AND c.sign_in_id = $8::uuid
+    AND c.user_session_id IS NULL
+    AND c.access_token_encrypted IS NOT NULL
+    AND c.access_expires_at > $9::timestamptz
+    AND EXISTS (
+      SELECT 1 FROM remote_session_ema_bindings b
+      WHERE b.id = c.remote_session_ema_binding_id AND b.generation = c.ema_binding_generation
+        AND b.project_id = c.project_id AND b.organization_id = c.organization_id
+        AND b.user_session_issuer_id = c.user_session_issuer_id
+        AND b.remote_session_issuer_id = c.remote_session_issuer_id
+        AND b.remote_session_client_id = c.remote_session_client_id
+        AND b.resource = c.resource AND b.state = 'ready'
+    ), FALSE)::boolean AS usable
+FROM remote_session_ema_credentials c
+WHERE c.organization_id = $10::text AND c.project_id = $11
+  AND c.user_session_issuer_id = $12
+  AND c.remote_session_client_id = $13 AND c.resource = $14
+  AND c.subject_urn = $15 AND c.user_session_id IS NULL AND c.sign_in_id = $8::uuid
+  AND c.deleted IS FALSE AND c.ema_provider = 'speakeasy'
+ORDER BY c.updated_at DESC, c.id DESC
+LIMIT 1
+`
+
+type GetSpeakeasyConsentEMACredentialForUseParams struct {
+	RemoteSessionIssuerID          uuid.UUID
+	BindingID                      uuid.UUID
+	BindingGeneration              int64
+	RequestedScopes                []string
+	InternalSessionIssuerID        uuid.UUID
+	InternalSessionIssuerUpdatedAt pgtype.Timestamptz
+	InternalSessionIssuerKeyID     uuid.UUID
+	SignInID                       uuid.UUID
+	UsableAfter                    pgtype.Timestamptz
+	OrganizationID                 string
+	ProjectID                      uuid.NullUUID
+	UserSessionIssuerID            uuid.NullUUID
+	RemoteSessionClientID          uuid.NullUUID
+	Resource                       string
+	SubjectUrn                     string
+}
+
+type GetSpeakeasyConsentEMACredentialForUseRow struct {
+	ID                   uuid.UUID
+	UpdatedAt            pgtype.Timestamptz
+	AccessTokenEncrypted pgtype.Text
+	AccessExpiresAt      pgtype.Timestamptz
+	GrantedScopes        []string
+	Usable               bool
+}
+
+// A consent credential has no MCP grant yet and belongs to the sign-in whose
+// consent page minted it. Its provenance predicate matches
+// GetSpeakeasyEMACredentialForUse, so adoption and reuse judge it alike.
+func (q *Queries) GetSpeakeasyConsentEMACredentialForUse(ctx context.Context, arg GetSpeakeasyConsentEMACredentialForUseParams) (GetSpeakeasyConsentEMACredentialForUseRow, error) {
+	row := q.db.QueryRow(ctx, getSpeakeasyConsentEMACredentialForUse,
+		arg.RemoteSessionIssuerID,
+		arg.BindingID,
+		arg.BindingGeneration,
+		arg.RequestedScopes,
+		arg.InternalSessionIssuerID,
+		arg.InternalSessionIssuerUpdatedAt,
+		arg.InternalSessionIssuerKeyID,
+		arg.SignInID,
+		arg.UsableAfter,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.UserSessionIssuerID,
+		arg.RemoteSessionClientID,
+		arg.Resource,
+		arg.SubjectUrn,
+	)
+	var i GetSpeakeasyConsentEMACredentialForUseRow
+	err := row.Scan(
+		&i.ID,
+		&i.UpdatedAt,
+		&i.AccessTokenEncrypted,
+		&i.AccessExpiresAt,
+		&i.GrantedScopes,
+		&i.Usable,
+	)
+	return i, err
+}
+
 const getSpeakeasyEMACredentialForUse = `-- name: GetSpeakeasyEMACredentialForUse :one
 SELECT c.id, c.updated_at, c.access_token_encrypted, c.access_expires_at, c.granted_scopes,
   COALESCE(
@@ -5980,6 +6394,75 @@ func (q *Queries) GetTenantUserRemoteSession(ctx context.Context, arg GetTenantU
 		arg.SubjectUrn,
 		arg.RemoteSessionClientID,
 		arg.UserSessionIssuerID,
+	)
+	var i RemoteSession
+	err := row.Scan(
+		&i.ID,
+		&i.GrantGeneration,
+		&i.SubjectUrn,
+		&i.UserSessionIssuerID,
+		&i.RemoteSessionClientID,
+		&i.AccessTokenEncrypted,
+		&i.AccessExpiresAt,
+		&i.RefreshTokenEncrypted,
+		&i.AuthorizationExpiresAt,
+		&i.RefreshExpiresAt,
+		&i.Scopes,
+		&i.Resource,
+		&i.AutoRefresh,
+		&i.LastRefreshAttemptAt,
+		&i.LastUsedAt,
+		&i.UpstreamSubject,
+		&i.UpstreamEmail,
+		&i.UpstreamDisplayName,
+		&i.IdentitySource,
+		&i.Enrichment,
+		&i.LastValidatedAt,
+		&i.ValidationStatus,
+		&i.ValidationReason,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const getTenantUserRemoteSessionForClient = `-- name: GetTenantUserRemoteSessionForClient :one
+SELECT s.id, s.grant_generation, s.subject_urn, s.user_session_issuer_id, s.remote_session_client_id, s.access_token_encrypted, s.access_expires_at, s.refresh_token_encrypted, s.authorization_expires_at, s.refresh_expires_at, s.scopes, s.resource, s.auto_refresh, s.last_refresh_attempt_at, s.last_used_at, s.upstream_subject, s.upstream_email, s.upstream_display_name, s.identity_source, s.enrichment, s.last_validated_at, s.validation_status, s.validation_reason, s.created_at, s.updated_at, s.deleted_at, s.deleted FROM remote_sessions s
+JOIN remote_session_clients c ON c.id = s.remote_session_client_id AND NOT c.deleted
+JOIN remote_session_issuers i ON i.id = c.remote_session_issuer_id AND NOT i.deleted
+JOIN user_session_issuers u ON u.id = s.user_session_issuer_id
+LEFT JOIN projects up ON up.id = u.project_id
+JOIN projects p ON p.id = $1 AND p.organization_id = $2 AND NOT p.deleted
+JOIN organization_metadata org ON org.id = p.organization_id AND org.disabled_at IS NULL
+JOIN users person ON s.subject_urn = 'user:' || person.id AND person.deleted_at IS NULL AND person.workos_deleted_at IS NULL
+JOIN organization_user_relationships membership ON membership.organization_id = p.organization_id AND membership.user_id = person.id AND NOT membership.deleted AND membership.deleted_at IS NULL
+WHERE s.subject_urn = $3 AND s.remote_session_client_id = $4 AND NOT s.deleted
+ AND (c.project_id = p.id OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = p.organization_id)))
+ AND (i.project_id = p.id OR (i.project_id IS NULL AND (i.organization_id IS NULL OR i.organization_id = p.organization_id)))
+ AND (up.organization_id = p.organization_id OR (u.project_id IS NULL AND u.organization_id = p.organization_id))
+`
+
+type GetTenantUserRemoteSessionForClientParams struct {
+	ProjectID             uuid.UUID
+	OrganizationID        string
+	SubjectUrn            urn.SessionSubject
+	RemoteSessionClientID uuid.UUID
+}
+
+// GetTenantUserRemoteSession without the user session issuer link, for the
+// auth client resolver, which authorizes the client against the server
+// instead. The client's reach pins a project registration to its project; the
+// consent must have come through a live sign-in of the server's organization,
+// so an organization or global registration never crosses organizations.
+// A deleted sign-in still names the organization the consent was made in.
+func (q *Queries) GetTenantUserRemoteSessionForClient(ctx context.Context, arg GetTenantUserRemoteSessionForClientParams) (RemoteSession, error) {
+	row := q.db.QueryRow(ctx, getTenantUserRemoteSessionForClient,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.SubjectUrn,
+		arg.RemoteSessionClientID,
 	)
 	var i RemoteSession
 	err := row.Scan(
@@ -6562,6 +7045,142 @@ func (q *Queries) ListConflictingClientBindingsForIssuerMigration(ctx context.Co
 	return items, nil
 }
 
+const listEMABindingAcceptance = `-- name: ListEMABindingAcceptance :many
+SELECT c.ema_provider,
+  rc.remote_session_issuer_id AS external_issuer_id,
+  c.internal_session_issuer_id,
+  MAX(c.updated_at)::timestamptz AS last_accepted_at
+FROM remote_session_ema_credentials c
+JOIN projects p ON p.id = c.project_id AND p.organization_id = c.organization_id AND p.deleted IS FALSE
+JOIN remote_session_ema_bindings b ON b.id = c.remote_session_ema_binding_id
+  AND b.organization_id = c.organization_id AND b.project_id = c.project_id
+  AND b.generation = c.ema_binding_generation AND b.remote_session_client_id = c.remote_session_client_id
+  AND b.state IS DISTINCT FROM 'unlinked'
+LEFT JOIN trusted_issuer_sessions t ON t.id = c.trusted_issuer_session_id AND t.organization_id = c.organization_id
+  AND t.deleted IS FALSE
+LEFT JOIN remote_session_clients rc ON rc.id = t.remote_session_client_id AND rc.deleted IS FALSE
+WHERE c.organization_id = $1::text AND c.project_id = $2::uuid
+  AND c.user_session_issuer_id = $3::uuid
+  AND c.remote_session_issuer_id = $4::uuid
+  AND c.resource = $5::text
+  AND c.deleted IS FALSE AND c.access_token_encrypted IS NOT NULL
+GROUP BY c.ema_provider, rc.remote_session_issuer_id, c.internal_session_issuer_id
+`
+
+type ListEMABindingAcceptanceParams struct {
+	OrganizationID        string
+	ProjectID             uuid.UUID
+	UserSessionIssuerID   uuid.UUID
+	RemoteSessionIssuerID uuid.UUID
+	Resource              string
+}
+
+type ListEMABindingAcceptanceRow struct {
+	EmaProvider             string
+	ExternalIssuerID        uuid.NullUUID
+	InternalSessionIssuerID uuid.NullUUID
+	LastAcceptedAt          pgtype.Timestamptz
+}
+
+// Status only: when the vendor last accepted an assertion for one binding
+// target, per provider, attributed as ListEMAVendorAcceptance does. Only
+// credentials that still hold an access token count, so retiring or purging
+// one is never read as an acceptance; the evidence goes when they do. Only
+// credentials of the binding's current generation and client, in a live
+// project, count: unlink and rebind retire older ones lazily.
+func (q *Queries) ListEMABindingAcceptance(ctx context.Context, arg ListEMABindingAcceptanceParams) ([]ListEMABindingAcceptanceRow, error) {
+	rows, err := q.db.Query(ctx, listEMABindingAcceptance,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.UserSessionIssuerID,
+		arg.RemoteSessionIssuerID,
+		arg.Resource,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListEMABindingAcceptanceRow
+	for rows.Next() {
+		var i ListEMABindingAcceptanceRow
+		if err := rows.Scan(
+			&i.EmaProvider,
+			&i.ExternalIssuerID,
+			&i.InternalSessionIssuerID,
+			&i.LastAcceptedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listEMABindingAcceptanceForOrganization = `-- name: ListEMABindingAcceptanceForOrganization :many
+SELECT c.project_id, c.user_session_issuer_id, c.remote_session_issuer_id, c.resource, c.ema_provider,
+  rc.remote_session_issuer_id AS external_issuer_id,
+  c.internal_session_issuer_id,
+  MAX(c.updated_at)::timestamptz AS last_accepted_at
+FROM remote_session_ema_credentials c
+JOIN projects p ON p.id = c.project_id AND p.organization_id = c.organization_id AND p.deleted IS FALSE
+JOIN remote_session_ema_bindings b ON b.id = c.remote_session_ema_binding_id
+  AND b.organization_id = c.organization_id AND b.project_id = c.project_id
+  AND b.generation = c.ema_binding_generation AND b.remote_session_client_id = c.remote_session_client_id
+  AND b.state IS DISTINCT FROM 'unlinked'
+LEFT JOIN trusted_issuer_sessions t ON t.id = c.trusted_issuer_session_id AND t.organization_id = c.organization_id
+  AND t.deleted IS FALSE
+LEFT JOIN remote_session_clients rc ON rc.id = t.remote_session_client_id AND rc.deleted IS FALSE
+WHERE c.organization_id = $1::text
+  AND c.deleted IS FALSE AND c.access_token_encrypted IS NOT NULL
+GROUP BY c.project_id, c.user_session_issuer_id, c.remote_session_issuer_id, c.resource, c.ema_provider,
+  rc.remote_session_issuer_id, c.internal_session_issuer_id
+`
+
+type ListEMABindingAcceptanceForOrganizationRow struct {
+	ProjectID               uuid.NullUUID
+	UserSessionIssuerID     uuid.NullUUID
+	RemoteSessionIssuerID   uuid.NullUUID
+	Resource                string
+	EmaProvider             string
+	ExternalIssuerID        uuid.NullUUID
+	InternalSessionIssuerID uuid.NullUUID
+	LastAcceptedAt          pgtype.Timestamptz
+}
+
+// ListEMABindingAcceptance for every binding target in the organization, for
+// the services view.
+func (q *Queries) ListEMABindingAcceptanceForOrganization(ctx context.Context, organizationID string) ([]ListEMABindingAcceptanceForOrganizationRow, error) {
+	rows, err := q.db.Query(ctx, listEMABindingAcceptanceForOrganization, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListEMABindingAcceptanceForOrganizationRow
+	for rows.Next() {
+		var i ListEMABindingAcceptanceForOrganizationRow
+		if err := rows.Scan(
+			&i.ProjectID,
+			&i.UserSessionIssuerID,
+			&i.RemoteSessionIssuerID,
+			&i.Resource,
+			&i.EmaProvider,
+			&i.ExternalIssuerID,
+			&i.InternalSessionIssuerID,
+			&i.LastAcceptedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listEMABindingsForUpstream = `-- name: ListEMABindingsForUpstream :many
 SELECT id, project_id, organization_id, user_session_issuer_id, remote_session_issuer_id, resource, remote_session_client_id, generation, state, grant_source, requested_scopes, claim_id, claimed_at, created_at, updated_at FROM remote_session_ema_bindings
 WHERE project_id = $1 AND organization_id = $2
@@ -6631,6 +7250,7 @@ WHERE project_id = $1 AND organization_id = $2
   AND user_session_issuer_id = $3
   AND rtrim(resource, '/') = $4::text
   AND ($5::uuid IS NULL OR remote_session_issuer_id = $5::uuid)
+  AND ($6::uuid IS NULL OR remote_session_client_id = $6::uuid)
   AND state = 'ready' AND remote_session_client_id IS NOT NULL
 ORDER BY id
 LIMIT 2
@@ -6642,6 +7262,7 @@ type ListEMAChainingBindingsParams struct {
 	UserSessionIssuerID   uuid.UUID
 	UpstreamResource      string
 	RemoteSessionIssuerID uuid.NullUUID
+	RemoteSessionClientID uuid.NullUUID
 }
 
 // Ready bindings whose canonical resource names an endpoint's upstream.
@@ -6649,8 +7270,9 @@ type ListEMAChainingBindingsParams struct {
 // keeps the exact RFC 9728 identifier, so both compare under the routing trim.
 // Unlinked tombstones and unfinished preparations never select or conflict.
 // A tunneled upstream passes its own derived issuer: its resource identifier is
-// operator supplied, so only a binding for that issuer may serve it. Two rows
-// are enough to prove the selection ambiguous.
+// operator supplied, so only a binding for that issuer may serve it. A caller
+// that chose a client passes it, so only that client's bindings select or
+// conflict. Two rows are enough to prove the selection ambiguous.
 func (q *Queries) ListEMAChainingBindings(ctx context.Context, arg ListEMAChainingBindingsParams) ([]RemoteSessionEmaBinding, error) {
 	rows, err := q.db.Query(ctx, listEMAChainingBindings,
 		arg.ProjectID,
@@ -6658,6 +7280,7 @@ func (q *Queries) ListEMAChainingBindings(ctx context.Context, arg ListEMAChaini
 		arg.UserSessionIssuerID,
 		arg.UpstreamResource,
 		arg.RemoteSessionIssuerID,
+		arg.RemoteSessionClientID,
 	)
 	if err != nil {
 		return nil, err
@@ -6698,6 +7321,7 @@ SELECT resource FROM remote_session_ema_bindings
 WHERE project_id = $1 AND organization_id = $2
   AND user_session_issuer_id = $3
   AND ($4::uuid IS NULL OR remote_session_issuer_id = $4::uuid)
+  AND ($5::uuid IS NULL OR remote_session_client_id = $5::uuid)
   AND state = 'ready' AND remote_session_client_id IS NOT NULL
 `
 
@@ -6706,16 +7330,19 @@ type ListEMAChainingResourceCandidatesParams struct {
 	OrganizationID        string
 	UserSessionIssuerID   uuid.UUID
 	RemoteSessionIssuerID uuid.NullUUID
+	RemoteSessionClientID uuid.NullUUID
 }
 
 // Diagnostic candidates only: an origin match can retain a configuration error
 // after invalid discovery, but never authorizes an alias or selects a token.
+// A caller that chose a client passes it, so only that client's bindings count.
 func (q *Queries) ListEMAChainingResourceCandidates(ctx context.Context, arg ListEMAChainingResourceCandidatesParams) ([]string, error) {
 	rows, err := q.db.Query(ctx, listEMAChainingResourceCandidates,
 		arg.ProjectID,
 		arg.OrganizationID,
 		arg.UserSessionIssuerID,
 		arg.RemoteSessionIssuerID,
+		arg.RemoteSessionClientID,
 	)
 	if err != nil {
 		return nil, err
@@ -6855,6 +7482,34 @@ func (q *Queries) ListEMAIssuerPurgeCredentialsFixture(ctx context.Context, proj
 	return items, nil
 }
 
+const listEMAProviderVendors = `-- name: ListEMAProviderVendors :many
+SELECT DISTINCT vendor_issuer
+FROM remote_session_ema_providers
+WHERE organization_id = $1::text AND deleted IS FALSE
+ORDER BY vendor_issuer
+`
+
+// Vendors with a saved provider order, whether or not a binding names them.
+func (q *Queries) ListEMAProviderVendors(ctx context.Context, organizationID string) ([]string, error) {
+	rows, err := q.db.Query(ctx, listEMAProviderVendors, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var vendor_issuer string
+		if err := rows.Scan(&vendor_issuer); err != nil {
+			return nil, err
+		}
+		items = append(items, vendor_issuer)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listEMAProviders = `-- name: ListEMAProviders :many
 SELECT p.id, p.remote_session_issuer_id, p.internal_session_issuer_id, p.position,
   (
@@ -6909,6 +7564,274 @@ func (q *Queries) ListEMAProviders(ctx context.Context, arg ListEMAProvidersPara
 			&i.ProviderDeleted,
 			&i.ProviderDisabled,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listEMAServiceServers = `-- name: ListEMAServiceServers :many
+SELECT i.id AS remote_session_issuer_id, i.issuer, COALESCE(i.name, '')::text AS name,
+  (i.project_id IS NULL)::boolean AS issuer_is_organization_level,
+  COALESCE(i.organization_id = $1::text OR (i.organization_id IS NULL AND i.project_id IS NULL), FALSE)::boolean AS issuer_settable,
+  COALESCE(b.state, '')::text AS state,
+  b.project_id, b.user_session_issuer_id, b.resource,
+  m.id AS mcp_server_id, m.toolset_id AS mcp_server_toolset_id,
+  COALESCE(m.name, '')::text AS mcp_server_name, COALESCE(m.slug, '')::text AS mcp_server_slug,
+  p.slug AS project_slug, p.name AS project_name,
+  u.trusted_remote_session_issuer_id AS sign_in_issuer_id,
+  COALESCE(si.name, '')::text AS sign_in_issuer_name
+FROM remote_session_ema_bindings b
+JOIN projects p ON p.id = b.project_id AND p.organization_id = $1::text AND p.deleted IS FALSE
+JOIN remote_session_issuers i ON i.id = b.remote_session_issuer_id AND i.deleted IS FALSE
+  AND (i.project_id = b.project_id OR (i.project_id IS NULL AND (i.organization_id = b.organization_id OR i.organization_id IS NULL)))
+LEFT JOIN remote_mcp_servers r ON r.project_id = b.project_id AND r.deleted IS FALSE
+  AND (
+    r.url = b.resource
+    OR EXISTS (
+      SELECT 1 FROM remote_protected_resources rpr
+      WHERE rpr.project_id = r.project_id AND rpr.resource_identifier = r.url AND rpr.deleted IS FALSE
+        AND rpr.metadata->>'resource' = b.resource
+    )
+  )
+LEFT JOIN mcp_servers m ON m.remote_mcp_server_id = r.id AND m.project_id = b.project_id
+  AND m.user_session_issuer_id = b.user_session_issuer_id AND m.deleted IS FALSE
+LEFT JOIN user_session_issuers u ON u.id = b.user_session_issuer_id
+  AND u.organization_id = $1::text AND u.project_id IS NULL AND u.deleted IS FALSE
+  AND u.trusted_remote_session_issuer_id IS NOT NULL AND u.trusted_remote_session_client_id IS NOT NULL
+LEFT JOIN remote_session_issuers si ON si.id = u.trusted_remote_session_issuer_id AND si.deleted IS FALSE
+  AND (si.organization_id = $1::text OR (si.organization_id IS NULL AND si.project_id IS NULL))
+WHERE b.organization_id = $1::text
+ORDER BY COALESCE(i.organization_id = $1::text OR (i.organization_id IS NULL AND i.project_id IS NULL), FALSE) DESC,
+  COALESCE(i.organization_id = $1::text, FALSE) DESC, (i.project_id IS NULL) DESC, i.created_at, i.id, p.name, m.id
+`
+
+type ListEMAServiceServersRow struct {
+	RemoteSessionIssuerID     uuid.UUID
+	Issuer                    string
+	Name                      string
+	IssuerIsOrganizationLevel bool
+	IssuerSettable            bool
+	State                     string
+	ProjectID                 uuid.UUID
+	UserSessionIssuerID       uuid.UUID
+	Resource                  string
+	McpServerID               uuid.NullUUID
+	McpServerToolsetID        uuid.NullUUID
+	McpServerName             string
+	McpServerSlug             string
+	ProjectSlug               string
+	ProjectName               string
+	SignInIssuerID            uuid.NullUUID
+	SignInIssuerName          string
+}
+
+// Status only: every identity chaining binding in the organization with the
+// vendor issuer record it names and each live MCP server it serves, for the
+// organization's services view. A server is matched exactly by its URL or by
+// the resource its cached protected resource document names, as RFC 8707 and
+// RFC 9728 resources compare. A binding whose
+// server was removed keeps its vendor listed with no server. Issuer records
+// come first those setEMAProviders accepts (the organization's own, then the
+// platform catalog), then organization-level, then oldest, so the name and
+// record a vendor shows are stable. sign_in_issuer_id is the external issuer the binding's
+// user session issuer, the server's sign-in, trusts, read as identity
+// chaining reads it; NULL means Speakeasy's own sign-in.
+func (q *Queries) ListEMAServiceServers(ctx context.Context, organizationID string) ([]ListEMAServiceServersRow, error) {
+	rows, err := q.db.Query(ctx, listEMAServiceServers, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListEMAServiceServersRow
+	for rows.Next() {
+		var i ListEMAServiceServersRow
+		if err := rows.Scan(
+			&i.RemoteSessionIssuerID,
+			&i.Issuer,
+			&i.Name,
+			&i.IssuerIsOrganizationLevel,
+			&i.IssuerSettable,
+			&i.State,
+			&i.ProjectID,
+			&i.UserSessionIssuerID,
+			&i.Resource,
+			&i.McpServerID,
+			&i.McpServerToolsetID,
+			&i.McpServerName,
+			&i.McpServerSlug,
+			&i.ProjectSlug,
+			&i.ProjectName,
+			&i.SignInIssuerID,
+			&i.SignInIssuerName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listEMAVendorAcceptance = `-- name: ListEMAVendorAcceptance :many
+SELECT i.issuer, c.ema_provider,
+  rc.remote_session_issuer_id AS external_issuer_id,
+  c.internal_session_issuer_id,
+  MAX(c.updated_at)::timestamptz AS last_accepted_at
+FROM remote_session_ema_credentials c
+JOIN projects p ON p.id = c.project_id AND p.organization_id = c.organization_id AND p.deleted IS FALSE
+JOIN remote_session_ema_bindings b ON b.id = c.remote_session_ema_binding_id
+  AND b.organization_id = c.organization_id AND b.project_id = c.project_id
+  AND b.generation = c.ema_binding_generation AND b.remote_session_client_id = c.remote_session_client_id
+  AND b.state IS DISTINCT FROM 'unlinked'
+JOIN remote_session_issuers i ON i.id = c.remote_session_issuer_id AND i.deleted IS FALSE
+  AND (i.project_id = c.project_id OR (i.project_id IS NULL AND (i.organization_id = c.organization_id OR i.organization_id IS NULL)))
+LEFT JOIN trusted_issuer_sessions t ON t.id = c.trusted_issuer_session_id AND t.organization_id = c.organization_id
+  AND t.deleted IS FALSE
+LEFT JOIN remote_session_clients rc ON rc.id = t.remote_session_client_id AND rc.deleted IS FALSE
+WHERE c.organization_id = $1::text
+  AND c.deleted IS FALSE AND c.access_token_encrypted IS NOT NULL
+GROUP BY i.issuer, c.ema_provider, rc.remote_session_issuer_id, c.internal_session_issuer_id
+`
+
+type ListEMAVendorAcceptanceRow struct {
+	Issuer                  string
+	EmaProvider             string
+	ExternalIssuerID        uuid.NullUUID
+	InternalSessionIssuerID uuid.NullUUID
+	LastAcceptedAt          pgtype.Timestamptz
+}
+
+// Status only: when each vendor last accepted an assertion from each provider
+// across the organization. External acceptances are attributed to the issuer
+// whose sign-in vouched, through a live trusted issuer session and its live
+// client, and Speakeasy ones to the internal session issuer that signed. Only
+// credentials that still hold an access token count: retirement and
+// containment purges bump updated_at without an exchange, so a retired
+// credential's acceptance disappears with it until an accepted_at column
+// records exchanges on their own.
+func (q *Queries) ListEMAVendorAcceptance(ctx context.Context, organizationID string) ([]ListEMAVendorAcceptanceRow, error) {
+	rows, err := q.db.Query(ctx, listEMAVendorAcceptance, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListEMAVendorAcceptanceRow
+	for rows.Next() {
+		var i ListEMAVendorAcceptanceRow
+		if err := rows.Scan(
+			&i.Issuer,
+			&i.EmaProvider,
+			&i.ExternalIssuerID,
+			&i.InternalSessionIssuerID,
+			&i.LastAcceptedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listEMAVendorAcceptanceForIssuers = `-- name: ListEMAVendorAcceptanceForIssuers :many
+SELECT i.issuer, c.ema_provider,
+  rc.remote_session_issuer_id AS external_issuer_id,
+  c.internal_session_issuer_id,
+  MAX(c.updated_at)::timestamptz AS last_accepted_at
+FROM remote_session_ema_credentials c
+JOIN projects p ON p.id = c.project_id AND p.organization_id = c.organization_id AND p.deleted IS FALSE
+JOIN remote_session_ema_bindings b ON b.id = c.remote_session_ema_binding_id
+  AND b.organization_id = c.organization_id AND b.project_id = c.project_id
+  AND b.generation = c.ema_binding_generation AND b.remote_session_client_id = c.remote_session_client_id
+  AND b.state IS DISTINCT FROM 'unlinked'
+JOIN remote_session_issuers i ON i.id = c.remote_session_issuer_id AND i.deleted IS FALSE
+  AND (i.project_id = c.project_id OR (i.project_id IS NULL AND (i.organization_id = c.organization_id OR i.organization_id IS NULL)))
+LEFT JOIN trusted_issuer_sessions t ON t.id = c.trusted_issuer_session_id AND t.organization_id = c.organization_id
+  AND t.deleted IS FALSE
+LEFT JOIN remote_session_clients rc ON rc.id = t.remote_session_client_id AND rc.deleted IS FALSE
+WHERE c.organization_id = $1::text
+  AND c.remote_session_issuer_id = ANY($2::uuid[])
+  AND c.deleted IS FALSE AND c.access_token_encrypted IS NOT NULL
+GROUP BY i.issuer, c.ema_provider, rc.remote_session_issuer_id, c.internal_session_issuer_id
+`
+
+type ListEMAVendorAcceptanceForIssuersParams struct {
+	OrganizationID         string
+	RemoteSessionIssuerIds []uuid.UUID
+}
+
+type ListEMAVendorAcceptanceForIssuersRow struct {
+	Issuer                  string
+	EmaProvider             string
+	ExternalIssuerID        uuid.NullUUID
+	InternalSessionIssuerID uuid.NullUUID
+	LastAcceptedAt          pgtype.Timestamptz
+}
+
+// ListEMAVendorAcceptance restricted to credentials naming one of the given
+// issuer records, for one vendor's views. It returns each record's current
+// issuer so callers can recheck it against the vendor.
+func (q *Queries) ListEMAVendorAcceptanceForIssuers(ctx context.Context, arg ListEMAVendorAcceptanceForIssuersParams) ([]ListEMAVendorAcceptanceForIssuersRow, error) {
+	rows, err := q.db.Query(ctx, listEMAVendorAcceptanceForIssuers, arg.OrganizationID, arg.RemoteSessionIssuerIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListEMAVendorAcceptanceForIssuersRow
+	for rows.Next() {
+		var i ListEMAVendorAcceptanceForIssuersRow
+		if err := rows.Scan(
+			&i.Issuer,
+			&i.EmaProvider,
+			&i.ExternalIssuerID,
+			&i.InternalSessionIssuerID,
+			&i.LastAcceptedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listEMAVendorIssuerCandidates = `-- name: ListEMAVendorIssuerCandidates :many
+SELECT i.id, i.issuer
+FROM remote_session_issuers i
+WHERE i.deleted IS FALSE
+  AND (i.organization_id = $1::text
+    OR (i.organization_id IS NULL AND i.project_id IS NULL)
+    OR (i.organization_id IS NULL AND i.project_id IN (SELECT p.id FROM projects p WHERE p.organization_id = $1::text AND p.deleted IS FALSE)))
+`
+
+type ListEMAVendorIssuerCandidatesRow struct {
+	ID     uuid.UUID
+	Issuer string
+}
+
+// Status only: every live issuer record a credential in the organization can
+// name, so callers can pick the spellings that normalize to one vendor.
+func (q *Queries) ListEMAVendorIssuerCandidates(ctx context.Context, organizationID string) ([]ListEMAVendorIssuerCandidatesRow, error) {
+	rows, err := q.db.Query(ctx, listEMAVendorIssuerCandidates, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListEMAVendorIssuerCandidatesRow
+	for rows.Next() {
+		var i ListEMAVendorIssuerCandidatesRow
+		if err := rows.Scan(&i.ID, &i.Issuer); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -8377,6 +9300,239 @@ func (q *Queries) ListPrincipalRemoteSessionCandidates(ctx context.Context, arg 
 	return items, nil
 }
 
+const listReachableRemoteSessionClients = `-- name: ListReachableRemoteSessionClients :many
+SELECT
+    c.id                                   AS client_id,
+    c.project_id                           AS client_project_id,
+    c.client_id                            AS external_client_id,
+    c.client_secret_encrypted              AS client_secret_encrypted,
+    c.token_endpoint_auth_method           AS token_endpoint_auth_method,
+    c.scope                                AS client_scope,
+    c.audience                             AS client_audience,
+    c.legacy_callback_url                  AS legacy_callback_url,
+    c.callback_base_url                    AS callback_base_url,
+    c.resource_identifier                  AS resource_identifier,
+    c.resource_name                        AS resource_name,
+    c.resource_documentation               AS resource_documentation,
+    c.resource_policy_uri                  AS resource_policy_uri,
+    c.resource_tos_uri                     AS resource_tos_uri,
+    c.client_secret_expires_at             AS client_secret_expires_at,
+    c.upstream_rejected_at                 AS upstream_rejected_at,
+    c.credential_owner                     AS credential_owner,
+    c.remote_session_issuer_id             AS remote_session_issuer_id,
+    i.tunneled_mcp_server_id               AS tunneled_mcp_server_id,
+    i.slug                                 AS issuer_slug,
+    i.name                                 AS issuer_name,
+    i.registration_endpoint                AS issuer_registration_endpoint,
+    i.logo_asset_id                        AS issuer_logo_asset_id,
+    i.service_documentation                AS issuer_service_documentation,
+    i.op_policy_uri                        AS issuer_op_policy_uri,
+    i.op_tos_uri                           AS issuer_op_tos_uri,
+    i.issuer                               AS issuer_url,
+    i.authorization_endpoint               AS authorization_endpoint,
+    i.token_endpoint                       AS token_endpoint,
+    i.scopes_supported                     AS scopes_supported,
+    i.scope_override                       AS scope_override,
+    i.omit_scope_fallback                  AS omit_scope_fallback,
+    i.code_challenge_methods_supported     AS code_challenge_methods_supported,
+    i.resource_indicator_supported         AS resource_indicator_supported,
+    i.authorization_response_iss_parameter_supported AS authorization_response_iss_parameter_supported,
+    i.metadata                             AS issuer_metadata,
+    i.passthrough                          AS passthrough,
+    i.oidc                                 AS oidc,
+    i.project_id                           AS issuer_project_id,
+    i.organization_id                      AS issuer_organization_id,
+    i.metadata_fetched_at                  AS metadata_fetched_at,
+    i.metadata_last_error_at               AS metadata_last_error_at,
+    i.metadata_last_error_url              AS metadata_last_error_url,
+    (
+      i.metadata IS NOT NULL AND (
+        i.introspection_endpoint_auth_methods_supported IS NULL
+        OR i.id_token_signing_alg_values_supported IS NULL
+        OR i.claims_supported IS NULL
+        OR i.backchannel_logout_supported IS NULL
+        OR i.authorization_response_iss_parameter_supported IS NULL
+        OR i.code_challenge_methods_supported IS NULL
+        OR (jsonb_typeof(COALESCE(NULLIF(i.metadata->'authorization_grant_profiles_supported', 'null'::jsonb), '[]'::jsonb)) IS DISTINCT FROM 'array'
+          OR COALESCE(NULLIF(i.metadata->'authorization_grant_profiles_supported', 'null'::jsonb), '[]'::jsonb) IS DISTINCT FROM to_jsonb(i.authorization_grant_profiles_supported)
+        )
+      )
+    )::boolean                             AS metadata_needs_reprojection
+FROM remote_session_clients AS c
+JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id
+JOIN projects AS p ON p.id = $1::uuid AND p.organization_id = $2::text AND p.deleted IS FALSE
+WHERE c.id = ANY($3::uuid[])
+  AND (c.project_id = p.id OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = p.organization_id)))
+  AND (i.project_id = p.id OR (i.project_id IS NULL AND (i.organization_id IS NULL OR i.organization_id = p.organization_id)))
+  AND c.deleted IS FALSE
+  AND i.deleted IS FALSE
+ORDER BY c.id
+`
+
+type ListReachableRemoteSessionClientsParams struct {
+	ProjectID              uuid.UUID
+	OrganizationID         string
+	RemoteSessionClientIds []uuid.UUID
+}
+
+type ListReachableRemoteSessionClientsRow struct {
+	ClientID                                   uuid.UUID
+	ClientProjectID                            uuid.NullUUID
+	ExternalClientID                           string
+	ClientSecretEncrypted                      pgtype.Text
+	TokenEndpointAuthMethod                    pgtype.Text
+	ClientScope                                []string
+	ClientAudience                             pgtype.Text
+	LegacyCallbackUrl                          bool
+	CallbackBaseUrl                            pgtype.Text
+	ResourceIdentifier                         pgtype.Text
+	ResourceName                               pgtype.Text
+	ResourceDocumentation                      pgtype.Text
+	ResourcePolicyUri                          pgtype.Text
+	ResourceTosUri                             pgtype.Text
+	ClientSecretExpiresAt                      pgtype.Timestamptz
+	UpstreamRejectedAt                         pgtype.Timestamptz
+	CredentialOwner                            string
+	RemoteSessionIssuerID                      uuid.UUID
+	TunneledMcpServerID                        uuid.NullUUID
+	IssuerSlug                                 string
+	IssuerName                                 pgtype.Text
+	IssuerRegistrationEndpoint                 pgtype.Text
+	IssuerLogoAssetID                          uuid.NullUUID
+	IssuerServiceDocumentation                 pgtype.Text
+	IssuerOpPolicyUri                          pgtype.Text
+	IssuerOpTosUri                             pgtype.Text
+	IssuerUrl                                  string
+	AuthorizationEndpoint                      pgtype.Text
+	TokenEndpoint                              pgtype.Text
+	ScopesSupported                            []string
+	ScopeOverride                              []string
+	OmitScopeFallback                          pgtype.Bool
+	CodeChallengeMethodsSupported              []string
+	ResourceIndicatorSupported                 pgtype.Bool
+	AuthorizationResponseIssParameterSupported pgtype.Bool
+	IssuerMetadata                             []byte
+	Passthrough                                bool
+	Oidc                                       bool
+	IssuerProjectID                            uuid.NullUUID
+	IssuerOrganizationID                       pgtype.Text
+	MetadataFetchedAt                          pgtype.Timestamptz
+	MetadataLastErrorAt                        pgtype.Timestamptz
+	MetadataLastErrorUrl                       pgtype.Text
+	MetadataNeedsReprojection                  bool
+}
+
+// GetReachableRemoteSessionClient for several clients at once; clients out of
+// reach are left out.
+func (q *Queries) ListReachableRemoteSessionClients(ctx context.Context, arg ListReachableRemoteSessionClientsParams) ([]ListReachableRemoteSessionClientsRow, error) {
+	rows, err := q.db.Query(ctx, listReachableRemoteSessionClients, arg.ProjectID, arg.OrganizationID, arg.RemoteSessionClientIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListReachableRemoteSessionClientsRow
+	for rows.Next() {
+		var i ListReachableRemoteSessionClientsRow
+		if err := rows.Scan(
+			&i.ClientID,
+			&i.ClientProjectID,
+			&i.ExternalClientID,
+			&i.ClientSecretEncrypted,
+			&i.TokenEndpointAuthMethod,
+			&i.ClientScope,
+			&i.ClientAudience,
+			&i.LegacyCallbackUrl,
+			&i.CallbackBaseUrl,
+			&i.ResourceIdentifier,
+			&i.ResourceName,
+			&i.ResourceDocumentation,
+			&i.ResourcePolicyUri,
+			&i.ResourceTosUri,
+			&i.ClientSecretExpiresAt,
+			&i.UpstreamRejectedAt,
+			&i.CredentialOwner,
+			&i.RemoteSessionIssuerID,
+			&i.TunneledMcpServerID,
+			&i.IssuerSlug,
+			&i.IssuerName,
+			&i.IssuerRegistrationEndpoint,
+			&i.IssuerLogoAssetID,
+			&i.IssuerServiceDocumentation,
+			&i.IssuerOpPolicyUri,
+			&i.IssuerOpTosUri,
+			&i.IssuerUrl,
+			&i.AuthorizationEndpoint,
+			&i.TokenEndpoint,
+			&i.ScopesSupported,
+			&i.ScopeOverride,
+			&i.OmitScopeFallback,
+			&i.CodeChallengeMethodsSupported,
+			&i.ResourceIndicatorSupported,
+			&i.AuthorizationResponseIssParameterSupported,
+			&i.IssuerMetadata,
+			&i.Passthrough,
+			&i.Oidc,
+			&i.IssuerProjectID,
+			&i.IssuerOrganizationID,
+			&i.MetadataFetchedAt,
+			&i.MetadataLastErrorAt,
+			&i.MetadataLastErrorUrl,
+			&i.MetadataNeedsReprojection,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRemoteServerURLsForUserSessionIssuer = `-- name: ListRemoteServerURLsForUserSessionIssuer :many
+SELECT rms.url, COALESCE(rpr.metadata->>'resource', '')::text AS document_resource
+FROM mcp_servers AS m
+JOIN remote_mcp_servers AS rms ON rms.id = m.remote_mcp_server_id AND rms.project_id = m.project_id AND rms.deleted IS FALSE
+LEFT JOIN remote_protected_resources AS rpr ON rpr.project_id = m.project_id AND rpr.resource_identifier = rms.url AND rpr.deleted IS FALSE
+WHERE m.project_id = $1
+  AND m.user_session_issuer_id = $2
+  AND m.deleted IS FALSE
+`
+
+type ListRemoteServerURLsForUserSessionIssuerParams struct {
+	ProjectID           uuid.UUID
+	UserSessionIssuerID uuid.NullUUID
+}
+
+type ListRemoteServerURLsForUserSessionIssuerRow struct {
+	Url              string
+	DocumentResource string
+}
+
+// The upstream URLs of the project's remote-backed MCP servers that sign in
+// through a user session issuer, each with the resource its cached protected
+// resource document names, or empty. Identity chaining finds a binding's server by
+// either value, then keys the resource row by the URL as logins do.
+func (q *Queries) ListRemoteServerURLsForUserSessionIssuer(ctx context.Context, arg ListRemoteServerURLsForUserSessionIssuerParams) ([]ListRemoteServerURLsForUserSessionIssuerRow, error) {
+	rows, err := q.db.Query(ctx, listRemoteServerURLsForUserSessionIssuer, arg.ProjectID, arg.UserSessionIssuerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListRemoteServerURLsForUserSessionIssuerRow
+	for rows.Next() {
+		var i ListRemoteServerURLsForUserSessionIssuerRow
+		if err := rows.Scan(&i.Url, &i.DocumentResource); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listRemoteSessionClientIDsForUserSessionIssuer = `-- name: ListRemoteSessionClientIDsForUserSessionIssuer :many
 SELECT c.id
 FROM remote_session_client_user_session_issuers AS link
@@ -9401,6 +10557,130 @@ func (q *Queries) ListRemoteSessionStatusesForSubject(ctx context.Context, arg L
 	var items []ListRemoteSessionStatusesForSubjectRow
 	for rows.Next() {
 		var i ListRemoteSessionStatusesForSubjectRow
+		if err := rows.Scan(
+			&i.RemoteSessionClientID,
+			&i.AutoRefresh,
+			&i.Resource,
+			&i.Scopes,
+			&i.AccessExpiresAt,
+			&i.AuthorizationExpiresAt,
+			&i.RefreshExpiresAt,
+			&i.UpstreamSubject,
+			&i.UpstreamEmail,
+			&i.UpstreamDisplayName,
+			&i.IdentitySource,
+			&i.Enrichment,
+			&i.ID,
+			&i.UpdatedAt,
+			&i.LastValidatedAt,
+			&i.ValidationStatus,
+			&i.ValidationReason,
+			&i.CanRefresh,
+			&i.Status,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRemoteSessionStatusesInTenant = `-- name: ListRemoteSessionStatusesInTenant :many
+SELECT
+  s.remote_session_client_id,
+  s.auto_refresh,
+  s.resource,
+  s.scopes,
+  s.access_expires_at,
+  s.authorization_expires_at,
+  s.refresh_expires_at,
+  s.upstream_subject,
+  s.upstream_email,
+  s.upstream_display_name,
+  s.identity_source,
+  s.enrichment,
+  s.id,
+  s.updated_at,
+  s.last_validated_at,
+  s.validation_status,
+  s.validation_reason,
+  (s.refresh_token_encrypted IS NOT NULL
+    AND (s.authorization_expires_at IS NULL OR s.authorization_expires_at > now())
+    AND (s.refresh_expires_at IS NULL OR s.refresh_expires_at > now()))::boolean AS can_refresh,
+  (CASE
+    WHEN (s.authorization_expires_at IS NULL OR s.authorization_expires_at > now())
+      AND (
+        s.access_expires_at IS NULL
+        OR s.access_expires_at > now()
+        OR (s.refresh_token_encrypted IS NOT NULL
+            AND (s.refresh_expires_at IS NULL OR s.refresh_expires_at > now()))
+      ) THEN 'active'
+    ELSE 'expired'
+  END)::text AS status
+FROM remote_sessions s
+JOIN remote_session_clients c ON c.id = s.remote_session_client_id AND NOT c.deleted
+JOIN remote_session_issuers i ON i.id = c.remote_session_issuer_id AND NOT i.deleted
+JOIN user_session_issuers u ON u.id = s.user_session_issuer_id
+LEFT JOIN projects up ON up.id = u.project_id
+JOIN projects p ON p.id = $1 AND p.organization_id = $2 AND NOT p.deleted
+WHERE s.subject_urn = $3 AND s.remote_session_client_id = ANY($4::uuid[]) AND NOT s.deleted
+ AND (c.project_id = p.id OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = p.organization_id)))
+ AND (i.project_id = p.id OR (i.project_id IS NULL AND (i.organization_id IS NULL OR i.organization_id = p.organization_id)))
+ AND (up.organization_id = p.organization_id OR (u.project_id IS NULL AND u.organization_id = p.organization_id))
+`
+
+type ListRemoteSessionStatusesInTenantParams struct {
+	ProjectID              uuid.UUID
+	OrganizationID         string
+	SubjectUrn             urn.SessionSubject
+	RemoteSessionClientIds []uuid.UUID
+}
+
+type ListRemoteSessionStatusesInTenantRow struct {
+	RemoteSessionClientID  uuid.UUID
+	AutoRefresh            bool
+	Resource               pgtype.Text
+	Scopes                 []string
+	AccessExpiresAt        pgtype.Timestamptz
+	AuthorizationExpiresAt pgtype.Timestamptz
+	RefreshExpiresAt       pgtype.Timestamptz
+	UpstreamSubject        pgtype.Text
+	UpstreamEmail          pgtype.Text
+	UpstreamDisplayName    pgtype.Text
+	IdentitySource         pgtype.Text
+	Enrichment             []byte
+	ID                     uuid.UUID
+	UpdatedAt              pgtype.Timestamptz
+	LastValidatedAt        pgtype.Timestamptz
+	ValidationStatus       pgtype.Text
+	ValidationReason       pgtype.Text
+	CanRefresh             bool
+	Status                 string
+}
+
+// ListRemoteSessionStatusesForSubject for the auth client resolver, over the
+// registrations it may serve instead of the user session issuer's links. A
+// session reports only where GetActiveRemoteSessionInTenant would serve it:
+// the client's reach pins a project registration to its project, and the
+// consent must have come through a sign-in of the server's organization.
+// A deleted sign-in still names the organization the consent was made in.
+func (q *Queries) ListRemoteSessionStatusesInTenant(ctx context.Context, arg ListRemoteSessionStatusesInTenantParams) ([]ListRemoteSessionStatusesInTenantRow, error) {
+	rows, err := q.db.Query(ctx, listRemoteSessionStatusesInTenant,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.SubjectUrn,
+		arg.RemoteSessionClientIds,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListRemoteSessionStatusesInTenantRow
+	for rows.Next() {
+		var i ListRemoteSessionStatusesInTenantRow
 		if err := rows.Scan(
 			&i.RemoteSessionClientID,
 			&i.AutoRefresh,
@@ -11149,6 +12429,73 @@ func (q *Queries) OktaIdentityProviderConnectionReferencesIssuer(ctx context.Con
 	return exists, err
 }
 
+const plantEMACredentialFixture = `-- name: PlantEMACredentialFixture :one
+INSERT INTO remote_session_ema_credentials (
+  organization_id, project_id, user_session_issuer_id, remote_session_issuer_id, remote_session_client_id,
+  resource, subject_urn, client_selection, remote_session_ema_binding_id, ema_binding_generation,
+  ema_provider, internal_session_issuer_id, trusted_issuer_session_id,
+  access_token_encrypted, access_expires_at, updated_at, deleted_at
+)
+VALUES (
+  $1, $2, $3, $4, $5,
+  $6, $7, 'binding',
+  (SELECT b.id FROM remote_session_ema_bindings b
+   WHERE b.organization_id = $1 AND b.project_id = $2
+     AND b.user_session_issuer_id = $3 AND b.remote_session_issuer_id = $4
+     AND b.resource = $6),
+  COALESCE($8::bigint, (SELECT b.generation FROM remote_session_ema_bindings b
+   WHERE b.organization_id = $1 AND b.project_id = $2
+     AND b.user_session_issuer_id = $3 AND b.remote_session_issuer_id = $4
+     AND b.resource = $6)),
+  $9::text, $10::uuid,
+  $11::uuid,
+  CASE WHEN $12::boolean THEN NULL ELSE 'encrypted-fixture' END,
+  clock_timestamp() + interval '1 hour', $13::timestamptz,
+  CASE WHEN $12::boolean THEN clock_timestamp() ELSE NULL END
+)
+RETURNING id
+`
+
+type PlantEMACredentialFixtureParams struct {
+	OrganizationID          pgtype.Text
+	ProjectID               uuid.NullUUID
+	UserSessionIssuerID     uuid.NullUUID
+	RemoteSessionIssuerID   uuid.NullUUID
+	RemoteSessionClientID   uuid.NullUUID
+	Resource                string
+	SubjectUrn              string
+	BindingGeneration       pgtype.Int8
+	EmaProvider             string
+	InternalSessionIssuerID uuid.NullUUID
+	TrustedIssuerSessionID  uuid.NullUUID
+	Retired                 bool
+	UpdatedAt               pgtype.Timestamptz
+}
+
+// TEST FIXTURE ONLY. A cached credential slot for either provider, live or
+// retired, without the rows a real publish references. It names the target's
+// binding at its current generation unless binding_generation overrides it.
+func (q *Queries) PlantEMACredentialFixture(ctx context.Context, arg PlantEMACredentialFixtureParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, plantEMACredentialFixture,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.UserSessionIssuerID,
+		arg.RemoteSessionIssuerID,
+		arg.RemoteSessionClientID,
+		arg.Resource,
+		arg.SubjectUrn,
+		arg.BindingGeneration,
+		arg.EmaProvider,
+		arg.InternalSessionIssuerID,
+		arg.TrustedIssuerSessionID,
+		arg.Retired,
+		arg.UpdatedAt,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const plantSpeakeasyEMACredentialFixture = `-- name: PlantSpeakeasyEMACredentialFixture :one
 INSERT INTO remote_session_ema_credentials (
   organization_id, project_id, user_session_issuer_id, remote_session_issuer_id, remote_session_client_id,
@@ -11189,6 +12536,27 @@ func (q *Queries) PlantSpeakeasyEMACredentialFixture(ctx context.Context, arg Pl
 		arg.BindingID,
 		arg.BindingGeneration,
 	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const plantTrustedIssuerSessionFixture = `-- name: PlantTrustedIssuerSessionFixture :one
+INSERT INTO trusted_issuer_sessions (organization_id, remote_session_client_id, subject_urn)
+VALUES ($1::text, $2::uuid, $3::text)
+RETURNING id
+`
+
+type PlantTrustedIssuerSessionFixtureParams struct {
+	OrganizationID        string
+	RemoteSessionClientID uuid.UUID
+	SubjectUrn            string
+}
+
+// TEST FIXTURE ONLY. A live delegation through one client, without the
+// credentials a real sign-in stores.
+func (q *Queries) PlantTrustedIssuerSessionFixture(ctx context.Context, arg PlantTrustedIssuerSessionFixtureParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, plantTrustedIssuerSessionFixture, arg.OrganizationID, arg.RemoteSessionClientID, arg.SubjectUrn)
 	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err
@@ -11738,7 +13106,7 @@ func (q *Queries) ReprojectRemoteSessionIssuerMetadataCapabilities(ctx context.C
 	return i, err
 }
 
-const retireEMACredential = `-- name: RetireEMACredential :exec
+const retireEMACredential = `-- name: RetireEMACredential :execrows
 UPDATE remote_session_ema_credentials
 SET access_token_encrypted = NULL, deleted_at = clock_timestamp(), updated_at = clock_timestamp()
 WHERE id = $1 AND organization_id = $2 AND project_id = $3 AND deleted IS FALSE
@@ -11754,15 +13122,19 @@ type RetireEMACredentialParams struct {
 
 // Soft deletes one credential slot and erases its ciphertext in the same write.
 // expected_updated_at is the version the caller judged unusable, so a
-// concurrent publish into the same slot is never erased.
-func (q *Queries) RetireEMACredential(ctx context.Context, arg RetireEMACredentialParams) error {
-	_, err := q.db.Exec(ctx, retireEMACredential,
+// concurrent publish into the same slot is never erased; it then retires
+// nothing and reports zero rows.
+func (q *Queries) RetireEMACredential(ctx context.Context, arg RetireEMACredentialParams) (int64, error) {
+	result, err := q.db.Exec(ctx, retireEMACredential,
 		arg.ID,
 		arg.OrganizationID,
 		arg.ProjectID,
 		arg.ExpectedUpdatedAt,
 	)
-	return err
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const retireLegacyEMACredentialSlot = `-- name: RetireLegacyEMACredentialSlot :exec
@@ -11796,6 +13168,77 @@ func (q *Queries) RetireLegacyEMACredentialSlot(ctx context.Context, arg RetireL
 		arg.SubjectUrn,
 	)
 	return err
+}
+
+const retireSpeakeasyConsentEMACredentials = `-- name: RetireSpeakeasyConsentEMACredentials :exec
+UPDATE remote_session_ema_credentials
+SET access_token_encrypted = NULL, deleted_at = clock_timestamp(), updated_at = clock_timestamp()
+WHERE organization_id = $1::text AND project_id = $2::uuid
+  AND user_session_issuer_id = $3::uuid
+  AND remote_session_client_id = $4::uuid
+  AND resource = $5::text AND subject_urn = $6::text
+  AND sign_in_id = $7::uuid
+  AND ema_provider = 'speakeasy' AND user_session_id IS NULL
+  AND deleted IS FALSE
+`
+
+type RetireSpeakeasyConsentEMACredentialsParams struct {
+	OrganizationID        string
+	ProjectID             uuid.UUID
+	UserSessionIssuerID   uuid.UUID
+	RemoteSessionClientID uuid.UUID
+	Resource              string
+	SubjectUrn            string
+	SignInID              uuid.UUID
+}
+
+// NULL grants never conflict in the per-grant key, so a sign-in's earlier
+// consent credentials are retired before it publishes a new one.
+func (q *Queries) RetireSpeakeasyConsentEMACredentials(ctx context.Context, arg RetireSpeakeasyConsentEMACredentialsParams) error {
+	_, err := q.db.Exec(ctx, retireSpeakeasyConsentEMACredentials,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.UserSessionIssuerID,
+		arg.RemoteSessionClientID,
+		arg.Resource,
+		arg.SubjectUrn,
+		arg.SignInID,
+	)
+	return err
+}
+
+const retireSpeakeasySignInConsentEMACredentials = `-- name: RetireSpeakeasySignInConsentEMACredentials :execrows
+UPDATE remote_session_ema_credentials
+SET access_token_encrypted = NULL, deleted_at = clock_timestamp(), updated_at = clock_timestamp()
+WHERE organization_id = $1::text AND project_id = $2::uuid
+  AND user_session_issuer_id = $3::uuid
+  AND subject_urn = $4::text AND sign_in_id = $5::uuid
+  AND ema_provider = 'speakeasy' AND user_session_id IS NULL
+  AND deleted IS FALSE
+`
+
+type RetireSpeakeasySignInConsentEMACredentialsParams struct {
+	OrganizationID      string
+	ProjectID           uuid.UUID
+	UserSessionIssuerID uuid.UUID
+	SubjectUrn          string
+	SignInID            uuid.UUID
+}
+
+// Erases every credential a sign-in's consent pages minted for one user
+// session issuer that no grant adopted, when the user denies consent.
+func (q *Queries) RetireSpeakeasySignInConsentEMACredentials(ctx context.Context, arg RetireSpeakeasySignInConsentEMACredentialsParams) (int64, error) {
+	result, err := q.db.Exec(ctx, retireSpeakeasySignInConsentEMACredentials,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.UserSessionIssuerID,
+		arg.SubjectUrn,
+		arg.SignInID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const revokeOrganizationRemoteSession = `-- name: RevokeOrganizationRemoteSession :one
@@ -12610,6 +14053,26 @@ func (q *Queries) SetRemoteSessionIssuerOrganizationFixture(ctx context.Context,
 	return result.RowsAffected(), nil
 }
 
+const setRemoteSessionIssuerURLFixture = `-- name: SetRemoteSessionIssuerURLFixture :execrows
+UPDATE remote_session_issuers SET issuer = $1
+WHERE id = $2 AND project_id = $3::uuid
+`
+
+type SetRemoteSessionIssuerURLFixtureParams struct {
+	Issuer    string
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+// TEST FIXTURE ONLY. Respells a project issuer's stored URL.
+func (q *Queries) SetRemoteSessionIssuerURLFixture(ctx context.Context, arg SetRemoteSessionIssuerURLFixtureParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setRemoteSessionIssuerURLFixture, arg.Issuer, arg.ID, arg.ProjectID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const setRemoteSessionRefreshExpiresAtIfUnknown = `-- name: SetRemoteSessionRefreshExpiresAtIfUnknown :execrows
 UPDATE remote_sessions AS s
 SET refresh_expires_at = $1
@@ -12846,6 +14309,54 @@ WHERE id = $1
 // without coupling those tests to a second service's authorization path.
 func (q *Queries) SoftDeleteRemoteSessionClientFixture(ctx context.Context, id uuid.UUID) (int64, error) {
 	result, err := q.db.Exec(ctx, softDeleteRemoteSessionClientFixture, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const softDeleteRemoteSessionConsentedInOtherOrganization = `-- name: SoftDeleteRemoteSessionConsentedInOtherOrganization :execrows
+UPDATE remote_sessions AS s
+SET deleted_at = clock_timestamp(),
+    -- The credentials are not revoked upstream: the re-consent replaces this
+    -- user's grant at the same upstream, and revoking the old token there can
+    -- revoke the new consent too. No identity is kept.
+    upstream_subject = NULL,
+    upstream_email = NULL,
+    upstream_display_name = NULL,
+    identity_source = NULL,
+    enrichment = NULL,
+    -- The credential is gone, so nothing it was observed doing survives it.
+    last_validated_at = NULL,
+    validation_status = NULL,
+    validation_reason = NULL
+FROM user_session_issuers AS stored
+LEFT JOIN projects AS stored_project ON stored_project.id = stored.project_id,
+     remote_session_clients AS c
+LEFT JOIN projects AS client_project ON client_project.id = c.project_id
+WHERE s.subject_urn = $1
+  AND s.remote_session_client_id = $2
+  AND s.deleted IS FALSE
+  AND stored.id = s.user_session_issuer_id
+  AND COALESCE(stored_project.organization_id, stored.organization_id) IS DISTINCT FROM $3::text
+  -- The client must be within the re-consenting organization's reach.
+  AND c.id = s.remote_session_client_id
+  AND (client_project.organization_id = $3::text OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = $3::text)))
+`
+
+type SoftDeleteRemoteSessionConsentedInOtherOrganizationParams struct {
+	SubjectUrn            urn.SessionSubject
+	RemoteSessionClientID uuid.UUID
+	OrganizationID        string
+}
+
+// Before a re-consent, tombstones the subject's live grant for the client when
+// it was consented through a sign-in of another organization, so the
+// re-consent inserts a fresh row recording the new organization instead of
+// updating the old row's provenance in place. The sign-in's organization is
+// its own, or its project's; a deleted sign-in still names it.
+func (q *Queries) SoftDeleteRemoteSessionConsentedInOtherOrganization(ctx context.Context, arg SoftDeleteRemoteSessionConsentedInOtherOrganizationParams) (int64, error) {
+	result, err := q.db.Exec(ctx, softDeleteRemoteSessionConsentedInOtherOrganization, arg.SubjectUrn, arg.RemoteSessionClientID, arg.OrganizationID)
 	if err != nil {
 		return 0, err
 	}
@@ -15205,7 +16716,7 @@ type UpsertSpeakeasyEMACredentialParams struct {
 	InternalSessionIssuerUpdatedAt pgtype.Timestamptz
 	InternalSessionIssuerKeyID     uuid.UUID
 	SignInID                       uuid.UUID
-	UserSessionID                  uuid.UUID
+	UserSessionID                  uuid.NullUUID
 	RequestedScopes                []string
 	GrantedScopes                  []string
 	AccessTokenEncrypted           string
@@ -15220,7 +16731,8 @@ type UpsertSpeakeasyEMACredentialRow struct {
 
 // The caller locks the binding, sign-in and issuer and checks the exact
 // grant before this statement. Client changes during redemption still fence
-// publication. Each authenticated MCP grant keeps its own slot.
+// publication. Each authenticated MCP grant keeps its own slot; a consent
+// credential has no grant yet and a NULL user_session_id.
 func (q *Queries) UpsertSpeakeasyEMACredential(ctx context.Context, arg UpsertSpeakeasyEMACredentialParams) (UpsertSpeakeasyEMACredentialRow, error) {
 	row := q.db.QueryRow(ctx, upsertSpeakeasyEMACredential,
 		arg.OrganizationID,

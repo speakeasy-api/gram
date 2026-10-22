@@ -306,6 +306,46 @@ var _ = Service("organizationUserSessionIssuers", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "OrganizationUserSessionIssuerMcpServers"}`)
 	})
 
+	Method("getAuthenticationHostImpact", func() {
+		Description("Preview moving a user_session_issuer in the caller's organization onto or off the deployment's authentication host: where clients sign in before and after, and how many MCP servers that affects. Requires org:read.")
+		Payload(func() {
+			Attribute("id", String, "The user_session_issuer id.", func() { Format(FormatUUID) })
+			Attribute("use_authentication_host", Boolean, "True to preview moving onto the authentication host, false to preview moving off it.")
+			Required("id", "use_authentication_host")
+			security.SessionPayload()
+		})
+		Result(UserSessionIssuerAuthenticationHostImpact)
+		HTTP(func() {
+			GET("/rpc/organizationUserSessionIssuers.getAuthenticationHostImpact")
+			Param("id")
+			Param("use_authentication_host")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+		Meta("openapi:operationId", "getOrganizationUserSessionIssuerAuthenticationHostImpact")
+		Meta("openapi:extension:x-speakeasy-name-override", "getAuthenticationHostImpact")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "OrganizationUserSessionIssuerAuthenticationHostImpact"}`)
+	})
+
+	Method("setAuthenticationHost", func() {
+		Description("Move a user_session_issuer in the caller's organization onto or off the deployment's authentication host. A shared authorization server with a pinned issuer URL is re-pinned to the matching host, so its issuer URL and token endpoint change; other issuers announce their authorization servers on the new host. Clients and anything configured with the previous URLs must be updated. Refused when the deployment has no authentication host, and for issuers managed by Speakeasy. Requires org:admin.")
+		Payload(func() {
+			Attribute("id", String, "The user_session_issuer id.", func() { Format(FormatUUID) })
+			Attribute("use_authentication_host", Boolean, "True to move onto the authentication host, false to move off it.")
+			Required("id", "use_authentication_host")
+			security.SessionPayload()
+		})
+		Result(UserSessionIssuer)
+		HTTP(func() {
+			POST("/rpc/organizationUserSessionIssuers.setAuthenticationHost")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+		Meta("openapi:operationId", "setOrganizationUserSessionIssuerAuthenticationHost")
+		Meta("openapi:extension:x-speakeasy-name-override", "setAuthenticationHost")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SetOrganizationUserSessionIssuerAuthenticationHost"}`)
+	})
+
 	Method("getIssuerDeletePreflight", func() {
 		Description("Report the clients, live sessions, MCP servers, and toolsets affected by deleting an organization-owned user_session_issuer. Requires org:read.")
 		Payload(func() {
@@ -569,6 +609,7 @@ var UserSessionIssuer = Type("UserSessionIssuer", func() {
 		Enum("pinned_issuer_url_invalid", "host_not_served")
 	})
 	Attribute("project_name", String, "The owning project's name. Present on organization-level reads of project-specific issuers.")
+	Attribute("authentication_host_available", Boolean, "Whether this deployment has an authentication host the issuer can be moved onto. Present on responses, not audit snapshots.")
 	Attribute("created_at", String, func() {
 		Format(FormatDateTime)
 	})
@@ -577,6 +618,16 @@ var UserSessionIssuer = Type("UserSessionIssuer", func() {
 	})
 
 	Required("id", "project_id", "organization_id", "slug", "authn_challenge_mode", "session_duration_hours", "client_id_metadata_admission_mode", "authorization_server_mode", "use_authentication_host", "issuer_url_pinned", "created_at", "updated_at")
+})
+
+var UserSessionIssuerAuthenticationHostImpact = Type("UserSessionIssuerAuthenticationHostImpact", func() {
+	Description("What moving a user_session_issuer onto or off the authentication host changes for its clients.")
+	Attribute("issuer", UserSessionIssuer, "The issuer as it is now.")
+	Attribute("authorization_server_before", String, "Where clients sign in now: the shared authorization server's issuer URL, or the origin that announces each MCP server's own authorization server. Empty for a shared issuer this deployment does not serve.")
+	Attribute("authorization_server_after", String, "Where clients sign in after the move, in the same terms.")
+	Attribute("changes", Boolean, "Whether the move changes where clients sign in. False when the issuer is already where it would move.")
+	Attribute("mcp_server_count", Int, "Live MCP servers, toolsets, and meta MCP servers attached to the issuer. Those on a custom domain keep announcing their own authorization servers there.")
+	Required("issuer", "authorization_server_before", "authorization_server_after", "changes", "mcp_server_count")
 })
 
 var UserSessionIssuerAttachImpact = Type("UserSessionIssuerAttachImpact", func() {

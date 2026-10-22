@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	accessgen "github.com/speakeasy-api/gram/server/gen/access"
+	accessservice "github.com/speakeasy-api/gram/server/internal/access"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 )
@@ -32,16 +33,17 @@ func TestAccessReadOutputsOnlyAllowlistedFields(t *testing.T) {
 		Members:      []AccessMember{{MaskedIdentity: "a***@e***", Roles: []string{"Operators"}, Reference: "opaque-member", Version: "opaque-version"}},
 		TotalMatches: NewSubjectCount(7), Suppressed: false, Truncated: false, ExpiresAt: "2026-09-04T12:10:00Z",
 	}
-	require.ElementsMatch(t, []string{"members", "masked_identity", "roles", "reference", "version", "total_matches", "suppressed", "truncated", "expires_at"}, decodeKeys(t, members))
+	require.ElementsMatch(t, []string{"members", "masked_identity", "roles", "reference", "version", "total_matches", "suppressed", "truncated", "exact_email_match", "expires_at"}, decodeKeys(t, members))
 
 	memberAccess := GetMemberMCPAccessOutput{Servers: []MemberMCPAccessRow{{
 		ProjectID: uuid.NewString(), ProjectName: "Default", MCPID: uuid.NewString(), MCPName: "Tasks",
 		Backend: "remote", Visibility: "private", AuthorizationMode: "rbac", ConnectionAccess: "some_tools",
 		CanConnect: true, ToolAccess: "some", CanView: true, CanManage: false,
+		Rules: []accessservice.MCPAccessRuleSummary{{AccessLevel: "use", SourceKind: "role", SourceName: "Operators", Effect: "limits", AppliesTo: "resource", Tools: []string{"delete_tasks"}, Dispositions: []string{"destructive"}, Reason: new("blocked")}},
 	}}}
 	require.ElementsMatch(t, []string{
 		"servers", "project_id", "project_name", "mcp_id", "mcp_name", "backend", "visibility", "authorization_mode",
-		"connection_access", "can_connect", "tool_access", "can_view", "can_manage", "truncated",
+		"connection_access", "can_connect", "tool_access", "can_view", "can_manage", "rules", "access_level", "source_kind", "source_name", "effect", "applies_to", "tools", "dispositions", "reason", "truncated",
 	}, decodeKeys(t, memberAccess))
 
 	access := GetMCPAccessOutput{

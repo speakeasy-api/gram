@@ -57,6 +57,16 @@ type UpdateIssuerRequestBody struct {
 	ClientIDMetadataAdmissionMode *string `form:"client_id_metadata_admission_mode,omitempty" json:"client_id_metadata_admission_mode,omitempty" xml:"client_id_metadata_admission_mode,omitempty"`
 }
 
+// SetAuthenticationHostRequestBody is the type of the
+// "organizationUserSessionIssuers" service "setAuthenticationHost" endpoint
+// HTTP request body.
+type SetAuthenticationHostRequestBody struct {
+	// The user_session_issuer id.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// True to move onto the authentication host, false to move off it.
+	UseAuthenticationHost *bool `form:"use_authentication_host,omitempty" json:"use_authentication_host,omitempty" xml:"use_authentication_host,omitempty"`
+}
+
 // MoveIssuerRequestBody is the type of the "organizationUserSessionIssuers"
 // service "moveIssuer" endpoint HTTP request body.
 type MoveIssuerRequestBody struct {
@@ -156,8 +166,11 @@ type CreateIssuerResponseBody struct {
 	// The owning project's name. Present on organization-level reads of
 	// project-specific issuers.
 	ProjectName *string `form:"project_name,omitempty" json:"project_name,omitempty" xml:"project_name,omitempty"`
-	CreatedAt   string  `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt   string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	// Whether this deployment has an authentication host the issuer can be moved
+	// onto. Present on responses, not audit snapshots.
+	AuthenticationHostAvailable *bool  `form:"authentication_host_available,omitempty" json:"authentication_host_available,omitempty" xml:"authentication_host_available,omitempty"`
+	CreatedAt                   string `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt                   string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // ListIssuersResponseBody is the type of the "organizationUserSessionIssuers"
@@ -234,8 +247,11 @@ type GetIssuerResponseBody struct {
 	// The owning project's name. Present on organization-level reads of
 	// project-specific issuers.
 	ProjectName *string `form:"project_name,omitempty" json:"project_name,omitempty" xml:"project_name,omitempty"`
-	CreatedAt   string  `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt   string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	// Whether this deployment has an authentication host the issuer can be moved
+	// onto. Present on responses, not audit snapshots.
+	AuthenticationHostAvailable *bool  `form:"authentication_host_available,omitempty" json:"authentication_host_available,omitempty" xml:"authentication_host_available,omitempty"`
+	CreatedAt                   string `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt                   string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // UpdateIssuerResponseBody is the type of the "organizationUserSessionIssuers"
@@ -304,8 +320,11 @@ type UpdateIssuerResponseBody struct {
 	// The owning project's name. Present on organization-level reads of
 	// project-specific issuers.
 	ProjectName *string `form:"project_name,omitempty" json:"project_name,omitempty" xml:"project_name,omitempty"`
-	CreatedAt   string  `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt   string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	// Whether this deployment has an authentication host the issuer can be moved
+	// onto. Present on responses, not audit snapshots.
+	AuthenticationHostAvailable *bool  `form:"authentication_host_available,omitempty" json:"authentication_host_available,omitempty" xml:"authentication_host_available,omitempty"`
+	CreatedAt                   string `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt                   string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // ListMcpServersResponseBody is the type of the
@@ -315,6 +334,101 @@ type ListMcpServersResponseBody struct {
 	Items []*UserSessionIssuerMcpServerResponseBody `form:"items" json:"items" xml:"items"`
 	// Cursor for the next page; empty when exhausted.
 	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
+}
+
+// GetAuthenticationHostImpactResponseBody is the type of the
+// "organizationUserSessionIssuers" service "getAuthenticationHostImpact"
+// endpoint HTTP response body.
+type GetAuthenticationHostImpactResponseBody struct {
+	// The issuer as it is now.
+	Issuer *UserSessionIssuerResponseBody `form:"issuer" json:"issuer" xml:"issuer"`
+	// Where clients sign in now: the shared authorization server's issuer URL, or
+	// the origin that announces each MCP server's own authorization server. Empty
+	// for a shared issuer this deployment does not serve.
+	AuthorizationServerBefore string `form:"authorization_server_before" json:"authorization_server_before" xml:"authorization_server_before"`
+	// Where clients sign in after the move, in the same terms.
+	AuthorizationServerAfter string `form:"authorization_server_after" json:"authorization_server_after" xml:"authorization_server_after"`
+	// Whether the move changes where clients sign in. False when the issuer is
+	// already where it would move.
+	Changes bool `form:"changes" json:"changes" xml:"changes"`
+	// Live MCP servers, toolsets, and meta MCP servers attached to the issuer.
+	// Those on a custom domain keep announcing their own authorization servers
+	// there.
+	McpServerCount int `form:"mcp_server_count" json:"mcp_server_count" xml:"mcp_server_count"`
+}
+
+// SetAuthenticationHostResponseBody is the type of the
+// "organizationUserSessionIssuers" service "setAuthenticationHost" endpoint
+// HTTP response body.
+type SetAuthenticationHostResponseBody struct {
+	// The user_session_issuer id.
+	ID string `form:"id" json:"id" xml:"id"`
+	// The owning project id; empty for organization-owned issuers.
+	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// The owning organization id.
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	// Issuer slug. Unique for project-owned issuers; organization-owned issuer
+	// slugs may repeat.
+	Slug string `form:"slug" json:"slug" xml:"slug"`
+	// chain | interactive.
+	AuthnChallengeMode string `form:"authn_challenge_mode" json:"authn_challenge_mode" xml:"authn_challenge_mode"`
+	// Maximum issued user session lifetime, in hours.
+	SessionDurationHours int `form:"session_duration_hours" json:"session_duration_hours" xml:"session_duration_hours"`
+	// The EFFECTIVE CIMD admission policy in force for this issuer: disabled |
+	// presets | reporting | open. Always populated, so clients never have to
+	// reason about an unset state. 'open' is the resting policy an issuer carries
+	// unless an operator chooses otherwise: it admits any spec-valid document, and
+	// 'presets' enforcement is opt-in because a denial under it is unrecoverable
+	// for the end user. Note 'reporting' can be READ but not written: it is a
+	// legacy value that admits exactly what 'open' admits, and no issuer is
+	// created with it.
+	ClientIDMetadataAdmissionMode string `form:"client_id_metadata_admission_mode" json:"client_id_metadata_admission_mode" xml:"client_id_metadata_admission_mode"`
+	// The organization-level or global remote_session_issuer whose assertions this
+	// issuer trusts. Absent when enterprise-managed authorization is disabled.
+	TrustedRemoteSessionIssuerID *string `form:"trusted_remote_session_issuer_id,omitempty" json:"trusted_remote_session_issuer_id,omitempty" xml:"trusted_remote_session_issuer_id,omitempty"`
+	// The organization-level remote_session_client Speakeasy uses with the trusted
+	// issuer. Absent when enterprise-managed authorization is disabled.
+	TrustedRemoteSessionClientID *string `form:"trusted_remote_session_client_id,omitempty" json:"trusted_remote_session_client_id,omitempty" xml:"trusted_remote_session_client_id,omitempty"`
+	// Which OAuth authorization server the issuer's MCP servers point clients to.
+	// 'endpoint' gives every MCP server its own authorization server, rooted at
+	// the server's URL. 'shared' serves one authorization server for the issuer,
+	// used by all of its MCP servers; issuer_url and token_endpoint locate it. A
+	// shared issuer whose authorization server this deployment does not serve
+	// falls back to per-endpoint authorization servers, and
+	// authorization_server_unavailable_reason says why.
+	AuthorizationServerMode string `form:"authorization_server_mode" json:"authorization_server_mode" xml:"authorization_server_mode"`
+	// Whether the issuer opts in to announcing its authorization servers on the
+	// deployment's authentication host rather than the MCP host. This is the
+	// stored setting: on a deployment without an authentication host it has no
+	// effect, and issuer_url shows the host actually used.
+	UseAuthenticationHost bool `form:"use_authentication_host" json:"use_authentication_host" xml:"use_authentication_host"`
+	// Whether the shared authorization server's issuer URL was fixed when the
+	// issuer was set up, so it stays the same if the deployment's hosts change. An
+	// unpinned shared issuer derives its issuer URL from the deployment's current
+	// hosts, so a host change also changes the values configured on other
+	// platforms. Always false outside shared mode.
+	IssuerURLPinned bool `form:"issuer_url_pinned" json:"issuer_url_pinned" xml:"issuer_url_pinned"`
+	// The RFC 8414 issuer identifier of the issuer's shared authorization server.
+	// Present only for a shared issuer whose authorization server this deployment
+	// serves.
+	IssuerURL *string `form:"issuer_url,omitempty" json:"issuer_url,omitempty" xml:"issuer_url,omitempty"`
+	// The token endpoint of the issuer's shared authorization server. Present
+	// exactly when issuer_url is.
+	TokenEndpoint *string `form:"token_endpoint,omitempty" json:"token_endpoint,omitempty" xml:"token_endpoint,omitempty"`
+	// Why a shared issuer's authorization server is not served, so its MCP servers
+	// fall back to per-endpoint authorization servers: the pinned issuer URL is
+	// not this issuer's shared authorization server (pinned_issuer_url_invalid),
+	// or it is on a host this deployment does not serve (host_not_served). Absent
+	// otherwise.
+	AuthorizationServerUnavailableReason *string `form:"authorization_server_unavailable_reason,omitempty" json:"authorization_server_unavailable_reason,omitempty" xml:"authorization_server_unavailable_reason,omitempty"`
+	// The owning project's name. Present on organization-level reads of
+	// project-specific issuers.
+	ProjectName *string `form:"project_name,omitempty" json:"project_name,omitempty" xml:"project_name,omitempty"`
+	// Whether this deployment has an authentication host the issuer can be moved
+	// onto. Present on responses, not audit snapshots.
+	AuthenticationHostAvailable *bool  `form:"authentication_host_available,omitempty" json:"authentication_host_available,omitempty" xml:"authentication_host_available,omitempty"`
+	CreatedAt                   string `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt                   string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // GetIssuerDeletePreflightResponseBody is the type of the
@@ -407,8 +521,11 @@ type MoveIssuerResponseBody struct {
 	// The owning project's name. Present on organization-level reads of
 	// project-specific issuers.
 	ProjectName *string `form:"project_name,omitempty" json:"project_name,omitempty" xml:"project_name,omitempty"`
-	CreatedAt   string  `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt   string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	// Whether this deployment has an authentication host the issuer can be moved
+	// onto. Present on responses, not audit snapshots.
+	AuthenticationHostAvailable *bool  `form:"authentication_host_available,omitempty" json:"authentication_host_available,omitempty" xml:"authentication_host_available,omitempty"`
+	CreatedAt                   string `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt                   string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // GetIssuerMigratePreflightResponseBody is the type of the
@@ -1443,6 +1560,386 @@ type ListMcpServersUnexpectedResponseBody struct {
 // "organizationUserSessionIssuers" service "listMcpServers" endpoint HTTP
 // response body for the "gateway_error" error.
 type ListMcpServersGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetAuthenticationHostImpactUnauthorizedResponseBody is the type of the
+// "organizationUserSessionIssuers" service "getAuthenticationHostImpact"
+// endpoint HTTP response body for the "unauthorized" error.
+type GetAuthenticationHostImpactUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetAuthenticationHostImpactForbiddenResponseBody is the type of the
+// "organizationUserSessionIssuers" service "getAuthenticationHostImpact"
+// endpoint HTTP response body for the "forbidden" error.
+type GetAuthenticationHostImpactForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetAuthenticationHostImpactBadRequestResponseBody is the type of the
+// "organizationUserSessionIssuers" service "getAuthenticationHostImpact"
+// endpoint HTTP response body for the "bad_request" error.
+type GetAuthenticationHostImpactBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetAuthenticationHostImpactNotFoundResponseBody is the type of the
+// "organizationUserSessionIssuers" service "getAuthenticationHostImpact"
+// endpoint HTTP response body for the "not_found" error.
+type GetAuthenticationHostImpactNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetAuthenticationHostImpactConflictResponseBody is the type of the
+// "organizationUserSessionIssuers" service "getAuthenticationHostImpact"
+// endpoint HTTP response body for the "conflict" error.
+type GetAuthenticationHostImpactConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetAuthenticationHostImpactUnsupportedMediaResponseBody is the type of the
+// "organizationUserSessionIssuers" service "getAuthenticationHostImpact"
+// endpoint HTTP response body for the "unsupported_media" error.
+type GetAuthenticationHostImpactUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetAuthenticationHostImpactInvalidResponseBody is the type of the
+// "organizationUserSessionIssuers" service "getAuthenticationHostImpact"
+// endpoint HTTP response body for the "invalid" error.
+type GetAuthenticationHostImpactInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetAuthenticationHostImpactInvariantViolationResponseBody is the type of the
+// "organizationUserSessionIssuers" service "getAuthenticationHostImpact"
+// endpoint HTTP response body for the "invariant_violation" error.
+type GetAuthenticationHostImpactInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetAuthenticationHostImpactUnexpectedResponseBody is the type of the
+// "organizationUserSessionIssuers" service "getAuthenticationHostImpact"
+// endpoint HTTP response body for the "unexpected" error.
+type GetAuthenticationHostImpactUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetAuthenticationHostImpactGatewayErrorResponseBody is the type of the
+// "organizationUserSessionIssuers" service "getAuthenticationHostImpact"
+// endpoint HTTP response body for the "gateway_error" error.
+type GetAuthenticationHostImpactGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetAuthenticationHostUnauthorizedResponseBody is the type of the
+// "organizationUserSessionIssuers" service "setAuthenticationHost" endpoint
+// HTTP response body for the "unauthorized" error.
+type SetAuthenticationHostUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetAuthenticationHostForbiddenResponseBody is the type of the
+// "organizationUserSessionIssuers" service "setAuthenticationHost" endpoint
+// HTTP response body for the "forbidden" error.
+type SetAuthenticationHostForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetAuthenticationHostBadRequestResponseBody is the type of the
+// "organizationUserSessionIssuers" service "setAuthenticationHost" endpoint
+// HTTP response body for the "bad_request" error.
+type SetAuthenticationHostBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetAuthenticationHostNotFoundResponseBody is the type of the
+// "organizationUserSessionIssuers" service "setAuthenticationHost" endpoint
+// HTTP response body for the "not_found" error.
+type SetAuthenticationHostNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetAuthenticationHostConflictResponseBody is the type of the
+// "organizationUserSessionIssuers" service "setAuthenticationHost" endpoint
+// HTTP response body for the "conflict" error.
+type SetAuthenticationHostConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetAuthenticationHostUnsupportedMediaResponseBody is the type of the
+// "organizationUserSessionIssuers" service "setAuthenticationHost" endpoint
+// HTTP response body for the "unsupported_media" error.
+type SetAuthenticationHostUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetAuthenticationHostInvalidResponseBody is the type of the
+// "organizationUserSessionIssuers" service "setAuthenticationHost" endpoint
+// HTTP response body for the "invalid" error.
+type SetAuthenticationHostInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetAuthenticationHostInvariantViolationResponseBody is the type of the
+// "organizationUserSessionIssuers" service "setAuthenticationHost" endpoint
+// HTTP response body for the "invariant_violation" error.
+type SetAuthenticationHostInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetAuthenticationHostUnexpectedResponseBody is the type of the
+// "organizationUserSessionIssuers" service "setAuthenticationHost" endpoint
+// HTTP response body for the "unexpected" error.
+type SetAuthenticationHostUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetAuthenticationHostGatewayErrorResponseBody is the type of the
+// "organizationUserSessionIssuers" service "setAuthenticationHost" endpoint
+// HTTP response body for the "gateway_error" error.
+type SetAuthenticationHostGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3234,8 +3731,11 @@ type UserSessionIssuerResponseBody struct {
 	// The owning project's name. Present on organization-level reads of
 	// project-specific issuers.
 	ProjectName *string `form:"project_name,omitempty" json:"project_name,omitempty" xml:"project_name,omitempty"`
-	CreatedAt   string  `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt   string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	// Whether this deployment has an authentication host the issuer can be moved
+	// onto. Present on responses, not audit snapshots.
+	AuthenticationHostAvailable *bool  `form:"authentication_host_available,omitempty" json:"authentication_host_available,omitempty" xml:"authentication_host_available,omitempty"`
+	CreatedAt                   string `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt                   string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // UserSessionIssuerMcpServerResponseBody is used to define fields on response
@@ -3317,6 +3817,7 @@ func NewCreateIssuerResponseBody(res *types.UserSessionIssuer) *CreateIssuerResp
 		TokenEndpoint:                        res.TokenEndpoint,
 		AuthorizationServerUnavailableReason: res.AuthorizationServerUnavailableReason,
 		ProjectName:                          res.ProjectName,
+		AuthenticationHostAvailable:          res.AuthenticationHostAvailable,
 		CreatedAt:                            res.CreatedAt,
 		UpdatedAt:                            res.UpdatedAt,
 	}
@@ -3364,6 +3865,7 @@ func NewGetIssuerResponseBody(res *types.UserSessionIssuer) *GetIssuerResponseBo
 		TokenEndpoint:                        res.TokenEndpoint,
 		AuthorizationServerUnavailableReason: res.AuthorizationServerUnavailableReason,
 		ProjectName:                          res.ProjectName,
+		AuthenticationHostAvailable:          res.AuthenticationHostAvailable,
 		CreatedAt:                            res.CreatedAt,
 		UpdatedAt:                            res.UpdatedAt,
 	}
@@ -3390,6 +3892,7 @@ func NewUpdateIssuerResponseBody(res *types.UserSessionIssuer) *UpdateIssuerResp
 		TokenEndpoint:                        res.TokenEndpoint,
 		AuthorizationServerUnavailableReason: res.AuthorizationServerUnavailableReason,
 		ProjectName:                          res.ProjectName,
+		AuthenticationHostAvailable:          res.AuthenticationHostAvailable,
 		CreatedAt:                            res.CreatedAt,
 		UpdatedAt:                            res.UpdatedAt,
 	}
@@ -3414,6 +3917,50 @@ func NewListMcpServersResponseBody(res *organizationusersessionissuers.ListUserS
 		}
 	} else {
 		body.Items = []*UserSessionIssuerMcpServerResponseBody{}
+	}
+	return body
+}
+
+// NewGetAuthenticationHostImpactResponseBody builds the HTTP response body
+// from the result of the "getAuthenticationHostImpact" endpoint of the
+// "organizationUserSessionIssuers" service.
+func NewGetAuthenticationHostImpactResponseBody(res *organizationusersessionissuers.UserSessionIssuerAuthenticationHostImpact) *GetAuthenticationHostImpactResponseBody {
+	body := &GetAuthenticationHostImpactResponseBody{
+		AuthorizationServerBefore: res.AuthorizationServerBefore,
+		AuthorizationServerAfter:  res.AuthorizationServerAfter,
+		Changes:                   res.Changes,
+		McpServerCount:            res.McpServerCount,
+	}
+	if res.Issuer != nil {
+		body.Issuer = marshalTypesUserSessionIssuerToUserSessionIssuerResponseBody(res.Issuer)
+	}
+	return body
+}
+
+// NewSetAuthenticationHostResponseBody builds the HTTP response body from the
+// result of the "setAuthenticationHost" endpoint of the
+// "organizationUserSessionIssuers" service.
+func NewSetAuthenticationHostResponseBody(res *types.UserSessionIssuer) *SetAuthenticationHostResponseBody {
+	body := &SetAuthenticationHostResponseBody{
+		ID:                                   res.ID,
+		ProjectID:                            res.ProjectID,
+		OrganizationID:                       res.OrganizationID,
+		Slug:                                 res.Slug,
+		AuthnChallengeMode:                   res.AuthnChallengeMode,
+		SessionDurationHours:                 res.SessionDurationHours,
+		ClientIDMetadataAdmissionMode:        res.ClientIDMetadataAdmissionMode,
+		TrustedRemoteSessionIssuerID:         res.TrustedRemoteSessionIssuerID,
+		TrustedRemoteSessionClientID:         res.TrustedRemoteSessionClientID,
+		AuthorizationServerMode:              res.AuthorizationServerMode,
+		UseAuthenticationHost:                res.UseAuthenticationHost,
+		IssuerURLPinned:                      res.IssuerURLPinned,
+		IssuerURL:                            res.IssuerURL,
+		TokenEndpoint:                        res.TokenEndpoint,
+		AuthorizationServerUnavailableReason: res.AuthorizationServerUnavailableReason,
+		ProjectName:                          res.ProjectName,
+		AuthenticationHostAvailable:          res.AuthenticationHostAvailable,
+		CreatedAt:                            res.CreatedAt,
+		UpdatedAt:                            res.UpdatedAt,
 	}
 	return body
 }
@@ -3476,6 +4023,7 @@ func NewMoveIssuerResponseBody(res *types.UserSessionIssuer) *MoveIssuerResponse
 		TokenEndpoint:                        res.TokenEndpoint,
 		AuthorizationServerUnavailableReason: res.AuthorizationServerUnavailableReason,
 		ProjectName:                          res.ProjectName,
+		AuthenticationHostAvailable:          res.AuthenticationHostAvailable,
 		CreatedAt:                            res.CreatedAt,
 		UpdatedAt:                            res.UpdatedAt,
 	}
@@ -4328,6 +4876,306 @@ func NewListMcpServersUnexpectedResponseBody(res *goa.ServiceError) *ListMcpServ
 // "organizationUserSessionIssuers" service.
 func NewListMcpServersGatewayErrorResponseBody(res *goa.ServiceError) *ListMcpServersGatewayErrorResponseBody {
 	body := &ListMcpServersGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetAuthenticationHostImpactUnauthorizedResponseBody builds the HTTP
+// response body from the result of the "getAuthenticationHostImpact" endpoint
+// of the "organizationUserSessionIssuers" service.
+func NewGetAuthenticationHostImpactUnauthorizedResponseBody(res *goa.ServiceError) *GetAuthenticationHostImpactUnauthorizedResponseBody {
+	body := &GetAuthenticationHostImpactUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetAuthenticationHostImpactForbiddenResponseBody builds the HTTP response
+// body from the result of the "getAuthenticationHostImpact" endpoint of the
+// "organizationUserSessionIssuers" service.
+func NewGetAuthenticationHostImpactForbiddenResponseBody(res *goa.ServiceError) *GetAuthenticationHostImpactForbiddenResponseBody {
+	body := &GetAuthenticationHostImpactForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetAuthenticationHostImpactBadRequestResponseBody builds the HTTP
+// response body from the result of the "getAuthenticationHostImpact" endpoint
+// of the "organizationUserSessionIssuers" service.
+func NewGetAuthenticationHostImpactBadRequestResponseBody(res *goa.ServiceError) *GetAuthenticationHostImpactBadRequestResponseBody {
+	body := &GetAuthenticationHostImpactBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetAuthenticationHostImpactNotFoundResponseBody builds the HTTP response
+// body from the result of the "getAuthenticationHostImpact" endpoint of the
+// "organizationUserSessionIssuers" service.
+func NewGetAuthenticationHostImpactNotFoundResponseBody(res *goa.ServiceError) *GetAuthenticationHostImpactNotFoundResponseBody {
+	body := &GetAuthenticationHostImpactNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetAuthenticationHostImpactConflictResponseBody builds the HTTP response
+// body from the result of the "getAuthenticationHostImpact" endpoint of the
+// "organizationUserSessionIssuers" service.
+func NewGetAuthenticationHostImpactConflictResponseBody(res *goa.ServiceError) *GetAuthenticationHostImpactConflictResponseBody {
+	body := &GetAuthenticationHostImpactConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetAuthenticationHostImpactUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "getAuthenticationHostImpact" endpoint
+// of the "organizationUserSessionIssuers" service.
+func NewGetAuthenticationHostImpactUnsupportedMediaResponseBody(res *goa.ServiceError) *GetAuthenticationHostImpactUnsupportedMediaResponseBody {
+	body := &GetAuthenticationHostImpactUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetAuthenticationHostImpactInvalidResponseBody builds the HTTP response
+// body from the result of the "getAuthenticationHostImpact" endpoint of the
+// "organizationUserSessionIssuers" service.
+func NewGetAuthenticationHostImpactInvalidResponseBody(res *goa.ServiceError) *GetAuthenticationHostImpactInvalidResponseBody {
+	body := &GetAuthenticationHostImpactInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetAuthenticationHostImpactInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "getAuthenticationHostImpact" endpoint
+// of the "organizationUserSessionIssuers" service.
+func NewGetAuthenticationHostImpactInvariantViolationResponseBody(res *goa.ServiceError) *GetAuthenticationHostImpactInvariantViolationResponseBody {
+	body := &GetAuthenticationHostImpactInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetAuthenticationHostImpactUnexpectedResponseBody builds the HTTP
+// response body from the result of the "getAuthenticationHostImpact" endpoint
+// of the "organizationUserSessionIssuers" service.
+func NewGetAuthenticationHostImpactUnexpectedResponseBody(res *goa.ServiceError) *GetAuthenticationHostImpactUnexpectedResponseBody {
+	body := &GetAuthenticationHostImpactUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetAuthenticationHostImpactGatewayErrorResponseBody builds the HTTP
+// response body from the result of the "getAuthenticationHostImpact" endpoint
+// of the "organizationUserSessionIssuers" service.
+func NewGetAuthenticationHostImpactGatewayErrorResponseBody(res *goa.ServiceError) *GetAuthenticationHostImpactGatewayErrorResponseBody {
+	body := &GetAuthenticationHostImpactGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetAuthenticationHostUnauthorizedResponseBody builds the HTTP response
+// body from the result of the "setAuthenticationHost" endpoint of the
+// "organizationUserSessionIssuers" service.
+func NewSetAuthenticationHostUnauthorizedResponseBody(res *goa.ServiceError) *SetAuthenticationHostUnauthorizedResponseBody {
+	body := &SetAuthenticationHostUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetAuthenticationHostForbiddenResponseBody builds the HTTP response body
+// from the result of the "setAuthenticationHost" endpoint of the
+// "organizationUserSessionIssuers" service.
+func NewSetAuthenticationHostForbiddenResponseBody(res *goa.ServiceError) *SetAuthenticationHostForbiddenResponseBody {
+	body := &SetAuthenticationHostForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetAuthenticationHostBadRequestResponseBody builds the HTTP response body
+// from the result of the "setAuthenticationHost" endpoint of the
+// "organizationUserSessionIssuers" service.
+func NewSetAuthenticationHostBadRequestResponseBody(res *goa.ServiceError) *SetAuthenticationHostBadRequestResponseBody {
+	body := &SetAuthenticationHostBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetAuthenticationHostNotFoundResponseBody builds the HTTP response body
+// from the result of the "setAuthenticationHost" endpoint of the
+// "organizationUserSessionIssuers" service.
+func NewSetAuthenticationHostNotFoundResponseBody(res *goa.ServiceError) *SetAuthenticationHostNotFoundResponseBody {
+	body := &SetAuthenticationHostNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetAuthenticationHostConflictResponseBody builds the HTTP response body
+// from the result of the "setAuthenticationHost" endpoint of the
+// "organizationUserSessionIssuers" service.
+func NewSetAuthenticationHostConflictResponseBody(res *goa.ServiceError) *SetAuthenticationHostConflictResponseBody {
+	body := &SetAuthenticationHostConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetAuthenticationHostUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "setAuthenticationHost" endpoint of the
+// "organizationUserSessionIssuers" service.
+func NewSetAuthenticationHostUnsupportedMediaResponseBody(res *goa.ServiceError) *SetAuthenticationHostUnsupportedMediaResponseBody {
+	body := &SetAuthenticationHostUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetAuthenticationHostInvalidResponseBody builds the HTTP response body
+// from the result of the "setAuthenticationHost" endpoint of the
+// "organizationUserSessionIssuers" service.
+func NewSetAuthenticationHostInvalidResponseBody(res *goa.ServiceError) *SetAuthenticationHostInvalidResponseBody {
+	body := &SetAuthenticationHostInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetAuthenticationHostInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "setAuthenticationHost" endpoint of the
+// "organizationUserSessionIssuers" service.
+func NewSetAuthenticationHostInvariantViolationResponseBody(res *goa.ServiceError) *SetAuthenticationHostInvariantViolationResponseBody {
+	body := &SetAuthenticationHostInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetAuthenticationHostUnexpectedResponseBody builds the HTTP response body
+// from the result of the "setAuthenticationHost" endpoint of the
+// "organizationUserSessionIssuers" service.
+func NewSetAuthenticationHostUnexpectedResponseBody(res *goa.ServiceError) *SetAuthenticationHostUnexpectedResponseBody {
+	body := &SetAuthenticationHostUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetAuthenticationHostGatewayErrorResponseBody builds the HTTP response
+// body from the result of the "setAuthenticationHost" endpoint of the
+// "organizationUserSessionIssuers" service.
+func NewSetAuthenticationHostGatewayErrorResponseBody(res *goa.ServiceError) *SetAuthenticationHostGatewayErrorResponseBody {
+	body := &SetAuthenticationHostGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -5754,6 +6602,30 @@ func NewListMcpServersPayload(userSessionIssuerID string, cursor *string, limit 
 	return v
 }
 
+// NewGetAuthenticationHostImpactPayload builds a
+// organizationUserSessionIssuers service getAuthenticationHostImpact endpoint
+// payload.
+func NewGetAuthenticationHostImpactPayload(id string, useAuthenticationHost bool, sessionToken *string) *organizationusersessionissuers.GetAuthenticationHostImpactPayload {
+	v := &organizationusersessionissuers.GetAuthenticationHostImpactPayload{}
+	v.ID = id
+	v.UseAuthenticationHost = useAuthenticationHost
+	v.SessionToken = sessionToken
+
+	return v
+}
+
+// NewSetAuthenticationHostPayload builds a organizationUserSessionIssuers
+// service setAuthenticationHost endpoint payload.
+func NewSetAuthenticationHostPayload(body *SetAuthenticationHostRequestBody, sessionToken *string) *organizationusersessionissuers.SetAuthenticationHostPayload {
+	v := &organizationusersessionissuers.SetAuthenticationHostPayload{
+		ID:                    *body.ID,
+		UseAuthenticationHost: *body.UseAuthenticationHost,
+	}
+	v.SessionToken = sessionToken
+
+	return v
+}
+
 // NewGetIssuerDeletePreflightPayload builds a organizationUserSessionIssuers
 // service getIssuerDeletePreflight endpoint payload.
 func NewGetIssuerDeletePreflightPayload(id string, sessionToken *string) *organizationusersessionissuers.GetIssuerDeletePreflightPayload {
@@ -5918,6 +6790,21 @@ func ValidateUpdateIssuerRequestBody(body *UpdateIssuerRequestBody) (err error) 
 		if !(*body.ClientIDMetadataAdmissionMode == "disabled" || *body.ClientIDMetadataAdmissionMode == "presets" || *body.ClientIDMetadataAdmissionMode == "open") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.client_id_metadata_admission_mode", *body.ClientIDMetadataAdmissionMode, []any{"disabled", "presets", "open"}))
 		}
+	}
+	return
+}
+
+// ValidateSetAuthenticationHostRequestBody runs the validations defined on
+// SetAuthenticationHostRequestBody
+func ValidateSetAuthenticationHostRequestBody(body *SetAuthenticationHostRequestBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.UseAuthenticationHost == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("use_authentication_host", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
 	}
 	return
 }

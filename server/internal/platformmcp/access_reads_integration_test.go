@@ -90,6 +90,64 @@ func TestAccessReadServiceSuppressesSmallMemberSearchAndReturnsMaskedLargeCohort
 	require.Equal(t, NewSubjectCount(5), byRoleName.TotalMatches)
 }
 
+func TestAccessReadServiceReturnsExactEmailMatchFromSmallMemberSearch(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_access_members_exact")
+	require.NoError(t, err)
+	principal, _ := seedRegistrationLifecycle(t, ctx, conn)
+	service := NewAccessReadService(testenv.NewLogger(t), conn, allowBudget(), "access-read-key")
+
+	seedAccessMember(t, ctx, conn, principal.OrganizationID, "member-exact", "member@example.test")
+	// Sorts before the exact match and also contains the query as a substring.
+	seedAccessMember(t, ctx, conn, principal.OrganizationID, "member-prefixed", "amember@example.test")
+
+	exact, err := service.ListMembers(ctx, principal, ListAccessMembersInput{Query: "  Member@Example.TEST ", Limit: 1})
+	require.NoError(t, err)
+	require.False(t, exact.Suppressed)
+	require.True(t, exact.ExactEmailMatch)
+	require.False(t, exact.Truncated)
+	require.Equal(t, NewSubjectCount(1), exact.TotalMatches)
+	require.Len(t, exact.Members, 1)
+	require.NotContains(t, exact.Members[0].MaskedIdentity, "example.test")
+	decoded, err := service.references.Decode(exact.Members[0].Reference, principal, subjectKindAccessMember, service.now())
+	require.NoError(t, err)
+	require.Equal(t, "member-exact", decoded)
+
+	partial, err := service.ListMembers(ctx, principal, ListAccessMembersInput{Query: "member@"})
+	require.NoError(t, err)
+	require.True(t, partial.Suppressed)
+	require.False(t, partial.ExactEmailMatch)
+	require.Empty(t, partial.Members)
+
+	unknown, err := service.ListMembers(ctx, principal, ListAccessMembersInput{Query: "nobody@example.test"})
+	require.NoError(t, err)
+	require.Equal(t, NewSubjectCount(0), unknown.TotalMatches)
+	require.Empty(t, unknown.Members)
+}
+
+func TestAccessReadServiceSuppressesAmbiguousExactEmailMatch(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_access_members_ambiguous")
+	require.NoError(t, err)
+	principal, _ := seedRegistrationLifecycle(t, ctx, conn)
+	service := NewAccessReadService(testenv.NewLogger(t), conn, allowBudget(), "access-read-key")
+
+	// User emails are unique only case-sensitively, so both normalize to the query.
+	seedAccessMember(t, ctx, conn, principal.OrganizationID, "member-lower", "member@example.test")
+	seedAccessMember(t, ctx, conn, principal.OrganizationID, "member-upper", "Member@example.test")
+
+	ambiguous, err := service.ListMembers(ctx, principal, ListAccessMembersInput{Query: "member@example.test", Limit: 1})
+	require.NoError(t, err)
+	require.True(t, ambiguous.Suppressed)
+	require.False(t, ambiguous.ExactEmailMatch)
+	require.Empty(t, ambiguous.Members)
+	require.Empty(t, ambiguous.ExpiresAt)
+}
+
 func TestGetMCPAccessUsesFrontingServerIDAndStoredToolMetadata(t *testing.T) {
 	t.Parallel()
 
@@ -154,6 +212,16 @@ func TestGetMemberMCPAccessEvaluatesLiveRoleGrantsAcrossInventory(t *testing.T) 
 	require.NotEmpty(t, rows)
 	target := rows[0]
 
+	seedAccessMember(t, ctx, conn, principal.OrganizationID, principal.UserID, "self-access@example.test")
+	selfAccess, err := service.ListMyMCPAccess(ctx, principal)
+	require.NoError(t, err)
+	selfReference, err := service.references.Encode(principal, subjectKindAccessMember, principal.UserID, service.now())
+	require.NoError(t, err)
+	referencedSelfAccess, err := service.GetMemberMCPAccess(ctx, principal, GetMemberMCPAccessInput{MemberReference: selfReference})
+	require.NoError(t, err)
+	require.Equal(t, referencedSelfAccess, selfAccess, "self access must use the caller directly without changing evaluation semantics")
+	require.NotEmpty(t, selfAccess.Servers)
+
 	memberID := "member-access-table"
 	seedAccessMember(t, ctx, conn, principal.OrganizationID, memberID, "member-access@example.test")
 	role := seedAccessRole(t, ctx, conn, principal.OrganizationID, "table-readers", "Table readers")
@@ -200,6 +268,38 @@ func TestGetMemberMCPAccessEvaluatesLiveRoleGrantsAcrossInventory(t *testing.T) 
 	require.Equal(t, "all", actual.ToolAccess)
 	require.True(t, actual.CanView)
 	require.False(t, actual.CanManage)
+	require.NotEmpty(t, actual.Rules)
+	for _, rule := range actual.Rules {
+		require.Equal(t, "role", rule.SourceKind)
+		require.Equal(t, "Table readers", rule.SourceName)
+	}
+
+	blockJSON, err := authz.NewSelector(authz.ScopeMCPBlockedConnect, target.McpServerID.String()).MarshalJSON()
+	require.NoError(t, err)
+	_, err = accessrepo.New(conn).UpsertPrincipalGrant(ctx, accessrepo.UpsertPrincipalGrantParams{
+		OrganizationID: principal.OrganizationID, PrincipalUrn: role, Scope: string(authz.ScopeMCPBlockedConnect), Selectors: blockJSON,
+	})
+	require.NoError(t, err)
+	blocked, err := service.GetMemberMCPAccess(ctx, principal, GetMemberMCPAccessInput{MemberReference: reference})
+	require.NoError(t, err)
+	found := false
+	for _, server := range blocked.Servers {
+		if server.MCPID != target.McpServerID.String() {
+			continue
+		}
+		found = true
+		require.False(t, server.CanConnect)
+		require.Equal(t, "none", server.ConnectionAccess)
+		var effects []string
+		for _, rule := range server.Rules {
+			if rule.AccessLevel == "use" {
+				effects = append(effects, rule.Effect)
+			}
+		}
+		require.Contains(t, effects, "blocks")
+		require.Contains(t, effects, "blocked")
+	}
+	require.True(t, found, "blocked servers remain in the member access inventory")
 
 	_, err = service.GetMemberMCPAccess(ctx, principal, GetMemberMCPAccessInput{MemberReference: "not-a-reference"})
 	require.ErrorIs(t, err, ErrAccessReferenceNotFound)
@@ -271,11 +371,11 @@ func TestListRolesNamesDirectorySourcesAndWithholdsSmallCounts(t *testing.T) {
 		require.NoError(t, err)
 	}
 	mappings := accessrepo.New(conn)
-	_, err = mappings.UpsertDirectoryGroupRoleMapping(ctx, accessrepo.UpsertDirectoryGroupRoleMappingParams{
+	_, err = mappings.InsertDirectoryGroupRoleMapping(ctx, accessrepo.InsertDirectoryGroupRoleMappingParams{
 		OrganizationID: org, DirectoryGroupID: uuid.NullUUID{UUID: groupID, Valid: true}, RoleUrn: analysts.String(),
 	})
 	require.NoError(t, err)
-	_, err = mappings.UpsertDirectoryAttributeRoleMapping(ctx, accessrepo.UpsertDirectoryAttributeRoleMappingParams{
+	_, err = mappings.InsertDirectoryAttributeRoleMapping(ctx, accessrepo.InsertDirectoryAttributeRoleMappingParams{
 		OrganizationID: org, AttributeKey: conv.ToPGText("department_name"), AttributeValue: conv.ToPGText("Research"), RoleUrn: analysts.String(),
 	})
 	require.NoError(t, err)

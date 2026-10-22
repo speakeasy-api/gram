@@ -30,11 +30,18 @@ type identityProviderAttachmentErrorResult struct {
 	Message string `json:"message"`
 }
 
+// Attaching an identity provider discovers the provider's metadata and
+// registers a client with it, so it reaches hosts outside Speakeasy.
+func identityProviderAttachmentAnnotations() *mcp.ToolAnnotations {
+	return writeAnnotations(false, false, true)
+}
+
 func registerUnavailableIdentityProviderTool(reg *Registrar) {
 	addTool(reg, &mcp.Tool{
 		Name:        "attach_platform_mcp_identity_provider",
 		Title:       "Connect an MCP Server's OAuth Provider",
 		Description: "Connect one MCP server to the OAuth provider it advertises. This is not switched on for your organization yet.",
+		Annotations: identityProviderAttachmentAnnotations(),
 	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeDefaultable}, unavailableTool("identity_provider_attachment"))
 }
 
@@ -43,6 +50,7 @@ func registerIdentityProviderTool(reg *Registrar, registrations *RegistrationSer
 		Name:        "attach_platform_mcp_identity_provider",
 		Title:       "Connect an MCP Server's OAuth Provider",
 		Description: "Connect one MCP server to the OAuth provider it advertises, so people can sign in to it. Without a project named, it acts on the organization's default project; project_slug in the result says which project was used. Ask for explicit user confirmation before calling this tool. It works out the provider's metadata from the stored MCP source and obtains an OAuth client automatically: through dynamic client registration when the provider offers it, otherwise through a client ID metadata document when the provider supports one. Constraints: non-secret provider URLs may be returned, but it never accepts or returns credentials, OAuth codes, tokens, client secrets, passwords, or API keys. After success, immediately present authorization_url as a clickable link and tell the user to open it and use Connect or Authorize.",
+		Annotations: identityProviderAttachmentAnnotations(),
 	}, ToolMeta{
 		Authorization: ExternalAuthorizationOrgAdmin,
 		// Connection-less: the registration is resolved by user and project,

@@ -29,6 +29,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/httpheaders"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcprequests"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
@@ -66,6 +67,10 @@ type metaGateContext struct {
 	// tokens, for an organization gateway whose members span projects. Read
 	// both through memberTokens.
 	projectTokens *projectTokenCache
+	// memberChoices, when serving reads credential choices, routes each
+	// proxied member through the client the credential chose for it, in
+	// place of tokens and projectTokens.
+	memberChoices *memberChoices
 	// userSessionIssuerID is the gated endpoint's issuer; uuid.Nil when ungated.
 	userSessionIssuerID uuid.UUID
 	// connectRoot is the gateway's root URL, under which each member has a
@@ -77,6 +82,7 @@ type metaGateContext struct {
 	// describe and consent probes never exchange; nil otherwise.
 	chainUpstream   func(ctx context.Context, upstreamResource string) (string, error)
 	toolSelection   *toolfilter.SessionSelection
+	discoveryMode   metamcp.DiscoveryMode
 	authenticated   bool
 	sessionID       string
 	chatID          string
@@ -181,7 +187,8 @@ func (s *Service) serveResolvedMetaMCPEndpoint(
 
 	var gateTokens map[uuid.UUID]remotesessions.UpstreamToken
 	var gateProjectTokens *projectTokenCache
-	var gateToolSelection *toolfilter.SessionSelection
+	var gateMemberChoices *memberChoices
+	var gatePolicy *toolfilter.SessionPolicy
 	switch {
 	case !metaServer.UserSessionIssuerID.Valid:
 	case membership.organization:
@@ -194,23 +201,42 @@ func (s *Service) serveResolvedMetaMCPEndpoint(
 		ctx = newCtx
 		r = r.WithContext(ctx)
 		gateProjectTokens = s.newOrganizationGatewayTokens(authentication)
-		gateToolSelection = toolSelection
+		gateMemberChoices, err = s.newMemberChoices(ctx, authentication)
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "load upstream client choices").LogError(ctx, logger)
+		}
+		gatePolicy = toolSelection
 	default:
 		if resolvedEndpoint == nil {
-			built, err := s.BuildResolvedMcpEndpointForMetaServer(ctx, logger, mcpEndpoint, metaServer, "mcp")
+			built, err := s.BuildResolvedMcpEndpointForMetaServer(ctx, logger, mcpEndpoint, metaServer, mcproute.MCP)
 			if err != nil {
 				return err
 			}
 			resolvedEndpoint = built
 		}
-		newCtx, tokens, toolSelection, err := s.ApplyIssuerGate(ctx, w, httpheaders.AuthorizationBearerToken(r), s.BaseURLForRequest(r), resolvedEndpoint)
+		newCtx, authentication, toolSelection, err := s.authenticateIssuerGate(ctx, w, httpheaders.AuthorizationBearerToken(r), s.BaseURLForRequest(r), resolvedEndpoint)
 		if err != nil {
 			return fmt.Errorf("apply issuer gate: %w", err)
 		}
 		ctx = newCtx
 		r = r.WithContext(ctx)
-		gateTokens = tokens
-		gateToolSelection = toolSelection
+		gateMemberChoices, err = s.newMemberChoices(ctx, authentication)
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "load upstream client choices").LogError(ctx, logger)
+		}
+		if gateMemberChoices != nil {
+			// Proxied members resolve only their chosen clients, so the
+			// issuer's other clients resolve lazily, for hosted members that
+			// need them, and an unrelated broken one blocks nothing else.
+			gateProjectTokens = s.newOrganizationGatewayTokens(authentication)
+		} else {
+			tokens, err := s.resolveIssuerGateAccessTokens(ctx, w, authentication)
+			if err != nil {
+				return fmt.Errorf("apply issuer gate: %w", err)
+			}
+			gateTokens = tokens
+		}
+		gatePolicy = toolSelection
 	}
 	if prepared.empty() {
 		return nil
@@ -240,11 +266,13 @@ func (s *Service) serveResolvedMetaMCPEndpoint(
 		organizationID:      metaServer.OrganizationID,
 		tokens:              gateTokens,
 		projectTokens:       gateProjectTokens,
+		memberChoices:       gateMemberChoices,
 		// Uninitialized when ungated, which disables identity chaining.
 		userSessionIssuerID: metaServer.UserSessionIssuerID.UUID,
 		connectRoot:         connectRoot,
 		chainUpstream:       nil,
-		toolSelection:       gateToolSelection,
+		toolSelection:       nil,
+		discoveryMode:       metamcp.ResolveDiscoveryMode(metaServer.DiscoveryMode),
 		authenticated:       false,
 		sessionID:           parseMcpSessionID(r.Header),
 		chatID:              r.Header.Get("Gram-Chat-ID"),
@@ -255,6 +283,17 @@ func (s *Service) serveResolvedMetaMCPEndpoint(
 		// tools/call path reads it (upstream dials pin their own version).
 		protocolVersion: resolution,
 		connectURL:      connectURL,
+	}
+	if gatePolicy != nil {
+		gate.toolSelection = gatePolicy.Selection
+		if gatePolicy.Gateway != nil && gatePolicy.Gateway.DiscoveryMode != nil {
+			gate.discoveryMode = *gatePolicy.Gateway.DiscoveryMode
+		}
+	}
+	// An agent gateway serves its delegated members progressively; the
+	// organization gateway follows the connection's choice.
+	if membership.agentID != uuid.Nil {
+		gate.discoveryMode = metamcp.DiscoveryModeProgressive
 	}
 	// Identity comes from the issuer gate alone: this surface runs no
 	// identity-auth ladder, so ungated meta endpoints serve anonymously —
@@ -341,10 +380,13 @@ func (s *Service) handleMetaMCPRequest(
 	case mcpversions.MethodInitialize:
 		return s.handleMetaInitialize(ctx, logger, metaServer, gate, req, gate.protocolVersion.InEffect)
 	case mcpversions.MethodServerDiscover:
-		return handleServerDiscover(ctx, logger, req.ID, describeMetaServer(metaServer), mcpversions.SupportedMetaServer())
+		return handleServerDiscover(ctx, logger, req.ID, describeMetaServer(metaServer, gate.discoveryMode), mcpversions.SupportedMetaServer())
 	case mcpversions.MethodNotificationsInitialized, mcpversions.MethodNotificationsCancelled:
 		return nil, nil
 	case mcpversions.MethodToolsList:
+		if gate.discoveryMode == metamcp.DiscoveryModeDirect {
+			return s.listDirectGatewayTools(ctx, logger, mcpEndpoint, metaServer, gate, req)
+		}
 		return s.listMetaServerTools(ctx, logger, req)
 	case mcpversions.MethodToolsCall:
 		return s.callMetaServerTool(ctx, logger, mcpEndpoint, metaServer, gate, req)
@@ -453,7 +495,7 @@ func (s *Service) handleMetaInitialize(
 
 	result := &result[initializeResult]{
 		ID:             req.ID,
-		Result:         describeMetaServer(metaServer).initializeResult(negotiated),
+		Result:         describeMetaServer(metaServer, gate.discoveryMode).initializeResult(negotiated),
 		serverIdentity: serverInfoMetaServer,
 		cacheHints:     nil,
 	}
@@ -469,6 +511,7 @@ func (s *Service) listMetaServerTools(ctx context.Context, logger *slog.Logger, 
 	tools := make([]*toolListEntry, 0, len(contract))
 	for _, tool := range contract {
 		tools = append(tools, &toolListEntry{
+			Title: "", OutputSchema: nil, Icons: nil, Execution: nil,
 			Name:        tool.Name,
 			Description: tool.Description,
 			InputSchema: tool.InputSchema,
@@ -513,12 +556,14 @@ func (s *Service) callMetaServerTool(
 		return nil, oops.E(oops.CodeInvalid, nil, "tool name is required").LogError(ctx, logger)
 	}
 
-	switch params.Name {
-	case metamcp.ToolListServers, metamcp.ToolDescribeServer, metamcp.ToolDescribeTools, metamcp.ToolExecuteTool, metamcp.ToolConnectionStatus:
-	default:
-		return nil, oops.E(oops.CodeNotFound, nil, "unknown tool %q", params.Name).LogError(ctx, logger)
-	}
+	if gate.discoveryMode != metamcp.DiscoveryModeDirect {
+		switch params.Name {
+		case metamcp.ToolListServers, metamcp.ToolDescribeServer, metamcp.ToolDescribeTools, metamcp.ToolExecuteTool, metamcp.ToolConnectionStatus:
+		default:
+			return nil, oops.E(oops.CodeNotFound, nil, "unknown tool %q", params.Name).LogError(ctx, logger)
+		}
 
+	}
 	start := time.Now()
 
 	// One snapshot per request: every meta MCP tool answers from the same
@@ -526,15 +571,7 @@ func (s *Service) callMetaServerTool(
 	// inside one. A derived gateway has no stored membership — its members
 	// are whatever the caller's access still reaches at this instant — so a
 	// revoked grant lands between requests the same way.
-	var (
-		members []metaMember
-		err     error
-	)
-	if gate.agentID != uuid.Nil || gate.organizationGateway {
-		ctx, members, err = s.resolveOrganizationMemberSnapshot(ctx, logger, gate.organizationID)
-	} else {
-		ctx, members, err = s.resolveMetaMemberSnapshot(ctx, logger, metaServer.ID, mcpEndpoint.ProjectID)
-	}
+	ctx, members, err := s.resolveGateMemberSnapshot(ctx, logger, gate, metaServer.ID, mcpEndpoint.ProjectID)
 	if err != nil {
 		if params.Name != metamcp.ToolExecuteTool {
 			s.logMetaDiscovery(ctx, gate, params.Name, start, err)
@@ -542,6 +579,9 @@ func (s *Service) callMetaServerTool(
 		return nil, err
 	}
 
+	if gate.discoveryMode == metamcp.DiscoveryModeDirect {
+		return s.executeMetaMemberTool(ctx, logger, gate, members, req, params.Name, params.Arguments, params.Meta)
+	}
 	var body json.RawMessage
 	switch params.Name {
 	case metamcp.ToolListServers:

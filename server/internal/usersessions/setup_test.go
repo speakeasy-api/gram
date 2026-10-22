@@ -99,6 +99,14 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 func newTestServiceWithRevoker(t *testing.T, revoker usersessions.TokenRevoker, guardianOpts ...func(*guardian.Policy)) (context.Context, *testInstance) {
 	t.Helper()
 
+	return newTestServiceWithHosts(t, testHosts, revoker, guardianOpts...)
+}
+
+// newTestServiceWithHosts builds the service on a deployment with the given
+// hosts, such as one without an authentication host.
+func newTestServiceWithHosts(t *testing.T, hosts authserver.Hosts, revoker usersessions.TokenRevoker, guardianOpts ...func(*guardian.Policy)) (context.Context, *testInstance) {
+	t.Helper()
+
 	ctx := t.Context()
 
 	logger := testenv.NewLogger(t)
@@ -138,7 +146,7 @@ func newTestServiceWithRevoker(t *testing.T, revoker usersessions.TokenRevoker, 
 		testenv.NewEncryptionClient(t),
 		usersessions.NewSigner("test-jwt-secret"),
 		testServerURL,
-		testHosts,
+		hosts,
 		ratelimit.NewRedisStore(redisClient),
 	)
 

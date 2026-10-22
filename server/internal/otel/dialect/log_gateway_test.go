@@ -9,7 +9,6 @@ import (
 
 // gatewayRecord is shaped like the record the MCP gateway emits for one hosted tool call.
 func gatewayRecord(scope string, attributes ...*otelv1.InboundLogRecord_KeyValue) *otelv1.InboundLogRecord {
-	duration := 1.25
 	return accessorTestRecord(scope, "execute_tool", append([]*otelv1.InboundLogRecord_KeyValue{
 		accessorTestKV("gen_ai.operation.name", "execute_tool"),
 		accessorTestKV("mcp.method.name", "tools/call"),
@@ -21,10 +20,7 @@ func gatewayRecord(scope string, attributes ...*otelv1.InboundLogRecord_KeyValue
 		accessorTestKV("user.email", "dev@example.com"),
 		accessorTestKV("gram.toolset.slug", "github"),
 		accessorTestKV("gram.mcp.client.name", "claude-code"),
-		(&otelv1.InboundLogRecord_KeyValue_builder{
-			Key:   new("gram.tool_call.duration"),
-			Value: (&otelv1.InboundLogRecord_AnyValue_builder{DoubleValue: &duration}).Build(),
-		}).Build(),
+		accessorTestDoubleKV("gram.tool_call.duration", 1.25),
 	}, attributes...)...)
 }
 
@@ -40,9 +36,7 @@ func TestGatewayLogAnswersEveryColumn(t *testing.T) {
 
 	record := gatewayRecord(GatewayLogScope, accessorTestIntKV("http.response.status_code", 200))
 	selected := ForLog(record)
-	fallback, ok := selected.(LogFallback)
-	require.True(t, ok)
-	require.Equal(t, []LogDialect{GatewayLog{}, SemconvLog{}}, fallback.Candidates)
+	require.IsType(t, GatewayLog{}, selected)
 
 	key, v, err := selected.EventType(record)
 	requireLogAnswer(t, "gen_ai.operation.name", EventTypeToolCallResult, key, v, err)

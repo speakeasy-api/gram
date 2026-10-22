@@ -13,16 +13,16 @@ packages:
   - e2e
 
 catalog:
-  "@ai-sdk/react": ^4.0.131
+  "@ai-sdk/react": ^4.0.141
   "@cfworker/json-schema": ^4.1.1
   "@modelcontextprotocol/sdk": ^1.30.0
   "@tailwindcss/vite": ^4.3.3
   "@tanstack/react-query": 5.102.8
   "@types/react": ^19.3.0
   "@types/react-dom": ^19.3.0
-  "@assistant-ui/react": ^0.15.23
+  "@assistant-ui/react": ^0.15.28
   "@vitejs/plugin-react": ^6.1.1
-  ai: ^7.0.128
+  ai: ^7.0.138
   "lucide-react": ^1.28.0
   typescript: 7.0.2
   vite: ^8.3.0
@@ -40,8 +40,8 @@ minimumReleaseAgeExclude:
   - "@chromatic-com/storybook"
 
 overrides:
-  ai: 7.0.128
-  "@ai-sdk/react": 4.0.131
+  ai: 7.0.138
+  "@ai-sdk/react": 4.0.141
   glob@>=10.0 <10.5.0: 10.5.0
   fast-uri@<3.1.8: 3.1.8
   # monaco-editor pins dompurify exactly; 3.4.15 has open XSS advisories.
@@ -50,7 +50,7 @@ overrides:
   # releases load multiple copies with separate layer-stack contexts — nested dismiss
   # layers then can't see each other (e.g. the filter sheet closing when dismissing a
   # dropdown inside it, DNO-393/AIS-168). Force one copy so all primitives share a stack.
-  "@radix-ui/react-dismissable-layer": 1.1.13
+  "@radix-ui/react-dismissable-layer": 1.2.1
   # Vite's optional Node types peer is runtime-irrelevant, but differing patch
   # versions mint separate Vite instances. TanStack Start checks its Vite
   # environment by identity, so keep the Vite peer set converged.

@@ -28,9 +28,8 @@ func TestAvailableAccessReadToolsAreReadOnlyWithStableAudiences(t *testing.T) {
 }
 
 // list_access_members is the one access read the assistant is admitted to: it
-// replaces the managed toolset's organization user lookup, and it is the only
-// only access read that works without a project or a role reference. The
-// other reads stay external-only.
+// replaces the managed toolset's organization user lookup. The other reads
+// stay external-only.
 func requireAccessReadToolDescriptors(t *testing.T, registrar *Registrar) {
 	t.Helper()
 
@@ -40,6 +39,7 @@ func requireAccessReadToolDescriptors(t *testing.T, registrar *Registrar) {
 	}{
 		"list_access_roles":     {ProjectScopeNone, externalOnly},
 		"list_access_members":   {ProjectScopeNone, bothAudiences},
+		"list_my_mcp_access":    {ProjectScopeNone, externalOnly},
 		"get_member_mcp_access": {ProjectScopeNone, externalOnly},
 		"get_mcp_access":        {ProjectScopeExplicit, externalOnly},
 	}
@@ -60,6 +60,7 @@ func requireAccessReadToolDescriptors(t *testing.T, registrar *Registrar) {
 	assistant := names(registrar.For(AudienceAssistant))
 	require.Contains(t, assistant, "list_access_members")
 	require.NotContains(t, assistant, "list_access_roles")
+	require.NotContains(t, assistant, "list_my_mcp_access")
 	require.NotContains(t, assistant, "get_member_mcp_access")
 	require.NotContains(t, assistant, "get_mcp_access")
 }
@@ -81,6 +82,7 @@ func TestListAccessMembersDescriptionExplainsMaskingAndReferences(t *testing.T) 
 		"must use the identity query",
 		"masked",
 		"at least five people",
+		"list_my_mcp_access",
 		"get_member_mcp_access",
 		"assign_mcp_access_role",
 	} {
@@ -99,6 +101,26 @@ func TestListAccessMembersDescriptionExplainsMaskingAndReferences(t *testing.T) 
 // The assistant advertises the descriptor's schema to a model. A stub with a
 // different schema would teach the model one contract and then enforce another
 // the moment the service is wired.
+func TestListMyMCPAccessUsesCallerIdentityWithoutInferringAccess(t *testing.T) {
+	t.Parallel()
+
+	registrar := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "test", Version: "test"}, nil))
+	registerAccessReadTools(registrar, nil)
+	descriptor := descriptorByName(t, registrar, "list_my_mcp_access")
+	for _, fragment := range []string{"authenticated caller", "without searching", "do not infer", "organization administration"} {
+		require.Contains(t, descriptor.Description, fragment)
+	}
+	var schema struct {
+		Properties map[string]json.RawMessage `json:"properties"`
+	}
+	require.NoError(t, json.Unmarshal(descriptor.InputSchema, &schema))
+	require.Empty(t, schema.Properties, "self access must not accept a user selector")
+
+	stub := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "test", Version: "test"}, nil))
+	registerUnavailableAccessReadTools(stub)
+	require.JSONEq(t, string(descriptor.InputSchema), string(descriptorByName(t, stub, "list_my_mcp_access").InputSchema))
+}
+
 func TestGetMemberMCPAccessAdvertisesTableReadyOutput(t *testing.T) {
 	t.Parallel()
 
@@ -112,6 +134,9 @@ func TestGetMemberMCPAccessAdvertisesTableReadyOutput(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, string(outputSchema), "connection_access")
 	require.Contains(t, string(outputSchema), "can_manage")
+	require.Contains(t, string(outputSchema), "rules")
+	require.Contains(t, string(outputSchema), "source_name")
+	require.Contains(t, string(outputSchema), "effect")
 }
 
 func TestGetMemberMCPAccessStubAdvertisesLiveInputSchema(t *testing.T) {

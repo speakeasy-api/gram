@@ -315,7 +315,9 @@ const RouteProvider = () => {
           .filter(
             ({ route, scope, resourceId, projectId }) =>
               !route.external &&
-              route.component &&
+              // A roster with child routes renders through indexComponent, not
+              // component, and is just as reachable — the palette takes either.
+              (route.component || route.indexComponent) &&
               route.title &&
               // Mirror the sidebar's per-page scope gating so the palette never
               // offers (nor navigates to) pages the user can't access.

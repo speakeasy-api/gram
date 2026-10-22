@@ -15,12 +15,26 @@ type contextKey string
 type APIKeyAuthorizationMode uint8
 
 // PrincipalCredential describes the immutable authorization state loaded from
-// a principal-backed credential row. The current owner is resolved separately
+// a principal-backed credential. The current owner is resolved separately
 // during live admission and is never accepted from the credential.
 type PrincipalCredential struct {
-	AuthorizerUserID       string
-	DelegatedGrants        []byte
+	// AuthorizerUserID is the user an agent credential acts for. Workload
+	// credentials carry none.
+	AuthorizerUserID string
+
+	// DelegatedGrants is the stored delegated policy that bounds the
+	// credential. Empty when DerivesPolicyAtAdmission is set.
+	DelegatedGrants []byte
+
+	// DelegatedGrantsVersion is the encoding version of DelegatedGrants.
 	DelegatedGrantsVersion int32
+
+	// DerivesPolicyAtAdmission marks a credential that stores no delegated
+	// policy: admission derives it on every request. Agent credentials derive
+	// it from the live policies of the agent, its owner, and the authorizing
+	// user; workload credentials derive it from the agent's live policy alone.
+	// Only the signed principal credential issuer sets it.
+	DerivesPolicyAtAdmission bool
 }
 
 const (
@@ -122,7 +136,7 @@ func WithPrincipalCredentialAuthorization(ctx context.Context, authCtx *AuthCont
 func PrincipalCredentialAuthorization(ctx context.Context) (PrincipalCredential, bool) {
 	authCtx, ok := GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.principalCredential == nil {
-		return PrincipalCredential{AuthorizerUserID: "", DelegatedGrants: nil, DelegatedGrantsVersion: 0}, false
+		return PrincipalCredential{AuthorizerUserID: "", DelegatedGrants: nil, DelegatedGrantsVersion: 0, DerivesPolicyAtAdmission: false}, false
 	}
 	credential := *authCtx.principalCredential
 	credential.DelegatedGrants = append([]byte(nil), credential.DelegatedGrants...)
@@ -161,6 +175,33 @@ func AuthenticatedActor(ctx context.Context) (urn.Principal, bool) {
 	}
 	actor, err := urn.ParsePrincipal(authCtx.actor.String())
 	return actor, err == nil
+}
+
+type workloadAgentKey struct{}
+
+// WithWorkloadAgent records the agent an admitted workload acts for. Only
+// workload admission sets it, with the agent whose policy it admitted; the
+// workload stays the actor.
+func WithWorkloadAgent(ctx context.Context, agent urn.Principal) context.Context {
+	return context.WithValue(ctx, workloadAgentKey{}, agent)
+}
+
+// EffectiveAgent returns the agent a request acts for: the actor itself when an
+// agent authenticated it, or the recorded agent when an admitted workload did.
+// Policy audiences, bypass, plugin selection and spend use this agent.
+func EffectiveAgent(ctx context.Context) (urn.Principal, bool) {
+	actor, ok := AuthenticatedActor(ctx)
+	switch {
+	case !ok:
+	case actor.Type == urn.PrincipalTypeAgent:
+		return actor, true
+	case actor.Type == urn.PrincipalTypeWorkload:
+		if agent, found := ctx.Value(workloadAgentKey{}).(urn.Principal); found && agent.Type == urn.PrincipalTypeAgent {
+			return agent, true
+		}
+	}
+	var zero urn.Principal
+	return zero, false
 }
 
 // APIKeyAuthorization returns the profile selected by trusted API-key

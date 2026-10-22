@@ -45,22 +45,14 @@ func (m *ChallengeManager) ResolveEMAResource(ctx context.Context, organizationI
 	if organizationID == "" || projectID == uuid.Nil || endpoint == "" {
 		return none, protectedresource.ErrEndpointResourceInvalid
 	}
-	digest := sha256.Sum256([]byte(organizationID + "\n" + projectID.String() + "\n" + endpoint))
-	key := "emaEndpointResource:v1:" + hex.EncodeToString(digest[:])
-	var entry emaResourceCacheEntry
-	if m.locks != nil && m.locks.Get(ctx, key, &entry) == nil {
-		if entry.Invalid {
-			return none, protectedresource.ErrEndpointResourceInvalid
-		}
-		if entry.Failed {
-			return none, fmt.Errorf("endpoint resource discovery temporarily unavailable")
-		}
-		return entry.Resource, nil
+	key := emaResourceCacheKey(organizationID, projectID, endpoint)
+	if resource, ok, err := m.cachedEMAResource(ctx, key); ok {
+		return resource, err
 	}
 	probeCtx, cancel := context.WithTimeout(ctx, emaResourceProbeBudget)
 	defer cancel()
 	resource, err := protectedresource.DiscoverEndpointResource(probeCtx, m.policy, endpoint)
-	entry = emaResourceCacheEntry{Resource: resource, Invalid: errors.Is(err, protectedresource.ErrEndpointResourceInvalid), Failed: err != nil}
+	entry := emaResourceCacheEntry{Resource: resource, Invalid: errors.Is(err, protectedresource.ErrEndpointResourceInvalid), Failed: err != nil}
 	ttl := emaResourceCacheTTL
 	if err != nil || !resource.Discovered {
 		ttl = emaResourceFailureTTL
@@ -74,4 +66,36 @@ func (m *ChallengeManager) ResolveEMAResource(ctx context.Context, organizationI
 		return resource, fmt.Errorf("resolve EMA resource: %w", err)
 	}
 	return resource, nil
+}
+
+// CachedEMAResource is ResolveEMAResource answered from its shared cache
+// alone, never probing the endpoint. False means no entry is cached.
+func (m *ChallengeManager) CachedEMAResource(ctx context.Context, organizationID string, projectID uuid.UUID, endpoint string) (protectedresource.EndpointResource, bool, error) {
+	if organizationID == "" || projectID == uuid.Nil || endpoint == "" {
+		return protectedresource.EndpointResource{Resource: "", AuthorizationServers: nil, Discovered: false}, true, protectedresource.ErrEndpointResourceInvalid
+	}
+	return m.cachedEMAResource(ctx, emaResourceCacheKey(organizationID, projectID, endpoint))
+}
+
+// cachedEMAResource reads one discovery cache entry, replaying a cached
+// failure as the error discovery returned.
+func (m *ChallengeManager) cachedEMAResource(ctx context.Context, key string) (protectedresource.EndpointResource, bool, error) {
+	var none protectedresource.EndpointResource
+	var entry emaResourceCacheEntry
+	if m.locks == nil || m.locks.Get(ctx, key, &entry) != nil {
+		return none, false, nil
+	}
+	if entry.Invalid {
+		return none, true, protectedresource.ErrEndpointResourceInvalid
+	}
+	if entry.Failed {
+		return none, true, fmt.Errorf("endpoint resource discovery temporarily unavailable")
+	}
+	return entry.Resource, true, nil
+}
+
+// emaResourceCacheKey keys an endpoint's discovered resource per tenant.
+func emaResourceCacheKey(organizationID string, projectID uuid.UUID, endpoint string) string {
+	digest := sha256.Sum256([]byte(organizationID + "\n" + projectID.String() + "\n" + endpoint))
+	return "emaEndpointResource:v1:" + hex.EncodeToString(digest[:])
 }

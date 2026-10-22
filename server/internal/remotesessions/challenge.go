@@ -52,6 +52,7 @@ import (
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -77,12 +78,8 @@ import (
 // upstream token exchange instead of bouncing back to
 // /<RouteBase>/{slug}/connect.
 //
-// RouteBase is "mcp" or "x/mcp" — the surface the parent challenge was
-// minted under. Drives both the upstream provider's redirect_uri
-// (/<RouteBase>/remote_login_callback) and the post-callback bounce to
-// /<RouteBase>/{slug}/connect. Empty values fall back to "mcp" so
-// in-flight states minted before this field landed still resume on the
-// original surface.
+// RouteBase is the surface the parent challenge was minted under. Drives
+// the post-callback bounce to /<RouteBase>/{slug}/connect.
 type ParentChallenge struct {
 	ID                  string
 	ProjectID           uuid.UUID
@@ -90,7 +87,7 @@ type ParentChallenge struct {
 	UserSessionIssuerID uuid.UUID
 	Subject             *urn.SessionSubject
 	McpSlug             string
-	RouteBase           string
+	RouteBase           mcproute.Base
 	McpServerID         uuid.NullUUID
 	MetaMcpServerID     uuid.NullUUID
 	// ResourceMcpServerID is the gateway member whose protected resource
@@ -147,10 +144,10 @@ type RemoteLoginState struct {
 	Resource        string              `json:"resource,omitempty"`
 	Subject         *urn.SessionSubject `json:"subject,omitempty"`
 	McpSlug         string              `json:"mcp_slug"`
-	// RouteBase is "mcp" or "x/mcp" — drives the post-callback redirect
-	// to /<RouteBase>/{slug}/connect. Empty values fall back to "mcp"
-	// for in-flight states minted before this field landed.
-	RouteBase       string        `json:"route_base,omitempty"`
+	// RouteBase drives the post-callback redirect to
+	// /<RouteBase>/{slug}/connect. Read it through Resolve: empty means
+	// mcproute.MCP, and an unserved value fails the callback closed.
+	RouteBase       mcproute.Base `json:"route_base,omitempty"`
 	McpServerID     uuid.NullUUID `json:"mcp_server_id,omitzero"`
 	MetaMcpServerID uuid.NullUUID `json:"meta_mcp_server_id,omitzero"`
 	// FinalRedirectURI overrides the default post-callback redirect to
@@ -898,46 +895,50 @@ func (m *ChallengeManager) listClients(
 			noted[r.RemoteSessionIssuerID] = true
 			m.issuerMetadata.NoteUse(ctx, issuerUseFromClientListRow(r))
 		}
-		out = append(out, Client{
-			ID:                               r.ClientID,
-			ProjectID:                        r.ClientProjectID,
-			RemoteSessionIssuerID:            r.RemoteSessionIssuerID,
-			ExternalClientID:                 r.ExternalClientID,
-			ClientSecretEncrypted:            conv.FromPGText[string](r.ClientSecretEncrypted),
-			IssuerSlug:                       r.IssuerSlug,
-			IssuerName:                       conv.FromPGText[string](r.IssuerName),
-			IssuerLogoAssetID:                r.IssuerLogoAssetID,
-			IssuerDocumentationURL:           conv.FromPGTextOrEmpty[string](r.IssuerServiceDocumentation),
-			IssuerPolicyURL:                  conv.FromPGTextOrEmpty[string](r.IssuerOpPolicyUri),
-			IssuerTosURL:                     conv.FromPGTextOrEmpty[string](r.IssuerOpTosUri),
-			ResourceIdentifier:               conv.FromPGTextOrEmpty[string](r.ResourceIdentifier),
-			ResourceName:                     conv.FromPGTextOrEmpty[string](r.ResourceName),
-			ResourceDocumentationURL:         conv.FromPGTextOrEmpty[string](r.ResourceDocumentation),
-			ResourcePolicyURL:                conv.FromPGTextOrEmpty[string](r.ResourcePolicyUri),
-			ResourceTosURL:                   conv.FromPGTextOrEmpty[string](r.ResourceTosUri),
-			IssuerURL:                        r.IssuerUrl,
-			IssuerIdentifier:                 issuerIdentifier(r.IssuerMetadata, r.IssuerUrl),
-			ClientAssertionIssuer:            clientAssertionIssuer(r.IssuerMetadata, r.IssuerUrl),
-			AuthorizationEndpoint:            conv.PtrValOr(conv.FromPGText[string](r.AuthorizationEndpoint), ""),
-			TokenEndpoint:                    conv.PtrValOr(conv.FromPGText[string](r.TokenEndpoint), ""),
-			ClientScope:                      r.ClientScope,
-			IssuerScopesSupported:            r.ScopesSupported,
-			IssuerScopeOverride:              r.ScopeOverride,
-			IssuerOmitScopeFallback:          r.OmitScopeFallback.Valid && r.OmitScopeFallback.Bool,
-			IssuerResourceIndicatorSupported: conv.FromPGBool[bool](r.ResourceIndicatorSupported),
-			IssuerAuthorizationResponseIssParameterSupported: r.AuthorizationResponseIssParameterSupported.Valid && r.AuthorizationResponseIssParameterSupported.Bool,
-			IssuerCodeChallengeMethodsSupported:              r.CodeChallengeMethodsSupported,
-			Audience:                                         conv.FromPGTextOrEmpty[string](r.ClientAudience),
-			Passthrough:                                      r.Passthrough,
-			LegacyCallbackUrl:                                r.LegacyCallbackUrl,
-			CallbackBaseURL:                                  r.CallbackBaseUrl,
-			IssuerRegistrationEndpoint:                       conv.FromPGTextOrEmpty[string](r.IssuerRegistrationEndpoint),
-			ClientSecretExpiresAt:                            timestampPtr(r.ClientSecretExpiresAt),
-			UpstreamRejectedAt:                               timestampPtr(r.UpstreamRejectedAt),
-			CredentialOwner:                                  CredentialOwner(r.CredentialOwner),
-		})
+		out = append(out, clientFromRow(r))
 	}
 	return out, nil
+}
+
+func clientFromRow(r remotesessions_repo.ListRemoteSessionClientsForUserSessionIssuerRow) Client {
+	return Client{
+		ID:                               r.ClientID,
+		ProjectID:                        r.ClientProjectID,
+		RemoteSessionIssuerID:            r.RemoteSessionIssuerID,
+		ExternalClientID:                 r.ExternalClientID,
+		ClientSecretEncrypted:            conv.FromPGText[string](r.ClientSecretEncrypted),
+		IssuerSlug:                       r.IssuerSlug,
+		IssuerName:                       conv.FromPGText[string](r.IssuerName),
+		IssuerLogoAssetID:                r.IssuerLogoAssetID,
+		IssuerDocumentationURL:           conv.FromPGTextOrEmpty[string](r.IssuerServiceDocumentation),
+		IssuerPolicyURL:                  conv.FromPGTextOrEmpty[string](r.IssuerOpPolicyUri),
+		IssuerTosURL:                     conv.FromPGTextOrEmpty[string](r.IssuerOpTosUri),
+		ResourceIdentifier:               conv.FromPGTextOrEmpty[string](r.ResourceIdentifier),
+		ResourceName:                     conv.FromPGTextOrEmpty[string](r.ResourceName),
+		ResourceDocumentationURL:         conv.FromPGTextOrEmpty[string](r.ResourceDocumentation),
+		ResourcePolicyURL:                conv.FromPGTextOrEmpty[string](r.ResourcePolicyUri),
+		ResourceTosURL:                   conv.FromPGTextOrEmpty[string](r.ResourceTosUri),
+		IssuerURL:                        r.IssuerUrl,
+		IssuerIdentifier:                 issuerIdentifier(r.IssuerMetadata, r.IssuerUrl),
+		ClientAssertionIssuer:            clientAssertionIssuer(r.IssuerMetadata, r.IssuerUrl),
+		AuthorizationEndpoint:            conv.PtrValOr(conv.FromPGText[string](r.AuthorizationEndpoint), ""),
+		TokenEndpoint:                    conv.PtrValOr(conv.FromPGText[string](r.TokenEndpoint), ""),
+		ClientScope:                      r.ClientScope,
+		IssuerScopesSupported:            r.ScopesSupported,
+		IssuerScopeOverride:              r.ScopeOverride,
+		IssuerOmitScopeFallback:          r.OmitScopeFallback.Valid && r.OmitScopeFallback.Bool,
+		IssuerResourceIndicatorSupported: conv.FromPGBool[bool](r.ResourceIndicatorSupported),
+		IssuerAuthorizationResponseIssParameterSupported: r.AuthorizationResponseIssParameterSupported.Valid && r.AuthorizationResponseIssParameterSupported.Bool,
+		IssuerCodeChallengeMethodsSupported:              r.CodeChallengeMethodsSupported,
+		Audience:                                         conv.FromPGTextOrEmpty[string](r.ClientAudience),
+		Passthrough:                                      r.Passthrough,
+		LegacyCallbackUrl:                                r.LegacyCallbackUrl,
+		CallbackBaseURL:                                  r.CallbackBaseUrl,
+		IssuerRegistrationEndpoint:                       conv.FromPGTextOrEmpty[string](r.IssuerRegistrationEndpoint),
+		ClientSecretExpiresAt:                            timestampPtr(r.ClientSecretExpiresAt),
+		UpstreamRejectedAt:                               timestampPtr(r.UpstreamRejectedAt),
+		CredentialOwner:                                  CredentialOwner(r.CredentialOwner),
+	}
 }
 
 // RemoteSessionStatus is the usability of a subject's stored remote_session
@@ -1051,6 +1052,11 @@ func (m *ChallengeManager) remoteSessionStatuses(
 	if err != nil {
 		return nil, fmt.Errorf("list remote session statuses: %w", err)
 	}
+	return remoteSessionStates(rows), nil
+}
+
+// remoteSessionStates keys each status row by its client.
+func remoteSessionStates(rows []remotesessions_repo.ListRemoteSessionStatusesForSubjectRow) map[uuid.UUID]RemoteSessionState {
 	statuses := make(map[uuid.UUID]RemoteSessionState, len(rows))
 	for _, row := range rows {
 		var accessExpiresAt *time.Time
@@ -1099,7 +1105,7 @@ func (m *ChallengeManager) remoteSessionStatuses(
 			ValidationReason:       row.ValidationReason.String,
 		}
 	}
-	return statuses, nil
+	return statuses
 }
 
 var ErrRemoteSessionNotRefreshable = errors.New("remote session has no usable refresh token")
@@ -1256,7 +1262,7 @@ func (m *ChallengeManager) mintAuthorization(
 	}
 
 	if client.AuthorizationEndpoint == "" {
-		return "", fmt.Errorf("remote_session_issuer %s missing authorization_endpoint", client.IssuerSlug)
+		return "", fmt.Errorf("remote_session_issuer %s: %w", client.IssuerSlug, ErrIssuerNoAuthorizationEndpoint)
 	}
 	if client.TokenEndpoint == "" {
 		return "", fmt.Errorf("remote_session_issuer %s missing token_endpoint", client.IssuerSlug)
@@ -1440,6 +1446,34 @@ func (m *ChallengeManager) mintAuthorization(
 	return u.String(), nil
 }
 
+// errRemoteLoginWithoutOrganization rejects a login state minted before it
+// carried an organization; without one the write could overwrite another
+// organization's grant.
+var errRemoteLoginWithoutOrganization = errors.New("remote login state has no organization")
+
+// storeRemoteSessionGrant records a consent for (subject, client). A live
+// grant consented through another organization's sign-in is tombstoned first,
+// so the new row records the organization the consent was made in; otherwise
+// the grant is updated in place. q must be the caller's transaction, holding
+// the sign-in and client locks.
+func storeRemoteSessionGrant(ctx context.Context, q *remotesessions_repo.Queries, organizationID string, params remotesessions_repo.UpsertRemoteSessionParams) (remotesessions_repo.RemoteSession, error) {
+	if organizationID == "" {
+		return remotesessions_repo.RemoteSession{}, errRemoteLoginWithoutOrganization
+	}
+	if _, err := q.SoftDeleteRemoteSessionConsentedInOtherOrganization(ctx, remotesessions_repo.SoftDeleteRemoteSessionConsentedInOtherOrganizationParams{
+		SubjectUrn:            params.SubjectUrn,
+		RemoteSessionClientID: params.RemoteSessionClientID,
+		OrganizationID:        organizationID,
+	}); err != nil {
+		return remotesessions_repo.RemoteSession{}, fmt.Errorf("tombstone grant from another organization: %w", err)
+	}
+	sess, err := q.UpsertRemoteSession(ctx, params)
+	if err != nil {
+		return sess, fmt.Errorf("upsert remote session: %w", err)
+	}
+	return sess, nil
+}
+
 // HandleRemoteLoginCallback is the GET handler for
 // /mcp/remote_login_callback. Bound by mcp/ at route-mount time. The legacy
 // /mcp/{mcpSlug}/remote_login_callback route is still accepted, but the MCP
@@ -1535,6 +1569,17 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 		return none, denied(ctx, logger, q)
 	}
 
+	// Only the default consent bounce is built from the route base; one no
+	// longer served fails before the code is exchanged.
+	routeBase := mcproute.MCP
+	if state.ConsentURL == "" && state.FinalRedirectURI == "" {
+		resolved, ok := state.RouteBase.Resolve()
+		if !ok {
+			return none, oops.E(oops.CodeUnauthorized, nil, "remote login state not found or expired").LogWarn(ctx, logger)
+		}
+		routeBase = resolved
+	}
+
 	// Hoisted above the DB lookup + upstream code exchange so a state with a
 	// missing/zero Subject fails fast — otherwise we burn the single-use
 	// upstream authorization code on a request that can't produce a
@@ -1615,12 +1660,11 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 		AssertionSigner:       m.assertions,
 	}, audience, code)
 	if err != nil {
-		var oauthErr oautherr.RFC6749Error
-		if errors.As(err, &oauthErr) && oauthErr.Code == oautherr.CodeInvalidTarget {
+		if oauthErr, ok := errors.AsType[oautherr.RFC6749Error](err); ok && oauthErr.Code == oautherr.CodeInvalidTarget {
 			return m.retryWithoutResource(ctx, logger, state, err)
 		}
 		m.noteExchangeTokenEndpointMissing(ctx, logger, client.ID, err)
-		return none, oops.E(oops.CodeUnauthorized, err, "upstream token exchange failed").LogError(ctx, logger)
+		return none, exchangeFailure(ctx, logger, err, clientRow.TunneledMcpServerID.Valid)
 	}
 	// The pair is live upstream from this line on, and every path out of here
 	// that does not store it strands it: unreachable through Speakeasy, and outside
@@ -1762,7 +1806,7 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 		return none, oops.E(oops.CodeUnauthorized, nil, "the connection this login was started from no longer exists").LogWarn(ctx, logger)
 	}
 
-	storedSession, err := txQueries.UpsertRemoteSession(ctx, remotesessions_repo.UpsertRemoteSessionParams{
+	storedSession, err := storeRemoteSessionGrant(ctx, txQueries, state.OrganizationID, remotesessions_repo.UpsertRemoteSessionParams{
 		SubjectUrn:            *state.Subject,
 		UserSessionIssuerID:   state.UserSessionIssuerID,
 		RemoteSessionClientID: state.RemoteSessionClientID,
@@ -1783,6 +1827,9 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 		Enrichment:          enrichment,
 	})
 	if err != nil {
+		if errors.Is(err, errRemoteLoginWithoutOrganization) {
+			return none, oops.E(oops.CodeUnauthorized, err, "this login expired, start it again").LogWarn(ctx, logger)
+		}
 		return none, oops.E(oops.CodeUnexpected, err, "store remote session").LogError(ctx, logger)
 	}
 
@@ -1791,10 +1838,6 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 	}
 	stranded = false
 
-	routeBase := state.RouteBase
-	if routeBase == "" {
-		routeBase = "mcp"
-	}
 	redirectBaseURL := m.serverURL.String()
 	if state.Authority.IsPrivate() {
 		redirectBaseURL = state.Authority.BaseURL
@@ -1881,7 +1924,11 @@ func (m *ChallengeManager) retryWithoutResource(ctx context.Context, logger *slo
 	var none RemoteLoginResult
 	logger = logger.With(attr.SlogOAuthError(oautherr.CodeInvalidTarget))
 	if state.Resource == "" || state.OmitResource || state.ResourceRetried {
-		return none, oops.E(oops.CodeUnauthorized, cause, "the identity provider rejected the requested resource").LogWarn(ctx, logger)
+		var attrs []slog.Attr
+		if endpointErr, ok := errors.AsType[*tokenEndpointError](cause); ok {
+			attrs = append(attrs, attr.SlogHTTPResponseStatusCode(endpointErr.statusCode))
+		}
+		return none, oops.E(oops.CodeUnauthorized, cause, "the identity provider rejected the requested resource").LogWarn(ctx, logger, attrs...)
 	}
 
 	clients, err := m.ListClients(ctx, state.ProjectID, state.OrganizationID, state.UserSessionIssuerID)
@@ -1910,13 +1957,12 @@ func (m *ChallengeManager) retryWithoutResource(ctx context.Context, logger *slo
 }
 
 // canonicalCallbackRouteBase is the route base the outbound remote-login
-// redirect_uri uses. remote_login_callback is mounted slug-less under both /mcp
-// and /x/mcp and recovers the originating slug from the cached login state, so
-// one canonical base serves either surface. A single stable redirect_uri also
+// redirect_uri uses. remote_login_callback is mounted slug-less under /mcp and
+// recovers the originating slug from the cached login state. A single stable redirect_uri also
 // matches the lone redirect_uri a CIMD client publishes in its metadata
 // document; the originating surface lives in the login state's RouteBase for
 // the post-callback bounce.
-const canonicalCallbackRouteBase = "mcp"
+const canonicalCallbackRouteBase = mcproute.MCP
 
 // HandleLegacyProxyCallback is the shim behind `GET /oauth/callback`, the
 // oauth_proxy_servers-era redirect_uri that clients flagged LegacyCallbackUrl
@@ -1971,23 +2017,34 @@ func (m *ChallengeManager) exchangeCode(
 		return tokenResponse{}, &tokenExchangeUnavailableError{err: fmt.Errorf("read token response body: %w", err)}
 	}
 	if resp.StatusCode/100 != 2 {
-		return tokenResponse{}, newTokenEndpointError(resp.StatusCode, resp.Status, body)
+		endpointErr := newTokenEndpointError(resp.StatusCode, resp.Status, body)
+		endpointErr.tunnelError = resp.Header.Get(tunnelrouting.ErrorHeader)
+		return tokenResponse{}, endpointErr
 	}
 	var tok tokenResponse
-	if err := json.Unmarshal(body, &tok); err != nil {
-		return tokenResponse{}, fmt.Errorf("decode token response: %w", err)
-	}
-	if tok.AccessToken == "" {
-		return tokenResponse{}, errors.New("token endpoint returned no access_token")
+	decodeErr := json.Unmarshal(body, &tok)
+	if decodeErr != nil || tok.AccessToken == "" {
+		// An OAuth error body under 2xx is checked first: it may not decode as a token response at all.
+		if _, ok := oautherr.ParseTokenError(body); ok {
+			return tokenResponse{}, newTokenEndpointError(resp.StatusCode, resp.Status, body)
+		}
+		if decodeErr != nil {
+			return tokenResponse{}, &tokenEndpointError{statusCode: resp.StatusCode, tunnelError: "", err: fmt.Errorf("decode token response: %w", decodeErr)}
+		}
+		return tokenResponse{}, &tokenEndpointError{statusCode: resp.StatusCode, tunnelError: "", err: errors.New("token endpoint returned no access_token")}
 	}
 	tok.raw = body
 	return tok, nil
 }
 
-// tokenEndpointError is a non-2xx code exchange; the status is kept for the reactive metadata refresh, the text is unchanged.
+// tokenEndpointError is a code exchange the token endpoint answered without a usable token; the status is kept for the reactive metadata refresh, the text is unchanged.
 type tokenEndpointError struct {
 	statusCode int
-	err        error
+
+	// tunnelError is the tunnel gateway's error status when the gateway, not the provider, produced the response.
+	tunnelError string
+
+	err error
 }
 
 func (e *tokenEndpointError) Error() string { return e.err.Error() }
@@ -1999,9 +2056,73 @@ func newTokenEndpointError(statusCode int, status string, body []byte) *tokenEnd
 	if parsed, ok := oautherr.ParseTokenError(body); ok {
 		parsed.Description = truncateForMessage(parsed.Description)
 		parsed.URI = truncateForMessage(parsed.URI)
-		return &tokenEndpointError{statusCode: statusCode, err: fmt.Errorf("token endpoint %s: %w", status, parsed)}
+		return &tokenEndpointError{statusCode: statusCode, tunnelError: "", err: fmt.Errorf("token endpoint %s: %w", status, parsed)}
 	}
-	return &tokenEndpointError{statusCode: statusCode, err: fmt.Errorf("token endpoint %s: %s", status, truncateForMessage(string(body)))}
+	return &tokenEndpointError{statusCode: statusCode, tunnelError: "", err: fmt.Errorf("token endpoint %s: %s", status, truncateForMessage(string(body)))}
+}
+
+// exchangeFailure names why the code exchange failed with fixed text only: an
+// IETF-registered OAuth error code, the token endpoint's non-2xx status, or a
+// fixed reason for transport, tunnel and signing failures. The provider's
+// description and vendor codes reach logs only. invalid_grant stays at error
+// level: a PKCE verifier or redirect_uri regression on our side answers it too.
+func exchangeFailure(ctx context.Context, logger *slog.Logger, err error, tunneled bool) *oops.ShareableError {
+	const message = "token exchange with the identity provider failed"
+	if _, ok := errors.AsType[*tokenEndpointSigningError](err); ok {
+		code := oops.CodeUnexpected
+		if errors.Is(err, errTokenEndpointSigningUnavailable) {
+			code = oops.CodeUnavailable
+		}
+		return oops.E(code, err, "%s: the client assertion could not be signed", message).LogError(ctx, logger)
+	}
+	if _, ok := errors.AsType[*tokenExchangeUnavailableError](err); ok {
+		reason := "the identity provider could not be reached"
+		if errors.Is(err, tunnelrouting.ErrNoTunnelRoute) {
+			reason = "the MCP tunnel is not connected"
+		}
+		return oops.E(oops.CodeGatewayError, err, "%s: %s", message, reason).LogError(ctx, logger)
+	}
+	endpointErr, ok := errors.AsType[*tokenEndpointError](err)
+	if !ok {
+		return oops.E(oops.CodeUnauthorized, err, message).LogError(ctx, logger)
+	}
+
+	attrs := []slog.Attr{attr.SlogHTTPResponseStatusCode(endpointErr.statusCode)}
+	if tunneled && endpointErr.tunnelError != "" {
+		return oops.E(oops.CodeGatewayError, err, "%s: the MCP tunnel could not reach the identity provider", message).LogError(ctx, logger, attrs...)
+	}
+	code := ""
+	if oauthErr, ok := errors.AsType[oautherr.RFC6749Error](err); ok {
+		code = tokenEndpointErrorCode(oauthErr.Code)
+		if code != "" {
+			attrs = append(attrs, attr.SlogOAuthError(code))
+		}
+		attrs = append(attrs, attr.SlogOAuthErrorDescription(ProviderErrorDescription(oauthErr.Description)))
+	}
+	status := exchangeFailureCode(endpointErr.statusCode, code)
+	switch {
+	case oautherr.IsIETFRegisteredCode(code):
+		return oops.E(status, err, "%s: %s", message, code).LogError(ctx, logger, attrs...)
+	case endpointErr.statusCode/100 == 2:
+		return oops.E(status, err, message).LogError(ctx, logger, attrs...)
+	case tunneled && endpointErr.statusCode == http.StatusBadGateway:
+		// The tunnel agent answers a bare 502 when it cannot reach the provider, indistinguishable from the provider's own.
+		return oops.E(status, err, "%s: HTTP 502 from the identity provider or the MCP tunnel agent", message).LogError(ctx, logger, attrs...)
+	default:
+		return oops.E(status, err, "%s: HTTP %d", message, endpointErr.statusCode).LogError(ctx, logger, attrs...)
+	}
+}
+
+// exchangeFailureCode answers a provider outage with 503 or 502 rather than blaming the user's credentials with 401.
+func exchangeFailureCode(status int, oauthCode string) oops.Code {
+	switch {
+	case oauthCode == oautherr.CodeTemporarilyUnavailable, status == http.StatusServiceUnavailable:
+		return oops.CodeUnavailable
+	case oauthCode == oautherr.CodeServerError, status >= http.StatusInternalServerError:
+		return oops.CodeGatewayError
+	default:
+		return oops.CodeUnauthorized
+	}
 }
 
 // exchangeIssuerReadBudget bounds the detached issuer read a withdrawn token endpoint triggers.

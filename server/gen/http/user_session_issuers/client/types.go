@@ -109,8 +109,11 @@ type CreateUserSessionIssuerResponseBody struct {
 	// The owning project's name. Present on organization-level reads of
 	// project-specific issuers.
 	ProjectName *string `form:"project_name,omitempty" json:"project_name,omitempty" xml:"project_name,omitempty"`
-	CreatedAt   *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt   *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	// Whether this deployment has an authentication host the issuer can be moved
+	// onto. Present on responses, not audit snapshots.
+	AuthenticationHostAvailable *bool   `form:"authentication_host_available,omitempty" json:"authentication_host_available,omitempty" xml:"authentication_host_available,omitempty"`
+	CreatedAt                   *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt                   *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // UpdateUserSessionIssuerResponseBody is the type of the "userSessionIssuers"
@@ -179,8 +182,11 @@ type UpdateUserSessionIssuerResponseBody struct {
 	// The owning project's name. Present on organization-level reads of
 	// project-specific issuers.
 	ProjectName *string `form:"project_name,omitempty" json:"project_name,omitempty" xml:"project_name,omitempty"`
-	CreatedAt   *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt   *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	// Whether this deployment has an authentication host the issuer can be moved
+	// onto. Present on responses, not audit snapshots.
+	AuthenticationHostAvailable *bool   `form:"authentication_host_available,omitempty" json:"authentication_host_available,omitempty" xml:"authentication_host_available,omitempty"`
+	CreatedAt                   *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt                   *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // ListUserSessionIssuersResponseBody is the type of the "userSessionIssuers"
@@ -257,8 +263,11 @@ type GetUserSessionIssuerResponseBody struct {
 	// The owning project's name. Present on organization-level reads of
 	// project-specific issuers.
 	ProjectName *string `form:"project_name,omitempty" json:"project_name,omitempty" xml:"project_name,omitempty"`
-	CreatedAt   *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt   *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	// Whether this deployment has an authentication host the issuer can be moved
+	// onto. Present on responses, not audit snapshots.
+	AuthenticationHostAvailable *bool   `form:"authentication_host_available,omitempty" json:"authentication_host_available,omitempty" xml:"authentication_host_available,omitempty"`
+	CreatedAt                   *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt                   *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // GetAttachImpactResponseBody is the type of the "userSessionIssuers" service
@@ -1486,8 +1495,11 @@ type UserSessionIssuerResponseBody struct {
 	// The owning project's name. Present on organization-level reads of
 	// project-specific issuers.
 	ProjectName *string `form:"project_name,omitempty" json:"project_name,omitempty" xml:"project_name,omitempty"`
-	CreatedAt   *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt   *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	// Whether this deployment has an authentication host the issuer can be moved
+	// onto. Present on responses, not audit snapshots.
+	AuthenticationHostAvailable *bool   `form:"authentication_host_available,omitempty" json:"authentication_host_available,omitempty" xml:"authentication_host_available,omitempty"`
+	CreatedAt                   *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt                   *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // NewCreateUserSessionIssuerRequestBody builds the HTTP request body from the
@@ -1536,6 +1548,7 @@ func NewCreateUserSessionIssuerUserSessionIssuerOK(body *CreateUserSessionIssuer
 		TokenEndpoint:                        body.TokenEndpoint,
 		AuthorizationServerUnavailableReason: body.AuthorizationServerUnavailableReason,
 		ProjectName:                          body.ProjectName,
+		AuthenticationHostAvailable:          body.AuthenticationHostAvailable,
 		CreatedAt:                            *body.CreatedAt,
 		UpdatedAt:                            *body.UpdatedAt,
 	}
@@ -1713,6 +1726,7 @@ func NewUpdateUserSessionIssuerUserSessionIssuerOK(body *UpdateUserSessionIssuer
 		TokenEndpoint:                        body.TokenEndpoint,
 		AuthorizationServerUnavailableReason: body.AuthorizationServerUnavailableReason,
 		ProjectName:                          body.ProjectName,
+		AuthenticationHostAvailable:          body.AuthenticationHostAvailable,
 		CreatedAt:                            *body.CreatedAt,
 		UpdatedAt:                            *body.UpdatedAt,
 	}
@@ -2058,6 +2072,7 @@ func NewGetUserSessionIssuerUserSessionIssuerOK(body *GetUserSessionIssuerRespon
 		TokenEndpoint:                        body.TokenEndpoint,
 		AuthorizationServerUnavailableReason: body.AuthorizationServerUnavailableReason,
 		ProjectName:                          body.ProjectName,
+		AuthenticationHostAvailable:          body.AuthenticationHostAvailable,
 		CreatedAt:                            *body.CreatedAt,
 		UpdatedAt:                            *body.UpdatedAt,
 	}

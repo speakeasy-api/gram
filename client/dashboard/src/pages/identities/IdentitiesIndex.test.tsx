@@ -1,10 +1,5 @@
-import {
-  cleanup,
-  fireEvent,
-  render,
-  screen,
-  waitFor,
-} from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { MemoryRouter } from "react-router";
@@ -16,10 +11,15 @@ const mocks = vi.hoisted(() => ({
   agents: vi.fn(),
   coverage: vi.fn(),
   roster: vi.fn(),
+  session: {
+    user: { id: "user_example" },
+    organizationOverride: false,
+    impersonatorEmail: undefined as string | undefined,
+  },
 }));
 vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({ id: "org_example", slug: "example" }),
-  useSession: () => ({ user: { id: "user_example" } }),
+  useSession: () => mocks.session,
   useIsPlatformAdmin: () => false,
 }));
 vi.mock("@/contexts/Sdk", () => ({
@@ -34,7 +34,18 @@ vi.mock("@/components/dev-toolbar-utils", () => ({
 }));
 vi.mock("@/routes", () => ({
   useOrgRoutes: () => ({ identity: { href: () => "/org/identity" } }),
-  useRoutes: () => ({ agents: { href: () => "/agents" } }),
+  useRoutes: () => ({
+    agents: { href: () => "/agents" },
+    identities: {
+      agents: {
+        href: () => "/identities/agents",
+        new: { href: () => "/identities/agents/new" },
+      },
+      detail: {
+        overview: { href: (urn: string) => `/identities/${urn}/overview` },
+      },
+    },
+  }),
 }));
 vi.mock("@gram/client/react-query/_context.js", () => ({
   useGramContext: () => ({}),
@@ -73,9 +84,28 @@ vi.mock("@/components/page-layout", () => {
         Leading: Box,
         Actions: Box,
         Search: () => null,
-        Filters: ({ schema }: { schema: { id: string }[] }) => (
+        // Each filter holding a value gets a clear button, the way the real
+        // sheet gives its chips one, so a test can take a filter back off.
+        Filters: ({
+          schema,
+          values,
+          onClear,
+        }: {
+          schema: { id: string }[];
+          values: Record<string, unknown>;
+          onClear: (id: string) => void;
+        }) => (
           <div data-testid="filters">
             {schema.map((item) => item.id).join(",")}
+            {Object.entries(values)
+              .filter(([, value]) =>
+                Array.isArray(value) ? value.length > 0 : value != null,
+              )
+              .map(([id]) => (
+                <button key={id} type="button" onClick={() => onClear(id)}>
+                  Clear {id}
+                </button>
+              ))}
           </div>
         ),
       }),
@@ -101,9 +131,14 @@ afterEach(cleanup);
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.orgRead = true;
-  mocks.agents.mockResolvedValue([
-    { id: "agent_example", name: "Registered agent" },
-  ]);
+  mocks.session = {
+    user: { id: "user_example" },
+    organizationOverride: false,
+    impersonatorEmail: undefined,
+  };
+  mocks.agents.mockResolvedValue({
+    items: [{ id: "agent_example", name: "Registered agent" }],
+  });
   mocks.coverage.mockResolvedValue({
     byUserId: new Map(),
     byEmail: new Map(),
@@ -127,14 +162,21 @@ beforeEach(() => {
     },
   ]);
 });
-function setup(search = "") {
+/** Every rendered table's text, so an assertion does not care which one. */
+const rowsText = () =>
+  screen
+    .getAllByTestId("rows")
+    .map((node) => node.textContent)
+    .join(" ");
+
+function setup(search = "", kind: "person" | "agent" = "agent") {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
   const tree = () => (
     <QueryClientProvider client={client}>
       <MemoryRouter initialEntries={[`/identities${search}`]}>
-        <IdentitiesIndex />
+        <IdentitiesIndex kind={kind} />
       </MemoryRouter>
     </QueryClientProvider>
   );
@@ -147,29 +189,70 @@ it("skips organization-only device coverage for a project reader", async () => {
   await screen.findByText("Registered agent");
   expect(mocks.coverage).not.toHaveBeenCalled();
 });
+it("excludes anonymous identities until they are asked for", async () => {
+  // The roster is mostly opaque client ids from personal-credential
+  // sessions. Opening the page full of them reads as broken rather than as
+  // complete, so the filter is on before anyone touches it.
+  setup("", "person");
+  await screen.findByText("human@example.com");
+  expect(rowsText()).not.toContain("unknown_subject");
+  // The chip's own wording is the schema's `allLabel`; the stub here renders
+  // dimension ids, so this asserts the dimension is offered at all.
+  expect(screen.getByTestId("filters").textContent).toContain("anonymous");
+});
+
+it("includes anonymous identities when the filter asks for them", async () => {
+  // The opt-in path, not just the default exclusion: a link written to show
+  // exactly these rows has to land on them.
+  setup("?anonymous=included", "person");
+  await waitFor(() => expect(rowsText()).toContain("unknown_subject"));
+  expect(rowsText()).toContain("human@example.com");
+});
+
 it.each(["unknown", "unknown,agent"])(
   "preserves legacy kind=%s and exposes a clearable filter",
   async (kind) => {
-    setup(`?kind=${kind}`);
-    await waitFor(() =>
-      expect(screen.getByTestId("rows").textContent).toContain(
-        "unknown_subject",
-      ),
-    );
-    expect(screen.getByTestId("rows").textContent).not.toContain(
-      "human@example.com",
-    );
-    expect(screen.getByTestId("filters").textContent).toContain("kind");
+    setup(`?kind=${kind}`, "person");
+    await waitFor(() => expect(rowsText()).toContain("unknown_subject"));
     expect(
       screen
-        .getByRole("button", { name: "Custom" })
-        .getAttribute("aria-pressed"),
-    ).toBe("true");
-    fireEvent.click(screen.getByRole("button", { name: "All" }));
-    await waitFor(() =>
-      expect(screen.getByTestId("rows").textContent).toContain(
-        "human@example.com",
-      ),
-    );
+        .getAllByTestId("rows")
+        .map((node) => node.textContent)
+        .join(" "),
+    ).not.toContain("human@example.com");
+    // The kind filter is still honoured and still clearable, now through the
+    // filter list rather than a segmented control the two tables made
+    // redundant. Clearing it puts the rows it was hiding back.
+    expect(screen.getByTestId("filters").textContent).toContain("kind");
+    await userEvent.click(screen.getByRole("button", { name: "Clear kind" }));
+    await waitFor(() => expect(rowsText()).toContain("human@example.com"));
   },
 );
+
+// Ported from the agent-management page's tests when that page was retired.
+// A support session is reading on someone else's behalf, and an agent's
+// management API answers to the owner — so the roster does not read it at all
+// rather than reading it as the person being supported.
+it("does not read agents in an organization override session", async () => {
+  mocks.session = {
+    user: { id: "user_example" },
+    organizationOverride: true,
+    impersonatorEmail: undefined,
+  };
+  setup("", "agent");
+  await waitFor(() => expect(mocks.roster).toHaveBeenCalled());
+  expect(mocks.agents).not.toHaveBeenCalled();
+  expect(screen.queryByText("New agent identity")).toBeNull();
+});
+
+it("does not read agents while impersonating", async () => {
+  mocks.session = {
+    user: { id: "user_example" },
+    organizationOverride: false,
+    impersonatorEmail: "support@example.test",
+  };
+  setup("", "agent");
+  await waitFor(() => expect(mocks.roster).toHaveBeenCalled());
+  expect(mocks.agents).not.toHaveBeenCalled();
+  expect(screen.queryByText("New agent identity")).toBeNull();
+});

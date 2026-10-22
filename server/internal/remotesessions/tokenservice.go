@@ -46,6 +46,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth/principalcredential"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/inv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -140,7 +141,12 @@ func NewTokenEndpointRequest(ctx context.Context, endpoint string, form url.Valu
 var (
 	ErrNoValidToken                 = errors.New("remotesessions: no valid token for subject")
 	ErrNoRemoteSessionClientBinding = errors.New("remotesessions: no client binding for remote issuer")
-	ErrInvalidAuthorizationRequest  = errors.New("remotesessions: invalid authorization request")
+
+	// ErrChosenClientUnbound means the client a credential chose is no longer
+	// bound to its user session issuer, so its credential cannot be resolved
+	// there. It wraps ErrNoValidToken: reconnecting records a fresh choice.
+	ErrChosenClientUnbound         = fmt.Errorf("%w: chosen client is not bound to the user session issuer", ErrNoValidToken)
+	ErrInvalidAuthorizationRequest = errors.New("remotesessions: invalid authorization request")
 
 	// ErrRemoteSessionUnavailable means a required upstream token could not be
 	// refreshed for a reason that clears on its own: the upstream token
@@ -223,6 +229,14 @@ func (m *ChallengeManager) resolveUpstreamToken(
 	resource string,
 ) (resolvedUpstreamToken, error) {
 	var zero resolvedUpstreamToken
+	// Workload credentials require a tenant-scoped owner lookup, just as
+	// agent attachments require scoped resolution rather than this primitive.
+	if actor, ok := contextvalues.AuthenticatedActor(ctx); ok && actor.Type == urn.PrincipalTypeWorkload {
+		return zero, nil
+	}
+	if subject.Kind == urn.SessionSubjectKindWorkload {
+		return zero, nil
+	}
 
 	if _, ok := principalcredential.FromContext(ctx); ok {
 		// Principal credentials resolve only through the tenant-scoped path.
@@ -359,7 +373,7 @@ func (m *ChallengeManager) ResolveAuthorization(
 			Resource:       clientCredentialRequestResource(*bound, resource),
 		})
 	} else {
-		resolved, err = m.resolveCallerUpstreamToken(ctx, projectID, organizationID, userSessionIssuerID, clientID, subject, resource)
+		resolved, err = m.resolveCallerUpstreamToken(ctx, lookupSignIn, projectID, organizationID, userSessionIssuerID, clientID, subject, resource)
 	}
 	if err != nil {
 		return ResolvedAuthorization{}, fmt.Errorf("resolve remote-session access token: %w", err)
@@ -523,6 +537,36 @@ func (m *ChallengeManager) ResolveAvailableAccessTokens(
 	return m.resolveBoundAccessTokens(ctx, projectID, organizationID, userSessionIssuerID, subject, true)
 }
 
+// ResolveClientAccessTokens resolves the caller's credential for one chosen
+// client, with the per-client behavior of ResolveAccessTokens, or of
+// ResolveAvailableAccessTokens when skipUnusable is set. The result holds at
+// most one entry, keyed by the client's remote session issuer.
+//
+// The client must still be bound to the user session issuer and visible to
+// the project: otherwise it returns ErrChosenClientUnbound, even when
+// skipUnusable is set, and never another client's credential.
+func (m *ChallengeManager) ResolveClientAccessTokens(
+	ctx context.Context,
+	projectID uuid.UUID,
+	organizationID string,
+	userSessionIssuerID uuid.UUID,
+	subject urn.SessionSubject,
+	clientID uuid.UUID,
+	skipUnusable bool,
+) (map[uuid.UUID]UpstreamToken, error) {
+	clients, err := m.listRemoteSessionClientRowsForUserSessionIssuer(ctx, projectID, organizationID, userSessionIssuerID, false)
+	if err != nil {
+		return nil, fmt.Errorf("list remote_session_clients: %w", err)
+	}
+	chosen := slices.DeleteFunc(clients, func(c remotesessions_repo.ListRemoteSessionClientsForUserSessionIssuerRow) bool {
+		return c.ClientID != clientID
+	})
+	if len(chosen) == 0 {
+		return nil, ErrChosenClientUnbound
+	}
+	return m.resolveClientTokens(ctx, lookupSignIn, projectID, organizationID, userSessionIssuerID, subject, chosen, skipUnusable)
+}
+
 func (m *ChallengeManager) resolveBoundAccessTokens(
 	ctx context.Context,
 	projectID uuid.UUID,
@@ -538,6 +582,21 @@ func (m *ChallengeManager) resolveBoundAccessTokens(
 	if len(clients) == 0 {
 		return nil, nil
 	}
+	return m.resolveClientTokens(ctx, lookupSignIn, projectID, organizationID, userSessionIssuerID, subject, clients, skipUnusable)
+}
+
+// resolveClientTokens resolves the caller's credential for each of clients,
+// keyed by remote session issuer.
+func (m *ChallengeManager) resolveClientTokens(
+	ctx context.Context,
+	lookup tokenLookup,
+	projectID uuid.UUID,
+	organizationID string,
+	userSessionIssuerID uuid.UUID,
+	subject urn.SessionSubject,
+	clients []remotesessions_repo.ListRemoteSessionClientsForUserSessionIssuerRow,
+	skipUnusable bool,
+) (map[uuid.UUID]UpstreamToken, error) {
 
 	// Assert the per-(user_session_issuer, remote_session_issuer) uniqueness
 	// invariant up front, before resolving any tokens. Folding this into the
@@ -583,7 +642,7 @@ func (m *ChallengeManager) resolveBoundAccessTokens(
 			// token with a new row's resource.
 			// No endpoint-level fallback: a refresh of a legacy NULL-resource
 			// row derives the client's own resource in RefreshNow.
-			resolved, err = m.resolveCallerUpstreamToken(ctx, projectID, organizationID, userSessionIssuerID, c.ClientID, subject, "")
+			resolved, err = m.resolveCallerUpstreamToken(ctx, lookup, projectID, organizationID, userSessionIssuerID, c.ClientID, subject, "")
 		}
 		switch {
 		case errors.Is(err, ErrNoValidToken):
@@ -596,7 +655,7 @@ func (m *ChallengeManager) resolveBoundAccessTokens(
 			// A refined failure can still be outranked by a later client that
 			// needs re-linking. Resolving the rest could cost one failing
 			// upstream refresh each, so their stored state decides instead.
-			reconnect, rerr := m.storedGrantsNeedReconnect(ctx, projectID, organizationID, userSessionIssuerID, clients[i+1:], subject)
+			reconnect, rerr := m.storedGrantsNeedReconnect(ctx, lookup, projectID, organizationID, userSessionIssuerID, clients[i+1:], subject)
 			if rerr != nil {
 				return nil, rerr
 			}
@@ -688,7 +747,31 @@ func (m *ChallengeManager) RemoteSessionsNeedReconnect(
 	if err != nil {
 		return false, fmt.Errorf("list remote_session_clients: %w", err)
 	}
-	return m.storedGrantsNeedReconnect(ctx, projectID, organizationID, userSessionIssuerID, clients, subject)
+	return m.storedGrantsNeedReconnect(ctx, lookupSignIn, projectID, organizationID, userSessionIssuerID, clients, subject)
+}
+
+// ClientNeedsReconnect is RemoteSessionsNeedReconnect for one client the
+// caller chose: only that client's stored credential decides, and a client
+// no longer bound to the user-session issuer needs reconnecting.
+func (m *ChallengeManager) ClientNeedsReconnect(
+	ctx context.Context,
+	projectID uuid.UUID,
+	organizationID string,
+	userSessionIssuerID uuid.UUID,
+	subject urn.SessionSubject,
+	clientID uuid.UUID,
+) (bool, error) {
+	clients, err := m.listRemoteSessionClientRowsForUserSessionIssuer(ctx, projectID, organizationID, userSessionIssuerID, false)
+	if err != nil {
+		return false, fmt.Errorf("list remote_session_clients: %w", err)
+	}
+	chosen := slices.IndexFunc(clients, func(c remotesessions_repo.ListRemoteSessionClientsForUserSessionIssuerRow) bool {
+		return c.ClientID == clientID
+	})
+	if chosen < 0 {
+		return true, nil
+	}
+	return m.storedGrantsNeedReconnect(ctx, lookupSignIn, projectID, organizationID, userSessionIssuerID, clients[chosen:chosen+1], subject)
 }
 
 // storedGrantsNeedReconnect reports whether the stored credential the caller
@@ -698,15 +781,39 @@ func (m *ChallengeManager) RemoteSessionsNeedReconnect(
 // are never re-linked, because no subject connects them.
 func (m *ChallengeManager) storedGrantsNeedReconnect(
 	ctx context.Context,
+	lookup tokenLookup,
 	projectID uuid.UUID,
 	organizationID string,
 	userSessionIssuerID uuid.UUID,
 	clients []remotesessions_repo.ListRemoteSessionClientsForUserSessionIssuerRow,
 	subject urn.SessionSubject,
 ) (bool, error) {
-	principalID, attached, err := remoteSessionCallerPrincipal(ctx, subject)
-	if err != nil {
-		return false, err
+	// The auth client resolver serves principal credentials from the
+	// authorizing user's session, as resolveCallerUpstreamToken does. The
+	// sign-in lookup keeps its existing reconnect check unchanged, so behavior
+	// with the resolver off stays as it was; aligning it is a separate change.
+	var authorizer *string
+	if credential, ok := principalcredential.FromContext(ctx); ok && lookup == lookupAuthClient {
+		authorizer = &credential.Credential.AuthorizerUserID
+	}
+	var principalID uuid.UUID
+	var attached bool
+	if authorizer == nil {
+		var err error
+		principalID, attached, err = remoteSessionCallerPrincipal(ctx, subject)
+		if err != nil {
+			return false, err
+		}
+	}
+	var workloadOwner string
+	if actor, ok := contextvalues.AuthenticatedActor(ctx); ok && actor.Type == urn.PrincipalTypeWorkload {
+		admission, err := m.workloadCredentialOwner(ctx, projectID, organizationID, subject)
+		if err != nil {
+			return false, err
+		}
+		workloadOwner = admission.OwnerUserID
+	} else if subject.Kind == urn.SessionSubjectKindWorkload {
+		return false, ErrInvalidAuthorizationRequest
 	}
 	q := remotesessions_repo.New(m.db)
 	now := time.Now()
@@ -715,7 +822,16 @@ func (m *ChallengeManager) storedGrantsNeedReconnect(
 			continue
 		}
 		var sess remotesessions_repo.RemoteSession
-		if attached {
+		var err error
+		switch {
+		case workloadOwner != "":
+			sess, err = tenantUserRemoteSession(ctx, q, lookup, urn.NewUserSubject(workloadOwner), c.ClientID, projectID, organizationID, userSessionIssuerID)
+		case authorizer != nil:
+			if *authorizer == "" {
+				return true, nil
+			}
+			sess, err = tenantUserRemoteSession(ctx, q, lookup, urn.NewUserSubject(*authorizer), c.ClientID, projectID, organizationID, userSessionIssuerID)
+		case attached:
 			sess, err = q.GetPrincipalRemoteSessionBinding(ctx, remotesessions_repo.GetPrincipalRemoteSessionBindingParams{
 				ProjectID:             projectID,
 				OrganizationID:        organizationID,
@@ -723,11 +839,8 @@ func (m *ChallengeManager) storedGrantsNeedReconnect(
 				UserSessionIssuerID:   userSessionIssuerID,
 				RemoteSessionClientID: c.ClientID,
 			})
-		} else {
-			sess, err = q.GetActiveRemoteSession(ctx, remotesessions_repo.GetActiveRemoteSessionParams{
-				SubjectUrn:            subject,
-				RemoteSessionClientID: c.ClientID,
-			})
+		default:
+			sess, err = activeUserRemoteSession(ctx, q, lookup, subject, c.ClientID, projectID, organizationID)
 		}
 		switch {
 		case errors.Is(err, pgx.ErrNoRows):

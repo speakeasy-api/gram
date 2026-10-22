@@ -527,6 +527,7 @@ type ClearAssistantToolsetsParams struct {
 	ProjectID   uuid.UUID
 }
 
+// Clears legacy toolset-keyed rows left behind.
 func (q *Queries) ClearAssistantToolsets(ctx context.Context, arg ClearAssistantToolsetsParams) error {
 	_, err := q.db.Exec(ctx, clearAssistantToolsets, arg.AssistantID, arg.ProjectID)
 	return err
@@ -545,6 +546,7 @@ type ClearAssistantToolsetsForServersParams struct {
 	McpServerIds []uuid.UUID
 }
 
+// Clears legacy toolset-keyed rows left behind.
 func (q *Queries) ClearAssistantToolsetsForServers(ctx context.Context, arg ClearAssistantToolsetsForServersParams) error {
 	_, err := q.db.Exec(ctx, clearAssistantToolsetsForServers, arg.AssistantID, arg.ProjectID, arg.McpServerIds)
 	return err
@@ -995,11 +997,9 @@ type EnableMCPForToolsetsParams struct {
 	ProjectID  uuid.UUID
 }
 
-// Flips mcp_enabled to TRUE for the listed toolsets in a project. Every
-// toolset attached to an assistant must be MCP-reachable for the runtime's
-// startup config to build; we enable on attach so users don't have to do it
-// separately. mcp_slug is required for an MCP-reachable toolset, so we skip
-// rows that lack one.
+// Flips mcp_enabled to TRUE for the listed toolsets in a project. Newly
+// attached toolsets are enabled so users don't have to do it separately; the
+// caller picks them by ResolveToolsetsForWrite's enables_mcp under its lock.
 func (q *Queries) EnableMCPForToolsets(ctx context.Context, arg EnableMCPForToolsetsParams) ([]uuid.UUID, error) {
 	rows, err := q.db.Query(ctx, enableMCPForToolsets, arg.ToolsetIds, arg.ProjectID)
 	if err != nil {
@@ -1849,11 +1849,6 @@ func (q *Queries) ListActiveAssistantRuntimes(ctx context.Context, activeState s
 }
 
 const listAssistantAttachedServerIDs = `-- name: ListAssistantAttachedServerIDs :many
-SELECT at.toolset_id AS mcp_server_id
-FROM assistant_toolsets at
-WHERE at.assistant_id = $1
-  AND at.project_id = $2
-UNION
 SELECT ams.mcp_server_id
 FROM assistant_mcp_servers ams
 WHERE ams.assistant_id = $1
@@ -1969,8 +1964,8 @@ type ListAssistantRuntimesForReapRow struct {
 }
 
 // Returns every runtime row for an assistant that still carries backend
-// metadata, regardless of soft-delete state. A stopped row whose Fly app
-// was not collected leaves its app_name in metadata and would otherwise
+// metadata, regardless of soft-delete state. A stopped row whose resources
+// were not collected retains backend metadata and would otherwise
 // be invisible to deleted-aware queries.
 func (q *Queries) ListAssistantRuntimesForReap(ctx context.Context, arg ListAssistantRuntimesForReapParams) ([]ListAssistantRuntimesForReapRow, error) {
 	rows, err := q.db.Query(ctx, listAssistantRuntimesForReap, arg.AssistantID, arg.ProjectID)
@@ -2109,9 +2104,6 @@ WHERE ms.project_id = $1
   AND ms.id = ANY($2::UUID[])
   AND ms.toolset_id = ms.id
   AND ms.deleted IS FALSE
-  AND ms.visibility <> 'disabled'
-  AND t.mcp_enabled IS TRUE
-  AND t.mcp_slug IS NOT NULL
   AND t.deleted IS FALSE
 `
 
@@ -2120,7 +2112,7 @@ type ListCanonicalWrapperIDsParams struct {
 	ToolsetIds []uuid.UUID
 }
 
-// Dialable toolsets with a live canonical wrapper (same id): the attachments the dependent move re-keys.
+// Writer-only: of the given toolsets, those with a live canonical wrapper (same id); hosted attachments are stored under it.
 func (q *Queries) ListCanonicalWrapperIDs(ctx context.Context, arg ListCanonicalWrapperIDsParams) ([]uuid.UUID, error) {
 	rows, err := q.db.Query(ctx, listCanonicalWrapperIDs, arg.ProjectID, arg.ToolsetIds)
 	if err != nil {
@@ -2511,7 +2503,7 @@ type ListStoppedRuntimesForReapRow struct {
 // indefinitely. The NOT EXISTS guard restricts the candidate to the most
 // recent non-reaped row per thread: ReserveAssistantRuntime copies the latest
 // non-empty metadata into each new row, so a stale older sibling can share
-// `machine_id` with the current owner — destroying it would yank the live
+// resource metadata with the current owner — destroying it would yank the live
 // machine out from under a fresher row that is still inside its own TTL.
 func (q *Queries) ListStoppedRuntimesForReap(ctx context.Context, arg ListStoppedRuntimesForReapParams) ([]ListStoppedRuntimesForReapRow, error) {
 	rows, err := q.db.Query(ctx, listStoppedRuntimesForReap,
@@ -2604,21 +2596,9 @@ func (q *Queries) ListWarmPendingThreads(ctx context.Context, arg ListWarmPendin
 }
 
 const loadAssistantMcpServers = `-- name: LoadAssistantMcpServers :many
-WITH attachments AS (
-  SELECT at.assistant_id, at.toolset_id AS mcp_server_id, at.environment_id, at.created_at, TRUE AS legacy
-  FROM assistant_toolsets at
-  WHERE at.assistant_id = ANY($2::UUID[])
-    AND at.project_id = $1
-  UNION ALL
-  SELECT ams.assistant_id, ams.mcp_server_id, ams.environment_id, ams.created_at, FALSE AS legacy
-  FROM assistant_mcp_servers ams
-  WHERE ams.assistant_id = ANY($2::UUID[])
-    AND ams.project_id = $1
-)
 SELECT
-  a.assistant_id,
-  a.mcp_server_id,
-  a.legacy::bool AS legacy,
+  ams.assistant_id,
+  ams.mcp_server_id,
   ms.slug AS server_slug,
   t.slug AS toolset_slug,
   CASE WHEN t.id IS NOT NULL THEN CASE
@@ -2637,23 +2617,22 @@ SELECT
     LIMIT 1
   ), '') END::text AS endpoint_slug,
   t.default_environment_slug,
-  a.environment_id,
+  ams.environment_id,
   e.slug AS environment_slug
-FROM attachments a
-LEFT JOIN mcp_servers ms
-  ON ms.id = a.mcp_server_id
+FROM assistant_mcp_servers ams
+JOIN mcp_servers ms
+  ON ms.id = ams.mcp_server_id
   AND ms.project_id = $1
   AND ms.deleted IS FALSE
-  AND (NOT a.legacy OR ms.toolset_id = ms.id)
 LEFT JOIN toolsets t
-  ON t.id = a.mcp_server_id
+  ON t.id = ms.id
+  AND ms.toolset_id = ms.id
   AND t.project_id = $1
   AND t.deleted IS FALSE
-  AND (a.legacy OR ms.toolset_id = ms.id)
-LEFT JOIN environments e ON e.id = a.environment_id AND e.project_id = $1
-WHERE (a.legacy AND t.id IS NOT NULL)
-   OR (NOT a.legacy AND ms.id IS NOT NULL)
-ORDER BY (t.id IS NULL), a.created_at, a.legacy DESC, a.mcp_server_id
+LEFT JOIN environments e ON e.id = ams.environment_id AND e.project_id = $1
+WHERE ams.assistant_id = ANY($2::UUID[])
+  AND ams.project_id = $1
+ORDER BY (t.id IS NULL), ams.created_at, ams.mcp_server_id
 `
 
 type LoadAssistantMcpServersParams struct {
@@ -2664,7 +2643,6 @@ type LoadAssistantMcpServersParams struct {
 type LoadAssistantMcpServersRow struct {
 	AssistantID            uuid.UUID
 	McpServerID            uuid.UUID
-	Legacy                 bool
 	ServerSlug             pgtype.Text
 	ToolsetSlug            pgtype.Text
 	Visibility             string
@@ -2674,10 +2652,9 @@ type LoadAssistantMcpServersRow struct {
 	EnvironmentSlug        pgtype.Text
 }
 
-// Both attachment tables; hosted rows (toolset id = canonical wrapper id) keep
-// the toolset slug, mcp_enabled, /mcp/{mcp_slug} address and default
-// environment, and sort first so they win runtime id collisions. Legacy rows
-// read the toolset whatever the wrapper's current shape.
+// Hosted rows (canonical wrapper, id = toolset id) keep the toolset slug,
+// mcp_enabled, /mcp/{mcp_slug} address and default environment, and sort first
+// so they win runtime id collisions.
 func (q *Queries) LoadAssistantMcpServers(ctx context.Context, arg LoadAssistantMcpServersParams) ([]LoadAssistantMcpServersRow, error) {
 	rows, err := q.db.Query(ctx, loadAssistantMcpServers, arg.ProjectID, arg.AssistantIds)
 	if err != nil {
@@ -2690,7 +2667,6 @@ func (q *Queries) LoadAssistantMcpServers(ctx context.Context, arg LoadAssistant
 		if err := rows.Scan(
 			&i.AssistantID,
 			&i.McpServerID,
-			&i.Legacy,
 			&i.ServerSlug,
 			&i.ToolsetSlug,
 			&i.Visibility,
@@ -2907,6 +2883,7 @@ type LoadAssistantToolsetsRow struct {
 	EnvironmentSlug        pgtype.Text
 }
 
+// Test-only: legacy assistant_toolsets rows are no longer read or written; deletes still clear them until AIM-581.
 func (q *Queries) LoadAssistantToolsets(ctx context.Context, arg LoadAssistantToolsetsParams) ([]LoadAssistantToolsetsRow, error) {
 	rows, err := q.db.Query(ctx, loadAssistantToolsets, arg.AssistantIds, arg.ProjectID)
 	if err != nil {
@@ -3293,7 +3270,6 @@ func (q *Queries) LookupActiveAssistantRuntimeV2(ctx context.Context, arg Lookup
 const markAssistantRuntimeMachineReaped = `-- name: MarkAssistantRuntimeMachineReaped :execrows
 UPDATE assistant_runtimes
 SET state = $1,
-    backend_metadata_json = backend_metadata_json - 'machine_id' - 'last_boot_id',
     updated_at = clock_timestamp(),
     ended_at = COALESCE(ended_at, clock_timestamp()),
     deleted_at = COALESCE(deleted_at, clock_timestamp())
@@ -3310,12 +3286,10 @@ type MarkAssistantRuntimeMachineReapedParams struct {
 	FailedState  string
 }
 
-// Per-thread reap: strips the machine slot from backend metadata while
-// preserving app-level fields (app_name, app_id, app_url, app_ip, region) so
-// the next admit for the same thread cold-launches into the same Fly app and
-// keeps its allocated IP and secrets. Filters by current state so a row that
-// raced into starting/active between selection and update is left alone — the
-// 0-rows return signals the caller to skip the destructive backend call.
+// Per-thread reap: marks the stopped resource reaped while retaining backend
+// metadata for full cleanup (e.g. local workspace volumes). Filters by current
+// state so a row that raced into starting/active between selection and
+// update is left alone.
 func (q *Queries) MarkAssistantRuntimeMachineReaped(ctx context.Context, arg MarkAssistantRuntimeMachineReapedParams) (int64, error) {
 	result, err := q.db.Exec(ctx, markAssistantRuntimeMachineReaped,
 		arg.ReapedState,
@@ -3347,7 +3321,7 @@ type MarkAssistantRuntimeReapedParams struct {
 	ProjectID   uuid.UUID
 }
 
-// Records that the backend resource (e.g. Fly app) for this runtime has
+// Records that the backend resource (e.g. sandbox claim) for this runtime has
 // been torn down. Clearing backend_metadata_json removes it from the reap
 // candidate set so the janitor stops re-scanning it.
 func (q *Queries) MarkAssistantRuntimeReaped(ctx context.Context, arg MarkAssistantRuntimeReapedParams) error {
@@ -3914,7 +3888,7 @@ func (q *Queries) ResolveThreadProjectID(ctx context.Context, threadID uuid.UUID
 }
 
 const resolveToolsetsForWrite = `-- name: ResolveToolsetsForWrite :many
-SELECT t.id, t.slug
+SELECT t.id, t.slug, (t.mcp_enabled IS FALSE AND t.mcp_slug IS NOT NULL)::bool AS enables_mcp
 FROM toolsets t
 WHERE t.project_id = $1
   AND t.deleted IS FALSE
@@ -3941,8 +3915,9 @@ type ResolveToolsetsForWriteParams struct {
 }
 
 type ResolveToolsetsForWriteRow struct {
-	ID   uuid.UUID
-	Slug string
+	ID         uuid.UUID
+	Slug       string
+	EnablesMcp bool
 }
 
 // Also locks the toolsets behind canonical wrappers named by slug, so server
@@ -3958,7 +3933,7 @@ func (q *Queries) ResolveToolsetsForWrite(ctx context.Context, arg ResolveToolse
 	var items []ResolveToolsetsForWriteRow
 	for rows.Next() {
 		var i ResolveToolsetsForWriteRow
-		if err := rows.Scan(&i.ID, &i.Slug); err != nil {
+		if err := rows.Scan(&i.ID, &i.Slug, &i.EnablesMcp); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

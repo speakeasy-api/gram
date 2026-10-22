@@ -120,7 +120,7 @@ LIMIT 1;
 -- name: ResolveToolsetsForWrite :many
 -- Also locks the toolsets behind canonical wrappers named by slug, so server
 -- attachments take the toolset lock before the server lock, as deletion does.
-SELECT t.id, t.slug
+SELECT t.id, t.slug, (t.mcp_enabled IS FALSE AND t.mcp_slug IS NOT NULL)::bool AS enables_mcp
 FROM toolsets t
 WHERE t.project_id = @project_id
   AND t.deleted IS FALSE
@@ -164,6 +164,7 @@ WHERE project_id = @project_id
   AND deleted IS FALSE;
 
 -- name: LoadAssistantToolsets :many
+-- Test-only: legacy assistant_toolsets rows are no longer read or written; deletes still clear them until AIM-581.
 SELECT
   at.assistant_id,
   at.toolset_id,
@@ -345,11 +346,13 @@ ORDER BY so.seen_at DESC, so.id DESC
 LIMIT 1;
 
 -- name: ClearAssistantToolsets :exec
+-- Clears legacy toolset-keyed rows left behind.
 DELETE FROM assistant_toolsets
 WHERE assistant_id = @assistant_id
   AND project_id = @project_id;
 
 -- name: AddAssistantToolsets :copyfrom
+-- Test-only, see LoadAssistantToolsets.
 INSERT INTO assistant_toolsets (
   assistant_id,
   toolset_id,
@@ -363,11 +366,9 @@ INSERT INTO assistant_toolsets (
 );
 
 -- name: EnableMCPForToolsets :many
--- Flips mcp_enabled to TRUE for the listed toolsets in a project. Every
--- toolset attached to an assistant must be MCP-reachable for the runtime's
--- startup config to build; we enable on attach so users don't have to do it
--- separately. mcp_slug is required for an MCP-reachable toolset, so we skip
--- rows that lack one.
+-- Flips mcp_enabled to TRUE for the listed toolsets in a project. Newly
+-- attached toolsets are enabled so users don't have to do it separately; the
+-- caller picks them by ResolveToolsetsForWrite's enables_mcp under its lock.
 UPDATE toolsets
 SET mcp_enabled = TRUE,
     updated_at = clock_timestamp()
@@ -379,25 +380,12 @@ WHERE id = ANY(@toolset_ids::UUID[])
 RETURNING id;
 
 -- name: LoadAssistantMcpServers :many
--- Both attachment tables; hosted rows (toolset id = canonical wrapper id) keep
--- the toolset slug, mcp_enabled, /mcp/{mcp_slug} address and default
--- environment, and sort first so they win runtime id collisions. Legacy rows
--- read the toolset whatever the wrapper's current shape.
-WITH attachments AS (
-  SELECT at.assistant_id, at.toolset_id AS mcp_server_id, at.environment_id, at.created_at, TRUE AS legacy
-  FROM assistant_toolsets at
-  WHERE at.assistant_id = ANY(@assistant_ids::UUID[])
-    AND at.project_id = @project_id
-  UNION ALL
-  SELECT ams.assistant_id, ams.mcp_server_id, ams.environment_id, ams.created_at, FALSE AS legacy
-  FROM assistant_mcp_servers ams
-  WHERE ams.assistant_id = ANY(@assistant_ids::UUID[])
-    AND ams.project_id = @project_id
-)
+-- Hosted rows (canonical wrapper, id = toolset id) keep the toolset slug,
+-- mcp_enabled, /mcp/{mcp_slug} address and default environment, and sort first
+-- so they win runtime id collisions.
 SELECT
-  a.assistant_id,
-  a.mcp_server_id,
-  a.legacy::bool AS legacy,
+  ams.assistant_id,
+  ams.mcp_server_id,
   ms.slug AS server_slug,
   t.slug AS toolset_slug,
   CASE WHEN t.id IS NOT NULL THEN CASE
@@ -416,23 +404,22 @@ SELECT
     LIMIT 1
   ), '') END::text AS endpoint_slug,
   t.default_environment_slug,
-  a.environment_id,
+  ams.environment_id,
   e.slug AS environment_slug
-FROM attachments a
-LEFT JOIN mcp_servers ms
-  ON ms.id = a.mcp_server_id
+FROM assistant_mcp_servers ams
+JOIN mcp_servers ms
+  ON ms.id = ams.mcp_server_id
   AND ms.project_id = @project_id
   AND ms.deleted IS FALSE
-  AND (NOT a.legacy OR ms.toolset_id = ms.id)
 LEFT JOIN toolsets t
-  ON t.id = a.mcp_server_id
+  ON t.id = ms.id
+  AND ms.toolset_id = ms.id
   AND t.project_id = @project_id
   AND t.deleted IS FALSE
-  AND (a.legacy OR ms.toolset_id = ms.id)
-LEFT JOIN environments e ON e.id = a.environment_id AND e.project_id = @project_id
-WHERE (a.legacy AND t.id IS NOT NULL)
-   OR (NOT a.legacy AND ms.id IS NOT NULL)
-ORDER BY (t.id IS NULL), a.created_at, a.legacy DESC, a.mcp_server_id;
+LEFT JOIN environments e ON e.id = ams.environment_id AND e.project_id = @project_id
+WHERE ams.assistant_id = ANY(@assistant_ids::UUID[])
+  AND ams.project_id = @project_id
+ORDER BY (t.id IS NULL), ams.created_at, ams.mcp_server_id;
 
 -- name: ClearAssistantHostedMcpServers :exec
 -- Detaches the assistant's toolset-backed (canonical wrapper) servers only.
@@ -458,18 +445,13 @@ WHERE ams.assistant_id = @assistant_id
   );
 
 -- name: ListAssistantAttachedServerIDs :many
-SELECT at.toolset_id AS mcp_server_id
-FROM assistant_toolsets at
-WHERE at.assistant_id = @assistant_id
-  AND at.project_id = @project_id
-UNION
 SELECT ams.mcp_server_id
 FROM assistant_mcp_servers ams
 WHERE ams.assistant_id = @assistant_id
   AND ams.project_id = @project_id;
 
 -- name: ListCanonicalWrapperIDs :many
--- Dialable toolsets with a live canonical wrapper (same id): the attachments the dependent move re-keys.
+-- Writer-only: of the given toolsets, those with a live canonical wrapper (same id); hosted attachments are stored under it.
 SELECT ms.id
 FROM mcp_servers ms
 JOIN toolsets t ON t.id = ms.id AND t.project_id = ms.project_id
@@ -477,12 +459,10 @@ WHERE ms.project_id = @project_id
   AND ms.id = ANY(@toolset_ids::UUID[])
   AND ms.toolset_id = ms.id
   AND ms.deleted IS FALSE
-  AND ms.visibility <> 'disabled'
-  AND t.mcp_enabled IS TRUE
-  AND t.mcp_slug IS NOT NULL
   AND t.deleted IS FALSE;
 
 -- name: ClearAssistantToolsetsForServers :exec
+-- Clears legacy toolset-keyed rows left behind.
 DELETE FROM assistant_toolsets
 WHERE assistant_id = @assistant_id
   AND project_id = @project_id
@@ -1216,8 +1196,8 @@ WHERE project_id = @project_id
 
 -- name: ListAssistantRuntimesForReap :many
 -- Returns every runtime row for an assistant that still carries backend
--- metadata, regardless of soft-delete state. A stopped row whose Fly app
--- was not collected leaves its app_name in metadata and would otherwise
+-- metadata, regardless of soft-delete state. A stopped row whose resources
+-- were not collected retains backend metadata and would otherwise
 -- be invisible to deleted-aware queries.
 SELECT id, assistant_thread_id, assistant_id, project_id, backend, backend_metadata_json, state, warm_until
 FROM assistant_runtimes
@@ -1322,7 +1302,7 @@ WHERE r.state = @active_state
 ORDER BY r.updated_at ASC;
 
 -- name: MarkAssistantRuntimeReaped :exec
--- Records that the backend resource (e.g. Fly app) for this runtime has
+-- Records that the backend resource (e.g. sandbox claim) for this runtime has
 -- been torn down. Clearing backend_metadata_json removes it from the reap
 -- candidate set so the janitor stops re-scanning it.
 UPDATE assistant_runtimes
@@ -1341,7 +1321,7 @@ WHERE id = @runtime_id
 -- indefinitely. The NOT EXISTS guard restricts the candidate to the most
 -- recent non-reaped row per thread: ReserveAssistantRuntime copies the latest
 -- non-empty metadata into each new row, so a stale older sibling can share
--- `machine_id` with the current owner — destroying it would yank the live
+-- resource metadata with the current owner — destroying it would yank the live
 -- machine out from under a fresher row that is still inside its own TTL.
 SELECT r.id, r.assistant_thread_id, r.assistant_id, r.project_id, r.backend, r.backend_metadata_json, r.state, r.warm_until
 FROM assistant_runtimes r
@@ -1360,15 +1340,12 @@ ORDER BY r.updated_at ASC
 LIMIT @limit_count;
 
 -- name: MarkAssistantRuntimeMachineReaped :execrows
--- Per-thread reap: strips the machine slot from backend metadata while
--- preserving app-level fields (app_name, app_id, app_url, app_ip, region) so
--- the next admit for the same thread cold-launches into the same Fly app and
--- keeps its allocated IP and secrets. Filters by current state so a row that
--- raced into starting/active between selection and update is left alone — the
--- 0-rows return signals the caller to skip the destructive backend call.
+-- Per-thread reap: marks the stopped resource reaped while retaining backend
+-- metadata for full cleanup (e.g. local workspace volumes). Filters by current
+-- state so a row that raced into starting/active between selection and
+-- update is left alone.
 UPDATE assistant_runtimes
 SET state = @reaped_state,
-    backend_metadata_json = backend_metadata_json - 'machine_id' - 'last_boot_id',
     updated_at = clock_timestamp(),
     ended_at = COALESCE(ended_at, clock_timestamp()),
     deleted_at = COALESCE(deleted_at, clock_timestamp())

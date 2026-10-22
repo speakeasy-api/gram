@@ -33,11 +33,14 @@ type Features interface {
 
 // Evaluator evaluates source events without durable progress state. Redelivery repeats
 // inference and publication under stable reading IDs, with new attempt IDs.
+// Every terminal sensor decision publishes either a reading or an outcome, so
+// coverage can account for eligible events that have no answer.
 type Evaluator struct {
 	logger     *slog.Logger
 	source     Source
 	features   Features
 	publisher  gcp.Publisher[*sigintv1.Reading]
+	outcomes   gcp.Publisher[*sigintv1.Outcome]
 	classifier classifier.Classifier
 	failures   metric.Int64Counter
 	skipped    metric.Int64Counter
@@ -47,7 +50,7 @@ type Evaluator struct {
 
 // NewEvaluator injects a classifier configured with the platform's credentials.
 // Runtime concurrency is bounded across all adapters sharing this instance.
-func NewEvaluator(logger *slog.Logger, meters metric.MeterProvider, source Source, features Features, publisher gcp.Publisher[*sigintv1.Reading], c classifier.Classifier) (*Evaluator, error) {
+func NewEvaluator(logger *slog.Logger, meters metric.MeterProvider, source Source, features Features, publisher gcp.Publisher[*sigintv1.Reading], outcomes gcp.Publisher[*sigintv1.Outcome], c classifier.Classifier) (*Evaluator, error) {
 	logger = logger.With(attr.SlogComponent("sigint-evaluator"))
 	meter := meters.Meter("github.com/speakeasy-api/gram/server/internal/sigint/evaluation")
 
@@ -66,7 +69,7 @@ func NewEvaluator(logger *slog.Logger, meters metric.MeterProvider, source Sourc
 		return nil, fmt.Errorf("create sensor window truncation counter: %w", err)
 	}
 
-	return &Evaluator{logger: logger, source: source, features: features, publisher: publisher, classifier: c, failures: failures, skipped: skipped, truncated: truncated, slots: make(chan struct{}, 4)}, nil
+	return &Evaluator{logger: logger, source: source, features: features, publisher: publisher, outcomes: outcomes, classifier: c, failures: failures, skipped: skipped, truncated: truncated, slots: make(chan struct{}, 4)}, nil
 }
 
 func (h *Evaluator) terminal(ctx context.Context, event Event, reason string, details ...slog.Attr) {
@@ -76,7 +79,8 @@ func (h *Evaluator) terminal(ctx context.Context, event Event, reason string, de
 }
 
 // Evaluate applies the source's eligible sensors to one normalized event.
-// Nil means all successful readings reached Pub/Sub and remaining work is terminal.
+// Nil means all readings and outcomes reached Pub/Sub and remaining work is terminal.
+// Event-level failures before sensors load have no sensor to attribute an outcome to.
 func (h *Evaluator) Evaluate(ctx context.Context, in Input) error {
 	select {
 	case h.slots <- struct{}{}:
@@ -101,6 +105,10 @@ func (h *Evaluator) Evaluate(ctx context.Context, in Input) error {
 		h.terminal(ctx, event, "invalid_timestamp")
 		return nil
 	}
+	if err := event.Evaluation.Validate(); err != nil {
+		h.terminal(ctx, event, "invalid_evaluation_context")
+		return nil
+	}
 
 	enabled, err := h.features.IsFeatureEnabled(ctx, event.OrganizationID, productfeatures.FeatureSignalsIntelligence)
 	if err != nil {
@@ -116,10 +124,22 @@ func (h *Evaluator) Evaluate(ctx context.Context, in Input) error {
 		return fmt.Errorf("load sensor definitions: %w", err)
 	}
 
+	// One attempt ID covers the whole event evaluation, across window groups.
+	attempt := uuid.NewString()
+	var pending []gcp.PublishResult
 	var compiled []compiledSensor
 	maxSize := 1
 	matchMessage := in.MatchingMessage()
 	for _, sensor := range sensors {
+		item, ready := compileSensor(sensor)
+		ref := sensorRef{id: sensor.ID, slug: sensor.Slug, hash: ""}
+		if ready {
+			ref.hash = item.hash
+		}
+		decide := func(status sigintv1.Outcome_Status, reason string) {
+			pending = append(pending, h.publishOutcome(ctx, outcome(event, ref, attempt, time.Now().UTC().Format(time.RFC3339Nano), status, reason)))
+		}
+
 		matched, err := matching.Match(ctx, sensor.MatchExpression, matchMessage)
 		if err != nil {
 			if errors.Is(err, celeval.ErrCanceled) || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) || ctx.Err() != nil {
@@ -138,23 +158,25 @@ func (h *Evaluator) Evaluate(ctx context.Context, in Input) error {
 			}
 			h.failures.Add(ctx, 1, metric.WithAttributes(attribute.String("reason", reason)))
 			h.logger.ErrorContext(ctx, "sensor matching failed", attr.SlogSigintSensorID(sensor.ID), attr.SlogProjectID(event.ProjectID), attr.SlogError(err))
+			decide(sigintv1.Outcome_STATUS_FAILED, reason)
 			continue
 		}
 
 		if !matched {
 			h.skipped.Add(ctx, 1, metric.WithAttributes(attribute.String("reason", "not_matched")))
+			decide(sigintv1.Outcome_STATUS_NOT_APPLICABLE, "")
 			continue
 		}
-		item, ready := compileSensor(sensor)
 		if !ready {
 			h.skipped.Add(ctx, 1, metric.WithAttributes(attribute.String("reason", "draft")))
+			decide(sigintv1.Outcome_STATUS_DRAFT, "")
 			continue
 		}
 		compiled = append(compiled, item)
 		maxSize = max(maxSize, item.windowSize)
 	}
 	if len(compiled) == 0 {
-		return nil
+		return awaitPublications(ctx, pending, "sensor outcome")
 	}
 
 	buffer := in.NewBuffer(maxSize)
@@ -162,7 +184,7 @@ func (h *Evaluator) Evaluate(ctx context.Context, in Input) error {
 	// failed target reads are neither repeated nor counted once per window size.
 	target, err := buffer.Resolve(ctx, 1)
 	if err != nil {
-		return h.evaluateGroup(ctx, event, compiled, target.State, err)
+		return errors.Join(h.evaluateGroup(ctx, event, attempt, compiled, target, err), awaitPublications(ctx, pending, "sensor outcome"))
 	}
 
 	// Ascending sizes let small windows succeed even when older content is invalid.
@@ -213,34 +235,47 @@ func (h *Evaluator) Evaluate(ctx context.Context, in Input) error {
 				)...)
 			}
 		}
-		retry = errors.Join(retry, h.evaluateGroup(ctx, event, sensors, resolved.State, err))
+		retry = errors.Join(retry, h.evaluateGroup(ctx, event, attempt, sensors, resolved, err))
 	}
-	return retry
+	return errors.Join(retry, awaitPublications(ctx, pending, "sensor outcome"))
 }
 
-func (h *Evaluator) evaluateGroup(ctx context.Context, event Event, compiled []compiledSensor, state classifier.Entry, err error) error {
+// failGroup permanently fails every sensor sharing an input that cannot be
+// classified, counting the failure once for the group.
+func (h *Evaluator) failGroup(ctx context.Context, event Event, attempt string, compiled []compiledSensor, reason string, input *ResolvedInput) error {
+	h.terminal(ctx, event, reason)
+	at := time.Now().UTC().Format(time.RFC3339Nano)
+	pending := make([]gcp.PublishResult, 0, len(compiled))
+	for _, sensor := range compiled {
+		o := outcome(event, sensor.ref(), attempt, at, sigintv1.Outcome_STATUS_FAILED, reason)
+		if input != nil {
+			withInput(o, sensor, *input)
+		}
+		pending = append(pending, h.publishOutcome(ctx, o))
+	}
+	return awaitPublications(ctx, pending, "sensor outcome")
+}
+
+func (h *Evaluator) evaluateGroup(ctx context.Context, event Event, attempt string, compiled []compiledSensor, input ResolvedInput, err error) error {
 	if err != nil {
 		if terminal, ok := errors.AsType[*permanentError](err); ok {
-			h.terminal(ctx, event, terminal.reason)
-			return nil
+			return h.failGroup(ctx, event, attempt, compiled, terminal.reason, nil)
 		}
 
 		if errors.Is(err, ErrInvalidInput) {
-			h.terminal(ctx, event, "invalid_content")
-			return nil
+			return h.failGroup(ctx, event, attempt, compiled, "invalid_content", nil)
 		}
 		return fmt.Errorf("resolve evaluation input: %w", err)
 	}
 
+	state := input.State
 	data, err := json.Marshal(state)
 	if err != nil || string(data) == "null" {
-		h.terminal(ctx, event, "invalid_content")
-		return nil
+		return h.failGroup(ctx, event, attempt, compiled, "invalid_content", &input)
 	}
 
 	if len(data) > maxContentBytes {
-		h.terminal(ctx, event, "content_too_large")
-		return nil
+		return h.failGroup(ctx, event, attempt, compiled, "content_too_large", &input)
 	}
 	req := classifier.NewRequest(state)
 	for _, sensor := range compiled {
@@ -248,7 +283,6 @@ func (h *Evaluator) evaluateGroup(ctx context.Context, event Event, compiled []c
 			req.Ask(question)
 		}
 	}
-	attempt := uuid.NewString()
 	result := h.classifier.Classify(ctx, req)
 	at := time.Now().UTC().Format(time.RFC3339Nano)
 	outcomes := make(map[classifier.QuestionKey]classifier.QuestionOutcome, len(result.Outcomes))
@@ -263,7 +297,11 @@ func (h *Evaluator) evaluateGroup(ctx context.Context, event Event, compiled []c
 		retry = fmt.Errorf("evaluate sensors: %w", err)
 	}
 
-	var pending []gcp.PublishResult
+	var pending, decided []gcp.PublishResult
+	fail := func(sensor compiledSensor, reason string) {
+		o := withClassification(withInput(outcome(event, sensor.ref(), attempt, at, sigintv1.Outcome_STATUS_FAILED, reason), sensor, input), result)
+		decided = append(decided, h.publishOutcome(ctx, o))
+	}
 	for _, sensor := range compiled {
 		failed, transient := false, false
 		var failures []error
@@ -290,6 +328,7 @@ func (h *Evaluator) evaluateGroup(ctx context.Context, event Event, compiled []c
 					attr.SlogSigintSensorMode(sensor.mode),
 					attr.SlogClassifierError(errors.Join(append(failures, operationErr)...)),
 				)
+				fail(sensor, "classifier_rejected")
 			}
 			continue
 		}
@@ -297,19 +336,17 @@ func (h *Evaluator) evaluateGroup(ctx context.Context, event Event, compiled []c
 		r, err := reading(event, sensor, outcomes, attempt, at, result)
 		if err != nil {
 			h.terminal(ctx, event, "invalid_answer")
+			fail(sensor, "invalid_answer")
 			continue
 		}
+		r.SetInput(readingInput(sensor, input))
 
 		if proto.Size(r) > maxReadingBytes {
 			h.terminal(ctx, event, "reading_too_large")
+			fail(sensor, "reading_too_large")
 			continue
 		}
 		pending = append(pending, h.publisher.Publish(ctx, r))
 	}
-	for _, publication := range pending {
-		if _, err := publication.Get(ctx); err != nil {
-			retry = errors.Join(retry, fmt.Errorf("publish sensor reading: %w", err))
-		}
-	}
-	return retry
+	return errors.Join(retry, awaitPublications(ctx, pending, "sensor reading"), awaitPublications(ctx, decided, "sensor outcome"))
 }

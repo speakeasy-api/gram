@@ -1,5 +1,47 @@
 # dashboard
 
+## 0.140.0
+
+### Minor Changes
+
+- 5298d58: Add servers to a plugin from a side sheet instead of a dropdown. Search by name or slug, see each server's logo and kind, and pick several at once. If some fail, the sheet stays open with the failed servers still selected and the reason shown on each row. The sheet is shared with the organization gateway's add-servers sheet.
+- ebe489d: Choose Direct or Progressive tool discovery for a gateway, with optional connection overrides in consent and Inspect. Existing connections follow the gateway default unless they choose a mode explicitly.
+  
+  Organization gateway connections can choose a mode at sign-in too; they default to Progressive. Organization gateway servers are named by their slug, with the project prefixed only when two projects share a slug.
+  
+  Discovery modes are available to every organization.
+- af8d5e3: The consent screen tool picker is now available to every organization, so the "Tool filtering on consent screens" setting and the `consent_tool_filtering` product feature are removed. Stored tool selections are still enforced.
+
+### Patch Changes
+
+- a539ae0: MCP servers returned by `mcpServers.get`, `mcpServers.list`, `mcpServers.listForOrg`, `mcpServers.create`, `mcpServers.update` and `remoteMcp.createServerAndMcpServer` now carry a `toolset` summary for hosted servers (id, slug, name, configured tool count excluding external MCP proxy tools, tool selection mode, external MCP slugs, whether the server is proxy-only, external OAuth server, and registry specifier), the `primary_endpoint_id` and `primary_endpoint_url` of the address that stands for the server, and the `platform_endpoint_slug` of its oldest platform endpoint. Custom-domain endpoints count only on a verified, activated domain. List endpoints load these in two batched queries regardless of page size, and `listForOrg` fills them only for servers the caller can read. If these details cannot be loaded, reads still succeed without them.
+- ead238e: Remote Identity Providers are now called **Authorization Servers**, matching what they are: the upstream OAuth servers where each user signs in so an MCP server can act for them. The organization page, an MCP server's Authentication settings (formerly **Connected services**), the attach, modify, and remove sheets, and the Service Account picker all use the new name, and the field's hint now explains what an authorization server does instead of calling it rarely needed. Platform MCP's setup guidance uses the same name, and an authorization server it attaches is named "Authorization server".
+- d20964a: Clarify pay-as-you-go billing copy right after activation so a short first period is not described as the monthly renewal.
+- 532503e: A dashboard card whose query fails now shows the error on that card instead of taking the whole page down with it.
+- 4f9d31e: A filter whose values fail to load no longer takes the whole dashboard page down; its dropdown just shows no values.
+- dfa7181: Fix directory role mapping rows collapsing a source's roles into "N roles" after a mapping is saved or removed, even when there is room to show them. Role chips now use the full width of the row.
+- 57c0a7c: Directory role mapping saves now replace a source's complete role set atomically, preserve unchanged mappings, and audit added and removed roles separately. An empty set removes all mappings for that source. Older dashboard clients retain a compatibility endpoint that cannot overwrite an existing multi-role set.
+- be7de1d: Let directory groups and attribute values grant several roles, with explicit add and remove controls that preserve the other roles on the source. Roles that don't fit on a mapping row collapse into a "+N more" chip that opens the full list.
+- 438757e: The plugin's add-servers sheet now shows hosted servers with MCP turned off as unavailable, with a note to turn MCP on first, instead of letting you pick them and fail. Its retry button no longer reloads server lists you have lost access to.
+- d910a2d: The Platform MCP install for Claude Code starts with the `/plugin marketplace add` and `/plugin install` commands again. The next step shows how to turn on auto-update: with `/plugin` → Marketplaces → Enable auto-update for yourself, or with a managed settings snippet for your whole organization. The Headless walkthrough and the public marketplace README both use this order.
+- 3296cfc: Platform MCP setup no longer flashes when you pick an agent or move between steps. The agent picker, install method, and setup steps now share one sheet instead of closing one and opening the next.
+- f06dde6: Retire the Risk Overview page. Old links to it now open Watchdog.
+
+## 0.139.0
+
+### Minor Changes
+
+- 1874a78: Adds the project-scoped `log:read` RBAC scope, which now gates a project's individual tool calls and raw log records: Tool Logs, the Playground logs panel, a session's Tool calls view, the underlying telemetry endpoints, and the matching Platform MCP and assistant tools. Like `chat:read`, no system role holds it and neither `project:*` nor `org:admin` implies it, so organization admins grant it per project through a custom role, including to themselves to keep using Tool Logs.
+- 92f2e71: Configure sensor message context in the dashboard with a sliding window of two to ten messages, and see each sensor's context setting in the sensor list.
+- 7eb804c: Add a Speakeasy authorization servers page to organization settings, behind the `gram-user-session-issuer-dashboard` rollout flag. It lists the organization-wide and project authorization servers MCP servers sign clients in with, shows each one's mode, issuer URL, token endpoint, MCP servers, and settings, and lets organization admins make a project's authorization server organization-wide or consolidate one into another after reviewing what changes.
+- 7eb804c: Warn before changing the user session issuer of an MCP server that already has one. Its connected clients must sign in again, and the new `userSessionIssuers.getAttachImpact` preview also says when the authorization server clients are sent to changes, so anything configured with it must be updated. MCP server settings now show the issuer URL, token endpoint, and resource of a shared authorization server, and the issuer picker marks issuers that share one.
+- 2310e62: Organization admins can move a Speakeasy authorization server onto or off the deployment's authentication host from its page, after previewing where clients will sign in. A shared authorization server with a pinned issuer URL is re-pinned to the new host, so its issuer URL and token endpoint follow. The new `organizationUserSessionIssuers.getAuthenticationHostImpact` and `setAuthenticationHost` methods back this, and issuers now report whether the deployment has an authentication host.
+
+### Patch Changes
+
+- 9f15f07: The service account panel no longer shows a disabled "Speakeasy-created" client ID choice marked "Coming soon". Identity providers that support client ID metadata documents, such as Okta, do not accept them for service account (client credentials) clients, so service account clients always use a client ID the provider issues.
+- 5253cf1: The consent page's approve button now updates in the same render as the tool access panel, so it is never briefly enabled while the panel already shows a blocking error.
+
 ## 0.138.0
 
 ### Minor Changes

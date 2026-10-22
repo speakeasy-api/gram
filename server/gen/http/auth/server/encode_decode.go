@@ -13,6 +13,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"unicode/utf8"
 
 	auth "github.com/speakeasy-api/gram/server/gen/auth"
 	goahttp "goa.design/goa/v3/http"
@@ -244,8 +245,10 @@ func DecodeLoginRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.D
 		var (
 			redirect       *string
 			orgName        *string
+			partnerCode    *string
 			email          *string
 			supportHandoff *string
+			err            error
 		)
 		qp := r.URL.Query()
 		redirectRaw := qp.Get("redirect")
@@ -256,6 +259,15 @@ func DecodeLoginRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.D
 		if orgNameRaw != "" {
 			orgName = &orgNameRaw
 		}
+		partnerCodeRaw := qp.Get("partner_code")
+		if partnerCodeRaw != "" {
+			partnerCode = &partnerCodeRaw
+		}
+		if partnerCode != nil {
+			if utf8.RuneCountInString(*partnerCode) > 80 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("partner_code", *partnerCode, utf8.RuneCountInString(*partnerCode), 80, false))
+			}
+		}
 		emailRaw := qp.Get("email")
 		if emailRaw != "" {
 			email = &emailRaw
@@ -264,7 +276,10 @@ func DecodeLoginRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.D
 		if supportHandoffRaw != "" {
 			supportHandoff = &supportHandoffRaw
 		}
-		payload = NewLoginPayload(redirect, orgName, email, supportHandoff)
+		if err != nil {
+			return payload, err
+		}
+		payload = NewLoginPayload(redirect, orgName, partnerCode, email, supportHandoff)
 
 		return payload, nil
 	}

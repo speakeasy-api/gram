@@ -505,6 +505,7 @@ func UserSessionIssuerView(row repo.UserSessionIssuer) *types.UserSessionIssuer 
 		TokenEndpoint:                        nil,
 		AuthorizationServerUnavailableReason: nil,
 		ProjectName:                          nil,
+		AuthenticationHostAvailable:          nil,
 		CreatedAt:                            row.CreatedAt.Time.Format(time.RFC3339),
 		UpdatedAt:                            row.UpdatedAt.Time.Format(time.RFC3339),
 	}
@@ -530,6 +531,7 @@ const (
 // the MCP service serves it on.
 func (s *Service) issuerView(ctx context.Context, row repo.UserSessionIssuer) *types.UserSessionIssuer {
 	view := UserSessionIssuerView(row)
+	view.AuthenticationHostAvailable = new(s.sharedHosts.AuthenticationHostAvailable())
 	if !authserver.IssuerInSharedMode(row) {
 		return view
 	}

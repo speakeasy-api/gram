@@ -1,8 +1,8 @@
 # Sensor evaluation
 
 `gram streams` consumes `gram.conversation.v1.MessageEvent` through
-`gram.sigint.v1.Evaluator` and publishes successful `gram.sigint.v1.Reading`
-messages. Configure **`GRAM_SIGINT_OPENROUTER_API_KEY`** with a platform-owned
+`gram.sigint.v1.Evaluator`. It publishes successful `gram.sigint.v1.Reading`
+messages and a `gram.sigint.v1.Outcome` for every other terminal sensor decision. Configure **`GRAM_SIGINT_OPENROUTER_API_KEY`** with a platform-owned
 OpenRouter inference key. The receiver is not registered when this is unset,
 unless temporary ack-only mode is enabled.
 The shared Jev client uses this key for every tenant; evaluation does not resolve
@@ -131,7 +131,10 @@ JSON framing counts toward the budget; an oversized target still fails evaluatio
 Other failures in older content affect only larger slices, and a history
 lookup failure does not prevent target-only readings. Redelivery creates a fresh
 buffer. The classifier contract remains questions plus state. Definition hashes
-include strategy, size and the versioned target-framing contract.
+include strategy, size and the versioned target-framing contract. Each reading's
+`input` records what that attempt actually supplied: strategy, requested and
+supplied message counts including the target, and whether the content budget
+truncated available history.
 
 ### Request goldens
 
@@ -201,7 +204,9 @@ Based on the [System One request schema](https://openrouter.ai/docs/api/api-refe
 - `exclusive`: one Choice question, 1–255 options; null descriptions are allowed.
 - `ordered_score`: one Score question, 2–10 ordered, non-null level descriptions.
 - Empty sensors and incomplete definitions are skipped, counted as `draft` in
-  `gram.sigint.evaluation.skipped`.
+  `gram.sigint.evaluation.skipped`. Incomplete sensors whose match expression
+  selects the event publish `STATUS_DRAFT` outcomes. Matching runs first, so a
+  nonmatching incomplete sensor publishes `STATUS_NOT_APPLICABLE`.
 
 Every eligible runnable sensor contributes to one logical classifier request per
 event and effective input configuration.
@@ -209,12 +214,25 @@ A multi-label reading requires all its Noul outcomes to succeed.
 
 ## Identity and content
 
-Reading identity is a UUIDv5 derived from a versioned JSON tuple containing organization,
-project, event kind, immutable logical event ID and sensor ID. The tuple is
-`["sigint-reading-v1", organization_id, project_id, event_kind, event_id, sensor_id]`.
-Repeated evaluations share
-this identity even if the sensor configuration changes between attempts;
-downstream processors account for repeated readings.
+Reading identity is a UUIDv5 derived from a JSON tuple containing tenant,
+evaluation scope, source event and sensor:
+
+```text
+["sigint-reading", organization_id, project_id, "stream", event_kind, event_id, sensor_id]
+["sigint-reading", organization_id, project_id, "manual", run_id, event_kind, event_id, sensor_id]
+```
+
+Every input supplies a validated `readings.Context`: an explicit `stream` or
+`manual` trigger, a nonzero run UUID only for manual evaluations, and an immutable
+request timestamp. The conversation adapter uses the creation mutation's
+`MessageEvent.occurred_at` as request time, independently of the original
+`message_created_at` source time. Manual inputs use their accepted run's creation
+time. Both readings and outcomes carry that context, and ClickHouse uses request
+time for partitioning and two-year retention. Invalid or absent context is terminal
+before sensor loading or inference.
+
+Retries share identity even if sensor configuration changes between attempts.
+Separate manual runs and streaming results retain independent identities.
 The fixed namespace is UUIDv5(URL namespace, `gram:sigint:reading`). The UUID is
 serialized as a canonical string on the wire and can be stored in native UUID
 columns in PostgreSQL and ClickHouse.
@@ -255,6 +273,34 @@ These fields do not participate in reading identity or the definition hash.
 
 Successful readings are published and their publication results awaited before
 acknowledgment.
+
+### Outcomes
+
+Coverage needs every eligible sensor decision, not only answers. Each loaded
+sensor that does not produce a reading publishes one `gram.sigint.v1.Outcome`,
+awaited before acknowledgment like readings:
+
+| Decision                                       | Status                  | `failure_reason`                                                                                      |
+| ---------------------------------------------- | ----------------------- | ----------------------------------------------------------------------------------------------------- |
+| Match expression excludes the event            | `STATUS_NOT_APPLICABLE` | empty                                                                                                 |
+| Incomplete definition (checked after matching) | `STATUS_DRAFT`          | empty                                                                                                 |
+| Invalid predicate or exhausted matching budget | `STATUS_FAILED`         | `match_compile`, `match_result_type`, `match_expression_size`, `match_evaluation`, `match_cost_limit` |
+| Unusable input shared by a group of sensors    | `STATUS_FAILED`         | `invalid_content`, `content_too_large`, `invalid_reference`, `missing_asset`                          |
+| Non-retryable classifier failure               | `STATUS_FAILED`         | `classifier_rejected`                                                                                 |
+| Answer does not fit the sensor mode            | `STATUS_FAILED`         | `invalid_answer`                                                                                      |
+| Reading over the 9 MiB transport budget        | `STATUS_FAILED`         | `reading_too_large`                                                                                   |
+
+An outcome carries the reading ID the same sensor, event and evaluation scope
+would produce, the trigger/run and immutable request time, attempt ID, tenant,
+event reference, sensor ID/slug, definition hash (empty for a
+draft), decision time and the same attribution as a reading. Failures after input
+resolution also record the supplied input, and failures after inference record
+the classifier model metadata. One attempt ID covers every reading and outcome of
+an event evaluation. Retryable failures publish nothing and nack the delivery, so
+redelivery decides them later. Event-level failures before sensors load (invalid
+identity, timestamp, event, or evaluation context) have no sensor to attribute and
+publish no outcome; a message census must account for those, including
+`invalid_evaluation_context`. The failure and skip counters are unchanged.
 Readings exceeding 9 MiB of serialized protobuf are rejected before publication,
 leaving headroom under Pub/Sub's 10 MiB limit. They are permanent failures with
 reason `reading_too_large`; other successful readings are still published.
@@ -273,8 +319,9 @@ budget and truncation reason. The log describes the context adjustment before
 classification; it does not imply that classification or publication succeeded.
 All evaluator logs carry `gram.component=sigint-evaluator`.
 Redelivery may reevaluate all sensors and republish successes with the same
-logical reading ID and different answers/attempt IDs. No evaluation checkpoints,
-DLQ, reading persistence or duplicate-winner policy are introduced.
+logical reading ID and different answers/attempt IDs. Independent ClickHouse
+consumers store both topics in `sigint_readings_v2`, where the latest completion
+wins within its trigger/run scope. Request time remains fixed across redelivery.
 
 Conversation and reading topics and the evaluator subscription retain messages
 for four days; acknowledged subscription messages are not retained. Provision

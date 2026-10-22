@@ -177,7 +177,7 @@ func TestServePlatformToolset_DeniedAndMissingInvalidBodiesMatch(t *testing.T) {
 	token := mintAssistantToken(t, ti, authCtx, otherID)
 
 	router := goahttp.NewMuxer()
-	mcp.Attach(router, ti.service, nil)
+	mcp.Attach(router, ti.service.Service, nil)
 
 	for _, revision := range []string{"", mcpversions.Version20251125, mcpversions.Version20260728} {
 		for _, tc := range []struct {
@@ -261,7 +261,7 @@ func TestServePlatformToolset_AttachedFailuresAreJSONRPCErrors(t *testing.T) {
 
 	_, ti := newTestMCPService(t)
 	router := goahttp.NewMuxer()
-	mcp.Attach(router, ti.service, nil)
+	mcp.Attach(router, ti.service.Service, nil)
 
 	for _, tc := range []struct {
 		name   string
@@ -547,7 +547,7 @@ func servePlatformHTTP(t *testing.T, ti *testInstance, slug string, body []byte,
 func TestServePlatformToolset_PlatformMCPReadVariantListsTools(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti := newTestMCPService(t)
+	ctx, ti, _ := newTestMCPServiceWithPlatformMCPReadTools(t)
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
@@ -641,7 +641,7 @@ func TestServePlatformToolset_PlatformMCPReadNonManagedAssistantRejected(t *test
 func TestServePlatformToolset_PlatformMCPReadListProjectsCall(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti, recorder := newTestMCPServiceWithScanSpans(t)
+	ctx, ti, recorder := newTestMCPServiceWithPlatformMCPReadTools(t)
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)

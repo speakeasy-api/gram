@@ -24,6 +24,8 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/visibility"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
@@ -45,13 +47,7 @@ import (
 // The parameter is named mcpSlug, as on every other MCP route, because the
 // organization slug is this gateway's slug: the OAuth handlers it shares
 // with stored endpoints read it under that name.
-const OrganizationGatewayRoute = "/" + organizationGatewayRouteBase + "/{mcpSlug}"
-
-// organizationGatewayRouteBase is the ResolvedMcpEndpoint.RouteBase of an
-// organization gateway. URLs built from the endpoint (its resource, its OAuth
-// handlers, its consent page) land under it, and slug-based re-resolution
-// recognizes it.
-const organizationGatewayRouteBase = orggateway.RouteBase
+const OrganizationGatewayRoute = "/" + string(mcproute.OrganizationGateway) + "/{mcpSlug}"
 
 // organizationGatewayNamespace derives the synthetic meta-server id an
 // organization gateway reports. There is no meta_mcp_servers row behind it,
@@ -66,7 +62,7 @@ func organizationGatewayID(organizationID string) uuid.UUID {
 // IsOrganizationGateway reports whether the endpoint is an organization
 // gateway rather than a stored server or gateway.
 func (e *ResolvedMcpEndpoint) IsOrganizationGateway() bool {
-	return e.RouteBase == organizationGatewayRouteBase
+	return e.RouteBase == mcproute.OrganizationGateway
 }
 
 // organizationGateway is a resolved organization gateway: the synthetic rows
@@ -118,7 +114,7 @@ func (s *Service) shadowedEndpointHandler(name string, serve func(http.ResponseW
 			rctx = chi.NewRouteContext()
 			r = r.WithContext(context.WithValue(r.Context(), chi.RouteCtxKey, rctx))
 		}
-		if _, err := s.LoadResolvedMcpEndpointBySlug(r.Context(), s.logger, shadowedEndpointSlug, "mcp"); err == nil {
+		if _, err := s.loadResolvedMcpEndpointBySlug(r.Context(), s.logger, shadowedEndpointSlug, mcproute.MCP, mcpmetrics.LegacyFallbackOrgGatewayProbe); err == nil {
 			rctx.URLParams.Add("mcpSlug", shadowedEndpointSlug)
 			endpointRoute.ServeHTTP(w, r)
 			return
@@ -183,7 +179,7 @@ func (s *Service) shadowedEndpointRoutes() []shadowedEndpointRoute {
 func attachOrganizationGateway(mux goahttp.Muxer, service *Service) {
 	o11y.AttachHandler(mux, http.MethodPost, OrganizationGatewayRoute, oops.MCPErrHandle(service.logger, service.ServeOrganizationGateway).ServeHTTP)
 	for _, route := range service.shadowedEndpointRoutes() {
-		o11y.AttachHandler(mux, http.MethodPost, "/"+organizationGatewayRouteBase+"/"+route.name, service.shadowedEndpointHandler(route.name, route.serve))
+		o11y.AttachHandler(mux, http.MethodPost, "/"+mcproute.OrganizationGateway.String()+"/"+route.name, service.shadowedEndpointHandler(route.name, route.serve))
 	}
 	for _, route := range service.organizationGatewayOAuthRoutes() {
 		o11y.AttachHandler(mux, route.method, route.path, oops.ErrHandle(service.logger, service.withOrganizationGateway(route.serve)).ServeHTTP)
@@ -196,7 +192,7 @@ func attachOrganizationGateway(mux goahttp.Muxer, service *Service) {
 // authorization server.
 func attachOrganizationGatewayAuthenticationHost(host *AuthenticationHost, service *Service) {
 	for _, route := range service.shadowedEndpointRoutes() {
-		host.Handle(http.MethodPost, "/"+organizationGatewayRouteBase+"/"+route.name, service.shadowedEndpointHandler(route.name, route.serve))
+		host.Handle(http.MethodPost, "/"+mcproute.OrganizationGateway.String()+"/"+route.name, service.shadowedEndpointHandler(route.name, route.serve))
 	}
 	for _, route := range service.organizationGatewayOAuthRoutes() {
 		if route.onAuthenticationHost {
@@ -262,6 +258,7 @@ func (s *Service) loadOrganizationGateway(ctx context.Context, organizationSlug 
 		Name:                organization.Name,
 		// NULL serves Speakeasy's built-in gateway instructions.
 		Instructions:      pgtype.Text{String: "", Valid: false},
+		DiscoveryMode:     "progressive",
 		Visibility:        visibility.Private,
 		NetworkAccessMode: pgtype.Text{String: "", Valid: false},
 		CreatedAt:         pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
@@ -274,7 +271,7 @@ func (s *Service) loadOrganizationGateway(ctx context.Context, organizationSlug 
 		Slug:      organization.Slug,
 	}
 
-	resolved := NewResolvedMcpEndpointFromMetaMcpServer(endpoint, metaServer, organization.ID, organizationGatewayRouteBase)
+	resolved := NewResolvedMcpEndpointFromMetaMcpServer(endpoint, metaServer, organization.ID, mcproute.OrganizationGateway)
 	if err := s.RequireUserSessionIssuer(ctx, resolved); err != nil {
 		return nil, err
 	}
@@ -316,7 +313,9 @@ func (c *projectTokenCache) get(ctx context.Context, projectID uuid.UUID) (map[u
 
 // newOrganizationGatewayTokens resolves upstream credentials for the
 // authenticated subject the way a member's own endpoint would: partially,
-// so a member whose provider is not connected degrades on its own.
+// so a member whose provider is not connected degrades on its own. A stored
+// gateway uses it too, for its hosted members, so the issuer's clients
+// resolve only when one needs them.
 func (s *Service) newOrganizationGatewayTokens(authentication *issuerGateAuthentication) *projectTokenCache {
 	endpoint := authentication.endpoint
 	return &projectTokenCache{
@@ -337,6 +336,9 @@ func (s *Service) newOrganizationGatewayTokens(authentication *issuerGateAuthent
 // members alone, as any other member failure does; the cache has already
 // logged the cause.
 func (g *metaGateContext) memberTokens(ctx context.Context, member metaMember) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
+	if g.memberChoices != nil && member.backend == metaMemberBackendProxied {
+		return g.memberChoices.tokens(ctx, member)
+	}
 	if g.projectTokens == nil {
 		return g.tokens, nil
 	}
@@ -380,6 +382,28 @@ func (s *Service) listEndpointClients(ctx context.Context, endpoint *ResolvedMcp
 	if err != nil {
 		return nil, fmt.Errorf("list remote session clients: %w", err)
 	}
+	if len(clients) == 0 {
+		return clients, nil
+	}
+	// The issuer may bind clients for other servers sharing it. Consent offers
+	// a proxied server only the clients configured for it, and a gateway only
+	// those of the members the subject reaches. A hosted server keeps serving
+	// from every client its issuer binds.
+	switch {
+	case endpoint.McpServerID.Valid && !endpoint.ToolsetID.Valid:
+		associated, err := s.serverAssociatedClients(ctx, endpoint.OrganizationID, []uuid.UUID{endpoint.McpServerID.UUID})
+		if err != nil {
+			return nil, err
+		}
+		own := associated[endpoint.McpServerID.UUID]
+		return slices.DeleteFunc(clients, func(client remotesessions.Client) bool { return !own[client.ID] }), nil
+	case endpoint.MetaMcpServerID.Valid:
+		members, err := s.consentSubjectMembers(ctx, endpoint, challengeState)
+		if err != nil {
+			return nil, err
+		}
+		return slices.DeleteFunc(clients, func(client remotesessions.Client) bool { return !clientServesAnyMember(client, members) }), nil
+	}
 	return clients, nil
 }
 
@@ -403,14 +427,10 @@ func (s *Service) consentSubjectMembers(ctx context.Context, endpoint *ResolvedM
 }
 
 // clientServesAnyMember reports whether a client authenticates for at least
-// one member: one whose authorization server is the client's, in the client's
-// own project when a project owns it.
+// one member, by memberUsesClient.
 func clientServesAnyMember(client remotesessions.Client, members []metaMember) bool {
 	for _, member := range members {
-		if !member.remoteSessionIssuerID.Valid || member.remoteSessionIssuerID.UUID != client.RemoteSessionIssuerID {
-			continue
-		}
-		if !client.ProjectID.Valid || client.ProjectID.UUID == member.projectID {
+		if memberUsesClient(member, client.ID, client.RemoteSessionIssuerID, client.ProjectID) {
 			return true
 		}
 	}
@@ -460,13 +480,13 @@ func (s *Service) clientTokenProjectIDs(ctx context.Context, endpoint *ResolvedM
 	if client.ProjectID.Valid {
 		return []uuid.UUID{client.ProjectID.UUID}, nil
 	}
-	rows, err := metamcprepo.New(s.db).ListOrganizationMCPServersForRemoteSessionIssuer(ctx, metamcprepo.ListOrganizationMCPServersForRemoteSessionIssuerParams{
+	rows, err := metamcprepo.New(s.db).ListOrganizationMCPServersForRemoteSessionClient(ctx, metamcprepo.ListOrganizationMCPServersForRemoteSessionClientParams{
 		OrganizationID:        endpoint.OrganizationID,
 		ProjectID:             uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		RemoteSessionIssuerID: uuid.NullUUID{UUID: client.RemoteSessionIssuerID, Valid: true},
+		RemoteSessionClientID: client.ID,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("list organization MCP servers for remote session issuer: %w", err)
+		return nil, fmt.Errorf("list organization MCP servers for remote session client: %w", err)
 	}
 	surface := requestNetworkSurface(ctx)
 	projectIDs := make([]uuid.UUID, 0, len(rows))

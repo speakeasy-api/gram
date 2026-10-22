@@ -26,6 +26,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	customdomains_repo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
@@ -155,7 +156,7 @@ func (e *ResolvedMcpEndpoint) consentPath() string {
 	if shared := e.servingSharedAuthorizationServer(); shared != nil {
 		return shared.consentPath()
 	}
-	return "/" + e.RouteBase + "/" + e.Slug + "/connect"
+	return "/" + e.RouteBase.String() + "/" + e.Slug + "/connect"
 }
 
 // SetPlatformHosts records the deployment's extra first-party hosts (from
@@ -352,15 +353,13 @@ func (s *Service) resolveSharedResource(ctx context.Context, logger *slog.Logger
 	if !ok {
 		return nil, sharedResourceMalformed, nil
 	}
-	routeBase := ""
+	var routeBase mcproute.Base
 	slug := ""
 	switch {
-	case strings.HasPrefix(routePath, organizationGatewayRouteBase+"/"):
-		routeBase, slug = organizationGatewayRouteBase, strings.TrimPrefix(routePath, organizationGatewayRouteBase+"/")
-	case strings.HasPrefix(routePath, "x/mcp/"):
-		routeBase, slug = "x/mcp", strings.TrimPrefix(routePath, "x/mcp/")
-	case strings.HasPrefix(routePath, "mcp/"):
-		routeBase, slug = "mcp", strings.TrimPrefix(routePath, "mcp/")
+	case strings.HasPrefix(routePath, mcproute.OrganizationGateway.String()+"/"):
+		routeBase, slug = mcproute.OrganizationGateway, strings.TrimPrefix(routePath, mcproute.OrganizationGateway.String()+"/")
+	case strings.HasPrefix(routePath, mcproute.MCP.String()+"/"):
+		routeBase, slug = mcproute.MCP, strings.TrimPrefix(routePath, mcproute.MCP.String()+"/")
 	default:
 		return nil, sharedResourceMalformed, nil
 	}
@@ -368,7 +367,7 @@ func (s *Service) resolveSharedResource(ctx context.Context, logger *slog.Logger
 		return nil, sharedResourceMalformed, nil
 	}
 
-	endpoint, err := s.LoadResolvedMcpEndpointBySlug(resourceCtx, logger, slug, routeBase)
+	endpoint, err := s.loadResolvedMcpEndpointBySlug(resourceCtx, logger, slug, routeBase, mcpmetrics.LegacyFallbackSharedResource)
 	if err != nil {
 		var shareable *oops.ShareableError
 		if errors.As(err, &shareable) && shareable.Code == oops.CodeNotFound {

@@ -16,40 +16,44 @@ import (
 
 // Client is the "organizationUserSessionIssuers" service client.
 type Client struct {
-	CreateIssuerEndpoint              goa.Endpoint
-	ListIssuersEndpoint               goa.Endpoint
-	GetIssuerEndpoint                 goa.Endpoint
-	UpdateIssuerEndpoint              goa.Endpoint
-	ListMcpServersEndpoint            goa.Endpoint
-	GetIssuerDeletePreflightEndpoint  goa.Endpoint
-	DeleteIssuerEndpoint              goa.Endpoint
-	MoveIssuerEndpoint                goa.Endpoint
-	GetIssuerMigratePreflightEndpoint goa.Endpoint
-	MigrateIssuerEndpoint             goa.Endpoint
-	CreateCimdClientEndpoint          goa.Endpoint
-	ListCimdClientsEndpoint           goa.Endpoint
-	GetCimdClientEndpoint             goa.Endpoint
-	DeleteCimdClientEndpoint          goa.Endpoint
+	CreateIssuerEndpoint                goa.Endpoint
+	ListIssuersEndpoint                 goa.Endpoint
+	GetIssuerEndpoint                   goa.Endpoint
+	UpdateIssuerEndpoint                goa.Endpoint
+	ListMcpServersEndpoint              goa.Endpoint
+	GetAuthenticationHostImpactEndpoint goa.Endpoint
+	SetAuthenticationHostEndpoint       goa.Endpoint
+	GetIssuerDeletePreflightEndpoint    goa.Endpoint
+	DeleteIssuerEndpoint                goa.Endpoint
+	MoveIssuerEndpoint                  goa.Endpoint
+	GetIssuerMigratePreflightEndpoint   goa.Endpoint
+	MigrateIssuerEndpoint               goa.Endpoint
+	CreateCimdClientEndpoint            goa.Endpoint
+	ListCimdClientsEndpoint             goa.Endpoint
+	GetCimdClientEndpoint               goa.Endpoint
+	DeleteCimdClientEndpoint            goa.Endpoint
 }
 
 // NewClient initializes a "organizationUserSessionIssuers" service client
 // given the endpoints.
-func NewClient(createIssuer, listIssuers, getIssuer, updateIssuer, listMcpServers, getIssuerDeletePreflight, deleteIssuer, moveIssuer, getIssuerMigratePreflight, migrateIssuer, createCimdClient, listCimdClients, getCimdClient, deleteCimdClient goa.Endpoint) *Client {
+func NewClient(createIssuer, listIssuers, getIssuer, updateIssuer, listMcpServers, getAuthenticationHostImpact, setAuthenticationHost, getIssuerDeletePreflight, deleteIssuer, moveIssuer, getIssuerMigratePreflight, migrateIssuer, createCimdClient, listCimdClients, getCimdClient, deleteCimdClient goa.Endpoint) *Client {
 	return &Client{
-		CreateIssuerEndpoint:              createIssuer,
-		ListIssuersEndpoint:               listIssuers,
-		GetIssuerEndpoint:                 getIssuer,
-		UpdateIssuerEndpoint:              updateIssuer,
-		ListMcpServersEndpoint:            listMcpServers,
-		GetIssuerDeletePreflightEndpoint:  getIssuerDeletePreflight,
-		DeleteIssuerEndpoint:              deleteIssuer,
-		MoveIssuerEndpoint:                moveIssuer,
-		GetIssuerMigratePreflightEndpoint: getIssuerMigratePreflight,
-		MigrateIssuerEndpoint:             migrateIssuer,
-		CreateCimdClientEndpoint:          createCimdClient,
-		ListCimdClientsEndpoint:           listCimdClients,
-		GetCimdClientEndpoint:             getCimdClient,
-		DeleteCimdClientEndpoint:          deleteCimdClient,
+		CreateIssuerEndpoint:                createIssuer,
+		ListIssuersEndpoint:                 listIssuers,
+		GetIssuerEndpoint:                   getIssuer,
+		UpdateIssuerEndpoint:                updateIssuer,
+		ListMcpServersEndpoint:              listMcpServers,
+		GetAuthenticationHostImpactEndpoint: getAuthenticationHostImpact,
+		SetAuthenticationHostEndpoint:       setAuthenticationHost,
+		GetIssuerDeletePreflightEndpoint:    getIssuerDeletePreflight,
+		DeleteIssuerEndpoint:                deleteIssuer,
+		MoveIssuerEndpoint:                  moveIssuer,
+		GetIssuerMigratePreflightEndpoint:   getIssuerMigratePreflight,
+		MigrateIssuerEndpoint:               migrateIssuer,
+		CreateCimdClientEndpoint:            createCimdClient,
+		ListCimdClientsEndpoint:             listCimdClients,
+		GetCimdClientEndpoint:               getCimdClient,
+		DeleteCimdClientEndpoint:            deleteCimdClient,
 	}
 }
 
@@ -166,6 +170,52 @@ func (c *Client) ListMcpServers(ctx context.Context, p *ListMcpServersPayload) (
 		return
 	}
 	return ires.(*ListUserSessionIssuerMcpServersResult), nil
+}
+
+// GetAuthenticationHostImpact calls the "getAuthenticationHostImpact" endpoint
+// of the "organizationUserSessionIssuers" service.
+// GetAuthenticationHostImpact may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) GetAuthenticationHostImpact(ctx context.Context, p *GetAuthenticationHostImpactPayload) (res *UserSessionIssuerAuthenticationHostImpact, err error) {
+	var ires any
+	ires, err = c.GetAuthenticationHostImpactEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*UserSessionIssuerAuthenticationHostImpact), nil
+}
+
+// SetAuthenticationHost calls the "setAuthenticationHost" endpoint of the
+// "organizationUserSessionIssuers" service.
+// SetAuthenticationHost may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) SetAuthenticationHost(ctx context.Context, p *SetAuthenticationHostPayload) (res *types.UserSessionIssuer, err error) {
+	var ires any
+	ires, err = c.SetAuthenticationHostEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*types.UserSessionIssuer), nil
 }
 
 // GetIssuerDeletePreflight calls the "getIssuerDeletePreflight" endpoint of

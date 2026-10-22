@@ -3,6 +3,7 @@ package authz
 import (
 	"context"
 
+	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -12,6 +13,12 @@ import (
 // requested organization's namespace before evaluating an organization scope.
 // It intentionally does not use grants prepared for the active organization.
 func (e *Engine) RequireUserOrganizationScope(ctx context.Context, organizationID, userID string, scope Scope) error {
+	return e.RequireUserOrganizationScopeWithDBTX(ctx, e.db, organizationID, userID, scope)
+}
+
+// RequireUserOrganizationScopeWithDBTX resolves live authority on the caller's
+// connection, including a transaction that already holds a source lock.
+func (e *Engine) RequireUserOrganizationScopeWithDBTX(ctx context.Context, db accessrepo.DBTX, organizationID, userID string, scope Scope) error {
 	if mode, ok := contextvalues.APIKeyAuthorization(ctx); ok && mode == contextvalues.APIKeyAuthorizationModePrincipal {
 		return oops.C(oops.CodeForbidden)
 	}
@@ -33,12 +40,12 @@ func (e *Engine) RequireUserOrganizationScope(ctx context.Context, organizationI
 		return nil
 	}
 
-	principals, err := ResolveUserPrincipals(ctx, e.db, organizationID, userID)
+	principals, err := ResolveUserPrincipals(ctx, db, organizationID, userID)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "resolve requested organization principals").LogError(ctx, e.logger, attr.SlogOrganizationID(organizationID), attr.SlogUserID(userID))
 	}
 
-	grants, err := LoadGrants(ctx, e.db, organizationID, principals)
+	grants, err := LoadGrants(ctx, db, organizationID, principals)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "load requested organization grants").LogError(ctx, e.logger, attr.SlogOrganizationID(organizationID), attr.SlogUserID(userID))
 	}

@@ -184,22 +184,17 @@ func TestOTLPTraceUsesGuardrailCallAttribution(t *testing.T) {
 	require.NoError(t, ti.service.traces.Shutdown(t.Context()))
 
 	query := telemetryrepo.New(ti.chConn)
-	var logs []telemetryrepo.TelemetryLog
-	require.EventuallyWithT(t, func(collect *assert.CollectT) {
-		testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
-		var queryErr error
-		logs, queryErr = query.ListTelemetryLogs(ctx, telemetryrepo.ListTelemetryLogsParams{
-			GramProjectID: authCtx.ProjectID.String(),
-			TimeStart:     start.Add(-time.Second).UnixNano(),
-			TimeEnd:       start.Add(time.Second).UnixNano(),
-			GramURNs:      []string{litellmOTLPResourceURN},
-			SortOrder:     "asc",
-			Cursor:        "",
-			Limit:         10,
-		})
-		assert.NoError(collect, queryErr)
-		assert.Len(collect, logs, 1)
-	}, 10*time.Second, 50*time.Millisecond)
+	logs, err := query.ListTelemetryLogs(ctx, telemetryrepo.ListTelemetryLogsParams{
+		GramProjectID: authCtx.ProjectID.String(),
+		TimeStart:     start.Add(-time.Second).UnixNano(),
+		TimeEnd:       start.Add(time.Second).UnixNano(),
+		GramURNs:      []string{litellmOTLPResourceURN},
+		SortOrder:     "asc",
+		Cursor:        "",
+		Limit:         10,
+	})
+	require.NoError(t, err)
+	require.Len(t, logs, 1)
 
 	require.Equal(t, messages[0].UserID.String, gjson.Get(logs[0].Attributes, "user.id").String())
 	require.Equal(t, conv.NormalizeEmail(storedEmail), gjson.Get(logs[0].Attributes, "user.email").String())
@@ -240,22 +235,17 @@ func TestOTLPMetricsPersistOnlyOperationalRows(t *testing.T) {
 	require.NoError(t, ti.service.metrics.Shutdown(t.Context()))
 
 	query := telemetryrepo.New(ti.chConn)
-	var logs []telemetryrepo.TelemetryLog
-	require.EventuallyWithT(t, func(collect *assert.CollectT) {
-		testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
-		var queryErr error
-		logs, queryErr = query.ListTelemetryLogs(ctx, telemetryrepo.ListTelemetryLogsParams{
-			GramProjectID: authCtx.ProjectID.String(),
-			TimeStart:     now.Add(-time.Second).UnixNano(),
-			TimeEnd:       now.Add(time.Second).UnixNano(),
-			GramURNs:      []string{litellmOTLPMetricsURN},
-			SortOrder:     "asc",
-			Cursor:        "",
-			Limit:         100,
-		})
-		assert.NoError(collect, queryErr)
-		assert.Len(collect, logs, 2*len(litellmMetricNames))
-	}, 10*time.Second, 50*time.Millisecond)
+	logs, err := query.ListTelemetryLogs(ctx, telemetryrepo.ListTelemetryLogsParams{
+		GramProjectID: authCtx.ProjectID.String(),
+		TimeStart:     now.Add(-time.Second).UnixNano(),
+		TimeEnd:       now.Add(time.Second).UnixNano(),
+		GramURNs:      []string{litellmOTLPMetricsURN},
+		SortOrder:     "asc",
+		Cursor:        "",
+		Limit:         100,
+	})
+	require.NoError(t, err)
+	require.Len(t, logs, 2*len(litellmMetricNames))
 
 	for _, log := range logs {
 		require.Equal(t, litellmMetricEventURN, gjson.Get(log.Attributes, "gram.event.urn").String())
@@ -942,7 +932,8 @@ func TestRealHooksPureTextResponseProducesAssistantPolicyFinding(t *testing.T) {
 		gcp.NewNoopPublisher[*riskv1.PromptPolicyAnalysis](),
 		gcp.NewNoopPublisher[*riskv1.CustomRulesAnalysis](),
 		gcp.NewNoopPublisher[*riskv1.LLMAnalysis](),
-		gcp.NewNoopPublisher[*riskv1.Finding](),
+		gcp.NewNoopPublisher[*riskv1.ToolCallAnalysis](),
+		gcp.NewNoopPublisher[*riskv1.AccountIdentityAnalysis](),
 		customRules,
 		celEngine,
 		nil,

@@ -81,6 +81,10 @@ export const AUDIT_ACTIONS = [
   "device_integration:retry_schedule",
   "device_integration:update_schedule",
   "device_integration:upsert",
+  "directory_review_item:approve",
+  "directory_review_item:dismiss",
+  "directory_review_item:opt_out",
+  "directory_review_settings:update",
   "directory_role_mapping:delete",
   "directory_role_mapping:set",
   "environment:create",
@@ -166,6 +170,8 @@ export const AUDIT_ACTIONS = [
   "organization:onboarding_stack_updated",
   "organization:onboarding_playbook_assigned",
   "organization:onboarding_playbook_unassigned",
+  "organization:partner_signup_attributed",
+  "organization:promotion_redeemed",
   "organization:payg_activated",
   "organization:payg_deactivated",
   "organization:product_feature_disabled",
@@ -282,6 +288,7 @@ export const AUDIT_ACTIONS = [
   "toolset:delete",
   "toolset:detach_external_oauth",
   "toolset:detach_oauth_proxy",
+  "toolset:migrate_to_remote_mcp",
   "toolset:update",
   "toolset:update_external_oauth_issuer",
   "toolset:update_oauth_proxy",
@@ -317,6 +324,8 @@ export const AUDIT_ACTIONS = [
   "workload-admission:admit",
   "workload-admission:update",
   "workload-admission:withdraw",
+  "workload-device-join-token:create",
+  "workload-device-join-token:redeem",
   "workload-issuer:create",
   "workload-issuer:delete",
   "workload-issuer:update",
@@ -558,6 +567,15 @@ export function staticActionPhrase(action: AuditAction): string {
     case "device_integration:retry_schedule":
       return "retried device integration sync";
 
+    case "directory_review_item:approve":
+      return "approved directory change";
+    case "directory_review_item:dismiss":
+      return "dismissed directory change";
+    case "directory_review_item:opt_out":
+      return "stopped review of new attribute values";
+    case "directory_review_settings:update":
+      return "updated directory review emails";
+
     case "directory_role_mapping:set":
       return "set directory role mapping";
     case "directory_role_mapping:delete":
@@ -679,6 +697,10 @@ export function staticActionPhrase(action: AuditAction): string {
       return "started a new enterprise trial";
     case "organization:enterprise_trial_converted":
       return "converted enterprise trial for";
+    case "organization:partner_signup_attributed":
+      return "attributed a partner signup to";
+    case "organization:promotion_redeemed":
+      return "redeemed a promotion for";
     case "organization:payg_activated":
       return "activated pay-as-you-go billing for";
     case "organization:payg_deactivated":
@@ -825,7 +847,7 @@ export function staticActionPhrase(action: AuditAction): string {
     case "remote-session-issuer:delete":
       return "deleted remote session issuer";
     case "remote-session-issuer:update_ema_providers":
-      return "changed the EMA provider order for";
+      return "changed the enabled identity providers for";
     case "remote-session-issuer:migrate":
       return "migrated remote session issuer";
 
@@ -945,6 +967,8 @@ export function staticActionPhrase(action: AuditAction): string {
       return "updated the OAuth proxy on";
     case "toolset:detach_oauth_proxy":
       return "detached an OAuth proxy from";
+    case "toolset:migrate_to_remote_mcp":
+      return "migrated the external MCP server";
 
     case "trigger-instance:create":
       return "created trigger";
@@ -1016,6 +1040,10 @@ export function staticActionPhrase(action: AuditAction): string {
       return "updated workload";
     case "workload-admission:withdraw":
       return "withdrew workload";
+    case "workload-device-join-token:create":
+      return "created a device join token for";
+    case "workload-device-join-token:redeem":
+      return "enrolled a device with a join token for";
 
     default:
       return assertNever(action);

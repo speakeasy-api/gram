@@ -166,7 +166,7 @@ export function IdentityExplainerDialog({
           <Dialog.Title>User Identity or Service Account?</Dialog.Title>
           <Dialog.Description>
             Users of this server must authenticate as themselves against the
-            service&apos;s identity provider, or every caller can act as one
+            service&apos;s authorization server, or every caller can act as one
             Service Account whose permissions you manage in the control plane.
           </Dialog.Description>
         </Dialog.Header>
@@ -195,11 +195,11 @@ export function IdentityExplainerCallout({
   onDismiss: () => void;
 }): JSX.Element {
   return (
-    <Alert variant="info" alignTop dismissible onDismiss={onDismiss}>
+    <Alert variant="info" dismissible onDismiss={onDismiss}>
       <div className="space-y-3">
         <Text small>
           Users of this server must authenticate as themselves against the
-          service&apos;s identity provider, or every caller can act as one
+          service&apos;s authorization server, or every caller can act as one
           Service Account whose permissions you manage in the control plane.
         </Text>
         <IdentityExplainerContent />

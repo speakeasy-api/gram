@@ -36,6 +36,9 @@ func TestServiceDeletionWaitsForAssistantAttachments(t *testing.T) {
 					McpSlug: pgtype.Text{String: "example-tools-endpoint", Valid: true}, McpEnabled: true,
 				})
 				require.NoError(t, err)
+				if kind == "toolset" {
+					syncCanonicalWrapper(t, conn, ts)
+				}
 				payload := &gen.CreateAssistantPayload{Name: "Assistant", Model: "openai/gpt-4o-mini"}
 				targetID := ts.ID
 				if kind == "toolset" {
@@ -61,6 +64,9 @@ func TestServiceDeletionWaitsForAssistantAttachments(t *testing.T) {
 						McpSlug: pgtype.Text{String: "live-tools-endpoint", Valid: true}, McpEnabled: true,
 					})
 					require.NoError(t, err)
+					if kind == "toolset" {
+						syncCanonicalWrapper(t, conn, live)
+					}
 					original := &gen.CreateAssistantPayload{Name: "Original", Model: payload.Model}
 					if kind == "toolset" {
 						original.Toolsets = []*types.AssistantToolsetRef{{ToolsetSlug: live.Slug}}
@@ -108,6 +114,14 @@ func TestServiceDeletionWaitsForAssistantAttachments(t *testing.T) {
 						if err == nil {
 							err = queries.DeleteAssistantToolsetsByToolset(ctx, toolsetsrepo.DeleteAssistantToolsetsByToolsetParams{ProjectID: projectID, ToolsetID: targetID})
 						}
+						// The toolset's canonical wrapper goes with it.
+						servers := mcpserversrepo.New(deletionTx)
+						if err == nil {
+							_, err = servers.DeleteMCPServer(ctx, mcpserversrepo.DeleteMCPServerParams{ProjectID: projectID, ID: targetID})
+						}
+						if err == nil {
+							err = servers.DeleteAssistantMCPServersByMCPServer(ctx, mcpserversrepo.DeleteAssistantMCPServersByMCPServerParams{ProjectID: projectID, McpServerID: targetID})
+						}
 					} else {
 						queries := mcpserversrepo.New(deletionTx)
 						_, err = queries.LockMCPServerByIDAndProjectID(ctx, mcpserversrepo.LockMCPServerByIDAndProjectIDParams{ProjectID: projectID, ID: targetID})
@@ -144,17 +158,14 @@ func TestServiceDeletionWaitsForAssistantAttachments(t *testing.T) {
 					require.NoError(t, err)
 				}
 				id := uuid.MustParse(assistantID)
-				require.NoError(t, enableAssistantToolsets(ctx, tx, newTestAuditLogger(), hostedmcp.Actor{UserID: "user-test", Email: nil}, projectID, resolved))
-				require.NoError(t, writeAssistantAttachments(ctx, tx, id, projectID, resolved, true, resolvedServers, true, false))
+				require.NoError(t, enableAssistantToolsets(ctx, tx, newTestAuditLogger(), hostedmcp.Actor{UserID: "user-test", Email: nil}, projectID, resolved, nil, allowAllMCPEnable))
+				require.NoError(t, writeAssistantAttachments(ctx, tx, id, projectID, resolved, true, resolvedServers, true))
 				counts, err := testrepo.New(tx).CountAssistantAttachments(ctx, testrepo.CountAssistantAttachmentsParams{
 					ProjectID: projectID, AssistantID: id,
 				})
 				require.NoError(t, err)
-				if kind == "toolset" {
-					require.EqualValues(t, 1, counts.Toolsets)
-				} else {
-					require.EqualValues(t, 1, counts.McpServers)
-				}
+				require.Zero(t, counts.Toolsets)
+				require.EqualValues(t, 1, counts.McpServers)
 				require.NoError(t, tx.Commit(ctx))
 				select {
 				case err := <-finished:

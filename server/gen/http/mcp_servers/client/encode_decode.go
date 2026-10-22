@@ -3092,6 +3092,32 @@ func DecodeDeleteMcpServerResponse(decoder func(*http.Response) goahttp.Decoder,
 	}
 }
 
+// unmarshalMcpServerToolsetSummaryResponseBodyToTypesMcpServerToolsetSummary
+// builds a value of type *types.McpServerToolsetSummary from a value of type
+// *McpServerToolsetSummaryResponseBody.
+func unmarshalMcpServerToolsetSummaryResponseBodyToTypesMcpServerToolsetSummary(v *McpServerToolsetSummaryResponseBody) *types.McpServerToolsetSummary {
+	if v == nil {
+		return nil
+	}
+	res := &types.McpServerToolsetSummary{
+		ID:                    *v.ID,
+		Slug:                  *v.Slug,
+		Name:                  *v.Name,
+		Description:           v.Description,
+		ToolCount:             *v.ToolCount,
+		ToolSelectionMode:     *v.ToolSelectionMode,
+		ExternalMcpProxyOnly:  *v.ExternalMcpProxyOnly,
+		ExternalOauthServerID: v.ExternalOauthServerID,
+		RegistrySpecifier:     v.RegistrySpecifier,
+	}
+	res.ExternalMcpSlugs = make([]string, len(v.ExternalMcpSlugs))
+	for i, val := range v.ExternalMcpSlugs {
+		res.ExternalMcpSlugs[i] = val
+	}
+
+	return res
+}
+
 // unmarshalMcpServerResponseBodyToTypesMcpServer builds a value of type
 // *types.McpServer from a value of type *McpServerResponseBody.
 func unmarshalMcpServerResponseBodyToTypesMcpServer(v *McpServerResponseBody) *types.McpServer {
@@ -3110,8 +3136,14 @@ func unmarshalMcpServerResponseBodyToTypesMcpServer(v *McpServerResponseBody) *t
 		ToolVariationsGroupID: v.ToolVariationsGroupID,
 		Visibility:            types.McpServerVisibility(*v.Visibility),
 		NetworkAccessMode:     types.NetworkAccessMode(*v.NetworkAccessMode),
+		PrimaryEndpointID:     v.PrimaryEndpointID,
+		PrimaryEndpointURL:    v.PrimaryEndpointURL,
+		HasEndpoint:           v.HasEndpoint,
 		CreatedAt:             *v.CreatedAt,
 		UpdatedAt:             *v.UpdatedAt,
+	}
+	if v.Toolset != nil {
+		res.Toolset = unmarshalMcpServerToolsetSummaryResponseBodyToTypesMcpServerToolsetSummary(v.Toolset)
 	}
 
 	return res

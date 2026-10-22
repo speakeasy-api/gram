@@ -164,7 +164,7 @@ type PluginServer struct {
 	// DisplayName is the name the generated package gives this server.
 	DisplayName string `json:"display_name"`
 
-	// Backend is what the entry is backed by: "toolset", "mcp_server", or "gateway".
+	// Backend is what the entry is backed by: "mcp_server", "gateway", or "unresolved" for a leftover toolset-keyed entry.
 	Backend string `json:"backend"`
 
 	// TargetID is the exact typed backend ID. It is present only in
@@ -426,6 +426,7 @@ type PluginsService struct {
 	assignmentReferences *subjectReferenceCodec
 	assignmentVersionKey []byte
 	remoteSessions       MemberMCPConnectionReader
+	authClientFlags      feature.Provider
 	identityChaining     IdentityChainingGovernor
 	now                  func() time.Time
 	// recordedPublish reads the project's marketplace connection row, whose
@@ -473,6 +474,7 @@ func NewPluginsService(db *pgxpool.Pool, budget OperationBudget, cursorKeyMateri
 		assignmentReferences:  references,
 		assignmentVersionKey:  versionKey,
 		remoteSessions:        nil,
+		authClientFlags:       nil,
 		identityChaining:      nil,
 		now:                   time.Now,
 		recordedPublish:       pluginsrepo.New(db).GetGitHubConnection,
@@ -527,6 +529,15 @@ func (s *PluginsService) WithRemoteSessions(remoteSessions *remotesessions.Chall
 		return s
 	}
 	return s.withMemberMCPConnectionReader(remoteSessions)
+}
+
+// WithAuthClientResolver reads member connection status as the auth client
+// resolver serves it in organizations where the resolver is enforced.
+func (s *PluginsService) WithAuthClientResolver(flags feature.Provider) *PluginsService {
+	if s != nil {
+		s.authClientFlags = flags
+	}
+	return s
 }
 
 // WithIdentityChaining reports MCP servers that identity chaining serves as
@@ -771,10 +782,11 @@ func (s *PluginsService) GetAssignedPlugin(ctx context.Context, principal Princi
 	}
 	for _, server := range servers {
 		backend := "mcp_server"
-		if server.ToolsetBacked {
-			backend = "toolset"
-		} else if server.GatewayBacked {
+		switch {
+		case server.GatewayBacked:
 			backend = "gateway"
+		case server.Unresolved:
+			backend = "unresolved"
 		}
 		output.Servers = append(output.Servers, PluginServer{DisplayName: server.DisplayName, Backend: backend, MCPSlug: server.McpSlug, Policy: server.Policy, Enabled: server.Enabled})
 	}

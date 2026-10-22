@@ -30,6 +30,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
@@ -82,14 +83,14 @@ func (s *Service) HandleConsentMCP(w http.ResponseWriter, r *http.Request) error
 		return oops.E(oops.CodeBadRequest, nil, "an mcp slug must be provided").LogError(ctx, s.logger)
 	}
 	logger := s.logger.With(attr.SlogToolsetMCPSlug(mcpSlug))
-	endpoint, err := s.LoadResolvedMcpEndpointBySlug(ctx, logger, mcpSlug, "mcp")
+	endpoint, err := s.LoadResolvedMcpEndpointBySlug(ctx, logger, mcpSlug, mcproute.MCP)
 	if err != nil {
 		return err
 	}
 	return s.ServeConsentMCP(w, r, endpoint)
 }
 
-// ServeConsentMCP is the post-resolution handler, shared with /x/mcp.
+// ServeConsentMCP is the post-resolution handler.
 func (s *Service) ServeConsentMCP(w http.ResponseWriter, r *http.Request, endpoint *ResolvedMcpEndpoint) error {
 	ctx := r.Context()
 	logger := endpoint.LogWith(s.logger)
@@ -108,12 +109,7 @@ func (s *Service) ServeConsentMCP(w http.ResponseWriter, r *http.Request, endpoi
 		return err
 	}
 
-	// The transport exists only while the organization's admin opt-in is
-	// enabled; an unavailable checker reads as off. 404 matches how the
-	// island's absence hides the surface entirely.
-	if !s.consentToolFilteringEnabled(ctx, logger, endpoint.OrganizationID) {
-		return oops.E(oops.CodeNotFound, nil, "not found").LogWarn(ctx, logger)
-	}
+	// 404 matches how the island's absence hides the surface entirely.
 	eligible, err := s.consentToolPickerEligible(ctx, endpoint)
 	if err != nil {
 		return oops.E(oops.CodeUnavailable, err, "service temporarily unavailable").LogError(ctx, logger)
@@ -184,6 +180,9 @@ func (s *Service) ServeConsentMCP(w http.ResponseWriter, r *http.Request, endpoi
 
 	draft, err := s.loadConsentInventoryDraft(ctx, endpoint, stateID, attempt)
 	if err != nil {
+		if errors.Is(err, errConsentConfigurationChanged) {
+			return oops.E(oops.CodeFailedPrecondition, err, "server configuration changed; reload this page to review access").LogWarn(ctx, logger)
+		}
 		return oops.E(oops.CodeUnavailable, err, "service temporarily unavailable").LogError(ctx, logger)
 	}
 
@@ -246,47 +245,9 @@ func (s *Service) serveConsentToolsetMCP(w http.ResponseWriter, r *http.Request,
 	case mcpversions.MethodPing:
 		return writeConsentJSONRPCResult(w, req.ID, map[string]any{}, nil)
 	case mcpversions.MethodToolsList:
-		toolset, terr := toolsets_repo.New(s.db).GetToolsetByIDAndProject(ctx, toolsets_repo.GetToolsetByIDAndProjectParams{
-			ID:        endpoint.ToolsetID.UUID,
-			ProjectID: endpoint.ProjectID,
-		})
+		tools, roleHidden, terr := s.authorizedToolsetConsentInventory(ctx, endpoint, challengeState)
 		if terr != nil {
-			return oops.E(oops.CodeUnexpected, terr, "load toolset for consent authorization").LogError(ctx, logger)
-		}
-		// Wrapper-governed endpoints (toolset-backed mcp_servers) take
-		// publicness from wrapper visibility alone (AIS-633); the legacy
-		// toolset-resolved endpoint keeps consulting the toolset flag so a
-		// mid-flow flip still closes the inventory.
-		private := !endpoint.IsPublic
-		if !endpoint.McpServerID.Valid {
-			private = !endpoint.IsPublic || !toolset.McpIsPublic
-		}
-		if private && challengeState.Subject.Kind == urn.SessionSubjectKindAnonymous {
-			return oops.E(oops.CodeUnauthorized, nil, "anonymous subject cannot enumerate a private MCP server").LogWarn(ctx, logger)
-		}
-		// The RBAC gate keys off the consent subject, exactly like the
-		// runtime request the minted session will make.
-		authzCtx, cerr := s.contextForSessionSubject(ctx, endpoint, *challengeState.Subject, "consent:"+challengeState.ID, challengeState.ClientID)
-		if cerr != nil {
-			return oops.E(oops.CodeUnexpected, cerr, "stamp consent subject context").LogError(ctx, logger)
-		}
-		if private {
-			if _, ok := contextvalues.GetAuthContext(authzCtx); !ok {
-				return oops.E(oops.CodeUnauthorized, nil, "consent subject has no authenticated context").LogWarn(ctx, logger)
-			}
-		}
-		if s.authz != nil && private {
-			if authzCtx, cerr = s.authz.PrepareContext(authzCtx); cerr != nil {
-				return oops.E(oops.CodeUnexpected, cerr, "load access grants for consent inventory").LogError(ctx, logger)
-			}
-			connectResourceID := endpoint.connectResourceID()
-			if cerr = s.authz.Require(authzCtx, authz.MCPCheck(authz.ScopeMCPConnect, connectResourceID.String(), endpoint.ProjectID.String())); cerr != nil {
-				return fmt.Errorf("authorize consent inventory access: %w", mcpaccess.ServerPermissionDenied(cerr, s.requestAccessURL(authzCtx, connectResourceID.String(), toolset.Name)))
-			}
-		}
-		tools, roleHidden, terr := s.enumerateToolsetConsentInventory(authzCtx, endpoint)
-		if terr != nil {
-			return oops.E(oops.CodeUnexpected, terr, "resolve toolset for consent inventory").LogError(ctx, logger)
+			return terr
 		}
 		if _, aerr := s.appendConsentInventoryPage(ctx, draft, consentRequestCursor(req.Params), tools, ""); aerr != nil {
 			if errors.Is(aerr, errConsentInventoryUnavailable) {
@@ -304,6 +265,55 @@ func (s *Service) serveConsentToolsetMCP(w http.ResponseWriter, r *http.Request,
 	default:
 		return writeConsentJSONRPCError(w, req.ID, proxy.RejectCodeMethodNotFound, "method is not available on the consent transport")
 	}
+}
+
+// authorizedToolsetConsentInventory applies the same subject and RBAC gates
+// during discovery and the final saved-approval check.
+func (s *Service) authorizedToolsetConsentInventory(ctx context.Context, endpoint *ResolvedMcpEndpoint, challengeState AuthnChallengeState) ([]consentInventoryTool, []string, error) {
+	logger := endpoint.LogWith(s.logger)
+	toolset, terr := toolsets_repo.New(s.db).GetToolsetByIDAndProject(ctx, toolsets_repo.GetToolsetByIDAndProjectParams{
+		ID:        endpoint.ToolsetID.UUID,
+		ProjectID: endpoint.ProjectID,
+	})
+	if terr != nil {
+		return nil, nil, oops.E(oops.CodeUnexpected, terr, "load toolset for consent authorization").LogError(ctx, logger)
+	}
+	// Wrapper-governed endpoints (toolset-backed mcp_servers) take
+	// publicness from wrapper visibility alone (AIS-633); the legacy
+	// toolset-resolved endpoint keeps consulting the toolset flag so a
+	// mid-flow flip still closes the inventory.
+	private := !endpoint.IsPublic
+	if !endpoint.McpServerID.Valid {
+		private = !endpoint.IsPublic || !toolset.McpIsPublic
+	}
+	if private && challengeState.Subject.Kind == urn.SessionSubjectKindAnonymous {
+		return nil, nil, oops.E(oops.CodeUnauthorized, nil, "anonymous subject cannot enumerate a private MCP server").LogWarn(ctx, logger)
+	}
+	// The RBAC gate keys off the consent subject, exactly like the
+	// runtime request the minted session will make.
+	authzCtx, cerr := s.contextForSessionSubject(ctx, endpoint, *challengeState.Subject, "consent:"+challengeState.ID, challengeState.ClientID)
+	if cerr != nil {
+		return nil, nil, oops.E(oops.CodeUnexpected, cerr, "stamp consent subject context").LogError(ctx, logger)
+	}
+	if private {
+		if _, ok := contextvalues.GetAuthContext(authzCtx); !ok {
+			return nil, nil, oops.E(oops.CodeUnauthorized, nil, "consent subject has no authenticated context").LogWarn(ctx, logger)
+		}
+	}
+	if s.authz != nil && private {
+		if authzCtx, cerr = s.authz.PrepareContext(authzCtx); cerr != nil {
+			return nil, nil, oops.E(oops.CodeUnexpected, cerr, "load access grants for consent inventory").LogError(ctx, logger)
+		}
+		connectResourceID := endpoint.connectResourceID()
+		if cerr = s.authz.Require(authzCtx, authz.MCPCheck(authz.ScopeMCPConnect, connectResourceID.String(), endpoint.ProjectID.String())); cerr != nil {
+			return nil, nil, fmt.Errorf("authorize consent inventory access: %w", mcpaccess.ServerPermissionDenied(cerr, s.requestAccessURL(authzCtx, connectResourceID.String(), toolset.Name)))
+		}
+	}
+	tools, roleHidden, terr := s.enumerateToolsetConsentInventory(authzCtx, endpoint)
+	if terr != nil {
+		return nil, nil, oops.E(oops.CodeUnexpected, terr, "resolve toolset for consent inventory").LogError(ctx, logger)
+	}
+	return tools, roleHidden, nil
 }
 
 // serveConsentProxiedMCP relays the consent method surface through the same
@@ -570,8 +580,9 @@ func (i *consentInventoryCaptureInterceptor) InterceptToolsListResponse(ctx cont
 			continue
 		}
 		pageTools = append(pageTools, consentInventoryTool{
-			Name:        tool.Name,
-			Annotations: consentAnnotationsFromSDK(tool.Annotations),
+			Name:           tool.Name,
+			DefinitionHash: consentEvidenceHash(tool),
+			Annotations:    consentAnnotationsFromSDK(tool.Annotations),
 		})
 	}
 	updated, err := i.service.appendConsentInventoryPage(ctx, *i.draft, requestCursor, pageTools, list.Result.NextCursor)

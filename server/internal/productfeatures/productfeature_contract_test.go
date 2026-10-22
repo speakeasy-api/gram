@@ -36,7 +36,7 @@ func TestProductFeatureNameContract(t *testing.T) {
 		productfeatures.FeatureSkills, productfeatures.FeatureSkillCaptureMetadataOnly, productfeatures.FeatureAIPlatformPushIntegrations,
 		productfeatures.FeaturePlatformMCP, productfeatures.FeatureCustomerManagedEncryptionKeys,
 		productfeatures.FeatureRemoteSessionAutoRefresh, productfeatures.FeatureRemoteSessionAutoRefreshEnforced,
-		productfeatures.FeatureConsentToolFiltering, productfeatures.FeatureSessionPortability,
+		productfeatures.FeatureSessionPortability,
 		productfeatures.FeatureNetworkIngress,
 		productfeatures.FeatureSignalsIntelligence,
 		productfeatures.FeatureOrganizationGatewayDisabled,
@@ -75,10 +75,10 @@ func TestClientSnapshot_ReturnsCompleteProductFeatureState(t *testing.T) {
 		CustomerManagedEncryptionKeysEnabled:    false,
 		RemoteSessionAutoRefreshEnabled:         false,
 		RemoteSessionAutoRefreshEnforcedEnabled: false,
-		ConsentToolFilteringEnabled:             false,
 		SessionPortabilityEnabled:               false,
 		NetworkIngressEnabled:                   false,
 		SignalsIntelligenceEnabled:              false,
+		OrganizationGatewayDisabled:             true,
 		DeviceAgent:                             true,
 	}, ti.client.Snapshot(ctx, orgID))
 }

@@ -6,11 +6,18 @@ import { SigninErrorNotice } from "./auth-errors";
 
 export function LoginPanel({
   redirectTo,
+  partnerCode,
 }: {
   redirectTo: string | null;
+  partnerCode?: string;
 }): JSX.Element {
   const handleLogin = () => {
-    window.location.href = buildLoginRedirectURL(redirectTo);
+    window.location.href = buildLoginRedirectURL(
+      redirectTo,
+      undefined,
+      undefined,
+      partnerCode,
+    );
   };
 
   return (
@@ -51,7 +58,7 @@ export function LoginPanel({
       <p className="mt-2 text-[14px] text-(--muted-strong)">
         Don't have an account?{" "}
         <Link
-          to={authPageHref("/sign-up", redirectTo)}
+          to={authPageHref("/sign-up", redirectTo, partnerCode)}
           className="text-(--link) underline hover:text-(--focus)"
         >
           Sign up

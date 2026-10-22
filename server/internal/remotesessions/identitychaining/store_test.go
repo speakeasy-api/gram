@@ -14,7 +14,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
+	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -142,6 +144,12 @@ func (f chainStoreFixture) setClientGrants(t *testing.T, org string, client uuid
 // generation. It returns the binding and its new generation.
 func bindResource(t *testing.T, db *pgxpool.Pool, req Request, remoteIssuer, client uuid.UUID, resource, state string) (uuid.UUID, int64) {
 	t.Helper()
+	return bindResourceScopes(t, db, req, remoteIssuer, client, resource, state, []string{"read"})
+}
+
+// bindResourceScopes is bindResource recording scopes.
+func bindResourceScopes(t *testing.T, db *pgxpool.Pool, req Request, remoteIssuer, client uuid.UUID, resource, state string, scopes []string) (uuid.UUID, int64) {
+	t.Helper()
 	q := repo.New(db)
 	key := repo.GetEMABindingParams{ProjectID: req.ProjectID, OrganizationID: req.OrganizationID, UserSessionIssuerID: req.UserSessionIssuerID, RemoteSessionIssuerID: remoteIssuer, Resource: resource}
 	require.NoError(t, q.EnsureEMABinding(t.Context(), repo.EnsureEMABindingParams(key)))
@@ -150,7 +158,7 @@ func bindResource(t *testing.T, db *pgxpool.Pool, req Request, remoteIssuer, cli
 	updated, err := q.SetEMABinding(t.Context(), repo.SetEMABindingParams{
 		State: pgtype.Text{String: state, Valid: true}, RemoteSessionClientID: uuid.NullUUID{UUID: client, Valid: true},
 		Generation: current.Generation + 1, GrantSource: pgtype.Text{String: remotesessions.PreparationGrantSourceAdministratorDeclared, Valid: true},
-		RequestedScopes: []string{"read"}, ClaimID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, ClaimedAt: pgtype.Timestamptz{},
+		RequestedScopes: scopes, ClaimID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, ClaimedAt: pgtype.Timestamptz{},
 		ID: current.ID, ProjectID: req.ProjectID, OrganizationID: req.OrganizationID, ExpectedGeneration: current.Generation,
 	})
 	require.NoError(t, err)
@@ -454,9 +462,11 @@ func TestStore_RetireSparesConcurrentPublish(t *testing.T) {
 	judged := f.credentials(t)[0]
 	require.NoError(t, f.chainer.publish(t.Context(), f.chainer.logger, f.req, f.sel, f.credential("fresh-token")))
 
-	require.NoError(t, repo.New(f.db).RetireEMACredential(t.Context(), repo.RetireEMACredentialParams{
+	retired, err := repo.New(f.db).RetireEMACredential(t.Context(), repo.RetireEMACredentialParams{
 		ID: judged.ID, OrganizationID: pgtype.Text{String: f.req.OrganizationID, Valid: true}, ProjectID: uuid.NullUUID{UUID: f.req.ProjectID, Valid: true}, ExpectedUpdatedAt: judged.UpdatedAt,
-	}))
+	})
+	require.NoError(t, err)
+	require.Zero(t, retired)
 	token, ok := f.chainer.cachedToken(t.Context(), testenv.NewLogger(t), f.req, f.sel)
 	require.True(t, ok, "retiring a stale read never erases a newer publish into the same slot")
 	require.Equal(t, "fresh-token", token.Value())
@@ -569,6 +579,42 @@ func TestStore_SelectBindingRestrictedToTunnelIssuer(t *testing.T) {
 	require.Equal(t, f.sel.bindingID, sel.bindingID)
 }
 
+func TestStore_SelectBindingRestrictedToChosenClient(t *testing.T) {
+	t.Parallel()
+	f := newChainStoreFixture(t)
+	other := f.req
+	other.RemoteSessionClientID = uuid.NullUUID{UUID: uuid.New(), Valid: true}
+	_, outcome := f.chainer.selectBinding(t.Context(), testenv.NewLogger(t), other)
+	require.Equal(t, notApplicable, outcome, "a credential that chose another client is never served by this binding")
+
+	own := f.req
+	own.RemoteSessionClientID = uuid.NullUUID{UUID: f.sel.clientID, Valid: true}
+	sel, outcome := f.chainer.selectBinding(t.Context(), testenv.NewLogger(t), own)
+	require.Equal(t, success, outcome)
+	require.Equal(t, f.sel.bindingID, sel.bindingID)
+}
+
+// Another client's binding for the same upstream is not a competing
+// candidate for a credential that chose this client: only the chosen
+// client's bindings are counted.
+func TestStore_SelectBindingCountsOnlyTheChosenClientsBindings(t *testing.T) {
+	t.Parallel()
+	f := newChainStoreFixture(t)
+	enc, err := encryption.NewWithBytes(bytes.Repeat([]byte{0x42}, 32))
+	require.NoError(t, err)
+	otherIssuer, otherClient := prepareResourceClient(t, f.db, enc, f.req.OrganizationID, "https://as.other.example.test", "https://as.other.example.test/token", "other-client", "other-secret")
+	bindResource(t, f.db, f.req, otherIssuer, otherClient, "https://api.resource.example.test", remotesessions.PreparationStateReady)
+
+	_, outcome := f.chainer.selectBinding(t.Context(), testenv.NewLogger(t), f.req)
+	require.Equal(t, ReasonConfigurationRequired, outcome.Reason, "without a chosen client both bindings compete")
+
+	own := f.req
+	own.RemoteSessionClientID = uuid.NullUUID{UUID: f.sel.clientID, Valid: true}
+	sel, outcome := f.chainer.selectBinding(t.Context(), testenv.NewLogger(t), own)
+	require.Equal(t, success, outcome)
+	require.Equal(t, f.sel.bindingID, sel.bindingID)
+}
+
 func TestStore_SwitchingBackToExternalReplacesSpeakeasySlot(t *testing.T) {
 	t.Parallel()
 	f := newChainStoreFixture(t)
@@ -592,4 +638,74 @@ func TestStore_SwitchingBackToExternalReplacesSpeakeasySlot(t *testing.T) {
 	token, ok := f.chainer.cachedToken(t.Context(), testenv.NewLogger(t), f.req, f.sel)
 	require.True(t, ok, "the slot now holds the external credential")
 	require.Equal(t, "external-token", token.Value())
+}
+
+func TestStore_RequestsTheScopesRecordedAtTurnOn(t *testing.T) {
+	t.Parallel()
+	f := newChainStoreFixture(t)
+	q := repo.New(f.db)
+	require.NoError(t, q.AttachRemoteSessionClientToUserSessionIssuer(t.Context(), repo.AttachRemoteSessionClientToUserSessionIssuerParams{RemoteSessionClientID: f.sel.clientID, UserSessionIssuerID: f.req.UserSessionIssuerID}))
+	_, err := q.UpdateOrganizationRemoteSessionClient(t.Context(), repo.UpdateOrganizationRemoteSessionClientParams{
+		Scope: []string{"openid", "read", "write"}, ID: f.sel.clientID, OrganizationID: pgtype.Text{String: f.req.OrganizationID, Valid: true},
+		ClientSecretEncrypted: pgtype.Text{}, TokenEndpointAuthMethod: pgtype.Text{}, TokenEndpointAuthAudienceFormat: pgtype.Text{}, Audience: pgtype.Text{}, LegacyCallbackUrl: pgtype.Bool{},
+	})
+	require.NoError(t, err)
+
+	sel, outcome := f.chainer.selectBinding(t.Context(), testenv.NewLogger(t), f.req)
+	require.Equal(t, success, outcome)
+	require.Equal(t, []string{"read"}, sel.scopes, "a connection change applies only when identity chaining is turned on again")
+}
+
+// An OIDC-only connection leaves chaining nothing to request, so the set Turn
+// on records must still bound the ID-JAG.
+func TestStore_OIDCOnlyConnectionBoundsTheGrant(t *testing.T) {
+	t.Parallel()
+	f := newChainStoreFixture(t)
+	ctx := t.Context()
+	q := repo.New(f.db)
+	require.NoError(t, q.AttachRemoteSessionClientToUserSessionIssuer(ctx, repo.AttachRemoteSessionClientToUserSessionIssuerParams{RemoteSessionClientID: f.sel.clientID, UserSessionIssuerID: f.req.UserSessionIssuerID}))
+	_, err := q.UpdateOrganizationRemoteSessionClient(ctx, repo.UpdateOrganizationRemoteSessionClientParams{
+		Scope: []string{"openid", "email"}, ID: f.sel.clientID, OrganizationID: pgtype.Text{String: f.req.OrganizationID, Valid: true},
+		ClientSecretEncrypted: pgtype.Text{}, TokenEndpointAuthMethod: pgtype.Text{}, TokenEndpointAuthAudienceFormat: pgtype.Text{}, Audience: pgtype.Text{}, LegacyCallbackUrl: pgtype.Bool{},
+	})
+	require.NoError(t, err)
+	remote, err := remotemcprepo.New(f.db).CreateServer(ctx, remotemcprepo.CreateServerParams{ID: uuid.New(), ProjectID: f.req.ProjectID, TransportType: "streamable-http", Url: testResource})
+	require.NoError(t, err)
+	_, err = mcpserversrepo.New(f.db).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
+		ID: uuid.New(), ProjectID: f.req.ProjectID, Name: pgtype.Text{String: "oidc-only", Valid: true}, Slug: pgtype.Text{String: "oidc-only", Valid: true},
+		RemoteMcpServerID: uuid.NullUUID{UUID: remote.ID, Valid: true}, Visibility: "private", UserSessionIssuerID: uuid.NullUUID{UUID: f.req.UserSessionIssuerID, Valid: true},
+	})
+	require.NoError(t, err)
+
+	// Turn on's rule over the connection, recorded as preparation records it.
+	connection, err := remotesessions.ConnectionScopes(ctx, f.db, remotesessions.BindingConnection{ProjectID: f.req.ProjectID, OrganizationID: f.req.OrganizationID, UserSessionIssuerID: f.req.UserSessionIssuerID, ClientID: f.sel.clientID, Resource: testResource, Discover: true})
+	require.NoError(t, err)
+	require.NotNil(t, connection)
+	recorded := remotesessions.BindingScopes(connection, nil)
+	require.Equal(t, []string{"email", "openid"}, recorded.Scopes)
+	bindResourceScopes(t, f.db, f.req, f.sel.remoteIssuerID, f.sel.clientID, testResource, remotesessions.PreparationStateReady, recorded.Scopes)
+
+	sel, outcome := f.chainer.selectBinding(ctx, testenv.NewLogger(t), f.req)
+	require.Equal(t, success, outcome)
+	require.Empty(t, sel.scopes, "OIDC scopes are never requested")
+	require.Equal(t, []string{"email", "openid"}, sel.configuredScopes)
+
+	now := time.Now().UTC().Truncate(time.Second)
+	sel.audience = testAudience
+	for _, tc := range []struct {
+		scope any
+		ok    bool
+	}{{nil, true}, {"openid email", true}, {"admin", false}, {"openid admin", false}} {
+		claims := validGrantClaims(sel, now)
+		delete(claims, "scope")
+		if tc.scope != nil {
+			claims["scope"] = tc.scope
+		}
+		outcome := f.chainer.validateGrant(ctx, testenv.NewLogger(t), claimsVerifier{typ: "oauth-id-jag+jwt", claims: claims, err: nil}, testIdPIssuer, "raw", testUpstreamSubject, sel)
+		if tc.ok {
+			require.True(t, outcome.Succeeded(), "scope %v: %+v", tc.scope, outcome)
+			continue
+		}
+		require.Equal(t, ReasonMalformedAssertion, outcome.Reason, "scope %v exceeds the recorded set", tc.scope)
+	}
 }

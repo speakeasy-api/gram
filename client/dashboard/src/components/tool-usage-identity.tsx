@@ -1,5 +1,5 @@
-import { AgentIcon, AgentLink } from "@/components/agent-link";
 import { IdentityLink } from "@/components/identity-link";
+import { ActingPrincipal } from "@/components/ui/ActingPrincipal";
 import { identityRefForKind } from "@/lib/identity-urn";
 
 export function ToolUsageIdentity({
@@ -14,13 +14,16 @@ export function ToolUsageIdentity({
   agent?: { id: string; name: string };
 }): JSX.Element {
   if (kind === "agent_id") {
+    // No authorizer: telemetry attributes a call to one principal, so naming a
+    // person here would invent a delegation this row cannot know about.
+    //
+    // Linked only once the agent itself resolved — an id read off a telemetry
+    // row is not proof the reader is allowed to open that agent.
     return (
-      <span className="inline-flex min-w-0 items-center gap-2">
-        <AgentIcon />
-        <AgentLink agentId={agent?.id} className="truncate">
-          {agent?.name ?? `agent:${identityKey}`}
-        </AgentLink>
-      </span>
+      <ActingPrincipal
+        agent={{ id: agent?.id ?? identityKey, name: agent?.name }}
+        linked={Boolean(agent?.id)}
+      />
     );
   }
   return (
