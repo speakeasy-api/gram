@@ -102,8 +102,8 @@ func (m MandatoryAuthorization) OrganizationID() string { return m.organizationI
 // enforcement uses. Callers that represent no user return "".
 func (m MandatoryAuthorization) RepresentedUserID() string { return m.authorization.representedUser }
 
-// LegacyAuthCeiling reports whether the caller's stored policy predates
-// version 5, so its auth client ceiling was derived from server access.
+// LegacyAuthCeiling reports whether admission derived the caller's auth
+// client ceiling from server access in a pre-version-5 stored policy.
 func (m MandatoryAuthorization) LegacyAuthCeiling() bool { return m.authorization.legacyAuthCeiling }
 
 // AuthorizeMandatory evaluates server access and auth client checks for any

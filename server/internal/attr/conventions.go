@@ -71,7 +71,7 @@ const (
 	MandatoryAuthzPrincipalIDKey = attribute.Key("gram.authz.mandatory.principal_id")
 	// MandatoryAuthzLegacyAllowedKey is whether today's decision allowed the request.
 	MandatoryAuthzLegacyAllowedKey = attribute.Key("gram.authz.mandatory.legacy_allowed")
-	// MandatoryAuthzLegacyAuthCeilingKey is whether the caller's stored policy predates version 5, so its auth client ceiling was derived from server access.
+	// MandatoryAuthzLegacyAuthCeilingKey is whether admission derived the caller's auth client ceiling from server access in a pre-version-5 stored policy.
 	MandatoryAuthzLegacyAuthCeilingKey = attribute.Key("gram.authz.mandatory.legacy_auth_ceiling")
 	// MandatoryAuthzOutcomeKey is the mandatory check's outcome: allow, deny, or error.
 	MandatoryAuthzOutcomeKey = attribute.Key("gram.authz.mandatory.outcome")

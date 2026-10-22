@@ -64,6 +64,27 @@ func TestAdmittedGrantsPrepareLegacyPoliciesInPlace(t *testing.T) {
 	}
 }
 
+func TestAdmitStoredPolicyFlagsOnlyDerivedCeilings(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name    string
+		grants  []authz.Grant
+		derived bool
+	}{
+		{"connect", []authz.Grant{authz.NewGrantWithSelector(authz.ScopeMCPConnect, connectSelector("server-1", "project-p"))}, true},
+		{"no connect", []authz.Grant{authz.NewGrant(authz.ScopeProjectRead, "project-p")}, false},
+	} {
+		policy, err := NewDelegatedPolicy(DelegatedPolicyVersion4, tc.grants)
+		require.NoError(t, err)
+		raw, err := EncodeDelegatedPolicy(DelegatedPolicyVersion4, policy)
+		require.NoError(t, err)
+		_, derived, err := admitStoredPolicy(int32(DelegatedPolicyVersion4), raw)
+		require.NoError(t, err)
+		require.Equal(t, tc.derived, derived, tc.name)
+	}
+}
+
 func TestIssuedPolicyVersionWaitsForAuthClientIssuers(t *testing.T) {
 	t.Parallel()
 	// Raising it stops admission deriving auth ceilings for new credentials.

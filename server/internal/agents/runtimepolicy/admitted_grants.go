@@ -5,14 +5,15 @@ import (
 )
 
 // admitStoredPolicy decodes a credential's stored policy for admission and
-// reports whether it predates version 5 (see admittedGrants).
+// reports whether admission derived an auth client ceiling (see admittedGrants).
 func admitStoredPolicy(version int32, raw []byte) (grants []authz.Grant, legacyAuthCeiling bool, err error) {
 	v := DelegatedPolicyVersion(version)
 	policy, err := DecodeDelegatedPolicy(v, raw)
 	if err != nil {
 		return nil, false, err
 	}
-	return admittedGrants(v, policy), v < DelegatedPolicyVersion5, nil
+	grants = admittedGrants(v, policy)
+	return grants, len(grants) > len(policy.RuntimeGrants()), nil
 }
 
 // admittedGrants reads each mcp:connect grant of a policy older than version 5
