@@ -138,4 +138,5 @@ func TestOAuthMountedDeviceAgentDatabaseFailure(t *testing.T) {
 	require.Equal(t, http.StatusServiceUnavailable, response.Code, response.Body.String())
 	require.Contains(t, response.Body.String(), `"error":"temporarily_unavailable"`)
 	require.Equal(t, "no-store", response.Header().Get("Cache-Control"))
+	require.Equal(t, "no-cache", response.Header().Get("Pragma"))
 }
