@@ -110,12 +110,10 @@ func TestCreateMCPFromFunctionsCreatesAServerExposingExactlyTheRequestedTools(t 
 	require.NoError(t, err)
 	require.Equal(t, fixture.project.ID, toolset.ProjectID)
 
-	// The index trigger ran for the toolset this creation wrote. This
-	// organization already has a server, so the new toolset is not
-	// MCP-enabled, and the real trigger answers not_required for that state.
-	// GRW-245: a server record serves the toolset regardless, so that answer
-	// is a bug; once it is fixed this assertion becomes "requested".
-	require.Equal(t, "not_required", created.IndexSignal)
+	// The index trigger ran for the toolset this creation wrote. Every new
+	// toolset is a private MCP server, so the real trigger requests the index
+	// even though this organization already has a server.
+	require.Equal(t, "requested", created.IndexSignal)
 	require.Equal(t, []uuid.UUID{toolsetID}, *fixture.indexed)
 
 	// The audit trail is the dashboard's: one toolset create, plus the

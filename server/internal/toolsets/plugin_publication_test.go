@@ -113,18 +113,21 @@ func TestDeleteToolsetSkipsToolsetOutsidePackages(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti, _ := newPublishingToolsetsService(t, true)
-	disabled, err := ti.service.CreateToolset(ctx, &gen.CreateToolsetPayload{
+	created, err := ti.service.CreateToolset(ctx, &gen.CreateToolsetPayload{
 		Name:         "Disabled toolset",
 		ToolUrns:     []string{},
 		ResourceUrns: []string{},
 	})
 	require.NoError(t, err)
+	disabled, err := ti.service.UpdateToolset(ctx, &gen.UpdateToolsetPayload{Slug: created.Slug, McpEnabled: new(false)})
+	require.NoError(t, err)
 	require.NotNil(t, disabled.McpEnabled)
 	require.False(t, *disabled.McpEnabled)
+	before := publicationRequests(t, ctx, ti)
 
 	require.NoError(t, ti.service.DeleteToolset(ctx, &gen.DeleteToolsetPayload{Slug: disabled.Slug}))
 
-	require.Zero(t, publicationRequests(t, ctx, ti), "a toolset that is not an MCP server is in no package")
+	require.Equal(t, before, publicationRequests(t, ctx, ti), "a toolset that is not an MCP server is in no package")
 }
 
 func TestDeleteToolsetSkipsProjectWithoutMarketplace(t *testing.T) {
