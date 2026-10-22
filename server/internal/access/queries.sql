@@ -78,6 +78,19 @@ WHERE organization_id = @organization_id
   AND scope = @scope
   AND selectors = @selectors;
 
+-- name: DeletePrincipalWildcardGrants :execrows
+-- Removes a principal's unrestricted rows for one scope: a selector naming only
+-- a resource kind and the wildcard resource ID. Older writers stored the kind
+-- as "*" or under another name, so matching on the kind the scope implies
+-- today would leave those rows granting access after an administrator removed
+-- them.
+DELETE FROM principal_grants
+WHERE organization_id = @organization_id
+  AND principal_urn = @principal_urn
+  AND scope = @scope
+  AND selectors->>'resource_id' = '*'
+  AND (selectors - 'resource_kind' - 'resource_id') = '{}'::jsonb;
+
 -- name: DeletePrincipalGrantsByTarget :execrows
 -- Removes every principal row for one exact grant target. Used by audience
 -- replacement writes where the caller supplies the full desired principal set.

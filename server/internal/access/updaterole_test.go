@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/access"
+	"github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -224,6 +225,48 @@ func TestService_UpdateRole_SystemRole_AllowsGrantEdit(t *testing.T) {
 
 	// WorkOS only tracks role identity/membership, not gram grants.
 	ti.roles.AssertNotCalled(t, "UpdateRole", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
+}
+
+func TestService_UpdateRole_RemovingUnrestrictedGrantRemovesLegacyWildcardRow(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	roleID := seedRole(t, ctx, ti.conn, authCtx.ActiveOrganizationID, mockSystemRole("role_member", "Member", authz.SystemRoleMember))
+	narrow := &gen.RoleGrant{Scope: string(authz.ScopeMCPWrite), Selectors: []*gen.Selector{{ResourceKind: "mcp", ResourceID: "server-1"}}}
+	role, err := ti.service.UpdateRole(ctx, &gen.UpdateRolePayload{ID: roleID, AddGrants: []*gen.RoleGrant{narrow}})
+	require.NoError(t, err)
+
+	// An unrestricted row stored with a wildcard kind, as older writers did.
+	// The editor shows it as "All servers", so removing that must delete it.
+	principal, err := urn.ParsePrincipal(role.PrincipalUrn)
+	require.NoError(t, err)
+	_, err = repo.New(ti.conn).UpsertPrincipalGrant(ctx, repo.UpsertPrincipalGrantParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		PrincipalUrn:   principal,
+		Scope:          string(authz.ScopeMCPWrite),
+		Selectors:      []byte(`{"resource_kind":"*","resource_id":"*"}`),
+	})
+	require.NoError(t, err)
+
+	role, err = ti.service.UpdateRole(ctx, &gen.UpdateRolePayload{
+		ID:           roleID,
+		RemoveGrants: []*gen.RoleGrant{{Scope: string(authz.ScopeMCPWrite)}},
+	})
+	require.NoError(t, err)
+
+	var remaining []string
+	for _, g := range role.Grants {
+		if g.Scope != string(authz.ScopeMCPWrite) {
+			continue
+		}
+		for _, sel := range g.Selectors {
+			remaining = append(remaining, sel.ResourceKind+"/"+sel.ResourceID)
+		}
+	}
+	require.Equal(t, []string{"mcp/server-1"}, remaining, "only the narrower grant should survive removing all servers")
 }
 
 func TestService_UpdateRole_SystemRole_AdminMustKeepOrgAdmin(t *testing.T) {
