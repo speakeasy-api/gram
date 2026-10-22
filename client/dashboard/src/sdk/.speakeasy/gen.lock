@@ -9106,6 +9106,9 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   listAuthClients:
     speakeasy-default-list-auth-clients:
+      parameters:
+        query:
+          limit: 50
       responses:
         "200":
           application/json: {"items": [{"client_type": "ema", "created_at": "2025-08-13T10:09:55.010Z", "enabled": true, "headers": [{"has_stored_value": false, "is_required": false, "is_secret": true, "name": "<value>"}], "id": "1d54340a-0b73-4dae-8bc3-8901d0fbd4d2", "name": "<value>", "personal": true, "servers": [], "source": "backfill", "updated_at": "2026-11-17T00:20:12.704Z"}]}

@@ -66,6 +66,25 @@ WHERE msac.organization_id = @organization_id
   AND msac.deleted IS FALSE
 ORDER BY msac.auth_client_id, ms.id;
 
+-- name: LockAuthClientServerRequirements :many
+SELECT
+  ms.id,
+  ms.requires_upstream_auth
+FROM mcp_server_auth_clients msac
+JOIN mcp_servers ms
+  ON ms.id = msac.mcp_server_id
+ AND ms.project_id = msac.project_id
+ AND ms.deleted IS FALSE
+JOIN projects p
+  ON p.id = ms.project_id
+ AND p.organization_id = msac.organization_id
+ AND p.deleted IS FALSE
+WHERE msac.organization_id = @organization_id
+  AND msac.auth_client_id = @auth_client_id
+  AND msac.deleted IS FALSE
+ORDER BY ms.id
+FOR SHARE OF ms;
+
 -- name: ListAuthClientHeaders :many
 SELECT
   h.auth_client_id,
@@ -82,14 +101,17 @@ WHERE h.organization_id = @organization_id
 ORDER BY h.auth_client_id, h.name;
 
 -- name: DetachAuthClientFromServer :one
-UPDATE mcp_server_auth_clients
+UPDATE mcp_server_auth_clients msac
 SET deleted_at = clock_timestamp(),
     updated_at = clock_timestamp()
-WHERE auth_client_id = @auth_client_id
-  AND mcp_server_id = @mcp_server_id
-  AND organization_id = @organization_id
-  AND deleted IS FALSE
-RETURNING id, project_id;
+FROM mcp_servers ms
+WHERE msac.auth_client_id = @auth_client_id
+  AND msac.mcp_server_id = @mcp_server_id
+  AND msac.organization_id = @organization_id
+  AND msac.deleted IS FALSE
+  AND ms.id = msac.mcp_server_id
+  AND ms.project_id = msac.project_id
+RETURNING msac.id, msac.project_id, ms.name AS mcp_server_name;
 
 -- name: GetOrganizationMCPServer :one
 SELECT

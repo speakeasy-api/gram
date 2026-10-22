@@ -14942,12 +14942,15 @@ paths:
             description: Pagination cursor.
             type: string
         - allowEmptyValue: true
-          description: Page size (default 50, max 100).
+          description: Page size.
           in: query
           name: limit
           schema:
-            description: Page size (default 50, max 100).
+            default: 50
+            description: Page size.
             format: int64
+            maximum: 100
+            minimum: 1
             type: integer
         - allowEmptyValue: true
           description: Session header
