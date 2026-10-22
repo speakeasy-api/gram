@@ -97,7 +97,11 @@ var _ = Service("authClients", func() {
 			Attribute("mcp_server_id", String, "Only clients offered by this MCP server.", func() { Format(FormatUUID) })
 			Attribute("client_type", String, "Only clients of this type.", clientTypeEnum)
 			Attribute("cursor", String, "Pagination cursor.")
-			Attribute("limit", Int, "Page size (default 50, max 100).")
+			Attribute("limit", Int, "Page size.", func() {
+				Default(50)
+				Minimum(1)
+				Maximum(100)
+			})
 			security.SessionPayload()
 			security.ByKeyPayload()
 		})

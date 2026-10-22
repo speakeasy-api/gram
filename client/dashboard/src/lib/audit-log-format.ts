@@ -191,6 +191,13 @@ function describeInvitation(log: AuditLog): string | undefined {
   return undefined;
 }
 
+function describeAuthClientDetach(log: AuditLog): string | undefined {
+  const server =
+    recordString(log.metadata, "mcp_server_name") ??
+    recordString(log.metadata, "mcp_server_id");
+  return server ? `removed MCP server ${server} from auth client` : undefined;
+}
+
 function describeProductFeatureToggle(log: AuditLog): string | undefined {
   const feature = recordString(log.metadata, "feature_name");
   if (!feature) return undefined;
@@ -305,6 +312,8 @@ export function renderVerb(log: AuditLog): string {
     case "organization_invitation:create":
     case "organization_invitation:update_role":
       return describeInvitation(log) ?? staticActionPhrase(log.action);
+    case "auth-client:detach-mcp-server":
+      return describeAuthClientDetach(log) ?? staticActionPhrase(log.action);
     case "organization:product_feature_enabled":
     case "organization:product_feature_disabled":
       return (

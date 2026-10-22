@@ -2472,7 +2472,7 @@ func NewSetMcpServerUpstreamAuthRequirementGatewayErrorResponseBody(res *goa.Ser
 
 // NewListAuthClientsPayload builds a authClients service listAuthClients
 // endpoint payload.
-func NewListAuthClientsPayload(mcpServerID *string, clientType *string, cursor *string, limit *int, sessionToken *string, apikeyToken *string) *authclients.ListAuthClientsPayload {
+func NewListAuthClientsPayload(mcpServerID *string, clientType *string, cursor *string, limit int, sessionToken *string, apikeyToken *string) *authclients.ListAuthClientsPayload {
 	v := &authclients.ListAuthClientsPayload{}
 	v.McpServerID = mcpServerID
 	v.ClientType = clientType

@@ -99,8 +99,8 @@ type ListAuthClientsPayload struct {
 	ClientType *string
 	// Pagination cursor.
 	Cursor *string
-	// Page size (default 50, max 100).
-	Limit        *int
+	// Page size.
+	Limit        int
 	SessionToken *string
 	ApikeyToken  *string
 }
