@@ -3335,14 +3335,15 @@ func prepareMessages(ctx context.Context, logger *slog.Logger, assetStorage asse
 				ContentHash:      nil,
 				Generation:       row.generation,
 			},
-			BillingUserID:  row.userID,
-			AssistantID:    assistantID,
-			WorkloadSource: workloadSource,
-			UserEmail:      row.userEmail,
-			Provider:       "",
-			HookHostname:   "",
-			AccountType:    "",
-			BillingMode:    "",
+			BillingUserID:     row.userID,
+			AssistantID:       assistantID,
+			WorkloadSource:    workloadSource,
+			UserEmail:         row.userEmail,
+			Provider:          "",
+			InferenceProvider: "",
+			HookHostname:      "",
+			AccountType:       "",
+			BillingMode:       "",
 		}
 	}
 

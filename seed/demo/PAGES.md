@@ -224,7 +224,10 @@ present in a developer's org and deliberately absent from the shared demo org.
    summary target, wait for delete visibility, then let the fresh raw inserts
    incrementally repopulate UTC-day summaries. The one exception is
    `sigint_readings_v2`: it feeds no MV, so its streaming readings span 400 trailing days
-   to give trend views a full annual cycle.
+   to give trend views a full annual cycle. Their source-message labels include
+   `model_family`, `inference_provider`, `model_name` and `department`, with both known
+   values and omitted attributes for unknowns. Model family and serving provider
+   vary independently of the synthetic classifier metadata.
 4. Every new CH insert target (or new MV) gets a matching scoped DELETE in
    `ch_01_purge_telemetry.go`, or re-runs double the numbers.
 5. Cost/session MVs are provenance-first: usage rows must be Claude OTEL
