@@ -1,41 +1,58 @@
 <!doctype html>
 <html lang="en">
   <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="robots" content="noindex, nofollow" />
     <title>Authorization could not start — Speakeasy</title>
+    {{/* The stylesheet is the one the MCP consent page uses, compiled from the
+    dashboard design system by `aube run -F dashboard build:consent-page` and
+    inlined, so every authorization page looks like the dashboard. */}}
     <style>
-      body {
-        margin: 0;
-        padding: 4rem 1rem;
-        background: #fafafa;
-        color: #333;
-        font: 1rem/1.6 system-ui, sans-serif;
-      }
-      main {
-        max-width: 30rem;
-        margin: 0 auto;
-        padding: 2rem;
-        background: white;
-        border: 1px solid #e5e5e5;
-        border-radius: 0.5rem;
-        overflow-wrap: anywhere;
-      }
-      h1 { font-size: 1.6rem; line-height: 1.3; }
-      code { font-size: 0.9rem; }
-      a { color: #1e60af; }
-      a:focus-visible { outline: 2px solid currentColor; outline-offset: 4px; }
+      {{.Styles}}
     </style>
   </head>
-  <body>
-    <main>
-      <p>Speakeasy</p>
-      <h1>Authorization could not start</h1>
-      <p><code>{{.Code}}</code></p>
-      <p>{{.Description}}</p>
-      <p>You can close this page, or return to the application with these error details. Continue only if you trust the destination.</p>
-      <p><a href="{{.CallbackURL}}" rel="noreferrer">Return to {{.Destination}}</a></p>
+  <body class="bg-background text-foreground min-h-screen">
+    <main
+      class="mx-auto flex min-h-screen w-full max-w-[34rem] flex-col gap-6 px-4 py-12 sm:py-16"
+    >
+      <div class="text-foreground">{{template "speakeasyWordmark"}}</div>
+
+      <section class="bg-card border" aria-labelledby="page-title">
+        <header class="flex flex-col gap-2 border-b px-6 py-6 sm:px-8">
+          <p class="text-eyebrow text-default-destructive">Authorization error</p>
+          <h1 id="page-title" class="text-display-xs">
+            Authorization could not start
+          </h1>
+          <p class="text-sm text-muted-foreground break-words">
+            {{.Description}}
+          </p>
+        </header>
+        <dl class="m-0 flex flex-col gap-4 border-b px-6 py-6 sm:px-8">
+          <div>
+            <dt class="text-eyebrow">Error code</dt>
+            <dd class="mt-1 ml-0 font-mono text-sm break-all">{{.Code}}</dd>
+          </div>
+          <div>
+            <dt class="text-eyebrow">Will return to</dt>
+            <dd class="mt-1 ml-0 font-mono text-sm break-all">{{.Destination}}</dd>
+          </div>
+        </dl>
+        <div class="flex flex-col gap-4 px-6 py-6 sm:px-8">
+          <p class="text-sm text-muted-foreground">
+            You can close this window, or return to the application with these
+            error details. Continue only if you trust the destination.
+          </p>
+          <a
+            href="{{.CallbackURL}}"
+            rel="noreferrer"
+            class="bg-card interact:bg-accent inline-flex min-h-10 w-full items-center justify-center border px-6 py-2 text-center text-sm break-all sm:w-fit"
+            >Return to {{.Destination}}</a
+          >
+        </div>
+      </section>
+
+      <p class="text-xs text-muted-foreground">Secured by Speakeasy.</p>
     </main>
   </body>
 </html>

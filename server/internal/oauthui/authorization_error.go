@@ -11,15 +11,19 @@ import (
 	"net/http"
 	"net/url"
 
+	"github.com/speakeasy-api/gram/server/internal/consentpage"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 )
 
 //go:embed authorization_error.html
 var authorizationErrorHTML string
 
-var authorizationErrorTemplate = template.Must(template.New("authorization-error").Parse(authorizationErrorHTML))
+var authorizationErrorTemplate = template.Must(template.Must(template.New("authorization-error").Parse(authorizationErrorHTML)).Parse(consentpage.LogoTemplate))
 
 type authorizationErrorView struct {
+	// Styles is the shared authorization page stylesheet.
+	Styles template.CSS
+
 	// Code is the OAuth error identifier.
 	Code string
 
@@ -56,6 +60,7 @@ func WriteAuthorizationError(ctx context.Context, w http.ResponseWriter, callbac
 		}
 	}
 	view := authorizationErrorView{
+		Styles:      consentpage.Styles,
 		Code:        code,
 		Description: description,
 		// Native application schemes require template.URL after scheme validation;
@@ -71,7 +76,7 @@ func WriteAuthorizationError(ctx context.Context, w http.ResponseWriter, callbac
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Pragma", "no-cache")
 	w.Header().Set("Referrer-Policy", "no-referrer")
-	w.Header().Set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'")
+	w.Header().Set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; font-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.WriteHeader(http.StatusBadRequest)
 	if _, err := w.Write(body.Bytes()); err != nil {
