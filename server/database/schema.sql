@@ -9376,7 +9376,7 @@ COMMENT ON COLUMN auth_permission_provisions.scope IS 'The granted scope, mcp:au
 @access: confidential';
 COMMENT ON COLUMN auth_permission_provisions.selectors IS 'The grant''s selector, as in principal_grants.selectors.
 @access: opaque-restricted';
-COMMENT ON COLUMN auth_permission_provisions.kind IS 'Which default the grant belongs to: personal_default, shared_client or api_key from the backfill, or creation_default for the personal default written when the organization was created. Validated in application code.
+COMMENT ON COLUMN auth_permission_provisions.kind IS 'Which default the grant belongs to: personal_default, shared_client, api_key or attachment from the backfill, or creation_default for the personal default written when the organization was created. Validated in application code.
 @access: confidential';
 COMMENT ON COLUMN auth_permission_provisions.taken_over_at IS 'When an admin wrote the same grant, making it theirs: a rollback leaves it. NULL while it is still provisioned.
 @access: confidential';
@@ -9385,6 +9385,53 @@ COMMENT ON COLUMN auth_permission_provisions.updated_at IS '@access: confidentia
 
 CREATE UNIQUE INDEX IF NOT EXISTS auth_permission_provisions_org_principal_scope_selector_key
 ON auth_permission_provisions (organization_id, principal_urn, scope, selectors);
+
+-- Agents a connection owner blocked from their own connection: one row per
+-- agent, owner and upstream OAuth client, recording that the mcp:blocked_auth
+-- grant for it was written under the owner's authority. The owner can remove
+-- only restrictions recorded here, and never one an agent manager has since
+-- written the same grant for.
+CREATE TABLE IF NOT EXISTS agent_connection_restrictions (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  agent_id uuid NOT NULL,
+  owner_user_id TEXT NOT NULL CHECK (owner_user_id <> ''),
+  remote_session_client_id uuid NOT NULL,
+  taken_over_at timestamptz,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT agent_connection_restrictions_pkey PRIMARY KEY (id),
+  CONSTRAINT agent_connection_restrictions_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT agent_connection_restrictions_agent_tenant_fkey FOREIGN KEY (organization_id, agent_id) REFERENCES agents (organization_id, id) ON DELETE CASCADE,
+  CONSTRAINT agent_connection_restrictions_remote_session_client_id_fkey FOREIGN KEY (remote_session_client_id) REFERENCES remote_session_clients (id) ON DELETE CASCADE
+);
+
+COMMENT ON TABLE agent_connection_restrictions IS 'Agents blocked by a connection owner from that owner''s connection to one upstream OAuth client, kept beside the mcp:blocked_auth grant that enforces it.';
+COMMENT ON COLUMN agent_connection_restrictions.id IS '@access: confidential';
+COMMENT ON COLUMN agent_connection_restrictions.organization_id IS '@access: confidential';
+COMMENT ON COLUMN agent_connection_restrictions.agent_id IS 'The blocked agent.
+@access: confidential';
+COMMENT ON COLUMN agent_connection_restrictions.owner_user_id IS 'The connection owner who wrote the restriction; the grant names this user as connection_owner.
+@access: confidential-pii';
+COMMENT ON COLUMN agent_connection_restrictions.remote_session_client_id IS 'The upstream OAuth client the connection uses; the restriction covers every auth client sharing it.
+@access: confidential';
+COMMENT ON COLUMN agent_connection_restrictions.taken_over_at IS 'When an agent manager wrote the same grant, making it theirs: removing the restriction then keeps the grant. NULL while only the owner holds it.
+@access: confidential';
+COMMENT ON COLUMN agent_connection_restrictions.created_at IS '@access: confidential';
+COMMENT ON COLUMN agent_connection_restrictions.updated_at IS '@access: confidential';
+
+CREATE UNIQUE INDEX IF NOT EXISTS agent_connection_restrictions_key
+ON agent_connection_restrictions (organization_id, agent_id, owner_user_id, remote_session_client_id);
+
+-- Owner-scoped listing.
+CREATE INDEX IF NOT EXISTS agent_connection_restrictions_owner_idx
+ON agent_connection_restrictions (organization_id, owner_user_id);
+
+-- Foreign-key checks on client deletes.
+CREATE INDEX IF NOT EXISTS agent_connection_restrictions_remote_session_client_id_idx
+ON agent_connection_restrictions (remote_session_client_id);
 
 CREATE TABLE IF NOT EXISTS audit_logs (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
