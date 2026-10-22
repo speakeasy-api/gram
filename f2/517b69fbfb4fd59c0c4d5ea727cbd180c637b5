@@ -1,0 +1,1077 @@
+client/dashboard/src/pages/identities/directoryPeople.ts
+  h_9630b74bdac540 10-20,22,30,41-49,91,99-101,139-141,154,169
+client/dashboard/src/components/observe/insightsEmployeesData.ts
+  h_9630b74bdac540 3,39
+client/dashboard/src/pages/identities/IdentitiesIndex.tsx
+  h_9630b74bdac540 46,50,63,123-138,304,313-318,777,858-859,886-891,893-898,974,1239,1335,1387,1669,1674-1690,1708-1709
+  h_9630b74bdac540 319,892,1691,1699
+client/dashboard/src/components/api-error-alert.tsx
+  s_f8c44ec28b1644::t_56fef2af0bcc4d 30
+client/dashboard/src/components/assistant-actor-link.tsx
+  s_f8c44ec28b1644::t_59912e8b11dc15 1,4,14-15,20-21,31-66,77-79,82-88
+client/dashboard/src/components/auditlogs/principals.test.tsx
+  s_f8c44ec28b1644::t_06cce434a8e777 41-44,48-53,241-242,245
+client/dashboard/src/components/auditlogs/principals.tsx
+  s_f8c44ec28b1644::t_77a044caa0d1ea 3-4,30-39,41-49
+client/dashboard/src/components/billing/inference-cap-control.tsx
+  s_f8c44ec28b1644::t_8d157edb0181a1 1-2,100-107,119-126,290-294
+client/dashboard/src/components/billing/inference-caps-section.test.tsx
+  s_f8c44ec28b1644::t_3fd60789427541 1,1228-1266
+client/dashboard/src/components/billing/inference-caps-section.tsx
+  s_f8c44ec28b1644::t_5e422e14819dd6 1-2,323-327
+client/dashboard/src/components/billing/inference-caps.test.ts
+  s_f8c44ec28b1644::t_8e9cfd5f98c3b2 1,82-96,177-189,203-211
+client/dashboard/src/components/billing/inference-caps.ts
+  s_f8c44ec28b1644::t_be3613edd8da01 1,51-60,95,98,100-103,116,129-131,163-167
+client/dashboard/src/components/billing/meter-breakdown-options.ts
+  s_f8c44ec28b1644::t_d36a2bd55b7a8e 1,21,130-136
+client/dashboard/src/components/billing/meter-usage-section.tsx
+  s_f8c44ec28b1644::t_d43dfd296bd717 1,146-151
+client/dashboard/src/components/billing/spend-breakdown-adapter.test.ts
+  s_f8c44ec28b1644::t_d0d9679cdee099 2,8,26-76
+client/dashboard/src/components/billing/spend-breakdown-adapter.ts
+  s_f8c44ec28b1644::t_fbdb6c4d2b593b 23-30,34-41,44-49
+client/dashboard/src/components/billing/spend-breakdown-section.test.tsx
+  s_f8c44ec28b1644::t_f4158aef23909c 1-185
+client/dashboard/src/components/billing/spend-breakdown-section.tsx
+  s_f8c44ec28b1644::t_4f97bb4f89978c 28,161-193,196,211
+client/dashboard/src/components/command-palette/candidates/index.test.tsx
+  s_f8c44ec28b1644::t_ece8ab83c017a0 6,224-261,307-308,389,1677-1724
+client/dashboard/src/components/command-palette/candidates/index.ts
+  s_f8c44ec28b1644::t_89397c20a44c3e 8,21,80-81,104-107,139-140,159-161
+client/dashboard/src/components/command-palette/candidates/types.ts
+  s_f8c44ec28b1644::t_0e96c12f9cedc4 13
+client/dashboard/src/components/command-palette/candidates/useAgentIdentityCandidates.test.tsx
+  s_f8c44ec28b1644::t_836b8ac4493a4c 1-220
+client/dashboard/src/components/command-palette/candidates/useAgentIdentityCandidates.ts
+  s_f8c44ec28b1644::t_daba3695621d87 1-126
+client/dashboard/src/components/command-palette/candidates/useSkillCandidates.test.tsx
+  s_f8c44ec28b1644::t_b5fa89a0f79aae 1-180
+client/dashboard/src/components/command-palette/candidates/useSkillCandidates.ts
+  s_f8c44ec28b1644::t_bdee67ee291f5c 1-67
+client/dashboard/src/components/connections/ConnectionsList.tsx
+  s_f8c44ec28b1644::t_97c0b06587e748 2-3,274-277,315-324,621-631
+client/dashboard/src/components/filters/FilterChip.tsx
+  s_f8c44ec28b1644::t_fca8fcb29a2306 1,7,17-31,125-199
+client/dashboard/src/components/identity-avatar.tsx
+  s_f8c44ec28b1644::t_cf572f43e16313 1,34,39,43
+client/dashboard/src/components/killswitch/KillswitchEditorSheet.test.tsx
+  s_f8c44ec28b1644::t_066055525432ce 12,93-176
+client/dashboard/src/components/killswitch/KillswitchEditorSheet.tsx
+  s_f8c44ec28b1644::t_b93e532eae42d8 16,19,205-214,246,263,296-297,342-343,477-481,485,550,552-580,898-903,910-914
+client/dashboard/src/components/killswitch/killswitch-view-model.test.ts
+  s_f8c44ec28b1644::t_2cb000e67e87e3 2,28-38
+client/dashboard/src/components/killswitch/killswitch-view-model.ts
+  s_f8c44ec28b1644::t_17cb0cefdf468a 1-2,33,57-59
+client/dashboard/src/components/mcp-tool-filtering-section.tsx
+  s_f8c44ec28b1644::t_daab4b290c2e5a 1-2,53-58,102-105,158-162,168-171,187
+client/dashboard/src/components/mcp/organization-gateway-setting.tsx
+  s_f8c44ec28b1644::t_b4ff5616f9c386 12-13,118-122
+client/dashboard/src/components/mcp/useOrganizationGatewaySetting.ts
+  s_f8c44ec28b1644::t_1e55031e8b7996 30-31
+client/dashboard/src/components/member-facepile.test.tsx
+  s_f8c44ec28b1644::t_992a128aefa294 4-5,55-130
+client/dashboard/src/components/member-facepile.tsx
+  s_f8c44ec28b1644::t_36ec4aa726abf1 1-2,16-22,111-113,117-121,129-130,219,223-228,230-234,236-243,245-343
+client/dashboard/src/components/observe/BusinessMemoryCorpus.tsx
+  s_f8c44ec28b1644::t_147144c1d4bed1 39
+client/dashboard/src/components/observe/LogsAgents.tsx
+  s_f8c44ec28b1644::t_461157c7d90047 4,28,45,51-52,144,178-203,233-268,525-546,577,682,709-710,734,773-774,781,820-821,829-861,863-994,996-998,1000-1001,1003,1007-1009,1017
+client/dashboard/src/components/observe/LogsTools.tsx
+  s_f8c44ec28b1644::t_509257b6d8ce52 50-51,1486-1487,1489-1508,1612-1616,1648,1658-1659,1832-1834,1836-1853
+client/dashboard/src/components/observe/employee-data-flow.tsx
+  s_f8c44ec28b1644::t_594933f92bdef9 1,10,421,450-454
+client/dashboard/src/components/observe/insights/InsightsGrid.tsx
+  s_f8c44ec28b1644::t_5f7023ca8539e4 21-23,224-240,284-320,386-388,390,398,483-485
+client/dashboard/src/components/observe/insights/RankedList.tsx
+  s_f8c44ec28b1644::t_74e88c26a2c4db 3,10-15,145
+client/dashboard/src/components/org-sidebar.tsx
+  s_f8c44ec28b1644::t_f8ffd62a79a83b 244
+client/dashboard/src/components/page-templates/index.stories.tsx
+  s_f8c44ec28b1644::t_8b7f78b96b6b5b 7,34-37,51-57
+client/dashboard/src/components/page-templates/settings-page.tsx
+  s_f8c44ec28b1644::t_47837aafde3616 37,42-43,47-55,63
+client/dashboard/src/components/project-guide/ProjectGuide.test.tsx
+  s_f8c44ec28b1644::t_3d3356fba01134 20,235,238,250,271-273,295-312,331,343,351,378,390-392,421,477,509-522,567,672,698-699,701,703,716,826,890,988,1020,1066,1118,1130-1132,1224,1288,1312,1327,1509,1676,1983
+client/dashboard/src/components/project-guide/ProjectGuide.tsx
+  s_f8c44ec28b1644::t_03b6cacf87ea4e 61-75,466-467,1347,1352,1372-1378,1381-1399,1402,1416,1423,1431,1438,1448,1456,1463,1467-1468,1517,1525,1529-1580,1663-1708,1714,1722,1730,1736-1738
+client/dashboard/src/components/project-guide/ProjectGuideRun.tsx
+  s_f8c44ec28b1644::t_7313a480c723b1 44-45
+client/dashboard/src/components/project-guide/journeys.ts
+  s_f8c44ec28b1644::t_1e7eb4825883b7 32,78,80,88-90,97-99
+client/dashboard/src/components/project-guide/projectGuideMachine.test.ts
+  s_f8c44ec28b1644::t_1647a518a4c6f6 5,58,72,148-156,159,162,248-249,274-286,294-341,518,567-568
+client/dashboard/src/components/project-guide/projectGuideMachine.ts
+  s_f8c44ec28b1644::t_f46b4ab5556d02 18,25,459,461-465,467-473,505-527,827-828,838-845
+client/dashboard/src/components/project-icon.tsx
+  s_f8c44ec28b1644::t_58aa3581b708a5 1-29
+client/dashboard/src/components/project/ActivityTimelineCard.tsx
+  s_f8c44ec28b1644::t_1be9823825097c 15-19,67-70
+client/dashboard/src/components/schedule-status-badge.tsx
+  s_f8c44ec28b1644::t_c68e8f6e1d1775 15-21,102-108
+client/dashboard/src/components/sessions/ClientCredentialBadge.tsx
+  s_f8c44ec28b1644::t_e877fe3fb6db25 5,28
+client/dashboard/src/components/sessions/ClientDetailSheet.tsx
+  s_f8c44ec28b1644::t_b490024e8dba96 28,148
+client/dashboard/src/components/sessions/ViewOrgSessionsButton.test.tsx
+  s_f8c44ec28b1644::t_0b1b453566c46d 6,48
+client/dashboard/src/components/shadow-mcp/ShadowMCPPolicyServerSelector.tsx
+  s_f8c44ec28b1644::t_272dddeecf09db 117
+client/dashboard/src/components/shadow-mcp/shadowMCPInventoryReview.ts
+  s_f8c44ec28b1644::t_cbf3e7b4a4b2d8 41
+client/dashboard/src/components/shadow-mcp/shadowMCPInventoryStatus.test.ts
+  s_f8c44ec28b1644::t_bcdb68dc3cb558 1,428-436
+client/dashboard/src/components/shadow-mcp/shadowMCPInventoryStatus.ts
+  s_f8c44ec28b1644::t_02d4289e359ad7 1,19-20,82-88,176,193-194,209,238-239,332
+client/dashboard/src/components/tool-usage-identity.test.tsx
+  s_f8c44ec28b1644::t_94ce644bf1f210 5,19-20,27,29-33,49-55,68-69,92
+client/dashboard/src/components/tool-usage-identity.tsx
+  s_f8c44ec28b1644::t_7ccc1072d4a6ec 2,17-21,23-26
+client/dashboard/src/components/ui/ActingPrincipal/index.stories.tsx
+  s_f8c44ec28b1644::t_3eefc4568aa0ef 1-130
+client/dashboard/src/components/ui/ActingPrincipal/index.test.tsx
+  s_f8c44ec28b1644::t_05f39d3317b0d9 1-95
+client/dashboard/src/components/ui/ActingPrincipal/index.tsx
+  s_f8c44ec28b1644::t_afddfc8cdade2c 1-200
+client/dashboard/src/components/ui/ActingPrincipal/text.ts
+  s_f8c44ec28b1644::t_4a65a764b1849a 1-39
+client/dashboard/src/components/ui/Alert/index.tsx
+  s_f8c44ec28b1644::t_7569fe6d4cf3e2 18-21,30-32,50-55,68-85,95,103-104,106-112,115-131,211,222-226
+client/dashboard/src/components/ui/MoreActions/index.stories.tsx
+  s_f8c44ec28b1644::t_805e5eb6ea03d3 44-62
+client/dashboard/src/components/ui/MoreActions/index.tsx
+  s_f8c44ec28b1644::t_c573c9940451b1 139,155
+client/dashboard/src/components/ui/Table/index.tsx
+  s_f8c44ec28b1644::t_c79475c2035eab 341-346
+client/dashboard/src/components/ui/Toolbar/index.stories.tsx
+  s_f8c44ec28b1644::t_3727a4015e8283 4-5,46-72
+client/dashboard/src/components/ui/styles/base.css
+  s_f8c44ec28b1644::t_073b6abdf44bb8 297-300,350-352,694-695,745-747
+client/dashboard/src/components/ui/styles/utilities.css
+  s_f8c44ec28b1644::t_69ac58b61a699c 344-348,685-688
+client/dashboard/src/components/upload-asset/review-changes-step.tsx
+  s_f8c44ec28b1644::t_5f26dd2ef07902 1,103,107
+client/dashboard/src/components/vendor-ema-trust-notice.tsx
+  s_f8c44ec28b1644::t_8ac8833cd610fe 12
+client/dashboard/src/components/workspace-switcher.test.tsx
+  s_f8c44ec28b1644::t_4f9d43acc936e5 38-39
+client/dashboard/src/components/workspace-switcher.tsx
+  s_f8c44ec28b1644::t_711579edef87c8 9,60,128-129,131,159-160,162
+client/dashboard/src/contexts/TelemetryProvider.test.ts
+  s_f8c44ec28b1644::t_0f0626212bf8cc 54,58,62
+client/dashboard/src/hooks/useProjectNavRoutes.test.tsx
+  s_f8c44ec28b1644::t_d851482497205f 230,240,263-271,283
+client/dashboard/src/hooks/useProjectNavRoutes.ts
+  s_f8c44ec28b1644::t_8520086ffe9530 79-83,92,106
+client/dashboard/src/hooks/useRBAC.forward-compatibility.test.ts
+  s_f8c44ec28b1644::t_a43394625c8ee6 1-5,7-14,16-19,21-32,34-36,39,41-44,46-47,49-56,59-61,64-78,80-87,90-94,97-103,106-115,118,120-129
+client/dashboard/src/hooks/useRBAC.ts
+  s_f8c44ec28b1644::t_e1b182750a0ddb 6-8,152-153,182-183
+client/dashboard/src/hooks/useToolUpdate.ts
+  s_f8c44ec28b1644::t_26c65d7ffaac2b 1-5,66-73
+client/dashboard/src/lib/audit-log-format.ts
+  s_f8c44ec28b1644::t_5fbeb0812638f4 6-17
+client/dashboard/src/lib/enum.test.ts
+  s_f8c44ec28b1644::t_6d39f6245bc3b4 1-26
+client/dashboard/src/lib/enum.ts
+  s_f8c44ec28b1644::t_3ce86015bfaabe 1-29
+client/dashboard/src/lib/identity-urn.ts
+  s_f8c44ec28b1644::t_ef1f72ba2d83a6 56-67
+client/dashboard/src/lib/mcp-server-visibility.ts
+  s_f8c44ec28b1644::t_9c53e5593a2374 1-2,34-37
+client/dashboard/src/lib/money.ts
+  s_f8c44ec28b1644::t_d53e8dc3f97d3b 4
+client/dashboard/src/lib/remote-identity/components/IdentityExplainer.tsx
+  s_f8c44ec28b1644::t_e10c8cb5aac0cf 198
+client/dashboard/src/lib/remote-identity/queries/useUpstreamProbe.ts
+  s_f8c44ec28b1644::t_5bebc8cca53b75 52
+client/dashboard/src/lib/sdk-enum-compatibility.test.ts
+  s_f8c44ec28b1644::t_7b4f2b87133d9e 1-67
+client/dashboard/src/lib/useIdentityHref.ts
+  s_f8c44ec28b1644::t_5d08c3f01921e7 4,42-46,50
+client/dashboard/src/lib/user-session-client-credential.ts
+  s_f8c44ec28b1644::t_233bf5694ddcb9 1,98-109
+client/dashboard/src/lib/workload-session.ts
+  s_f8c44ec28b1644::t_6bf661245ac38b 29
+client/dashboard/src/main.tsx
+  s_f8c44ec28b1644::t_cde8216b7c45c9 1,5,10-19,26,28-38
+client/dashboard/src/pages/access/Access.tsx
+  s_f8c44ec28b1644::t_dde57e563bdf71 22,29,35,138-140,151-154
+client/dashboard/src/pages/access/AssignmentServerIcon.test.tsx
+  s_f8c44ec28b1644::t_5d470f1361d209 1-57
+client/dashboard/src/pages/access/AssignmentServerIcon.tsx
+  s_f8c44ec28b1644::t_c2145e87976305 1-39
+client/dashboard/src/pages/access/ChallengesTab.test.tsx
+  s_f8c44ec28b1644::t_b34a01c701fe54 1,43-48,53,150-159
+client/dashboard/src/pages/access/ChallengesTab.tsx
+  s_f8c44ec28b1644::t_fc0c497d9ae5d8 1,9,18,33-37,44,101-104,370-386,391-398,400-414,417,462,522-529
+client/dashboard/src/pages/access/ChangeRoleDialog.tsx
+  s_f8c44ec28b1644::t_867187c75a311c 1-2,58-60
+client/dashboard/src/pages/access/CreateRoleDialog.tsx
+  s_f8c44ec28b1644::t_633167882115ca 1,217-219
+client/dashboard/src/pages/access/GrantDrawer.tsx
+  s_f8c44ec28b1644::t_b7880efb0b8130 8,182-198,227,230-234,237
+client/dashboard/src/pages/access/MCPAssignments.test.tsx
+  s_f8c44ec28b1644::t_887916a4e10d1c 7,9-12,14-22,24-38,41-42,47-51,55-60,62-85,87-88,90-107,109-110,112-116,118-120,123-126,128-129,131,133,135-139,142,147-155,157-159,161-167,169,171-175,177-233,235-253,257-266,268-278,280-283,285-319,323-331,333-336,338-349,351-354,356-360,362,364-387,389,393-395,397-401,403-408,410,412-431,434-448,451-489
+client/dashboard/src/pages/access/MCPAssignments.tsx
+  s_f8c44ec28b1644::t_4e933487c4e41b 1-2,4-5,7,9-17,19-69,71-72,74-75,77-78,80-84,86-90,92-112,115-119,121-144,146-173,175-190,192-217,219-322,324,326-337,339-363,365,367-375,377-381,383-397,399,403-405,407-417,420-423,425-436,439-452,455-485,489-491,493-522,524-541,544-551,553-566,568-575,578-586,590-596,599,603-678,680-704,706-710,712,715-750,754-852,854-989,993-1003
+client/dashboard/src/pages/access/PersonServerAssignment.test.tsx
+  s_f8c44ec28b1644::t_3ba4e7c653adde 1-221
+client/dashboard/src/pages/access/PersonServerAssignment.tsx
+  s_f8c44ec28b1644::t_56e2c8cee55a6d 1-3,5-13,15-18,20-31,33,36-52,54-135,137-141,143-174
+client/dashboard/src/pages/access/RemoveAssignmentDialog.test.tsx
+  s_f8c44ec28b1644::t_03d58cc1aa7a57 1-216
+client/dashboard/src/pages/access/RemoveAssignmentDialog.tsx
+  s_f8c44ec28b1644::t_0d85a9d442344c 2-3,5-6,8-23,25-32,34-36,38-42,44-55,57-72,74-78,80-88,90-108,111-128,131-153,155-284,287-298,300-306,308-310
+client/dashboard/src/pages/access/RoleAccessMatrix.tsx
+  s_f8c44ec28b1644::t_e215dc93039202 30,422-426,741,968
+client/dashboard/src/pages/access/RolePermissionsSection.tsx
+  s_f8c44ec28b1644::t_0da2429dfdbf08 288
+client/dashboard/src/pages/access/ToolAccessSheet.tsx
+  s_f8c44ec28b1644::t_deb20732731c86 32-33,139-143,150-151,158-167,181-197,327,339,425,447,451
+client/dashboard/src/pages/access/assignmentExclusions.test.ts
+  s_f8c44ec28b1644::t_964000b67d6a13 1-88
+client/dashboard/src/pages/access/assignmentExclusions.ts
+  s_f8c44ec28b1644::t_b7eda52d8a1498 1-8,10-25,27-37
+client/dashboard/src/pages/access/challengeHelpers.test.ts
+  s_f8c44ec28b1644::t_00cdbca596d0ce 1,177,182,198,203-217
+client/dashboard/src/pages/access/challengeHelpers.ts
+  s_f8c44ec28b1644::t_b3a7c35ca01449 97
+client/dashboard/src/pages/access/mcpAccessModel.test.ts
+  s_f8c44ec28b1644::t_ad4320f69c4058 1,4-9,59-79
+client/dashboard/src/pages/access/mcpAccessModel.ts
+  s_f8c44ec28b1644::t_07809f4eb615fb 1,12,17,57-59,148-166
+client/dashboard/src/pages/access/roleGrantTransform.ts
+  s_f8c44ec28b1644::t_b1a3cbabd649ed 1,8-11,72-73,87,104-105,126-130
+client/dashboard/src/pages/access/roundtrip.test.ts
+  s_f8c44ec28b1644::t_5f23c3a1a7ea46 1,328-375
+client/dashboard/src/pages/access/types.ts
+  s_f8c44ec28b1644::t_d510aed935a1c3 124,129,138-152
+client/dashboard/src/pages/access/useChallengeRowColumns.tsx
+  s_f8c44ec28b1644::t_787a45d2bf5331 2,35-41,106-109,136-163,322
+client/dashboard/src/pages/agents/AgentAPIKeys.test.tsx
+  s_f8c44ec28b1644::t_c1e18cff8f9fa0 462-463
+client/dashboard/src/pages/agents/AgentFederatedAccess.test.tsx
+  s_f8c44ec28b1644::t_01f256216eb077 5,158-178
+client/dashboard/src/pages/agents/AgentFederatedAccess.tsx
+  s_f8c44ec28b1644::t_678401997187d7 4,78-85
+client/dashboard/src/pages/agents/AgentGatewayInstall.tsx
+  s_f8c44ec28b1644::t_7ae10ac4b8b17f 10,28
+client/dashboard/src/pages/agents/AgentGrantSelector.test.tsx
+  s_f8c44ec28b1644::t_825ad51dce6ad6 1,127-147
+client/dashboard/src/pages/agents/AgentGrantSelector.tsx
+  s_f8c44ec28b1644::t_442ab837c76e54 1-2,358-363,386-388,486-492
+client/dashboard/src/pages/agents/AgentSessions.tsx
+  s_f8c44ec28b1644::t_7ecbaec37ddb61 11,17-22,37-41,80,85-88,155-170,310-313,347-351
+client/dashboard/src/pages/agents/EditAgentIdentity.tsx
+  s_f8c44ec28b1644::t_6c42a4ec58a6cc 19,108
+client/dashboard/src/pages/agents/ManagedAgentSessions.test.tsx
+  s_f8c44ec28b1644::t_5c665cd822d5c9 22-26
+client/dashboard/src/pages/agents/ManagedAgentSessions.tsx
+  s_f8c44ec28b1644::t_34884d2c99f5de 1,5,7,12,17-21,26-32,41-45,50-58,67
+client/dashboard/src/pages/agents/NewAgentIdentity.tsx
+  s_f8c44ec28b1644::t_ac16589e720722 11,75
+client/dashboard/src/pages/agents/agent-admin.tsx
+  s_f8c44ec28b1644::t_27ef50ac2e4acb 81-89,95-126
+client/dashboard/src/pages/agents/agent-api-key-grants.ts
+  s_f8c44ec28b1644::t_d6ba50946b6104 171
+client/dashboard/src/pages/agents/agent-policy-grants.test.ts
+  s_f8c44ec28b1644::t_96d724245ec498 2,296-327
+client/dashboard/src/pages/agents/agent-policy-grants.ts
+  s_f8c44ec28b1644::t_ac3a097ccd0f56 27-29,124-125,210-211,216,268,364,375,381-382,386,391
+client/dashboard/src/pages/agents/agentPolicyEdit.test.ts
+  s_f8c44ec28b1644::t_9ead19b284f46c 48-49,56-71,81-83
+client/dashboard/src/pages/agents/agentPolicyEdit.ts
+  s_f8c44ec28b1644::t_feaffa79eb61e8 50-62,72,86,90,92-108
+client/dashboard/src/pages/agents/credentials/ClaudeTagSetupInstructions.tsx
+  s_f8c44ec28b1644::t_daa5590e0a53d4 82
+client/dashboard/src/pages/agents/credentials/CredentialsWizard.test.tsx
+  s_f8c44ec28b1644::t_49e5de76213a0b 16,42-47,156,164-165,363-429,477-481,498-502,505,510-524,526,529-531,534-536,538-548,550-562,571-573,600,632,743-849,851-857,863-877,879-945,947-950
+client/dashboard/src/pages/agents/credentials/CredentialsWizard.tsx
+  s_f8c44ec28b1644::t_9b9a4cb3ddb6f3 27-32,42,45,70,76,79,116,221,275-278,289-293,308-312,337-347,356-379,414-422,446-459,461-473,478,522-527,529-535,537-564,588-594,605-612,708-724,728-731,749-750,753-765,767,769-771,802,817,871-881,903-904,936,940-945,982-983,1029,1036-1037,1040,1060,1062-1071,1161-1168,1171,1189-1191,1195-1200,1247-1252
+client/dashboard/src/pages/agents/credentials/SetupFields.tsx
+  s_f8c44ec28b1644::t_5a4649f4427408 119
+client/dashboard/src/pages/agents/credentials/StepInstall.tsx
+  s_f8c44ec28b1644::t_c0fe4177065c40 7,9,21,29,94,99-100,109-111,114-115,118-133,171-175,177,179,182-188,190-195,198-213,220-244,246-343,345-350,353-381,383-385,388-395,397-399,402-414,417-419,422-431,433-435,437-439,441-442
+client/dashboard/src/pages/agents/credentials/StepServers.tsx
+  s_f8c44ec28b1644::t_e67db54dd492cb 32-34,42-55,76,96-98,147-148,154-156,169-171,183-206,223-228,231-233,236
+client/dashboard/src/pages/agents/credentials/StepWorkload.tsx
+  s_f8c44ec28b1644::t_3d4e30616119e3 128,151-156,190,192,198,202,205,227,238,244-248
+client/dashboard/src/pages/agents/credentials/platformSetups.ts
+  s_f8c44ec28b1644::t_5cb5a5ad09db91 3,20-26,31
+client/dashboard/src/pages/agents/credentials/useServerInventory.test.ts
+  s_f8c44ec28b1644::t_e7a3159635f274 1-68
+client/dashboard/src/pages/agents/credentials/useServerInventory.ts
+  s_f8c44ec28b1644::t_2600e37d841b35 3-4,53
+client/dashboard/src/pages/agents/credentials/workloadCatalog.ts
+  s_f8c44ec28b1644::t_00778211d3ff9c 1-3,22,31,66-82
+client/dashboard/src/pages/agents/useAgentSessionList.ts
+  s_f8c44ec28b1644::t_dd03dfc5133598 1-6,8-20,22-34,36-58,60-87,89-92,96-106
+client/dashboard/src/pages/assistants/AssistantAuditLog.tsx
+  s_f8c44ec28b1644::t_b5e25bceb7ae6b 21-22,45,49-50,55-61,73-85,164-166,264-268
+client/dashboard/src/pages/assistants/onboarding/AssistantTriggersList.tsx
+  s_f8c44ec28b1644::t_8557319bf94e16 44
+client/dashboard/src/pages/budgets/Budgets.tsx
+  s_f8c44ec28b1644::t_2540f6eb0e18c9 1,34,311,427
+client/dashboard/src/pages/budgets/RuleDetailSheet.tsx
+  s_f8c44ec28b1644::t_e49c32440d9d00 1,19,30-34,134-138,140,171-176,202-228
+client/dashboard/src/pages/budgets/RuleSheet.tsx
+  s_f8c44ec28b1644::t_830d628711c3c4 1-6,33-35,137,143,162,191-207,209,229,238,279-301,329-331,336,371-377,416-420,422,428-434,457-462,686,691,701-719,727,729-730,733,742-746,748-752,759
+client/dashboard/src/pages/budgets/budget-shared.tsx
+  s_f8c44ec28b1644::t_b1b6d89b0dd491 1,118-120,143-146,152,169-172,181
+client/dashboard/src/pages/budgets/budgets-data.ts
+  s_f8c44ec28b1644::t_dd6bfe041a063c 1-6,11,13,15-16,28-29,39-40,44-73,80-83,247,317-318,354-356,360-371,381,395,409
+client/dashboard/src/pages/budgets/budgets-enums.test.tsx
+  s_f8c44ec28b1644::t_feea9585fbab75 1-540
+client/dashboard/src/pages/budgets/budgets-queries.ts
+  s_f8c44ec28b1644::t_86a9b0dd23743f 1-11,33,57,183,187,195,197,202,252-253,261-280,282,291-292,300-328,330,367,375-381,396
+client/dashboard/src/pages/chatLogs/ChatLogs.tsx
+  s_f8c44ec28b1644::t_72362f22e12f2f 3-12,14
+client/dashboard/src/pages/chatLogs/ChatLogsTable.test.tsx
+  s_f8c44ec28b1644::t_60f6fcc0213b75 74-76,161-168,294-296,303-430,456
+client/dashboard/src/pages/chatLogs/ChatLogsTable.tsx
+  s_f8c44ec28b1644::t_6de4566d6a3850 8-10,27-28,38-45,65-74,77-79,84-106,108-261,263-395,397-401,403,405-407,422-424,439,602-603,692-836,889-929
+client/dashboard/src/pages/costs/Costs.tsx
+  s_f8c44ec28b1644::t_4766a2757a1b86 66,93,95,110-111,116
+client/dashboard/src/pages/data-exports/ConfigureDestinationSheet.tsx
+  s_f8c44ec28b1644::t_62949813eb23c0 214
+client/dashboard/src/pages/data-exports/ConfigureExportSheet.tsx
+  s_f8c44ec28b1644::t_75c2f132fc725d 448
+client/dashboard/src/pages/data-exports/DataExports.test.tsx
+  s_f8c44ec28b1644::t_b8b13e5068b01b 18,22-26,225-255
+client/dashboard/src/pages/data-exports/DataExports.tsx
+  s_f8c44ec28b1644::t_828529d3e759bd 1-2,75,221,379-390,496-499,525-528,846-849,860-865,889-892,918-925,929
+client/dashboard/src/pages/data-exports/DataExports.unsupported.test.tsx
+  s_f8c44ec28b1644::t_019ab12f9988d8 1-165
+client/dashboard/src/pages/data/EventFeed.tsx
+  s_f8c44ec28b1644::t_5ff088625ba723 68
+client/dashboard/src/pages/device-agent/DeviceAgent.tsx
+  s_f8c44ec28b1644::t_822c20ff5cfd28 21-22,67,121-126,146-148
+client/dashboard/src/pages/device-agent/ai-scan-target-draft.test.ts
+  s_f8c44ec28b1644::t_e2ebd8f1633987 1,314-322
+client/dashboard/src/pages/device-agent/ai-scan-target-draft.ts
+  s_f8c44ec28b1644::t_0c20b82fc98947 1-2,49,88-89,175,196-198,377-380
+client/dashboard/src/pages/device-agent/device-agent-setup.tsx
+  s_f8c44ec28b1644::t_669545a42e5c20 38-42,130-166,241,243-244,250-252,386-390,449-451,457-499,511,519-524,590-591,632-634,638,640-644,652-678,846,946-948,971-972,974,977-992,995,1000-1002,1007,1016-1026,1029,1033-1039,1041-1055,1059-1062,1069-1071,1074-1085,1087,1091-1093,1096-1097,1100-1123,1128-1150,1152-1169,1171-1213,1215-1217,1250-1252,1255,1257-1261,1264-1265,1268-1298,1337-1341,1407-1408,1411,1416,1422,1427,1440,1683,1701,1862
+client/dashboard/src/pages/explore/exploreModel.ts
+  s_f8c44ec28b1644::t_30f1aac9d76b45 468
+client/dashboard/src/pages/identities/AgentIdentityActivity.test.tsx
+  s_f8c44ec28b1644::t_43e80474f7310a 19-25
+client/dashboard/src/pages/identities/AgentIdentityActivity.tsx
+  s_f8c44ec28b1644::t_76f1f8af1c95a0 1-6,19-21,42-49,77-85
+client/dashboard/src/pages/identities/AgentIdentityProfile.tsx
+  s_f8c44ec28b1644::t_47634d5a7aa959 8,20-22,195,209-231
+client/dashboard/src/pages/identities/AgentIdentityUsage.tsx
+  s_f8c44ec28b1644::t_12222d41a88123 1-278
+client/dashboard/src/pages/identities/IdentitiesIndex.test.tsx
+  s_f8c44ec28b1644::t_8570e02b511cc0 192-211
+client/dashboard/src/pages/identities/IdentityDetailRoot.tsx
+  s_f8c44ec28b1644::t_2cc99f58a818ba 23,49,95-109,197-208,211-217,226-237,251-256
+client/dashboard/src/pages/logs/LogDetailSheet.tsx
+  s_f8c44ec28b1644::t_cf9852569bb818 3,7,168-200,298-318,321-336
+client/dashboard/src/pages/mcp/GatewayAccessReview.test.tsx
+  s_f8c44ec28b1644::t_cb5f24390d6ff1 1-63
+client/dashboard/src/pages/mcp/GatewayAccessReview.tsx
+  s_f8c44ec28b1644::t_134e9dd6f0b31a 1-2,4-5,7-10,12-21,23-46,48-56
+client/dashboard/src/pages/mcp/OrganizationGateway.test.tsx
+  s_f8c44ec28b1644::t_64278c68f28ea1 1-264
+client/dashboard/src/pages/mcp/OrganizationGateway.tsx
+  s_f8c44ec28b1644::t_bcbfc56eaf8ec2 1-13,31,72-91,104-106,109-156,158-211,224,253-254,273-277,296
+client/dashboard/src/pages/mcp/access/CheckAccessResult.test.tsx
+  s_f8c44ec28b1644::t_c9afb8fa91d0eb 1-150
+client/dashboard/src/pages/mcp/access/CheckAccessResult.tsx
+  s_f8c44ec28b1644::t_6babcb43676afd 20,305,312-317
+client/dashboard/src/pages/mcp/access/ManageAccess.test.tsx
+  s_f8c44ec28b1644::t_712d20e8f55f5e 1,79,372-373,547-578,589-669
+client/dashboard/src/pages/mcp/access/ManageAccess.tsx
+  s_f8c44ec28b1644::t_3f679c03d357b9 1,134-141,204,245-247,249,256,262,302,304,311-312,318,325-330,343,409,412-414,418-420,423-425,430,468,482,495,559,576,614,652,654-658,696,733,748,782
+client/dashboard/src/pages/mcp/access/accessRows.test.ts
+  s_f8c44ec28b1644::t_5e87b0c5ca55d4 1,6,522-575
+client/dashboard/src/pages/mcp/access/accessRows.ts
+  s_f8c44ec28b1644::t_f3197ea5dcd3e8 1,107-108,195,210-213,420-428,544
+client/dashboard/src/pages/mcp/access/accessWrites.test.ts
+  s_f8c44ec28b1644::t_492c692542f2fe 1,1048-1066
+client/dashboard/src/pages/mcp/access/accessWrites.ts
+  s_f8c44ec28b1644::t_453f671dd19a4b 21,222-224,409,484-491
+client/dashboard/src/pages/mcp/access/explainAccess.test.ts
+  s_f8c44ec28b1644::t_ab061ed4b00041 5,10,14,471-601
+client/dashboard/src/pages/mcp/access/explainAccess.ts
+  s_f8c44ec28b1644::t_b858318794870a 1,3-7,250-256,266,319,332-334,343-363,379,398-401,416-424,448
+client/dashboard/src/pages/mcp/access/manageAccessState.test.ts
+  s_f8c44ec28b1644::t_14553e3faa9901 1,5,111-124
+client/dashboard/src/pages/mcp/access/manageAccessState.ts
+  s_f8c44ec28b1644::t_3ebb9f68434f5f 1-8,10,32,58,60-62,91,136,139-163
+client/dashboard/src/pages/mcp/access/serverAudience.test.ts
+  s_f8c44ec28b1644::t_671509df4c508d 1,5-10,207-306
+client/dashboard/src/pages/mcp/access/serverAudience.ts
+  s_f8c44ec28b1644::t_7f5a9cb7cd62e9 1-2,57,109,248-258,260-262,416,428-435
+client/dashboard/src/pages/mcp/add/AddMcpServer.tsx
+  s_f8c44ec28b1644::t_ab0d9fce6fabe8 181-187,214-219
+client/dashboard/src/pages/mcp/gateway/GatewayDiscoverySection.test.tsx
+  s_f8c44ec28b1644::t_f20a764e710e4e 9,136-205
+client/dashboard/src/pages/mcp/gateway/GatewayDiscoverySection.tsx
+  s_f8c44ec28b1644::t_510314280344f7 1-2,34-41,74,76-81,84,87,99-101,113-114,118-128,137-138
+client/dashboard/src/pages/mcp/gateway/GatewayInspectTab.test.tsx
+  s_f8c44ec28b1644::t_d05473d9820856 4,126-164
+client/dashboard/src/pages/mcp/gateway/GatewayInspectTab.tsx
+  s_f8c44ec28b1644::t_c36c85e64e79c6 1,187-191
+client/dashboard/src/pages/mcp/gateway/GatewayMembersSection.test.tsx
+  s_f8c44ec28b1644::t_22243eed9b0f5c 647-661
+client/dashboard/src/pages/mcp/gateway/GatewayMembersSection.tsx
+  s_f8c44ec28b1644::t_f9912d8ce27466 781-792,816-826
+client/dashboard/src/pages/mcp/gateway/GatewaySettingsTab.test.tsx
+  s_f8c44ec28b1644::t_88a8c892752ee3 15,18,100,207,371-476
+client/dashboard/src/pages/mcp/gateway/GatewaySettingsTab.tsx
+  s_f8c44ec28b1644::t_3c46ca6cc23500 214-219,237,250-257,278-282,290-295,309-319,330-331,343-344
+client/dashboard/src/pages/mcp/x/MCPServerAvailabilityToggle.test.tsx
+  s_f8c44ec28b1644::t_4c89d669ccfd50 1,101-127,271-279
+client/dashboard/src/pages/mcp/x/MCPServerDetails.tsx
+  s_f8c44ec28b1644::t_1975984696b97c 1-8,29,338-342,357,360-361,389-396,477-482,484-485,487-502,515,525-528,532,534,546-550,552-555
+client/dashboard/src/pages/mcp/x/tabs/TunneledMcpConnectionsPanel.tsx
+  s_f8c44ec28b1644::t_899c50d6662c3c 38
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/GeneralSection.tsx
+  s_f8c44ec28b1644::t_85dab884a0e52d 1-2,143-146,148,157-163,289-293
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/NetworkAccessSection.test.tsx
+  s_f8c44ec28b1644::t_aa52575279719e 1,370-425
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/NetworkAccessSection.tsx
+  s_f8c44ec28b1644::t_a43b431b6aa4d0 1-2,43,87,164,177-184,326-330,346-349,376-379,388-391,398-401,436-441,451,555-557,631,668
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/ToolFilteringSection.test.tsx
+  s_f8c44ec28b1644::t_8e55ff63728013 1-96
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/ToolFilteringSection.tsx
+  s_f8c44ec28b1644::t_ece234269f0c11 1-4,46-49,80-90,92-95,138,162-177,194-196,203
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/authentication/IdentityChainingField.test.tsx
+  s_f8c44ec28b1644::t_783d4b9d9ef035 498-505,557-647,1307-1371
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/authentication/IdentityChainingField.tsx
+  s_f8c44ec28b1644::t_ed095d1f06d03e 36,48,60-63,170-174,347-349,389-392,496-498,501-506,558,566-567,576,580,603-604,628-629,642-644,668,778-781,796,823-829,831-836,1169,1303,1316,1340,1343-1357,1367-1370,1385,1389-1390,1399-1400
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/authentication/IssuerDuplicateWarning.tsx
+  s_f8c44ec28b1644::t_5498c5261d1b4a 12-14,46,62,76
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/authentication/IssuerFormFields.test.tsx
+  s_f8c44ec28b1644::t_4a3ef557e2d5ca 5-8,77-111
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/authentication/IssuerFormFields.tsx
+  s_f8c44ec28b1644::t_a949a2e7c880e1 1,289,304,306-317,390,394-397,412-416,452,468,525,538
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/authentication/ModifyRemoteIdentityProviderSheet.test.tsx
+  s_f8c44ec28b1644::t_f9c132d9679c03 26-30,87-88,121,127,132-147,183-184,274-327
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/authentication/ModifyRemoteIdentityProviderSheet.tsx
+  s_f8c44ec28b1644::t_a5b0f58e923b0d 1-2,426-439,445-460,599,618,622,633-639
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/authentication/RemoteMcpIdentitySection.test.tsx
+  s_f8c44ec28b1644::t_95809f7a39266b 1614-1617
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/authentication/authTarget.ts
+  s_f8c44ec28b1644::t_d8ca80846f4c88 1-3,88-91,98-101
+client/dashboard/src/pages/org/ApiKeyScopeField.tsx
+  s_f8c44ec28b1644::t_d8f5c2c695cb93 91
+client/dashboard/src/pages/org/CreateApiKeySheet.tsx
+  s_f8c44ec28b1644::t_e77417c4a4d487 143
+client/dashboard/src/pages/org/OrgApiKeys.test.tsx
+  s_f8c44ec28b1644::t_3a5c2dc426a437 410
+client/dashboard/src/pages/org/OrgGateway.tsx
+  s_f8c44ec28b1644::t_10419a9bebb153 1-2,4,6-7
+client/dashboard/src/pages/org/OrgHome.tsx
+  s_f8c44ec28b1644::t_d55cf0c365894d 16,174-177,299,448,618,625,667,707,714,749,915-927,953-957,1013-1019,1170-1177,1185-1205,1211-1221
+client/dashboard/src/pages/org/PlatformMCP.tsx
+  s_f8c44ec28b1644::t_e40918a4648728 1,901,926-928,1604
+client/dashboard/src/pages/org/PrivateNetworkSection.test.tsx
+  s_f8c44ec28b1644::t_ed9d31467c8de8 3-4,31,151-181,270-294
+client/dashboard/src/pages/org/PrivateNetworkSection.tsx
+  s_f8c44ec28b1644::t_99c3c195f7c78b 194,404,414-416,419-428,490
+client/dashboard/src/pages/org/UserSessions.tsx
+  s_f8c44ec28b1644::t_5527de3638758d 46-47
+client/dashboard/src/pages/org/device-integrations/DeviceIntegrations.tsx
+  s_f8c44ec28b1644::t_965f60862fb3fd 17
+client/dashboard/src/pages/org/device-integrations/MdmIntegrationDetail.tsx
+  s_f8c44ec28b1644::t_62f1b49038d527 47
+client/dashboard/src/pages/org/device-integrations/use-device-integration-schedules.test.ts
+  s_f8c44ec28b1644::t_e3e8deffe54243 1-2,4,43-77
+client/dashboard/src/pages/org/device-integrations/use-device-integration-schedules.ts
+  s_f8c44ec28b1644::t_a85c1f6b3f38a1 1-2,76-81
+client/dashboard/src/pages/org/encryption-keys/jwks/KeySetSetupSteps.tsx
+  s_f8c44ec28b1644::t_ee3f5df3b4575d 101-104
+client/dashboard/src/pages/org/encryption-keys/jwks/keyLifecycle.test.ts
+  s_f8c44ec28b1644::t_1bd2b3c0166cb5 2-5,37-41
+client/dashboard/src/pages/org/encryption-keys/jwks/keyLifecycle.ts
+  s_f8c44ec28b1644::t_ebec9efdd2f161 28-30,44,60,74
+client/dashboard/src/pages/org/identity-provider/DirectoryReviewPanel.test.tsx
+  s_f8c44ec28b1644::t_2eaaf5d770bdd8 5-8,140-161
+client/dashboard/src/pages/org/identity-provider/DirectoryReviewPanel.tsx
+  s_f8c44ec28b1644::t_86a753c0aece54 26,119-120,138,163,194-218
+client/dashboard/src/pages/org/identity-provider/IdentityProviders.test.tsx
+  s_f8c44ec28b1644::t_b47b6081e8b8aa 9-11,109,122,146
+client/dashboard/src/pages/org/identity-provider/OktaWorkspace.test.tsx
+  s_f8c44ec28b1644::t_5a22b137191eca 12,18-20,83-128,136,155,223,236,266-280
+client/dashboard/src/pages/org/identity-provider/OktaWorkspace.tsx
+  s_f8c44ec28b1644::t_bdd621bfaccc03 1,31-42,51-52,59-61,83-95,117-120,138-140,148-150,152,205-220
+client/dashboard/src/pages/org/identity-provider/SpeakeasyWorkspace.test.tsx
+  s_f8c44ec28b1644::t_c30e27846aaf1b 1,584-627
+client/dashboard/src/pages/org/identity-provider/SpeakeasyWorkspace.tsx
+  s_f8c44ec28b1644::t_7683859df05f5d 1,6-9,80-84,86-89,91,106-107,112,115-116,121-123,128,176-181,184-189,292-297,300-305,438,464,488,584-587
+client/dashboard/src/pages/org/identity-provider/connectionView.test.ts
+  s_f8c44ec28b1644::t_97d4e696071c76 1-2,13,175-186
+client/dashboard/src/pages/org/identity-provider/connectionView.ts
+  s_f8c44ec28b1644::t_4e85c80644d227 14,20-25,32-33,36-39,41-46,111
+client/dashboard/src/pages/org/identity-provider/directoryReview.ts
+  s_f8c44ec28b1644::t_3a42ad686cbd78 1-5,13-16,31
+client/dashboard/src/pages/org/identity-provider/services/EmaAllowedProvidersEditor.tsx
+  s_f8c44ec28b1644::t_6e991484199780 13-17,27,38,95-98,126-135,142,148,174-175,220-239,252-253,259,270-272,303,328,330,342,374,398,433-438,440,479-484,494-496,517,575,577,579,581,584,596-612
+client/dashboard/src/pages/org/identity-provider/services/EmaServiceServers.test.tsx
+  s_f8c44ec28b1644::t_b847cccff2430e 185-198
+client/dashboard/src/pages/org/identity-provider/services/EmaServiceServers.tsx
+  s_f8c44ec28b1644::t_379b2a85f0604a 12-16,23,37-38,53,74-79
+client/dashboard/src/pages/org/identity-provider/services/EmaServiceWorkspace.test.tsx
+  s_f8c44ec28b1644::t_63b41c81b5423a 1045-1153
+client/dashboard/src/pages/org/identity-provider/services/ProviderTrust.test.tsx
+  s_f8c44ec28b1644::t_bf552adc1ba8ba 4-5,26-44
+client/dashboard/src/pages/org/identity-provider/services/ProviderTrust.tsx
+  s_f8c44ec28b1644::t_afdf30b1b9d87d 6,20-26
+client/dashboard/src/pages/org/identity-provider/services/TrustedByServices.test.tsx
+  s_f8c44ec28b1644::t_bda223fb34c543 12-13,68-90
+client/dashboard/src/pages/org/identity-provider/services/TrustedByServices.tsx
+  s_f8c44ec28b1644::t_b5f817817a5e01 11-15,30-33,36,80,109-115
+client/dashboard/src/pages/org/identity-provider/services/emaServiceView.test.ts
+  s_f8c44ec28b1644::t_468f4f64a1b4a4 80-107
+client/dashboard/src/pages/org/identity-provider/services/emaServiceView.ts
+  s_f8c44ec28b1644::t_1ec909fcf9e198 1-6,67-68,74-84,116-130,180-181,238-244
+client/dashboard/src/pages/org/identity-provider/tabs/applications/OktaServerSuggestions.tsx
+  s_f8c44ec28b1644::t_08de7fec1ba76b 1,226-229
+client/dashboard/src/pages/org/identity-provider/tabs/applications/applicationsView.ts
+  s_f8c44ec28b1644::t_3ec75860273eef 1,24-28,52,58
+client/dashboard/src/pages/org/identity-provider/tabs/cross-app-access/ClearedConfirmationNotice.tsx
+  s_f8c44ec28b1644::t_954ba651c0eb62 20
+client/dashboard/src/pages/org/identity-provider/tabs/cross-app-access/CrossAppAccessTab.tsx
+  s_f8c44ec28b1644::t_e5dcb1e820529f 268,332
+client/dashboard/src/pages/org/identity-provider/tabs/cross-app-access/xaaView.test.ts
+  s_f8c44ec28b1644::t_20bfca8ed2d6ec 1,221-227
+client/dashboard/src/pages/org/identity-provider/tabs/cross-app-access/xaaView.ts
+  s_f8c44ec28b1644::t_508104efdf5b23 1,38,44,61-65,74-78,102-106,111-115
+client/dashboard/src/pages/org/identity-provider/tabs/setup/ConnectionSetupProgress.tsx
+  s_f8c44ec28b1644::t_4d0afa631f17a8 20
+client/dashboard/src/pages/org/identity-provider/tabs/setup/OktaConnectionTab.tsx
+  s_f8c44ec28b1644::t_09d7eb81e77888 1,61,66,95,152-155
+client/dashboard/src/pages/org/identity-provider/tabs/setup/TrustSignInConfirmDialog.tsx
+  s_f8c44ec28b1644::t_3753cb7a58d192 34
+client/dashboard/src/pages/org/litellm-config.test.ts
+  s_f8c44ec28b1644::t_018a9338f82868 1,90-98
+client/dashboard/src/pages/org/litellm-config.ts
+  s_f8c44ec28b1644::t_917d352767aa6e 1-2,24-27,57
+client/dashboard/src/pages/org/litellm-integration-row.test.tsx
+  s_f8c44ec28b1644::t_75cc7e083bf60f 2,9-10,13,105-119,228-341
+client/dashboard/src/pages/org/litellm-integration-row.tsx
+  s_f8c44ec28b1644::t_b0da1e06386ee4 1-2,424-427,744-760,817,820,825-832,922-923
+client/dashboard/src/pages/org/slack-workspaces/SlackDirectory.test.tsx
+  s_f8c44ec28b1644::t_5fd1b90aa02be8 447-456
+client/dashboard/src/pages/org/slack-workspaces/SlackDirectory.tsx
+  s_f8c44ec28b1644::t_fa38842dbc0773 1-2,134-137,252
+client/dashboard/src/pages/org/use-ai-integration-schedules.ts
+  s_f8c44ec28b1644::t_3f91328fd0bb02 1-5,22-23,103-105,110-112
+client/dashboard/src/pages/playground/ManageToolsDialog.test.tsx
+  s_f8c44ec28b1644::t_e6912e4f0661c2 161-163,173-175
+client/dashboard/src/pages/playground/ManageToolsDialog.tsx
+  s_f8c44ec28b1644::t_03633901b24547 260-262
+client/dashboard/src/pages/playground/Playground.tsx
+  s_f8c44ec28b1644::t_90575aa1d5433d 1-5,118,122-135,140,531-535,644-646
+client/dashboard/src/pages/plugins/PluginDetail.permissions.test.tsx
+  s_f8c44ec28b1644::t_d7c999b42c8a07 418
+client/dashboard/src/pages/plugins/Plugins.permissions.test.tsx
+  s_f8c44ec28b1644::t_da7eaeea169eda 21-27,211-213
+client/dashboard/src/pages/plugins/principals.ts
+  s_f8c44ec28b1644::t_badce453cf1c17 1,112-128
+client/dashboard/src/pages/plugins/use-plugin-assignments-visible.test.tsx
+  s_f8c44ec28b1644::t_c37404f5631435 26,31,43,53
+client/dashboard/src/pages/plugins/use-plugin-assignments-visible.ts
+  s_f8c44ec28b1644::t_82c6a28459032c 4,8
+client/dashboard/src/pages/remote-identity-providers/MigrateImpact.tsx
+  s_f8c44ec28b1644::t_2fa6529c5c266f 220,241
+client/dashboard/src/pages/remote-identity-providers/clientAlerts.tsx
+  s_f8c44ec28b1644::t_42f38bcc2db953 39
+client/dashboard/src/pages/remote-identity-providers/tabs/client/ClientCard.test.tsx
+  s_f8c44ec28b1644::t_899e6a71064c5d 1,7,13-18,25,42,100-176
+client/dashboard/src/pages/remote-identity-providers/tabs/client/ClientCard.tsx
+  s_f8c44ec28b1644::t_0dd6f3a466dc09 1,55-68,76-83,111-119,145,175,202-207,254-255,257-258,260
+client/dashboard/src/pages/remote-identity-providers/tabs/client/SessionsTab.tsx
+  s_f8c44ec28b1644::t_5a972f7bb9a6e1 9,24,28,43-57,145-153,158-191
+client/dashboard/src/pages/security/CallPath.test.tsx
+  s_f8c44ec28b1644::t_44a9fbad421cf3 1-30
+client/dashboard/src/pages/security/CallPath.tsx
+  s_f8c44ec28b1644::t_c00e9b56f72273 57-59,120-126,141-145
+client/dashboard/src/pages/security/ExclusionsTab.tsx
+  s_f8c44ec28b1644::t_f8e0c8b6a5340b 1-2,64-70,86-95,99-103,150-155,199,215-226
+client/dashboard/src/pages/security/PolicyDetail.tsx
+  s_f8c44ec28b1644::t_852ab76d7ecf5d 1-2,90,289-327,471-474,1677
+client/dashboard/src/pages/security/PolicyDetail.unsupported.test.tsx
+  s_f8c44ec28b1644::t_3519da8165ce5a 1-39
+client/dashboard/src/pages/security/PolicyStart.tsx
+  s_f8c44ec28b1644::t_df9e01741d4647 1,39,96-98,144-146,243-246,422,431,458-461,629,652-670,686-688,796
+client/dashboard/src/pages/security/PolicyStart.use-case.test.tsx
+  s_f8c44ec28b1644::t_7143a70235cec3 8-10,87,216-295
+client/dashboard/src/pages/security/ShadowAIPolicyEditor.tsx
+  s_f8c44ec28b1644::t_85f29862be251c 1-2,277-278,280-281
+client/dashboard/src/pages/security/call-path.test.ts
+  s_f8c44ec28b1644::t_8615726d8cd25b 1,7-21,108-123,125-140
+client/dashboard/src/pages/security/call-path.ts
+  s_f8c44ec28b1644::t_61b8d5545c73ea 1-2,4,8,16,44,63,74-80,82-88,99-121
+client/dashboard/src/pages/security/policy-delete-dialog.ts
+  s_f8c44ec28b1644::t_05630837d33bea 1,104
+client/dashboard/src/pages/security/policy-draft.test.ts
+  s_f8c44ec28b1644::t_94d42f52bc0c37 1-2,6-8,261-362
+client/dashboard/src/pages/security/policy-draft.ts
+  s_f8c44ec28b1644::t_0a42b1efd898d2 1-8,65-122,126,128,130,144-147,149,151,223-225,410-411
+client/dashboard/src/pages/security/policy-shadow-mcp-setup.ts
+  s_f8c44ec28b1644::t_b74c49bd3aaf26 203,206
+client/dashboard/src/pages/security/risk-outcome.test.ts
+  s_f8c44ec28b1644::t_4273d1e2ad27b9 1,52-58
+client/dashboard/src/pages/security/risk-outcome.ts
+  s_f8c44ec28b1644::t_66f3347543d59a 1,25
+client/dashboard/src/pages/security/shadow-ai/ShadowAIAccessStep.tsx
+  s_f8c44ec28b1644::t_8be9d71435bf51 1,53,57-62,183
+client/dashboard/src/pages/security/shadow-ai/access-rows.test.ts
+  s_f8c44ec28b1644::t_9cecffce6a7378 1,12-34
+client/dashboard/src/pages/security/shadow-ai/access-rows.ts
+  s_f8c44ec28b1644::t_e562ef3fb803d6 1-2,8,21,36-41,45-46,57-58,112,117-118
+client/dashboard/src/pages/security/watchdog/AnalysisStatusBadge.tsx
+  s_f8c44ec28b1644::t_c14e914d5159a6 73
+client/dashboard/src/pages/security/watchdog/suppressed-helpers.test.ts
+  s_f8c44ec28b1644::t_5da0a263bc7a2c 1-2,4,6-12,14-21,24-27,29
+client/dashboard/src/pages/security/watchdog/suppressed-helpers.ts
+  s_f8c44ec28b1644::t_406e793c908ea4 1,3-6,9,12,19-23,37-38
+client/dashboard/src/pages/setup/SetupWizard.tsx
+  s_f8c44ec28b1644::t_6ae6fdbbda1c1f 1,4,310
+client/dashboard/src/pages/setup/components/confirm-traffic-section.tsx
+  s_f8c44ec28b1644::t_584f505d0f673a 171
+client/dashboard/src/pages/setup/components/steps/anthropic-inference-hooks-step.tsx
+  s_f8c44ec28b1644::t_d2b612c8dcbc66 110
+client/dashboard/src/pages/setup/components/steps/identity-provider-step.tsx
+  s_f8c44ec28b1644::t_5d803f3f360cb1 90
+client/dashboard/src/pages/shadow-mcp/ShadowMCPServerDetail.tsx
+  s_f8c44ec28b1644::t_d3374e55027f80 161
+client/dashboard/src/pages/sigint/DeleteConfigurationDialog.tsx
+  s_f8c44ec28b1644::t_91f67921ce0059 37
+client/dashboard/src/pages/sigint/SensorEditorDialog.test.tsx
+  s_f8c44ec28b1644::t_96189c4c845a8a 1,133-147
+client/dashboard/src/pages/sigint/SensorEditorDialog.tsx
+  s_f8c44ec28b1644::t_750fea4a66e1e0 1-5,142-164
+client/dashboard/src/pages/sigint/SensorsTab.tsx
+  s_f8c44ec28b1644::t_d44be068f62872 1-9,254-256,260-262,305-312,339-347,353-362
+client/dashboard/src/pages/skills/SkillDistributionsSection.test.tsx
+  s_f8c44ec28b1644::t_025ed7739a1b45 1-104
+client/dashboard/src/pages/skills/SkillDistributionsSection.tsx
+  s_f8c44ec28b1644::t_bec70ac69af4f6 53,113-118,130-133
+client/dashboard/src/pages/skills/SkillsList.page.test.tsx
+  s_f8c44ec28b1644::t_4285d43260eaee 398-406,427,682,699-701,703,705
+client/dashboard/src/pages/skills/SkillsList.tsx
+  s_f8c44ec28b1644::t_3a494bc68f7e5b 114-123,147,260,445
+client/dashboard/src/pages/sources/remote-mcp/configureCreatedIdentity.ts
+  s_f8c44ec28b1644::t_c24bf11f2bd3fc 1-2,377-380
+client/dashboard/src/pages/sources/remote-mcp/useVerifyRemoteMcpUrl.test.ts
+  s_f8c44ec28b1644::t_f41167f82446d8 86-106
+client/dashboard/src/pages/sources/remote-mcp/useVerifyRemoteMcpUrl.ts
+  s_f8c44ec28b1644::t_99b9e8722021ed 85,92,118-124
+client/dashboard/src/pages/sources/tunneled-mcp/CreateTunneledMcp.tsx
+  s_f8c44ec28b1644::t_b824c8b2f01140 44
+client/dashboard/src/routes.tsx
+  s_f8c44ec28b1644::t_b61161356a3088 1374,1636-1640
+client/dashboard/src/sdk/.speakeasy/gen.lock
+  s_f8c44ec28b1644::t_4e56151968aef1 5-6,29,31
+client/dashboard/src/sdk/.speakeasy/gen.yaml
+  s_f8c44ec28b1644::t_13963b2ec38e68 21,73,94
+client/dashboard/src/sdk/src/lib/config.ts
+  s_f8c44ec28b1644::t_c637fba7908a1c 60-61
+client/dashboard/src/sdk/src/models/components/accessmemberdirectoryrolesource.ts
+  s_f8c44ec28b1644::t_06177f6e4cfbe5 8-9,23,51-52
+client/dashboard/src/sdk/src/models/components/actorattribute.ts
+  s_f8c44ec28b1644::t_e16f7b82294f58 7-8,22,40-43
+client/dashboard/src/sdk/src/models/components/agentplugin.ts
+  s_f8c44ec28b1644::t_2b85eee8def0aa 8-9,24,50-51
+client/dashboard/src/sdk/src/models/components/agentpolicygrant.ts
+  s_f8c44ec28b1644::t_810013b529b904 8-9,20,35-38
+client/dashboard/src/sdk/src/models/components/agentpolicygrantform.ts
+  s_f8c44ec28b1644::t_74f085f618ae21 7-8,27,47-50,52-55
+client/dashboard/src/sdk/src/models/components/agentpolicyselector.ts
+  s_f8c44ec28b1644::t_a9e78fcd29a683 8-9,25,47,86-89,91-94,97-100,102-105
+client/dashboard/src/sdk/src/models/components/agentusage.ts
+  s_f8c44ec28b1644::t_f1842b2e207721 7-8,25,36-39
+client/dashboard/src/sdk/src/models/components/aidetection.ts
+  s_f8c44ec28b1644::t_ca52d836ff6f88 8-9,28,34,83-84,87-88
+client/dashboard/src/sdk/src/models/components/aidetectionuser.ts
+  s_f8c44ec28b1644::t_e68c9ee55eb764 8-9,17,50-53
+client/dashboard/src/sdk/src/models/components/aiintegrationconfig.ts
+  s_f8c44ec28b1644::t_ae47b2bac46a74 8-9,24,93-96
+client/dashboard/src/sdk/src/models/components/aiintegrationschedulestate.ts
+  s_f8c44ec28b1644::t_2fbb56479886d9 8-9,26,40,93-96,99-100
+client/dashboard/src/sdk/src/models/components/aiscantarget.ts
+  s_f8c44ec28b1644::t_19b8f1182c6259 8-9,36,48,101-104,107-108
+client/dashboard/src/sdk/src/models/components/aitoolaccesssummary.ts
+  s_f8c44ec28b1644::t_b4a8469d9cf51c 7-8,23,38,65-68,71-74
+client/dashboard/src/sdk/src/models/components/allowedorigin.ts
+  s_f8c44ec28b1644::t_70f77ef7230639 8-9,18,45-48
+client/dashboard/src/sdk/src/models/components/analyticsdataset.ts
+  s_f8c44ec28b1644::t_41d312af715659 7-8,20,37-40
+client/dashboard/src/sdk/src/models/components/analyticsfield.ts
+  s_f8c44ec28b1644::t_5e58abaac9bceb 7-8,20,27,63-66,69-70
+client/dashboard/src/sdk/src/models/components/approveskillsuggestionresult.ts
+  s_f8c44ec28b1644::t_61553f99af2d7b 7-8,28,51-54
+client/dashboard/src/sdk/src/models/components/asset.ts
+  s_f8c44ec28b1644::t_dd4ce5202a70b1 8-9,20,51-52
+client/dashboard/src/sdk/src/models/components/assistant.ts
+  s_f8c44ec28b1644::t_22bff89e20e122 8-9,36,48,118-121,124-127
+client/dashboard/src/sdk/src/models/components/audienceoption.ts
+  s_f8c44ec28b1644::t_57a56571ccb527 8-9,25,51-54
+client/dashboard/src/sdk/src/models/components/authzchallenge.ts
+  s_f8c44ec28b1644::t_84a5633a8416a0 8-9,18,25,40,53,65,152-155,158-161,164-167,170-173,176-179
+client/dashboard/src/sdk/src/models/components/awsiamcredential.ts
+  s_f8c44ec28b1644::t_3f4c3d886723bb 8-9,23,78-81
+client/dashboard/src/sdk/src/models/components/awskmskey.ts
+  s_f8c44ec28b1644::t_dcf1f3695f7f1a 8-9,23,35,84-87,90-93
+client/dashboard/src/sdk/src/models/components/businessmemory.ts
+  s_f8c44ec28b1644::t_c8ad80fc88a7c0 8-9,24,85-86
+client/dashboard/src/sdk/src/models/components/challengebucket.ts
+  s_f8c44ec28b1644::t_f124b4024b16d3 8-9,18,25,40,51,63,159-160,163-164,167-170,173-176,179-182
+client/dashboard/src/sdk/src/models/components/challengeresolution.ts
+  s_f8c44ec28b1644::t_1e940b9e6d027f 8-9,17,63-66
+client/dashboard/src/sdk/src/models/components/chat.ts
+  s_f8c44ec28b1644::t_0fb16e6e14b59c 32-39,196-197,252-253
+client/dashboard/src/sdk/src/models/components/chatoverview.ts
+  s_f8c44ec28b1644::t_4d259b2ac9e6aa 24-31,148-149,193-194
+client/dashboard/src/sdk/src/models/components/chatsummary.ts
+  s_f8c44ec28b1644::t_7ebf6b67e01aaa 8-9,23,84-87
+client/dashboard/src/sdk/src/models/components/commitserveridentityconfigurationresult.ts
+  s_f8c44ec28b1644::t_664701b753efdd 8-9,35,48,63,75,128-129,132-133,137-142,146-147
+client/dashboard/src/sdk/src/models/components/customdomain.ts
+  s_f8c44ec28b1644::t_70ef6d0b2c1ae2 8-9,23,101-104
+client/dashboard/src/sdk/src/models/components/dataexportroute.ts
+  s_f8c44ec28b1644::t_a70d0f42ce3bb7 8-9,24,63-66
+client/dashboard/src/sdk/src/models/components/delegationstatuscount.ts
+  s_f8c44ec28b1644::t_dd48cdddc19c86 8-9,29,60-63
+client/dashboard/src/sdk/src/models/components/destination.ts
+  s_f8c44ec28b1644::t_5fbfddea38c260 8-9,26,40,83-86,89-92
+client/dashboard/src/sdk/src/models/components/deviceintegrationcoverage.ts
+  s_f8c44ec28b1644::t_234eaa8a4197e3 8-9,23,84-85
+client/dashboard/src/sdk/src/models/components/deviceintegrationproviderfield.ts
+  s_f8c44ec28b1644::t_633994b16248ed 7-8,22,53-56
+client/dashboard/src/sdk/src/models/components/deviceintegrationschedulestate.ts
+  s_f8c44ec28b1644::t_ced8fd266cab44 8-9,26,73-76
+client/dashboard/src/sdk/src/models/components/directoryperson.ts
+  s_f8c44ec28b1644::t_d3d43380c4a253 8-9,29,63-66
+client/dashboard/src/sdk/src/models/components/directoryreviewitem.ts
+  s_f8c44ec28b1644::t_509b3dde46cd6a 8-9,28,51-54
+client/dashboard/src/sdk/src/models/components/directoryrolemapping.ts
+  s_f8c44ec28b1644::t_5bb933dc1d3f11 8-9,23,37,77-80,83-84
+client/dashboard/src/sdk/src/models/components/directoryrolesetupproposedrole.ts
+  s_f8c44ec28b1644::t_1a71a0e8d6d346 8-9,24,50-51
+client/dashboard/src/sdk/src/models/components/directoryrolesetupsideeffect.ts
+  s_f8c44ec28b1644::t_34fcadf3ce4983 8-9,22,33,51-52,55-58
+client/dashboard/src/sdk/src/models/components/directoryrolesetupsource.ts
+  s_f8c44ec28b1644::t_61dbacfc857661 8-9,23,45-46,48-49
+client/dashboard/src/sdk/src/models/components/emaprovider.ts
+  s_f8c44ec28b1644::t_131e6616a731fe 8-9,23,44,73-76,79-82
+client/dashboard/src/sdk/src/models/components/emaserviceserver.ts
+  s_f8c44ec28b1644::t_ba494c20b2f442 8-9,24,73-76
+client/dashboard/src/sdk/src/models/components/employeedataflownode.ts
+  s_f8c44ec28b1644::t_f2f2d873bdb944 8-9,24,38,69-70,73-76
+client/dashboard/src/sdk/src/models/components/eventlogentry.ts
+  s_f8c44ec28b1644::t_09cd0e81173589 8-9,23,72-75
+client/dashboard/src/sdk/src/models/components/explainedaccessdirectorysource.ts
+  s_f8c44ec28b1644::t_d93cfb0e0ea17f 8-9,23,48-49
+client/dashboard/src/sdk/src/models/components/explainedaccesslevel.ts
+  s_f8c44ec28b1644::t_d2d9282fac1ca0 8-9,28,41,63-64,67-68
+client/dashboard/src/sdk/src/models/components/explainedaccessrule.ts
+  s_f8c44ec28b1644::t_5e6666f69b815d 8-9,28,36,52,66,83,98,148-149,152-153,156-157,160-163,166-169,172-173
+client/dashboard/src/sdk/src/models/components/explainresourceaccessresult.ts
+  s_f8c44ec28b1644::t_d367335ef50606 7-8,27,41-42
+client/dashboard/src/sdk/src/models/components/externalcredentialsummary.ts
+  s_f8c44ec28b1644::t_e1103e8a7c8b19 8-9,23,58-61
+client/dashboard/src/sdk/src/models/components/externalkeysummary.ts
+  s_f8c44ec28b1644::t_505164a4d8244b 8-9,23,37,84-87,90-93
+client/dashboard/src/sdk/src/models/components/externalmcpremote.ts
+  s_f8c44ec28b1644::t_99c9731e7c4745 8-9,31,58-61
+client/dashboard/src/sdk/src/models/components/externalmcptooldefinition.ts
+  s_f8c44ec28b1644::t_430754998f3c52 8-9,32,162-165
+client/dashboard/src/sdk/src/models/components/gcpiamcredential.ts
+  s_f8c44ec28b1644::t_1f88e458d82658 8-9,23,72-73
+client/dashboard/src/sdk/src/models/components/gcpkmskey.ts
+  s_f8c44ec28b1644::t_3cebe0d73f282a 8-9,23,35,84-87,90-93
+client/dashboard/src/sdk/src/models/components/getprojectoverviewresult.ts
+  s_f8c44ec28b1644::t_d35efc0d8d6336 8-9,27,48-49
+client/dashboard/src/sdk/src/models/components/hooktracesummary.ts
+  s_f8c44ec28b1644::t_233a4b94817480 8-9,25,82-83
+client/dashboard/src/sdk/src/models/components/identitychainingpreparation.ts
+  s_f8c44ec28b1644::t_e9860f122cd1d4 8-9,24,48,106-109,112-115
+client/dashboard/src/sdk/src/models/components/identitymodel.ts
+  s_f8c44ec28b1644::t_c08606f7bfedf8 8-9,29,74-77
+client/dashboard/src/sdk/src/models/components/identityproviderconnectionchecklistitem.ts
+  s_f8c44ec28b1644::t_fd13038705ac5d 7-8,22,45,80-81,85-86
+client/dashboard/src/sdk/src/models/components/identityproviderconnectionreconcilerun.ts
+  s_f8c44ec28b1644::t_28ecd0d7e0999e 8-9,28,41,85-86,90-91
+client/dashboard/src/sdk/src/models/components/inferencespendcap.ts
+  s_f8c44ec28b1644::t_f2db2dc0d7b1cc 8-9,23,47-50
+client/dashboard/src/sdk/src/models/components/ingesthookresult.ts
+  s_f8c44ec28b1644::t_b9e583eaef5d99 7-8,22,49-52
+client/dashboard/src/sdk/src/models/components/internalsessionissuer.ts
+  s_f8c44ec28b1644::t_1c4bf945dca0d9 8-9,32,72-75
+client/dashboard/src/sdk/src/models/components/internalsessionissuerkey.ts
+  s_f8c44ec28b1644::t_b565f9bf7e3a4b 7-8,23,39-42
+client/dashboard/src/sdk/src/models/components/jsonwebkey.ts
+  s_f8c44ec28b1644::t_871c04e22c7d6f 8-9,25,82-83
+client/dashboard/src/sdk/src/models/components/killswitchcapabilitykey.ts
+  s_f8c44ec28b1644::t_20845b6336a965 6-7,12,15-18,20-23
+client/dashboard/src/sdk/src/models/components/killswitchconflictname.ts
+  s_f8c44ec28b1644::t_6bde39ce9425fb 6-7,13,16-19
+client/dashboard/src/sdk/src/models/components/killswitchhistoryaction.ts
+  s_f8c44ec28b1644::t_f004b74dcde2dc 6-7,16,19-22
+client/dashboard/src/sdk/src/models/components/killswitchoverlapstatus.ts
+  s_f8c44ec28b1644::t_cd2802150f4e37 6-7,13,16-19
+client/dashboard/src/sdk/src/models/components/killswitchstatus.ts
+  s_f8c44ec28b1644::t_c88b114723c636 6-7,15,18-21
+client/dashboard/src/sdk/src/models/components/listrolegrant.ts
+  s_f8c44ec28b1644::t_721431d14d9190 8-9,66,114,136-139,142-143
+client/dashboard/src/sdk/src/models/components/litellmingestresult.ts
+  s_f8c44ec28b1644::t_d2b8488f11dfee 8-9,18,33-36
+client/dashboard/src/sdk/src/models/components/litellminstance.ts
+  s_f8c44ec28b1644::t_4922fd72f48f28 8-9,28,57-60
+client/dashboard/src/sdk/src/models/components/litellminstancediagnostics.ts
+  s_f8c44ec28b1644::t_254419cb44c382 8-9,24,37,68-71,74-77
+client/dashboard/src/sdk/src/models/components/managedagent.ts
+  s_f8c44ec28b1644::t_8210e90276bddb 8-9,26,52-53
+client/dashboard/src/sdk/src/models/components/manageddevice.ts
+  s_f8c44ec28b1644::t_df9bb157efabc4 8-9,28,91-94
+client/dashboard/src/sdk/src/models/components/mcpserver.ts
+  s_f8c44ec28b1644::t_a7f36c0fc91c68 8-9,28,43,132-135,138-141
+client/dashboard/src/sdk/src/models/components/mcpserveractivity.ts
+  s_f8c44ec28b1644::t_ece0a3d652b08c 8-9,24,57-58
+client/dashboard/src/sdk/src/models/components/mcpsetupguide.ts
+  s_f8c44ec28b1644::t_6a45dc95907504 8-9,27,76-77
+client/dashboard/src/sdk/src/models/components/metamcpserver.ts
+  s_f8c44ec28b1644::t_6b7dac4f2d6a10 8-9,23,36,50,107-110,113-116,119-122
+client/dashboard/src/sdk/src/models/components/meterusagebreakdown.ts
+  s_f8c44ec28b1644::t_135acf8fe38647 7-8,45,61-64
+client/dashboard/src/sdk/src/models/components/meterusageresponse.ts
+  s_f8c44ec28b1644::t_888407a070da62 8-9,30,36,63-64,67-68
+client/dashboard/src/sdk/src/models/components/meterusageseries.ts
+  s_f8c44ec28b1644::t_32d65b326d4c02 7-8,23,49-52
+client/dashboard/src/sdk/src/models/components/networkingress.ts
+  s_f8c44ec28b1644::t_aa9309ba3db8d6 8-9,23,34,92-95,98-101
+client/dashboard/src/sdk/src/models/components/oktaidentityproviderconnection.ts
+  s_f8c44ec28b1644::t_0f4a65db1b5f1a 8-9,35,47,60,76,90,193-194,198-199,203-204,207-210,213-216
+client/dashboard/src/sdk/src/models/components/oktaresourceconnectionserver.ts
+  s_f8c44ec28b1644::t_d89a529c974181 8-9,25,39,50,65,81,174-175,178-181,184-187,190-193,196-199
+client/dashboard/src/sdk/src/models/components/oktaserversuggestion.ts
+  s_f8c44ec28b1644::t_36b0b844c43646 8-9,32,92-95
+client/dashboard/src/sdk/src/models/components/openapiv3evaluation.ts
+  s_f8c44ec28b1644::t_972b284e1bdf8e 8-9,37,90-93
+client/dashboard/src/sdk/src/models/components/openapiv3evaluationcategory.ts
+  s_f8c44ec28b1644::t_253a60fac6c063 6-7,20,25-28
+client/dashboard/src/sdk/src/models/components/openapiv3evaluationseverity.ts
+  s_f8c44ec28b1644::t_4bb36d8f908e92 6-7,20,25-28
+client/dashboard/src/sdk/src/models/components/organizationclientdelegationstatus.ts
+  s_f8c44ec28b1644::t_e5e734650226c0 8-9,28,49-50
+client/dashboard/src/sdk/src/models/components/organizationclientdeletepreflight.ts
+  s_f8c44ec28b1644::t_ff9032b00f8ed3 8-9,27,60-63
+client/dashboard/src/sdk/src/models/components/organizationgateway.ts
+  s_f8c44ec28b1644::t_901bbb0cdf347e 8-9,26,49-52
+client/dashboard/src/sdk/src/models/components/organizationinvitation.ts
+  s_f8c44ec28b1644::t_d98c3d6e9c82c7 8-9,25,67-70
+client/dashboard/src/sdk/src/models/components/platformmcponboardingstate.ts
+  s_f8c44ec28b1644::t_1666bff32b737e 8-9,24,38,53,67,88,105,126,140,249-252,255-258,261-264,267-270,273-276,279-282,285-286,289-290
+client/dashboard/src/sdk/src/models/components/pluginassignment.ts
+  s_f8c44ec28b1644::t_5a942247819c4d 8-9,24,45-48
+client/dashboard/src/sdk/src/models/components/pluginaudience.ts
+  s_f8c44ec28b1644::t_8095df9587d950 8-9,25,47-50
+client/dashboard/src/sdk/src/models/components/pluginserver.ts
+  s_f8c44ec28b1644::t_e5301d302e669c 8-9,23,58-61
+client/dashboard/src/sdk/src/models/components/pluginskilldistribution.ts
+  s_f8c44ec28b1644::t_04ddf00ccef77b 8-9,22,85-88
+client/dashboard/src/sdk/src/models/components/policybypassredemption.ts
+  s_f8c44ec28b1644::t_b4bb265042d45d 7-8,22,45-48
+client/dashboard/src/sdk/src/models/components/probeurlresult.ts
+  s_f8c44ec28b1644::t_a2351d8043d05d 8-9,25,50-53
+client/dashboard/src/sdk/src/models/components/prompttemplate.ts
+  s_f8c44ec28b1644::t_74c9981a6a8ae1 8-9,31,43,141-142,145-148
+client/dashboard/src/sdk/src/models/components/remotemcpserverclientscopes.ts
+  s_f8c44ec28b1644::t_7da7a37db4abd3 8-9,30,67-68
+client/dashboard/src/sdk/src/models/components/remotesessionclient.ts
+  s_f8c44ec28b1644::t_f582b82331f4b7 8-9,23,35,51,143-146,149-152,156-157
+client/dashboard/src/sdk/src/models/components/remotesessionissuerduplicatematch.ts
+  s_f8c44ec28b1644::t_98b894f2ab53be 8-9,24,57-58
+client/dashboard/src/sdk/src/models/components/resolvedirectoryreviewitemresult.ts
+  s_f8c44ec28b1644::t_4584dd9e56af00 8-9,32,56-59
+client/dashboard/src/sdk/src/models/components/resourceaudienceentry.ts
+  s_f8c44ec28b1644::t_330b20b235f385 8-9,23,33,52,70,122-125,128-131,134-137,140-143
+client/dashboard/src/sdk/src/models/components/resourceentry.ts
+  s_f8c44ec28b1644::t_2011cd2aa331e2 8-9,16,39-42
+client/dashboard/src/sdk/src/models/components/riskanalysisstatusresult.ts
+  s_f8c44ec28b1644::t_d02f189fc18ec0 8-9,24,52-55
+client/dashboard/src/sdk/src/models/components/riskblock.ts
+  s_f8c44ec28b1644::t_c2267b3fe786ea 8-9,23,61-64
+client/dashboard/src/sdk/src/models/components/riskcustomdetectionrule.ts
+  s_f8c44ec28b1644::t_ebc40f2074a174 8-9,26,70-73
+client/dashboard/src/sdk/src/models/components/riskexclusion.ts
+  s_f8c44ec28b1644::t_1429ab5cb50204 8-9,26,72-75
+client/dashboard/src/sdk/src/models/components/riskmcpscope.ts
+  s_f8c44ec28b1644::t_e4861b507875e5 8-9,25,45-48,50-53
+client/dashboard/src/sdk/src/models/components/riskpolicy.ts
+  s_f8c44ec28b1644::t_33f7e91e1ce328 8-9,34,46,58,70,176-179,182-185,188-191,194-197
+client/dashboard/src/sdk/src/models/components/riskpolicybypassrequest.ts
+  s_f8c44ec28b1644::t_570817bb305ea9 8-9,25,93-96
+client/dashboard/src/sdk/src/models/components/riskpolicyevalreview.ts
+  s_f8c44ec28b1644::t_f9fc59a49a0cc1 8-9,24,62-63
+client/dashboard/src/sdk/src/models/components/riskpreset.ts
+  s_f8c44ec28b1644::t_5c1262024b821b 8-9,25,37,90-93,96-99
+client/dashboard/src/sdk/src/models/components/riskresult.ts
+  s_f8c44ec28b1644::t_028451e506c9ed 8-9,29,42,192-195,198-201
+client/dashboard/src/sdk/src/models/components/riskresultredacted.ts
+  s_f8c44ec28b1644::t_9fe726e0d92532 8-9,32,152-155
+client/dashboard/src/sdk/src/models/components/riskrevealpayloadresult.ts
+  s_f8c44ec28b1644::t_bdbae938e33bb6 8-9,23,53-54
+client/dashboard/src/sdk/src/models/components/risksignal.ts
+  s_f8c44ec28b1644::t_a36d96de309dc9 8-9,29,110-113
+client/dashboard/src/sdk/src/models/components/riskunmaskresultresult.ts
+  s_f8c44ec28b1644::t_11ddabc7969513 8-9,23,43-46
+client/dashboard/src/sdk/src/models/components/rolegrant.ts
+  s_f8c44ec28b1644::t_98e28b0ae762b1 7-8,70,84-85,87-88
+client/dashboard/src/sdk/src/models/components/rotateobservabilitycredentialresult.ts
+  s_f8c44ec28b1644::t_29c48d0d20c4b5 8-9,27,68-69
+client/dashboard/src/sdk/src/models/components/scopedefinition.ts
+  s_f8c44ec28b1644::t_a0e5bbd1d8667d 8-9,38,58,112,124,156-159,162-163,166-167,170-173
+client/dashboard/src/sdk/src/models/components/selector.ts
+  s_f8c44ec28b1644::t_a7201c87d03e41 8-9,25,46,79-80,82-83,86-87,89-90
+client/dashboard/src/sdk/src/models/components/serverclientassociation.ts
+  s_f8c44ec28b1644::t_07c2477649afd2 8-9,24,71-74
+client/dashboard/src/sdk/src/models/components/serveridentityimpactserver.ts
+  s_f8c44ec28b1644::t_053db454c38b05 8-9,25,39,78-81,84-87
+client/dashboard/src/sdk/src/models/components/serveridentityregistrationfailure.ts
+  s_f8c44ec28b1644::t_d0bc0c9f524b2c 8-9,17,31,54-55,59-60
+client/dashboard/src/sdk/src/models/components/sessionsummary.ts
+  s_f8c44ec28b1644::t_9d797d2144c257 8-9,23,96-99
+client/dashboard/src/sdk/src/models/components/setuptask.ts
+  s_f8c44ec28b1644::t_27a1b23b5ba3b8 8-9,29,72-75
+client/dashboard/src/sdk/src/models/components/shadowmcpaccesssummary.ts
+  s_f8c44ec28b1644::t_ba2c2e10b0ac58 8-9,24,37,50,62,75,89,122-123,126-127,130-133,136-137,140-143,146-147
+client/dashboard/src/sdk/src/models/components/shadowmcpinventoryapprovalrequest.ts
+  s_f8c44ec28b1644::t_b7da7d913816ea 8-9,23,38,64-67,70-71
+client/dashboard/src/sdk/src/models/components/shadowmcpinventoryserver.ts
+  s_f8c44ec28b1644::t_e9e3508b48b932 8-9,37,49,94-95,98-99
+client/dashboard/src/sdk/src/models/components/shadowmcpinventoryurlstate.ts
+  s_f8c44ec28b1644::t_85e62e547e04da 8-9,37,64-67
+client/dashboard/src/sdk/src/models/components/sigintsensor.ts
+  s_f8c44ec28b1644::t_f7dca7c498d822 8-9,23,38,103-106,109-112
+client/dashboard/src/sdk/src/models/components/skilldistribution.ts
+  s_f8c44ec28b1644::t_15f764679f8460 8-9,23,92-93
+client/dashboard/src/sdk/src/models/components/skilldrift.ts
+  s_f8c44ec28b1644::t_117edd55f71dfc 8-9,24,65-66
+client/dashboard/src/sdk/src/models/components/skilleditsuggestion.ts
+  s_f8c44ec28b1644::t_0fbea4b2fe58fa 8-9,29,108-111
+client/dashboard/src/sdk/src/models/components/skillefficacyscoredsession.ts
+  s_f8c44ec28b1644::t_d7650e41d2d25e 8-9,18,24,45-48,51-54
+client/dashboard/src/sdk/src/models/components/skillfeedback.ts
+  s_f8c44ec28b1644::t_90711de8b1246f 8-9,26,63-66
+client/dashboard/src/sdk/src/models/components/skillsuggestionapprovalitem.ts
+  s_f8c44ec28b1644::t_d92409325f8697 8-9,25,64-67
+client/dashboard/src/sdk/src/models/components/slackdirectoryconnection.ts
+  s_f8c44ec28b1644::t_85ef7e6cca6835 8-9,24,37,55,136-139,142-145,148-149
+client/dashboard/src/sdk/src/models/components/slackdirectorymember.ts
+  s_f8c44ec28b1644::t_4c9123a0fd475f 8-9,28,43,57,130-133,136-137,140-143
+client/dashboard/src/sdk/src/models/components/slackpersonaccount.ts
+  s_f8c44ec28b1644::t_6c29c2e4f092b0 8-9,28,48-51
+client/dashboard/src/sdk/src/models/components/sourceenvironmentlink.ts
+  s_f8c44ec28b1644::t_6a0b4d2ab91b97 8-9,23,50-53
+client/dashboard/src/sdk/src/models/components/spendbreakdownresponse.ts
+  s_f8c44ec28b1644::t_aa0633866ebdae 8-9,28,33,38,67-68,71-72,75-76
+client/dashboard/src/sdk/src/models/components/spendcap.ts
+  s_f8c44ec28b1644::t_0304a84912563d 8-9,23,37-40
+client/dashboard/src/sdk/src/models/components/spendproduct.ts
+  s_f8c44ec28b1644::t_fce28fc964c03e 8-9,19,25,54-55,58-61
+client/dashboard/src/sdk/src/models/components/spendrule.ts
+  s_f8c44ec28b1644::t_605dd83c454f03 8-9,27,40,111-114,117-120
+client/dashboard/src/sdk/src/models/components/spendruleevent.ts
+  s_f8c44ec28b1644::t_be3c5cdab7fdd6 8-9,23,81-82
+client/dashboard/src/sdk/src/models/components/spendruleusage.ts
+  s_f8c44ec28b1644::t_6b986e2237a478 8-9,25,63-66
+client/dashboard/src/sdk/src/models/components/stripesubscription.ts
+  s_f8c44ec28b1644::t_70a734c86210d5 8-9,29,85-88
+client/dashboard/src/sdk/src/models/components/suggestcustomdetectionruleresult.ts
+  s_f8c44ec28b1644::t_d3cfd4e395ace8 8-9,26,59-60
+client/dashboard/src/sdk/src/models/components/suggestriskpolicyresult.ts
+  s_f8c44ec28b1644::t_4a802cae29ce3d 8-9,29,43,102-105,108-111
+client/dashboard/src/sdk/src/models/components/summarizetoolcallresult.ts
+  s_f8c44ec28b1644::t_ee77a830e3b3da 7-8,22,40-41
+client/dashboard/src/sdk/src/models/components/toolentry.ts
+  s_f8c44ec28b1644::t_e143212fc0b27f 8-9,30,60-63
+client/dashboard/src/sdk/src/models/components/toolset.ts
+  s_f8c44ec28b1644::t_f4d0265caffe8a 8-9,55,182-185
+client/dashboard/src/sdk/src/models/components/toolusagetargetsummary.ts
+  s_f8c44ec28b1644::t_3a15574aab4b84 8-9,24,42,89-92,95-98
+client/dashboard/src/sdk/src/models/components/toolusagetargettimeseriespoint.ts
+  s_f8c44ec28b1644::t_66af842a0cd588 8-9,24,42,90-91,95-96
+client/dashboard/src/sdk/src/models/components/toolusagetargettoolbreakdownrow.ts
+  s_f8c44ec28b1644::t_bf78121fa99512 8-9,24,42,90-91,95-96
+client/dashboard/src/sdk/src/models/components/toolusagetraceloggroup.ts
+  s_f8c44ec28b1644::t_578fa963608dbc 7-8,24,43-46
+client/dashboard/src/sdk/src/models/components/toolusagetracesummary.ts
+  s_f8c44ec28b1644::t_0da0f8603933a3 8-9,29,44,62,79,190-193,196-199,202-205,208-211
+client/dashboard/src/sdk/src/models/components/toolusageuserfilteroption.ts
+  s_f8c44ec28b1644::t_20af3e26c30672 8-9,26,51-52
+client/dashboard/src/sdk/src/models/components/toolusageusersbytargetrow.ts
+  s_f8c44ec28b1644::t_928c4e9e806c1f 8-9,24,42,59,106-109,112-115,118-121
+client/dashboard/src/sdk/src/models/components/toolusageusersummary.ts
+  s_f8c44ec28b1644::t_c8b128502cdfd9 8-9,26,69-72
+client/dashboard/src/sdk/src/models/components/toolusageusertimeseriespoint.ts
+  s_f8c44ec28b1644::t_d8dcd4b54d9993 8-9,26,61-64
+client/dashboard/src/sdk/src/models/components/topuser.ts
+  s_f8c44ec28b1644::t_24216382f172dc 8-9,23,44-45
+client/dashboard/src/sdk/src/models/components/triggerdefinition.ts
+  s_f8c44ec28b1644::t_621bf13946565d 8-9,27,57-60
+client/dashboard/src/sdk/src/models/components/triggerevent.ts
+  s_f8c44ec28b1644::t_ac0c389f5bb7bf 8-9,25,63-66
+client/dashboard/src/sdk/src/models/components/triggerinstance.ts
+  s_f8c44ec28b1644::t_08492de73b6ba6 8-9,25,83-86
+client/dashboard/src/sdk/src/models/components/tunneledmcpserver.ts
+  s_f8c44ec28b1644::t_7ef895cf0ae4ed 8-9,24,37,118-121,124-127
+client/dashboard/src/sdk/src/models/components/unknownskillactivation.ts
+  s_f8c44ec28b1644::t_19d8fe445f44fa 8-9,24,63-66
+client/dashboard/src/sdk/src/models/components/usersession.ts
+  s_f8c44ec28b1644::t_01dfcfbc1d6d40 8-9,33,120-123
+client/dashboard/src/sdk/src/models/components/usersessionclient.ts
+  s_f8c44ec28b1644::t_afe2139f8d9f34 8-9,25,89-92
+client/dashboard/src/sdk/src/models/components/usersessionissuer.ts
+  s_f8c44ec28b1644::t_71dad8e9a80c4d 8-9,23,35,51,134-137,140-143,146-149
+client/dashboard/src/sdk/src/models/components/usersessionissuermcpserver.ts
+  s_f8c44ec28b1644::t_6cac31d3c39131 8-9,24,59-62
+client/dashboard/src/sdk/src/models/components/usersessionworkload.ts
+  s_f8c44ec28b1644::t_9580da833f0b21 8-9,28,69-70
+client/dashboard/src/sdk/src/models/components/usersessionworkloadadmission.ts
+  s_f8c44ec28b1644::t_c775f85b222e9d 7-8,22,45-48
+client/dashboard/src/sdk/src/models/components/verifycimdurlresult.ts
+  s_f8c44ec28b1644::t_6e34ce37fb76d8 8-9,26,65-68
+client/dashboard/src/sdk/src/models/components/verifykmskeyresult.ts
+  s_f8c44ec28b1644::t_36ada20f25a207 8-9,33,54-55
+client/dashboard/src/sdk/src/models/components/verifyplatformcredentialresult.ts
+  s_f8c44ec28b1644::t_5f751d533c64c3 8-9,24,49-52
+client/dashboard/src/sdk/src/models/components/workloadadmission.ts
+  s_f8c44ec28b1644::t_1fc28477924714 8-9,23,88-91
+client/dashboard/src/sdk/src/models/components/workloadformblock.ts
+  s_f8c44ec28b1644::t_b34af9ba6c73bb 8-9,28,45,61,110-111,114-115,118-121
+client/dashboard/src/sdk/src/models/components/workloadplatformconstant.ts
+  s_f8c44ec28b1644::t_2ef7ec88bbc79a 7-8,22,41-44
+client/dashboard/src/sdk/src/models/components/workloadplatformvariable.ts
+  s_f8c44ec28b1644::t_3368bb6d1d3166 8-9,23,62-65
+client/dashboard/src/vite-env.d.ts
+  s_f8c44ec28b1644::t_578623417bce69 22-23
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f2517b69fbfb4fd59c0c4d5ea727cbd180c637b5",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  },
+  "sessions": {
+    "s_f8c44ec28b1644": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "39ad914a-bbea-494a-8f52-6dfbdf5c17d5",
+        "model": "unknown"
+      },
+      "human_author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}
