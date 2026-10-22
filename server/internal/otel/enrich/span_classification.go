@@ -24,5 +24,6 @@ func (*spanClassification) Enrich(_ context.Context, span *otelv1.InboundSpan) (
 		inboundSpanAttributeString(span, string(attr.ProviderKey)),
 		stated(d.Provider(span)),
 		stated(d.Surface(span)),
+		"",
 	), nil
 }

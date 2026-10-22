@@ -352,6 +352,14 @@ func chAgentEventChecks() []chCheck {
 			settings: "",
 			msg:      "demo seed postflight: Claude tool rows name the three demo skills and Codex rows name none",
 		},
+		{
+			cond: `(SELECT countIf(product = '') FROM agent_events
+   WHERE organization_id = @org) != 0
+  OR (SELECT countIf(agent_id != '') FROM agent_events
+      WHERE organization_id = @org) = 0`,
+			settings: "",
+			msg:      "demo seed postflight: every demo agent event names its product, and some ran as an agent",
+		},
 	}
 }
 
@@ -375,8 +383,8 @@ const (
 const agentEventInsert = `INSERT INTO agent_events
   (organization_id, project_id, occurred_at_unix_nano, observed_at_unix_nano,
    record_id, session_id, turn_id, event_id, event_type, raw_event_name,
-   source, provider, surface, user_id, user_email, external_user_id,
-   account_type, billing_mode, external_org_id, device_id,
+   source, provider, surface, product, client, user_id, user_email,
+   external_user_id, agent_id, account_type, billing_mode, external_org_id, device_id,
    department_name, division_name, job_title, employee_type, cost_center_name,
    roles, groups, model, query_source, skill_name, agent_name,
    mcp_server_name, mcp_tool_name, tool_name, text, outcome, outcome_message,
@@ -407,6 +415,9 @@ type agentSession struct {
 	turns    int
 	onClaude bool
 	surface  string
+	product  string
+	client   string
+	agentID  string
 	provider string
 	model    string
 	id       string
@@ -426,6 +437,21 @@ func (s *seeder) agentSession(i int) agentSession {
 	if onClaude {
 		surface, provider = "claude-code", "anthropic"
 	}
+	// Claude Code states its terminal, so a third of its sessions ran in an
+	// editor and the rest at a command line. Codex states no client at all.
+	client := ""
+	if onClaude {
+		client = "cli"
+		if i%3 == 0 {
+			client = "ide"
+		}
+	}
+	// Every twelfth session from the fifth on ran as the release assistant
+	// rather than as its person, so the agent dimension has a value.
+	agentID := ""
+	if i%12 == 4 {
+		agentID = s.det("managed-agent-1").String()
+	}
 	model := "claude-sonnet-5"
 	switch {
 	case !onClaude:
@@ -440,6 +466,9 @@ func (s *seeder) agentSession(i int) agentSession {
 		turns:    2 + i%4,
 		onClaude: onClaude,
 		surface:  surface,
+		product:  surface,
+		client:   client,
+		agentID:  agentID,
 		provider: provider,
 		model:    model,
 		id:       s.det("agent-session-" + strconv.Itoa(i)).String(),
@@ -489,9 +518,12 @@ func (s *seeder) appendAgentEvent(batch driver.Batch, sess agentSession, f agent
 		sess.surface, // source
 		sess.provider,
 		sess.surface,
+		sess.product,
+		sess.client,
 		s.userID(sess.user.handle),
 		s.email(sess.user.handle),
 		"", // external_user_id
+		sess.agentID,
 		"", // account_type
 		"", // billing_mode
 		"", // external_org_id

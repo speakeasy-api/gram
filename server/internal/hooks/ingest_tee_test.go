@@ -120,7 +120,7 @@ func TestTeeCanonicalHookPublishesWhatTheIngestEdgeWould(t *testing.T) {
 	require.Equal(t, dialect.HooksLogScope, record.GetScope().GetName())
 	require.Equal(t, "codex", teeAttrByKey(t, record.GetResource().GetAttributes(), string(attr.ServiceNameKey)).GetStringValue())
 	require.Equal(t, "1.2.3", teeAttrByKey(t, record.GetResource().GetAttributes(), string(attr.ServiceVersionKey)).GetStringValue())
-	require.Equal(t, otelsvc.ProvenanceSource, record.GetProvenance().GetSource())
+	require.Equal(t, enrich.InternalProvenanceSource, record.GetProvenance().GetSource())
 	require.Equal(t, authCtx.ActiveOrganizationID, record.GetProvenance().GetOrganizationId())
 	require.Equal(t, authCtx.ProjectID.String(), record.GetProvenance().GetProjectId())
 
@@ -280,7 +280,7 @@ func TestIngest_TeesToolCallIntoEventFeed(t *testing.T) {
 	for _, record := range []*otelv1.InboundLogRecord{request, response} {
 		require.NoError(t, otelsvc.ValidateInboundLogRecord(record))
 		require.Equal(t, dialect.HooksLogScope, record.GetScope().GetName())
-		require.Equal(t, otelsvc.ProvenanceSource, record.GetProvenance().GetSource())
+		require.Equal(t, enrich.InternalProvenanceSource, record.GetProvenance().GetSource())
 		require.Equal(t, authCtx.ActiveOrganizationID, record.GetProvenance().GetOrganizationId())
 		require.Equal(t, authCtx.ProjectID.String(), record.GetProvenance().GetProjectId())
 		require.Equal(t, "codex", teeAttrByKey(t, record.GetResource().GetAttributes(), string(attr.ServiceNameKey)).GetStringValue())

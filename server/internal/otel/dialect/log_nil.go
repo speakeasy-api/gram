@@ -29,6 +29,7 @@ func (NilLog) ResponseID(*otelv1.InboundLogRecord) (string, string, error) {
 
 func (NilLog) Provider(*otelv1.InboundLogRecord) (string, string, error)        { return "", "", nil }
 func (NilLog) Surface(*otelv1.InboundLogRecord) (string, string, error)         { return "", "", nil }
+func (NilLog) Client(*otelv1.InboundLogRecord) (string, string, error)          { return "", "", nil }
 func (NilLog) EventName(*otelv1.InboundLogRecord) (string, string, error)       { return "", "", nil }
 func (NilLog) EventType(*otelv1.InboundLogRecord) (string, string, error)       { return "", "", nil }
 func (NilLog) SubjectID(*otelv1.InboundLogRecord) (string, string, error)       { return "", "", nil }

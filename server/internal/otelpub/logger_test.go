@@ -22,7 +22,6 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	otelsvc "github.com/speakeasy-api/gram/server/internal/otel"
 	"github.com/speakeasy-api/gram/server/internal/otel/enrich"
 )
 
@@ -114,7 +113,7 @@ func TestLogPublishesBeforeReturningWithTenancyFromTheAuthenticatedRequest(t *te
 	record := (*published)[0]
 	require.Equal(t, testOrganizationID, record.GetProvenance().GetOrganizationId())
 	require.Equal(t, testProjectID.String(), record.GetProvenance().GetProjectId())
-	require.Equal(t, otelsvc.ProvenanceSource, record.GetProvenance().GetSource())
+	require.Equal(t, enrich.InternalProvenanceSource, record.GetProvenance().GetSource())
 	require.Equal(t, "gram.tool_call.started", record.GetEventName())
 	require.Equal(t, "call-1", attributeValue(record, "gram.tool_call.id"))
 	require.Equal(t, "tool call started", record.GetBody().GetStringValue())

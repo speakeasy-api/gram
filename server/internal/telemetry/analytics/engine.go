@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	agentsRepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
 	hooksRepo "github.com/speakeasy-api/gram/server/internal/hooks/repo"
 )
 
@@ -25,6 +26,7 @@ type Engine struct {
 func NewEngine(db *pgxpool.Pool, ch Querier) (*Engine, error) {
 	catalog, err := Default.WithLoaders(map[string]LookupLoader{
 		MCPServerDisplayNamesLookup: mcpServerDisplayNames(hooksRepo.New(db)),
+		AgentNamesLookup:            agentNames(agentsRepo.New(db)),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("bind catalog lookups: %w", err)
@@ -98,6 +100,22 @@ func mcpServerDisplayNames(hooks *hooksRepo.Queries) LookupLoader {
 		names := make(map[string]string, len(overrides))
 		for _, override := range overrides {
 			names[override.RawServerName] = override.DisplayName
+		}
+		return names, nil
+	}
+}
+
+// agentNames loads the organization's agents, id to name, so an agent shows
+// under the name it has now.
+func agentNames(agents *agentsRepo.Queries) LookupLoader {
+	return func(ctx context.Context, tenant Tenant) (map[string]string, error) {
+		rows, err := agents.ListAgentNames(ctx, tenant.OrganizationID)
+		if err != nil {
+			return nil, fmt.Errorf("list agent names: %w", err)
+		}
+		names := make(map[string]string, len(rows))
+		for _, row := range rows {
+			names[row.ID.String()] = row.Name
 		}
 		return names, nil
 	}
