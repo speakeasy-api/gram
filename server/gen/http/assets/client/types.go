@@ -4148,11 +4148,14 @@ func NewUploadChatAttachmentGatewayError(body *UploadChatAttachmentGatewayErrorR
 
 // NewServeChatAttachmentResultOK builds a "assets" service
 // "serveChatAttachment" endpoint result from a HTTP "OK" response.
-func NewServeChatAttachmentResultOK(contentType string, contentLength int64, lastModified string) *assets.ServeChatAttachmentResult {
+func NewServeChatAttachmentResultOK(contentType string, contentLength int64, lastModified string, contentDisposition string, contentSecurityPolicy string, xContentTypeOptions string) *assets.ServeChatAttachmentResult {
 	v := &assets.ServeChatAttachmentResult{}
 	v.ContentType = contentType
 	v.ContentLength = contentLength
 	v.LastModified = lastModified
+	v.ContentDisposition = contentDisposition
+	v.ContentSecurityPolicy = contentSecurityPolicy
+	v.XContentTypeOptions = xContentTypeOptions
 
 	return v
 }
@@ -4470,12 +4473,15 @@ func NewCreateSignedChatAttachmentURLGatewayError(body *CreateSignedChatAttachme
 
 // NewServeChatAttachmentSignedResultOK builds a "assets" service
 // "serveChatAttachmentSigned" endpoint result from a HTTP "OK" response.
-func NewServeChatAttachmentSignedResultOK(contentType string, contentLength int64, lastModified string, accessControlAllowOrigin *string) *assets.ServeChatAttachmentSignedResult {
+func NewServeChatAttachmentSignedResultOK(contentType string, contentLength int64, lastModified string, accessControlAllowOrigin *string, contentDisposition string, contentSecurityPolicy string, xContentTypeOptions string) *assets.ServeChatAttachmentSignedResult {
 	v := &assets.ServeChatAttachmentSignedResult{}
 	v.ContentType = contentType
 	v.ContentLength = contentLength
 	v.LastModified = lastModified
 	v.AccessControlAllowOrigin = accessControlAllowOrigin
+	v.ContentDisposition = contentDisposition
+	v.ContentSecurityPolicy = contentSecurityPolicy
+	v.XContentTypeOptions = xContentTypeOptions
 
 	return v
 }

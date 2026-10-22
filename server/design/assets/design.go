@@ -282,6 +282,9 @@ var _ = Service("assets", func() {
 				Header("content_type:Content-Type")
 				Header("content_length:Content-Length")
 				Header("last_modified:Last-Modified")
+				Header("content_disposition:Content-Disposition")
+				Header("content_security_policy:Content-Security-Policy")
+				Header("x_content_type_options:X-Content-Type-Options")
 			})
 
 			security.ByKeyHeader()
@@ -337,6 +340,9 @@ var _ = Service("assets", func() {
 				Header("content_length:Content-Length")
 				Header("last_modified:Last-Modified")
 				Header("access_control_allow_origin:Access-Control-Allow-Origin")
+				Header("content_disposition:Content-Disposition")
+				Header("content_security_policy:Content-Security-Policy")
+				Header("x_content_type_options:X-Content-Type-Options")
 			})
 
 			SkipResponseBodyEncodeDecode()
@@ -526,11 +532,14 @@ var ServeChatAttachmentForm = Type("ServeChatAttachmentForm", func() {
 })
 
 var ServeChatAttachmentResult = Type("ServeChatAttachmentResult", func() {
-	Required("content_type", "content_length", "last_modified")
+	Required("content_type", "content_length", "last_modified", "content_disposition", "content_security_policy", "x_content_type_options")
 
 	Attribute("content_type", String)
 	Attribute("content_length", Int64)
 	Attribute("last_modified", String)
+	Attribute("content_disposition", String)
+	Attribute("content_security_policy", String)
+	Attribute("x_content_type_options", String)
 })
 
 var CreateSignedChatAttachmentURLForm = Type("CreateSignedChatAttachmentURLForm", func() {
@@ -562,10 +571,13 @@ var ServeChatAttachmentSignedForm = Type("ServeChatAttachmentSignedForm", func()
 })
 
 var ServeChatAttachmentSignedResult = Type("ServeChatAttachmentSignedResult", func() {
-	Required("content_type", "content_length", "last_modified")
+	Required("content_type", "content_length", "last_modified", "content_disposition", "content_security_policy", "x_content_type_options")
 
 	Attribute("content_type", String)
 	Attribute("content_length", Int64)
 	Attribute("last_modified", String)
 	Attribute("access_control_allow_origin", String)
+	Attribute("content_disposition", String)
+	Attribute("content_security_policy", String)
+	Attribute("x_content_type_options", String)
 })

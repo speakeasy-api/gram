@@ -179,9 +179,12 @@ type ServeChatAttachmentForm struct {
 // ServeChatAttachmentResult is the result type of the assets service
 // serveChatAttachment method.
 type ServeChatAttachmentResult struct {
-	ContentType   string
-	ContentLength int64
-	LastModified  string
+	ContentType           string
+	ContentLength         int64
+	LastModified          string
+	ContentDisposition    string
+	ContentSecurityPolicy string
+	XContentTypeOptions   string
 }
 
 // ServeChatAttachmentSignedForm is the payload type of the assets service
@@ -198,6 +201,9 @@ type ServeChatAttachmentSignedResult struct {
 	ContentLength            int64
 	LastModified             string
 	AccessControlAllowOrigin *string
+	ContentDisposition       string
+	ContentSecurityPolicy    string
+	XContentTypeOptions      string
 }
 
 // ServeFunctionForm is the payload type of the assets service serveFunction

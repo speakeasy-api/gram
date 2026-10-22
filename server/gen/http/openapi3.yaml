@@ -19153,14 +19153,23 @@ paths:
                                 type: string
                     description: OK response.
                     headers:
+                        Content-Disposition:
+                            schema:
+                                type: string
                         Content-Length:
                             schema:
                                 format: int64
                                 type: integer
+                        Content-Security-Policy:
+                            schema:
+                                type: string
                         Content-Type:
                             schema:
                                 type: string
                         Last-Modified:
+                            schema:
+                                type: string
+                        X-Content-Type-Options:
                             schema:
                                 type: string
                 "400":
@@ -19252,14 +19261,23 @@ paths:
                         Access-Control-Allow-Origin:
                             schema:
                                 type: string
+                        Content-Disposition:
+                            schema:
+                                type: string
                         Content-Length:
                             schema:
                                 format: int64
                                 type: integer
+                        Content-Security-Policy:
+                            schema:
+                                type: string
                         Content-Type:
                             schema:
                                 type: string
                         Last-Modified:
+                            schema:
+                                type: string
+                        X-Content-Type-Options:
                             schema:
                                 type: string
                 "400":
@@ -116144,17 +116162,26 @@ components:
         ServeChatAttachmentResult:
             type: object
             properties:
+                content_disposition:
+                    type: string
                 content_length:
                     type: integer
                     format: int64
+                content_security_policy:
+                    type: string
                 content_type:
                     type: string
                 last_modified:
+                    type: string
+                x_content_type_options:
                     type: string
             required:
                 - content_type
                 - content_length
                 - last_modified
+                - content_disposition
+                - content_security_policy
+                - x_content_type_options
         ServeChatAttachmentSignedForm:
             type: object
             properties:
@@ -116168,17 +116195,26 @@ components:
             properties:
                 access_control_allow_origin:
                     type: string
+                content_disposition:
+                    type: string
                 content_length:
                     type: integer
                     format: int64
+                content_security_policy:
+                    type: string
                 content_type:
                     type: string
                 last_modified:
+                    type: string
+                x_content_type_options:
                     type: string
             required:
                 - content_type
                 - content_length
                 - last_modified
+                - content_disposition
+                - content_security_policy
+                - x_content_type_options
         ServeFunctionForm:
             type: object
             properties:

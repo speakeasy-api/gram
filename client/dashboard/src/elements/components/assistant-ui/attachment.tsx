@@ -37,7 +37,11 @@ import { getApiUrl } from "@/elements/lib/api";
 import { useAuth } from "@/elements/hooks/useAuth";
 import { useElements } from "@/elements/hooks/useElements";
 import { cn } from "@/lib/utils";
-import { attachmentTypeLabel } from "./attachment.helpers";
+import {
+  attachmentTypeLabel,
+  isPassiveImageType,
+  opensInBrowserTab,
+} from "./attachment.helpers";
 
 const useFileSrc = (file: File | undefined) => {
   const [src, setSrc] = useState<string | undefined>(undefined);
@@ -87,7 +91,9 @@ const useAuthenticatedSrc = (url: string | undefined) => {
         });
         if (!response.ok) return;
         const blob = await response.blob();
-        if (cancelled) return;
+        // An SVG blob URL opened from the image's context menu would run its
+        // script as the dashboard, so only raster images get a preview.
+        if (cancelled || !isPassiveImageType(blob.type)) return;
         objectUrl = URL.createObjectURL(blob);
         setSrc(objectUrl);
       } catch {
@@ -174,43 +180,55 @@ const AttachmentPreviewDialog: FC<PropsWithChildren> = ({ children }) => {
  * Opens an attachment that has no inline preview — a PDF, a spec, an audio
  * file. Composer-stage files open straight from the picked `File`; a stored one
  * is fetched with session headers first, because the serve endpoint rejects an
- * unauthenticated `window.open`.
+ * unauthenticated `window.open`. Types that could run script as the dashboard
+ * (HTML, SVG, XML) are downloaded rather than opened.
  */
 const useOpenAttachment = () => {
   const { config } = useElements();
   const apiUrl = getApiUrl(config);
   const auth = useAuth({ auth: config.api, projectSlug: config.projectSlug });
   const ensureValidHeaders = auth.ensureValidHeaders;
-  const { file, fileUrl } = useAuiState(
-    useShallow(({ attachment }): { file?: File; fileUrl?: string } => {
-      const url = attachment.content?.filter((c) => c.type === "file")[0]?.data;
-      return {
-        ...(attachment.file ? { file: attachment.file } : {}),
-        ...(url ? { fileUrl: url } : {}),
-      };
-    }),
+  const { file, fileUrl, name } = useAuiState(
+    useShallow(
+      ({ attachment }): { file?: File; fileUrl?: string; name: string } => {
+        const url = attachment.content?.filter((c) => c.type === "file")[0]
+          ?.data;
+        return {
+          ...(attachment.file ? { file: attachment.file } : {}),
+          ...(url ? { fileUrl: url } : {}),
+          name: attachment.name,
+        };
+      },
+    ),
   );
 
   const open = useCallback(async () => {
-    let objectUrl: string | undefined;
+    let blob: Blob | undefined;
     if (file) {
-      objectUrl = URL.createObjectURL(file);
+      blob = file;
     } else if (fileUrl?.startsWith(apiUrl)) {
       const response = await fetch(fileUrl, {
         headers: await ensureValidHeaders(),
       });
       if (!response.ok) return;
-      objectUrl = URL.createObjectURL(await response.blob());
+      blob = await response.blob();
     } else if (fileUrl) {
       window.open(fileUrl, "_blank", "noopener,noreferrer");
       return;
     }
-    if (!objectUrl) return;
-    const opened = objectUrl;
-    window.open(opened, "_blank", "noopener,noreferrer");
-    // The new tab has loaded it by now; keeping the URL alive leaks the blob.
-    setTimeout(() => URL.revokeObjectURL(opened), 60_000);
-  }, [file, fileUrl, apiUrl, ensureValidHeaders]);
+    if (!blob) return;
+    const objectUrl = URL.createObjectURL(blob);
+    if (opensInBrowserTab(blob.type)) {
+      window.open(objectUrl, "_blank", "noopener,noreferrer");
+    } else {
+      const link = document.createElement("a");
+      link.href = objectUrl;
+      link.download = name || "attachment";
+      link.click();
+    }
+    // The new tab or download has read it by now; keeping the URL alive leaks the blob.
+    setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
+  }, [file, fileUrl, name, apiUrl, ensureValidHeaders]);
 
   return { open };
 };
