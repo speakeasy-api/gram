@@ -267,6 +267,11 @@ type tokenGrant struct {
 // none takes the clientless branch.
 func (s *Service) tokenGrantFor(r *http.Request, grantType string, creds presentedClientCredentials) (tokenGrant, bool) {
 	switch grantType {
+	case "client_credentials":
+		if s.assistantWorkloadTokens == nil {
+			return tokenGrant{clientAuth: tokenClientAuthUndeclared, resolveMode: "", authenticated: nil, clientless: nil}, false
+		}
+		return tokenGrant{clientAuth: tokenClientAuthRequired, resolveMode: lookupClientOnly, authenticated: s.handleAssistantClientCredentialsGrant, clientless: nil}, true
 	// Authorization-code and refresh grants continue an authorization that
 	// already passed admission, so they resolve the client from the database
 	// only.

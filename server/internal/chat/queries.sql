@@ -600,6 +600,15 @@ candidate_chats AS (
       OR u.email ILIKE '%' || @search || '%'
       OR ua.email ILIKE '%' || @search || '%'
     )
+    -- Eager runtime warmup persists a blank chat, not a user session.
+    -- Apply this outside the optional assistant filter for ordinary lists too.
+    AND NOT EXISTS (
+      SELECT 1 FROM assistant_threads warmup
+      WHERE warmup.chat_id = c.id
+        AND warmup.project_id = c.project_id
+        AND warmup.deleted IS FALSE
+        AND warmup.source_kind = 'warmup'
+    )
     AND (
       @assistant_id = ''
       OR EXISTS (
@@ -759,6 +768,15 @@ candidate_chats AS (
       OR u.display_name ILIKE '%' || @search || '%'
       OR u.email ILIKE '%' || @search || '%'
       OR ua.email ILIKE '%' || @search || '%'
+    )
+    -- Eager runtime warmup persists a blank chat, not a user session.
+    -- Apply this outside the optional assistant filter for ordinary lists too.
+    AND NOT EXISTS (
+      SELECT 1 FROM assistant_threads warmup
+      WHERE warmup.chat_id = c.id
+        AND warmup.project_id = c.project_id
+        AND warmup.deleted IS FALSE
+        AND warmup.source_kind = 'warmup'
     )
     AND (
       @assistant_id = ''
@@ -1063,7 +1081,7 @@ assistant_chats AS MATERIALIZED (
     AND c.project_id = at.project_id
     AND c.deleted IS FALSE
   WHERE at.project_id = @project_id
-    AND at.source_kind <> 'setup'
+    AND at.source_kind NOT IN ('setup', 'warmup')
     AND at.deleted IS FALSE
     AND (@external_user_id::text = '' OR c.external_user_id = @external_user_id::text)
     AND (@user_id::text = '' OR c.user_id = @user_id::text)
@@ -1112,7 +1130,7 @@ JOIN chats c
   AND c.deleted IS FALSE
 WHERE at.assistant_id = @assistant_id
   AND at.project_id = @project_id
-  AND at.source_kind <> 'setup'
+  AND at.source_kind NOT IN ('setup', 'warmup')
   AND at.deleted IS FALSE
   AND at.correlation_id > @after_correlation_id
   AND (@external_user_id::text = '' OR c.external_user_id = @external_user_id::text)
@@ -2257,3 +2275,37 @@ FROM ancestry ORDER BY root_id, (slack_channel_id IS NULL), depth;
 -- name: LockChatRowForTest :exec
 -- Test fixture: hold the lock an ordinary helper capture takes on its own row.
 SELECT id FROM chats WHERE id = @id AND project_id = @project_id FOR NO KEY UPDATE;
+
+-- name: GetKitProjectionMessage :one
+SELECT * FROM chat_messages WHERE project_id = @project_id AND id = @id;
+
+-- name: PatchKitProjectionMessage :execrows
+UPDATE chat_messages SET content = @content, content_raw = @content_raw,
+ tool_calls = @tool_calls, content_hash = @content_hash, finish_reason = @finish_reason,
+ risk_analyzed_at = CASE WHEN content IS DISTINCT FROM @content OR content_raw IS DISTINCT FROM @content_raw OR tool_calls IS DISTINCT FROM @tool_calls THEN NULL ELSE risk_analyzed_at END
+WHERE project_id = @project_id AND chat_id = @chat_id AND id = @id AND source = 'kit'
+AND (content IS DISTINCT FROM @content OR content_raw IS DISTINCT FROM @content_raw OR tool_calls IS DISTINCT FROM @tool_calls OR finish_reason IS DISTINCT FROM @finish_reason);
+
+-- name: ValidateKitTranscriptBinding :one
+SELECT t.id FROM assistant_threads t
+JOIN assistant_runtimes r ON r.assistant_id = t.assistant_id AND r.project_id = t.project_id
+JOIN assistants a ON a.id = t.assistant_id AND a.project_id = t.project_id
+JOIN chats c ON c.id = t.chat_id AND c.project_id = t.project_id
+WHERE t.project_id = @project_id AND t.assistant_id = @assistant_id AND t.id = @thread_id AND t.chat_id = @chat_id
+AND r.id = @runtime_id AND r.runtime_version = 3 AND NOT r.deleted AND NOT r.ended
+AND NOT t.deleted AND NOT c.deleted AND NOT a.deleted AND a.status = 'active';
+
+-- name: SetKitCompletionRuntimeFixture :exec
+-- Test fixture: exercise live runtime admission independently of key validity.
+UPDATE assistant_runtimes
+SET runtime_version = @runtime_version, ended_at = sqlc.narg(ended_at)::timestamptz
+WHERE id = @runtime_id AND project_id = @project_id;
+
+-- name: RevokeKitCompletionBindingFixture :exec
+-- Test fixture: revoke only the binding, keeping the principal API key live.
+UPDATE assistant_inference_credentials SET revoked_at = clock_timestamp()
+WHERE api_key_id = @id::uuid AND project_id = @project_id;
+
+-- name: DeleteKitCompletionBindingFixture :exec
+-- Test fixture: remove only the binding, keeping the principal API key live.
+DELETE FROM assistant_inference_credentials WHERE api_key_id = @id::uuid AND project_id = @project_id;

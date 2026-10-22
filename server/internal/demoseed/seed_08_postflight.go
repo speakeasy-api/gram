@@ -408,6 +408,11 @@ func (s *seeder) postflightCore(ctx context.Context) error {
 			fail:  postflightMustBeZero("%d gateway members are not servable"),
 		},
 		{
+			what:  "tunnel endpoints",
+			count: byProject(s.q.PostflightCountTunnelEndpoints),
+			fail:  postflightMustEqual(1, "expected 1 private tunnel endpoint, found %d"),
+		},
+		{
 			what: "active session quarantines",
 			count: func() (int64, error) {
 				return s.q.PostflightCountActiveQuarantines(ctx, repo.PostflightCountActiveQuarantinesParams{OrgID: org, ProjectID: proj})

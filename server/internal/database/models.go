@@ -573,6 +573,8 @@ type Assistant struct {
 	// @access: confidential
 	MaxConcurrency int64
 	// @access: confidential
+	RuntimeVersion int16
+	// @access: confidential
 	Status string
 	// @access: confidential
 	CreatedAt pgtype.Timestamptz
@@ -638,6 +640,82 @@ type AssistantDashboardMessage struct {
 	Content string
 	// @access: confidential
 	Seq int64
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+}
+
+type AssistantInferenceCredential struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: confidential
+	AssistantID uuid.UUID
+	// @access: confidential
+	RuntimeID uuid.UUID
+	// @access: confidential
+	ApiKeyID uuid.UUID
+	// @access: opaque-restricted
+	IdentityJson []byte
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	RevokedAt pgtype.Timestamptz
+}
+
+type AssistantKitGatewayCredential struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	ProjectID uuid.NullUUID
+	// @access: confidential
+	AssistantID uuid.NullUUID
+	// @access: confidential
+	RuntimeID uuid.NullUUID
+	// @access: secret-restricted
+	TokenCiphertext string
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+}
+
+type AssistantKitInterruptRequest struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	ProjectID uuid.NullUUID
+	// @access: confidential
+	AssistantID uuid.NullUUID
+	// @access: confidential
+	RuntimeID uuid.NullUUID
+	// @access: confidential
+	AssistantThreadID uuid.NullUUID
+	// @access: confidential
+	EventID uuid.NullUUID
+	// @access: confidential
+	Attempt int64
+	// @access: confidential
+	Outcome string
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	AcknowledgedAt pgtype.Timestamptz
+}
+
+type AssistantKitSession struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	ProjectID uuid.NullUUID
+	// @access: confidential
+	AssistantID uuid.NullUUID
+	// @access: confidential
+	RuntimeID uuid.NullUUID
+	// @access: confidential
+	AssistantThreadID uuid.NullUUID
+	// @access: confidential
+	AcpSessionID string
 	// @access: confidential
 	CreatedAt pgtype.Timestamptz
 }
@@ -1910,6 +1988,12 @@ type DirectoryUser struct {
 	DirectoryID pgtype.Text
 	// @access: confidential-pii
 	Email pgtype.Text
+	// Given name from the WorkOS directory user. NULL until a dsync.user event or the name backfill provides it.
+	// @access: confidential-pii
+	FirstName pgtype.Text
+	// Family name from the WorkOS directory user. NULL until a dsync.user event or the name backfill provides it.
+	// @access: confidential-pii
+	LastName pgtype.Text
 	// @access: opaque-restricted
 	Attributes []byte
 	// @access: confidential
@@ -7634,6 +7718,10 @@ type UserSession struct {
 type UserSessionClient struct {
 	// @access: confidential
 	ID uuid.UUID
+	// @access: confidential
+	AssistantTriggerWorkloadBindingID uuid.NullUUID
+	// @access: confidential
+	AssistantRuntimeID uuid.NullUUID
 	// @access: confidential
 	ProjectID uuid.NullUUID
 	// @access: confidential

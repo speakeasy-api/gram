@@ -627,6 +627,14 @@ func (a *Activities) TransitionDeployment(ctx context.Context, projectID uuid.UU
 	return a.transitionDeployment.Do(ctx, projectID, deploymentID, status)
 }
 
+func (a *Activities) CompleteDeploymentWithExpectedActive(ctx context.Context, projectID uuid.UUID, deploymentID uuid.UUID, expectedActive uuid.UUID) (*activities.TransitionDeploymentResult, error) {
+	result, err := a.transitionDeployment.CompleteWithExpectedActive(ctx, projectID, deploymentID, expectedActive)
+	if err != nil {
+		return nil, fmt.Errorf("complete deployment with active snapshot guard: %w", err)
+	}
+	return result, nil
+}
+
 func (a *Activities) ProcessDeployment(ctx context.Context, projectID uuid.UUID, deploymentID uuid.UUID) error {
 	return a.processDeployment.Do(ctx, projectID, deploymentID)
 }

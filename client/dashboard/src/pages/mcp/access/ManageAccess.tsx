@@ -30,7 +30,13 @@ import { invalidateAllRoles } from "@gram/client/react-query/roles.js";
 import { invalidateAllPlugin } from "@gram/client/react-query/plugin.js";
 import { invalidateAllPlugins } from "@gram/client/react-query/plugins.js";
 import { useMembers } from "@gram/client/react-query/members.js";
+import { useDirectoryRoleMappings } from "@gram/client/react-query/directoryRoleMappings.js";
 import { useQueryClient } from "@tanstack/react-query";
+import {
+  type RoleDirectorySource,
+  roleDirectorySources,
+} from "@/pages/access/directorySourcesForRole";
+import { RoleDirectorySourceLine } from "./RoleDirectorySourceLine";
 import {
   Bot,
   ChevronLeft,
@@ -164,6 +170,24 @@ export function ManageAccess({
       ]),
     );
   }, [membersData]);
+
+  // Where the directory hands out each role. Administrators only: the
+  // mappings name attribute values, which can carry personal data.
+  const { data: mappingsData } = useDirectoryRoleMappings(
+    undefined,
+    undefined,
+    { enabled: isAdmin, throwOnError: false },
+  );
+  const sourcesFor = useMemo(() => {
+    const members = membersData?.members ?? [];
+    // Disabling the query keeps cached data, so a lost admin scope hides it
+    // here too rather than waiting for the cache to go.
+    const data = isAdmin ? mappingsData : undefined;
+    return (row: AccessRow): RoleDirectorySource[] =>
+      data && row.kind === "role"
+        ? roleDirectorySources(data, members, row)
+        : [];
+  }, [isAdmin, mappingsData, membersData]);
 
   const rows = useMemo(() => buildAccessRows(entries), [entries]);
 
@@ -401,6 +425,8 @@ export function ManageAccess({
                 key={row.principalUrn}
                 row={row}
                 rolePlugins={showPlugins ? rolePlugins : undefined}
+                directorySources={sourcesFor(row)}
+                reviewHref={orgRoutes.identity.href()}
                 faces={row.memberIds
                   .map((id) => facesById.get(id))
                   .filter((member) => member !== undefined)}
@@ -546,6 +572,8 @@ export function ManageAccess({
 function PrincipalRow({
   row,
   rolePlugins,
+  directorySources,
+  reviewHref,
   faces,
   catalog,
   onAllow,
@@ -561,6 +589,10 @@ function PrincipalRow({
 }: {
   row: AccessRow;
   rolePlugins?: ResourceAudienceRolePlugin[];
+  /** The directory groups and attribute values that give out a role. */
+  directorySources: RoleDirectorySource[];
+  /** The IDP and SSO tab, where a removed source's review item waits. */
+  reviewHref: string;
   /** The people a role reaches, for the facepile on its row. */
   faces: FacepileMember[];
   /** The server's tools, for resolving what a rule and a block leave. */
@@ -605,6 +637,10 @@ function PrincipalRow({
               row.displayName
             )}
           </span>
+          <RoleDirectorySourceLine
+            sources={directorySources}
+            reviewHref={reviewHref}
+          />
         </div>
 
         <Text muted small className="min-w-0 truncate">

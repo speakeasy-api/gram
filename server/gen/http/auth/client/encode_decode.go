@@ -10,6 +10,7 @@ package client
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -2255,6 +2256,9 @@ func EncodeTransferInRequest(encoder func(*http.Request) goahttp.Encoder) func(*
 		}
 		if p.Redirect != nil {
 			values.Add("redirect", *p.Redirect)
+		}
+		if p.ReplaceSession != nil {
+			values.Add("replace_session", fmt.Sprintf("%v", *p.ReplaceSession))
 		}
 		req.URL.RawQuery = values.Encode()
 		return nil

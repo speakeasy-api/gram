@@ -263,6 +263,9 @@ func newPrivateIngressRuntime(ctx context.Context, c *cli.Context, logger *slog.
 	assistantsCore.SetWakeCanceller(triggerApp)
 	assistantsCore.SetDashboardIngestor(triggerApp)
 	assistantsCore.SetChatMessageWriter(chatWriter)
+	if err := installKitLocalRuntimeFromCLI(c, assistantsCore, db, auditLogger, redisClient, serverURL); err != nil {
+		return nil, err
+	}
 	assistantsCore.SetAssetStorage(assetStorage)
 	assistantsCore.SetAssetSigningKey(c.String(usersessions.JWTSigningKeyFlag))
 	assistantsCore.SetSlackImageInlining(env, slackapi.NewClient("", guardianPolicy.PooledClient()))
@@ -293,11 +296,14 @@ func newPrivateIngressRuntime(ctx context.Context, c *cli.Context, logger *slog.
 	}
 	r.cleanup = append(r.cleanup, func(context.Context) error { remoteSessionDeps.Refresher.Shutdown(); return nil })
 	challengeManager := remoteSessionDeps.Challenges
+	tunnelCollector, stopTunnelMetrics := newTunnelMetrics(ctx, logger, broker)
+	r.cleanup = append(r.cleanup, stopTunnelMetrics)
 	mcpService, err := newMCPService(c, mcpServiceDependencies{
 		CallerAssertions: callerAssertions,
 		IssuerGate:       issuerGate, IssuerSigner: issuerSigner,
 		Logger: logger, Tracer: tracerProvider, Meter: meterProvider, DB: db, Redis: redisClient,
-		Sessions: sessionManager, ChatSessions: chatSessions, Environment: env,
+		TunnelMetrics: tunnelCollector,
+		Sessions:      sessionManager, ChatSessions: chatSessions, Environment: env,
 		Posthog: posthogClient, Features: featureFlags, ServerURL: serverURL, SiteURL: siteURL,
 		Encryption: enc, Guardian: guardianPolicy, Functions: functionsOrchestrator,
 		BillingTracker: billingTracker, Billing: billingRepo, Telemetry: telemLogger, TelemetryService: telemSvc,

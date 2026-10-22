@@ -1,5 +1,12 @@
 # admin
 
+## 0.9.4
+
+### Patch Changes
+
+- e2ab479: The typed auth client backfill now also records static credential and pass-through clients from a source's credential headers, copies credential headers onto upstream OAuth clients, and records EMA clients from ready identity chaining bindings. It keeps copies and scopes in sync, retires what the configuration no longer yields, runs each phase independently under a per-organization lock, and reports per-kind counts and why anything is unresolved.
+- 03b4725: Record a typed auth client for every upstream OAuth client an MCP server uses, as a separate step of the admin upstream OAuth migration, retire backfilled records whose association or client is gone, and mark servers that offer one as needing upstream authentication where that is still undecided. Nothing reads these records yet.
+
 ## 0.9.3
 
 ### Patch Changes

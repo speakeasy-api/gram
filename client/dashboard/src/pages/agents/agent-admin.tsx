@@ -8,7 +8,7 @@
  */
 import { DangerSettingsSection } from "@/components/page-templates";
 import { Badge } from "@/components/ui/Badge";
-import { Button } from "@/components/ui/Button";
+import { Button, type ButtonProps } from "@/components/ui/Button";
 import { Label } from "@/components/ui/Label";
 import { Dialog } from "@/components/ui/Dialog";
 import { Input } from "@/components/ui/Input";
@@ -143,9 +143,13 @@ export function AgentIdentityFacts({
 export function RenameAgentButton({
   agent,
   refresh,
+  variant = "secondary",
+  size,
 }: {
   agent: ManagedAgent;
   refresh: () => void;
+  variant?: ButtonProps["variant"];
+  size?: ButtonProps["size"];
   // Null when the reader may not rename: the control is the whole output.
 }): JSX.Element | null {
   const [open, setOpen] = useState(false);
@@ -170,7 +174,9 @@ export function RenameAgentButton({
       }}
     >
       <Dialog.Trigger asChild>
-        <Button variant="secondary">Rename</Button>
+        <Button variant={variant} size={size}>
+          Rename
+        </Button>
       </Dialog.Trigger>
       <Dialog.Content>
         <Dialog.Header>

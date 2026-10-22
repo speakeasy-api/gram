@@ -262,6 +262,9 @@ func (s *seeder) seedServers(ctx context.Context) error {
 	}); err != nil {
 		return fmt.Errorf("insert demo gateway endpoints: %w", err)
 	}
+	if err := s.seedServersTunnel(ctx); err != nil {
+		return err
+	}
 	if err := s.seedServersEMA(ctx); err != nil {
 		return err
 	}
@@ -509,6 +512,42 @@ func (s *seeder) seedServers(ctx context.Context) error {
 
 	return nil
 }
+
+// seedServersTunnel: a private MCP server reached through a disconnected
+// tunnel, so the tunnel Overview has a source to chart without a live agent.
+func (s *seeder) seedServersTunnel(ctx context.Context) error {
+	proj := s.projectID()
+	slug := s.spec.OrgSlug + "-private-inventory"
+	if err := s.q.ServersInsertPrivateInventoryTunnel(ctx, repo.ServersInsertPrivateInventoryTunnelParams{
+		ID:        s.tunnelSourceID(),
+		ProjectID: proj,
+		KeySeed:   s.name("inert-tunnel-key"),
+	}); err != nil {
+		return fmt.Errorf("insert demo private inventory tunnel: %w", err)
+	}
+	if err := s.q.ServersInsertPrivateInventoryMCPServer(ctx, repo.ServersInsertPrivateInventoryMCPServerParams{
+		ID:        s.tunnelServerID(),
+		ProjectID: proj,
+		Slug:      slug,
+		TunnelID:  s.tunnelSourceID(),
+	}); err != nil {
+		return fmt.Errorf("insert demo private inventory mcp server: %w", err)
+	}
+	if err := s.q.ServersInsertPrivateInventoryEndpoint(ctx, repo.ServersInsertPrivateInventoryEndpointParams{
+		ID:          s.det("endpoint-private-inventory"),
+		ProjectID:   proj,
+		McpServerID: s.tunnelServerID(),
+		Slug:        slug,
+	}); err != nil {
+		return fmt.Errorf("insert demo private inventory endpoint: %w", err)
+	}
+	return nil
+}
+
+// tunnelSourceID and tunnelServerID join the tunnel's Postgres rows to its
+// ClickHouse metric snapshots.
+func (s *seeder) tunnelSourceID() uuid.UUID { return s.det("tunneledmcp-private-inventory") }
+func (s *seeder) tunnelServerID() uuid.UUID { return s.det("mcpserver-private-inventory") }
 
 // seedServersEMA: Enterprise Managed Authorization. Acme Identity is a
 // fictional identity provider for two fictional services behind workforce

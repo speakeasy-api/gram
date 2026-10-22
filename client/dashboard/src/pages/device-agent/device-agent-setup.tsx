@@ -34,11 +34,16 @@ import {
 const RELEASES_BASE =
   "https://storage.googleapis.com/speakeasy-device-agent-releases-prod";
 const MANIFEST_URL = `${RELEASES_BASE}/releases.json`;
+// The server's stable link to the current signed Windows msi (a 302 to the
+// versioned file in the release bucket). It sits under /rpc, which the
+// Ingress routes to the server.
+const STABLE_MSI_PATH = "/rpc/install/device-agent-windows.msi";
 
 // Public docs: what the device agent is, and the MDM rollout guide.
 const DOCS_DEVICE_AGENT =
   "https://www.speakeasy.com/docs/ai-control-plane/reference/device-agent";
 const DOCS_MDM = `${DOCS_DEVICE_AGENT}/mdm-installations`;
+const DOCS_LINUX = `${DOCS_MDM}/linux`;
 
 // Shared inline-link styling for the anchors/Links on this page.
 const LINK_CLASS = "underline underline-offset-2 hover:text-foreground";
@@ -201,6 +206,7 @@ type ScriptOsSpec = BaseOsSpec & {
   serviceNote?: React.ReactNode;
   serviceRegister: string;
   verify: string;
+  verifyNote?: React.ReactNode;
   // Manifest platform keys to surface as direct-download links for this OS.
   downloadKeys: string[];
   // The OS ships a root-helper install package (.deb/.rpm on Linux) that gets
@@ -244,12 +250,37 @@ mkdir -p ${LINUX_AGENT_DIR}
 mv speakeasyd speakeasy ${LINUX_AGENT_DIR}/`,
     serviceNote: (
       <>
-        Installs <code>speakeasyd</code> as a systemd service.
+        Run these as the person who uses the machine, without <code>sudo</code>:
+        the service is per user. The first two lines turn on self-update, unless
+        IT&apos;s <code>managed.json</code> says otherwise. The{" "}
+        <code>add-wants</code> line starts the service at every login; on a
+        machine nobody logs in to, also run{" "}
+        <code>sudo loginctl enable-linger $USER</code>.
       </>
     ),
-    serviceRegister: `${LINUX_AGENT_DIR}/speakeasyd -service install
+    // The unit `-service install` writes is wanted by multi-user.target, which
+    // a user's systemd manager never reaches, so without add-wants the daemon
+    // never starts again after a reboot or logout.
+    serviceRegister: `mkdir -p ~/.config/speakeasy
+[ -e ~/.config/speakeasy/local.json ] || echo '{"auto_update": "automatic"}' > ~/.config/speakeasy/local.json
+${LINUX_AGENT_DIR}/speakeasyd -service install
+systemctl --user add-wants default.target com.speakeasy.daemon.service
 ${LINUX_AGENT_DIR}/speakeasyd -service start`,
     verify: `${LINUX_AGENT_DIR}/speakeasy status`,
+    verifyNote: (
+      <>
+        Want a tray icon? The optional <code>speakeasy-ui</code> app (x64 only)
+        goes in the same folder, and nothing starts it for you. The{" "}
+        <ExternalLink
+          href={DOCS_LINUX}
+          target="_blank"
+          iconSuffixName="external-link"
+        >
+          Linux guide
+        </ExternalLink>{" "}
+        has the steps.
+      </>
+    ),
     downloadKeys: ["linux/amd64", "linux/arm64"],
     hasHelperPackage: true,
   },
@@ -768,11 +799,25 @@ function ConfigurationProfileNote() {
   );
 }
 
+// managedAutoUpdate picks the update mode the example managed.json ships with.
+// The macOS pkg and the per-user Linux install update themselves, so they get
+// "automatic". Windows self-update is not yet validated on real hardware
+// (DNO-1122), so Windows fleets keep "notify" and re-push the msi. Without an
+// OS (onboarding covers every platform) the example uses "automatic" and the
+// help text calls out Windows.
+function managedAutoUpdate(os?: OsKey): "automatic" | "notify" {
+  return os === "windows" ? "notify" : "automatic";
+}
+
 // ManagedProfileExample is the managed.json template plus the inline
 // mint action for its org_token. Shared by the setup sheet's identity
-// step and onboarding's MDM rollout breakdown, so the file an admin copies is
-// identical wherever they meet it.
-export function ManagedProfileExample(): React.JSX.Element {
+// step, which passes its OS, and onboarding's MDM rollout breakdown, which
+// covers every platform.
+export function ManagedProfileExample({
+  os,
+}: {
+  os?: OsKey;
+}): React.JSX.Element {
   const { name: orgName, slug: orgSlug } = useOrganization();
   const apiKeysHref = useOrgRoutes().apiKeys.href();
 
@@ -789,7 +834,7 @@ export function ManagedProfileExample(): React.JSX.Element {
         org_token: orgToken,
         org_slug: orgSlug || "acme-corp",
         org_name: orgName || "Acme Corporation",
-        auto_update: "notify",
+        auto_update: managedAutoUpdate(os),
       },
       null,
       2,
@@ -850,6 +895,12 @@ export function ManagedProfileExample(): React.JSX.Element {
         </strong>{" "}
         in the example to mint the <code>org_token</code>.
       </Text>
+      {os === undefined && (
+        <Text small muted className="mt-2">
+          On Windows, set <code>auto_update</code> to <code>"notify"</code> for
+          now and re-push the msi for new versions.
+        </Text>
+      )}
 
       <div className="mt-4 flex flex-col gap-3">
         {generatedToken && (
@@ -913,9 +964,10 @@ function FleetIdentity({ os }: { os: OsKey }) {
         <SubHeading>File location</SubHeading>
         <Text small muted className="mb-3">
           Deploy the file to the fixed system path for each OS. Create the
-          directory <code>0755</code> and the file <code>0640</code> (or
-          equivalent ACLs on Windows). The file must be{" "}
-          <strong>readable by the user the agent runs as</strong> — the agent
+          directory <code>0755</code> and the file <code>0644</code>, or{" "}
+          <code>0640</code> with the user&apos;s group (equivalent ACLs on
+          Windows); <code>0600</code> silently breaks enrollment. The file must
+          be <strong>readable by the user the agent runs as</strong> — the agent
           runs as the logged-in user, not root. The agent only reads this file;
           it never writes it.
         </Text>
@@ -932,7 +984,7 @@ function FleetIdentity({ os }: { os: OsKey }) {
 
       <div>
         <SubHeading>Example managed.json</SubHeading>
-        <ManagedProfileExample />
+        <ManagedProfileExample os={os} />
       </div>
 
       <div>
@@ -945,7 +997,8 @@ function FleetIdentity({ os }: { os: OsKey }) {
           don't commit it or paste it into chat. If the agent isn't picking up
           the file, confirm the path with the agent CLI&apos;s{" "}
           <code>config path</code> command (run by its install path), check that
-          it's readable by the logged-in user, and validate the JSON.
+          it's readable by the logged-in user, and validate the JSON. The agent
+          reads the file when it starts, so restart it after every change.
         </Text>
       </div>
     </div>
@@ -1010,7 +1063,7 @@ function WinInstallerDownload() {
   // fall back to the manifest rather than the stable link.
   const serverURL = getServerURL();
   const stableMsiUrl = serverURL.startsWith("https:")
-    ? `${serverURL}/v1/install/device-agent-windows.msi`
+    ? `${serverURL}${STABLE_MSI_PATH}`
     : null;
 
   if (version) {
@@ -1223,7 +1276,7 @@ launchctl print "gui/$(id -u)/com.speakeasy.daemon"
 // install from the signed .msi, which lays down the daemon, CLI, and UI under
 // C:\Program Files\Speakeasy\ and registers the machine-wide LocalSystem
 // service itself — no separate service-registration step. The primary snippet
-// uses this Speakeasy server's stable /v1/install URL, which 302-redirects to the
+// uses this Speakeasy server's stable install URL, which 302-redirects to the
 // current version's signed msi, so the copy never goes stale. Like the macOS
 // pkg, the msi is deliberately not listed in releases.json (it's the
 // manual/MDM on-ramp), so the direct-download URL is built from the resolved
@@ -1236,7 +1289,7 @@ function WinInstallStep() {
   // and build the snippet against the (always-HTTPS) release bucket instead.
   const serverURL = getServerURL();
   const stableMsiUrl = serverURL.startsWith("https:")
-    ? `${serverURL}/v1/install/device-agent-windows.msi`
+    ? `${serverURL}${STABLE_MSI_PATH}`
     : null;
   const downloadScript = stableMsiUrl
     ? `Invoke-WebRequest "${stableMsiUrl}" -OutFile speakeasy-agent.msi
@@ -1323,23 +1376,9 @@ function IdentityStep({ os }: { os: OsKey }) {
         for an org; personal enrollment is handy for testing.
       </Text>
       <Tabs defaultValue="fleet" className="gap-6">
-        <TabsList className="grid h-auto w-full grid-cols-2 items-stretch gap-3 divide-x-0 border-0 bg-transparent p-0">
-          <SetupTab
-            value="fleet"
-            icon="building-2"
-            title="Fleet (MDM)"
-            desc="IT sets identity centrally via managed.json."
-          />
-          <SetupTab
-            value="personal"
-            icon="user"
-            title="Personal / PoC"
-            desc={
-              os === "linux"
-                ? "Sign in once with the agent CLI."
-                : "Sign in once in the agent app."
-            }
-          />
+        <TabsList className="w-full">
+          <TabsTrigger value="fleet">Fleet (MDM)</TabsTrigger>
+          <TabsTrigger value="personal">Personal / PoC</TabsTrigger>
         </TabsList>
         <TabsContent value="fleet" className="pt-2">
           <FleetIdentity os={os} />
@@ -1349,32 +1388,6 @@ function IdentityStep({ os }: { os: OsKey }) {
         </TabsContent>
       </Tabs>
     </div>
-  );
-}
-
-// SetupTab renders a bordered card that doubles as a tab trigger.
-function SetupTab({
-  value,
-  icon,
-  title,
-  desc,
-}: {
-  value: string;
-  icon: React.ComponentProps<typeof Icon>["name"];
-  title: string;
-  desc: React.ReactNode;
-}) {
-  return (
-    <TabsTrigger
-      value={value}
-      className="border-border data-[state=active]:border-primary/40 h-auto flex-col items-start justify-start gap-1 border p-4 text-left whitespace-normal"
-    >
-      <div className="flex items-center gap-2">
-        <Icon name={icon} className="h-4 w-4" />
-        <span className="font-medium">{title}</span>
-      </div>
-      <span className="text-muted-foreground text-sm font-normal">{desc}</span>
-    </TabsTrigger>
   );
 }
 
@@ -1452,7 +1465,12 @@ function buildSteps(platform: PlatformKey): SetupStep[] {
   });
   steps.push({
     title: "Verify it's running",
-    body: <CodeBlock language={cfg.lang}>{cfg.verify}</CodeBlock>,
+    body: (
+      <div className="flex flex-col gap-2">
+        <CodeBlock language={cfg.lang}>{cfg.verify}</CodeBlock>
+        {cfg.verifyNote && <StepNote>{cfg.verifyNote}</StepNote>}
+      </div>
+    ),
   });
   if (cfg.hasHelperPackage) {
     steps.push({

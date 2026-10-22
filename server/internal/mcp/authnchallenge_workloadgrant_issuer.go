@@ -88,6 +88,7 @@ func (s *Service) handleIssuerWorkloadAssertionGrant(ctx context.Context, w http
 		projectID = &shared.projectID
 	}
 	return s.issueWorkloadGrantSession(ctx, w, logger, workloadGrantIssuance{
+		client: nil, beforeCommit: nil,
 		presented:  presented,
 		credential: credential,
 		projectID:  projectID,

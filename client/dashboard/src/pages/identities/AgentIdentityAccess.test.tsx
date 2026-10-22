@@ -15,15 +15,24 @@ vi.mock("@/contexts/Auth", () => ({
 }));
 vi.mock("@/contexts/Sdk", () => ({
   useSdkClient: () => ({ agents: { listPolicyGrants: mocks.list } }),
+  useSlugs: () => ({ orgSlug: "org" }),
 }));
-vi.mock("@/pages/access/useOrgMcpServers", () => ({
-  useOrgMcpServers: () => ({
-    groups: [
-      {
-        projectName: "Example project",
-        servers: [{ id: "server_example", name: "Example server" }],
-      },
-    ],
+vi.mock("@/pages/access/useResourceLinkMaps", () => ({
+  useResourceLinkMaps: () => ({
+    projectMap: new Map([
+      ["project_example", { slug: "example", name: "Example project" }],
+    ]),
+    toolsetMap: new Map([
+      [
+        "server_example",
+        {
+          slug: "example-server",
+          name: "Example server",
+          projectId: "project_example",
+        },
+      ],
+    ]),
+    mcpServerMap: new Map(),
   }),
 }));
 vi.mock("@/routes", () => ({
@@ -78,8 +87,11 @@ describe("Agent profile permissions", () => {
     setup();
     expect(await screen.findByText("mcp:connect")).toBeTruthy();
     expect(
+      screen.getByRole("link", { name: /Example server/ }).getAttribute("href"),
+    ).toBe("/org/projects/example/mcp/example-server");
+    expect(
       screen.getByText(
-        /Example server \(Example project\).*Tool: search.*Disposition: read_only.*Server identity: example.*Server URL: https:\/\/example.test\/mcp/,
+        /Project: Example project.*Tool: search.*Disposition: read_only.*Server identity: example.*Server URL: https:\/\/example.test\/mcp/,
       ),
     ).toBeTruthy();
     expect(mocks.list).toHaveBeenCalledWith({ agentId: agent.id }, undefined, {

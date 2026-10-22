@@ -851,7 +851,9 @@ func (s *Service) Evolve(ctx context.Context, form *gen.EvolvePayload) (*gen.Evo
 	return &gen.EvolveResult{Deployment: dep}, nil
 }
 
-func (s *Service) Redeploy(ctx context.Context, payload *gen.RedeployPayload) (*gen.RedeployResult, error) {
+// PrepareRedeploy clones and audits a project snapshot in the caller transaction.
+// The caller must commit before processing; this method starts no workflows.
+func (s *Service) PrepareRedeploy(ctx context.Context, dbtx pgx.Tx, payload *gen.RedeployPayload) (*types.Deployment, error) {
 	span := trace.SpanFromContext(ctx)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
@@ -862,7 +864,11 @@ func (s *Service) Redeploy(ctx context.Context, payload *gen.RedeployPayload) (*
 		return nil, err
 	}
 
-	if payload.DeploymentID == "" {
+	if dbtx == nil {
+		return nil, oops.E(oops.CodeInvalid, nil, "transaction is required").LogError(ctx, s.logger)
+	}
+
+	if payload == nil || payload.DeploymentID == "" {
 		return nil, oops.E(oops.CodeInvalid, nil, "deployment id is required").LogError(ctx, s.logger)
 	}
 
@@ -872,19 +878,15 @@ func (s *Service) Redeploy(ctx context.Context, payload *gen.RedeployPayload) (*
 	logger := s.logger.With(attr.SlogProjectID(projectID.String()), attr.SlogOrganizationID(organizationID))
 	span.SetAttributes(attr.ProjectID(projectID.String()))
 
-	dbtx, err := s.db.Begin(ctx)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error accessing deployments").LogError(ctx, logger)
-	}
-	defer o11y.NoLogDefer(func() error {
-		return dbtx.Rollback(ctx)
-	})
-
 	tx := s.repo.WithTx(dbtx)
 
 	deploymentID, err := uuid.Parse(payload.DeploymentID)
 	if err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "invalid deployment id").LogError(ctx, logger)
+	}
+
+	if _, err := mv.DescribeDeployment(ctx, logger, tx, mv.ProjectID(projectID), mv.DeploymentID(deploymentID)); err != nil {
+		return nil, err
 	}
 
 	newID, err := cloneDeployment(
@@ -931,18 +933,57 @@ func (s *Service) Redeploy(ctx context.Context, payload *gen.RedeployPayload) (*
 		return nil, oops.E(oops.CodeUnexpected, err, "error adding deployment redeploy audit log").LogError(ctx, s.logger)
 	}
 
-	if err := dbtx.Commit(ctx); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error saving deployment").LogError(ctx, logger)
+	return dep, nil
+}
+
+// ProcessRedeploy reads a committed deployment and processes it if still created.
+// It never clones; repeated dispatch uses the existing deployment workflow ID.
+func (s *Service) ProcessRedeploy(ctx context.Context, deploymentID string) (*gen.RedeployResult, error) {
+	return s.processRedeploy(ctx, deploymentID, false, nil)
+}
+
+// DispatchRedeploy starts processing without waiting for the workflow. Promotion
+// must still match expectedActive; uuid.Nil means no active deployment existed.
+func (s *Service) DispatchRedeploy(ctx context.Context, deploymentID string, expectedActive uuid.UUID) (*gen.RedeployResult, error) {
+	return s.processRedeploy(ctx, deploymentID, true, &expectedActive)
+}
+
+func (s *Service) processRedeploy(ctx context.Context, deploymentID string, nonBlocking bool, expectedActive *uuid.UUID) (*gen.RedeployResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	status := dep.Status
-	if status == "created" {
-		s, err := s.startDeployment(ctx, logger, projectID, newID, dep, false)
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	id, err := uuid.Parse(deploymentID)
+	if err != nil {
+		return nil, oops.E(oops.CodeInvalid, err, "invalid deployment id").LogError(ctx, s.logger)
+	}
+
+	projectID := *authCtx.ProjectID
+	logger := s.logger.With(
+		attr.SlogProjectID(projectID.String()),
+		attr.SlogOrganizationID(authCtx.ActiveOrganizationID),
+		attr.SlogDeploymentID(id.String()),
+	)
+
+	dep, err := mv.DescribeDeployment(ctx, logger, s.repo, mv.ProjectID(projectID), mv.DeploymentID(id))
+	if err != nil {
+		return nil, err
+	}
+
+	if dep == nil {
+		return nil, oops.C(oops.CodeNotFound)
+	}
+
+	if dep.Status == "created" {
+		status, err := s.startDeploymentWithExpectedActive(ctx, logger, projectID, id, dep, nonBlocking, expectedActive)
 		if err != nil {
 			return nil, err
 		}
-
-		status = s
 		if status == "" {
 			return nil, oops.E(oops.CodeInvariantViolation, nil, "unable to resolve deployment status").LogError(ctx, logger)
 		}
@@ -950,9 +991,41 @@ func (s *Service) Redeploy(ctx context.Context, payload *gen.RedeployPayload) (*
 		dep.Status = status
 	}
 
-	s.captureDeploymentProcessedEvent(ctx, logger, authCtx.OrganizationSlug, *authCtx.ProjectSlug, "redeploy", dep, nil)
+	projectSlug := ""
+	if authCtx.ProjectSlug != nil {
+		projectSlug = *authCtx.ProjectSlug
+	}
+	s.captureDeploymentProcessedEvent(ctx, logger, authCtx.OrganizationSlug, projectSlug, "redeploy", dep, nil)
 
 	return &gen.RedeployResult{Deployment: dep}, nil
+}
+
+func (s *Service) Redeploy(ctx context.Context, payload *gen.RedeployPayload) (*gen.RedeployResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+		return nil, err
+	}
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error accessing deployments").LogError(ctx, s.logger)
+	}
+	defer o11y.NoLogDefer(func() error {
+		return dbtx.Rollback(ctx)
+	})
+
+	dep, err := s.PrepareRedeploy(ctx, dbtx, payload)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := dbtx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error saving deployment").LogError(ctx, s.logger)
+	}
+
+	return s.ProcessRedeploy(ctx, dep.ID)
 }
 
 type resolvedPackage struct {
@@ -1028,6 +1101,10 @@ func (s *Service) resolvePackages(ctx context.Context, tx *packagesRepo.Queries,
 }
 
 func (s *Service) startDeployment(ctx context.Context, logger *slog.Logger, projectID uuid.UUID, deploymentID uuid.UUID, dep *types.Deployment, nonBlocking bool) (string, error) {
+	return s.startDeploymentWithExpectedActive(ctx, logger, projectID, deploymentID, dep, nonBlocking, nil)
+}
+
+func (s *Service) startDeploymentWithExpectedActive(ctx context.Context, logger *slog.Logger, projectID uuid.UUID, deploymentID uuid.UUID, dep *types.Deployment, nonBlocking bool, expectedActive *uuid.UUID) (string, error) {
 	defer func() {
 		logger.InfoContext(ctx, "starting project-scoped functions reaper")
 		_, err := background.ExecuteProjectFunctionsReaperWorkflow(ctx, s.temporalEnv, projectID)
@@ -1040,9 +1117,10 @@ func (s *Service) startDeployment(ctx context.Context, logger *slog.Logger, proj
 	}()
 
 	wr, err := background.ExecuteProcessDeploymentWorkflow(ctx, s.temporalEnv, background.ProcessDeploymentWorkflowParams{
-		ProjectID:      projectID,
-		DeploymentID:   deploymentID,
-		IdempotencyKey: conv.PtrValOr(dep.IdempotencyKey, ""),
+		ProjectID:                  projectID,
+		DeploymentID:               deploymentID,
+		IdempotencyKey:             conv.PtrValOr(dep.IdempotencyKey, ""),
+		ExpectedActiveDeploymentID: expectedActive,
 	})
 	if err != nil {
 		return "", oops.E(oops.CodeUnexpected, err, "error starting deployment").LogError(ctx, logger)

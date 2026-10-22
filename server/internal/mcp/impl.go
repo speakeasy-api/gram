@@ -113,8 +113,9 @@ type IdentityResolver interface {
 }
 
 type Service struct {
-	federatedLoginConsumer FederatedLoginConsumer
-	identityChainer        identityChainer
+	assistantWorkloadTokens AssistantWorkloadTokenIssuer
+	federatedLoginConsumer  FederatedLoginConsumer
+	identityChainer         identityChainer
 	// authClientPermitter decides whether the caller may use a resolved typed
 	// auth client; nil keeps the connect-equivalent rule (connectPermitter).
 	authClientPermitter       authClientPermitter
@@ -150,8 +151,12 @@ type Service struct {
 	// on the platform hosts. Empty serves not found. Set by
 	// SetOpenAIAppsChallengeToken.
 	openAIAppsChallengeToken string
-	siteURL                  *url.URL
-	posthog                  *posthog.Posthog // posthog metrics will no-op if the dependency is not provided
+	// mcpRegistryAuth is the proof record served at
+	// /.well-known/mcp-registry-auth on the platform hosts. Empty serves not
+	// found. Set by SetMCPRegistryAuth.
+	mcpRegistryAuth string
+	siteURL         *url.URL
+	posthog         *posthog.Posthog // posthog metrics will no-op if the dependency is not provided
 	// features resolves flag-controlled behavior (the managed assistant's
 	// Platform MCP toolset variant). Wired from the environment-aware
 	// provider: the posthog client in production, the CSV-backed in-memory
@@ -226,6 +231,9 @@ type Service struct {
 	// so tools/call on the same session can resolve it. Always usable: without
 	// Redis it records nothing and every caller resolves as unknown.
 	sessionClientInfo *sessionclientinfo.Store
+	// tunnelClientFamilies attributes authenticated tunneled requests to the
+	// client their session reported at initialize, from the same store.
+	tunnelClientFamilies *tunnelClientFamilies
 	// userSessionSigner mints the SessionClaims JWT issued at /token.
 	// HS256 with GRAM_JWT_SIGNING_KEY -- same key the chat-session signer
 	// uses, intentionally separate signer code so each path is removable
@@ -511,7 +519,9 @@ func NewService(
 		platformtoolsruntime.WithFeatureChecker(platformFeatureChecker),
 	)
 
+	sessionClientInfo := sessionclientinfo.NewStore(redisClient, 0)
 	service := &Service{
+		assistantWorkloadTokens:   nil,
 		replayLiveness:            nil,
 		federatedLoginConsumer:    nil,
 		identityChainer:           nil,
@@ -539,6 +549,7 @@ func NewService(
 		authenticationHostBaseURL: "",
 		platformHosts:             nil,
 		openAIAppsChallengeToken:  "",
+		mcpRegistryAuth:           "",
 		siteURL:                   siteURL,
 		posthog:                   posthog,
 		features:                  features,
@@ -611,7 +622,8 @@ func NewService(
 			cacheImpl,
 			cache.SuffixNone,
 		),
-		sessionClientInfo:    sessionclientinfo.NewStore(redisClient, 0),
+		sessionClientInfo:    sessionClientInfo,
+		tunnelClientFamilies: newTunnelClientFamilies(sessionClientInfo),
 		identityResolver:     identityResolver,
 		identityValidator:    mcpidentity.NewValidatorBoundary(),
 		userSessionSigner:    userSessionSigner,
@@ -625,6 +637,9 @@ func NewService(
 		tunnelPublic:         newTunnelPublicRuntime(redisClient, meterProvider, metrics, tunnelPublicConfig),
 		metaRuntime:          metaRuntimeConfig.withDefaults(),
 	}
+	// Discovery and token dispatch share this production issuer. Only explicitly
+	// provisioned, live assistant workload registrations can obtain tokens.
+	service.assistantWorkloadTokens = &registeredAssistantWorkloadIssuer{service: service}
 	return service, nil
 }
 
@@ -785,6 +800,7 @@ func Attach(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Se
 	// client assertions.
 	o11y.AttachHandler(mux, "GET", "/.well-known/oauth-client/{id}/jwks.json", oops.ErrHandle(service.logger, service.HandleClientJSONWebKeySet).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", "/.well-known/openai-apps-challenge", oops.ErrHandle(service.logger, service.HandleOpenAIAppsChallenge).ServeHTTP)
+	o11y.AttachHandler(mux, "GET", "/.well-known/mcp-registry-auth", oops.ErrHandle(service.logger, service.HandleMCPRegistryAuth).ServeHTTP)
 	// Agents live outside Speakeasy and reach it on the public host, so the gateway
 	// mounts here as well as on the private listener. Its own key is the
 	// credential, so being publicly routable is not being publicly readable.

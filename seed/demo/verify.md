@@ -627,3 +627,7 @@ In shared Explore Demo, verify the mapping dialog shows its read-only notice and
 4. Do not run workloads using the illustrative issuer/JWKS URLs: these fixtures
    are display-only, not usable credentials. Leave the page marked `[~]` until
    the browser checks above are performed.
+
+## Tunnel observability
+
+Open MCP Servers → Private inventory → Overview. Verify request, connection and latency charts contain history, the latest missing intervals stay gaps, and the current agent count is zero. The marketplace callout appears above the tunnel status, which reads "No connected tunnel agents" with a View tunnel agent setup action. The sidebar Readiness card does not call the server ready: its Tunnel agent item says no tunnel agent is connected and links to tunnel agent setup. Check 1 hour / 24 hours / 7 days, the Requests by client list, and the data table under About these numbers. The synthetic source must not initiate any network connection.
