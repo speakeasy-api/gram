@@ -49,6 +49,32 @@ func (q *Queries) AgePreparationFixtureClaim(ctx context.Context, arg AgePrepara
 	return err
 }
 
+const associateAuthClientFixture = `-- name: AssociateAuthClientFixture :exec
+INSERT INTO mcp_server_auth_clients (project_id, organization_id, mcp_server_id, auth_client_id, client_attachment_scope, source)
+VALUES (
+    $1, $2, $3, $4,
+    (SELECT ac.attachment_scope FROM mcp_auth_clients ac WHERE ac.id = $4),
+    'backfill'
+)
+`
+
+type AssociateAuthClientFixtureParams struct {
+	ProjectID      uuid.UUID
+	OrganizationID string
+	McpServerID    uuid.UUID
+	AuthClientID   uuid.UUID
+}
+
+func (q *Queries) AssociateAuthClientFixture(ctx context.Context, arg AssociateAuthClientFixtureParams) error {
+	_, err := q.db.Exec(ctx, associateAuthClientFixture,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.McpServerID,
+		arg.AuthClientID,
+	)
+	return err
+}
+
 const attachPreparationFixtureInteractiveClient = `-- name: AttachPreparationFixtureInteractiveClient :execrows
 INSERT INTO remote_session_client_user_session_issuers (remote_session_client_id,user_session_issuer_id)
 SELECT c.id, u.id FROM remote_session_clients c
@@ -711,6 +737,55 @@ func (q *Queries) CreateAttachmentUpstreamAgentFixture(ctx context.Context, arg 
 	return result.RowsAffected(), nil
 }
 
+const createAuthClientFixture = `-- name: CreateAuthClientFixture :one
+INSERT INTO mcp_auth_clients (organization_id, project_id, client_type, source, name)
+VALUES ($1, $2, $3, 'backfill', $4)
+RETURNING id
+`
+
+type CreateAuthClientFixtureParams struct {
+	OrganizationID string
+	ProjectID      uuid.NullUUID
+	ClientType     string
+	Name           string
+}
+
+func (q *Queries) CreateAuthClientFixture(ctx context.Context, arg CreateAuthClientFixtureParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, createAuthClientFixture,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.ClientType,
+		arg.Name,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const createAuthClientHeaderFixture = `-- name: CreateAuthClientHeaderFixture :exec
+INSERT INTO mcp_auth_client_headers (auth_client_id, organization_id, name, is_secret, value)
+VALUES ($1, $2, $3, $4, $5)
+`
+
+type CreateAuthClientHeaderFixtureParams struct {
+	AuthClientID   uuid.UUID
+	OrganizationID string
+	Name           string
+	IsSecret       bool
+	Value          pgtype.Text
+}
+
+func (q *Queries) CreateAuthClientHeaderFixture(ctx context.Context, arg CreateAuthClientHeaderFixtureParams) error {
+	_, err := q.db.Exec(ctx, createAuthClientHeaderFixture,
+		arg.AuthClientID,
+		arg.OrganizationID,
+		arg.Name,
+		arg.IsSecret,
+		arg.Value,
+	)
+	return err
+}
+
 const createMCPGatewayFixture = `-- name: CreateMCPGatewayFixture :one
 INSERT INTO meta_mcp_servers (id, organization_id, project_id, name)
 VALUES ($1, $2, $3, $4)
@@ -886,6 +961,46 @@ func (q *Queries) CreateProjectFixture(ctx context.Context, arg CreateProjectFix
 	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err
+}
+
+const createRemoteBackedMCPServerFixture = `-- name: CreateRemoteBackedMCPServerFixture :exec
+INSERT INTO mcp_servers (id, project_id, slug, name, remote_mcp_server_id, visibility)
+VALUES ($1, $2, $3, $3, $4, $5)
+`
+
+type CreateRemoteBackedMCPServerFixtureParams struct {
+	ID                uuid.UUID
+	ProjectID         uuid.UUID
+	Slug              pgtype.Text
+	RemoteMcpServerID uuid.NullUUID
+	Visibility        string
+}
+
+func (q *Queries) CreateRemoteBackedMCPServerFixture(ctx context.Context, arg CreateRemoteBackedMCPServerFixtureParams) error {
+	_, err := q.db.Exec(ctx, createRemoteBackedMCPServerFixture,
+		arg.ID,
+		arg.ProjectID,
+		arg.Slug,
+		arg.RemoteMcpServerID,
+		arg.Visibility,
+	)
+	return err
+}
+
+const createRemoteMCPBackendFixture = `-- name: CreateRemoteMCPBackendFixture :exec
+INSERT INTO remote_mcp_servers (id, project_id, transport_type, url)
+VALUES ($1, $2, 'streamable-http', $3)
+`
+
+type CreateRemoteMCPBackendFixtureParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+	Url       string
+}
+
+func (q *Queries) CreateRemoteMCPBackendFixture(ctx context.Context, arg CreateRemoteMCPBackendFixtureParams) error {
+	_, err := q.db.Exec(ctx, createRemoteMCPBackendFixture, arg.ID, arg.ProjectID, arg.Url)
+	return err
 }
 
 const createRemoteMCPServerFixture = `-- name: CreateRemoteMCPServerFixture :one

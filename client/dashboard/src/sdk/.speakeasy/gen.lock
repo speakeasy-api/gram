@@ -172,6 +172,12 @@ trackedFiles:
   src/funcs/auditlogsList.ts: {}
   src/funcs/auditlogsListFacets.ts: {}
   src/funcs/authCallback.ts: {}
+  src/funcs/authClientsDetachFromMcpServer.ts: {}
+  src/funcs/authClientsGet.ts: {}
+  src/funcs/authClientsGetMcpServerAuthentication.ts: {}
+  src/funcs/authClientsList.ts: {}
+  src/funcs/authClientsSetMcpServerUpstreamAuthRequirement.ts: {}
+  src/funcs/authClientsUpdate.ts: {}
   src/funcs/authEnterDemo.ts: {}
   src/funcs/authInfo.ts: {}
   src/funcs/authLogin.ts: {}
@@ -946,6 +952,9 @@ trackedFiles:
   src/models/components/audienceoption.ts: {}
   src/models/components/auditlog.ts: {}
   src/models/components/auditlogfacetoption.ts: {}
+  src/models/components/authclient.ts: {}
+  src/models/components/authclientheader.ts: {}
+  src/models/components/authclientserver.ts: {}
   src/models/components/authorizerequestbody.ts: {}
   src/models/components/authorizeresponsebody.ts: {}
   src/models/components/authzchallenge.ts: {}
@@ -1085,6 +1094,7 @@ trackedFiles:
   src/models/components/deploymentsummary.ts:
     pristine_git_object: 9f408bfae0fc457c23380d8317f36f1be06ead9d
   src/models/components/destination.ts: {}
+  src/models/components/detachauthclientfrommcpserverrequestbody.ts: {}
   src/models/components/detachbindingrequestbody.ts: {}
   src/models/components/detachserverclientassociationrequestbody.ts: {}
   src/models/components/deviceagentconfiguration.ts: {}
@@ -1335,6 +1345,7 @@ trackedFiles:
   src/models/components/listaudiencesresult.ts: {}
   src/models/components/listauditlogfacetsresult.ts: {}
   src/models/components/listauditlogsresult.ts: {}
+  src/models/components/listauthclientsresponsebody.ts: {}
   src/models/components/listbindingsresponsebody.ts: {}
   src/models/components/listbuiltinexclusionsresult.ts: {}
   src/models/components/listbusinessmemoriesresponsebody.ts: {}
@@ -1493,6 +1504,7 @@ trackedFiles:
   src/models/components/mcpregistry.ts: {}
   src/models/components/mcpserver.ts: {}
   src/models/components/mcpserveractivity.ts: {}
+  src/models/components/mcpserverauthentication.ts: {}
   src/models/components/mcpservertoolsetsummary.ts: {}
   src/models/components/mcpsetupguide.ts: {}
   src/models/components/mcpsetupguideremote.ts: {}
@@ -1782,6 +1794,7 @@ trackedFiles:
   src/models/components/setidentityproviderconnectionsetupmethodrequestbody.ts: {}
   src/models/components/setkeyenabledrequestbody.ts: {}
   src/models/components/setmcpmetadatarequestbody.ts: {}
+  src/models/components/setmcpserverupstreamauthrequirementrequestbody.ts: {}
   src/models/components/setorganizationwhitelistrequestbody.ts: {}
   src/models/components/setpinnedrequestbody.ts: {}
   src/models/components/setpluginassignmentsform.ts: {}
@@ -1963,6 +1976,7 @@ trackedFiles:
   src/models/components/unshareskillrequestbody.ts: {}
   src/models/components/updateagentpolicygrantform.ts: {}
   src/models/components/updateassistantform.ts: {}
+  src/models/components/updateauthclientrequestbody.ts: {}
   src/models/components/updateawsiamcredentialrequestbody.ts: {}
   src/models/components/updateawskmskeyrequestbody.ts: {}
   src/models/components/updateconfigurationrequestbody.ts: {}
@@ -2264,6 +2278,7 @@ trackedFiles:
   src/models/operations/deleteusersessionissuercimdclient.ts: {}
   src/models/operations/deletewidget.ts: {}
   src/models/operations/denyriskpolicybypassrequest.ts: {}
+  src/models/operations/detachauthclientfrommcpserver.ts: {}
   src/models/operations/detachbinding.ts: {}
   src/models/operations/detachorganizationremotesessionclientkeyset.ts: {}
   src/models/operations/detachremotesessionclientkeyset.ts: {}
@@ -2314,6 +2329,7 @@ trackedFiles:
   src/models/operations/getassistant.ts: {}
   src/models/operations/getassistantmemory.ts: {}
   src/models/operations/getassistantsessionsummary.ts: {}
+  src/models/operations/getauthclient.ts: {}
   src/models/operations/getawsiamcredential.ts: {}
   src/models/operations/getawskmskey.ts: {}
   src/models/operations/getbillingemail.ts: {}
@@ -2357,6 +2373,7 @@ trackedFiles:
   src/models/operations/getmcpnetworktraffic.ts: {}
   src/models/operations/getmcpserver.ts: {}
   src/models/operations/getmcpserveractivity.ts: {}
+  src/models/operations/getmcpserverauthentication.ts: {}
   src/models/operations/getmcpserverdetails.ts: {}
   src/models/operations/getmcpsetupdocs.ts: {}
   src/models/operations/getmetamcpserver.ts: {}
@@ -2486,6 +2503,7 @@ trackedFiles:
   src/models/operations/listaudiences.ts: {}
   src/models/operations/listauditlogfacets.ts: {}
   src/models/operations/listauditlogs.ts: {}
+  src/models/operations/listauthclients.ts: {}
   src/models/operations/listawsiamcredentials.ts: {}
   src/models/operations/listawskmskeys.ts: {}
   src/models/operations/listbindings.ts: {}
@@ -2762,6 +2780,7 @@ trackedFiles:
   src/models/operations/setmcpmetadata.ts: {}
   src/models/operations/setmcpservertoolmetadata.ts: {}
   src/models/operations/setmcpservertoolmetadatabatch.ts: {}
+  src/models/operations/setmcpserverupstreamauthrequirement.ts: {}
   src/models/operations/setmodelproviderkeyenabled.ts: {}
   src/models/operations/setorganizationremotesessionissueremaproviders.ts: {}
   src/models/operations/setorganizationusersessionissuerauthenticationhost.ts: {}
@@ -2812,6 +2831,7 @@ trackedFiles:
   src/models/operations/unshareskill.ts: {}
   src/models/operations/updateagentpolicygrant.ts: {}
   src/models/operations/updateassistant.ts: {}
+  src/models/operations/updateauthclient.ts: {}
   src/models/operations/updateawsiamcredential.ts: {}
   src/models/operations/updateawskmskey.ts: {}
   src/models/operations/updatecustomdetectionrule.ts: {}
@@ -2978,6 +2998,10 @@ trackedFiles:
   src/react-query/auditLogFacets.ts: {}
   src/react-query/auditLogs.core.ts: {}
   src/react-query/auditLogs.ts: {}
+  src/react-query/authClient.core.ts: {}
+  src/react-query/authClient.ts: {}
+  src/react-query/authClients.core.ts: {}
+  src/react-query/authClients.ts: {}
   src/react-query/batchKillswitchUserBadges.ts: {}
   src/react-query/beginSlackDirectoryConnection.ts: {}
   src/react-query/builtinExclusions.core.ts: {}
@@ -3129,6 +3153,7 @@ trackedFiles:
   src/react-query/deploymentEvaluation.ts: {}
   src/react-query/deploymentLogs.core.ts: {}
   src/react-query/deploymentLogs.ts: {}
+  src/react-query/detachAuthClientFromMcpServer.ts: {}
   src/react-query/detachOrganizationRemoteSessionClientKeySet.ts: {}
   src/react-query/detachRemoteSessionClientKeySet.ts: {}
   src/react-query/detachServerClientAssociation.ts: {}
@@ -3490,6 +3515,8 @@ trackedFiles:
   src/react-query/mcpRegistriesClearCache.ts: {}
   src/react-query/mcpRegistriesGetServerDetails.core.ts: {}
   src/react-query/mcpRegistriesGetServerDetails.ts: {}
+  src/react-query/mcpServerAuthentication.core.ts: {}
+  src/react-query/mcpServerAuthentication.ts: {}
   src/react-query/mcpServers.core.ts: {}
   src/react-query/mcpServers.ts: {}
   src/react-query/members.core.ts: {}
@@ -3818,6 +3845,7 @@ trackedFiles:
   src/react-query/setInternalSessionIssuerEnabled.ts: {}
   src/react-query/setMcpServerToolMetadata.ts: {}
   src/react-query/setMcpServerToolMetadataBatch.ts: {}
+  src/react-query/setMcpServerUpstreamAuthRequirement.ts: {}
   src/react-query/setModelProviderKeyEnabled.ts: {}
   src/react-query/setOrganizationRemoteSessionIssuerEMAProviders.ts: {}
   src/react-query/setOrganizationUserSessionIssuerAuthenticationHost.ts: {}
@@ -3937,6 +3965,7 @@ trackedFiles:
   src/react-query/unproxiedMcpServers.core.ts: {}
   src/react-query/unproxiedMcpServers.ts: {}
   src/react-query/unshareSkill.ts: {}
+  src/react-query/updateAuthClient.ts: {}
   src/react-query/updateAwsIamCredential.ts: {}
   src/react-query/updateAwsKmsKey.ts: {}
   src/react-query/updateDashboard.ts: {}
@@ -4068,6 +4097,7 @@ trackedFiles:
   src/sdk/assistants.ts: {}
   src/sdk/auditlogs.ts: {}
   src/sdk/auth.ts: {}
+  src/sdk/authclients.ts: {}
   src/sdk/blocks.ts: {}
   src/sdk/businessmemories.ts: {}
   src/sdk/categories.ts: {}
@@ -6274,6 +6304,17 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  detachAuthClientFromMcpServer:
+    speakeasy-default-detach-auth-client-from-mcp-server:
+      requestBody:
+        application/json: {"id": "daee6da0-e449-4c93-8fba-faaf46b80ca2", "mcp_server_id": "d846e9dc-67aa-45d4-bc49-34532014924a"}
+      responses:
+        "200":
+          application/json: {"client_type": "service_account", "created_at": "2026-07-30T00:49:42.187Z", "enabled": true, "headers": [{"has_stored_value": true, "is_required": false, "is_secret": false, "name": "<value>"}], "id": "f9a3e9eb-e68f-4cd9-8e91-de98ff73304d", "name": "<value>", "personal": true, "servers": [], "source": "backfill", "updated_at": "2024-01-18T11:31:45.272Z"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   detachBinding:
     speakeasy-default-detach-binding:
       requestBody:
@@ -6920,6 +6961,18 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  getAuthClient:
+    speakeasy-default-get-auth-client:
+      parameters:
+        query:
+          id: "e6fae4cd-933a-49ef-894e-e34da3ff9e36"
+      responses:
+        "200":
+          application/json: {"client_type": "pass_through", "created_at": "2025-06-11T12:43:59.328Z", "enabled": false, "headers": [], "id": "e01039a9-5b63-4170-bb66-6c0ddf864bd0", "name": "<value>", "personal": false, "servers": [], "source": "admin", "updated_at": "2026-03-25T10:00:51.392Z"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   getAwsIamCredential:
     speakeasy-default-get-aws-iam-credential:
       parameters:
@@ -7431,6 +7484,18 @@ examples:
       responses:
         "200":
           application/json: {"activity": [{"recent_tool_calls": 21147, "target_id": "<id>", "target_label": "<value>", "target_type": "tunneled_mcp_server", "total_tool_calls": 866664}], "lookback_days": 283054, "recent_window_days": 917174}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  getMcpServerAuthentication:
+    speakeasy-default-get-mcp-server-authentication:
+      parameters:
+        query:
+          mcp_server_id: "8482bdeb-31bf-4cbe-99cf-00205696f2bd"
+      responses:
+        "200":
+          application/json: {"clients": [], "mcp_server_id": "8444839a-9293-4d3c-977f-11417ff43272", "project_id": "fa041fce-7fda-4a6f-bd05-c354edb76fe4", "public": false, "status": "setup_incomplete"}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -9039,6 +9104,15 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  listAuthClients:
+    speakeasy-default-list-auth-clients:
+      responses:
+        "200":
+          application/json: {"items": [{"client_type": "ema", "created_at": "2025-08-13T10:09:55.010Z", "enabled": true, "headers": [{"has_stored_value": false, "is_required": false, "is_secret": true, "name": "<value>"}], "id": "1d54340a-0b73-4dae-8bc3-8901d0fbd4d2", "name": "<value>", "personal": true, "servers": [], "source": "backfill", "updated_at": "2026-11-17T00:20:12.704Z"}]}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   listAwsIamCredentials:
     speakeasy-default-list-aws-iam-credentials:
       responses:
@@ -12269,6 +12343,17 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  setMcpServerUpstreamAuthRequirement:
+    speakeasy-default-set-mcp-server-upstream-auth-requirement:
+      requestBody:
+        application/json: {"mcp_server_id": "ccb8c230-762a-46ad-9412-090104bb3243", "requires_upstream_auth": true}
+      responses:
+        "200":
+          application/json: {"clients": [], "mcp_server_id": "7c924e12-5da7-4110-918d-429936da8062", "project_id": "21805c97-a53b-4760-8952-b14d302b33d5", "public": false, "status": "setup_incomplete"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   setModelProviderKeyEnabled:
     speakeasy-default-set-model-provider-key-enabled:
       requestBody:
@@ -12828,6 +12913,17 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  updateAuthClient:
+    speakeasy-default-update-auth-client:
+      requestBody:
+        application/json: {"id": "7b6f429a-57b9-4274-87d3-2cce08753dd5"}
+      responses:
+        "200":
+          application/json: {"client_type": "pass_through", "created_at": "2026-03-21T14:01:55.201Z", "enabled": true, "headers": [], "id": "137c3b9d-dafe-4c3c-8e34-94fe7201e146", "name": "<value>", "personal": true, "servers": [], "source": "admin", "updated_at": "2024-06-06T01:05:38.965Z"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   updateAwsIamCredential:
     speakeasy-default-update-aws-iam-credential:
       requestBody:

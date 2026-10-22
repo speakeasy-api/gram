@@ -22480,6 +22480,620 @@ paths:
             x-speakeasy-name-override: transferOut
             x-speakeasy-react-hook:
                 disabled: true
+    /rpc/authClients.detachFromMcpServer:
+        post:
+            description: Stop an MCP server offering an auth client. The client and its other servers are unchanged. Requires org:admin.
+            operationId: detachAuthClientFromMcpServer
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/DetachAuthClientFromMcpServerRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AuthClient'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+            summary: detachAuthClientFromMcpServer authClients
+            tags:
+                - authClients
+            x-speakeasy-name-override: detachFromMcpServer
+            x-speakeasy-react-hook:
+                name: DetachAuthClientFromMcpServer
+    /rpc/authClients.get:
+        get:
+            description: Get an auth client in the caller's organization. Requires org:read.
+            operationId: getAuthClient
+            parameters:
+                - allowEmptyValue: true
+                  description: The auth client id.
+                  in: query
+                  name: id
+                  required: true
+                  schema:
+                    description: The auth client id.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AuthClient'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+            summary: getAuthClient authClients
+            tags:
+                - authClients
+            x-speakeasy-name-override: get
+            x-speakeasy-react-hook:
+                name: AuthClient
+    /rpc/authClients.getMcpServerAuthentication:
+        get:
+            description: 'Get how an MCP server authenticates to its upstream: whether authentication is required and which auth clients it offers. Requires org:read.'
+            operationId: getMcpServerAuthentication
+            parameters:
+                - allowEmptyValue: true
+                  description: The MCP server id.
+                  in: query
+                  name: mcp_server_id
+                  required: true
+                  schema:
+                    description: The MCP server id.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/McpServerAuthentication'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+            summary: getMcpServerAuthentication authClients
+            tags:
+                - authClients
+            x-speakeasy-name-override: getMcpServerAuthentication
+            x-speakeasy-react-hook:
+                name: McpServerAuthentication
+    /rpc/authClients.list:
+        get:
+            description: List the auth clients in the caller's organization. Requires org:read.
+            operationId: listAuthClients
+            parameters:
+                - allowEmptyValue: true
+                  description: Only clients offered by this MCP server.
+                  in: query
+                  name: mcp_server_id
+                  schema:
+                    description: Only clients offered by this MCP server.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Only clients of this type.
+                  in: query
+                  name: client_type
+                  schema:
+                    description: Only clients of this type.
+                    enum:
+                        - remote_session
+                        - service_account
+                        - static_credential
+                        - pass_through
+                        - ema
+                    type: string
+                - allowEmptyValue: true
+                  description: Pagination cursor.
+                  in: query
+                  name: cursor
+                  schema:
+                    description: Pagination cursor.
+                    type: string
+                - allowEmptyValue: true
+                  description: Page size (default 50, max 100).
+                  in: query
+                  name: limit
+                  schema:
+                    description: Page size (default 50, max 100).
+                    format: int64
+                    type: integer
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListAuthClientsResponseBody'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+            summary: listAuthClients authClients
+            tags:
+                - authClients
+            x-speakeasy-name-override: list
+            x-speakeasy-pagination:
+                inputs:
+                    - in: parameters
+                      name: cursor
+                      type: cursor
+                outputs:
+                    nextCursor: $.next_cursor
+                type: cursor
+            x-speakeasy-react-hook:
+                name: AuthClients
+    /rpc/authClients.setMcpServerUpstreamAuthRequirement:
+        post:
+            description: Declare whether an MCP server's upstream needs authentication. A server that needs none is served without upstream credentials; a server that needs it and offers no enabled client is unavailable until setup is complete. Not available for hosted toolsets. Requires org:admin.
+            operationId: setMcpServerUpstreamAuthRequirement
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/SetMcpServerUpstreamAuthRequirementRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/McpServerAuthentication'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+            summary: setMcpServerUpstreamAuthRequirement authClients
+            tags:
+                - authClients
+            x-speakeasy-name-override: setMcpServerUpstreamAuthRequirement
+            x-speakeasy-react-hook:
+                name: SetMcpServerUpstreamAuthRequirement
+    /rpc/authClients.update:
+        post:
+            description: Rename, enable or disable an auth client. The change applies on every MCP server that offers the client. Requires org:admin.
+            operationId: updateAuthClient
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UpdateAuthClientRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AuthClient'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+            summary: updateAuthClient authClients
+            tags:
+                - authClients
+            x-speakeasy-name-override: update
+            x-speakeasy-react-hook:
+                name: UpdateAuthClient
     /rpc/businessMemories.contentScopes:
         get:
             description: List the complete content-scope tree and distinct-memory counts for the active project. Requires organization admin.
@@ -93382,6 +93996,127 @@ components:
                 - value
                 - display_name
                 - count
+        AuthClient:
+            type: object
+            properties:
+                client_type:
+                    type: string
+                    description: How the client authenticates upstream.
+                    enum:
+                        - remote_session
+                        - service_account
+                        - static_credential
+                        - pass_through
+                        - ema
+                created_at:
+                    type: string
+                    description: When the client was created.
+                    format: date-time
+                enabled:
+                    type: boolean
+                    description: Whether the client can be used. A disabled client is never selected or resolved.
+                headers:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AuthClientHeader'
+                    description: The headers the client sends upstream.
+                id:
+                    type: string
+                    description: The auth client id.
+                    format: uuid
+                name:
+                    type: string
+                    description: The client's name.
+                personal:
+                    type: boolean
+                    description: Whether each caller uses their own connection through the client. A grant on a personal client never lets one user use another user's connection.
+                project_id:
+                    type: string
+                    description: The project the client belongs to. Omitted for a client shared across the organization's projects.
+                    format: uuid
+                remote_session_client_id:
+                    type: string
+                    description: The OAuth registration behind remote_session, service_account and ema clients.
+                    format: uuid
+                servers:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AuthClientServer'
+                    description: The MCP servers that offer the client. Changing or disabling the client changes upstream behavior on every one of them.
+                source:
+                    enum:
+                        - backfill
+                        - admin
+                    type: string
+                    x-speakeasy-name-override: AuthClientSource
+                updated_at:
+                    type: string
+                    description: When the client was last updated.
+                    format: date-time
+            description: A configured way for Speakeasy to authenticate to an upstream MCP server. Who may use it is controlled by mcp:auth grants on the client, never by who configured it.
+            required:
+                - id
+                - client_type
+                - source
+                - name
+                - enabled
+                - personal
+                - headers
+                - servers
+                - created_at
+                - updated_at
+        AuthClientHeader:
+            type: object
+            properties:
+                description:
+                    type: string
+                    description: What the header is for.
+                has_stored_value:
+                    type: boolean
+                    description: Whether the client stores a value for this header.
+                is_required:
+                    type: boolean
+                    description: Whether a caller must supply the header when it is copied from the request.
+                is_secret:
+                    type: boolean
+                    description: Whether the stored value is secret.
+                name:
+                    type: string
+                    description: The header name.
+                value_from_request_header:
+                    type: string
+                    description: The request header the value is copied from, for pass-through headers.
+            description: A header an auth client sends upstream. Stored values are never returned.
+            required:
+                - name
+                - is_required
+                - is_secret
+                - has_stored_value
+        AuthClientServer:
+            type: object
+            properties:
+                id:
+                    type: string
+                    description: The MCP server id.
+                    format: uuid
+                name:
+                    type: string
+                    description: The MCP server's name.
+                project_id:
+                    type: string
+                    description: The MCP server's project.
+                    format: uuid
+                public:
+                    type: boolean
+                    description: Whether the MCP server is public.
+                slug:
+                    type: string
+                    description: The MCP server's slug.
+            description: An MCP server an auth client is associated with.
+            required:
+                - id
+                - project_id
+                - public
         AuthorizeRequestBody:
             type: object
             properties:
@@ -98284,6 +99019,20 @@ components:
                 - sensitive_data
                 - created_at
                 - updated_at
+        DetachAuthClientFromMcpServerRequestBody:
+            type: object
+            properties:
+                id:
+                    type: string
+                    description: The auth client id.
+                    format: uuid
+                mcp_server_id:
+                    type: string
+                    description: The MCP server id.
+                    format: uuid
+            required:
+                - id
+                - mcp_server_id
         DetachBindingRequestBody:
             type: object
             properties:
@@ -104640,6 +105389,17 @@ components:
                     description: The cursor to be used for the next page of results.
             required:
                 - logs
+        ListAuthClientsResponseBody:
+            type: object
+            properties:
+                items:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AuthClient'
+                next_cursor:
+                    type: string
+            required:
+                - items
         ListBindingsResponseBody:
             type: object
             properties:
@@ -107506,6 +108266,43 @@ components:
                 - target_label
                 - total_tool_calls
                 - recent_tool_calls
+        McpServerAuthentication:
+            type: object
+            properties:
+                clients:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AuthClient'
+                    description: The auth clients the server offers.
+                mcp_server_id:
+                    type: string
+                    description: The MCP server id.
+                    format: uuid
+                project_id:
+                    type: string
+                    description: The MCP server's project.
+                    format: uuid
+                public:
+                    type: boolean
+                    description: Whether the MCP server is public.
+                requires_upstream_auth:
+                    type: boolean
+                    description: Whether the upstream needs authentication. Omitted while undecided.
+                status:
+                    type: string
+                    description: configured when authentication is required and at least one enabled client is offered; setup_incomplete when it is required and none is; no_auth_required when the upstream explicitly needs none; undecided when nobody has said.
+                    enum:
+                        - configured
+                        - setup_incomplete
+                        - no_auth_required
+                        - undecided
+            description: How an MCP server authenticates to its upstream.
+            required:
+                - mcp_server_id
+                - project_id
+                - public
+                - status
+                - clients
         McpServerToolsetSummary:
             type: object
             properties:
@@ -116781,6 +117578,19 @@ components:
                     description: The slug of the toolset associated with this install page metadata. Mutually exclusive with mcp_server_id.
                     pattern: ^[a-z0-9_-]{1,128}$
                     maxLength: 40
+        SetMcpServerUpstreamAuthRequirementRequestBody:
+            type: object
+            properties:
+                mcp_server_id:
+                    type: string
+                    description: The MCP server id.
+                    format: uuid
+                requires_upstream_auth:
+                    type: boolean
+                    description: Whether the upstream needs authentication.
+            required:
+                - mcp_server_id
+                - requires_upstream_auth
         SetOrganizationChatAnalysisSettingsRequestBody:
             type: object
             properties:
@@ -122918,6 +123728,22 @@ components:
                     format: int64
             required:
                 - id
+        UpdateAuthClientRequestBody:
+            type: object
+            properties:
+                enabled:
+                    type: boolean
+                    description: Whether the client can be used.
+                id:
+                    type: string
+                    description: The auth client id.
+                    format: uuid
+                name:
+                    type: string
+                    description: The new name.
+                    minLength: 1
+            required:
+                - id
         UpdateAwsIamCredentialRequestBody:
             type: object
             properties:
@@ -126831,6 +127657,8 @@ tags:
       description: Manages audit logs in Speakeasy.
     - name: auth
       description: Managed auth for gram producers and dashboard.
+    - name: authClients
+      description: Manage the auth clients Speakeasy uses to authenticate to upstream MCP servers, and which servers offer them. Managing a client never grants permission to use it. Stored header values are never returned.
     - name: businessMemories
       description: Inspect and semantically search business memories.
     - name: chat
