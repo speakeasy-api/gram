@@ -565,7 +565,7 @@ func (s *ComplianceImportService) upsertDiscoveredChat(ctx context.Context, cfg 
 		// NULL when unresolved so the upsert's COALESCE preserves a user
 		// resolved by an earlier discovery or the message-page enrichment.
 		UserID:         conv.ToPGTextEmpty(userID),
-		ExternalUserID: conv.ToPGTextEmpty(found.externalUserID),
+		ExternalUserID: conv.ToPGTextEmpty(complianceUserLabel(found.userEmail, found.externalUserID)),
 		ExternalChatID: conv.ToPGText(found.externalChatID),
 		// NULL when the discovery carried no title so the upsert's COALESCE
 		// keeps the title set from the chat's first message page.
@@ -714,7 +714,7 @@ func (s *ComplianceImportService) upsertMessagePageChat(ctx context.Context, cfg
 		// NULL when unresolved so the upsert's COALESCE preserves a user
 		// resolved from a prior sync.
 		UserID:         conv.ToPGTextEmpty(userID),
-		ExternalUserID: conv.ToPGTextEmpty(page.User.ID),
+		ExternalUserID: conv.ToPGTextEmpty(complianceUserLabel(page.User.EmailAddress, page.User.ID)),
 		ExternalChatID: conv.ToPGText(page.ID),
 		Title:          conv.ToPGText(conv.StripNUL(page.Name)),
 		CreatedAt:      conv.ToPGTimestamptz(createdAt),
@@ -740,6 +740,7 @@ func (s *ComplianceImportService) buildExternalMessageRows(ctx context.Context, 
 	if err != nil {
 		return nil, err
 	}
+	externalUserID := complianceUserLabel(page.User.EmailAddress, page.User.ID)
 	model := ""
 
 	if page.Model != nil {
@@ -780,7 +781,7 @@ func (s *ComplianceImportService) buildExternalMessageRows(ctx context.Context, 
 				MessageID:         pgtype.Text{String: "", Valid: false},
 				ToolCallID:        pgtype.Text{String: "", Valid: false},
 				UserID:            conv.ToPGText(userID),
-				ExternalUserID:    conv.ToPGText(page.User.ID),
+				ExternalUserID:    conv.ToPGTextEmpty(externalUserID),
 				ExternalMessageID: conv.ToPGText(msg.ID),
 				FinishReason:      pgtype.Text{String: "", Valid: false},
 				ToolCalls:         nil,
@@ -899,6 +900,16 @@ func (r *connectedUserResolver) resolve(ctx context.Context, email string) (stri
 		r.cache[conv.NormalizeEmail(user.Email)] = user.ID
 	}
 	return r.cache[email], nil
+}
+
+// complianceUserLabel is the external_user_id stored on imported chats and
+// messages: the owner's normalized email when the feed carries one, else the
+// Anthropic user id. user_id stays NULL until the email matches an
+// organization member, and session search and the session owner label read
+// external_user_id, so an Anthropic user id would leave non-member employees'
+// sessions unfindable by email.
+func complianceUserLabel(email, anthropicUserID string) string {
+	return conv.Default(conv.NormalizeEmail(email), anthropicUserID)
 }
 
 // complianceSourceFromUserAgent classifies the activity actor's user agent.
