@@ -5,9 +5,9 @@ import { GROUP_ORDER, SCOPE_DEFS } from "./rbac-override-state";
 // The override replaces the caller's grants outright, so a grantable scope
 // missing here is silently denied while the toolbar says "all scopes" —
 // agent pages rendered empty that way when the agent scopes were added.
-// Deny-effect scopes and machine-only scopes are not grants a person holds.
+// Deny-effect scopes are left out, and so are the scopes meant for agents:
+// a person reaches the device-sync and hook-ingest routes through org:admin.
 const NOT_OVERRIDABLE = new Set<string>([
-  "root",
   Scope.OrgDeviceAgentSync,
   Scope.OrgHooksIngest,
 ]);
@@ -22,6 +22,13 @@ describe("RBAC override scope list", () => {
         !listed.has(scope),
     );
     expect(missing).toEqual([]);
+  });
+
+  it("lists only scopes the server defines, each once", () => {
+    const known = new Set<string>(Object.values(Scope));
+    const scopes = SCOPE_DEFS.map((def) => def.scope);
+    expect(scopes.filter((scope) => !known.has(scope))).toEqual([]);
+    expect(new Set(scopes).size).toBe(scopes.length);
   });
 
   it("renders every scope under a group", () => {

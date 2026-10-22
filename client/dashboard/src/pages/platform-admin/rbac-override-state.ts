@@ -106,7 +106,7 @@ export const SCOPE_DEFS: {
     scope: "plugin:write",
     label: "plugin:write",
     resourceType: "plugin",
-    description: "Create, edit, and publish plugins",
+    description: "Create, edit, and publish plugins within projects",
   },
   {
     scope: "risk_policy:evaluate",
@@ -160,7 +160,7 @@ export const SCOPE_DEFS: {
     scope: "agent:authorize",
     label: "agent:authorize",
     resourceType: "agent",
-    description: "Authorize sessions as an agent",
+    description: "Authorize and manage agent credentials",
   },
   {
     scope: "agent:transfer",
