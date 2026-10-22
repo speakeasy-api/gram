@@ -949,6 +949,7 @@ func (tp *ToolProxy) doExternalMCP(
 		Headers:          headers,
 		DisableRetries:   false,
 		MaxResponseBytes: 0,
+		MaxMessageBytes:  0,
 	}
 
 	// Connect to the external MCP server
