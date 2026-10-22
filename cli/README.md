@@ -42,8 +42,7 @@ the Homebrew `cli` formula no longer conflicts with the SDK generator formula
   other folders yourself.
 - A copy updated to this release and still run as `speakeasy` prints a
   deprecation notice. Running an SDK generator command such as `speakeasy run`
-  with it says how to install `speakeasy-ai`, or how to install the SDK
-  generator as `speakeasy-sdks`.
+  with it says to install `speakeasy-ai` and remove the old copy.
 
 ### Migrating from `gram`
 

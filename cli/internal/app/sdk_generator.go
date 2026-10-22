@@ -38,11 +38,6 @@ var sdkGeneratorCommands = []string{
 	"test",
 }
 
-// sdkGeneratorInstallCommand installs the SDK generator as speakeasy-sdks, so
-// it no longer competes with an older copy of this CLI that still runs as
-// speakeasy.
-const sdkGeneratorInstallCommand = "curl -fsSL https://go.speakeasy.com/cli-install.sh | BINARY_NAME=speakeasy-sdks sh"
-
 // unknownCommandExitCode is the exit code urfave/cli uses when a command has
 // no help topic, kept so scripts see the same failure as for any unknown
 // command.
@@ -61,9 +56,6 @@ func sdkGeneratorCommandMessage(command string, invokedName string) (string, boo
 			"Run it with the SDK generator instead: speakeasy %s", command, command), true
 	}
 	return fmt.Sprintf("%q is a command of the Speakeasy SDK generator, not of this CLI.\n"+
-		"This speakeasy is the Speakeasy AI Control Plane CLI, which is now called speakeasy-ai.\n"+
-		"Install speakeasy-ai and remove this copy so speakeasy runs the SDK generator,\n"+
-		"or install the SDK generator as speakeasy-sdks:\n"+
-		"  %s\n"+
-		"Then run: speakeasy-sdks %s", command, sdkGeneratorInstallCommand, command), true
+		"This speakeasy is an older copy of the Speakeasy AI Control Plane CLI, which is now called speakeasy-ai.\n"+
+		"Install speakeasy-ai and remove this copy, so speakeasy runs the SDK generator.", command), true
 }

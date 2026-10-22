@@ -129,8 +129,7 @@ func TestSDKGeneratorCommandMessage_RunAsSpeakeasy(t *testing.T) {
 
 	require.True(t, ok)
 	require.Contains(t, message, "now called speakeasy-ai")
-	require.Contains(t, message, "BINARY_NAME=speakeasy-sdks")
-	require.Contains(t, message, "Then run: speakeasy-sdks quickstart")
+	require.Contains(t, message, "remove this copy, so speakeasy runs the SDK generator")
 }
 
 func TestNewApp_UnknownCommandKeepsDefaultError(t *testing.T) {
