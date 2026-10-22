@@ -1,5 +1,5 @@
 {
-  "include": ["src"],
+  "include": ["src", "speakeasy.config.ts"],
   "exclude": ["node_modules"],
   "compilerOptions": {
     "noEmit": true,

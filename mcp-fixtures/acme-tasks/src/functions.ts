@@ -58,6 +58,12 @@ const functions = new Functions()
     annotations: { title: "Search Tasks", ...readOnly },
     async execute(ctx, input) {
       const words = input.query.toLowerCase().split(/\s+/).filter(Boolean);
+      if (words.length === 0) {
+        return ctx.fail(
+          { error: "Enter at least one word to search for." },
+          { status: 400 },
+        );
+      }
       const matches = tasks.filter((task) => {
         const text = [task.title, ...task.labels].join(" ").toLowerCase();
         return words.every((word) => text.includes(word));

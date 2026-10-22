@@ -50,3 +50,8 @@ test("search_tasks matches title and label words", async () => {
     ["ACME-102", "ACME-105"],
   );
 });
+
+test("search_tasks rejects a query of only spaces", async () => {
+  const { status } = await call("search_tasks", { query: "   " });
+  assert.equal(status, 400);
+});
