@@ -4875,7 +4875,7 @@ func (q *Queries) GetToolUsageTargets(ctx context.Context, arg GetToolUsageSumma
 		"target_kind",
 		"target_id",
 		"target_label",
-		"max(mcp_server_id) AS target_mcp_server_id",
+		"if(uniqExact(mcp_server_id) = 1, any(mcp_server_id), '') AS target_mcp_server_id",
 		"count() AS event_count",
 		"uniqExact(tool_name) AS unique_tools",
 		"sum(success) AS success_count",
@@ -5384,7 +5384,7 @@ func (q *Queries) GetToolUsageTargetToolBreakdown(ctx context.Context, arg GetTo
 func (q *Queries) getToolUsageHostedServerFilterOptions(ctx context.Context, arg GetToolUsageSummaryParams) ([]ToolUsageHostedServerFilterOptionRow, error) {
 	sb, err := toolUsageBaseSelect(arg,
 		"target_id AS toolset_slug",
-		"max(mcp_server_id) AS target_mcp_server_id",
+		"if(uniqExact(mcp_server_id) = 1, any(mcp_server_id), '') AS target_mcp_server_id",
 		"count() AS event_count",
 	)
 	if err != nil {
@@ -5804,10 +5804,7 @@ const toolUsageAgentIDExpr = "if(telemetry_logs.event_source IN ('tool_call', 'r
 // The gateway an event belongs to: the target itself, else the gateway that dispatched it.
 const toolUsageGatewayIDExpr = "if(target_type = '" + ToolUsageTargetTypeMetaMCP + "', target_id, meta_mcp_server_id)"
 
-// toolUsageMCPServerIDCTE appends <name> over <name>_base with an mcp_server_id
-// column for hosted and tunneled targets. Rows recorded before they carried a
-// server id fall back to the matcher that classified them, keyed by target.
-// Its bind args follow the base CTE's.
+// toolUsageMCPServerIDCTE adds mcp_server_id over <name>_base; unstamped rows fall back to their target's matcher.
 func toolUsageMCPServerIDCTE(name string, hosted []HostedMCPMatcher, servers []MCPServerMatcher) (string, []any) {
 	keys := make([]string, 0, len(hosted)+len(servers))
 	ids := make([]string, 0, len(hosted)+len(servers))

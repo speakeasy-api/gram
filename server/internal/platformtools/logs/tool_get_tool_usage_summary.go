@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/gen/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/platformtools/core"
 	"github.com/speakeasy-api/gram/server/internal/telemetry/telemetryerrs"
@@ -21,7 +22,7 @@ type getToolUsageSummaryInput struct {
 	To                 string   `json:"to,omitempty" jsonschema:"End time in ISO 8601 format. Defaults to now."`
 	TargetTypes        []string `json:"target_types,omitempty" jsonschema:"Target types to include: hosted_mcp_server, tunneled_mcp_server, meta_mcp_server, shadow_mcp_server, local_tool, skill. Use tunneled_mcp_server for tunneled MCP servers and meta_mcp_server for calls observed against a gateway endpoint."`
 	HostedToolsetSlugs []string `json:"hosted_toolset_slugs,omitempty" jsonschema:"Hosted MCP toolset slugs to include. Prefer mcp_server_ids."`
-	MCPServerIDs       []string `json:"mcp_server_ids,omitempty" jsonschema:"MCP server ids to include: calls served by those hosted, remote or tunneled servers."`
+	MCPServerIDs       []string `json:"mcp_server_ids,omitempty" jsonschema:"MCP server ids (UUIDs) to include: calls served by those hosted, remote or tunneled servers. Toolset slugs go in hosted_toolset_slugs."`
 	ShadowServerNames  []string `json:"shadow_server_names,omitempty" jsonschema:"Shadow MCP server names to include."`
 	MetaMcpServerIDs   []string `json:"meta_mcp_server_ids,omitempty" jsonschema:"Gateway (meta MCP server) ids to include: calls dispatched through the gateway plus calls observed against it."`
 	HookSources        []string `json:"hook_sources,omitempty" jsonschema:"Hook plugin sources to include. Direct MCP calls have no hook source."`
@@ -68,6 +69,11 @@ func (s *GetToolUsageSummary) Call(ctx context.Context, _ toolconfig.ToolCallEnv
 	}
 	if err := core.DecodeInput(payload, &input); err != nil {
 		return err
+	}
+	for _, id := range input.MCPServerIDs {
+		if _, err := uuid.Parse(id); err != nil {
+			return fmt.Errorf("mcp_server_ids: %q is not a UUID", id)
+		}
 	}
 	from, to := defaultTimeWindow(input.From, input.To)
 

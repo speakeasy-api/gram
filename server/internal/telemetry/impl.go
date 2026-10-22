@@ -3568,7 +3568,7 @@ func (s *Service) resolveToolUsageParams(ctx context.Context, f toolUsageFilters
 		MetaMCPMatchers:    metaMCPMatchers,
 		TargetTypes:        targetTypes,
 		HostedToolsetSlugs: f.HostedToolsetSlugs,
-		MCPServerIDs:       f.MCPServerIDs,
+		MCPServerIDs:       lowerAll(f.MCPServerIDs),
 		ShadowServerNames:  f.ShadowServerNames,
 		MetaMCPServerIDs:   f.MetaMcpServerIDs,
 		UserFilters:        userFilters,
@@ -3928,7 +3928,7 @@ func (s *Service) ListToolUsageTraces(ctx context.Context, payload *telem_gen.Li
 		MetaMCPMatchers:    metaMCPMatchers,
 		TargetTypes:        targetTypes,
 		HostedToolsetSlugs: payload.HostedToolsetSlugs,
-		MCPServerIDs:       payload.McpServerIds,
+		MCPServerIDs:       lowerAll(payload.McpServerIds),
 		MCPServerTargetIDs: nil,
 		ShadowServerNames:  payload.ShadowServerNames,
 		MetaMCPServerIDs:   payload.MetaMcpServerIds,
@@ -4213,24 +4213,39 @@ func LoadToolUsageMatchers(ctx context.Context, db *pgxpool.Pool, projectID uuid
 	return hostedMatchers, serverMatchers, nil
 }
 
-// toolsetMCPServerIDs maps each toolset to the mcp_servers row serving it: the
-// canonical wrapper (id = toolset id) when present, else the first live row.
+// toolsetMCPServerIDs picks each toolset's hosting wrapper the way
+// GetMCPServerByToolsetID does: live only, enabled, then canonical, then oldest.
 func toolsetMCPServerIDs(servers []mcpserversRepo.ListMCPServersForTelemetryByProjectIDRow) map[uuid.UUID]string {
-	ids := make(map[uuid.UUID]string, len(servers))
+	best := make(map[uuid.UUID]mcpserversRepo.ListMCPServersForTelemetryByProjectIDRow, len(servers))
 	for _, server := range servers {
-		if !server.ToolsetID.Valid {
+		if !server.ToolsetID.Valid || server.Deleted {
 			continue
 		}
-		toolsetID := server.ToolsetID.UUID
-		if server.ID == toolsetID {
-			ids[toolsetID] = server.ID.String()
-			continue
-		}
-		if _, ok := ids[toolsetID]; !ok {
-			ids[toolsetID] = server.ID.String()
+		current, ok := best[server.ToolsetID.UUID]
+		if !ok || hostingWrapperBefore(server, current) {
+			best[server.ToolsetID.UUID] = server
 		}
 	}
+	ids := make(map[uuid.UUID]string, len(best))
+	for toolsetID, server := range best {
+		ids[toolsetID] = server.ID.String()
+	}
 	return ids
+}
+
+func hostingWrapperBefore(a, b mcpserversRepo.ListMCPServersForTelemetryByProjectIDRow) bool {
+	aEnabled, bEnabled := a.Visibility != "disabled", b.Visibility != "disabled"
+	if aEnabled != bEnabled {
+		return aEnabled
+	}
+	aCanonical, bCanonical := a.ID == a.ToolsetID.UUID, b.ID == b.ToolsetID.UUID
+	if aCanonical != bCanonical {
+		return aCanonical
+	}
+	if !a.CreatedAt.Time.Equal(b.CreatedAt.Time) {
+		return a.CreatedAt.Time.Before(b.CreatedAt.Time)
+	}
+	return a.ID.String() < b.ID.String()
 }
 
 // LoadMetaMCPMatchers loads the gateway endpoint URL suffixes (gram.mcp.server_url)
@@ -4375,6 +4390,7 @@ func toToolUsageFilterOptionsResult(options *repo.ToolUsageFilterOptions, hosted
 	hostedServers := make([]*telem_gen.ToolUsageHostedServerFilterOption, 0, len(options.HostedServers))
 	if includeHostedServers {
 		hostedCounts := make(map[string]int64, len(options.HostedServers))
+		// Empty when the slug's calls span several servers, so the option filters by slug.
 		hostedServerIDs := make(map[string]string, len(options.HostedServers))
 		for _, row := range options.HostedServers {
 			hostedCounts[row.ToolsetSlug] = uint64ToInt64(row.EventCount)
@@ -4384,9 +4400,9 @@ func toToolUsageFilterOptionsResult(options *repo.ToolUsageFilterOptions, hosted
 		seen := make(map[string]struct{}, len(hostedMCPMatchers))
 		for _, matcher := range hostedMCPMatchers {
 			seen[matcher.ToolsetSlug] = struct{}{}
-			serverID := matcher.MCPServerID
-			if serverID == "" {
-				serverID = hostedServerIDs[matcher.ToolsetSlug]
+			serverID, observed := hostedServerIDs[matcher.ToolsetSlug]
+			if !observed {
+				serverID = matcher.MCPServerID
 			}
 			hostedServers = append(hostedServers, &telem_gen.ToolUsageHostedServerFilterOption{
 				ToolsetSlug: matcher.ToolsetSlug,
@@ -4846,4 +4862,16 @@ func toLLMClientUsageFromPG(clients []chatRepo.GetLLMClientBreakdownByMessagesRo
 		}
 	}
 	return result
+}
+
+// lowerAll lowercases ids so they compare equal to the stored lowercase UUIDs.
+func lowerAll(values []string) []string {
+	if len(values) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(values))
+	for _, v := range values {
+		out = append(out, strings.ToLower(v))
+	}
+	return out
 }

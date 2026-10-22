@@ -3,6 +3,7 @@ package telemetry_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -38,6 +39,16 @@ func createHostedMCPServerFixture(t *testing.T, ctx context.Context, ti *testIns
 	})
 	require.NoError(t, err)
 
+	return addToolsetWrapper(t, ctx, ti, toolset.ID, toolset.ID, "acme-"+slug)
+}
+
+// addToolsetWrapper adds an mcp_servers row serving the toolset.
+func addToolsetWrapper(t *testing.T, ctx context.Context, ti *testInstance, toolsetID, id uuid.UUID, slug string) uuid.UUID {
+	t.Helper()
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
 	issuer, err := usersessionsrepo.New(ti.conn).CreateUserSessionIssuer(ctx, usersessionsrepo.CreateUserSessionIssuerParams{
 		ProjectID:          *authCtx.ProjectID,
 		Slug:               "usi-" + uuid.NewString()[:8],
@@ -47,15 +58,15 @@ func createHostedMCPServerFixture(t *testing.T, ctx context.Context, ti *testIns
 	require.NoError(t, err)
 
 	server, err := mcpserversRepo.New(ti.conn).CreateMCPServer(ctx, mcpserversRepo.CreateMCPServerParams{
-		ID:                    toolset.ID,
+		ID:                    id,
 		ProjectID:             *authCtx.ProjectID,
-		Name:                  pgtype.Text{String: name, Valid: true},
-		Slug:                  pgtype.Text{String: "acme-" + slug, Valid: true},
+		Name:                  pgtype.Text{String: slug, Valid: true},
+		Slug:                  pgtype.Text{String: slug, Valid: true},
 		EnvironmentID:         uuid.NullUUID{},
 		UserSessionIssuerID:   uuid.NullUUID{UUID: issuer.ID, Valid: true},
 		RemoteMcpServerID:     uuid.NullUUID{},
 		TunneledMcpServerID:   uuid.NullUUID{},
-		ToolsetID:             uuid.NullUUID{UUID: toolset.ID, Valid: true},
+		ToolsetID:             uuid.NullUUID{UUID: toolsetID, Valid: true},
 		UnproxiedMcpServerID:  uuid.NullUUID{},
 		ToolVariationsGroupID: uuid.NullUUID{},
 		Visibility:            "private",
@@ -250,4 +261,119 @@ func TestToolUsage_FiltersByMCPServerID(t *testing.T) {
 		require.Equal(t, billingID.String(), ids["billing"])
 		require.Equal(t, otherID.String(), ids["other"])
 	})
+}
+
+func TestToolUsage_ToolsetServedByTwoServers(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	projectID := authCtx.ProjectID.String()
+	now := time.Now().UTC()
+
+	canonicalID := createHostedMCPServerFixture(t, ctx, ti, "Shared", "shared")
+	secondID := addToolsetWrapper(t, ctx, ti, canonicalID, uuid.New(), "acme-shared-two")
+
+	for _, row := range []struct {
+		tool     string
+		serverID string
+	}{
+		{tool: "via_canonical", serverID: canonicalID.String()},
+		{tool: "via_second", serverID: secondID.String()},
+		{tool: "unstamped", serverID: ""},
+	} {
+		insertHostedToolEvent(t, ctx, ti, hostedToolEventParams{
+			projectID:   projectID,
+			timestamp:   now.Add(-10 * time.Minute),
+			toolsetSlug: "shared",
+			toolName:    row.tool,
+			userEmail:   "alice@example.com",
+			statusCode:  200,
+			mcpServerID: row.serverID,
+		})
+	}
+
+	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
+	to := now.Add(1 * time.Hour).Format(time.RFC3339)
+	listTools := func(t *testing.T, ids []string) []string {
+		t.Helper()
+		res, err := ti.service.ListToolUsageTraces(ctx, &gen.ListToolUsageTracesPayload{
+			From: from, To: to, McpServerIds: ids, Limit: 10,
+		})
+		require.NoError(t, err, "cause: %v", errors.Unwrap(err))
+		names := make([]string, 0, len(res.Traces))
+		for _, trace := range res.Traces {
+			names = append(names, trace.ToolName)
+		}
+		return names
+	}
+
+	t.Run("it matches unstamped rows to the canonical wrapper", func(t *testing.T) {
+		t.Parallel()
+		require.ElementsMatch(t, []string{"via_canonical", "unstamped"}, listTools(t, []string{canonicalID.String()}))
+	})
+
+	t.Run("it matches the second wrapper's own calls only", func(t *testing.T) {
+		t.Parallel()
+		require.ElementsMatch(t, []string{"via_second"}, listTools(t, []string{secondID.String()}))
+	})
+
+	t.Run("it matches an uppercase id", func(t *testing.T) {
+		t.Parallel()
+		require.ElementsMatch(t, []string{"via_second"}, listTools(t, []string{strings.ToUpper(secondID.String())}))
+	})
+
+	t.Run("it leaves the toolset option and target on the slug", func(t *testing.T) {
+		t.Parallel()
+		options, err := ti.service.GetToolUsageFilterOptions(ctx, &gen.GetToolUsageFilterOptionsPayload{
+			From: from, To: to, OptionTypes: []gen.ToolUsageFilterOptionType{"hosted_servers"},
+		})
+		require.NoError(t, err, "cause: %v", errors.Unwrap(err))
+		require.Len(t, options.HostedServers, 1)
+		require.Equal(t, "shared", options.HostedServers[0].ToolsetSlug)
+		require.Nil(t, options.HostedServers[0].McpServerID)
+
+		summary, err := ti.service.GetToolUsageSummary(ctx, &gen.GetToolUsageSummaryPayload{From: from, To: to})
+		require.NoError(t, err, "cause: %v", errors.Unwrap(err))
+		target := toolUsageTargetsByKey(summary.Targets)["hosted_mcp_server:server:shared"]
+		require.NotNil(t, target)
+		require.Equal(t, int64(3), target.EventCount)
+		require.Nil(t, target.McpServerID)
+	})
+}
+
+func TestToolUsage_DeletedCanonicalWrapperIsNotTheFallback(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	projectID := authCtx.ProjectID.String()
+	now := time.Now().UTC()
+
+	canonicalID := createHostedMCPServerFixture(t, ctx, ti, "Rewrapped", "rewrapped")
+	_, err := mcpserversRepo.New(ti.conn).DeleteMCPServer(ctx, mcpserversRepo.DeleteMCPServerParams{
+		ID:        canonicalID,
+		ProjectID: *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+	liveID := addToolsetWrapper(t, ctx, ti, canonicalID, uuid.New(), "acme-rewrapped-live")
+
+	insertHostedToolEvent(t, ctx, ti, hostedToolEventParams{
+		projectID:   projectID,
+		timestamp:   now.Add(-10 * time.Minute),
+		toolsetSlug: "rewrapped",
+		toolName:    "legacy_call",
+		userEmail:   "alice@example.com",
+		statusCode:  200,
+	})
+
+	res, err := ti.service.ListToolUsageTraces(ctx, &gen.ListToolUsageTracesPayload{
+		From:         now.Add(-1 * time.Hour).Format(time.RFC3339),
+		To:           now.Add(1 * time.Hour).Format(time.RFC3339),
+		McpServerIds: []string{liveID.String()},
+		Limit:        10,
+	})
+	require.NoError(t, err, "cause: %v", errors.Unwrap(err))
+	require.Len(t, res.Traces, 1)
+	require.Equal(t, liveID.String(), *res.Traces[0].McpServerID)
 }

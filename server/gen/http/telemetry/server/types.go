@@ -17630,6 +17630,9 @@ func ValidateGetToolUsageSummaryRequestBody(body *GetToolUsageSummaryRequestBody
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.target_types[*]", e, []any{"hosted_mcp_server", "tunneled_mcp_server", "meta_mcp_server", "shadow_mcp_server", "local_tool", "skill"}))
 		}
 	}
+	if len(body.McpServerIds) > 100 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.mcp_server_ids", body.McpServerIds, len(body.McpServerIds), 100, false))
+	}
 	for _, e := range body.McpServerIds {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_ids[*]", e, goa.FormatUUID))
 	}
@@ -17674,6 +17677,9 @@ func ValidateGetToolUsageTotalsRequestBody(body *GetToolUsageTotalsRequestBody) 
 		if !(e == "hosted_mcp_server" || e == "tunneled_mcp_server" || e == "meta_mcp_server" || e == "shadow_mcp_server" || e == "local_tool" || e == "skill") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.target_types[*]", e, []any{"hosted_mcp_server", "tunneled_mcp_server", "meta_mcp_server", "shadow_mcp_server", "local_tool", "skill"}))
 		}
+	}
+	if len(body.McpServerIds) > 100 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.mcp_server_ids", body.McpServerIds, len(body.McpServerIds), 100, false))
 	}
 	for _, e := range body.McpServerIds {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_ids[*]", e, goa.FormatUUID))
@@ -17720,6 +17726,9 @@ func ValidateGetToolUsageTargetsRequestBody(body *GetToolUsageTargetsRequestBody
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.target_types[*]", e, []any{"hosted_mcp_server", "tunneled_mcp_server", "meta_mcp_server", "shadow_mcp_server", "local_tool", "skill"}))
 		}
 	}
+	if len(body.McpServerIds) > 100 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.mcp_server_ids", body.McpServerIds, len(body.McpServerIds), 100, false))
+	}
 	for _, e := range body.McpServerIds {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_ids[*]", e, goa.FormatUUID))
 	}
@@ -17764,6 +17773,9 @@ func ValidateGetToolUsageUsersRequestBody(body *GetToolUsageUsersRequestBody) (e
 		if !(e == "hosted_mcp_server" || e == "tunneled_mcp_server" || e == "meta_mcp_server" || e == "shadow_mcp_server" || e == "local_tool" || e == "skill") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.target_types[*]", e, []any{"hosted_mcp_server", "tunneled_mcp_server", "meta_mcp_server", "shadow_mcp_server", "local_tool", "skill"}))
 		}
+	}
+	if len(body.McpServerIds) > 100 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.mcp_server_ids", body.McpServerIds, len(body.McpServerIds), 100, false))
 	}
 	for _, e := range body.McpServerIds {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_ids[*]", e, goa.FormatUUID))
@@ -17810,6 +17822,9 @@ func ValidateGetToolUsageClientsRequestBody(body *GetToolUsageClientsRequestBody
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.target_types[*]", e, []any{"hosted_mcp_server", "tunneled_mcp_server", "meta_mcp_server", "shadow_mcp_server", "local_tool", "skill"}))
 		}
 	}
+	if len(body.McpServerIds) > 100 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.mcp_server_ids", body.McpServerIds, len(body.McpServerIds), 100, false))
+	}
 	for _, e := range body.McpServerIds {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_ids[*]", e, goa.FormatUUID))
 	}
@@ -17854,6 +17869,9 @@ func ValidateGetToolUsageClientToolBreakdownRequestBody(body *GetToolUsageClient
 		if !(e == "hosted_mcp_server" || e == "tunneled_mcp_server" || e == "meta_mcp_server" || e == "shadow_mcp_server" || e == "local_tool" || e == "skill") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.target_types[*]", e, []any{"hosted_mcp_server", "tunneled_mcp_server", "meta_mcp_server", "shadow_mcp_server", "local_tool", "skill"}))
 		}
+	}
+	if len(body.McpServerIds) > 100 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.mcp_server_ids", body.McpServerIds, len(body.McpServerIds), 100, false))
 	}
 	for _, e := range body.McpServerIds {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_ids[*]", e, goa.FormatUUID))
@@ -17900,6 +17918,9 @@ func ValidateGetToolUsageTargetTimeSeriesRequestBody(body *GetToolUsageTargetTim
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.target_types[*]", e, []any{"hosted_mcp_server", "tunneled_mcp_server", "meta_mcp_server", "shadow_mcp_server", "local_tool", "skill"}))
 		}
 	}
+	if len(body.McpServerIds) > 100 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.mcp_server_ids", body.McpServerIds, len(body.McpServerIds), 100, false))
+	}
 	for _, e := range body.McpServerIds {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_ids[*]", e, goa.FormatUUID))
 	}
@@ -17944,6 +17965,9 @@ func ValidateGetToolUsageUserTimeSeriesRequestBody(body *GetToolUsageUserTimeSer
 		if !(e == "hosted_mcp_server" || e == "tunneled_mcp_server" || e == "meta_mcp_server" || e == "shadow_mcp_server" || e == "local_tool" || e == "skill") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.target_types[*]", e, []any{"hosted_mcp_server", "tunneled_mcp_server", "meta_mcp_server", "shadow_mcp_server", "local_tool", "skill"}))
 		}
+	}
+	if len(body.McpServerIds) > 100 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.mcp_server_ids", body.McpServerIds, len(body.McpServerIds), 100, false))
 	}
 	for _, e := range body.McpServerIds {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_ids[*]", e, goa.FormatUUID))
@@ -17990,6 +18014,9 @@ func ValidateGetToolUsageUsersByTargetRequestBody(body *GetToolUsageUsersByTarge
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.target_types[*]", e, []any{"hosted_mcp_server", "tunneled_mcp_server", "meta_mcp_server", "shadow_mcp_server", "local_tool", "skill"}))
 		}
 	}
+	if len(body.McpServerIds) > 100 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.mcp_server_ids", body.McpServerIds, len(body.McpServerIds), 100, false))
+	}
 	for _, e := range body.McpServerIds {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_ids[*]", e, goa.FormatUUID))
 	}
@@ -18035,6 +18062,9 @@ func ValidateGetToolUsageTargetToolBreakdownRequestBody(body *GetToolUsageTarget
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.target_types[*]", e, []any{"hosted_mcp_server", "tunneled_mcp_server", "meta_mcp_server", "shadow_mcp_server", "local_tool", "skill"}))
 		}
 	}
+	if len(body.McpServerIds) > 100 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.mcp_server_ids", body.McpServerIds, len(body.McpServerIds), 100, false))
+	}
 	for _, e := range body.McpServerIds {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_ids[*]", e, goa.FormatUUID))
 	}
@@ -18079,6 +18109,9 @@ func ValidateListToolUsageTracesRequestBody(body *ListToolUsageTracesRequestBody
 		if !(e == "hosted_mcp_server" || e == "tunneled_mcp_server" || e == "meta_mcp_server" || e == "shadow_mcp_server" || e == "local_tool" || e == "skill") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.target_types[*]", e, []any{"hosted_mcp_server", "tunneled_mcp_server", "meta_mcp_server", "shadow_mcp_server", "local_tool", "skill"}))
 		}
+	}
+	if len(body.McpServerIds) > 100 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.mcp_server_ids", body.McpServerIds, len(body.McpServerIds), 100, false))
 	}
 	for _, e := range body.McpServerIds {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_ids[*]", e, goa.FormatUUID))

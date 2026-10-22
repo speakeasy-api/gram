@@ -102140,6 +102140,7 @@ components:
                         type: string
                         format: uuid
                     description: MCP server ids to include. Matches calls served by the server, including calls recorded before they carried a server id.
+                    maxItems: 100
                 meta_mcp_server_ids:
                     type: array
                     items:
@@ -106639,6 +106640,7 @@ components:
                         type: string
                         format: uuid
                     description: MCP server ids to include. Matches calls served by the server, including calls recorded before they carried a server id.
+                    maxItems: 100
                 meta_mcp_server_ids:
                     type: array
                     items:

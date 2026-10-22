@@ -2557,7 +2557,9 @@ var GetToolUsageSummaryPayload = Type("GetToolUsageSummaryPayload", func() {
 	})
 	Attribute("target_types", ArrayOf(ToolUsageTargetType), "Target types to include. Empty means all target types.")
 	Attribute("hosted_toolset_slugs", ArrayOf(String), "Deprecated: use mcp_server_ids. Hosted MCP toolset slugs to include")
-	Attribute("mcp_server_ids", ArrayOf(String, func() { Format(FormatUUID) }), "MCP server ids to include. Matches calls served by the server, including calls recorded before they carried a server id.")
+	Attribute("mcp_server_ids", ArrayOf(String, func() { Format(FormatUUID) }), "MCP server ids to include. Matches calls served by the server, including calls recorded before they carried a server id.", func() {
+		MaxLength(100)
+	})
 	Attribute("shadow_server_names", ArrayOf(String), "Shadow MCP server names to include")
 	Attribute("meta_mcp_server_ids", ArrayOf(String), "Gateway (meta MCP server) ids to include: calls dispatched through the gateway to its members plus calls observed against the gateway itself")
 	Attribute("user_filters", ArrayOf(ToolUsageUserFilter), "Typed user identities to include")
@@ -2659,7 +2661,9 @@ var ListToolUsageTracesPayload = Type("ListToolUsageTracesPayload", func() {
 	})
 	Attribute("target_types", ArrayOf(ToolUsageTargetType), "Target types to include. Empty means all target types.")
 	Attribute("hosted_toolset_slugs", ArrayOf(String), "Deprecated: use mcp_server_ids. Hosted MCP toolset slugs to include")
-	Attribute("mcp_server_ids", ArrayOf(String, func() { Format(FormatUUID) }), "MCP server ids to include. Matches calls served by the server, including calls recorded before they carried a server id.")
+	Attribute("mcp_server_ids", ArrayOf(String, func() { Format(FormatUUID) }), "MCP server ids to include. Matches calls served by the server, including calls recorded before they carried a server id.", func() {
+		MaxLength(100)
+	})
 	Attribute("shadow_server_names", ArrayOf(String), "Shadow MCP server names to include")
 	Attribute("meta_mcp_server_ids", ArrayOf(String), "Gateway (meta MCP server) ids to include: calls dispatched through the gateway to its members plus calls observed against the gateway itself")
 	Attribute("user_filters", ArrayOf(ToolUsageUserFilter), "Typed user identities to include")
