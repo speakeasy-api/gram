@@ -1,4 +1,4 @@
-h1:GaqfsKzMZku2HfTsRa+TRYMsTW/O3IKUz7Mk4mW5MmY=
+h1:3fzPhT7bmWN7WRhtvr0S6wNs04CjIHizV2kn6je00S8=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -492,3 +492,4 @@ h1:GaqfsKzMZku2HfTsRa+TRYMsTW/O3IKUz7Mk4mW5MmY=
 20261022000714_directory-users-add-names.sql h1:fZwT3+YRip75UfixXKwzcReAAUytZKmwE8rOc9zGA4k=
 20261022140708_assistant_kit_runtime_authority.sql h1:uhS6VYBQqRnH193QF9B8fwgRngFfuKXLJV5ThSoeQ1I=
 20261022165651_aim_581_drop_toolset_keyed_dependents.sql h1:wBNUisUUx5mKFGrL81O70UwpNizrahyxb0qSRpoYUOw=
+20261022180942_mcp-skill-links.sql h1:8h/6HETO0hd6IvvqSMN+RZv4sWzRymz7KblxYRdODyQ=
