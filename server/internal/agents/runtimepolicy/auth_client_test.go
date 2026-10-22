@@ -210,3 +210,53 @@ func TestAuthScopesAreNotIssuableYet(t *testing.T) {
 	require.False(t, IsIssuableScope(authz.ScopeMCPBlockedAuth))
 	require.True(t, IsIssuableScope(authz.ScopeMCPConnect))
 }
+
+func TestKnownRepresentedUserMatchesTheirConcreteOwnerGrant(t *testing.T) {
+	t.Parallel()
+
+	symbolic := authGrant("", authz.ScopeMCPAuth, "*", ownedBy(authz.SelectorValueRepresentedUser))
+	own := authGrant("", authz.ScopeMCPAuth, "*", ownedBy("user_u"))
+	unrestricted := authGrant("", authz.ScopeMCPAuth, "*", nil)
+	policy := mustAuthPolicy(t, symbolic)
+
+	contained, err := DelegationContainedFor("user_u", policy, []authz.Grant{own})
+	require.NoError(t, err)
+	require.True(t, contained, "acting for user_u, user_u's own connection grant contains the symbolic owner")
+
+	contained, err = DelegationContainedFor("user_x", policy, []authz.Grant{own})
+	require.NoError(t, err)
+	require.False(t, contained, "acting for user_x, user_u's connection grant does not")
+
+	contained, err = DelegationContained(policy, []authz.Grant{own})
+	require.NoError(t, err)
+	require.False(t, contained, "an unknown represented user stays conservative")
+
+	grants, err := DelegableGrantsFor("user_u", []authz.Grant{symbolic}, []authz.Grant{own}, []authz.Grant{unrestricted})
+	require.NoError(t, err)
+	require.Equal(t, []authz.Grant{symbolic}, grants, "the candidate keeps the symbolic owner")
+
+	grants, err = DelegableGrantsFor("user_u", []authz.Grant{own}, []authz.Grant{symbolic}, []authz.Grant{unrestricted})
+	require.NoError(t, err)
+	require.Equal(t, []authz.Grant{symbolic}, grants, "either orientation narrows to the symbolic owner")
+
+	grants, err = DelegableGrantsFor("user_x", []authz.Grant{symbolic}, []authz.Grant{own}, []authz.Grant{unrestricted})
+	require.NoError(t, err)
+	require.Empty(t, grants, "another user's connection grant offers nothing")
+}
+
+func TestDirectOwnConnectionGrantOutranksInheritedSymbolicBlock(t *testing.T) {
+	t.Parallel()
+
+	allow := authGrant("user:user_u", authz.ScopeMCPAuth, "client_a", ownedBy("user_u"))
+	inherited := authGrant("role:role_1", authz.ScopeMCPBlockedAuth, "client_a", ownedBy(authz.SelectorValueRepresentedUser))
+	policy := mustAuthPolicy(t, authGrant("", authz.ScopeMCPAuth, "client_a", ownedBy(authz.SelectorValueRepresentedUser)))
+
+	contained, err := DelegationContainedFor("user_u", policy, []authz.Grant{allow, inherited})
+	require.NoError(t, err)
+	require.True(t, contained, "the direct grant outranks the inherited block for user_u, as at runtime")
+
+	own := authGrant("user:user_u", authz.ScopeMCPBlockedAuth, "client_a", ownedBy(authz.SelectorValueRepresentedUser))
+	contained, err = DelegationContainedFor("user_u", policy, []authz.Grant{allow, own})
+	require.NoError(t, err)
+	require.False(t, contained, "the principal's own block is never outranked")
+}
