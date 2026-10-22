@@ -1435,6 +1435,68 @@ type AdminStripeSubscriptionCandidate struct {
 	Status string
 }
 
+// Where one kind of configured upstream identity stands.
+type AdminUpstreamOAuthMigrationAuthClientKind struct {
+	// The kind: oauth, header or ema.
+	Kind string
+	// Configuration and server links decided.
+	Decided int64
+	// Auth clients not yet recorded.
+	PendingClients int64
+	// Server to auth client links not yet recorded.
+	PendingLinks int64
+	// Header copies and EMA scope sets not yet up to date.
+	PendingHeaders int64
+	// Backfilled auth clients and server links the configuration no longer yields,
+	// not yet retired.
+	PendingRetirements int64
+	// Configuration that cannot be recorded without a guess.
+	Unresolved int64
+}
+
+// Where one organization stands in recording a typed auth client for every
+// upstream identity its servers are configured with (upstream OAuth clients,
+// source credential headers and identity chaining upstreams), and in retiring
+// backfilled records the configuration no longer yields. Nothing reads these
+// records yet.
+type AdminUpstreamOAuthMigrationAuthClients struct {
+	// Whether every configured identity has its auth client, server links and
+	// header copies recorded, no backfilled record is left to retire, no server
+	// offering one is left undecided, and no phase failed.
+	Complete bool
+	// Whether a run is recording typed auth clients for the organization right
+	// now. The other counts are then empty; check again when it finishes.
+	InProgress bool
+	// Servers offering a backfilled auth client whose need for upstream
+	// authentication is still undecided, not yet marked as needing it.
+	PendingMarkedServers int64
+	// Configured identities and server links decided.
+	Associations int64
+	// Auth clients not yet recorded.
+	PendingClients int64
+	// Server to auth client links not yet recorded.
+	PendingLinks int64
+	// Header copies and EMA scope sets not yet up to date.
+	PendingHeaders int64
+	// Backfilled auth clients and server links the configuration no longer yields,
+	// not yet retired.
+	PendingRetirements int64
+	// Configured identities that cannot be recorded without a guess and need
+	// attention.
+	Unresolved int64
+	// The configuration counted in unresolved.
+	UnresolvedAssociations []*AdminUpstreamOAuthMigrationUnresolvedAssociation
+	// Configuration worth a look that needs no action and does not hold back
+	// complete, such as a server at an identity chaining upstream's origin that
+	// only live discovery could confirm.
+	Warnings []*AdminUpstreamOAuthMigrationUnresolvedAssociation
+	// The same counts for each kind of configured identity.
+	Kinds []*AdminUpstreamOAuthMigrationAuthClientKind
+	// Phases whose check failed: oauth, headers, ema, reconcile or mark. The
+	// counts cover the other phases.
+	FailedPhases []string
+}
+
 // An organization the upstream OAuth migration applies to: it has a live MCP
 // server signed in through a user session issuer.
 type AdminUpstreamOAuthMigrationOrganization struct {
@@ -1465,6 +1527,16 @@ type AdminUpstreamOAuthMigrationRun struct {
 	AssociationsSkipped int64
 	// Credential choices recorded.
 	SelectionsWritten int64
+	// Typed auth clients recorded.
+	AuthClientsWritten *int64
+	// Server to auth client links recorded.
+	AuthClientLinksWritten *int64
+	// Servers marked as needing upstream authentication because they offer a
+	// backfilled auth client.
+	ServersMarkedRequiringUpstreamAuth *int64
+	// Why recording typed auth clients failed, when it did. The upstream OAuth
+	// migration itself is unaffected.
+	AuthClientsError *string
 	// The organization's status after the run.
 	Status *AdminUpstreamOAuthMigrationStatus
 }
@@ -1501,6 +1573,42 @@ type AdminUpstreamOAuthMigrationStatus struct {
 	// Credentials with at least one server they will be asked to reconnect to,
 	// because no single client is decided for them.
 	ReconnectCredentials int64
+	// Where the organization stands in recording typed auth clients. Separate from
+	// migrated: it never gates the upstream OAuth cutover. Absent when its check
+	// failed.
+	AuthClients *AdminUpstreamOAuthMigrationAuthClients
+}
+
+// Configuration the typed auth client backfill cannot record without a guess,
+// and why. ID fields that do not apply to its kind are the nil UUID.
+type AdminUpstreamOAuthMigrationUnresolvedAssociation struct {
+	// What was decided: oauth, header or ema.
+	Kind string
+	// Why it cannot be recorded: unknown_owner, type_mismatch, project_mismatch,
+	// multiple_authorization_headers, duplicate_header_names, denied_source,
+	// mixed_credential_headers, oauth_client_shared_across_sources,
+	// ema_client_shared_across_sources, conflicting_scopes, resource_variants,
+	// resource_not_matched, issuer_not_allowed or registration_out_of_reach; for a
+	// warning, server_not_matched.
+	Reason string
+	// The association, source, upstream OAuth client or first binding decided.
+	SubjectID string
+	// The server to upstream OAuth client association ID, for an oauth association.
+	AssociationID string
+	// The MCP server ID, when one server is concerned.
+	McpServerID string
+	// The project the configuration belongs to.
+	ProjectID string
+	// The upstream OAuth client ID, for oauth and ema.
+	RemoteSessionClientID string
+	// Every identity chaining binding decided together, for ema.
+	BindingIds []string
+	// The sources concerned, for an upstream OAuth client shared across sources.
+	SourceIds []string
+	// The servers concerned, for an upstream OAuth client shared across sources.
+	ServerIds []string
+	// The auth client already recorded, if any.
+	AuthClientID *string
 }
 
 type AdminUser struct {

@@ -17,7 +17,7 @@ export function ClearedConfirmationNotice({
   onReview: () => void;
 }): JSX.Element {
   return (
-    <Alert variant="info" alignTop>
+    <Alert variant="info">
       <div className="flex flex-col gap-3">
         <Text small>
           Confirmation cleared for {snapshot.serverName}. The Okta connection

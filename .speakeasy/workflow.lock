@@ -1,4 +1,4 @@
-speakeasyVersion: 1.796.1
+speakeasyVersion: 1.803.0
 sources: {}
 targets:
     gram-admin:
@@ -9,7 +9,7 @@ targets:
         source: Hooks-Ingest
 workflow:
     workflowVersion: 1.0.0
-    speakeasyVersion: 1.796.1
+    speakeasyVersion: 1.803.0
     sources:
         Gram-Admin:
             inputs:

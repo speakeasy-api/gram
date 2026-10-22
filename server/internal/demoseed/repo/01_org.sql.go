@@ -691,6 +691,22 @@ func (q *Queries) OrgInsertFeatures(ctx context.Context, arg OrgInsertFeaturesPa
 	return err
 }
 
+const orgInsertGatewayDisabledFeature = `-- name: OrgInsertGatewayDisabledFeature :exec
+INSERT INTO organization_features (organization_id, feature_name)
+SELECT $1::text, 'organization_gateway_disabled'
+WHERE NOT EXISTS (
+  SELECT 1 FROM organization_features
+  WHERE organization_id = $1::text AND feature_name = 'organization_gateway_disabled'
+)
+ON CONFLICT (organization_id, feature_name) WHERE deleted IS FALSE DO NOTHING
+`
+
+// Start with access review required, preserving an explicit opt-in on reseed.
+func (q *Queries) OrgInsertGatewayDisabledFeature(ctx context.Context, orgID string) error {
+	_, err := q.db.Exec(ctx, orgInsertGatewayDisabledFeature, orgID)
+	return err
+}
+
 const orgInsertHooksFailOpenFeature = `-- name: OrgInsertHooksFailOpenFeature :exec
 INSERT INTO organization_features (organization_id, feature_name)
 SELECT $1::text, 'hooks_fail_open'

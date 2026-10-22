@@ -131,15 +131,29 @@ remains hidden and the PAGES.md row stays `[~]`, not UI-verified.
     starts with the fictional `https://auth.example.com` issuer; live discovery
     does not need to succeed for this seeded-page check.
 
-12a. **Organization Gateway** — open **MCP** (`/<org>/projects/default/mcp`). The
-**Organization Gateway** card leads the MCP Servers grid, because `acme-workforce` is
-the organization's only organization-wide authorization server. Opening it
-shows the endpoint `<server>/mcp/gateway/<org>` with a copy button, where
-`<org>` is the organization's slug (`acme-demo` in the demo org, your own org's
-slug after `mise run seed`); install cards for **Claude Code**, **Claude**,
-**Cursor**, **OpenAI Codex**, **ChatGPT**, **OpenCode** and **Other clients**;
-and an **Enabled** switch. `organizations.getGateway` in the network panel
-returns `available: true` with that URL.
+12a. **Organization Gateway** — after seeding, open **MCP**
+(`/<org>/projects/default/mcp`). The **Organization Gateway** card leads the
+unfiltered grid and table with an **Off** badge for organization admins.
+`organizations.getGateway` reports `available: false`. Open the card and confirm
+**View assignments** opens the role and member access view for organization
+admins before enabling. Use the gateway switch to start the assignment review. Acknowledge the completed
+review and select **Enable Organization Gateway**. The same page then shows
+the endpoint `<server>/mcp/gateway/<org>` with a copy button and client install
+instructions. Derive `<org>` from the active organization slug at the start of
+the dashboard URL (`/<org>/projects/default/mcp`), for both the shared demo
+and local seed. Confirm `organizations.getGateway` returns the matching endpoint.
+The page header uses the brand-mesh background with grain texture. Its endpoint has a
+white box and copy button with the enabled/disabled switch alongside it,
+above separate **Install** and **View assignments** tabs. Organization admins
+can inspect and edit assignments without turning the gateway off. The gateway response reports `available: true` with that URL.
+The old organization settings gateway URL redirects to this page.
+
+In **MCP Assignments**, confirm one row per role with stacked server icons under
+**Connect**. Expand **Support Desk** to inspect unrestricted and
+read-only access; expand **Contractors** to see its blocked server after allowed
+servers, with red styling and a blocked icon badge. The MCP filter opens a
+searchable list directly. Click a role’s member avatars and select a person to
+open their effective assignments; the dropdown always offers compact member search and **Edit role**. Default-project labels and per-row totals stay hidden.
 
 13. **Killswitches on the identity Access tab (local rewritten seed only)** —
     Killswitch management intentionally rejects demo/support sessions. Verify this

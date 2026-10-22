@@ -1,3 +1,4 @@
+import { supportsAudienceReading } from "./manageAccessState";
 import {
   InlineChoice,
   type InlineChoiceOption,
@@ -130,8 +131,14 @@ export function ManageAccess({
   // The row controls are gated by RequireScope; the remove button carries the
   // same gate as a disabled state so it cannot be clicked without the scope.
   const { hasAnyScope } = useRBAC();
-  const canManage = hasAnyScope(["org:admin"]);
-  const showPlugins = canManage && rolePlugins !== undefined;
+  const direct = useMemo(() => ownRules(entries), [entries]);
+  const supportsEditing = useMemo(
+    () => supportsAudienceReading(entries),
+    [entries],
+  );
+  const isAdmin = hasAnyScope(["org:admin"]);
+  const canManage = isAdmin && supportsEditing;
+  const showPlugins = isAdmin && rolePlugins !== undefined;
   const [page, setPage] = useState(0);
   // Which kind of principal the picker is open for.
   const [adding, setAdding] = useState<"user" | "agent" | "role" | null>(null);
@@ -158,7 +165,6 @@ export function ManageAccess({
     );
   }, [membersData]);
 
-  const direct = useMemo(() => ownRules(entries), [entries]);
   const rows = useMemo(() => buildAccessRows(entries), [entries]);
 
   // Agents a role's or everyone's unnarrowed connect block reaches. Unlike a
@@ -195,6 +201,7 @@ export function ManageAccess({
       // Check access answers from the same rules, so an open answer is redone.
       await Promise.all([
         invalidateAllResourceAudience(queryClient),
+        queryClient.invalidateQueries({ queryKey: ["mcpAssignments"] }),
         invalidateAllExplainResourceAccess(queryClient),
         invalidateAllRoles(queryClient),
         invalidateAllPlugin(queryClient),
@@ -235,20 +242,24 @@ export function ManageAccess({
     );
   };
 
-  const applyWrite = (write: AudienceWrite) =>
+  const applyWrite = (buildWrite: () => AudienceWrite) => {
+    if (!canManage) return;
+    const write = buildWrite();
     save(write.entries, write.message);
+  };
 
   const changeNarrowing = (
     target: NarrowingTarget,
     next: { tools: string[]; dispositions: string[] },
   ) => {
     setNarrowing(null);
-    applyWrite(
+    applyWrite(() =>
       narrowWrite(direct, target.row, next, toolCatalog, resourceName),
     );
   };
 
   const openNarrowing = (row: AccessRow) => {
+    if (!canManage) return;
     // A block this row cannot lift caps what it can reach, so the picker
     // leaves those tools out rather than accepting a choice that does
     // nothing — and it opens on what the row reaches today, so saving
@@ -288,28 +299,35 @@ export function ManageAccess({
   // block, which outranks every grant but the ones people were given here by
   // name. Only that case is worth a dialog.
   const removeRow = (row: AccessRow) => {
+    if (!canManage) return;
     if (inheritedGrants(row).length === 0) {
-      applyWrite(revokeRowWrite(direct, row, resourceName));
+      applyWrite(() => revokeRowWrite(direct, row, resourceName));
       return;
     }
     setRemoving(row);
   };
 
   const confirmRemove = () => {
-    if (!removing) return;
-    applyWrite(revokeRowWrite(direct, removing, resourceName));
+    if (!removing || !canManage) return;
+    applyWrite(() => revokeRowWrite(direct, removing, resourceName));
     setRemoving(null);
   };
 
   const addPrincipals = (principalUrns: string[]) => {
     setPage(0);
-    applyWrite(addPrincipalsWrite(direct, principalUrns, resourceName));
+    applyWrite(() => addPrincipalsWrite(direct, principalUrns, resourceName));
   };
 
   if (isLoading) return <SkeletonTable />;
 
   return (
     <div>
+      {!supportsEditing && (
+        <p className="text-muted-foreground mb-3 text-sm">
+          Some access rules are not supported by this version. Refresh the page
+          before editing.
+        </p>
+      )}
       <Card.Dashboard
         title="Manage access to this server"
         // Rows run edge to edge under the header.
@@ -322,7 +340,7 @@ export function ManageAccess({
           >
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="secondary" size="sm">
+                <Button variant="secondary" size="sm" disabled={!canManage}>
                   <Button.LeftIcon>
                     <Plus className="h-4 w-4" />
                   </Button.LeftIcon>
@@ -388,21 +406,28 @@ export function ManageAccess({
                   .filter((member) => member !== undefined)}
                 catalog={toolCatalog ?? []}
                 onAllow={(scope) =>
-                  applyWrite(allowWrite(direct, row, scope, resourceName))
+                  applyWrite(() => allowWrite(direct, row, scope, resourceName))
                 }
                 onRevokeScope={(scope) =>
-                  applyWrite(revokeScopeWrite(direct, row, scope, resourceName))
+                  applyWrite(() =>
+                    revokeScopeWrite(direct, row, scope, resourceName),
+                  )
                 }
                 onNarrow={() => openNarrowing(row)}
                 onBlockDestructive={() =>
-                  applyWrite(blockDestructiveWrite(direct, row, resourceName))
+                  applyWrite(() =>
+                    blockDestructiveWrite(direct, row, resourceName),
+                  )
                 }
                 onAllowDestructive={() =>
-                  applyWrite(allowDestructiveWrite(direct, row, resourceName))
+                  applyWrite(() =>
+                    allowDestructiveWrite(direct, row, resourceName),
+                  )
                 }
                 onRevoke={() => removeRow(row)}
                 onEditRole={() => editRole(row)}
                 canManage={canManage}
+                isAdmin={isAdmin}
                 pending={setAudience.isPending}
               />
             ))}
@@ -440,7 +465,7 @@ export function ManageAccess({
         </div>
       )}
 
-      {narrowing && (
+      {narrowing && canManage && (
         <ToolNarrowingDialog
           serverId={resourceId}
           serverName={resourceName}
@@ -454,7 +479,7 @@ export function ManageAccess({
         />
       )}
 
-      {removing && (
+      {removing && canManage && (
         <RemoveAudienceDialog
           row={removing}
           keptBy={keptIndividually(removing, rows, toolCatalog ?? []).map(
@@ -467,7 +492,7 @@ export function ManageAccess({
         />
       )}
 
-      {adding && (
+      {adding && canManage && (
         <AddAudienceDialog
           title={
             adding === "agent"
@@ -531,6 +556,7 @@ function PrincipalRow({
   onRevoke,
   onEditRole,
   canManage,
+  isAdmin,
   pending,
 }: {
   row: AccessRow;
@@ -547,6 +573,7 @@ function PrincipalRow({
   onRevoke: () => void;
   onEditRole: () => void;
   canManage: boolean;
+  isAdmin: boolean;
   pending: boolean;
 }): JSX.Element {
   // Collapsed by default: an administrator scanning the list wants to know
@@ -584,7 +611,7 @@ function PrincipalRow({
           {accessSummary(row, catalog)}
         </Text>
 
-        {canManage && rolePlugins !== undefined && (
+        {rolePlugins !== undefined && (
           <div className="min-w-0">
             {row.kind === "role" ? (
               <RolePluginLinks
@@ -622,11 +649,13 @@ function PrincipalRow({
             // A role reached by an organization-wide rule is not removed
             // here, it is subtracted — so the label says what it does.
             label={
-              !canManage
+              !isAdmin
                 ? "Only organization admins can change access."
-                : reaches
-                  ? `Remove ${row.displayName} from this server`
-                  : `Remove ${row.displayName}`
+                : !canManage
+                  ? "Access cannot be changed here."
+                  : reaches
+                    ? `Remove ${row.displayName} from this server`
+                    : `Remove ${row.displayName}`
             }
             onClick={onRevoke}
             disabled={pending || !canRemove}
@@ -664,6 +693,7 @@ function PrincipalRow({
                   onBlockDestructive={onBlockDestructive}
                   onAllowDestructive={onAllowDestructive}
                   pending={pending}
+                  canManage={canManage}
                 />
               ))}
             </div>
@@ -700,6 +730,7 @@ function ScopeLine({
   onBlockDestructive,
   onAllowDestructive,
   pending,
+  canManage,
 }: {
   label: string;
   /** What this scope lets the principal do, in one line. */
@@ -714,6 +745,7 @@ function ScopeLine({
   onBlockDestructive: () => void;
   onAllowDestructive: () => void;
   pending: boolean;
+  canManage: boolean;
 }): JSX.Element {
   const state = scopeState(row, scope, catalog);
   const options = scopeOptions({
@@ -747,7 +779,7 @@ function ScopeLine({
         >
           <InlineChoice
             value={state.value}
-            disabled={pending}
+            disabled={pending || !canManage}
             options={options}
           />
         </RequireScope>

@@ -233,10 +233,11 @@ func (s *Service) serveResolvedMCPEndpoint(
 				return err
 			}
 		}
+		buildOptions := authClientBuildOptions(pendingIssuerGate)
 		if mcpServer.RemoteMcpServerID.Valid {
-			return s.serveRemoteBackend(w, r, logger, mcpEndpoint, mcpServer, upstreamToken, wwwAuthenticate, sessionToolSelection)
+			return s.serveRemoteBackend(w, r, logger, mcpEndpoint, mcpServer, upstreamToken, wwwAuthenticate, sessionToolSelection, buildOptions...)
 		}
-		return s.serveTunneledBackend(w, r, logger, mcpEndpoint, mcpServer, upstreamResource, upstreamToken, wwwAuthenticate, sessionToolSelection)
+		return s.serveTunneledBackend(w, r, logger, mcpEndpoint, mcpServer, upstreamResource, upstreamToken, wwwAuthenticate, sessionToolSelection, buildOptions...)
 	case mcpServer.ToolsetID.Valid:
 		// Wrapper-governed dispatch (AIS-633): visibility, issuer gating, the
 		// RBAC resource id, and the variation-group override come from the
@@ -436,17 +437,6 @@ func grantRoutesToUpstream(resource, upstream string, tunneled bool) bool {
 	// a distinct audience.
 	want := strings.TrimRight(upstream, "/")
 	return want != "" && strings.TrimRight(resource, "/") == want
-}
-
-// tunneledBackendIssuer yields the identity a resourceless tunneled backend's
-// subject grants route by: the server's own derived remote_session_issuer,
-// and only for tunneled backends — a remote backend routes subject grants
-// strictly by recorded resource.
-func tunneledBackendIssuer(mcpServer *mcpserversrepo.McpServer) uuid.NullUUID {
-	if !mcpServer.TunneledMcpServerID.Valid {
-		return uuid.NullUUID{UUID: uuid.Nil, Valid: false}
-	}
-	return mcpServer.RemoteSessionIssuerID
 }
 
 // upstreamRoutingError is a fail-closed routing outcome: the endpoint's
@@ -714,6 +704,7 @@ func (s *Service) serveRemoteBackend(
 	upstream remotesessions.UpstreamToken,
 	wwwAuthenticate string,
 	selection *toolfilter.SessionSelection,
+	buildOptions ...remotemcp.BuildOption,
 ) error {
 	ctx := r.Context()
 	logger = logger.With(attr.SlogRemoteMCPServerID(mcpServer.RemoteMcpServerID.UUID.String()))
@@ -723,7 +714,7 @@ func (s *Service) serveRemoteBackend(
 		return err
 	}
 
-	build, err := s.remoteBackendProxyBuilder(ctx, logger, endpoint.ProjectID, organizationID, mcpServer, upstream.Token, wwwAuthenticate, selection)
+	build, err := s.remoteBackendProxyBuilder(ctx, logger, endpoint.ProjectID, organizationID, mcpServer, upstream.Token, wwwAuthenticate, selection, buildOptions...)
 	if err != nil {
 		return err
 	}
@@ -735,6 +726,16 @@ func (s *Service) serveRemoteBackend(
 	rejectSurvivingClientCredentialRejection(w, p, logger, upstream, renewal)
 
 	return serveProxyBackend(w, r.WithContext(ctx), p)
+}
+
+// authClientBuildOptions sends the resolved typed auth client's headers in
+// place of the server's credential headers; none when the upstream client
+// choice governs the request.
+func authClientBuildOptions(authentication *issuerGateAuthentication) []remotemcp.BuildOption {
+	if authentication == nil || authentication.authClient == nil {
+		return nil
+	}
+	return []remotemcp.BuildOption{remotemcp.WithAuthClientHeaders(authentication.authClient.headers)}
 }
 
 // remoteBackendProxyBuilder loads a remote-backed server once and yields fresh one-request proxies for it.
@@ -807,6 +808,7 @@ func (s *Service) serveTunneledBackend(
 	upstream remotesessions.UpstreamToken,
 	wwwAuthenticate string,
 	selection *toolfilter.SessionSelection,
+	buildOptions ...remotemcp.BuildOption,
 ) error {
 	ctx := r.Context()
 	logger = logger.With(attr.SlogTunneledMCPServerID(mcpServer.TunneledMcpServerID.UUID.String()))
@@ -836,7 +838,7 @@ func (s *Service) serveTunneledBackend(
 		UpstreamAuth:       upstream.Token,
 		WWWAuthenticate:    wwwAuthenticate,
 		Selection:          selection,
-	})
+	}, buildOptions...)
 	if err != nil {
 		return err
 	}

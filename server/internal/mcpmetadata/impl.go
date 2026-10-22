@@ -418,20 +418,18 @@ func (s *Service) SetMcpMetadata(ctx context.Context, payload *gen.SetMcpMetadat
 	if backend.toolset != nil && !wrapperID.Valid {
 		return nil, oops.E(oops.CodeBadRequest, nil, hostedmcp.NoServerMessage).LogWarn(ctx, logger)
 	}
-	rows, err := mcpr.LockMetadataByBackendID(ctx, repo.LockMetadataByBackendIDParams{ProjectID: *authCtx.ProjectID, BackendID: backend.backendID(), ToolsetBackend: backend.toolset != nil})
-	if err != nil {
+	var existingRow *repo.McpMetadatum
+	row, err := mcpr.LockMetadataByBackendID(ctx, repo.LockMetadataByBackendIDParams{ProjectID: *authCtx.ProjectID, BackendID: backend.backendID(), ToolsetBackend: backend.toolset != nil})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "fetch existing MCP server metadata").LogError(ctx, logger)
-	}
-	existingRow := winningMetadataRow(rows)
-	if existingRow != nil {
-		existing, err = ToMCPMetadata(ctx, mcpr, *existingRow)
+	default:
+		existingRow = &row
+		existing, err = ToMCPMetadata(ctx, mcpr, row)
 		if err != nil {
 			logger.ErrorContext(ctx, "convert existing MCP server metadata", attr.SlogError(err))
 		}
-	}
-	// Toolset-keyed rows only match a canonical id, so they move onto that wrapper in place and the save below updates them.
-	if err := rekeyMetadataOntoWrapper(ctx, mcpr, *authCtx.ProjectID, backend.backendID(), rows); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "move MCP server metadata onto its server").LogError(ctx, logger)
 	}
 
 	var logoID uuid.NullUUID
@@ -871,44 +869,6 @@ func (b *resolvedMetadataBackend) reportBackendIDs(metadata *types.McpMetadata, 
 	if wrapperID.Valid {
 		metadata.ToolsetID, metadata.McpServerID = new(wrapperID.UUID.String()), new(wrapperID.UUID.String())
 	}
-}
-
-// winningMetadataRow picks the row every reader shows: toolset-keyed over a server-keyed twin.
-func winningMetadataRow(rows []repo.McpMetadatum) *repo.McpMetadatum {
-	for i := range rows {
-		if rows[i].ToolsetID.Valid {
-			return &rows[i]
-		}
-	}
-	if len(rows) == 0 {
-		return nil
-	}
-	return &rows[0]
-}
-
-// rekeyMetadataOntoWrapper moves a toolset-keyed row onto the wrapper in place, deleting a server-keyed twin first.
-func rekeyMetadataOntoWrapper(ctx context.Context, mcpr *repo.Queries, projectID, wrapperID uuid.UUID, rows []repo.McpMetadatum) error {
-	winner := winningMetadataRow(rows)
-	if winner == nil || !winner.ToolsetID.Valid {
-		return nil
-	}
-	key := uuid.NullUUID{UUID: wrapperID, Valid: true}
-	for _, row := range rows {
-		if row.McpServerID != key {
-			continue
-		}
-		if _, err := mcpr.DeleteServerKeyedMetadata(ctx, repo.DeleteServerKeyedMetadataParams{ID: row.ID, ProjectID: projectID, McpServerID: key}); err != nil {
-			return fmt.Errorf("delete server-keyed metadata twin: %w", err)
-		}
-	}
-	moved, err := mcpr.RekeyMetadataToMcpServer(ctx, repo.RekeyMetadataToMcpServerParams{McpServerID: key, ID: winner.ID, ProjectID: projectID})
-	if err != nil {
-		return fmt.Errorf("rekey toolset metadata: %w", err)
-	}
-	if moved != 1 {
-		return fmt.Errorf("rekey toolset metadata: %d rows moved", moved)
-	}
-	return nil
 }
 
 func isCanonicalWrapper(server *mcpservers_repo.McpServer) bool {

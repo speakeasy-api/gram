@@ -211,8 +211,12 @@ export function GatewayInstructionsSection({
   const defaultInstructions =
     metaMcpServer.discoveryMode === "direct"
       ? directInstructions.trimEnd()
-      : builtInInstructions;
-  const stored = metaMcpServer.instructions || defaultInstructions;
+      : metaMcpServer.discoveryMode === "progressive"
+        ? builtInInstructions
+        : undefined;
+  const supportsEditing =
+    defaultInstructions !== undefined || !!metaMcpServer.instructions;
+  const stored = metaMcpServer.instructions || defaultInstructions || "";
   const [draft, setDraft] = useState(stored);
 
   useEffect(() => {
@@ -230,7 +234,7 @@ export function GatewayInstructionsSection({
       // Refetching an already-empty saved value does not change `stored`.
       setDraft((current) =>
         current.replaceAll("\0", "").trim() === ""
-          ? defaultInstructions
+          ? (defaultInstructions ?? "")
           : current,
       );
       toast.success("Gateway instructions updated");
@@ -243,7 +247,14 @@ export function GatewayInstructionsSection({
   // the limit agree with what will be stored.
   const characterCount = Array.from(trimmedDraft.replaceAll("\0", "")).length;
   const overLimit = characterCount > INSTRUCTIONS_MAX_LENGTH;
-  const saveDisabled = !canWrite || !dirty || overLimit || update.isPending;
+  const saveDisabled =
+    !canWrite ||
+    !supportsEditing ||
+    !dirty ||
+    overLimit ||
+    update.isPending ||
+    (defaultInstructions === undefined &&
+      trimmedDraft.replaceAll("\0", "").trim() === "");
 
   return (
     <SettingsSection id={GATEWAY_INSTRUCTIONS_SECTION_ID}>
@@ -264,9 +275,11 @@ export function GatewayInstructionsSection({
               <FieldLabel htmlFor="gateway-instructions">
                 Custom instructions
               </FieldLabel>
-              <CopyBuiltInInstructionsButton
-                instructions={defaultInstructions}
-              />
+              {defaultInstructions !== undefined && (
+                <CopyBuiltInInstructionsButton
+                  instructions={defaultInstructions}
+                />
+              )}
             </div>
             <Textarea
               id="gateway-instructions"
@@ -274,7 +287,12 @@ export function GatewayInstructionsSection({
               onChange={(event) => setDraft(event.target.value)}
               className="min-h-[160px]"
               aria-invalid={update.isError || overLimit}
-              disabled={!canWrite || update.isPending}
+              disabled={!canWrite || !supportsEditing || update.isPending}
+              placeholder={
+                defaultInstructions === undefined
+                  ? "Default instructions unavailable"
+                  : undefined
+              }
             />
             {overLimit && (
               <FieldError>
@@ -288,7 +306,17 @@ export function GatewayInstructionsSection({
           <SettingsSection.FooterHint
             className={cn(overLimit && "text-destructive")}
           >
-            {`${characterCount.toLocaleString()} / ${INSTRUCTIONS_MAX_LENGTH.toLocaleString()} characters.`}
+            {supportsEditing && (
+              <span className="block">
+                {`${characterCount.toLocaleString()} / ${INSTRUCTIONS_MAX_LENGTH.toLocaleString()} characters.`}
+              </span>
+            )}
+            {defaultInstructions === undefined && (
+              <span className="block">
+                Refresh the page to view or restore default instructions for
+                this gateway’s unsupported discovery mode.
+              </span>
+            )}
           </SettingsSection.FooterHint>
           <SettingsSection.FooterActions>
             <RequireScope
@@ -299,7 +327,8 @@ export function GatewayInstructionsSection({
               <FooterSaveButton
                 pending={update.isPending}
                 disabled={saveDisabled}
-                onClick={() =>
+                onClick={() => {
+                  if (saveDisabled) return;
                   update.mutate({
                     request: {
                       updateMetaMcpServerForm: {
@@ -311,8 +340,8 @@ export function GatewayInstructionsSection({
                         instructions: trimmedDraft,
                       },
                     },
-                  })
-                }
+                  });
+                }}
               />
             </RequireScope>
           </SettingsSection.FooterActions>

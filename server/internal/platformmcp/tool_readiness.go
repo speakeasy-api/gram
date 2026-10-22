@@ -44,7 +44,7 @@ func registerReadinessTools(reg *Registrar, readiness *ReadinessService) {
 		Name:        "get_mcp_readiness",
 		Title:       "Check If an MCP Server Is Working",
 		Description: "Say whether one MCP server is working, from the last stored check, when its registration ID is known. Constraints: forcing a fresh authenticated check is limited to three per minute for that MCP server, and is unavailable to managed project assistants.",
-		Annotations: readOnlyAnnotations(),
+		Annotations: readOnlyOpenWorldAnnotations(),
 	}, ToolMeta{
 		Authorization: ExternalAuthorizationOrgAdmin,
 		// Assistants only read their own persisted, actor-scoped evidence. A

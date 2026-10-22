@@ -50,7 +50,6 @@ import { useRemovePluginServerMutation } from "@gram/client/react-query/removePl
 import { useAudiences } from "@gram/client/react-query/audiences";
 import { useMembers } from "@gram/client/react-query/members";
 import { useRoles } from "@gram/client/react-query/roles";
-import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
 import { useSyncedAgentUsers } from "@gram/client/react-query/syncedAgentUsers.js";
 import type { PublishStatusResult } from "@gram/client/models/components/publishstatusresult.js";
 import { Badge } from "@/components/ui/Badge";
@@ -305,13 +304,6 @@ function PluginDetailContent({
 
   const assignmentsVisible = usePluginAssignmentsVisible();
   const showAssignments = canAdmin && assignmentsVisible;
-  const { data: productFeatures } = useProductFeatures(
-    {
-      organizationId: organization.id,
-    },
-    undefined,
-    { enabled: canAdmin },
-  );
 
   // Invalidate publish status too so the dirty/up-to-date affordance reflects
   // the edit the moment a mutation lands.
@@ -898,31 +890,6 @@ function PluginDetailContent({
               />
             </RequireScope>
           )}
-
-          {/* Assignments only affect device-agent delivery, so the section is
-              hidden for marketplace-only orgs (see usePluginAssignmentsVisible).
-              Now that it's a route, a bookmark can still land here — say why the
-              page is empty rather than rendering nothing. Wait for
-              productFeatures before doing so, since the visibility flag reads
-              false while it loads. */}
-          {section === PLUGIN_ASSIGNMENTS_SECTION_ID &&
-            canAdmin &&
-            !showAssignments &&
-            !!productFeatures && (
-              <SettingsSection>
-                <SettingsSection.Header>
-                  <SettingsSection.Title>Assignments</SettingsSection.Title>
-                  <SettingsSection.Description>
-                    Assignments control delivery to devices running the
-                    Speakeasy agent.
-                  </SettingsSection.Description>
-                </SettingsSection.Header>
-                <SectionEmptyState
-                  title="Assignments aren't available for this project"
-                  subtitle="Marketplace installs receive every published plugin, so there's nothing to assign."
-                />
-              </SettingsSection>
-            )}
 
           {section === PLUGIN_ASSIGNMENTS_SECTION_ID && showAssignments && (
             <SettingsSection>
