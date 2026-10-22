@@ -41,7 +41,7 @@ func (s *Service) deliverEligibleGateway(ctx context.Context, tx pgx.Tx, authCtx
 	for _, gatewayID := range uniqueIDs(gatewayIDs...) {
 		admissionCtx, err := admission.AdministratorWriteContext(ctx, s.authz, authCtx.ActiveOrganizationID)
 		if err != nil {
-			return gatewayDeliveryError(err)
+			return oops.E(oops.CodeUnavailable, err, "distribution authorization could not be verified safely")
 		}
 		if _, err := roledelivery.Eligible(admissionCtx, tx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, gatewayID, s.distributionAdmission); err != nil {
 			return gatewayDeliveryError(err)

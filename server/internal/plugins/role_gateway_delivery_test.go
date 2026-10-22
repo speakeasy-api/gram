@@ -46,7 +46,7 @@ func roleGatewayFixture(t *testing.T, ctx context.Context, ti *testInstance, vis
 	require.NoError(t, err)
 	if endpoint {
 		_, err = endpointrepo.New(ti.conn).CreateMCPEndpoint(ctx, endpointrepo.CreateMCPEndpointParams{
-			ProjectID: *ac.ProjectID, MetaMcpServerID: uuid.NullUUID{UUID: gateway.ID, Valid: true}, Slug: "role-gateway-" + gateway.ID.String()[:8],
+			ProjectID: *ac.ProjectID, MetaMcpServerID: uuid.NullUUID{UUID: gateway.ID, Valid: true}, Slug: "role-gateway-" + gateway.ID.String(),
 		})
 		require.NoError(t, err)
 	}

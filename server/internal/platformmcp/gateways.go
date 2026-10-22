@@ -523,6 +523,9 @@ func (s *GatewayService) sanitize(ctx context.Context, err error) error {
 	if _, ok := errors.AsType[*ExternalAuthorizationError](err); ok {
 		return err
 	}
+	if errors.Is(err, admission.ErrApprovalRequired) || errors.Is(err, admission.ErrPrivateGatewayAudience) {
+		return &GatewayError{Code: "conflict", Message: "The gateway cannot be delivered to its role-plugin audience. Review its distribution approval and private-network audience before retrying.", Members: nil, Cause: errors.Join(ErrGatewayConflict, err)}
+	}
 	refusal, ok := errors.AsType[*GatewayError](err)
 	if !ok {
 		refusal, _ = errors.AsType[*GatewayError](gatewayUnavailable(err))
