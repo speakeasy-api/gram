@@ -23,6 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
 	"github.com/speakeasy-api/gram/server/internal/oautherr"
+	"github.com/speakeasy-api/gram/server/internal/oauthui"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -81,7 +82,7 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 	// RFC 6749 §4.1.2.1 wants validation errors carried back to the client
 	// via redirect when we can trust the redirect_uri, and surfaced inline
 	// otherwise. That motivates the two-phase split: validate the fields
-	// we need to trust the URI first, then validate the rest once we have.
+	// needed to match the URI first, then validate the rest.
 	if err := req.ValidateRedirectableFields(); err != nil {
 		return writeAuthorizeOAuthError(ctx, w, logger, http.StatusBadRequest, err)
 	}
@@ -180,21 +181,17 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 		return oops.E(oops.CodeUnexpected, err, "build resource identifier").LogError(ctx, logger)
 	}
 
-	// At this point the redirect_uri is trusted (matched against the
-	// registered set on the client row), so RFC 6749 §4.1.2.1 requires that
-	// any remaining validation errors are forwarded to the client by 302
-	// rather than rendered inline — otherwise the MCP client has no way to
-	// observe the failure. The two-phase Validate split exists to make this
-	// switch unambiguous.
+	// Registered callbacks can still be attacker-controlled. Before authentication,
+	// only loopback destinations receive automatic error redirects.
 	if err := req.ValidatePostRedirect(); err != nil {
-		return redirectAuthorizeOAuthError(ctx, w, r, logger, issuer, req.RedirectURI, req.State, "", err)
+		return writePreAuthenticationAuthorizeError(ctx, w, r, logger, issuer, req.RedirectURI, req.State, "", err)
 	}
 	// RFC 8707 §2: a resource naming some other server means the client
 	// believes it is getting a token for an endpoint this one will never mint
 	// for. Rejecting makes that misconfiguration visible at the point it
 	// happens instead of at first use.
 	if err := oauthwire.ValidateResourceIndicators(req.Resources, resource); err != nil {
-		return redirectAuthorizeOAuthError(ctx, w, r, logger, issuer, req.RedirectURI, req.State, "resource_mismatch", err)
+		return writePreAuthenticationAuthorizeError(ctx, w, r, logger, issuer, req.RedirectURI, req.State, "resource_mismatch", err)
 	}
 
 	challengeID := uuid.NewString()
@@ -334,17 +331,11 @@ func writeAuthorizeOAuthError(ctx context.Context, w http.ResponseWriter, logger
 	return writeAuthorizeError(ctx, w, logger, status, "invalid_request", err.Error())
 }
 
-// redirectAuthorizeOAuthError redirects the user agent back to the (already
-// trusted) redirect_uri with `iss` / `error` / `error_description` / `state`
-// query parameters per RFC 6749 §4.1.2.1 and RFC 9207 §2. Callers must only
-// invoke this AFTER the supplied redirect_uri has been validated against the
-// registered set on the OAuth client row — passing through an untrusted URI
-// here would turn the AS into an open redirector.
-// failureReason labels the rejection with the same vocabulary the token
-// endpoint logs (for example "resource_mismatch"), so one query finds a given
-// class of rejection on both legs. Empty when the error code alone identifies
-// the cause.
-func redirectAuthorizeOAuthError(ctx context.Context, w http.ResponseWriter, r *http.Request, logger *slog.Logger, issuer, redirectURI, originalState, failureReason string, err error) error {
+// writePreAuthenticationAuthorizeError sends errors to a registered callback
+// automatically only for loopback destinations. Other callbacks require an
+// explicit user click, preventing DCR and CIMD phishing redirects (RFC 9700 §4.11.2).
+// failureReason preserves resource-rejection telemetry across response modes.
+func writePreAuthenticationAuthorizeError(ctx context.Context, w http.ResponseWriter, r *http.Request, logger *slog.Logger, issuer, redirectURI, originalState, failureReason string, err error) error {
 	code := "invalid_request"
 	description := err.Error()
 	if oauthErr, ok := errors.AsType[*oauthwire.Error](err); ok {
@@ -358,7 +349,7 @@ func redirectAuthorizeOAuthError(ctx context.Context, w http.ResponseWriter, r *
 	if failureReason != "" {
 		args = append(args, attr.SlogOAuthFailureReason(failureReason))
 	}
-	logger.InfoContext(ctx, "authorize request rejected (post-redirect)", args...)
+	logger.InfoContext(ctx, "authorize request rejected before authentication", args...)
 	redirect, err := buildClientRedirect(clientRedirectParams{
 		RedirectURI:      redirectURI,
 		Issuer:           issuer,
@@ -369,6 +360,12 @@ func redirectAuthorizeOAuthError(ctx context.Context, w http.ResponseWriter, r *
 	})
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "build client redirect").LogError(ctx, logger)
+	}
+	if !oauthwire.MayAutoRedirectBeforeAuthentication(redirectURI) {
+		if err := oauthui.WriteAuthorizationError(ctx, w, redirect, code, description); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "render authorization error page").LogError(ctx, logger)
+		}
+		return nil
 	}
 	http.Redirect(w, r, redirect, http.StatusFound)
 	return nil

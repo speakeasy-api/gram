@@ -32,6 +32,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/oautherr"
+	"github.com/speakeasy-api/gram/server/internal/oauthui"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/organizations/orgprovision"
@@ -427,7 +428,7 @@ func (s *OAuthHTTP) AuthorizeHandler() http.Handler {
 			return
 		}
 		if err := request.ValidatePostRedirect(); err != nil {
-			redirectOAuthError(w, r, request.RedirectURI, request.State, err)
+			writePreAuthenticationOAuthError(w, r, request.RedirectURI, request.State, err)
 			return
 		}
 
@@ -1520,6 +1521,24 @@ func writeRequestOAuthError(w http.ResponseWriter, status int, err error) {
 		return
 	}
 	writeOAuthError(w, status, "invalid_request", "invalid request")
+}
+
+// writePreAuthenticationOAuthError requires a user click for registered callbacks
+// outside loopback; later browser legs retain their existing redirect behavior.
+func writePreAuthenticationOAuthError(w http.ResponseWriter, r *http.Request, redirectURI, state string, err error) {
+	if oauthwire.MayAutoRedirectBeforeAuthentication(redirectURI) {
+		redirectOAuthError(w, r, redirectURI, state, err)
+		return
+	}
+	oauthError, ok := errors.AsType[*oauthwire.Error](err)
+	if !ok {
+		oauthError = &oauthwire.Error{Code: oautherr.CodeInvalidRequest, Description: "invalid request"}
+	}
+	setOAuthTelemetryOutcome(w, oauthError.Code)
+	callback := redirectURL(redirectURI, "", state, oauthError.Code, oauthError.Description)
+	if err := oauthui.WriteAuthorizationError(r.Context(), w, callback, oauthError.Code, oauthError.Description); err != nil {
+		writeOAuthError(w, http.StatusInternalServerError, oautherr.CodeServerError, "could not render authorization page")
+	}
 }
 
 func redirectOAuthError(w http.ResponseWriter, r *http.Request, redirectURI, state string, err error) {
