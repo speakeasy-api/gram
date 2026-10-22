@@ -987,7 +987,7 @@ func (s *Scanner) scanPolicyEnforce(ctx context.Context, policy repo.RiskPolicy,
 		findings, ok := promptPolicyFindings[policy.ID.String()]
 		if !ok {
 			incomplete.Store(true)
-			return nil, nil
+			findings = promptpolicy.FindingsFromEvaluation(promptpolicy.ParseConfig(policy.ModelConfig), nil, nil, true)
 		}
 		if len(findings) == 0 {
 			return nil, nil
@@ -1149,7 +1149,7 @@ func (s *Scanner) scanPolicyEnforce(ctx context.Context, policy repo.RiskPolicy,
 		}
 		// Missing remote lanes are not successful empty results. Check after
 		// scope filtering so irrelevant detectors cannot affect completeness.
-		if nativeFindings != nil && (source == ra.SourceGitleaks || source == ra.SourcePresidio || source == ra.SourcePromptInjection) {
+		if nativeFindings != nil && (!llmMode || source != ra.SourcePromptInjection) && (source == ra.SourceGitleaks || source == ra.SourcePresidio || source == ra.SourcePromptInjection) {
 			findings, ok := nativeFindings[source]
 			if !ok {
 				incomplete.Store(true)
@@ -1274,7 +1274,7 @@ func (s *Scanner) scanPolicyEnforce(ctx context.Context, policy repo.RiskPolicy,
 			}
 		case ra.SourcePromptInjection:
 			var promptInjectionFindings []scanners.Finding
-			if nativeFindings != nil {
+			if nativeFindings != nil && !llmMode {
 				promptInjectionFindings = nativeFindings[ra.SourcePromptInjection]
 			} else {
 				scanStarted := time.Now()
@@ -1456,7 +1456,7 @@ type laneDispatch struct {
 func (s *Scanner) dispatchEnforcementLanes(ctx context.Context, request RealtimeScanRequest, orgSlug string, policies []repo.RiskPolicy, incomplete *atomic.Bool, plan laneDispatch) (native map[string][]scanners.Finding, promptPolicies map[string][]scanners.Finding, llm []scanners.Finding, truncated bool) {
 	text := request.Text
 	origins := make(map[enforcereply.Lane]metering.RiskProvenance, 6)
-	nativeLanes, customRuleIDs, promptConfigs := nativeEnforcementLanes(request.Provenance, policies, origins, plan)
+	nativeLanes, customRuleIDs, promptConfigs := s.nativeEnforcementLanes(request, policies, origins, plan)
 	if len(nativeLanes) > 0 {
 		native = make(map[string][]scanners.Finding, len(nativeLanes))
 	}
@@ -1575,15 +1575,36 @@ func (s *Scanner) dispatchEnforcementLanes(ctx context.Context, request Realtime
 // nativeEnforcementLanes builds the unkeyed detector lanes and one keyed lane
 // per applicable prompt policy. Origins preserve the policy that caused each
 // lane to exist.
-func nativeEnforcementLanes(baseProvenance metering.RiskProvenance, policies []repo.RiskPolicy, origins map[enforcereply.Lane]metering.RiskProvenance, plan laneDispatch) (lanes []enforcereply.Lane, customRuleIDs []string, promptConfigs map[string]enforcereply.PromptPolicyConfig) {
+func (s *Scanner) nativeEnforcementLanes(request RealtimeScanRequest, policies []repo.RiskPolicy, origins map[enforcereply.Lane]metering.RiskProvenance, plan laneDispatch) (lanes []enforcereply.Lane, customRuleIDs []string, promptConfigs map[string]enforcereply.PromptPolicyConfig) {
 	lanes = make([]enforcereply.Lane, 0, 6)
+	view := realtimeMessageView(request.Text, request.MessageType, request.ToolName)
+	scopes := make(map[uuid.UUID]ra.CategoryScope, len(policies))
+	invalidScopes := make(map[uuid.UUID]struct{})
+	sourceInScope := func(policy repo.RiskPolicy, source string) bool {
+		if _, invalid := invalidScopes[policy.ID]; invalid {
+			return false
+		}
+		categoryScope, ok := scopes[policy.ID]
+		if !ok {
+			specified, err := ra.CompileDetectionScopes(s.celEng, ra.DetectionScopesFromConfig(policy.AnalyzerConfig))
+			if err != nil {
+				// scanPolicy reports the invalid configuration. Do not run a
+				// remote engine before that policy can be evaluated.
+				invalidScopes[policy.ID] = struct{}{}
+				return false
+			}
+			categoryScope = ra.NewCategoryScope(s.recommended, specified)
+			scopes[policy.ID] = categoryScope
+		}
+		return categoryScope.SourceInScope(view, source)
+	}
 	addSourceLane := func(scanner riskv1.EnforcementScanner, source string) {
 		lane := enforcereply.Lane{Scanner: scanner, PolicyID: ""}
 		for _, policy := range policies {
-			if !slices.Contains(policy.Sources, source) {
+			if !slices.Contains(policy.Sources, source) || !sourceInScope(policy, source) {
 				continue
 			}
-			origin := baseProvenance
+			origin := request.Provenance
 			origin.RiskPolicyID = policy.ID
 			origin.RiskPolicyVersion = policy.Version
 			origin.PolicyLinkReason = ""
@@ -1602,6 +1623,9 @@ func nativeEnforcementLanes(baseProvenance metering.RiskProvenance, policies []r
 		return lanes, nil, nil
 	}
 	for _, policy := range policies {
+		if !sourceInScope(policy, ra.SourceCustom) {
+			continue
+		}
 		for _, ruleID := range policy.CustomRuleIds {
 			if !slices.Contains(customRuleIDs, ruleID) {
 				customRuleIDs = append(customRuleIDs, ruleID)
@@ -1611,10 +1635,10 @@ func nativeEnforcementLanes(baseProvenance metering.RiskProvenance, policies []r
 	if len(customRuleIDs) > 0 {
 		lane := enforcereply.Lane{Scanner: riskv1.EnforcementScanner_ENFORCEMENT_SCANNER_CUSTOM_RULES, PolicyID: ""}
 		for _, policy := range policies {
-			if len(policy.CustomRuleIds) == 0 {
+			if len(policy.CustomRuleIds) == 0 || !sourceInScope(policy, ra.SourceCustom) {
 				continue
 			}
-			origin := baseProvenance
+			origin := request.Provenance
 			origin.RiskPolicyID = policy.ID
 			origin.RiskPolicyVersion = policy.Version
 			origin.PolicyLinkReason = ""
@@ -1629,12 +1653,12 @@ func nativeEnforcementLanes(baseProvenance metering.RiskProvenance, policies []r
 	}
 	promptConfigs = make(map[string]enforcereply.PromptPolicyConfig)
 	for _, policy := range policies {
-		if policy.PolicyType != ra.PolicyTypePromptBased {
+		if policy.PolicyType != ra.PolicyTypePromptBased || !sourceInScope(policy, promptpolicy.Source) {
 			continue
 		}
 		policyID := policy.ID.String()
 		lane := enforcereply.Lane{Scanner: riskv1.EnforcementScanner_ENFORCEMENT_SCANNER_JUDGE, PolicyID: policyID}
-		origin := baseProvenance
+		origin := request.Provenance
 		origin.RiskPolicyID = policy.ID
 		origin.RiskPolicyVersion = policy.Version
 		origin.PolicyLinkReason = ""
