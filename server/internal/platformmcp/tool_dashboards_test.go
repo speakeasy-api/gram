@@ -93,6 +93,7 @@ func TestDashboardToolsWithoutAServiceAnswerUnavailable(t *testing.T) {
 		// every tool is discoverable with it.
 		require.Equal(t, discoveryProjectRead, descriptor.Meta.DiscoveryScopes, name)
 		require.Equal(t, idempotent[name], descriptor.Annotations.IdempotentHint, name)
+		require.NotContains(t, descriptor.Description, "switched on", "%s has no rollout to wait on", name)
 		if name == listDashboardsToolName || name == getDashboardToolName {
 			require.True(t, descriptor.Annotations.ReadOnlyHint, name)
 		} else {

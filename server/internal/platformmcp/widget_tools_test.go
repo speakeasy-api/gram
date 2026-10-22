@@ -200,6 +200,7 @@ func TestWidgetToolsDeclareTheirContract(t *testing.T) {
 		require.Equal(t, externalOnly, descriptor.Meta.Audiences, name)
 		require.Equal(t, ExternalAuthorizationMember, descriptor.Meta.Authorization, name)
 		require.Equal(t, ProjectScopeExplicit, descriptor.Meta.ProjectScope, name)
+		require.NotContains(t, descriptor.Description, "switched on", "%s has no rollout to wait on", name)
 
 		encoded, err := json.Marshal(arguments)
 		require.NoError(t, err)
