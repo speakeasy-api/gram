@@ -1,0 +1,32 @@
+server/internal/risk/enforcereply/dispatch.go
+  h_e404c1a6a54184 174,362,370-371,376-378,380
+server/internal/risk/enforcereply/dispatch_test.go
+  h_e404c1a6a54184 782,791-793,795,797-800,811-815
+pystreams/src/pystreams/risk/enforce_handler.py
+  s_ad2d0c24ceb8da::t_a74e6f641d9204 46-48,183-190,206,246-247
+pystreams/tests/test_risk_enforce.py
+  s_ad2d0c24ceb8da::t_133ea7767eb68e 643,646,648,650-652,655,663
+server/internal/scanners/gitleaks/enforce_handler.go
+  s_ad2d0c24ceb8da::t_6fdbcedf4d1d40 23,29-32,44-46,51-59,83-85,91-99,133-136,139,141,185-186
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "da14b0663797e1fb1fde43e08a9881aeabb584db",
+  "prompts": {},
+  "humans": {
+    "h_e404c1a6a54184": {
+      "author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  },
+  "sessions": {
+    "s_ad2d0c24ceb8da": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "fcc6e428-0421-4f38-87ca-9d1950a637de",
+        "model": "unknown"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
