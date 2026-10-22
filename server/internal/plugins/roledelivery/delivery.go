@@ -38,21 +38,22 @@ func servers(ctx context.Context, tx pgx.Tx, org string, projectID uuid.UUID) ([
 	if err != nil {
 		return nil, fmt.Errorf("list role delivery server candidates: %w", err)
 	}
+	versions, err := pluginsrepo.New(tx).ListGatewayDeliveryToolURNs(ctx, pluginsrepo.ListGatewayDeliveryToolURNsParams{
+		OrganizationID: org, ProjectID: projectID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("load gateway platform tool delivery eligibility: %w", err)
+	}
+	platformGateways := make(map[uuid.UUID]bool)
+	for _, version := range versions {
+		if HasPlatformTool(version.ToolUrns) {
+			platformGateways[version.GatewayID] = true
+		}
+	}
 	for i := range candidates {
 		s := &candidates[i]
 		// Keep the row for removals; only automatic additions use eligibility.
-		if s.IsGateway && s.Eligible {
-			versions, err := pluginsrepo.New(tx).ListGatewayDeliveryToolURNs(ctx, pluginsrepo.ListGatewayDeliveryToolURNsParams{
-				OrganizationID: org, ProjectID: projectID, MetaMcpServerID: s.ID,
-			})
-			if err != nil {
-				return nil, fmt.Errorf("load gateway platform tool delivery eligibility: %w", err)
-			}
-			if slices.ContainsFunc(versions, HasPlatformTool) {
-				s.Eligible = false
-			}
-		}
-		if HasPlatformTool(s.ToolUrns) {
+		if (s.IsGateway && platformGateways[s.ID]) || HasPlatformTool(s.ToolUrns) {
 			s.Eligible = false
 		}
 	}
@@ -306,6 +307,7 @@ func RoleChanged(ctx context.Context, tx pgx.Tx, org, role string, before []auth
 	changed := []uuid.UUID{}
 	// Match audience/content writers: admission lock, then exact plugin row.
 	lockedProjects := map[uuid.UUID]bool{}
+	projectServers := map[uuid.UUID][]server{}
 	for _, p := range targets {
 		if !lockedProjects[p.ProjectID] {
 			if err := admission.LockProject(ctx, tx, p.ProjectID); err != nil {
@@ -337,9 +339,13 @@ func RoleChanged(ctx context.Context, tx pgx.Tx, org, role string, before []auth
 		if err != nil {
 			return nil, err
 		}
-		candidates, err := servers(ctx, tx, org, p.ProjectID)
-		if err != nil {
-			return nil, err
+		candidates, loaded := projectServers[p.ProjectID]
+		if !loaded {
+			candidates, err = servers(ctx, tx, org, p.ProjectID)
+			if err != nil {
+				return nil, err
+			}
+			projectServers[p.ProjectID] = candidates
 		}
 		for _, s := range candidates {
 			was, err := allowed(before, s)

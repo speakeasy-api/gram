@@ -262,7 +262,7 @@ func (s *Service) CreateMcpEndpoint(ctx context.Context, payload *gen.CreateMcpE
 	}
 
 	if err := s.deliverEligibleGateway(ctx, dbtx, authCtx, metaMcpServerID); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "deliver eligible gateway")
+		return nil, err.LogError(ctx, logger)
 	}
 	if err := s.requestPublicationForMCPMembership(ctx, dbtx, authCtx, []uuid.NullUUID{mcpServerID}, metaMcpServerID); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "enqueue endpoint publication").LogError(ctx, logger)
@@ -635,7 +635,7 @@ func (s *Service) UpdateMcpEndpoint(ctx context.Context, payload *gen.UpdateMcpE
 	}
 
 	if err := s.deliverEligibleGateway(ctx, dbtx, authCtx, updated.MetaMcpServerID); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "deliver eligible gateway")
+		return nil, err.LogError(ctx, logger)
 	}
 	if err := s.requestPublicationForMCPMembership(ctx, dbtx, authCtx, []uuid.NullUUID{existing.McpServerID, updated.McpServerID}, existing.MetaMcpServerID, updated.MetaMcpServerID); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "enqueue endpoint publication").LogError(ctx, logger)

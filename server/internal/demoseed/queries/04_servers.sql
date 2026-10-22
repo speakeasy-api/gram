@@ -128,6 +128,9 @@ VALUES
 -- mcp:write still allow connecting at the endpoint but do not deliver
 -- servers. Store server identities, not legacy toolset memberships. Content
 -- has no manual/automatic distinction and never widens a plugin's audience.
+-- This fixture intentionally models wildcard connect grants only. Exact grants
+-- remain examples of access without automatic seed delivery; production evaluates
+-- all selectors through the typed authorization engine.
 -- name: ServersInsertRoleServerMemberships :execrows
 WITH backends AS (
   -- Skip canonical hosted wrappers, which duplicate the fresh-id servers.
@@ -138,14 +141,16 @@ WITH backends AS (
   SELECT NULL::uuid, g.id, g.name
   FROM meta_mcp_servers g
   JOIN user_session_issuers i ON i.id = g.user_session_issuer_id
-    AND i.project_id = g.project_id AND i.organization_id = g.organization_id
+    AND i.organization_id = g.organization_id
+    AND (i.project_id = g.project_id OR i.project_id IS NULL)
   WHERE g.project_id = @project_id::uuid AND g.organization_id = @org_id::text
     AND g.deleted IS FALSE AND i.deleted IS FALSE
     AND EXISTS (SELECT 1 FROM mcp_endpoints e
       WHERE e.meta_mcp_server_id = g.id AND e.project_id = g.project_id AND e.deleted IS FALSE)
 )
 INSERT INTO plugin_servers (plugin_id, project_id, mcp_server_id, meta_mcp_server_id, display_name)
-SELECT p.id, p.project_id, s.mcp_server_id, s.meta_mcp_server_id, s.name
+SELECT p.id, CASE WHEN s.meta_mcp_server_id IS NOT NULL THEN p.project_id END,
+  s.mcp_server_id, s.meta_mcp_server_id, s.name
 FROM plugins p
 JOIN plugin_assignments a ON a.plugin_id = p.id AND a.organization_id = @org_id::text
 JOIN organization_roles r ON a.principal_urn = 'role:organization:' || r.id

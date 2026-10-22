@@ -65,6 +65,7 @@ func testRoleServersSurviveReseed(t *testing.T, spec Spec) {
 			memberships[plugin.Slug] = []string{}
 			for _, server := range servers {
 				if server.MetaMcpServerID.Valid {
+					require.Equal(t, uuid.NullUUID{UUID: projectID, Valid: true}, server.ProjectID)
 					require.False(t, server.McpServerID.Valid)
 					gateway, err := q.GetGatewayForPluginServer(ctx, pluginrepo.GetGatewayForPluginServerParams{
 						MetaMcpServerID: server.MetaMcpServerID.UUID, ProjectID: projectID,
@@ -75,6 +76,7 @@ func testRoleServersSurviveReseed(t *testing.T, spec Spec) {
 					memberships[plugin.Slug] = append(memberships[plugin.Slug], "gateway:"+gateway.Name)
 					continue
 				}
+				require.False(t, server.ProjectID.Valid, "ordinary server memberships match AddPluginServer")
 				require.True(t, server.McpServerID.Valid)
 				require.False(t, server.MetaMcpServerID.Valid)
 				backend, err := q.GetMcpServerForPluginServer(ctx, pluginrepo.GetMcpServerForPluginServerParams{
@@ -97,6 +99,9 @@ func testRoleServersSurviveReseed(t *testing.T, spec Spec) {
 		// Existing wildcard connect grants deliver the OAuth gateway, including
 		// disposition-limited roles. Read/write and server-specific grants do not.
 		gatewayRoles := []string{"collaborator", "engineer", "analyst", "read-only-tools", "temporary-escalation"}
+		for _, slug := range gatewayRoles {
+			require.Contains(t, memberships, slug, "gateway role plugin must exist")
+		}
 		for slug, backends := range memberships {
 			if slices.Contains(gatewayRoles, slug) {
 				require.Contains(t, backends, "gateway:Acme Agent Gateway", slug)

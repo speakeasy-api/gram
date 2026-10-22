@@ -49,7 +49,7 @@ func registerGatewayTools(reg *Registrar, service *GatewayService) {
 		Description: "Create a gateway in an explicit project: one MCP endpoint that serves the tools of several MCP servers already in that project, each tool named <server slug>--<tool name>. " +
 			"Supply a name and the exact MCP server IDs from find_mcp in that same project, in the order the gateway should list them. Before calling, tell the user the project, the name, and the servers it will front. " +
 			"The gateway, its default address, and every member are created together, or nothing is: when any server cannot sit behind a gateway, the refusal lists each one with its reason, and the call can be repeated without them. " +
-			"The gateway is private, requires sign-in, and is reachable on the public network only; each person signs in to each member's provider through it. It reaches nobody until it is put into a plugin with distribute_mcp_to_plugin. " +
+			"The gateway is private, requires sign-in, and is reachable on the public network only; each person signs in to each member's provider through it. When gateway plugin delivery is enabled, eligible gateways are automatically delivered through plugins assigned to roles with Use access. Gateways containing Platform tools are excluded from automatic delivery. Use distribute_mcp_to_plugin for explicit delivery to another plugin. " +
 			"Each call creates a new gateway, so after a timeout check find_mcp before calling again. Change its members later with set_gateway_members.",
 		Annotations: &mcp.ToolAnnotations{IdempotentHint: false, DestructiveHint: new(false), OpenWorldHint: new(false)},
 	}, meta, createHandler)

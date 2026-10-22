@@ -16,7 +16,10 @@ import (
 	endpointrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	"github.com/speakeasy-api/gram/server/internal/plugins/roledelivery"
+	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -30,7 +33,7 @@ func roleGatewayFixture(t *testing.T, ctx context.Context, ti *testInstance, vis
 	issuerID := uuid.NullUUID{}
 	if oauth {
 		issuer, err := usersessionsrepo.New(ti.conn).CreateUserSessionIssuer(ctx, usersessionsrepo.CreateUserSessionIssuerParams{
-			ProjectID: *ac.ProjectID, OrganizationID: conv.ToPGText(ac.ActiveOrganizationID), Slug: "role-gateway-issuer",
+			ProjectID: *ac.ProjectID, OrganizationID: conv.ToPGText(ac.ActiveOrganizationID), Slug: "role-gateway-issuer-" + uuid.NewString()[:8],
 			AuthnChallengeMode: "interactive", SessionDuration: pgtype.Interval{Microseconds: time.Hour.Microseconds(), Valid: true},
 		})
 		require.NoError(t, err)
@@ -43,7 +46,7 @@ func roleGatewayFixture(t *testing.T, ctx context.Context, ti *testInstance, vis
 	require.NoError(t, err)
 	if endpoint {
 		_, err = endpointrepo.New(ti.conn).CreateMCPEndpoint(ctx, endpointrepo.CreateMCPEndpointParams{
-			ProjectID: *ac.ProjectID, MetaMcpServerID: uuid.NullUUID{UUID: gateway.ID, Valid: true}, Slug: "role-gateway",
+			ProjectID: *ac.ProjectID, MetaMcpServerID: uuid.NullUUID{UUID: gateway.ID, Valid: true}, Slug: "role-gateway-" + gateway.ID.String()[:8],
 		})
 		require.NoError(t, err)
 	}
@@ -107,6 +110,78 @@ func TestRoleGatewayDeliveryEligibility(t *testing.T) {
 	}
 }
 
+// The issuer's composite organization FK already rejects foreign organization
+// IDs. Project scope still needs validation, including inconsistent legacy rows
+// whose issuer organization matches but whose project belongs to another tenant.
+func TestRoleGatewayDeliveryIssuerScope(t *testing.T) {
+	t.Parallel()
+	for _, tt := range []struct {
+		name                                                 string
+		deleted, orgScoped, foreignProject, foreignOrg, want bool
+	}{
+		{name: "live project issuer", want: true},
+		{name: "live organization issuer", orgScoped: true, want: true},
+		{name: "deleted project issuer", deleted: true},
+		{name: "deleted organization issuer", deleted: true, orgScoped: true},
+		{name: "foreign project issuer", foreignProject: true},
+		{name: "foreign organization project issuer", foreignProject: true, foreignOrg: true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			features := &feature.InMemory{}
+			ctx, ti := newTestPluginsServiceWithGitHubAndFeatures(t, &mockGitHubPublisher{}, features)
+			ac, _ := contextvalues.GetAuthContext(ctx)
+			features.SetFlag(feature.FlagGatewayPluginMembership, ac.ActiveOrganizationID, true)
+			ti.service.WithDistributionAdmission(admission.NewGuard().WithGatewayPluginMembershipFeatures(features))
+			gatewayID := roleGatewayFixture(t, ctx, ti, "private", true, true)
+			issuerProject := uuid.NullUUID{UUID: *ac.ProjectID, Valid: !tt.orgScoped}
+			if tt.foreignProject {
+				org := ac.ActiveOrganizationID
+				if tt.foreignOrg {
+					org = "org_issuer_scope_" + uuid.NewString()
+					err := orgrepo.New(ti.conn).CreateOrganizationMetadata(ctx, orgrepo.CreateOrganizationMetadataParams{ID: org, Name: "Other organization", Slug: org})
+					require.NoError(t, err)
+				}
+				project, err := projectsrepo.New(ti.conn).CreateProject(ctx, projectsrepo.CreateProjectParams{
+					Name: "Other project", Slug: "other-project", OrganizationID: org,
+				})
+				require.NoError(t, err)
+				issuerProject = uuid.NullUUID{UUID: project.ID, Valid: true}
+			}
+			err := pluginsrepo.New(ti.conn).SetRoleGatewayIssuerFixture(ctx, pluginsrepo.SetRoleGatewayIssuerFixtureParams{
+				GatewayID: gatewayID, GatewayProjectID: *ac.ProjectID, ProjectID: issuerProject, Deleted: tt.deleted,
+			})
+			require.NoError(t, err)
+			candidates, err := pluginsrepo.New(ti.conn).ListRoleDeliveryServers(ctx, pluginsrepo.ListRoleDeliveryServersParams{
+				OrganizationID: ac.ActiveOrganizationID, ProjectID: *ac.ProjectID,
+			})
+			require.NoError(t, err)
+			found := false
+			for _, candidate := range candidates {
+				if candidate.IsGateway && candidate.ID == gatewayID {
+					found = true
+					require.Equal(t, tt.want, candidate.Eligible)
+				}
+			}
+			require.True(t, found, "ineligible issuers must retain removal candidates")
+			role := createTestRolePrincipal(t, ctx, ti, "gateway-issuer-scope")
+			grantRoleGateway(t, ctx, ti, role, gatewayID, authz.ScopeMCPConnect)
+			plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Gateway issuer scope"})
+			require.NoError(t, err)
+			_, err = ti.service.SetPluginAssignments(ctx, &gen.SetPluginAssignmentsPayload{PluginID: plugin.ID, PrincipalUrns: []string{role}})
+			require.NoError(t, err)
+			got, err := ti.service.GetPlugin(ctx, &gen.GetPluginPayload{ID: plugin.ID})
+			require.NoError(t, err)
+			if tt.want {
+				require.Len(t, got.Servers, 1)
+				require.Equal(t, gatewayID.String(), *got.Servers[0].MetaMcpServerID)
+			} else {
+				require.Empty(t, got.Servers)
+			}
+		})
+	}
+}
+
 func TestRoleGatewayDeliveryExcludesPlatformMembers(t *testing.T) {
 	t.Parallel()
 	features := &feature.InMemory{}
@@ -126,13 +201,18 @@ func TestRoleGatewayDeliveryExcludesPlatformMembers(t *testing.T) {
 	})
 	require.NoError(t, err)
 	grantRoleGateway(t, ctx, ti, role, gatewayID, authz.ScopeMCPConnect)
+	// Batched classification must not exclude an unrelated eligible gateway.
+	cleanRole := createTestRolePrincipal(t, ctx, ti, "gateway-no-platform")
+	cleanGatewayID := roleGatewayFixture(t, ctx, ti, "private", true, true)
+	grantRoleGateway(t, ctx, ti, cleanRole, cleanGatewayID, authz.ScopeMCPConnect)
 	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Gateway platform"})
 	require.NoError(t, err)
-	_, err = ti.service.SetPluginAssignments(ctx, &gen.SetPluginAssignmentsPayload{PluginID: plugin.ID, PrincipalUrns: []string{role}})
+	_, err = ti.service.SetPluginAssignments(ctx, &gen.SetPluginAssignmentsPayload{PluginID: plugin.ID, PrincipalUrns: []string{role, cleanRole}})
 	require.NoError(t, err)
 	got, err := ti.service.GetPlugin(ctx, &gen.GetPluginPayload{ID: plugin.ID})
 	require.NoError(t, err)
-	require.Empty(t, got.Servers)
+	require.Len(t, got.Servers, 1)
+	require.Equal(t, cleanGatewayID.String(), *got.Servers[0].MetaMcpServerID)
 }
 func TestRoleGatewayDeliveryExportAndRemovalReplay(t *testing.T) {
 	t.Parallel()

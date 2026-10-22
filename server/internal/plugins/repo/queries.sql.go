@@ -1489,7 +1489,7 @@ func (q *Queries) ListDeliveryToolsetToolURNs(ctx context.Context, arg ListDeliv
 }
 
 const listGatewayDeliveryToolURNs = `-- name: ListGatewayDeliveryToolURNs :many
-SELECT latest.tool_urns
+SELECT g.id AS gateway_id, latest.tool_urns
 FROM meta_mcp_servers g
 JOIN projects p ON p.id = g.project_id AND p.organization_id = g.organization_id AND p.deleted IS FALSE
 JOIN meta_mcp_server_members member ON member.meta_mcp_server_id = g.id AND member.project_id = p.id AND member.deleted IS FALSE
@@ -1500,30 +1500,34 @@ JOIN LATERAL (
   WHERE v.toolset_id = t.id AND v.deleted IS FALSE
   ORDER BY v.version DESC LIMIT 1
 ) latest ON true
-WHERE g.id = $1 AND g.organization_id = $2
-  AND g.project_id = $3 AND g.deleted IS FALSE
+WHERE g.organization_id = $1
+  AND g.project_id = $2 AND g.deleted IS FALSE
 `
 
 type ListGatewayDeliveryToolURNsParams struct {
-	MetaMcpServerID uuid.UUID
-	OrganizationID  string
-	ProjectID       uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.UUID
 }
 
-// Classify all live gateway members using their latest live toolset versions.
-func (q *Queries) ListGatewayDeliveryToolURNs(ctx context.Context, arg ListGatewayDeliveryToolURNsParams) ([][]urn.Tool, error) {
-	rows, err := q.db.Query(ctx, listGatewayDeliveryToolURNs, arg.MetaMcpServerID, arg.OrganizationID, arg.ProjectID)
+type ListGatewayDeliveryToolURNsRow struct {
+	GatewayID uuid.UUID
+	ToolUrns  []urn.Tool
+}
+
+// Batch all live gateway members in the project using their latest live toolset versions.
+func (q *Queries) ListGatewayDeliveryToolURNs(ctx context.Context, arg ListGatewayDeliveryToolURNsParams) ([]ListGatewayDeliveryToolURNsRow, error) {
+	rows, err := q.db.Query(ctx, listGatewayDeliveryToolURNs, arg.OrganizationID, arg.ProjectID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items [][]urn.Tool
+	var items []ListGatewayDeliveryToolURNsRow
 	for rows.Next() {
-		var tool_urns []urn.Tool
-		if err := rows.Scan(&tool_urns); err != nil {
+		var i ListGatewayDeliveryToolURNsRow
+		if err := rows.Scan(&i.GatewayID, &i.ToolUrns); err != nil {
 			return nil, err
 		}
-		items = append(items, tool_urns)
+		items = append(items, i)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -2613,7 +2617,12 @@ WHERE p.organization_id = $1 AND p.id = $2
 UNION ALL
 SELECT true::boolean AS is_gateway, g.id, g.project_id, g.name,
   g.id AS resource_id, NULL::uuid AS legacy_toolset_id,
-  (g.visibility <> 'disabled' AND g.user_session_issuer_id IS NOT NULL AND EXISTS (
+  (g.visibility <> 'disabled' AND EXISTS (
+    SELECT 1 FROM user_session_issuers i
+    WHERE i.id = g.user_session_issuer_id AND i.deleted IS FALSE
+      AND i.organization_id = g.organization_id
+      AND (i.project_id = g.project_id OR i.project_id IS NULL)
+  ) AND EXISTS (
     SELECT 1 FROM mcp_endpoints e
     LEFT JOIN custom_domains cd ON cd.id = e.custom_domain_id AND cd.organization_id = g.organization_id
       AND cd.activated IS TRUE AND cd.verified IS TRUE AND cd.deleted IS FALSE
@@ -3268,6 +3277,31 @@ type SetPluginAutoCreatedFixtureParams struct {
 // Fixture for verifying read-only plugin origin metadata in inventory responses.
 func (q *Queries) SetPluginAutoCreatedFixture(ctx context.Context, arg SetPluginAutoCreatedFixtureParams) error {
 	_, err := q.db.Exec(ctx, setPluginAutoCreatedFixture, arg.AutoCreated, arg.ID, arg.ProjectID)
+	return err
+}
+
+const setRoleGatewayIssuerFixture = `-- name: SetRoleGatewayIssuerFixture :exec
+UPDATE user_session_issuers
+SET project_id = $1::uuid,
+    deleted_at = CASE WHEN $2::boolean THEN clock_timestamp() ELSE NULL END
+WHERE id = (SELECT user_session_issuer_id FROM meta_mcp_servers
+  WHERE id = $3::uuid AND project_id = $4::uuid)
+`
+
+type SetRoleGatewayIssuerFixtureParams struct {
+	ProjectID        uuid.NullUUID
+	Deleted          bool
+	GatewayID        uuid.UUID
+	GatewayProjectID uuid.UUID
+}
+
+func (q *Queries) SetRoleGatewayIssuerFixture(ctx context.Context, arg SetRoleGatewayIssuerFixtureParams) error {
+	_, err := q.db.Exec(ctx, setRoleGatewayIssuerFixture,
+		arg.ProjectID,
+		arg.Deleted,
+		arg.GatewayID,
+		arg.GatewayProjectID,
+	)
 	return err
 }
 

@@ -371,6 +371,9 @@ func (s *GatewayService) setGatewayMembers(ctx context.Context, principal Princi
 	if !changed {
 		return s.finish(ctx, project.ID, principal, meta.ID, gatewayOutcomeUnchanged, nil, nil), nil
 	}
+	if err := s.writer.DeliverEligibleGateway(ctx, tx, actor, meta.ID); err != nil {
+		return GatewayOutput{}, fmt.Errorf("deliver updated gateway: %w", err)
+	}
 	if _, err := s.publication.ProjectWithOutcome(ctx, tx, principal.OrganizationID, project.ID, principal.UserID); err != nil {
 		return GatewayOutput{}, fmt.Errorf("request gateway publication: %w", err)
 	}

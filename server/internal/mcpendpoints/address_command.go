@@ -29,7 +29,7 @@ import (
 
 // CreateMcpEndpointInTransactionInput describes an endpoint created within a
 // caller-owned transaction. It does not attach generic backends to the Default
-// plugin. Gateway role delivery and publication requests share the transaction.
+// plugin. Gateway role delivery shares the transaction; the caller requests publication.
 type CreateMcpEndpointInTransactionInput struct {
 	AuthContext     *contextvalues.AuthContext
 	CustomDomainID  uuid.NullUUID
@@ -42,7 +42,7 @@ type CreateMcpEndpointInTransactionInput struct {
 }
 
 // CreateMcpEndpointInTransaction creates an endpoint using the caller's
-// transaction. The caller owns commit and post-commit publication signaling;
+// transaction. The caller owns publication requests, commit, and post-commit signaling;
 // generic default-plugin attachment remains outside this transaction seam.
 func (s *Service) CreateMcpEndpointInTransaction(ctx context.Context, tx pgx.Tx, input CreateMcpEndpointInTransactionInput) (*types.McpEndpoint, error) {
 	authCtx := input.AuthContext
@@ -115,10 +115,7 @@ func (s *Service) CreateMcpEndpointInTransaction(ctx context.Context, tx pgx.Tx,
 	}
 	if !input.DeferGatewayDelivery {
 		if err := s.deliverEligibleGateway(ctx, tx, authCtx, created.MetaMcpServerID); err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "deliver eligible gateway")
-		}
-		if err := s.requestPublicationForMCPMembership(ctx, tx, authCtx, nil, created.MetaMcpServerID); err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "enqueue gateway endpoint publication")
+			return nil, err
 		}
 	}
 	return mv.BuildMcpEndpointView(created), nil
