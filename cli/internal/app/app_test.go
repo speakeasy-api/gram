@@ -67,14 +67,14 @@ func TestWriteLegacyCommandNotice_SpeakeasyAI(t *testing.T) {
 func TestNewApp_UsesSpeakeasyAIName(t *testing.T) {
 	t.Parallel()
 
-	require.Equal(t, "speakeasy-ai", newApp().Name)
+	require.Equal(t, "speakeasy-ai", newApp(commandName).Name)
 }
 
 func TestNewApp_ControlPlaneMarker(t *testing.T) {
 	t.Parallel()
 
 	var stdout bytes.Buffer
-	app := newApp()
+	app := newApp(commandName)
 	app.Writer = &stdout
 	app.ErrWriter = &bytes.Buffer{}
 
@@ -89,7 +89,7 @@ func TestNewApp_NoArgsShowsHelp(t *testing.T) {
 	t.Parallel()
 
 	var stdout bytes.Buffer
-	app := newApp()
+	app := newApp(commandName)
 	app.Writer = &stdout
 	app.ErrWriter = &bytes.Buffer{}
 
@@ -105,13 +105,13 @@ func TestNewApp_SDKGeneratorCommandNamesTheOtherCLI(t *testing.T) {
 	t.Parallel()
 
 	var exitErr error
-	app := newApp()
+	app := newApp(commandName)
 	app.Writer = &bytes.Buffer{}
 	app.ErrWriter = &bytes.Buffer{}
 	app.ExitErrHandler = func(_ *cli.Context, err error) { exitErr = err }
 
 	profilePath := filepath.Join(t.TempDir(), "profile.json")
-	err := app.RunContext(t.Context(), []string{"speakeasy", "--profile-path", profilePath, "run"})
+	err := app.RunContext(t.Context(), []string{"speakeasy-ai", "--profile-path", profilePath, "run"})
 
 	require.Error(t, err)
 	require.Equal(t, err, exitErr)
@@ -120,6 +120,25 @@ func TestNewApp_SDKGeneratorCommandNamesTheOtherCLI(t *testing.T) {
 	require.Equal(t, unknownCommandExitCode, exitCoder.ExitCode())
 	require.Contains(t, err.Error(), `"run" is a command of the Speakeasy SDK generator`)
 	require.Contains(t, err.Error(), "Run it with the SDK generator instead: speakeasy run")
+}
+
+func TestNewApp_SDKGeneratorCommandRunAsSpeakeasyNamesTheRename(t *testing.T) {
+	t.Parallel()
+
+	app := newApp(sharedCommandName)
+	app.Writer = &bytes.Buffer{}
+	app.ErrWriter = &bytes.Buffer{}
+	app.ExitErrHandler = func(*cli.Context, error) {}
+
+	profilePath := filepath.Join(t.TempDir(), "profile.json")
+	err := app.RunContext(t.Context(), []string{sharedCommandName, "--profile-path", profilePath, "run"})
+
+	require.Error(t, err)
+	var exitCoder cli.ExitCoder
+	require.ErrorAs(t, err, &exitCoder)
+	require.Equal(t, unknownCommandExitCode, exitCoder.ExitCode())
+	require.Contains(t, err.Error(), "now called speakeasy-ai")
+	require.NotContains(t, err.Error(), "Run it with the SDK generator instead")
 }
 
 func TestSDKGeneratorCommandMessage_RunAsSpeakeasy(t *testing.T) {
@@ -135,7 +154,7 @@ func TestSDKGeneratorCommandMessage_RunAsSpeakeasy(t *testing.T) {
 func TestNewApp_UnknownCommandKeepsDefaultError(t *testing.T) {
 	t.Parallel()
 
-	app := newApp()
+	app := newApp(commandName)
 	app.Writer = &bytes.Buffer{}
 	app.ErrWriter = &bytes.Buffer{}
 	app.ExitErrHandler = func(*cli.Context, error) {}
@@ -150,7 +169,7 @@ func TestNewApp_UnknownCommandKeepsDefaultError(t *testing.T) {
 func TestSDKGeneratorCommandsSkipSharedAndOwnCommands(t *testing.T) {
 	t.Parallel()
 
-	for _, command := range newApp().Commands {
+	for _, command := range newApp(commandName).Commands {
 		require.NotContains(t, sdkGeneratorCommands, command.Name, "this CLI has its own %q command", command.Name)
 	}
 	for _, shared := range []string{"auth", "status", "update"} {

@@ -17,7 +17,9 @@ import (
 	"github.com/speakeasy-api/gram/cli/internal/profile"
 )
 
-func newApp() *cli.App {
+// newApp builds the CLI. arg0 is the name the CLI was run as, which decides
+// how an SDK generator command is answered.
+func newApp(arg0 string) *cli.App {
 	shortSha := GitSHA
 	if len(GitSHA) > 7 {
 		shortSha = GitSHA[:7]
@@ -90,7 +92,7 @@ func newApp() *cli.App {
 				return nil
 			}
 			if c.Args().Present() {
-				if message, ok := sdkGeneratorCommandMessage(c.Args().First(), invokedAs(os.Args[0])); ok {
+				if message, ok := sdkGeneratorCommandMessage(c.Args().First(), invokedAs(arg0)); ok {
 					return cli.Exit(message, unknownCommandExitCode)
 				}
 				return cli.ShowCommandHelp(c, c.Args().First())
@@ -192,9 +194,11 @@ func writeLegacyCommandNotice(w io.Writer, arg0 string) {
 }
 
 func Execute(ctx context.Context, osArgs []string) {
+	arg0 := ""
 	if len(osArgs) > 0 {
-		writeLegacyCommandNotice(os.Stderr, osArgs[0])
+		arg0 = osArgs[0]
 	}
+	writeLegacyCommandNotice(os.Stderr, arg0)
 	notice, err := flags.ApplyLegacyEnv(os.LookupEnv, os.Setenv)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -204,7 +208,7 @@ func Execute(ctx context.Context, osArgs []string) {
 		_, _ = fmt.Fprintln(os.Stderr, notice)
 	}
 
-	if err := newApp().RunContext(ctx, osArgs); err != nil {
+	if err := newApp(arg0).RunContext(ctx, osArgs); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}

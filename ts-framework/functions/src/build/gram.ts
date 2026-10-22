@@ -204,7 +204,7 @@ export async function deployFunction(logger: Logger, config: ParsedUserConfig) {
 
   if (result.exitCode !== 0) {
     throw new Error(
-      `speakeasy CLI push command failed with exit code ${result.exitCode}`,
+      `Speakeasy AI Control Plane CLI push command failed with exit code ${result.exitCode}`,
     );
   }
 

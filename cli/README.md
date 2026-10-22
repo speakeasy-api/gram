@@ -37,6 +37,8 @@ the Homebrew `cli` formula no longer conflicts with the SDK generator formula
 
 - Homebrew and npm: upgrade as usual. The upgrade replaces `speakeasy` with
   `speakeasy-ai`.
+- Functions projects: their `package.json` scripts call the CLI by name. Replace
+  `speakeasy functions` with `speakeasy-ai functions` in them.
 - Install script: run it again. It installs `speakeasy-ai`, and warns when an
   old `speakeasy` copy of this CLI is in the same folder. Remove old copies in
   other folders yourself.

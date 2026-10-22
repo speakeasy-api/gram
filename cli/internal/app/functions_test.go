@@ -398,7 +398,7 @@ func runApp(t *testing.T, args ...string) (string, error) {
 	t.Helper()
 
 	var stdout bytes.Buffer
-	app := newApp()
+	app := newApp(commandName)
 	app.Writer = &stdout
 	app.ErrWriter = &bytes.Buffer{}
 	app.ExitErrHandler = func(*cli.Context, error) {}
