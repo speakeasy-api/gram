@@ -1,0 +1,32 @@
+server/cmd/tools/migrations/riskfindings/source_test.go
+  s_ad2d0c24ceb8da::t_cdf5d268690d0c 130-147
+server/cmd/tools/migrations/riskfindings/source.go
+  s_ad2d0c24ceb8da::t_9e8603e3b97113 164,175
+  s_ad2d0c24ceb8da::t_cdf5d268690d0c 13
+  s_ad2d0c24ceb8da::t_8277cec1e6e549 157-163,165-166,172-174,176-185,344
+  s_ad2d0c24ceb8da::t_60ac57e39babf9 167-171
+  s_ad2d0c24ceb8da::t_f110b2befc36f1 426
+  s_ad2d0c24ceb8da::t_72edb7481c2e26 423-425,427-429,438-439
+server/cmd/tools/migrations/riskfindings/sink.go
+  s_ad2d0c24ceb8da::t_8277cec1e6e549 157-161
+server/cmd/tools/migrations/riskfindings/gapfill_test.go
+  s_ad2d0c24ceb8da::t_cdf5d268690d0c 35,44-45
+server/cmd/tools/migrations/RISK_RESULTS_MIGRATION.md
+  s_ad2d0c24ceb8da::t_cdf5d268690d0c 229-233
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ed3faacac196c7179aaea38c26a70bb5f168bcb3",
+  "prompts": {},
+  "sessions": {
+    "s_ad2d0c24ceb8da": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "fcc6e428-0421-4f38-87ca-9d1950a637de",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
