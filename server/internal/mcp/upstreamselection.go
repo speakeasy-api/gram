@@ -223,8 +223,14 @@ func (s *Service) directUpstreamChoice(ctx context.Context, w http.ResponseWrite
 		}
 	}
 	choice, err := selector.forServer(ctx, endpoint.McpServerID.UUID)
-	if mode == feature.AuthClientResolverShadow {
-		s.shadowAuthClient(ctx, selector, endpoint.McpServerID.UUID, choice, err)
+	switch mode {
+	case feature.AuthClientResolverShadow:
+		s.shadowAuthClient(ctx, selector, endpoint.McpServerID.UUID, endpoint.ProjectID, authentication.subject, choice, err)
+	case feature.AuthClientResolverOff:
+		if err == nil {
+			s.newMandatoryShadow(ctx, endpoint.OrganizationID).recordSkipped(ctx, mandatorySurfaceAuthClient, true, mandatoryReasonResolverOff, endpoint.McpServerID.UUID.String(), endpoint.ProjectID.String())
+		}
+	case feature.AuthClientResolverEnforced:
 	}
 	switch {
 	case errors.Is(err, errUpstreamSelectionMissing), errors.Is(err, errUpstreamSelectionUnusable):

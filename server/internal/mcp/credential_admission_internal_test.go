@@ -73,7 +73,7 @@ func TestMCPPrincipalCredentialReadmissionErrors(t *testing.T) {
 					req := httptest.NewRequest(http.MethodPost, "/mcp/test", strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"initialize"}`)).WithContext(ctx)
 					err = service.serveToolsetResolved(httptest.NewRecorder(), req, &toolsetsrepo.Toolset{ID: uuid.New(), ProjectID: projectID}, "test", "mcp", &hostedServing{callerGated: true}, nil, nil, nil, nil)
 				case "proxy":
-					_, err = service.authorizeProxyBackendAccess(ctx, logger, projectID, &mcpserversrepo.McpServer{ID: uuid.New(), Visibility: mcpservers.VisibilityPrivate})
+					_, err = service.authorizeProxyBackendAccess(ctx, logger, mandatorySurfaceProxiedConnect, "", projectID, &mcpserversrepo.McpServer{ID: uuid.New(), Visibility: mcpservers.VisibilityPrivate})
 				}
 				require.Equal(t, 2, calls)
 				require.ErrorIs(t, err, tt.admissionErr)

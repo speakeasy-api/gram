@@ -118,6 +118,48 @@ WHERE pr.organization_id = @organization_id
   )
 ORDER BY is_default_project DESC, pr.created_at, pr.id, p.slug;
 
+-- name: ListAgentPluginServers :many
+-- Lists the live MCP servers inside the given plugins for the device agent's
+-- menu bar, in each plugin's display order. A membership whose backend is
+-- deleted or turned off is skipped, since the plugin no longer delivers it.
+-- Exactly one of mcp_server_id and gateway_id is non-null per row; the handler builds the
+-- dashboard link and the mcp:read check from whichever it is.
+SELECT
+  ps.plugin_id,
+  ps.display_name,
+  om.slug AS organization_slug,
+  om.default_host AS organization_default_host,
+  pr.id AS project_id,
+  pr.slug AS project_slug,
+  m.id AS mcp_server_id,
+  m.slug AS mcp_server_slug,
+  m.toolset_id AS mcp_server_toolset_id,
+  g.id AS gateway_id
+FROM plugin_servers ps
+JOIN plugins p
+  ON p.id = ps.plugin_id
+  AND p.deleted IS FALSE
+JOIN projects pr
+  ON pr.id = p.project_id
+  AND pr.deleted IS FALSE
+JOIN organization_metadata om
+  ON om.id = p.organization_id
+LEFT JOIN mcp_servers m
+  ON m.id = ps.mcp_server_id
+  AND m.project_id = p.project_id
+  AND m.deleted IS FALSE
+  AND m.visibility <> 'disabled'
+LEFT JOIN meta_mcp_servers g
+  ON g.id = ps.meta_mcp_server_id
+  AND g.project_id = p.project_id
+  AND g.deleted IS FALSE
+  AND g.visibility <> 'disabled'
+WHERE p.organization_id = @organization_id
+  AND ps.plugin_id = ANY(@plugin_ids::uuid[])
+  AND ps.deleted IS FALSE
+  AND (m.id IS NOT NULL OR g.id IS NOT NULL)
+ORDER BY ps.plugin_id, ps.sort_order ASC, ps.created_at ASC, ps.id ASC;
+
 -- name: UpsertDeviceAgentSync :exec
 -- Best-effort record that the device agent for @email in @organization_id polled.
 -- The ON CONFLICT WHERE guard caps writes to at most once per minute per

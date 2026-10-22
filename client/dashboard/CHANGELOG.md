@@ -1,5 +1,17 @@
 # dashboard
 
+## 0.142.0
+
+### Minor Changes
+
+- 2dc6d74: The plugin assignments sheet sets an install mode per audience (Required, On by default, Available), with individually assigned members sharing one control and a summary of who gets what. Everyone can now be assigned alongside other audiences so they can carry different modes. The plugin detail page shows each assignment's mode.
+
+### Patch Changes
+
+- 53a88c4: Reloading the new-agent wizard past its first step now starts the draft over at the name step. The draft is kept only in the page, so a reload left the install step with no name and no key, and "Issue a key" failed with `length of body.name must be greater or equal than 1`.
+- cea85db: Add the `mcp:auth` and `mcp:blocked_auth` permissions for upstream auth clients. Grants can name a client, a client type, a project, or the owner of a personal connection, including `$represented_user` for the user a request acts for. Checks match strictly, never let anyone use another user's connection, and require an agent's authorizing user to hold the permission too. Agent policies can hold the new scopes, and delegated policy version 5 can encode them; credentials keep being issued at version 4 until every server reads version 5. No request is checked against the new scopes yet, and where access control is skipped, such as for legacy API keys, using an auth client is always denied.
+- 17dbb78: API keys can be created with their own policy through `policy_grants`: `mcp:connect` and `mcp:auth` grants and their blocks. A project-bound key's grants must stay in its project, and a server grant covering every server must name a project. Setting a policy requires org admin and a consumer, producer or chat scope; `keys.list` returns it, the creation and revocation audit entries record it, and revoking the key removes it. The policy is not enforced yet.
+
 ## 0.141.0
 
 ### Minor Changes

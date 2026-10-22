@@ -112,6 +112,7 @@ type AccessRoleMutationBackend interface {
 	AddMemberRoleTx(context.Context, pgx.Tx, string, string, string, access.RoleAuditActor, access.MemberRoleValidation) (access.MemberRoleAddResult, access.MemberRoleReconciliation, error)
 	CurrentMemberRoleReconciliationTx(context.Context, pgx.Tx, string, string) (access.MemberRoleReconciliation, error)
 	ReconcileRoleIdentity(context.Context, string, string, string, string, bool)
+	ReconcileRoleDelivery(context.Context, access.RoleReconciliation)
 	ReconcileMemberRoles(context.Context, access.MemberRoleReconciliation)
 }
 
@@ -250,6 +251,9 @@ func (s *AccessRoleMutationService) Update(ctx context.Context, principal Princi
 		ProjectID: project.ID.String(), RoleID: roleID, ExpectedVersion: input.ExpectedVersion,
 		AddRules: addRules, RemoveRules: removeRules,
 	}
+	// Only a fresh commit changes role plugins; a replayed receipt runs no
+	// transaction and must not republish again.
+	var delivery access.RoleReconciliation
 	receipt, err := s.receipts.ExecuteUpdate(ctx, principal, project, input.IdempotencyKey, normalized, s.charge(principal), func(ctx context.Context, tx pgx.Tx) (AccessRoleMutationReceiptResult, error) {
 		roleUUID, parseErr := uuid.Parse(roleID)
 		if parseErr != nil || roleUUID == uuid.Nil {
@@ -271,17 +275,21 @@ func (s *AccessRoleMutationService) Update(ctx context.Context, principal Princi
 		if versionErr != nil || !hmac.Equal([]byte(version), []byte(input.ExpectedVersion)) {
 			return AccessRoleMutationReceiptResult{}, accessRoleMutationConflict("The access role changed after it was read. Read it again and retry with the new version.")
 		}
-		result, _, err := s.backend.UpdateRoleTx(ctx, tx, principal.OrganizationID, workosOrgID, access.RoleAuditActor{Principal: urn.NewPrincipal(urn.PrincipalTypeUser, principal.UserID), DisplayName: nil}, &accessgen.UpdateRolePayload{ApikeyToken: nil, SessionToken: nil, ID: roleID, Name: nil, Description: nil, AddGrants: accessRoleRulesToGenGrants(addRules, project.ID), RemoveGrants: accessRoleRulesToGenGrants(removeRules, project.ID), MemberIds: nil, AgentIds: nil})
+		result, reconciliation, err := s.backend.UpdateRoleTx(ctx, tx, principal.OrganizationID, workosOrgID, access.RoleAuditActor{Principal: urn.NewPrincipal(urn.PrincipalTypeUser, principal.UserID), DisplayName: nil}, &accessgen.UpdateRolePayload{ApikeyToken: nil, SessionToken: nil, ID: roleID, Name: nil, Description: nil, AddGrants: accessRoleRulesToGenGrants(addRules, project.ID), RemoveGrants: accessRoleRulesToGenGrants(removeRules, project.ID), MemberIds: nil, AgentIds: nil})
 		if err != nil {
 			return AccessRoleMutationReceiptResult{}, classifyAccessRoleBackendError(err)
 		}
 		if result.After == nil {
 			return AccessRoleMutationReceiptResult{}, accessRoleMutationNotFound()
 		}
+		delivery = reconciliation
 		return s.receiptResult(result.After, result.Slug, "updated", "complete")
 	})
 	if err != nil {
 		return UpdateMCPAccessRoleOutput{}, err
+	}
+	if !receipt.Replayed {
+		s.backend.ReconcileRoleDelivery(ctx, delivery)
 	}
 	result, err := decodeAccessRoleMutationReceipt(operationUpdateMCPAccessRole, receipt.ResultPayload)
 	if err != nil {

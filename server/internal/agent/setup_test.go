@@ -42,6 +42,9 @@ import (
 
 const testServerURL = "https://app.getgram.ai"
 
+// testSiteURL is the dashboard base that plugin server links are built on.
+const testSiteURL = "https://dashboard.getgram.ai"
+
 var infra *testenv.Environment
 
 func TestMain(m *testing.M) {
@@ -130,7 +133,9 @@ func newTestAgentService(t *testing.T) (context.Context, *testInstance) {
 
 	serverURL, err := url.Parse(testServerURL)
 	require.NoError(t, err)
-	orgHosts := orghost.New(orghost.Config{ServerURL: serverURL})
+	siteURL, err := url.Parse(testSiteURL)
+	require.NoError(t, err)
+	orgHosts := orghost.New(orghost.Config{ServerURL: serverURL, SiteURL: siteURL})
 	deviceAgentTokens := deviceagenttoken.New(mcpauthztest.NewIssuer(t), conn)
 	svc := agent.NewService(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), logger, tracerProvider, conn, sessionManager, authzEngine, audit.NewLogger(), features, testServerURL, orgHosts, blobs, telemetryLogger, nil, deviceAgentTokens)
 
