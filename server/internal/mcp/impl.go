@@ -226,6 +226,9 @@ type Service struct {
 	// so tools/call on the same session can resolve it. Always usable: without
 	// Redis it records nothing and every caller resolves as unknown.
 	sessionClientInfo *sessionclientinfo.Store
+	// tunnelClientFamilies attributes authenticated tunneled requests to the
+	// client their session reported at initialize, from the same store.
+	tunnelClientFamilies *tunnelClientFamilies
 	// userSessionSigner mints the SessionClaims JWT issued at /token.
 	// HS256 with GRAM_JWT_SIGNING_KEY -- same key the chat-session signer
 	// uses, intentionally separate signer code so each path is removable
@@ -511,6 +514,7 @@ func NewService(
 		platformtoolsruntime.WithFeatureChecker(platformFeatureChecker),
 	)
 
+	sessionClientInfo := sessionclientinfo.NewStore(redisClient, 0)
 	service := &Service{
 		replayLiveness:            nil,
 		federatedLoginConsumer:    nil,
@@ -611,7 +615,8 @@ func NewService(
 			cacheImpl,
 			cache.SuffixNone,
 		),
-		sessionClientInfo:    sessionclientinfo.NewStore(redisClient, 0),
+		sessionClientInfo:    sessionClientInfo,
+		tunnelClientFamilies: newTunnelClientFamilies(sessionClientInfo),
 		identityResolver:     identityResolver,
 		identityValidator:    mcpidentity.NewValidatorBoundary(),
 		userSessionSigner:    userSessionSigner,

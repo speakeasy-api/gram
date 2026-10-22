@@ -1071,6 +1071,75 @@ func (q *Queries) ServersInsertMetaMCPServerMembers(ctx context.Context, arg Ser
 	return err
 }
 
+const serversInsertPrivateInventoryEndpoint = `-- name: ServersInsertPrivateInventoryEndpoint :exec
+INSERT INTO mcp_endpoints (id, project_id, mcp_server_id, slug) VALUES
+  ($1::uuid, $2::uuid, $3::uuid, $4::text)
+`
+
+type ServersInsertPrivateInventoryEndpointParams struct {
+	ID          uuid.UUID
+	ProjectID   uuid.UUID
+	McpServerID uuid.UUID
+	Slug        string
+}
+
+func (q *Queries) ServersInsertPrivateInventoryEndpoint(ctx context.Context, arg ServersInsertPrivateInventoryEndpointParams) error {
+	_, err := q.db.Exec(ctx, serversInsertPrivateInventoryEndpoint,
+		arg.ID,
+		arg.ProjectID,
+		arg.McpServerID,
+		arg.Slug,
+	)
+	return err
+}
+
+const serversInsertPrivateInventoryMCPServer = `-- name: ServersInsertPrivateInventoryMCPServer :exec
+INSERT INTO mcp_servers (id, project_id, name, slug, tunneled_mcp_server_id,
+                         visibility) VALUES
+  ($1::uuid, $2::uuid, 'Private inventory', $3::text,
+   $4::uuid, 'private')
+`
+
+type ServersInsertPrivateInventoryMCPServerParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+	Slug      string
+	TunnelID  uuid.UUID
+}
+
+func (q *Queries) ServersInsertPrivateInventoryMCPServer(ctx context.Context, arg ServersInsertPrivateInventoryMCPServerParams) error {
+	_, err := q.db.Exec(ctx, serversInsertPrivateInventoryMCPServer,
+		arg.ID,
+		arg.ProjectID,
+		arg.Slug,
+		arg.TunnelID,
+	)
+	return err
+}
+
+const serversInsertPrivateInventoryTunnel = `-- name: ServersInsertPrivateInventoryTunnel :exec
+INSERT INTO tunneled_mcp_servers (id, project_id, name, key_hash, key_prefix,
+                                  status, agent_version, last_seen_at) VALUES
+  ($1::uuid, $2::uuid, 'Private inventory tunnel',
+   md5($3::text), 'demo_inert', 'active', '0.2.0', NULL)
+`
+
+type ServersInsertPrivateInventoryTunnelParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+	KeySeed   string
+}
+
+// Tunnel example, deliberately disconnected: its activity history must not
+// fabricate a live customer agent in the shared demo environment. The key
+// hash comes from the tenant's name seed, so it stays globally unique and
+// matches no issued key. ClickHouse metric rows reference these ids
+// (ch_05_tunnel_metrics.go).
+func (q *Queries) ServersInsertPrivateInventoryTunnel(ctx context.Context, arg ServersInsertPrivateInventoryTunnelParams) error {
+	_, err := q.db.Exec(ctx, serversInsertPrivateInventoryTunnel, arg.ID, arg.ProjectID, arg.KeySeed)
+	return err
+}
+
 const serversInsertRemoteMCPServers = `-- name: ServersInsertRemoteMCPServers :exec
 
 INSERT INTO remote_mcp_servers (id, project_id, name, slug, transport_type, url) VALUES

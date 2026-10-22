@@ -321,6 +321,27 @@ INSERT INTO mcp_endpoints (id, project_id, meta_mcp_server_id, mcp_server_id, sl
   (@slack_endpoint_id::uuid, @project_id::uuid, NULL,
    @slack_server_id::uuid, @slack_slug::text);
 
+-- Tunnel example, deliberately disconnected: its activity history must not
+-- fabricate a live customer agent in the shared demo environment. The key
+-- hash comes from the tenant's name seed, so it stays globally unique and
+-- matches no issued key. ClickHouse metric rows reference these ids
+-- (ch_05_tunnel_metrics.go).
+-- name: ServersInsertPrivateInventoryTunnel :exec
+INSERT INTO tunneled_mcp_servers (id, project_id, name, key_hash, key_prefix,
+                                  status, agent_version, last_seen_at) VALUES
+  (@id::uuid, @project_id::uuid, 'Private inventory tunnel',
+   md5(@key_seed::text), 'demo_inert', 'active', '0.2.0', NULL);
+
+-- name: ServersInsertPrivateInventoryMCPServer :exec
+INSERT INTO mcp_servers (id, project_id, name, slug, tunneled_mcp_server_id,
+                         visibility) VALUES
+  (@id::uuid, @project_id::uuid, 'Private inventory', @slug::text,
+   @tunnel_id::uuid, 'private');
+
+-- name: ServersInsertPrivateInventoryEndpoint :exec
+INSERT INTO mcp_endpoints (id, project_id, mcp_server_id, slug) VALUES
+  (@id::uuid, @project_id::uuid, @mcp_server_id::uuid, @slug::text);
+
 -- Enterprise Managed Authorization (EMA). Acme Identity is a fictional
 -- identity provider for two fictional services behind workforce servers;
 -- the workforce sign-in deliberately does not trust it, so demo sign-in is
