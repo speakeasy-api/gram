@@ -3,10 +3,9 @@ package authclientbackfill
 import (
 	"context"
 	"fmt"
+	"slices"
 
 	"github.com/google/uuid"
-
-	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
 )
 
 // CredentialClass is the kind of inbound credential a choice belongs to, as
@@ -57,13 +56,18 @@ const (
 	// until the auth client backfill or an administrator records one.
 	SelectionNoClient SelectionOutcome = "no_client"
 
-	// SelectionStaleNoAuth is a no-auth choice on a server that now offers an
-	// OAuth-backed client. It is already unusable; the credential reconnects.
+	// SelectionStaleNoAuth is a no-auth choice, or one naming the server's
+	// headers, on a server that now has an upstream OAuth client association
+	// or offers an enabled OAuth-backed client. It is already unusable, or is
+	// once the typed resolver is enabled; the credential reconnects, or its
+	// next issuance replaces it.
 	SelectionStaleNoAuth SelectionOutcome = "stale_no_auth"
 
-	// SelectionUnusable is a choice naming an auth client that is no longer
-	// usable for its server. A named client is never replaced by another, so
-	// the credential reconnects.
+	// SelectionUnusable is an OAuth choice the upstream client choice already
+	// rejects, because its registration is no longer associated with the
+	// server or bound to the credential's user session issuer, or a choice
+	// naming an auth client that is no longer usable for its server. A named
+	// client is never replaced by another, so the credential reconnects.
 	SelectionUnusable SelectionOutcome = "unusable"
 
 	// SelectionSkippedRace is a choice whose evidence changed before the
@@ -87,7 +91,8 @@ type SelectionCounts struct {
 	// Selections counts live choices.
 	Selections int `json:"selections"`
 
-	// Outcomes counts choices per outcome, as decided before any write.
+	// Outcomes counts choices per outcome, as finally decided: a choice
+	// decided again under lock before its write counts as that decision.
 	Outcomes map[SelectionOutcome]int `json:"outcomes"`
 
 	// Written counts choices this run named an auth client on.
@@ -136,16 +141,32 @@ func (r *Report) selectionClass(class CredentialClass) *SelectionCounts {
 	return counts
 }
 
+// liveCredential is a live user session credential as coverage reads it.
+type liveCredential struct {
+	class  CredentialClass
+	issuer uuid.UUID
+}
+
 // decideSelection decides one choice's mapping, returning the auth client to
-// name when there is exactly one.
-func decideSelection(row ListSelectionMappingsRow) (SelectionOutcome, uuid.UUID) {
+// name when there is exactly one. issuer is the user session issuer of the
+// choice's credential. A choice the upstream client choice reads as no-auth,
+// explicit or naming the server's headers, holds while the server has no
+// upstream OAuth client association, as GetUpstreamClientSelection reads it,
+// and the server offers no enabled OAuth-backed client. An OAuth choice holds
+// while its registration is associated with the server and bound to issuer.
+func decideSelection(row ListSelectionMappingsRow, issuer uuid.UUID) (SelectionOutcome, uuid.UUID) {
+	readsNoAuth := row.NoAuth || row.NamesHeaders
+	staleNoAuth := readsNoAuth && (row.ServerHasAssociations || row.ServerHasOauthClients)
+	oauthRejected := !readsNoAuth && (!row.RegistrationAssociated || !slices.Contains(row.RegistrationIssuerIds, issuer))
 	switch {
+	case staleNoAuth:
+		return SelectionStaleNoAuth, uuid.Nil
+	case oauthRejected:
+		return SelectionUnusable, uuid.Nil
 	case row.AuthClientID.Valid && row.MappedUsable:
 		return SelectionMapped, uuid.Nil
 	case row.AuthClientID.Valid:
 		return SelectionUnusable, uuid.Nil
-	case row.NoAuth && row.ServerHasOauthClients:
-		return SelectionStaleNoAuth, uuid.Nil
 	case row.NoAuth && len(row.CandidateIds) == 0:
 		return SelectionNoAuth, uuid.Nil
 	case len(row.CandidateIds) == 1:
@@ -157,10 +178,10 @@ func decideSelection(row ListSelectionMappingsRow) (SelectionOutcome, uuid.UUID)
 	}
 }
 
-// liveCredentialClasses reads the class of every live user session credential
-// in the organization.
-func liveCredentialClasses(ctx context.Context, q *Queries, organizationID string, size int32) (map[uuid.UUID]CredentialClass, error) {
-	classes := map[uuid.UUID]CredentialClass{}
+// liveCredentials reads every live user session credential in the
+// organization.
+func liveCredentials(ctx context.Context, q *Queries, organizationID string, size int32) (map[uuid.UUID]liveCredential, error) {
+	credentials := map[uuid.UUID]liveCredential{}
 	cursor := uuid.Nil
 	for {
 		rows, err := q.ListLiveCredentialClasses(ctx, ListLiveCredentialClassesParams{Cursor: cursor, OrganizationID: organizationID, PageSize: size})
@@ -168,33 +189,37 @@ func liveCredentialClasses(ctx context.Context, q *Queries, organizationID strin
 			return nil, fmt.Errorf("list live credentials: %w", err)
 		}
 		for _, row := range rows {
-			classes[row.CredentialID] = CredentialClass(row.CredentialClass)
+			credentials[row.CredentialID] = liveCredential{class: CredentialClass(row.CredentialClass), issuer: row.UserSessionIssuerID}
 			cursor = row.CredentialID
 		}
 		if len(rows) < int(size) {
-			return classes, nil
+			return credentials, nil
 		}
 	}
 }
 
-// runSelections names a typed auth client on every live choice that exactly
-// one can serve, and reports every live choice's coverage by credential class.
-// Choices of credentials that are no longer live are left alone: they are
-// never served again.
-func runSelections(ctx context.Context, q *Queries, opts Options, size int32, report *Report) error {
-	classes, err := liveCredentialClasses(ctx, q, opts.OrganizationID, size)
+// runSelections reports every live choice's coverage by credential class and,
+// when write is set, names a typed auth client on every live choice that
+// exactly one can serve. Choices of credentials that are no longer live are
+// left alone: they are never served again.
+func runSelections(ctx context.Context, q *Queries, opts Options, size int32, write bool, report *Report) error {
+	credentials, err := liveCredentials(ctx, q, opts.OrganizationID, size)
 	if err != nil {
 		return err
 	}
 	cursor := uuid.Nil
 	for {
-		rows, err := q.ListSelectionMappings(ctx, ListSelectionMappingsParams{OrganizationID: opts.OrganizationID, Cursor: cursor, PageSize: size})
+		rows, err := q.ListSelectionMappings(ctx, ListSelectionMappingsParams{OrganizationID: opts.OrganizationID, Cursor: cursor, OnlyID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, PageSize: size})
 		if err != nil {
 			return fmt.Errorf("list selections: %w", err)
 		}
 		for _, row := range rows {
 			cursor = row.ID
-			if err := decideSelectionRow(ctx, q, opts, classes, row, report); err != nil {
+			credential, live := credentials[row.CredentialID]
+			if !live {
+				continue
+			}
+			if err := decideSelectionRow(ctx, q, opts, write, credential, row, report); err != nil {
 				return err
 			}
 		}
@@ -204,40 +229,29 @@ func runSelections(ctx context.Context, q *Queries, opts Options, size int32, re
 	}
 }
 
-func decideSelectionRow(ctx context.Context, q *Queries, opts Options, classes map[uuid.UUID]CredentialClass, row ListSelectionMappingsRow, report *Report) error {
-	class, live := selectionCredentialClass(classes, row)
-	if !live {
-		return nil
-	}
-	outcome, clientID := decideSelection(row)
-	counts := report.selectionClass(class)
+func decideSelectionRow(ctx context.Context, q *Queries, opts Options, write bool, credential liveCredential, row ListSelectionMappingsRow, report *Report) error {
+	outcome, clientID := decideSelection(row, credential.issuer)
+	counts := report.selectionClass(credential.class)
 	counts.Selections++
-	counts.Outcomes[outcome]++
 	if outcome == SelectionMap {
 		report.PendingSelectionMappings++
-		if opts.Apply {
-			n, err := q.MapSelectionToAuthClient(ctx, MapSelectionToAuthClientParams{
-				ID:                    row.ID,
-				OrganizationID:        opts.OrganizationID,
-				NoAuth:                row.NoAuth,
-				RemoteSessionClientID: row.RemoteSessionClientID,
-				AuthClientID:          clientID,
-			})
+		if write {
+			written, final, err := mapSelection(ctx, q, opts, credential, row, clientID)
 			if err != nil {
-				return fmt.Errorf("map selection %s: %w", row.ID, err)
+				return err
 			}
-			if n == 0 {
-				outcome = SelectionSkippedRace
-			} else {
+			outcome = final
+			if written {
 				counts.Written++
 				report.SelectionsMapped++
 			}
 		}
 	}
+	counts.Outcomes[outcome]++
 	if !outcome.Covered() {
 		report.SelectionGaps = append(report.SelectionGaps, SelectionGap{
 			SelectionID:     row.ID,
-			CredentialClass: class,
+			CredentialClass: credential.class,
 			CredentialID:    row.CredentialID,
 			MCPServerID:     row.McpServerID,
 			ProjectID:       row.ProjectID,
@@ -247,13 +261,52 @@ func decideSelectionRow(ctx context.Context, q *Queries, opts Options, classes m
 	return nil
 }
 
-// selectionCredentialClass is the class of the credential a choice belongs to,
-// and whether that credential is live. A user session credential is live while
-// a row of it can still refresh; other credential kinds are their own class.
-func selectionCredentialClass(classes map[uuid.UUID]CredentialClass, row ListSelectionMappingsRow) (CredentialClass, bool) {
-	if row.CredentialKind != upstreamclients.CredentialKindUserSession {
-		return CredentialClass(row.CredentialKind), true
+// mapSelection names clientID on a choice decided as SelectionMap, after
+// locking what the decision reads against the writers that change it and
+// deciding again from a read taken after the locks: an auth client enabled,
+// disabled or detached, an upstream OAuth client association or a credential
+// header changed concurrently either commits before the read or waits for
+// this phase to commit. It returns whether it wrote and the choice's outcome.
+// The locks are held until the phase commits.
+func mapSelection(ctx context.Context, q *Queries, opts Options, credential liveCredential, row ListSelectionMappingsRow, clientID uuid.UUID) (bool, SelectionOutcome, error) {
+	if err := q.LockSelectionRemoteSource(ctx, row.McpServerID); err != nil {
+		return false, "", fmt.Errorf("lock source of selection %s: %w", row.ID, err)
 	}
-	class, live := classes[row.CredentialID]
-	return class, live
+	if err := q.LockSelectionTunneledSource(ctx, row.McpServerID); err != nil {
+		return false, "", fmt.Errorf("lock source of selection %s: %w", row.ID, err)
+	}
+	if err := q.LockSelectionServer(ctx, row.McpServerID); err != nil {
+		return false, "", fmt.Errorf("lock server of selection %s: %w", row.ID, err)
+	}
+	if err := q.LockSelectionServerAuthClients(ctx, LockSelectionServerAuthClientsParams{McpServerID: row.McpServerID, OrganizationID: opts.OrganizationID}); err != nil {
+		return false, "", fmt.Errorf("lock auth clients of selection %s: %w", row.ID, err)
+	}
+	fresh, err := q.ListSelectionMappings(ctx, ListSelectionMappingsParams{OrganizationID: opts.OrganizationID, Cursor: uuid.Nil, OnlyID: uuid.NullUUID{UUID: row.ID, Valid: true}, PageSize: 1})
+	if err != nil {
+		return false, "", fmt.Errorf("reread selection %s: %w", row.ID, err)
+	}
+	if len(fresh) == 0 {
+		return false, SelectionSkippedRace, nil
+	}
+	outcome, decided := decideSelection(fresh[0], credential.issuer)
+	switch {
+	case outcome != SelectionMap:
+		return false, outcome, nil
+	case decided != clientID:
+		return false, SelectionSkippedRace, nil
+	}
+	n, err := q.MapSelectionToAuthClient(ctx, MapSelectionToAuthClientParams{
+		ID:                    row.ID,
+		OrganizationID:        opts.OrganizationID,
+		NoAuth:                fresh[0].NoAuth,
+		RemoteSessionClientID: fresh[0].RemoteSessionClientID,
+		AuthClientID:          clientID,
+	})
+	if err != nil {
+		return false, "", fmt.Errorf("map selection %s: %w", row.ID, err)
+	}
+	if n == 0 {
+		return false, SelectionSkippedRace, nil
+	}
+	return true, SelectionMap, nil
 }

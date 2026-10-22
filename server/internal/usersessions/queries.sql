@@ -2518,7 +2518,16 @@ SET remote_session_client_id = EXCLUDED.remote_session_client_id,
     auth_client_attachment_scope = NULL,
     source = EXCLUDED.source,
     updated_at = clock_timestamp()
-WHERE upstream_client_selections.remote_session_client_id IS NULL
+WHERE (upstream_client_selections.no_auth
+       OR EXISTS (
+         SELECT 1
+         FROM mcp_auth_clients AS headers_only
+         WHERE headers_only.id = upstream_client_selections.auth_client_id
+           AND upstream_client_selections.remote_session_client_id IS NULL
+           AND headers_only.organization_id = upstream_client_selections.organization_id
+           AND (headers_only.project_id IS NULL OR headers_only.project_id = upstream_client_selections.project_id)
+           AND headers_only.client_type IN ('static_credential', 'pass_through')
+       ))
   AND EXCLUDED.remote_session_client_id IS NOT NULL;
 
 -- name: GetUpstreamClientSelection :one

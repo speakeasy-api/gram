@@ -468,7 +468,7 @@ function SelectionCoverage({
       <p className="text-muted-foreground text-xs">
         Credential choices:{" "}
         {a.selectionsComplete
-          ? "every choice names an auth client"
+          ? "every choice is covered (auth client or explicit no-auth)"
           : `${a.pendingSelectionMappings} to name, ${a.selectionGapCount} without a usable auth client`}
       </p>
       <ul className="text-muted-foreground text-xs">

@@ -11,10 +11,10 @@
 // no longer yields, so the records track it, and marks each server it links a
 // client to as needing upstream authentication where that is still
 // undecided. Admin-created records are never
-// read or retired here. It then names, on each live credential's choice for a
-// server, the one auth client that serves it (see selections.go), and reports
-// coverage by credential class; a choice several clients could serve is
-// reported, never guessed. Its last phase grants the default auth permissions
+// retired here. It then names, on each live credential's choice for a server,
+// the one auth client that serves it, admin-created clients included (see
+// selections.go), and reports coverage by credential class; a choice several
+// clients could serve is reported, never guessed. Its last phase grants the default auth permissions
 // the mandatory auth client check needs (see grants.go); those grants are live
 // authorization data. The client records themselves are not read yet: the
 // existing resolution stays authoritative.
@@ -726,8 +726,11 @@ func runPhases(ctx context.Context, db TxStarter, opts Options, startedAt pgtype
 		}},
 		// After every phase that records or retires clients and links, so
 		// choices name what this run left in place.
+		// Choices are only reported, not mapped, when an earlier phase failed:
+		// its clients and links were rolled back, and a mapped choice is never
+		// revisited.
 		{name: PhaseSelections, kind: "", run: func(ctx context.Context, tx pgx.Tx, local *Report) error {
-			return runSelections(ctx, New(tx), opts, size, local)
+			return runSelections(ctx, New(tx), opts, size, opts.Apply && len(report.PhaseErrors) == 0, local)
 		}},
 	}
 	if withGrants {
