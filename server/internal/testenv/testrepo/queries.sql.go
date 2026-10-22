@@ -153,6 +153,36 @@ func (q *Queries) ClearRemoteSessionClientKeySetFixture(ctx context.Context, jso
 	return result.RowsAffected(), nil
 }
 
+const copyConsentEMACredentialToProjectFixture = `-- name: CopyConsentEMACredentialToProjectFixture :exec
+INSERT INTO remote_session_ema_credentials (
+  organization_id, project_id, user_session_issuer_id, remote_session_issuer_id,
+  remote_session_client_id, resource, subject_urn, client_selection,
+  remote_session_ema_binding_id, ema_binding_generation, ema_provider,
+  internal_session_issuer_id, internal_session_issuer_updated_at, internal_session_issuer_key_id, sign_in_id,
+  access_token_encrypted, access_expires_at
+)
+SELECT c.organization_id, p.id, c.user_session_issuer_id, c.remote_session_issuer_id,
+       c.remote_session_client_id, c.resource, c.subject_urn, c.client_selection,
+       c.remote_session_ema_binding_id, c.ema_binding_generation, c.ema_provider,
+       c.internal_session_issuer_id, c.internal_session_issuer_updated_at, c.internal_session_issuer_key_id, c.sign_in_id,
+       c.access_token_encrypted, c.access_expires_at
+FROM remote_session_ema_credentials AS c
+JOIN projects AS p ON p.id = $1 AND p.organization_id = c.organization_id
+WHERE c.id = $2 AND c.organization_id = $3 AND c.user_session_id IS NULL
+`
+
+type CopyConsentEMACredentialToProjectFixtureParams struct {
+	ProjectID      uuid.UUID
+	ID             uuid.UUID
+	OrganizationID pgtype.Text
+}
+
+// TEST FIXTURE ONLY. A pending organization-issued consent in another member project.
+func (q *Queries) CopyConsentEMACredentialToProjectFixture(ctx context.Context, arg CopyConsentEMACredentialToProjectFixtureParams) error {
+	_, err := q.db.Exec(ctx, copyConsentEMACredentialToProjectFixture, arg.ProjectID, arg.ID, arg.OrganizationID)
+	return err
+}
+
 const corruptDeviceIntegrationCredentialsFixture = `-- name: CorruptDeviceIntegrationCredentialsFixture :exec
 UPDATE device_integration_configs
 SET credentials_encrypted = 'not-a-valid-ciphertext'

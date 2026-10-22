@@ -229,9 +229,11 @@ type Service struct {
 	// userSessionRefreshReplayCoordination elects the database rotation winner.
 	userSessionRefreshReplayCoordination cache.Cache
 	sessionPolicyCache                   cache.TypedCacheObject[sessionPolicyEntry]
-	// consentToolInventoryCache holds per-(state, attempt) tool inventory
-	// snapshots captured by the consent MCP transport.
+	// consentToolInventoryCache holds bounded gateway challenge captures and
+	// single-server attempt snapshots captured by the consent MCP transport.
 	consentToolInventoryCache cache.TypedCacheObject[consentToolInventory]
+	// connectionCatalogCache retains immutable approved catalogs for a grant's lifetime.
+	connectionCatalogCache cache.Cache
 	// sessionClientInfo holds the MCP client identity captured at initialize
 	// so tools/call on the same session can resolve it. Always usable: without
 	// Redis it records nothing and every caller resolves as unknown.
@@ -629,20 +631,21 @@ func NewService(
 			cacheImpl,
 			cache.SuffixNone,
 		),
-		sessionClientInfo:    sessionClientInfo,
-		tunnelClientFamilies: newTunnelClientFamilies(sessionClientInfo),
-		identityResolver:     identityResolver,
-		identityValidator:    mcpidentity.NewValidatorBoundary(),
-		userSessionSigner:    userSessionSigner,
-		remoteChallengeMgr:   remoteChallengeMgr,
-		validationMetrics:    remotesessionmetrics.NewValidation(logger, meterProvider),
-		validationLimiter:    newValidationLimiter(redisClient, meterProvider),
-		autoVerifications:    newAutoVerifications(),
-		remoteSessionRecheck: newRemoteSessionRecheck(metaRuntimeConfig.withDefaults().RecheckInterval, redisClient, meterProvider),
-		remoteProxyManager:   remoteProxyManager,
-		tunnelManager:        newTunnelManager(tunnelRoutes, tunnelForwardToken, remoteProxyManager, tunnelGatewayCIDRs, callerAssertions),
-		tunnelPublic:         newTunnelPublicRuntime(redisClient, meterProvider, metrics, tunnelPublicConfig),
-		metaRuntime:          metaRuntimeConfig.withDefaults(),
+		connectionCatalogCache: cacheImpl,
+		sessionClientInfo:      sessionClientInfo,
+		tunnelClientFamilies:   newTunnelClientFamilies(sessionClientInfo),
+		identityResolver:       identityResolver,
+		identityValidator:      mcpidentity.NewValidatorBoundary(),
+		userSessionSigner:      userSessionSigner,
+		remoteChallengeMgr:     remoteChallengeMgr,
+		validationMetrics:      remotesessionmetrics.NewValidation(logger, meterProvider),
+		validationLimiter:      newValidationLimiter(redisClient, meterProvider),
+		autoVerifications:      newAutoVerifications(),
+		remoteSessionRecheck:   newRemoteSessionRecheck(metaRuntimeConfig.withDefaults().RecheckInterval, redisClient, meterProvider),
+		remoteProxyManager:     remoteProxyManager,
+		tunnelManager:          newTunnelManager(tunnelRoutes, tunnelForwardToken, remoteProxyManager, tunnelGatewayCIDRs, callerAssertions),
+		tunnelPublic:           newTunnelPublicRuntime(redisClient, meterProvider, metrics, tunnelPublicConfig),
+		metaRuntime:            metaRuntimeConfig.withDefaults(),
 	}
 	// Discovery and token dispatch share this production issuer. Only explicitly
 	// provisioned, live assistant workload registrations can obtain tokens.
