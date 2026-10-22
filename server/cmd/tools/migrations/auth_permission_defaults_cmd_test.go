@@ -58,12 +58,16 @@ func TestBackfillAuthPermissionDefaultsAggregates(t *testing.T) {
 		return r
 	}
 	results := map[string]authclientbackfill.Report{
-		"a": report(map[authclientbackfill.GrantKind]int{authclientbackfill.GrantPersonalDefault: 1, authclientbackfill.GrantSharedClient: 0, authclientbackfill.GrantAPIKey: 2}, 3, false, false),
-		"b": report(map[authclientbackfill.GrantKind]int{authclientbackfill.GrantPersonalDefault: 0, authclientbackfill.GrantSharedClient: 4, authclientbackfill.GrantAPIKey: 0}, 4, true, false),
+		"a": report(map[authclientbackfill.GrantKind]int{authclientbackfill.GrantPersonalDefault: 1, authclientbackfill.GrantSharedClient: 0, authclientbackfill.GrantAPIKey: 2, authclientbackfill.GrantAttachment: 1}, 3, false, false),
+		"b": report(map[authclientbackfill.GrantKind]int{authclientbackfill.GrantPersonalDefault: 0, authclientbackfill.GrantSharedClient: 4, authclientbackfill.GrantAPIKey: 0, authclientbackfill.GrantAttachment: 0}, 4, true, false),
 		"c": report(nil, 0, false, true),
 	}
-	results["e"] = report(map[authclientbackfill.GrantKind]int{authclientbackfill.GrantPersonalDefault: 1, authclientbackfill.GrantSharedClient: 0, authclientbackfill.GrantAPIKey: 0}, 1, true, false)
+	results["e"] = report(map[authclientbackfill.GrantKind]int{authclientbackfill.GrantPersonalDefault: 1, authclientbackfill.GrantSharedClient: 0, authclientbackfill.GrantAPIKey: 0, authclientbackfill.GrantAttachment: 0}, 1, true, false)
 	results["e"].PhaseErrors[authclientbackfill.PhaseEMA] = "readiness check failed"
+	remediation := authclientbackfill.AttachmentRemediation{BindingID: "binding", AgentID: "agent", Reason: authclientbackfill.AttachmentOwnerChanged}
+	withAttachment := results["b"]
+	withAttachment.AttachmentRemediations = []authclientbackfill.AttachmentRemediation{remediation}
+	results["b"] = withAttachment
 	got, err := backfillAuthPermissionDefaults([]string{"a", "b", "c", "d", "e"}, func(id string) (authclientbackfill.Report, error) {
 		if id == "d" {
 			return authclientbackfill.Report{}, authclientbackfill.ErrRunInProgress
@@ -72,11 +76,12 @@ func TestBackfillAuthPermissionDefaultsAggregates(t *testing.T) {
 	}, func(int, int) {})
 	require.NoError(t, err)
 	require.Equal(t, 5, got.Organizations)
-	require.Equal(t, map[authclientbackfill.GrantKind]int{authclientbackfill.GrantPersonalDefault: 2, authclientbackfill.GrantAPIKey: 2, authclientbackfill.GrantSharedClient: 4}, got.Granted)
+	require.Equal(t, map[authclientbackfill.GrantKind]int{authclientbackfill.GrantPersonalDefault: 2, authclientbackfill.GrantAPIKey: 2, authclientbackfill.GrantSharedClient: 4, authclientbackfill.GrantAttachment: 1}, got.Granted)
 	require.Equal(t, 8, got.Written, "a readiness-check error does not undo committed grants")
 	require.Equal(t, 2, got.KeysWaiting)
 	require.Equal(t, 1, got.Failed)
 	require.Equal(t, 1, got.Busy)
+	require.Equal(t, []attachmentRemediation{{OrganizationID: "b", AttachmentRemediation: remediation}}, got.Remediations, "each attachment to remediate names its organization")
 
 	_, err = backfillAuthPermissionDefaults([]string{"a"}, func(string) (authclientbackfill.Report, error) {
 		return authclientbackfill.Report{}, errors.New("database down")

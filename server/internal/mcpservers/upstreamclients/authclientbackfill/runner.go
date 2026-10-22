@@ -365,6 +365,10 @@ type Report struct {
 	// clients are not recorded yet.
 	APIKeysWaiting bool `json:"api_keys_waiting"`
 
+	// AttachmentRemediations lists the agent attachments the grants phase
+	// could not carry over, which need their owner to act.
+	AttachmentRemediations []AttachmentRemediation `json:"attachment_remediations"`
+
 	// PhaseErrors names each phase that failed and why. A failed phase's
 	// writes are rolled back and its records are not retired; the other
 	// phases still run.
@@ -412,30 +416,31 @@ func (r *Report) wroteHeader(k Kind)   { r.HeadersWritten++; r.kind(k).Written++
 // newReport returns an empty report in the given mode.
 func newReport(apply bool) Report {
 	report := Report{
-		Mode:                  "dry_run",
-		Associations:          0,
-		Outcomes:              map[Outcome]int{},
-		ByKind:                map[Kind]*KindCounts{},
-		PendingClients:        0,
-		PendingLinks:          0,
-		PendingHeaders:        0,
-		ClientsWritten:        0,
-		LinksWritten:          0,
-		HeadersWritten:        0,
-		Gaps:                  0,
-		PendingRetiredClients: 0,
-		PendingRetiredLinks:   0,
-		ClientsRetired:        0,
-		LinksRetired:          0,
-		PendingMarkedServers:  0,
-		ServersMarked:         0,
-		PendingGrants:         0,
-		PendingGrantsByKind:   map[GrantKind]int{},
-		GrantsWritten:         0,
-		APIKeysGranted:        []string{},
-		APIKeysWaiting:        false,
-		PhaseErrors:           map[string]string{},
-		Results:               []Result{},
+		Mode:                   "dry_run",
+		Associations:           0,
+		Outcomes:               map[Outcome]int{},
+		ByKind:                 map[Kind]*KindCounts{},
+		PendingClients:         0,
+		PendingLinks:           0,
+		PendingHeaders:         0,
+		ClientsWritten:         0,
+		LinksWritten:           0,
+		HeadersWritten:         0,
+		Gaps:                   0,
+		PendingRetiredClients:  0,
+		PendingRetiredLinks:    0,
+		ClientsRetired:         0,
+		LinksRetired:           0,
+		PendingMarkedServers:   0,
+		ServersMarked:          0,
+		PendingGrants:          0,
+		PendingGrantsByKind:    map[GrantKind]int{},
+		GrantsWritten:          0,
+		APIKeysGranted:         []string{},
+		APIKeysWaiting:         false,
+		AttachmentRemediations: []AttachmentRemediation{},
+		PhaseErrors:            map[string]string{},
+		Results:                []Result{},
 	}
 	if apply {
 		report.Mode = "apply"
@@ -484,6 +489,7 @@ func (r *Report) merge(o Report) {
 	r.GrantsWritten += o.GrantsWritten
 	r.APIKeysGranted = append(r.APIKeysGranted, o.APIKeysGranted...)
 	r.APIKeysWaiting = r.APIKeysWaiting || o.APIKeysWaiting
+	r.AttachmentRemediations = append(r.AttachmentRemediations, o.AttachmentRemediations...)
 	r.Results = append(r.Results, o.Results...)
 }
 

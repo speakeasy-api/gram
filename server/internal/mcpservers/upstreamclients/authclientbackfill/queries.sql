@@ -1726,6 +1726,34 @@ WHERE ara.organization_id = @organization_id
   AND ara.deleted_at IS NULL
 ORDER BY role_urn;
 
+-- name: ListLiveAgentAttachments :many
+-- Unrevoked attachments of live agents to a user's connection, with what the
+-- attachment runtime checks before serving one: the connection is still live
+-- at the attached grant generation, it belongs to the user who attached it,
+-- and that user still owns the agent.
+SELECT
+  b.id AS binding_id,
+  b.principal_id AS agent_id,
+  b.remote_session_client_id,
+  b.attached_by_subject_id,
+  a.owner_user_id,
+  COALESCE(rs.subject_urn, '')::text AS connection_subject,
+  (rs.id IS NOT NULL AND rs.deleted IS FALSE AND rs.grant_generation = b.grant_generation)::boolean AS connection_live,
+  EXISTS (
+    SELECT 1
+    FROM mcp_auth_clients AS ac
+    WHERE ac.organization_id = b.organization_id
+      AND ac.remote_session_client_id = b.remote_session_client_id
+      AND ac.client_type = 'remote_session'
+      AND ac.deleted IS FALSE
+  )::boolean AS client_recorded
+FROM principal_remote_session_bindings AS b
+JOIN agents AS a ON a.organization_id = b.organization_id AND a.id = b.principal_id AND a.deleted IS FALSE
+LEFT JOIN remote_sessions AS rs ON rs.id = b.remote_session_id
+WHERE b.organization_id = @organization_id
+  AND b.revoked_at IS NULL
+ORDER BY b.id;
+
 -- name: ListAuthClientGrantRows :many
 -- Existing grants of the given scopes, to tell which defaults are missing.
 SELECT principal_urn, scope, selectors
@@ -1815,3 +1843,18 @@ SELECT ac.id, ac.organization_id, ac.remote_session_client_id, c.remote_session_
 FROM mcp_auth_clients AS ac
 JOIN remote_session_clients AS c ON c.id = ac.remote_session_client_id
 WHERE ac.id = @auth_client_id::uuid;
+
+-- name: SeedAgentAttachmentFixture :one
+WITH link AS (
+  INSERT INTO remote_session_client_user_session_issuers (remote_session_client_id, user_session_issuer_id)
+  VALUES (@remote_session_client_id, @user_session_issuer_id)
+  ON CONFLICT DO NOTHING
+), session AS (
+  INSERT INTO remote_sessions (subject_urn, user_session_issuer_id, remote_session_client_id, access_token_encrypted)
+  VALUES (@connection_subject::text, @user_session_issuer_id, @remote_session_client_id, 'fixture-not-a-token')
+  RETURNING id, grant_generation
+)
+INSERT INTO principal_remote_session_bindings (project_id, organization_id, principal_id, user_session_issuer_id, remote_session_client_id, remote_session_id, grant_generation, attached_by_subject_id)
+SELECT @project_id, @organization_id, @agent_id, @user_session_issuer_id, @remote_session_client_id, session.id, session.grant_generation + @generation_offset::bigint, @attached_by::text
+FROM session
+RETURNING id;

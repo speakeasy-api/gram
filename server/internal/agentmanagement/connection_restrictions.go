@@ -16,18 +16,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
-// connectionRestrictionSelector names one logical connection: ownerUserID's
-// connection through the upstream OAuth client, whichever auth client uses it.
-// The server fixes every key, so a connection owner can never write a
-// wildcard, symbolic or broader restriction through this authority.
+// connectionRestrictionSelector names one logical connection. The server
+// fixes every key, so a connection owner can never write a wildcard, symbolic
+// or broader restriction through this authority.
 func connectionRestrictionSelector(remoteSessionClientID uuid.UUID, ownerUserID string) authz.Selector {
-	return authz.Selector{
-		authz.SelectorKeyResourceKind:    authz.ResourceKindMCPAuthClient,
-		authz.SelectorKeyResourceID:      authz.WildcardResource,
-		authz.SelectorKeyClientType:      authz.AuthClientTypeRemoteSession,
-		authz.SelectorKeyUpstreamClient:  remoteSessionClientID.String(),
-		authz.SelectorKeyConnectionOwner: ownerUserID,
-	}
+	return authz.ConnectionAuthClientSelector(remoteSessionClientID.String(), ownerUserID)
 }
 
 func (s *Service) ListConnectionRestrictions(ctx context.Context, _ *gen.ListConnectionRestrictionsPayload) (*gen.ListAgentConnectionRestrictionsResult, error) {

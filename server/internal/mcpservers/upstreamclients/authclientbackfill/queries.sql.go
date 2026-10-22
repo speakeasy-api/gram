@@ -1731,6 +1731,75 @@ func (q *Queries) ListEMASameOriginServers(ctx context.Context, arg ListEMASameO
 	return items, nil
 }
 
+const listLiveAgentAttachments = `-- name: ListLiveAgentAttachments :many
+SELECT
+  b.id AS binding_id,
+  b.principal_id AS agent_id,
+  b.remote_session_client_id,
+  b.attached_by_subject_id,
+  a.owner_user_id,
+  COALESCE(rs.subject_urn, '')::text AS connection_subject,
+  (rs.id IS NOT NULL AND rs.deleted IS FALSE AND rs.grant_generation = b.grant_generation)::boolean AS connection_live,
+  EXISTS (
+    SELECT 1
+    FROM mcp_auth_clients AS ac
+    WHERE ac.organization_id = b.organization_id
+      AND ac.remote_session_client_id = b.remote_session_client_id
+      AND ac.client_type = 'remote_session'
+      AND ac.deleted IS FALSE
+  )::boolean AS client_recorded
+FROM principal_remote_session_bindings AS b
+JOIN agents AS a ON a.organization_id = b.organization_id AND a.id = b.principal_id AND a.deleted IS FALSE
+LEFT JOIN remote_sessions AS rs ON rs.id = b.remote_session_id
+WHERE b.organization_id = $1
+  AND b.revoked_at IS NULL
+ORDER BY b.id
+`
+
+type ListLiveAgentAttachmentsRow struct {
+	BindingID             uuid.UUID
+	AgentID               uuid.UUID
+	RemoteSessionClientID uuid.UUID
+	AttachedBySubjectID   string
+	OwnerUserID           string
+	ConnectionSubject     string
+	ConnectionLive        bool
+	ClientRecorded        bool
+}
+
+// Unrevoked attachments of live agents to a user's connection, with what the
+// attachment runtime checks before serving one: the connection is still live
+// at the attached grant generation, it belongs to the user who attached it,
+// and that user still owns the agent.
+func (q *Queries) ListLiveAgentAttachments(ctx context.Context, organizationID string) ([]ListLiveAgentAttachmentsRow, error) {
+	rows, err := q.db.Query(ctx, listLiveAgentAttachments, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListLiveAgentAttachmentsRow
+	for rows.Next() {
+		var i ListLiveAgentAttachmentsRow
+		if err := rows.Scan(
+			&i.BindingID,
+			&i.AgentID,
+			&i.RemoteSessionClientID,
+			&i.AttachedBySubjectID,
+			&i.OwnerUserID,
+			&i.ConnectionSubject,
+			&i.ConnectionLive,
+			&i.ClientRecorded,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listLiveAuthClientIDsFixture = `-- name: ListLiveAuthClientIDsFixture :many
 SELECT id FROM mcp_auth_clients WHERE organization_id = $1 AND deleted IS FALSE ORDER BY id
 `
@@ -3048,6 +3117,49 @@ func (q *Queries) RetireStaleBackfillLinks(ctx context.Context, organizationID s
 		return nil, err
 	}
 	return items, nil
+}
+
+const seedAgentAttachmentFixture = `-- name: SeedAgentAttachmentFixture :one
+WITH link AS (
+  INSERT INTO remote_session_client_user_session_issuers (remote_session_client_id, user_session_issuer_id)
+  VALUES ($5, $4)
+  ON CONFLICT DO NOTHING
+), session AS (
+  INSERT INTO remote_sessions (subject_urn, user_session_issuer_id, remote_session_client_id, access_token_encrypted)
+  VALUES ($8::text, $4, $5, 'fixture-not-a-token')
+  RETURNING id, grant_generation
+)
+INSERT INTO principal_remote_session_bindings (project_id, organization_id, principal_id, user_session_issuer_id, remote_session_client_id, remote_session_id, grant_generation, attached_by_subject_id)
+SELECT $1, $2, $3, $4, $5, session.id, session.grant_generation + $6::bigint, $7::text
+FROM session
+RETURNING id
+`
+
+type SeedAgentAttachmentFixtureParams struct {
+	ProjectID             uuid.UUID
+	OrganizationID        string
+	AgentID               uuid.UUID
+	UserSessionIssuerID   uuid.UUID
+	RemoteSessionClientID uuid.UUID
+	GenerationOffset      int64
+	AttachedBy            string
+	ConnectionSubject     string
+}
+
+func (q *Queries) SeedAgentAttachmentFixture(ctx context.Context, arg SeedAgentAttachmentFixtureParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, seedAgentAttachmentFixture,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.AgentID,
+		arg.UserSessionIssuerID,
+		arg.RemoteSessionClientID,
+		arg.GenerationOffset,
+		arg.AttachedBy,
+		arg.ConnectionSubject,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
 }
 
 const seedAssociationFixture = `-- name: SeedAssociationFixture :one
