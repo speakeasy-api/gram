@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 
+	"github.com/speakeasy-api/gram/server/internal/consentpage"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd"
 )
 
@@ -20,7 +21,7 @@ const finishElsewhereField = "finish_elsewhere"
 var consentFinishElsewhereTemplateHTML string
 
 var consentFinishElsewhereTemplate = template.Must(
-	template.Must(template.New("finish-elsewhere").Parse(consentFinishElsewhereTemplateHTML)).Parse(consentLogoHTML),
+	template.Must(template.New("finish-elsewhere").Parse(consentFinishElsewhereTemplateHTML)).Parse(consentpage.LogoTemplate),
 )
 
 // isLoopbackRedirect reports whether redirectURI points at a loopback
@@ -77,7 +78,7 @@ func renderConsentFinishElsewhere(w http.ResponseWriter, clientName, callbackURL
 	}
 	minutes := int(userSessionGrantTTL.Minutes())
 	data := consentFinishElsewhereData{
-		Styles:        consentPageStyles,
+		Styles:        consentpage.Styles,
 		ClientName:    clientName,
 		ListenAddress: u.Host,
 		CallbackURL:   callbackURL,

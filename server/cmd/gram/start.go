@@ -1870,6 +1870,7 @@ func newStartCommand() *cli.Command {
 			platformMCPAssistant, err := configurePlatformMCP(ctx, platformMCPConfig{
 				DeploymentRedeploy:        deploymentsService,
 				AssistantIdentity:         assistantsSvc,
+				Workspaces:                platformMCPWorkspaces{auth: authService, organizations: organizationsService},
 				SignalAuthoring:           sigintSvc,
 				Logger:                    logger,
 				MeterProvider:             meterProvider,
