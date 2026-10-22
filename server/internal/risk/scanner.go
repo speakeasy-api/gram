@@ -1760,12 +1760,13 @@ func enforcementFindings(text, source string, in []*riskv1.EnforcementFinding) (
 		if math.IsNaN(score) || math.IsInf(score, 0) || score < 0 || score > 1 {
 			return nil, fmt.Errorf("enforcement finding has invalid score %v", score)
 		}
+		description := conv.TruncateString(conv.Default(finding.GetDescription(), finding.GetRuleId()), enforcereply.MaxFindingDescriptionRunes)
 		if source == llmanalyzer.Source {
 			// The model reports no offsets (surface none): the rationale is the
 			// description, the match stays empty and the category is the tag.
 			out = append(out, scanners.Finding{
 				RuleID:              finding.GetRuleId(),
-				Description:         conv.Default(finding.GetDescription(), finding.GetRuleId()),
+				Description:         description,
 				Match:               "",
 				StartPos:            0,
 				EndPos:              0,
@@ -1785,7 +1786,8 @@ func enforcementFindings(text, source string, in []*riskv1.EnforcementFinding) (
 			return nil, fmt.Errorf("enforcement finding has invalid byte range %d:%d", start, end)
 		}
 		match := text[start:end]
-		description := conv.Default(finding.GetDescription(), finding.GetRuleId())
+		// Gitleaks and Presidio use the local catalog descriptions below. Other
+		// lanes preserve the bounded description carried by the reply.
 		switch source {
 		case ra.SourcePresidio:
 			_, description = ra.DescribePresidioEntity(strings.ToUpper(strings.TrimPrefix(finding.GetRuleId(), "pii.")))
