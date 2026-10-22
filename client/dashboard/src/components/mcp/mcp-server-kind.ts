@@ -54,7 +54,7 @@ export function listedMcpServers(servers: McpServer[]): ListedMcpServer[] {
 }
 
 /** The toolset summary when this row hosts its toolset. */
-export function standInToolset(
+function standInToolset(
   server: McpServer,
 ): McpServerToolsetSummary | undefined {
   return mcpServerKind(server) === "hosted" && standsInForToolset(server)
