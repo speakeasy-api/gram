@@ -6463,8 +6463,16 @@ CREATE TABLE IF NOT EXISTS chat_messages (
   -- version rescans and backfills are coordinated outside this field.
   risk_analyzed_at timestamptz,
 
+  -- Set when this row is a secondary copy of an entry already stored from
+  -- another capture source (Claude Code hooks and the Anthropic inference
+  -- hook both deliver the same session). Points at the primary row, which
+  -- usually lives in a different chat. Secondary rows are never risk-scanned,
+  -- metered or published downstream.
+  primary_message_id uuid,
+
   CONSTRAINT chat_messages_pkey PRIMARY KEY (id),
   CONSTRAINT chat_messages_chat_id_fkey FOREIGN KEY (chat_id) REFERENCES chats(id) ON DELETE CASCADE,
+  CONSTRAINT chat_messages_primary_message_id_fkey FOREIGN KEY (primary_message_id) REFERENCES chat_messages (id) ON DELETE SET NULL,
   CONSTRAINT chat_messages_seq_key UNIQUE (seq)
 ) WITH (
   -- Insert-heavy like risk_results, but also update-heavy: risk_analyzed_at
@@ -6515,6 +6523,7 @@ COMMENT ON COLUMN chat_messages.generation IS '@access: confidential';
 COMMENT ON COLUMN chat_messages.replayed IS '@access: confidential';
 COMMENT ON COLUMN chat_messages.created_at IS '@access: confidential';
 COMMENT ON COLUMN chat_messages.risk_analyzed_at IS '@access: confidential';
+COMMENT ON COLUMN chat_messages.primary_message_id IS '@access: confidential';
 
 CREATE INDEX IF NOT EXISTS chat_messages_chat_id_idx ON chat_messages (chat_id);
 CREATE INDEX IF NOT EXISTS chat_messages_chat_id_generation_seq_idx ON chat_messages (chat_id, generation, seq);
@@ -6572,6 +6581,11 @@ WHERE origin = 'anthropic-inference' AND external_message_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS chat_messages_risk_analyzed_at_null_idx
 ON chat_messages (project_id, id)
 WHERE risk_analyzed_at IS NULL;
+
+-- Secondary rows only. Serves the ON DELETE SET NULL cascade from the primary
+-- row and the writer's "last shared anchor" lookup between two linked chats.
+CREATE INDEX IF NOT EXISTS chat_messages_primary_message_id_idx
+ON chat_messages (primary_message_id) WHERE primary_message_id IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS chat_content_parts (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
@@ -6633,6 +6647,48 @@ ON chat_content_parts (project_id, id) WHERE risk_analyzed_at IS NULL;
 -- Read path: attachments for a chat / a parent turn.
 CREATE INDEX IF NOT EXISTS chat_content_parts_chat_id_idx
 ON chat_content_parts (chat_id);
+
+-- One row per model-minted entry identity stored in a chat. Every capture
+-- source that sees the same agent session (Claude Code hooks, the Anthropic
+-- inference hook) carries the same tool-use ids, so the first writer to
+-- record a key owns the primary row and later copies of that entry are stored
+-- as secondaries (chat_messages.primary_message_id). The writer inserts keys
+-- in the same transaction as the rows they name.
+CREATE TABLE IF NOT EXISTS chat_entry_keys (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid,
+  chat_id uuid NOT NULL,
+  message_id uuid NOT NULL,
+  -- '<kind>:<id>': 'tool-call:toolu_…' for the request row of a tool use,
+  -- 'tool-result:toolu_…' for its result row.
+  key TEXT NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT chat_entry_keys_pkey PRIMARY KEY (id),
+  CONSTRAINT chat_entry_keys_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE SET NULL,
+  CONSTRAINT chat_entry_keys_chat_id_fkey FOREIGN KEY (chat_id) REFERENCES chats (id) ON DELETE CASCADE,
+  CONSTRAINT chat_entry_keys_message_id_fkey FOREIGN KEY (message_id) REFERENCES chat_messages (id) ON DELETE CASCADE
+);
+
+COMMENT ON COLUMN chat_entry_keys.id IS '@access: confidential';
+COMMENT ON COLUMN chat_entry_keys.project_id IS '@access: confidential';
+COMMENT ON COLUMN chat_entry_keys.chat_id IS '@access: confidential';
+COMMENT ON COLUMN chat_entry_keys.message_id IS '@access: confidential';
+COMMENT ON COLUMN chat_entry_keys.key IS 'Producer-minted tool-use id with a kind prefix.
+@access: opaque-confidential';
+COMMENT ON COLUMN chat_entry_keys.created_at IS '@access: confidential';
+
+-- The writer resolves every key in a batch with one lookup per project, and
+-- the unique index is what makes a concurrent second writer lose the race.
+CREATE UNIQUE INDEX IF NOT EXISTS chat_entry_keys_project_id_key_key
+ON chat_entry_keys (project_id, key);
+
+-- Cascade paths from chats and chat_messages.
+CREATE INDEX IF NOT EXISTS chat_entry_keys_chat_id_idx
+ON chat_entry_keys (chat_id);
+
+CREATE INDEX IF NOT EXISTS chat_entry_keys_message_id_idx
+ON chat_entry_keys (message_id);
 
 -- Serves the chat analysis enqueue walk, which pages a project's chats on the
 -- immutable (created_at, id) keyset within a bounded lookback.

@@ -4106,6 +4106,7 @@ func (s *ServiceCore) selfHealCorruptHistory(ctx context.Context, chatID uuid.UU
 		HookHostname:      "",
 		AccountType:       chatRow.AccountType,
 		BillingMode:       "",
+		SessionID:         "",
 	})
 	for _, m := range userMessages {
 		row := base
@@ -4123,6 +4124,7 @@ func (s *ServiceCore) selfHealCorruptHistory(ctx context.Context, chatID uuid.UU
 			HookHostname:      "",
 			AccountType:       chatRow.AccountType,
 			BillingMode:       "",
+			SessionID:         "",
 		})
 	}
 

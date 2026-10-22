@@ -515,6 +515,7 @@ func (s *postgresStore) archive(ctx context.Context, config Config, frame Frame,
 				HookHostname:      "",
 				AccountType:       "team",
 				BillingMode:       "unknown",
+				SessionID:         frame.SessionID,
 			})
 		}
 	}

@@ -109,5 +109,5 @@ func externalPublication(write ExternalMessageWrite) MessageWrite {
 	var params repo.CreateChatMessageParams
 	params.ID = write.Params.ID
 	params.ProjectID = write.Params.ProjectID
-	return MessageWrite{Params: params, BillingUserID: write.BillingUserID, AssistantID: uuid.Nil, WorkloadSource: write.WorkloadSource, UserEmail: write.UserEmail, Provider: write.Provider, InferenceProvider: write.InferenceProvider, HookHostname: write.HookHostname, AccountType: write.AccountType, BillingMode: write.BillingMode}
+	return MessageWrite{Params: params, BillingUserID: write.BillingUserID, AssistantID: uuid.Nil, WorkloadSource: write.WorkloadSource, UserEmail: write.UserEmail, Provider: write.Provider, InferenceProvider: write.InferenceProvider, HookHostname: write.HookHostname, AccountType: write.AccountType, BillingMode: write.BillingMode, SessionID: write.SessionID}
 }

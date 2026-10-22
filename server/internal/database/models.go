@@ -1252,6 +1252,22 @@ type ChatContentPart struct {
 	Deleted bool
 }
 
+type ChatEntryKey struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	ProjectID uuid.NullUUID
+	// @access: confidential
+	ChatID uuid.UUID
+	// @access: confidential
+	MessageID uuid.UUID
+	// Producer-minted tool-use id with a kind prefix.
+	// @access: opaque-confidential
+	Key string
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+}
+
 type ChatMessage struct {
 	// @access: confidential
 	ID uuid.UUID
@@ -1319,6 +1335,8 @@ type ChatMessage struct {
 	CreatedAt pgtype.Timestamptz
 	// @access: confidential
 	RiskAnalyzedAt pgtype.Timestamptz
+	// @access: confidential
+	PrimaryMessageID uuid.NullUUID
 }
 
 type ChatMessageParticipant struct {

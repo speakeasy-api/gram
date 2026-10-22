@@ -803,6 +803,7 @@ func (s *ComplianceImportService) buildExternalMessageRows(ctx context.Context, 
 			HookHostname:      "",
 			AccountType:       complianceAccountTypeTeam,
 			BillingMode:       cfg.BillingMode,
+			SessionID:         "",
 		})
 	}
 	return rows, nil

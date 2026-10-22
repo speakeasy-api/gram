@@ -498,6 +498,7 @@ func (s *Service) insertMessageWithFallbackUpsertResult(
 		HookHostname:      metadata.Hostname,
 		AccountType:       metadata.AccountType,
 		BillingMode:       metadata.BillingMode,
+		SessionID:         metadata.SessionID,
 	}
 	writeMessage := func() (int64, error) {
 		if msgParams.MessageID.Valid && strings.HasPrefix(msgParams.MessageID.String, agentPromptCorrelationPrefix) {
@@ -627,6 +628,7 @@ func (s *Service) insertUncorrelatedAgentPrompt(
 		HookHostname:      metadata.Hostname,
 		AccountType:       metadata.AccountType,
 		BillingMode:       metadata.BillingMode,
+		SessionID:         metadata.SessionID,
 	}}
 	tx, err := s.db.Begin(ctx)
 	if err != nil {

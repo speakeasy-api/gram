@@ -439,6 +439,7 @@ func buildAssistantRows(
 		HookHostname:      "",
 		AccountType:       "",
 		BillingMode:       "",
+		SessionID:         "",
 	}}
 }
 
