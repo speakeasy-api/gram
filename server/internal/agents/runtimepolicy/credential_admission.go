@@ -66,19 +66,20 @@ func AdmitPrincipalCredentialWithDBTX(ctx context.Context, tx accessrepo.DBTX) (
 	}
 
 	var storedPolicy []authz.Grant
+	var legacyAuthCeiling bool
 	if credential.DerivesPolicyAtAdmission {
 		if len(credential.DelegatedGrants) != 0 {
 			return authz.PrincipalCredentialAdmission{}, oops.C(oops.CodeUnauthorized)
 		}
 	} else {
-		policy, err := DecodeDelegatedPolicy(DelegatedPolicyVersion(credential.DelegatedGrantsVersion), credential.DelegatedGrants)
+		var err error
+		storedPolicy, legacyAuthCeiling, err = admitStoredPolicy(credential.DelegatedGrantsVersion, credential.DelegatedGrants)
 		if err != nil {
 			if errors.Is(err, ErrInvalidDelegatedPolicy) {
 				return authz.PrincipalCredentialAdmission{}, oops.C(oops.CodeUnauthorized)
 			}
 			return authz.PrincipalCredentialAdmission{}, fmt.Errorf("decode delegated credential policy: %w", err)
 		}
-		storedPolicy = policy.RuntimeGrants()
 	}
 
 	if mode, hasMode := contextvalues.APIKeyAuthorization(ctx); hasMode && mode == contextvalues.APIKeyAuthorizationModePrincipal {
@@ -171,6 +172,8 @@ func AdmitPrincipalCredentialWithDBTX(ctx context.Context, tx accessrepo.DBTX) (
 		Agent:       agentPolicy,
 		Owner:       ownerPolicy,
 		Authorizer:  authz.RepresentedUserPolicy{UserID: credential.AuthorizerUserID, Policy: authorizerPolicy},
+
+		LegacyAuthCeiling: legacyAuthCeiling,
 	}, nil
 }
 

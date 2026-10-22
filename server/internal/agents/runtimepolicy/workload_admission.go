@@ -85,19 +85,20 @@ func admitWorkloadSessionInTx(ctx context.Context, tx accessrepo.DBTX) (authz.Wo
 	}
 
 	var storedCeiling []authz.Grant
+	var legacyAuthCeiling bool
 	if credential.DerivesPolicyAtAdmission {
 		if len(credential.DelegatedGrants) != 0 {
 			return authz.WorkloadSessionAdmission{}, oops.C(oops.CodeUnauthorized)
 		}
 	} else {
-		policy, err := DecodeDelegatedPolicy(DelegatedPolicyVersion(credential.DelegatedGrantsVersion), credential.DelegatedGrants)
+		var err error
+		storedCeiling, legacyAuthCeiling, err = admitStoredPolicy(credential.DelegatedGrantsVersion, credential.DelegatedGrants)
 		if err != nil {
 			if errors.Is(err, ErrInvalidDelegatedPolicy) {
 				return authz.WorkloadSessionAdmission{}, oops.C(oops.CodeUnauthorized)
 			}
 			return authz.WorkloadSessionAdmission{}, fmt.Errorf("decode workload session policy: %w", err)
 		}
-		storedCeiling = policy.RuntimeGrants()
 	}
 
 	agentID, assigned, err := workloadidentity.ResolveAssignedAgent(ctx, tx, workloadidentity.AssignmentParams{
@@ -156,6 +157,8 @@ func admitWorkloadSessionInTx(ctx context.Context, tx accessrepo.DBTX) (authz.Wo
 		Ceiling:        ceiling,
 		Agent:          agentPolicy,
 		Owner:          ownerPolicy,
+
+		LegacyAuthCeiling: legacyAuthCeiling,
 	}, nil
 }
 
