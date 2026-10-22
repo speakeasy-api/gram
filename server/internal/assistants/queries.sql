@@ -344,8 +344,9 @@ RETURNING id;
 
 -- name: LoadAssistantMcpServers :many
 -- Hosted rows (canonical wrapper, id = toolset id) keep the toolset slug,
--- mcp_enabled, /mcp/{mcp_slug} address and default environment, and sort first
--- so they win runtime id collisions.
+-- mcp_enabled and default environment, and sort first so they win runtime id
+-- collisions. The address is the server's own endpoint: platform first, else
+-- one on a verified, activated custom domain (ListAddressableMCPEndpointsByMCPServerIDs).
 SELECT
   ams.assistant_id,
   ams.mcp_server_id,
@@ -356,20 +357,13 @@ SELECT
     WHEN t.mcp_is_public THEN 'public'
     ELSE 'private'
   END ELSE ms.visibility END::text AS visibility,
-  CASE WHEN t.id IS NOT NULL THEN COALESCE(t.mcp_slug, '') ELSE COALESCE((
-    SELECT me.slug
-    FROM mcp_endpoints me
-    WHERE me.mcp_server_id = ms.id
-      AND me.project_id = ms.project_id
-      AND me.custom_domain_id IS NULL
-      AND me.deleted IS FALSE
-    ORDER BY me.created_at
-    LIMIT 1
-  ), '') END::text AS endpoint_slug,
+  COALESCE(ep.slug, '')::text AS endpoint_slug,
+  COALESCE(ep.domain, '')::text AS endpoint_domain,
   t.default_environment_slug,
   ams.environment_id,
   e.slug AS environment_slug
 FROM assistant_mcp_servers ams
+JOIN projects p ON p.id = ams.project_id
 JOIN mcp_servers ms
   ON ms.id = ams.mcp_server_id
   AND ms.project_id = @project_id
@@ -379,6 +373,22 @@ LEFT JOIN toolsets t
   AND ms.toolset_id = ms.id
   AND t.project_id = @project_id
   AND t.deleted IS FALSE
+LEFT JOIN LATERAL (
+  SELECT me.slug, cd.domain
+  FROM mcp_endpoints me
+  LEFT JOIN custom_domains cd
+    ON cd.id = me.custom_domain_id
+    AND cd.organization_id = p.organization_id
+    AND cd.deleted IS FALSE
+    AND cd.verified IS TRUE
+    AND cd.activated IS TRUE
+  WHERE me.mcp_server_id = ms.id
+    AND me.project_id = ms.project_id
+    AND me.deleted IS FALSE
+    AND (me.custom_domain_id IS NULL OR cd.id IS NOT NULL)
+  ORDER BY (me.custom_domain_id IS NOT NULL), me.created_at, me.id
+  LIMIT 1
+) ep ON TRUE
 LEFT JOIN environments e ON e.id = ams.environment_id AND e.project_id = @project_id
 WHERE ams.assistant_id = ANY(@assistant_ids::UUID[])
   AND ams.project_id = @project_id
@@ -434,8 +444,8 @@ WHERE assistant_id = @assistant_id
 -- Besides resolving slugs to ids, this returns everything attach-time
 -- validation needs to reject servers the assistant runtime cannot reach:
 -- the backend kind (tunnelled servers have no serving path), visibility,
--- and whether a Speakeasy-hosted endpoint exists to build the /mcp/{slug} URL.
--- A canonical hosted wrapper may use its toolset's legacy mcp_slug address.
+-- and whether a Speakeasy-hosted endpoint exists to build the /mcp/{slug} URL,
+-- on the platform or a verified, activated custom domain.
 SELECT
   ms.id,
   ms.slug,
@@ -445,19 +455,19 @@ SELECT
   (EXISTS (
     SELECT 1
     FROM mcp_endpoints me
+    LEFT JOIN custom_domains cd
+      ON cd.id = me.custom_domain_id
+      AND cd.organization_id = p.organization_id
+      AND cd.deleted IS FALSE
+      AND cd.verified IS TRUE
+      AND cd.activated IS TRUE
     WHERE me.mcp_server_id = ms.id
       AND me.project_id = ms.project_id
-      AND me.custom_domain_id IS NULL
       AND me.deleted IS FALSE
-  ) OR (ms.toolset_id = ms.id AND EXISTS (
-    SELECT 1
-    FROM toolsets t
-    WHERE t.id = ms.toolset_id
-      AND t.project_id = ms.project_id
-      AND t.mcp_slug IS NOT NULL
-      AND t.deleted IS FALSE
-  )))::bool AS has_gram_endpoint
+      AND (me.custom_domain_id IS NULL OR cd.id IS NOT NULL)
+  ))::bool AS has_gram_endpoint
 FROM mcp_servers ms
+JOIN projects p ON p.id = ms.project_id
 WHERE ms.project_id = @project_id
   AND ms.slug = ANY(@slugs::TEXT[])
   AND ms.deleted IS FALSE

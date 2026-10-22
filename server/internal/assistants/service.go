@@ -258,11 +258,13 @@ type assistantThreadEventRecord struct {
 
 // assistantMCPServerRow is one attached server; ToolsetSlug is set for hosted servers.
 type assistantMCPServerRow struct {
-	MCPServerID            uuid.UUID
-	ServerSlug             pgtype.Text
-	ToolsetSlug            pgtype.Text
-	Visibility             string
-	EndpointSlug           string
+	MCPServerID  uuid.UUID
+	ServerSlug   pgtype.Text
+	ToolsetSlug  pgtype.Text
+	Visibility   string
+	EndpointSlug string
+	// EndpointDomain is the custom-domain host of the endpoint; "" for platform.
+	EndpointDomain         string
 	DefaultEnvironmentSlug pgtype.Text
 	EnvironmentID          uuid.NullUUID
 	EnvironmentSlug        pgtype.Text
@@ -1285,6 +1287,7 @@ func (s *ServiceCore) loadAssistantMcpServers(ctx context.Context, projectID uui
 			ToolsetSlug:            row.ToolsetSlug,
 			Visibility:             row.Visibility,
 			EndpointSlug:           row.EndpointSlug,
+			EndpointDomain:         row.EndpointDomain,
 			DefaultEnvironmentSlug: row.DefaultEnvironmentSlug,
 			EnvironmentID:          row.EnvironmentID,
 			EnvironmentSlug:        row.EnvironmentSlug,
@@ -1505,7 +1508,7 @@ func toHTTPAssistant(record assistantRecord) (*types.Assistant, error) {
 			EnvironmentSlug: envSlug,
 			EndpointSlug:    nil,
 		}
-		if row.EndpointSlug != "" {
+		if row.EndpointSlug != "" && row.EndpointDomain == "" {
 			endpointSlug := row.EndpointSlug
 			ref.EndpointSlug = &endpointSlug
 		}
@@ -3759,6 +3762,14 @@ func unreachableReason(m assistantMCPServerRow) string {
 	return "disabled"
 }
 
+// endpointURL is the server's own MCP address; platform endpoints live under base.
+func (m assistantMCPServerRow) endpointURL(base *url.URL) *url.URL {
+	if m.EndpointDomain != "" {
+		return (&url.URL{Scheme: "https", Host: m.EndpointDomain}).JoinPath("mcp", m.EndpointSlug)
+	}
+	return base.JoinPath("mcp", m.EndpointSlug)
+}
+
 func resolveAssistantMCPServers(ctx context.Context, logger *slog.Logger, serverURL *url.URL, mcpServers []assistantMCPServerRow, platformToolsets []string) []runtimeMCPServer {
 	servers := make([]runtimeMCPServer, 0, len(mcpServers)+len(platformToolsets))
 	// Runtime server IDs must be unique — agentkit namespaces tool names by
@@ -3809,7 +3820,7 @@ func resolveAssistantMCPServers(ctx context.Context, logger *slog.Logger, server
 		seenIDs[id] = struct{}{}
 		servers = append(servers, runtimeMCPServer{
 			ID:      id,
-			URL:     serverURL.JoinPath("mcp", m.EndpointSlug).String(),
+			URL:     m.endpointURL(serverURL).String(),
 			Headers: headers,
 		})
 	}
