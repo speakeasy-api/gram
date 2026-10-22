@@ -80,9 +80,9 @@ export function PaygCheckoutSummary({
               }).format(amount * 2 ** 30)
             : currency.format(amount);
           const rateUnit = perToken
-            ? `M ${unitLabel === "tokens scanned" ? "tokens scanned" : "tokens"}`
+            ? `million ${unitLabel === "tokens scanned" ? "tokens scanned" : "tokens"}`
             : perByte
-              ? "GiB"
+              ? "GiB of egress"
               : (unitLabel ?? "unit");
           return (
             <li

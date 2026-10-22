@@ -61,8 +61,12 @@ export function BillingPaymentMethod(): JSX.Element {
           </Text>
         </Alert>
       )}
-      <PaygPlanSection paymentDetails />
-      <PaygPriceList />
+      <div className="grid gap-8 pb-6 lg:grid-cols-2 lg:items-start lg:gap-10">
+        <PaygPriceList />
+        <div className="w-full max-w-lg lg:justify-self-end">
+          <PaygPlanSection paymentDetails />
+        </div>
+      </div>
       <BillingEmailSection />
     </BillingPage>
   );
