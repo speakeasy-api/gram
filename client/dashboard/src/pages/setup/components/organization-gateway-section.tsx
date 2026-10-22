@@ -1,10 +1,7 @@
 import { type ReactNode, useMemo, useState } from "react";
 import { Link } from "react-router";
 import type { OrganizationGateway } from "@gram/client/models/components/organizationgateway.js";
-import { useGramContext } from "@gram/client/react-query/_context.js";
 import { useOrganizationGateway } from "@gram/client/react-query/organizationGateway.js";
-import { useQuery } from "@tanstack/react-query";
-import { buildOrganizationSetupTasksQuery } from "@/hooks/useOrganizationSetupTasks";
 import { GatewayNotServed } from "@/components/mcp/organization-gateway-setting";
 import { Button } from "@/components/ui/Button";
 import { useOrganization } from "@/contexts/Auth";
@@ -16,32 +13,20 @@ import { PlatformSetupStepBody } from "./platform-setup-steps";
 
 // The Organization Gateway as a Claude connector, inside the Anthropic admin
 // controls card. The gateway read is the only gate: its URL shows once the
-// server says the gateway is served. The organization-wide sign-in it needs is
-// created when an organization admin opens this card, so the only thing an admin does here
-// is turn the gateway on, and that stays behind the MCP assignment review on
+// server says the gateway is served. New organizations get the
+// organization-wide sign-in it needs when they are created, so the only thing
+// an admin does here is turn the gateway on, and that stays behind the MCP assignment review on
 // the Organization Gateway page. This section never turns it on itself.
 export function OrganizationGatewayConnectorSection(): JSX.Element {
   const organization = useOrganization();
   const { hasScope, isLoading: permissionsLoading } = useRBAC();
   const canRead = hasScope("org:read", organization.id);
   const canManage = hasScope("org:admin", organization.id);
-  // Listing setup tasks as an organization admin creates the sign-in before
-  // the response returns. Share the wizard's query (same key, no extra fetch
-  // on mount) and read the gateway only once that list has settled, so a
-  // direct link to this card can't race the sign-in being created.
-  const client = useGramContext();
-  const setupTasks = useQuery({
-    ...buildOrganizationSetupTasksQuery(client, organization.id, false, {
-      retry: false,
-    }),
-    refetchOnMount: false,
-  });
-  const setupSettled = setupTasks.isFetched && !setupTasks.isFetching;
   const gateway = useOrganizationGateway(undefined, undefined, {
     throwOnError: false,
-    enabled: canRead && setupSettled,
-    // An answer cached elsewhere (the MCP list, the gateway page) may predate
-    // the sign-in, so this card always asks again.
+    enabled: canRead,
+    // Ask again on mount so the card reflects the gateway's live state rather
+    // than an answer cached by the MCP list or the gateway page.
     refetchOnMount: "always",
   });
 
@@ -56,7 +41,9 @@ export function OrganizationGatewayConnectorSection(): JSX.Element {
       </Muted>
     );
   }
-  if (!setupSettled || gateway.isLoading || !gateway.isFetchedAfterMount) {
+  // A cached answer (from the MCP list or the gateway page) may be stale, so
+  // hold the URL back until this card's own read has come back.
+  if (gateway.isLoading || !gateway.isFetchedAfterMount) {
     return <Muted>Loading the Organization Gateway…</Muted>;
   }
   const retry = (
@@ -122,26 +109,15 @@ function GatewayNotReady({
           <GatewayPageLink /> page. Its URL shows here after that.
         </Muted>
       );
-    // Listing setup tasks as an organization admin creates the sign-in, so an
-    // admin on this card only waits; anyone else needs an admin to open it.
+    // The shared message knows where each sign-in problem is fixed and who
+    // can fix it.
     case "no_organization_issuer":
-      return canManage ? (
-        <WithAction action={retry}>
-          The organization-wide sign-in the gateway uses isn&apos;t ready yet.
-          Check again in a moment, or contact support if this persists.
-        </WithAction>
-      ) : (
-        <WithAction action={retry}>
-          The gateway needs an organization-wide sign-in. An organization admin
-          creates it by opening this setup card.
-        </WithAction>
-      );
     case "multiple_organization_issuers":
       return (
-        <Muted>
-          The gateway needs exactly one organization-wide sign-in, and your
-          organization has more than one. Contact support to resolve this.
-        </Muted>
+        <div className="space-y-3">
+          <GatewayNotServed reason={reason} />
+          {retry}
+        </div>
       );
     case "custom_domain_only":
       return <GatewayNotServed reason={reason} />;

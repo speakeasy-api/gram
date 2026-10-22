@@ -2,6 +2,10 @@ import { RequireScope } from "@/components/require-scope";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Switch } from "@/components/ui/Switch";
 import { Text } from "@/components/ui/Text";
+import { useOrganization } from "@/contexts/Auth";
+import { useFeatureFlag } from "@/hooks/useFeatureFlag";
+import { useRBAC } from "@/hooks/useRBAC";
+import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { useOrgRoutes } from "@/routes";
 import type { OrganizationGateway } from "@gram/client/models/components/organizationgateway.js";
 import { useState } from "react";
@@ -64,9 +68,6 @@ export function OrganizationGatewaySwitch({
   );
 }
 
-/** The setup card whose visit prepares the organization-wide sign-in. */
-const GATEWAY_SETUP_TASK = "anthropic-admin-controls";
-
 /**
  * Explains why a gateway that is switched on still isn't served, and where to
  * fix it, so the switch never reads as on for a URL that answers 404.
@@ -77,30 +78,52 @@ export function GatewayNotServed({
   reason: OrganizationGateway["unavailableReason"];
 }): JSX.Element | null {
   const orgRoutes = useOrgRoutes();
+  const organization = useOrganization();
+  const { hasScope } = useRBAC();
+  const canManage = hasScope("org:admin", organization.id);
+  // Speakeasy Authorization Servers can make a project's server
+  // organization-wide and consolidate one server into another (removing the
+  // source). It is rolled out behind a flag and its actions need org:admin;
+  // without both, point to an admin or support instead.
+  const issuersPage =
+    useFeatureFlag(FEATURE_FLAGS.userSessionIssuerDashboard).status ===
+      "enabled" && canManage ? (
+      <Link to={orgRoutes.userSessionIssuers.href()} className="underline">
+        Speakeasy Authorization Servers
+      </Link>
+    ) : null;
+  const askFor = canManage
+    ? "Contact support"
+    : "Ask an organization admin or contact support";
   switch (reason) {
-    // Speakeasy creates the organization-wide sign-in when an organization
-    // admin opens this setup card, so that is where to send them.
+    // Only new organizations get one automatically.
     case "no_organization_issuer":
       return (
         <Text small className="text-warning mt-3">
-          Not available yet: it needs an organization-wide sign-in. An
-          organization admin creates it by opening{" "}
-          <Link
-            to={`${orgRoutes.setup.href()}?task=${GATEWAY_SETUP_TASK}`}
-            className="underline"
-          >
-            Set up Anthropic admin controls
-          </Link>{" "}
-          in setup.
+          Not available: it needs an organization-wide sign-in, and your
+          organization doesn&apos;t have one.{" "}
+          {issuersPage ? (
+            <>
+              Make a project&apos;s authorization server organization-wide in{" "}
+              {issuersPage}, or contact support.
+            </>
+          ) : (
+            `${askFor} to set one up.`
+          )}
         </Text>
       );
-    // No dashboard page removes an organization-wide sign-in.
     case "multiple_organization_issuers":
       return (
         <Text small className="text-warning mt-3">
           Not available: the organization has more than one organization-wide
-          sign-in, and the gateway needs exactly one. Contact support to resolve
-          this.
+          sign-in, and the gateway needs exactly one.{" "}
+          {issuersPage ? (
+            <>
+              In {issuersPage}, use Consolidate into another until one is left.
+            </>
+          ) : (
+            `${askFor} to resolve this.`
+          )}
         </Text>
       );
     case "custom_domain_only":

@@ -179,15 +179,10 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	endpoints := gen.NewEndpoints(service)
 	endpoints.Use(middleware.MapErrors())
 	endpoints.Use(middleware.TraceMethods(service.tracer))
-	handlers := srv.New(endpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil)
-	setupTasks := handlers.ListSetupTasks
-	handlers.ListSetupTasks = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// This personalized checklist also prepares missing sign-in state for
-		// administrators. Never let an HTTP cache bypass that preparation.
-		w.Header().Set("Cache-Control", "private, no-store")
-		setupTasks.ServeHTTP(w, r)
-	})
-	srv.Mount(mux, handlers)
+	srv.Mount(
+		mux,
+		srv.New(endpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil),
+	)
 
 	// Raw HTTP handler for Speakeasy invite-token acceptance.
 	mux.Handle("GET", inviteCallbackPath, service.handleInviteCallback)

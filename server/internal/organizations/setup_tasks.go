@@ -121,9 +121,6 @@ var validSetupTaskStatuses = []string{
 	setupTaskStatusDone,
 }
 
-// ListSetupTasks projects the checklist and prepares missing organization sign-in
-// for administrators entering the visible Anthropic connection step. Unlike a
-// read-only inspection API, that preparation can create an audited issuer.
 func (s *Service) ListSetupTasks(ctx context.Context, payload *gen.ListSetupTasksPayload) (*gen.ListSetupTasksResult, error) {
 	ac, err := s.authContext(ctx)
 	if err != nil {
@@ -141,14 +138,6 @@ func (s *Service) ListSetupTasks(ctx context.Context, payload *gen.ListSetupTask
 	includeHidden := payload.IncludeHidden != nil && *payload.IncludeHidden && ac.IsAdmin
 	if !includeHidden {
 		tasks = slices.DeleteFunc(tasks, func(task *gen.SetupTask) bool { return task.Hidden })
-	}
-
-	// Prepare the organization sign-in before returning the connection step.
-	// Hidden cards (including staff previews) must not provision anything.
-	if task := setupTaskByKey(tasks, "anthropic-admin-controls"); task != nil && !task.Hidden {
-		if err := s.prepareOnboardingIssuer(ctx, ac); err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "prepare onboarding issuer").LogError(ctx, s.logger)
-		}
 	}
 
 	return &gen.ListSetupTasksResult{Tasks: tasks}, nil

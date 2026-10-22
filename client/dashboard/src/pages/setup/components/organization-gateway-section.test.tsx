@@ -16,25 +16,7 @@ const state = vi.hoisted(() => ({
   },
   queryOptions: undefined as Record<string, unknown> | undefined,
   refetch: vi.fn(),
-  setupTasks: { isFetched: true, isFetching: false },
-  setupQuery: undefined as Record<string, unknown> | undefined,
-}));
-
-vi.mock("@gram/client/react-query/_context.js", () => ({
-  useGramContext: () => ({}),
-}));
-vi.mock("@/hooks/useOrganizationSetupTasks", () => ({
-  buildOrganizationSetupTasksQuery: (
-    _client: unknown,
-    organizationId: string,
-    includeHidden: boolean,
-  ) => ({ queryKey: ["setupTasks", { organizationId, includeHidden }] }),
-}));
-vi.mock("@tanstack/react-query", () => ({
-  useQuery: (options: Record<string, unknown>) => {
-    state.setupQuery = options;
-    return state.setupTasks;
-  },
+  issuerDashboard: "disabled",
 }));
 
 vi.mock("@/hooks/useRBAC", () => ({
@@ -52,7 +34,11 @@ vi.mock("@/routes", () => ({
     gateway: { href: () => "/acme/gateway" },
     identity: { href: () => "/acme/identity" },
     domains: { href: () => "/acme/domains" },
+    userSessionIssuers: { href: () => "/acme/user-session-issuers" },
   }),
+}));
+vi.mock("@/hooks/useFeatureFlag", () => ({
+  useFeatureFlag: () => ({ status: state.issuerDashboard }),
 }));
 vi.mock("@gram/client/react-query/organizationGateway.js", () => ({
   useOrganizationGateway: (
@@ -98,8 +84,7 @@ beforeEach(() => {
   state.gateway = {};
   state.queryOptions = undefined;
   state.refetch.mockClear();
-  state.setupTasks = { isFetched: true, isFetching: false };
-  state.setupQuery = undefined;
+  state.issuerDashboard = "disabled";
 });
 
 function renderSection() {
@@ -142,39 +127,8 @@ describe("OrganizationGatewayConnectorSection", () => {
     expect(screen.getByText(GATEWAY_URL)).toBeTruthy();
   });
 
-  it("waits for the setup task list, which creates the sign-in, before reading the gateway", () => {
-    state.setupTasks = { isFetched: false, isFetching: true };
+  it("asks the gateway again on mount instead of trusting a cached answer", () => {
     state.gateway = { data: { available: true, url: GATEWAY_URL } };
-
-    renderSection();
-
-    expect(state.setupQuery).toMatchObject({
-      queryKey: [
-        "setupTasks",
-        { organizationId: "org-1", includeHidden: false },
-      ],
-      refetchOnMount: false,
-    });
-    expect(state.queryOptions?.enabled).toBe(false);
-    expect(screen.getByText(/Loading the Organization Gateway/)).toBeTruthy();
-    expectNoUrlOrSteps();
-  });
-
-  it("waits again while cached setup tasks refetch", () => {
-    state.setupTasks = { isFetched: true, isFetching: true };
-    state.gateway = { data: { available: true, url: GATEWAY_URL } };
-
-    renderSection();
-
-    expect(state.queryOptions?.enabled).toBe(false);
-    expectNoUrlOrSteps();
-  });
-
-  it("ignores a gateway answer cached before this card mounted", () => {
-    state.gateway = {
-      data: { available: false, unavailableReason: "no_organization_issuer" },
-      isFetchedAfterMount: false,
-    };
 
     renderSection();
 
@@ -182,8 +136,33 @@ describe("OrganizationGatewayConnectorSection", () => {
       enabled: true,
       refetchOnMount: "always",
     });
+  });
+
+  it("holds a cached URL back until this card's own read returns", () => {
+    state.gateway = {
+      data: { available: true, url: GATEWAY_URL },
+      isFetchedAfterMount: false,
+    };
+
+    renderSection();
+
     expect(screen.getByText(/Loading the Organization Gateway/)).toBeTruthy();
-    expect(screen.queryByText(/isn't ready yet/)).toBeNull();
+    expectNoUrlOrSteps();
+  });
+
+  it("links admins to consolidation when the issuer dashboard is on", () => {
+    state.issuerDashboard = "enabled";
+    unavailable("multiple_organization_issuers");
+
+    renderSection();
+
+    expect(
+      screen
+        .getByRole("link", { name: "Speakeasy Authorization Servers" })
+        .getAttribute("href"),
+    ).toBe("/acme/user-session-issuers");
+    expect(screen.getByRole("button", { name: "Check again" })).toBeTruthy();
+    expectNoUrlOrSteps();
   });
 
   it("shows no URL when available is set without one", () => {
@@ -223,28 +202,28 @@ describe("OrganizationGatewayConnectorSection", () => {
     ).toBeTruthy();
   });
 
-  it("waits for the automatic sign-in without linking anywhere to create one", () => {
+  it("sends admins to support for a missing sign-in, without a setup link", () => {
     unavailable("no_organization_issuer");
 
     renderSection();
 
-    expect(screen.getByText(/isn't ready yet/)).toBeTruthy();
+    expect(screen.getByText(/doesn't have one/)).toBeTruthy();
+    expect(screen.getByText(/Contact support to set one up/)).toBeTruthy();
+    expect(screen.queryByText(/opening this setup card/)).toBeNull();
     expect(screen.queryByRole("link")).toBeNull();
     expectNoUrlOrSteps();
     fireEvent.click(screen.getByRole("button", { name: "Check again" }));
     expect(state.refetch).toHaveBeenCalled();
   });
 
-  it("tells members an admin opening this card creates the sign-in", () => {
+  it("sends members to an admin or support for a missing sign-in", () => {
     state.scopes = ["org:read"];
     unavailable("no_organization_issuer");
 
     renderSection();
 
     expect(
-      screen.getByText(
-        /An organization admin\s+creates it by opening this setup card/,
-      ),
+      screen.getByText(/Ask an organization admin or contact support/),
     ).toBeTruthy();
     expect(screen.queryByRole("link")).toBeNull();
     expectNoUrlOrSteps();
