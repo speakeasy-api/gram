@@ -1553,6 +1553,11 @@ func (s *Service) persistCanonicalConversationEvent(ctx context.Context, payload
 	if proxiedTranscriptSource(hookSource) {
 		defer s.markChatLiteLLMProxied(ctx, sessionIDToUUID(sessionID), *authCtx.ProjectID)
 	}
+	// Every row a Claude turn produces (prompt, tool request, tool result,
+	// reply) carries the prompt id, so they can be grouped by the prompt that
+	// caused them. Codex prompts overwrite this with their hashed correlation
+	// key below; their tool rows carry no turn identity.
+	promptID := claudePromptID(payload)
 	baseMsg := func(role, content string) chatRepo.CreateChatMessageParams {
 		return chatRepo.CreateChatMessageParams{
 			ID:               uuid.Nil,
@@ -1564,7 +1569,7 @@ func (s *Service) persistCanonicalConversationEvent(ctx context.Context, payload
 			ContentAssetUrl:  conv.ToPGTextEmpty(""),
 			StorageError:     conv.ToPGTextEmpty(""),
 			Model:            conv.ToPGTextEmpty(canonicalModel(payload)),
-			MessageID:        conv.ToPGTextEmpty(""),
+			MessageID:        conv.ToPGTextEmpty(promptID),
 			ToolCallID:       conv.ToPGTextEmpty(""),
 			UserID:           conv.ToPGTextEmpty(metadata.UserID),
 			ExternalUserID:   conv.ToPGTextEmpty(metadata.UserEmail),
@@ -1790,6 +1795,44 @@ func agentPromptCorrelationID(payload *gen.IngestPayload) string {
 	}
 	digest := sha256.Sum256([]byte(turnID))
 	return agentPromptCorrelationPrefix + hex.EncodeToString(digest[:])
+}
+
+// claudePromptID returns the prompt id Claude Code minted for the turn an
+// event belongs to, or "" when the event carries none. Claude Code assigns a
+// UUID to each user prompt and sends it on every hook of that turn
+// (UserPromptSubmit, PreToolUse, PostToolUse, Stop); the relay forwards it
+// unprefixed as session.turn_id. It is stored as-is rather than hashed into an
+// agent-prompt:v1 correlation key: that key exists so a LiteLLM observation of
+// a Codex or OpenCode turn can promote the proxied row, but a proxied Claude
+// turn is dropped as a duplicate instead, and the raw value is what Claude's
+// OTel events carry as the prompt id. Only a UUID is accepted so an adapter
+// that forwards some other token in the same field cannot pass it off as one.
+func claudePromptID(payload *gen.IngestPayload) string {
+	if payload == nil || payload.Source == nil || payload.Session == nil || payload.Session.TurnID == nil {
+		return ""
+	}
+	if !claudeCodeAdapter(payload.Source.Adapter) {
+		return ""
+	}
+	turnID := strings.TrimSpace(*payload.Session.TurnID)
+	if _, err := uuid.Parse(turnID); err != nil {
+		return ""
+	}
+	return turnID
+}
+
+// claudeCodeAdapter reports whether an adapter is a Claude Code surface, the
+// only adapters whose session.turn_id is Claude Code's prompt id. Cursor also
+// forwards a per-turn id (its generation id) in that field, so this stays a
+// separate list from nativeAssistantTurnSource even though they agree today:
+// that predicate is about which streams report their own assistant turn.
+func claudeCodeAdapter(adapter string) bool {
+	switch strings.ToLower(strings.TrimSpace(adapter)) {
+	case "claude", "claude-code", "claude-tag", "claude-code-desktop", "cowork":
+		return true
+	default:
+		return false
+	}
 }
 
 func canonicalAgentTurnID(payload *gen.IngestPayload) string {
