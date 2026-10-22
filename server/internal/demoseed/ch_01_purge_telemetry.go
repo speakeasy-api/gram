@@ -447,8 +447,13 @@ func (s *seeder) chToolCallRows() []chTelemetryRow {
 					attrs += `,"gram.authorization.authorizer_user_id":"` + s.userID(u.handle) + `"`
 				}
 			}
-			attrs += `,"gram.toolset.slug":"` + chIf(i%5 == 0, "acme-ops", "acme-support-tools") + `"` +
-				`,"http.response.status_code":` + chIf(failed, "500", "200") +
+			attrs += `,"gram.toolset.slug":"` + chIf(i%5 == 0, "acme-ops", "acme-support-tools") + `"`
+			// Hosted calls carry their server id. Every seventh chat models
+			// calls recorded before that, which filters match by toolset.
+			if i%7 != 0 {
+				attrs += `,"gram.mcp_server.id":"` + s.det(chIf(i%5 == 0, "mcpserver-ops", "mcpserver-support")).String() + `"`
+			}
+			attrs += `,"http.response.status_code":` + chIf(failed, "500", "200") +
 				`,"gram.outcome":"` + chIf(failed || toolError, "error", "ok") + `"` +
 				`,"http.server.request.duration":` + chRound(0.05+float64(hash64(i, k)%200)/100, 3) +
 				// The arguments and the result, as a real tool call records
