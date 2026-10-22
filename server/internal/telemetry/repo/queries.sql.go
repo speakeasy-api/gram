@@ -4175,6 +4175,8 @@ type HostedMCPMatcher struct {
 	ToolsetSlug string
 	ToolsetName string
 	McpSlug     string
+	// MCPServerID is the toolset's mcp_servers row, empty when it has none.
+	MCPServerID string
 }
 
 // MCPServerMatcher maps direct MCP server source ids from telemetry to their
@@ -4208,6 +4210,7 @@ type GetToolUsageSummaryParams struct {
 	MetaMCPMatchers    []MetaMCPMatcher
 	TargetTypes        []string
 	HostedToolsetSlugs []string
+	MCPServerIDs       []string
 	ShadowServerNames  []string
 	MetaMCPServerIDs   []string
 	UserFilters        []ToolUsageUserFilter
@@ -4236,6 +4239,7 @@ type ListToolUsageTracesParams struct {
 	MetaMCPMatchers    []MetaMCPMatcher
 	TargetTypes        []string
 	HostedToolsetSlugs []string
+	MCPServerIDs       []string
 	// MCPServerTargetIDs narrows to configured remote or tunneled MCP servers by
 	// the target id their matcher folds calls onto (the server slug, or its id
 	// when it has none). Matched on both the hosted and tunneled target types,
@@ -4287,6 +4291,7 @@ type ToolUsageTraceSummary struct {
 	TargetKind        string  `ch:"target_kind"`
 	TargetID          string  `ch:"target_id"`
 	TargetLabel       string  `ch:"target_label"`
+	MCPServerID       string  `ch:"mcp_server_id"`
 	UserKey           string  `ch:"user_key"`
 	UserLabel         string  `ch:"user_label"`
 	UserKind          string  `ch:"user_kind"`
@@ -4344,6 +4349,7 @@ type McpServerActivityRow struct {
 
 type ToolUsageHostedServerFilterOptionRow struct {
 	ToolsetSlug string `ch:"toolset_slug"`
+	MCPServerID string `ch:"target_mcp_server_id"`
 	EventCount  uint64 `ch:"event_count"`
 }
 
@@ -4387,6 +4393,7 @@ type ToolUsageTargetSummaryRow struct {
 	TargetKind   string  `ch:"target_kind"`
 	TargetID     string  `ch:"target_id"`
 	TargetLabel  string  `ch:"target_label"`
+	MCPServerID  string  `ch:"target_mcp_server_id"`
 	EventCount   uint64  `ch:"event_count"`
 	UniqueTools  uint64  `ch:"unique_tools"`
 	SuccessCount uint64  `ch:"success_count"`
@@ -4541,6 +4548,7 @@ func (q *Queries) GetToolUsageFilterOptions(ctx context.Context, arg GetToolUsag
 		MetaMCPMatchers:    arg.MetaMCPMatchers,
 		TargetTypes:        nil,
 		HostedToolsetSlugs: nil,
+		MCPServerIDs:       nil,
 		ShadowServerNames:  nil,
 		MetaMCPServerIDs:   nil,
 		UserFilters:        nil,
@@ -4613,6 +4621,9 @@ func toolUsageTraceTargetFilter(arg ListToolUsageTracesParams) squirrel.Sqlizer 
 			squirrel.Eq{"target_type": ToolUsageTargetTypeHostedMCP},
 			squirrel.Eq{"target_id": arg.HostedToolsetSlugs},
 		})
+	}
+	if len(arg.MCPServerIDs) > 0 {
+		targetFilters = append(targetFilters, squirrel.Eq{"mcp_server_id": arg.MCPServerIDs})
 	}
 	// A configured remote server is classified hosted and a tunneled one
 	// tunneled, and neither carries a toolset slug, so the configured server
@@ -4697,6 +4708,7 @@ func (q *Queries) ListToolUsageTraces(ctx context.Context, arg ListToolUsageTrac
 		"target_kind",
 		"target_id",
 		"target_label",
+		"mcp_server_id",
 		"user_key",
 		"user_label",
 		"user_kind",
@@ -4863,6 +4875,7 @@ func (q *Queries) GetToolUsageTargets(ctx context.Context, arg GetToolUsageSumma
 		"target_kind",
 		"target_id",
 		"target_label",
+		"max(mcp_server_id) AS target_mcp_server_id",
 		"count() AS event_count",
 		"uniqExact(tool_name) AS unique_tools",
 		"sum(success) AS success_count",
@@ -4924,6 +4937,7 @@ func (q *Queries) GetMcpServerActivity(ctx context.Context, arg GetMcpServerActi
 		MetaMCPMatchers:    nil,
 		TargetTypes:        []string{ToolUsageTargetTypeHostedMCP, ToolUsageTargetTypeTunneledMCP},
 		HostedToolsetSlugs: nil,
+		MCPServerIDs:       nil,
 		ShadowServerNames:  nil,
 		MetaMCPServerIDs:   nil,
 		UserFilters:        nil,
@@ -5370,6 +5384,7 @@ func (q *Queries) GetToolUsageTargetToolBreakdown(ctx context.Context, arg GetTo
 func (q *Queries) getToolUsageHostedServerFilterOptions(ctx context.Context, arg GetToolUsageSummaryParams) ([]ToolUsageHostedServerFilterOptionRow, error) {
 	sb, err := toolUsageBaseSelect(arg,
 		"target_id AS toolset_slug",
+		"max(mcp_server_id) AS target_mcp_server_id",
 		"count() AS event_count",
 	)
 	if err != nil {
@@ -5584,13 +5599,16 @@ func toolUsageFilteredSelect(arg GetToolUsageSummaryParams, columns ...string) (
 		sb = sb.Where(squirrel.Eq{"target_type": arg.TargetTypes})
 	}
 
-	if len(arg.HostedToolsetSlugs) > 0 || len(arg.ShadowServerNames) > 0 || len(arg.MetaMCPServerIDs) > 0 {
+	if len(arg.HostedToolsetSlugs) > 0 || len(arg.MCPServerIDs) > 0 || len(arg.ShadowServerNames) > 0 || len(arg.MetaMCPServerIDs) > 0 {
 		targetFilters := squirrel.Or{}
 		if len(arg.HostedToolsetSlugs) > 0 {
 			targetFilters = append(targetFilters, squirrel.And{
 				squirrel.Eq{"target_type": ToolUsageTargetTypeHostedMCP},
 				squirrel.Eq{"target_id": arg.HostedToolsetSlugs},
 			})
+		}
+		if len(arg.MCPServerIDs) > 0 {
+			targetFilters = append(targetFilters, squirrel.Eq{"mcp_server_id": arg.MCPServerIDs})
 		}
 		if len(arg.ShadowServerNames) > 0 {
 			targetFilters = append(targetFilters, squirrel.And{
@@ -5786,6 +5804,47 @@ const toolUsageAgentIDExpr = "if(telemetry_logs.event_source IN ('tool_call', 'r
 // The gateway an event belongs to: the target itself, else the gateway that dispatched it.
 const toolUsageGatewayIDExpr = "if(target_type = '" + ToolUsageTargetTypeMetaMCP + "', target_id, meta_mcp_server_id)"
 
+// toolUsageMCPServerIDCTE appends <name> over <name>_base with an mcp_server_id
+// column for hosted and tunneled targets. Rows recorded before they carried a
+// server id fall back to the matcher that classified them, keyed by target.
+// Its bind args follow the base CTE's.
+func toolUsageMCPServerIDCTE(name string, hosted []HostedMCPMatcher, servers []MCPServerMatcher) (string, []any) {
+	keys := make([]string, 0, len(hosted)+len(servers))
+	ids := make([]string, 0, len(hosted)+len(servers))
+	seen := make(map[string]struct{}, len(hosted)+len(servers))
+	add := func(targetType, targetID, serverID string) {
+		if targetID == "" || serverID == "" {
+			return
+		}
+		key := targetType + ":" + targetID
+		if _, ok := seen[key]; ok {
+			return
+		}
+		seen[key] = struct{}{}
+		keys = append(keys, key)
+		ids = append(ids, serverID)
+	}
+	for _, m := range hosted {
+		add(ToolUsageTargetTypeHostedMCP, m.ToolsetSlug, m.MCPServerID)
+	}
+	for _, m := range servers {
+		add(m.TargetType, m.TargetID, m.MCPServerID)
+	}
+
+	fallback := "''"
+	var args []any
+	if len(keys) > 0 {
+		fallback = "transform(concat(target_type, ':', target_id), ?, ?, '')"
+		args = []any{keys, ids}
+	}
+	expr := chMultiIf(
+		"target_type NOT IN ('"+ToolUsageTargetTypeHostedMCP+"', '"+ToolUsageTargetTypeTunneledMCP+"')", "''",
+		"row_mcp_server_id != ''", "row_mcp_server_id",
+		fallback,
+	)
+	return ",\n" + name + " AS (SELECT * EXCEPT (row_mcp_server_id), " + expr + " AS mcp_server_id FROM " + name + "_base)", args
+}
+
 // toolUsageTraceRowsFromSummariesCTE builds the normalized_traces CTE from the
 // trace_summaries materialized view (one row per trace) for the common case where no
 // free-text query or arbitrary attribute filters are active. It emits the same output
@@ -5821,6 +5880,7 @@ func toolUsageTraceRowsFromSummariesCTE(arg ListToolUsageTracesParams) (string, 
 		"max(meta_mcp_server_id) AS g_meta_mcp_server_id",
 		"max(mcp_client_name) AS g_mcp_client_name",
 		"max(mcp_client_version) AS g_mcp_client_version",
+		"max(mcp_server_id) AS g_mcp_server_id",
 	).
 		From("(SELECT *, multiIf(has_block = 1, 3, has_error = 1, 2, has_result = 1, 1, 0) AS hook_status_rank FROM trace_summaries)").
 		Where("gram_project_id = ?", arg.GramProjectID).
@@ -5992,7 +6052,8 @@ SELECT
 	g_meta_mcp_server_id AS meta_mcp_server_id,
 	%s AS client_key,
 	%s AS client_label,
-	nullIf(g_mcp_client_version, '') AS client_version
+	nullIf(g_mcp_client_version, '') AS client_version,
+	g_mcp_server_id AS row_mcp_server_id
 FROM (%s)`,
 		toolName,
 		targetType,
@@ -6038,7 +6099,10 @@ FROM (%s)`,
 	}
 	finalArgs = append(finalArgs, sourceArgs...)
 
-	return "WITH normalized_traces AS (" + tracesSQL + ")", finalArgs, nil
+	serverIDSQL, serverIDArgs := toolUsageMCPServerIDCTE("normalized_traces", arg.HostedMCPMatchers, arg.MCPServerMatchers)
+	finalArgs = append(finalArgs, serverIDArgs...)
+
+	return "WITH normalized_traces_base AS (" + tracesSQL + ")" + serverIDSQL, finalArgs, nil
 }
 
 func toolUsageTraceRowsCTE(arg ListToolUsageTracesParams) (string, []any, error) {
@@ -6076,6 +6140,7 @@ func toolUsageTraceRowsCTE(arg ListToolUsageTracesParams) (string, []any, error)
 		"meta_mcp_server_id",
 		"mcp_client_name",
 		"mcp_client_version",
+		"mcp_server_id AS row_mcp_server_id",
 		chAttr("gram.hook.source")+" AS hook_source",
 		chAttr("gen_ai.tool.call.result")+" AS tool_result",
 		chAttr("gram.hook.error")+" AS hook_error",
@@ -6302,7 +6367,8 @@ SELECT
 	account_type,
 	meta_mcp_server_id,
 	mcp_client_name,
-	mcp_client_version
+	mcp_client_version,
+	row_mcp_server_id
 FROM (%s)`, logGroupKind, logGroupValue, chMultiIf(isSkillCall, skillLabel, resolvedToolName), targetType, targetKind, targetID, targetLabel, userKey, userLabel, userKind, sourceSQL)
 
 	normalizedArgs := make([]any, 0, 7+len(sourceArgs))
@@ -6337,7 +6403,7 @@ FROM (%s)`, logGroupKind, logGroupValue, chMultiIf(isSkillCall, skillLabel, reso
 
 	traceSQL := `
 WITH raw_normalized_events AS (` + normalizedSQL + `),
-normalized_traces AS (
+normalized_traces_base AS (
 	SELECT
 		concat(log_group_kind, ':', log_group_value, ':', target_type, ':', target_id, ':', tool_name) AS id,
 		if(log_group_kind = 'trace_id', log_group_value, '') AS trace_id,
@@ -6369,12 +6435,16 @@ normalized_traces AS (
 		max(meta_mcp_server_id) AS meta_mcp_server_id,
 		if(max(mcp_client_name) != '', lower(max(mcp_client_name)), '` + MCPClientUnattributed + `') AS client_key,
 		if(max(mcp_client_name) != '', max(mcp_client_name), '` + MCPClientUnattributed + `') AS client_label,
-		nullIf(max(mcp_client_version), '') AS client_version
+		nullIf(max(mcp_client_version), '') AS client_version,
+		max(row_mcp_server_id) AS row_mcp_server_id
 	FROM raw_normalized_events
 	GROUP BY log_group_kind, log_group_value, target_type, target_kind, target_id, target_label, tool_name, user_kind, user_key, user_label
 )`
 
-	return traceSQL, normalizedArgs, nil
+	serverIDSQL, serverIDArgs := toolUsageMCPServerIDCTE("normalized_traces", arg.HostedMCPMatchers, arg.MCPServerMatchers)
+	normalizedArgs = append(normalizedArgs, serverIDArgs...)
+
+	return traceSQL + serverIDSQL, normalizedArgs, nil
 }
 
 // toolUsageRawNormalizedEventsCTE answers the summary from the same raw-log
@@ -6394,6 +6464,7 @@ func toolUsageRawNormalizedEventsCTE(arg GetToolUsageSummaryParams) (string, []a
 		MetaMCPMatchers:    arg.MetaMCPMatchers,
 		TargetTypes:        nil,
 		HostedToolsetSlugs: nil,
+		MCPServerIDs:       nil,
 		MCPServerTargetIDs: nil,
 		ShadowServerNames:  nil,
 		MetaMCPServerIDs:   nil,
@@ -6447,6 +6518,7 @@ SELECT
 	http_status_code,
 	ifNull(account_type, '') AS account_type,
 	meta_mcp_server_id,
+	mcp_server_id,
 	client_key,
 	client_label,
 	ifNull(client_version, '') AS client_version
@@ -6510,6 +6582,7 @@ func toolUsageNormalizedEventsCTE(arg GetToolUsageSummaryParams) (string, []any,
 		"max(meta_mcp_server_id) AS g_meta_mcp_server_id",
 		"max(mcp_client_name) AS g_mcp_client_name",
 		"max(mcp_client_version) AS g_mcp_client_version",
+		"max(mcp_server_id) AS g_mcp_server_id",
 	).
 		From("trace_summaries").
 		Where("gram_project_id = ?", arg.GramProjectID).
@@ -6540,6 +6613,7 @@ func toolUsageNormalizedEventsCTE(arg GetToolUsageSummaryParams) (string, []any,
 		"max(meta_mcp_server_id) AS g_meta_mcp_server_id",
 		"max(mcp_client_name) AS g_mcp_client_name",
 		"max(mcp_client_version) AS g_mcp_client_version",
+		"max(mcp_server_id) AS g_mcp_server_id",
 	).
 		From("trace_summaries").
 		Where("gram_project_id = ?", arg.GramProjectID).
@@ -6624,7 +6698,8 @@ SELECT
 	g_meta_mcp_server_id AS meta_mcp_server_id,
 	%s AS client_key,
 	%s AS client_label,
-	g_mcp_client_version AS client_version
+	g_mcp_client_version AS client_version,
+	g_mcp_server_id AS row_mcp_server_id
 FROM (%s)`,
 		directTargetType,
 		toolUsageTargetKindServer,
@@ -6759,7 +6834,8 @@ SELECT
 	g_meta_mcp_server_id AS meta_mcp_server_id,
 	%s AS client_key,
 	%s AS client_label,
-	g_mcp_client_version AS client_version
+	g_mcp_client_version AS client_version,
+	g_mcp_server_id AS row_mcp_server_id
 FROM (%s)`, hookTargetType, hookTargetKind, hookTargetID, hookTargetLabel, hookToolName, userKey, userLabel, userKind, clientKey, clientLabel, hookSourceSQL)
 
 	directArgs := make([]any, 0, 3+len(directSourceArgs))
@@ -6799,7 +6875,10 @@ FROM (%s)`, hookTargetType, hookTargetKind, hookTargetID, hookTargetLabel, hookT
 	args = append(args, directArgs...)
 	args = append(args, hookArgs...)
 
-	return "WITH normalized_events AS (" + directSQL + " UNION ALL " + hookSQL + ")", args, nil
+	serverIDSQL, serverIDArgs := toolUsageMCPServerIDCTE("normalized_events", arg.HostedMCPMatchers, arg.MCPServerMatchers)
+	args = append(args, serverIDArgs...)
+
+	return "WITH normalized_events_base AS (" + directSQL + " UNION ALL " + hookSQL + ")" + serverIDSQL, args, nil
 }
 
 func nonZeroLimit(value, fallback uint64) uint64 {
@@ -7712,6 +7791,7 @@ func projectOverviewServerFilter(arg GetTopServersParams) GetToolUsageSummaryPar
 			ToolUsageTargetTypeMetaMCP,
 		},
 		HostedToolsetSlugs: nil,
+		MCPServerIDs:       nil,
 		ShadowServerNames:  nil,
 		MetaMCPServerIDs:   nil,
 		UserFilters:        nil,

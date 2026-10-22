@@ -490,8 +490,11 @@ type GetToolUsageClientToolBreakdownPayload struct {
 	To string
 	// Target types to include. Empty means all target types.
 	TargetTypes []ToolUsageTargetType
-	// Hosted MCP toolset slugs to include
+	// Deprecated: use mcp_server_ids. Hosted MCP toolset slugs to include
 	HostedToolsetSlugs []string
+	// MCP server ids to include. Matches calls served by the server, including
+	// calls recorded before they carried a server id.
+	McpServerIds []string
 	// Shadow MCP server names to include
 	ShadowServerNames []string
 	// Gateway (meta MCP server) ids to include: calls dispatched through the
@@ -536,8 +539,11 @@ type GetToolUsageClientsPayload struct {
 	To string
 	// Target types to include. Empty means all target types.
 	TargetTypes []ToolUsageTargetType
-	// Hosted MCP toolset slugs to include
+	// Deprecated: use mcp_server_ids. Hosted MCP toolset slugs to include
 	HostedToolsetSlugs []string
+	// MCP server ids to include. Matches calls served by the server, including
+	// calls recorded before they carried a server id.
+	McpServerIds []string
 	// Shadow MCP server names to include
 	ShadowServerNames []string
 	// Gateway (meta MCP server) ids to include: calls dispatched through the
@@ -611,8 +617,11 @@ type GetToolUsageSummaryPayload struct {
 	To string
 	// Target types to include. Empty means all target types.
 	TargetTypes []ToolUsageTargetType
-	// Hosted MCP toolset slugs to include
+	// Deprecated: use mcp_server_ids. Hosted MCP toolset slugs to include
 	HostedToolsetSlugs []string
+	// MCP server ids to include. Matches calls served by the server, including
+	// calls recorded before they carried a server id.
+	McpServerIds []string
 	// Shadow MCP server names to include
 	ShadowServerNames []string
 	// Gateway (meta MCP server) ids to include: calls dispatched through the
@@ -673,8 +682,11 @@ type GetToolUsageTargetTimeSeriesPayload struct {
 	To string
 	// Target types to include. Empty means all target types.
 	TargetTypes []ToolUsageTargetType
-	// Hosted MCP toolset slugs to include
+	// Deprecated: use mcp_server_ids. Hosted MCP toolset slugs to include
 	HostedToolsetSlugs []string
+	// MCP server ids to include. Matches calls served by the server, including
+	// calls recorded before they carried a server id.
+	McpServerIds []string
 	// Shadow MCP server names to include
 	ShadowServerNames []string
 	// Gateway (meta MCP server) ids to include: calls dispatched through the
@@ -719,8 +731,11 @@ type GetToolUsageTargetToolBreakdownPayload struct {
 	To string
 	// Target types to include. Empty means all target types.
 	TargetTypes []ToolUsageTargetType
-	// Hosted MCP toolset slugs to include
+	// Deprecated: use mcp_server_ids. Hosted MCP toolset slugs to include
 	HostedToolsetSlugs []string
+	// MCP server ids to include. Matches calls served by the server, including
+	// calls recorded before they carried a server id.
+	McpServerIds []string
 	// Shadow MCP server names to include
 	ShadowServerNames []string
 	// Gateway (meta MCP server) ids to include: calls dispatched through the
@@ -765,8 +780,11 @@ type GetToolUsageTargetsPayload struct {
 	To string
 	// Target types to include. Empty means all target types.
 	TargetTypes []ToolUsageTargetType
-	// Hosted MCP toolset slugs to include
+	// Deprecated: use mcp_server_ids. Hosted MCP toolset slugs to include
 	HostedToolsetSlugs []string
+	// MCP server ids to include. Matches calls served by the server, including
+	// calls recorded before they carried a server id.
+	McpServerIds []string
 	// Shadow MCP server names to include
 	ShadowServerNames []string
 	// Gateway (meta MCP server) ids to include: calls dispatched through the
@@ -811,8 +829,11 @@ type GetToolUsageTotalsPayload struct {
 	To string
 	// Target types to include. Empty means all target types.
 	TargetTypes []ToolUsageTargetType
-	// Hosted MCP toolset slugs to include
+	// Deprecated: use mcp_server_ids. Hosted MCP toolset slugs to include
 	HostedToolsetSlugs []string
+	// MCP server ids to include. Matches calls served by the server, including
+	// calls recorded before they carried a server id.
+	McpServerIds []string
 	// Shadow MCP server names to include
 	ShadowServerNames []string
 	// Gateway (meta MCP server) ids to include: calls dispatched through the
@@ -857,8 +878,11 @@ type GetToolUsageUserTimeSeriesPayload struct {
 	To string
 	// Target types to include. Empty means all target types.
 	TargetTypes []ToolUsageTargetType
-	// Hosted MCP toolset slugs to include
+	// Deprecated: use mcp_server_ids. Hosted MCP toolset slugs to include
 	HostedToolsetSlugs []string
+	// MCP server ids to include. Matches calls served by the server, including
+	// calls recorded before they carried a server id.
+	McpServerIds []string
 	// Shadow MCP server names to include
 	ShadowServerNames []string
 	// Gateway (meta MCP server) ids to include: calls dispatched through the
@@ -903,8 +927,11 @@ type GetToolUsageUsersByTargetPayload struct {
 	To string
 	// Target types to include. Empty means all target types.
 	TargetTypes []ToolUsageTargetType
-	// Hosted MCP toolset slugs to include
+	// Deprecated: use mcp_server_ids. Hosted MCP toolset slugs to include
 	HostedToolsetSlugs []string
+	// MCP server ids to include. Matches calls served by the server, including
+	// calls recorded before they carried a server id.
+	McpServerIds []string
 	// Shadow MCP server names to include
 	ShadowServerNames []string
 	// Gateway (meta MCP server) ids to include: calls dispatched through the
@@ -949,8 +976,11 @@ type GetToolUsageUsersPayload struct {
 	To string
 	// Target types to include. Empty means all target types.
 	TargetTypes []ToolUsageTargetType
-	// Hosted MCP toolset slugs to include
+	// Deprecated: use mcp_server_ids. Hosted MCP toolset slugs to include
 	HostedToolsetSlugs []string
+	// MCP server ids to include. Matches calls served by the server, including
+	// calls recorded before they carried a server id.
+	McpServerIds []string
 	// Shadow MCP server names to include
 	ShadowServerNames []string
 	// Gateway (meta MCP server) ids to include: calls dispatched through the
@@ -1333,8 +1363,11 @@ type ListToolUsageTracesPayload struct {
 	To string
 	// Target types to include. Empty means all target types.
 	TargetTypes []ToolUsageTargetType
-	// Hosted MCP toolset slugs to include
+	// Deprecated: use mcp_server_ids. Hosted MCP toolset slugs to include
 	HostedToolsetSlugs []string
+	// MCP server ids to include. Matches calls served by the server, including
+	// calls recorded before they carried a server id.
+	McpServerIds []string
 	// Shadow MCP server names to include
 	ShadowServerNames []string
 	// Gateway (meta MCP server) ids to include: calls dispatched through the
@@ -2185,6 +2218,8 @@ type ToolUsageHostedServerFilterOption struct {
 	ToolsetSlug string
 	// Hosted MCP toolset display name
 	ToolsetName string
+	// MCP server id to filter by; absent when the server has no mcp_servers row
+	McpServerID *string
 	// Number of tool usage events observed for the hosted MCP server
 	EventCount int64
 }
@@ -2213,6 +2248,8 @@ type ToolUsageTargetSummary struct {
 	TargetID string
 	// User-facing label for the target
 	TargetLabel string
+	// MCP server id for hosted and tunneled targets; absent for other targets
+	McpServerID *string
 	// Total number of tool usage events for the target
 	EventCount int64
 	// Number of distinct tools observed for the target
@@ -2332,6 +2369,8 @@ type ToolUsageTraceSummary struct {
 	TargetID string
 	// User-facing target label
 	TargetLabel string
+	// MCP server id for hosted and tunneled targets; absent for other targets
+	McpServerID *string
 	// Stable user identity value
 	UserKey string
 	// User-facing user identity label

@@ -20,7 +20,8 @@ type getToolUsageSummaryInput struct {
 	From               string   `json:"from,omitempty" jsonschema:"Start time in ISO 8601 format. Defaults to 7 days ago."`
 	To                 string   `json:"to,omitempty" jsonschema:"End time in ISO 8601 format. Defaults to now."`
 	TargetTypes        []string `json:"target_types,omitempty" jsonschema:"Target types to include: hosted_mcp_server, tunneled_mcp_server, meta_mcp_server, shadow_mcp_server, local_tool, skill. Use tunneled_mcp_server for tunneled MCP servers and meta_mcp_server for calls observed against a gateway endpoint."`
-	HostedToolsetSlugs []string `json:"hosted_toolset_slugs,omitempty" jsonschema:"Hosted MCP toolset slugs to include."`
+	HostedToolsetSlugs []string `json:"hosted_toolset_slugs,omitempty" jsonschema:"Hosted MCP toolset slugs to include. Prefer mcp_server_ids."`
+	MCPServerIDs       []string `json:"mcp_server_ids,omitempty" jsonschema:"MCP server ids to include: calls served by those hosted, remote or tunneled servers."`
 	ShadowServerNames  []string `json:"shadow_server_names,omitempty" jsonschema:"Shadow MCP server names to include."`
 	MetaMcpServerIDs   []string `json:"meta_mcp_server_ids,omitempty" jsonschema:"Gateway (meta MCP server) ids to include: calls dispatched through the gateway plus calls observed against it."`
 	HookSources        []string `json:"hook_sources,omitempty" jsonschema:"Hook plugin sources to include. Direct MCP calls have no hook source."`
@@ -59,6 +60,7 @@ func (s *GetToolUsageSummary) Call(ctx context.Context, _ toolconfig.ToolCallEnv
 		To:                 "",
 		TargetTypes:        nil,
 		HostedToolsetSlugs: nil,
+		MCPServerIDs:       nil,
 		ShadowServerNames:  nil,
 		MetaMcpServerIDs:   nil,
 		HookSources:        nil,
@@ -82,6 +84,7 @@ func (s *GetToolUsageSummary) Call(ctx context.Context, _ toolconfig.ToolCallEnv
 		To:                 to,
 		TargetTypes:        targetTypes,
 		HostedToolsetSlugs: input.HostedToolsetSlugs,
+		McpServerIds:       input.MCPServerIDs,
 		ShadowServerNames:  input.ShadowServerNames,
 		MetaMcpServerIds:   input.MetaMcpServerIDs,
 		UserFilters:        nil,

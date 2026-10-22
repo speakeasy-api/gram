@@ -9874,6 +9874,7 @@ func unmarshalToolUsageTargetSummaryResponseBodyToTelemetryToolUsageTargetSummar
 		TargetKind:   telemetry.ToolUsageTargetKind(*v.TargetKind),
 		TargetID:     *v.TargetID,
 		TargetLabel:  *v.TargetLabel,
+		McpServerID:  v.McpServerID,
 		EventCount:   *v.EventCount,
 		UniqueTools:  *v.UniqueTools,
 		SuccessCount: *v.SuccessCount,
@@ -10024,6 +10025,7 @@ func unmarshalToolUsageTraceSummaryResponseBodyToTelemetryToolUsageTraceSummary(
 		TargetKind:           telemetry.ToolUsageTargetKind(*v.TargetKind),
 		TargetID:             *v.TargetID,
 		TargetLabel:          *v.TargetLabel,
+		McpServerID:          v.McpServerID,
 		UserKey:              *v.UserKey,
 		UserLabel:            *v.UserLabel,
 		UserKind:             telemetry.ToolUsageUserKind(*v.UserKind),
@@ -10063,6 +10065,7 @@ func unmarshalToolUsageHostedServerFilterOptionResponseBodyToTelemetryToolUsageH
 	res := &telemetry.ToolUsageHostedServerFilterOption{
 		ToolsetSlug: *v.ToolsetSlug,
 		ToolsetName: *v.ToolsetName,
+		McpServerID: v.McpServerID,
 		EventCount:  *v.EventCount,
 	}
 

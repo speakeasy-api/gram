@@ -137,6 +137,10 @@ export type ToolUsageTraceSummary = {
    */
   logGroup: ToolUsageTraceLogGroup;
   /**
+   * MCP server id for hosted and tunneled targets; absent for other targets
+   */
+  mcpServerId?: string | undefined;
+  /**
    * Earliest log timestamp in Unix nanoseconds as a string for JavaScript integer safety
    */
   startTimeUnixNano: string;
@@ -229,6 +233,7 @@ export const ToolUsageTraceSummary$inboundSchema: z.ZodMiniType<
     id: z.string(),
     log_count: z.int(),
     log_group: ToolUsageTraceLogGroup$inboundSchema,
+    mcp_server_id: z.optional(z.string()),
     start_time_unix_nano: z.string(),
     target_id: z.string(),
     target_kind: ToolUsageTraceSummaryTargetKind$inboundSchema,
@@ -256,6 +261,7 @@ export const ToolUsageTraceSummary$inboundSchema: z.ZodMiniType<
       "http_status_code": "httpStatusCode",
       "log_count": "logCount",
       "log_group": "logGroup",
+      "mcp_server_id": "mcpServerId",
       "start_time_unix_nano": "startTimeUnixNano",
       "target_id": "targetId",
       "target_kind": "targetKind",

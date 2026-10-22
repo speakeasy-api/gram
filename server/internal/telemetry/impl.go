@@ -3441,6 +3441,7 @@ func (s *Service) GetToolUsageSummary(ctx context.Context, payload *telem_gen.Ge
 		To:                 payload.To,
 		TargetTypes:        payload.TargetTypes,
 		HostedToolsetSlugs: payload.HostedToolsetSlugs,
+		MCPServerIDs:       payload.McpServerIds,
 		ShadowServerNames:  payload.ShadowServerNames,
 		MetaMcpServerIDs:   payload.MetaMcpServerIds,
 		UserFilters:        payload.UserFilters,
@@ -3471,6 +3472,7 @@ type toolUsageFilters struct {
 	To                 string
 	TargetTypes        []telem_gen.ToolUsageTargetType
 	HostedToolsetSlugs []string
+	MCPServerIDs       []string
 	ShadowServerNames  []string
 	MetaMcpServerIDs   []string
 	UserFilters        []*telem_gen.ToolUsageUserFilter
@@ -3566,6 +3568,7 @@ func (s *Service) resolveToolUsageParams(ctx context.Context, f toolUsageFilters
 		MetaMCPMatchers:    metaMCPMatchers,
 		TargetTypes:        targetTypes,
 		HostedToolsetSlugs: f.HostedToolsetSlugs,
+		MCPServerIDs:       f.MCPServerIDs,
 		ShadowServerNames:  f.ShadowServerNames,
 		MetaMCPServerIDs:   f.MetaMcpServerIDs,
 		UserFilters:        userFilters,
@@ -3597,6 +3600,7 @@ func (s *Service) GetToolUsageTotals(ctx context.Context, payload *telem_gen.Get
 		To:                 payload.To,
 		TargetTypes:        payload.TargetTypes,
 		HostedToolsetSlugs: payload.HostedToolsetSlugs,
+		MCPServerIDs:       payload.McpServerIds,
 		ShadowServerNames:  payload.ShadowServerNames,
 		MetaMcpServerIDs:   payload.MetaMcpServerIds,
 		UserFilters:        payload.UserFilters,
@@ -3626,6 +3630,7 @@ func (s *Service) GetToolUsageTargets(ctx context.Context, payload *telem_gen.Ge
 		To:                 payload.To,
 		TargetTypes:        payload.TargetTypes,
 		HostedToolsetSlugs: payload.HostedToolsetSlugs,
+		MCPServerIDs:       payload.McpServerIds,
 		ShadowServerNames:  payload.ShadowServerNames,
 		MetaMcpServerIDs:   payload.MetaMcpServerIds,
 		UserFilters:        payload.UserFilters,
@@ -3655,6 +3660,7 @@ func (s *Service) GetToolUsageUsers(ctx context.Context, payload *telem_gen.GetT
 		To:                 payload.To,
 		TargetTypes:        payload.TargetTypes,
 		HostedToolsetSlugs: payload.HostedToolsetSlugs,
+		MCPServerIDs:       payload.McpServerIds,
 		ShadowServerNames:  payload.ShadowServerNames,
 		MetaMcpServerIDs:   payload.MetaMcpServerIds,
 		UserFilters:        payload.UserFilters,
@@ -3684,6 +3690,7 @@ func (s *Service) GetToolUsageClients(ctx context.Context, payload *telem_gen.Ge
 		To:                 payload.To,
 		TargetTypes:        payload.TargetTypes,
 		HostedToolsetSlugs: payload.HostedToolsetSlugs,
+		MCPServerIDs:       payload.McpServerIds,
 		ShadowServerNames:  payload.ShadowServerNames,
 		MetaMcpServerIDs:   payload.MetaMcpServerIds,
 		UserFilters:        payload.UserFilters,
@@ -3713,6 +3720,7 @@ func (s *Service) GetToolUsageClientToolBreakdown(ctx context.Context, payload *
 		To:                 payload.To,
 		TargetTypes:        payload.TargetTypes,
 		HostedToolsetSlugs: payload.HostedToolsetSlugs,
+		MCPServerIDs:       payload.McpServerIds,
 		ShadowServerNames:  payload.ShadowServerNames,
 		MetaMcpServerIDs:   payload.MetaMcpServerIds,
 		UserFilters:        payload.UserFilters,
@@ -3742,6 +3750,7 @@ func (s *Service) GetToolUsageTargetTimeSeries(ctx context.Context, payload *tel
 		To:                 payload.To,
 		TargetTypes:        payload.TargetTypes,
 		HostedToolsetSlugs: payload.HostedToolsetSlugs,
+		MCPServerIDs:       payload.McpServerIds,
 		ShadowServerNames:  payload.ShadowServerNames,
 		MetaMcpServerIDs:   payload.MetaMcpServerIds,
 		UserFilters:        payload.UserFilters,
@@ -3771,6 +3780,7 @@ func (s *Service) GetToolUsageUserTimeSeries(ctx context.Context, payload *telem
 		To:                 payload.To,
 		TargetTypes:        payload.TargetTypes,
 		HostedToolsetSlugs: payload.HostedToolsetSlugs,
+		MCPServerIDs:       payload.McpServerIds,
 		ShadowServerNames:  payload.ShadowServerNames,
 		MetaMcpServerIDs:   payload.MetaMcpServerIds,
 		UserFilters:        payload.UserFilters,
@@ -3800,6 +3810,7 @@ func (s *Service) GetToolUsageUsersByTarget(ctx context.Context, payload *telem_
 		To:                 payload.To,
 		TargetTypes:        payload.TargetTypes,
 		HostedToolsetSlugs: payload.HostedToolsetSlugs,
+		MCPServerIDs:       payload.McpServerIds,
 		ShadowServerNames:  payload.ShadowServerNames,
 		MetaMcpServerIDs:   payload.MetaMcpServerIds,
 		UserFilters:        payload.UserFilters,
@@ -3829,6 +3840,7 @@ func (s *Service) GetToolUsageTargetToolBreakdown(ctx context.Context, payload *
 		To:                 payload.To,
 		TargetTypes:        payload.TargetTypes,
 		HostedToolsetSlugs: payload.HostedToolsetSlugs,
+		MCPServerIDs:       payload.McpServerIds,
 		ShadowServerNames:  payload.ShadowServerNames,
 		MetaMcpServerIDs:   payload.MetaMcpServerIds,
 		UserFilters:        payload.UserFilters,
@@ -3916,6 +3928,7 @@ func (s *Service) ListToolUsageTraces(ctx context.Context, payload *telem_gen.Li
 		MetaMCPMatchers:    metaMCPMatchers,
 		TargetTypes:        targetTypes,
 		HostedToolsetSlugs: payload.HostedToolsetSlugs,
+		MCPServerIDs:       payload.McpServerIds,
 		MCPServerTargetIDs: nil,
 		ShadowServerNames:  payload.ShadowServerNames,
 		MetaMCPServerIDs:   payload.MetaMcpServerIds,
@@ -4133,18 +4146,6 @@ func LoadToolUsageMatchers(ctx context.Context, db *pgxpool.Pool, projectID uuid
 		return nil, nil, fmt.Errorf("list project toolsets: %w", err)
 	}
 
-	hostedMatchers := make([]repo.HostedMCPMatcher, 0, len(toolsets))
-	for _, toolset := range toolsets {
-		if !toolset.McpEnabled || !toolset.McpSlug.Valid || toolset.McpSlug.String == "" {
-			continue
-		}
-		hostedMatchers = append(hostedMatchers, repo.HostedMCPMatcher{
-			ToolsetSlug: toolset.Slug,
-			ToolsetName: toolset.Name,
-			McpSlug:     toolset.McpSlug.String,
-		})
-	}
-
 	// Include soft-deleted servers: tool_source on telemetry rows is the
 	// backend remote/tunneled server id, which outlives the mcp_servers row.
 	// Matching against deleted servers keeps a deleted (or recreated) server's
@@ -4154,6 +4155,20 @@ func LoadToolUsageMatchers(ctx context.Context, db *pgxpool.Pool, projectID uuid
 	servers, err := mcpserversRepo.New(db).ListMCPServersForTelemetryByProjectID(ctx, projectID)
 	if err != nil {
 		return nil, nil, fmt.Errorf("list project MCP servers: %w", err)
+	}
+
+	toolsetServerIDs := toolsetMCPServerIDs(servers)
+	hostedMatchers := make([]repo.HostedMCPMatcher, 0, len(toolsets))
+	for _, toolset := range toolsets {
+		if !toolset.McpEnabled || !toolset.McpSlug.Valid || toolset.McpSlug.String == "" {
+			continue
+		}
+		hostedMatchers = append(hostedMatchers, repo.HostedMCPMatcher{
+			ToolsetSlug: toolset.Slug,
+			ToolsetName: toolset.Name,
+			McpSlug:     toolset.McpSlug.String,
+			MCPServerID: toolsetServerIDs[toolset.ID],
+		})
 	}
 
 	serverMatchers := make([]repo.MCPServerMatcher, 0, len(servers))
@@ -4196,6 +4211,26 @@ func LoadToolUsageMatchers(ctx context.Context, db *pgxpool.Pool, projectID uuid
 		})
 	}
 	return hostedMatchers, serverMatchers, nil
+}
+
+// toolsetMCPServerIDs maps each toolset to the mcp_servers row serving it: the
+// canonical wrapper (id = toolset id) when present, else the first live row.
+func toolsetMCPServerIDs(servers []mcpserversRepo.ListMCPServersForTelemetryByProjectIDRow) map[uuid.UUID]string {
+	ids := make(map[uuid.UUID]string, len(servers))
+	for _, server := range servers {
+		if !server.ToolsetID.Valid {
+			continue
+		}
+		toolsetID := server.ToolsetID.UUID
+		if server.ID == toolsetID {
+			ids[toolsetID] = server.ID.String()
+			continue
+		}
+		if _, ok := ids[toolsetID]; !ok {
+			ids[toolsetID] = server.ID.String()
+		}
+	}
+	return ids
 }
 
 // LoadMetaMCPMatchers loads the gateway endpoint URL suffixes (gram.mcp.server_url)
@@ -4300,6 +4335,7 @@ func toToolUsageTracesResult(rows []repo.ToolUsageTraceSummary, nextCursor strin
 			TargetKind:           telem_gen.ToolUsageTargetKind(row.TargetKind),
 			TargetID:             row.TargetID,
 			TargetLabel:          row.TargetLabel,
+			McpServerID:          conv.PtrEmpty(row.MCPServerID),
 			UserKey:              row.UserKey,
 			UserLabel:            row.UserLabel,
 			UserKind:             telem_gen.ToolUsageUserKind(row.UserKind),
@@ -4339,16 +4375,23 @@ func toToolUsageFilterOptionsResult(options *repo.ToolUsageFilterOptions, hosted
 	hostedServers := make([]*telem_gen.ToolUsageHostedServerFilterOption, 0, len(options.HostedServers))
 	if includeHostedServers {
 		hostedCounts := make(map[string]int64, len(options.HostedServers))
+		hostedServerIDs := make(map[string]string, len(options.HostedServers))
 		for _, row := range options.HostedServers {
 			hostedCounts[row.ToolsetSlug] = uint64ToInt64(row.EventCount)
+			hostedServerIDs[row.ToolsetSlug] = row.MCPServerID
 		}
 
 		seen := make(map[string]struct{}, len(hostedMCPMatchers))
 		for _, matcher := range hostedMCPMatchers {
 			seen[matcher.ToolsetSlug] = struct{}{}
+			serverID := matcher.MCPServerID
+			if serverID == "" {
+				serverID = hostedServerIDs[matcher.ToolsetSlug]
+			}
 			hostedServers = append(hostedServers, &telem_gen.ToolUsageHostedServerFilterOption{
 				ToolsetSlug: matcher.ToolsetSlug,
 				ToolsetName: matcher.ToolsetName,
+				McpServerID: conv.PtrEmpty(serverID),
 				EventCount:  hostedCounts[matcher.ToolsetSlug],
 			})
 		}
@@ -4360,6 +4403,7 @@ func toToolUsageFilterOptionsResult(options *repo.ToolUsageFilterOptions, hosted
 			hostedServers = append(hostedServers, &telem_gen.ToolUsageHostedServerFilterOption{
 				ToolsetSlug: row.ToolsetSlug,
 				ToolsetName: row.ToolsetSlug,
+				McpServerID: conv.PtrEmpty(row.MCPServerID),
 				EventCount:  uint64ToInt64(row.EventCount),
 			})
 		}
@@ -4472,6 +4516,7 @@ func toToolUsageTargetSummaries(rows []repo.ToolUsageTargetSummaryRow) []*telem_
 			TargetKind:   telem_gen.ToolUsageTargetKind(row.TargetKind),
 			TargetID:     row.TargetID,
 			TargetLabel:  row.TargetLabel,
+			McpServerID:  conv.PtrEmpty(row.MCPServerID),
 			EventCount:   uint64ToInt64(row.EventCount),
 			UniqueTools:  uint64ToInt64(row.UniqueTools),
 			SuccessCount: uint64ToInt64(row.SuccessCount),
