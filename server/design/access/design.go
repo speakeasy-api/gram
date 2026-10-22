@@ -1169,14 +1169,14 @@ var SelectorModel = Type("Selector", func() {
 		Description("The resource identifier, or '*' for all resources of this kind.")
 	})
 	Attribute("client_type", String, func() {
-		Description("Auth client type filter (mcp:auth scopes only).")
+		Description("Auth client type filter (mcp:auth and mcp:blocked_auth scopes only).")
 		Enum("remote_session", "service_account", "static_credential", "pass_through", "ema", "*")
 	})
 	Attribute("connection_owner", String, func() {
-		Description("Personal connection owner filter (mcp:auth scopes on remote_session clients only). A user ID, '*', or '$represented_user' for the user the request acts for. Never lets a caller use another user's connection.")
+		Description("Personal connection owner filter (mcp:auth and mcp:blocked_auth scopes on remote_session clients only). A user ID, '*', or '$represented_user' for the user the request acts for. Never lets a caller use another user's connection.")
 	})
 	Attribute("upstream_client", String, func() {
-		Description("Upstream OAuth client filter (mcp:auth scopes on remote_session clients only). Together with connection_owner it names one person's connection across every auth client sharing that upstream client.")
+		Description("Upstream OAuth client filter (mcp:auth and mcp:blocked_auth scopes on remote_session clients only). Together with connection_owner it names one person's connection across every auth client sharing that upstream client.")
 	})
 	Attribute("disposition", String, func() {
 		Description("Tool disposition filter (MCP scopes only).")
@@ -1186,7 +1186,7 @@ var SelectorModel = Type("Selector", func() {
 		Description("Specific tool name filter (MCP scopes only).")
 	})
 	Attribute("project_id", String, func() {
-		Description("Project filter (MCP, environment, assistant, and mcp:auth scopes). When set with resource_id='*', grants access to every resource of the kind in the project. For mcp:auth it is the project of the server using the client.")
+		Description("Project filter (MCP, environment, assistant, mcp:auth and mcp:blocked_auth scopes). When set with resource_id='*', grants access to every resource of the kind in the project. For the auth-client scopes it is the project of the server using the client.")
 	})
 	Attribute("server_url", String, func() {
 		Description("Server URL filter (risk policy scopes only). Include the URI scheme, for example https://api.example.com.")

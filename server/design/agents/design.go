@@ -52,16 +52,16 @@ var PolicySelector = Type("AgentPolicySelector", func() {
 		Enum("project", "mcp", "org", "environment", "skill", "assistant", "risk_policy", "chat", "agent", "mcp_auth_client", "*")
 	})
 	Attribute("resource_id", String, "The resource identifier, or '*' for all resources of this kind.")
-	Attribute("client_type", String, "Auth client type filter (mcp:auth scopes only).", func() {
+	Attribute("client_type", String, "Auth client type filter (mcp:auth and mcp:blocked_auth scopes only).", func() {
 		Enum("remote_session", "service_account", "static_credential", "pass_through", "ema", "*")
 	})
-	Attribute("connection_owner", String, "Personal connection owner filter (mcp:auth scopes on remote_session clients only): a user ID, '*', or '$represented_user'.")
-	Attribute("upstream_client", String, "Upstream OAuth client filter (mcp:auth scopes on remote_session clients only). Together with connection_owner it names one person's connection across every auth client sharing that upstream client.")
+	Attribute("connection_owner", String, "Personal connection owner filter (mcp:auth and mcp:blocked_auth scopes on remote_session clients only): a user ID, '*', or '$represented_user'.")
+	Attribute("upstream_client", String, "Upstream OAuth client filter (mcp:auth and mcp:blocked_auth scopes on remote_session clients only). Together with connection_owner it names one person's connection across every auth client sharing that upstream client.")
 	Attribute("disposition", String, "Tool disposition filter (MCP scopes only).", func() {
 		Enum("read_only", "destructive", "idempotent", "open_world")
 	})
 	Attribute("tool", String, "Specific tool name filter (MCP scopes only).")
-	Attribute("project_id", String, "Project filter (MCP, environment, assistant, and mcp:auth scopes).")
+	Attribute("project_id", String, "Project filter (MCP, environment, assistant, mcp:auth and mcp:blocked_auth scopes).")
 	Attribute("server_url", String, "Server URL filter (risk policy scopes only).", func() { Format(FormatURI) })
 	Attribute("server_identity", String, "Server identity filter (risk policy scopes only).")
 })
