@@ -9,7 +9,11 @@ import { serializeFilters } from "@/pages/logs/log-filter-url";
 import { Operator } from "@gram/client/models/components/logfilter";
 import { PluginStatusBanner } from "@/pages/mcp/overview/PluginStatusBanner";
 import { Stack } from "@/components/ui/Stack";
-import { MCPOverviewTab } from "@/pages/mcp/overview/MCPOverviewTab";
+import {
+  type HostedServerRef,
+  MCPOverviewTab,
+} from "@/pages/mcp/overview/MCPOverviewTab";
+import { standsInForToolset } from "@/pages/mcp/x/MCPServerDetailsRouting";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import { TunneledMcpConnectionsPanel } from "./TunneledMcpConnectionsPanel";
 import { UnproxiedMcpOverviewTab } from "./UnproxiedMcpOverviewTab";
@@ -63,16 +67,29 @@ export function OverviewTab({
       />
     );
   }
-  const server = {
-    kind: "mcp-server" as const,
-    id: mcpServer.id,
-    slug: mcpServer.slug ?? "",
-    name: mcpServer.name ?? "MCP Server",
-  };
+  const hostedToolset = standsInForToolset(mcpServer)
+    ? mcpServer.toolset
+    : undefined;
+  // Hosted traffic is only attributed by toolset slug, so a hosted server keeps the toolset page's overview.
+  const server: HostedServerRef = hostedToolset
+    ? {
+        kind: "toolset",
+        id: hostedToolset.id,
+        slug: hostedToolset.slug,
+        name: hostedToolset.name,
+      }
+    : {
+        kind: "mcp-server",
+        id: mcpServer.id,
+        slug: mcpServer.slug ?? "",
+        name: mcpServer.name ?? "MCP Server",
+      };
   const tunneled = !!mcpServer.tunneledMcpServerId;
   // The usage dashboard is keyed by slug; a tunneled server without one still
   // gets its tunnel status.
-  const usage = mcpServer.slug ? (
+  const usage = hostedToolset ? (
+    <MCPOverviewTab server={server} />
+  ) : mcpServer.slug ? (
     <MCPOverviewTab
       server={server}
       // For tunneled servers the marketplace banner sits above the tunnel

@@ -28,10 +28,17 @@ vi.mock("@/pages/mcp/overview/PluginStatusBanner", () => ({
 }));
 // The real dashboard renders the marketplace banner unless told not to.
 vi.mock("@/pages/mcp/overview/MCPOverviewTab", () => ({
-  MCPOverviewTab: ({ showPluginBanner }: { showPluginBanner?: boolean }) => (
+  MCPOverviewTab: ({
+    showPluginBanner,
+    server,
+  }: {
+    showPluginBanner?: boolean;
+    server: { kind: string; slug: string };
+  }) => (
     <div>
       {showPluginBanner !== false && <div>Marketplace</div>}
       <div>Shared usage dashboard</div>
+      <div data-testid="scope" data-scope={`${server.kind}:${server.slug}`} />
     </div>
   ),
 }));
@@ -103,3 +110,34 @@ it("retains the shared overview for servers without tunnels", () => {
   expect(screen.getAllByText("Marketplace")).toHaveLength(1);
   expect(screen.queryByText("Tunnel status")).toBeNull();
 });
+
+it.each([
+  ["its canonical wrapper", "toolset-1"],
+  ["a hosting server that is not the canonical wrapper", "host-1"],
+])(
+  "scopes a hosted server's overview to its toolset when it is %s",
+  (_, id) => {
+    render(
+      <OverviewTab
+        mcpServer={
+          {
+            id,
+            slug: "server-slug",
+            name: "Server",
+            toolsetId: "toolset-1",
+            toolset: {
+              id: "toolset-1",
+              slug: "toolset-slug",
+              name: "Tools",
+              hostingMcpServerId: id,
+            },
+          } as McpServer
+        }
+        agentSetupHref="/settings"
+      />,
+    );
+    expect(screen.getByTestId("scope").getAttribute("data-scope")).toBe(
+      "toolset:toolset-slug",
+    );
+  },
+);
