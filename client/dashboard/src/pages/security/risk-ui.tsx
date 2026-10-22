@@ -540,6 +540,10 @@ export function EventMatchDialog({
 
   const summary = rationale?.trim() ? rationale.trim() : null;
 
+  if (!resultId || !matchRedacted || !hasRevealableEvent(matchRedacted)) {
+    return summary ? <RationaleText text={summary} /> : <span>-</span>;
+  }
+
   if (restricted) {
     return (
       <span className="flex min-w-0 flex-col gap-1">
@@ -547,10 +551,6 @@ export function EventMatchDialog({
         <RiskContentNotice />
       </span>
     );
-  }
-
-  if (!resultId || !matchRedacted || !hasRevealableEvent(matchRedacted)) {
-    return summary ? <RationaleText text={summary} /> : <span>-</span>;
   }
 
   // Without chat:read the event payload can never be revealed, so there's no

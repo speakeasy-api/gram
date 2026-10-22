@@ -331,6 +331,7 @@ function FindingDetail({
   const { hasScope } = useRBAC();
   const kind = findingKind(result);
   // Payload reveals need unrestricted chat:read; chat reveals follow the chat.
+  // Impersonation blocks both payload and chat reveals regardless of scope.
   const restricted = useRiskContentRestricted();
   const canReveal =
     !restricted &&

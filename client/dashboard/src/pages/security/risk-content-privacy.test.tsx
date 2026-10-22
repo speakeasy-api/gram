@@ -28,7 +28,7 @@ const state = vi.hoisted(() => ({
     activeOrganizationId: "org_fixture",
   },
   unmask: vi.fn(),
-  payload: vi.fn(),
+  payload: vi.fn<() => void>(),
   loadChat: vi.fn(),
 }));
 vi.mock("@/contexts/Auth", () => ({ useSession: () => state.session }));
@@ -141,8 +141,8 @@ describe("risk content privacy", () => {
           revealed
           canReveal
           rating={null}
-          onToggleReveal={vi.fn()}
-          onRequestReveal={vi.fn()}
+          onToggleReveal={vi.fn<() => void>()}
+          onRequestReveal={vi.fn<() => void>()}
         />
         <FindingPayload
           result={finding}
@@ -156,8 +156,8 @@ describe("risk content privacy", () => {
             isError: false,
             reveal: state.payload,
           }}
-          onToggleReveal={vi.fn()}
-          onSelect={vi.fn()}
+          onToggleReveal={vi.fn<() => void>()}
+          onSelect={vi.fn<(id: string | null) => void>()}
         />
       </>,
     );

@@ -1321,6 +1321,12 @@ func (s *Service) ListRiskResults(ctx context.Context, payload *gen.ListRiskResu
 		return nil, err
 	}
 
+	for _, r := range raw.Results {
+		if r.ChatTitle != nil {
+			r.ChatTitle = new(authz.RedactSessionTitle(ctx, *r.ChatTitle, r.ChatID))
+		}
+	}
+
 	if payload.ChatID != nil && *payload.ChatID != "" && authz.CheckSensitiveContentAccess(ctx) == nil {
 		matched, err := s.authz.FindMatched(ctx, []authz.Check{authz.ChatReadCheck(*payload.ChatID)})
 		if err == nil && len(matched) == 1 && matched[0] {
@@ -1554,6 +1560,9 @@ func (s *Service) ListRiskResultsForAgent(ctx context.Context, payload *gen.List
 
 	redacted := make([]*types.RiskResultRedacted, 0, len(base.Results))
 	for _, r := range base.Results {
+		if r.ChatTitle != nil {
+			r.ChatTitle = new(authz.RedactSessionTitle(ctx, *r.ChatTitle, r.ChatID))
+		}
 		redacted = append(redacted, redactRiskResult(r, authCtx.ActiveOrganizationID))
 	}
 
@@ -1705,6 +1714,19 @@ func redactMatch(source, ruleID string, match *string, orgID string) string {
 }
 
 func (s *Service) ListRiskResultsByChat(ctx context.Context, payload *gen.ListRiskResultsByChatPayload) (*gen.ListRiskResultsByChatResult, error) {
+	result, err := s.listRiskResultsByChatRaw(ctx, payload)
+	if err != nil {
+		return nil, err
+	}
+	for _, chat := range result.Chats {
+		if chat.ChatTitle != nil {
+			chat.ChatTitle = new(authz.RedactSessionTitle(ctx, *chat.ChatTitle, new(chat.ChatID)))
+		}
+	}
+	return result, nil
+}
+
+func (s *Service) listRiskResultsByChatRaw(ctx context.Context, payload *gen.ListRiskResultsByChatPayload) (*gen.ListRiskResultsByChatResult, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
