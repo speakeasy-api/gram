@@ -431,6 +431,7 @@ func selectorFromForm(selector *gen.AgentPolicySelector) authz.Selector {
 		authz.SelectorKeyDisposition: selector.Disposition, authz.SelectorKeyTool: selector.Tool, authz.SelectorKeyProjectID: selector.ProjectID,
 		authz.SelectorKeyServerURL: selector.ServerURL, authz.SelectorKeyServerIdentity: selector.ServerIdentity,
 		authz.SelectorKeyClientType: selector.ClientType, authz.SelectorKeyConnectionOwner: selector.ConnectionOwner,
+		authz.SelectorKeyUpstreamClient: selector.UpstreamClient,
 	} {
 		if value != nil {
 			result[key] = *value
@@ -450,6 +451,7 @@ func selectorModel(selector authz.Selector) *gen.AgentPolicySelector {
 		ServerIdentity:  mapStringPtr(selector, authz.SelectorKeyServerIdentity),
 		ClientType:      mapStringPtr(selector, authz.SelectorKeyClientType),
 		ConnectionOwner: mapStringPtr(selector, authz.SelectorKeyConnectionOwner),
+		UpstreamClient:  mapStringPtr(selector, authz.SelectorKeyUpstreamClient),
 	}
 	return model
 }
