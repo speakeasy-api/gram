@@ -16,34 +16,38 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/speakeasy-api/gram/server/cmd/tools/migrations/clientscopes"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
 )
 
 type clientScopesConfig struct {
 	dbURL       string
 	environment string
 	reportPath  string
+	restore     bool
 	options     clientscopes.Options
 }
 
 // Stdout carries counts only, never client, project or organization ids.
 type clientScopesSummary struct {
 	Mode          string                       `json:"mode"`
+	Phase         string                       `json:"phase"`
 	Environment   string                       `json:"environment"`
-	CreatedBefore string                       `json:"created_before"`
+	CreatedBefore string                       `json:"created_before,omitempty"`
 	Scanned       int                          `json:"scanned"`
 	Outcomes      map[clientscopes.Outcome]int `json:"outcomes"`
 	ReportPath    string                       `json:"report_path,omitempty"`
 }
 
 // parseClientScopesFlags returns flag.ErrHelp, with usage written to helpOut, when -h is passed.
-func parseClientScopesFlags(args []string, getenv func(string) string, helpOut io.Writer) (clientScopesConfig, error) {
+func parseClientScopesFlags(args []string, getenv func(string) string, now time.Time, helpOut io.Writer) (clientScopesConfig, error) {
 	fs := flag.NewFlagSet("client-scopes", flag.ContinueOnError)
 	fs.SetOutput(helpOut)
 	apply := fs.Bool("apply", false, "commit writes (default: dry run)")
+	restore := fs.Bool("restore", false, "put back every scope this backfill cleared that is still unset")
 	environment := fs.String("environment", "", "target environment name")
 	confirmEnvironment := fs.String("confirm-environment", "", "must exactly match -environment for writes")
 	createdBefore := fs.String("created-before", "", "RFC 3339 time #7199 reached the environment; only older clients are considered")
-	reportPath := fs.String("report", "", "per-client JSON report path; -apply requires one and refuses an existing file")
+	reportPath := fs.String("report", "", "per-client JSON report path; refuses an existing file, required with -apply")
 	if err := fs.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return clientScopesConfig{}, fmt.Errorf("parse flags: %w", err)
@@ -60,17 +64,28 @@ func parseClientScopesFlags(args []string, getenv func(string) string, helpOut i
 		return clientScopesConfig{}, errors.New("writes require -confirm-environment to exactly match -environment")
 	}
 	if *apply && *reportPath == "" {
-		return clientScopesConfig{}, errors.New("writes require -report, the record a restore reads")
-	}
-	cutoff, err := time.Parse(time.RFC3339, *createdBefore)
-	if err != nil {
-		return clientScopesConfig{}, errors.New("-created-before must be an RFC 3339 time")
+		return clientScopesConfig{}, errors.New("writes require -report")
 	}
 	cfg := clientScopesConfig{
 		dbURL:       getenv("GRAM_DATABASE_URL"),
 		environment: *environment,
 		reportPath:  *reportPath,
-		options:     clientscopes.Options{CreatedBefore: cutoff, PageSize: 0, Apply: *apply},
+		restore:     *restore,
+		options:     clientscopes.Options{CreatedBefore: time.Time{}, PageSize: 0, Apply: *apply},
+	}
+	if *restore {
+		if *createdBefore != "" {
+			return clientScopesConfig{}, errors.New("-restore takes no -created-before")
+		}
+	} else {
+		cutoff, err := time.Parse(time.RFC3339, *createdBefore)
+		if err != nil {
+			return clientScopesConfig{}, errors.New("-created-before must be an RFC 3339 time")
+		}
+		if cutoff.After(now) {
+			return clientScopesConfig{}, errors.New("-created-before must not be in the future")
+		}
+		cfg.options.CreatedBefore = cutoff
 	}
 	if cfg.dbURL == "" {
 		return cfg, errors.New("missing $GRAM_DATABASE_URL")
@@ -79,7 +94,7 @@ func parseClientScopesFlags(args []string, getenv func(string) string, helpOut i
 }
 
 func runClientScopes(args []string, stdout io.Writer, getenv func(string) string) int {
-	cfg, err := parseClientScopesFlags(args, getenv, stdout)
+	cfg, err := parseClientScopesFlags(args, getenv, time.Now(), stdout)
 	if errors.Is(err, flag.ErrHelp) {
 		return 0
 	}
@@ -87,22 +102,19 @@ func runClientScopes(args []string, stdout io.Writer, getenv func(string) string
 		log.Printf("invalid client-scopes configuration: %v", err)
 		return 2
 	}
-	// Open the report before any apply, so a bad path cannot strand cleared rows without it.
+	// Open the report before any write, so a bad path cannot strand changed rows without it.
 	var reportFile *os.File
 	if cfg.reportPath != "" {
-		flags := os.O_WRONLY | os.O_CREATE | os.O_TRUNC
-		if cfg.options.Apply {
-			flags = os.O_WRONLY | os.O_CREATE | os.O_EXCL
-		}
-		reportFile, err = os.OpenFile(cfg.reportPath, flags, 0o600)
+		// #nosec G304 -- operator-supplied report path
+		reportFile, err = os.OpenFile(cfg.reportPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
 		if err != nil {
 			log.Printf("open client-scopes report: %v", err)
 			return 2
 		}
-		defer func() { _ = reportFile.Close() }()
+		defer o11y.NoLogDefer(reportFile.Close)
 	}
 
-	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	pool, err := pgxpool.New(ctx, cfg.dbURL)
 	if err != nil {
@@ -111,31 +123,56 @@ func runClientScopes(args []string, stdout io.Writer, getenv func(string) string
 	}
 	defer pool.Close()
 
-	report, runErr := clientscopes.NewRunner(pool, cfg.options).Run(ctx)
-	// The report is written even after a failure: it names every client already cleared.
+	runner := clientscopes.NewRunner(pool, cfg.options)
+	phase := "clear"
+	var report clientscopes.Report
+	var runErr error
+	if cfg.restore {
+		phase = "restore"
+		report, runErr = runner.Restore(ctx)
+	} else {
+		report, runErr = runner.Run(ctx)
+	}
+
+	code := 0
+	// Written even after a failure: it names every client already changed.
 	if reportFile != nil {
-		encoder := json.NewEncoder(reportFile)
-		encoder.SetIndent("", "  ")
-		if err := encoder.Encode(report); err != nil {
+		if err := writeClientScopesReport(reportFile, report); err != nil {
 			log.Printf("write client-scopes report: %v", err)
-			return 1
+			code = 1
 		}
 	}
 	summary := clientScopesSummary{
 		Mode:          report.Mode,
+		Phase:         phase,
 		Environment:   cfg.environment,
-		CreatedBefore: cfg.options.CreatedBefore.UTC().Format(time.RFC3339),
+		CreatedBefore: "",
 		Scanned:       report.Scanned,
 		Outcomes:      report.Outcomes,
 		ReportPath:    cfg.reportPath,
 	}
+	if !cfg.restore {
+		summary.CreatedBefore = cfg.options.CreatedBefore.UTC().Format(time.RFC3339)
+	}
 	if err := json.NewEncoder(stdout).Encode(summary); err != nil {
 		log.Printf("write client-scopes summary: %v", err)
-		return 1
+		code = 1
 	}
 	if runErr != nil {
 		log.Printf("client-scopes failed: %v", runErr)
 		return 1
 	}
-	return 0
+	return code
+}
+
+func writeClientScopesReport(f *os.File, report clientscopes.Report) error {
+	encoder := json.NewEncoder(f)
+	encoder.SetIndent("", "  ")
+	if err := encoder.Encode(report); err != nil {
+		return fmt.Errorf("encode report: %w", err)
+	}
+	if err := f.Sync(); err != nil {
+		return fmt.Errorf("sync report: %w", err)
+	}
+	return nil
 }

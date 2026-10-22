@@ -28,7 +28,6 @@ type ClearClientScopeParams struct {
 	ExpectedUpdatedAt pgtype.Timestamptz
 }
 
-// Compare-and-swap on the updated_at read under the lock.
 func (q *Queries) ClearClientScope(ctx context.Context, arg ClearClientScopeParams) (RemoteSessionClient, error) {
 	row := q.db.QueryRow(ctx, clearClientScope, arg.ID, arg.ExpectedUpdatedAt)
 	var i RemoteSessionClient
@@ -78,6 +77,74 @@ func (q *Queries) GetClientScopeFixture(ctx context.Context, id uuid.UUID) ([]st
 	return scope, err
 }
 
+const linkClientFixture = `-- name: LinkClientFixture :exec
+INSERT INTO remote_session_client_user_session_issuers (remote_session_client_id, user_session_issuer_id)
+VALUES ($1, $2)
+`
+
+type LinkClientFixtureParams struct {
+	ClientID            uuid.UUID
+	UserSessionIssuerID uuid.UUID
+}
+
+func (q *Queries) LinkClientFixture(ctx context.Context, arg LinkClientFixtureParams) error {
+	_, err := q.db.Exec(ctx, linkClientFixture, arg.ClientID, arg.UserSessionIssuerID)
+	return err
+}
+
+const listBackfillClears = `-- name: ListBackfillClears :many
+SELECT
+  l.organization_id,
+  l.project_id,
+  l.subject_id::uuid AS client_id,
+  ARRAY(
+    SELECT s.value
+    FROM jsonb_array_elements_text(l.before_snapshot->'Scope') WITH ORDINALITY AS s(value, n)
+    ORDER BY s.n
+  )::text[] AS scope
+FROM audit_logs AS l
+WHERE l.actor_type = 'system'
+  AND l.actor_id = $1
+  AND l.action = 'remote-session-client:update'
+  AND l.subject_type = 'remote_session_client'
+  AND jsonb_typeof(l.before_snapshot->'Scope') = 'array'
+  AND jsonb_typeof(l.after_snapshot->'Scope') IS DISTINCT FROM 'array'
+ORDER BY l.seq ASC
+`
+
+type ListBackfillClearsRow struct {
+	OrganizationID string
+	ProjectID      uuid.NullUUID
+	ClientID       uuid.UUID
+	Scope          []string
+}
+
+// Every clear this backfill audited, with the scope it cleared in its original order.
+func (q *Queries) ListBackfillClears(ctx context.Context, actorID string) ([]ListBackfillClearsRow, error) {
+	rows, err := q.db.Query(ctx, listBackfillClears, actorID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListBackfillClearsRow
+	for rows.Next() {
+		var i ListBackfillClearsRow
+		if err := rows.Scan(
+			&i.OrganizationID,
+			&i.ProjectID,
+			&i.ClientID,
+			&i.Scope,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listClientAuditActionsFixture = `-- name: ListClientAuditActionsFixture :many
 SELECT action, actor_type, actor_id, before_snapshot, after_snapshot
 FROM audit_logs
@@ -119,33 +186,82 @@ func (q *Queries) ListClientAuditActionsFixture(ctx context.Context, subjectID s
 	return items, nil
 }
 
+const listClientLoginServers = `-- name: ListClientLoginServers :many
+SELECT
+  link.user_session_issuer_id,
+  m.project_id,
+  COALESCE(rms.url, '')::text AS url
+FROM remote_session_client_user_session_issuers AS link
+JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id AND usi.deleted IS FALSE
+JOIN mcp_servers AS m ON m.user_session_issuer_id = usi.id AND m.deleted IS FALSE
+JOIN projects AS mp ON mp.id = m.project_id AND mp.deleted IS FALSE
+LEFT JOIN remote_mcp_servers AS rms ON rms.id = m.remote_mcp_server_id AND rms.project_id = m.project_id AND rms.deleted IS FALSE
+WHERE link.remote_session_client_id = $1
+  AND mp.organization_id = $2
+  AND ($3::uuid IS NULL OR m.project_id = $3::uuid)
+ORDER BY m.id ASC
+`
+
+type ListClientLoginServersParams struct {
+	ClientID       uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.NullUUID
+}
+
+type ListClientLoginServersRow struct {
+	UserSessionIssuerID uuid.UUID
+	ProjectID           uuid.UUID
+	Url                 string
+}
+
+// The servers that sign in through the client's user session issuers, in its tenant; url is empty when not remote-backed.
+func (q *Queries) ListClientLoginServers(ctx context.Context, arg ListClientLoginServersParams) ([]ListClientLoginServersRow, error) {
+	rows, err := q.db.Query(ctx, listClientLoginServers, arg.ClientID, arg.OrganizationID, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListClientLoginServersRow
+	for rows.Next() {
+		var i ListClientLoginServersRow
+		if err := rows.Scan(&i.UserSessionIssuerID, &i.ProjectID, &i.Url); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listClientScopeCandidates = `-- name: ListClientScopeCandidates :many
 SELECT
   c.id,
   c.project_id,
+  c.organization_id AS client_organization_id,
   COALESCE(c.organization_id, p.organization_id, '')::text AS organization_id,
   c.client_id,
   c.scope,
-  c.updated_at,
+  i.scopes_supported AS issuer_scopes_supported,
+  i.scope_override AS issuer_scope_override,
+  COALESCE(i.omit_scope_fallback, FALSE)::boolean AS issuer_omit_scope_fallback,
   (c.identity_provider_connection_id IS NOT NULL)::boolean AS managed,
   (c.credential_owner <> 'subject' OR c.legacy_callback_url)::boolean AS excluded_kind,
-  COALESCE(
-    (SELECT array_agg(DISTINCT s ORDER BY s) FROM unnest(c.scope) AS s)
-      = (SELECT array_agg(DISTINCT s ORDER BY s) FROM unnest(i.scopes_supported) AS s),
-    FALSE
-  )::boolean AS matches_issuer,
+  EXISTS (
+    SELECT 1 FROM user_session_issuers AS usi
+    WHERE usi.trusted_remote_session_client_id = c.id AND usi.deleted IS FALSE
+  )::boolean AS trusted_sign_in,
+  EXISTS (
+    SELECT 1 FROM remote_session_ema_bindings AS b
+    WHERE b.remote_session_client_id = c.id
+  )::boolean AS identity_chaining,
   EXISTS (
     SELECT 1
     FROM remote_session_client_user_session_issuers AS link
-    JOIN mcp_servers AS m ON m.user_session_issuer_id = link.user_session_issuer_id AND m.deleted IS FALSE
-    JOIN projects AS mp ON mp.id = m.project_id
-    JOIN remote_mcp_servers AS rms ON rms.id = m.remote_mcp_server_id AND rms.project_id = m.project_id AND rms.deleted IS FALSE
-    JOIN remote_protected_resources AS r ON r.project_id = m.project_id AND r.organization_id = mp.organization_id AND r.resource_identifier = rms.url AND r.deleted IS FALSE
+    JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id AND usi.deleted IS FALSE
     WHERE link.remote_session_client_id = c.id
-      AND (m.project_id = c.project_id OR (c.project_id IS NULL AND mp.organization_id = c.organization_id))
-      AND (SELECT array_agg(DISTINCT s ORDER BY s) FROM unnest(c.scope) AS s)
-        = (SELECT array_agg(DISTINCT s ORDER BY s) FROM unnest(r.scopes_supported) AS s)
-  )::boolean AS matches_resource,
+  )::boolean AS linked,
   EXISTS (
     SELECT 1
     FROM audit_logs AS l
@@ -160,9 +276,10 @@ SELECT
       )
   )::boolean AS scope_edited
 FROM remote_session_clients AS c
-JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id
+JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id AND i.deleted IS FALSE
 LEFT JOIN projects AS p ON p.id = c.project_id
 WHERE c.deleted IS FALSE
+  AND p.deleted IS NOT TRUE
   AND cardinality(c.scope) > 0
   AND c.created_at < $1
   AND c.id > $2
@@ -179,24 +296,24 @@ type ListClientScopeCandidatesParams struct {
 }
 
 type ListClientScopeCandidatesRow struct {
-	ID              uuid.UUID
-	ProjectID       uuid.NullUUID
-	OrganizationID  string
-	ClientID        string
-	Scope           []string
-	UpdatedAt       pgtype.Timestamptz
-	Managed         bool
-	ExcludedKind    bool
-	MatchesIssuer   bool
-	MatchesResource bool
-	ScopeEdited     bool
+	ID                      uuid.UUID
+	ProjectID               uuid.NullUUID
+	ClientOrganizationID    pgtype.Text
+	OrganizationID          string
+	ClientID                string
+	Scope                   []string
+	IssuerScopesSupported   []string
+	IssuerScopeOverride     []string
+	IssuerOmitScopeFallback bool
+	Managed                 bool
+	ExcludedKind            bool
+	TrustedSignIn           bool
+	IdentityChaining        bool
+	Linked                  bool
+	ScopeEdited             bool
 }
 
-// Live clients created before the cutoff that still store a scope, with the
-// evidence the runner needs to decide whether the scope is a copy taken at
-// creation: equal as a set to the issuer's or a bound server's resource
-// scopes_supported, and never changed by an audited edit. An update entry
-// without both snapshots counts as an edit, since it cannot prove otherwise.
+// Live clients created before the cutoff that store a scope; an update audit missing a snapshot counts as a scope edit.
 func (q *Queries) ListClientScopeCandidates(ctx context.Context, arg ListClientScopeCandidatesParams) ([]ListClientScopeCandidatesRow, error) {
 	rows, err := q.db.Query(ctx, listClientScopeCandidates,
 		arg.CreatedBefore,
@@ -214,14 +331,18 @@ func (q *Queries) ListClientScopeCandidates(ctx context.Context, arg ListClientS
 		if err := rows.Scan(
 			&i.ID,
 			&i.ProjectID,
+			&i.ClientOrganizationID,
 			&i.OrganizationID,
 			&i.ClientID,
 			&i.Scope,
-			&i.UpdatedAt,
+			&i.IssuerScopesSupported,
+			&i.IssuerScopeOverride,
+			&i.IssuerOmitScopeFallback,
 			&i.Managed,
 			&i.ExcludedKind,
-			&i.MatchesIssuer,
-			&i.MatchesResource,
+			&i.TrustedSignIn,
+			&i.IdentityChaining,
+			&i.Linked,
 			&i.ScopeEdited,
 		); err != nil {
 			return nil, err
@@ -234,43 +355,24 @@ func (q *Queries) ListClientScopeCandidates(ctx context.Context, arg ListClientS
 	return items, nil
 }
 
-const listUserSessionIssuerIDsForClient = `-- name: ListUserSessionIssuerIDsForClient :many
-SELECT link.user_session_issuer_id
-FROM remote_session_client_user_session_issuers AS link
-WHERE link.remote_session_client_id = $1
-ORDER BY link.user_session_issuer_id
-`
-
-func (q *Queries) ListUserSessionIssuerIDsForClient(ctx context.Context, remoteSessionClientID uuid.UUID) ([]uuid.UUID, error) {
-	rows, err := q.db.Query(ctx, listUserSessionIssuerIDsForClient, remoteSessionClientID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []uuid.UUID
-	for rows.Next() {
-		var user_session_issuer_id uuid.UUID
-		if err := rows.Scan(&user_session_issuer_id); err != nil {
-			return nil, err
-		}
-		items = append(items, user_session_issuer_id)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const lockClientForScopeClear = `-- name: LockClientForScopeClear :one
+const lockClientForScopeWrite = `-- name: LockClientForScopeWrite :one
 SELECT id, project_id, organization_id, attachment_scope, remote_session_issuer_id, client_id, client_secret_encrypted, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, json_web_key_set_id, scope, grant_types, audience, token_endpoint_auth_audience_format, client_id_metadata_uri, legacy_callback_url, callback_base_url, resource_identifier, resource_name, resource_documentation, resource_policy_uri, resource_tos_uri, upstream_rejected_at, identity_provider_connection_id, credential_owner, created_at, updated_at, deleted_at, deleted
 FROM remote_session_clients
 WHERE id = $1
+  AND project_id IS NOT DISTINCT FROM $2::uuid
+  AND (organization_id IS NULL OR organization_id = $3::text)
   AND deleted IS FALSE
 FOR UPDATE
 `
 
-func (q *Queries) LockClientForScopeClear(ctx context.Context, id uuid.UUID) (RemoteSessionClient, error) {
-	row := q.db.QueryRow(ctx, lockClientForScopeClear, id)
+type LockClientForScopeWriteParams struct {
+	ID             uuid.UUID
+	ProjectID      uuid.NullUUID
+	OrganizationID string
+}
+
+func (q *Queries) LockClientForScopeWrite(ctx context.Context, arg LockClientForScopeWriteParams) (RemoteSessionClient, error) {
+	row := q.db.QueryRow(ctx, lockClientForScopeWrite, arg.ID, arg.ProjectID, arg.OrganizationID)
 	var i RemoteSessionClient
 	err := row.Scan(
 		&i.ID,
@@ -307,50 +409,65 @@ func (q *Queries) LockClientForScopeClear(ctx context.Context, id uuid.UUID) (Re
 	return i, err
 }
 
-const seedBoundResourceFixture = `-- name: SeedBoundResourceFixture :exec
-WITH usi AS (
-  INSERT INTO user_session_issuers (project_id, slug, authn_challenge_mode, session_duration)
-  VALUES ($1, $5, 'interactive', interval '1 hour')
-  RETURNING id
-), link AS (
-  INSERT INTO remote_session_client_user_session_issuers (remote_session_client_id, user_session_issuer_id)
-  SELECT $6, usi.id FROM usi
-), rms AS (
-  INSERT INTO remote_mcp_servers (project_id, transport_type, url)
-  VALUES ($1, 'streamable-http', $3)
-  RETURNING id
-), srv AS (
-  INSERT INTO mcp_servers (project_id, user_session_issuer_id, remote_mcp_server_id, visibility)
-  SELECT $1, usi.id, rms.id, 'private' FROM usi, rms
-)
-INSERT INTO remote_protected_resources (project_id, organization_id, resource_identifier, scopes_supported)
-VALUES ($1, $2, $3, $4)
+const restoreClientScope = `-- name: RestoreClientScope :one
+UPDATE remote_session_clients
+SET scope = $1::text[],
+    updated_at = clock_timestamp()
+WHERE id = $2
+  AND updated_at = $3
+  AND scope IS NULL
+  AND deleted IS FALSE
+  AND identity_provider_connection_id IS NULL
+RETURNING id, project_id, organization_id, attachment_scope, remote_session_issuer_id, client_id, client_secret_encrypted, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, json_web_key_set_id, scope, grant_types, audience, token_endpoint_auth_audience_format, client_id_metadata_uri, legacy_callback_url, callback_base_url, resource_identifier, resource_name, resource_documentation, resource_policy_uri, resource_tos_uri, upstream_rejected_at, identity_provider_connection_id, credential_owner, created_at, updated_at, deleted_at, deleted
 `
 
-type SeedBoundResourceFixtureParams struct {
-	ProjectID       uuid.UUID
-	OrganizationID  string
-	Url             string
-	ScopesSupported []string
-	Slug            string
-	ClientID        uuid.UUID
+type RestoreClientScopeParams struct {
+	Scope             []string
+	ID                uuid.UUID
+	ExpectedUpdatedAt pgtype.Timestamptz
 }
 
-func (q *Queries) SeedBoundResourceFixture(ctx context.Context, arg SeedBoundResourceFixtureParams) error {
-	_, err := q.db.Exec(ctx, seedBoundResourceFixture,
-		arg.ProjectID,
-		arg.OrganizationID,
-		arg.Url,
-		arg.ScopesSupported,
-		arg.Slug,
-		arg.ClientID,
+func (q *Queries) RestoreClientScope(ctx context.Context, arg RestoreClientScopeParams) (RemoteSessionClient, error) {
+	row := q.db.QueryRow(ctx, restoreClientScope, arg.Scope, arg.ID, arg.ExpectedUpdatedAt)
+	var i RemoteSessionClient
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.OrganizationID,
+		&i.AttachmentScope,
+		&i.RemoteSessionIssuerID,
+		&i.ClientID,
+		&i.ClientSecretEncrypted,
+		&i.ClientIDIssuedAt,
+		&i.ClientSecretExpiresAt,
+		&i.TokenEndpointAuthMethod,
+		&i.JsonWebKeySetID,
+		&i.Scope,
+		&i.GrantTypes,
+		&i.Audience,
+		&i.TokenEndpointAuthAudienceFormat,
+		&i.ClientIDMetadataUri,
+		&i.LegacyCallbackUrl,
+		&i.CallbackBaseUrl,
+		&i.ResourceIdentifier,
+		&i.ResourceName,
+		&i.ResourceDocumentation,
+		&i.ResourcePolicyUri,
+		&i.ResourceTosUri,
+		&i.UpstreamRejectedAt,
+		&i.IdentityProviderConnectionID,
+		&i.CredentialOwner,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
 	)
-	return err
+	return i, err
 }
 
 const seedClientFixture = `-- name: SeedClientFixture :one
-INSERT INTO remote_session_clients (project_id, organization_id, remote_session_issuer_id, client_id, scope, created_at, updated_at)
-VALUES ($1, $2, $3, $4, $5::text[], $6, $6)
+INSERT INTO remote_session_clients (project_id, organization_id, remote_session_issuer_id, client_id, scope, legacy_callback_url, created_at, updated_at)
+VALUES ($1::uuid, $2, $3, $4, $5::text[], $6, $7, $7)
 RETURNING id
 `
 
@@ -360,6 +477,7 @@ type SeedClientFixtureParams struct {
 	RemoteSessionIssuerID uuid.UUID
 	ClientID              string
 	Scope                 []string
+	LegacyCallbackUrl     bool
 	CreatedAt             pgtype.Timestamptz
 }
 
@@ -370,6 +488,7 @@ func (q *Queries) SeedClientFixture(ctx context.Context, arg SeedClientFixturePa
 		arg.RemoteSessionIssuerID,
 		arg.ClientID,
 		arg.Scope,
+		arg.LegacyCallbackUrl,
 		arg.CreatedAt,
 	)
 	var id uuid.UUID
@@ -452,4 +571,91 @@ func (q *Queries) SeedProjectFixture(ctx context.Context, arg SeedProjectFixture
 	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err
+}
+
+const seedServerResourceFixture = `-- name: SeedServerResourceFixture :exec
+WITH rms AS (
+  INSERT INTO remote_mcp_servers (project_id, transport_type, url)
+  VALUES ($1, 'streamable-http', $3)
+  RETURNING id
+), srv AS (
+  INSERT INTO mcp_servers (project_id, user_session_issuer_id, remote_mcp_server_id, visibility)
+  SELECT $1, $5, rms.id, 'private' FROM rms
+)
+INSERT INTO remote_protected_resources (project_id, organization_id, resource_identifier, scopes_supported)
+VALUES ($1, $2, $3, $4)
+`
+
+type SeedServerResourceFixtureParams struct {
+	ProjectID           uuid.UUID
+	OrganizationID      string
+	Url                 string
+	ScopesSupported     []string
+	UserSessionIssuerID uuid.NullUUID
+}
+
+func (q *Queries) SeedServerResourceFixture(ctx context.Context, arg SeedServerResourceFixtureParams) error {
+	_, err := q.db.Exec(ctx, seedServerResourceFixture,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.Url,
+		arg.ScopesSupported,
+		arg.UserSessionIssuerID,
+	)
+	return err
+}
+
+const seedUserSessionIssuerFixture = `-- name: SeedUserSessionIssuerFixture :one
+INSERT INTO user_session_issuers (project_id, slug, authn_challenge_mode, session_duration)
+VALUES ($1, $2, 'interactive', interval '1 hour')
+RETURNING id
+`
+
+type SeedUserSessionIssuerFixtureParams struct {
+	ProjectID uuid.NullUUID
+	Slug      string
+}
+
+func (q *Queries) SeedUserSessionIssuerFixture(ctx context.Context, arg SeedUserSessionIssuerFixtureParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, seedUserSessionIssuerFixture, arg.ProjectID, arg.Slug)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const setResourcePinFixture = `-- name: SetResourcePinFixture :exec
+UPDATE remote_protected_resources SET scope_override = $1 WHERE project_id = $2
+`
+
+type SetResourcePinFixtureParams struct {
+	ScopeOverride []string
+	ProjectID     uuid.UUID
+}
+
+func (q *Queries) SetResourcePinFixture(ctx context.Context, arg SetResourcePinFixtureParams) error {
+	_, err := q.db.Exec(ctx, setResourcePinFixture, arg.ScopeOverride, arg.ProjectID)
+	return err
+}
+
+const softDeleteClientFixture = `-- name: SoftDeleteClientFixture :exec
+UPDATE remote_session_clients SET deleted_at = clock_timestamp() WHERE id = $1
+`
+
+func (q *Queries) SoftDeleteClientFixture(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, softDeleteClientFixture, id)
+	return err
+}
+
+const trustClientFixture = `-- name: TrustClientFixture :exec
+UPDATE user_session_issuers SET trusted_remote_session_client_id = $1 WHERE id = $2
+`
+
+type TrustClientFixtureParams struct {
+	ClientID uuid.NullUUID
+	ID       uuid.UUID
+}
+
+func (q *Queries) TrustClientFixture(ctx context.Context, arg TrustClientFixtureParams) error {
+	_, err := q.db.Exec(ctx, trustClientFixture, arg.ClientID, arg.ID)
+	return err
 }

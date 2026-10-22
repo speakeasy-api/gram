@@ -231,11 +231,25 @@ func (s *RefreshService) FallbackResourceForClient(ctx context.Context, clientID
 // same endpoint; see claimableUpstream. Siblings are only consulted when the
 // client's own attachments leave the claim open.
 func (s *RefreshService) ResourceForClientAtUpstream(ctx context.Context, organizationID string, clientID uuid.UUID, siblingIDs []uuid.UUID, upstream string) (string, error) {
-	attachments, err := attachmentsForClients(ctx, s.db, organizationID, append([]uuid.UUID{clientID}, siblingIDs...))
+	return ResourceForClientAtUpstream(ctx, s.db, organizationID, clientID, siblingIDs, upstream)
+}
+
+// ResourceForClientAtUpstream is RefreshService.ResourceForClientAtUpstream over db.
+func ResourceForClientAtUpstream(ctx context.Context, db remotesessions_repo.DBTX, organizationID string, clientID uuid.UUID, siblingIDs []uuid.UUID, upstream string) (string, error) {
+	attachments, err := attachmentsForClients(ctx, db, organizationID, append([]uuid.UUID{clientID}, siblingIDs...))
 	if err != nil {
 		return "", err
 	}
 	return resourceAmongSiblings(attachments, clientID, upstream), nil
+}
+
+// ResourceAppliesAtUpstream reports whether a login for clientID at upstream reads upstream's protected resource row.
+func ResourceAppliesAtUpstream(ctx context.Context, db remotesessions_repo.DBTX, organizationID string, clientID uuid.UUID, siblingIDs []uuid.UUID, upstream string) (bool, error) {
+	resource, err := ResourceForClientAtUpstream(ctx, db, organizationID, clientID, siblingIDs, upstream)
+	if err != nil {
+		return false, err
+	}
+	return resource != "" && sameUpstream(resource, upstream), nil
 }
 
 // ResourcesForClientsAtUpstream is ResourceForClientAtUpstream for every
