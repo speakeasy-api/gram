@@ -173,10 +173,11 @@ export default function MCPServerDetails(): JSX.Element | null {
   }
   const renderTabContent = () => {
     // Hosted tabs and settings need the toolset; never fall back to another layout.
+    // Overview needs the loaded toolset only when the read's summary is missing.
     const needsToolset =
-      activeTab !== "overview" &&
-      activeTab !== "sessions" &&
-      activeTab !== "guardrails";
+      activeTab === "overview"
+        ? !mcpServer.toolset
+        : activeTab !== "sessions" && activeTab !== "guardrails";
     if (hosted && needsToolset && !hostedToolset) {
       if (isLoadingToolset) return null;
       return (

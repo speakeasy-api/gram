@@ -53,8 +53,11 @@ export function useHostedVisibilityGuard({
     {
       enabled,
       retry: (failureCount, err) =>
-        !(err instanceof GramError && err.statusCode === 404) &&
-        failureCount < 3,
+        !(
+          err instanceof GramError &&
+          err.statusCode >= 400 &&
+          err.statusCode < 500
+        ) && failureCount < 3,
       throwOnError: false,
     },
   );
