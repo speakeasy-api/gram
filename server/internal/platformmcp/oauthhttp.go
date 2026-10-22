@@ -699,7 +699,7 @@ func (s *OAuthHTTP) TokenHandler() http.Handler {
 		resource := s.resource(r.Context())
 		client, err := s.authenticateClient(r.Context(), clientID, clientSecret, now)
 		if err != nil {
-			writeClientAuthenticationError(w, r, oautherr.CodeInvalidClient)
+			s.writeClientAuthenticationFailure(w, r, err)
 			return
 		}
 		switch r.PostForm.Get("grant_type") {
@@ -772,22 +772,30 @@ func (s *OAuthHTTP) RevokeHandler() http.Handler {
 			writeClientAuthenticationError(w, r, code)
 			return
 		}
-		client, err := s.authenticateClient(r.Context(), clientID, secret, s.now())
+		now := s.now()
+		client, err := s.authenticateClient(r.Context(), clientID, secret, now)
 		if err != nil {
-			writeClientAuthenticationError(w, r, oautherr.CodeInvalidClient)
+			s.writeClientAuthenticationFailure(w, r, err)
 			return
 		}
 		token := r.PostForm.Get(oauthwire.ParamToken)
+		var revokeErr error
 		switch r.PostForm.Get(oauthwire.ParamTokenTypeHint) {
 		case "access_token":
-			s.revokeAccessToken(r.Context(), token, client.ID)
+			revokeErr = s.revokeAccessToken(r.Context(), token, client.ID, now)
 		default:
 			if organizationID, decodeErr := s.credentials.OrganizationID(refreshTokenCredential, token); decodeErr == nil {
-				if _, err := s.store.RevokeSession(r.Context(), organizationID, opaqueHash(token), client.ID, time.Now()); err == nil {
+				_, revokeErr = s.store.RevokeSession(r.Context(), organizationID, opaqueHash(token), client.ID, now)
+				if !errors.Is(revokeErr, platformoauth.ErrNotFound) {
 					break
 				}
 			}
-			s.revokeAccessToken(r.Context(), token, client.ID)
+			revokeErr = s.revokeAccessToken(r.Context(), token, client.ID, now)
+		}
+		if revokeErr != nil && !errors.Is(revokeErr, platformoauth.ErrNotFound) {
+			s.logger.ErrorContext(r.Context(), "revoke OAuth token", attr.SlogError(revokeErr))
+			writeOAuthError(w, http.StatusServiceUnavailable, oautherr.CodeTemporarilyUnavailable, "token revocation is temporarily unavailable")
+			return
 		}
 		w.Header().Set("Cache-Control", "no-store")
 		w.Header().Set("Pragma", "no-cache")
@@ -795,16 +803,19 @@ func (s *OAuthHTTP) RevokeHandler() http.Handler {
 	})
 }
 
-func (s *OAuthHTTP) revokeAccessToken(ctx context.Context, token, clientID string) {
+func (s *OAuthHTTP) revokeAccessToken(ctx context.Context, token, clientID string, now time.Time) error {
 	jti, err := s.signer.VerifiedJTI(token)
 	if err != nil {
-		return
+		return nil
 	}
 	organizationID, err := s.credentials.OrganizationID(accessJTICredential, jti)
 	if err != nil {
-		return
+		return nil
 	}
-	_, _ = s.store.RevokeAccessSession(ctx, organizationID, jti, clientID, time.Now())
+	if _, err := s.store.RevokeAccessSession(ctx, organizationID, jti, clientID, now); err != nil {
+		return fmt.Errorf("revoke access token session: %w", err)
+	}
+	return nil
 }
 
 func (s *OAuthHTTP) mintAndExchangeGrant(w http.ResponseWriter, r *http.Request, input platformoauth.ConsumeGrantInput, grant platformoauth.Grant, clientID, resource string, now time.Time) {
@@ -1130,6 +1141,15 @@ func (s *OAuthHTTP) writeClientResolutionError(w http.ResponseWriter, ctx contex
 		return
 	}
 	writeOAuthError(w, http.StatusBadRequest, oautherr.CodeInvalidClient, "unknown client_id")
+}
+
+func (s *OAuthHTTP) writeClientAuthenticationFailure(w http.ResponseWriter, r *http.Request, err error) {
+	if errors.Is(err, platformoauth.ErrNotFound) || errors.Is(err, platformoauth.ErrExpired) || errors.Is(err, platformoauth.ErrRevoked) || errors.Is(err, platformoauth.ErrClientMismatch) {
+		writeClientAuthenticationError(w, r, oautherr.CodeInvalidClient)
+		return
+	}
+	s.logger.ErrorContext(r.Context(), "authenticate OAuth client", attr.SlogError(err))
+	writeOAuthError(w, http.StatusServiceUnavailable, oautherr.CodeTemporarilyUnavailable, "client lookup is temporarily unavailable")
 }
 
 func writeClientAuthenticationError(w http.ResponseWriter, r *http.Request, code string) {

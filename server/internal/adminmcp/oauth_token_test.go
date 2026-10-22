@@ -385,6 +385,8 @@ func TestStaffOAuthRejectsMultipleValidCredentials(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			tokens, store, _ := staffTokensFixture(t)
+			clients, ok := tokens.clients.(*recordingStaffClientStore)
+			require.True(t, ok)
 			request := staffTokenRequest("authorization_code", tc.fields)
 			if tc.repeatedHeader {
 				request.Header.Add("Authorization", request.Header.Get("Authorization"))
@@ -394,6 +396,7 @@ func TestStaffOAuthRejectsMultipleValidCredentials(t *testing.T) {
 			require.Equal(t, http.StatusBadRequest, response.Code, response.Body.String())
 			require.Contains(t, response.Body.String(), `"error":"invalid_request"`)
 			require.Empty(t, response.Header().Get("WWW-Authenticate"))
+			require.Zero(t, clients.lookups)
 			require.Zero(t, store.validate)
 			require.Zero(t, store.exchange)
 		})

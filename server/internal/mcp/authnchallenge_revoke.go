@@ -82,6 +82,7 @@ func (s *Service) serveRevoke(w http.ResponseWriter, r *http.Request, logger *sl
 	}
 
 	if code := oauthwire.ClientAuthenticationError(r); code != "" {
+		logOAuthClientCredentialEvent(ctx, logger, r, "oauth revoke client authentication rejected", "", "", "", code)
 		if code == oautherr.CodeInvalidClient {
 			return writeInvalidClientError(ctx, w, r, logger, clientAuthFailureDescription)
 		}

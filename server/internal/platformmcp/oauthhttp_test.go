@@ -786,3 +786,126 @@ func TestOAuthHTTPUnsupportedAuthenticationCannotFallBackToPublicClient(t *testi
 		}
 	}
 }
+
+func TestOAuthHTTPClientAuthenticationLookupErrors(t *testing.T) {
+	t.Parallel()
+	for _, endpoint := range []string{"token", "revoke"} {
+		for _, basic := range []bool{false, true} {
+			for _, tc := range []struct {
+				name   string
+				err    error
+				status int
+				code   string
+			}{
+				{name: "unknown", err: platformoauth.ErrNotFound, status: http.StatusBadRequest, code: "invalid_client"},
+				{name: "expired", err: platformoauth.ErrExpired, status: http.StatusBadRequest, code: "invalid_client"},
+				{name: "revoked", err: platformoauth.ErrRevoked, status: http.StatusBadRequest, code: "invalid_client"},
+				{name: "mismatch", err: platformoauth.ErrClientMismatch, status: http.StatusBadRequest, code: "invalid_client"},
+				{name: "outage", err: errors.New("database unavailable"), status: http.StatusServiceUnavailable, code: "temporarily_unavailable"},
+			} {
+				t.Run(fmt.Sprintf("%s/basic=%t/%s", endpoint, basic, tc.name), func(t *testing.T) {
+					t.Parallel()
+					service := newTestOAuthHTTP(t)
+					service.store = clientLookupErrorStore{Store: service.store, err: tc.err}
+					request := httptest.NewRequest(http.MethodPost, "/platform-mcp/"+endpoint, strings.NewReader("grant_type=refresh_token&refresh_token=unknown&token=unknown&client_id=test-client"))
+					request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+					status := tc.status
+					challenge := ""
+					if basic {
+						request.SetBasicAuth("test-client", "test-secret")
+						if tc.code == "invalid_client" {
+							status = http.StatusUnauthorized
+							challenge = `Basic realm="Speakeasy"`
+						}
+					}
+					handler := service.TokenHandler()
+					if endpoint == "revoke" {
+						handler = service.RevokeHandler()
+					}
+					response := httptest.NewRecorder()
+					handler.ServeHTTP(response, request)
+					require.Equal(t, status, response.Code, response.Body.String())
+					require.Contains(t, response.Body.String(), `"error":"`+tc.code+`"`)
+					require.Equal(t, challenge, response.Header().Get("WWW-Authenticate"))
+					require.Equal(t, "no-store", response.Header().Get("Cache-Control"))
+					require.NotContains(t, response.Body.String(), "database unavailable")
+				})
+			}
+		}
+	}
+}
+
+type revocationErrorStore struct {
+	platformoauth.Store
+	err          error
+	refreshCalls int
+	accessCalls  int
+}
+
+func (s *revocationErrorStore) RevokeSession(context.Context, string, string, string, time.Time) (platformoauth.Session, error) {
+	s.refreshCalls++
+	return platformoauth.Session{}, s.err
+}
+
+func (s *revocationErrorStore) RevokeAccessSession(context.Context, string, string, string, time.Time) (platformoauth.Session, error) {
+	s.accessCalls++
+	return platformoauth.Session{}, s.err
+}
+
+func TestOAuthHTTPRevocationStorageErrors(t *testing.T) {
+	t.Parallel()
+	for _, kind := range []string{"refresh_token", "access_token", "access_without_hint"} {
+		for _, tc := range []struct {
+			name   string
+			err    error
+			status int
+		}{
+			{name: "success", status: http.StatusOK},
+			{name: "unknown", err: platformoauth.ErrNotFound, status: http.StatusOK},
+			{name: "outage", err: errors.New("database unavailable"), status: http.StatusServiceUnavailable},
+		} {
+			t.Run(kind+"/"+tc.name, func(t *testing.T) {
+				t.Parallel()
+				service := newTestOAuthHTTP(t)
+				require.NoError(t, testStore(t, service).RegisterClient(t.Context(), platformoauth.Client{ID: "test-client"}))
+				store := &revocationErrorStore{Store: service.store, err: tc.err}
+				service.store = store
+				var token string
+				var err error
+				if kind == "refresh_token" {
+					token, err = service.credentials.Issue(refreshTokenCredential, "org-1", "")
+					require.NoError(t, err)
+				} else {
+					jti, err := service.credentials.Issue(accessJTICredential, "org-1", "")
+					require.NoError(t, err)
+					token, _, err = service.signer.Mint(sessiontokens.MintParams{Subject: urn.SessionSubject{Kind: urn.SessionSubjectKindUser, ID: "user-1"}, Audience: platformResource(service.baseURL), Issuer: platformResource(service.baseURL), Lifetime: time.Hour, ClientID: "test-client", JTI: jti})
+					require.NoError(t, err)
+				}
+				form := url.Values{"token": {token}, "client_id": {"test-client"}}
+				if kind != "access_without_hint" {
+					form.Set("token_type_hint", kind)
+				}
+				request := httptest.NewRequest(http.MethodPost, "/platform-mcp/revoke", strings.NewReader(form.Encode()))
+				request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+				response := httptest.NewRecorder()
+				service.RevokeHandler().ServeHTTP(response, request)
+				require.Equal(t, tc.status, response.Code, response.Body.String())
+				require.Empty(t, response.Header().Get("WWW-Authenticate"))
+				require.Equal(t, "no-store", response.Header().Get("Cache-Control"))
+				require.NotContains(t, response.Body.String(), "database unavailable")
+				if tc.status == http.StatusServiceUnavailable {
+					require.Contains(t, response.Body.String(), `"error":"temporarily_unavailable"`)
+				} else {
+					require.Empty(t, response.Body.String())
+				}
+				if kind == "refresh_token" {
+					require.Equal(t, 1, store.refreshCalls)
+					require.Zero(t, store.accessCalls)
+				} else {
+					require.Equal(t, 1, store.accessCalls)
+					require.Zero(t, store.refreshCalls)
+				}
+			})
+		}
+	}
+}

@@ -125,9 +125,10 @@ type staffPresentedClient struct {
 // staffClientCredentials accepts exactly one presentation: HTTP Basic for
 // confidential clients, or a single form client_id with no secret and no
 // Authorization header for public clients. A form client_secret, a Basic
-// header mixed with a form client_id, a client assertion, or any other header is
-// refused. The returned OAuth error code distinguishes duplicate or mixed
-// credentials from a failed authentication method; an empty code means success.
+// header mixed with a form client_id, a client assertion, or any other
+// Authorization header is refused. The returned OAuth error code distinguishes
+// duplicate or mixed credentials from a failed authentication method; an empty
+// code means success.
 func staffClientCredentials(r *http.Request) (staffPresentedClient, string) {
 	authorization := r.Header.Values("Authorization")
 	ids := r.PostForm[oauthwire.ParamClientID]

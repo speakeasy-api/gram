@@ -315,6 +315,11 @@ func (s *Service) HandleSharedToken(w http.ResponseWriter, r *http.Request) erro
 		return writeTokenError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeInvalidRequest, "failed to parse form")
 	}
 
+	if code := oauthwire.ClientAuthenticationError(r); code == oautherr.CodeInvalidRequest {
+		logOAuthClientCredentialEvent(ctx, logger, r, "oauth token request rejected", "", "", r.PostForm.Get(oauthwire.ParamGrantType), code)
+		return writeTokenError(ctx, w, logger, http.StatusBadRequest, code, "invalid client authentication request")
+	}
+
 	var endpoint *ResolvedMcpEndpoint
 	grantType := r.PostForm.Get(oauthwire.ParamGrantType)
 	switch grantType {

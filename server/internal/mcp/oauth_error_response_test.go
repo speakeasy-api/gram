@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 	goahttp "goa.design/goa/v3/http"
@@ -22,11 +23,12 @@ import (
 func TestOAuthInvalidClientPerServer(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestMCPService(t)
-	toolset, _, _ := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	toolset, issuer, _ := seedPrivateToolsetWithIssuer(t, ctx, ti)
 	router := goahttp.NewMuxer()
 	mcp.Attach(router, ti.service.Service, nil)
 	base := ti.serverURL.String() + "/mcp/" + toolset.McpSlug.String
 	requireOAuthClientErrorResponses(t, router, base, base)
+	requireOAuthMixedCredentialResponses(t, ti, issuer.ID, router, base, base)
 }
 
 func TestOAuthInvalidClientPerServerAuthenticationHost(t *testing.T) {
@@ -37,6 +39,7 @@ func TestOAuthInvalidClientPerServerAuthenticationHost(t *testing.T) {
 	harness := newAuthenticationHostHarness(t, ti)
 	path := "/mcp/" + toolset.McpSlug.String
 	requireOAuthClientErrorResponses(t, harness.handler, testAuthenticationHostURL+path, ti.serverURL.String()+path)
+	requireOAuthMixedCredentialResponses(t, ti, issuer.ID, harness.handler, testAuthenticationHostURL+path, ti.serverURL.String()+path)
 }
 
 func TestOAuthInvalidClientShared(t *testing.T) {
@@ -46,6 +49,7 @@ func TestOAuthInvalidClientShared(t *testing.T) {
 	router := goahttp.NewMuxer()
 	mcp.Attach(router, ti.service.Service, nil)
 	requireOAuthClientErrorResponses(t, router, f.issuerURL, f.resource(ti, f.slugA))
+	requireOAuthMixedCredentialResponses(t, ti, f.issuer.ID, router, f.issuerURL, f.resource(ti, f.slugA))
 }
 
 func TestOAuthInvalidClientSharedAuthenticationHost(t *testing.T) {
@@ -56,6 +60,7 @@ func TestOAuthInvalidClientSharedAuthenticationHost(t *testing.T) {
 	base := authenticationHostSharedIssuerURL(f.issuer.ID.String())
 	setIssuerMode(t, ctx, ti, f.issuer.ID, string(authserver.ModeShared), base)
 	requireOAuthClientErrorResponses(t, harness.handler, base, f.resource(ti, f.slugA))
+	requireOAuthMixedCredentialResponses(t, ti, f.issuer.ID, harness.handler, base, f.resource(ti, f.slugA))
 }
 
 func TestOAuthInvalidClientOrganizationGateway(t *testing.T) {
@@ -66,6 +71,7 @@ func TestOAuthInvalidClientOrganizationGateway(t *testing.T) {
 	mcp.Attach(router, ti.service.Service, nil)
 	base := ti.serverURL.String() + "/mcp/gateway/" + f.organizationSlug
 	requireOAuthClientErrorResponses(t, router, base, base)
+	requireOAuthMixedCredentialResponses(t, ti, f.issuerID, router, base, base)
 }
 
 func TestOAuthInvalidClientOrganizationGatewayAuthenticationHost(t *testing.T) {
@@ -76,6 +82,7 @@ func TestOAuthInvalidClientOrganizationGatewayAuthenticationHost(t *testing.T) {
 	harness := newAuthenticationHostHarness(t, ti)
 	path := "/mcp/gateway/" + f.organizationSlug
 	requireOAuthClientErrorResponses(t, harness.handler, testAuthenticationHostURL+path, ti.serverURL.String()+path)
+	requireOAuthMixedCredentialResponses(t, ti, f.issuerID, harness.handler, testAuthenticationHostURL+path, ti.serverURL.String()+path)
 }
 
 // requireOAuthClientErrorResponses exercises the token and revocation response
@@ -204,6 +211,67 @@ func TestOAuthRejectsMultipleValidCredentials(t *testing.T) {
 				router.ServeHTTP(response, request)
 				require.Equal(t, http.StatusOK, response.Code, response.Body.String())
 			})
+		}
+	}
+}
+
+// requireOAuthMixedCredentialResponses exercises validation before grant
+// dispatch across each mounted route, with credentials valid for that issuer.
+func requireOAuthMixedCredentialResponses(t *testing.T, ti *testInstance, issuerID uuid.UUID, handler http.Handler, base, resource string) {
+	t.Helper()
+	hash, err := bcrypt.GenerateFromPassword([]byte("test-secret"), bcrypt.MinCost)
+	require.NoError(t, err)
+	client, err := usersessions_repo.New(ti.conn).CreateUserSessionClient(t.Context(), usersessions_repo.CreateUserSessionClientParams{
+		UserSessionIssuerID:     issuerID,
+		ClientID:                "mixed-credential-client",
+		ClientName:              "Test client",
+		ClientSecretHash:        pgtype.Text{String: string(hash), Valid: true},
+		RedirectUris:            []string{"http://127.0.0.1:51423/callback"},
+		TokenEndpointAuthMethod: oauthwire.AuthMethodClientSecretBasic,
+	})
+	require.NoError(t, err)
+	// A single valid presentation can revoke an unknown token on this route.
+	request := httptest.NewRequest(http.MethodPost, base+"/revoke", strings.NewReader("token=unknown"))
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	request.SetBasicAuth(client.ClientID, "test-secret")
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
+
+	for _, endpoint := range []string{"token", "revoke"} {
+		grants := []string{""}
+		if endpoint == "token" {
+			grants = []string{oauthwire.GrantTypeJWTBearer, oauthwire.GrantTypeAuthorizationCode, oauthwire.GrantTypeRefreshToken, "unsupported"}
+		}
+		for _, grant := range grants {
+			for _, tc := range []struct {
+				name           string
+				repeatedHeader bool
+				fields         url.Values
+			}{
+				{name: "repeated header", repeatedHeader: true},
+				{name: "body secret", fields: url.Values{oauthwire.ParamClientSecret: {"test-secret"}}},
+				{name: "assertion", fields: url.Values{oauthwire.ParamClientAssertion: {"assertion"}, oauthwire.ParamClientAssertionType: {"jwt"}}},
+				{name: "repeated identifier", fields: url.Values{oauthwire.ParamClientID: {client.ClientID, client.ClientID}}},
+			} {
+				t.Run("mixed/"+endpoint+"/"+grant+"/"+tc.name, func(t *testing.T) {
+					t.Parallel()
+					form := url.Values{oauthwire.ParamGrantType: {grant}, oauthwire.ParamResource: {resource}, oauthwire.ParamToken: {"unknown"}, oauthwire.ParamCode: {"unknown-code"}, oauthwire.ParamRefreshToken: {"unknown-refresh"}}
+					maps.Copy(form, tc.fields)
+					request := httptest.NewRequest(http.MethodPost, base+"/"+endpoint, strings.NewReader(form.Encode()))
+					request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+					request.SetBasicAuth(client.ClientID, "test-secret")
+					if tc.repeatedHeader {
+						request.Header.Add("Authorization", request.Header.Get("Authorization"))
+					}
+					response := httptest.NewRecorder()
+					handler.ServeHTTP(response, request)
+					require.Equal(t, http.StatusBadRequest, response.Code, response.Body.String())
+					require.Contains(t, response.Body.String(), `"error":"invalid_request"`)
+					require.Empty(t, response.Header().Get("WWW-Authenticate"))
+					require.Equal(t, "no-store", response.Header().Get("Cache-Control"))
+				})
+			}
 		}
 	}
 }

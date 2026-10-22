@@ -15,8 +15,9 @@ import (
 )
 
 type recordingStaffClientStore struct {
-	client staffOAuthClient
-	err    error
+	lookups int
+	client  staffOAuthClient
+	err     error
 }
 
 func (s *recordingStaffClientStore) RegisterClient(_ context.Context, client staffOAuthClient) error {
@@ -25,6 +26,7 @@ func (s *recordingStaffClientStore) RegisterClient(_ context.Context, client sta
 }
 
 func (s *recordingStaffClientStore) GetClient(_ context.Context, id string) (staffOAuthClient, error) {
+	s.lookups++
 	if s.err != nil {
 		return staffOAuthClient{}, s.err
 	}
