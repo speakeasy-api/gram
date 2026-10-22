@@ -2363,6 +2363,31 @@ func marshalAgentAgentPluginToAgentPluginResponseBody(v *agent.AgentPlugin) *Age
 		Name:            v.Name,
 		Description:     v.Description,
 	}
+	if v.Servers != nil {
+		res.Servers = make([]*AgentPluginServerResponseBody, len(v.Servers))
+		for i, val := range v.Servers {
+			if val == nil {
+				res.Servers[i] = nil
+				continue
+			}
+			res.Servers[i] = marshalAgentAgentPluginServerToAgentPluginServerResponseBody(val)
+		}
+	}
+
+	return res
+}
+
+// marshalAgentAgentPluginServerToAgentPluginServerResponseBody builds a value
+// of type *AgentPluginServerResponseBody from a value of type
+// *agent.AgentPluginServer.
+func marshalAgentAgentPluginServerToAgentPluginServerResponseBody(v *agent.AgentPluginServer) *AgentPluginServerResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &AgentPluginServerResponseBody{
+		Name:         v.Name,
+		DashboardURL: v.DashboardURL,
+	}
 
 	return res
 }
