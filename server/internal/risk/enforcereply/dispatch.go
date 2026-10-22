@@ -128,8 +128,8 @@ type DispatchRequest struct {
 	// lane falls back to the origin's MessageType.
 	MessageType string
 
-	// ToolCalls consume the remaining shared publish budget in order. Arguments
-	// that duplicate an earlier field reuse that field's budgeted value.
+	// Tool-call arguments consume the remaining shared publish budget in order.
+	// Arguments that duplicate an earlier field reuse that field's budgeted value.
 	ToolCalls []ToolCall
 
 	// PresidioEntities is an optional scanner superset; empty requests all entities.
