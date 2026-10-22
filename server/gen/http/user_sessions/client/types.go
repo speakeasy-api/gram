@@ -827,9 +827,11 @@ type UserSessionResponseBody struct {
 	SubjectUrn *string `form:"subject_urn,omitempty" json:"subject_urn,omitempty" xml:"subject_urn,omitempty"`
 	// Current access-token JTI; used by the revocation path.
 	Jti *string `form:"jti,omitempty" json:"jti,omitempty" xml:"jti,omitempty"`
-	// Next refresh deadline.
+	// Inbound authorization deadline. A session can refresh its access token until
+	// this time.
 	RefreshExpiresAt *string `form:"refresh_expires_at,omitempty" json:"refresh_expires_at,omitempty" xml:"refresh_expires_at,omitempty"`
-	// Terminal session expiry; ceiling on refresh_expires_at.
+	// Current access-token expiry. An expired access token may still be refreshed
+	// before refresh_expires_at.
 	ExpiresAt *string `form:"expires_at,omitempty" json:"expires_at,omitempty" xml:"expires_at,omitempty"`
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`

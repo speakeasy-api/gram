@@ -8993,20 +8993,40 @@ FROM remote_sessions AS s
 JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id
 JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id
 LEFT JOIN users AS u ON s.subject_urn = 'user:' || u.id AND u.deleted_at IS NULL
-WHERE s.remote_session_client_id = $1
-  AND (i.organization_id = $2 OR c.organization_id = $2)
+LEFT JOIN agents a ON s.subject_urn = 'agent:' || a.id::text AND a.organization_id = $1 AND a.deleted IS FALSE
+WHERE s.remote_session_client_id = $2
+  AND (i.organization_id = $1 OR c.organization_id = $1)
   AND s.deleted IS FALSE
   AND c.deleted IS FALSE
   AND i.deleted IS FALSE
   AND ($3::uuid IS NULL OR s.id < $3::uuid)
-ORDER BY s.id DESC
-LIMIT $4
+
+  AND ($4::text = '' OR strpos(lower(s.subject_urn::text || ' ' || COALESCE(u.display_name, '') || ' ' || COALESCE(u.email, '') || ' ' || COALESCE(a.name, '')), lower($4)) > 0)
+  AND CASE $5::text WHEN 'active' THEN (LEAST(s.authorization_expires_at, CASE WHEN s.refresh_token_encrypted IS NOT NULL THEN s.refresh_expires_at ELSE s.access_expires_at END) IS NULL OR LEAST(s.authorization_expires_at, CASE WHEN s.refresh_token_encrypted IS NOT NULL THEN s.refresh_expires_at ELSE s.access_expires_at END) > now()) WHEN 'expired' THEN LEAST(s.authorization_expires_at, CASE WHEN s.refresh_token_encrypted IS NOT NULL THEN s.refresh_expires_at ELSE s.access_expires_at END) <= now() ELSE TRUE END
+  AND ($6::timestamptz IS NULL OR s.created_at >= $6)
+  AND ($7::timestamptz IS NULL OR s.created_at < $7)
+  AND ($8::uuid IS NULL OR CASE WHEN $9::text IN ('oldest','expiry') THEN
+  (CASE $9::text WHEN 'last_used' THEN COALESCE(s.last_used_at, '0001-01-01'::timestamptz) WHEN 'expiry' THEN COALESCE(LEAST(s.authorization_expires_at, CASE WHEN s.refresh_token_encrypted IS NOT NULL THEN s.refresh_expires_at ELSE s.access_expires_at END), '9999-12-31'::timestamptz) ELSE s.created_at END, s.id) > ($10::timestamptz, $8::uuid)
+  ELSE (CASE $9::text WHEN 'last_used' THEN COALESCE(s.last_used_at, '0001-01-01'::timestamptz) WHEN 'expiry' THEN COALESCE(LEAST(s.authorization_expires_at, CASE WHEN s.refresh_token_encrypted IS NOT NULL THEN s.refresh_expires_at ELSE s.access_expires_at END), '9999-12-31'::timestamptz) ELSE s.created_at END, s.id) < ($10::timestamptz, $8::uuid) END)
+ORDER BY
+ CASE WHEN $9::text IN ('oldest','expiry') THEN CASE $9::text WHEN 'last_used' THEN COALESCE(s.last_used_at, '0001-01-01'::timestamptz) WHEN 'expiry' THEN COALESCE(LEAST(s.authorization_expires_at, CASE WHEN s.refresh_token_encrypted IS NOT NULL THEN s.refresh_expires_at ELSE s.access_expires_at END), '9999-12-31'::timestamptz) ELSE s.created_at END END ASC,
+ CASE WHEN $9::text NOT IN ('oldest','expiry','id') THEN CASE $9::text WHEN 'last_used' THEN COALESCE(s.last_used_at, '0001-01-01'::timestamptz) WHEN 'expiry' THEN COALESCE(LEAST(s.authorization_expires_at, CASE WHEN s.refresh_token_encrypted IS NOT NULL THEN s.refresh_expires_at ELSE s.access_expires_at END), '9999-12-31'::timestamptz) ELSE s.created_at END END DESC,
+ CASE WHEN $9::text IN ('oldest','expiry') THEN s.id END ASC,
+ CASE WHEN $9::text NOT IN ('oldest','expiry') THEN s.id END DESC
+LIMIT $11
 `
 
 type ListOrganizationRemoteSessionsByClientIDParams struct {
+	OrganizationID        string
 	RemoteSessionClientID uuid.UUID
-	OrganizationID        pgtype.Text
 	Cursor                uuid.NullUUID
+	Search                string
+	Status                string
+	CreatedAfter          pgtype.Timestamptz
+	CreatedBefore         pgtype.Timestamptz
+	CursorID              uuid.NullUUID
+	Sort                  string
+	CursorTime            pgtype.Timestamptz
 	LimitValue            int32
 }
 
@@ -9020,9 +9040,16 @@ type ListOrganizationRemoteSessionsByClientIDRow struct {
 // ListOrganizationRemoteSessionClientsByIssuerID.
 func (q *Queries) ListOrganizationRemoteSessionsByClientID(ctx context.Context, arg ListOrganizationRemoteSessionsByClientIDParams) ([]ListOrganizationRemoteSessionsByClientIDRow, error) {
 	rows, err := q.db.Query(ctx, listOrganizationRemoteSessionsByClientID,
-		arg.RemoteSessionClientID,
 		arg.OrganizationID,
+		arg.RemoteSessionClientID,
 		arg.Cursor,
+		arg.Search,
+		arg.Status,
+		arg.CreatedAfter,
+		arg.CreatedBefore,
+		arg.CursorID,
+		arg.Sort,
+		arg.CursorTime,
 		arg.LimitValue,
 	)
 	if err != nil {
@@ -14179,6 +14206,41 @@ func (q *Queries) SetRemoteSessionIssuerURLFixture(ctx context.Context, arg SetR
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const setRemoteSessionListFixture = `-- name: SetRemoteSessionListFixture :exec
+UPDATE remote_sessions s
+SET created_at = $1, last_used_at = $2,
+    access_expires_at = $3, refresh_expires_at = $4,
+    authorization_expires_at = $5, refresh_token_encrypted = $6
+FROM remote_session_clients c
+WHERE s.id = $7 AND c.id = s.remote_session_client_id AND c.organization_id = $8
+`
+
+type SetRemoteSessionListFixtureParams struct {
+	CreatedAt              pgtype.Timestamptz
+	LastUsedAt             pgtype.Timestamptz
+	AccessExpiresAt        pgtype.Timestamptz
+	RefreshExpiresAt       pgtype.Timestamptz
+	AuthorizationExpiresAt pgtype.Timestamptz
+	RefreshTokenEncrypted  pgtype.Text
+	ID                     uuid.UUID
+	OrganizationID         pgtype.Text
+}
+
+// Test fixture for effective expiry and timestamp pagination.
+func (q *Queries) SetRemoteSessionListFixture(ctx context.Context, arg SetRemoteSessionListFixtureParams) error {
+	_, err := q.db.Exec(ctx, setRemoteSessionListFixture,
+		arg.CreatedAt,
+		arg.LastUsedAt,
+		arg.AccessExpiresAt,
+		arg.RefreshExpiresAt,
+		arg.AuthorizationExpiresAt,
+		arg.RefreshTokenEncrypted,
+		arg.ID,
+		arg.OrganizationID,
+	)
+	return err
 }
 
 const setRemoteSessionRefreshExpiresAtIfUnknown = `-- name: SetRemoteSessionRefreshExpiresAtIfUnknown :execrows

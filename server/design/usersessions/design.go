@@ -160,10 +160,10 @@ var UserSession = Type("UserSession", func() {
 	})
 	Attribute("subject_urn", String, "The session's subject URN (user:<id> | apikey:<uuid> | agent:<uuid> | anonymous:<mcp-session-id> | workload:<issuer-id>:<external-subject>).")
 	Attribute("jti", String, "Current access-token JTI; used by the revocation path.")
-	Attribute("refresh_expires_at", String, "Next refresh deadline.", func() {
+	Attribute("refresh_expires_at", String, "Inbound authorization deadline. A session can refresh its access token until this time.", func() {
 		Format(FormatDateTime)
 	})
-	Attribute("expires_at", String, "Terminal session expiry; ceiling on refresh_expires_at.", func() {
+	Attribute("expires_at", String, "Current access-token expiry. An expired access token may still be refreshed before refresh_expires_at.", func() {
 		Format(FormatDateTime)
 	})
 	Attribute("created_at", String, func() {

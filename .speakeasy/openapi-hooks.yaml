@@ -933,6 +933,8 @@ tags:
     description: Manage organization-owned user_session_issuer records inherited by every project in the caller's organization.
   - name: userSessions
     description: Operator visibility into issued user_sessions. List + revoke; sessions are written by /mcp/{slug}/token.
+  - name: gatewaySessions
+    description: Sessions authorized for a project gateway or the Organization Gateway. Issuer-scoped sessions may authorize several endpoints; resource-bound sessions are restricted to the selected endpoint. Server filters describe configured upstream associations, not historical usage.
   - name: widgets
     description: 'Widgets: Explore''s saved questions, each kept with the chart that draws it.'
   - name: workloadIdentities

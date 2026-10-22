@@ -1247,6 +1247,65 @@ func (q *Queries) ServersInsertMetaMCPServerMembers(ctx context.Context, arg Ser
 	return err
 }
 
+const serversInsertOrganizationGatewayClient = `-- name: ServersInsertOrganizationGatewayClient :exec
+INSERT INTO user_session_clients
+ (id, project_id, organization_id, user_session_issuer_id, client_id, client_name,
+ redirect_uris, client_id_issued_at, token_endpoint_auth_method)
+VALUES ($1::uuid, NULL, $2::text, $3::uuid,
+ ($1::uuid)::text, 'Example desktop client', ARRAY['http://127.0.0.1:41296/callback'], now(), 'none')
+`
+
+type ServersInsertOrganizationGatewayClientParams struct {
+	ID       uuid.UUID
+	OrgID    string
+	IssuerID uuid.UUID
+}
+
+func (q *Queries) ServersInsertOrganizationGatewayClient(ctx context.Context, arg ServersInsertOrganizationGatewayClientParams) error {
+	_, err := q.db.Exec(ctx, serversInsertOrganizationGatewayClient, arg.ID, arg.OrgID, arg.IssuerID)
+	return err
+}
+
+const serversInsertOrganizationGatewaySession = `-- name: ServersInsertOrganizationGatewaySession :exec
+INSERT INTO user_sessions
+ (id, organization_id, user_session_issuer_id, user_session_client_id, subject_urn,
+ jti, refresh_token_hash, refresh_expires_at, expires_at, last_used_at, created_at)
+VALUES ($1::uuid, $2::text, $3::uuid, $4::uuid, 'user:' || $5::text,
+ $6::text, $7::text,
+ now() + ($8::text)::interval,
+ now() - interval '1 hour', now() - ($9::text)::interval, now() - ($10::text)::interval)
+`
+
+type ServersInsertOrganizationGatewaySessionParams struct {
+	ID               uuid.UUID
+	OrgID            string
+	IssuerID         uuid.UUID
+	ClientID         uuid.UUID
+	UserID           string
+	Jti              string
+	RefreshTokenHash string
+	ExpiresIn        string
+	LastUsedAgo      string
+	CreatedAgo       string
+}
+
+// Inert authorizations remain visible while the gateway is disabled.
+func (q *Queries) ServersInsertOrganizationGatewaySession(ctx context.Context, arg ServersInsertOrganizationGatewaySessionParams) error {
+	_, err := q.db.Exec(ctx, serversInsertOrganizationGatewaySession,
+		arg.ID,
+		arg.OrgID,
+		arg.IssuerID,
+		arg.ClientID,
+		arg.UserID,
+		arg.Jti,
+		arg.RefreshTokenHash,
+		arg.ExpiresIn,
+		arg.LastUsedAgo,
+		arg.CreatedAgo,
+	)
+	return err
+}
+
 const serversInsertPrivateInventoryEndpoint = `-- name: ServersInsertPrivateInventoryEndpoint :exec
 INSERT INTO mcp_endpoints (id, project_id, mcp_server_id, slug) VALUES
   ($1::uuid, $2::uuid, $3::uuid, $4::text)
