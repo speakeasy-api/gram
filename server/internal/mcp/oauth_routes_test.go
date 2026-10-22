@@ -10,12 +10,49 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/internal/auth/deviceagenttoken"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/oautherr"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/stretchr/testify/require"
 	goahttp "goa.design/goa/v3/http"
 )
+
+func TestOAuthMountedRoutesRetiredIssuer(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	issuerID := createUserSessionIssuer(t, ctx, ti.conn, *authCtx.ProjectID)
+	slug := "retired-issuer-" + uuid.NewString()
+	createRemoteMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, "https://upstream.invalid/mcp", slug, "public", issuerID)
+
+	// Simulate an issuer retiring between endpoint and issuer resolution.
+	retired, err := testrepo.New(ti.conn).SoftDeleteAttachmentConfigFixture(ctx, testrepo.SoftDeleteAttachmentConfigFixtureParams{ID: issuerID, ProjectID: uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true}})
+	require.NoError(t, err)
+	require.EqualValues(t, 1, retired)
+
+	router := goahttp.NewMuxer()
+	mcp.Attach(router, ti.service.Service, nil)
+	for _, suffix := range []string{"/token", "/revoke"} {
+		response := httptest.NewRecorder()
+		request := httptest.NewRequestWithContext(ctx, http.MethodPost, "/mcp/"+slug+suffix, nil)
+		router.ServeHTTP(response, request)
+		require.Equal(t, http.StatusBadRequest, response.Code, response.Body.String())
+		var body oautherr.RFC6749Error
+		require.NoError(t, json.Unmarshal(response.Body.Bytes(), &body))
+		require.Equal(t, oautherr.CodeInvalidGrant, body.Code)
+		require.Equal(t, "no-store", response.Header().Get("Cache-Control"))
+		require.Equal(t, "no-cache", response.Header().Get("Pragma"))
+	}
+
+	// Other OAuth surfaces retain their endpoint-discovery semantics.
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, httptest.NewRequestWithContext(ctx, http.MethodPost, "/mcp/"+slug+"/register", nil))
+	require.Equal(t, http.StatusNotFound, response.Code, response.Body.String())
+}
 
 func TestOAuthMountedRoutesSetupErrors(t *testing.T) {
 	t.Parallel()

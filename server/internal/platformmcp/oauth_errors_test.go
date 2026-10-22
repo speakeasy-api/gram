@@ -56,6 +56,7 @@ func TestOAuthHTTPClientFailuresPreserveRegistrationOnOutage(t *testing.T) {
 			require.NoError(t, json.Unmarshal(response.Body.Bytes(), &body))
 			require.Equal(t, tc.code, body.Code)
 			require.Equal(t, "no-store", response.Header().Get("Cache-Control"))
+			require.Equal(t, "no-cache", response.Header().Get("Pragma"))
 			require.NotContains(t, response.Body.String(), "private")
 		})
 	}
@@ -72,6 +73,8 @@ func TestOAuthHTTPAuthorizeClientLookupOutage(t *testing.T) {
 	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &body))
 	require.Equal(t, oautherr.CodeTemporarilyUnavailable, body.Code)
 	require.Empty(t, response.Header().Get("Location"))
+	require.Equal(t, "no-store", response.Header().Get("Cache-Control"))
+	require.Equal(t, "no-cache", response.Header().Get("Pragma"))
 	require.NotContains(t, response.Body.String(), "private")
 }
 
@@ -126,6 +129,7 @@ func TestOAuthHTTPTokenGateMappings(t *testing.T) {
 				require.NoError(t, json.Unmarshal(response.Body.Bytes(), &body))
 				require.Equal(t, gateCase.code, body.Code)
 				require.Equal(t, "no-store", response.Header().Get("Cache-Control"))
+				require.Equal(t, "no-cache", response.Header().Get("Pragma"))
 			})
 		}
 	}
@@ -138,4 +142,6 @@ func TestOAuthHTTPMissingGrantType(t *testing.T) {
 	service.TokenHandler().ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/platform-mcp/token", nil))
 	require.Equal(t, http.StatusBadRequest, response.Code)
 	require.Contains(t, response.Body.String(), `"error":"invalid_request"`)
+	require.Equal(t, "no-store", response.Header().Get("Cache-Control"))
+	require.Equal(t, "no-cache", response.Header().Get("Pragma"))
 }

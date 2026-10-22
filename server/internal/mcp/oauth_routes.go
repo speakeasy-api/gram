@@ -27,9 +27,12 @@ func oauthRouteHandler(logger *slog.Logger, method, pattern string, handler func
 }
 
 // tokenEndpointResolutionError preserves indistinguishable 404s for unknown,
-// unserved, and wrong-host issuers. Only a failed grant lookup can establish
-// invalid_grant; endpoint discovery failures must retain client credentials.
+// unserved, and wrong-host issuers. A resolved endpoint whose issuer has
+// retired cannot redeem its grants and must prompt reauthorization.
 func tokenEndpointResolutionError(err error) error {
+	if errors.Is(err, errUserSessionIssuerRetired) {
+		return oops.NewOAuthError(http.StatusBadRequest, oautherr.CodeInvalidGrant, "authorization issuer is no longer available", err)
+	}
 	if shareable, ok := errors.AsType[*oops.ShareableError](err); ok && shareable.Code == oops.CodeNotFound {
 		return oops.NewOAuthError(http.StatusNotFound, oautherr.CodeInvalidRequest, "authorization endpoint not found", err)
 	}

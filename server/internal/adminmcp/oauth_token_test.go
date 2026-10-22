@@ -465,10 +465,25 @@ func TestStaffOAuthRejectsMultipleValidCredentials(t *testing.T) {
 
 func TestStaffOAuthMissingGrantType(t *testing.T) {
 	t.Parallel()
-	tokens, _, _ := staffTokensFixture(t)
-	response := httptest.NewRecorder()
-	tokens.TokenHandler().ServeHTTP(response, staffTokenRequest("", nil))
-	require.Equal(t, http.StatusBadRequest, response.Code)
-	require.Contains(t, response.Body.String(), `"error":"invalid_request"`)
-	require.Equal(t, "no-store", response.Header().Get("Cache-Control"))
+	for _, tc := range []struct {
+		name string
+		body string
+	}{
+		{name: "absent", body: ""},
+		{name: "empty", body: "grant_type="},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			tokens, _, _ := staffTokensFixture(t)
+			request := httptest.NewRequest(http.MethodPost, Path+"/token", strings.NewReader(tc.body))
+			request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			request.SetBasicAuth(staffClient, "test-client-secret")
+			response := httptest.NewRecorder()
+			tokens.TokenHandler().ServeHTTP(response, request)
+			require.Equal(t, http.StatusBadRequest, response.Code)
+			require.Contains(t, response.Body.String(), `"error":"invalid_request"`)
+			require.Equal(t, "no-store", response.Header().Get("Cache-Control"))
+			require.Equal(t, "no-cache", response.Header().Get("Pragma"))
+		})
+	}
 }
