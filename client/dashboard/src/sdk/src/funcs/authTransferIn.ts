@@ -102,6 +102,7 @@ async function $do(
   const query = encodeFormQuery({
     "code": payload?.code,
     "redirect": payload?.redirect,
+    "replace_session": payload?.replace_session,
     "source_host": payload?.source_host,
   });
 

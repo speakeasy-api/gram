@@ -263,6 +263,11 @@ type TransferInPayload struct {
 	Code *string
 	// Optional URL path to land on once the session is established on this host
 	Redirect *string
+	// Start mode: replace a session this browser already holds on this host for
+	// the same user. Without it, the callback keeps that session and its
+	// organization, so a stale source session cannot undo an organization switch
+	// made here. Set it right after switching organization on the source host.
+	ReplaceSession *bool
 }
 
 // TransferInResult is the result type of the auth service transferIn method.

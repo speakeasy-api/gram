@@ -335,6 +335,7 @@ var _ = Service("auth", func() {
 			Attribute("source_host", String, "Start mode: the platform host that holds the session to move here (e.g. app.getgram.ai)")
 			Attribute("code", String, "Callback mode: the opaque one-time transfer code from the source host's transferOut endpoint")
 			Attribute("redirect", String, "Optional URL path to land on once the session is established on this host")
+			Attribute("replace_session", Boolean, "Start mode: replace a session this browser already holds on this host for the same user. Without it, the callback keeps that session and its organization, so a stale source session cannot undo an organization switch made here. Set it right after switching organization on the source host.")
 		})
 
 		Result(func() {
@@ -349,6 +350,7 @@ var _ = Service("auth", func() {
 			Param("source_host")
 			Param("code")
 			Param("redirect")
+			Param("replace_session")
 
 			Response(StatusTemporaryRedirect, func() {
 				Header("location:Location", String, func() {

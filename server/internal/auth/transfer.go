@@ -336,7 +336,7 @@ func (s *Service) TransferIn(ctx context.Context, payload *gen.TransferInPayload
 	case sourceHost != "" && code != "":
 		failure = failTransfer(signinTransferWrongDestination, "both_modes", nil)
 	case sourceHost != "":
-		result, failure = s.transferInStart(ctx, sourceHost, redirect)
+		result, failure = s.transferInStart(ctx, sourceHost, redirect, conv.PtrValOr(payload.ReplaceSession, false))
 	case code != "":
 		result, failure = s.transferInCallback(ctx, logger, code, redirect, siteURL)
 	default:
@@ -368,8 +368,10 @@ func (s *Service) transferSourceBaseURL(sourceHost string) (string, bool) {
 	return s.cfg.GramServerURL, s.cfg.GramServerURL != ""
 }
 
-// transferInStart is Step 1/3, TransferIn's start mode.
-func (s *Service) transferInStart(ctx context.Context, sourceHost, redirect string) (*gen.TransferInResult, *transferFailure) {
+// transferInStart is Step 1/3, TransferIn's start mode. replaceSession is
+// recorded in a cookie beside the nonce, so the callback knows to replace a
+// session this browser already holds here.
+func (s *Service) transferInStart(ctx context.Context, sourceHost, redirect string, replaceSession bool) (*gen.TransferInResult, *transferFailure) {
 	if s.cfg.OrgHosts == nil {
 		return nil, failTransfer(signinTransferTemporaryError, "platform_hosts_not_configured", nil)
 	}
@@ -404,7 +406,11 @@ func (s *Service) transferInStart(ctx context.Context, sourceHost, redirect stri
 	sourceURL.Path = strings.TrimRight(sourceURL.Path, "/") + "/rpc/auth.transferOut"
 	sourceURL.RawQuery = query.Encode()
 
-	jar.Set(transferNonceCookieName(authsessions.TransferNonceHash(nonce)), nonce)
+	nonceHash := authsessions.TransferNonceHash(nonce)
+	jar.Set(transferNonceCookieName(nonceHash), nonce)
+	if replaceSession {
+		jar.Set(transferReplaceCookieName(nonceHash), "1")
+	}
 	return &gen.TransferInResult{Location: sourceURL.String(), SessionToken: nil, SessionCookie: nil}, nil
 }
 
@@ -429,9 +435,17 @@ func (s *Service) transferInCallback(ctx context.Context, logger *slog.Logger, c
 		return nil, failTransfer(signinTransferTemporaryError, "cookie_jar_missing", nil)
 	}
 	cookieName := transferNonceCookieName(record.NonceHash)
+	replaceCookieName := transferReplaceCookieName(record.NonceHash)
 	nonce := jar.Get(cookieName)
-	if !record.BoundTo(nonce) {
+	replaceSession := jar.Get(replaceCookieName) != ""
+	clearCookies := func() {
 		jar.Clear(cookieName)
+		if replaceSession {
+			jar.Clear(replaceCookieName)
+		}
+	}
+	if !record.BoundTo(nonce) {
+		clearCookies()
 		// Burn the code: see the flow notes at the top of this file. A
 		// browser without the cookie could never redeem it anyway.
 		if err := s.transferManager.Consume(ctx, code); err != nil {
@@ -470,10 +484,24 @@ func (s *Service) transferInCallback(ctx context.Context, logger *slog.Logger, c
 	// fails here.
 	err = s.transferManager.Consume(ctx, code)
 	if err == nil || errors.Is(err, authsessions.ErrTransferCodeNotFound) {
-		jar.Clear(cookieName)
+		clearCookies()
 	}
 	if err != nil {
 		return nil, codeFailure("consume", err)
+	}
+
+	// Each host holds its own session, and the source session keeps whatever
+	// organization it last had. A browser that switched organization here
+	// would be sent back to the source's organization on every visit to the
+	// source host, so a valid session of the same user here wins unless the
+	// transfer follows a switch on the source host.
+	if !replaceSession && s.keepsTargetSession(ctx, record.UserID) {
+		logger.InfoContext(ctx, "kept existing session on session transfer",
+			attr.SlogSourceHost(record.SourceHost),
+			attr.SlogTargetHost(currentURL.Host),
+			attr.SlogUserID(record.UserID),
+		)
+		return &gen.TransferInResult{Location: strings.TrimRight(siteURL, "/") + redirect, SessionToken: nil, SessionCookie: nil}, nil
 	}
 
 	newSessionID, err := authsessions.NewSessionID()
@@ -504,4 +532,26 @@ func (s *Service) transferInCallback(ctx context.Context, logger *slog.Logger, c
 		SessionToken:  &newSessionID,
 		SessionCookie: &newSessionID,
 	}, nil
+}
+
+// keepsTargetSession reports whether the browser already holds a valid session
+// on this host for userID that a transfer should leave in place. Support and
+// impersonation sessions are always replaced: they belong to a staff operator
+// and must not outlive a transfer of the user's own session.
+func (s *Service) keepsTargetSession(ctx context.Context, userID string) bool {
+	sessionID, _ := contextvalues.GetSessionTokenFromContext(ctx)
+	if sessionID == "" {
+		return false
+	}
+
+	sessionCtx, err := s.sessions.Authenticate(ctx, sessionID)
+	if err != nil {
+		return false
+	}
+
+	existing, ok := contextvalues.GetAuthContext(sessionCtx)
+	if !ok || existing == nil || existing.SupportOrganizationID != "" || contextvalues.IsLegacyImpersonatedSession(sessionCtx) {
+		return false
+	}
+	return existing.UserID == userID && existing.ActiveOrganizationID != ""
 }

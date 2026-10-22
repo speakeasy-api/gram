@@ -915,10 +915,11 @@ func ParseEndpoint(
 		authTransferOutRedirectFlag     = authTransferOutFlags.String("redirect", "", "")
 		authTransferOutSessionTokenFlag = authTransferOutFlags.String("session-token", "", "")
 
-		authTransferInFlags          = flag.NewFlagSet("transfer-in", flag.ExitOnError)
-		authTransferInSourceHostFlag = authTransferInFlags.String("source-host", "", "")
-		authTransferInCodeFlag       = authTransferInFlags.String("code", "", "")
-		authTransferInRedirectFlag   = authTransferInFlags.String("redirect", "", "")
+		authTransferInFlags              = flag.NewFlagSet("transfer-in", flag.ExitOnError)
+		authTransferInSourceHostFlag     = authTransferInFlags.String("source-host", "", "")
+		authTransferInCodeFlag           = authTransferInFlags.String("code", "", "")
+		authTransferInRedirectFlag       = authTransferInFlags.String("redirect", "", "")
+		authTransferInReplaceSessionFlag = authTransferInFlags.String("replace-session", "", "")
 
 		businessMemoriesFlags = flag.NewFlagSet("business-memories", flag.ContinueOnError)
 
@@ -10043,7 +10044,7 @@ func ParseEndpoint(
 				data, err = authc.BuildTransferOutPayload(*authTransferOutTargetHostFlag, *authTransferOutNonceFlag, *authTransferOutRedirectFlag, *authTransferOutSessionTokenFlag)
 			case "transfer-in":
 				endpoint = c.TransferIn()
-				data, err = authc.BuildTransferInPayload(*authTransferInSourceHostFlag, *authTransferInCodeFlag, *authTransferInRedirectFlag)
+				data, err = authc.BuildTransferInPayload(*authTransferInSourceHostFlag, *authTransferInCodeFlag, *authTransferInRedirectFlag, *authTransferInReplaceSessionFlag)
 			}
 		case "business-memories":
 			c := businessmemoriesc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -15835,6 +15836,7 @@ func authTransferInUsage() {
 	fmt.Fprint(os.Stderr, " -source-host STRING")
 	fmt.Fprint(os.Stderr, " -code STRING")
 	fmt.Fprint(os.Stderr, " -redirect STRING")
+	fmt.Fprint(os.Stderr, " -replace-session BOOL")
 	fmt.Fprintln(os.Stderr)
 
 	// Description
@@ -15845,10 +15847,11 @@ func authTransferInUsage() {
 	fmt.Fprintln(os.Stderr, `    -source-host STRING: `)
 	fmt.Fprintln(os.Stderr, `    -code STRING: `)
 	fmt.Fprintln(os.Stderr, `    -redirect STRING: `)
+	fmt.Fprintln(os.Stderr, `    -replace-session BOOL: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "auth transfer-in --source-host \"abc123\" --code \"abc123\" --redirect \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "auth transfer-in --source-host \"abc123\" --code \"abc123\" --redirect \"abc123\" --replace-session false")
 }
 
 // businessMemoriesUsage displays the usage of the business-memories command
