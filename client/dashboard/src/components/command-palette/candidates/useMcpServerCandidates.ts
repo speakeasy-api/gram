@@ -6,11 +6,11 @@ import {
   mcpServerVisibilityUpdateForm,
 } from "@/lib/mcp-server-visibility";
 import { mcpServerRouteParam } from "@/lib/sources";
+import { standsInForToolset } from "@/pages/mcp/x/MCPServerDetailsRouting";
 import { useRoutes } from "@/routes";
 import {
   listedMcpServers,
   mcpServerDisplayName,
-  standInToolset,
 } from "@/components/mcp/mcp-server-kind";
 import type {
   McpServer,
@@ -149,7 +149,7 @@ export function useMcpServerCandidates({
         run: (verb) => {
           // Enabling a hosted server goes through its page's enable dialog and free-tier gate.
           const opensServerPage =
-            verb === "enable" && standInToolset(server) !== undefined;
+            verb === "enable" && standsInForToolset(server);
           if (!opensServerPage && (verb === "enable" || verb === "disable")) {
             return setVisibility(server, verb);
           }

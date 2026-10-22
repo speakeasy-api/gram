@@ -270,7 +270,7 @@ export function DangerZoneSection({
                   >
                     <RequireScope
                       scope="mcp:write"
-                      resourceId={mcpServer.projectId}
+                      resourceId={hostedToolset.id}
                       level="component"
                     >
                       <DeleteHostedServerButton toolset={hostedToolset} />

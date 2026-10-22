@@ -72,7 +72,7 @@ export function useHostedVisibilityGuard({
   const [oauthBlockOpen, setOauthBlockOpen] = useState(false);
   // Until the attached environment resolves, Public could skip the warning.
   const publicUnavailable =
-    enabled && (metadataLoading || !environmentsData || !toolset);
+    hosted && (!enabled || metadataLoading || !environmentsData || !toolset);
 
   const needsEnableDialog = (next: McpServerVisibility) =>
     next === "disabled" || current === "disabled";
@@ -96,7 +96,7 @@ export function useHostedVisibilityGuard({
     }
   };
 
-  const dialogs = toolsetSlug ? (
+  const dialogs = hosted ? (
     <>
       <Dialog open={oauthBlockOpen} onOpenChange={setOauthBlockOpen}>
         <Dialog.Content className="max-w-md">
@@ -113,21 +113,23 @@ export function useHostedVisibilityGuard({
           </Dialog.Footer>
         </Dialog.Content>
       </Dialog>
-      <PublicMcpWarningDialog
-        isOpen={publicPending !== null}
-        onClose={() => setPublicPending(null)}
-        onConfirm={() => {
-          const next = publicPending;
-          setPublicPending(null);
-          if (!next) return;
-          if (needsEnableDialog(next)) setEnablePending(next);
-          else apply(next);
-        }}
-        isLoading={isApplying}
-        toolsetSlug={toolsetSlug}
-        environmentSlug={attachedEnvironment?.slug ?? ""}
-        variableNames={systemVarNames}
-      />
+      {toolsetSlug && (
+        <PublicMcpWarningDialog
+          isOpen={publicPending !== null}
+          onClose={() => setPublicPending(null)}
+          onConfirm={() => {
+            const next = publicPending;
+            setPublicPending(null);
+            if (!next) return;
+            if (needsEnableDialog(next)) setEnablePending(next);
+            else apply(next);
+          }}
+          isLoading={isApplying}
+          toolsetSlug={toolsetSlug}
+          environmentSlug={attachedEnvironment?.slug ?? ""}
+          variableNames={systemVarNames}
+        />
+      )}
       <ServerEnableDialog
         isOpen={enablePending !== null}
         onClose={() => setEnablePending(null)}

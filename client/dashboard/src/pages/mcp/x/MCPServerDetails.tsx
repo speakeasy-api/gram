@@ -73,7 +73,7 @@ import { useFeatureFlag } from "@/hooks/useFeatureFlag";
 import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { GuardrailsTab } from "./tabs/guardrails/GuardrailsTab";
 
-export default function MCPServerDetails(): JSX.Element {
+export default function MCPServerDetails(): JSX.Element | null {
   const { mcpServerSlug } = useParams<{ mcpServerSlug: string }>();
   const location = useLocation();
   const routes = useRoutes();
@@ -127,6 +127,8 @@ export default function MCPServerDetails(): JSX.Element {
   if (isError || (!isLoading && !mcpServer)) {
     return <Navigate to={routes.mcp.href()} replace />;
   }
+  // Which tabs exist depends on the server's kind, so route only once it loads.
+  if (!mcpServer) return null;
   if (legacyAuthenticationPath) {
     return (
       <Navigate
