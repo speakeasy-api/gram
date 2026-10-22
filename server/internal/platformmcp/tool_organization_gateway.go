@@ -15,6 +15,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/orggateway"
 )
 
+// Administrator assignment review already has list_access_members,
+// get_member_mcp_access, get_mcp_access, and the access-role mutation tools.
+// Activation stays in the dashboard's review flow: there is no durable review
+// proposal for an MCP mutation to confirm. This discovery tool shares the
+// live opt-in gate; organization_gateway_integration_test proves its refusal.
 const getMyOrganizationGatewayName = "get_my_organization_gateway"
 
 const getMyOrganizationGatewayDescription = "Get the one MCP URL that gives you every MCP server in your organization you are allowed to reach, across all projects, signed in with your organization account. " +
@@ -88,7 +93,7 @@ func (s *OrganizationGatewayService) Get(ctx context.Context, principal Principa
 	case orggateway.UnavailabilityMultipleOrganizationIssuers:
 		return unavailableOrganizationGateway(unavailable, "Ask an organization administrator to consolidate the organization-wide authorization servers into one."), nil
 	case orggateway.UnavailabilityTurnedOff:
-		return unavailableOrganizationGateway(unavailable, "An organization administrator turned the gateway off. Ask them to turn it on in organization settings under Gateway."), nil
+		return unavailableOrganizationGateway(unavailable, "Organization Gateway is off by default. Ask an organization administrator to open the Organization Gateway card on the MCP Servers page, review MCP Assignments, and enable it."), nil
 	case orggateway.UnavailabilityCustomDomainOnly:
 		return unavailableOrganizationGateway(unavailable, "Your organization only allows its MCP servers to be reached through its own custom domain, where the gateway is not offered. Connect to each MCP server's address on that domain."), nil
 	default:

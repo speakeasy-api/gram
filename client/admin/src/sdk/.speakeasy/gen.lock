@@ -2,8 +2,8 @@ lockVersion: 2.0.0
 id: 28456435-1d04-45f4-ad18-f45f4724a5a5
 management:
   docVersion: 0.0.1
-  speakeasyVersion: 1.796.1
-  generationVersion: 2.933.0
+  speakeasyVersion: 1.803.0
+  generationVersion: 2.950.2
   releaseVersion: 0.33.8
 features:
   typescript:
@@ -25,7 +25,7 @@ features:
     pagination: 2.83.2
     reactQueryHooks: 0.3.0
     responseFormat: 0.3.0
-    retries: 2.83.1
+    retries: 2.83.2
     sdkHooks: 0.4.0
     uploadStreams: 0.1.1
 trackedFiles:
@@ -222,11 +222,14 @@ trackedFiles:
   src/models/components/adminstripecustomer.ts: {}
   src/models/components/adminstripesubscription.ts: {}
   src/models/components/adminstripesubscriptioncandidate.ts: {}
+  src/models/components/adminupstreamoauthmigrationauthclientkind.ts: {}
+  src/models/components/adminupstreamoauthmigrationauthclients.ts: {}
   src/models/components/adminupstreamoauthmigrationorganization.ts: {}
   src/models/components/adminupstreamoauthmigrationorganizations.ts: {}
   src/models/components/adminupstreamoauthmigrationrun.ts: {}
   src/models/components/adminupstreamoauthmigrationserver.ts: {}
   src/models/components/adminupstreamoauthmigrationstatus.ts: {}
+  src/models/components/adminupstreamoauthmigrationunresolvedassociation.ts: {}
   src/models/components/adminuser.ts: {}
   src/models/components/adminuserorganization.ts: {}
   src/models/components/asset.ts: {}

@@ -60,8 +60,10 @@ WHERE project_id = @project_id
   AND deleted IS FALSE
 ORDER BY created_at DESC;
 
--- name: ListAddressableMCPEndpointsByMCPServerID :many
-SELECT sqlc.embed(e), cd.domain AS custom_domain
+-- name: ListMCPEndpointsOnLiveDomainsByMCPServerID :many
+-- Endpoints on a deleted or another organization's domain are skipped; those
+-- on a domain still pending verification or activation are kept.
+SELECT sqlc.embed(e)
 FROM mcp_endpoints e
 LEFT JOIN custom_domains cd
   ON cd.id = e.custom_domain_id

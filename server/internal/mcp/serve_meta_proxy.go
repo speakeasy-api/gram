@@ -209,7 +209,7 @@ func (s *Service) routeMetaMember(
 		}
 		routed, terr := routeMetaMemberToken(tokens, member, strings.TrimRight(remoteServer.Url, "/"))
 		upstreamToken := routed.Token
-		if terr == nil && upstreamToken == "" && gate.chainUpstream != nil {
+		if terr == nil && upstreamToken == "" && gate.chainUpstream != nil && !member.upstreamNoAuth {
 			upstreamToken, terr = gate.chainUpstream(ctx, remoteServer.Url)
 		}
 		if terr != nil {
@@ -229,7 +229,7 @@ func (s *Service) routeMetaMember(
 	case member.tunneledServerID.Valid:
 		routed, terr := routeMetaMemberToken(tokens, member, strings.TrimRight(member.tunneledResourceIdentifier, "/"))
 		upstreamToken := routed.Token
-		if terr == nil && upstreamToken == "" && gate.chainUpstream != nil {
+		if terr == nil && upstreamToken == "" && gate.chainUpstream != nil && !member.upstreamNoAuth {
 			upstreamToken, terr = gate.chainUpstream(ctx, member.tunneledResourceIdentifier)
 		}
 		if terr != nil {
@@ -248,6 +248,7 @@ func (s *Service) routeMetaMember(
 				UpstreamAuth:       upstreamToken,
 				WWWAuthenticate:    "",
 				Selection:          gate.toolSelection,
+				Request:            nil,
 			}, remotemcp.WithoutToolsCallIdentityCoverage(), remotemcp.WithMetaMCPServerID(gate.metaServerID.String()))
 			if berr != nil {
 				return nil, fmt.Errorf("build tunnel proxy: %w", berr)

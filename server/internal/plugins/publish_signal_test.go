@@ -41,7 +41,7 @@ func TestPluginsService_MutationsSignalRepublish(t *testing.T) {
 	assertSignalled(t, 2, "renaming a plugin")
 
 	toolset := createTestToolset(t, ctx, ti.conn, "signalled-server")
-	require.NoError(t, toolsetsrepo.New(ti.conn).SetToolsetMCPPublicByID(ctx, toolsetsrepo.SetToolsetMCPPublicByIDParams{
+	require.NoError(t, setTestToolsetMCPPublic(ctx, ti.conn, toolsetsrepo.SetToolsetMCPPublicByIDParams{
 		McpIsPublic: true, ID: toolset.ID, ProjectID: toolset.ProjectID,
 	}))
 

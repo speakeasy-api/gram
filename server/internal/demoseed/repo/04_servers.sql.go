@@ -1071,6 +1071,75 @@ func (q *Queries) ServersInsertMetaMCPServerMembers(ctx context.Context, arg Ser
 	return err
 }
 
+const serversInsertPrivateInventoryEndpoint = `-- name: ServersInsertPrivateInventoryEndpoint :exec
+INSERT INTO mcp_endpoints (id, project_id, mcp_server_id, slug) VALUES
+  ($1::uuid, $2::uuid, $3::uuid, $4::text)
+`
+
+type ServersInsertPrivateInventoryEndpointParams struct {
+	ID          uuid.UUID
+	ProjectID   uuid.UUID
+	McpServerID uuid.UUID
+	Slug        string
+}
+
+func (q *Queries) ServersInsertPrivateInventoryEndpoint(ctx context.Context, arg ServersInsertPrivateInventoryEndpointParams) error {
+	_, err := q.db.Exec(ctx, serversInsertPrivateInventoryEndpoint,
+		arg.ID,
+		arg.ProjectID,
+		arg.McpServerID,
+		arg.Slug,
+	)
+	return err
+}
+
+const serversInsertPrivateInventoryMCPServer = `-- name: ServersInsertPrivateInventoryMCPServer :exec
+INSERT INTO mcp_servers (id, project_id, name, slug, tunneled_mcp_server_id,
+                         visibility) VALUES
+  ($1::uuid, $2::uuid, 'Private inventory', $3::text,
+   $4::uuid, 'private')
+`
+
+type ServersInsertPrivateInventoryMCPServerParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+	Slug      string
+	TunnelID  uuid.UUID
+}
+
+func (q *Queries) ServersInsertPrivateInventoryMCPServer(ctx context.Context, arg ServersInsertPrivateInventoryMCPServerParams) error {
+	_, err := q.db.Exec(ctx, serversInsertPrivateInventoryMCPServer,
+		arg.ID,
+		arg.ProjectID,
+		arg.Slug,
+		arg.TunnelID,
+	)
+	return err
+}
+
+const serversInsertPrivateInventoryTunnel = `-- name: ServersInsertPrivateInventoryTunnel :exec
+INSERT INTO tunneled_mcp_servers (id, project_id, name, key_hash, key_prefix,
+                                  status, agent_version, last_seen_at) VALUES
+  ($1::uuid, $2::uuid, 'Private inventory tunnel',
+   md5($3::text), 'demo_inert', 'active', '0.2.0', NULL)
+`
+
+type ServersInsertPrivateInventoryTunnelParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+	KeySeed   string
+}
+
+// Tunnel example, deliberately disconnected: its activity history must not
+// fabricate a live customer agent in the shared demo environment. The key
+// hash comes from the tenant's name seed, so it stays globally unique and
+// matches no issued key. ClickHouse metric rows reference these ids
+// (ch_05_tunnel_metrics.go).
+func (q *Queries) ServersInsertPrivateInventoryTunnel(ctx context.Context, arg ServersInsertPrivateInventoryTunnelParams) error {
+	_, err := q.db.Exec(ctx, serversInsertPrivateInventoryTunnel, arg.ID, arg.ProjectID, arg.KeySeed)
+	return err
+}
+
 const serversInsertRemoteMCPServers = `-- name: ServersInsertRemoteMCPServers :exec
 
 INSERT INTO remote_mcp_servers (id, project_id, name, slug, transport_type, url) VALUES
@@ -1269,6 +1338,49 @@ type ServersInsertSupportDeskGrantsParams struct {
 // names the toolset), Slack only for tools annotated read-only.
 func (q *Queries) ServersInsertSupportDeskGrants(ctx context.Context, arg ServersInsertSupportDeskGrantsParams) error {
 	_, err := q.db.Exec(ctx, serversInsertSupportDeskGrants, arg.OrgID, arg.Toolset1, arg.SlackServerID)
+	return err
+}
+
+const serversInsertUpstreamClientChoice = `-- name: ServersInsertUpstreamClientChoice :exec
+INSERT INTO upstream_client_selections
+  (id, project_id, organization_id, credential_kind, credential_id,
+   mcp_server_id, remote_session_client_id, client_attachment_scope, no_auth,
+   source)
+SELECT $1::uuid, $2::uuid, $3::text, $4::text,
+       $5::uuid, $6::uuid, c.id, c.attachment_scope,
+       $7::uuid IS NULL, $8::text
+FROM (SELECT 1) AS one
+LEFT JOIN remote_session_clients AS c
+  ON c.id = $7::uuid
+`
+
+type ServersInsertUpstreamClientChoiceParams struct {
+	ID                    uuid.UUID
+	ProjectID             uuid.UUID
+	OrgID                 string
+	CredentialKind        string
+	CredentialID          uuid.UUID
+	McpServerID           uuid.UUID
+	RemoteSessionClientID uuid.NullUUID
+	Source                string
+}
+
+// One seeded credential's choice for one server, as issuance records it: the
+// client the credential uses there, or no-auth when the client is omitted.
+// no_auth follows the parameter, so a client id that resolves to no client
+// fails the no-auth check instead of being recorded as no-auth. The projects
+// delete cascades these rows.
+func (q *Queries) ServersInsertUpstreamClientChoice(ctx context.Context, arg ServersInsertUpstreamClientChoiceParams) error {
+	_, err := q.db.Exec(ctx, serversInsertUpstreamClientChoice,
+		arg.ID,
+		arg.ProjectID,
+		arg.OrgID,
+		arg.CredentialKind,
+		arg.CredentialID,
+		arg.McpServerID,
+		arg.RemoteSessionClientID,
+		arg.Source,
+	)
 	return err
 }
 

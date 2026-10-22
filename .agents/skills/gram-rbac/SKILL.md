@@ -75,7 +75,9 @@ Scope vocabulary, grant types, and enforcement logic are defined here. `authz`'s
 
 `server/internal/access/` implements the Goa `access` service on top of `authz`. Every handler calls `s.authz.Require(...)` with the appropriate scope before doing work. The package also owns `queries.sql` and the generated `server/internal/access/repo/` SQLc package that both `access` and `authz` use to read and write grant rows.
 
-**Scope metadata.** `ListScopes` in `server/internal/access/impl.go` returns one `{Slug, Description, ResourceType}` entry per scope; this is what the dashboard consumes to render the scope picker.
+**Scope metadata.** `ListScopes` in `server/internal/access/impl.go` supplies scope slugs, descriptions, resource types, and visibility to dashboard scope pickers. The RBAC override toolbar also uses this catalog: user-visible scopes and groups appear automatically, and `resourceType` controls narrowing (plugin scopes use `project`). Do not maintain a duplicate frontend scope list.
+
+**Override recovery.** `ListScopes` requires `org:read`. The override editor always renders an `org:read` toggle, but does not force it on. If catalog access is denied, saved choices and cached metadata remain available. With no cached catalog, the editor still shows `org:read` and saved scopes under a fallback group; undiscovered catalog scopes appear after recovery. Re-enabling `org:read` automatically clears stale organization restrictions and persists the change before refetching. Alternatively, disable the override.
 
 **Full-access grant list.** `ListGrants` returns a hard-coded full-access scope list when enforcement is intentionally skipped, such as sessionless or API-key requests. That inline list in `server/internal/access/impl.go` must grow whenever a new scope is added. The parallel test expectation is `expectedFullAccessScopes` in `server/internal/access/listusergrants_test.go`.
 
@@ -173,7 +175,7 @@ Use this when the resource type is already represented (e.g. adding a new verb o
 1. Add the `Scope<Name>` constant in `server/internal/authz/scopes.go`.
 2. Add the new scope to `scopeExpansions` in the same file. Usually: the new scope is the upper or lower end of an existing read/write/connect triple.
 3. Extend `SystemRoleGrants` in `server/internal/authz/grants.go`: admin always receives the new scope. Member receives it if and only if end users should have it by default (read and connect, yes; write, no).
-4. Add a `{Slug, Description, ResourceType}` entry to `ListScopes` in `server/internal/access/impl.go`.
+4. Add the scope metadata to `ListScopes` in `server/internal/access/impl.go`, with the correct resource type and visibility. The override toolbar discovers user-visible scopes from this backend catalog; do not add scopes or groups manually to the toolbar.
 5. Extend the hard-coded full-access scope list in `ListGrants` (same `impl.go`) so callers without grants loaded still see the complete catalogue.
 6. Update the three enums in `server/design/access/design.go` that have to stay in lockstep.
 7. No dashboard edit is needed for the `Scope` union — it is regenerated in the SDK (`@gram/client/models/components/rolegrant.js`) by `gen:sdk` in step 10. Confirm the new slug appears there after regeneration.

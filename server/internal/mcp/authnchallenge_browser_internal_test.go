@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -72,7 +73,7 @@ func TestFederatedCrossOriginBrowserHandoff(t *testing.T) {
 	state.Browser.CallbackHash = ""
 	state.Endpoint.BaseURL = "https://custom.example"
 	state.Federation = &FederatedChallenge{CallbackURL: "https://gram.example/mcp/idp_callback", StartPhase: "bootstrap"}
-	endpoint := &ResolvedMcpEndpoint{RouteBase: "mcp", Slug: "test"}
+	endpoint := &ResolvedMcpEndpoint{RouteBase: mcproute.MCP, Slug: "test"}
 	bootstrap := httptest.NewRecorder()
 	require.NoError(t, s.prepareFederatedBrowserHandoff(bootstrap, httptest.NewRequest(http.MethodGet, "https://gram.example/mcp/idp_callback", nil), endpoint, &state))
 	require.Equal(t, "origin", state.Federation.StartPhase)

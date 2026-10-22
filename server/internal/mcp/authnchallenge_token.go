@@ -32,6 +32,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
@@ -192,7 +193,7 @@ func (s *Service) HandleToken(w http.ResponseWriter, r *http.Request) error {
 		return oops.E(oops.CodeBadRequest, nil, "an mcp slug must be provided").LogError(ctx, s.logger)
 	}
 	logger := s.logger.With(attr.SlogToolsetMCPSlug(mcpSlug))
-	endpoint, err := s.LoadResolvedMcpEndpointBySlug(ctx, logger, mcpSlug, "mcp")
+	endpoint, err := s.LoadResolvedMcpEndpointBySlug(ctx, logger, mcpSlug, mcproute.MCP)
 	if err != nil {
 		return err
 	}
@@ -384,6 +385,18 @@ func (s *Service) authenticateTokenClient(
 	if reason != "" {
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth token client authentication rejected", clientID, presentedAuthMethod, grantType, reason)
 		return nil, writeTokenError(ctx, w, logger, http.StatusUnauthorized, "invalid_client", "client_id is required")
+	}
+	// Only a grant that resolves CIMD would fetch a client_id naming this
+	// endpoint. Refused ahead of admission and the fetch, as at /authorize.
+	if resolveMode == resolveClientCIMD {
+		namesEndpoint, err := s.clientIDNamesEndpoint(endpoint, baseURL, clientID)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "check client_id against endpoint URLs").LogError(ctx, logger)
+		}
+		if namesEndpoint {
+			logOAuthClientCredentialEvent(ctx, logger, r, "oauth token client authentication rejected", clientID, presentedAuthMethod, grantType, clientIDNamesEndpointReason)
+			return nil, writeTokenError(ctx, w, logger, http.StatusUnauthorized, oautherr.CodeInvalidClient, clientIDNamesEndpointDescription)
+		}
 	}
 	clientRow, err := s.resolveUserSessionClient(ctx, logger, endpoint, clientID, resolveMode)
 	if err != nil {
@@ -1101,10 +1114,10 @@ func (s *Service) rotateRefreshToken(
 			admittedAgentSessionID = refreshSession.ID
 		}
 	}
-	if lookupErr == nil && refreshSession.SubjectUrn.Kind == urn.SessionSubjectKindUser &&
+	if lookupErr == nil &&
 		refreshSession.UserSessionClientID.Valid && refreshSession.UserSessionClientID.UUID == clientRow.ID &&
 		refreshSession.RefreshExpiresAt.Valid && refreshSession.RefreshExpiresAt.Time.After(time.Now()) &&
-		s.userRefreshNeedsUpstreamReconnect(ctx, logger, endpoint, refreshSession.SubjectUrn, refreshSession.Jti) {
+		s.refreshNeedsUpstreamReconnect(ctx, logger, endpoint, refreshSession.SubjectUrn, refreshSession.Jti) {
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token request rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", "upstream_reconnect_required")
 		return true, writeTokenError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeInvalidGrant, remoteSessionReconnectDescription)
 	}
@@ -1361,37 +1374,89 @@ func (s *Service) rotateRefreshToken(
 	return published, writeTokenSuccess(ctx, w, logger, minted.Body)
 }
 
-// userRefreshNeedsUpstreamReconnect reports whether a user's refresh should be
+// refreshNeedsUpstreamReconnect reports whether a session's refresh should be
 // refused because a required upstream remote session needs reconnecting. A new
 // access token would only hit the same invalid_token from the MCP runtime,
 // while invalid_grant sends the client through the consent page that
 // reconnects the upstream. It fails open (meta MCP endpoints, check errors)
 // because many clients treat any failed refresh as a sign-out.
 //
+// A direct proxied server is served through the credential's choice, so
+// refresh judges that choice for every session the runtime holds to its
+// choices: a missing or unusable one is refused, as the runtime would refuse
+// it, and a no-auth one needs no upstream. For a user, a chosen client needs
+// reconnecting only when its own stored grant does; sibling clients on the
+// user session issuer never decide. Other endpoints keep the user's
+// issuer-wide check.
+//
 // When identity chaining owns the upstream, refresh follows the runtime, which
-// then serves the call from the upstream's own token or by chaining and never
-// consults sibling clients on the user session issuer; the consent page
-// likewise lets a chained card stand in for a connection. So once chaining
-// serves the grant, sibling sessions need no reconnect either. The reconnect
-// stands only when chaining does not serve the upstream, stored state
-// confirms the human must sign in again, or a provider just refused chaining
-// for good, which only the consent page's separate sign-in works around.
-// Anything chaining cannot confirm,
-// a failed read included, fails open, because no reconnect would change it.
-func (s *Service) userRefreshNeedsUpstreamReconnect(ctx context.Context, logger *slog.Logger, endpoint *ResolvedMcpEndpoint, subject urn.SessionSubject, jti string) bool {
+// then serves the call from the chosen client's token or by chaining through
+// that client's binding; the consent page likewise lets a chained card stand
+// in for a connection. The reconnect stands only when chaining does not serve
+// the upstream, stored state confirms the human must sign in again, or a
+// provider just refused chaining for good, which only the consent page's
+// separate sign-in works around. Anything chaining cannot confirm, a failed
+// read included, fails open, because no reconnect would change it.
+func (s *Service) refreshNeedsUpstreamReconnect(ctx context.Context, logger *slog.Logger, endpoint *ResolvedMcpEndpoint, subject urn.SessionSubject, jti string) bool {
+	switch subject.Kind {
+	case urn.SessionSubjectKindUser, urn.SessionSubjectKindAgent, urn.SessionSubjectKindWorkload, urn.SessionSubjectKindAnonymous:
+	case urn.SessionSubjectKindAPIKey:
+		return false
+	default:
+		return false
+	}
 	if endpoint.MetaMcpServerID.Valid {
 		return false
 	}
-	reconnect, err := s.remoteChallengeMgr.RemoteSessionsNeedReconnect(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject)
-	if err != nil {
-		logger.WarnContext(ctx, "check upstream remote sessions before refresh", attr.SlogError(err))
-		return false
-	}
-	if !reconnect || s.identityChainer == nil || subject.Kind != urn.SessionSubjectKindUser || subject.ID == "" {
+	// Where the auth client resolver serves the organization, a choice it
+	// cannot use sends the session to reconnect rather than refreshing into
+	// the same rejection.
+	if reconnect, decided, err := s.refreshNeedsAuthClientReconnect(ctx, endpoint, subject, jti); err != nil {
+		logger.WarnContext(ctx, "resolve auth client before refresh", attr.SlogError(err))
+	} else if decided {
 		return reconnect
 	}
-	routing := consentRouting{backend: consentBackendNone, upstream: endpoint.UpstreamResource, issuer: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, members: nil, grants: nil, projectScoped: false}
-	req, ok, err := s.directChainingRequest(ctx, endpoint, subject.ID, routing)
+	user := subject.Kind == urn.SessionSubjectKindUser
+	routing := consentRouting{backend: consentBackendNone, upstream: endpoint.UpstreamResource, members: nil}
+	tunneled, proxied, err := s.consentDirectBackend(ctx, endpoint, routing)
+	if err != nil {
+		return false
+	}
+	if !proxied {
+		if !user {
+			return false
+		}
+		reconnect, err := s.remoteChallengeMgr.RemoteSessionsNeedReconnect(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject)
+		if err != nil {
+			logger.WarnContext(ctx, "check upstream remote sessions before refresh", attr.SlogError(err))
+			return false
+		}
+		return reconnect
+	}
+
+	choice, err := s.refreshUpstreamChoice(ctx, endpoint, jti)
+	switch {
+	case errors.Is(err, errUpstreamSelectionMissing), errors.Is(err, errUpstreamSelectionUnusable):
+		return true
+	case err != nil:
+		logger.WarnContext(ctx, "load upstream client choice before refresh", attr.SlogError(err))
+		return false
+	case choice.noAuth(), !user:
+		return false
+	}
+	routing.backend = consentBackendRemote
+	if tunneled {
+		routing.backend = consentBackendTunneled
+	}
+	reconnect, err := s.remoteChallengeMgr.ClientNeedsReconnect(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject, choice.clientID.UUID)
+	if err != nil {
+		logger.WarnContext(ctx, "check chosen upstream remote session before refresh", attr.SlogError(err))
+		return false
+	}
+	if !reconnect || s.identityChainer == nil || subject.ID == "" {
+		return reconnect
+	}
+	req, ok, err := s.directChainingRequest(ctx, endpoint, subject.ID, routing, choice)
 	switch {
 	case err != nil:
 		return false

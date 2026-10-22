@@ -21,6 +21,42 @@ const (
 	// SigintSensorDefinitionHashKey identifies the evaluated sensor configuration version.
 	SigintSensorDefinitionHashKey = attribute.Key("gram.sigint.sensor.definition_hash")
 
+	// AuthClientBackfillPhaseKey names a typed auth client backfill phase.
+	AuthClientBackfillPhaseKey = attribute.Key("gram.auth_client_backfill.phase")
+
+	// AuthClientBackfillKindKey names the kind of configured upstream identity a typed auth client backfill count covers.
+	AuthClientBackfillKindKey = attribute.Key("gram.auth_client_backfill.kind")
+
+	// AuthClientBackfillDecidedKey counts configured identities and server links a typed auth client backfill decided.
+	AuthClientBackfillDecidedKey = attribute.Key("gram.auth_client_backfill.decided")
+
+	// AuthClientBackfillWrittenKey counts records a typed auth client backfill wrote.
+	AuthClientBackfillWrittenKey = attribute.Key("gram.auth_client_backfill.written")
+
+	// AuthClientBackfillRetiredKey counts records a typed auth client backfill retired.
+	AuthClientBackfillRetiredKey = attribute.Key("gram.auth_client_backfill.retired")
+
+	// AuthClientBackfillUnresolvedKey counts configured identities a typed auth client backfill could not record without a guess.
+	AuthClientBackfillUnresolvedKey = attribute.Key("gram.auth_client_backfill.unresolved")
+
+	// AuthClientIDKey identifies the typed auth client a request resolved its upstream credential through.
+	AuthClientIDKey = attribute.Key("gram.auth_client.id")
+
+	// AuthClientTypeKey is the type of the typed auth client a request resolved through.
+	AuthClientTypeKey = attribute.Key("gram.auth_client.type")
+
+	// AuthClientOutcomeKey is the outcome of resolving a request's typed auth client.
+	AuthClientOutcomeKey = attribute.Key("gram.auth_client.outcome")
+
+	// AuthClientReasonKey is why resolving a request's typed auth client did not succeed.
+	AuthClientReasonKey = attribute.Key("gram.auth_client.reason")
+
+	// AuthClientLegacyOutcomeKey is the outcome the legacy upstream client choice reached for the same request.
+	AuthClientLegacyOutcomeKey = attribute.Key("gram.auth_client.legacy_outcome")
+
+	// AuthClientParityAgreedKey reports whether a shadow comparison of the typed auth client resolver agreed with the legacy choice.
+	AuthClientParityAgreedKey = attribute.Key("gram.auth_client.parity_agreed")
+
 	// SigintRequestedWindowSizeKey records the configured message count including the target.
 	SigintRequestedWindowSizeKey = attribute.Key("gram.sigint.window.requested_size")
 
@@ -1069,6 +1105,67 @@ func SlogSigintSensorMode(v string) slog.Attr { return slog.String(string(Sigint
 // SlogSigintSensorDefinitionHash identifies the evaluated sensor configuration version.
 func SlogSigintSensorDefinitionHash(v string) slog.Attr {
 	return slog.String(string(SigintSensorDefinitionHashKey), v)
+}
+
+// SlogAuthClientBackfillPhase names a typed auth client backfill phase.
+func SlogAuthClientBackfillPhase(v string) slog.Attr {
+	return slog.String(string(AuthClientBackfillPhaseKey), v)
+}
+
+// SlogAuthClientBackfillKind names the kind of configured upstream identity a count covers.
+func SlogAuthClientBackfillKind(v string) slog.Attr {
+	return slog.String(string(AuthClientBackfillKindKey), v)
+}
+
+// SlogAuthClientBackfillDecided counts configured identities and server links decided.
+func SlogAuthClientBackfillDecided(v int) slog.Attr {
+	return slog.Int(string(AuthClientBackfillDecidedKey), v)
+}
+
+// SlogAuthClientBackfillWritten counts records written.
+func SlogAuthClientBackfillWritten(v int) slog.Attr {
+	return slog.Int(string(AuthClientBackfillWrittenKey), v)
+}
+
+// SlogAuthClientBackfillRetired counts records retired.
+func SlogAuthClientBackfillRetired(v int) slog.Attr {
+	return slog.Int(string(AuthClientBackfillRetiredKey), v)
+}
+
+// SlogAuthClientBackfillUnresolved counts configured identities not recorded without a guess.
+func SlogAuthClientBackfillUnresolved(v int) slog.Attr {
+	return slog.Int(string(AuthClientBackfillUnresolvedKey), v)
+}
+
+func AuthClientID(v string) attribute.KeyValue { return AuthClientIDKey.String(v) }
+
+// SlogAuthClientID identifies a typed auth client.
+func SlogAuthClientID(v string) slog.Attr { return slog.String(string(AuthClientIDKey), v) }
+
+func AuthClientType(v string) attribute.KeyValue { return AuthClientTypeKey.String(v) }
+
+// SlogAuthClientType is a typed auth client's type.
+func SlogAuthClientType(v string) slog.Attr { return slog.String(string(AuthClientTypeKey), v) }
+
+func AuthClientOutcome(v string) attribute.KeyValue { return AuthClientOutcomeKey.String(v) }
+
+// SlogAuthClientOutcome is the outcome of resolving a typed auth client.
+func SlogAuthClientOutcome(v string) slog.Attr { return slog.String(string(AuthClientOutcomeKey), v) }
+
+func AuthClientReason(v string) attribute.KeyValue { return AuthClientReasonKey.String(v) }
+
+// SlogAuthClientReason is why resolving a typed auth client did not succeed.
+func SlogAuthClientReason(v string) slog.Attr { return slog.String(string(AuthClientReasonKey), v) }
+
+func AuthClientLegacyOutcome(v string) attribute.KeyValue {
+	return AuthClientLegacyOutcomeKey.String(v)
+}
+
+func AuthClientParityAgreed(v bool) attribute.KeyValue { return AuthClientParityAgreedKey.Bool(v) }
+
+// SlogAuthClientLegacyOutcome is the outcome the legacy upstream client choice reached.
+func SlogAuthClientLegacyOutcome(v string) slog.Attr {
+	return slog.String(string(AuthClientLegacyOutcomeKey), v)
 }
 
 // SlogSigintRequestedWindowSize records the configured message count including the target.

@@ -1422,9 +1422,9 @@ type orgProvisionOptions struct {
 }
 
 // provisionOrgForUser creates an organization and attaches a user to it as the
-// first member. Shared by the three paths that create orgs: self-serve register,
-// signup with a company name carried through login, and assistants
-// auto-provisioning.
+// first member. Shared by the four paths that create orgs: self-serve register,
+// signup with a company name carried through login, assistants
+// auto-provisioning, and a Platform MCP workspace named during OAuth.
 //
 // Session mutation is deliberately left to the caller. Register updates an
 // already-stored session; the callback-side callers assign

@@ -29,7 +29,7 @@ const (
 	// constant to go.mod, so a dependency bump that forgets the citation fails
 	// CI instead of shipping a guide that cites the wrong export.
 	ModulePath    = "github.com/speakeasy-api/mcp-setup-docs/go"
-	PinnedVersion = "v0.3.8"
+	PinnedVersion = "v0.3.9"
 	// sourceName is the human half of a citation: "mcp-setup-docs/go@v0.3.0".
 	sourceName = "mcp-setup-docs/go"
 
@@ -130,6 +130,7 @@ func Build(opts Options) ([]platformmcp.SetupResource, error) {
 				continue
 			}
 			resource := platformmcp.SetupResource{
+				Render:       nil,
 				URI:          platformmcp.SetupResourceURI(string(guide.Slug), section.intent),
 				Name:         fmt.Sprintf("setup-%s-%s", guide.Slug, strings.ReplaceAll(section.intent, "_", "-")),
 				Title:        fmt.Sprintf("%s — %s", guide.Title, section.label),

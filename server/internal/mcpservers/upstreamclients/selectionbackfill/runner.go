@@ -25,8 +25,14 @@ const defaultPageSize = 200
 type Outcome string
 
 const (
-	// OutcomeSelected is a pair that already has a choice.
+	// OutcomeSelected is a pair that already has a usable choice.
 	OutcomeSelected Outcome = "selected"
+
+	// OutcomeUnusableClient is a pair whose chosen client is no longer usable:
+	// detached from the server, unbound from the credential's issuer, or
+	// deleted. A client choice is never replaced by another client, so the
+	// credential must reconnect.
+	OutcomeUnusableClient Outcome = "unusable_client"
 
 	// OutcomeClient is a pair whose server has exactly one associated client
 	// the credential's issuer also binds; that client is chosen.
@@ -62,6 +68,8 @@ func Classify(row ListUpstreamClientSelectionCoverageRow) Outcome {
 	switch {
 	case row.Selected:
 		return OutcomeSelected
+	case row.ChoseClient:
+		return OutcomeUnusableClient
 	case row.EligibleClients == 1:
 		return OutcomeClient
 	case row.EligibleClients > 1:

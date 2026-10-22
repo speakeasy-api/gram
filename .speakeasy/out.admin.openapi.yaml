@@ -9914,6 +9914,117 @@ components:
         - id
         - customer_id
         - status
+    AdminUpstreamOAuthMigrationAuthClientKind:
+      type: object
+      properties:
+        decided:
+          type: integer
+          description: Configuration and server links decided.
+          format: int64
+        kind:
+          type: string
+          description: 'The kind: oauth, header or ema.'
+        pending_clients:
+          type: integer
+          description: Auth clients not yet recorded.
+          format: int64
+        pending_headers:
+          type: integer
+          description: Header copies and EMA scope sets not yet up to date.
+          format: int64
+        pending_links:
+          type: integer
+          description: Server to auth client links not yet recorded.
+          format: int64
+        pending_retirements:
+          type: integer
+          description: Backfilled auth clients and server links the configuration no longer yields, not yet retired.
+          format: int64
+        unresolved:
+          type: integer
+          description: Configuration that cannot be recorded without a guess.
+          format: int64
+      description: Where one kind of configured upstream identity stands.
+      required:
+        - kind
+        - decided
+        - pending_clients
+        - pending_links
+        - pending_headers
+        - pending_retirements
+        - unresolved
+    AdminUpstreamOAuthMigrationAuthClients:
+      type: object
+      properties:
+        associations:
+          type: integer
+          description: Configured identities and server links decided.
+          format: int64
+        complete:
+          type: boolean
+          description: Whether every configured identity has its auth client, server links and header copies recorded, no backfilled record is left to retire, no server offering one is left undecided, and no phase failed.
+        failed_phases:
+          type: array
+          items:
+            type: string
+          description: 'Phases whose check failed: oauth, headers, ema, reconcile or mark. The counts cover the other phases.'
+        in_progress:
+          type: boolean
+          description: Whether a run is recording typed auth clients for the organization right now. The other counts are then empty; check again when it finishes.
+        kinds:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminUpstreamOAuthMigrationAuthClientKind'
+          description: The same counts for each kind of configured identity.
+        pending_clients:
+          type: integer
+          description: Auth clients not yet recorded.
+          format: int64
+        pending_headers:
+          type: integer
+          description: Header copies and EMA scope sets not yet up to date.
+          format: int64
+        pending_links:
+          type: integer
+          description: Server to auth client links not yet recorded.
+          format: int64
+        pending_marked_servers:
+          type: integer
+          description: Servers offering a backfilled auth client whose need for upstream authentication is still undecided, not yet marked as needing it.
+          format: int64
+        pending_retirements:
+          type: integer
+          description: Backfilled auth clients and server links the configuration no longer yields, not yet retired.
+          format: int64
+        unresolved:
+          type: integer
+          description: Configured identities that cannot be recorded without a guess and need attention.
+          format: int64
+        unresolved_associations:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminUpstreamOAuthMigrationUnresolvedAssociation'
+          description: The configuration counted in unresolved.
+        warnings:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminUpstreamOAuthMigrationUnresolvedAssociation'
+          description: Configuration worth a look that needs no action and does not hold back complete, such as a server at an identity chaining upstream's origin that only live discovery could confirm.
+      description: Where one organization stands in recording a typed auth client for every upstream identity its servers are configured with (upstream OAuth clients, source credential headers and identity chaining upstreams), and in retiring backfilled records the configuration no longer yields. Nothing reads these records yet.
+      required:
+        - complete
+        - in_progress
+        - associations
+        - pending_clients
+        - pending_links
+        - pending_headers
+        - pending_retirements
+        - pending_marked_servers
+        - unresolved
+        - unresolved_associations
+        - warnings
+        - kinds
+        - failed_phases
     AdminUpstreamOAuthMigrationOrganization:
       type: object
       properties:
@@ -9957,9 +10068,24 @@ components:
           type: integer
           description: Server to client associations recorded.
           format: int64
+        auth_client_links_written:
+          type: integer
+          description: Server to auth client links recorded.
+          format: int64
+        auth_clients_error:
+          type: string
+          description: Why recording typed auth clients failed, when it did. The upstream OAuth migration itself is unaffected.
+        auth_clients_written:
+          type: integer
+          description: Typed auth clients recorded.
+          format: int64
         selections_written:
           type: integer
           description: Credential choices recorded.
+          format: int64
+        servers_marked_requiring_upstream_auth:
+          type: integer
+          description: Servers marked as needing upstream authentication because they offer a backfilled auth client.
           format: int64
         status:
           $ref: '#/components/schemas/AdminUpstreamOAuthMigrationStatus'
@@ -9987,6 +10113,8 @@ components:
     AdminUpstreamOAuthMigrationStatus:
       type: object
       properties:
+        auth_clients:
+          $ref: '#/components/schemas/AdminUpstreamOAuthMigrationAuthClients'
         credentials:
           type: integer
           description: Live user session credentials scanned.
@@ -10018,7 +10146,7 @@ components:
           items:
             $ref: '#/components/schemas/AdminUpstreamOAuthMigrationServer'
           description: Servers whose upstream OAuth client must be associated by an administrator.
-      description: 'Where one organization stands in the upstream OAuth migration, read from a dry run of both backfills. The organization is migrated when nothing is left to write and no server needs configuring. Credentials that must reconnect do not block it: they are asked to sign in again once serving reads their choices.'
+      description: 'Where one organization stands in the upstream OAuth migration, read from a dry run of its backfills. The organization is migrated when nothing is left to write and no server needs configuring. Credentials that must reconnect do not block it: they are asked to sign in again once serving reads their choices. Typed auth clients are reported separately in auth_clients and never affect migrated.'
       required:
         - organization_id
         - migrated
@@ -10028,6 +10156,69 @@ components:
         - credentials
         - pending_selections
         - reconnect_credentials
+    AdminUpstreamOAuthMigrationUnresolvedAssociation:
+      type: object
+      properties:
+        association_id:
+          type: string
+          description: The server to upstream OAuth client association ID, for an oauth association.
+          format: uuid
+        auth_client_id:
+          type: string
+          description: The auth client already recorded, if any.
+          format: uuid
+        binding_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+          description: Every identity chaining binding decided together, for ema.
+        kind:
+          type: string
+          description: 'What was decided: oauth, header or ema.'
+        mcp_server_id:
+          type: string
+          description: The MCP server ID, when one server is concerned.
+          format: uuid
+        project_id:
+          type: string
+          description: The project the configuration belongs to.
+          format: uuid
+        reason:
+          type: string
+          description: 'Why it cannot be recorded: unknown_owner, type_mismatch, project_mismatch, multiple_authorization_headers, duplicate_header_names, denied_source, mixed_credential_headers, oauth_client_shared_across_sources, ema_client_shared_across_sources, conflicting_scopes, resource_variants, resource_not_matched, issuer_not_allowed or registration_out_of_reach; for a warning, server_not_matched.'
+        remote_session_client_id:
+          type: string
+          description: The upstream OAuth client ID, for oauth and ema.
+          format: uuid
+        server_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+          description: The servers concerned, for an upstream OAuth client shared across sources.
+        source_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+          description: The sources concerned, for an upstream OAuth client shared across sources.
+        subject_id:
+          type: string
+          description: The association, source, upstream OAuth client or first binding decided.
+          format: uuid
+      description: Configuration the typed auth client backfill cannot record without a guess, and why. ID fields that do not apply to its kind are the nil UUID.
+      required:
+        - kind
+        - reason
+        - subject_id
+        - association_id
+        - mcp_server_id
+        - project_id
+        - remote_session_client_id
+        - binding_ids
+        - source_ids
+        - server_ids
     AdminUser:
       type: object
       properties:

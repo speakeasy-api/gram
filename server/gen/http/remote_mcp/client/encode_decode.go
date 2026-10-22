@@ -3905,6 +3905,7 @@ func unmarshalMcpServerResponseBodyToTypesMcpServer(v *McpServerResponseBody) *t
 		NetworkAccessMode:     types.NetworkAccessMode(*v.NetworkAccessMode),
 		PrimaryEndpointID:     v.PrimaryEndpointID,
 		PrimaryEndpointURL:    v.PrimaryEndpointURL,
+		HasEndpoint:           v.HasEndpoint,
 		CreatedAt:             *v.CreatedAt,
 		UpdatedAt:             *v.UpdatedAt,
 	}
@@ -3926,6 +3927,7 @@ func unmarshalMcpServerToolsetSummaryResponseBodyToTypesMcpServerToolsetSummary(
 		ID:                    *v.ID,
 		Slug:                  *v.Slug,
 		Name:                  *v.Name,
+		Description:           v.Description,
 		ToolCount:             *v.ToolCount,
 		ToolSelectionMode:     *v.ToolSelectionMode,
 		ExternalMcpProxyOnly:  *v.ExternalMcpProxyOnly,
