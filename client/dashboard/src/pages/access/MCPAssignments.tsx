@@ -279,7 +279,7 @@ export function MCPAssignments({
         <div role="alert" className="space-y-3">
           <Text>
             Couldn’t load the complete assignment review. Check your access and
-            retry before enabling the gateway.
+            retry.
           </Text>
           <Button variant="secondary" onClick={refresh}>
             <Button.Text>Retry</Button.Text>

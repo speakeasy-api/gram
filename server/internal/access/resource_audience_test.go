@@ -531,6 +531,32 @@ func TestService_ListResourceAudience_HonoursProjectScopedGrants(t *testing.T) {
 	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
 }
 
+func TestService_ListResourceAudience_OrgAdminReadsBlockedServer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	serverID := seedMCPServer(t, ctx, ti.conn, authCtx.ActiveOrganizationID)
+
+	// An organization admin whose read of this server is blocked (for example
+	// by a block on everyone) can still read the rules they are allowed to
+	// write.
+	adminCtx := authz.GrantsToContext(contextvalues.SetAuthContext(ctx, authCtx), []authz.Grant{
+		authz.NewGrant(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID),
+		authz.NewGrant(authz.ScopeMCPBlockedRead, serverID),
+	})
+
+	_, err := ti.service.ListResourceAudience(adminCtx, &gen.ListResourceAudiencePayload{
+		ResourceKind: "mcp",
+		ResourceID:   serverID,
+		SessionToken: nil,
+		ApikeyToken:  nil,
+	})
+	require.NoError(t, err)
+}
+
 func TestService_SetResourceAudience_RefusesStaleVersion(t *testing.T) {
 	t.Parallel()
 

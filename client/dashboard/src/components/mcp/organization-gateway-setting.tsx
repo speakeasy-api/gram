@@ -9,9 +9,9 @@ import type { OrganizationGatewaySetting } from "./useOrganizationGatewaySetting
 import { Link } from "react-router";
 
 /**
- * The on/off switch. The page starts an access review when turning on;
- * turning off asks first, because
- * it cuts off every connected client at once. Members see it disabled with the
+ * The on/off switch. Turning on asks first and recommends reviewing MCP
+ * assignments; turning off asks first, because it cuts off every connected
+ * client at once. Members see it disabled with the
  * admin-only reason.
  */
 export function OrganizationGatewaySwitch({
@@ -21,7 +21,10 @@ export function OrganizationGatewaySwitch({
 }: Pick<OrganizationGatewaySetting, "setOn" | "isPending"> & {
   on: boolean;
 }): JSX.Element {
-  const [confirming, setConfirming] = useState(false);
+  const [confirming, setConfirming] = useState<"on" | "off" | null>(null);
+  const onOpenChange = (open: boolean) => {
+    if (!open) setConfirming(null);
+  };
   return (
     <>
       <RequireScope
@@ -31,16 +34,34 @@ export function OrganizationGatewaySwitch({
       >
         <Switch
           checked={on}
-          onCheckedChange={(checked) =>
-            checked ? setOn(true) : setConfirming(true)
-          }
+          onCheckedChange={(checked) => setConfirming(checked ? "on" : "off")}
           disabled={isPending}
           aria-label="Organization Gateway"
         />
       </RequireScope>
       <ConfirmDialog
-        open={confirming}
-        onOpenChange={setConfirming}
+        open={confirming === "on"}
+        onOpenChange={onOpenChange}
+        title="Turn on Organization Gateway?"
+        description={
+          <>
+            Each person gets every MCP server they can access across all
+            projects, including access inherited from broad roles.
+            <br />
+            <br />
+            We recommend reviewing MCP assignments first and removing any that
+            people no longer need.
+          </>
+        }
+        confirmLabel="Turn on"
+        pendingLabel="Turning on…"
+        confirmVariant="primary"
+        isPending={isPending}
+        onConfirm={() => setOn(true, { onSuccess: () => setConfirming(null) })}
+      />
+      <ConfirmDialog
+        open={confirming === "off"}
+        onOpenChange={onOpenChange}
         title="Turn off Organization Gateway?"
         description={
           <>
@@ -57,7 +78,7 @@ export function OrganizationGatewaySwitch({
         pendingLabel="Turning off…"
         isPending={isPending}
         onConfirm={() =>
-          setOn(false, { onSuccess: () => setConfirming(false) })
+          setOn(false, { onSuccess: () => setConfirming(null) })
         }
       />
     </>
