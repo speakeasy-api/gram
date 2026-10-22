@@ -1,0 +1,19 @@
+server/migrations/atlas.sum
+  s_63809ffe88ad47::t_30d5630ba89048 1,487-492
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "defbadec9e76841f479e2af6940037d76893fca3",
+  "prompts": {},
+  "sessions": {
+    "s_63809ffe88ad47": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "154fd015-ea37-495b-8184-fe9bfdbc5924",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}
