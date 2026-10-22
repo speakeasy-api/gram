@@ -226,7 +226,7 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 			"On the external Platform MCP, when an administrator asks about their own access across servers, inspect the authenticated caller directly; do not search the member directory first. For anyone else, find that exact member before inspecting their access. The managed assistant does not have the organization-wide self-access inspection: do not work around that with member search or inference; direct the user to the dashboard or external Platform MCP. Present available results as a compact table grouped by project, with server, connection access, view, and manage columns. Treat public and disabled as endpoint behavior rather than role grants, preserve partial tool access, and say when the inventory was truncated. Never infer a person's role or MCP access from their ability to use Platform MCP, organization administration, or any other permission, and never reveal or reconstruct another member's unmasked identity.",
 			"For signals intelligence, discover the exact project and reusable signals before authoring a sensor. Sensors are classifiers, not enforcement policies. Choose multi_label for independent labels, exclusive for one choice, or ordered_score for two to ten ordered levels with criteria. Only message.role is available to matching predicates. Use create_sensor or create_signal with confirmed:false, show the normalized configuration, and obtain explicit confirmation before resending the identical proposal with its preview token, expected version and a stable idempotency key. Preview creation IDs are provisional. Update shared signals only after showing every affected sensor. A configuration version covers the whole project, so any concurrent configuration change requires a new preview. Re-read the committed target; configuration readiness does not prove inference is active. Receipt replay reports a historical write and a separate live target. If snapshot_scope is verification_unavailable, the write committed but the fresh read failed; preserve all retry inputs and the key, and do not interpret target_available:false as deletion. Only a current_configuration snapshot can establish target absence. Matching examples use caller-supplied metadata, never stored transcripts or inference. These tools currently admit external users only; never infer a human from assistant attribution.",
 			"Risk policy audiences are positive user/role grants, not exclusions. Read the exact policy and obtain confirmation before changing its audience. Self-removal and effective exclusion are unavailable pending organization-scoped coordination of audience grants; remove_self_from_risk_policy always refuses before database transactions or receipt replay. Never infer a human from managed-assistant attribution. For self-removal requests, do not bypass the refusal with an audience replacement, policy disablement, role change, or risk exclusion. For approved incremental user/ROLE audience changes, external organization admins can use change_risk_policy_audience with confirmed bounded add_principals/remove_principals, a fresh expected_version and a stable idempotency_key. It refuses Everyone deltas and empty resulting audiences and only changes exact positive grants; it does not prove effective exclusion. Managed assistants cannot invoke it or read exact audiences. General audience replacements require confirmation of the complete desired audience and must not be presented as Everyone-except-one or role exceptions. Re-read the policy after a write; receipt replay is historical evidence, not proof of current state.",
-			"Use this server to inspect the selected organization and manage reviewed MCP servers in an explicit project. List reviewed catalogue options and eligible projects, then ask the user to choose one of each before mutating. When no listed project fits, or there is none yet, an organization administrator can create one here instead of leaving for the dashboard: ask for the exact name, confirm it, and create the project, which starts empty. Its slug is derived from the name and cannot be chosen; a rename changes only the display name and keeps the slug. Renaming a project needs only write access to that project, as in the dashboard, not organization administrator access. Inspect the chosen candidate and collect only its declared non-secret configuration values. Normal non-secret URLs may be discussed and returned. Register it privately.",
+			"Use this server to inspect the selected organization and manage reviewed MCP servers in an explicit project. List reviewed catalogue options and eligible projects, then ask the user to choose one of each before mutating. When the organization's default project is the only eligible project, use it without asking: the tools that add, check and connect an MCP server act on it when no project is named, and their result names the project used. When no listed project fits, or there is none yet, an organization administrator can create one here instead of leaving for the dashboard: ask for the exact name, confirm it, and create the project, which starts empty. Its slug is derived from the name and cannot be chosen; a rename changes only the display name and keeps the slug. Renaming a project needs only write access to that project, as in the dashboard, not organization administrator access. Inspect the chosen candidate and collect only its declared non-secret configuration values. Normal non-secret URLs may be discussed and returned. Register it privately.",
 			"Use get_mcp_readiness with the returned registration ID to inspect persisted readiness. If readiness says an upstream authorization server is missing, ask the user to explicitly confirm and then call attach_platform_mcp_identity_provider; the server derives the provider from the persisted reviewed MCP source and returns its non-secret provider_url plus an Inspect authorization_url for the user to use Connect or Authorize. Immediately present authorization_url as the exact clickable link—never say a link is above or ask the user to confirm an unspecified authorization action.",
 			"Never request or accept OAuth codes, tokens, client secrets, passwords, API keys, or secret headers in chat. The registration dashboard_setup_url is the Authentication settings fallback, not the authorization page. Force a fresh readiness check after user authorization.",
 			"Setup also decides which MCP clients may sign in to the new server: read get_mcp_client_admission, explain in plain words which apps that lets in, and only change it with set_mcp_client_admission after the user explicitly confirms.",
@@ -567,7 +567,7 @@ func registerUnavailableCatalogRegistrationTool(reg *Registrar) {
 		Title:       "Add a Reviewed MCP Server to a Project",
 		Description: "Add a reviewed MCP server to a project. This is not switched on for your organization yet.",
 		Annotations: registrationAnnotations(),
-	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, unavailableTool("catalog_registration"))
+	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeDefaultable}, unavailableTool("catalog_registration"))
 }
 
 func registerUnavailableRemoteRegistrationTool(reg *Registrar) {
@@ -576,7 +576,7 @@ func registerUnavailableRemoteRegistrationTool(reg *Registrar) {
 		Title:       "Add Your Own MCP Server to a Project",
 		Description: "Add an MCP server of your own to a project. This is not switched on for your organization yet.",
 		Annotations: registrationAnnotations(),
-	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, unavailableTool("direct_remote_registration"))
+	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeDefaultable}, unavailableTool("direct_remote_registration"))
 }
 
 func registerUnavailableLifecycleMetadataTool(reg *Registrar) {
@@ -628,12 +628,17 @@ func registerUnavailableReadinessTools(reg *Registrar) {
 		{"get_mcp_readiness", "Check If an MCP Server Is Working", "Check whether an MCP server is working. This is not switched on for your organization yet.", readOnlyOpenWorldAnnotations()},
 		{"get_mcp_repair_plan", "What to Fix on an MCP Server", "See what to fix on an MCP server that is not working. This is not switched on for your organization yet.", readOnlyAnnotations()},
 	} {
+		// Same project scope as the live registration of each tool.
+		projectScope := ProjectScopeExplicit
+		if tool.name == "get_mcp_readiness" {
+			projectScope = ProjectScopeDefaultable
+		}
 		addTool(reg, &mcp.Tool{
 			Name:        tool.name,
 			Title:       tool.title,
 			Description: tool.description,
 			Annotations: tool.annotations,
-		}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, unavailableTool("mcp_readiness"))
+		}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: projectScope}, unavailableTool("mcp_readiness"))
 	}
 }
 
@@ -665,6 +670,8 @@ func operationBudgetToolResult(err error) (*mcp.CallToolResult, bool) {
 		result = operationBudgetResult{Code: "conflict", Message: "That MCP server conflicts with something already set up in this project."}
 	case errors.Is(err, ErrTargetIneligible):
 		result = operationBudgetResult{Code: "ineligible_project", Message: "That project is not available for MCP setup. Check the project slug and try again."}
+	case errors.Is(err, ErrDefaultProjectNotFound):
+		result = defaultProjectNotFoundResult
 	default:
 		return nil, false
 	}
@@ -691,6 +698,32 @@ func unavailableTool(feature string) mcp.ToolHandlerFor[map[string]any, featureU
 			IsError: true,
 		}, result, nil
 	}
+}
+
+// defaultProjectSlug is the organization's literal default project: the one a
+// ProjectScopeDefaultable tool acts on when the caller names no project.
+const defaultProjectSlug = "default"
+
+// ErrDefaultProjectNotFound is a ProjectScopeDefaultable call that named no
+// project in an organization that has no default project.
+var ErrDefaultProjectNotFound = errors.New("platform mcp default project not found")
+
+var defaultProjectNotFoundResult = operationBudgetResult{Code: "default_project_not_found", Message: "No project was named, and this organization has no default project to use instead. Call list_projects, ask the user to choose one, and name it."}
+
+// projectSlugOrDefault returns projectSlug when the caller named one, and
+// otherwise the slug of the organization's default project.
+func projectSlugOrDefault(ctx context.Context, projects SkillProjectResolver, organizationID, projectSlug string) (string, error) {
+	if projectSlug != "" {
+		return projectSlug, nil
+	}
+	project, err := projects.ResolveProject(ctx, organizationID, defaultProjectSlug)
+	if errors.Is(err, ErrRegistrationInvalid) {
+		return "", ErrDefaultProjectNotFound
+	}
+	if err != nil {
+		return "", fmt.Errorf("resolve platform mcp default project: %w", err)
+	}
+	return project.Slug, nil
 }
 
 func principalFromToolContext(ctx context.Context) (Principal, error) {

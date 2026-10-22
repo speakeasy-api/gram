@@ -91,9 +91,9 @@ func registerPluginTools(reg *Registrar, plugins *PluginsService) {
 	addTool(reg, &mcp.Tool{
 		Name:        "get_my_install_instructions",
 		Title:       "Get My Install Instructions",
-		Description: "Get non-secret, client-specific installation guidance for one assigned published plugin or one configured MCP server the caller may connect to. Name exactly one target in an explicit project. Plugin guidance rechecks the caller's current recipient assignments; standalone MCP guidance rechecks mcp:connect. No marketplace token, repository credential, package bytes, API key, or OAuth credential is returned.",
+		Description: "Get non-secret, client-specific installation guidance for one assigned published plugin or one configured MCP server the caller may connect to. Name exactly one target in a named project, or in the organization's default project when no project is named. Plugin guidance rechecks the caller's current recipient assignments; standalone MCP guidance rechecks mcp:connect. No marketplace token, repository credential, package bytes, API key, or OAuth credential is returned.",
 		Annotations: readOnlyAnnotations(),
-	}, ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: externalOnly, ProjectScope: ProjectScopeExplicit, DiscoveryScopes: discoveryOrgReadOrMCPConnect}, func(ctx context.Context, _ *mcp.CallToolRequest, input GetMyInstallInstructionsInput) (*mcp.CallToolResult, GetMyInstallInstructionsOutput, error) {
+	}, ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: externalOnly, ProjectScope: ProjectScopeDefaultable, DiscoveryScopes: discoveryOrgReadOrMCPConnect}, func(ctx context.Context, _ *mcp.CallToolRequest, input GetMyInstallInstructionsInput) (*mcp.CallToolResult, GetMyInstallInstructionsOutput, error) {
 		return principalToolCall(ctx, installInstructionToolResult, func(principal Principal) (GetMyInstallInstructionsOutput, error) {
 			return plugins.GetMyInstallInstructions(ctx, principal, input)
 		})
@@ -161,7 +161,12 @@ func registerUnavailablePluginTools(reg *Registrar) {
 		if tool.name == "list_plugins" || tool.name == "get_plugin" || tool.name == "list_plugin_assignments" {
 			audiences = bothAudiences
 		}
-		addTool(reg, manifest, ToolMeta{Authorization: authority, Audiences: audiences, ProjectScope: ProjectScopeExplicit, DiscoveryScopes: discoveryScopes}, unavailableTool("plugins"))
+		// Same project scope as the live registration of each tool.
+		projectScope := ProjectScopeExplicit
+		if tool.name == "get_my_install_instructions" {
+			projectScope = ProjectScopeDefaultable
+		}
+		addTool(reg, manifest, ToolMeta{Authorization: authority, Audiences: audiences, ProjectScope: projectScope, DiscoveryScopes: discoveryScopes}, unavailableTool("plugins"))
 	}
 	registerRepublishPluginTool(reg, nil)
 }
@@ -263,6 +268,8 @@ func pluginToolResult(err error) (*mcp.CallToolResult, bool) {
 	switch {
 	case errors.Is(err, ErrPluginProjectNotFound):
 		result = pluginRefusalResult{Code: "not_found", Message: "That project is not one you can use here. Pick one returned by list_projects."}
+	case errors.Is(err, ErrDefaultProjectNotFound):
+		result = pluginRefusalResult{Code: defaultProjectNotFoundResult.Code, Message: defaultProjectNotFoundResult.Message}
 	case errors.Is(err, ErrPluginNotFound):
 		result = pluginRefusalResult{Code: "not_found", Message: "No plugin in this project has that exact name. List the project's plugins with list_plugins and name one of them; nothing is picked by default."}
 	case errors.Is(err, ErrPluginAmbiguous):
