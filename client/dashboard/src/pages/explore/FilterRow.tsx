@@ -56,7 +56,8 @@ export function FilterRow({
         <SelectTrigger size="sm" className="w-48" aria-label="Filter field">
           <SelectValue placeholder="Pick a field" />
         </SelectTrigger>
-        <SelectContent>
+        {/* Field descriptions run long; keep the menu narrow and clip them. */}
+        <SelectContent className="max-w-[400px] **:data-[slot=select-item-description]:line-clamp-3">
           {filterableFields(dataset).map((candidate) => (
             <SelectItem
               key={candidate.name}

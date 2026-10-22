@@ -337,7 +337,7 @@ function Sentence({
             >
               <Icon name="plus" className="size-4" />
             </SelectTrigger>
-            <SelectContent>
+            <SelectContent className="max-w-[400px] **:data-[slot=select-item-description]:line-clamp-3">
               {free.map((field) => (
                 <SelectItem
                   key={field.name}

@@ -174,7 +174,7 @@ export function WidgetView({
         onOpen={onOpen}
         actions={actions}
       />
-      {paged && paged.skipped.length > 0 && (
+      {!restricted && paged && paged.skipped.length > 0 && (
         <p className="text-muted-foreground -mt-2 text-xs">
           Not filtered by {paged.skipped.join(", ")}, which {saved?.dataset}{" "}
           cannot filter on.

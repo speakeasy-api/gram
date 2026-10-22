@@ -232,6 +232,16 @@ describe("WidgetView", () => {
     expect(screen.queryByRole("link")).toBeNull();
   });
 
+  it("does not blame a restricted widget's dataset for the page's filters", () => {
+    testState.datasets = [];
+    testState.restricted = ["sessions"];
+    renderView(widget({}, { id: "widget-1" }), {
+      filters: { client: ["cursor"] },
+    });
+    expect(screen.getByText("Only org admins can see this.")).toBeTruthy();
+    expect(screen.queryByText(/Not filtered by/)).toBeNull();
+  });
+
   it("says a restricted widget is for org admins even when its query no longer works", () => {
     testState.datasets = [];
     testState.restricted = ["sessions"];

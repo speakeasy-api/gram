@@ -242,7 +242,7 @@ func registerDashboardTools(reg *Registrar, service *DashboardsService) {
 			return service.save(ctx, principal, input)
 		})
 	})
-	addTool(reg, dashboardManifest(duplicateDashboardToolName, "Duplicate a Dashboard", "Copy a project dashboard by id, or a Speakeasy-built dashboard by slug, into a new project dashboard the caller owns. Every card of the copy shows a new saved widget, so the copy changes independently of the original."+dashboardWriteSafeguards, dashboardHints{read: false, destructive: false, idempotent: false}), meta, func(ctx context.Context, _ *mcp.CallToolRequest, input duplicateDashboardInput) (*mcp.CallToolResult, dashboardWriteOutput, error) {
+	addTool(reg, dashboardManifest(duplicateDashboardToolName, "Duplicate a Dashboard", "Copy a project dashboard by id, or a Speakeasy-built dashboard by slug, into a new project dashboard the caller owns. Every card of the copy shows a new saved widget, so the copy changes independently of the original. A dashboard with widgets over a dataset only organization administrators may read, such as risk_findings, can only be copied by them, and anyone else is refused as dataset_restricted."+dashboardWriteSafeguards, dashboardHints{read: false, destructive: false, idempotent: false}), meta, func(ctx context.Context, _ *mcp.CallToolRequest, input duplicateDashboardInput) (*mcp.CallToolResult, dashboardWriteOutput, error) {
 		return principalToolCall(ctx, dashboardToolError(ctx, logger), func(principal Principal) (dashboardWriteOutput, error) {
 			return service.duplicate(ctx, principal, input)
 		})
