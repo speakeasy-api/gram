@@ -335,6 +335,9 @@ func (s *Service) serveResolvedMetaMCPEndpoint(
 		w.Header().Set("Mcp-Session-Id", gate.sessionID)
 	}
 
+	// Every member and toolset check this request shadows shares one
+	// admission of its caller.
+	ctx = withMandatoryAdmission(ctx)
 	body, err := s.handleMetaMCPRequest(ctx, logger, mcpEndpoint, metaServer, gate, &req, r.Header.Get(mcpversions.HTTPHeader))
 
 	switch {

@@ -162,6 +162,11 @@ type Service struct {
 	// provider: the posthog client in production, the CSV-backed in-memory
 	// provider in local development, feature.InMemory in tests.
 	features feature.Provider
+	// mandatoryShadowLog dedupes mandatory authz shadow disagreement logs.
+	mandatoryShadowLog *mandatoryShadowLog
+	// prepareMandatory replaces authz PrepareMandatory for the shadow when
+	// set; tests use it to observe admissions.
+	prepareMandatory func(context.Context) (authz.MandatoryAuthorization, error)
 	// cimdResolver fetches + validates Client ID Metadata Documents for
 	// URL-shaped client_ids and owns the cimd.fetch.* telemetry.
 	cimdResolver *cimd.Resolver
@@ -553,6 +558,8 @@ func NewService(
 		siteURL:                   siteURL,
 		posthog:                   posthog,
 		features:                  features,
+		mandatoryShadowLog:        newMandatoryShadowLog(),
+		prepareMandatory:          nil,
 		cimdResolver:              cimd.NewResolver(guardianPolicy, meterProvider, logger),
 		cimdAdmissionMetrics:      admission.NewMetrics(meterProvider, logger),
 		clientAssertionVerifier:   newClientAssertionVerifier(redisClient, guardianPolicy, meterProvider, logger),
@@ -1310,12 +1317,14 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 	// re-reject the JWT it doesn't recognise.
 	runInToolsetGate := cfg.runInToolsetGate
 	callerAlreadyGated := cfg.callerGated
+	connect := authz.MCPCheck(authz.ScopeMCPConnect, cfg.rbacResourceID.String(), toolset.ProjectID.String())
 	if runInToolsetGate {
 		// The WWW-Authenticate URL, issuer URL, and consent action follow
 		// the surface the request arrived under.
 		endpoint := newResolvedMcpEndpointFromToolset(toolset, mcpRouteBase)
 		newCtx, authentication, gateToolSelection, err := s.authenticateIssuerGate(ctx, w, authToken, baseURL, endpoint)
 		if err != nil {
+			s.newMandatoryShadow(ctx, toolset.OrganizationID).shadowRequire(ctx, mandatorySurfaceHostedConnect, err, connect)
 			return err
 		}
 		ctx = newCtx
@@ -1367,87 +1376,26 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 		case !cfg.isPublic:
 			ctx, err = s.RequirePrivateIdentityAuth(ctx, w, r, false, toolset.ID, oauthProtectedResourceURL)
 			if err != nil {
+				s.newMandatoryShadow(ctx, toolset.OrganizationID).shadowRequire(ctx, mandatorySurfaceHostedConnect, err, connect)
 				return err
 			}
 		default:
 			ctx, err = s.TryPublicIdentityAuth(ctx, r, false, toolset.ID)
 			if err != nil {
+				s.newMandatoryShadow(ctx, toolset.OrganizationID).shadowRequire(ctx, mandatorySurfaceHostedConnect, err, connect)
 				return err
 			}
 		}
 	}
 
 	var selectedEnvironment string
-	var authenticated bool
-	if authCtx, ok := contextvalues.GetAuthContext(ctx); ok && authCtx != nil && authCtx.ActiveOrganizationID != "" {
-		projects, err := s.authRepo.ListProjectsByOrganization(ctx, authCtx.ActiveOrganizationID)
-		switch {
-		case errors.Is(err, pgx.ErrNoRows):
-			return oops.E(oops.CodeForbidden, nil, "no projects found").LogError(ctx, s.logger)
-		case err != nil:
-			return oops.E(oops.CodeUnexpected, err, "error checking project access").LogError(ctx, s.logger, attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
-		}
-
-		projectInOrg := false
-		for _, project := range projects {
-			if project.ID == toolset.ProjectID {
-				projectInOrg = true
-				break
-			}
-		}
-
-		if projectInOrg {
-			authenticated = true
-		} else if !cfg.isPublic {
-			// Only return 401 for non-public MCPs when the user is not in the owning org
-			return oops.C(oops.CodeUnauthorized)
-		}
-		// For public MCPs accessed from outside the owning org, authenticated stays false
-		// so they get public access without environment/secrets
+	ctx = withMandatoryAdmission(ctx)
+	authorizedCtx, authenticated, err := s.authorizeHostedRequest(ctx, toolset, cfg, connect)
+	s.newMandatoryShadow(authorizedCtx, toolset.OrganizationID).shadowRequire(authorizedCtx, mandatorySurfaceHostedConnect, err, connect)
+	if err != nil {
+		return err
 	}
-
-	if !cfg.isPublic && !authenticated {
-		return oops.C(oops.CodeNotFound)
-	}
-
-	if authenticated {
-		// Private MCPs require mcp:connect on the specific server (the
-		// wrapper's id when one fronts the request, else the toolset's).
-		// Public MCPs are open to everyone — no RBAC enforcement.
-		if !cfg.isPublic {
-			// Ensure grants are loaded — not all auth strategies in authenticateToken
-			// go through auth.Authorize (which calls PrepareContext). Principal
-			// credentials repeat live admission even when grants are already loaded.
-			ctx, err = s.authz.PrepareContext(ctx)
-			if err != nil {
-				var shareable *oops.ShareableError
-				if errors.As(err, &shareable) && shareable.Code != oops.CodeUnexpected {
-					return fmt.Errorf("principal credential admission: %w", err)
-				}
-				return oops.E(oops.CodeUnexpected, err, "failed to load access grants").LogError(ctx, s.logger)
-			}
-			if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPConnect, cfg.rbacResourceID.String(), toolset.ProjectID.String())); err != nil {
-				return fmt.Errorf("authorize MCP server access: %w", mcpaccess.ServerPermissionDenied(err, s.requestAccessURL(ctx, cfg.rbacResourceID.String(), toolset.Name)))
-			}
-		}
-
-		if err := requirePrincipalCredentialProject(ctx, toolset.ProjectID); err != nil {
-			return err
-		}
-		if authCtx, ok := contextvalues.GetAuthContext(ctx); ok && authCtx != nil && authCtx.APIKeyID != "" {
-			if authCtx.ProjectID != nil && *authCtx.ProjectID != toolset.ProjectID {
-				return oops.E(oops.CodeForbidden, nil, "api key project does not match toolset project")
-			}
-			if authCtx.ProjectID == nil {
-				// Organization-wide keys gain execution context only after project
-				// access is authorized. Copy the context so sibling calls cannot
-				// inherit this request's project binding.
-				projectAuth := *authCtx
-				projectAuth.ProjectID = &toolset.ProjectID
-				ctx = contextvalues.SetAuthContext(ctx, &projectAuth)
-			}
-		}
-	}
+	ctx = authorizedCtx
 	if prepared.empty() {
 		return nil
 	}
@@ -1615,6 +1563,85 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 	}
 
 	return nil
+}
+
+// authorizeHostedRequest applies today's access decision for a hosted
+// server: organization membership, mcp:connect on private servers, and the
+// caller's project binding. It reports whether the caller is in the server's
+// organization.
+func (s *Service) authorizeHostedRequest(ctx context.Context, toolset *toolsets_repo.Toolset, cfg *hostedServing, connect authz.Check) (context.Context, bool, error) {
+	var authenticated bool
+	if authCtx, ok := contextvalues.GetAuthContext(ctx); ok && authCtx != nil && authCtx.ActiveOrganizationID != "" {
+		projects, err := s.authRepo.ListProjectsByOrganization(ctx, authCtx.ActiveOrganizationID)
+		switch {
+		case errors.Is(err, pgx.ErrNoRows):
+			return ctx, false, oops.E(oops.CodeForbidden, nil, "no projects found").LogError(ctx, s.logger)
+		case err != nil:
+			return ctx, false, oops.E(oops.CodeUnexpected, err, "error checking project access").LogError(ctx, s.logger, attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
+		}
+
+		projectInOrg := false
+		for _, project := range projects {
+			if project.ID == toolset.ProjectID {
+				projectInOrg = true
+				break
+			}
+		}
+
+		if projectInOrg {
+			authenticated = true
+		} else if !cfg.isPublic {
+			// Only return 401 for non-public MCPs when the user is not in the owning org
+			return ctx, false, oops.C(oops.CodeUnauthorized)
+		}
+		// For public MCPs accessed from outside the owning org, authenticated stays false
+		// so they get public access without environment/secrets
+	}
+
+	if !cfg.isPublic && !authenticated {
+		return ctx, false, oops.C(oops.CodeNotFound)
+	}
+
+	if authenticated {
+		// Private MCPs require mcp:connect on the specific server (the
+		// wrapper's id when one fronts the request, else the toolset's).
+		// Public MCPs are open to everyone — no RBAC enforcement.
+		if !cfg.isPublic {
+			// Ensure grants are loaded — not all auth strategies in authenticateToken
+			// go through auth.Authorize (which calls PrepareContext). Principal
+			// credentials repeat live admission even when grants are already loaded.
+			prepared, err := s.authz.PrepareContext(ctx)
+			if err != nil {
+				var shareable *oops.ShareableError
+				if errors.As(err, &shareable) && shareable.Code != oops.CodeUnexpected {
+					return ctx, false, fmt.Errorf("principal credential admission: %w", err)
+				}
+				return ctx, false, oops.E(oops.CodeUnexpected, err, "failed to load access grants").LogError(ctx, s.logger)
+			}
+			ctx = prepared
+			if err := s.authz.Require(ctx, connect); err != nil {
+				return ctx, false, fmt.Errorf("authorize MCP server access: %w", mcpaccess.ServerPermissionDenied(err, s.requestAccessURL(ctx, cfg.rbacResourceID.String(), toolset.Name)))
+			}
+		}
+
+		if err := requirePrincipalCredentialProject(ctx, toolset.ProjectID); err != nil {
+			return ctx, false, err
+		}
+		if authCtx, ok := contextvalues.GetAuthContext(ctx); ok && authCtx != nil && authCtx.APIKeyID != "" {
+			if authCtx.ProjectID != nil && *authCtx.ProjectID != toolset.ProjectID {
+				return ctx, false, oops.E(oops.CodeForbidden, nil, "api key project does not match toolset project")
+			}
+			if authCtx.ProjectID == nil {
+				// Organization-wide keys gain execution context only after project
+				// access is authorized. Copy the context so sibling calls cannot
+				// inherit this request's project binding.
+				projectAuth := *authCtx
+				projectAuth.ProjectID = &toolset.ProjectID
+				ctx = contextvalues.SetAuthContext(ctx, &projectAuth)
+			}
+		}
+	}
+	return ctx, authenticated, nil
 }
 
 func (s *Service) enforceHostedToolsCall(ctx context.Context, organizationID string, mcpServerID *uuid.UUID) error {
