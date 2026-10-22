@@ -2,6 +2,7 @@ package gram
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net"
@@ -22,6 +23,7 @@ import (
 	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/codemode"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/functions"
@@ -114,7 +116,7 @@ type mcpServiceDependencies struct {
 	IssuerSigner           *internalsessionissuers.Signer
 }
 
-func newMCPService(c *cli.Context, d mcpServiceDependencies) (*mcp.Service, error) {
+func newMCPService(c *cli.Context, d mcpServiceDependencies) (service *mcp.Service, err error) {
 	cacheImpl := cache.NewRedisCacheAdapter(d.Redis)
 	checkpoint, err := mcptoolexecution.NewCheckpoint(d.DB, mcptoolexecution.DefaultEvaluationTimeout, d.Meter, d.Logger)
 	if err != nil {
@@ -133,7 +135,13 @@ func newMCPService(c *cli.Context, d mcpServiceDependencies) (*mcp.Service, erro
 	if err != nil {
 		return nil, fmt.Errorf("initialize code runtime: %w", err)
 	}
-	service, err := mcp.NewService(d.Logger, d.Tracer, d.Meter, d.DB, d.Sessions, d.ChatSessions, d.Environment, d.Posthog, d.Features, d.ServerURL, d.SiteURL, d.Encryption, cacheImpl,
+	// Service.Shutdown releases the runtime only once a service is returned.
+	defer func() {
+		if err != nil {
+			err = errors.Join(err, releaseCodeExecutor(c.Context, codeExecutor))
+		}
+	}()
+	service, err = mcp.NewService(d.Logger, d.Tracer, d.Meter, d.DB, d.Sessions, d.ChatSessions, d.Environment, d.Posthog, d.Features, d.ServerURL, d.SiteURL, d.Encryption, cacheImpl,
 		d.Guardian, d.Functions, d.BillingTracker, d.Billing, d.Telemetry, d.ToolCallLogs, d.TelemetryService, d.RAG, d.Triggers, d.Authz, d.AssistantTokens, d.PrincipalCredentials, d.ShadowMCP, d.Audit, d.PlatformExtras, d.PlatformFeatureChecker, d.PlatformToolsets,
 		d.Identity, usersessions.NewSigner(c.String(usersessions.JWTSigningKeyFlag)), d.Challenges, d.MCPRisk, proxy, route.NewRedis(d.Redis), c.String("tunnel-forward-token"), cidrs, d.CallerAssertions, d.Redis,
 		mcp.TunnelPublicConfig{SessionTTL: 0, LiveSessionCap: c.Int("public-tunnels-live-session-cap"), InitializeRate: ratelimit.Rate{Tokens: 0, Interval: 0, Burst: 0}, RequestRate: ratelimit.Rate{Tokens: 0, Interval: 0, Burst: 0}, MaxRequestLifetime: 0},
@@ -156,6 +164,18 @@ func newMCPService(c *cli.Context, d mcpServiceDependencies) (*mcp.Service, erro
 	chainer.SetSpeakeasyIssuer(d.IssuerGate, d.IssuerSigner, d.Features)
 	service.SetIdentityChainer(chainer)
 	return service, nil
+}
+
+// releaseCodeExecutor stops a code runtime no MCP service took ownership of.
+func releaseCodeExecutor(ctx context.Context, executor codemode.Executor) error {
+	runtime, ok := executor.(interface{ Shutdown(context.Context) error })
+	if !ok {
+		return nil
+	}
+	if err := runtime.Shutdown(ctx); err != nil {
+		return fmt.Errorf("release code runtime: %w", err)
+	}
+	return nil
 }
 
 func newIdentityChainer(logger *slog.Logger, meter metric.MeterProvider, db *pgxpool.Pool, redisClient *redis.Client, enc *encryption.Client, policy *guardian.Policy, challenges *remotesessions.ChallengeManager, delegation *remotesessions.DelegationService, auditLogger *audit.Logger) (*identitychaining.Chainer, error) {

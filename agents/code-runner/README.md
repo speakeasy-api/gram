@@ -8,8 +8,12 @@ server or host adapter, assistant sessions, a language model, or a workspace.
 Each accepted stream gets a fresh Monty worker process and interpreter, installs
 the small Python tools prelude, and evaluates one snippet. The worker is killed
 on completion or interruption; it never serves a later execution. No execution
-is resumed or automatically replayed. Persistent runner and yamux connections
-amortize connection setup without retaining interpreter processes or state.
+is resumed or automatically replayed. The worker pool keeps one pre-started idle
+worker warm (`min_processes = 1`, up to the runner's execution capacity) so an
+execution does not wait for process startup; that worker has never run code, and
+each worker serves exactly one execution (`max_checkouts_per_worker = 1`).
+Persistent runner and yamux connections amortize connection setup; no
+interpreter state survives an execution.
 
 Build locally with `mise run build:monty` and `mise run build:code-runner`.
 Run `mise run test:code-runner` and `mise run lint:code-runner`. Tests require a

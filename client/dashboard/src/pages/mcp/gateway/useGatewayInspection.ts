@@ -56,7 +56,27 @@ function authCacheKey(headers: Record<string, string> | undefined): string {
   return `auth:${hash}`;
 }
 
-class UnauthorizedError extends Error {}
+/**
+ * The gateway answered with an error instead of a result. `code` is the
+ * JSON-RPC error code when the answer carried one.
+ */
+export class GatewayRPCError extends Error {
+  readonly status: number;
+  readonly code: number | undefined;
+
+  constructor(message: string, status: number, code?: number) {
+    super(message);
+    this.status = status;
+    this.code = code;
+  }
+}
+
+class UnauthorizedError extends GatewayRPCError {}
+
+const rpcErrorSchema = z.object({
+  code: z.number().optional(),
+  message: z.string(),
+});
 
 // The endpoint speaks streamable HTTP and answers stateless requests, so one
 // fetch per JSON-RPC call is enough — no session to establish or carry.
@@ -85,15 +105,21 @@ export async function gatewayRPC(
   });
 
   if (response.status === 401 || response.status === 403) {
-    throw new UnauthorizedError("unauthorized");
+    throw new UnauthorizedError("unauthorized", response.status);
   }
   if (!response.ok) {
     const failure: unknown = await response.json().catch(() => undefined);
-    const message = z
-      .object({ error: z.object({ message: z.string() }) })
-      .safeParse(failure);
-    if (message.success) throw new Error(message.data.error.message);
-    throw new Error(`${method} failed: ${response.status}`);
+    const message = z.object({ error: rpcErrorSchema }).safeParse(failure);
+    if (message.success)
+      throw new GatewayRPCError(
+        message.data.error.message,
+        response.status,
+        message.data.error.code,
+      );
+    throw new GatewayRPCError(
+      `${method} failed: ${response.status}`,
+      response.status,
+    );
   }
 
   const body = await response.text();
@@ -113,17 +139,18 @@ export async function gatewayRPC(
   const envelope = z
     .object({
       result: z.unknown().optional(),
-      error: z.object({ message: z.string() }).optional(),
+      error: rpcErrorSchema.optional(),
     })
     .parse(parsed);
 
   if (envelope.error) {
+    const { code, message } = envelope.error;
     // The runtime reports an expired or absent session as a JSON-RPC error
     // rather than an HTTP status.
-    if (/token|unauthor/i.test(envelope.error.message)) {
-      throw new UnauthorizedError(envelope.error.message);
+    if (/token|unauthor/i.test(message)) {
+      throw new UnauthorizedError(message, response.status, code);
     }
-    throw new Error(envelope.error.message);
+    throw new GatewayRPCError(message, response.status, code);
   }
   return envelope.result;
 }

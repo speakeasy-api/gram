@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Text } from "@/components/ui/Text";
 import { TextArea } from "@/components/ui/Textarea";
 import { cn } from "@/lib/utils";
-import { gatewayRPC } from "./useGatewayInspection";
+import { GatewayRPCError, gatewayRPC } from "./useGatewayInspection";
 
 const resultSchema = z.object({
   value: z.unknown(),
@@ -19,6 +19,19 @@ const resultSchema = z.object({
 });
 
 class ExecutionNotAdmittedError extends Error {}
+
+const JSONRPC_INTERNAL_ERROR = -32603;
+
+/**
+ * The gateway rejected the call before submitting the program. An internal
+ * error is not treated as a refusal: the gateway also reports failures that
+ * follow execution that way, so its outcome stays unknown.
+ */
+function refusedBeforeExecution(error: unknown): error is GatewayRPCError {
+  if (!(error instanceof GatewayRPCError)) return false;
+  if (error.code !== undefined) return error.code !== JSONRPC_INTERNAL_ERROR;
+  return error.status >= 400 && error.status < 500;
+}
 
 /** Executes only on explicit submission; transport failures never replay code. */
 export function GatewayCodeExecution({
@@ -89,6 +102,9 @@ export function GatewayCodeExecution({
         return response.structuredContent;
       } catch (error) {
         if (error instanceof ExecutionNotAdmittedError) throw error;
+        if (refusedBeforeExecution(error)) {
+          throw new ExecutionNotAdmittedError(error.message);
+        }
         if (controller.signal.aborted) {
           throw new Error(
             "Cancellation requested. Tools already dispatched may have completed; check their state before running again.",

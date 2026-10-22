@@ -295,6 +295,7 @@ pub async fn serve_stream<S: AsyncRead + AsyncWrite + Unpin + Send + 'static>(
             wall_ms > 0 && wall_ms <= 30_000,
             "wall deadline must be 1 to 30000ms"
         );
+        ensure!(!code.is_empty(), "code must not be empty");
         ensure!(code.len() <= runtime::MAX_CODE, "code exceeds 64 KiB");
         // Refused capacity attempts must not consume the replay guard budget.
         let permit = state.capacity.try_acquire()?;

@@ -2748,6 +2748,7 @@ jobs:
         docker-build-client,
         docker-build-pystreams,
         assistant-runtime-image,
+        code-runner-image,
         preview-image-tags,
         upload-dashboard-assets,
       ]
@@ -2755,6 +2756,8 @@ jobs:
       pull-requests: write # adds the preview label
     # Only on PR creation, so a manually removed label stays removed. Waits
     # for every preview image tag, or the preview polls for missing images.
+    # The code runner image is tagged for every eligible PR commit, so it is
+    # never skipped here and must succeed.
     if: >-
       !cancelled() &&
       github.event_name == 'pull_request' &&
@@ -2771,6 +2774,7 @@ jobs:
        needs.docker-build-pystreams.result == 'success') &&
       (needs.changes.outputs.server != 'true' ||
        needs.assistant-runtime-image.result == 'success') &&
+      needs.code-runner-image.result == 'success' &&
       ((needs.changes.outputs.server != 'true' && needs.changes.outputs.client != 'true') ||
        needs.upload-dashboard-assets.result == 'success') &&
       contains(fromJSON('["success","skipped"]'), needs.preview-image-tags.result)

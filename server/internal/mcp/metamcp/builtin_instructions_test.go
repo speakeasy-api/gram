@@ -22,5 +22,7 @@ func TestCodeInstructionsMatchDashboardCopy(t *testing.T) {
 	t.Parallel()
 	canonical, err := os.ReadFile("../../../../client/dashboard/src/pages/mcp/gateway/builtin-gateway-code-instructions.txt")
 	require.NoError(t, err)
-	require.Equal(t, ResolveDiscoveryInstructions(nil, DiscoveryModeCode), strings.TrimSpace(string(canonical)))
+	// Only the file's final newline is not part of the served instructions.
+	require.True(t, strings.HasSuffix(string(canonical), "\n"), "builtin-gateway-code-instructions.txt must end with a newline")
+	require.Equal(t, ResolveDiscoveryInstructions(nil, DiscoveryModeCode), strings.TrimSuffix(string(canonical), "\n"))
 }

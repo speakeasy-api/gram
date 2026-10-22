@@ -297,6 +297,22 @@ async fn deadline_includes_host_wait() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn empty_code_is_refused_before_admission() {
+    let state = state(1).await;
+    let id = Uuid::new_v4().to_string();
+    let mut empty = Run::new(state.clone(), id.clone(), "", 5000).await;
+    assert!(
+        matches!(empty.next().await, ServerFrame::Error { code, message } if code == "admission_refused" && message.contains("empty"))
+    );
+    empty.close().await.unwrap();
+    // A refused attempt consumes neither capacity nor its execution ID.
+    let mut retry = Run::new(state, id, "1", 5000).await;
+    retry.started().await;
+    assert!(matches!(retry.next().await, ServerFrame::Complete { .. }));
+    retry.close().await.unwrap();
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn execution_ids_cannot_be_replayed() {
     let state = state(1).await;
     let id = Uuid::new_v4().to_string();

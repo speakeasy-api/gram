@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/speakeasy-api/gram/server/internal/codemode"
 	"github.com/speakeasy-api/gram/server/internal/otelpub"
@@ -48,7 +49,7 @@ func TestCodeRuntimeDrainsBeforeBlockedVerification(t *testing.T) {
 	go func() { done <- service.Shutdown(ctx) }()
 	select {
 	case <-runtimeStopped:
-	case <-t.Context().Done():
+	case <-time.After(5 * time.Second):
 		t.Fatal("runtime did not drain")
 	}
 	cancel()

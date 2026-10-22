@@ -168,6 +168,75 @@ it("shows an admission refusal without claiming tools might have run", async () 
   expect(alert.textContent).toContain("No program was submitted.");
   expect(alert.textContent).not.toContain("may have");
 });
+it.each([
+  [
+    "a JSON-RPC rejection",
+    () =>
+      new Response(
+        JSON.stringify({
+          jsonrpc: "2.0",
+          id: "response",
+          error: { code: -32003, message: "code admission is unavailable" },
+        }),
+        { headers: { "content-type": "application/json" } },
+      ),
+    "code admission is unavailable",
+  ],
+  [
+    "an HTTP rejection",
+    () =>
+      new Response(
+        JSON.stringify({
+          jsonrpc: "2.0",
+          id: "response",
+          error: { code: -32602, message: "execute requires valid Python" },
+        }),
+        { status: 400, headers: { "content-type": "application/json" } },
+      ),
+    "execute requires valid Python",
+  ],
+  [
+    "an authorization failure",
+    () => new Response("", { status: 401 }),
+    "unauthorized",
+  ],
+])("shows %s before submission as a refusal", async (_, reply, message) => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockImplementation(async () => reply()),
+  );
+  show();
+  fireEvent.click(screen.getByRole("button", { name: "Run Python" }));
+  const alert = await screen.findByRole("alert");
+  expect(alert.textContent).toContain("The run was refused");
+  expect(alert.textContent).toContain(message);
+  expect(alert.textContent).not.toContain("may have");
+});
+it.each([
+  [
+    "an internal gateway error",
+    () =>
+      new Response(
+        JSON.stringify({
+          jsonrpc: "2.0",
+          id: "response",
+          error: { code: -32603, message: "serialize code execution" },
+        }),
+        { headers: { "content-type": "application/json" } },
+      ),
+  ],
+  ["a proxy failure", () => new Response("Bad Gateway", { status: 502 })],
+])("reports %s as an unknown outcome", async (_, reply) => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockImplementation(async () => reply()),
+  );
+  show();
+  fireEvent.click(screen.getByRole("button", { name: "Run Python" }));
+  const alert = await screen.findByRole("alert");
+  expect(alert.textContent).toContain("The run did not finish");
+  expect(alert.textContent).toContain("tools may have run");
+});
 it("cancels with the submitted credential after headers refresh", async () => {
   const fetch = vi.fn(
     (_url, options) =>

@@ -196,8 +196,10 @@ func TestConnectionCatalogPersistsTypedAuthClientWithoutBackfill(t *testing.T) {
 	}
 }
 
-// Each case uses the real consent, issuance and public tools/call paths. The
-// typed header has no corresponding server header, so legacy auth cannot pass.
+// Each case uses the real consent, issuance and public tools/call paths. A
+// typed client's headers resolve only as exact copies of the server's declared
+// headers, so fresh cases declare the same header the client copies; stale
+// cases change the copy, and execution must send the server's current value.
 func TestConnectionCatalogDirectProgressiveRechecksTypedExecution(t *testing.T) {
 	t.Parallel()
 	for _, discovery := range []metamcp.DiscoveryMode{metamcp.DiscoveryModeDirect, metamcp.DiscoveryModeProgressive} {

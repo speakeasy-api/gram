@@ -218,21 +218,37 @@ func TestCodeGKERejectsUnsafeWarmPod(t *testing.T) {
 
 func TestCodeGKERejectsReassignedPodIP(t *testing.T) {
 	t.Parallel()
-	provider, client, scope := newCodeGKEFixture(t, nil)
-	lease, err := provider.Acquire(t.Context(), scope)
-	require.NoError(t, err)
-	require.NoError(t, lease.Release(t.Context()))
-	typed, ok := lease.(*gkeLease)
-	require.True(t, ok)
-	entry := typed.entry
-	pod, err := client.Resource(sandbox.Pods).Namespace("code").Get(t.Context(), entry.name, metav1.GetOptions{})
-	require.NoError(t, err)
-	pod.SetUID(types.UID(uuid.NewString()))
-	_, err = client.Resource(sandbox.Pods).Namespace("code").Update(t.Context(), pod, metav1.UpdateOptions{})
-	require.NoError(t, err)
-	_, err = provider.Acquire(t.Context(), scope)
-	require.ErrorContains(t, err, "identity changed")
-	require.True(t, lease.Client().closed)
+	for _, tc := range []struct {
+		name       string
+		replaceUID bool
+		podIP      string
+	}{
+		{name: "replaced pod", replaceUID: true, podIP: "10.52.0.2"},
+		// The same pod at another admissible address must not keep its connection.
+		{name: "reassigned IP", replaceUID: false, podIP: "10.52.0.3"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			provider, client, scope := newCodeGKEFixture(t, nil)
+			lease, err := provider.Acquire(t.Context(), scope)
+			require.NoError(t, err)
+			require.NoError(t, lease.Release(t.Context()))
+			typed, ok := lease.(*gkeLease)
+			require.True(t, ok)
+			entry := typed.entry
+			pod, err := client.Resource(sandbox.Pods).Namespace("code").Get(t.Context(), entry.name, metav1.GetOptions{})
+			require.NoError(t, err)
+			if tc.replaceUID {
+				pod.SetUID(types.UID(uuid.NewString()))
+			}
+			require.NoError(t, unstructured.SetNestedField(pod.Object, tc.podIP, "status", "podIP"))
+			_, err = client.Resource(sandbox.Pods).Namespace("code").Update(t.Context(), pod, metav1.UpdateOptions{})
+			require.NoError(t, err)
+			_, err = provider.Acquire(t.Context(), scope)
+			require.ErrorContains(t, err, "identity changed")
+			require.True(t, lease.Client().closed)
+		})
+	}
 }
 
 // A live connection outlasts its pod's state, so reusing it must not admit
