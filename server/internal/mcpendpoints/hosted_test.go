@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/mcp_endpoints"
@@ -239,8 +240,8 @@ func TestUpdateMcpEndpointHostedRejectedWithoutWriter(t *testing.T) {
 	require.Equal(t, f.endpoint, f.requireProjected(t, ctx))
 }
 
-// placeOnDomain puts the hosted toolset and its endpoint on a domain directly, as legacy rows sit today.
-func (f *hostedAddressFixture) placeOnDomain(t *testing.T, ctx context.Context, name string, slug string) customdomainsrepo.CustomDomain {
+// placeOnDomain puts the hosted toolset and its endpoint on a domain the product would not accept, as legacy rows sit.
+func (f *hostedAddressFixture) placeOnDomain(t *testing.T, ctx context.Context, name string) customdomainsrepo.CustomDomain {
 	t.Helper()
 
 	domain, err := customdomainsrepo.New(f.ti.conn).CreateCustomDomain(ctx, customdomainsrepo.CreateCustomDomainParams{
@@ -248,11 +249,11 @@ func (f *hostedAddressFixture) placeOnDomain(t *testing.T, ctx context.Context, 
 		CertSecretName: conv.ToPGText("cert-" + name), ProvisionerKind: "ingress", IpAllowlist: []string{},
 	})
 	require.NoError(t, err)
-	_, err = f.ti.conn.Exec(ctx, `UPDATE toolsets SET custom_domain_id = $1, mcp_slug = $2 WHERE id = $3 AND project_id = $4`, domain.ID, slug, f.toolset.ID, f.projectID)
-	require.NoError(t, err)
-	_, err = f.ti.conn.Exec(ctx, `UPDATE mcp_servers SET slug = $1 WHERE id = $2 AND project_id = $3`, slug, f.toolset.ID, f.projectID)
-	require.NoError(t, err)
-	_, err = f.ti.conn.Exec(ctx, `UPDATE mcp_endpoints SET custom_domain_id = $1, slug = $2 WHERE id = $3 AND project_id = $4`, domain.ID, slug, f.endpoint.ID, f.projectID)
+	domainID := uuid.NullUUID{UUID: domain.ID, Valid: true}
+	require.NoError(t, toolsetsrepo.New(f.ti.conn).SetToolsetCustomDomain(ctx, toolsetsrepo.SetToolsetCustomDomainParams{CustomDomainID: domainID, Slug: f.toolset.Slug, ProjectID: f.projectID}))
+	_, err = mcpendpointsrepo.New(f.ti.conn).UpdateMCPEndpointAddress(ctx, mcpendpointsrepo.UpdateMCPEndpointAddressParams{
+		CustomDomainID: domainID, Slug: f.endpoint.Slug, IsDomainRoot: pgtype.Bool{Bool: false, Valid: false}, ID: f.endpoint.ID, ProjectID: f.projectID,
+	})
 	require.NoError(t, err)
 	f.requireProjected(t, ctx)
 	return domain
@@ -261,23 +262,29 @@ func (f *hostedAddressFixture) placeOnDomain(t *testing.T, ctx context.Context, 
 func TestUpdateMcpEndpointHostedLeavesUnservableDomain(t *testing.T) {
 	t.Parallel()
 
-	cases := map[string]func(t *testing.T, ctx context.Context, f *hostedAddressFixture, domain customdomainsrepo.CustomDomain){
-		"never verified": func(*testing.T, context.Context, *hostedAddressFixture, customdomainsrepo.CustomDomain) {},
+	type degrade func(t *testing.T, ctx context.Context, f *hostedAddressFixture, domain customdomainsrepo.CustomDomain)
+	cases := map[string]degrade{
+		"never verified": func(t *testing.T, ctx context.Context, f *hostedAddressFixture, domain customdomainsrepo.CustomDomain) {
+			t.Helper()
+		},
 		"verified, not activated": func(t *testing.T, ctx context.Context, f *hostedAddressFixture, domain customdomainsrepo.CustomDomain) {
-			_, err := customdomainsrepo.New(f.ti.conn).SetCustomDomainVerified(ctx, domain.ID)
+			t.Helper()
+			_, err := customdomainsrepo.New(f.ti.conn).UpdateCustomDomain(ctx, customdomainsrepo.UpdateCustomDomainParams{
+				Verified: true, Activated: false, IngressName: domain.IngressName, CertSecretName: domain.CertSecretName, ProvisionerKind: domain.ProvisionerKind, ID: domain.ID,
+			})
 			require.NoError(t, err)
 		},
 		"soft-deleted": func(t *testing.T, ctx context.Context, f *hostedAddressFixture, domain customdomainsrepo.CustomDomain) {
-			_, err := f.ti.conn.Exec(ctx, `UPDATE custom_domains SET deleted_at = clock_timestamp() WHERE id = $1`, domain.ID)
-			require.NoError(t, err)
+			t.Helper()
+			require.NoError(t, customdomainsrepo.New(f.ti.conn).DeleteCustomDomain(ctx, f.authCtx.ActiveOrganizationID))
 		},
 	}
 	for name, setup := range cases {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			ctx, f := newHostedAddressFixture(t, "free")
-			slug := f.authCtx.OrganizationSlug + "-mcp"
-			domain := f.placeOnDomain(t, ctx, "mcp.unservable.example.com", slug)
+			slug := f.endpoint.Slug
+			domain := f.placeOnDomain(t, ctx, "mcp.unservable.example.com")
 			setup(t, ctx, f, domain)
 
 			input, err := mcpendpoints.FromContext(ctx, slug)
@@ -313,11 +320,10 @@ func TestUpdateMcpEndpointHostedLeavesUnservableDomain(t *testing.T) {
 func TestUpdateMcpEndpointHostedLeavingDomainAppliesPlatformRules(t *testing.T) {
 	t.Parallel()
 	ctx, f := newHostedAddressFixture(t, "pro")
-	slug := "unprefixed"
-	f.placeOnDomain(t, ctx, "mcp.leave-rules.example.com", slug)
+	f.placeOnDomain(t, ctx, "mcp.leave-rules.example.com")
 	placed := f.requireProjected(t, ctx)
 
-	_, err := f.ti.service.UpdateMcpEndpoint(ctx, f.payload(slug, nil))
+	_, err := f.ti.service.UpdateMcpEndpoint(ctx, f.payload("unprefixed", nil))
 	requireOopsCode(t, err, oops.CodeInvalid)
 	require.ErrorContains(t, err, "invalid slug")
 

@@ -104,7 +104,7 @@ func (s *Service) UpdateHostedAddress(ctx context.Context, update mcpendpoints.H
 		if servable {
 			return mcpendpointsrepo.McpEndpoint{}, oops.E(oops.CodeInvalid, nil, "a hosted MCP server cannot leave its custom domain while the domain is live").LogWarn(ctx, logger)
 		}
-		customDomainID = uuid.NullUUID{}
+		customDomainID = uuid.NullUUID{UUID: uuid.Nil, Valid: false}
 	}
 	// An unchanged slug is omitted, as a toolset save that leaves mcp_slug out.
 	var requestedSlug *string
