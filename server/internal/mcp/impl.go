@@ -21,6 +21,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
@@ -113,6 +114,8 @@ type IdentityResolver interface {
 }
 
 type Service struct {
+	aiCatalog *aivendors.Store
+
 	assistantWorkloadTokens AssistantWorkloadTokenIssuer
 	federatedLoginConsumer  FederatedLoginConsumer
 	identityChainer         identityChainer
@@ -451,7 +454,7 @@ func optionalUUIDString(id *uuid.UUID) *string {
 	return new(id.String())
 }
 
-func NewService(
+func NewService(aiCatalog *aivendors.Store,
 	logger *slog.Logger,
 	tracerProvider trace.TracerProvider,
 	meterProvider metric.MeterProvider,
@@ -521,6 +524,7 @@ func NewService(
 
 	sessionClientInfo := sessionclientinfo.NewStore(redisClient, 0)
 	service := &Service{
+		aiCatalog:                 aiCatalog,
 		assistantWorkloadTokens:   nil,
 		replayLiveness:            nil,
 		federatedLoginConsumer:    nil,

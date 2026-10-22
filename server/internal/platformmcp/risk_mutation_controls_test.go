@@ -12,6 +12,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/risk/exclusioncore"
@@ -377,7 +378,7 @@ func TestRiskMutationHandlerSelectionAcceptsExportedSuccessContract(t *testing.T
 	catalog, err := policycatalog.Build()
 	require.NoError(t, err)
 	server := mcp.NewServer(&mcp.Implementation{Name: "test", Version: "test"}, nil)
-	registrar := newRegistrar(server)
+	registrar := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), server)
 	want := CreateRiskPolicyToolOutput{
 		CreateRiskPolicyReceiptResult: CreateRiskPolicyReceiptResult{Project: RiskMutationReceiptProject{ID: "11111111-1111-4111-8111-111111111111", Slug: "default"}, Policy: RiskPolicyReceiptSummary{ID: "22222222-2222-4222-8222-222222222222", PolicyType: "standard", Enabled: true, Action: "flag"}, Version: "opaque", ResultCategory: "created"},
 		Receipt:                       RiskMutationToolReceipt{ID: "33333333-3333-4333-8333-333333333333", Replayed: false},
@@ -406,7 +407,7 @@ func TestRiskMutationHandlerSelectionRequiresAvailableCatalogForLiveCallbacks(t 
 	t.Parallel()
 
 	server := mcp.NewServer(&mcp.Implementation{Name: "test", Version: "test"}, nil)
-	registrar := newRegistrar(server)
+	registrar := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), server)
 	called := false
 	registerRiskMutationHandlers(registrar, policycatalog.Catalog{}, false, &RiskMutationHandlers{
 		Controls: &RiskMutationControls{},
@@ -433,7 +434,7 @@ func TestRiskMutationHandlerSelectionDefaultsEveryWriteToStableRefusal(t *testin
 
 	server := mcp.NewServer(&mcp.Implementation{Name: "test", Version: "test"}, nil)
 	bindExternalTestPrincipal(server)
-	registrar := newRegistrar(server)
+	registrar := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), server)
 	registrar.withExternalAuthorizer(allowExternalCallAuthorizer{})
 	registerRiskMutationHandlers(registrar, catalog, true, &RiskMutationHandlers{})
 	for _, name := range []string{operationCreateRiskPolicy, operationUpdateRiskPolicy, operationCreateRiskExclusion, operationUpdateRiskExclusion, operationMarkRiskFindingsFalsePositive, operationUnmarkRiskFindingsFalsePositive} {

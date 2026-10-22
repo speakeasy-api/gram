@@ -282,18 +282,18 @@ DELETE FROM ai_scan_targets WHERE organization_id = @organization_id;
 -- The decided built-ins carry no definition: the compiled-in one stays
 -- authoritative, so a later registry revision still reaches this org.
 -- name: RolesInsertAIScanTargets :exec
-INSERT INTO ai_scan_targets (organization_id, id, status, rationale)
+INSERT INTO ai_scan_targets (organization_id, id, ai_product_id, status, rationale)
 VALUES
-  (@organization_id, 'claude-code', 'approved',
+  (@organization_id, 'claude-code', 'claude-code', 'approved',
    'Standard issue for the platform team.'),
-  (@organization_id, 'codex', 'blocked',
+  (@organization_id, 'codex', 'codex', 'blocked',
    'Not covered by the vendor review. Ask in #ai-tooling if you need it.'),
-  (@organization_id, 'hermes-agent', 'approved',
+  (@organization_id, 'hermes-agent', 'hermes-agent', 'approved',
    'Reviewed with the research team. Publishes a client ID metadata '
    || 'document, so the approval is enforced at the gateway.'),
-  (@organization_id, 'zed', 'approved',
+  (@organization_id, 'zed', 'zed', 'approved',
    'Approved for the platform team after the editor review.'),
-  (@organization_id, 'goose', 'blocked',
+  (@organization_id, 'goose', 'goose', 'blocked',
    'Runs arbitrary local commands under its own extensions. Blocked until '
    || 'the extension policy lands.');
 

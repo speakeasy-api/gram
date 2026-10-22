@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	gendeployments "github.com/speakeasy-api/gram/server/gen/deployments"
 	"github.com/speakeasy-api/gram/server/gen/types"
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/platformmcp"
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -34,7 +35,9 @@ func TestPlatformMCPDeploymentRedeployRequiresTemporal(t *testing.T) {
 	// gate, rather than another missing dependency, is what disables the service.
 	db := new(pgxpool.Pool)
 	reader := platformmcp.NewPostgresReader(testenv.NewLogger(t), db)
-	config := platformMCPConfig{DB: db, DeploymentRedeploy: &redeployCompositionManagement{}, MeterProvider: noop.NewMeterProvider(), TemporalEnv: new(tenv.Environment)}
+	config := platformMCPConfig{
+		AICatalog: aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())),
+		DB:        db, DeploymentRedeploy: &redeployCompositionManagement{}, MeterProvider: noop.NewMeterProvider(), TemporalEnv: new(tenv.Environment)}
 	require.NotNil(t, newPlatformMCPDeploymentRedeploy(config, reader, nil))
 	config.TemporalEnv = nil
 	require.Nil(t, newPlatformMCPDeploymentRedeploy(config, reader, nil))

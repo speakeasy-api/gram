@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 )
 
 const unavailableCode = "feature_unavailable"
@@ -203,11 +205,11 @@ type operationBudgetResult struct {
 // registrar alongside the server so another admitted audience — the project
 // assistant — can be composed from the same registration pass rather than from
 // a second list that would drift.
-func newServer(reader Reader, catalog Catalog, registrations *RegistrationService, cursorKeyMaterial string, setupResources []SetupResource, feedback *FeedbackService, onboarding *OnboardingService, distributions *DistributionService, skills *SkillsService, diagnostics *DiagnosticsService, workflowRun *WorkflowRunService, plugins *PluginsService, sessionRecall *SessionRecallService, candidate CatalogDescriptor) (*mcp.Server, *Registrar) {
-	return newServerWithRiskMutations(reader, catalog, registrations, cursorKeyMaterial, setupResources, feedback, onboarding, distributions, skills, diagnostics, workflowRun, plugins, sessionRecall, nil, candidate, nil, nil, nil, nil)
+func newServer(aiCatalog *aivendors.Store, reader Reader, catalog Catalog, registrations *RegistrationService, cursorKeyMaterial string, setupResources []SetupResource, feedback *FeedbackService, onboarding *OnboardingService, distributions *DistributionService, skills *SkillsService, diagnostics *DiagnosticsService, workflowRun *WorkflowRunService, plugins *PluginsService, sessionRecall *SessionRecallService, candidate CatalogDescriptor) (*mcp.Server, *Registrar) {
+	return newServerWithRiskMutations(aiCatalog, reader, catalog, registrations, cursorKeyMaterial, setupResources, feedback, onboarding, distributions, skills, diagnostics, workflowRun, plugins, sessionRecall, nil, candidate, nil, nil, nil, nil)
 }
 
-func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *RegistrationService, cursorKeyMaterial string, setupResources []SetupResource, feedback *FeedbackService, onboarding *OnboardingService, distributions *DistributionService, skills *SkillsService, diagnostics *DiagnosticsService, workflowRun *WorkflowRunService, plugins *PluginsService, sessionRecall *SessionRecallService, riskMutations *RiskMutationHandlers, candidate CatalogDescriptor, accessRead *AccessReadService, accessRoleMutations *AccessRoleMutationService, assistantIdentity *AssistantIdentityService, signalAuthoring *SignalAuthoringService, connectionMutations ...*MCPConnectionMutationService) (*mcp.Server, *Registrar) {
+func newServerWithRiskMutations(aiCatalog *aivendors.Store, reader Reader, catalog Catalog, registrations *RegistrationService, cursorKeyMaterial string, setupResources []SetupResource, feedback *FeedbackService, onboarding *OnboardingService, distributions *DistributionService, skills *SkillsService, diagnostics *DiagnosticsService, workflowRun *WorkflowRunService, plugins *PluginsService, sessionRecall *SessionRecallService, riskMutations *RiskMutationHandlers, candidate CatalogDescriptor, accessRead *AccessReadService, accessRoleMutations *AccessRoleMutationService, assistantIdentity *AssistantIdentityService, signalAuthoring *SignalAuthoringService, connectionMutations ...*MCPConnectionMutationService) (*mcp.Server, *Registrar) {
 	server := mcp.NewServer(&mcp.Implementation{
 		Name:    "platform-mcp",
 		Title:   "Platform MCP",
@@ -266,7 +268,7 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 		},
 	})
 
-	reg := newRegistrar(server)
+	reg := newRegistrar(aiCatalog, server)
 
 	registerAssistantIdentityTool(reg, assistantIdentity)
 	registerSignalTools(reg, signalAuthoring)

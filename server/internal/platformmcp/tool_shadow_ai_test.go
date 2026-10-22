@@ -115,7 +115,7 @@ func TestShadowAIListLibraryReportsOriginAndBlockability(t *testing.T) {
 			{Target: blockable, Source: aitargets.SourceDefault, Decision: aitargets.DecisionRecord{TargetID: "codex", Decision: aitargets.DecisionBlocked, Rationale: "not approved"}},
 			{Target: inert, Source: aitargets.SourceOrganization, Decision: aitargets.DecisionRecord{TargetID: "acme-tool", Decision: aitargets.DecisionBlocked, Rationale: "recorded but inert"}},
 		},
-		Snapshot: aitargets.NewSnapshot(7, nil),
+		Snapshot: aitargets.NewSnapshot(7, nil, ""),
 	}
 	service := NewShadowAIService(&stubDetectionReader{}, &stubLibraryReader{list: list}, stubAuthorizer{}, allowingBudget())
 	require.NotNil(t, service)

@@ -92,6 +92,11 @@ func newPrivateIngressRuntime(ctx context.Context, c *cli.Context, logger *slog.
 	}
 	r.DB = db
 	r.cleanup = append(r.cleanup, func(context.Context) error { db.Close(); return nil })
+	aiCatalog, stopAICatalog, err := startAICatalog(ctx, db, logger)
+	if err != nil {
+		return nil, err
+	}
+	r.cleanup = append(r.cleanup, func(context.Context) error { stopAICatalog(); return nil })
 	chDB, stop, err := newClickhouseClient(ctx, logger, c)
 	if err != nil {
 		return nil, err
@@ -299,6 +304,7 @@ func newPrivateIngressRuntime(ctx context.Context, c *cli.Context, logger *slog.
 	tunnelCollector, stopTunnelMetrics := newTunnelMetrics(ctx, logger, broker)
 	r.cleanup = append(r.cleanup, stopTunnelMetrics)
 	mcpService, err := newMCPService(c, mcpServiceDependencies{
+		AICatalog:        aiCatalog,
 		CallerAssertions: callerAssertions,
 		IssuerGate:       issuerGate, IssuerSigner: issuerSigner,
 		Logger: logger, Tracer: tracerProvider, Meter: meterProvider, DB: db, Redis: redisClient,

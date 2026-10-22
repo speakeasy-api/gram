@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 )
 
@@ -14,7 +15,7 @@ func chatMetadataRegistrar(t *testing.T, reader chatMetadataReader) (*Registrar,
 	t.Helper()
 
 	service, _ := newChatMetadataService(t, reader, allowBudget())
-	registrar := newRegistrar(newTestMCPServer())
+	registrar := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), newTestMCPServer())
 	registerChatMetadataTools(registrar, service)
 	return registrar, service
 }
@@ -122,7 +123,7 @@ func TestListChatsToolRequiresPrincipal(t *testing.T) {
 func TestListChatsStubRefuses(t *testing.T) {
 	t.Parallel()
 
-	registrar := newRegistrar(newTestMCPServer())
+	registrar := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), newTestMCPServer())
 	registerUnavailableChatMetadataTools(registrar)
 	descriptor := descriptorByName(t, registrar, listChatsToolName)
 	require.Equal(t, bothAudiences, descriptor.Meta.Audiences, "the stub declares the live tool's audiences")
@@ -139,7 +140,7 @@ func TestListChatsStubRefuses(t *testing.T) {
 func TestListChatsIsRegisteredAsAStubWithoutDependencies(t *testing.T) {
 	t.Parallel()
 
-	_, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
+	_, registrar := newServer(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
 	descriptor := descriptorByName(t, registrar, listChatsToolName)
 	require.Equal(t, bothAudiences, descriptor.Meta.Audiences)
 	require.Contains(t, descriptor.Description, "not switched on")

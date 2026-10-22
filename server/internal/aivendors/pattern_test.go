@@ -1,4 +1,4 @@
-package admission
+package aivendors
 
 import (
 	"strings"
@@ -15,7 +15,7 @@ const (
 func TestPresetIsPattern(t *testing.T) {
 	t.Parallel()
 
-	require.True(t, Preset{URL: chatGPTPattern}.IsPattern())
+	require.True(t, Preset{URL: chatGPTPattern, Pattern: true}.IsPattern())
 	require.False(t, Preset{URL: "https://chatgpt.com/oauth/abc/client.json"}.IsPattern())
 	require.False(t, Preset{URL: ""}.IsPattern())
 }
@@ -202,7 +202,7 @@ func TestCatalog_PatternsAreValid(t *testing.T) {
 	t.Parallel()
 
 	var found int
-	for _, preset := range Catalog() {
+	for _, preset := range NewSnapshot(Products()).Catalog() {
 		if !preset.IsPattern() {
 			continue
 		}
@@ -284,7 +284,7 @@ func TestCatalog_CodexStableDocumentOverlap(t *testing.T) {
 func TestCatalogAdmits_ExactEntriesUnaffectedByPatterns(t *testing.T) {
 	t.Parallel()
 
-	require.True(t, catalogAdmits(claudeCodeURL))
+	require.True(t, catalogAdmits("https://claude.ai/oauth/claude-code-client-metadata"))
 	require.False(t, catalogAdmits("https://claude.ai/oauth/anything-else"))
 	require.False(t, catalogAdmits("https://claude.ai/oauth/claude-code-client-metadata/x"))
 }
@@ -318,4 +318,9 @@ func TestCatalogAdmits_VercelConnectNamespace(t *testing.T) {
 		require.Falsef(t, matchesPattern(vercelPattern, clientID), "%q must NOT match", clientID)
 		require.Falsef(t, catalogAdmits(clientID), "%q must NOT be admitted by the catalog", clientID)
 	}
+}
+
+func catalogAdmits(clientID string) bool {
+	_, ok := NewSnapshot(Products()).CatalogPreset(clientID)
+	return ok
 }

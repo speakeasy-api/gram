@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/risk/policycatalog"
 	"github.com/stretchr/testify/require"
 )
@@ -70,7 +71,7 @@ func TestRiskPolicyAudienceChangeToolContract(t *testing.T) {
 	catalog, err := policycatalog.Build()
 	require.NoError(t, err)
 	for _, enabled := range []bool{false, true} {
-		reg := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "test", Version: "test"}, nil))
+		reg := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), mcp.NewServer(&mcp.Implementation{Name: "test", Version: "test"}, nil))
 		reg.withExternalAuthorizer(allowExternalCallAuthorizer{})
 		called := false
 		handler := func(context.Context, *mcp.CallToolRequest, map[string]any) (*mcp.CallToolResult, UpdateRiskPolicyToolOutput, error) {
@@ -189,7 +190,7 @@ func TestRiskPolicyAudienceChangeRequiresOrgAdmin(t *testing.T) {
 	require.NoError(t, err)
 	server := mcp.NewServer(&mcp.Implementation{Name: "test", Version: "test"}, nil)
 	bindExternalTestPrincipal(server)
-	reg := newRegistrar(server)
+	reg := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), server)
 	reg.withExternalAuthorizer(denyExternalCallAuthorizer{err: &ExternalAuthorizationError{RequiredScope: "org:admin", cause: ErrForbidden}})
 	called := false
 	registerRiskMutationHandlers(reg, catalog, true, &RiskMutationHandlers{Controls: &RiskMutationControls{}, ChangeAudience: func(context.Context, *mcp.CallToolRequest, map[string]any) (*mcp.CallToolResult, UpdateRiskPolicyToolOutput, error) {

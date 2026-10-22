@@ -17,6 +17,7 @@ import (
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/agent"
 	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
 	"github.com/speakeasy-api/gram/server/internal/audit"
@@ -131,7 +132,7 @@ func newTestAgentService(t *testing.T) (context.Context, *testInstance) {
 	require.NoError(t, err)
 	orgHosts := orghost.New(orghost.Config{ServerURL: serverURL})
 	deviceAgentTokens := deviceagenttoken.New(mcpauthztest.NewIssuer(t), conn)
-	svc := agent.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, audit.NewLogger(), features, testServerURL, orgHosts, blobs, telemetryLogger, nil, deviceAgentTokens)
+	svc := agent.NewService(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), logger, tracerProvider, conn, sessionManager, authzEngine, audit.NewLogger(), features, testServerURL, orgHosts, blobs, telemetryLogger, nil, deviceAgentTokens)
 
 	return ctx, &testInstance{
 		service:           svc,

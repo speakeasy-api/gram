@@ -18,6 +18,7 @@ import (
 	"github.com/stretchr/testify/require"
 	goahttp "goa.design/goa/v3/http"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
@@ -91,6 +92,8 @@ func TestPlatformHostVerificationChecklistPlatformMCP(t *testing.T) {
 			encryptionClient := testEncryption(t)
 			signer := sessiontokens.NewSigner("platform-host-checklist-key")
 			oauth, err := NewOAuthHTTP(OAuthHTTPConfig{
+				AICatalog: aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())),
+
 				BaseURL:       serverURL,
 				Cache:         &memoryCache{values: map[string]any{}},
 				Store:         NewPostgresOAuthStore(conn),
@@ -104,7 +107,7 @@ func TestPlatformHostVerificationChecklistPlatformMCP(t *testing.T) {
 			require.NoError(t, err)
 			authenticator, err := NewJWTAuthenticator(signer, conn, encryptionClient, serverURL)
 			require.NoError(t, err)
-			runtime := NewRuntime(testenv.NewLogger(t), authenticator, allowGate{}, allowAuthorizer{}, oauth.ProtectedResourceURL(), "platform-host-checklist-cursor", nil, nil, nil, nil, nil)
+			runtime := NewRuntime(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), testenv.NewLogger(t), authenticator, allowGate{}, allowAuthorizer{}, oauth.ProtectedResourceURL(), "platform-host-checklist-cursor", nil, nil, nil, nil, nil)
 
 			logger := testenv.NewLogger(t)
 			mcpSecurity, err := middleware.MCPSecurity(logger, append([]string{serverURL.String()}, slices.Sorted(maps.Values(platformHosts))...), nil)

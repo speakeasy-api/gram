@@ -370,3 +370,10 @@ Browser verification: [~] — follow check 30 in `seed/demo/verify.md`.
 The seeded gateway uses Progressive discovery. Settings shows this default and Inspect can reconnect in Direct mode to show qualified member tools. Choosing a mode in Inspect leaves the gateway default unchanged.
 
 Tunnel observability: [x] seeded and browser-verified for all three ranges, the data table, gaps, and no-agent state.
+
+AI tool decisions: all five seeded built-ins reference global catalog products.
+The catalog bootstrap runs before tenant provisioning; reseeding preserves the
+references and catalog edits. Postflight checks five matching product links.
+
+The AI tool library reads the seeded global catalog through the live snapshot.
+Catalog edits reach the library and gateway matchers on the next refresh.

@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	srv "github.com/speakeasy-api/gram/server/gen/okta_resource_connections"
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	idpc "github.com/speakeasy-api/gram/server/internal/identityproviderconnections"
@@ -41,7 +42,7 @@ func xaaTestSession(t *testing.T, service *xaaReadinessService, deny bool) *mcp.
 	t.Helper()
 	server := newTestMCPServer()
 	bindExternalTestPrincipal(server)
-	reg := newRegistrar(server)
+	reg := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), server)
 	if deny {
 		reg.withExternalAuthorizer(denyExternalCallAuthorizer{err: &ExternalAuthorizationError{RequiredScope: "org:admin", cause: ErrForbidden}})
 	} else {
@@ -67,7 +68,7 @@ func xaaCall(t *testing.T, session *mcp.ClientSession, projectID, serverID strin
 
 func TestXAAReadinessContract(t *testing.T) {
 	t.Parallel()
-	live, unavailable := newRegistrar(newTestMCPServer()), newRegistrar(newTestMCPServer())
+	live, unavailable := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), newTestMCPServer()), newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), newTestMCPServer())
 	registerXAAReadinessTool(live, &xaaReadinessService{})
 	registerXAAReadinessTool(unavailable, nil)
 	a, b := live.Descriptors()[0], unavailable.Descriptors()[0]
@@ -409,7 +410,7 @@ func TestXAAReadinessOktaSignInGuidanceCoversEveryStep(t *testing.T) {
 	require.Contains(t, oktaSignInGuidance[idpc.SignInStepSetUpSignIn], "customer-managed encryption keys")
 	require.Contains(t, oktaSignInGuidance[idpc.SignInStepSetUpSignIn], "Google Cloud KMS key")
 	descriptor := func() Descriptor {
-		reg := newRegistrar(newTestMCPServer())
+		reg := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), newTestMCPServer())
 		registerXAAReadinessTool(reg, nil)
 		return reg.Descriptors()[0]
 	}()

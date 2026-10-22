@@ -7,6 +7,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/assertion/privatekeyjwt"
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
@@ -21,7 +22,9 @@ func TestVerifyClientAssertion_NoVerifierRefuses(t *testing.T) {
 
 	require.Nil(t, newClientAssertionVerifier(nil, nil, testenv.NewMeterProvider(t), testenv.NewLogger(t)))
 
-	svc := &Service{clientAssertionVerifier: nil}
+	svc := &Service{
+		aiCatalog:               aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())),
+		clientAssertionVerifier: nil}
 	row := &usersessions_repo.UserSessionClient{
 		ClientID:                "https://client.example.com/oauth/client.json",
 		TokenEndpointAuthMethod: pgtype.Text{String: "private_key_jwt", Valid: true},

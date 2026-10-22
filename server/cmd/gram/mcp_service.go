@@ -12,6 +12,7 @@ import (
 	"github.com/redis/go-redis/v9"
 	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
@@ -71,6 +72,8 @@ func newToolCallLogs(publisher gcp.Publisher[*otelv1.InboundLogRecord]) *otelpub
 }
 
 type mcpServiceDependencies struct {
+	// AICatalog is the process-wide database catalog store.
+	AICatalog      *aivendors.Store
 	TunnelMetrics  *metrics.Collector
 	Logger         *slog.Logger
 	Tracer         trace.TracerProvider
@@ -129,7 +132,7 @@ func newMCPService(c *cli.Context, d mcpServiceDependencies) (*mcp.Service, erro
 			return nil, fmt.Errorf("invalid tunnel gateway CIDR block %q: %w", cidr, err)
 		}
 	}
-	service, err := mcp.NewService(d.Logger, d.Tracer, d.Meter, d.DB, d.Sessions, d.ChatSessions, d.Environment, d.Posthog, d.Features, d.ServerURL, d.SiteURL, d.Encryption, cacheImpl,
+	service, err := mcp.NewService(d.AICatalog, d.Logger, d.Tracer, d.Meter, d.DB, d.Sessions, d.ChatSessions, d.Environment, d.Posthog, d.Features, d.ServerURL, d.SiteURL, d.Encryption, cacheImpl,
 		d.Guardian, d.Functions, d.BillingTracker, d.Billing, d.Telemetry, d.ToolCallLogs, d.TelemetryService, d.RAG, d.Triggers, d.Authz, d.AssistantTokens, d.PrincipalCredentials, d.ShadowMCP, d.Audit, d.PlatformExtras, d.PlatformFeatureChecker, d.PlatformToolsets,
 		d.Identity, usersessions.NewSigner(c.String(usersessions.JWTSigningKeyFlag)), d.Challenges, d.MCPRisk, proxy, route.NewRedis(d.Redis), c.String("tunnel-forward-token"), cidrs, d.CallerAssertions, d.Redis,
 		mcp.TunnelPublicConfig{SessionTTL: 0, LiveSessionCap: c.Int("public-tunnels-live-session-cap"), InitializeRate: ratelimit.Rate{Tokens: 0, Interval: 0, Burst: 0}, RequestRate: ratelimit.Rate{Tokens: 0, Interval: 0, Burst: 0}, MaxRequestLifetime: 0},

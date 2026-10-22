@@ -13,6 +13,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
@@ -232,7 +233,7 @@ func TestGetMCPAdvertisesToolPagingAndRefusesAStaleToolCursor(t *testing.T) {
 	t.Parallel()
 
 	reader := refusingProjectReader{mcpErr: fmt.Errorf("read platform MCP tool exposure: %w", toolExposureCursorInvalid())}
-	server, registrar := newServer(reader, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
+	server, registrar := newServer(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), reader, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
 	bindExternalTestPrincipal(server)
 	registrar.withExternalAuthorizer(allowExternalCallAuthorizer{})
 

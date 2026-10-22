@@ -19,6 +19,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/speakeasy-api/gram/dev-idp/pkg/devidptest"
 	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth/identity"
@@ -696,7 +697,7 @@ func buildTestMCPService(
 		// assistant audience, called directly by the adapter.
 		platformMCPReadTools = assistant_platform_mcp_adapter.ExternalTools(
 			platformmcp.NewRuntimeWithLifecycle(
-				logger, nil, nil, platformmcp.NewLiveOrgAdminAuthorizer(conn, authzEngine), "", "test-cursor-key",
+				aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), logger, nil, nil, platformmcp.NewLiveOrgAdminAuthorizer(conn, authzEngine), "", "test-cursor-key",
 				platformmcp.NewPostgresReader(logger, conn).WithAuthorization(authzEngine), nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil,
 				platformmcp.CatalogDescriptor{},
 			).AssistantTools(),
@@ -714,7 +715,7 @@ func buildTestMCPService(
 	toolCallRecords := &toolCallRecorder{}
 	// Named as in production, so the pipeline derives the same source.
 	toolCallLogs := otelpub.NewLogger(toolCallRecords, resource.NewSchemaless(semconv.ServiceNameKey.String("gram-server")), dialect.GatewayLogScope)
-	svc, err := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, chatSessionsManager, env, posthog, features, serverURL, siteURL, enc, mcpCache, guardianPolicy, funcs, billingStub, billingStub, telemLogger, toolCallLogs, telemService, vectorToolStore, nil, authzEngine, assistantTokens, principalCredentials, shadowMCPClient, auditLogger, assistantSkillTools, featClient.PlatformFeatureCheck, platformToolsets, identityResolver, userSessionSigner, remoteChallengeMgr, scanEvaluator, remoteProxyManager, tunnelRoutes, "", nil, callerAssertions, redisClient, tunnelPublicConfig, metaRuntime)
+	svc, err := mcp.NewService(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), logger, tracerProvider, meterProvider, conn, sessionManager, chatSessionsManager, env, posthog, features, serverURL, siteURL, enc, mcpCache, guardianPolicy, funcs, billingStub, billingStub, telemLogger, toolCallLogs, telemService, vectorToolStore, nil, authzEngine, assistantTokens, principalCredentials, shadowMCPClient, auditLogger, assistantSkillTools, featClient.PlatformFeatureCheck, platformToolsets, identityResolver, userSessionSigner, remoteChallengeMgr, scanEvaluator, remoteProxyManager, tunnelRoutes, "", nil, callerAssertions, redisClient, tunnelPublicConfig, metaRuntime)
 	require.NoError(t, err)
 	// Identity chaining runs as in production, so gate tests without bindings
 	// prove it leaves their behavior unchanged.

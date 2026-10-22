@@ -9,11 +9,15 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-	"github.com/stretchr/testify/require"
-
+	"github.com/speakeasy-api/gram/server/internal/agent/aitargets"
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
+	"github.com/speakeasy-api/gram/server/internal/aivendors/catalogseed"
+	catalogseedrepo "github.com/speakeasy-api/gram/server/internal/aivendors/catalogseed/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/stretchr/testify/require"
 )
 
 const (
@@ -33,7 +37,7 @@ func TestIsChatGPTClient(t *testing.T) {
 		"00000000-0000-0000-0000-000000000000":                  false,
 		"":                                                      false,
 	} {
-		require.Equal(t, want, isChatGPTClient(clientID), clientID)
+		require.Equal(t, want, isChatGPTClient(aivendors.NewSnapshot(aivendors.Products()), clientID), clientID)
 	}
 }
 
@@ -49,12 +53,14 @@ func TestChatGPTToolAllowlistNamesRegisteredExternalTools(t *testing.T) {
 func TestExternalCatalogueIntersectsChatGPTAllowlistWithGrants(t *testing.T) {
 	t.Parallel()
 
-	registrar := &Registrar{descriptors: []Descriptor{
-		{Name: "search_mcp_catalog", Meta: ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: externalOnly}},
-		{Name: "register_catalog_mcp", Meta: ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: externalOnly, DiscoveryScopes: discoveryMCPWrite}},
-		{Name: "list_projects", Meta: ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: externalOnly, DiscoveryScopes: discoveryProjectRead}},
-		{Name: "get_platform_context", Meta: ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: externalOnly}},
-	}}
+	registrar := &Registrar{
+		aiCatalog: aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())),
+		descriptors: []Descriptor{
+			{Name: "search_mcp_catalog", Meta: ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: externalOnly}},
+			{Name: "register_catalog_mcp", Meta: ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: externalOnly, DiscoveryScopes: discoveryMCPWrite}},
+			{Name: "list_projects", Meta: ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: externalOnly, DiscoveryScopes: discoveryProjectRead}},
+			{Name: "get_platform_context", Meta: ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: externalOnly}},
+		}}
 	tools := []*mcp.Tool{{Name: "search_mcp_catalog"}, {Name: "register_catalog_mcp"}, {Name: "list_projects"}, {Name: "get_platform_context"}}
 	ctx := authz.GrantsToContext(t.Context(), []authz.Grant{authz.NewGrant(authz.ScopeProjectRead, "project-1")})
 
@@ -149,7 +155,7 @@ func newAllowlistTestRuntime(t *testing.T, grants []authz.Grant) *Runtime {
 	t.Helper()
 
 	return NewRuntime(
-		testenv.NewLogger(t),
+		aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), testenv.NewLogger(t),
 		&testAuthenticator{principal: testPrincipal()},
 		testGate{enabled: true},
 		&testAuthorizer{grants: grants},
@@ -202,4 +208,30 @@ func allowlistRPC(t *testing.T, handler http.Handler, runtime *Runtime, clientID
 	response := allowlistRPCRaw(t, handler, runtime, clientID, body, headers...)
 	require.Nil(t, response.Error)
 	require.NoError(t, json.Unmarshal(response.Result, result))
+}
+
+func TestChatGPTRecognitionFollowsCatalogRefresh(t *testing.T) {
+	t.Parallel()
+	db, err := platformMCPInfra.CloneTestDatabase(t, "client_catalog_refresh")
+	require.NoError(t, err)
+	require.NoError(t, catalogseed.EnsureCatalog(t.Context(), db))
+	logger := testenv.NewLogger(t)
+	initial, err := aivendors.Load(t.Context(), db, logger, aitargets.ValidateCatalog)
+	require.NoError(t, err)
+	store := aivendors.NewStore(initial)
+	registrar := newRegistrar(store, nil)
+	require.True(t, isChatGPTClient(store.Snapshot(), testChatGPTConnectorClientID))
+	q := catalogseedrepo.New(db)
+	docs, err := q.ListDocuments(t.Context())
+	require.NoError(t, err)
+	for _, d := range docs {
+		if d.Url == "https://chatgpt.com/oauth/*/client.json" {
+			require.NoError(t, q.EditDocumentFixture(t.Context(), catalogseedrepo.EditDocumentFixtureParams{ID: d.ID, Url: "https://clients.example.com/connectors/*/client.json", DisplayName: d.DisplayName, Enabled: true, DeletedAt: pgtype.Timestamptz{}}))
+		}
+	}
+	require.NoError(t, store.Refresh(t.Context(), db, logger, aitargets.ValidateCatalog))
+	require.False(t, isChatGPTClient(registrar.aiCatalog.Snapshot(), testChatGPTConnectorClientID))
+	require.True(t, isChatGPTClient(registrar.aiCatalog.Snapshot(), "https://clients.example.com/connectors/fixture/client.json"))
+	require.False(t, isChatGPTClient(registrar.aiCatalog.Snapshot(), "https://chatgpt.com/oauth/codex/client.json"))
+	require.True(t, isChatGPTClient(initial, testChatGPTConnectorClientID), "captured revisions remain usable")
 }

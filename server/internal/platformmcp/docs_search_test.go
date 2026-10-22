@@ -8,6 +8,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 )
 
@@ -179,7 +180,7 @@ func TestSearchDocsCitationsResolveToRegisteredResources(t *testing.T) {
 
 	now := time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC)
 	corpus := docsCorpus(now)
-	reg := newRegistrar(newTestMCPServer())
+	reg := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), newTestMCPServer())
 	registerSetupResources(reg, corpus, func() time.Time { return now })
 	registerSearchDocsTool(reg, NewMemoryDocsIndex(corpus, func() time.Time { return now }), allowingDocsBudget())
 
@@ -213,7 +214,7 @@ func TestSearchDocsReturnsGuideUnavailableRatherThanGuessing(t *testing.T) {
 
 	now := time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC)
 	corpus := docsCorpus(now)
-	reg := newRegistrar(newTestMCPServer())
+	reg := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), newTestMCPServer())
 	registerSearchDocsTool(reg, NewMemoryDocsIndex(corpus, func() time.Time { return now }), allowingDocsBudget())
 
 	output := searchDocs(t, reg, "gamma quantum teleportation setup")
@@ -254,7 +255,7 @@ func TestReadDocAnswersTheSameURIsSearchCites(t *testing.T) {
 	observed := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	corpus := docsCorpus(observed)
 	now := observed.AddDate(0, 0, 1)
-	reg := newRegistrar(newTestMCPServer())
+	reg := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), newTestMCPServer())
 	registerSetupResources(reg, corpus, func() time.Time { return now })
 	registerSearchDocsTool(reg, NewMemoryDocsIndex(corpus, func() time.Time { return now }), allowingDocsBudget())
 	registerReadDocTool(reg)
@@ -287,7 +288,7 @@ func TestSearchDocsRefusesWhenRateLimited(t *testing.T) {
 
 	now := time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC)
 	corpus := docsCorpus(now)
-	reg := newRegistrar(newTestMCPServer())
+	reg := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), newTestMCPServer())
 	registerSearchDocsTool(reg, NewMemoryDocsIndex(corpus, func() time.Time { return now }), OperationBudget{
 		Connection:   &recordingOperationLimiter{result: ratelimit.Result{Allowed: false}},
 		Organization: &recordingOperationLimiter{result: ratelimit.Result{Allowed: true}},

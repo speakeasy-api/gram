@@ -7,10 +7,12 @@ import (
 	"strings"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	gen "github.com/speakeasy-api/gram/server/gen/agent"
 	"github.com/speakeasy-api/gram/server/internal/agent/aitargets"
 	"github.com/speakeasy-api/gram/server/internal/agent/repo"
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -41,11 +43,12 @@ func (s *Service) requireOrganizationAdmin(ctx context.Context) (*contextvalues.
 }
 
 func (s *Service) ListAiScanTargets(ctx context.Context, _ *gen.ListAiScanTargetsPayload) (*gen.ListAiScanTargetsResult, error) {
+	catalog := s.aiCatalog.Snapshot()
 	authCtx, err := s.requireOrganizationAdmin(ctx)
 	if err != nil {
 		return nil, err
 	}
-	list, err := aitargets.LoadOrganizationList(ctx, s.repo, authCtx.ActiveOrganizationID)
+	list, err := aitargets.LoadOrganizationList(ctx, s.repo, authCtx.ActiveOrganizationID, catalog)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list ai scan targets").LogError(ctx, s.logger)
 	}
@@ -53,6 +56,7 @@ func (s *Service) ListAiScanTargets(ctx context.Context, _ *gen.ListAiScanTarget
 }
 
 func (s *Service) UpsertAiScanTarget(ctx context.Context, payload *gen.UpsertAiScanTargetPayload) (*gen.AiScanTargetMutationResult, error) {
+	catalog := s.aiCatalog.Snapshot()
 	authCtx, err := s.requireOrganizationAdmin(ctx)
 	if err != nil {
 		return nil, err
@@ -81,7 +85,7 @@ func (s *Service) UpsertAiScanTarget(ctx context.Context, payload *gen.UpsertAiS
 		return nil, oops.E(oops.CodeUnexpected, err, "serialize ai scan target update").LogError(ctx, s.logger)
 	}
 
-	before, err := aiScanTargetBefore(ctx, queries, organizationID, target.ID)
+	before, err := aiScanTargetBefore(ctx, catalog, queries, organizationID, target.ID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "read existing ai scan target").LogError(ctx, s.logger)
 	}
@@ -95,12 +99,12 @@ func (s *Service) UpsertAiScanTarget(ctx context.Context, payload *gen.UpsertAiS
 		target.GatewayClient = before.GatewayClient.Clone()
 	}
 
-	if err := aitargets.ValidateTarget(target); err != nil {
+	if err := aitargets.ValidateTarget(catalog, target); err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "%v", err)
 	}
 	// Built-in targets are system-supplied, the same contract Detection Rules
 	// holds its built-ins to. There is nothing left for an organization to
-	// write about one: the definition is compiled in, and being in the
+	// write about one: the definition comes from the global catalog, and being in the
 	// inventory is what makes it probed for, so there is no per-organization
 	// switch either. The access decision is recorded through the AI tool
 	// decision endpoint, not here.
@@ -113,20 +117,18 @@ func (s *Service) UpsertAiScanTarget(ctx context.Context, payload *gen.UpsertAiS
 	// Enforced here and not only in the dashboard because the API is the
 	// contract: a hand-rolled call must not be able to silently redefine what
 	// every agent in the organization probes for.
-	if _, isBuiltin := aitargets.DefaultByID(target.ID); isBuiltin {
+	if _, isBuiltin := aitargets.DefaultByID(catalog, target.ID); isBuiltin {
 		return nil, oops.E(oops.CodeBadRequest, nil, "%q is a built-in scan target: Speakeasy supplies its definition and every organization is served it, so there is nothing to write here; record an access decision about it through the AI tool decision endpoint instead", target.ID)
 	}
 	if _, err := queries.UpsertAIScanTarget(ctx, aitargets.UpsertParams(organizationID, target)); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "save ai scan target").LogError(ctx, s.logger)
 	}
-	list, err := aitargets.LoadOrganizationList(ctx, queries, organizationID)
+	list, err := aitargets.LoadOrganizationList(ctx, queries, organizationID, catalog)
 	if err != nil {
+		if errors.Is(err, aitargets.ErrInvalidTarget) {
+			return nil, oops.E(oops.CodeBadRequest, err, "%v", err)
+		}
 		return nil, oops.E(oops.CodeUnexpected, err, "read updated ai scan targets").LogError(ctx, s.logger)
-	}
-	// The served set is bounded by what agents accept; the check runs under
-	// the organization's lock so concurrent writers cannot slip past it.
-	if err := aitargets.ValidateServed(list.Snapshot.Targets()); err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "%v", err)
 	}
 	entry, ok := list.Entry(target.ID)
 	if !ok {
@@ -149,6 +151,7 @@ func (s *Service) UpsertAiScanTarget(ctx context.Context, payload *gen.UpsertAiS
 			OrganizationID: organizationID,
 			ID:             target.ID,
 			Status:         string(aitargets.DecisionUnreviewed),
+			AiProductID:    pgtype.Text{String: "", Valid: false},
 			Rationale:      conv.ToPGTextEmpty(""),
 		})
 		if err != nil {
@@ -205,12 +208,13 @@ func (s *Service) UpsertAiScanTarget(ctx context.Context, payload *gen.UpsertAiS
 	}
 
 	return &gen.AiScanTargetMutationResult{
-		ListVersion: int(aitargets.ListVersion()),
+		ListVersion: int(catalog.Version()),
 		Target:      mv.BuildAiScanTargetView(entry),
 	}, nil
 }
 
 func (s *Service) DeleteAiScanTarget(ctx context.Context, payload *gen.DeleteAiScanTargetPayload) (*gen.DeleteAiScanTargetResult, error) {
+	catalog := s.aiCatalog.Snapshot()
 	authCtx, err := s.requireOrganizationAdmin(ctx)
 	if err != nil {
 		return nil, err
@@ -239,17 +243,12 @@ func (s *Service) DeleteAiScanTarget(ctx context.Context, payload *gen.DeleteAiS
 	if _, err := queries.DeleteAIScanTarget(ctx, repo.DeleteAIScanTargetParams{OrganizationID: organizationID, ID: id}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "delete ai scan target").LogError(ctx, s.logger)
 	}
-	// Dropping a customization serves the default again, which can grow the
-	// served set, so it is checked like any other write.
-	list, err := aitargets.LoadOrganizationList(ctx, queries, organizationID)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "read updated ai scan targets").LogError(ctx, s.logger)
-	}
-	if err := aitargets.ValidateServed(list.Snapshot.Targets()); err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "%v", err)
-	}
+	// Removing an organization row can only shrink the served set or leave a
+	// built-in's authoritative definition unchanged. Allow incremental cleanup
+	// when a catalog refresh has invalidated several custom targets; validating
+	// the remaining list here would prevent deleting any of them.
 
-	before := aitargets.ResolveBuiltinDefinition(aitargets.EntryFromRow(row).Target)
+	before := aitargets.ResolveBuiltinDefinition(catalog, aitargets.EntryFromRow(row).Target)
 	if err := s.audit.LogAiScanTargetDelete(ctx, dbtx, audit.LogAiScanTargetDeleteEvent{
 		OrganizationID:             organizationID,
 		Actor:                      urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
@@ -265,7 +264,7 @@ func (s *Service) DeleteAiScanTarget(ctx context.Context, payload *gen.DeleteAiS
 		return nil, oops.E(oops.CodeUnexpected, err, "commit ai scan target delete").LogError(ctx, s.logger)
 	}
 
-	return &gen.DeleteAiScanTargetResult{ListVersion: int(aitargets.ListVersion())}, nil
+	return &gen.DeleteAiScanTargetResult{ListVersion: int(catalog.Version())}, nil
 }
 
 // aiScanTargetBefore is what the organization's list held for id ahead of a
@@ -277,16 +276,16 @@ func (s *Service) DeleteAiScanTarget(ctx context.Context, payload *gen.DeleteAiS
 // definition off this: the omitted-gateway_client carry-over above, which
 // would otherwise unlink a built-in from the caller it blocks and then fail
 // the read-only check, and the update audit's before-snapshot.
-func aiScanTargetBefore(ctx context.Context, queries *repo.Queries, organizationID string, id string) (*aitargets.Target, error) {
+func aiScanTargetBefore(ctx context.Context, catalog *aivendors.Snapshot, queries *repo.Queries, organizationID string, id string) (*aitargets.Target, error) {
 	row, err := queries.GetAIScanTargetForUpdate(ctx, repo.GetAIScanTargetForUpdateParams{OrganizationID: organizationID, ID: id})
 	switch {
 	case err == nil:
-		target := aitargets.ResolveBuiltinDefinition(aitargets.EntryFromRow(row).Target)
+		target := aitargets.ResolveBuiltinDefinition(catalog, aitargets.EntryFromRow(row).Target)
 		return &target, nil
 	case !errors.Is(err, pgx.ErrNoRows):
 		return nil, fmt.Errorf("lock ai scan target %q: %w", id, err)
 	}
-	if builtin, isBuiltin := aitargets.DefaultByID(id); isBuiltin {
+	if builtin, isBuiltin := aitargets.DefaultByID(catalog, id); isBuiltin {
 		return &builtin, nil
 	}
 	return nil, nil

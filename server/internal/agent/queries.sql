@@ -382,7 +382,12 @@ VALUES (
   @client_info_names::text[]
 )
 ON CONFLICT (organization_id, id) DO UPDATE
-SET display_name = EXCLUDED.display_name
+-- Writing a definition makes the row the organization's own target. A
+-- decision-only row left by a built-in since removed from the registry may
+-- still reference its product, and keeping that would mark the definition
+-- as a built-in's.
+SET ai_product_id = NULL
+  , display_name = EXCLUDED.display_name
   , category = EXCLUDED.category
   , bundle_ids = EXCLUDED.bundle_ids
   , binaries = EXCLUDED.binaries
@@ -396,10 +401,11 @@ SET display_name = EXCLUDED.display_name
 RETURNING *;
 
 -- name: SetAIScanTargetStatus :one
-INSERT INTO ai_scan_targets (organization_id, id, status, rationale)
-VALUES (@organization_id, @id, @status, sqlc.narg('rationale'))
+INSERT INTO ai_scan_targets (organization_id, id, ai_product_id, status, rationale)
+VALUES (@organization_id, @id, sqlc.narg('ai_product_id'), @status, sqlc.narg('rationale'))
 ON CONFLICT (organization_id, id) DO UPDATE
-SET status = EXCLUDED.status
+SET ai_product_id = COALESCE(ai_scan_targets.ai_product_id, EXCLUDED.ai_product_id)
+  , status = EXCLUDED.status
   , rationale = EXCLUDED.rationale
   , updated_at = clock_timestamp()
 RETURNING *;
@@ -446,3 +452,21 @@ ORDER BY id;
 
 -- name: AcquireAIScanTargetsLock :exec
 SELECT pg_advisory_xact_lock(hashtextextended('ai_scan_targets:' || @organization_id::text, 0));
+
+-- ID matching alone cannot establish a stored row's kind: an organization's
+-- definition may predate a built-in with the same ID. Only decision-only rows
+-- can acquire a catalog reference, even while readers still overlay by ID.
+-- name: GetAIScanTargetCatalogState :one
+SELECT
+  EXISTS (SELECT 1 FROM ai_products p WHERE p.id = @id) AS product_exists,
+  EXISTS (
+    SELECT 1 FROM ai_scan_targets t
+    WHERE t.organization_id = @organization_id AND t.id = @id
+      AND NOT (
+        t.display_name IS NULL AND t.category IS NULL AND t.version_plist_key IS NULL
+        AND cardinality(t.bundle_ids) = 0 AND cardinality(t.binaries) = 0
+        AND cardinality(t.config_dirs) = 0 AND cardinality(t.process_names) = 0
+        AND cardinality(t.cimd_vendor_keys) = 0 AND cardinality(t.oauth_client_ids) = 0
+        AND cardinality(t.client_info_names) = 0
+      )
+  ) AS has_definition;

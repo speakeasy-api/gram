@@ -37,6 +37,7 @@ var registry = []Product{
 		ClientInfoNames: []string{"claude-code", "Claude Code", "claude-ai"},
 		Documents: []Document{{
 			URL:         "https://claude.ai/oauth/claude-code-client-metadata",
+			Pattern:     false,
 			DisplayName: "Anthropic (Claude Code)",
 			Enabled:     true,
 		}},
@@ -51,6 +52,7 @@ var registry = []Product{
 		ClientInfoNames: nil,
 		Documents: []Document{{
 			URL:         "https://claude.ai/oauth/mcp-oauth-client-metadata",
+			Pattern:     false,
 			DisplayName: "Anthropic (Claude)",
 			Enabled:     true,
 		}},
@@ -70,11 +72,13 @@ var registry = []Product{
 		Documents: []Document{
 			{
 				URL:         "https://vscode.dev/oauth/client-metadata.json",
+				Pattern:     false,
 				DisplayName: "Visual Studio Code",
 				Enabled:     true,
 			},
 			{
 				URL:         "https://insiders.vscode.dev/oauth/client-metadata.json",
+				Pattern:     false,
 				DisplayName: "Visual Studio Code (Insiders)",
 				Enabled:     true,
 			},
@@ -101,6 +105,7 @@ var registry = []Product{
 		ClientInfoNames: nil,
 		Documents: []Document{{
 			URL:         "https://zed.dev/oauth/client-metadata.json",
+			Pattern:     false,
 			DisplayName: "Zed",
 			Enabled:     true,
 		}},
@@ -130,6 +135,7 @@ var registry = []Product{
 		ClientInfoNames: nil,
 		Documents: []Document{{
 			URL:         "https://goose-docs.ai/oauth/client-metadata.json",
+			Pattern:     false,
 			DisplayName: "Goose",
 			Enabled:     true,
 		}},
@@ -189,6 +195,7 @@ var registry = []Product{
 				// Apps SDK docs and the Codex CLI source) — deterministic per
 				// server, unbounded across servers.
 				URL:         "https://chatgpt.com/oauth/*/client.json",
+				Pattern:     true,
 				DisplayName: "ChatGPT (connectors)",
 				Enabled:     true,
 			},
@@ -198,6 +205,7 @@ var registry = []Product{
 				// between /oauth/ and /client.json, and this URL has none,
 				// so this entry is the only thing that admits it.
 				URL:         "https://chatgpt.com/oauth/client.json",
+				Pattern:     false,
 				DisplayName: "ChatGPT",
 				Enabled:     true,
 			},
@@ -275,6 +283,7 @@ var registry = []Product{
 				// per server URL, not per install, but the server URL space
 				// is unbounded, so only a pattern can admit it.
 				URL:         "https://chatgpt.com/oauth/codex/*/client.json",
+				Pattern:     true,
 				DisplayName: "Codex CLI",
 				Enabled:     true,
 			},
@@ -293,6 +302,7 @@ var registry = []Product{
 				// here is what attributes a caller presenting it to Codex
 				// rather than to ChatGPT.
 				URL:         "https://chatgpt.com/oauth/codex/client.json",
+				Pattern:     false,
 				DisplayName: "Codex CLI (stable document)",
 				Enabled:     true,
 			},
@@ -315,11 +325,13 @@ var registry = []Product{
 		Documents: []Document{
 			{
 				URL:         "https://www.notion.so/oauth/mcp-client-metadata.json",
+				Pattern:     false,
 				DisplayName: "Notion",
 				Enabled:     true,
 			},
 			{
 				URL:         "https://app.notion.com/oauth/mcp-client-metadata.json",
+				Pattern:     false,
 				DisplayName: "Notion (app.notion.com)",
 				Enabled:     true,
 			},
@@ -337,6 +349,7 @@ var registry = []Product{
 		ClientInfoNames: nil,
 		Documents: []Document{{
 			URL:         "https://www.mcpjam.com/.well-known/oauth/client-metadata.json",
+			Pattern:     false,
 			DisplayName: "MCPJam Inspector",
 			Enabled:     true,
 		}},
@@ -353,6 +366,7 @@ var registry = []Product{
 		ClientInfoNames: nil,
 		Documents: []Document{{
 			URL:         "https://api.factory.ai/mcp/oauth-client",
+			Pattern:     false,
 			DisplayName: "Factory Droid",
 			Enabled:     true,
 		}},
@@ -369,6 +383,7 @@ var registry = []Product{
 		ClientInfoNames: nil,
 		Documents: []Document{{
 			URL:         "https://toolhive.dev/oauth/client-metadata.json",
+			Pattern:     false,
 			DisplayName: "ToolHive",
 			Enabled:     true,
 		}},
@@ -398,6 +413,7 @@ var registry = []Product{
 		ClientInfoNames: nil,
 		Documents: []Document{{
 			URL:         "https://nousresearch.github.io/hermes-agent/docs/oauth/client-metadata.json",
+			Pattern:     false,
 			DisplayName: "Hermes Agent",
 			Enabled:     true,
 		}},
@@ -416,6 +432,7 @@ var registry = []Product{
 		ClientInfoNames: nil,
 		Documents: []Document{{
 			URL:         "https://www.skydive.com/api/v1/external-oauth/client-metadata",
+			Pattern:     false,
 			DisplayName: "Skydive",
 			Enabled:     true,
 		}},
@@ -440,6 +457,7 @@ var registry = []Product{
 		ClientInfoNames: []string{"opencode"},
 		Documents: []Document{{
 			URL:         "https://opencode.ai/oauth/opencode/client.json",
+			Pattern:     false,
 			DisplayName: "opencode",
 			Enabled:     true,
 		}},
@@ -458,6 +476,7 @@ var registry = []Product{
 		ClientInfoNames: nil,
 		Documents: []Document{{
 			URL:         "https://github.com/copilot/cli/client-metadata.json",
+			Pattern:     false,
 			DisplayName: "GitHub Copilot CLI",
 			Enabled:     true,
 		}},
@@ -489,6 +508,7 @@ var registry = []Product{
 		ClientInfoNames: nil,
 		Documents: []Document{{
 			URL:         "https://api.conductor.build/oauth/client-metadata.json",
+			Pattern:     false,
 			DisplayName: "Conductor",
 			Enabled:     true,
 		}},
@@ -514,6 +534,7 @@ var registry = []Product{
 		ClientInfoNames: nil,
 		Documents: []Document{{
 			URL:         "https://connect.vercel.com/connectors/*",
+			Pattern:     true,
 			DisplayName: "Vercel Connect (connectors)",
 			Enabled:     true,
 		}},
@@ -534,6 +555,7 @@ var registry = []Product{
 		ClientInfoNames: nil,
 		Documents: []Document{{
 			URL:         "https://linear.app/.well-known/oauth-client-metadata/mcp.json",
+			Pattern:     false,
 			DisplayName: "Linear",
 			Enabled:     true,
 		}},
@@ -555,6 +577,7 @@ var registry = []Product{
 		ClientInfoNames: nil,
 		Documents: []Document{{
 			URL:         "https://api.lovable.dev/.well-known/oauth-client",
+			Pattern:     false,
 			DisplayName: "Lovable",
 			Enabled:     true,
 		}},
@@ -593,6 +616,7 @@ var registry = []Product{
 		ClientInfoNames: nil,
 		Documents: []Document{{
 			URL:         "https://antigravity.google/oauth/client-metadata.json",
+			Pattern:     false,
 			DisplayName: "Google Antigravity",
 			Enabled:     true,
 		}},

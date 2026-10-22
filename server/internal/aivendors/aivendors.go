@@ -1,13 +1,5 @@
-// Package aivendors is the single declaration of the AI tools Speakeasy knows: what
-// each looks like on a laptop, and which client ID metadata documents it
-// publishes. The CIMD admission catalog and the Shadow AI scan catalog are both
-// projections of it, so a product becomes admissible and blockable in one edit.
-//
-// Admission is a prerequisite for blocking: a client absent from the admission
-// catalog cannot authenticate in presets mode, so it never reaches a decision.
-//
-// A leaf package by design — standard library only, so both consumers can
-// depend on it without depending on each other.
+// Package aivendors owns AI product identities and immutable database catalog
+// snapshots shared by CIMD admission, device scanning, and gateway attribution.
 package aivendors
 
 import "slices"
@@ -31,32 +23,29 @@ const (
 // product is normal: stable and insiders builds, two origins, or one per MCP
 // server are all the same product to someone deciding whether to allow it.
 type Document struct {
+	// Pattern marks a URL as a path-segment pattern, as stored in the database.
+	Pattern bool `json:"pattern"`
 	// URL is the client_id the vendor presents. Usually exact; may be a
 	// wildcard pattern where the client_id space cannot be enumerated.
-	URL string
-
+	URL string `json:"url"`
 	// DisplayName is how the admission catalog lists this document —
 	// per-document, since a vendor's connector and shared documents differ.
-	DisplayName string
-
+	DisplayName string `json:"display_name"`
 	// Enabled gates the document without deleting it.
-	Enabled bool
+	Enabled bool `json:"enabled"`
 }
 
 // Signatures are the on-device footprints that identify a product. Mirrors
 // aitargets.Signatures.
 type Signatures struct {
 	// BundleIDs are macOS CFBundleIdentifier values.
-	BundleIDs []string
-
+	BundleIDs []string `json:"bundle_ids"`
 	// Binaries are bare command names resolved on the device PATH.
-	Binaries []string
-
+	Binaries []string `json:"binaries"`
 	// ConfigDirs mark the tool installed by existing.
-	ConfigDirs []string
-
+	ConfigDirs []string `json:"config_dirs"`
 	// ProcessNames are checked for the running signal.
-	ProcessNames []string
+	ProcessNames []string `json:"process_names"`
 }
 
 // IsZero marks a product Speakeasy knows as an OAuth client but never scans for.
@@ -71,30 +60,23 @@ func (s Signatures) IsZero() bool {
 type Product struct {
 	// ID is what scan reports key on and decisions are recorded against. Set
 	// even for unscanned products, so both projections agree on names.
-	ID string
-
+	ID string `json:"id"`
 	// VendorKey groups products by vendor. Not unique; stable.
-	VendorKey string
-
-	DisplayName string
-
+	VendorKey   string `json:"vendor_key"`
+	DisplayName string `json:"display_name"`
 	// Category is required when Signatures are set.
-	Category Category
-
+	Category Category `json:"category"`
 	// Signatures are the on-device footprints, empty for a product Speakeasy knows
 	// only as an OAuth client.
-	Signatures Signatures
-
+	Signatures Signatures `json:"signatures"`
 	// VersionPlistKey overrides the Info.plist key read on a bundle match;
 	// empty means CFBundleShortVersionString.
-	VersionPlistKey string
-
+	VersionPlistKey string `json:"version_plist_key"`
 	// ClientInfoNames are what the product reports at initialize. Attribution
 	// only — self-reported, so any client can claim any name.
-	ClientInfoNames []string
-
+	ClientInfoNames []string `json:"client_info_names"`
 	// Documents are the CIMD documents it publishes.
-	Documents []Document
+	Documents []Document `json:"documents"`
 }
 
 // SpeaksCIMD reports whether a decision about this product is enforceable.

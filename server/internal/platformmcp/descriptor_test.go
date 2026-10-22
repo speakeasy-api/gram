@@ -10,6 +10,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 )
 
@@ -20,7 +21,7 @@ func TestListProjectsDescriptionDoesNotAdvertiseHiddenResourceSignals(t *testing
 	t.Parallel()
 
 	server := mcp.NewServer(&mcp.Implementation{Name: "list-projects-description-test", Version: "0.0.1"}, nil)
-	registrar := newRegistrar(server)
+	registrar := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), server)
 	registerListProjectsTool(registrar, nil)
 
 	descriptor := registrar.Descriptors()[0]
@@ -31,7 +32,7 @@ func TestListProjectsDescriptionDoesNotAdvertiseHiddenResourceSignals(t *testing
 func TestEveryRegisteredToolDeclaresAnAudience(t *testing.T) {
 	t.Parallel()
 
-	_, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
+	_, registrar := newServer(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
 	descriptors := registrar.Descriptors()
 	require.NotEmpty(t, descriptors, "the deployment registers tools even when every dependency is absent")
 
@@ -73,11 +74,13 @@ func TestEveryRegisteredToolDeclaresAnAudience(t *testing.T) {
 func TestAudienceFilterSelectsPerTool(t *testing.T) {
 	t.Parallel()
 
-	registrar := &Registrar{descriptors: []Descriptor{
-		{Name: "both", Meta: ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: []Audience{AudienceExternal, AudienceAssistant}}},
-		{Name: "external-only", Meta: ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: []Audience{AudienceExternal}}},
-		{Name: "unadmitted", Meta: ToolMeta{}},
-	}}
+	registrar := &Registrar{
+		aiCatalog: aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())),
+		descriptors: []Descriptor{
+			{Name: "both", Meta: ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: []Audience{AudienceExternal, AudienceAssistant}}},
+			{Name: "external-only", Meta: ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: []Audience{AudienceExternal}}},
+			{Name: "unadmitted", Meta: ToolMeta{}},
+		}}
 
 	require.Equal(t, []string{"both", "external-only"}, names(registrar.For(AudienceExternal)))
 	require.Equal(t, []string{"both"}, names(registrar.For(AudienceAssistant)))
@@ -96,7 +99,7 @@ func TestAddToolExplicitInputSchemaIsAuthoritative(t *testing.T) {
 
 	server := mcp.NewServer(&mcp.Implementation{Name: "schema-test", Version: "0.0.1"}, nil)
 	bindExternalTestPrincipal(server)
-	registrar := newRegistrar(server)
+	registrar := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), server)
 	registrar.withExternalAuthorizer(allowExternalCallAuthorizer{})
 	var calls atomic.Int32
 	schema := &jsonschema.Schema{
@@ -162,7 +165,7 @@ func TestAddToolInfersInputSchemaWhenUnset(t *testing.T) {
 	t.Parallel()
 
 	server := mcp.NewServer(&mcp.Implementation{Name: "inferred-test", Version: "0.0.1"}, nil)
-	registrar := newRegistrar(server)
+	registrar := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), server)
 	addTool(registrar, &mcp.Tool{Name: "inferred_schema"}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeNone}, func(_ context.Context, _ *mcp.CallToolRequest, input explicitSchemaInput) (*mcp.CallToolResult, explicitSchemaOutput, error) {
 		return nil, explicitSchemaOutput(input), nil
 	})
@@ -205,7 +208,7 @@ func bindExternalTestPrincipal(server *mcp.Server) {
 func TestExternalToolRegistrationRequiresAuthorizationPolicy(t *testing.T) {
 	t.Parallel()
 
-	registrar := newRegistrar(newTestMCPServer())
+	registrar := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), newTestMCPServer())
 	require.PanicsWithValue(t, `platformmcp: external tool "missing_policy" declares no authorization policy`, func() {
 		addTool(registrar, &mcp.Tool{Name: "missing_policy"}, ToolMeta{Audiences: externalOnly, ProjectScope: ProjectScopeNone}, func(context.Context, *mcp.CallToolRequest, map[string]any) (*mcp.CallToolResult, map[string]any, error) {
 			return nil, nil, nil
@@ -216,7 +219,7 @@ func TestExternalToolRegistrationRequiresAuthorizationPolicy(t *testing.T) {
 func TestExternalResourceRegistrationRequiresAuthorizationPolicy(t *testing.T) {
 	t.Parallel()
 
-	registrar := newRegistrar(newTestMCPServer())
+	registrar := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), newTestMCPServer())
 	require.PanicsWithValue(t, `platformmcp: external resource "gram://test/missing-policy" declares no authorization policy`, func() {
 		addResource(registrar, &mcp.Resource{URI: "gram://test/missing-policy", Name: "missing_policy"}, ResourceMeta{Audiences: externalOnly}, func(context.Context) (string, error) {
 			return "", nil
@@ -227,7 +230,7 @@ func TestExternalResourceRegistrationRequiresAuthorizationPolicy(t *testing.T) {
 func TestEveryExternalToolUsesAKnownAuthorizationPolicy(t *testing.T) {
 	t.Parallel()
 
-	_, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
+	_, registrar := newServer(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
 	byName := map[string]ExternalAuthorization{}
 	for _, descriptor := range registrar.For(AudienceExternal) {
 		require.Contains(t, []ExternalAuthorization{ExternalAuthorizationMember, ExternalAuthorizationOrgAdmin}, descriptor.Meta.Authorization, descriptor.Name)
@@ -274,7 +277,7 @@ func TestEveryExternalToolUsesAKnownAuthorizationPolicy(t *testing.T) {
 func TestGetPlatformContextPreservesAssistantCallsWithoutExternalGrants(t *testing.T) {
 	t.Parallel()
 
-	registrar := newRegistrar(newTestMCPServer())
+	registrar := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), newTestMCPServer())
 	registerGetPlatformContextTool(registrar)
 	principal := testPrincipal()
 	principal.ConnectionID = ""
@@ -308,14 +311,16 @@ func TestExternalCatalogueFiltersByLiveCapabilities(t *testing.T) {
 	t.Parallel()
 
 	principal := testPrincipal()
-	registrar := &Registrar{descriptors: []Descriptor{
-		{Name: "context", Meta: ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: externalOnly}},
-		{Name: "projects", Meta: ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: externalOnly, DiscoveryScopes: discoveryProjectRead}},
-		{Name: "mcps", Meta: ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: externalOnly, DiscoveryScopes: discoveryMCPRead}},
-		{Name: "skill_write", Meta: ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: externalOnly, DiscoveryScopes: discoverySkillWrite}},
-		{Name: "admin", Meta: ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: externalOnly}},
-		{Name: "admin_mcp", Meta: ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: externalOnly, DiscoveryScopes: discoveryMCPRead}},
-	}}
+	registrar := &Registrar{
+		aiCatalog: aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())),
+		descriptors: []Descriptor{
+			{Name: "context", Meta: ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: externalOnly}},
+			{Name: "projects", Meta: ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: externalOnly, DiscoveryScopes: discoveryProjectRead}},
+			{Name: "mcps", Meta: ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: externalOnly, DiscoveryScopes: discoveryMCPRead}},
+			{Name: "skill_write", Meta: ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: externalOnly, DiscoveryScopes: discoverySkillWrite}},
+			{Name: "admin", Meta: ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: externalOnly}},
+			{Name: "admin_mcp", Meta: ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: externalOnly, DiscoveryScopes: discoveryMCPRead}},
+		}}
 	tools := []*mcp.Tool{{Name: "context"}, {Name: "projects"}, {Name: "mcps"}, {Name: "skill_write"}, {Name: "admin"}, {Name: "admin_mcp"}}
 
 	memberCtx := authz.GrantsToContext(t.Context(), []authz.Grant{
@@ -349,7 +354,7 @@ func TestExternalToolDenialReturnsReadableErrorWithoutCallingHandler(t *testing.
 
 	server := newTestMCPServer()
 	bindExternalTestPrincipal(server)
-	registrar := newRegistrar(server)
+	registrar := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), server)
 	registrar.withExternalAuthorizer(denyExternalCallAuthorizer{err: &ExternalAuthorizationError{
 		RequiredScope:    "org:admin",
 		RequestAccessURL: "https://app.example.test/example/request-access?scope=org%3Aadmin",
@@ -408,7 +413,7 @@ func names(descriptors []Descriptor) []string {
 func TestAssistantAudienceExcludesConnectionScopedTools(t *testing.T) {
 	t.Parallel()
 
-	_, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
+	_, registrar := newServer(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
 
 	admitted := map[string]bool{}
 	for _, descriptor := range registrar.For(AudienceAssistant) {
@@ -543,7 +548,7 @@ func TestAssistantAudienceExcludesConnectionScopedTools(t *testing.T) {
 func TestExternalEndpointServesOnlyExternallyAdmittedTools(t *testing.T) {
 	t.Parallel()
 
-	server, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
+	server, registrar := newServer(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
 	bindExternalTestPrincipal(server)
 	registrar.withExternalAuthorizer(allowExternalCallAuthorizer{})
 
@@ -592,7 +597,7 @@ func TestAdvertisedOutputSchemaMatchesTheSubjectCountWireForm(t *testing.T) {
 	// results carry no subject count. The handler is never called here — only
 	// the schema the registration advertises is under test.
 	server := newTestMCPServer()
-	registrar := newRegistrar(server)
+	registrar := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), server)
 	registerDiagnosticsTools(registrar, nil)
 	registerSkillUsageTools(registrar, nil)
 

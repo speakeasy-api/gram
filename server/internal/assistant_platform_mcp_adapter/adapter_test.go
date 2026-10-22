@@ -8,6 +8,7 @@ import (
 	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/platformmcp"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
@@ -219,7 +220,7 @@ func TestOnlyAdmittedDescriptorsAreComposed(t *testing.T) {
 func TestComposedAssistantToolsetIncludesListAccessMembers(t *testing.T) {
 	t.Parallel()
 
-	runtime := platformmcp.NewRuntimeWithLifecycle(nil, nil, nil, nil, "", "", nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, platformmcp.CatalogDescriptor{})
+	runtime := platformmcp.NewRuntimeWithLifecycle(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), nil, nil, nil, nil, "", "", nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, platformmcp.CatalogDescriptor{})
 	tools := ExternalTools(runtime.AssistantTools(), nil)
 
 	composed := map[string]platformtools.ExternalTool{}
@@ -253,7 +254,7 @@ func TestComposedAssistantToolsetIncludesListAccessMembers(t *testing.T) {
 func TestAssistantToolsetListsPluginReadsAndWithholdsPluginMutations(t *testing.T) {
 	t.Parallel()
 
-	runtime := platformmcp.NewRuntime(testenv.NewLogger(t), nil, nil, nil, "", "", nil, nil, nil, nil, nil)
+	runtime := platformmcp.NewRuntime(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), testenv.NewLogger(t), nil, nil, nil, "", "", nil, nil, nil, nil, nil)
 	composed := ExternalTools(runtime.AssistantTools(), nil)
 
 	listed := map[string]platformtools.ToolDescriptor{}

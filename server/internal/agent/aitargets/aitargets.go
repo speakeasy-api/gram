@@ -183,18 +183,16 @@ func (t Target) Clone() Target {
 	return out
 }
 
-// Defaults is the code-owned set an empty catalog is seeded from; after that
-// Postgres is the source of truth. Derived from the aivendors registry, so a
-// product declared once is both admissible and blockable.
-//
-// A product with no CIMD document carries detection names only, and a vendor
-// key covering more than one product names neither — GatewayMatchersFor
-// derives both rules.
-func Defaults() []Target {
-	products := aivendors.ScanProducts()
+// Defaults projects the captured database catalog into device scan targets.
+// Products without install signatures remain available to admission only.
+func Defaults(catalog *aivendors.Snapshot) []Target {
+	products := catalog.Products()
 	targets := make([]Target, 0, len(products))
 	for _, product := range products {
-		matchers := aivendors.GatewayMatchersFor(product)
+		if !product.IsScanned() {
+			continue
+		}
+		matchers := catalog.GatewayMatchersFor(product)
 		target := Target{
 			ID:          product.ID,
 			DisplayName: product.DisplayName,
@@ -209,7 +207,7 @@ func Defaults() []Target {
 			GatewayClient: GatewayClient{
 				CIMDVendorKeys:  matchers.VendorKeys,
 				OAuthClientIDs:  matchers.ClientIDs,
-				ClientInfoNames: product.ClientInfoNames,
+				ClientInfoNames: orNil(product.ClientInfoNames),
 			},
 		}
 		if product.VersionPlistKey != "" {
@@ -235,7 +233,7 @@ type Snapshot struct {
 }
 
 // NewSnapshot builds a snapshot over a copy of targets, sorted by id.
-func NewSnapshot(listVersion int32, targets []Target) *Snapshot {
+func NewSnapshot(listVersion int32, targets []Target, catalogFingerprint string) *Snapshot {
 	owned := make([]Target, 0, len(targets))
 	byID := make(map[string]Target, len(targets))
 	for _, target := range targets {
@@ -248,7 +246,7 @@ func NewSnapshot(listVersion int32, targets []Target) *Snapshot {
 	})
 	snapshot := &Snapshot{
 		ListVersion: listVersion,
-		ETag:        fingerprint(listVersion, owned),
+		ETag:        fingerprint(listVersion, owned, catalogFingerprint),
 		targets:     owned,
 		byID:        byID,
 		envelope:    nil,
@@ -334,8 +332,9 @@ func encodeEnvelope(envelope Envelope) map[string]any {
 	return value
 }
 
-func fingerprint(listVersion int32, sorted []Target) string {
+func fingerprint(listVersion int32, sorted []Target, catalogFingerprint string) string {
 	hash := sha256.New()
+	_, _ = fmt.Fprintf(hash, "catalog=%s\n", catalogFingerprint)
 	_, _ = fmt.Fprintf(hash, "schema_version=%d\nlist_version=%d\n", SchemaVersion, listVersion)
 	data, err := json.Marshal(wireTargets(sorted))
 	if err != nil {

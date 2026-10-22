@@ -27,7 +27,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd"
-	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd/admission"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
@@ -55,7 +54,7 @@ func (s *Service) ListPresets(ctx context.Context, payload *gen.ListPresetsPaylo
 		return nil, err
 	}
 
-	presets := admission.Catalog()
+	presets := s.aiCatalog.Snapshot().Catalog()
 	items := make([]*types.CimdClientPreset, 0, len(presets))
 	for _, preset := range presets {
 		items = append(items, &types.CimdClientPreset{

@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"testing"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
@@ -58,7 +59,9 @@ func TestFederatedFailureResponse(t *testing.T) {
 				logger := testenv.NewLogger(t)
 				serverURL, err := url.Parse("https://gram.example")
 				require.NoError(t, err)
-				s := &Service{serverURL: serverURL, logger: logger, metrics: mcpmetrics.NewMetrics(meter.Meter("test"), logger)}
+				s := &Service{
+					aiCatalog: aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())),
+					serverURL: serverURL, logger: logger, metrics: mcpmetrics.NewMetrics(meter.Meter("test"), logger)}
 				endpoint := &ResolvedMcpEndpoint{RouteBase: "/mcp", Slug: "test-server"}
 				state := AuthnChallengeState{FirstParty: firstParty, RedirectURI: "http://127.0.0.1:8080/callback", State: "original-client-state"}
 				w := httptest.NewRecorder()

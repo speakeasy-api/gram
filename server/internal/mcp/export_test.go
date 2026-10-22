@@ -8,6 +8,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/agent/aitargets"
 	agentrepo "github.com/speakeasy-api/gram/server/internal/agent/repo"
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/mcpriskscan"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
@@ -75,7 +76,7 @@ func (s *Service) FailAIToolBlockedIDsRead(err error) {
 // FailAIToolCatalogRead makes the scan-target catalog read behind the gateway
 // block check fail with err, leaving the blocked-ids read intact.
 func (s *Service) FailAIToolCatalogRead(err error) {
-	s.aiToolBlockReads.catalog = func(context.Context, *agentrepo.Queries, string) (*aitargets.OrganizationList, error) {
+	s.aiToolBlockReads.catalog = func(context.Context, *agentrepo.Queries, string, *aivendors.Snapshot) (*aitargets.OrganizationList, error) {
 		return nil, err
 	}
 }

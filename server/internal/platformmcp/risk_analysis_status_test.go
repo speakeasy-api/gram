@@ -11,6 +11,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/risk/analysisstatus"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
@@ -154,7 +155,7 @@ func TestRiskAnalysisStatusToolServesLiveAndRefusals(t *testing.T) {
 	service.projects = &stubRiskProjects{project: project, expected: []riskProjectCall{resolution, resolution}, calls: nil, err: nil}
 
 	server := mcp.NewServer(&mcp.Implementation{Name: "risk-analysis-status-test", Version: "0.0.1"}, nil)
-	reg := newRegistrar(server)
+	reg := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), server)
 	registerRiskAnalysisStatusTool(reg, service)
 	descriptor := descriptorByName(t, reg, "get_risk_analysis_status")
 	require.True(t, descriptor.Annotations.ReadOnlyHint)
@@ -191,7 +192,7 @@ func TestRiskAnalysisStatusToolStubWithoutDescriber(t *testing.T) {
 	t.Parallel()
 
 	server := mcp.NewServer(&mcp.Implementation{Name: "risk-analysis-status-stub-test", Version: "0.0.1"}, nil)
-	reg := newRegistrar(server)
+	reg := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), server)
 	registerRiskAnalysisStatusTool(reg, nil)
 	descriptor := descriptorByName(t, reg, "get_risk_analysis_status")
 	require.Contains(t, descriptor.Description, "unavailable in this deployment")
@@ -239,7 +240,7 @@ func TestRiskAnalysisStatusToolLiveWhenPolicyReadsUnavailable(t *testing.T) {
 	service := testRiskAnalysisStatusService(t, project, describer)
 
 	server := mcp.NewServer(&mcp.Implementation{Name: "risk-analysis-status-independent-test", Version: "0.0.1"}, nil)
-	reg := newRegistrar(server)
+	reg := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), server)
 	require.NotPanics(t, func() { registerRiskToolsWithMutations(reg, nil, service, nil) })
 
 	descriptor := descriptorByName(t, reg, "get_risk_analysis_status")

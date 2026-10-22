@@ -13,6 +13,7 @@ import (
 	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 )
@@ -178,6 +179,8 @@ func (d ResourceDescriptor) Read(ctx context.Context) (string, error) {
 // admitted audience are built from a single pass rather than two lists that can
 // drift.
 type Registrar struct {
+	aiCatalog *aivendors.Store
+
 	server             *mcp.Server
 	descriptors        []Descriptor
 	resources          []ResourceDescriptor
@@ -189,8 +192,8 @@ type Registrar struct {
 	logger *slog.Logger
 }
 
-func newRegistrar(server *mcp.Server) *Registrar {
-	return &Registrar{server: server, descriptors: nil, resources: nil, riskTelemetry: noopRiskTelemetry{}, externalAuthorizer: nil, logger: nil}
+func newRegistrar(aiCatalog *aivendors.Store, server *mcp.Server) *Registrar {
+	return &Registrar{aiCatalog: aiCatalog, server: server, descriptors: nil, resources: nil, riskTelemetry: noopRiskTelemetry{}, externalAuthorizer: nil, logger: nil}
 }
 
 func (r *Registrar) withLogger(logger *slog.Logger) {
@@ -249,7 +252,7 @@ func (r *Registrar) FilterExternalTools(ctx context.Context, principal Principal
 		}
 	}
 	grants, grantsLoaded := authz.GrantsFromContext(ctx)
-	allowlist := clientToolAllowlist(principal.ClientID)
+	allowlist := clientToolAllowlist(r.aiCatalog.Snapshot(), principal.ClientID)
 	visible := make([]*mcp.Tool, 0, len(tools))
 	for _, tool := range tools {
 		descriptor, ok := descriptors[tool.Name]

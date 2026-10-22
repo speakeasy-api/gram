@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"encoding/json"
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"maps"
 	"slices"
@@ -28,7 +29,9 @@ func TestServerDiscoverNotificationHasNoResponse(t *testing.T) {
 		t.Run(surface, func(t *testing.T) {
 			t.Parallel()
 			logger := testenv.NewLogger(t)
-			service := &Service{logger: logger,
+			service := &Service{
+				aiCatalog:    aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())),
+				logger:       logger,
 				toolsetsRepo: toolsetsrepo.New(failingDBTX{}), mcpMetadataRepo: metadatarepo.New(failingDBTX{})}
 			resolution := mcpversions.Resolution{Declared: mcpversions.Version20260728, InEffect: mcpversions.Version20260728}
 			req := &rawRequest{JSONRPC: "2.0", Method: mcpversions.MethodServerDiscover,
@@ -77,7 +80,9 @@ func TestServerDiscoverPreservesZeroAndEmptyStringIDs(t *testing.T) {
 func TestPlatformServerDiscoverIsCallerVarying(t *testing.T) {
 	t.Parallel()
 	resolution := mcpversions.Resolution{Declared: mcpversions.Version20260728, InEffect: mcpversions.Version20260728}
-	body, err := (&Service{logger: testenv.NewLogger(t)}).handlePlatformToolsetRequest(t.Context(), nil, platformtools.Toolset{},
+	body, err := (&Service{
+		aiCatalog: aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())),
+		logger:    testenv.NewLogger(t)}).handlePlatformToolsetRequest(t.Context(), nil, platformtools.Toolset{},
 		&rawRequest{JSONRPC: "2.0", ID: mcpjsonrpc.NumberID(1), Method: mcpversions.MethodServerDiscover}, "", &resolution)
 	require.NoError(t, err)
 	var response struct {
@@ -143,7 +148,9 @@ func TestHostedServerDiscoverStoredInstructionsAndCachePrivacy(t *testing.T) {
 			require.NoError(t, err)
 			// The request builder already loaded the toolset, so describing the
 			// server must not look it up again by slug.
-			service := &Service{logger: testenv.NewLogger(t), toolsetsRepo: toolsetsrepo.New(failingDBTX{}), mcpMetadataRepo: metadata}
+			service := &Service{
+				aiCatalog: aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())),
+				logger:    testenv.NewLogger(t), toolsetsRepo: toolsetsrepo.New(failingDBTX{}), mcpMetadataRepo: metadata}
 			body, err := service.handleRequest(ctx, &mcpInputs{
 				projectID: project.ID, toolset: toolset.Slug,
 				toolsetID: uuid.NullUUID{UUID: toolset.ID, Valid: true}, toolsetIsPublic: new(tc.public),

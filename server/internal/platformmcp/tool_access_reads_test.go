@@ -7,6 +7,8 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
+
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 )
 
 // The stub catalogue (service not wired) and the live catalogue must declare
@@ -15,14 +17,14 @@ import (
 func TestAccessReadToolsAreReadOnlyWithStableAudiences(t *testing.T) {
 	t.Parallel()
 
-	_, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
+	_, registrar := newServer(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
 	requireAccessReadToolDescriptors(t, registrar)
 }
 
 func TestAvailableAccessReadToolsAreReadOnlyWithStableAudiences(t *testing.T) {
 	t.Parallel()
 
-	registrar := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "test", Version: "test"}, nil))
+	registrar := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), mcp.NewServer(&mcp.Implementation{Name: "test", Version: "test"}, nil))
 	registerAccessReadTools(registrar, nil)
 	requireAccessReadToolDescriptors(t, registrar)
 }
@@ -72,7 +74,7 @@ func requireAccessReadToolDescriptors(t *testing.T, registrar *Registrar) {
 func TestListAccessMembersDescriptionExplainsMaskingAndReferences(t *testing.T) {
 	t.Parallel()
 
-	registrar := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "test", Version: "test"}, nil))
+	registrar := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), mcp.NewServer(&mcp.Implementation{Name: "test", Version: "test"}, nil))
 	registerAccessReadTools(registrar, nil)
 	descriptor := descriptorByName(t, registrar, "list_access_members")
 	for _, fragment := range []string{
@@ -104,7 +106,7 @@ func TestListAccessMembersDescriptionExplainsMaskingAndReferences(t *testing.T) 
 func TestListMyMCPAccessUsesCallerIdentityWithoutInferringAccess(t *testing.T) {
 	t.Parallel()
 
-	registrar := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "test", Version: "test"}, nil))
+	registrar := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), mcp.NewServer(&mcp.Implementation{Name: "test", Version: "test"}, nil))
 	registerAccessReadTools(registrar, nil)
 	descriptor := descriptorByName(t, registrar, "list_my_mcp_access")
 	for _, fragment := range []string{"authenticated caller", "without searching", "do not infer", "organization administration"} {
@@ -116,7 +118,7 @@ func TestListMyMCPAccessUsesCallerIdentityWithoutInferringAccess(t *testing.T) {
 	require.NoError(t, json.Unmarshal(descriptor.InputSchema, &schema))
 	require.Empty(t, schema.Properties, "self access must not accept a user selector")
 
-	stub := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "test", Version: "test"}, nil))
+	stub := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), mcp.NewServer(&mcp.Implementation{Name: "test", Version: "test"}, nil))
 	registerUnavailableAccessReadTools(stub)
 	require.JSONEq(t, string(descriptor.InputSchema), string(descriptorByName(t, stub, "list_my_mcp_access").InputSchema))
 }
@@ -124,7 +126,7 @@ func TestListMyMCPAccessUsesCallerIdentityWithoutInferringAccess(t *testing.T) {
 func TestGetMemberMCPAccessAdvertisesTableReadyOutput(t *testing.T) {
 	t.Parallel()
 
-	registrar := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "test", Version: "test"}, nil))
+	registrar := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), mcp.NewServer(&mcp.Implementation{Name: "test", Version: "test"}, nil))
 	registerAccessReadTools(registrar, nil)
 	descriptor := descriptorByName(t, registrar, "get_member_mcp_access")
 	require.Contains(t, descriptor.Description, "table-ready")
@@ -142,9 +144,9 @@ func TestGetMemberMCPAccessAdvertisesTableReadyOutput(t *testing.T) {
 func TestGetMemberMCPAccessStubAdvertisesLiveInputSchema(t *testing.T) {
 	t.Parallel()
 
-	live := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "test", Version: "test"}, nil))
+	live := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), mcp.NewServer(&mcp.Implementation{Name: "test", Version: "test"}, nil))
 	registerAccessReadTools(live, nil)
-	stub := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "test", Version: "test"}, nil))
+	stub := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), mcp.NewServer(&mcp.Implementation{Name: "test", Version: "test"}, nil))
 	registerUnavailableAccessReadTools(stub)
 
 	liveSchema := descriptorByName(t, live, "get_member_mcp_access").InputSchema
@@ -155,9 +157,9 @@ func TestGetMemberMCPAccessStubAdvertisesLiveInputSchema(t *testing.T) {
 func TestListAccessMembersStubAdvertisesLiveInputSchema(t *testing.T) {
 	t.Parallel()
 
-	live := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "test", Version: "test"}, nil))
+	live := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), mcp.NewServer(&mcp.Implementation{Name: "test", Version: "test"}, nil))
 	registerAccessReadTools(live, nil)
-	stub := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "test", Version: "test"}, nil))
+	stub := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), mcp.NewServer(&mcp.Implementation{Name: "test", Version: "test"}, nil))
 	registerUnavailableAccessReadTools(stub)
 
 	liveSchema := descriptorByName(t, live, "list_access_members").InputSchema

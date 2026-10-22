@@ -15,6 +15,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
@@ -406,7 +407,7 @@ func TestCatalogRegistrationToolBindsOnboardingSoTheMCPCanBeDistributed(t *testi
 		remoteURL:        "https://reviewed.example.test/mcp",
 	}}, &testRegistrationGate{enabled: true}, store)
 
-	reg := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "platform-mcp-test"}, nil))
+	reg := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), mcp.NewServer(&mcp.Implementation{Name: "platform-mcp-test"}, nil))
 	registerCatalogRegistrationTool(reg, registrations, onboarding)
 	register := descriptorByName(t, reg, "register_catalog_mcp")
 

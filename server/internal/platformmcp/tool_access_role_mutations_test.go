@@ -5,12 +5,14 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 )
 
 func TestAccessRoleMutationToolsAreStableExternalOnlyMutations(t *testing.T) {
 	t.Parallel()
 
-	_, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
+	_, registrar := newServer(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
 	for _, name := range []string{operationCreateMCPAccessRole, operationUpdateMCPAccessRole, operationAssignMCPAccessRole} {
 		descriptor := descriptorByName(t, registrar, name)
 		require.Equal(t, externalOnly, descriptor.Meta.Audiences)

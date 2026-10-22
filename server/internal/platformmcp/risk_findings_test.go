@@ -14,6 +14,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/risk/chrepo"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
@@ -110,7 +111,7 @@ func TestRiskFindingsUnavailableReader(t *testing.T) {
 	require.ErrorIs(t, err, ErrUnavailable)
 
 	server := mcp.NewServer(&mcp.Implementation{Name: "findings-unavailable", Version: "1"}, nil)
-	reg := newRegistrar(server)
+	reg := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), server)
 	registerRiskFindingsTool(reg, service)
 	descriptor := descriptorByName(t, reg, "list_watchdog_findings")
 	require.Contains(t, descriptor.Description, "unavailable in this deployment")
@@ -316,7 +317,7 @@ func TestRiskFindingsMCPInProcess(t *testing.T) {
 
 	s, reader, _ := findingsFixture(t)
 	server := mcp.NewServer(&mcp.Implementation{Name: "findings-test", Version: "1"}, nil)
-	reg := newRegistrar(server)
+	reg := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), server)
 	reg.withExternalAuthorizer(allowExternalCallAuthorizer{})
 	registerRiskFindingsTool(reg, s)
 	descriptor := descriptorByName(t, reg, "list_watchdog_findings")
@@ -391,7 +392,7 @@ func TestRiskFindingsStub(t *testing.T) {
 	t.Parallel()
 
 	server := mcp.NewServer(&mcp.Implementation{Name: "findings-stub", Version: "1"}, nil)
-	reg := newRegistrar(server)
+	reg := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), server)
 	registerRiskFindingsTool(reg, nil)
 	d := descriptorByName(t, reg, "list_watchdog_findings")
 	require.Contains(t, d.Description, "unavailable in this deployment")

@@ -13,6 +13,7 @@ import (
 
 	genassistants "github.com/speakeasy-api/gram/server/gen/assistants"
 	"github.com/speakeasy-api/gram/server/gen/types"
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/assistantidentity"
 	"github.com/speakeasy-api/gram/server/internal/assistants"
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
@@ -39,8 +40,8 @@ func (f assistantIdentityManagementFunc) UpgradeAssistantIdentity(ctx context.Co
 
 func TestAssistantIdentityToolContract(t *testing.T) {
 	t.Parallel()
-	live := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "live", Version: "1"}, nil))
-	unavailable := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "unavailable", Version: "1"}, nil))
+	live := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), mcp.NewServer(&mcp.Implementation{Name: "live", Version: "1"}, nil))
+	unavailable := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), mcp.NewServer(&mcp.Implementation{Name: "unavailable", Version: "1"}, nil))
 	registerAssistantIdentityTool(live, &AssistantIdentityService{})
 	registerAssistantIdentityTool(unavailable, nil)
 	a := descriptorByName(t, live, upgradeAssistantIdentityToolName)

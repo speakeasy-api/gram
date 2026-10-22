@@ -11,37 +11,15 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/speakeasy-api/gram/server/internal/agent/repo"
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 )
-
-// DefaultsVersion counts revisions of Defaults. Bump it whenever the
-// compiled-in list changes, so agents can tell which defaults they hold.
-//
-// 2: the registry grew past the original harnesses to cover assistants and
-// open model runners, and gained the gateway-client matchers.
-//
-// 3: ChatGPT moved from harness to assistant, and Cline gained the versioned
-// VS Code extension config dirs that detect an install without the npm CLI.
-//
-// 4: ChatGPT Classic gained its process name, so an agent reports it as
-// running and not merely installed.
-//
-// 5: Pi joined the catalog, so a device running it no longer scans clean.
-//
-// 6: the current ChatGPT app became its own target under the bundle id it
-// moved to, and the ChatGPT gateway documents moved onto it, leaving Classic
-// a scan target the gateway cannot single out.
-//
-// 7: Conductor joined the catalog (both admission and detection).
-//
-// 8: Google Antigravity joined the catalog (both admission and detection).
-const DefaultsVersion int32 = 8
 
 // Source says where a target in an organization's list comes from.
 type Source string
 
 const (
-	// SourceDefault marks a target compiled into Speakeasy.
+	// SourceDefault marks a target provided by the global catalog.
 	SourceDefault Source = "default"
 
 	// SourceOrganization marks a target the organization added.
@@ -90,7 +68,7 @@ func Overlay(defaults []Target, rows []Entry) []Entry {
 		if row, ok := byID[target.ID]; ok {
 			// The built-in's own definition wins. A row under its id records
 			// only the decision the organization has made about it, so a later
-			// registry revision still reaches an organization that has touched
+			// catalog revision still reaches an organization that has touched
 			// this one. The decision lives on the Entry rather than the
 			// embedded Target, so replacing the definition keeps it.
 			row.Target = target.Clone()
@@ -115,11 +93,11 @@ func Overlay(defaults []Target, rows []Entry) []Entry {
 		}
 		// A row matching no default is an organization's own target, and its
 		// row carries the full definition. Except when it does not: a built-in
-		// that has since been removed from the registry leaves behind the
+		// that has since been removed from the catalog leaves behind the
 		// decision-only row an organization wrote about it, whose definition
 		// columns were always empty. Promoting that to an organization target
 		// would serve agents a target with no name, no category and no
-		// signatures, and keep them probing for a product the registry no
+		// signatures, and keep them probing for a product the catalog no
 		// longer ships. Skip it: the row records a decision about something
 		// that no longer exists, and purging it is part of removing the
 		// built-in.
@@ -140,7 +118,7 @@ func Overlay(defaults []Target, rows []Entry) []Entry {
 //
 // Being in the inventory is what makes a target probed for; there is no
 // second switch. A built-in leaves the inventory by being deleted from the
-// registry, which reaches agents on their next poll, and an organization's
+// catalog, which reaches agents on their next poll, and an organization's
 // own target leaves by having its row deleted.
 func Served(entries []Entry) []Target {
 	targets := make([]Target, 0, len(entries))
@@ -150,9 +128,9 @@ func Served(entries []Entry) []Target {
 	return targets
 }
 
-// DefaultByID resolves a compiled-in default by id.
-func DefaultByID(id string) (Target, bool) {
-	for _, target := range Defaults() {
+// DefaultByID resolves a catalog default by id.
+func DefaultByID(catalog *aivendors.Snapshot, id string) (Target, bool) {
+	for _, target := range Defaults(catalog) {
 		if target.ID == id {
 			return target, true
 		}
@@ -160,7 +138,7 @@ func DefaultByID(id string) (Target, bool) {
 	return ZeroTarget(), false
 }
 
-// ResolveBuiltinDefinition puts a built-in's compiled-in definition back over
+// ResolveBuiltinDefinition puts a built-in's catalog definition back over
 // a target read straight from its row, keeping the one thing the row owns:
 // whether the organization has it switched on.
 //
@@ -173,8 +151,8 @@ func DefaultByID(id string) (Target, bool) {
 // built-in, and an audit snapshot records a blank target.
 //
 // Returns the target unchanged when its id names no built-in.
-func ResolveBuiltinDefinition(target Target) Target {
-	builtin, isBuiltin := DefaultByID(target.ID)
+func ResolveBuiltinDefinition(catalog *aivendors.Snapshot, target Target) Target {
+	builtin, isBuiltin := DefaultByID(catalog, target.ID)
 	if !isBuiltin {
 		return target
 	}
@@ -213,13 +191,6 @@ func normalizeForComparison(t Target) Target {
 	return out
 }
 
-// ListVersion is the served list_version: the compiled-in defaults revision.
-// Organization edits do not move it — they change the served targets, which
-// the snapshot ETag hashes, and that is what makes an agent re-apply.
-func ListVersion() int32 {
-	return DefaultsVersion
-}
-
 // OrganizationList is an organization's full target list and the snapshot
 // its agents are served.
 type OrganizationList struct {
@@ -249,7 +220,7 @@ func (l *OrganizationList) Entry(id string) (Entry, bool) {
 
 // LoadOrganizationList reads an organization's rows and overlays them on the
 // defaults.
-func LoadOrganizationList(ctx context.Context, queries *repo.Queries, organizationID string) (*OrganizationList, error) {
+func LoadOrganizationList(ctx context.Context, queries *repo.Queries, organizationID string, catalog *aivendors.Snapshot) (*OrganizationList, error) {
 	rows, err := queries.ListAIScanTargets(ctx, organizationID)
 	if err != nil {
 		return nil, fmt.Errorf("list ai scan targets: %w", err)
@@ -258,10 +229,14 @@ func LoadOrganizationList(ctx context.Context, queries *repo.Queries, organizati
 	for _, row := range rows {
 		entries = append(entries, EntryFromRow(row))
 	}
-	overlaid := Overlay(Defaults(), entries)
+	overlaid := Overlay(Defaults(catalog), entries)
+	served := Served(overlaid)
+	if err := ValidateServed(catalog, served); err != nil {
+		return nil, fmt.Errorf("validate organization ai scan targets: %w", err)
+	}
 	return &OrganizationList{
 		Entries:  overlaid,
-		Snapshot: NewSnapshot(ListVersion(), Served(overlaid)),
+		Snapshot: NewSnapshot(catalog.Version(), served, catalog.Fingerprint()),
 	}, nil
 }
 

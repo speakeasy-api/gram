@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
@@ -55,7 +56,7 @@ func newDashboardToolFixture(t *testing.T) (context.Context, dashboardToolFixtur
 	service := NewDashboardsService(logger, management, NewPostgresReader(logger, db), engine, flags, NewPostgresOrganizationSlugResolver(db), "test-dashboard-key")
 	require.NotNil(t, service)
 	require.Nil(t, NewDashboardsService(logger, management, NewPostgresReader(logger, db), engine, nil, NewPostgresOrganizationSlugResolver(db), "test-dashboard-key"), "without flags the tools are served as unavailable")
-	reg := newRegistrar(newTestMCPServer())
+	reg := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), newTestMCPServer())
 	registerDashboardTools(reg, service)
 
 	ctx := dashboardCallerContext(t.Context(), principal, project, authz.ScopeProjectRead, authz.ScopeProjectWrite)

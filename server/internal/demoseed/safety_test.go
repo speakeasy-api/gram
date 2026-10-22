@@ -8,6 +8,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors/catalogseed"
 	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/demoseed/demoseedtest"
@@ -60,6 +61,7 @@ func TestDemoSeedSafety(t *testing.T) {
 
 	// Baseline BEFORE the fixture: everything the fixture adds on top of it is
 	// "another tenant's data", and its ids feed the leak check below.
+	require.NoError(t, catalogseed.EnsureCatalog(ctx, db))
 	pgBaseline, err := demoseedtest.SnapshotPostgres(ctx, db)
 	require.NoError(t, err)
 

@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"math"
 	"net/url"
 	"regexp"
@@ -12,6 +11,8 @@ import (
 	"strings"
 	"unicode"
 	"unicode/utf8"
+
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 )
 
 // These bounds are mirrored by the device agent's decode-time validator and
@@ -52,8 +53,14 @@ var (
 // ErrInvalidTarget is wrapped by every validation failure.
 var ErrInvalidTarget = errors.New("invalid ai scan target")
 
+// ValidateCatalog verifies the complete device-facing projection before a
+// database snapshot becomes visible to any catalog reader.
+func ValidateCatalog(catalog *aivendors.Snapshot) error {
+	return ValidateServed(catalog, Defaults(catalog))
+}
+
 // Validate checks the count bound, id uniqueness, and every per-target rule.
-func Validate(targets []Target) error {
+func Validate(catalog *aivendors.Snapshot, targets []Target) error {
 	if len(targets) > MaxTargets {
 		return fmt.Errorf("%w: %d targets exceeds the maximum of %d", ErrInvalidTarget, len(targets), MaxTargets)
 	}
@@ -65,7 +72,7 @@ func Validate(targets []Target) error {
 	vendorKeys := make(map[string]string, len(targets))
 	clientIDs := make(map[string]string, len(targets))
 	for _, target := range targets {
-		if err := ValidateTarget(target); err != nil {
+		if err := ValidateTarget(catalog, target); err != nil {
 			return err
 		}
 		if _, duplicate := seen[target.ID]; duplicate {
@@ -91,15 +98,15 @@ func Validate(targets []Target) error {
 	return nil
 }
 
-// ValidateServed checks the set that would be served after a write: the
+// ValidateServed checks the set served after catalog and organization overlays: the
 // per-target rules plus the count and encoded-size caps agents enforce. The
 // size is measured at the widest list_version so a later revision cannot
 // push an accepted set over the cap.
-func ValidateServed(targets []Target) error {
-	if err := Validate(targets); err != nil {
+func ValidateServed(catalog *aivendors.Snapshot, targets []Target) error {
+	if err := Validate(catalog, targets); err != nil {
 		return err
 	}
-	data, err := json.Marshal(NewSnapshot(math.MaxInt32, targets).Envelope())
+	data, err := json.Marshal(NewSnapshot(math.MaxInt32, targets, "").Envelope())
 	if err != nil {
 		return fmt.Errorf("encode served list: %w", err)
 	}
@@ -111,7 +118,7 @@ func ValidateServed(targets []Target) error {
 
 // ValidateTarget checks one target against the rules the device agent
 // enforces on receipt.
-func ValidateTarget(target Target) error {
+func ValidateTarget(catalog *aivendors.Snapshot, target Target) error {
 	if !targetIDPattern.MatchString(target.ID) {
 		return fmt.Errorf("%w: id %q must match %s", ErrInvalidTarget, target.ID, targetIDPattern)
 	}
@@ -154,7 +161,7 @@ func ValidateTarget(target Target) error {
 	if len(sig.BundleIDs)+len(sig.Binaries)+len(sig.ConfigDirs) == 0 {
 		return fail("at least one install signature (bundle id, binary, or config dir) is required")
 	}
-	return validateGatewayClient(target.Category, target.GatewayClient, fail)
+	return validateGatewayClient(catalog, target.Category, target.GatewayClient, fail)
 }
 
 func isSpaceOrControl(r rune) bool {
@@ -165,7 +172,7 @@ func isSpaceOrControl(r rune) bool {
 // server can actually produce — a catalog vendor key, or a CIMD document URL
 // it can verify — so a matcher that could never match is rejected at write
 // time rather than read as a silently inert block.
-func validateGatewayClient(category Category, gateway GatewayClient, fail func(string, ...any) error) error {
+func validateGatewayClient(catalog *aivendors.Snapshot, category Category, gateway GatewayClient, fail func(string, ...any) error) error {
 	// A harness and an assistant both call Speakeasy's MCP gateway, so both can
 	// name a caller. An open model run locally is software on a laptop and
 	// nothing else, so a matcher on one would name a caller that cannot exist.
@@ -187,7 +194,7 @@ func validateGatewayClient(category Category, gateway GatewayClient, fail func(s
 		if !vendorKeyPattern.MatchString(key) {
 			return fail("cimd vendor key %q must match %s", key, vendorKeyPattern)
 		}
-		if !aivendors.BlockableVendorKey(key) {
+		if !catalog.BlockableVendorKey(key) {
 			return fail("cimd vendor key %q does not name a single CIMD-publishing vendor Speakeasy can recognize at the gateway; name the client id metadata document url instead", key)
 		}
 	}

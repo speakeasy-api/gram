@@ -66,16 +66,18 @@ stores them, and rejects any update that tries to set them.
 - `ai_scan`: the Shadow AI scan targets the organization's device agents probe
   for, with each target's on-device signatures (macOS bundle ids, PATH
   binaries, home-relative or absolute config directories, process names). The
-  list is the
-  Speakeasy defaults compiled into Gram overlaid with the targets the
-  organization added or customized on Device Agent > Configuration; a
-  customization under a default's id replaces that default, which is how an
-  organization disables one. The object carries `schema_version`,
-  `list_version` (which agents echo as `target_list_version` on every scan
-  receipt; a receipt carries `0` when the agent scanned with the list embedded
-  in its binary because it has not received one), `etag`, and `targets`.
-  `list_version` moves whenever the organization edits its list or Speakeasy ships
-  new defaults. Organization admins manage the list through
+  list is the global AI product catalog loaded from Postgres, refreshed about
+  once a minute, and overlaid with the organization's own targets and access
+  decisions. A decision about a built-in preserves its catalog definition.
+  The object carries `schema_version`, `list_version`, `etag`, and `targets`.
+  Agents echo `list_version` as `target_list_version` on scan receipts, or `0`
+  when using the list embedded in their binary. The positive 32-bit value is
+  derived from catalog content: stable across replicas and restarts, but not
+  monotonic or guaranteed unique. Clients must use `etag` to detect changes.
+  The ETag includes the full catalog fingerprint and the organization's served
+  targets, so version-label collisions cannot hide changes. Organization edits
+  change the ETag without changing the global catalog's version identifier.
+  Organization admins manage their targets through
   `agent.listAiScanTargets`, `agent.upsertAiScanTarget`, and
   `agent.deleteAiScanTarget`; every change lands in the organization's audit
   log. The key is never part of the stored settings document, so

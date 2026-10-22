@@ -24,6 +24,7 @@ import (
 	"go.opentelemetry.io/otel/metric/noop"
 	"golang.org/x/crypto/bcrypt"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/identity"
@@ -189,6 +190,8 @@ var _ cache.CacheableObject[oauthChallenge] = (*oauthChallenge)(nil)
 // platform host is its own RFC 8707 resource with its own authorization
 // server metadata. Requests from any other surface use baseURL.
 type OAuthHTTP struct {
+	aiCatalog *aivendors.Store
+
 	// baseURL is the configured server URL. It is the origin for requests not
 	// stamped as a platform host.
 	baseURL       *url.URL
@@ -218,6 +221,9 @@ type OAuthHTTP struct {
 }
 
 type OAuthHTTPConfig struct {
+	// AICatalog supplies the live client catalog.
+	AICatalog *aivendors.Store
+
 	BaseURL       *url.URL
 	Environment   string
 	Cache         cache.Cache
@@ -241,7 +247,7 @@ type OAuthHTTPConfig struct {
 }
 
 func NewOAuthHTTP(config OAuthHTTPConfig) (*OAuthHTTP, error) {
-	if config.BaseURL == nil || config.BaseURL.Scheme == "" || config.BaseURL.Host == "" || config.Cache == nil || config.Store == nil || config.Identity == nil || config.Gate == nil || config.Authorizer == nil || config.Organizations == nil || config.Signer == nil || config.Encryption == nil {
+	if config.AICatalog == nil || config.BaseURL == nil || config.BaseURL.Scheme == "" || config.BaseURL.Host == "" || config.Cache == nil || config.Store == nil || config.Identity == nil || config.Gate == nil || config.Authorizer == nil || config.Organizations == nil || config.Signer == nil || config.Encryption == nil {
 		return nil, errors.New("platform oauth http configuration is incomplete")
 	}
 	credentials, err := NewCredentialCodec(config.Encryption)
@@ -268,6 +274,7 @@ func NewOAuthHTTP(config OAuthHTTPConfig) (*OAuthHTTP, error) {
 		idpCallbackBaseURL = *config.IDPCallbackBaseURL
 	}
 	return &OAuthHTTP{
+		aiCatalog:     config.AICatalog,
 		baseURL:       &baseURL,
 		environment:   config.Environment,
 		cache:         cache.NewTypedObjectCache[oauthChallenge](nil, config.Cache, cache.SuffixNone),

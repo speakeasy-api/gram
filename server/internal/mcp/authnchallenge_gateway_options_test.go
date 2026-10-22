@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
@@ -14,7 +15,9 @@ import (
 
 func TestConsentGatewayModeChoices(t *testing.T) {
 	t.Parallel()
-	service := &Service{}
+	service := &Service{
+		aiCatalog: aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())),
+	}
 	endpoint := &ResolvedMcpEndpoint{MetaMcpServerID: uuid.NullUUID{UUID: uuid.New(), Valid: true}, OrganizationID: "org_test", ProjectID: uuid.New()}
 	ctx := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{ActiveOrganizationID: "org_test", OrganizationSlug: "test-org"})
 	policy, err := service.consentGatewayPolicy(ctx, endpoint, AuthnChallengeState{}, "", "", nil)

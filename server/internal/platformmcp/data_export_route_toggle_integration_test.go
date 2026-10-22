@@ -17,6 +17,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -322,7 +323,7 @@ func TestDataExportToggleUnavailableManifestMatchesLive(t *testing.T) {
 	ctx := t.Context()
 	f := newDataExportToggleFixture(t, ctx, "platform_mcp_data_export_toggle_manifest")
 	describe := func(service *DataExportRouteToggleService) map[string]Descriptor {
-		registrar := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "data-export-toggle", Version: "0.0.1"}, nil))
+		registrar := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), mcp.NewServer(&mcp.Implementation{Name: "data-export-toggle", Version: "0.0.1"}, nil))
 		registerDataExportRouteToggleTools(registrar, service)
 		out := map[string]Descriptor{}
 		for _, descriptor := range registrar.Descriptors() {

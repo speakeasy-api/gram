@@ -9,6 +9,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
@@ -29,8 +30,8 @@ func (r *recordingNetworkTrafficReader) GetMCPNetworkTraffic(_ context.Context, 
 
 func TestMCPNetworkTrafficToolSchemaMatchesUnavailable(t *testing.T) {
 	t.Parallel()
-	live := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "traffic-live", Version: "0.0.1"}, nil))
-	unavailable := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "traffic-unavailable", Version: "0.0.1"}, nil))
+	live := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), mcp.NewServer(&mcp.Implementation{Name: "traffic-live", Version: "0.0.1"}, nil))
+	unavailable := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), mcp.NewServer(&mcp.Implementation{Name: "traffic-unavailable", Version: "0.0.1"}, nil))
 	registerMCPNetworkTrafficTool(live, nil)
 	registerUnavailableMCPNetworkTrafficTool(unavailable)
 	require.JSONEq(t, string(live.Descriptors()[0].InputSchema), string(unavailable.Descriptors()[0].InputSchema))
