@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"strings"
 	"sync"
@@ -145,10 +146,16 @@ func (s *Service) admitMandatoryShadow(ctx context.Context) (authz.MandatoryAuth
 func (s *Service) prepareMandatoryWithin(ctx context.Context) (authz.MandatoryAuthorization, error) {
 	prepareCtx, cancel := context.WithTimeout(ctx, mandatoryShadowTimeout)
 	defer cancel()
+	prepare := s.authz.PrepareMandatory
 	if s.prepareMandatory != nil {
-		return s.prepareMandatory(prepareCtx)
+		prepare = s.prepareMandatory
 	}
-	return s.authz.PrepareMandatory(prepareCtx)
+	// The authorization is kept on failure so the shadow still attributes it.
+	authorization, err := prepare(prepareCtx)
+	if err != nil {
+		return authorization, fmt.Errorf("prepare mandatory shadow authorization: %w", err)
+	}
+	return authorization, nil
 }
 
 // shadowMandatory records one check against today's decision.
