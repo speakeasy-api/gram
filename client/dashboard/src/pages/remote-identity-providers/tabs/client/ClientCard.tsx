@@ -22,6 +22,8 @@ import {
   type UpdateRemoteSessionClientFormTokenEndpointAuthAudienceFormat as AuthAudienceFormat,
 } from "@gram/client/models/components/updateremotesessionclientform.js";
 import { invalidateAllOrganizationRemoteSessionClient } from "@gram/client/react-query/organizationRemoteSessionClient.js";
+import { invalidateAllOrganizationRemoteSessionClients } from "@gram/client/react-query/organizationRemoteSessionClients.js";
+import { invalidateAllOrganizationRemoteSessionClientSessions } from "@gram/client/react-query/organizationRemoteSessionClientSessions.js";
 import { useUpdateOrganizationRemoteSessionClientMutation } from "@gram/client/react-query/updateOrganizationRemoteSessionClient.js";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
@@ -35,6 +37,7 @@ import {
   isPrivateKeyJwtAuthMethod,
   narrowTokenEndpointAuthMethod,
 } from "../../../mcp/x/tabs/settings/sections/authentication/issuerFormUtils";
+import { ChangeClientIdDialog } from "../../clientDialogs";
 import { InfoField, InfoText } from "../../detailFields";
 import { formatTimestamp } from "./formatTimestamp";
 import { KeySetField } from "./KeySetField";
@@ -85,6 +88,9 @@ export function ClientCard({
       ? client.tokenEndpointAuthAudienceFormat
       : undefined,
   );
+  const [displayName, setDisplayName] = useState(client.displayName ?? "");
+  const [clientIdDraft, setClientIdDraft] = useState(client.clientId);
+  const [confirmClientIdChange, setConfirmClientIdChange] = useState(false);
   const [scope, setScope] = useState<string[]>(client.scope ?? []);
   const [audience, setAudience] = useState(client.audience ?? "");
   const [clientSecret, setClientSecret] = useState("");
@@ -106,6 +112,14 @@ export function ClientCard({
   const shownAuthAudienceFormat = canEdit
     ? authAudienceFormat
     : client.tokenEndpointAuthAudienceFormat;
+  const shownDisplayName = canEdit ? displayName : (client.displayName ?? "");
+  const shownClientId = canEdit ? clientIdDraft : client.clientId;
+  // A CIMD client's ID is the metadata document URL Speakeasy generated, so
+  // only manually entered and dynamically registered IDs can be corrected.
+  const clientIdEditable = !client.clientIdMetadataUri;
+  const trimmedClientId = clientIdDraft.trim();
+  const clientIdChanged =
+    clientIdEditable && trimmedClientId !== client.clientId;
   const shownScope = canEdit ? scope : (client.scope ?? []);
   const shownAudience = canEdit ? audience : (client.audience ?? "");
   const privateKeyJwtSelected = isPrivateKeyJwtAuthMethod(shownAuthMethod);
@@ -153,11 +167,24 @@ export function ClientCard({
 
   const update = useUpdateOrganizationRemoteSessionClientMutation({
     onSuccess: async (saved) => {
-      await invalidateAllOrganizationRemoteSessionClient(queryClient, {
-        refetchType: "all",
-      });
+      await Promise.all([
+        invalidateAllOrganizationRemoteSessionClient(queryClient, {
+          refetchType: "all",
+        }),
+        // Lists and breadcrumbs show the name, and a changed client ID
+        // revokes the client's sessions.
+        invalidateAllOrganizationRemoteSessionClients(queryClient, {
+          refetchType: "all",
+        }),
+        invalidateAllOrganizationRemoteSessionClientSessions(queryClient, {
+          refetchType: "all",
+        }),
+      ]);
       // An emptied audience is omitted, so show what was actually kept.
       setAudience(saved.audience ?? "");
+      setDisplayName(saved.displayName ?? "");
+      setClientIdDraft(saved.clientId);
+      setConfirmClientIdChange(false);
       setClientSecret("");
       setLegacyCallbackMode(undefined);
       toast.success("Client updated");
@@ -177,7 +204,9 @@ export function ClientCard({
 
   const dirty =
     canEdit &&
-    (authMethod !== persistedAuthMethod ||
+    (displayName.trim() !== (client.displayName ?? "") ||
+      clientIdChanged ||
+      authMethod !== persistedAuthMethod ||
       scopeChanged ||
       audience !== (client.audience ?? "") ||
       clientSecret !== "" ||
@@ -189,12 +218,19 @@ export function ClientCard({
     onDirtyChange?.(dirty);
   }, [dirty, onDirtyChange]);
 
-  const handleSave = () => {
+  const submit = () => {
     if (!canEdit || (privateKeyJwtSelected && !supportsAudience)) return;
+    const trimmedDisplayName = displayName.trim();
     update.mutate({
       request: {
         updateRemoteSessionClientForm: {
           id: client.id,
+          clientId: clientIdChanged ? trimmedClientId : undefined,
+          // An empty string clears the name; unchanged names are omitted.
+          displayName:
+            trimmedDisplayName !== (client.displayName ?? "")
+              ? trimmedDisplayName
+              : undefined,
           tokenEndpointAuthMethod: authMethod || undefined,
           tokenEndpointAuthAudienceFormat: privateKeyJwtSelected
             ? authAudienceFormat
@@ -213,6 +249,14 @@ export function ClientCard({
     });
   };
 
+  const handleSave = () => {
+    if (clientIdChanged) {
+      setConfirmClientIdChange(true);
+      return;
+    }
+    submit();
+  };
+
   return (
     <Card>
       <Card.Header>Client</Card.Header>
@@ -225,9 +269,11 @@ export function ClientCard({
         )}
         <div className="flex flex-col gap-4">
           <div className="grid items-start gap-x-8 gap-y-4 sm:grid-cols-2">
-            <InfoField label="Client ID">
-              <InfoText mono>{client.clientId}</InfoText>
-            </InfoField>
+            {!clientIdEditable && (
+              <InfoField label="Client ID">
+                <InfoText mono>{client.clientId}</InfoText>
+              </InfoField>
+            )}
             <InfoField label="Client issued at">
               <InfoText>{formatTimestamp(client.clientIdIssuedAt)}</InfoText>
             </InfoField>
@@ -247,6 +293,37 @@ export function ClientCard({
             disabled={!canEdit}
             className="m-0 flex min-w-0 flex-col gap-4 border-0 p-0"
           >
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="client-display-name">Name</Label>
+              <Input
+                id="client-display-name"
+                value={shownDisplayName}
+                onChange={setDisplayName}
+                placeholder={client.clientId}
+                maxLength={200}
+                disabled={!canEdit}
+              />
+              <Text small muted>
+                Shown in lists and page titles. Leave empty to show the client
+                ID.
+              </Text>
+            </div>
+            {clientIdEditable && (
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="client-id">Client ID</Label>
+                <Input
+                  id="client-id"
+                  className="font-mono"
+                  value={shownClientId}
+                  onChange={setClientIdDraft}
+                  disabled={!canEdit}
+                />
+                <Text small muted>
+                  The ID the authorization server issued for this client.
+                  Changing it signs out everyone connected through the client.
+                </Text>
+              </div>
+            )}
             <div className="flex flex-col gap-1.5">
               <Label id="client-scopes-label" htmlFor="client-scopes">
                 Scopes
@@ -368,7 +445,8 @@ export function ClientCard({
                 disabled={
                   update.isPending ||
                   keySetPending ||
-                  privateKeyJwtMissingKeySet
+                  privateKeyJwtMissingKeySet ||
+                  (clientIdEditable && trimmedClientId === "")
                 }
               >
                 <Button.Text>
@@ -379,6 +457,15 @@ export function ClientCard({
           )}
         </div>
       </Card.Content>
+      {confirmClientIdChange && (
+        <ChangeClientIdDialog
+          clientId={client.id}
+          newClientId={trimmedClientId}
+          isPending={update.isPending}
+          onConfirm={submit}
+          onClose={() => setConfirmClientIdChange(false)}
+        />
+      )}
     </Card>
   );
 }

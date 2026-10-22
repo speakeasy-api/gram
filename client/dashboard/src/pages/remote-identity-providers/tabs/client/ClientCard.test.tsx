@@ -174,3 +174,30 @@ it("labels an unknown authentication method as unsupported rather than the defau
   expect(screen.queryByText("client_secret_basic (default)")).toBeNull();
   expect(screen.queryByRole("button", { name: "Save changes" })).toBeNull();
 });
+
+// A container such as the duplicate sheet warns before discarding edits, so a
+// typed name or corrected client ID must count as unsaved.
+it.each([
+  ["Name", "Production"],
+  ["Client ID", "corrected-client"],
+])("reports an edited %s as unsaved", (label, value) => {
+  testState.admin = true;
+  const onDirtyChange = vi.fn<(dirty: boolean) => void>();
+  render(
+    <ClientCard
+      client={client}
+      issuer={issuer}
+      issuerId="issuer-1"
+      onDirtyChange={onDirtyChange}
+    />,
+  );
+  expect(onDirtyChange).toHaveBeenLastCalledWith(false);
+
+  const input = screen.getByLabelText(label);
+  const original = (input as HTMLInputElement).value;
+  fireEvent.change(input, { target: { value } });
+  expect(onDirtyChange).toHaveBeenLastCalledWith(true);
+
+  fireEvent.change(input, { target: { value: original } });
+  expect(onDirtyChange).toHaveBeenLastCalledWith(false);
+});

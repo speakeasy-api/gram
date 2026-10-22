@@ -61,7 +61,7 @@ export function ClientsTab({
     body = (
       <DotTable
         headers={[
-          { label: "Client ID" },
+          { label: "Client" },
           { label: "MCP Servers" },
           { label: "Active Sessions" },
           { label: "" },
@@ -109,6 +109,17 @@ export function ClientsTab({
                       </Badge>
                     )}
                   </div>
+                  {item.client.displayName && (
+                    <Text
+                      small
+                      muted
+                      as="div"
+                      className="truncate font-mono"
+                      title={item.client.clientId}
+                    >
+                      {item.client.clientId}
+                    </Text>
+                  )}
                 </td>
                 <td className="px-3 py-3">
                   <Text small muted>

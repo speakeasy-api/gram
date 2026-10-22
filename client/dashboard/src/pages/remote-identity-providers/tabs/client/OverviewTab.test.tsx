@@ -90,10 +90,39 @@ vi.mock(
     invalidateAllOrganizationRemoteSessionClient: vi.fn(),
   }),
 );
+vi.mock(
+  "@gram/client/react-query/organizationRemoteSessionClients.js",
+  async (importOriginal) => ({
+    ...(await importOriginal<
+      typeof import("@gram/client/react-query/organizationRemoteSessionClients.js")
+    >()),
+    invalidateAllOrganizationRemoteSessionClients: vi.fn(),
+  }),
+);
+vi.mock(
+  "@gram/client/react-query/organizationRemoteSessionClientSessions.js",
+  async (importOriginal) => ({
+    ...(await importOriginal<
+      typeof import("@gram/client/react-query/organizationRemoteSessionClientSessions.js")
+    >()),
+    invalidateAllOrganizationRemoteSessionClientSessions: vi.fn(),
+  }),
+);
 vi.mock("./KeySetField", () => ({ KeySetField: () => <div>key set</div> }));
 vi.mock("../../clientDialogs", () => ({
   DeleteClientDialog: () => <div>delete dialog</div>,
   RotateClientDialog: () => <div>rotate dialog</div>,
+  ChangeClientIdDialog: ({
+    newClientId,
+    onConfirm,
+  }: {
+    newClientId: string;
+    onConfirm: () => void;
+  }) => (
+    <button type="button" onClick={onConfirm}>
+      Confirm change to {newClientId}
+    </button>
+  ),
 }));
 vi.mock(
   "../../../mcp/x/tabs/settings/sections/authentication/IssuerFormFields",
@@ -452,10 +481,91 @@ describe("client overview read-only access", () => {
 });
 
 describe("client overview settings", () => {
-  it("shows the client ID read-only at the top of the card", () => {
+  it("shows a CIMD client's generated client ID read-only", () => {
+    renderTab({
+      client: client(undefined, {
+        clientId: "https://app.example.com/cimd/client-1",
+        clientIdMetadataUri: "https://app.example.com/cimd/client-1",
+      }),
+    });
+
+    expect(field("Client ID").textContent).toContain(
+      "https://app.example.com/cimd/client-1",
+    );
+    expect(screen.queryByRole("textbox", { name: "Client ID" })).toBeNull();
+  });
+
+  it("omits an unchanged client ID without asking to confirm", () => {
     renderTab();
 
-    expect(field("Client ID").textContent).toContain("upstream-client");
+    expect(
+      (screen.getByRole("textbox", { name: "Client ID" }) as HTMLInputElement)
+        .value,
+    ).toBe("upstream-client");
+    save();
+
+    expect(screen.queryByText(/Confirm change/)).toBeNull();
+    expect(lastSaved().clientId).toBeUndefined();
+  });
+
+  it("confirms before saving a corrected client ID", () => {
+    renderTab();
+
+    fireEvent.change(screen.getByRole("textbox", { name: "Client ID" }), {
+      target: { value: "  corrected-client  " },
+    });
+    save();
+
+    expect(mutation.mutate).not.toHaveBeenCalled();
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Confirm change to corrected-client",
+      }),
+    );
+    expect(lastSaved().clientId).toBe("corrected-client");
+  });
+
+  it("blocks saving an empty client ID", () => {
+    renderTab();
+
+    fireEvent.change(screen.getByRole("textbox", { name: "Client ID" }), {
+      target: { value: "  " },
+    });
+
+    expect(
+      (
+        screen.getByRole("button", {
+          name: "Save changes",
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(true);
+  });
+
+  it("saves a trimmed name and omits an unchanged one", () => {
+    renderTab();
+
+    expect(
+      (screen.getByLabelText("Name") as HTMLInputElement).placeholder,
+    ).toBe("upstream-client");
+    save();
+    expect(lastSaved().displayName).toBeUndefined();
+
+    fireEvent.change(screen.getByLabelText("Name"), {
+      target: { value: "  Production login  " },
+    });
+    save();
+    expect(lastSaved().displayName).toBe("Production login");
+  });
+
+  it("clears a name with an empty string", () => {
+    renderTab({ client: client(undefined, { displayName: "Old name" }) });
+
+    fireEvent.change(screen.getByLabelText("Name"), {
+      target: { value: "" },
+    });
+    save();
+
+    expect(lastSaved().displayName).toBe("");
   });
 
   it("saves a trimmed audience", () => {
@@ -480,7 +590,10 @@ describe("client overview settings", () => {
     expect(lastSaved().audience).toBeUndefined();
 
     await act(async () => {
-      await mutation.onSuccess?.({ audience: "old-aud" });
+      await mutation.onSuccess?.({
+        audience: "old-aud",
+        clientId: "upstream-client",
+      });
     });
     expect((screen.getByLabelText("Audience") as HTMLInputElement).value).toBe(
       "old-aud",

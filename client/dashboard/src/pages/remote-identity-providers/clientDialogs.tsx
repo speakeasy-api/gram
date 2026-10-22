@@ -194,3 +194,46 @@ export function RotateClientDialog({
     />
   );
 }
+
+// ChangeClientIdDialog confirms saving a corrected client ID. The issuer bound
+// every existing session's tokens to the old ID, so the server revokes them
+// and users reconnect once.
+export function ChangeClientIdDialog({
+  clientId,
+  newClientId,
+  isPending,
+  onConfirm,
+  onClose,
+}: {
+  clientId: string;
+  newClientId: string;
+  isPending: boolean;
+  onConfirm: () => void;
+  onClose: () => void;
+}): JSX.Element {
+  // isFetching for the same reason as RotateClientDialog: a reopened dialog
+  // must not confirm against a count from before the last change.
+  const { data: preflight, isFetching } =
+    useOrganizationRemoteSessionClientDeletePreflight({ id: clientId });
+  const sessionCount = preflight?.sessionCount ?? 0;
+
+  return (
+    <ConfirmDialog
+      open
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+      title="Change the client ID?"
+      description={`Speakeasy will identify this client to the authorization server as "${newClientId}". Everyone connected through it is signed out and reconnects once. The client's settings and attachments are kept.`}
+      confirmLabel="Change client ID"
+      pendingLabel="Saving…"
+      isPending={isPending}
+      impact={{
+        summary: `${sessionCount} ${sessionCount === 1 ? "session" : "sessions"} will be revoked.`,
+        mcpServerNames: preflight?.mcpServerNames,
+        isLoading: isFetching,
+      }}
+      onConfirm={onConfirm}
+    />
+  );
+}
