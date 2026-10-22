@@ -1,0 +1,20 @@
+server/internal/risk/scanner.go
+  h_e404c1a6a54184 990,1152,1277,1459,1578,1580-1600,1604,1607,1626-1628,1638,1641,1656,1661
+server/internal/risk/scanner_llm_test.go
+  h_e404c1a6a54184 6,305-350
+server/internal/risk/scanner_test.go
+  h_e404c1a6a54184 1084-1116,1644-1690
+server/internal/risk/prompt_policy_scanner_test.go
+  h_e404c1a6a54184 6,19,79-83,100,198-293
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "52bdada6b96aea1629ac225a50f15c85d7ca34a8",
+  "prompts": {},
+  "humans": {
+    "h_e404c1a6a54184": {
+      "author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
