@@ -2278,10 +2278,11 @@ type AgentPluginResponseBody struct {
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// Short description of the plugin, when one is set.
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
-	// MCP servers the plugin contains, in display order. Display-only: the agent
-	// installs the plugin, not these entries. Empty for the synthesized
-	// observability plugin.
-	Servers []*AgentPluginServerResponseBody `form:"servers,omitempty" json:"servers,omitempty" xml:"servers,omitempty"`
+	// MCP servers the plugin contains, in display order, possibly none.
+	// Display-only: the agent installs the plugin, not these entries. Absent for
+	// the synthesized observability plugin, which carries hooks rather than
+	// servers.
+	Servers []*AgentPluginServerResponseBody `json:"servers,omitzero"`
 }
 
 // AgentPluginServerResponseBody is used to define fields on response body
@@ -7283,9 +7284,6 @@ func ValidateAgentPluginResponseBody(body *AgentPluginResponseBody) (err error) 
 	}
 	if body.InstallMode == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("install_mode", "body"))
-	}
-	if body.Servers == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("servers", "body"))
 	}
 	if body.InstallMode != nil {
 		if !(*body.InstallMode == "required" || *body.InstallMode == "default" || *body.InstallMode == "available") {

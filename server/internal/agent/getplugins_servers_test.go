@@ -2,6 +2,7 @@ package agent_test
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 
 	"github.com/google/uuid"
@@ -10,6 +11,7 @@ import (
 
 	mockidp "github.com/speakeasy-api/gram/dev-idp/pkg/testidp"
 	gen "github.com/speakeasy-api/gram/server/gen/agent"
+	agenthttp "github.com/speakeasy-api/gram/server/gen/http/agent/server"
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -133,9 +135,8 @@ func TestGetPlugins_ListsPluginServersWithDashboardLinksForMCPRead(t *testing.T)
 	require.Nil(t, servers[1].DashboardURL,
 		"a grant on one server does not extend to a gateway in the same project")
 
-	require.NotNil(t, pluginBySlug(t, res, wantObservability).Servers)
-	require.Empty(t, pluginBySlug(t, res, wantObservability).Servers,
-		"observability carries hooks, not servers, but still sends an empty list")
+	require.Nil(t, pluginBySlug(t, res, wantObservability).Servers,
+		"observability carries hooks, not servers, so it sends no server list")
 }
 
 func TestGetPlugins_WithholdsDashboardLinksWithoutMCPRead(t *testing.T) {
@@ -172,6 +173,37 @@ func TestGetPlugins_PluginWithoutServersSendsEmptyList(t *testing.T) {
 	servers := pluginBySlug(t, res, "basket").Servers
 	require.NotNil(t, servers, "an empty list, not an absent one, tells the agent the plugin has no servers")
 	require.Empty(t, servers)
+}
+
+// TestGetPlugins_EncodesServerListPresence pins the wire contract the agent
+// relies on: an empty list is sent as [] ("No servers"), while observability
+// sends no servers key at all.
+func TestGetPlugins_EncodesServerListPresence(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestAgentService(t)
+
+	publishMarketplace(t, ctx, ti.conn, ti.projectID, "tok")
+	pluginID := seedPlugin(t, ctx, ti.conn, ti.orgID, ti.projectID, "basket")
+	assignPlugin(t, ctx, ti.conn, pluginID, ti.orgID, "*")
+
+	res, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: new(mockidp.MockUserEmail)})
+	require.NoError(t, err)
+
+	encoded, err := json.Marshal(agenthttp.NewGetPluginsResponseBody(res))
+	require.NoError(t, err)
+	var wire struct {
+		Plugins []map[string]json.RawMessage `json:"plugins"`
+	}
+	require.NoError(t, json.Unmarshal(encoded, &wire))
+
+	bySlug := make(map[string]map[string]json.RawMessage, len(wire.Plugins))
+	for _, p := range wire.Plugins {
+		var slug string
+		require.NoError(t, json.Unmarshal(p["slug"], &slug))
+		bySlug[slug] = p
+	}
+	require.JSONEq(t, `[]`, string(bySlug["basket"]["servers"]))
+	require.NotContains(t, bySlug[wantObservability], "servers")
 }
 
 func TestGetPlugins_SkipsDisabledPluginServers(t *testing.T) {

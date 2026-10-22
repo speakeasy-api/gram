@@ -53,7 +53,8 @@ import (
 // caller owns the URL shape so this builder stays free of server-side config.
 //
 // servers holds each assigned plugin's MCP servers by plugin id. A plugin
-// missing from it, and the observability plugin, get an empty list.
+// missing from it gets an empty list. The observability plugin carries hooks
+// rather than servers, so it gets no list at all.
 func BuildAgentPluginsView(rows []repo.GetAgentPluginSetRow, marketplaceURL func(token string) string, servers map[uuid.UUID][]*gen.AgentPluginServer) *gen.GetPluginsResult {
 	var marketplaces []*gen.AgentMarketplace
 	var plugins []*gen.AgentPlugin
@@ -89,7 +90,7 @@ func BuildAgentPluginsView(rows []repo.GetAgentPluginSetRow, marketplaceURL func
 					InstallMode:     string(installmode.Required),
 					Name:            nil,
 					Description:     nil,
-					Servers:         []*gen.AgentPluginServer{},
+					Servers:         nil,
 				})
 				writeAgentPluginsETag(etag, "plugin\x00%s\x00%s\x00%d\x00%s\n", name, observabilitySlug, int64(0), installmode.Required)
 			}

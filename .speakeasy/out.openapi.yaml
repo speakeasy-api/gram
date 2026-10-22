@@ -82495,7 +82495,7 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/AgentPluginServer'
-          description: 'MCP servers the plugin contains, in display order. Display-only: the agent installs the plugin, not these entries. Empty for the synthesized observability plugin.'
+          description: 'MCP servers the plugin contains, in display order, possibly none. Display-only: the agent installs the plugin, not these entries. Absent for the synthesized observability plugin, which carries hooks rather than servers.'
         slug:
           type: string
           description: Plugin slug. Combined with marketplace_name, this identifies the plugin in the managed tool.
@@ -82503,7 +82503,6 @@ components:
         - slug
         - marketplace_name
         - install_mode
-        - servers
     AgentPluginServer:
       type: object
       properties:

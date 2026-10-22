@@ -2372,8 +2372,6 @@ func marshalAgentAgentPluginToAgentPluginResponseBody(v *agent.AgentPlugin) *Age
 			}
 			res.Servers[i] = marshalAgentAgentPluginServerToAgentPluginServerResponseBody(val)
 		}
-	} else {
-		res.Servers = []*AgentPluginServerResponseBody{}
 	}
 
 	return res
@@ -2383,6 +2381,9 @@ func marshalAgentAgentPluginToAgentPluginResponseBody(v *agent.AgentPlugin) *Age
 // of type *AgentPluginServerResponseBody from a value of type
 // *agent.AgentPluginServer.
 func marshalAgentAgentPluginServerToAgentPluginServerResponseBody(v *agent.AgentPluginServer) *AgentPluginServerResponseBody {
+	if v == nil {
+		return nil
+	}
 	res := &AgentPluginServerResponseBody{
 		Name:         v.Name,
 		DashboardURL: v.DashboardURL,

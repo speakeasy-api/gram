@@ -2634,13 +2634,15 @@ func unmarshalAgentPluginResponseBodyToAgentAgentPlugin(v *AgentPluginResponseBo
 		Name:            v.Name,
 		Description:     v.Description,
 	}
-	res.Servers = make([]*agent.AgentPluginServer, len(v.Servers))
-	for i, val := range v.Servers {
-		if val == nil {
-			res.Servers[i] = nil
-			continue
+	if v.Servers != nil {
+		res.Servers = make([]*agent.AgentPluginServer, len(v.Servers))
+		for i, val := range v.Servers {
+			if val == nil {
+				res.Servers[i] = nil
+				continue
+			}
+			res.Servers[i] = unmarshalAgentPluginServerResponseBodyToAgentAgentPluginServer(val)
 		}
-		res.Servers[i] = unmarshalAgentPluginServerResponseBodyToAgentAgentPluginServer(val)
 	}
 
 	return res
@@ -2650,6 +2652,9 @@ func unmarshalAgentPluginResponseBodyToAgentAgentPlugin(v *AgentPluginResponseBo
 // value of type *agent.AgentPluginServer from a value of type
 // *AgentPluginServerResponseBody.
 func unmarshalAgentPluginServerResponseBodyToAgentAgentPluginServer(v *AgentPluginServerResponseBody) *agent.AgentPluginServer {
+	if v == nil {
+		return nil
+	}
 	res := &agent.AgentPluginServer{
 		Name:         *v.Name,
 		DashboardURL: v.DashboardURL,

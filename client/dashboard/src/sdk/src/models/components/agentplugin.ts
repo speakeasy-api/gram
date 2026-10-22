@@ -45,9 +45,9 @@ export type AgentPlugin = {
    */
   name?: string | undefined;
   /**
-   * MCP servers the plugin contains, in display order. Display-only: the agent installs the plugin, not these entries. Empty for the synthesized observability plugin.
+   * MCP servers the plugin contains, in display order, possibly none. Display-only: the agent installs the plugin, not these entries. Absent for the synthesized observability plugin, which carries hooks rather than servers.
    */
-  servers: Array<AgentPluginServer>;
+  servers?: Array<AgentPluginServer> | undefined;
   /**
    * Plugin slug. Combined with marketplace_name, this identifies the plugin in the managed tool.
    */
@@ -66,7 +66,7 @@ export const AgentPlugin$inboundSchema: z.ZodMiniType<AgentPlugin, unknown> = z
       install_mode: InstallMode$inboundSchema,
       marketplace_name: z.string(),
       name: z.optional(z.string()),
-      servers: z.array(AgentPluginServer$inboundSchema),
+      servers: z.optional(z.array(AgentPluginServer$inboundSchema)),
       slug: z.string(),
     }),
     z.transform((v) => {

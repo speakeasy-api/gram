@@ -495,10 +495,12 @@ var AgentPluginModel = Type("AgentPlugin", func() {
 	})
 	Attribute("name", String, "Display name of the plugin. Absent for the synthesized observability plugin.")
 	Attribute("description", String, "Short description of the plugin, when one is set.")
-	// Required so an empty list reaches the agent: Goa omits empty optional
-	// arrays, and the menu bar shows "No servers" only for a present empty list.
-	Attribute("servers", ArrayOf(AgentPluginServerModel), "MCP servers the plugin contains, in display order. Display-only: the agent installs the plugin, not these entries. Empty for the synthesized observability plugin.")
-	Required("servers")
+	// omitzero rather than Goa's default omitempty: an empty list must reach
+	// the agent, which shows "No servers" for it, while the observability
+	// plugin leaves the field out entirely.
+	Attribute("servers", ArrayOf(AgentPluginServerModel), "MCP servers the plugin contains, in display order, possibly none. Display-only: the agent installs the plugin, not these entries. Absent for the synthesized observability plugin, which carries hooks rather than servers.", func() {
+		Meta("struct:tag:json", "servers,omitzero")
+	})
 })
 
 var AgentPluginServerModel = Type("AgentPluginServer", func() {

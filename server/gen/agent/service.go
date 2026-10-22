@@ -200,10 +200,11 @@ type AgentPlugin struct {
 	Name *string
 	// Short description of the plugin, when one is set.
 	Description *string
-	// MCP servers the plugin contains, in display order. Display-only: the agent
-	// installs the plugin, not these entries. Empty for the synthesized
-	// observability plugin.
-	Servers []*AgentPluginServer
+	// MCP servers the plugin contains, in display order, possibly none.
+	// Display-only: the agent installs the plugin, not these entries. Absent for
+	// the synthesized observability plugin, which carries hooks rather than
+	// servers.
+	Servers []*AgentPluginServer `json:"servers,omitzero"`
 }
 
 type AgentPluginServer struct {
