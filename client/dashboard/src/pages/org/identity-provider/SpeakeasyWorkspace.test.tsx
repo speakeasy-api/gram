@@ -1,3 +1,4 @@
+import { unrecognized } from "@gram/client/types/unrecognized.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   cleanup,
@@ -579,4 +580,48 @@ describe("Speakeasy identity provider page", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(mocks.mutate).not.toHaveBeenCalled();
   });
+});
+
+describe("unknown issuer state", () => {
+  it("shows the neutral status without offering issuer management", () => {
+    mocks.issuer = {
+      ...enabledIssuer,
+      state: unrecognized("future_state"),
+      canEnable: true,
+    };
+    show();
+    expect(screen.getByText("Unknown")).toBeTruthy();
+    expect(screen.getByText(/Issuer status is unknown/)).toBeTruthy();
+    for (const name of [
+      "Disable",
+      "Replace compromised key",
+      "Rotate key",
+      "Enable Enterprise Managed Authorization",
+    ]) {
+      expect(screen.queryByRole("button", { name })).toBeNull();
+    }
+    expect(mocks.rotate).not.toHaveBeenCalled();
+    expect(mocks.mutate).not.toHaveBeenCalled();
+  });
+
+  it.each(["Disable", "Replace compromised key", "Rotate key"])(
+    "closes pending %s confirmation when issuer state becomes unknown",
+    (name) => {
+      mocks.issuer = enabledIssuer;
+      const view = show();
+      fireEvent.click(screen.getByRole("button", { name }));
+      expect(screen.getByRole("dialog")).toBeTruthy();
+      mocks.issuer = { ...enabledIssuer, state: unrecognized("future_state") };
+      view.rerender(
+        <MemoryRouter>
+          <TooltipProvider>
+            <SpeakeasyWorkspace />
+          </TooltipProvider>
+        </MemoryRouter>,
+      );
+      expect(screen.queryByRole("dialog")).toBeNull();
+      expect(mocks.rotate).not.toHaveBeenCalled();
+      expect(mocks.mutate).not.toHaveBeenCalled();
+    },
+  );
 });

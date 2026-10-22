@@ -83,7 +83,7 @@ const deleteAIScanTarget = `-- name: DeleteAIScanTarget :one
 DELETE FROM ai_scan_targets
 WHERE organization_id = $1
   AND id = $2
-RETURNING organization_id, id, display_name, category, bundle_ids, binaries, config_dirs, process_names, version_plist_key, cimd_vendor_keys, oauth_client_ids, client_info_names, status, rationale, created_at, updated_at
+RETURNING organization_id, id, ai_product_id, display_name, category, bundle_ids, binaries, config_dirs, process_names, version_plist_key, cimd_vendor_keys, oauth_client_ids, client_info_names, status, rationale, created_at, updated_at
 `
 
 type DeleteAIScanTargetParams struct {
@@ -97,6 +97,7 @@ func (q *Queries) DeleteAIScanTarget(ctx context.Context, arg DeleteAIScanTarget
 	err := row.Scan(
 		&i.OrganizationID,
 		&i.ID,
+		&i.AiProductID,
 		&i.DisplayName,
 		&i.Category,
 		&i.BundleIds,
@@ -116,7 +117,7 @@ func (q *Queries) DeleteAIScanTarget(ctx context.Context, arg DeleteAIScanTarget
 }
 
 const getAIScanTargetForUpdate = `-- name: GetAIScanTargetForUpdate :one
-SELECT organization_id, id, display_name, category, bundle_ids, binaries, config_dirs, process_names, version_plist_key, cimd_vendor_keys, oauth_client_ids, client_info_names, status, rationale, created_at, updated_at
+SELECT organization_id, id, ai_product_id, display_name, category, bundle_ids, binaries, config_dirs, process_names, version_plist_key, cimd_vendor_keys, oauth_client_ids, client_info_names, status, rationale, created_at, updated_at
 FROM ai_scan_targets
 WHERE organization_id = $1
   AND id = $2
@@ -134,6 +135,7 @@ func (q *Queries) GetAIScanTargetForUpdate(ctx context.Context, arg GetAIScanTar
 	err := row.Scan(
 		&i.OrganizationID,
 		&i.ID,
+		&i.AiProductID,
 		&i.DisplayName,
 		&i.Category,
 		&i.BundleIds,
@@ -506,7 +508,7 @@ func (q *Queries) InsertSessionHandoffLink(ctx context.Context, arg InsertSessio
 
 const listAIScanTargets = `-- name: ListAIScanTargets :many
 
-SELECT organization_id, id, display_name, category, bundle_ids, binaries, config_dirs, process_names, version_plist_key, cimd_vendor_keys, oauth_client_ids, client_info_names, status, rationale, created_at, updated_at
+SELECT organization_id, id, ai_product_id, display_name, category, bundle_ids, binaries, config_dirs, process_names, version_plist_key, cimd_vendor_keys, oauth_client_ids, client_info_names, status, rationale, created_at, updated_at
 FROM ai_scan_targets
 WHERE organization_id = $1
 ORDER BY id
@@ -527,6 +529,7 @@ func (q *Queries) ListAIScanTargets(ctx context.Context, organizationID string) 
 		if err := rows.Scan(
 			&i.OrganizationID,
 			&i.ID,
+			&i.AiProductID,
 			&i.DisplayName,
 			&i.Category,
 			&i.BundleIds,
@@ -705,7 +708,7 @@ ON CONFLICT (organization_id, id) DO UPDATE
 SET status = EXCLUDED.status
   , rationale = EXCLUDED.rationale
   , updated_at = clock_timestamp()
-RETURNING organization_id, id, display_name, category, bundle_ids, binaries, config_dirs, process_names, version_plist_key, cimd_vendor_keys, oauth_client_ids, client_info_names, status, rationale, created_at, updated_at
+RETURNING organization_id, id, ai_product_id, display_name, category, bundle_ids, binaries, config_dirs, process_names, version_plist_key, cimd_vendor_keys, oauth_client_ids, client_info_names, status, rationale, created_at, updated_at
 `
 
 type SetAIScanTargetStatusParams struct {
@@ -726,6 +729,7 @@ func (q *Queries) SetAIScanTargetStatus(ctx context.Context, arg SetAIScanTarget
 	err := row.Scan(
 		&i.OrganizationID,
 		&i.ID,
+		&i.AiProductID,
 		&i.DisplayName,
 		&i.Category,
 		&i.BundleIds,
@@ -786,7 +790,7 @@ SET display_name = EXCLUDED.display_name
   , oauth_client_ids = EXCLUDED.oauth_client_ids
   , client_info_names = EXCLUDED.client_info_names
   , updated_at = clock_timestamp()
-RETURNING organization_id, id, display_name, category, bundle_ids, binaries, config_dirs, process_names, version_plist_key, cimd_vendor_keys, oauth_client_ids, client_info_names, status, rationale, created_at, updated_at
+RETURNING organization_id, id, ai_product_id, display_name, category, bundle_ids, binaries, config_dirs, process_names, version_plist_key, cimd_vendor_keys, oauth_client_ids, client_info_names, status, rationale, created_at, updated_at
 `
 
 type UpsertAIScanTargetParams struct {
@@ -827,6 +831,7 @@ func (q *Queries) UpsertAIScanTarget(ctx context.Context, arg UpsertAIScanTarget
 	err := row.Scan(
 		&i.OrganizationID,
 		&i.ID,
+		&i.AiProductID,
 		&i.DisplayName,
 		&i.Category,
 		&i.BundleIds,

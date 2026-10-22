@@ -471,7 +471,7 @@ func Delete(ctx context.Context, tx pgx.Tx, tracerProvider trace.TracerProvider,
 	}
 	tombstoned, err := tombstone.Tombstone(ctx, tx, auditLogger, locked, tombstone.Input{
 		OrganizationID: toolset.OrganizationID, ProjectID: toolset.ProjectID, ActorUserID: actor.UserID, ActorEmail: actor.Email,
-		TracerProvider: tracerProvider,
+		ActorSystem: "", TracerProvider: tracerProvider,
 	})
 	if err != nil {
 		return DeleteResult{}, oops.E(oops.CodeUnexpected, err, "delete hosted MCP server")

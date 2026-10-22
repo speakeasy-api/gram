@@ -364,6 +364,9 @@ func normalizePrincipal(ctx context.Context, db pluginsrepo.DBTX, organizationID
 		if principal.Type == urn.PrincipalTypeWorkload {
 			return normalizedPrincipal{}, fmt.Errorf("%w: workload principals are not assignable", ErrInvalid)
 		}
+		if principal.Type == urn.PrincipalTypeAPIKey {
+			return normalizedPrincipal{}, fmt.Errorf("%w: api key principals are not assignable", ErrInvalid)
+		}
 		if principal.Type == urn.PrincipalTypeRole {
 			if err := authz.ValidatePrincipal(ctx, db, organizationID, principal); err != nil {
 				if errors.Is(err, authz.ErrPrincipalInvalid) || errors.Is(err, authz.ErrPrincipalNotFound) {

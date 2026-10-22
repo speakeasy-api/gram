@@ -210,18 +210,34 @@ will not join.
 
 ## Gap-fill before an organization cutover
 
-Run gap-fill for each organization before enabling
-`risk-findings-clickhouse-cutover`. The lookup checks ClickHouse in batches
-bounded by organization, project, the batch's UTC partition days, and source.
-It first matches the deterministic migration id, then matches a different live
-id by anchor, policy id and version, source, rule id, and span offsets.
+Run the gap-fill and policy-filter sweep before enabling
+`risk-findings-clickhouse-cutover`. Use one half-open time window for every
+step. The gap-fill lookup checks ClickHouse in batches bounded by organization,
+project, the batch's UTC partition days, and source. It first matches the
+deterministic migration id, then matches a different live id by anchor, policy
+id and version, source, rule id, and span offsets.
+prompt_injection and llm_judge findings match without span offsets: the two
+stores render the judged event at different lengths, so the same verdict
+carries different offsets.
 
-1. Run a dry run first:
+Gap-fill reads Postgres one project at a time (every project of `-org`, or
+only `-project`), paging by `(created_at, id)` so the `(project_id,
+created_at)` indexes drive each page. A page that a read replica cancels with
+a recovery conflict (SQLSTATE `40001`) is retried from the same position up
+to four times before the run fails.
+
+An organization-wide gap-fill lists the organization's projects once at the
+start, so projects created during the run are not covered, and resuming with
+`-gap-fill-cursor` can skip projects added since the original run. If projects
+may have been added, re-run without the cursor; matching is idempotent.
+
+1. Run a gap-fill dry run:
 
    ```bash
    mise exec -- go run ./server/cmd/tools/migrations riskfindings \
      -gap-fill -org <ORG_ID> \
      -sources prompt_injection,llm_judge,shadow_mcp,destructive_tool,cli_destructive,account_identity,presidio,gitleaks,custom \
+     -from <FROM_RFC3339> -to <TO_RFC3339> \
      -dry-run=true
    ```
 
@@ -231,17 +247,49 @@ id by anchor, policy id and version, source, rule id, and span offsets.
    `skipped_ch_newer` counts Postgres marks ignored because ClickHouse has an
    explicit reversal or a newer state event, and `inserts` is the number of
    missing ClickHouse rows.
-3. Repeat the same command with `-dry-run=false`. Preserve `-org`, `-project`,
-   `-policy`, `-sources`, `-from`, and `-to` when resuming with `-cursor`.
-   Pass `-from` explicitly on resume (the failure log prints the effective
-   value), since the gap-fill default is relative to run time.
-4. Run the dry run again. Every source should report zero `state_copies` and
-   zero `inserts`.
-5. Validate per-source counts over the same half-open time window. Expand
+3. Repeat the same command with `-dry-run=false`. To resume, pass the
+   `-gap-fill-cursor <project_id>/<created_at>/<id>` value the failure log
+   prints (`-cursor` does not apply to gap-fill) and preserve `-org`,
+   `-project`, `-policy`, `-sources`, `-from`, and `-to`. Pass `-from`
+   explicitly on resume (the failure log prints the effective value), since
+   the gap-fill default is relative to run time.
+4. Run the gap-fill dry run again. Every source should report zero
+   `state_copies` and zero `inserts`.
+5. For each project, run the policy-filter sweep dry run:
+
+   ```bash
+   GRAM_ASSETS_BACKEND=gcs GRAM_ASSETS_URI=gs://<ASSET_BUCKET> \
+     mise exec -- go run ./server/cmd/tools/sweep_builtin_presets \
+       -candidates clickhouse \
+       -org <ORG_ID> -project <PROJECT_ID> \
+       -from <FROM_RFC3339> -to <TO_RFC3339>
+   ```
+
+   Review `scanned`, `missing policy`, `disabled policy`,
+   `unreconstructable`, `redaction mismatch`, and the per-source and per-filter
+   counts. Candidates with a missing, deleted, or malformed policy reference
+   are counted under `missing policy`; candidates for a present but disabled
+   policy are counted separately under `disabled policy`. Both are skipped.
+   ClickHouse mode honors each enabled policy's disabled rules and built-in
+   preset toggle. `-assets-backend` and `-assets-uri` default to
+   `GRAM_ASSETS_BACKEND` and `GRAM_ASSETS_URI`; provide both whenever the window
+   may contain content-part findings. Without asset storage, those built-in
+   candidates are counted as `unreconstructable` and left live. A `redaction
+   mismatch` means reconstructed bytes did not reproduce the finding's stored
+   display mask, so the candidate is also left live.
+
+6. Repeat the sweep with `-dry-run=false`, preserving every scope flag. Run the
+   dry run once more and confirm `flagged`, `unreconstructable`, and `redaction
+   mismatch` are all zero. If either residual counter cannot be reduced to
+   zero, review the remaining candidates individually and record the explicit
+   decision to accept each residual before cutover.
+7. Validate per-source counts over the same half-open time window. Expand
    Postgres spans with
    `SUM(GREATEST(COALESCE(jsonb_array_length(spans), 1), 1))`. In ClickHouse,
    resolve the latest copy per id and compare `uniqExact(id)` grouped by
    `source`. State copies do not change `uniqExact(id)`.
+8. Enable `risk-findings-clickhouse-cutover` only after the validation passes
+   and the residual acceptance criteria in step 6 are satisfied.
 
 Rows matched under a live ClickHouse id keep that id. Missing Postgres
 exclusion or dismissal state is appended as a suppression copy of the latest

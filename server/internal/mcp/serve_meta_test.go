@@ -297,7 +297,8 @@ func TestServePublic_MetaEndpoint_ToolsList_FixedContract(t *testing.T) {
 	envelope := decodeRPCResponse(t, w)
 	var result struct {
 		Tools []struct {
-			Name string `json:"name"`
+			Name        string         `json:"name"`
+			Annotations map[string]any `json:"annotations"`
 		} `json:"tools"`
 	}
 	require.NoError(t, json.Unmarshal(envelope["result"], &result))
@@ -305,6 +306,11 @@ func TestServePublic_MetaEndpoint_ToolsList_FixedContract(t *testing.T) {
 	names := make([]string, 0, len(result.Tools))
 	for _, tool := range result.Tools {
 		names = append(names, tool.Name)
+		if tool.Name == "execute_tool" {
+			require.Nil(t, tool.Annotations, "execution must not be advertised as read-only")
+		} else {
+			require.Equal(t, map[string]any{"readOnlyHint": true}, tool.Annotations, tool.Name)
+		}
 	}
 	require.Equal(t, []string{"list_servers", "describe_server", "describe_tools", "execute_tool", "connection_status"}, names)
 

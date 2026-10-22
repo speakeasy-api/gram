@@ -9,7 +9,8 @@ import type { OrganizationGatewaySetting } from "./useOrganizationGatewaySetting
 import { Link } from "react-router";
 
 /**
- * The on/off switch. Turning on is immediate; turning off asks first, because
+ * The on/off switch. The page starts an access review when turning on;
+ * turning off asks first, because
  * it cuts off every connected client at once. Members see it disabled with the
  * admin-only reason.
  */
@@ -114,4 +115,9 @@ export function GatewayNotServed({
     case undefined:
       return null;
   }
+  return (
+    <Text small className="text-warning mt-3">
+      Gateway status unavailable. Refresh the page for updated details.
+    </Text>
+  );
 }

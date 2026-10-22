@@ -99,9 +99,7 @@ func apply(ctx context.Context, tx pgx.Tx, org string, pluginID uuid.UUID, s ser
 		}
 		changed := false
 		for _, membership := range memberships {
-			matches := s.BackendKind == "mcp_server" && membership.McpServerID.Valid && membership.McpServerID.UUID == s.ID
-			matches = matches || (s.LegacyToolsetID.Valid && membership.ToolsetID.Valid && membership.ToolsetID.UUID == s.LegacyToolsetID.UUID)
-			if !matches {
+			if !membership.McpServerID.Valid || membership.McpServerID.UUID != s.ID {
 				continue
 			}
 			removed, err := pluginsrepo.New(tx).RemovePluginServer(ctx, pluginsrepo.RemovePluginServerParams{ID: membership.ID, PluginID: pluginID})
@@ -111,17 +109,17 @@ func apply(ctx context.Context, tx pgx.Tx, org string, pluginID uuid.UUID, s ser
 			if err != nil {
 				return false, fmt.Errorf("remove role-delivered membership: %w", err)
 			}
-			if err := auditChange(ctx, tx, org, s.ProjectID, pluginID, removed, false); err != nil {
+			if err := auditChange(ctx, tx, org, s.ProjectID, pluginID, memberRow(removed), false); err != nil {
 				return false, err
 			}
 			changed = true
 		}
 		return changed, nil
 	}
-	if !s.Eligible || s.BackendKind != "mcp_server" {
+	if !s.Eligible {
 		return false, nil
 	}
-	exists, err := pluginsrepo.New(tx).HasRoleDeliveryMembership(ctx, pluginsrepo.HasRoleDeliveryMembershipParams{PluginID: pluginID, OrganizationID: org, ProjectID: s.ProjectID, ToolsetID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, McpServerID: uuid.NullUUID{UUID: s.ID, Valid: true}, LegacyToolsetID: s.LegacyToolsetID, PreserveRemoval: preserveRemoval})
+	exists, err := pluginsrepo.New(tx).HasRoleDeliveryMembership(ctx, pluginsrepo.HasRoleDeliveryMembershipParams{PluginID: pluginID, OrganizationID: org, ProjectID: s.ProjectID, McpServerID: uuid.NullUUID{UUID: s.ID, Valid: true}, LegacyToolsetID: s.LegacyToolsetID, PreserveRemoval: preserveRemoval})
 	if err != nil {
 		return false, fmt.Errorf("check existing role delivery membership: %w", err)
 	}
@@ -154,11 +152,11 @@ func apply(ctx context.Context, tx pgx.Tx, org string, pluginID uuid.UUID, s ser
 		}
 	}
 	params := pluginsrepo.AddPluginServerParams{PluginID: pluginID, DisplayName: name, Policy: "required", SortOrder: 0, McpServerID: uuid.NullUUID{UUID: s.ID, Valid: true}}
-	membership, err := pluginsrepo.New(tx).AddPluginServer(ctx, params)
+	added, err := pluginsrepo.New(tx).AddPluginServer(ctx, params)
 	if err != nil {
 		return false, fmt.Errorf("add role-delivered membership: %w", err)
 	}
-	if err := auditChange(ctx, tx, org, s.ProjectID, pluginID, membership, true); err != nil {
+	if err := auditChange(ctx, tx, org, s.ProjectID, pluginID, memberRow(added), true); err != nil {
 		return false, err
 	}
 	return true, nil

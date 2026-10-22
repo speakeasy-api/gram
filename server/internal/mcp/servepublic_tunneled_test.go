@@ -31,6 +31,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	tunneledmcprepo "github.com/speakeasy-api/gram/server/internal/tunneledmcp/repo"
+	"github.com/speakeasy-api/gram/tunnel/metrics"
 	"github.com/speakeasy-api/gram/tunnel/wire"
 )
 
@@ -380,6 +381,39 @@ func TestServePublic_Tunneled_SessionRequestPinsExactTarget(t *testing.T) {
 	require.Equal(t, "backend-secret-session", forwarded.Get("Mcp-Session-Id"), "backend must see its own session id")
 	require.Equal(t, "agent-1", forwarded.Get(wire.HeaderTunnelAgentSession), "session traffic must pin the exact agent session")
 	require.NotEmpty(t, forwarded.Get(wire.HeaderTunnelConsumerSession))
+}
+
+// Node-based clients send a generic User-Agent, so activity metrics attribute
+// the session to the client its initialize reported, on every later request.
+func TestServePublic_Tunneled_MetricsAttributeSessionToReportedClient(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	collector := metrics.New()
+	ti.remoteProxyManager.TunnelMetrics = collector
+	gateway := &fakeTunnelGateway{t: t, agentSessionID: "agent-1", backendSessionID: "backend-session"}
+	fixture := newPublicTunnelFixture(t, ctx, ti, gateway, true)
+
+	serve := func(body []byte, sessionID string) *httptest.ResponseRecorder {
+		req := newTunneledPublicRequest(fixture.endpointSlug, http.MethodPost, body, sessionID)
+		req.Header.Set("User-Agent", "node")
+		w := httptest.NewRecorder()
+		require.NoError(t, ti.service.ServePublic(w, req))
+		require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+		return w
+	}
+	sid := serve(makeInitializeBodyWithClientInfo(t, "cursor-vscode", "1.0"), "").Header().Get("Mcp-Session-Id")
+	require.NotEmpty(t, sid)
+	serve([]byte(`{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"ping","arguments":{}}}`), sid)
+
+	families := map[string]string{}
+	collector.Flush(t.Context(), func(_ context.Context, s metrics.Snapshot) error {
+		if s.Kind == "requests" {
+			families[s.Method] = s.ClientFamily
+		}
+		return nil
+	})
+	require.Equal(t, map[string]string{"initialize": "cursor", "tools/call": "cursor"}, families)
 }
 
 // Session ids that are not Speakeasy-minted, or valid-shaped but unknown, must

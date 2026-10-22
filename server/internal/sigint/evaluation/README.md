@@ -267,8 +267,20 @@ assistant-generated messages with no actor. Neither identity is inferred from th
 other. `source` namespaces external identities within the organization. Account
 ID comes from the current conversation row; account type/billing mode, assistant
 ID and the historical `replayed` marker come from the event's ingestion context.
-Absent provenance remains absent. Directory
-enrichment belongs downstream, as it does for agent-session storage metering.
+Absent provenance remains absent. Creation events snapshot `model_name`,
+`model_family` (recognized model vendor), `inference_provider` (reported inference
+provider) and `department` in their string attributes. Department uses the
+actor's active directory profile within the message's organization: the latest
+linked profile wins, with an unambiguous observed-email fallback. Billing
+allocation never supplies an actor or department. Blank/unknown values are
+omitted. Imports record the directory state known at ingestion, not an inferred
+historical department. Evaluation carries these attributes through retries and
+outcomes without re-enrichment, except when the oversized-outcome safeguard
+drops attributes to meet the transport budget. They describe the source message, independently
+of the classifier's model/provider metadata.
+Completion responses supply the reported serving provider; first-party imports
+name their known service. Hook account-provider metadata alone does not establish
+an inference provider, so those messages omit `inference_provider` when it is unknown.
 These fields do not participate in reading identity or the definition hash.
 
 Successful readings are published and their publication results awaited before

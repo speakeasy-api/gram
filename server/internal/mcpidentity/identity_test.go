@@ -166,3 +166,36 @@ func TestValidatorBoundaryStampAgent(t *testing.T) {
 		require.False(t, ok)
 	}
 }
+
+func TestValidatorBoundaryAdmittedWorkloadSession(t *testing.T) {
+	t.Parallel()
+	boundary := mcpidentity.NewValidatorBoundary()
+	agentID := uuid.New()
+	session := validatedSession(t, urn.NewWorkloadSubject(uuid.New(), "machine-test"))
+	earlier := boundary.StampValidatedSession(t.Context(), validatedSession(t, urn.NewUserSubject("user_test")))
+	identity, ok := mcpidentity.FromContext(boundary.StampValidatedWorkloadSession(earlier, session, agentID))
+	require.True(t, ok)
+	require.Equal(t, mcpidentity.KindAgent, identity.Kind())
+	require.Equal(t, agentID.String(), identity.AgentID())
+	require.Empty(t, identity.UserID())
+	require.Equal(t, session.ExpiresAt(), identity.ExpiresAt())
+	require.Equal(t, session.JTI(), identity.SessionJTI())
+	for _, tc := range []struct {
+		name     string
+		boundary *mcpidentity.ValidatorBoundary
+		session  sessiontokens.ValidatedSession
+		agentID  uuid.UUID
+	}{
+		{"nil boundary", nil, session, agentID},
+		{"inert boundary", &mcpidentity.ValidatorBoundary{}, session, agentID},
+		{"invalid proof", boundary, sessiontokens.ValidatedSession{}, agentID},
+		{"missing agent", boundary, session, uuid.Nil},
+		{"user proof", boundary, validatedSession(t, urn.NewUserSubject("user_test")), agentID},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			_, ok := mcpidentity.FromContext(tc.boundary.StampValidatedWorkloadSession(t.Context(), tc.session, tc.agentID))
+			require.False(t, ok)
+		})
+	}
+}

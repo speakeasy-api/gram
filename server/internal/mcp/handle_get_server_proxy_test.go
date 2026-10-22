@@ -170,7 +170,7 @@ func TestRuntimeMethods_MountedOnMux(t *testing.T) {
 	)
 
 	mux := goahttp.NewMuxer()
-	mcp.Attach(mux, ti.service, metadataService)
+	mcp.Attach(mux, ti.service.Service, metadataService)
 
 	req := httptest.NewRequest(http.MethodGet, "/mcp/no-such-slug-"+uuid.NewString(), nil).WithContext(ctx)
 	req.Header.Set("Accept", "text/event-stream")

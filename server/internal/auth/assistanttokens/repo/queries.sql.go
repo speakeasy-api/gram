@@ -9,7 +9,86 @@ import (
 	"context"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
+
+const createKitAPIKey = `-- name: CreateKitAPIKey :one
+INSERT INTO api_keys (
+    organization_id
+  , project_id
+  , created_by_user_id
+  , name
+  , key_prefix
+  , key_hash
+  , scopes
+  , subject_urn
+  , delegated_grants
+  , delegated_grants_version
+  , expires_at
+) VALUES (
+    $1
+  , $2
+  , $3
+  , $4
+  , $5
+  , $6
+  , ARRAY[]::text[]
+  , $7
+  , $8::jsonb
+  , $9
+  , $10
+)
+RETURNING id, organization_id, project_id, created_by_user_id, name, key_prefix, key_hash, scopes, subject_urn, delegated_grants, delegated_grants_version, expires_at, created_at, updated_at, deleted_at, deleted, last_accessed_at
+`
+
+type CreateKitAPIKeyParams struct {
+	OrganizationID         string
+	ProjectID              uuid.NullUUID
+	CreatedByUserID        string
+	Name                   string
+	KeyPrefix              string
+	KeyHash                string
+	SubjectUrn             pgtype.Text
+	DelegatedGrants        []byte
+	DelegatedGrantsVersion pgtype.Int4
+	ExpiresAt              pgtype.Timestamptz
+}
+
+func (q *Queries) CreateKitAPIKey(ctx context.Context, arg CreateKitAPIKeyParams) (ApiKey, error) {
+	row := q.db.QueryRow(ctx, createKitAPIKey,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.CreatedByUserID,
+		arg.Name,
+		arg.KeyPrefix,
+		arg.KeyHash,
+		arg.SubjectUrn,
+		arg.DelegatedGrants,
+		arg.DelegatedGrantsVersion,
+		arg.ExpiresAt,
+	)
+	var i ApiKey
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.CreatedByUserID,
+		&i.Name,
+		&i.KeyPrefix,
+		&i.KeyHash,
+		&i.Scopes,
+		&i.SubjectUrn,
+		&i.DelegatedGrants,
+		&i.DelegatedGrantsVersion,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+		&i.LastAccessedAt,
+	)
+	return i, err
+}
 
 const getAssistantRevocation = `-- name: GetAssistantRevocation :one
 SELECT a.deleted AS assistant_deleted, a.status AS assistant_status
@@ -62,4 +141,155 @@ func (q *Queries) GetAssistantTokenRevocation(ctx context.Context, arg GetAssist
 	var i GetAssistantTokenRevocationRow
 	err := row.Scan(&i.ThreadDeleted, &i.AssistantDeleted, &i.AssistantStatus)
 	return i, err
+}
+
+const isManagedKitAPIKey = `-- name: IsManagedKitAPIKey :one
+SELECT EXISTS (SELECT 1 FROM assistant_inference_credentials WHERE api_key_id = $1)
+`
+
+func (q *Queries) IsManagedKitAPIKey(ctx context.Context, apiKeyID uuid.UUID) (bool, error) {
+	row := q.db.QueryRow(ctx, isManagedKitAPIKey, apiKeyID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
+const issueKitAPIKeyBinding = `-- name: IssueKitAPIKeyBinding :one
+INSERT INTO assistant_inference_credentials (api_key_id, project_id, assistant_id, runtime_id, identity_json)
+SELECT $1, $2, $3, r.id, $4
+FROM assistant_runtimes r JOIN assistants a ON a.id = r.assistant_id AND a.project_id = r.project_id
+WHERE r.id = $5 AND r.project_id = $2 AND r.assistant_id = $3
+AND r.runtime_version = 3 AND a.runtime_version = 3
+AND NOT r.deleted AND NOT r.ended AND r.state IN ('starting', 'active') AND NOT a.deleted AND a.status = 'active'
+RETURNING id
+`
+
+type IssueKitAPIKeyBindingParams struct {
+	ApiKeyID     uuid.UUID
+	ProjectID    uuid.UUID
+	AssistantID  uuid.UUID
+	IdentityJson []byte
+	RuntimeID    uuid.UUID
+}
+
+// The api_key_id references the already-created native API key; this row holds only
+// control-plane runtime authority and does not define a new wire credential.
+func (q *Queries) IssueKitAPIKeyBinding(ctx context.Context, arg IssueKitAPIKeyBindingParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, issueKitAPIKeyBinding,
+		arg.ApiKeyID,
+		arg.ProjectID,
+		arg.AssistantID,
+		arg.IdentityJson,
+		arg.RuntimeID,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const listKitInferenceSessionBindings = `-- name: ListKitInferenceSessionBindings :many
+SELECT s.acp_session_id, t.id AS thread_id, t.chat_id
+FROM assistant_kit_sessions s
+JOIN assistant_runtimes r ON r.id = s.runtime_id AND r.project_id = s.project_id AND r.assistant_id = s.assistant_id
+JOIN assistants a ON a.id = r.assistant_id AND a.project_id = r.project_id
+JOIN assistant_threads t ON t.id = s.assistant_thread_id AND t.project_id = s.project_id AND t.assistant_id = s.assistant_id
+JOIN chats c ON c.id = t.chat_id AND c.project_id = t.project_id
+WHERE s.runtime_id = $1 AND s.project_id = $2 AND s.assistant_id = $3
+  AND r.runtime_version = 3 AND a.runtime_version = 3
+  AND NOT r.deleted AND NOT r.ended AND r.state IN ('starting', 'active') AND NOT a.deleted AND a.status = 'active'
+  AND NOT t.deleted AND NOT c.deleted
+`
+
+type ListKitInferenceSessionBindingsParams struct {
+	RuntimeID   uuid.NullUUID
+	ProjectID   uuid.NullUUID
+	AssistantID uuid.NullUUID
+}
+
+type ListKitInferenceSessionBindingsRow struct {
+	AcpSessionID string
+	ThreadID     uuid.UUID
+	ChatID       uuid.UUID
+}
+
+// Resolve provider session attribution only inside the authenticated runtime.
+func (q *Queries) ListKitInferenceSessionBindings(ctx context.Context, arg ListKitInferenceSessionBindingsParams) ([]ListKitInferenceSessionBindingsRow, error) {
+	rows, err := q.db.Query(ctx, listKitInferenceSessionBindings, arg.RuntimeID, arg.ProjectID, arg.AssistantID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListKitInferenceSessionBindingsRow
+	for rows.Next() {
+		var i ListKitInferenceSessionBindingsRow
+		if err := rows.Scan(&i.AcpSessionID, &i.ThreadID, &i.ChatID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const readKitAPIKeyBinding = `-- name: ReadKitAPIKeyBinding :one
+SELECT c.id, c.project_id, c.assistant_id, c.runtime_id, c.api_key_id, c.identity_json, c.created_at, c.revoked_at FROM assistant_inference_credentials c
+JOIN api_keys k ON k.id = c.api_key_id AND k.project_id = c.project_id
+JOIN assistant_runtimes r ON r.id = c.runtime_id AND r.project_id = c.project_id AND r.assistant_id = c.assistant_id
+JOIN assistants a ON a.id = c.assistant_id AND a.project_id = c.project_id
+WHERE c.api_key_id = $1 AND c.revoked_at IS NULL AND NOT k.deleted AND (k.expires_at IS NULL OR k.expires_at > clock_timestamp())
+AND NOT r.deleted AND NOT r.ended AND r.state IN ('starting', 'active') AND NOT a.deleted AND a.status = 'active'
+`
+
+func (q *Queries) ReadKitAPIKeyBinding(ctx context.Context, apiKeyID uuid.UUID) (AssistantInferenceCredential, error) {
+	row := q.db.QueryRow(ctx, readKitAPIKeyBinding, apiKeyID)
+	var i AssistantInferenceCredential
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.AssistantID,
+		&i.RuntimeID,
+		&i.ApiKeyID,
+		&i.IdentityJson,
+		&i.CreatedAt,
+		&i.RevokedAt,
+	)
+	return i, err
+}
+
+const revokeInferenceCredential = `-- name: RevokeInferenceCredential :exec
+WITH revoked AS (
+  UPDATE assistant_inference_credentials c SET revoked_at = clock_timestamp()
+  WHERE c.project_id = $1 AND c.api_key_id = $2 AND c.revoked_at IS NULL RETURNING c.api_key_id
+)
+UPDATE api_keys SET deleted_at = clock_timestamp() WHERE id IN (SELECT api_key_id FROM revoked) AND NOT deleted
+`
+
+type RevokeInferenceCredentialParams struct {
+	ProjectID uuid.UUID
+	ApiKeyID  uuid.UUID
+}
+
+func (q *Queries) RevokeInferenceCredential(ctx context.Context, arg RevokeInferenceCredentialParams) error {
+	_, err := q.db.Exec(ctx, revokeInferenceCredential, arg.ProjectID, arg.ApiKeyID)
+	return err
+}
+
+const revokeRuntimeInferenceCredentials = `-- name: RevokeRuntimeInferenceCredentials :exec
+WITH revoked AS (
+  UPDATE assistant_inference_credentials c SET revoked_at = clock_timestamp()
+  WHERE c.project_id = $1 AND c.runtime_id = $2 AND c.revoked_at IS NULL RETURNING c.api_key_id
+)
+UPDATE api_keys SET deleted_at = clock_timestamp() WHERE id IN (SELECT api_key_id FROM revoked) AND NOT deleted
+`
+
+type RevokeRuntimeInferenceCredentialsParams struct {
+	ProjectID uuid.UUID
+	RuntimeID uuid.UUID
+}
+
+func (q *Queries) RevokeRuntimeInferenceCredentials(ctx context.Context, arg RevokeRuntimeInferenceCredentialsParams) error {
+	_, err := q.db.Exec(ctx, revokeRuntimeInferenceCredentials, arg.ProjectID, arg.RuntimeID)
+	return err
 }

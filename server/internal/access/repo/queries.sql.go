@@ -217,6 +217,7 @@ WHERE organization_id = $1
     'resource_kind', $3::text,
     'resource_id', $4::text
   )
+  AND principal_type <> 'api_key'
 `
 
 type DeletePrincipalGrantsByResourceParams struct {
@@ -245,6 +246,7 @@ DELETE FROM principal_grants
 WHERE organization_id = $1
   AND scope = $2
   AND selectors = $3
+  AND principal_type <> 'api_key'
 `
 
 type DeletePrincipalGrantsByTargetParams struct {
@@ -1007,6 +1009,113 @@ func (q *Queries) InsertPrincipalGrantIfAbsent(ctx context.Context, arg InsertPr
 	return result.RowsAffected(), nil
 }
 
+const listAccessMemberDirectoryRoleSources = `-- name: ListAccessMemberDirectoryRoleSources :many
+WITH members AS (
+  SELECT u.id, u.email
+  FROM users AS u
+  JOIN organization_user_relationships AS our
+    ON our.user_id = u.id
+    AND our.organization_id = $1
+    AND our.deleted IS FALSE
+  WHERE u.deleted_at IS NULL
+),
+profiles AS (
+  SELECT members.id AS user_id, p.id AS directory_user_id, p.attributes
+  FROM members
+  CROSS JOIN LATERAL (
+    SELECT d.id, d.attributes
+    FROM directory_users AS d
+    WHERE d.organization_id = $1
+      AND d.deleted IS FALSE
+      AND d.workos_deleted IS FALSE
+      AND (d.user_id = members.id OR (d.user_id IS NULL AND LOWER(d.email) = LOWER(members.email)))
+    ORDER BY (d.user_id = members.id) DESC NULLS LAST, d.workos_updated_at DESC, d.id
+    LIMIT 1
+  ) AS p
+)
+SELECT
+  profiles.user_id::text AS user_id,
+  COALESCE(mapped_org_role.id::text, mapped_global_role.id::text)::text AS role_id,
+  drm.id AS mapping_id,
+  drm.source_kind,
+  drm.directory_group_id
+FROM directory_role_mappings AS drm
+JOIN profiles
+  ON (
+    drm.source_kind = 'group'
+    AND EXISTS (
+      SELECT 1
+      FROM directory_user_group_memberships AS m
+      JOIN directory_groups AS dg
+        ON dg.id = m.directory_group_id
+        AND dg.organization_id = drm.organization_id
+        AND dg.deleted IS FALSE
+        AND dg.workos_deleted IS FALSE
+      WHERE m.directory_user_id = profiles.directory_user_id
+        AND m.directory_group_id = drm.directory_group_id
+        AND m.deleted IS FALSE
+    )
+  )
+  OR (
+    drm.source_kind = 'attribute'
+    AND profiles.attributes ->> drm.attribute_key = drm.attribute_value
+  )
+LEFT JOIN organization_roles AS mapped_org_role
+  ON drm.role_urn = 'role:organization:' || mapped_org_role.id::text
+  AND mapped_org_role.organization_id = drm.organization_id
+  AND mapped_org_role.deleted IS FALSE
+  AND mapped_org_role.workos_deleted IS FALSE
+LEFT JOIN global_roles AS mapped_global_role
+  ON drm.role_urn = 'role:global:' || mapped_global_role.id::text
+  AND mapped_global_role.deleted IS FALSE
+  AND mapped_global_role.workos_deleted IS FALSE
+WHERE drm.organization_id = $1
+  AND drm.deleted IS FALSE
+  AND COALESCE(mapped_org_role.id, mapped_global_role.id) IS NOT NULL
+ORDER BY profiles.user_id, role_id, drm.source_kind, drm.id
+`
+
+type ListAccessMemberDirectoryRoleSourcesRow struct {
+	UserID           string
+	RoleID           string
+	MappingID        uuid.UUID
+	SourceKind       string
+	DirectoryGroupID uuid.NullUUID
+}
+
+// For every active member, the directory role mappings that currently give
+// them a role: one row per member and matching mapping, so a role reached
+// through two groups is listed twice. This is the batch form of
+// ListUserDirectoryRoleMappingSources: each member's directory profile is
+// chosen and matched the same way as in ListUserRolePrincipals, and mappings
+// that point at a deleted role are skipped, as in the mapped half of
+// ListAccessMembers.
+func (q *Queries) ListAccessMemberDirectoryRoleSources(ctx context.Context, organizationID string) ([]ListAccessMemberDirectoryRoleSourcesRow, error) {
+	rows, err := q.db.Query(ctx, listAccessMemberDirectoryRoleSources, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAccessMemberDirectoryRoleSourcesRow
+	for rows.Next() {
+		var i ListAccessMemberDirectoryRoleSourcesRow
+		if err := rows.Scan(
+			&i.UserID,
+			&i.RoleID,
+			&i.MappingID,
+			&i.SourceKind,
+			&i.DirectoryGroupID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listAccessMembers = `-- name: ListAccessMembers :many
 WITH members AS (
 SELECT
@@ -1021,6 +1130,11 @@ SELECT
   -- attribute, comes back as an empty string.
   COALESCE(du.attributes ->> 'department_name', '')::text AS department,
   COALESCE(dg_names.group_names, '{}'::text[])::text[] AS group_names,
+  -- The same groups by stable ID. group_ids and group_id_names are parallel
+  -- arrays: entry i of each describes the same group.
+  COALESCE(dg_names.group_ids, '{}'::uuid[])::uuid[] AS group_ids,
+  COALESCE(dg_names.group_id_names, '{}'::text[])::text[] AS group_id_names,
+  (du.id IS NOT NULL)::boolean AS in_directory,
   COALESCE(mapped_roles.role_ids, '{}'::text[])::text[] AS directory_role_ids
 FROM organization_user_relationships AS our
 JOIN users
@@ -1043,7 +1157,10 @@ LEFT JOIN LATERAL (
   LIMIT 1
 ) du ON TRUE
 LEFT JOIN LATERAL (
-  SELECT ARRAY_AGG(DISTINCT dg.name) AS group_names
+  SELECT
+    ARRAY_AGG(DISTINCT dg.name) AS group_names,
+    ARRAY_AGG(dg.id ORDER BY dg.name, dg.id) AS group_ids,
+    ARRAY_AGG(dg.name ORDER BY dg.name, dg.id) AS group_id_names
   FROM directory_user_group_memberships m
   INNER JOIN directory_groups dg
     ON dg.id = m.directory_group_id
@@ -1116,7 +1233,7 @@ WHERE our.organization_id = $2
   AND our.deleted IS FALSE
   AND users.deleted_at IS NULL
 ), matched AS (
-  SELECT members.id, members.display_name, members.email, members.photo_url, members.role_ids, members.joined_at, members.department, members.group_names, members.directory_role_ids,
+  SELECT members.id, members.display_name, members.email, members.photo_url, members.role_ids, members.joined_at, members.department, members.group_names, members.group_ids, members.group_id_names, members.in_directory, members.directory_role_ids,
     ($3::text <> '' AND
       LOWER(BTRIM(REGEXP_REPLACE(email, '[[:space:]]+', ' ', 'g'))) = $3) AS exact_email_match
   FROM members
@@ -1138,7 +1255,7 @@ WHERE our.organization_id = $2
       )
     )
 )
-SELECT matched.id, matched.display_name, matched.email, matched.photo_url, matched.role_ids, matched.joined_at, matched.department, matched.group_names, matched.directory_role_ids, matched.exact_email_match,
+SELECT matched.id, matched.display_name, matched.email, matched.photo_url, matched.role_ids, matched.joined_at, matched.department, matched.group_names, matched.group_ids, matched.group_id_names, matched.in_directory, matched.directory_role_ids, matched.exact_email_match,
   COUNT(*) OVER () AS total_matches,
   COUNT(*) FILTER (WHERE exact_email_match) OVER () AS exact_email_matches
 FROM matched
@@ -1162,6 +1279,9 @@ type ListAccessMembersRow struct {
 	JoinedAt          pgtype.Timestamptz
 	Department        string
 	GroupNames        []string
+	GroupIds          []uuid.UUID
+	GroupIDNames      []string
+	InDirectory       bool
 	DirectoryRoleIds  []string
 	ExactEmailMatch   pgtype.Bool
 	TotalMatches      int64
@@ -1191,6 +1311,9 @@ func (q *Queries) ListAccessMembers(ctx context.Context, arg ListAccessMembersPa
 			&i.JoinedAt,
 			&i.Department,
 			&i.GroupNames,
+			&i.GroupIds,
+			&i.GroupIDNames,
+			&i.InDirectory,
 			&i.DirectoryRoleIds,
 			&i.ExactEmailMatch,
 			&i.TotalMatches,
@@ -2091,6 +2214,23 @@ SELECT
   dg.name AS directory_group_name,
   drm.attribute_key,
   drm.attribute_value,
+  -- A missing source matches nobody: a group mapping whose group is gone or
+  -- tombstoned, or an attribute mapping no live directory user carries. The
+  -- group name is still returned so the mapping can be recognised.
+  (
+    CASE
+      WHEN drm.source_kind = 'group' THEN
+        dg.id IS NULL OR dg.deleted OR dg.workos_deleted
+      ELSE NOT EXISTS (
+        SELECT 1
+        FROM directory_users AS du
+        WHERE du.organization_id = drm.organization_id
+          AND du.deleted IS FALSE
+          AND du.workos_deleted IS FALSE
+          AND du.attributes ->> drm.attribute_key = drm.attribute_value
+      )
+    END
+  )::boolean AS source_missing,
   drm.role_urn,
   drm.created_at,
   drm.updated_at
@@ -2110,6 +2250,7 @@ type ListDirectoryRoleMappingsRow struct {
 	DirectoryGroupName pgtype.Text
 	AttributeKey       pgtype.Text
 	AttributeValue     pgtype.Text
+	SourceMissing      bool
 	RoleUrn            string
 	CreatedAt          pgtype.Timestamptz
 	UpdatedAt          pgtype.Timestamptz
@@ -2131,6 +2272,7 @@ func (q *Queries) ListDirectoryRoleMappings(ctx context.Context, organizationID 
 			&i.DirectoryGroupName,
 			&i.AttributeKey,
 			&i.AttributeValue,
+			&i.SourceMissing,
 			&i.RoleUrn,
 			&i.CreatedAt,
 			&i.UpdatedAt,
@@ -2722,6 +2864,7 @@ type ListPrincipalGrantsByOrgRow struct {
 
 // Queries for managing principal grants (RBAC).
 // principal_grants is org-scoped (no project_id); every query is scoped to organization_id.
+// Audience reads and replacements skip api_key rows: a key's policy is owned by the keys service.
 // Returns all grant rows for an organization, optionally filtered by principal URN.
 func (q *Queries) ListPrincipalGrantsByOrg(ctx context.Context, arg ListPrincipalGrantsByOrgParams) ([]ListPrincipalGrantsByOrgRow, error) {
 	rows, err := q.db.Query(ctx, listPrincipalGrantsByOrg, arg.OrganizationID, arg.PrincipalUrn)
@@ -2761,6 +2904,7 @@ WHERE organization_id = $1
     'resource_kind', $3::text,
     'resource_id', $4::text
   )
+  AND principal_type <> 'api_key'
 ORDER BY principal_urn
 `
 
@@ -2812,6 +2956,7 @@ WHERE organization_id = $1
     'resource_kind', $3::text
   )
   AND selectors->>'resource_id' = ANY($4::text[])
+  AND principal_type <> 'api_key'
 ORDER BY principal_urn
 `
 

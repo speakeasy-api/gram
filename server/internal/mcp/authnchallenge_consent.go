@@ -29,6 +29,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/consentpage"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
@@ -51,15 +52,8 @@ import (
 //go:embed consent_template.html
 var consentTemplateHTML string
 
-// consentLogoHTML defines the "speakeasyWordmark" template. Kept in its own
-// file because it is generated from the dashboard's GramLogo component and is
-// almost entirely path data.
-//
-//go:embed consent_logo.html
-var consentLogoHTML string
-
 var consentTemplate = template.Must(
-	template.Must(template.New("consent").Parse(consentTemplateHTML)).Parse(consentLogoHTML),
+	template.Must(template.New("consent").Parse(consentTemplateHTML)).Parse(consentpage.LogoTemplate),
 )
 
 // consentScriptData is the consent page's client-side script. It is served
@@ -783,7 +777,7 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		ConsentToolsDeferred:    inventoryDeferred,
 		ValidationDeadlineMS:    validationDeadlineMS,
 		ConnectedCardCount:      connectedCardCount,
-		Styles:                  consentPageStyles,
+		Styles:                  consentpage.Styles,
 		SelectedSessionDuration: selectedSessionDuration(durationOptions),
 		AgentSelectionEnabled:   agentSelectionEnabled,
 		AgentOptions:            agentOptions,
@@ -925,6 +919,10 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		// grant while ignoring the newly introduced agent_id field.
 		return oops.E(oops.CodeBadRequest, nil, "agent approval action and selection do not match").LogError(ctx, logger)
 	}
+	// The credential the grant mints is the selected agent's for an agent
+	// approval, so its upstream client picks are judged by the agent's own
+	// connections.
+	pickState := challengeState
 	if selectedAgentID != "" {
 		selectedAgent, err := s.authorizeConsentAgent(ctx, challengeState, endpoint, selectedAgentID)
 		if err != nil {
@@ -933,6 +931,7 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		// Keep the challenge retryable while the human connects and attaches
 		// required services. Human-owned tokens alone do not authorize an agent.
 		subject := urn.NewAgentSubject(selectedAgent.AgentID)
+		pickState.Subject = &subject
 		agentCtx, err := s.contextForSessionSubject(ctx, endpoint, subject, "", "")
 		if err != nil {
 			return oops.E(oops.CodeUnavailable, err, "resolve selected agent identity").LogWarn(ctx, logger)
@@ -1061,6 +1060,14 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		toolSelection, duration = approval.selection, approval.duration
 	}
 
+	// For each server offering several upstream clients, the one usable card
+	// the credential goes through is recorded as its choice. Read before the
+	// challenge is consumed, so a failure leaves the page retryable.
+	upstreamPicks, err := s.consentUpstreamClientPicks(ctx, endpoint, pickState)
+	if err != nil {
+		return oops.E(oops.CodeUnavailable, err, "read upstream client picks").LogError(ctx, logger)
+	}
+
 	// Atomic GETDEL: a consent approval consumes the authn-challenge state
 	// single-use. Parallel POSTs (e.g. user double-submits) lose the race
 	// and get "not found or expired", so only one grant is ever minted per
@@ -1140,7 +1147,7 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		ToolSelection:               toolSelection,
 		SignInID:                    nil,
 		GatewayPolicy:               toolPolicy,
-		UpstreamClientPicks:         nil,
+		UpstreamClientPicks:         upstreamPicks,
 		CreatedAt:                   time.Now(),
 	}
 	// Only a human subject's own session is linked to its sign-in.
@@ -1484,14 +1491,15 @@ func cardLinks(c remotesessions.Client, ownResource bool) (documentation, policy
 
 // resourceDisplayOwner decides whether a client recorded its RFC 9728
 // display members for a resource this endpoint routes the client's grant
-// to: the single proxied server's upstream, or a meta member claiming the
-// client's authorization server. A client that recorded none owns none.
+// to: the single proxied server's upstream, or a meta member associated with
+// the client. A client that recorded none owns none.
 // Meta member rows load once, on first use, and serve every card.
 type resourceDisplayOwner struct {
 	endpoint *ResolvedMcpEndpoint
 	load     func(ctx context.Context) ([]metamcprepo.ListMetaMCPProxiedMemberResourcesRow, error)
 	loaded   bool
-	// upstreams is each issuer's member resources, keyed by remote_session_issuer_id.
+	// upstreams is each client's associated member resources, keyed by
+	// remote_session_client_id.
 	upstreams map[uuid.UUID][]metamcprepo.ListMetaMCPProxiedMemberResourcesRow
 }
 
@@ -1546,16 +1554,14 @@ func (o *resourceDisplayOwner) owns(ctx context.Context, c remotesessions.Client
 		}
 		o.upstreams = make(map[uuid.UUID][]metamcprepo.ListMetaMCPProxiedMemberResourcesRow, len(rows))
 		for _, row := range rows {
-			if row.RemoteSessionIssuerID.Valid {
-				o.upstreams[row.RemoteSessionIssuerID.UUID] = append(o.upstreams[row.RemoteSessionIssuerID.UUID], row)
-			}
+			o.upstreams[row.RemoteSessionClientID] = append(o.upstreams[row.RemoteSessionClientID], row)
 		}
 		o.loaded = true
 	}
 	// A client a project owns routes only to its own project's servers, so
 	// only they can lend it their resource. A stored gateway's members all
 	// share its project.
-	return slices.ContainsFunc(o.upstreams[c.RemoteSessionIssuerID], func(row metamcprepo.ListMetaMCPProxiedMemberResourcesRow) bool {
+	return slices.ContainsFunc(o.upstreams[c.ID], func(row metamcprepo.ListMetaMCPProxiedMemberResourcesRow) bool {
 		if c.ProjectID.Valid && c.ProjectID.UUID != row.ProjectID {
 			return false
 		}

@@ -442,11 +442,13 @@ WHERE t.project_id = @project_id
       AND tv2.deleted IS FALSE
   );
 
--- name: DeleteAssistantToolsetsByToolset :exec
-DELETE FROM assistant_toolsets
-WHERE toolset_id = @toolset_id AND project_id = @project_id;
-
 -- name: GetToolsetByIDIncludingDeletedFixture :one
 SELECT *
 FROM toolsets
 WHERE id = @id AND project_id = @project_id;
+
+-- name: GetToolsetByMcpSlugAndProjectAndCustomDomain :one
+SELECT * FROM toolsets
+WHERE mcp_slug = @mcp_slug AND project_id = @project_id
+  AND organization_id = @organization_id
+  AND custom_domain_id IS NOT DISTINCT FROM @custom_domain_id AND deleted IS FALSE;

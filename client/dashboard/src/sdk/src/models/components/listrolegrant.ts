@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import { Selector, Selector$inboundSchema } from "./selector.js";
@@ -28,6 +29,8 @@ export const ListRoleGrantScope = {
   McpBlockedWrite: "mcp:blocked_write",
   McpConnect: "mcp:connect",
   McpBlockedConnect: "mcp:blocked_connect",
+  McpAuth: "mcp:auth",
+  McpBlockedAuth: "mcp:blocked_auth",
   EnvironmentRead: "environment:read",
   EnvironmentBlockedRead: "environment:blocked_read",
   EnvironmentWrite: "environment:write",
@@ -62,7 +65,7 @@ export const ListRoleGrantScope = {
 /**
  * The scope slug this grant applies to.
  */
-export type ListRoleGrantScope = ClosedEnum<typeof ListRoleGrantScope>;
+export type ListRoleGrantScope = OpenEnum<typeof ListRoleGrantScope>;
 
 export const SubScopes = {
   OrgRead: "org:read",
@@ -79,6 +82,8 @@ export const SubScopes = {
   McpBlockedWrite: "mcp:blocked_write",
   McpConnect: "mcp:connect",
   McpBlockedConnect: "mcp:blocked_connect",
+  McpAuth: "mcp:auth",
+  McpBlockedAuth: "mcp:blocked_auth",
   EnvironmentRead: "environment:read",
   EnvironmentBlockedRead: "environment:blocked_read",
   EnvironmentWrite: "environment:write",
@@ -110,7 +115,7 @@ export const SubScopes = {
   OrgDeviceAgentSync: "org:device_agent_sync",
   OrgHooksIngest: "org:hooks_ingest",
 } as const;
-export type SubScopes = ClosedEnum<typeof SubScopes>;
+export type SubScopes = OpenEnum<typeof SubScopes>;
 
 export type ListRoleGrant = {
   /**
@@ -132,14 +137,14 @@ export type ListRoleGrant = {
 };
 
 /** @internal */
-export const ListRoleGrantScope$inboundSchema: z.ZodMiniEnum<
-  typeof ListRoleGrantScope
-> = z.enum(ListRoleGrantScope);
+export const ListRoleGrantScope$inboundSchema: z.ZodMiniType<
+  ListRoleGrantScope,
+  unknown
+> = openEnums.inboundSchema(ListRoleGrantScope);
 
 /** @internal */
-export const SubScopes$inboundSchema: z.ZodMiniEnum<typeof SubScopes> = z.enum(
-  SubScopes,
-);
+export const SubScopes$inboundSchema: z.ZodMiniType<SubScopes, unknown> =
+  openEnums.inboundSchema(SubScopes);
 
 /** @internal */
 export const ListRoleGrant$inboundSchema: z.ZodMiniType<

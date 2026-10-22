@@ -2438,8 +2438,7 @@ LEFT JOIN LATERAL (
      AND plugin.organization_id = $3
      AND plugin.deleted IS FALSE
     WHERE membership.deleted IS FALSE
-      AND (($1::text = 'mcp_server' AND (membership.mcp_server_id = server.id
-          OR (membership.toolset_id = server.id AND server.toolset_id = membership.toolset_id)))
+      AND (($1::text = 'mcp_server' AND membership.mcp_server_id = server.id)
         OR ($1::text = 'gateway' AND membership.meta_mcp_server_id = gateway.id))
 ) memberships ON TRUE
 WHERE project.id = $4
@@ -3146,7 +3145,8 @@ func (q *Queries) GetPlatformMCPPluginInventoryItem(ctx context.Context, arg Get
 
 const getPlatformMCPPluginMembershipVersion = `-- name: GetPlatformMCPPluginMembershipVersion :one
 SELECT md5(COALESCE(jsonb_agg(
-  jsonb_build_array(ps.id, ps.sort_order, ps.display_name, ps.policy, ps.toolset_id, ps.mcp_server_id, ps.meta_mcp_server_id)
+  -- NULL holds the retired toolset_id slot so versions stay stable.
+  jsonb_build_array(ps.id, ps.sort_order, ps.display_name, ps.policy, NULL::uuid, ps.mcp_server_id, ps.meta_mcp_server_id)
   ORDER BY ps.sort_order, ps.display_name, ps.id
 )::text, '[]'))::text AS membership_version
 FROM plugin_servers ps
@@ -5932,7 +5932,8 @@ func (q *Queries) ListPlatformMCPPluginInventory(ctx context.Context, arg ListPl
 const listPlatformMCPPluginMemberships = `-- name: ListPlatformMCPPluginMemberships :many
 WITH membership_version AS (
   SELECT md5(COALESCE(jsonb_agg(
-    jsonb_build_array(ps.id, ps.sort_order, ps.display_name, ps.policy, ps.toolset_id, ps.mcp_server_id, ps.meta_mcp_server_id)
+    -- NULL holds the retired toolset_id slot so versions stay stable.
+    jsonb_build_array(ps.id, ps.sort_order, ps.display_name, ps.policy, NULL::uuid, ps.mcp_server_id, ps.meta_mcp_server_id)
     ORDER BY ps.sort_order, ps.display_name, ps.id
   )::text, '[]'))::text AS value
   FROM plugin_servers ps
@@ -5945,11 +5946,12 @@ SELECT
     ps.policy,
     ps.sort_order,
     CASE
-      WHEN ps.mcp_server_id IS NOT NULL OR s.id IS NOT NULL THEN 'mcp_server'
-      WHEN ps.toolset_id IS NOT NULL THEN 'toolset'
+      WHEN ps.mcp_server_id IS NOT NULL THEN 'mcp_server'
       WHEN ps.meta_mcp_server_id IS NOT NULL THEN 'gateway'
+      -- A live toolset-only row lands here until AIM-581 drops plugin_servers.toolset_id.
+      ELSE 'unresolved'
     END::text AS target_kind,
-    COALESCE(ps.toolset_id, ps.mcp_server_id, ps.meta_mcp_server_id) AS target_id,
+    COALESCE(ps.mcp_server_id, ps.meta_mcp_server_id) AS target_id,
     (COALESCE(t.id, s.id, gateway.id) IS NOT NULL)::boolean AS target_resolved,
     COALESCE(ep.slug, t.mcp_slug, gateway_ep.slug, '')::text AS mcp_slug,
     COALESCE(s.visibility <> 'disabled', t.mcp_enabled, gateway.visibility <> 'disabled', FALSE)::boolean AS enabled,
@@ -5960,12 +5962,11 @@ JOIN plugins p
   ON p.id = ps.plugin_id
   AND p.deleted IS FALSE
 LEFT JOIN mcp_servers s
-  ON s.id = COALESCE(ps.mcp_server_id, ps.toolset_id)
+  ON s.id = ps.mcp_server_id
   AND s.project_id = p.project_id
   AND s.deleted IS FALSE
-  AND (ps.mcp_server_id IS NOT NULL OR (s.toolset_id = ps.toolset_id AND s.visibility <> 'disabled'))
 LEFT JOIN toolsets t
-  ON t.id = COALESCE(ps.toolset_id, CASE WHEN s.toolset_id = s.id THEN s.id END)
+  ON t.id = (CASE WHEN s.toolset_id = s.id THEN s.id END)
   AND t.project_id = p.project_id
   AND t.deleted IS FALSE
 LEFT JOIN meta_mcp_servers gateway
@@ -6073,8 +6074,8 @@ SELECT
     ps.display_name,
     ps.policy,
     ps.sort_order,
-    (ps.toolset_id IS NOT NULL AND s.id IS NULL)::boolean AS toolset_backed,
     (ps.meta_mcp_server_id IS NOT NULL)::boolean AS gateway_backed,
+    (ps.mcp_server_id IS NULL AND ps.meta_mcp_server_id IS NULL)::boolean AS unresolved,
     COALESCE(ep.slug, t.mcp_slug, gateway_ep.slug, '')::text AS mcp_slug,
     COALESCE(s.visibility <> 'disabled', t.mcp_enabled, gateway.visibility <> 'disabled', FALSE)::boolean AS enabled
 FROM plugin_servers ps
@@ -6082,12 +6083,11 @@ JOIN plugins p
   ON p.id = ps.plugin_id
   AND p.deleted IS FALSE
 LEFT JOIN mcp_servers s
-  ON s.id = COALESCE(ps.mcp_server_id, ps.toolset_id)
+  ON s.id = ps.mcp_server_id
   AND s.project_id = p.project_id
   AND s.deleted IS FALSE
-  AND (ps.mcp_server_id IS NOT NULL OR (s.toolset_id = ps.toolset_id AND s.visibility <> 'disabled'))
 LEFT JOIN toolsets t
-  ON t.id = COALESCE(ps.toolset_id, CASE WHEN s.toolset_id = s.id THEN s.id END)
+  ON t.id = (CASE WHEN s.toolset_id = s.id THEN s.id END)
   AND t.project_id = p.project_id
   AND t.deleted IS FALSE
 LEFT JOIN meta_mcp_servers gateway
@@ -6128,16 +6128,15 @@ type ListPlatformMCPPluginServersRow struct {
 	DisplayName   string
 	Policy        string
 	SortOrder     int32
-	ToolsetBacked bool
 	GatewayBacked bool
+	Unresolved    bool
 	McpSlug       string
 	Enabled       bool
 }
 
 // Member-facing compatibility projection. It deliberately omits membership and
 // backend IDs, which are administrative identity and must not cross this path.
-// A toolset-keyed row reads through its enabled canonical wrapper (same id) when one exists;
-// a server-keyed canonical wrapper still falls back to its toolset's MCP slug.
+// A canonical wrapper with no endpoint falls back to its toolset's MCP slug.
 func (q *Queries) ListPlatformMCPPluginServers(ctx context.Context, arg ListPlatformMCPPluginServersParams) ([]ListPlatformMCPPluginServersRow, error) {
 	rows, err := q.db.Query(ctx, listPlatformMCPPluginServers,
 		arg.PluginID,
@@ -6157,8 +6156,8 @@ func (q *Queries) ListPlatformMCPPluginServers(ctx context.Context, arg ListPlat
 			&i.DisplayName,
 			&i.Policy,
 			&i.SortOrder,
-			&i.ToolsetBacked,
 			&i.GatewayBacked,
+			&i.Unresolved,
 			&i.McpSlug,
 			&i.Enabled,
 		); err != nil {
@@ -6699,7 +6698,6 @@ membership AS (
     SELECT
         plugin_server.id AS membership_id,
         plugin_server.mcp_server_id,
-        plugin_server.toolset_id,
         plugin.slug AS plugin_slug,
         plugin_server.display_name
     FROM plugins AS plugin
@@ -6717,16 +6715,6 @@ server_membership AS (
         membership.display_name
     FROM membership
     WHERE membership.mcp_server_id IS NOT NULL
-    UNION ALL
-    SELECT
-        server.id AS server_id,
-        membership.membership_id,
-        membership.plugin_slug,
-        membership.display_name
-    FROM server
-    JOIN membership
-      ON membership.toolset_id = server.toolset_id
-    WHERE server.hosts_toolset
 )
 SELECT
     server.id AS mcp_server_id,
@@ -6762,13 +6750,9 @@ type ListPlatformMCPServerIdentitiesRow struct {
 // slug, name, hosted toolset slug, and each plugin membership's plugin slug and
 // display name (the key the plugin's mcp.json ships it under). One row per
 // (server, membership); a server with no membership yields one row with empty
-// plugin columns. Hosted servers are also reached through memberships attached
-// by toolset, so those memberships, and the toolset slug, belong to the
-// toolset's hosting server: its canonical row (id = toolset id), or every
-// server fronting it when it has none. Memberships are gathered from the
-// project's live plugins through the (plugin_id, backend) indexes, one arm per
-// backend kind: a live membership has exactly one backend, so the arms never
-// repeat a row. toolset_shared marks a hosting server whose toolset other live
+// plugin columns. The toolset slug belongs to the toolset's hosting server: its
+// canonical row (id = toolset id), or every server fronting it when it has
+// none. toolset_shared marks a hosting server whose toolset other live
 // servers also front, since their calls carry the same toolset slug.
 func (q *Queries) ListPlatformMCPServerIdentities(ctx context.Context, arg ListPlatformMCPServerIdentitiesParams) ([]ListPlatformMCPServerIdentitiesRow, error) {
 	rows, err := q.db.Query(ctx, listPlatformMCPServerIdentities, arg.OrganizationID, arg.ProjectID)

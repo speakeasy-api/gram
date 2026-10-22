@@ -132,24 +132,30 @@ type MCPDistribution struct {
 }
 
 type MCP struct {
-	ID               string            `json:"id"`
-	ProjectID        string            `json:"project_id"`
-	ProjectName      string            `json:"project_name,omitempty"`
-	ProjectSlug      string            `json:"project_slug,omitempty"`
-	Name             string            `json:"name,omitempty"`
-	Slug             string            `json:"slug,omitempty"`
-	Version          string            `json:"version,omitempty"`
-	Visibility       string            `json:"visibility"`
-	EffectiveEnabled bool              `json:"effective_enabled"`
-	Model            string            `json:"model"`
-	BackendKind      MCPBackendKind    `json:"backend_kind"`
-	UpstreamURL      string            `json:"upstream_url,omitempty"`
-	Source           MCPSource         `json:"source"`
-	Registration     *MCPRegistration  `json:"registration,omitempty"`
-	Readiness        MCPReadiness      `json:"readiness"`
-	Distributions    []MCPDistribution `json:"distributions"`
-	Operations       []string          `json:"operations"`
-	DashboardPath    string            `json:"dashboard_path,omitempty"`
+	ID          string `json:"id"`
+	ProjectID   string `json:"project_id"`
+	ProjectName string `json:"project_name,omitempty"`
+	ProjectSlug string `json:"project_slug,omitempty"`
+	Name        string `json:"name,omitempty"`
+	Slug        string `json:"slug,omitempty"`
+	Version     string `json:"version,omitempty"`
+	Visibility  string `json:"visibility"`
+
+	// EffectiveEnabled is true only for recognized enabled visibility values.
+	EffectiveEnabled bool `json:"effective_enabled" jsonschema:"true only when enabled_state is enabled; false may mean disabled or unknown"`
+
+	// EnabledState distinguishes confirmed disabled servers from unknown visibility.
+	EnabledState string `json:"enabled_state" jsonschema:"enabled for private or public visibility; disabled for disabled visibility; unknown for unrecognized visibility"`
+
+	Model         string            `json:"model"`
+	BackendKind   MCPBackendKind    `json:"backend_kind"`
+	UpstreamURL   string            `json:"upstream_url,omitempty"`
+	Source        MCPSource         `json:"source"`
+	Registration  *MCPRegistration  `json:"registration,omitempty"`
+	Readiness     MCPReadiness      `json:"readiness"`
+	Distributions []MCPDistribution `json:"distributions"`
+	Operations    []string          `json:"operations"`
+	DashboardPath string            `json:"dashboard_path,omitempty"`
 
 	// ToolExposure is the tool list this server puts in front of people, and
 	// the version token add_tools_to_mcp and remove_tools_from_mcp take back.
@@ -208,6 +214,7 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 		Version: "0.1.0",
 	}, &mcp.ServerOptions{
 		Instructions: strings.Join([]string{
+			"MCP inventory reports enabled_state as enabled, disabled, or unknown. Treat unknown as indeterminate, never as disabled or enabled. The compatibility boolean effective_enabled is true only for confirmed enabled servers; false alone does not establish that a server is disabled.",
 			"# What this server is",
 			"Speakeasy's AI Control Plane lets an administrator put MCP servers and skills in front of the people in their organization. An MCP server reaches a person in stages: added to a project, its OAuth provider connected, confirmed working, put into a plugin — the bundle of MCP servers and skills you share with people — and published to them. Someone asking to \"set up Slack for support\" is asking for all five. Name the stage you are at in those words. When the organisation has a Shadow MCP policy that blocks unreviewed servers, an organization administrator putting a server of the user's own into a plugin counts as the review: the server is recorded in Shadow MCP as approved for the people who receive it, and the result says so with a link to its page. Later distributions widen that approval to the new people; they never narrow it, and removing the server from a plugin does not revoke it. Tell the administrator that; narrowing or revoking the approval is done by deciding the server's Shadow MCP access here or from that page, and stopping the server reaching people is done by removing it from the plugin or turning it off. Making such a server public stays refused under the policy, because an approval never grants anonymous access.",
 			"# How to talk about it",
@@ -219,7 +226,7 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 			"On the external Platform MCP, when an administrator asks about their own access across servers, inspect the authenticated caller directly; do not search the member directory first. For anyone else, find that exact member before inspecting their access. The managed assistant does not have the organization-wide self-access inspection: do not work around that with member search or inference; direct the user to the dashboard or external Platform MCP. Present available results as a compact table grouped by project, with server, connection access, view, and manage columns. Treat public and disabled as endpoint behavior rather than role grants, preserve partial tool access, and say when the inventory was truncated. Never infer a person's role or MCP access from their ability to use Platform MCP, organization administration, or any other permission, and never reveal or reconstruct another member's unmasked identity.",
 			"For signals intelligence, discover the exact project and reusable signals before authoring a sensor. Sensors are classifiers, not enforcement policies. Choose multi_label for independent labels, exclusive for one choice, or ordered_score for two to ten ordered levels with criteria. Only message.role is available to matching predicates. Use create_sensor or create_signal with confirmed:false, show the normalized configuration, and obtain explicit confirmation before resending the identical proposal with its preview token, expected version and a stable idempotency key. Preview creation IDs are provisional. Update shared signals only after showing every affected sensor. A configuration version covers the whole project, so any concurrent configuration change requires a new preview. Re-read the committed target; configuration readiness does not prove inference is active. Receipt replay reports a historical write and a separate live target. If snapshot_scope is verification_unavailable, the write committed but the fresh read failed; preserve all retry inputs and the key, and do not interpret target_available:false as deletion. Only a current_configuration snapshot can establish target absence. Matching examples use caller-supplied metadata, never stored transcripts or inference. These tools currently admit external users only; never infer a human from assistant attribution.",
 			"Risk policy audiences are positive user/role grants, not exclusions. Read the exact policy and obtain confirmation before changing its audience. Self-removal and effective exclusion are unavailable pending organization-scoped coordination of audience grants; remove_self_from_risk_policy always refuses before database transactions or receipt replay. Never infer a human from managed-assistant attribution. For self-removal requests, do not bypass the refusal with an audience replacement, policy disablement, role change, or risk exclusion. For approved incremental user/ROLE audience changes, external organization admins can use change_risk_policy_audience with confirmed bounded add_principals/remove_principals, a fresh expected_version and a stable idempotency_key. It refuses Everyone deltas and empty resulting audiences and only changes exact positive grants; it does not prove effective exclusion. Managed assistants cannot invoke it or read exact audiences. General audience replacements require confirmation of the complete desired audience and must not be presented as Everyone-except-one or role exceptions. Re-read the policy after a write; receipt replay is historical evidence, not proof of current state.",
-			"Use this server to inspect the selected organization and manage reviewed MCP servers in an explicit project. List reviewed catalogue options and eligible projects, then ask the user to choose one of each before mutating. When no listed project fits, or there is none yet, an organization administrator can create one here instead of leaving for the dashboard: ask for the exact name, confirm it, and create the project, which starts empty. Its slug is derived from the name and cannot be chosen; a rename changes only the display name and keeps the slug. Renaming a project needs only write access to that project, as in the dashboard, not organization administrator access. Inspect the chosen candidate and collect only its declared non-secret configuration values. Normal non-secret URLs may be discussed and returned. Register it privately.",
+			"Use this server to inspect the selected organization and manage reviewed MCP servers in an explicit project. List reviewed catalogue options and eligible projects, then ask the user to choose one of each before mutating. When the organization's default project is the only eligible project, use it without asking: the tools that add, check and connect an MCP server act on it when no project is named, and their result names the project used. When no listed project fits, or there is none yet, an organization administrator can create one here instead of leaving for the dashboard: ask for the exact name, confirm it, and create the project, which starts empty. Its slug is derived from the name and cannot be chosen; a rename changes only the display name and keeps the slug. Renaming a project needs only write access to that project, as in the dashboard, not organization administrator access. Inspect the chosen candidate and collect only its declared non-secret configuration values. Normal non-secret URLs may be discussed and returned. Register it privately.",
 			"Use get_mcp_readiness with the returned registration ID to inspect persisted readiness. If readiness says an upstream authorization server is missing, ask the user to explicitly confirm and then call attach_platform_mcp_identity_provider; the server derives the provider from the persisted reviewed MCP source and returns its non-secret provider_url plus an Inspect authorization_url for the user to use Connect or Authorize. Immediately present authorization_url as the exact clickable link—never say a link is above or ask the user to confirm an unspecified authorization action.",
 			"Never request or accept OAuth codes, tokens, client secrets, passwords, API keys, or secret headers in chat. The registration dashboard_setup_url is the Authentication settings fallback, not the authorization page. Force a fresh readiness check after user authorization.",
 			"Setup also decides which MCP clients may sign in to the new server: read get_mcp_client_admission, explain in plain words which apps that lets in, and only change it with set_mcp_client_admission after the user explicitly confirms.",
@@ -227,9 +234,10 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 			"To remove existing plugin content, use remove_plugin_server with exact project, plugin and membership IDs after explicit confirmation. This changes distribution only, never server access. remove_mcp_from_plugin remains limited to undoing this connection's onboarding distribution. Re-read the plugin and distinguish a publication update from installed-client refresh.",
 			"When a member wants one connection for every MCP server they can reach across the organization, call get_my_organization_gateway and give them its url (the Organization Gateway) to add to their MCP client; the Organization Gateway page under MCP Servers has per-client install steps. It lists no servers itself; once connected, the gateway shows the servers their own access reaches. If it is unavailable, relay its next_action as written.",
 			"To change an existing MCP server or gateway address or network access, first read its exact connection settings in the selected project. Show the current and proposed address or mode, and wait for explicit confirmation before changing it. Re-read that same target afterwards. A publication request means the plugin update was requested, not that its packages or downstream users have converged; verify the publication evidence before reporting completion.",
-			"Before moving any MCP server or gateway to dual or private_only, call get_network_ingress. If ready_for_private_access is false, report its next_action and present its exact setup_url instead of attempting the change; Tailscale credentials are entered only in the dashboard, never in chat. Private access restricts who can reach the AI Control Plane endpoint over the organization's tailnet; it does not change where the upstream MCP server is hosted.",
+			"Before moving any MCP server or gateway to dual or private_only, call get_network_ingress. If ready_for_private_access is false, report its next_action instead of attempting the change. Present its exact setup_url only for configure_ingress_in_dashboard, add_credentials_in_dashboard, enable_ingress_in_dashboard, or repair_ingress_in_dashboard. For wait_for_ingress, wait and call get_network_ingress again. For request_private_networking or contact_support_for_unsupported_provider, contact Speakeasy support without presenting the dashboard setup URL. Tailscale credentials are entered only in the dashboard, never in chat. Private access restricts who can reach the AI Control Plane endpoint over the organization's tailnet; it does not change where the upstream MCP server is hosted.",
 			"Use upgrade_assistant_workload_identity only when the user explicitly asks to give an assistant an agent. Ask whether to create a new agent or use an existing agent of the project, name the exact project, assistant, and agent choice, and wait for confirmation. Say that a new agent starts with access to every MCP server and skill in that project and to administering this assistant, that an existing agent keeps its policy and gains administration of this assistant, and that either can be narrowed afterwards like any other agent. Never upgrade implicitly, and never treat an ACTIVE identity state as permission to run. Repeating the upgrade is safe, but it keeps the existing agent: it does not replace an agent that was suspended, revoked, or deleted.",
 			"Which tools an MCP server puts in front of people is a separate decision from which plugin carries the server. Pushing a new tool to a project does not put it on any server. To expose one, list the project's tools, read the exact server, and then add the named tools to it after the user confirms the exact server and tools. Say before acting that everyone holding a plugin that carries the server gets the change immediately, and name those plugins. Removing a tool takes it away from those same people. Never guess a tool from its name; use the exact one the project's tool list returned, and if a tool is missing from that list, say the deployment that produces it has not finished rather than adding something else. When no existing server in the project fits, offer to create one from the project's function tools instead: ask unconfirmed first, show the project, the new server's name, what that unconfirmed call previews and the exact tools, wait for explicit confirmation, then create it. A new server reaches nobody until it is put into a plugin, except an organization's first server, which joins the project's Default plugin and reaches everyone holding it: say which from the preview before confirming and from the result afterwards.",
+			"Redeployment is a whole-project snapshot operation, not a restart of an individual server. Use redeploy_deployment with confirmed:false to preview the exact project, source and active deployment, then explain that all sources are cloned and an older snapshot can roll back newer tools. Obtain explicit confirmation before resending its IDs, expected active ID and the same idempotency key with confirmed:true. After a timeout keep the key unchanged; a committed clone may already exist. Report only the returned observed status and verification, never infer readiness from creation. This workflow is available to authorized external users only, not to managed assistants.",
 			"Creating a data export is a mutation: first show the exact project, endpoint, data source, enabled state, and sensitive-data policy, then ask for explicit confirmation. Never request or accept authorization header values in chat; create the export without headers and send the user to the returned management URL to add authentication securely.",
 			"When an administrator describes a risk in their own words, call suggest_risk_policy with that description before choosing detectors yourself; list_risk_presets explains the presets it draws from. Present the draft as what it detects, what happens when it fires, how severe findings are, and that it is enabled the moment it is created unless they want it off, then create it with create_risk_policy only after explicit confirmation, passing the preset id and any agreed overrides including enabled. Before creating a policy that blocks, or one whose description names an MCP server or tool, settle where it applies. Without mcp_scope a policy is enforced inside the agent sessions the project observes, including the tool calls those agents make, and is not enforced at an MCP server for callers outside such a session. With mcp_scope it is checked at the gateway before the tool runs, for every caller, and only checks calls through the chosen servers, so it no longer covers the rest of an agent session. Say both plainly and ask which the administrator wants; when they want both, propose two policies and confirm each. For a scoped policy, resolve each named server to its id with find_mcp in the same project, name the exact servers back to the administrator, and pass them as mcp_scope. Only flag and block are available on a scoped policy, and drafts or presets with can_scope_to_mcp false cannot be scoped. Read the result, then call get_risk_policy with the returned policy id and confirm the stored policy matches what the administrator approved.",
 			"Pausing or resuming a data export changes only whether one route sends data; nothing about its destination or data source changes, and editing or deleting a destination or route stays in the dashboard. Name the exact project and route from the current data export list and wait for explicit confirmation. Before pausing, tell the user that data produced while the route is paused is dropped, not held back for later — resuming sends only new data — and that either change takes up to about a minute to reach every relay. Before resuming, show the user the route's data source and destination from the current data export list and pass exactly those back; if the route changed since that read the resume is refused, so read it again and confirm what it points at now. A route with no destination, a deleted destination, or a destination whose stored configuration can no longer be used cannot be resumed; say which and send the user to the dashboard. Speakeasy does not record when a route last delivered, so do not state one.",
@@ -262,6 +270,11 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 
 	registerAssistantIdentityTool(reg, assistantIdentity)
 	registerSignalTools(reg, signalAuthoring)
+	var redeploy *DeploymentRedeployService
+	if projects, ok := reader.(*PostgresReader); ok {
+		redeploy = projects.deploymentRedeploy
+	}
+	registerDeploymentRedeployTool(reg, redeploy)
 
 	registerReadTools(reg, reader, cursorKeyMaterial)
 	var xaaReadiness *xaaReadinessService
@@ -474,6 +487,7 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 		registerAccessReadTools(reg, accessRead)
 	}
 	registerAccessRoleMutationTools(reg, accessRoleMutations)
+	registerDirectoryReviewTools(reg, accessRead)
 	if !sessionRecall.valid() {
 		registerUnavailableSessionRecallTools(reg)
 	} else {
@@ -503,6 +517,7 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 			Name:        "send_platform_mcp_feedback",
 			Title:       "Send Feedback About This Platform",
 			Description: "Send feedback about this platform. This is not switched on for your organization yet.",
+			Annotations: feedbackAnnotations(),
 		}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeNone}, unavailableTool("platform_mcp_feedback"))
 	} else {
 		registerFeedbackTool(reg, feedback)
@@ -532,7 +547,7 @@ func registerUnavailableCatalogTools(reg *Registrar) {
 			Name:        tool.name,
 			Title:       tool.title,
 			Description: tool.description,
-			Annotations: readOnlyAnnotations(),
+			Annotations: readOnlyOpenWorldAnnotations(),
 		}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, unavailableTool("catalog"))
 	}
 }
@@ -542,7 +557,7 @@ func registerUnavailableCandidateInspectionTool(reg *Registrar) {
 		Name:        "inspect_mcp_candidate",
 		Title:       "Inspect an MCP Server",
 		Description: "Look at one MCP server before adding it. This is not switched on for your organization yet.",
-		Annotations: readOnlyAnnotations(),
+		Annotations: readOnlyOpenWorldAnnotations(),
 	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeNone}, unavailableTool("candidate_inspection"))
 }
 
@@ -551,7 +566,8 @@ func registerUnavailableCatalogRegistrationTool(reg *Registrar) {
 		Name:        "register_catalog_mcp",
 		Title:       "Add a Reviewed MCP Server to a Project",
 		Description: "Add a reviewed MCP server to a project. This is not switched on for your organization yet.",
-	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, unavailableTool("catalog_registration"))
+		Annotations: registrationAnnotations(),
+	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeDefaultable}, unavailableTool("catalog_registration"))
 }
 
 func registerUnavailableRemoteRegistrationTool(reg *Registrar) {
@@ -559,7 +575,8 @@ func registerUnavailableRemoteRegistrationTool(reg *Registrar) {
 		Name:        "register_remote_mcp",
 		Title:       "Add Your Own MCP Server to a Project",
 		Description: "Add an MCP server of your own to a project. This is not switched on for your organization yet.",
-	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, unavailableTool("direct_remote_registration"))
+		Annotations: registrationAnnotations(),
+	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeDefaultable}, unavailableTool("direct_remote_registration"))
 }
 
 func registerUnavailableLifecycleMetadataTool(reg *Registrar) {
@@ -567,6 +584,7 @@ func registerUnavailableLifecycleMetadataTool(reg *Registrar) {
 		Name:        "update_mcp_metadata",
 		Title:       "Rename an MCP Server",
 		Description: "Rename one MCP server. This is not switched on for your organization yet.",
+		Annotations: writeAnnotations(false, true, false),
 	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, unavailableTool("mcp_lifecycle_metadata"))
 }
 
@@ -575,6 +593,7 @@ func registerUnavailableSetupHandoffTool(reg *Registrar) {
 		Name:        "get_setup_handoff",
 		Title:       "Open Setup in the Dashboard",
 		Description: "Open the dashboard to finish setting up an MCP server. This is not switched on for your organization yet.",
+		Annotations: setupHandoffAnnotations(),
 	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, unavailableTool("setup_handoff"))
 }
 
@@ -584,15 +603,17 @@ func registerUnavailableTools(reg *Registrar) {
 		title       string
 		description string
 		feature     string
+		annotations *mcp.ToolAnnotations
 	}{
 
-		{"distribute_mcp_to_plugin", "Add an MCP Server to a Plugin", "Give an MCP server to one plugin, so the people it reaches get it. This is not switched on for your organization yet.", "plugin_distribution"},
-		{"remove_mcp_from_plugin", "Remove an MCP Server from a Plugin", "Take an MCP server back out of one plugin. This is not switched on for your organization yet.", "plugin_distribution"},
+		{"distribute_mcp_to_plugin", "Add an MCP Server to a Plugin", "Give an MCP server to one plugin, so the people it reaches get it. This is not switched on for your organization yet.", "plugin_distribution", distributeMCPToPluginAnnotations()},
+		{"remove_mcp_from_plugin", "Remove an MCP Server from a Plugin", "Take an MCP server back out of one plugin. This is not switched on for your organization yet.", "plugin_distribution", removeMCPFromPluginAnnotations()},
 	} {
 		addTool(reg, &mcp.Tool{
 			Name:        tool.name,
 			Title:       tool.title,
 			Description: tool.description,
+			Annotations: tool.annotations,
 		}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}, unavailableTool(tool.feature))
 	}
 }
@@ -602,16 +623,22 @@ func registerUnavailableReadinessTools(reg *Registrar) {
 		name        string
 		title       string
 		description string
+		annotations *mcp.ToolAnnotations
 	}{
-		{"get_mcp_readiness", "Check If an MCP Server Is Working", "Check whether an MCP server is working. This is not switched on for your organization yet."},
-		{"get_mcp_repair_plan", "What to Fix on an MCP Server", "See what to fix on an MCP server that is not working. This is not switched on for your organization yet."},
+		{"get_mcp_readiness", "Check If an MCP Server Is Working", "Check whether an MCP server is working. This is not switched on for your organization yet.", readOnlyOpenWorldAnnotations()},
+		{"get_mcp_repair_plan", "What to Fix on an MCP Server", "See what to fix on an MCP server that is not working. This is not switched on for your organization yet.", readOnlyAnnotations()},
 	} {
+		// Same project scope as the live registration of each tool.
+		projectScope := ProjectScopeExplicit
+		if tool.name == "get_mcp_readiness" {
+			projectScope = ProjectScopeDefaultable
+		}
 		addTool(reg, &mcp.Tool{
 			Name:        tool.name,
 			Title:       tool.title,
 			Description: tool.description,
-			Annotations: readOnlyAnnotations(),
-		}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, unavailableTool("mcp_readiness"))
+			Annotations: tool.annotations,
+		}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: projectScope}, unavailableTool("mcp_readiness"))
 	}
 }
 
@@ -643,6 +670,8 @@ func operationBudgetToolResult(err error) (*mcp.CallToolResult, bool) {
 		result = operationBudgetResult{Code: "conflict", Message: "That MCP server conflicts with something already set up in this project."}
 	case errors.Is(err, ErrTargetIneligible):
 		result = operationBudgetResult{Code: "ineligible_project", Message: "That project is not available for MCP setup. Check the project slug and try again."}
+	case errors.Is(err, ErrDefaultProjectNotFound):
+		result = defaultProjectNotFoundResult
 	default:
 		return nil, false
 	}
@@ -671,6 +700,32 @@ func unavailableTool(feature string) mcp.ToolHandlerFor[map[string]any, featureU
 	}
 }
 
+// defaultProjectSlug is the organization's literal default project: the one a
+// ProjectScopeDefaultable tool acts on when the caller names no project.
+const defaultProjectSlug = "default"
+
+// ErrDefaultProjectNotFound is a ProjectScopeDefaultable call that named no
+// project in an organization that has no default project.
+var ErrDefaultProjectNotFound = errors.New("platform mcp default project not found")
+
+var defaultProjectNotFoundResult = operationBudgetResult{Code: "default_project_not_found", Message: "No project was named, and this organization has no default project to use instead. Call list_projects, ask the user to choose one, and name it."}
+
+// projectSlugOrDefault returns projectSlug when the caller named one, and
+// otherwise the slug of the organization's default project.
+func projectSlugOrDefault(ctx context.Context, projects SkillProjectResolver, organizationID, projectSlug string) (string, error) {
+	if projectSlug != "" {
+		return projectSlug, nil
+	}
+	project, err := projects.ResolveProject(ctx, organizationID, defaultProjectSlug)
+	if errors.Is(err, ErrRegistrationInvalid) {
+		return "", ErrDefaultProjectNotFound
+	}
+	if err != nil {
+		return "", fmt.Errorf("resolve platform mcp default project: %w", err)
+	}
+	return project.Slug, nil
+}
+
 func principalFromToolContext(ctx context.Context) (Principal, error) {
 	principal, ok := PrincipalFromContext(ctx)
 	if !ok {
@@ -679,8 +734,49 @@ func principalFromToolContext(ctx context.Context) (Principal, error) {
 	return principal, nil
 }
 
+// Every tool states readOnlyHint, destructiveHint, and openWorldHint from its
+// real behaviour. Speakeasy reads an unset hint as undeclared, so a tool must
+// not leave one to the MCP defaults. A tool is open world only when its
+// handler reaches a host outside Speakeasy.
 func readOnlyAnnotations() *mcp.ToolAnnotations {
-	return &mcp.ToolAnnotations{ReadOnlyHint: true}
+	return &mcp.ToolAnnotations{Title: "", ReadOnlyHint: true, DestructiveHint: new(false), IdempotentHint: false, OpenWorldHint: new(false)}
+}
+
+// readOnlyOpenWorldAnnotations is for a read-only tool whose handler reaches a
+// host outside Speakeasy, such as a registry or the user's own MCP server.
+func readOnlyOpenWorldAnnotations() *mcp.ToolAnnotations {
+	return &mcp.ToolAnnotations{Title: "", ReadOnlyHint: true, DestructiveHint: new(false), IdempotentHint: false, OpenWorldHint: new(true)}
+}
+
+// writeAnnotations is for a tool that changes state.
+func writeAnnotations(destructive, idempotent, openWorld bool) *mcp.ToolAnnotations {
+	return &mcp.ToolAnnotations{Title: "", ReadOnlyHint: false, DestructiveHint: new(destructive), IdempotentHint: idempotent, OpenWorldHint: new(openWorld)}
+}
+
+func feedbackAnnotations() *mcp.ToolAnnotations {
+	return writeAnnotations(false, true, false)
+}
+
+// registrationAnnotations is for register_catalog_mcp and register_remote_mcp,
+// which reach the registry or the user's MCP server.
+func registrationAnnotations() *mcp.ToolAnnotations {
+	return writeAnnotations(false, true, true)
+}
+
+// setupHandoffAnnotations is for get_setup_handoff. A single-use handoff
+// writes a new handoff row, revokes the caller's earlier active handoffs, and
+// records an audit event. The handler also checks the catalogue entry.
+func setupHandoffAnnotations() *mcp.ToolAnnotations {
+	return writeAnnotations(true, false, true)
+}
+
+// The plugin distribution tools publish to GitHub before they return.
+func distributeMCPToPluginAnnotations() *mcp.ToolAnnotations {
+	return writeAnnotations(false, true, true)
+}
+
+func removeMCPFromPluginAnnotations() *mcp.ToolAnnotations {
+	return writeAnnotations(true, true, true)
 }
 
 func boundedLimit(limit int) int {

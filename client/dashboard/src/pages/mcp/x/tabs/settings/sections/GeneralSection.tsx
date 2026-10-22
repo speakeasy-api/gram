@@ -1,3 +1,5 @@
+import { isKnownEnumValue } from "@/lib/enum";
+import { UpdateMcpServerFormVisibility as KnownUpdateMcpServerFormVisibility } from "@gram/client/models/components/updatemcpserverform.js";
 import { useMcpMetadataMetadataForm } from "@/components/mcp_install_page/useMcpMetadataForm";
 import { RequireScope } from "@/components/require-scope";
 import {
@@ -138,7 +140,12 @@ function GeneralSectionContent({
   const dirty = nameDirty || metadataForm.brandingDirty || upstreamDirty;
   const saving =
     update.isPending || metadataForm.isLoading || !!upstream?.pending;
+  const supportsEditing = isKnownEnumValue(
+    KnownUpdateMcpServerFormVisibility,
+    mcpServer.visibility,
+  );
   const saveDisabled =
+    !supportsEditing ||
     !dirty ||
     trimmedDraft === "" ||
     nameTooLong ||
@@ -147,6 +154,13 @@ function GeneralSectionContent({
     (!!upstream?.dirty && upstream.invalid);
 
   const handleSave = async () => {
+    if (
+      !isKnownEnumValue(
+        KnownUpdateMcpServerFormVisibility,
+        mcpServer.visibility,
+      )
+    )
+      return;
     try {
       if (metadataForm.brandingDirty) {
         await metadataForm.saveAsync();
@@ -272,6 +286,11 @@ function GeneralSectionContent({
               {upstream ? <UpstreamUrlField upstream={upstream} /> : null}
             </div>
           </div>
+          {!supportsEditing && (
+            <FieldDescription>
+              Refresh the page before changing this server’s settings.
+            </FieldDescription>
+          )}
           {metadataUnresolved && !metadataResult.isLoading && (
             <FieldDescription className="text-destructive text-xs">
               Couldn't load current branding settings. Refresh the page before

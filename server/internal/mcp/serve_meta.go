@@ -26,6 +26,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/externalmcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/httpheaders"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcprequests"
@@ -67,6 +68,10 @@ type metaGateContext struct {
 	// tokens, for an organization gateway whose members span projects. Read
 	// both through memberTokens.
 	projectTokens *projectTokenCache
+	// memberChoices, when serving reads credential choices, routes each
+	// proxied member through the client the credential chose for it, in
+	// place of tokens and projectTokens.
+	memberChoices *memberChoices
 	// userSessionIssuerID is the gated endpoint's issuer; uuid.Nil when ungated.
 	userSessionIssuerID uuid.UUID
 	// connectRoot is the gateway's root URL, under which each member has a
@@ -183,6 +188,7 @@ func (s *Service) serveResolvedMetaMCPEndpoint(
 
 	var gateTokens map[uuid.UUID]remotesessions.UpstreamToken
 	var gateProjectTokens *projectTokenCache
+	var gateMemberChoices *memberChoices
 	var gatePolicy *toolfilter.SessionPolicy
 	switch {
 	case !metaServer.UserSessionIssuerID.Valid:
@@ -196,6 +202,10 @@ func (s *Service) serveResolvedMetaMCPEndpoint(
 		ctx = newCtx
 		r = r.WithContext(ctx)
 		gateProjectTokens = s.newOrganizationGatewayTokens(authentication)
+		gateMemberChoices, err = s.newMemberChoices(ctx, authentication)
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "load upstream client choices").LogError(ctx, logger)
+		}
 		gatePolicy = toolSelection
 	default:
 		if resolvedEndpoint == nil {
@@ -205,13 +215,28 @@ func (s *Service) serveResolvedMetaMCPEndpoint(
 			}
 			resolvedEndpoint = built
 		}
-		newCtx, tokens, toolSelection, err := s.ApplyIssuerGate(ctx, w, httpheaders.AuthorizationBearerToken(r), s.BaseURLForRequest(r), resolvedEndpoint)
+		newCtx, authentication, toolSelection, err := s.authenticateIssuerGate(ctx, w, httpheaders.AuthorizationBearerToken(r), s.BaseURLForRequest(r), resolvedEndpoint)
 		if err != nil {
 			return fmt.Errorf("apply issuer gate: %w", err)
 		}
 		ctx = newCtx
 		r = r.WithContext(ctx)
-		gateTokens = tokens
+		gateMemberChoices, err = s.newMemberChoices(ctx, authentication)
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "load upstream client choices").LogError(ctx, logger)
+		}
+		if gateMemberChoices != nil {
+			// Proxied members resolve only their chosen clients, so the
+			// issuer's other clients resolve lazily, for hosted members that
+			// need them, and an unrelated broken one blocks nothing else.
+			gateProjectTokens = s.newOrganizationGatewayTokens(authentication)
+		} else {
+			tokens, err := s.resolveIssuerGateAccessTokens(ctx, w, authentication)
+			if err != nil {
+				return fmt.Errorf("apply issuer gate: %w", err)
+			}
+			gateTokens = tokens
+		}
 		gatePolicy = toolSelection
 	}
 	if prepared.empty() {
@@ -242,6 +267,7 @@ func (s *Service) serveResolvedMetaMCPEndpoint(
 		organizationID:      metaServer.OrganizationID,
 		tokens:              gateTokens,
 		projectTokens:       gateProjectTokens,
+		memberChoices:       gateMemberChoices,
 		// Uninitialized when ungated, which disables identity chaining.
 		userSessionIssuerID: metaServer.UserSessionIssuerID.UUID,
 		connectRoot:         connectRoot,
@@ -493,6 +519,17 @@ func (s *Service) listMetaServerTools(ctx context.Context, logger *slog.Logger, 
 			Annotations: nil,
 			Meta:        nil,
 		})
+		// Only inspection tools are read-only; execute_tool can dispatch writes.
+		switch tool.Name {
+		case metamcp.ToolListServers, metamcp.ToolDescribeServer, metamcp.ToolDescribeTools, metamcp.ToolConnectionStatus:
+			tools[len(tools)-1].Annotations = &externalmcp.ToolAnnotations{
+				Title:           "",
+				ReadOnlyHint:    new(true),
+				DestructiveHint: nil,
+				IdempotentHint:  nil,
+				OpenWorldHint:   nil,
+			}
+		}
 		if tool.Name == metamcp.ToolConnectionStatus {
 			tools[len(tools)-1].Meta = map[string]any{
 				"ui":             map[string]any{"resourceUri": metamcp.ConnectionStatusResourceURI},

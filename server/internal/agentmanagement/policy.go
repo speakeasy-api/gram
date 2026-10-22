@@ -270,11 +270,13 @@ func policySelector(input *gen.AgentPolicySelector) authz.Selector {
 		authz.SelectorKeyResourceID:   input.ResourceID,
 	}
 	for key, value := range map[string]*string{
-		authz.SelectorKeyDisposition:    input.Disposition,
-		authz.SelectorKeyTool:           input.Tool,
-		authz.SelectorKeyProjectID:      input.ProjectID,
-		authz.SelectorKeyServerURL:      input.ServerURL,
-		authz.SelectorKeyServerIdentity: input.ServerIdentity,
+		authz.SelectorKeyDisposition:     input.Disposition,
+		authz.SelectorKeyTool:            input.Tool,
+		authz.SelectorKeyProjectID:       input.ProjectID,
+		authz.SelectorKeyServerURL:       input.ServerURL,
+		authz.SelectorKeyServerIdentity:  input.ServerIdentity,
+		authz.SelectorKeyClientType:      input.ClientType,
+		authz.SelectorKeyConnectionOwner: input.ConnectionOwner,
 	} {
 		if value != nil {
 			selector[key] = *value
@@ -296,20 +298,24 @@ func policyGrantView(row policyGrantRow) (*gen.AgentPolicyGrant, error) {
 
 func policySelectorView(selector authz.Selector) *gen.AgentPolicySelector {
 	result := &gen.AgentPolicySelector{
-		ResourceKind:   selector[authz.SelectorKeyResourceKind],
-		ResourceID:     selector[authz.SelectorKeyResourceID],
-		Disposition:    nil,
-		Tool:           nil,
-		ProjectID:      nil,
-		ServerURL:      nil,
-		ServerIdentity: nil,
+		ResourceKind:    selector[authz.SelectorKeyResourceKind],
+		ResourceID:      selector[authz.SelectorKeyResourceID],
+		Disposition:     nil,
+		Tool:            nil,
+		ProjectID:       nil,
+		ServerURL:       nil,
+		ServerIdentity:  nil,
+		ClientType:      nil,
+		ConnectionOwner: nil,
 	}
 	for key, target := range map[string]**string{
-		authz.SelectorKeyDisposition:    &result.Disposition,
-		authz.SelectorKeyTool:           &result.Tool,
-		authz.SelectorKeyProjectID:      &result.ProjectID,
-		authz.SelectorKeyServerURL:      &result.ServerURL,
-		authz.SelectorKeyServerIdentity: &result.ServerIdentity,
+		authz.SelectorKeyDisposition:     &result.Disposition,
+		authz.SelectorKeyTool:            &result.Tool,
+		authz.SelectorKeyProjectID:       &result.ProjectID,
+		authz.SelectorKeyServerURL:       &result.ServerURL,
+		authz.SelectorKeyServerIdentity:  &result.ServerIdentity,
+		authz.SelectorKeyClientType:      &result.ClientType,
+		authz.SelectorKeyConnectionOwner: &result.ConnectionOwner,
 	} {
 		if value, ok := selector[key]; ok {
 			value := value

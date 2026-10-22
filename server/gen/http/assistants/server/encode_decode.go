@@ -2201,6 +2201,7 @@ func marshalTypesAssistantToAssistantResponseBody(v *types.Assistant) *Assistant
 		Instructions:    v.Instructions,
 		WarmTTLSeconds:  v.WarmTTLSeconds,
 		MaxConcurrency:  v.MaxConcurrency,
+		RuntimeVersion:  v.RuntimeVersion,
 		Status:          v.Status,
 		CreatedAt:       v.CreatedAt,
 		UpdatedAt:       v.UpdatedAt,

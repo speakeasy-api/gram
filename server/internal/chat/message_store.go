@@ -50,8 +50,13 @@ type MessageWrite struct {
 	// UserEmail is the email explicitly observed for the message actor.
 	UserEmail string
 
-	// Provider is the AI provider explicitly reported by ingestion.
+	// Provider preserves producer-specific AI provider attribution for metering
+	// and account context. It does not by itself establish the serving route.
 	Provider string
+
+	// InferenceProvider is the reported inference service or a known first-party
+	// service. Empty means unknown, independently of the account provider.
+	InferenceProvider string
 
 	// HookHostname is the device hostname explicitly reported by hook ingestion.
 	HookHostname string
@@ -77,8 +82,13 @@ type ExternalMessageWrite struct {
 	// UserEmail is the email explicitly observed for the imported message actor.
 	UserEmail string
 
-	// Provider is the AI provider explicitly reported by ingestion.
+	// Provider preserves producer-specific AI provider attribution for metering
+	// and account context. It does not by itself establish the serving route.
 	Provider string
+
+	// InferenceProvider is the reported inference service or a known first-party
+	// service. Empty means unknown, independently of the account provider.
+	InferenceProvider string
 
 	// HookHostname is the device hostname explicitly reported by hook ingestion.
 	HookHostname string

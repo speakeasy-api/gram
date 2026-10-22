@@ -47,8 +47,8 @@ VALUES (@organization_id, @project_id, 'Default', 'default', true)
 RETURNING id;
 
 -- name: RolesInsertEveryonePluginAssignment :exec
-INSERT INTO plugin_assignments (plugin_id, organization_id, principal_urn)
-VALUES (@plugin_id, @organization_id, '*');
+INSERT INTO plugin_assignments (plugin_id, organization_id, principal_urn, install_mode)
+VALUES (@plugin_id, @organization_id, '*', 'available');
 
 -- Every role (the tenant's custom ones, then the global ones) with the plugin
 -- slug it maps to. The slug matches conv.ToSlug, including Go's ASCII-only
@@ -78,8 +78,8 @@ VALUES (@organization_id, @project_id, @name, @slug, true)
 RETURNING id;
 
 -- name: RolesInsertRolePluginAssignment :exec
-INSERT INTO plugin_assignments (plugin_id, organization_id, principal_urn)
-VALUES (@plugin_id, @organization_id, @principal_urn)
+INSERT INTO plugin_assignments (plugin_id, organization_id, principal_urn, install_mode)
+VALUES (@plugin_id, @organization_id, @principal_urn, 'default')
 ON CONFLICT (plugin_id, principal_urn) DO NOTHING;
 
 -- The Read-only Tools role is the disposition case: it reaches every server,
@@ -146,6 +146,39 @@ WHERE organization_id = @organization_id AND slack_user_id IN ('U0DEMO00001', 'U
 -- name: RolesDeleteDirectoryRoleMappings :exec
 DELETE FROM directory_role_mappings WHERE organization_id = @organization_id;
 
+-- name: RolesDeleteDirectoryReviewItems :exec
+DELETE FROM directory_review_items WHERE organization_id = @organization_id;
+
+-- name: RolesDeleteDirectoryReviewOrgState :exec
+DELETE FROM directory_review_org_states WHERE organization_id = @organization_id;
+
+-- name: RolesDeleteDirectoryReviewOptOuts :exec
+DELETE FROM directory_review_attribute_opt_outs WHERE organization_id = @organization_id;
+
+-- Starts directory review now: groups created before this are offered in
+-- bulk setup, groups created after it are raised for review. Review emails
+-- are off: the seeded items are recreated on every reseed, so they would
+-- otherwise email the organization's admins each day.
+-- name: RolesInsertDirectoryReviewOrgState :exec
+INSERT INTO directory_review_org_states (organization_id, baseline_at, emails_disabled_at)
+VALUES (@organization_id::text, clock_timestamp(), clock_timestamp());
+
+-- A group first seen after review started.
+-- name: RolesInsertNewDirectoryGroup :exec
+INSERT INTO directory_groups
+  (organization_id, workos_directory_group_id, name, workos_created_at, workos_updated_at)
+VALUES (@organization_id::text, @group_prefix::text || @slug::text, @name::text, now(), now());
+
+-- name: RolesInsertDirectoryReviewGroupItem :exec
+INSERT INTO directory_review_items (organization_id, kind, directory_group_id, occurrence, state)
+SELECT @organization_id::text, @kind::text, dg.id, 1, 'pending'
+FROM directory_groups dg
+WHERE dg.organization_id = @organization_id::text AND dg.name = @group_name::text;
+
+-- name: RolesInsertDirectoryReviewAttributeItem :exec
+INSERT INTO directory_review_items (organization_id, kind, attribute_key, attribute_value, occurrence, state)
+VALUES (@organization_id::text, @kind::text, @attribute_key::text, @attribute_value::text, 1, 'pending');
+
 -- name: RolesDeleteDirectoryGroupMemberships :exec
 DELETE FROM directory_user_group_memberships WHERE directory_group_id IN
   (SELECT id FROM directory_groups WHERE organization_id = @organization_id);
@@ -164,11 +197,23 @@ INSERT INTO directory_groups
 SELECT @organization_id::text, @group_prefix::text || replace(lower(t), ' ', '-'), t, now(), now()
 FROM (SELECT DISTINCT unnest(@teams::text[]) AS t) g;
 
+-- A group the directory has since deleted. Its mapping stays and grants
+-- nothing, so the mappings page shows it as a missing source.
+-- name: RolesInsertDeletedDirectoryGroup :exec
+INSERT INTO directory_groups
+  (organization_id, workos_directory_group_id, name, workos_created_at,
+   workos_updated_at, workos_deleted_at, deleted_at)
+VALUES (@organization_id::text, @group_prefix::text || @slug::text, @name::text,
+        now() - interval '60 days', now() - interval '3 days',
+        now() - interval '3 days', now() - interval '3 days');
+
 -- name: RolesInsertDirectoryUser :exec
+-- user_id is NULL for directory people who have not signed in yet.
 INSERT INTO directory_users
-  (organization_id, user_id, workos_directory_user_id, email, attributes,
-   workos_created_at, workos_updated_at)
-VALUES (@organization_id, @user_id::text, @workos_directory_user_id, @email::text,
+  (organization_id, user_id, workos_directory_user_id, email, first_name,
+   last_name, attributes, workos_created_at, workos_updated_at)
+VALUES (@organization_id, sqlc.narg(user_id)::text, @workos_directory_user_id,
+        @email::text, sqlc.narg(first_name)::text, sqlc.narg(last_name)::text,
         jsonb_build_object(
           'division_name', @division_name::text,
           'department_name', @department_name::text,

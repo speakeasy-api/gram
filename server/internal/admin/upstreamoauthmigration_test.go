@@ -13,6 +13,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/admin"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/associationbackfill"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/selectionbackfill"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -192,4 +193,72 @@ func TestUpstreamOAuthMigration_RunRequiresStaff(t *testing.T) {
 	var shareable *oops.ShareableError
 	require.ErrorAs(t, err, &shareable)
 	require.Equal(t, oops.CodeUnauthorized, shareable.Code)
+}
+
+func TestUpstreamOAuthMigration_RecordsAuthClientsWithoutGatingMigrated(t *testing.T) {
+	t.Parallel()
+	ctx, svc, db := newTestAdminService(t)
+	ctx = contextvalues.SetAdminAuthContext(ctx, &contextvalues.AdminAuthContext{OIDCSubject: "staff-test"})
+
+	org := newMigrationOrg(t, ctx, db, "migrate-auth-clients")
+	issuer := org.issuer()
+	org.client(issuer)
+	server := org.server(issuer)
+	org.session(issuer)
+
+	run, err := svc.RunUpstreamOAuthMigration(ctx, &gen.RunUpstreamOAuthMigrationPayload{OrganizationID: org.id})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), *run.AuthClientsWritten)
+	require.Equal(t, int64(1), *run.AuthClientLinksWritten)
+	require.Nil(t, run.AuthClientsError)
+	require.True(t, run.Status.Migrated)
+	require.NotNil(t, run.Status.AuthClients)
+	require.True(t, run.Status.AuthClients.Complete)
+	require.Equal(t, int64(1), run.Status.AuthClients.Associations)
+
+	// A missing link leaves auth clients incomplete without touching migrated.
+	require.NoError(t, authclientbackfill.New(db).SoftDeleteServerAuthClientLinksFixture(ctx, server))
+	status, err := svc.GetUpstreamOAuthMigrationStatus(ctx, &gen.GetUpstreamOAuthMigrationStatusPayload{OrganizationID: org.id})
+	require.NoError(t, err)
+	require.True(t, status.Migrated)
+	require.False(t, status.AuthClients.Complete)
+	require.Equal(t, int64(1), status.AuthClients.PendingLinks)
+	require.Empty(t, status.AuthClients.FailedPhases)
+	byKind := map[string]*gen.AdminUpstreamOAuthMigrationAuthClientKind{}
+	for _, kind := range status.AuthClients.Kinds {
+		byKind[kind.Kind] = kind
+	}
+	require.Len(t, byKind, 3, "every kind is reported")
+	require.Equal(t, int64(1), byKind["oauth"].PendingLinks)
+	require.Zero(t, byKind["header"].PendingLinks)
+	require.Zero(t, byKind["ema"].PendingLinks)
+}
+
+func TestUpstreamOAuthMigration_ReportsAnAuthClientRunInProgress(t *testing.T) {
+	t.Parallel()
+	ctx, svc, db := newTestAdminService(t)
+	ctx = contextvalues.SetAdminAuthContext(ctx, &contextvalues.AdminAuthContext{OIDCSubject: "staff-test"})
+	org := newMigrationOrg(t, ctx, db, "auth-clients-in-progress")
+
+	tx, err := db.Begin(ctx) //nolint:glint // notestingrawsql: transaction boundary only; the lock uses a generated SQLc method.
+	require.NoError(t, err)
+	defer func() { _ = tx.Rollback(context.WithoutCancel(ctx)) }()
+	require.NoError(t, authclientbackfill.New(tx).LockOrganizationBackfill(ctx, org.id))
+
+	status, err := svc.GetUpstreamOAuthMigrationStatus(ctx, &gen.GetUpstreamOAuthMigrationStatusPayload{OrganizationID: org.id})
+	require.NoError(t, err)
+	require.NotNil(t, status.AuthClients)
+	require.True(t, status.AuthClients.InProgress)
+	require.False(t, status.AuthClients.Complete)
+
+	run, err := svc.RunUpstreamOAuthMigration(ctx, &gen.RunUpstreamOAuthMigrationPayload{OrganizationID: org.id})
+	require.NoError(t, err)
+	require.NotNil(t, run.AuthClientsError)
+	require.Contains(t, *run.AuthClientsError, "already in progress")
+
+	require.NoError(t, tx.Rollback(ctx))
+	status, err = svc.GetUpstreamOAuthMigrationStatus(ctx, &gen.GetUpstreamOAuthMigrationStatusPayload{OrganizationID: org.id})
+	require.NoError(t, err)
+	require.False(t, status.AuthClients.InProgress)
+	require.Empty(t, status.AuthClients.Warnings)
 }

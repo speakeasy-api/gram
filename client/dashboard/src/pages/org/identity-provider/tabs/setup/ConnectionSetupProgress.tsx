@@ -17,6 +17,7 @@ const CURRENT_STEP: Record<ConnectionStep, number | null> = {
   verify: 2,
   repair: 2,
   connected: null,
+  unknown: null,
 };
 
 export function ConnectionSetupProgress({

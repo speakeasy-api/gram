@@ -436,6 +436,7 @@ func (s *Service) serveConsentProxiedMCP(
 			UpstreamAuth:       upstreamToken.Token,
 			WWWAuthenticate:    "",
 			Selection:          nil,
+			Request:            nil,
 		})
 		if err != nil {
 			return err

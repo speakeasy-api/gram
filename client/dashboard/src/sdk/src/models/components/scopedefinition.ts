@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
@@ -20,6 +21,7 @@ export const ExclusionScope = {
   McpBlockedRead: "mcp:blocked_read",
   McpBlockedWrite: "mcp:blocked_write",
   McpBlockedConnect: "mcp:blocked_connect",
+  McpBlockedAuth: "mcp:blocked_auth",
   EnvironmentBlockedRead: "environment:blocked_read",
   EnvironmentBlockedWrite: "environment:blocked_write",
   SkillBlockedRead: "skill:blocked_read",
@@ -34,7 +36,7 @@ export const ExclusionScope = {
 /**
  * The scope used to store exception rules for this scope.
  */
-export type ExclusionScope = ClosedEnum<typeof ExclusionScope>;
+export type ExclusionScope = OpenEnum<typeof ExclusionScope>;
 
 /**
  * The type of resource this scope applies to.
@@ -50,11 +52,12 @@ export const ResourceType = {
   Chat: "chat",
   Agent: "agent",
   Workload: "workload",
+  McpAuthClient: "mcp_auth_client",
 } as const;
 /**
  * The type of resource this scope applies to.
  */
-export type ResourceType = ClosedEnum<typeof ResourceType>;
+export type ResourceType = OpenEnum<typeof ResourceType>;
 
 /**
  * Unique scope identifier.
@@ -74,6 +77,8 @@ export const Slug = {
   McpBlockedWrite: "mcp:blocked_write",
   McpConnect: "mcp:connect",
   McpBlockedConnect: "mcp:blocked_connect",
+  McpAuth: "mcp:auth",
+  McpBlockedAuth: "mcp:blocked_auth",
   EnvironmentRead: "environment:read",
   EnvironmentBlockedRead: "environment:blocked_read",
   EnvironmentWrite: "environment:write",
@@ -108,7 +113,7 @@ export const Slug = {
 /**
  * Unique scope identifier.
  */
-export type Slug = ClosedEnum<typeof Slug>;
+export type Slug = OpenEnum<typeof Slug>;
 
 /**
  * Whether this scope is a first-class permission or an internal storage/evaluation scope.
@@ -120,7 +125,7 @@ export const ScopeDefinitionVisibility = {
 /**
  * Whether this scope is a first-class permission or an internal storage/evaluation scope.
  */
-export type ScopeDefinitionVisibility = ClosedEnum<
+export type ScopeDefinitionVisibility = OpenEnum<
   typeof ScopeDefinitionVisibility
 >;
 
@@ -152,21 +157,24 @@ export type ScopeDefinition = {
 };
 
 /** @internal */
-export const ExclusionScope$inboundSchema: z.ZodMiniEnum<
-  typeof ExclusionScope
-> = z.enum(ExclusionScope);
+export const ExclusionScope$inboundSchema: z.ZodMiniType<
+  ExclusionScope,
+  unknown
+> = openEnums.inboundSchema(ExclusionScope);
 
 /** @internal */
-export const ResourceType$inboundSchema: z.ZodMiniEnum<typeof ResourceType> = z
-  .enum(ResourceType);
+export const ResourceType$inboundSchema: z.ZodMiniType<ResourceType, unknown> =
+  openEnums.inboundSchema(ResourceType);
 
 /** @internal */
-export const Slug$inboundSchema: z.ZodMiniEnum<typeof Slug> = z.enum(Slug);
+export const Slug$inboundSchema: z.ZodMiniType<Slug, unknown> = openEnums
+  .inboundSchema(Slug);
 
 /** @internal */
-export const ScopeDefinitionVisibility$inboundSchema: z.ZodMiniEnum<
-  typeof ScopeDefinitionVisibility
-> = z.enum(ScopeDefinitionVisibility);
+export const ScopeDefinitionVisibility$inboundSchema: z.ZodMiniType<
+  ScopeDefinitionVisibility,
+  unknown
+> = openEnums.inboundSchema(ScopeDefinitionVisibility);
 
 /** @internal */
 export const ScopeDefinition$inboundSchema: z.ZodMiniType<

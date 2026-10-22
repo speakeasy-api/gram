@@ -9,6 +9,7 @@ import (
 	"github.com/OpenRouterTeam/go-sdk/optionalnullable"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	conversationv1 "github.com/speakeasy-api/gram/infra/gen/gram/conversation/v1"
 	meteringv1 "github.com/speakeasy-api/gram/infra/gen/gram/metering/v1"
 	"github.com/stretchr/testify/require"
 
@@ -147,6 +148,7 @@ func TestCaptureMessage_PropagatesReportedProviderToStorageReading(t *testing.T)
 	s := newCaptureStrategy(t, ti.conn)
 	chatID := uuid.New()
 	response := makeResponse("provider attributed")
+	response.Model = "anthropic/claude-opus-5"
 	response.Provider = "Amazon Bedrock"
 
 	runTurn(
@@ -159,6 +161,15 @@ func TestCaptureMessage_PropagatesReportedProviderToStorageReading(t *testing.T)
 
 	reading := assistantStorageReading(t, ti, chatID, ti.projectID)
 	require.Equal(t, "Amazon Bedrock", reading.GetAttributes()[metering.AttributeProvider])
+	var assistantEvent *conversationv1.MessageEvent
+	for _, event := range conversationMessages(t, ti) {
+		if event.GetRole() == conversationv1.MessageEvent_ROLE_ASSISTANT {
+			assistantEvent = event
+		}
+	}
+	require.NotNil(t, assistantEvent)
+	require.Equal(t, "anthropic", assistantEvent.GetIngestion().GetAttributes()["model_family"])
+	require.Equal(t, "bedrock", assistantEvent.GetIngestion().GetAttributes()["inference_provider"])
 }
 
 func TestCaptureMessage_OmitsUnknownProviderFromStorageReading(t *testing.T) {
@@ -181,6 +192,11 @@ func TestCaptureMessage_OmitsUnknownProviderFromStorageReading(t *testing.T) {
 
 	reading := assistantStorageReading(t, ti, chatID, ti.projectID)
 	require.NotContains(t, reading.GetAttributes(), metering.AttributeProvider)
+	events := conversationMessages(t, ti)
+	require.NotEmpty(t, events)
+	for _, event := range events {
+		require.NotContains(t, event.GetIngestion().GetAttributes(), "inference_provider")
+	}
 }
 
 // Clean append: reload with full history + new message should insert only the

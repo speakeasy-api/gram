@@ -195,7 +195,7 @@ export function IdentityExplainerCallout({
   onDismiss: () => void;
 }): JSX.Element {
   return (
-    <Alert variant="info" alignTop dismissible onDismiss={onDismiss}>
+    <Alert variant="info" dismissible onDismiss={onDismiss}>
       <div className="space-y-3">
         <Text small>
           Users of this server must authenticate as themselves against the

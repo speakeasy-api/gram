@@ -1672,7 +1672,8 @@ RETURNING *;
 -- Access-only sessions instead store NULL or a colon-delimited source marker.
 -- Only the derived capability leaves SQL.
 SELECT tool_selection, expires_at,
-       COALESCE(refresh_token_hash ~ '^[A-Za-z0-9_-]{43}$', false)::boolean AS refreshable
+       COALESCE(refresh_token_hash ~ '^[A-Za-z0-9_-]{43}$', false)::boolean AS refreshable,
+       COALESCE(credential_id, id)::uuid AS credential_id
 FROM user_sessions
 WHERE user_session_issuer_id = @user_session_issuer_id
   AND jti = @jti
@@ -1682,7 +1683,7 @@ WHERE user_session_issuer_id = @user_session_issuer_id
 -- Authoritative serve-path lookup for an agent session's immutable credential
 -- profile. It intentionally bypasses caches so direct session revocation and
 -- expiry remain authoritative on every admission.
-SELECT organization_id, subject_urn, authorizer_user_id, delegated_grants, delegated_grants_version
+SELECT organization_id, subject_urn, authorizer_user_id, delegated_grants, delegated_grants_version, user_session_client_id
 FROM user_sessions
 WHERE user_session_issuer_id = @user_session_issuer_id
   AND jti = @jti
@@ -2368,6 +2369,102 @@ WHERE si.id = @id
   AND si.organization_id = @organization_id
 FOR SHARE OF si;
 
+-- name: BindAssistantWorkloadClient :one
+-- Pin a newly registered client to the current root binding, never infer it
+-- from client metadata or accept a subject supplied at the token endpoint.
+UPDATE user_session_clients c
+SET assistant_trigger_workload_binding_id = tb.id, assistant_runtime_id = r.id, updated_at = clock_timestamp()
+FROM trigger_workload_bindings tb
+JOIN assistant_agent_bindings ab ON ab.id = tb.assistant_binding_id
+  AND ab.organization_id = tb.organization_id AND ab.project_id = tb.project_id
+  AND ab.generation = tb.assistant_binding_generation
+JOIN assistants a ON a.id = ab.assistant_id AND a.project_id = ab.project_id AND a.organization_id = ab.organization_id
+JOIN assistant_runtimes r ON r.assistant_id = a.id AND r.project_id = a.project_id
+JOIN trigger_instances t ON t.id = tb.trigger_id AND t.project_id = tb.project_id AND t.organization_id = tb.organization_id
+WHERE c.id = @client_id AND c.deleted IS FALSE
+  AND c.assistant_trigger_workload_binding_id IS NULL AND c.assistant_runtime_id IS NULL
+  AND r.id = @runtime_id AND r.runtime_version = 3 AND a.runtime_version = 3
+  AND r.deleted IS FALSE AND r.ended IS FALSE AND r.state IN ('starting', 'active')
+  AND c.organization_id = @organization_id
+  AND (c.project_id = @project_id OR c.project_id IS NULL)
+  AND tb.organization_id = @organization_id AND tb.project_id = @project_id
+  AND ab.original_assistant_id = @assistant_id AND tb.original_trigger_id = @trigger_id
+  AND tb.deleted IS FALSE AND ab.deleted IS FALSE AND a.deleted IS FALSE AND a.status = 'active'
+  AND t.deleted IS FALSE AND t.status = 'active' AND t.definition_slug <> 'wake'
+  AND t.target_kind = 'assistant' AND t.target_ref = a.id::text
+RETURNING c.id;
+
+-- name: GetAssistantWorkloadClientBinding :one
+SELECT tb.id AS binding_id, r.id AS runtime_id, ab.original_assistant_id AS assistant_id,
+  tb.original_trigger_id AS trigger_id, tb.original_workload_issuer_id AS workload_issuer_id,
+  tb.subject
+FROM user_session_clients c
+JOIN trigger_workload_bindings tb ON tb.id = c.assistant_trigger_workload_binding_id
+JOIN assistant_agent_bindings ab ON ab.id = tb.assistant_binding_id
+  AND ab.organization_id = tb.organization_id AND ab.project_id = tb.project_id
+  AND ab.generation = tb.assistant_binding_generation
+JOIN assistants a ON a.id = ab.assistant_id AND a.project_id = ab.project_id AND a.organization_id = ab.organization_id
+JOIN assistant_runtimes r ON r.id = c.assistant_runtime_id AND r.assistant_id = a.id AND r.project_id = a.project_id
+JOIN trigger_instances t ON t.id = tb.trigger_id AND t.project_id = tb.project_id AND t.organization_id = tb.organization_id
+WHERE c.id = @client_id AND c.user_session_issuer_id = @user_session_issuer_id
+  AND c.organization_id = @organization_id AND c.deleted IS FALSE
+  AND (c.project_id = @project_id OR c.project_id IS NULL)
+  AND tb.organization_id = @organization_id AND tb.project_id = @project_id
+  AND tb.deleted IS FALSE AND ab.deleted IS FALSE AND a.deleted IS FALSE AND a.status = 'active'
+  AND r.runtime_version = 3 AND a.runtime_version = 3 AND r.deleted IS FALSE AND r.ended IS FALSE
+  AND t.deleted IS FALSE AND t.status = 'active' AND t.definition_slug <> 'wake'
+  AND t.target_kind = 'assistant' AND t.target_ref = a.id::text;
+
+-- name: GetAssistantWorkloadRuntime :one
+-- Trusted worker bootstrap resolves tenancy from the persisted incarnation.
+SELECT r.id, r.assistant_id, r.project_id, a.organization_id
+FROM assistant_runtimes r
+JOIN assistants a ON a.id = r.assistant_id AND a.project_id = r.project_id
+WHERE r.id = @runtime_id AND r.runtime_version = 3 AND a.runtime_version = 3
+  AND r.deleted IS FALSE AND r.ended IS FALSE AND r.state IN ('starting', 'active')
+  AND a.deleted IS FALSE AND a.status = 'active';
+
+-- name: ListAssistantWorkloadRuntimeRoots :many
+SELECT tb.original_trigger_id AS trigger_id
+FROM trigger_workload_bindings tb
+JOIN assistant_agent_bindings ab ON ab.id = tb.assistant_binding_id
+  AND ab.organization_id = tb.organization_id AND ab.project_id = tb.project_id
+  AND ab.generation = tb.assistant_binding_generation
+JOIN trigger_instances t ON t.id = tb.trigger_id AND t.project_id = tb.project_id AND t.organization_id = tb.organization_id
+WHERE tb.project_id = @project_id AND tb.organization_id = @organization_id
+  AND ab.original_assistant_id = @assistant_id AND ab.deleted IS FALSE AND tb.deleted IS FALSE
+  AND t.deleted IS FALSE AND t.status = 'active' AND t.definition_slug <> 'wake'
+  AND t.target_kind = 'assistant' AND t.target_ref = ab.original_assistant_id::text
+ORDER BY tb.original_trigger_id;
+
+-- name: RevokeAssistantRuntimeWorkloadClients :many
+UPDATE user_session_clients c
+SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
+FROM assistant_runtimes r
+WHERE c.assistant_runtime_id = @runtime_id AND r.id = c.assistant_runtime_id
+  AND c.organization_id = @organization_id AND r.project_id = @project_id
+  AND (c.project_id = @project_id OR c.project_id IS NULL) AND c.deleted IS FALSE
+RETURNING c.id;
+
+-- name: GetAssistantRuntimeForWorkloadSession :one
+-- Input comes only from the already authenticated workload context. The caller
+-- locks/rechecks the returned runtime in its wake-creation transaction.
+SELECT r.id AS runtime_id, r.assistant_id, c.id AS client_registration_id
+FROM user_sessions s
+JOIN user_session_clients c ON c.id = s.user_session_client_id AND c.user_session_issuer_id = s.user_session_issuer_id
+JOIN trigger_workload_bindings tb ON tb.id = c.assistant_trigger_workload_binding_id AND tb.organization_id = c.organization_id AND tb.deleted IS FALSE
+JOIN assistant_agent_bindings ab ON ab.id = tb.assistant_binding_id AND ab.organization_id = tb.organization_id AND ab.project_id = tb.project_id AND ab.deleted IS FALSE AND ab.generation = tb.assistant_binding_generation
+JOIN trigger_instances t ON t.id = tb.trigger_id AND t.project_id = tb.project_id AND t.organization_id = tb.organization_id AND t.deleted IS FALSE AND t.status = 'active'
+JOIN assistant_runtimes r ON r.id = c.assistant_runtime_id AND r.project_id = tb.project_id AND r.assistant_id = ab.assistant_id
+JOIN assistants a ON a.id = r.assistant_id AND a.project_id = r.project_id
+WHERE s.jti = @jti AND s.subject_urn = @subject_urn
+  AND s.organization_id = @organization_id AND r.project_id = @project_id
+  AND s.deleted IS FALSE AND s.expires_at > clock_timestamp() AND c.deleted IS FALSE
+  AND r.state IN ('starting', 'active')
+  AND r.runtime_version = 3 AND a.runtime_version = 3 AND r.deleted IS FALSE AND r.ended IS FALSE
+  AND a.deleted IS FALSE AND a.status = 'active' AND a.organization_id = @organization_id
+  AND t.definition_slug <> 'wake' AND t.target_kind = 'assistant' AND t.target_ref = a.id::text;
+
 -- name: RecordUpstreamClientSelections :execrows
 -- Records, for one inbound credential, the upstream OAuth client it uses for
 -- every MCP server it can reach, or an explicit no-auth choice. An existing
@@ -2521,15 +2618,21 @@ WHERE upstream_client_selections.no_auth
 -- One credential's choice for one MCP server, with whether it can still be
 -- used: a chosen client must be live, still associated with the server, and
 -- still bound to the credential's user session issuer, and a no-auth choice
--- holds only while the server has no associated client.
+-- holds only while the server has no associated client. A choice naming a
+-- static_credential or pass_through auth client reads as no-auth, as it did
+-- before the choice was mapped onto auth clients, whatever that client's
+-- state: the typed resolver fails closed on it, this path does not.
 -- An unusable choice is reported as such rather than replaced, so the caller
 -- fails closed instead of switching clients.
+-- ListUpstreamClientSelections repeats the usable expression; the two must
+-- stay identical.
 SELECT sel.remote_session_client_id,
-       sel.no_auth,
+       chosen.remote_session_issuer_id AS remote_session_issuer_id,
+       (sel.no_auth OR headers_only.id IS NOT NULL)::boolean AS no_auth,
        sel.source,
        (
          CASE
-           WHEN sel.no_auth THEN NOT EXISTS (
+           WHEN sel.no_auth OR headers_only.id IS NOT NULL THEN NOT EXISTS (
              SELECT 1
              FROM mcp_server_remote_session_clients AS a
              WHERE a.mcp_server_id = sel.mcp_server_id
@@ -2551,9 +2654,65 @@ SELECT sel.remote_session_client_id,
          END
        )::boolean AS usable
 FROM upstream_client_selections AS sel
+LEFT JOIN remote_session_clients AS chosen
+  ON chosen.id = sel.remote_session_client_id
+LEFT JOIN mcp_auth_clients AS headers_only
+  ON headers_only.id = sel.auth_client_id
+ AND sel.remote_session_client_id IS NULL
+ AND headers_only.organization_id = sel.organization_id
+ AND (headers_only.project_id IS NULL OR headers_only.project_id = sel.project_id)
+ AND headers_only.client_type IN ('static_credential', 'pass_through')
 WHERE sel.credential_kind = @credential_kind::text
   AND sel.credential_id = @credential_id::uuid
   AND sel.mcp_server_id = @mcp_server_id::uuid
+  AND sel.organization_id = @organization_id::text
+  AND sel.deleted IS FALSE;
+
+-- name: ListUpstreamClientSelections :many
+-- GetUpstreamClientSelection for several MCP servers at once, as a gateway
+-- reads its members' choices. Servers without a choice have no row.
+-- The usable expression repeats GetUpstreamClientSelection's; the two must
+-- stay identical, since both callers fail closed on it.
+SELECT sel.mcp_server_id,
+       sel.remote_session_client_id,
+       chosen.remote_session_issuer_id AS remote_session_issuer_id,
+       (sel.no_auth OR headers_only.id IS NOT NULL)::boolean AS no_auth,
+       sel.source,
+       (
+         CASE
+           WHEN sel.no_auth OR headers_only.id IS NOT NULL THEN NOT EXISTS (
+             SELECT 1
+             FROM mcp_server_remote_session_clients AS a
+             WHERE a.mcp_server_id = sel.mcp_server_id
+               AND a.deleted IS FALSE
+           )
+           ELSE EXISTS (
+             SELECT 1
+             FROM mcp_server_remote_session_clients AS a
+             JOIN remote_session_clients AS c
+               ON c.id = a.remote_session_client_id
+              AND c.deleted IS FALSE
+             JOIN remote_session_client_user_session_issuers AS link
+               ON link.remote_session_client_id = a.remote_session_client_id
+              AND link.user_session_issuer_id = @user_session_issuer_id::uuid
+             WHERE a.mcp_server_id = sel.mcp_server_id
+               AND a.remote_session_client_id = sel.remote_session_client_id
+               AND a.deleted IS FALSE
+           )
+         END
+       )::boolean AS usable
+FROM upstream_client_selections AS sel
+LEFT JOIN remote_session_clients AS chosen
+  ON chosen.id = sel.remote_session_client_id
+LEFT JOIN mcp_auth_clients AS headers_only
+  ON headers_only.id = sel.auth_client_id
+ AND sel.remote_session_client_id IS NULL
+ AND headers_only.organization_id = sel.organization_id
+ AND (headers_only.project_id IS NULL OR headers_only.project_id = sel.project_id)
+ AND headers_only.client_type IN ('static_credential', 'pass_through')
+WHERE sel.credential_kind = @credential_kind::text
+  AND sel.credential_id = @credential_id::uuid
+  AND sel.mcp_server_id = ANY(@mcp_server_ids::uuid[])
   AND sel.organization_id = @organization_id::text
   AND sel.deleted IS FALSE;
 
@@ -2647,3 +2806,17 @@ SELECT COUNT(*) FROM user_session_consent_resources
 WHERE project_id = @project_id::uuid
   AND user_session_consent_id = ANY(@consent_ids::uuid[])
   AND deleted IS FALSE;
+
+-- name: GetKitUserSessionIssuerByID :one
+SELECT issuer.*
+FROM user_session_issuers issuer
+LEFT JOIN projects project ON project.id = issuer.project_id
+WHERE issuer.id = @id AND issuer.deleted IS FALSE
+  AND ((issuer.project_id = @project_id::uuid AND project.organization_id = @organization_id::text)
+    OR (issuer.project_id IS NULL AND issuer.organization_id = @organization_id::text));
+
+-- name: ClearAssistantWorkloadClientMarkersForTest :exec
+-- Test fixture: simulate ON DELETE SET NULL cleanup of both binding references.
+UPDATE user_session_clients
+SET assistant_runtime_id = NULL, assistant_trigger_workload_binding_id = NULL
+WHERE id = @client_id AND organization_id = @organization_id;

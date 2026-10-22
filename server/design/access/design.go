@@ -174,6 +174,35 @@ var _ = Service("access", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DirectoryRoleMappings"}`)
 	})
 
+	Method("listDirectoryPeople", func() {
+		Description("List every live directory profile in the active organization with its name, groups and whether it belongs to a member. Requires an authenticated session authorized for org:admin, because it names people who are not members; API keys cannot enumerate it. Attribute values are not returned.")
+		Security(security.Session)
+
+		Payload(func() {
+			Attribute("limit", Int, "Maximum number of people to return.", func() {
+				Default(500)
+				Minimum(1)
+				Maximum(1000)
+			})
+			Attribute("cursor", String, "Cursor for the next page of results.")
+			security.SessionPayload()
+		})
+
+		Result(ListDirectoryPeopleResult)
+
+		HTTP(func() {
+			GET("/rpc/access.listDirectoryPeople")
+			Param("limit")
+			Param("cursor")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listDirectoryPeople")
+		Meta("openapi:extension:x-speakeasy-name-override", "listDirectoryPeople")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DirectoryPeople"}`)
+	})
+
 	Method("syncDirectoryGroups", func() {
 		Description("Fetch the organization's directory groups from WorkOS and save any that are new or changed.")
 		Security(security.ByKey, func() {
@@ -276,6 +305,165 @@ var _ = Service("access", func() {
 		Meta("openapi:operationId", "deleteDirectoryRoleMapping")
 		Meta("openapi:extension:x-speakeasy-name-override", "deleteDirectoryRoleMapping")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DeleteDirectoryRoleMapping", "type": "mutation"}`)
+	})
+
+	Method("previewDirectoryRoleSetup", func() {
+		Description("Propose roles for every live directory group and mappable attribute value, for bulk setup. An unmapped source is proposed one role: the live role whose slug matches the source name, or a new role named after the source. A mapped source is listed with its current roles. Nothing is written. Each item carries a version that applyDirectoryRoleSetup checks to detect changes since the preview; the version authorizes nothing.")
+		Security(security.ByKey, func() {
+			Scope("producer")
+		})
+		Security(security.Session)
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+		})
+
+		Result(DirectoryRoleSetupPreviewResult)
+
+		HTTP(func() {
+			GET("/rpc/access.previewDirectoryRoleSetup")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "previewDirectoryRoleSetup")
+		Meta("openapi:extension:x-speakeasy-name-override", "previewDirectoryRoleSetup")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DirectoryRoleSetupPreview"}`)
+	})
+
+	Method("applyDirectoryRoleSetup", func() {
+		Description("Apply a reviewed bulk setup in one transaction: create the requested new roles and replace each listed source's role set. New roles get no grants unless grant_set is given, in which case every new role in the batch gets exactly that set. If any item's version no longer matches, nothing is written and the request returns conflict; preview again. WorkOS role sync for new roles is requested after commit and reported as requested, not done. Creating roles sets up no plugin distribution.")
+		Security(security.ByKey, func() {
+			Scope("producer")
+		})
+		Security(security.Session)
+
+		Payload(func() {
+			Extend(ApplyDirectoryRoleSetupForm)
+			security.ByKeyPayload()
+			security.SessionPayload()
+		})
+
+		Result(ApplyDirectoryRoleSetupResult)
+
+		HTTP(func() {
+			POST("/rpc/access.applyDirectoryRoleSetup")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "applyDirectoryRoleSetup")
+		Meta("openapi:extension:x-speakeasy-name-override", "applyDirectoryRoleSetup")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ApplyDirectoryRoleSetup", "type": "mutation"}`)
+	})
+
+	Method("listDirectoryReviewItems", func() {
+		Description("List the directory changes waiting for an admin decision, oldest first: a directory group first seen after review started, with no mapping; a new value of an attribute key that already has mappings; and a mapped group or attribute value that has gone from the directory. Each item carries the same proposal and version as previewDirectoryRoleSetup, for resolveDirectoryReviewItem. Nothing is written.")
+		Security(security.ByKey, func() {
+			Scope("producer")
+		})
+		Security(security.Session)
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+		})
+
+		Result(ListDirectoryReviewItemsResult)
+
+		HTTP(func() {
+			GET("/rpc/access.listDirectoryReviewItems")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listDirectoryReviewItems")
+		Meta("openapi:extension:x-speakeasy-name-override", "listDirectoryReviewItems")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DirectoryReviewItems"}`)
+	})
+
+	Method("resolveDirectoryReviewItem", func() {
+		Description("Decide one pending directory review item. approve on a new group or attribute value maps it to the given role set, creating new roles as applyDirectoryRoleSetup does; approve on a missing source removes its mappings. dismiss leaves a new source unmapped, or keeps a missing source's mappings. opt_out_key dismisses a new attribute value and stops raising new values of its key. approve checks version as applyDirectoryRoleSetup does and returns conflict if the source changed. An item that is no longer pending returns conflict.")
+		Security(security.ByKey, func() {
+			Scope("producer")
+		})
+		Security(security.Session)
+
+		Payload(func() {
+			Extend(ResolveDirectoryReviewItemForm)
+			security.ByKeyPayload()
+			security.SessionPayload()
+		})
+
+		Result(ResolveDirectoryReviewItemResult)
+
+		HTTP(func() {
+			POST("/rpc/access.resolveDirectoryReviewItem")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "resolveDirectoryReviewItem")
+		Meta("openapi:extension:x-speakeasy-name-override", "resolveDirectoryReviewItem")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ResolveDirectoryReviewItem", "type": "mutation"}`)
+	})
+
+	Method("getDirectoryReviewSettings", func() {
+		Description("Get the organization's directory review settings: whether its admins are emailed when directory changes are waiting for a decision.")
+		Security(security.ByKey, func() {
+			Scope("producer")
+		})
+		Security(security.Session)
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+		})
+
+		Result(DirectoryReviewSettingsModel)
+
+		HTTP(func() {
+			GET("/rpc/access.getDirectoryReviewSettings")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getDirectoryReviewSettings")
+		Meta("openapi:extension:x-speakeasy-name-override", "getDirectoryReviewSettings")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DirectoryReviewSettings"}`)
+	})
+
+	Method("updateDirectoryReviewSettings", func() {
+		Description("Turn the organization's directory review emails on or off. Pending items stay listed in the dashboard either way, and webhooks are unaffected.")
+		Security(security.ByKey, func() {
+			Scope("producer")
+		})
+		Security(security.Session)
+
+		Payload(func() {
+			Extend(DirectoryReviewSettingsModel)
+			security.ByKeyPayload()
+			security.SessionPayload()
+		})
+
+		Result(DirectoryReviewSettingsModel)
+
+		HTTP(func() {
+			POST("/rpc/access.updateDirectoryReviewSettings")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "updateDirectoryReviewSettings")
+		Meta("openapi:extension:x-speakeasy-name-override", "updateDirectoryReviewSettings")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UpdateDirectoryReviewSettings", "type": "mutation"}`)
 	})
 
 	Method("listScopes", func() {
@@ -1004,10 +1192,17 @@ var SelectorModel = Type("Selector", func() {
 
 	Attribute("resource_kind", String, func() {
 		Description("The kind of resource this selector targets.")
-		Enum("project", "mcp", "org", "environment", "skill", "assistant", "risk_policy", "chat", "agent", "workload", "*")
+		Enum("project", "mcp", "org", "environment", "skill", "assistant", "risk_policy", "chat", "agent", "workload", "mcp_auth_client", "*")
 	})
 	Attribute("resource_id", String, func() {
 		Description("The resource identifier, or '*' for all resources of this kind.")
+	})
+	Attribute("client_type", String, func() {
+		Description("Auth client type filter (mcp:auth and mcp:blocked_auth only).")
+		Enum("remote_session", "service_account", "static_credential", "pass_through", "ema", "*")
+	})
+	Attribute("connection_owner", String, func() {
+		Description("Personal connection owner filter (mcp:auth and mcp:blocked_auth on remote_session clients only). A user ID, '*', or '$represented_user' for the user the request acts for. Never lets a caller use another user's connection.")
 	})
 	Attribute("disposition", String, func() {
 		Description("Tool disposition filter (MCP scopes only).")
@@ -1017,7 +1212,7 @@ var SelectorModel = Type("Selector", func() {
 		Description("Specific tool name filter (MCP scopes only).")
 	})
 	Attribute("project_id", String, func() {
-		Description("Project filter (MCP, environment, and assistant scopes). When set with resource_id='*', grants access to every resource of the kind in the project.")
+		Description("Project filter (MCP, environment, assistant, mcp:auth, and mcp:blocked_auth scopes). When set with resource_id='*', grants access to every resource of the kind in the project. For mcp:auth and mcp:blocked_auth it is the project of the server using the client.")
 	})
 	Attribute("server_url", String, func() {
 		Description("Server URL filter (risk policy scopes only). Include the URI scheme, for example https://api.example.com.")
@@ -1030,7 +1225,7 @@ var RoleGrantModel = Type("RoleGrant", func() {
 
 	Attribute("scope", String, func() {
 		Description("The scope slug this grant applies to.")
-		Enum("org:read", "org:blocked_read", "org:admin", "org:blocked_admin", "project:read", "project:blocked_read", "project:write", "project:blocked_write", "mcp:read", "mcp:blocked_read", "mcp:write", "mcp:blocked_write", "mcp:connect", "mcp:blocked_connect", "environment:read", "environment:blocked_read", "environment:write", "environment:blocked_write", "skill:read", "skill:blocked_read", "skill:write", "skill:blocked_write", "assistant:read", "assistant:blocked_read", "assistant:write", "assistant:blocked_write", "plugin:write", "plugin:blocked_write", "risk_policy:evaluate", "risk_policy:bypass", "risk_policy:block", "chat:read", "chat:write", "log:read", "agent:read", "agent:write", "agent:authorize", "agent:transfer", "workload:read", "workload:blocked_read", "workload:write", "workload:blocked_write", "org:device_agent_sync", "org:hooks_ingest")
+		Enum("org:read", "org:blocked_read", "org:admin", "org:blocked_admin", "project:read", "project:blocked_read", "project:write", "project:blocked_write", "mcp:read", "mcp:blocked_read", "mcp:write", "mcp:blocked_write", "mcp:connect", "mcp:blocked_connect", "mcp:auth", "mcp:blocked_auth", "environment:read", "environment:blocked_read", "environment:write", "environment:blocked_write", "skill:read", "skill:blocked_read", "skill:write", "skill:blocked_write", "assistant:read", "assistant:blocked_read", "assistant:write", "assistant:blocked_write", "plugin:write", "plugin:blocked_write", "risk_policy:evaluate", "risk_policy:bypass", "risk_policy:block", "chat:read", "chat:write", "log:read", "agent:read", "agent:write", "agent:authorize", "agent:transfer", "workload:read", "workload:blocked_read", "workload:write", "workload:blocked_write", "org:device_agent_sync", "org:hooks_ingest")
 	})
 
 	Attribute("selectors", ArrayOf(SelectorModel), func() {
@@ -1044,13 +1239,13 @@ var ListRoleGrantModel = Type("ListRoleGrant", func() {
 
 	Attribute("scope", String, func() {
 		Description("The scope slug this grant applies to.")
-		Enum("org:read", "org:blocked_read", "org:admin", "org:blocked_admin", "project:read", "project:blocked_read", "project:write", "project:blocked_write", "mcp:read", "mcp:blocked_read", "mcp:write", "mcp:blocked_write", "mcp:connect", "mcp:blocked_connect", "environment:read", "environment:blocked_read", "environment:write", "environment:blocked_write", "skill:read", "skill:blocked_read", "skill:write", "skill:blocked_write", "assistant:read", "assistant:blocked_read", "assistant:write", "assistant:blocked_write", "plugin:write", "plugin:blocked_write", "risk_policy:evaluate", "risk_policy:bypass", "risk_policy:block", "chat:read", "chat:write", "log:read", "agent:read", "agent:write", "agent:authorize", "agent:transfer", "workload:read", "workload:blocked_read", "workload:write", "workload:blocked_write", "org:device_agent_sync", "org:hooks_ingest")
+		Enum("org:read", "org:blocked_read", "org:admin", "org:blocked_admin", "project:read", "project:blocked_read", "project:write", "project:blocked_write", "mcp:read", "mcp:blocked_read", "mcp:write", "mcp:blocked_write", "mcp:connect", "mcp:blocked_connect", "mcp:auth", "mcp:blocked_auth", "environment:read", "environment:blocked_read", "environment:write", "environment:blocked_write", "skill:read", "skill:blocked_read", "skill:write", "skill:blocked_write", "assistant:read", "assistant:blocked_read", "assistant:write", "assistant:blocked_write", "plugin:write", "plugin:blocked_write", "risk_policy:evaluate", "risk_policy:bypass", "risk_policy:block", "chat:read", "chat:write", "log:read", "agent:read", "agent:write", "agent:authorize", "agent:transfer", "workload:read", "workload:blocked_read", "workload:write", "workload:blocked_write", "org:device_agent_sync", "org:hooks_ingest")
 	})
 
 	Attribute("sub_scopes", ArrayOf(String), func() {
 		Description("The inherited scopes the primary scope grants.")
 		Elem(func() {
-			Enum("org:read", "org:blocked_read", "org:admin", "org:blocked_admin", "project:read", "project:blocked_read", "project:write", "project:blocked_write", "mcp:read", "mcp:blocked_read", "mcp:write", "mcp:blocked_write", "mcp:connect", "mcp:blocked_connect", "environment:read", "environment:blocked_read", "environment:write", "environment:blocked_write", "skill:read", "skill:blocked_read", "skill:write", "skill:blocked_write", "assistant:read", "assistant:blocked_read", "assistant:write", "assistant:blocked_write", "plugin:write", "plugin:blocked_write", "risk_policy:evaluate", "risk_policy:bypass", "risk_policy:block", "chat:read", "chat:write", "log:read", "agent:read", "agent:write", "agent:authorize", "agent:transfer", "workload:read", "workload:blocked_read", "workload:write", "workload:blocked_write", "org:device_agent_sync", "org:hooks_ingest")
+			Enum("org:read", "org:blocked_read", "org:admin", "org:blocked_admin", "project:read", "project:blocked_read", "project:write", "project:blocked_write", "mcp:read", "mcp:blocked_read", "mcp:write", "mcp:blocked_write", "mcp:connect", "mcp:blocked_connect", "mcp:auth", "mcp:blocked_auth", "environment:read", "environment:blocked_read", "environment:write", "environment:blocked_write", "skill:read", "skill:blocked_read", "skill:write", "skill:blocked_write", "assistant:read", "assistant:blocked_read", "assistant:write", "assistant:blocked_write", "plugin:write", "plugin:blocked_write", "risk_policy:evaluate", "risk_policy:bypass", "risk_policy:block", "chat:read", "chat:write", "log:read", "agent:read", "agent:write", "agent:authorize", "agent:transfer", "workload:read", "workload:blocked_read", "workload:write", "workload:blocked_write", "org:device_agent_sync", "org:hooks_ingest")
 		})
 	})
 
@@ -1093,12 +1288,12 @@ var ScopeModel = Type("ScopeDefinition", func() {
 
 	Attribute("slug", String, func() {
 		Description("Unique scope identifier.")
-		Enum("org:read", "org:blocked_read", "org:admin", "org:blocked_admin", "project:read", "project:blocked_read", "project:write", "project:blocked_write", "mcp:read", "mcp:blocked_read", "mcp:write", "mcp:blocked_write", "mcp:connect", "mcp:blocked_connect", "environment:read", "environment:blocked_read", "environment:write", "environment:blocked_write", "skill:read", "skill:blocked_read", "skill:write", "skill:blocked_write", "assistant:read", "assistant:blocked_read", "assistant:write", "assistant:blocked_write", "plugin:write", "plugin:blocked_write", "risk_policy:evaluate", "risk_policy:bypass", "risk_policy:block", "chat:read", "chat:write", "log:read", "agent:read", "agent:write", "agent:authorize", "agent:transfer", "workload:read", "workload:blocked_read", "workload:write", "workload:blocked_write", "org:device_agent_sync", "org:hooks_ingest")
+		Enum("org:read", "org:blocked_read", "org:admin", "org:blocked_admin", "project:read", "project:blocked_read", "project:write", "project:blocked_write", "mcp:read", "mcp:blocked_read", "mcp:write", "mcp:blocked_write", "mcp:connect", "mcp:blocked_connect", "mcp:auth", "mcp:blocked_auth", "environment:read", "environment:blocked_read", "environment:write", "environment:blocked_write", "skill:read", "skill:blocked_read", "skill:write", "skill:blocked_write", "assistant:read", "assistant:blocked_read", "assistant:write", "assistant:blocked_write", "plugin:write", "plugin:blocked_write", "risk_policy:evaluate", "risk_policy:bypass", "risk_policy:block", "chat:read", "chat:write", "log:read", "agent:read", "agent:write", "agent:authorize", "agent:transfer", "workload:read", "workload:blocked_read", "workload:write", "workload:blocked_write", "org:device_agent_sync", "org:hooks_ingest")
 	})
 	Attribute("description", String, "What this scope protects.")
 	Attribute("resource_type", String, func() {
 		Description("The type of resource this scope applies to.")
-		Enum("org", "project", "mcp", "environment", "skill", "assistant", "risk_policy", "chat", "agent", "workload")
+		Enum("org", "project", "mcp", "environment", "skill", "assistant", "risk_policy", "chat", "agent", "workload", "mcp_auth_client")
 	})
 	Attribute("visibility", String, func() {
 		Description("Whether this scope is a first-class permission or an internal storage/evaluation scope.")
@@ -1107,7 +1302,7 @@ var ScopeModel = Type("ScopeDefinition", func() {
 	Attribute("agent_eligible", Boolean, "Whether an agent principal can hold this scope. Roles may carry scopes agents cannot hold; those are ignored for the role's agent members rather than granted.")
 	Attribute("exclusion_scope", String, func() {
 		Description("The scope used to store exception rules for this scope.")
-		Enum("org:blocked_read", "org:blocked_admin", "project:blocked_read", "project:blocked_write", "mcp:blocked_read", "mcp:blocked_write", "mcp:blocked_connect", "environment:blocked_read", "environment:blocked_write", "skill:blocked_read", "skill:blocked_write", "assistant:blocked_read", "assistant:blocked_write", "plugin:blocked_write", "risk_policy:bypass", "workload:blocked_read", "workload:blocked_write")
+		Enum("org:blocked_read", "org:blocked_admin", "project:blocked_read", "project:blocked_write", "mcp:blocked_read", "mcp:blocked_write", "mcp:blocked_connect", "mcp:blocked_auth", "environment:blocked_read", "environment:blocked_write", "skill:blocked_read", "skill:blocked_write", "assistant:blocked_read", "assistant:blocked_write", "plugin:blocked_write", "risk_policy:bypass", "workload:blocked_read", "workload:blocked_write")
 	})
 })
 
@@ -1314,10 +1509,40 @@ var MemberModel = Type("AccessMember", func() {
 		Format(FormatDateTime)
 	})
 	// Directory profile, from the org's synced identity provider. Every field
-	// is absent when no directory is connected, when the member has no profile
-	// in it, or when the provider does not report that attribute.
+	// except in_directory is absent when no directory is connected, when the
+	// member has no profile in it, or when the provider does not report that
+	// attribute. listMembers sets in_directory to false in those cases.
 	Attribute("department", String, "Department name as reported by the identity provider.")
 	Attribute("groups", ArrayOf(String), "Names of the directory groups the member belongs to.")
+	Attribute("directory_groups", ArrayOf(MemberDirectoryGroupModel), "The directory groups the member belongs to, by stable ID. Prefer this to groups when matching a member to a group, since two groups can share a name.")
+	Attribute("in_directory", Boolean, "Whether the member has a live profile in the organization's synced directory. Set by listMembers.")
+	Attribute("directory_role_sources", ArrayOf(MemberDirectoryRoleSourceModel), "Where each role in directory_role_ids comes from: one entry per directory role mapping that currently gives the member that role, so a role reached through two groups appears twice. Set by listMembers.")
+})
+
+var MemberDirectoryGroupModel = Type("AccessMemberDirectoryGroup", func() {
+	Description("A live directory group a member belongs to.")
+	Required("id", "name")
+
+	Attribute("id", String, "Directory group identifier.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("name", String, "Directory group name.")
+})
+
+var MemberDirectoryRoleSourceModel = Type("AccessMemberDirectoryRoleSource", func() {
+	Description("One directory role mapping that currently gives a member a role. Attribute keys and values are not included: they can carry personal directory data, so admins resolve them through listDirectoryRoleMappings by mapping_id.")
+	Required("role_id", "mapping_id", "source_kind")
+
+	Attribute("role_id", String, "The role the mapping grants.")
+	Attribute("mapping_id", String, "The directory role mapping.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("source_kind", String, "What the mapping matches: a directory group or an attribute value.", func() {
+		Enum("group", "attribute")
+	})
+	Attribute("directory_group_id", String, "The mapped directory group. Set when source_kind is group.", func() {
+		Format(FormatUUID)
+	})
 })
 
 var ListMembersResult = Type("ListMembersResult", func() {
@@ -1830,7 +2055,7 @@ var ListIdentityAccessResult = Type("ListIdentityAccessResult", func() {
 })
 
 var DirectoryRoleMappingModel = Type("DirectoryRoleMapping", func() {
-	Required("id", "source_kind", "role_urn", "created_at", "updated_at")
+	Required("id", "source_kind", "source_status", "role_urn", "created_at", "updated_at")
 
 	Attribute("id", String, "Unique mapping identifier.", func() {
 		Format(FormatUUID)
@@ -1844,6 +2069,10 @@ var DirectoryRoleMappingModel = Type("DirectoryRoleMapping", func() {
 	Attribute("directory_group_name", String, "Display name of the mapped directory group.")
 	Attribute("attribute_key", String, "The directory attribute key. Set when source_kind is attribute.")
 	Attribute("attribute_value", String, "The directory attribute value. Set when source_kind is attribute.")
+	Attribute("source_status", String, func() {
+		Description("Whether the mapped source still exists. missing means the group was deleted from the directory, or no live directory user has the attribute value. A missing source matches nobody, so the mapping grants nothing until the source returns.")
+		Enum("active", "missing")
+	})
 	Attribute("role_urn", String, "Principal URN of the role granted to matching members.")
 	Attribute("created_at", String, func() {
 		Format(FormatDateTime)
@@ -1879,6 +2108,44 @@ var ListDirectoryRoleMappingsResult = Type("ListDirectoryRoleMappingsResult", fu
 	Attribute("mappings", ArrayOf(DirectoryRoleMappingModel), "Live directory role mappings.")
 })
 
+var DirectoryPersonGroupModel = Type("DirectoryPersonGroup", func() {
+	Required("id", "name")
+
+	Attribute("id", String, "Directory group ID.", func() { Format(FormatUUID) })
+	Attribute("name", String, "Directory group name.")
+})
+
+var DirectoryPersonModel = Type("DirectoryPerson", func() {
+	Required("id", "email", "state", "groups")
+
+	Attribute("id", String, "Directory profile ID.", func() { Format(FormatUUID) })
+	Attribute("email", String, "Email the directory reports for the profile. Empty when the directory reports none.")
+	Attribute("first_name", String, "First name the directory reports, when it reports one.")
+	Attribute("last_name", String, "Last name the directory reports, when it reports one.")
+	Attribute("state", String, "How the profile relates to Speakeasy accounts. member: linked to, or the only email match of, a member of this organization. account_not_member: an account exists but is not a member here. not_signed_in: no matching account. ambiguous_email: the email matches more than one profile or account, so it is never matched.", func() {
+		Enum("member", "account_not_member", "not_signed_in", "ambiguous_email")
+	})
+	Attribute("user_id", String, "The matched Speakeasy user ID. Present only for member and account_not_member.")
+	Attribute("groups", ArrayOf(DirectoryPersonGroupModel), "Live directory groups the profile belongs to.")
+})
+
+var DirectoryPeopleStateCountsModel = Type("DirectoryPeopleStateCounts", func() {
+	Required("member", "account_not_member", "not_signed_in", "ambiguous_email")
+
+	Attribute("member", Int64, "Profiles in the member state.")
+	Attribute("account_not_member", Int64, "Profiles in the account_not_member state.")
+	Attribute("not_signed_in", Int64, "Profiles in the not_signed_in state.")
+	Attribute("ambiguous_email", Int64, "Profiles in the ambiguous_email state.")
+})
+
+var ListDirectoryPeopleResult = Type("ListDirectoryPeopleResult", func() {
+	Required("people", "counts")
+
+	Attribute("people", ArrayOf(DirectoryPersonModel), "One page of directory profiles, ordered by profile ID.")
+	Attribute("counts", DirectoryPeopleStateCountsModel, "Profiles per state across the whole organization, not just this page.")
+	Attribute("next_cursor", String, "Cursor for the next page. Absent on the last page.")
+})
+
 var SyncDirectoryGroupsResult = Type("SyncDirectoryGroupsResult", func() {
 	Required("group_count")
 
@@ -1911,4 +2178,159 @@ var SetDirectoryRoleMappingsForm = Type("SetDirectoryRoleMappingsForm", func() {
 	})
 	Attribute("expected_role_urns", ArrayOf(String), "Optional compare-and-set precondition. The normalized current role set must match or the request returns conflict without changes. Omit for unconditional replacement; an empty array requires an unmapped source.")
 	Attribute("role_urns", ArrayOf(String), "The complete set of role principal URNs to grant, from Role.principal_urn. Empty removes every mapping for the source.")
+})
+
+var DirectoryRoleSetupSourceModel = Type("DirectoryRoleSetupSource", func() {
+	Required("source_kind")
+
+	Attribute("source_kind", String, "What the source is: a directory group or an attribute value.", func() {
+		Enum("group", "attribute")
+	})
+	Attribute("directory_group_id", String, "The directory group. Set when source_kind is group.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("attribute_key", String, "The directory attribute key. Set when source_kind is attribute.", func() {
+		MinLength(1)
+	})
+	Attribute("attribute_value", String, "The directory attribute value. Set when source_kind is attribute.", func() {
+		MinLength(1)
+	})
+})
+
+var DirectoryRoleSetupProposedRoleModel = Type("DirectoryRoleSetupProposedRole", func() {
+	Required("role_action", "role_name", "current_grants")
+
+	Attribute("role_action", String, "reuse an existing role, or create a new one.", func() {
+		Enum("reuse", "create")
+	})
+	Attribute("role_id", String, "The existing role. Set when role_action is reuse.")
+	Attribute("role_urn", String, "Principal URN of the existing role. Set when role_action is reuse.")
+	Attribute("role_name", String, "The existing role's name, or the name a new role would get.")
+	Attribute("current_grants", ArrayOf(RoleGrantModel), "Grants the existing role already has. Applying the proposal approves them for the source's members. Empty for a new role.")
+})
+
+var DirectoryRoleSetupPreviewItemModel = Type("DirectoryRoleSetupPreviewItem", func() {
+	Required("source", "source_name", "directory_people", "existing_role_urns", "proposed_roles", "version")
+
+	Attribute("source", DirectoryRoleSetupSourceModel)
+	Attribute("source_name", String, "The group name, or key=value for an attribute value.")
+	Attribute("directory_people", Int64, "People with a live directory profile that matches the source, counted once per email address, so someone with profiles in two directories counts once and a profile with no email is not counted. These are directory people, not organization members or role members.")
+	Attribute("existing_role_urns", ArrayOf(String), "Roles the source already maps to. Empty for an unmapped source.")
+	Attribute("proposed_roles", ArrayOf(DirectoryRoleSetupProposedRoleModel), "The suggested role set. For a mapped source this is its current set; for an unmapped source, one reused or new role.")
+	Attribute("version", String, "Opaque version of the source and its current mappings. Send it back with applyDirectoryRoleSetup.")
+})
+
+var DirectoryRoleSetupHiddenAttributeKeyModel = Type("DirectoryRoleSetupHiddenAttributeKey", func() {
+	Required("key", "value_count")
+
+	Attribute("key", String, "Directory attribute key with too many distinct values to offer in bulk setup.")
+	Attribute("value_count", Int64, "Number of distinct values the key has on live directory profiles.")
+})
+
+var DirectoryRoleSetupPreviewResult = Type("DirectoryRoleSetupPreviewResult", func() {
+	Required("items", "hidden_attribute_keys", "max_values_per_attribute_key")
+
+	Attribute("items", ArrayOf(DirectoryRoleSetupPreviewItemModel), "One item per live directory group and mappable attribute value.")
+	Attribute("hidden_attribute_keys", ArrayOf(DirectoryRoleSetupHiddenAttributeKeyModel), "Attribute keys left out of items because they have more than max_values_per_attribute_key distinct values. Their values can still be mapped one at a time with setDirectoryRoleMappings.")
+	Attribute("max_values_per_attribute_key", Int64, "The limit on distinct values above which an attribute key is left out.")
+})
+
+var ApplyDirectoryRoleSetupRoleModel = Type("ApplyDirectoryRoleSetupRole", func() {
+	Description("One role in an item's role set: an existing role by principal URN, or a new role by name. Set exactly one.")
+
+	Attribute("role_urn", String, "Principal URN of an existing role.")
+	Attribute("create_name", String, "Name of a role to create. Items in the batch that name the same new role share it.", func() {
+		MinLength(1)
+	})
+})
+
+var ApplyDirectoryRoleSetupItemModel = Type("ApplyDirectoryRoleSetupItem", func() {
+	Required("source", "version", "roles")
+
+	Attribute("source", DirectoryRoleSetupSourceModel)
+	Attribute("version", String, "The item version from previewDirectoryRoleSetup.")
+	Attribute("roles", ArrayOf(ApplyDirectoryRoleSetupRoleModel), "The complete role set for the source. Empty removes every mapping for the source.")
+})
+
+var ApplyDirectoryRoleSetupForm = Type("ApplyDirectoryRoleSetupForm", func() {
+	Required("items")
+
+	Attribute("items", ArrayOf(ApplyDirectoryRoleSetupItemModel), "The sources to set up. Each source may appear once.", func() {
+		MinLength(1)
+		MaxLength(500)
+	})
+	Attribute("grant_set", ArrayOf(RoleGrantModel), "Optional grants given to every role this request creates. Omit to create roles with no grants. Existing roles are never changed.")
+})
+
+var DirectoryRoleSetupSideEffectModel = Type("DirectoryRoleSetupSideEffect", func() {
+	Required("kind", "role_id", "request_status")
+
+	Attribute("kind", String, "What was requested.", func() {
+		Enum("workos_role_sync")
+	})
+	Attribute("role_id", String, "The role the request is for.")
+	Attribute("request_status", String, "Requested work runs after the response and is never reported as done.", func() {
+		Enum("requested")
+	})
+})
+
+var ApplyDirectoryRoleSetupResult = Type("ApplyDirectoryRoleSetupResult", func() {
+	Required("created_roles", "mappings", "side_effects")
+
+	Attribute("created_roles", ArrayOf(RoleModel), "Roles this request created.")
+	Attribute("mappings", ArrayOf(DirectoryRoleMappingModel), "The resulting mappings of every source in the request.")
+	Attribute("side_effects", ArrayOf(DirectoryRoleSetupSideEffectModel), "Work requested after commit.")
+})
+
+var DirectoryReviewItemModel = Type("DirectoryReviewItem", func() {
+	Required("id", "kind", "occurrence", "created_at", "item")
+
+	Attribute("id", String, "The review item.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("kind", String, "new_group: an unmapped group first seen after review started. new_attribute_value: a new value of an attribute key that has mappings. source_missing: a mapped group or attribute value that has gone.", func() {
+		Enum("new_group", "new_attribute_value", "source_missing")
+	})
+	Attribute("occurrence", Int32, "1 the first time a source is raised for this kind, then one more each time it recurs.")
+	Attribute("created_at", String, "When the item was raised.", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("item", DirectoryRoleSetupPreviewItemModel, "The source with its current roles, proposal and version. For a missing source, directory_people is 0 and proposed_roles are the roles approving would remove.")
+})
+
+var ListDirectoryReviewItemsResult = Type("ListDirectoryReviewItemsResult", func() {
+	Required("items")
+
+	Attribute("items", ArrayOf(DirectoryReviewItemModel), "Pending items, oldest first.")
+})
+
+var ResolveDirectoryReviewItemForm = Type("ResolveDirectoryReviewItemForm", func() {
+	Required("id", "decision")
+
+	Attribute("id", String, "The review item.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("decision", String, "approve, dismiss, or opt_out_key (new attribute values only).", func() {
+		Enum("approve", "dismiss", "opt_out_key")
+	})
+	Attribute("version", String, "The item version from listDirectoryReviewItems. Required to approve.")
+	Attribute("roles", ArrayOf(ApplyDirectoryRoleSetupRoleModel), "The role set to map a new source to. Required and non-empty to approve a new source; must be empty or omitted otherwise.")
+	Attribute("grant_set", ArrayOf(RoleGrantModel), "Optional grants given to every role the approval creates. Existing roles are never changed.")
+})
+
+var ResolveDirectoryReviewItemResult = Type("ResolveDirectoryReviewItemResult", func() {
+	Required("state", "created_roles", "mappings", "side_effects")
+
+	Attribute("state", String, "The item's state after the decision.", func() {
+		Enum("approved", "dismissed")
+	})
+	Attribute("created_roles", ArrayOf(RoleModel), "Roles the approval created.")
+	Attribute("mappings", ArrayOf(DirectoryRoleMappingModel), "The mappings an approval of a new source wrote. Empty for every other decision.")
+	Attribute("side_effects", ArrayOf(DirectoryRoleSetupSideEffectModel), "Work requested after commit.")
+})
+
+var DirectoryReviewSettingsModel = Type("DirectoryReviewSettings", func() {
+	Required("emails_enabled")
+
+	Attribute("emails_enabled", Boolean, "Whether organization admins are emailed when directory changes are waiting for a decision. On by default.")
 })

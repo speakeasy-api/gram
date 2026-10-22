@@ -183,6 +183,7 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	srv.Mount(mux, server)
 
 	o11y.AttachHandler(mux, "POST", "/chat/completions", oops.ErrHandle(service.logger, service.HandleCompletion).ServeHTTP)
+	o11y.AttachHandler(mux, "GET", "/chat/models", oops.ErrHandle(service.logger, service.HandleModels).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", "/chat/turnstream", oops.ErrHandle(service.logger, service.HandleTurnStream).ServeHTTP)
 }
 
@@ -202,6 +203,10 @@ func (s *Service) JWTAuth(ctx context.Context, token string, schema *security.JW
 // like KeyType, never from client-claimed headers — so a caller cannot pick
 // another slot's customer key.
 func (s *Service) directAuthorize(ctx context.Context, r *http.Request) (context.Context, *contextvalues.AuthContext, billing.ModelUsageSource, error) {
+	return s.directAuthorizeWithKitAdmission(ctx, r, false)
+}
+
+func (s *Service) directAuthorizeWithKitAdmission(ctx context.Context, r *http.Request, allowKit bool) (context.Context, *contextvalues.AuthContext, billing.ModelUsageSource, error) {
 	if token := r.Header.Get("Authorization"); token != "" {
 		authorizedCtx, _, err := s.assistantTokens.Authorize(ctx, token)
 		if err == nil {
@@ -227,6 +232,7 @@ func (s *Service) directAuthorize(ctx context.Context, r *http.Request) (context
 
 	authorizedCtx, err := s.auth.Authorize(ctx, r.Header.Get(constants.SessionHeader), &sc)
 
+	requireKitBinding := false
 	// Try API key auth if session auth fails
 	if err != nil {
 		sc := security.APIKeyScheme{
@@ -235,6 +241,17 @@ func (s *Service) directAuthorize(ctx context.Context, r *http.Request) (context
 			Scopes:         []string{},
 		}
 		authorizedCtx, err = s.auth.Authorize(ctx, r.Header.Get(constants.APIKeyHeader), &sc)
+		if err != nil && allowKit && r.Header.Get(constants.APIKeyHeader) != "" {
+			// Principal keys cannot enter chat transports. Completion alone may
+			// authenticate through the ordinary consumer transport, provided the
+			// managed runtime binding is verified below before any model work.
+			sc.RequiredScopes = []string{"consumer"}
+			kitCtx, kitErr := s.auth.Authorize(ctx, r.Header.Get(constants.APIKeyHeader), &sc)
+			if _, principal := contextvalues.PrincipalCredentialAuthorization(kitCtx); kitErr == nil && principal {
+				authorizedCtx, err = kitCtx, nil
+				requireKitBinding = true
+			}
+		}
 	}
 
 	// Try Chat Sessions auth if API key auth fails
@@ -253,7 +270,13 @@ func (s *Service) directAuthorize(ctx context.Context, r *http.Request) (context
 		Scopes:         []string{},
 		RequiredScopes: []string{},
 	}
-	authorizedCtx, err = s.auth.Authorize(authorizedCtx, r.Header.Get(constants.ProjectHeader), &sc)
+	if requireKitBinding {
+		// Runtime identity, rather than a generic project:read grant, admits
+		// this model-only request. Tenant/project binding is still enforced.
+		authorizedCtx, err = s.auth.AuthorizeWithHandlerProjectAccess(authorizedCtx, r.Header.Get(constants.ProjectHeader), &sc)
+	} else {
+		authorizedCtx, err = s.auth.Authorize(authorizedCtx, r.Header.Get(constants.ProjectHeader), &sc)
+	}
 	if err != nil {
 		return authorizedCtx, nil, "", oops.E(oops.CodeUnauthorized, err, "unauthorized access")
 	}
@@ -265,6 +288,20 @@ func (s *Service) directAuthorize(ctx context.Context, r *http.Request) (context
 
 	if authCtx.ProjectID == nil {
 		return authorizedCtx, nil, "", oops.E(oops.CodeUnauthorized, nil, "unauthorized: project id is required")
+	}
+
+	if allowKit {
+		var managed bool
+		authorizedCtx, managed, err = s.assistantTokens.AuthorizeKitAPIKey(authorizedCtx)
+		if err != nil {
+			return authorizedCtx, nil, "", fmt.Errorf("authorize Kit API key: %w", err)
+		}
+		if requireKitBinding && !managed {
+			return authorizedCtx, nil, "", oops.C(oops.CodeUnauthorized)
+		}
+		if managed {
+			keySlot = billing.ModelUsageSourceAssistants
+		}
 	}
 
 	return authorizedCtx, authCtx, keySlot, nil
@@ -467,6 +504,8 @@ func (s *Service) chatOverviews(ctx context.Context, authCtx *contextvalues.Auth
 			AssistantID:          conv.FromNullableUUID(row.AssistantID),
 			AssistantName:        conv.FromPGText[string](row.AssistantName),
 			AssistantAgentID:     conv.FromNullableUUID(row.AssistantAgentID),
+			AgentID:              conv.FromNullableUUID(row.AgentID),
+			AgentName:            conv.FromPGText[string](row.AgentName),
 			Source:               conv.FromPGText[string](row.Source),
 			OriginatingClient:    conv.PtrEmpty(row.OriginatingClient),
 			LitellmProxied:       conv.PtrEmpty(row.LitellmProxied),
@@ -1577,6 +1616,8 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		AssistantID:          conv.FromNullableUUID(chat.AssistantID),
 		AssistantName:        conv.FromPGText[string](chat.AssistantName),
 		AssistantAgentID:     conv.FromNullableUUID(chat.AssistantAgentID),
+		AgentID:              conv.FromNullableUUID(chat.AgentID),
+		AgentName:            conv.FromPGText[string](chat.AgentName),
 		Source:               source,
 		OriginatingClient:    originatingClient,
 		LitellmProxied:       conv.PtrEmpty(chat.LitellmProxied),
@@ -1834,7 +1875,7 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 	// A caller holding an assistant runtime token IS the assistants surface;
 	// its telemetry tag follows the credential, not the header, so a runner
 	// request can never be tagged (and billed) as another surface.
-	if _, isAssistant := contextvalues.GetAssistantPrincipal(ctx); isAssistant {
+	if _, isAssistant := contextvalues.GetAssistantPrincipal(ctx); isAssistant || assistanttokens.InferenceTranscriptOwned(ctx) {
 		source = billing.ModelUsageSourceAssistants
 	}
 	// risk-analysis is reserved for the platform's own scanning inference
@@ -1928,7 +1969,23 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 		}
 	}
 
+	// Released Kit 2c4a35e maps its provider session ID to this header in
+	// SpeakeasyProvider::preprocess_request; it is not a canonical chat UUID.
 	chatIDHeader := r.Header.Get("Gram-Chat-ID")
+	if assistanttokens.InferenceTranscriptOwned(ctx) {
+		id, err := uuid.Parse(chatIDHeader)
+		if err != nil {
+			return oops.C(oops.CodeForbidden)
+		}
+		ctx, err = s.assistantTokens.BindKitSession(ctx, id)
+		if err != nil {
+			return fmt.Errorf("bind inference chat: %w", err)
+		}
+		if canonical, bound := assistanttokens.RuntimeChatID(ctx); bound {
+			chatIDHeader = canonical.String()
+		}
+	}
+
 	if id, bound := assistanttokens.RuntimeChatID(ctx); bound {
 		if chatIDHeader != "" && chatIDHeader != id.String() {
 			return oops.C(oops.CodeForbidden)
@@ -1998,7 +2055,7 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 	// assistant-principal check before any non-assistant caller adopts
 	// it.
 	completionChatID := chatID
-	if r.Header.Get("Gram-Skip-Capture") == "1" {
+	if r.Header.Get("Gram-Skip-Capture") == "1" && !assistanttokens.InferenceTranscriptOwned(ctx) {
 		completionChatID = uuid.Nil
 	}
 	reasoning := chatRequest.Reasoning
@@ -2065,7 +2122,7 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 		// the way past, so the dashboard renders text as it is generated. The
 		// bytes still reach this caller untouched; the tee is a side channel.
 		src := io.Reader(streamBody)
-		if s.turnStream != nil && chatID != uuid.Nil {
+		if s.turnStream != nil && chatID != uuid.Nil && !assistanttokens.InferenceTranscriptOwned(ctx) {
 			teed, done := s.teeStreamText(ctx, chatID)
 			src = io.TeeReader(streamBody, teed)
 			defer done()
@@ -2092,7 +2149,7 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 	// With no chat to attribute frames to, or no stream to publish on, this is
 	// an ordinary completion.
 	var response *openrouter.CompletionResponse
-	if s.turnStream != nil && chatID != uuid.Nil {
+	if s.turnStream != nil && chatID != uuid.Nil && !assistanttokens.InferenceTranscriptOwned(ctx) {
 		teed, teeErr := s.teedCompletion(ctx, completionReq, chatID)
 		if teeErr != nil {
 			return teeErr
@@ -3278,14 +3335,15 @@ func prepareMessages(ctx context.Context, logger *slog.Logger, assetStorage asse
 				ContentHash:      nil,
 				Generation:       row.generation,
 			},
-			BillingUserID:  row.userID,
-			AssistantID:    assistantID,
-			WorkloadSource: workloadSource,
-			UserEmail:      row.userEmail,
-			Provider:       "",
-			HookHostname:   "",
-			AccountType:    "",
-			BillingMode:    "",
+			BillingUserID:     row.userID,
+			AssistantID:       assistantID,
+			WorkloadSource:    workloadSource,
+			UserEmail:         row.userEmail,
+			Provider:          "",
+			InferenceProvider: "",
+			HookHostname:      "",
+			AccountType:       "",
+			BillingMode:       "",
 		}
 	}
 
@@ -3577,7 +3635,7 @@ func clampUint64ToInt64(value uint64) int64 {
 // authentication.
 func (s *Service) authorizeCompletion(r *http.Request) (context.Context, *contextvalues.AuthContext, billing.ModelUsageSource, error) {
 	if !assistanttokens.IsRuntimeCredential(r.Header.Get("Authorization")) {
-		return s.directAuthorize(r.Context(), r)
+		return s.directAuthorizeWithKitAdmission(r.Context(), r, true)
 	}
 	ctx, _, err := s.assistantTokens.AuthorizeRuntime(r.Context(), r.Header.Get("Authorization"))
 	if err != nil {
