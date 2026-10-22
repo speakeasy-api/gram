@@ -9,10 +9,12 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/auth_clients"
 	"github.com/speakeasy-api/gram/server/gen/types"
+	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authclients"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/visibility"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
@@ -73,6 +75,15 @@ func TestSetAuthClientAudienceKeepsUntouchedProvisionedGrants(t *testing.T) {
 	provisioned := authz.AuthClientSelector(clientID.String(), ti.projectID.String())
 	require.NoError(t, authz.PatchPrincipalGrants(ctx, ti.conn, ti.organizationID, authz.AllUsersPrincipal(),
 		[]*authz.RoleGrant{{Scope: string(authz.ScopeMCPAuth), Selectors: []authz.Selector{provisioned}}}, nil))
+	raw, err := provisioned.MarshalJSON()
+	require.NoError(t, err)
+	require.NoError(t, accessrepo.New(ti.conn).RecordAuthPermissionDefault(ctx, accessrepo.RecordAuthPermissionDefaultParams{
+		OrganizationID: ti.organizationID,
+		PrincipalUrn:   authz.AllUsersPrincipal().String(),
+		Scope:          string(authz.ScopeMCPAuth),
+		Selectors:      raw,
+		Kind:           "shared_client",
+	}))
 
 	ctx = withOrgGrants(t, ctx, authz.ScopeOrgRead, authz.ScopeOrgAdmin)
 	current, err := ti.service.GetAuthClientAudience(ctx, &gen.GetAuthClientAudiencePayload{ID: clientID.String()})
@@ -96,6 +107,7 @@ func TestSetAuthClientAudienceKeepsUntouchedProvisionedGrants(t *testing.T) {
 	for _, grant := range grants {
 		if grant.Scope == authz.ScopeMCPAuth && grant.Selector.ResourceID() == clientID.String() {
 			require.Equal(t, ti.projectID.String(), grant.Selector[authz.SelectorKeyProjectID], "the kept rule keeps its stored selector")
+			require.True(t, grant.Inferred, "the kept rule is still the backfill's, not taken over")
 			kept = true
 		}
 	}
@@ -183,4 +195,65 @@ func ownRules(audience *types.AuthClientAudience) []string {
 		}
 	}
 	return rules
+}
+
+func TestSetAuthClientAudienceTakesOverRemovedProvisionedGrants(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	clientID := seedStaticClient(t, ctx, ti.conn, ti.organizationID, ti.projectID, "Shared")
+
+	provisioned := authz.AuthClientSelector(clientID.String(), ti.projectID.String())
+	require.NoError(t, authz.PatchPrincipalGrants(ctx, ti.conn, ti.organizationID, authz.AllUsersPrincipal(),
+		[]*authz.RoleGrant{{Scope: string(authz.ScopeMCPAuth), Selectors: []authz.Selector{provisioned}}}, nil))
+	raw, err := provisioned.MarshalJSON()
+	require.NoError(t, err)
+	require.NoError(t, accessrepo.New(ti.conn).RecordAuthPermissionDefault(ctx, accessrepo.RecordAuthPermissionDefaultParams{
+		OrganizationID: ti.organizationID,
+		PrincipalUrn:   authz.AllUsersPrincipal().String(),
+		Scope:          string(authz.ScopeMCPAuth),
+		Selectors:      raw,
+		Kind:           "shared_client",
+	}))
+
+	ctx = withOrgGrants(t, ctx, authz.ScopeOrgRead, authz.ScopeOrgAdmin)
+	current, err := ti.service.GetAuthClientAudience(ctx, &gen.GetAuthClientAudiencePayload{ID: clientID.String()})
+	require.NoError(t, err)
+	_, err = ti.service.SetAuthClientAudience(ctx, &gen.SetAuthClientAudiencePayload{ID: clientID.String(), ExpectedVersion: current.Version, Entries: nil})
+	require.NoError(t, err)
+
+	provisions, err := authclientbackfill.New(ti.conn).ListAuthPermissionProvisionsFixture(ctx, ti.organizationID)
+	require.NoError(t, err)
+	require.Len(t, provisions, 1)
+	require.True(t, provisions[0].TakenOver, "removing a provisioned rule takes it over from the backfill")
+}
+
+func TestAuthClientAudienceShowsProjectRulesOnlyWhereTheClientIsOffered(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	clientID, err := testrepo.New(ti.conn).CreateAuthClientFixture(ctx, testrepo.CreateAuthClientFixtureParams{
+		OrganizationID: ti.organizationID,
+		ProjectID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		ClientType:     authz.AuthClientTypeServiceAccount,
+		Name:           "Organization credential",
+	})
+	require.NoError(t, err)
+	_, otherProject := seedOtherOrganization(t, ctx, ti.conn)
+
+	offered := authz.AuthClientTypeSelector(authz.AuthClientTypeServiceAccount, ti.projectID.String())
+	elsewhere := authz.AuthClientTypeSelector(authz.AuthClientTypeServiceAccount, otherProject.String())
+	require.NoError(t, authz.PatchPrincipalGrants(ctx, ti.conn, ti.organizationID, authz.AllUsersPrincipal(),
+		[]*authz.RoleGrant{{Scope: string(authz.ScopeMCPAuth), Selectors: []authz.Selector{offered, elsewhere}}}, nil))
+
+	ctx = withOrgGrants(t, ctx, authz.ScopeOrgRead, authz.ScopeOrgAdmin)
+	got, err := ti.service.GetAuthClientAudience(ctx, &gen.GetAuthClientAudiencePayload{ID: clientID.String()})
+	require.NoError(t, err)
+	require.Empty(t, got.Entries, "no server offers the client yet")
+
+	associate(t, ctx, ti.conn, ti.organizationID, seedServer(t, ctx, ti.conn, ti.projectID, visibility.Private), clientID)
+	got, err = ti.service.GetAuthClientAudience(ctx, &gen.GetAuthClientAudiencePayload{ID: clientID.String()})
+	require.NoError(t, err)
+	require.Len(t, got.Entries, 1)
+	require.Equal(t, ti.projectID.String(), *got.Entries[0].ProjectID)
 }

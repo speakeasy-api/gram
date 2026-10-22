@@ -923,7 +923,7 @@ func ParseEndpoint(
 		authClientsListAuthClientsMcpServerIDFlag  = authClientsListAuthClientsFlags.String("mcp-server-id", "", "")
 		authClientsListAuthClientsClientTypeFlag   = authClientsListAuthClientsFlags.String("client-type", "", "")
 		authClientsListAuthClientsCursorFlag       = authClientsListAuthClientsFlags.String("cursor", "", "")
-		authClientsListAuthClientsLimitFlag        = authClientsListAuthClientsFlags.String("limit", "", "")
+		authClientsListAuthClientsLimitFlag        = authClientsListAuthClientsFlags.String("limit", "50", "")
 		authClientsListAuthClientsSessionTokenFlag = authClientsListAuthClientsFlags.String("session-token", "", "")
 		authClientsListAuthClientsApikeyTokenFlag  = authClientsListAuthClientsFlags.String("apikey-token", "", "")
 
@@ -15985,7 +15985,7 @@ func authClientsListAuthClientsUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "auth-clients list-auth-clients --mcp-server-id \"550e8400-e29b-41d4-a716-446655440000\" --client-type \"service_account\" --cursor \"abc123\" --limit 1 --session-token \"abc123\" --apikey-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "auth-clients list-auth-clients --mcp-server-id \"550e8400-e29b-41d4-a716-446655440000\" --client-type \"service_account\" --cursor \"abc123\" --limit 2 --session-token \"abc123\" --apikey-token \"abc123\"")
 }
 
 func authClientsGetAuthClientUsage() {

@@ -42,7 +42,7 @@ func DecodeListAuthClientsRequest(mux goahttp.Muxer, decoder func(*http.Request)
 			mcpServerID  *string
 			clientType   *string
 			cursor       *string
-			limit        *int
+			limit        int
 			sessionToken *string
 			apikeyToken  *string
 			err          error
@@ -70,14 +70,21 @@ func DecodeListAuthClientsRequest(mux goahttp.Muxer, decoder func(*http.Request)
 		}
 		{
 			limitRaw := qp.Get("limit")
-			if limitRaw != "" {
+			if limitRaw == "" {
+				limit = 50
+			} else {
 				v, err2 := strconv.ParseInt(limitRaw, 10, strconv.IntSize)
 				if err2 != nil {
 					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("limit", limitRaw, "integer"))
 				}
-				pv := int(v)
-				limit = &pv
+				limit = int(v)
 			}
+		}
+		if limit < 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 1, true))
+		}
+		if limit > 100 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 100, false))
 		}
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {

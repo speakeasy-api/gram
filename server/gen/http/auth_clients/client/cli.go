@@ -49,15 +49,23 @@ func BuildListAuthClientsPayload(authClientsListAuthClientsMcpServerID string, a
 			cursor = &authClientsListAuthClientsCursor
 		}
 	}
-	var limit *int
+	var limit int
 	{
 		if authClientsListAuthClientsLimit != "" {
 			var v int64
 			v, err = strconv.ParseInt(authClientsListAuthClientsLimit, 10, strconv.IntSize)
-			val := int(v)
-			limit = &val
+			limit = int(v)
 			if err != nil {
 				return nil, fmt.Errorf("invalid value for limit, must be INT")
+			}
+			if limit < 1 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 1, true))
+			}
+			if limit > 100 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 100, false))
+			}
+			if err != nil {
+				return nil, err
 			}
 		}
 	}
