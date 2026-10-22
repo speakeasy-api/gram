@@ -2184,3 +2184,10 @@ SET deleted_at = clock_timestamp()
 WHERE project_id = @project_id
   AND deployment_id = @deployment_id
   AND tool_urn = @tool_urn;
+
+-- name: ExpireAPIKeyFixture :exec
+-- Test-only fixture: puts a key's expiry in the past.
+UPDATE api_keys
+SET expires_at = clock_timestamp() - interval '1 minute'
+WHERE id = @id
+  AND organization_id = @organization_id;

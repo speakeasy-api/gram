@@ -195,6 +195,10 @@ func ValidatePrincipal(ctx context.Context, db repo.DBTX, organizationID string,
 				return fmt.Errorf("validate agent principal %q: %w", principal.String(), err)
 			}
 		}
+	case urn.PrincipalTypeAPIKey:
+		// A key's policy is written only through the keys service, so no
+		// audience, assignment or policy elsewhere can target one.
+		return fmt.Errorf("%w: api key principal %q holds grants only through its key policy", ErrPrincipalInvalid, principal.String())
 	case urn.PrincipalTypeSystem:
 		// A system principal is an audit actor, never a grant target.
 		return fmt.Errorf("%w: system principal %q cannot hold grants", ErrPrincipalInvalid, principal.String())
