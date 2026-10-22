@@ -163,6 +163,32 @@ func TestKitGKELifecycleReloadsAndCommitsRecoveryEvidence(t *testing.T) {
 	}))
 }
 
+func TestKitGKEPersistedHostedEndpointIssuer(t *testing.T) {
+	t.Parallel()
+	f := newHostedAttachmentFixture(t, "kit_hosted_endpoint_issuer")
+	origin, err := url.Parse("https://mcp.example")
+	require.NoError(t, err)
+	f.core.serverURL = origin
+	issuer, err := usersessionsrepo.New(f.db).CreateUserSessionIssuer(t.Context(), usersessionsrepo.CreateUserSessionIssuerParams{
+		ProjectID: f.projectID, Slug: "hosted-workload", AuthnChallengeMode: "interactive",
+		SessionDuration: pgtype.Interval{Microseconds: time.Hour.Microseconds(), Valid: true},
+	})
+	require.NoError(t, err)
+	require.Equal(t, "endpoint", issuer.AuthorizationServerMode)
+	f.addServerRow(t, f.hosted.ID, uuid.NullUUID{})
+	err = assistantrepo.New(f.db).SetAttachedMCPServerIssuerForTest(t.Context(), assistantrepo.SetAttachedMCPServerIssuerForTestParams{UserSessionIssuerID: uuid.NullUUID{UUID: issuer.ID, Valid: true}, ID: f.hosted.ID, ProjectID: f.projectID})
+	require.NoError(t, err)
+	a := assistantRecord{ID: f.assistant, ProjectID: f.projectID, OrganizationID: "org-test"}
+	resource, issuerID, err := f.core.kitPersistedMCP(t.Context(), f.db, a)
+	require.NoError(t, err)
+	require.Equal(t, origin.JoinPath("mcp", f.hosted.McpSlug.String).String(), resource.String())
+	require.Equal(t, issuer.ID, issuerID)
+	tx := testenv.BeginTx(t, t.Context(), f.db)
+	eligible, err := f.core.kitGKEAssistantEligible(t.Context(), tx, a, KitLocalCompositionConfig{PersistedMCP: true})
+	require.NoError(t, err)
+	require.True(t, eligible)
+}
+
 func TestKitGKEEligibilityUsesPersistedAttachmentAndIssuer(t *testing.T) {
 	t.Parallel()
 	f := newHostedAttachmentFixture(t, "kit_gke_eligibility")
