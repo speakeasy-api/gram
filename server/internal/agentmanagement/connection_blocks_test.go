@@ -208,6 +208,11 @@ func TestConnectionBlockRequestsRejectUnknownFields(t *testing.T) {
 		require.Error(t, err, extra)
 	}
 
+	xmlRequest := request(srv.BlockAgentOnConnectionAgentsPath(), "<payload/>")
+	xmlRequest.Header.Set("Content-Type", "application/xml")
+	_, err = block(xmlRequest)
+	require.Error(t, err, "only JSON bodies are accepted")
+
 	_, err = remove(request(srv.RemoveConnectionBlockAgentsPath(), `{"block_id":"`+uuid.NewString()+`"}`))
 	require.NoError(t, err)
 	_, err = remove(request(srv.RemoveConnectionBlockAgentsPath(), `{"block_id":"`+uuid.NewString()+`","scope":"mcp:auth"}`))

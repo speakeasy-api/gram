@@ -30,16 +30,27 @@ func connectionBlockSelector(remoteSessionClientID uuid.UUID, ownerUserID string
 // requestDecoder rejects unknown body fields on the connection block
 // endpoints. A connection owner's authority covers only the fixed block the
 // server builds, so a request naming a scope, principal or selector is refused
-// rather than silently narrowed to that block.
+// rather than silently narrowed to that block. Those endpoints accept JSON
+// only, since the other body formats Goa decodes ignore unknown fields too.
 func requestDecoder(r *http.Request) goahttp.Decoder {
+	decoder := goahttp.RequestDecoder(r)
 	switch r.URL.Path {
 	case srv.BlockAgentOnConnectionAgentsPath(), srv.RemoveConnectionBlockAgentsPath():
-		decoder := json.NewDecoder(r.Body)
-		decoder.DisallowUnknownFields()
-		return decoder
+		jsonDecoder, ok := decoder.(*json.Decoder)
+		if !ok {
+			return jsonOnlyDecoder{}
+		}
+		jsonDecoder.DisallowUnknownFields()
+		return jsonDecoder
 	default:
-		return goahttp.RequestDecoder(r)
+		return decoder
 	}
+}
+
+type jsonOnlyDecoder struct{}
+
+func (jsonOnlyDecoder) Decode(any) error {
+	return errors.New("request body must be JSON")
 }
 
 func (s *Service) ListConnectionBlocks(ctx context.Context, payload *gen.ListConnectionBlocksPayload) (*gen.ListAgentConnectionBlocksResult, error) {
