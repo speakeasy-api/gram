@@ -64,6 +64,9 @@ export function OrganizationGatewaySwitch({
   );
 }
 
+/** The setup card whose visit prepares the organization-wide sign-in. */
+const GATEWAY_SETUP_TASK = "anthropic-admin-controls";
+
 /**
  * Explains why a gateway that is switched on still isn't served, and where to
  * fix it, so the switch never reads as on for a URL that answers 404.
@@ -75,26 +78,29 @@ export function GatewayNotServed({
 }): JSX.Element | null {
   const orgRoutes = useOrgRoutes();
   switch (reason) {
+    // Speakeasy creates the organization-wide sign-in when an organization
+    // admin opens this setup card, so that is where to send them.
     case "no_organization_issuer":
       return (
         <Text small className="text-warning mt-3">
-          Not available yet: it needs an organization-wide sign-in. Set one up
-          in{" "}
-          <Link to={orgRoutes.identity.href()} className="underline">
-            IDP and SSO
-          </Link>
-          .
+          Not available yet: it needs an organization-wide sign-in. An
+          organization admin creates it by opening{" "}
+          <Link
+            to={`${orgRoutes.setup.href()}?task=${GATEWAY_SETUP_TASK}`}
+            className="underline"
+          >
+            Set up Anthropic admin controls
+          </Link>{" "}
+          in setup.
         </Text>
       );
+    // No dashboard page removes an organization-wide sign-in.
     case "multiple_organization_issuers":
       return (
         <Text small className="text-warning mt-3">
           Not available: the organization has more than one organization-wide
-          sign-in. Keep one in{" "}
-          <Link to={orgRoutes.identity.href()} className="underline">
-            IDP and SSO
-          </Link>
-          .
+          sign-in, and the gateway needs exactly one. Contact support to resolve
+          this.
         </Text>
       );
     case "custom_domain_only":

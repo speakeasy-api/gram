@@ -171,6 +171,12 @@ func (s *Service) CreateIssuer(ctx context.Context, payload *orggen.CreateIssuer
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
+	// Serialize manual creation with onboarding's missing-issuer preparation.
+	// Explicit creation may still add another issuer; onboarding never does.
+	if _, err := orgrepo.New(dbtx).LockOrganizationForSetupTaskUpdate(ctx, authCtx.ActiveOrganizationID); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "lock organization for issuer creation").LogError(ctx, logger)
+	}
+
 	if trustedIssuerID.Valid {
 		var trustErr error
 		if trustedClientID.Valid {
