@@ -13,14 +13,17 @@ import (
 )
 
 const detachAuthClientFromServer = `-- name: DetachAuthClientFromServer :one
-UPDATE mcp_server_auth_clients
+UPDATE mcp_server_auth_clients msac
 SET deleted_at = clock_timestamp(),
     updated_at = clock_timestamp()
-WHERE auth_client_id = $1
-  AND mcp_server_id = $2
-  AND organization_id = $3
-  AND deleted IS FALSE
-RETURNING id, project_id
+FROM mcp_servers ms
+WHERE msac.auth_client_id = $1
+  AND msac.mcp_server_id = $2
+  AND msac.organization_id = $3
+  AND msac.deleted IS FALSE
+  AND ms.id = msac.mcp_server_id
+  AND ms.project_id = msac.project_id
+RETURNING msac.id, msac.project_id, ms.name AS mcp_server_name
 `
 
 type DetachAuthClientFromServerParams struct {
@@ -30,14 +33,15 @@ type DetachAuthClientFromServerParams struct {
 }
 
 type DetachAuthClientFromServerRow struct {
-	ID        uuid.UUID
-	ProjectID uuid.UUID
+	ID            uuid.UUID
+	ProjectID     uuid.UUID
+	McpServerName pgtype.Text
 }
 
 func (q *Queries) DetachAuthClientFromServer(ctx context.Context, arg DetachAuthClientFromServerParams) (DetachAuthClientFromServerRow, error) {
 	row := q.db.QueryRow(ctx, detachAuthClientFromServer, arg.AuthClientID, arg.McpServerID, arg.OrganizationID)
 	var i DetachAuthClientFromServerRow
-	err := row.Scan(&i.ID, &i.ProjectID)
+	err := row.Scan(&i.ID, &i.ProjectID, &i.McpServerName)
 	return i, err
 }
 
@@ -411,6 +415,56 @@ func (q *Queries) LockAuthClient(ctx context.Context, arg LockAuthClientParams) 
 		&i.Deleted,
 	)
 	return i, err
+}
+
+const lockAuthClientServerRequirements = `-- name: LockAuthClientServerRequirements :many
+SELECT
+  ms.id,
+  ms.requires_upstream_auth
+FROM mcp_server_auth_clients msac
+JOIN mcp_servers ms
+  ON ms.id = msac.mcp_server_id
+ AND ms.project_id = msac.project_id
+ AND ms.deleted IS FALSE
+JOIN projects p
+  ON p.id = ms.project_id
+ AND p.organization_id = msac.organization_id
+ AND p.deleted IS FALSE
+WHERE msac.organization_id = $1
+  AND msac.auth_client_id = $2
+  AND msac.deleted IS FALSE
+ORDER BY ms.id
+FOR SHARE OF ms
+`
+
+type LockAuthClientServerRequirementsParams struct {
+	OrganizationID string
+	AuthClientID   uuid.UUID
+}
+
+type LockAuthClientServerRequirementsRow struct {
+	ID                   uuid.UUID
+	RequiresUpstreamAuth pgtype.Bool
+}
+
+func (q *Queries) LockAuthClientServerRequirements(ctx context.Context, arg LockAuthClientServerRequirementsParams) ([]LockAuthClientServerRequirementsRow, error) {
+	rows, err := q.db.Query(ctx, lockAuthClientServerRequirements, arg.OrganizationID, arg.AuthClientID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []LockAuthClientServerRequirementsRow
+	for rows.Next() {
+		var i LockAuthClientServerRequirementsRow
+		if err := rows.Scan(&i.ID, &i.RequiresUpstreamAuth); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const lockOrganizationMCPServer = `-- name: LockOrganizationMCPServer :one

@@ -81,6 +81,15 @@ describe("renderVerb", () => {
     expect(
       renderVerb(log({ action: "organization:product_feature_disabled" })),
     ).toBe("disabled a product feature for");
+
+    expect(
+      renderVerb(
+        log({
+          action: "auth-client:detach-mcp-server",
+          metadata: { mcp_server_id: "srv-1", mcp_server_name: "GitHub" },
+        }),
+      ),
+    ).toBe("removed MCP server GitHub from auth client");
   });
 
   // Every billing action is recorded against the same fixed subject display

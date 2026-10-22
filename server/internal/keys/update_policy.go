@@ -89,6 +89,13 @@ func (s *Service) UpdateKeyPolicy(ctx context.Context, payload *gen.UpdateKeyPol
 	if err := authz.PatchPrincipalGrants(ctx, dbtx, authCtx.ActiveOrganizationID, principal, policy, nil); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "save api key policy").LogError(ctx, s.logger)
 	}
+	if err := authz.TakeOverPrincipalPolicyTx(ctx, dbtx, authCtx.ActiveOrganizationID, principal); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "take over api key policy").LogError(ctx, s.logger)
+	}
+	updatedAt, err := kr.TouchAPIKeyUpdatedAt(ctx, repo.TouchAPIKeyUpdatedAtParams{ID: key.ID, OrganizationID: authCtx.ActiveOrganizationID})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "touch api key").LogError(ctx, s.logger)
+	}
 
 	if err := s.audit.LogKeyPolicyUpdate(ctx, dbtx, audit.LogKeyPolicyUpdateEvent{
 		OrganizationID:     authCtx.ActiveOrganizationID,
@@ -127,7 +134,7 @@ func (s *Service) UpdateKeyPolicy(ctx context.Context, payload *gen.UpdateKeyPol
 		ExpiresAt:              nil,
 		PolicyGrants:           policyModel(policy),
 		CreatedAt:              key.CreatedAt.Time.Format(time.RFC3339),
-		UpdatedAt:              key.UpdatedAt.Time.Format(time.RFC3339),
+		UpdatedAt:              updatedAt.Time.Format(time.RFC3339),
 		LastAccessedAt:         lastAccessedAt,
 	}, nil
 }

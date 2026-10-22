@@ -13,6 +13,10 @@ import (
 // rollback leaves it.
 const AuthPermissionKindCreationDefault = "creation_default"
 
+// AuthPermissionKindExplicitPolicy marks a principal whose whole policy an
+// admin wrote, so the backfill never provisions for it again.
+const AuthPermissionKindExplicitPolicy = "explicit_policy"
+
 // PersonalAuthClientSelector is the default every organization grants
 // user:all: each caller may use personal (remote_session) clients only for
 // the connection its represented user owns.
@@ -108,6 +112,36 @@ func MarkAuthPermissionTakenOverTx(ctx context.Context, dbtx repo.DBTX, organiza
 		Selectors:      selectors,
 	}); err != nil {
 		return fmt.Errorf("mark auth permission taken over: %w", err)
+	}
+	return nil
+}
+
+// TakeOverPrincipalPolicyTx records that an explicit write replaced
+// principal's whole policy, even with an empty one: every grant the backfill
+// provisioned for it is taken over, and a marker row keeps a principal with
+// no provisioning history from reading as untouched.
+func TakeOverPrincipalPolicyTx(ctx context.Context, dbtx repo.DBTX, organizationID string, principal urn.Principal) error {
+	q := repo.New(dbtx)
+	if err := q.MarkPrincipalAuthPermissionsTakenOver(ctx, repo.MarkPrincipalAuthPermissionsTakenOverParams{
+		OrganizationID: organizationID,
+		PrincipalUrn:   principal.String(),
+	}); err != nil {
+		return fmt.Errorf("mark principal auth permissions taken over: %w", err)
+	}
+	// The marker names every MCP server in the organization, a grant the
+	// backfill never writes since it scopes each one to a project.
+	raw, err := Selector{SelectorKeyResourceKind: ResourceKindMCP, SelectorKeyResourceID: WildcardResource}.MarshalJSON()
+	if err != nil {
+		return fmt.Errorf("marshal policy takeover marker: %w", err)
+	}
+	if err := q.RecordAuthPermissionPolicyTakeover(ctx, repo.RecordAuthPermissionPolicyTakeoverParams{
+		OrganizationID: organizationID,
+		PrincipalUrn:   principal.String(),
+		Scope:          string(ScopeMCPConnect),
+		Selectors:      raw,
+		Kind:           AuthPermissionKindExplicitPolicy,
+	}); err != nil {
+		return fmt.Errorf("record policy takeover: %w", err)
 	}
 	return nil
 }
