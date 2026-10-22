@@ -146,8 +146,8 @@ async function init(argv: string[]): Promise<void> {
   }
 
   let installCli = false;
-  // The project's build and push scripts run `speakeasy`, so look for the AI
-  // Control Plane CLI under that name rather than the old `gram` binary.
+  // The project's build and push scripts run `speakeasy-ai`, so look for the
+  // AI Control Plane CLI under that name rather than the old `gram` binary.
   const proc =
     await $`speakeasy-ai --control-plane-cli 2>/dev/null | grep -qx speakeasy-ai-control-plane-cli`
       .quiet()
@@ -263,11 +263,10 @@ async function init(argv: string[]): Promise<void> {
 
   if (installCli) {
     tlog.message("Installing the Speakeasy AI Control Plane CLI");
-    // A `speakeasy` on PATH may be the Speakeasy SDK generator CLI, which
-    // shares the name, so only skip the installer when the binary prints the
-    // AI Control Plane CLI marker. The installer puts the CLI in
-    // ${INSTALL_DIR:-/usr/local/bin}, so authenticate with that path rather
-    // than whatever `speakeasy` comes first on PATH.
+    // Only skip the installer when `speakeasy-ai` prints the AI Control Plane
+    // CLI marker. The installer puts the CLI in ${INSTALL_DIR:-/usr/local/bin},
+    // so authenticate with that path rather than whatever `speakeasy-ai` comes
+    // first on PATH.
     await $`speakeasy-ai --control-plane-cli 2>/dev/null | grep -qx speakeasy-ai-control-plane-cli || (curl -fsSL https://ai.speakeasy.com/cli.sh | bash && "\${INSTALL_DIR:-/usr/local/bin}/speakeasy-ai" auth)`;
   }
 

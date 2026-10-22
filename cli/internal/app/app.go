@@ -169,7 +169,7 @@ const (
 	// sharedCommandNotice is printed to stderr when the CLI runs as speakeasy.
 	sharedCommandNotice = "Warning: this CLI is now called speakeasy-ai, because the speakeasy name belongs to the Speakeasy SDK generator. " +
 		"Running it as speakeasy will stop working in a future release. " +
-		"Install speakeasy-ai with 'brew upgrade speakeasy-api/tap/cli', 'npm i -g @speakeasy-api/cli' or 'curl -fsSL https://ai.speakeasy.com/cli.sh | bash', " +
+		"Install speakeasy-ai with 'brew install speakeasy-api/tap/cli', 'npm i -g @speakeasy-api/cli' or 'curl -fsSL https://ai.speakeasy.com/cli.sh | bash', " +
 		"then run 'speakeasy-ai' instead of 'speakeasy'."
 )
 

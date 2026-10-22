@@ -52,7 +52,7 @@ func TestWriteLegacyCommandNotice_Speakeasy(t *testing.T) {
 
 	require.Equal(t, sharedCommandNotice+"\n", buf.String())
 	require.Contains(t, buf.String(), "now called speakeasy-ai")
-	require.Contains(t, buf.String(), "brew upgrade speakeasy-api/tap/cli")
+	require.Contains(t, buf.String(), "brew install speakeasy-api/tap/cli")
 }
 
 func TestWriteLegacyCommandNotice_SpeakeasyAI(t *testing.T) {
