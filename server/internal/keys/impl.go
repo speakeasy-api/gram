@@ -180,20 +180,9 @@ func (s *Service) CreateKey(ctx context.Context, payload *gen.CreateKeyPayload) 
 		projectID = uuid.NullUUID{UUID: project.ID, Valid: true}
 	}
 
-	policy, policyProjects, err := keyPolicyGrants(payload.PolicyGrants, projectID)
+	policy, err := s.validatedKeyPolicy(ctx, authCtx.ActiveOrganizationID, payload.PolicyGrants, projectID)
 	if err != nil {
 		return nil, err
-	}
-	for _, raw := range policyProjects {
-		id, err := uuid.Parse(raw)
-		if err != nil {
-			return nil, oops.E(oops.CodeBadRequest, err, "invalid project ID in key policy")
-		}
-		if _, err := s.projectRepo.GetProjectByIDAndOrganizationID(ctx, project_repo.GetProjectByIDAndOrganizationIDParams{ID: id, OrganizationID: authCtx.ActiveOrganizationID}); errors.Is(err, pgx.ErrNoRows) {
-			return nil, oops.E(oops.CodeBadRequest, nil, "key policy names a project outside this organization")
-		} else if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "load key policy project").LogError(ctx, s.logger)
-		}
 	}
 	policyAudit, err := policyAuditPayload(policy)
 	if err != nil {

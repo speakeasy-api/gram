@@ -41,6 +41,14 @@ type Client struct {
 	// requests to the setMcpServerUpstreamAuthRequirement endpoint.
 	SetMcpServerUpstreamAuthRequirementDoer goahttp.Doer
 
+	// GetAuthClientAudience Doer is the HTTP client used to make requests to the
+	// getAuthClientAudience endpoint.
+	GetAuthClientAudienceDoer goahttp.Doer
+
+	// SetAuthClientAudience Doer is the HTTP client used to make requests to the
+	// setAuthClientAudience endpoint.
+	SetAuthClientAudienceDoer goahttp.Doer
+
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
 	RestoreResponseBody bool
@@ -67,6 +75,8 @@ func NewClient(
 		DetachAuthClientFromMcpServerDoer:       doer,
 		GetMcpServerAuthenticationDoer:          doer,
 		SetMcpServerUpstreamAuthRequirementDoer: doer,
+		GetAuthClientAudienceDoer:               doer,
+		SetAuthClientAudienceDoer:               doer,
 		RestoreResponseBody:                     restoreBody,
 		scheme:                                  scheme,
 		host:                                    host,
@@ -215,6 +225,54 @@ func (c *Client) SetMcpServerUpstreamAuthRequirement() goa.Endpoint {
 		resp, err := c.SetMcpServerUpstreamAuthRequirementDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("authClients", "setMcpServerUpstreamAuthRequirement", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetAuthClientAudience returns an endpoint that makes HTTP requests to the
+// authClients service getAuthClientAudience server.
+func (c *Client) GetAuthClientAudience() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetAuthClientAudienceRequest(c.encoder)
+		decodeResponse = DecodeGetAuthClientAudienceResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetAuthClientAudienceRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetAuthClientAudienceDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("authClients", "getAuthClientAudience", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// SetAuthClientAudience returns an endpoint that makes HTTP requests to the
+// authClients service setAuthClientAudience server.
+func (c *Client) SetAuthClientAudience() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeSetAuthClientAudienceRequest(c.encoder)
+		decodeResponse = DecodeSetAuthClientAudienceResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildSetAuthClientAudienceRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.SetAuthClientAudienceDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("authClients", "setAuthClientAudience", err)
 		}
 		return decodeResponse(resp)
 	}

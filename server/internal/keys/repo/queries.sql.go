@@ -12,6 +12,26 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const countLiveAuthClientsInOrganization = `-- name: CountLiveAuthClientsInOrganization :one
+SELECT COUNT(*)
+FROM mcp_auth_clients
+WHERE organization_id = $1
+  AND id = ANY($2::uuid[])
+  AND deleted IS FALSE
+`
+
+type CountLiveAuthClientsInOrganizationParams struct {
+	OrganizationID string
+	Ids            []uuid.UUID
+}
+
+func (q *Queries) CountLiveAuthClientsInOrganization(ctx context.Context, arg CountLiveAuthClientsInOrganizationParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countLiveAuthClientsInOrganization, arg.OrganizationID, arg.Ids)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createAPIKey = `-- name: CreateAPIKey :one
 INSERT INTO api_keys (
     organization_id

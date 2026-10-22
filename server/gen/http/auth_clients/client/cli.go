@@ -273,3 +273,94 @@ func BuildSetMcpServerUpstreamAuthRequirementPayload(authClientsSetMcpServerUpst
 
 	return v, nil
 }
+
+// BuildGetAuthClientAudiencePayload builds the payload for the authClients
+// getAuthClientAudience endpoint from CLI flags.
+func BuildGetAuthClientAudiencePayload(authClientsGetAuthClientAudienceID string, authClientsGetAuthClientAudienceSessionToken string, authClientsGetAuthClientAudienceApikeyToken string) (*authclients.GetAuthClientAudiencePayload, error) {
+	var err error
+	var id string
+	{
+		id = authClientsGetAuthClientAudienceID
+		err = goa.MergeErrors(err, goa.ValidateFormat("id", id, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if authClientsGetAuthClientAudienceSessionToken != "" {
+			sessionToken = &authClientsGetAuthClientAudienceSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if authClientsGetAuthClientAudienceApikeyToken != "" {
+			apikeyToken = &authClientsGetAuthClientAudienceApikeyToken
+		}
+	}
+	v := &authclients.GetAuthClientAudiencePayload{}
+	v.ID = id
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+
+	return v, nil
+}
+
+// BuildSetAuthClientAudiencePayload builds the payload for the authClients
+// setAuthClientAudience endpoint from CLI flags.
+func BuildSetAuthClientAudiencePayload(authClientsSetAuthClientAudienceBody string, authClientsSetAuthClientAudienceSessionToken string, authClientsSetAuthClientAudienceApikeyToken string) (*authclients.SetAuthClientAudiencePayload, error) {
+	var err error
+	var body SetAuthClientAudienceRequestBody
+	{
+		err = json.Unmarshal([]byte(authClientsSetAuthClientAudienceBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"entries\": [\n         {\n            \"level\": \"blocked\",\n            \"principal_urn\": \"abc123\"\n         }\n      ],\n      \"expected_version\": \"abc123\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+		}
+		if body.Entries == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("entries", "body"))
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
+		for _, e := range body.Entries {
+			if e != nil {
+				if err2 := ValidateAuthClientAudienceRuleRequestBody(e); err2 != nil {
+					err = goa.MergeErrors(err, err2)
+				}
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if authClientsSetAuthClientAudienceSessionToken != "" {
+			sessionToken = &authClientsSetAuthClientAudienceSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if authClientsSetAuthClientAudienceApikeyToken != "" {
+			apikeyToken = &authClientsSetAuthClientAudienceApikeyToken
+		}
+	}
+	v := &authclients.SetAuthClientAudiencePayload{
+		ID:              body.ID,
+		ExpectedVersion: body.ExpectedVersion,
+	}
+	if body.Entries != nil {
+		v.Entries = make([]*authclients.AuthClientAudienceRule, len(body.Entries))
+		for i, val := range body.Entries {
+			if val == nil {
+				v.Entries[i] = nil
+				continue
+			}
+			v.Entries[i] = marshalAuthClientAudienceRuleRequestBodyToAuthclientsAuthClientAudienceRule(val)
+		}
+	} else {
+		v.Entries = []*authclients.AuthClientAudienceRule{}
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+
+	return v, nil
+}
