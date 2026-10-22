@@ -730,6 +730,49 @@ func TestDispatchRejectsLLMLaneWithPolicyID(t *testing.T) {
 	require.Empty(t, llmPub.messages)
 }
 
+func TestDispatchDoesNotSpendBudgetTwiceOnDuplicateBody(t *testing.T) {
+	t.Parallel()
+
+	te := setupInboxTest(t, "replica-dispatch-duplicate-body")
+	llmPub := &captureLLMPublisher{messages: nil, attributes: nil, onPublish: nil}
+	llmPub.onPublish = replyOK[*riskv1.LLMEnforcement](te, llmLane)
+	dispatcher := testLLMDispatcher(te, llmPub, DispatcherConfig{WaitTimeout: time.Second, LaneWaitTimeout: nil, Flags: nil})
+
+	text := strings.Repeat("x", 60*1024)
+	request := llmDispatchRequest([]Lane{llmLane}, testOrigins(llmLane))
+	request.Content = text
+	request.Body = text
+
+	outcome, err := dispatcher.Dispatch(t.Context(), request)
+	require.NoError(t, err)
+	require.True(t, outcome.Truncated)
+	require.Len(t, llmPub.messages, 1)
+	require.Equal(t, strings.Repeat("x", DefaultMaxContentBytes), llmPub.messages[0].GetContent())
+	require.Equal(t, llmPub.messages[0].GetContent(), llmPub.messages[0].GetBody())
+}
+
+func TestDispatchDoesNotSpendBudgetTwiceOnDuplicateToolArguments(t *testing.T) {
+	t.Parallel()
+
+	te := setupInboxTest(t, "replica-dispatch-duplicate-tool-arguments")
+	llmPub := &captureLLMPublisher{messages: nil, attributes: nil, onPublish: nil}
+	llmPub.onPublish = replyOK[*riskv1.LLMEnforcement](te, llmLane)
+	dispatcher := testLLMDispatcher(te, llmPub, DispatcherConfig{WaitTimeout: time.Second, LaneWaitTimeout: nil, Flags: nil})
+
+	text := strings.Repeat("x", MaxContentBytes+1)
+	request := llmDispatchRequest([]Lane{llmLane}, testOrigins(llmLane))
+	request.Content = text
+	request.Body = ""
+	request.ToolCalls = []ToolCall{{ID: "toolu_1", Name: "bash", Arguments: text}}
+
+	outcome, err := dispatcher.Dispatch(t.Context(), request)
+	require.NoError(t, err)
+	require.True(t, outcome.Truncated)
+	require.Len(t, llmPub.messages, 1)
+	require.Equal(t, strings.Repeat("x", DefaultMaxContentBytes), llmPub.messages[0].GetContent())
+	require.Equal(t, llmPub.messages[0].GetContent(), llmPub.messages[0].GetToolCalls()[0].GetArguments())
+}
+
 func TestDispatchHonorsWholeMessageBudgetInPriorityOrder(t *testing.T) {
 	t.Parallel()
 
