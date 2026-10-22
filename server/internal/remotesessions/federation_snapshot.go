@@ -35,10 +35,12 @@ type federatedClientSnapshot struct {
 	UpstreamRejectedAt              pgtype.Timestamptz `json:"UpstreamRejectedAt"`
 	IdentityProviderConnectionID    uuid.NullUUID      `json:"IdentityProviderConnectionID"`
 	CredentialOwner                 string             `json:"CredentialOwner"`
-	CreatedAt                       pgtype.Timestamptz `json:"CreatedAt"`
-	UpdatedAt                       pgtype.Timestamptz `json:"UpdatedAt"`
-	DeletedAt                       pgtype.Timestamptz `json:"DeletedAt"`
-	Deleted                         bool               `json:"Deleted"`
+	// A label only: renaming a client must not change its fingerprint.
+	DisplayName pgtype.Text        `json:"-"`
+	CreatedAt   pgtype.Timestamptz `json:"CreatedAt"`
+	UpdatedAt   pgtype.Timestamptz `json:"UpdatedAt"`
+	DeletedAt   pgtype.Timestamptz `json:"DeletedAt"`
+	Deleted     bool               `json:"Deleted"`
 }
 
 type federatedIssuerSnapshot struct {
