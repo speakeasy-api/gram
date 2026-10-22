@@ -9,8 +9,9 @@
 // server's configuration, and kept: a later version carries every earlier
 // choice and only adds choices for servers that had none. A server whose
 // configuration offers exactly one client the context can use gets it; a
-// server with no auth client and no need for upstream authentication gets an
-// explicit no-auth choice; anything else is left without a choice, reported as
+// server with no auth client that an administrator decided needs no upstream
+// authentication gets an explicit no-auth choice; anything else, including a
+// server whose need is still undecided, is left without a choice, reported as
 // a gap, and never guessed. A turn with no user (userless) never chooses a
 // personal remote_session client or EMA, which act as a user.
 //
@@ -59,6 +60,7 @@ const (
 // Auth client types a decision distinguishes.
 const (
 	typeRemoteSession    = "remote_session"
+	typeEMA              = "ema"
 	typeServiceAccount   = "service_account"
 	typeStaticCredential = "static_credential" // #nosec G101 -- a client type, not a credential
 	typePassThrough      = "pass_through"
@@ -83,6 +85,11 @@ const (
 	// GapSetupIncomplete is a server that needs upstream authentication and
 	// offers no auth client.
 	GapSetupIncomplete GapReason = "setup_incomplete"
+
+	// GapUpstreamAuthUndecided is a server that offers no auth client and
+	// whose need for upstream authentication an administrator has not
+	// decided.
+	GapUpstreamAuthUndecided GapReason = "upstream_auth_undecided"
 )
 
 // Gap is one server a profile has no choice for.
@@ -100,7 +107,7 @@ type decision struct {
 
 // decide decides a server's choice for a context. A server's upstream OAuth
 // client is its single associated one, which is what serves it today; its
-// remote_session or service_account auth client serves the choice. A server
+// remote_session, EMA or service_account auth client serves the choice. A server
 // with no associated upstream OAuth client is served by its headers, as a
 // static_credential or pass_through auth client, or by nothing.
 func decide(row ListProfileServersRow, execCtx Context) (decision, *Gap) {
@@ -126,7 +133,9 @@ func decide(row ListProfileServersRow, execCtx Context) (decision, *Gap) {
 			return gap(GapSelectionRequired)
 		case len(headers) == 1:
 			return choose(headers[0])
-		case row.RequiresUpstreamAuth.Valid && row.RequiresUpstreamAuth.Bool:
+		case !row.RequiresUpstreamAuth.Valid:
+			return gap(GapUpstreamAuthUndecided)
+		case row.RequiresUpstreamAuth.Bool:
 			return gap(GapSetupIncomplete)
 		default:
 			return choose(uuid.Nil)
@@ -141,7 +150,7 @@ func decide(row ListProfileServersRow, execCtx Context) (decision, *Gap) {
 			switch row.AuthClientTypes[i] {
 			case typeServiceAccount:
 				candidates = append(candidates, id)
-			case typeRemoteSession:
+			case typeRemoteSession, typeEMA:
 				if execCtx == ContextUserless {
 					personal = true
 					continue
@@ -213,6 +222,65 @@ func Bind(ctx context.Context, db TxStarter, target Target, source string) (Bind
 	return binding, nil
 }
 
+// plan is what a bind under target would record: the profile's latest
+// version, the new choices it can decide and the servers left without one.
+type plan struct {
+	profileID uuid.UUID
+	versionID uuid.UUID
+	version   int64
+	decisions []decision
+	gaps      []Gap
+}
+
+// writes reports whether a bind records a new version.
+func (p plan) writes() bool {
+	return p.version == 0 || len(p.decisions) > 0
+}
+
+func planTx(ctx context.Context, q *Queries, target Target, profileID, versionID uuid.UUID, version int64) (plan, error) {
+	servers, err := q.ListProfileServers(ctx, ListProfileServersParams{
+		VersionID:      uuid.NullUUID{UUID: versionID, Valid: version > 0},
+		OrganizationID: target.OrganizationID,
+		AssistantID:    target.AssistantID,
+		ProjectID:      target.ProjectID,
+	})
+	if err != nil {
+		return plan{}, fmt.Errorf("list execution profile servers: %w", err)
+	}
+	p := plan{profileID: profileID, versionID: versionID, version: version, decisions: []decision{}, gaps: []Gap{}}
+	for _, row := range servers {
+		if row.HasChoice {
+			continue
+		}
+		d, gap := decide(row, target.Context)
+		if gap != nil {
+			p.gaps = append(p.gaps, *gap)
+			continue
+		}
+		p.decisions = append(p.decisions, d)
+	}
+	return p, nil
+}
+
+// preview decides what a bind under target would record without writing or
+// locking anything.
+func preview(ctx context.Context, q *Queries, target Target) (plan, error) {
+	profile, err := q.GetProfile(ctx, GetProfileParams{
+		OrganizationID:    target.OrganizationID,
+		ProjectID:         target.ProjectID,
+		AssistantID:       target.AssistantID,
+		TriggerInstanceID: target.TriggerID,
+		ExecutionContext:  string(target.Context),
+	})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return planTx(ctx, q, target, uuid.Nil, uuid.Nil, 0)
+	case err != nil:
+		return plan{}, fmt.Errorf("read execution profile: %w", err)
+	}
+	return planTx(ctx, q, target, profile.ID, profile.VersionID, profile.Version)
+}
+
 func bindTx(ctx context.Context, q *Queries, target Target, source string) (Binding, error) {
 	var zero Binding
 	if err := q.EnsureProfile(ctx, EnsureProfileParams{
@@ -234,28 +302,12 @@ func bindTx(ctx context.Context, q *Queries, target Target, source string) (Bind
 	if err != nil {
 		return zero, fmt.Errorf("lock execution profile: %w", err)
 	}
-	servers, err := q.ListProfileServers(ctx, ListProfileServersParams{
-		VersionID:      uuid.NullUUID{UUID: profile.VersionID, Valid: profile.Version > 0},
-		OrganizationID: target.OrganizationID,
-		AssistantID:    target.AssistantID,
-		ProjectID:      target.ProjectID,
-	})
+	p, err := planTx(ctx, q, target, profile.ID, profile.VersionID, profile.Version)
 	if err != nil {
-		return zero, fmt.Errorf("list execution profile servers: %w", err)
+		return zero, err
 	}
-	decisions, gaps := []decision{}, []Gap{}
-	for _, row := range servers {
-		if row.HasChoice {
-			continue
-		}
-		d, gap := decide(row, target.Context)
-		if gap != nil {
-			gaps = append(gaps, *gap)
-			continue
-		}
-		decisions = append(decisions, d)
-	}
-	if profile.Version > 0 && len(decisions) == 0 {
+	gaps := p.gaps
+	if !p.writes() {
 		return Binding{VersionID: profile.VersionID, Version: profile.Version, Gaps: gaps}, nil
 	}
 	next := profile.Version + 1
@@ -278,7 +330,7 @@ func bindTx(ctx context.Context, q *Queries, target Target, source string) (Bind
 			return zero, fmt.Errorf("copy execution profile choices: %w", err)
 		}
 	}
-	for _, d := range decisions {
+	for _, d := range p.decisions {
 		n, err := q.RecordProfileChoice(ctx, RecordProfileChoiceParams{
 			VersionID:      versionID,
 			Source:         source,

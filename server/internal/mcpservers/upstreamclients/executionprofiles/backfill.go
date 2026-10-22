@@ -2,10 +2,7 @@ package executionprofiles
 
 import (
 	"context"
-	"errors"
 	"fmt"
-
-	"github.com/jackc/pgx/v5"
 )
 
 // Report summarizes the profiles of one organization. It carries counts only.
@@ -17,19 +14,22 @@ type Report struct {
 	// execution context.
 	Targets int `json:"targets"`
 
-	// VersionsWritten counts profile versions this run recorded.
+	// VersionsWritten counts profile versions this run recorded, or a dry run
+	// would record.
 	VersionsWritten int `json:"versions_written"`
 
-	// Gaps counts, per execution context, the servers the profiles' latest
-	// versions hold no choice for, by reason.
+	// Gaps counts, per execution context, the profile and server pairs the
+	// profiles' latest versions hold no choice for, by reason.
 	Gaps map[Context]map[GapReason]int `json:"gaps"`
 }
 
 // Backfill records a profile for every live assistant and root trigger pair in
 // the organization, in each execution context, deciding each one's choices
 // from the configuration that serves its turns today. With apply false it
-// decides without writing. It is idempotent: a rerun only adds choices for
-// servers that had none and can now be decided.
+// decides without writing or locking any profile. With apply true each
+// profile is bound in its own transaction, so a turn binding it waits only
+// for that profile. It is idempotent: a rerun only adds choices for servers
+// that had none and can now be decided.
 func Backfill(ctx context.Context, db TxStarter, organizationID string, apply bool) (Report, error) {
 	report := Report{Mode: "dry_run", Targets: 0, VersionsWritten: 0, Gaps: map[Context]map[GapReason]int{}}
 	if apply {
@@ -48,46 +48,44 @@ func Backfill(ctx context.Context, db TxStarter, organizationID string, apply bo
 	for _, t := range targets {
 		report.Targets++
 		for _, execCtx := range Contexts {
-			before, err := q.LockProfile(ctx, LockProfileParams{
-				OrganizationID:    organizationID,
-				ProjectID:         t.ProjectID,
-				AssistantID:       t.AssistantID.UUID,
-				TriggerInstanceID: t.TriggerID.UUID,
-				ExecutionContext:  string(execCtx),
-			})
-			previous := int64(0)
-			switch {
-			case err == nil:
-				previous = before.Version
-			case !errors.Is(err, pgx.ErrNoRows):
-				return report, fmt.Errorf("read execution profile: %w", err)
-			}
-			binding, err := bindTx(ctx, q, Target{
+			target := Target{
 				OrganizationID: organizationID,
 				ProjectID:      t.ProjectID,
 				AssistantID:    t.AssistantID.UUID,
 				TriggerID:      t.TriggerID.UUID,
 				Context:        execCtx,
-			}, SourceBackfill)
-			if err != nil {
-				return report, err
 			}
-			if binding.Version != previous {
-				report.VersionsWritten++
+			var gaps []Gap
+			if apply {
+				before, err := preview(ctx, q, target)
+				if err != nil {
+					return report, err
+				}
+				binding, err := Bind(ctx, db, target, SourceBackfill)
+				if err != nil {
+					return report, err
+				}
+				if binding.Version != before.version {
+					report.VersionsWritten++
+				}
+				gaps = binding.Gaps
+			} else {
+				p, err := preview(ctx, q, target)
+				if err != nil {
+					return report, err
+				}
+				if p.writes() {
+					report.VersionsWritten++
+				}
+				gaps = p.gaps
 			}
-			for _, gap := range binding.Gaps {
+			for _, gap := range gaps {
 				if report.Gaps[execCtx] == nil {
 					report.Gaps[execCtx] = map[GapReason]int{}
 				}
 				report.Gaps[execCtx][gap.Reason]++
 			}
 		}
-	}
-	if !apply {
-		return report, nil
-	}
-	if err := tx.Commit(ctx); err != nil {
-		return report, fmt.Errorf("commit execution profile backfill: %w", err)
 	}
 	return report, nil
 }

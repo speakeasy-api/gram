@@ -585,7 +585,9 @@ function ExecutionProfileStatus({
     return (
       <p className="text-muted-foreground text-xs">
         Assistant profiles: recorded for {p.targets}{" "}
-        {p.targets === 1 ? "trigger" : "triggers"}
+        {p.targets === 1
+          ? "assistant and trigger pair"
+          : "assistant and trigger pairs"}
       </p>
     );
   }
@@ -602,7 +604,9 @@ function ExecutionProfileStatus({
           {p.gaps.map((gap) => (
             <li key={`${gap.executionContext}:${gap.reason}`}>
               {gap.executionContext} {gap.reason}: {gap.servers}{" "}
-              {gap.servers === 1 ? "server" : "servers"}
+              {gap.servers === 1
+                ? "profile and server pair"
+                : "profile and server pairs"}
             </li>
           ))}
         </ul>

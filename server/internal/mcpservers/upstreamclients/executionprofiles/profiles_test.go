@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
@@ -108,6 +109,14 @@ func (f *fixture) authClient(serverID uuid.UUID, clientType string, registration
 	return id
 }
 
+// workloadBinding binds the trigger to the assistant's workload identity.
+func (f *fixture) workloadBinding() {
+	f.t.Helper()
+	require.NoError(f.t, f.q.SeedWorkloadBindingFixture(f.t.Context(), SeedWorkloadBindingFixtureParams{
+		OrganizationID: f.orgID, ProjectID: f.projectID, AssistantID: f.assistant, TriggerID: f.trigger,
+	}))
+}
+
 func (f *fixture) bind(execCtx Context) Binding {
 	f.t.Helper()
 	binding, err := Bind(f.t.Context(), f.pool, Target{OrganizationID: f.orgID, ProjectID: f.projectID, AssistantID: f.assistant, TriggerID: f.trigger, Context: execCtx}, SourceIssuance)
@@ -143,6 +152,7 @@ func TestBindDecidesOnlyWhatConfigurationDecides(t *testing.T) {
 	several := f.server(undecided)
 	f.registration(several)
 	f.registration(several)
+	unset := f.server(undecided)
 
 	binding := f.bind(ContextUserBacked)
 	require.Equal(t, int64(1), binding.Version)
@@ -155,7 +165,52 @@ func TestBindDecidesOnlyWhatConfigurationDecides(t *testing.T) {
 	require.ElementsMatch(t, []Gap{
 		{MCPServerID: incomplete, Reason: GapSetupIncomplete},
 		{MCPServerID: several, Reason: GapSelectionRequired},
+		{MCPServerID: unset, Reason: GapUpstreamAuthUndecided},
 	}, binding.Gaps)
+}
+
+func TestBindTreatsEMAAsPersonal(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	server := f.server(undecided)
+	registration := f.registration(server)
+	emaClient := f.authClient(server, typeEMA, registration)
+
+	userless := f.bind(ContextUserless)
+	require.Empty(t, f.choices(userless.VersionID))
+	require.Equal(t, []Gap{{MCPServerID: server, Reason: GapPersonalRequiresUser}}, userless.Gaps)
+
+	userBacked := f.bind(ContextUserBacked)
+	require.Equal(t, map[uuid.UUID]uuid.UUID{server: emaClient}, f.choices(userBacked.VersionID))
+
+}
+
+func TestBackfillDryRunWritesNothing(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	server := f.server(undecided)
+	f.authClient(server, typeServiceAccount, f.registration(server))
+	f.workloadBinding()
+
+	dry, err := Backfill(t.Context(), f.pool, f.orgID, false)
+	require.NoError(t, err)
+	require.Equal(t, 1, dry.Targets)
+	require.Equal(t, len(Contexts), dry.VersionsWritten)
+	for _, execCtx := range Contexts {
+		_, err := f.q.GetProfile(t.Context(), GetProfileParams{
+			OrganizationID: f.orgID, ProjectID: f.projectID, AssistantID: f.assistant,
+			TriggerInstanceID: f.trigger, ExecutionContext: string(execCtx),
+		})
+		require.ErrorIs(t, err, pgx.ErrNoRows, "a dry run creates no profile")
+	}
+
+	applied, err := Backfill(t.Context(), f.pool, f.orgID, true)
+	require.NoError(t, err)
+	require.Equal(t, len(Contexts), applied.VersionsWritten)
+
+	again, err := Backfill(t.Context(), f.pool, f.orgID, false)
+	require.NoError(t, err)
+	require.Zero(t, again.VersionsWritten)
 }
 
 func TestBindNeverGivesAUserlessTurnAPersonalClient(t *testing.T) {

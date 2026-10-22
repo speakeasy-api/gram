@@ -1,7 +1,8 @@
 // Package principalcredential issues and authenticates short-lived bearer
 // tokens for an agent or a workload principal. A token carries the principal,
-// the organization and project it acts in, and an optional authorizing user for
-// an agent. It carries no grants: admission derives the policy that bounds it
+// the organization and project it acts in, an optional authorizing user for
+// an agent, and, for an assistant turn, the optional execution-selection
+// profile version it binds. It carries no grants: admission derives the policy that bounds it
 // on every request from the live policies of the agent, its owner, and the
 // authorizing user, so the token's size does not grow with the principal's
 // grants and a revoked grant takes effect immediately. Authenticating one

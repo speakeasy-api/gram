@@ -119,13 +119,17 @@ func (s *Service) RunUpstreamOAuthMigration(ctx context.Context, p *gen.RunUpstr
 			)
 		}
 	}
+	// Profiles decide from the typed auth clients, so they are recorded only
+	// after a run that recorded every auth client phase.
 	var profileVersionsWritten *int64
-	profiles, err := executionprofiles.Backfill(migrationCtx, s.db, organizationID, true)
-	switch {
-	case err != nil:
-		logger.ErrorContext(ctx, "record execution selection profiles", attr.SlogError(err))
-	default:
-		profileVersionsWritten = new(int64(profiles.VersionsWritten))
+	if authClientsError == nil {
+		profiles, err := executionprofiles.Backfill(migrationCtx, s.db, organizationID, true)
+		switch {
+		case err != nil:
+			logger.ErrorContext(ctx, "record execution selection profiles", attr.SlogError(err))
+		default:
+			profileVersionsWritten = new(int64(profiles.VersionsWritten))
+		}
 	}
 	// The writes above are committed even if the caller has gone, so the
 	// audit line and the status read do not depend on the request.

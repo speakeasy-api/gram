@@ -96,6 +96,56 @@ func (q *Queries) EnsureProfile(ctx context.Context, arg EnsureProfileParams) er
 	return err
 }
 
+const getProfile = `-- name: GetProfile :one
+SELECT p.id,
+       COALESCE(v.id, '00000000-0000-0000-0000-000000000000'::uuid)::uuid AS version_id,
+       COALESCE(v.version, 0)::bigint AS version
+FROM execution_selection_profiles AS p
+LEFT JOIN LATERAL (
+  SELECT pv.id, pv.version
+  FROM execution_selection_profile_versions AS pv
+  WHERE pv.profile_id = p.id
+  ORDER BY pv.version DESC
+  LIMIT 1
+) AS v ON TRUE
+WHERE p.organization_id = $1
+  AND p.project_id = $2
+  AND p.assistant_id = $3
+  AND p.trigger_instance_id = $4
+  AND p.execution_context = $5
+  AND p.deleted IS FALSE
+`
+
+type GetProfileParams struct {
+	OrganizationID    string
+	ProjectID         uuid.UUID
+	AssistantID       uuid.UUID
+	TriggerInstanceID uuid.UUID
+	ExecutionContext  string
+}
+
+type GetProfileRow struct {
+	ID        uuid.UUID
+	VersionID uuid.UUID
+	Version   int64
+}
+
+// The live profile for an assistant, root trigger and execution context, read
+// without a lock, with its latest version: version 0 and the nil id when it
+// has none. A dry run reads it so it never holds a profile a turn binds.
+func (q *Queries) GetProfile(ctx context.Context, arg GetProfileParams) (GetProfileRow, error) {
+	row := q.db.QueryRow(ctx, getProfile,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.AssistantID,
+		arg.TriggerInstanceID,
+		arg.ExecutionContext,
+	)
+	var i GetProfileRow
+	err := row.Scan(&i.ID, &i.VersionID, &i.Version)
+	return i, err
+}
+
 const linkAuthClientFixture = `-- name: LinkAuthClientFixture :exec
 INSERT INTO mcp_server_auth_clients (project_id, organization_id, mcp_server_id, auth_client_id, client_attachment_scope, source)
 SELECT $1, $2, $3, ac.id, ac.attachment_scope, 'backfill'
@@ -674,4 +724,44 @@ func (q *Queries) SeedTriggerFixture(ctx context.Context, arg SeedTriggerFixture
 	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err
+}
+
+const seedWorkloadBindingFixture = `-- name: SeedWorkloadBindingFixture :exec
+WITH ab AS (
+  INSERT INTO assistant_agent_bindings (
+    organization_id, project_id, project_ref_organization_id, project_ref_id,
+    original_assistant_id, assistant_ref_organization_id, assistant_ref_project_id, assistant_id,
+    original_agent_id, generation
+  )
+  VALUES ($1, $2, $1, $2, $4, $1, $2, $4, generate_uuidv7(), 1)
+  RETURNING id
+)
+INSERT INTO trigger_workload_bindings (
+  organization_id, project_id, project_ref_organization_id, project_ref_id,
+  original_trigger_id, trigger_ref_organization_id, trigger_ref_project_id, trigger_id,
+  original_assistant_binding_id, assistant_binding_ref_organization_id, assistant_binding_ref_project_id, assistant_binding_id,
+  assistant_binding_generation, original_workload_issuer_id, subject, generation
+)
+SELECT $1, $2, $1, $2,
+       $3, $1, $2, $3,
+       ab.id, $1, $2, ab.id,
+       1, generate_uuidv7(), 'workload', 1
+FROM ab
+`
+
+type SeedWorkloadBindingFixtureParams struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+	TriggerID      uuid.UUID
+	AssistantID    uuid.UUID
+}
+
+func (q *Queries) SeedWorkloadBindingFixture(ctx context.Context, arg SeedWorkloadBindingFixtureParams) error {
+	_, err := q.db.Exec(ctx, seedWorkloadBindingFixture,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.TriggerID,
+		arg.AssistantID,
+	)
+	return err
 }

@@ -144,6 +144,18 @@ describe("needsMigrationRun", () => {
     expect(needsMigrationRun(s)).toBe(false);
   });
 
+  it("skips profiles to record while a run records auth clients", () => {
+    const s = status(true, true);
+    if (s.authClients) s.authClients.inProgress = true;
+    s.executionProfiles = {
+      complete: false,
+      targets: 1,
+      pendingVersions: 2,
+      gaps: [],
+    };
+    expect(needsMigrationRun(s)).toBe(false);
+  });
+
   it("skips an organization whose auth clients a run is recording", () => {
     const s = status(true, false);
     if (s.authClients) s.authClients.inProgress = true;

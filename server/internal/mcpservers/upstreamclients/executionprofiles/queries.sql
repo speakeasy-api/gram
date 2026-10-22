@@ -29,6 +29,28 @@ WHERE p.organization_id = @organization_id
   AND p.deleted IS FALSE
 FOR UPDATE OF p;
 
+-- name: GetProfile :one
+-- The live profile for an assistant, root trigger and execution context, read
+-- without a lock, with its latest version: version 0 and the nil id when it
+-- has none. A dry run reads it so it never holds a profile a turn binds.
+SELECT p.id,
+       COALESCE(v.id, '00000000-0000-0000-0000-000000000000'::uuid)::uuid AS version_id,
+       COALESCE(v.version, 0)::bigint AS version
+FROM execution_selection_profiles AS p
+LEFT JOIN LATERAL (
+  SELECT pv.id, pv.version
+  FROM execution_selection_profile_versions AS pv
+  WHERE pv.profile_id = p.id
+  ORDER BY pv.version DESC
+  LIMIT 1
+) AS v ON TRUE
+WHERE p.organization_id = @organization_id
+  AND p.project_id = @project_id
+  AND p.assistant_id = @assistant_id
+  AND p.trigger_instance_id = @trigger_instance_id
+  AND p.execution_context = @execution_context
+  AND p.deleted IS FALSE;
+
 -- name: ListProfileServers :many
 -- Every proxied (remote or tunneled) live MCP server the assistant reaches,
 -- with whether the version already holds a choice for it and the evidence a
@@ -259,3 +281,25 @@ SELECT mcp_server_id, auth_client_id, remote_session_client_id, no_auth
 FROM upstream_client_selections
 WHERE credential_kind = 'execution_profile_version' AND credential_id = @version_id AND deleted IS FALSE
 ORDER BY mcp_server_id;
+
+-- name: SeedWorkloadBindingFixture :exec
+WITH ab AS (
+  INSERT INTO assistant_agent_bindings (
+    organization_id, project_id, project_ref_organization_id, project_ref_id,
+    original_assistant_id, assistant_ref_organization_id, assistant_ref_project_id, assistant_id,
+    original_agent_id, generation
+  )
+  VALUES (@organization_id, @project_id, @organization_id, @project_id, @assistant_id, @organization_id, @project_id, @assistant_id, generate_uuidv7(), 1)
+  RETURNING id
+)
+INSERT INTO trigger_workload_bindings (
+  organization_id, project_id, project_ref_organization_id, project_ref_id,
+  original_trigger_id, trigger_ref_organization_id, trigger_ref_project_id, trigger_id,
+  original_assistant_binding_id, assistant_binding_ref_organization_id, assistant_binding_ref_project_id, assistant_binding_id,
+  assistant_binding_generation, original_workload_issuer_id, subject, generation
+)
+SELECT @organization_id, @project_id, @organization_id, @project_id,
+       @trigger_id, @organization_id, @project_id, @trigger_id,
+       ab.id, @organization_id, @project_id, ab.id,
+       1, generate_uuidv7(), 'workload', 1
+FROM ab;
