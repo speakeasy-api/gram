@@ -1193,6 +1193,7 @@ SELECT cm.id
 FROM chat_messages cm
 WHERE cm.project_id = $1
   AND cm.risk_analyzed_at IS NULL
+  AND cm.primary_message_id IS NULL
   AND cm.id >= $2
 ORDER BY cm.id ASC
 LIMIT $3
@@ -1213,6 +1214,10 @@ type FetchUnanalyzedMessageIDsParams struct {
 // fresh messages while units nearing the lookback's edge age out without a
 // retry; ascending order drains the window fairly and costs at most the
 // lookback in added freshness latency.
+// Secondary rows (a copy of an entry already stored from another capture
+// source) are stamped analyzed at insert, so the predicate normally costs
+// nothing; it is still required because a litellm-to-native promotion resets
+// risk_analyzed_at and must never pull a secondary back into the sweep.
 func (q *Queries) FetchUnanalyzedMessageIDs(ctx context.Context, arg FetchUnanalyzedMessageIDsParams) ([]uuid.UUID, error) {
 	rows, err := q.db.Query(ctx, fetchUnanalyzedMessageIDs, arg.ProjectID, arg.IDLowerBound, arg.BatchLimit)
 	if err != nil {
@@ -5453,6 +5458,27 @@ type SetChatMessageExternalUserIDForTestParams struct {
 
 func (q *Queries) SetChatMessageExternalUserIDForTest(ctx context.Context, arg SetChatMessageExternalUserIDForTestParams) error {
 	_, err := q.db.Exec(ctx, setChatMessageExternalUserIDForTest, arg.ExternalUserID, arg.ID, arg.ProjectID)
+	return err
+}
+
+const setChatMessagePrimaryFixture = `-- name: SetChatMessagePrimaryFixture :exec
+UPDATE chat_messages
+SET primary_message_id = $1,
+    risk_analyzed_at = NULL
+WHERE id = $2
+  AND project_id = $3
+`
+
+type SetChatMessagePrimaryFixtureParams struct {
+	PrimaryMessageID uuid.NullUUID
+	ID               uuid.UUID
+	ProjectID        uuid.NullUUID
+}
+
+// Test fixture: a secondary row whose risk_analyzed_at was reset, the state a
+// litellm-to-native promotion leaves behind.
+func (q *Queries) SetChatMessagePrimaryFixture(ctx context.Context, arg SetChatMessagePrimaryFixtureParams) error {
+	_, err := q.db.Exec(ctx, setChatMessagePrimaryFixture, arg.PrimaryMessageID, arg.ID, arg.ProjectID)
 	return err
 }
 

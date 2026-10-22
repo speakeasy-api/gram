@@ -60,6 +60,32 @@ func TestFetchUnanalyzed_ExcludesAlreadyAnalyzed(t *testing.T) {
 	require.Equal(t, msgs[1], result.MessageIDs[0])
 }
 
+func TestFetchUnanalyzed_SkipsSecondary(t *testing.T) {
+	t.Parallel()
+	conn := cloneDB(t)
+	td := seedTestData(t, conn, true)
+	msgs := seedMessages(t, conn, td, 2)
+
+	// A secondary copy of an entry stays out of the sweep even after a
+	// promotion reset its risk_analyzed_at; the primary is scanned instead.
+	err := riskrepo.New(conn).SetChatMessagePrimaryFixture(t.Context(), riskrepo.SetChatMessagePrimaryFixtureParams{
+		PrimaryMessageID: uuid.NullUUID{UUID: msgs[0], Valid: true},
+		ID:               msgs[1],
+		ProjectID:        uuid.NullUUID{UUID: td.projectID, Valid: true},
+	})
+	require.NoError(t, err)
+
+	activity := risk_analysis.NewFetchUnanalyzed(testenv.NewLogger(t), testenv.NewTracerProvider(t), conn)
+	result, err := activity.Do(t.Context(), risk_analysis.FetchUnanalyzedArgs{
+		ProjectID:    td.projectID,
+		IDLowerBound: zeroLowerBound,
+		BatchLimit:   100,
+	})
+	require.NoError(t, err)
+	require.Len(t, result.MessageIDs, 1)
+	require.Equal(t, msgs[0], result.MessageIDs[0])
+}
+
 func TestFetchUnanalyzed_DisabledPolicyReturnsEmpty(t *testing.T) {
 	t.Parallel()
 	conn := cloneDB(t)

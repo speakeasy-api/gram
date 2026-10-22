@@ -773,10 +773,15 @@ ORDER BY findings DESC, rule_id ASC;
 -- fresh messages while units nearing the lookback's edge age out without a
 -- retry; ascending order drains the window fairly and costs at most the
 -- lookback in added freshness latency.
+-- Secondary rows (a copy of an entry already stored from another capture
+-- source) are stamped analyzed at insert, so the predicate normally costs
+-- nothing; it is still required because a litellm-to-native promotion resets
+-- risk_analyzed_at and must never pull a secondary back into the sweep.
 SELECT cm.id
 FROM chat_messages cm
 WHERE cm.project_id = @project_id
   AND cm.risk_analyzed_at IS NULL
+  AND cm.primary_message_id IS NULL
   AND cm.id >= @id_lower_bound
 ORDER BY cm.id ASC
 LIMIT @batch_limit;
@@ -804,6 +809,15 @@ LIMIT @batch_limit;
 UPDATE chat_content_parts
 SET risk_analyzed_at = clock_timestamp()
 WHERE id = ANY(@content_part_ids::uuid[])
+  AND project_id = @project_id;
+
+-- name: SetChatMessagePrimaryFixture :exec
+-- Test fixture: a secondary row whose risk_analyzed_at was reset, the state a
+-- litellm-to-native promotion leaves behind.
+UPDATE chat_messages
+SET primary_message_id = @primary_message_id,
+    risk_analyzed_at = NULL
+WHERE id = @id
   AND project_id = @project_id;
 
 -- name: GetMessageContentBatch :many

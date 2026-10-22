@@ -151,6 +151,7 @@ func (s *ServiceCore) RecordCompactedGeneration(ctx context.Context, projectID, 
 			HookHostname:      "",
 			AccountType:       chatRow.AccountType,
 			BillingMode:       "",
+			SessionID:         "",
 		})
 	}
 

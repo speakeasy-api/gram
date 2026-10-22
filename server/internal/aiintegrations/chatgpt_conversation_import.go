@@ -429,6 +429,7 @@ func (src *chatgptConversationSource) writeFile(ctx context.Context, file codexa
 			HookHostname:      "",
 			AccountType:       complianceAccountTypeTeam,
 			BillingMode:       src.cfg.BillingMode,
+			SessionID:         "",
 		})
 	}
 	if fallbacks := src.timestampFallbacks() - fallbacksBefore; fallbacks > 0 {

@@ -2212,6 +2212,64 @@ UPDATE chats SET inference_actor_key = @inference_actor_key
 WHERE id = @id AND project_id = @project_id
   AND inference_actor_key IS NULL;
 
+-- name: LookupChatEntryKeys :many
+-- Resolves a batch of entry keys to the rows that already own them. Only live
+-- chats count: a key whose chat was soft-deleted cannot turn a new copy of
+-- the entry into a secondary.
+SELECT k.key, k.chat_id, k.message_id, c.user_id, c.external_user_id
+FROM chat_entry_keys k
+JOIN chats c ON c.id = k.chat_id AND c.project_id = k.project_id
+WHERE k.project_id = @project_id
+  AND k.key = ANY(@keys::text[])
+  AND NOT c.deleted;
+
+-- name: InsertChatEntryKey :one
+-- No row back means a concurrent writer recorded the key first; the caller
+-- looks the key up again and stores its own row as a secondary.
+INSERT INTO chat_entry_keys (project_id, chat_id, message_id, key)
+VALUES (@project_id, @chat_id, @message_id, @key)
+ON CONFLICT (project_id, key) DO NOTHING
+RETURNING id;
+
+-- name: MarkChatMessageSecondary :exec
+-- A secondary row is stamped analyzed in the same statement so the unanalyzed
+-- sweep never sees it, even for the instant between insert and mark.
+UPDATE chat_messages
+SET primary_message_id = @primary_message_id,
+    risk_analyzed_at = clock_timestamp()
+WHERE id = @id AND project_id = @project_id;
+
+-- name: GetLinkedChatForSession :one
+SELECT id, user_id, external_user_id
+FROM chats
+WHERE id = @id AND project_id = @project_id AND NOT deleted;
+
+-- name: GetLastSharedAnchor :one
+-- The newest primary row in the linked chat that a row of this chat is a
+-- secondary of. Everything after it in the linked chat is the open segment an
+-- unkeyed row may still match by text. Positions are compared within the
+-- linked chat only: the two chats stamp created_at from different clocks.
+SELECT p.created_at, p.seq
+FROM chat_messages p
+JOIN chat_messages s ON s.primary_message_id = p.id
+WHERE p.project_id = @project_id
+  AND p.chat_id = @linked_chat_id
+  AND s.chat_id = @chat_id
+ORDER BY p.created_at DESC, p.seq DESC
+LIMIT 1;
+
+-- name: ListChatOpenSegment :many
+-- Primary rows of a chat after a position, oldest first. Pass the epoch and
+-- seq 0 to read from the start of the chat.
+SELECT id, role, content, created_at, seq
+FROM chat_messages
+WHERE chat_id = @chat_id
+  AND project_id = @project_id
+  AND primary_message_id IS NULL
+  AND (created_at, seq) > (@after_created_at::timestamptz, @after_seq::bigint)
+ORDER BY created_at ASC, seq ASC
+LIMIT @row_limit;
+
 -- name: RecordSlackMessageParticipant :exec
 -- Without a workspace hint, only a unique organization-local directory match
 -- is resolvable. Never select an arbitrary workspace or match profile email.

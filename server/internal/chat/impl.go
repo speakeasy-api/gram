@@ -3344,6 +3344,7 @@ func prepareMessages(ctx context.Context, logger *slog.Logger, assetStorage asse
 			HookHostname:      "",
 			AccountType:       "",
 			BillingMode:       "",
+			SessionID:         "",
 		}
 	}
 

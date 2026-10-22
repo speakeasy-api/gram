@@ -497,6 +497,7 @@ func (src *codexCloudSource) writeFile(ctx context.Context, file codexapi.LogFil
 			HookHostname:      "",
 			AccountType:       complianceAccountTypeTeam,
 			BillingMode:       src.cfg.BillingMode,
+			SessionID:         "",
 		})
 	}
 	if len(rows) == 0 {
