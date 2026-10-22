@@ -8,6 +8,7 @@ import {
 import { useState, type ReactNode } from "react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { PaygEmbeddedCheckout } from "./payg-embedded-checkout";
+import { PaygCheckoutSkeleton } from "./payg-checkout-skeleton";
 import { PaygCheckoutMount } from "./payg-checkout-mount";
 
 const mocks = vi.hoisted(() => ({
@@ -23,7 +24,7 @@ vi.mock("@stripe/stripe-js", () => ({
   loadStripe: () => Promise.resolve(null),
 }));
 vi.mock("./payg-checkout-summary", () => ({
-  PaygCheckoutHeader: () => <h2>Pricing header</h2>,
+  PaygCheckoutHeader: () => <h4>Pricing</h4>,
   PaygCheckoutSummary: () => (
     <section aria-label="Order summary">Price items</section>
   ),
@@ -144,20 +145,94 @@ it("preserves Stripe provider state for the same session and resets it for a rep
   ).toBeTruthy();
 });
 
-it("places the pricing header above both summary and payment columns", () => {
+it("uses separate column dividers in the header row above aligned summary and payment columns", () => {
   show();
-  const headerRow = screen.getByRole("heading", {
-    name: "Pricing header",
+  const pricing = screen.getByRole("heading", { name: "Pricing", level: 4 });
+  const payment = screen.getByRole("heading", {
+    name: "Payment details",
+    level: 4,
+  });
+  const pricingCell = pricing.parentElement!;
+  const paymentCell = payment.parentElement!;
+  const headerRow = pricingCell.parentElement!;
+  const summaryCell = screen.getByRole("region", {
+    name: "Order summary",
   }).parentElement!;
-  const summary = screen.getByRole("region", { name: "Order summary" });
-  const formColumn = screen.getByRole("button", {
+  const formCell = screen.getByRole("button", {
     name: "Confirm",
   }).parentElement!;
-  expect(headerRow.classList.contains("lg:col-span-2")).toBe(true);
+  const bodyRow = summaryCell.parentElement!;
+  expect(Array.from(headerRow.children)).toEqual([pricingCell, paymentCell]);
+  expect(Array.from(bodyRow.children)).toEqual([summaryCell, formCell]);
   expect(Array.from(headerRow.parentElement!.children)).toEqual([
     headerRow,
-    summary,
-    formColumn,
+    bodyRow,
   ]);
-  expect(headerRow.parentElement!.classList.contains("grid-cols-1")).toBe(true);
+  expect(headerRow.classList.contains("lg:border-b")).toBe(false);
+  for (const cell of [pricingCell, paymentCell]) {
+    expect(cell.classList.contains("border-b")).toBe(true);
+    expect(cell.classList.contains("border-border")).toBe(true);
+  }
+  for (const row of [headerRow, bodyRow]) {
+    expect(row.classList.contains("contents")).toBe(true);
+    expect(row.classList.contains("lg:grid")).toBe(true);
+    expect(row.classList.contains("lg:grid-cols-2")).toBe(true);
+    expect(row.classList.contains("lg:gap-10")).toBe(true);
+    expect(row.classList.contains("lg:items-start")).toBe(true);
+  }
+  for (const cell of [paymentCell, formCell]) {
+    expect(cell.classList.contains("max-w-lg")).toBe(true);
+    expect(cell.classList.contains("lg:justify-self-end")).toBe(true);
+  }
+  // On mobile, display: contents lets summary precede the payment heading/form.
+  for (const [index, cell] of [
+    pricingCell,
+    summaryCell,
+    paymentCell,
+    formCell,
+  ].entries()) {
+    expect(cell.classList.contains(`order-${index + 1}`)).toBe(true);
+  }
+  expect(payment.classList.contains("text-display-sm")).toBe(false);
+  expect(headerRow.querySelector('[class*="lg:pb-7"]')).toBeNull();
+  expect(
+    screen.getAllByRole("heading", { name: "Payment details" }),
+  ).toHaveLength(1);
+});
+
+it("reserves broad summary and payment shapes beneath aligned headers while checkout loads", () => {
+  render(<PaygCheckoutSkeleton />);
+  const grid = screen
+    .getByRole("status", { name: "Loading checkout" })
+    .querySelector('[aria-hidden="true"]')!;
+  const [headerRow, bodyRow] = Array.from(grid.children);
+  expect(grid.children).toHaveLength(2);
+  expect(headerRow!.classList.contains("lg:border-b")).toBe(false);
+  for (const cell of Array.from(headerRow!.children)) {
+    expect(cell.classList.contains("border-b")).toBe(true);
+  }
+  for (const row of [headerRow!, bodyRow!]) {
+    expect(row.children).toHaveLength(2);
+    expect(row.classList.contains("contents")).toBe(true);
+    expect(row.classList.contains("lg:grid-cols-2")).toBe(true);
+    expect(row.classList.contains("lg:gap-10")).toBe(true);
+    expect(row.lastElementChild!.classList.contains("max-w-lg")).toBe(true);
+    expect(
+      row.lastElementChild!.classList.contains("lg:justify-self-end"),
+    ).toBe(true);
+  }
+  const [summary, payment] = Array.from(bodyRow!.children);
+  // Reserve whole sections rather than reproducing product or billing text lines.
+  for (const height of ["h-12", "h-28", "h-8"]) {
+    expect(summary!.querySelector(`.${height}.w-full`)).not.toBeNull();
+  }
+  for (const height of ["h-11", "h-36", "h-16"]) {
+    expect(payment!.querySelector(`.${height}.w-full`)).not.toBeNull();
+  }
+  expect(headerRow!.classList.contains("pb-6")).toBe(true);
+  for (const cell of Array.from(headerRow!.children)) {
+    expect(cell.classList.contains("pb-2")).toBe(true);
+  }
+  expect(headerRow!.querySelectorAll(".h-7")).toHaveLength(3);
+  expect(grid.querySelector('[class*="lg:mb-15"]')).toBeNull();
 });
