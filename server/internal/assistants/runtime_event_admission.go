@@ -16,6 +16,8 @@ var errRuntimeAuthorityRetired = errors.New("assistant runtime authority is no l
 // claimRuntimeEvent serializes event admission with selection changes. A runtime
 // loaded before a switch must not claim an event ingested after that switch.
 // The processing row keeps switching busy after this short transaction commits.
+// Kit also claims while starting so bootstrap receives the actual event root;
+// all assistant, project, version, backend and retirement checks still apply.
 func (s *ServiceCore) claimRuntimeEvent(ctx context.Context, runtime assistantRuntimeRecord, threadID uuid.UUID) (assistantThreadEventRecord, bool, error) {
 	var zero assistantThreadEventRecord
 	tx, err := s.db.Begin(ctx)
@@ -34,7 +36,7 @@ func (s *ServiceCore) claimRuntimeEvent(ctx context.Context, runtime assistantRu
 	if err != nil {
 		return zero, false, fmt.Errorf("read event runtime authority: %w", err)
 	}
-	if row.Deleted || row.Ended || row.AssistantID != runtime.AssistantID || row.RuntimeVersion != runtime.RuntimeVersion || row.Backend != runtime.Backend || row.State != runtimeStateActive {
+	if row.Deleted || row.Ended || row.AssistantID != runtime.AssistantID || row.RuntimeVersion != runtime.RuntimeVersion || row.Backend != runtime.Backend || (row.State != runtimeStateActive && (runtime.RuntimeVersion != 3 || row.State != runtimeStateStarting)) {
 		return zero, false, errRuntimeAuthorityRetired
 	}
 	event, ok, err := claimNextPendingEventWithQueries(ctx, queries, runtime.ProjectID, threadID)

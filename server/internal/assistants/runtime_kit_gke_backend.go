@@ -29,13 +29,16 @@ import (
 // All lifecycle calls require the caller's shared runtime admission lock.
 // Bootstrap retires old inference authority before minting startup credentials.
 type KitGKERuntimeConfig struct {
-	GKE            GKERuntimeConfig
-	Provision      KitGKEProvisionInput
-	Bootstrap      func(context.Context, assistantRuntimeRecord) (KitLocalBootstrap, error)
-	Protocol       func(context.Context, assistantRuntimeRecord, *url.URL) (runtimeProtocol, error)
-	Fence          func(context.Context, assistantRuntimeRecord) error
-	Snapshots      KitGKECheckpointDriver
-	AuthorityStore KitGKEAuthorityStore
+	// BootstrapGeneration refreshes credential/configuration format through the
+	// existing checkpoint/restore path, without changing the Kit binary contract.
+	BootstrapGeneration string
+	GKE                 GKERuntimeConfig
+	Provision           KitGKEProvisionInput
+	Bootstrap           func(context.Context, assistantRuntimeRecord) (KitLocalBootstrap, error)
+	Protocol            func(context.Context, assistantRuntimeRecord, *url.URL) (runtimeProtocol, error)
+	Fence               func(context.Context, assistantRuntimeRecord) error
+	Snapshots           KitGKECheckpointDriver
+	AuthorityStore      KitGKEAuthorityStore
 	// Lifecycle acquires the assistant advisory fence and reloads authoritative state.
 	Lifecycle func(context.Context, assistantRuntimeRecord, func(context.Context, assistantRuntimeRecord) error) error
 }
@@ -144,27 +147,28 @@ func (k *KitGKERuntimeBackend) validate(r assistantRuntimeRecord) error {
 }
 
 type kitGKEBackendMetadata struct {
-	Checkpoint        json.RawMessage `json:"checkpoint,omitempty"`
-	TLSCertificate    []byte          `json:"tls_certificate"`
-	Provisioning      bool            `json:"provisioning,omitempty"`
-	CheckpointMarker  string          `json:"checkpoint_marker"`
-	ProxyImageDigest  string          `json:"proxy_image_digest"`
-	ImageDigest       string          `json:"image_digest"`
-	ContainerID       string          `json:"container_id"`
-	AuthorityUID      types.UID       `json:"authority_uid,omitempty"`
-	AuthorityNotAfter time.Time       `json:"authority_not_after"`
-	RuntimeID         uuid.UUID       `json:"runtime_id"`
-	AssistantID       uuid.UUID       `json:"assistant_id"`
-	ProjectID         uuid.UUID       `json:"project_id"`
-	Version           int16           `json:"runtime_version"`
-	Namespace         string          `json:"namespace"`
-	Fingerprint       string          `json:"compatibility"`
-	ClaimUID          types.UID       `json:"claim_uid"`
-	TemplateUID       types.UID       `json:"template_uid"`
-	SecretUID         types.UID       `json:"secret_uid"`
-	SecretName        string          `json:"secret_name"`
-	PodName           string          `json:"pod_name"`
-	PodUID            types.UID       `json:"pod_uid"`
+	BootstrapGeneration string          `json:"bootstrap_generation,omitempty"`
+	Checkpoint          json.RawMessage `json:"checkpoint,omitempty"`
+	TLSCertificate      []byte          `json:"tls_certificate"`
+	Provisioning        bool            `json:"provisioning,omitempty"`
+	CheckpointMarker    string          `json:"checkpoint_marker"`
+	ProxyImageDigest    string          `json:"proxy_image_digest"`
+	ImageDigest         string          `json:"image_digest"`
+	ContainerID         string          `json:"container_id"`
+	AuthorityUID        types.UID       `json:"authority_uid,omitempty"`
+	AuthorityNotAfter   time.Time       `json:"authority_not_after"`
+	RuntimeID           uuid.UUID       `json:"runtime_id"`
+	AssistantID         uuid.UUID       `json:"assistant_id"`
+	ProjectID           uuid.UUID       `json:"project_id"`
+	Version             int16           `json:"runtime_version"`
+	Namespace           string          `json:"namespace"`
+	Fingerprint         string          `json:"compatibility"`
+	ClaimUID            types.UID       `json:"claim_uid"`
+	TemplateUID         types.UID       `json:"template_uid"`
+	SecretUID           types.UID       `json:"secret_uid"`
+	SecretName          string          `json:"secret_name"`
+	PodName             string          `json:"pod_name"`
+	PodUID              types.UID       `json:"pod_uid"`
 }
 
 func (k *KitGKERuntimeBackend) metadata(r assistantRuntimeRecord) (kitGKEBackendMetadata, error) {
@@ -227,7 +231,14 @@ func (k *KitGKERuntimeBackend) Ensure(ctx context.Context, r assistantRuntimeRec
 			return RuntimeBackendEnsureResult{}, err
 		}
 		if m.Provisioning {
-			return k.finishColdProvision(ctx, r, m, true)
+			result, err := k.finishColdProvision(ctx, r, m, true)
+			if err != nil || m.BootstrapGeneration == k.config.BootstrapGeneration {
+				return result, err
+			}
+			// Finish an interrupted legacy admission before checkpointing it;
+			// never overwrite its live bootstrap secret or discard its lineage.
+			r.BackendMetadataJSON = result.BackendMetadataJSON
+			return k.Ensure(ctx, r)
 		}
 		state, obj, e := k.loadAuthority(ctx, r)
 		if e != nil {
@@ -236,8 +247,9 @@ func (k *KitGKERuntimeBackend) Ensure(ctx context.Context, r assistantRuntimeRec
 		if state.Phase != "active" {
 			return k.restore(ctx, r, state, obj)
 		}
-		if !time.Now().Before(state.Metadata.AuthorityNotAfter) {
-			// Renew only through durable checkpoint and fresh-process restore;
+		if !time.Now().Before(state.Metadata.AuthorityNotAfter) || state.Metadata.BootstrapGeneration != k.config.BootstrapGeneration {
+			// Renew authority or update bootstrap format only through durable
+			// checkpoint and fresh-process restore;
 			// never rotate credentials beneath an existing process.
 			if err := k.Stop(ctx, r); err != nil {
 				return RuntimeBackendEnsureResult{}, fmt.Errorf("checkpoint expired Kit authority: %w", err)
@@ -331,7 +343,7 @@ func (k *KitGKERuntimeBackend) Ensure(ctx context.Context, r assistantRuntimeRec
 	}
 	maps.Copy(podAnnotations, annotations)
 	_ = unstructured.SetNestedStringMap(objects.Template.Object, podAnnotations, "spec", "podTemplate", "metadata", "annotations")
-	m := kitGKEBackendMetadata{Checkpoint: nil, TLSCertificate: in.TLSCertificate, Provisioning: false, CheckpointMarker: string(in.CheckpointMarker), ImageDigest: "", ProxyImageDigest: "", ContainerID: "", AuthorityUID: "", ClaimUID: "", TemplateUID: "", SecretUID: "", PodName: "", PodUID: "", AuthorityNotAfter: time.Now().Add(assistanttokens.MaxInferenceLifetime - time.Hour), SecretName: objects.Secret.GetName(), RuntimeID: r.ID, AssistantID: r.AssistantID, ProjectID: r.ProjectID, Version: 3, Namespace: in.Identity.Namespace, Fingerprint: k.fingerprint}
+	m := kitGKEBackendMetadata{BootstrapGeneration: k.config.BootstrapGeneration, Checkpoint: nil, TLSCertificate: in.TLSCertificate, Provisioning: false, CheckpointMarker: string(in.CheckpointMarker), ImageDigest: "", ProxyImageDigest: "", ContainerID: "", AuthorityUID: "", ClaimUID: "", TemplateUID: "", SecretUID: "", PodName: "", PodUID: "", AuthorityNotAfter: time.Now().Add(assistanttokens.MaxInferenceLifetime - time.Hour), SecretName: objects.Secret.GetName(), RuntimeID: r.ID, AssistantID: r.AssistantID, ProjectID: r.ProjectID, Version: 3, Namespace: in.Identity.Namespace, Fingerprint: k.fingerprint}
 	for _, step := range []struct {
 		gvr schema.GroupVersionResource
 		obj *unstructured.Unstructured

@@ -1,27 +1,24 @@
 package assistants
 
 import (
-	"errors"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
-func TestKitMCPStartupDesiredSetPolicy(t *testing.T) {
+func TestKitTurnMCPServersUsesScopedCredential(t *testing.T) {
 	t.Parallel()
-	for _, tc := range []struct {
-		name                         string
-		resuming, provided, rejected bool
-	}{
-		{"new omitted", false, false, false},
-		{"new initial servers including empty", false, true, false},
-		{"resident omitted retains", true, false, false},
-		{"resume rejects supplied desired set", true, true, true},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			err := validateKitMCPStartup(tc.resuming, tc.provided)
-			if (!tc.rejected && err != nil) || (tc.rejected && !errors.Is(err, ErrKitMCPDesiredSetUnsupported)) {
-				t.Fatalf("unexpected policy result: %v", err)
+	for _, servers := range [][]runtimeMCPServer{nil, {}, {{ID: "platform", URL: "https://example.invalid/platform"}}, {{ID: "platform", URL: "https://example.invalid/platform"}, {ID: "attached", URL: "https://example.invalid/mcp", Headers: map[string]string{"authorization": "stale", "X-Environment": "test"}}}} {
+		got := kitTurnMCPServers(runTurnRequest{AuthToken: "turn-credential", MCPServers: servers})
+		require.Len(t, got, len(servers))
+		for i, server := range got {
+			require.Equal(t, servers[i].ID, server["name"])
+			headers, ok := server["headers"].([]map[string]string)
+			require.True(t, ok)
+			require.Contains(t, headers, map[string]string{"name": "Authorization", "value": "Bearer turn-credential"})
+			for _, header := range headers {
+				require.NotEqual(t, "stale", header["value"])
 			}
-		})
+		}
 	}
 }

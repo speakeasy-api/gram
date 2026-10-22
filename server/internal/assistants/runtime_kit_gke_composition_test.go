@@ -6,16 +6,12 @@ import (
 	"net/url"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgtype"
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
-	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
-	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 	"github.com/stretchr/testify/require"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/dynamic/fake"
@@ -54,8 +50,6 @@ func TestKitGKECompositionRejectsLocalAndMissingAuthority(t *testing.T) {
 		{"missing namespace", func(c *KitGKECompositionConfig) { c.GKE.Namespace = "" }},
 		{"invalid network bounds", func(c *KitGKECompositionConfig) { c.GKE.RunnerCIDRBlocks = []string{"10.0.0.0/16", "garbage"} }},
 		{"missing network bounds", func(c *KitGKECompositionConfig) { c.GKE.RunnerCIDRBlocks = nil }},
-		{"missing issuer", func(c *KitGKECompositionConfig) { c.MCPUserSessionIssuerID = uuid.Nil }},
-		{"missing provisioner", func(c *KitGKECompositionConfig) { c.ProvisionMCP = nil }},
 		{"missing transcript", func(c *KitGKECompositionConfig) { c.TurnStream = nil }},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -163,87 +157,26 @@ func TestKitGKELifecycleReloadsAndCommitsRecoveryEvidence(t *testing.T) {
 	}))
 }
 
-func TestKitGKEPersistedHostedEndpointIssuer(t *testing.T) {
+func TestKitGKEEligibilityIndependentOfAttachments(t *testing.T) {
 	t.Parallel()
-	f := newHostedAttachmentFixture(t, "kit_hosted_endpoint_issuer")
-	origin, err := url.Parse("https://mcp.example")
-	require.NoError(t, err)
-	f.core.serverURL = origin
-	issuer, err := usersessionsrepo.New(f.db).CreateUserSessionIssuer(t.Context(), usersessionsrepo.CreateUserSessionIssuerParams{
-		ProjectID: f.projectID, Slug: "hosted-workload", AuthnChallengeMode: "interactive",
-		SessionDuration: pgtype.Interval{Microseconds: time.Hour.Microseconds(), Valid: true},
-	})
-	require.NoError(t, err)
-	require.Equal(t, "endpoint", issuer.AuthorizationServerMode)
-	f.addServerRow(t, f.hosted.ID, uuid.NullUUID{})
-	err = assistantrepo.New(f.db).SetAttachedMCPServerIssuerForTest(t.Context(), assistantrepo.SetAttachedMCPServerIssuerForTestParams{UserSessionIssuerID: uuid.NullUUID{UUID: issuer.ID, Valid: true}, ID: f.hosted.ID, ProjectID: f.projectID})
-	require.NoError(t, err)
-	a := assistantRecord{ID: f.assistant, ProjectID: f.projectID, OrganizationID: "org-test"}
-	resource, issuerID, err := f.core.kitPersistedMCP(t.Context(), f.db, a)
-	require.NoError(t, err)
-	require.Equal(t, origin.JoinPath("mcp", f.hosted.McpSlug.String).String(), resource.String())
-	require.Equal(t, issuer.ID, issuerID)
-	tx := testenv.BeginTx(t, t.Context(), f.db)
-	eligible, err := f.core.kitGKEAssistantEligible(t.Context(), tx, a, KitLocalCompositionConfig{PersistedMCP: true})
-	require.NoError(t, err)
-	require.True(t, eligible)
-}
-
-func TestKitGKEEligibilityUsesPersistedAttachmentAndIssuer(t *testing.T) {
-	t.Parallel()
-	f := newHostedAttachmentFixture(t, "kit_gke_eligibility")
-	origin, err := url.Parse("https://mcp.example")
-	require.NoError(t, err)
-	f.core.serverURL = origin
-	issuer, err := usersessionsrepo.New(f.db).CreateUserSessionIssuer(t.Context(), usersessionsrepo.CreateUserSessionIssuerParams{
-		ProjectID: f.projectID, Slug: "kit-workload", AuthnChallengeMode: "interactive",
-		SessionDuration: pgtype.Interval{Microseconds: time.Hour.Microseconds(), Valid: true},
-	})
-	require.NoError(t, err)
-	c := KitLocalCompositionConfig{MCPResource: origin.JoinPath("mcp", "team-remote"), MCPUserSessionIssuerID: issuer.ID}
+	f := newHostedAttachmentFixture(t, "kit_attachment_parity")
 	a := assistantRecord{ID: f.assistant, ProjectID: f.projectID, OrganizationID: "org-test"}
 	check := func(want bool) {
 		t.Helper()
 		tx := testenv.BeginTx(t, t.Context(), f.db)
 		defer func() { _ = tx.Rollback(t.Context()) }()
-		eligible, err := f.core.kitGKEAssistantEligible(t.Context(), tx, a, c)
+		eligible, err := f.core.kitGKEAssistantEligible(t.Context(), tx, a, KitLocalCompositionConfig{PersistedMCP: true})
 		require.NoError(t, err)
 		require.Equal(t, want, eligible)
 	}
-	check(false)
+	check(true) // No attachments: inference and platform tools remain available.
 	f.addServerRow(t, f.remote.ID, uuid.NullUUID{})
-	check(false)
-	err = assistantrepo.New(f.db).SetAttachedMCPServerIssuerForTest(t.Context(), assistantrepo.SetAttachedMCPServerIssuerForTestParams{UserSessionIssuerID: uuid.NullUUID{UUID: issuer.ID, Valid: true}, ID: f.remote.ID, ProjectID: f.projectID})
-	require.NoError(t, err)
-	// Endpoint-mode issuers use the same workload provisioner, with an exact
-	// resource-specific issuer URL rather than a shared authorization URL.
-	check(true)
-	resource, issuerID, err := f.core.kitPersistedMCP(t.Context(), f.db, a)
-	require.NoError(t, err)
-	require.Equal(t, origin.JoinPath("mcp", "team-remote").String(), resource.String())
-	require.Equal(t, issuer.ID, issuerID)
-	c.PersistedMCP = true
+	check(true) // No configured issuer: connection failure is not startup failure.
+	f.addServerRow(t, f.hosted.ID, uuid.NullUUID{})
+	check(true) // Multiple connections use the ordinary desired-set resolver.
+	f.remote.Visibility = "disabled"
+	f.updateWrapper(t, f.remote)
 	check(true)
 	a.OrganizationID = "another-org"
-	check(false)
-	a.OrganizationID = "org-test"
-	c.PersistedMCP = false
-	updated, err := testrepo.New(f.db).SetUserSessionIssuerAuthorizationServerModeFixture(t.Context(), testrepo.SetUserSessionIssuerAuthorizationServerModeFixtureParams{AuthorizationServerMode: "shared", IssuerID: issuer.ID, OrganizationID: a.OrganizationID, PinnedIssuerUrl: pgtype.Text{String: "", Valid: false}})
-	require.NoError(t, err)
-	require.EqualValues(t, 1, updated)
-	check(true)
-	c.MCPUserSessionIssuerID = uuid.New()
-	check(false)
-	c.MCPUserSessionIssuerID = issuer.ID
-	c.MCPResource = origin.JoinPath("mcp", "another-project")
-	check(false)
-	// Production derives the connection from persisted rows, not deployment-
-	// global issuer or resource flags. Stale flags cannot change its authority.
-	c.PersistedMCP = true
-	c.MCPResource = nil
-	c.MCPUserSessionIssuerID = uuid.Nil
-	check(true)
-	err = assistantrepo.New(f.db).DisableAttachedMCPServerForTest(t.Context(), assistantrepo.DisableAttachedMCPServerForTestParams{ID: f.remote.ID, ProjectID: f.projectID})
-	require.NoError(t, err)
 	check(false)
 }

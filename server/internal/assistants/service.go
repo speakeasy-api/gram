@@ -3000,6 +3000,37 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 		Attempt:           0,
 	})
 
+	// Claim Kit's first event before bootstrap so inference uses its real root,
+	// not an arbitrary root chosen from the assistant's triggers.
+	var firstEvent assistantThreadEventRecord
+	var firstClaimed bool
+	stopStartupHeartbeat := func() {}
+	if runtimeRecord.RuntimeVersion == 3 {
+		firstEvent, firstClaimed, err = s.claimRuntimeEvent(ctx, runtimeRecord, thread.ID)
+		if err != nil {
+			return ProcessThreadEventsResult{}, err
+		}
+		if firstClaimed {
+			ctx = context.WithValue(ctx, kitExecutionEventKey{}, firstEvent)
+			stopStartupHeartbeat = s.startProcessingLeaseHeartbeat(ctx, thread.ProjectID, runtimeRecord.ID, firstEvent.ID)
+			defer stopStartupHeartbeat()
+			defer func() {
+				if firstClaimed {
+					cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+					defer cancel()
+					_ = s.resetEventToPending(cleanup, thread.ProjectID, firstEvent.ID, errors.New("kit startup did not dispatch event"))
+				}
+			}()
+		}
+		// Dashboard fallback can heal a missing trigger; resolve before Ensure
+		// takes the lifecycle transaction so healing cannot reacquire its lock.
+		trigger, err := s.executionTrigger(ctx, assistant, firstEvent)
+		if err != nil {
+			return ProcessThreadEventsResult{}, err
+		}
+		ctx = context.WithValue(ctx, kitExecutionTriggerKey{}, trigger)
+	}
+
 	ensureCtx := ctx
 	if kitProductionRuntime(runtimeRecord.RuntimeVersion, runtimeRecord.Backend) {
 		ensureCtx = context.WithValue(ctx, kitAdmissionProgressKey{}, kitAdmissionProgressWriter(func(progressCtx context.Context, raw []byte) error {
@@ -3049,7 +3080,12 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 
 	processedAny := false
 	for {
-		event, ok, err := s.claimRuntimeEvent(ctx, runtimeRecord, thread.ID)
+		event, ok := firstEvent, firstClaimed
+		firstClaimed = false
+		stopStartupHeartbeat()
+		if !ok {
+			event, ok, err = s.claimRuntimeEvent(ctx, runtimeRecord, thread.ID)
+		}
 		if err != nil {
 			return ProcessThreadEventsResult{}, err
 		}

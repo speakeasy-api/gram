@@ -4,13 +4,23 @@ import (
 	"archive/tar"
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/url"
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/speakeasy-api/gram/server/internal/assistantidentity"
+	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
+	"github.com/speakeasy-api/gram/server/internal/auth"
+	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
+	tokenrepo "github.com/speakeasy-api/gram/server/internal/auth/assistanttokens/repo"
 	"github.com/speakeasy-api/gram/server/internal/chat"
+	keysrepo "github.com/speakeasy-api/gram/server/internal/keys/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
+	triggerrepo "github.com/speakeasy-api/gram/server/internal/triggers/repo"
 	"github.com/stretchr/testify/require"
 )
 
@@ -38,12 +48,6 @@ func TestKitCompositionRejectsInvalidConfig(t *testing.T) {
 	for _, mutate := range []func(*KitLocalCompositionConfig){
 		func(c *KitLocalCompositionConfig) { c.Environment = "production" },
 		func(c *KitLocalCompositionConfig) { c.Image = "" },
-		func(c *KitLocalCompositionConfig) { c.ProvisionMCP = nil },
-		func(c *KitLocalCompositionConfig) { c.MCPUserSessionIssuerID = uuid.Nil },
-		func(c *KitLocalCompositionConfig) { c.MCPResource, _ = url.Parse("http://mcp.example/mcp/resource") },
-		func(c *KitLocalCompositionConfig) {
-			c.MCPResource, _ = url.Parse("https://mcp.example/mcp/platform/tools")
-		},
 		func(c *KitLocalCompositionConfig) { c.Origin, _ = url.Parse("http://api.example") },
 	} {
 		c := valid
@@ -133,33 +137,58 @@ func TestKitCompositionRejectsInvalidCredentials(t *testing.T) {
 	}
 }
 
-func TestKitCompositionBootstrapRejectsUnattachedDisabledAndWrongOrigin(t *testing.T) {
+func TestKitCompositionBootstrapWithoutAttachments(t *testing.T) {
 	t.Parallel()
-	f := newHostedAttachmentFixture(t, "kit_bootstrap_attachment_gate")
-	origin, err := url.Parse("https://mcp.example")
+	db, err := assistantsInfra.CloneTestDatabase(t, "kit_composition_no_attachments")
 	require.NoError(t, err)
-	f.core.serverURL = origin
-	resource := origin.JoinPath("mcp", "team-remote")
-	config := KitLocalCompositionConfig{
-		MCPResource: resource,
-		ProvisionMCP: func(context.Context, KitMCPProvisionRequest) (KitMCPProvisionResult, error) {
-			t.Fatal("rejected attachment must not provision credentials")
-			return KitMCPProvisionResult{}, nil
-		},
-	}
-	runtime := assistantRuntimeRecord{ID: uuid.New(), ProjectID: f.projectID, AssistantID: f.assistant, RuntimeVersion: 3}
-	assertRejected := func() {
-		t.Helper()
-		_, err := f.core.kitCompositionBootstrap(t.Context(), runtime, config)
-		require.ErrorContains(t, err, "not an enabled attachment")
-	}
-	assertRejected()
-	f.addServerRow(t, f.remote.ID, uuid.NullUUID{})
-	config.MCPResource, err = url.Parse("https://other.example/mcp/team-remote")
+	project := newProvisioningProject(t, db, "kit-composition")
+	seedProjectRead(t, db, "user-1", project)
+	core := newProvisioningCore(t, db)
+	assistant, err := core.CreateAssistant(t.Context(), "org-test", project, "user-1", "Startup", "openai/gpt-4o-mini", "", nil, nil, 300, 1, StatusActive, true, nil)
 	require.NoError(t, err)
-	assertRejected()
-	config.MCPResource = resource
-	f.remote.Visibility = "disabled"
-	f.updateWrapper(t, f.remote)
-	assertRejected()
+	q := assistantrepo.New(db)
+	require.NoError(t, q.SetAssistantDesiredRuntimeVersionForTest(t.Context(), assistantrepo.SetAssistantDesiredRuntimeVersionForTestParams{ProjectID: project, AssistantID: assistant.ID, RuntimeVersion: 3}))
+	require.NoError(t, q.ReserveAssistantRuntimeV2(t.Context(), assistantrepo.ReserveAssistantRuntimeV2Params{ProjectID: project, AssistantID: assistant.ID, AssistantThreadID: uuid.Nil, Backend: runtimeBackendLocal, State: runtimeStateActive}))
+	row, err := q.GetAssistantRuntimeV2(t.Context(), assistantrepo.GetAssistantRuntimeV2Params{ProjectID: project, AssistantID: assistant.ID})
+	require.NoError(t, err)
+	core.assistantTokens = assistanttokens.New("test", db, nil, nil, nil)
+	core.encryptionClient = testenv.NewEncryptionClient(t)
+	origin, err := url.Parse("https://ai.speakeasy.com")
+	require.NoError(t, err)
+	config := KitLocalCompositionConfig{Environment: "local", Origin: origin, PersistedMCP: true, ProvisionMCP: func(context.Context, KitMCPProvisionRequest) (KitMCPProvisionResult, error) {
+		t.Fatal("per-turn MCP must not provision a singleton machine connection")
+		return KitMCPProvisionResult{}, nil
+	}}
+	bootstrap, err := core.kitCompositionBootstrap(t.Context(), assistantRuntimeRecord{ID: row.ID, ProjectID: project, AssistantID: assistant.ID, RuntimeVersion: 3}, config)
+	require.NoError(t, err)
+	require.JSONEq(t, `{"mcpServers":{}}`, string(bootstrap.MCPJSON))
+	require.Empty(t, bootstrap.MCPFiles)
+	require.NotEmpty(t, bootstrap.InferenceJSON)
+	require.NotContains(t, string(bootstrap.AgentsMD), "unavailable in this runtime")
+	// Additional roots must not turn bootstrap into a singleton query.
+	for i := range 2 {
+		tx := testenv.BeginTx(t, t.Context(), db)
+		trigger, err := triggerrepo.New(tx).CreateTriggerInstance(t.Context(), triggerrepo.CreateTriggerInstanceParams{OrganizationID: "org-test", ProjectID: project, DefinitionSlug: sourceKindSlack, Name: fmt.Sprintf("Slack %d", i), TargetKind: "assistant", TargetRef: assistant.ID.String(), TargetDisplay: "Startup", ConfigJson: []byte(`{"event_types":["message"]}`), Status: StatusActive})
+		require.NoError(t, err)
+		require.NoError(t, core.identities.BindRootTrigger(t.Context(), tx, project, trigger.ID))
+		require.NoError(t, tx.Commit(t.Context()))
+		event := assistantThreadEventRecord{TriggerInstanceID: uuid.NullUUID{UUID: trigger.ID, Valid: true}}
+		turnCtx := context.WithValue(t.Context(), kitExecutionEventKey{}, event)
+		got, err := core.kitCompositionBootstrap(turnCtx, assistantRuntimeRecord{ID: row.ID, ProjectID: project, AssistantID: assistant.ID, RuntimeVersion: 3}, config)
+		require.NoError(t, err)
+		var credential kitInferenceFile
+		require.NoError(t, json.Unmarshal(got.InferenceJSON, &credential))
+		hash, err := auth.GetAPIKeyHash(credential.APIKey)
+		require.NoError(t, err)
+		key, err := keysrepo.New(db).GetAPIKeyByKeyHash(t.Context(), hash)
+		require.NoError(t, err)
+		binding, err := tokenrepo.New(db).ReadKitAPIKeyBinding(t.Context(), key.ID)
+		require.NoError(t, err)
+		var identity assistantidentity.Identity
+		require.NoError(t, json.Unmarshal(binding.IdentityJson, &identity))
+		expected, err := core.identities.Resolve(t.Context(), db, "org-test", project, assistant.ID, trigger.ID)
+		require.NoError(t, err)
+		require.Equal(t, *expected.Identity, identity)
+	}
+
 }
