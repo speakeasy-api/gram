@@ -671,7 +671,8 @@ func TestToolsetsService_UpdateToolset_EnableMcp_AttachesToDefaultPlugin(t *test
 	})
 	require.NoError(t, err)
 
-	// Second toolset in the org does not auto-enable.
+	// Second toolset in the org starts private without joining the Default
+	// plugin; disabling it sets up the false-to-true transition under test.
 	second, err := ti.service.CreateToolset(ctx, &gen.CreateToolsetPayload{
 		SessionToken:           nil,
 		Name:                   "Second Toolset",
@@ -682,7 +683,10 @@ func TestToolsetsService_UpdateToolset_EnableMcp_AttachesToDefaultPlugin(t *test
 		ProjectSlugInput:       nil,
 	})
 	require.NoError(t, err)
-	require.False(t, *second.McpEnabled)
+	require.True(t, *second.McpEnabled)
+	disabled, err := ti.service.UpdateToolset(ctx, &gen.UpdateToolsetPayload{Slug: second.Slug, McpEnabled: new(false)})
+	require.NoError(t, err)
+	require.False(t, *disabled.McpEnabled)
 
 	servers, err := pluginsQueries.ListPluginServers(ctx, defaultPlugin.ID)
 	require.NoError(t, err)
