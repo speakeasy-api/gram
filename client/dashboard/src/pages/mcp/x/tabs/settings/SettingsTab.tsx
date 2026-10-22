@@ -213,7 +213,8 @@ export function SettingsTab({
           />
         </PageSection>
         <ToolFilteringSection mcpServer={mcpServer} />
-        <ExportJsonSection mcpServer={mcpServer} />
+        {/* Export reads the toolset's canonical server only. */}
+        {canonical && <ExportJsonSection mcpServer={mcpServer} />}
         <DangerZoneSection
           mcpServer={mcpServer}
           endpoints={endpoints}
