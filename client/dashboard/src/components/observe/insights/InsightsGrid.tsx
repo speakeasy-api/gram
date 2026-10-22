@@ -13,11 +13,9 @@ import {
   RankedList,
   type RankedRow,
 } from "@/components/observe/insights/RankedList";
-import {
-  useObserveLogsLink,
-  type ObserveDeepLinkScope,
-} from "@/components/observe/observeDeepLink";
+import { useObserveLogsLink } from "@/components/observe/observeDeepLink";
 import { buildToolUsageTimeSeries } from "@/components/observe/toolUsageTimeSeriesChartData";
+import { targetScope } from "./targetScope";
 import { ActingPrincipal } from "@/components/ui/ActingPrincipal";
 import { actingPrincipalText } from "@/components/ui/ActingPrincipal/text";
 import { useReadableAgents } from "@/hooks/useReadableAgents";
@@ -41,28 +39,6 @@ const SERVER_TARGET_TYPES = new Set([
 
 function percent(rate: number): string {
   return `${(rate * 100).toFixed(1)}%`;
-}
-
-export function targetScope(
-  target: ToolUsageTargetSummary,
-): ObserveDeepLinkScope {
-  switch (target.targetType) {
-    case "hosted_mcp_server":
-      return {
-        target: { type: "hosted", id: target.mcpServerId ?? target.targetId },
-      };
-    case "meta_mcp_server":
-      return { target: { type: "gateway", id: target.targetId } };
-    case "shadow_mcp_server":
-      return { target: { type: "shadow", id: target.targetId } };
-    case "tunneled_mcp_server":
-      return { target: { type: "shadow", id: target.targetId } };
-    case "skill":
-      return { targetTypes: ["skill"] };
-    case "local_tool":
-    default:
-      return { targetTypes: ["local_tool"] };
-  }
 }
 
 /**
