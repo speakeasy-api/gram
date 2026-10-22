@@ -737,6 +737,7 @@ func TestService_TransferIn_TargetSessionCheckFailureIsTemporary(t *testing.T) {
 
 	// The outage neither used up the code nor replaced the session.
 	result = f.in(targetCtx, t, testTargetBaseURL, code, b)
+	require.Equal(t, testTargetBaseURL+testTransferRedirect, result.Location)
 	require.Nil(t, result.SessionCookie)
 	kept, err := f.instance.sessionManager.GetSession(ctx, existing.SessionID)
 	require.NoError(t, err)
