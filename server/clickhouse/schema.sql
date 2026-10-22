@@ -1925,10 +1925,12 @@ COMMENT 'Risk findings event log: one row per detected secret or sensitive-data 
 -- One row per finding, folded from risk_findings as copies arrive, for
 -- analytics that count findings. A finding is an event log of copies: the
 -- scanner's row, its redeliveries, and the suppression and unsuppression
--- copies that change its state. Each column keeps its value from the
--- winning copy, ranked as every risk read ranks them: a state-change copy
--- outranks a finding copy, then the latest inserted wins
--- (chrepo.LatestCopyOrderSQL). argMax is idempotent, so a redelivered copy
+-- copies that change its state. Copies rank as every risk read ranks them:
+-- a state-change copy outranks a finding copy, then the latest inserted wins
+-- (chrepo.LatestCopyOrderSQL). live is the winning copy's. Each other column
+-- is the best-ranked copy's that set it, as a state-change copy can carry
+-- fewer fields than the scanner's and a blank must not hide what a finding
+-- was. argMax is idempotent, so a redelivered copy
 -- changes nothing and no read-time de-duplication is needed. The shadow
 -- engine's comparison rows are never folded. Columns are only what counting
 -- needs: no matched value, fingerprint, description or chat location.
@@ -1937,7 +1939,7 @@ CREATE TABLE IF NOT EXISTS risk_finding_states (
     project_id String COMMENT 'Project the finding was scoped to. Empty string when unknown.\n@access: confidential' CODEC(ZSTD),
     id UUID COMMENT 'Finding id that every copy of the finding shares.\n@access: confidential',
 
-    -- The winning copy's values. The version is (state-change copy, inserted_at).
+    -- Ranked by version (state-change copy, inserted_at).
     live AggregateFunction(argMax, UInt8, Tuple(UInt8, DateTime64(9))) COMMENT '1 while the finding is neither suppressed, a false positive nor a could-not-analyze sentinel.\n@access: confidential',
     category AggregateFunction(argMaxIf, String, Tuple(UInt8, DateTime64(9)), UInt8) COMMENT 'Risk category of the rule that fired, e.g. secrets.\n@access: confidential',
     rule_id AggregateFunction(argMaxIf, String, Tuple(UInt8, DateTime64(9)), UInt8) COMMENT 'Rule that fired, e.g. pii.email_address.\n@access: confidential',
