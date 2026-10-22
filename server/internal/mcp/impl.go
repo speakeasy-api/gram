@@ -164,6 +164,9 @@ type Service struct {
 	features feature.Provider
 	// mandatoryShadowLog dedupes mandatory authz shadow disagreement logs.
 	mandatoryShadowLog *mandatoryShadowLog
+	// prepareMandatory replaces authz PrepareMandatory for the shadow when
+	// set; tests use it to observe admissions.
+	prepareMandatory func(context.Context) (authz.MandatoryAuthorization, error)
 	// cimdResolver fetches + validates Client ID Metadata Documents for
 	// URL-shaped client_ids and owns the cimd.fetch.* telemetry.
 	cimdResolver *cimd.Resolver
@@ -556,6 +559,7 @@ func NewService(
 		posthog:                   posthog,
 		features:                  features,
 		mandatoryShadowLog:        newMandatoryShadowLog(),
+		prepareMandatory:          nil,
 		cimdResolver:              cimd.NewResolver(guardianPolicy, meterProvider, logger),
 		cimdAdmissionMetrics:      admission.NewMetrics(meterProvider, logger),
 		clientAssertionVerifier:   newClientAssertionVerifier(redisClient, guardianPolicy, meterProvider, logger),

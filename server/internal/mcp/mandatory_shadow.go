@@ -15,6 +15,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -96,10 +97,58 @@ func (s *Service) newMandatoryShadow(ctx context.Context, organizationID string)
 	if !feature.MandatoryAuthzShadow(ctx, s.features, organizationID) {
 		return nil
 	}
+	authorization, err := s.admitMandatoryShadow(ctx)
+	return &mandatoryShadow{service: s, organizationID: organizationID, authorization: authorization, err: err}
+}
+
+// mandatoryAdmissionKey carries a request's shared shadow admission.
+type mandatoryAdmissionKey struct{}
+
+// mandatoryAdmission is one request's shadow admission of its caller, shared
+// by every shadowed check in that request, failures included. Admission does
+// not depend on the checked server's organization, only on the caller.
+type mandatoryAdmission struct {
+	// authCtx is the caller admission was scoped to. A context carrying any
+	// other caller, such as an attribution identity synthesized for member
+	// calls, admits on its own.
+	authCtx       *contextvalues.AuthContext
+	once          sync.Once
+	authorization authz.MandatoryAuthorization
+	err           error
+}
+
+// withMandatoryAdmission scopes one shadow admission to the rest of a
+// request, so a gateway request with many members admits its caller once
+// within one timeout instead of once per member.
+func withMandatoryAdmission(ctx context.Context) context.Context {
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	return context.WithValue(ctx, mandatoryAdmissionKey{}, &mandatoryAdmission{authCtx: authCtx}) //nolint:exhaustruct // filled once on first use
+}
+
+// admitMandatoryShadow admits the caller for the shadow, reusing the
+// request's shared admission when ctx carries the caller it was scoped to.
+func (s *Service) admitMandatoryShadow(ctx context.Context) (authz.MandatoryAuthorization, error) {
+	shared, ok := ctx.Value(mandatoryAdmissionKey{}).(*mandatoryAdmission)
+	if ok {
+		if authCtx, _ := contextvalues.GetAuthContext(ctx); authCtx == shared.authCtx {
+			shared.once.Do(func() {
+				// Detached from whichever check came first, whose own context
+				// may end before the others: the timeout alone bounds it.
+				shared.authorization, shared.err = s.prepareMandatoryWithin(context.WithoutCancel(ctx))
+			})
+			return shared.authorization, shared.err
+		}
+	}
+	return s.prepareMandatoryWithin(ctx)
+}
+
+func (s *Service) prepareMandatoryWithin(ctx context.Context) (authz.MandatoryAuthorization, error) {
 	prepareCtx, cancel := context.WithTimeout(ctx, mandatoryShadowTimeout)
 	defer cancel()
-	authorization, err := s.authz.PrepareMandatory(prepareCtx)
-	return &mandatoryShadow{service: s, organizationID: organizationID, authorization: authorization, err: err}
+	if s.prepareMandatory != nil {
+		return s.prepareMandatory(prepareCtx)
+	}
+	return s.authz.PrepareMandatory(prepareCtx)
 }
 
 // shadowMandatory records one check against today's decision.
