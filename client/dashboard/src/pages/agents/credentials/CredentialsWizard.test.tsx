@@ -153,13 +153,13 @@ const grant = {
   },
 };
 
-function setup(initialPlatformKey?: string) {
+function setup(initialPlatformKey?: string, initialEntry = "/") {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
   const onDone = vi.fn();
   const view = render(
-    <MemoryRouter>
+    <MemoryRouter initialEntries={[initialEntry]}>
       <QueryClientProvider client={client}>
         <CredentialsWizard
           initialPlatformKey={initialPlatformKey}
@@ -227,6 +227,16 @@ beforeEach(() => {
 });
 
 describe("Provisioning a new agent", () => {
+  it("starts the draft over when reloaded past its first step", async () => {
+    // Nothing of a new agent's draft survives a reload, so the install step
+    // has no name to create an agent with and no key to show.
+    setup(undefined, "/?step=3");
+
+    expect(await screen.findByLabelText("Name")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Issue a key" })).toBeNull();
+    expect(mocks.createAgent).not.toHaveBeenCalled();
+  });
+
   it("will not move on without a name or a server", async () => {
     setup();
     expect(

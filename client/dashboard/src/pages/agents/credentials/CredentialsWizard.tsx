@@ -216,6 +216,16 @@ export function CredentialsWizard({
     },
     [setParams],
   );
+  // A new agent's draft lives only in this page's memory, so a reload past
+  // its first step has nothing to resume: the name, the servers and the key
+  // are gone, and a later step would act on an empty draft — issuing a key
+  // there tried to create an agent with no name. Start the draft over.
+  const restarted = useRef(false);
+  useEffect(() => {
+    if (restarted.current) return;
+    restarted.current = true;
+    if (!existing && step > defaultStep) setStep(defaultStep);
+  }, [existing, step, defaultStep, setStep]);
   const [name, setName] = useState(agent?.name ?? "");
   // null until the person picks, so the default can follow the project as it
 
