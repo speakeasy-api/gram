@@ -50,7 +50,9 @@ type Service interface {
 	// binds the transfer to this browser and redirects to Step 2/3, transferOut on
 	// the source host. Step 3/3 (callback: code, no source_host) redeems the
 	// one-time code that transferOut issued, checks it against that cookie, and
-	// sets a new session cookie on this host. The cookie exists because a code
+	// sets a new session cookie on this host, unless the browser already holds a
+	// valid session here for the same user and start mode did not set
+	// replace_session; that session is then kept. The cookie exists because a code
 	// alone would let anyone who holds one sign another person into the code's
 	// account (login CSRF). A request with both or neither, and any failed check,
 	// lands on this host's login page with a signin_error code; a failed callback
@@ -276,10 +278,10 @@ type TransferInResult struct {
 	// requested page (callback mode), or this host's login page when a check fails
 	Location string
 	// The new authentication session on this host. Set only when callback mode
-	// succeeds.
+	// mints one.
 	SessionToken *string
 	// The new authentication session on this host. Set only when callback mode
-	// succeeds.
+	// mints one.
 	SessionCookie *string
 }
 

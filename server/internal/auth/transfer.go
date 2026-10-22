@@ -313,7 +313,9 @@ func (s *Service) transferOut(ctx context.Context, logger *slog.Logger, payload 
 //   - Step 3/3, callback (code, no source_host), redeems that code: it must
 //     have been issued for this host, the browser must hold the matching
 //     nonce cookie, and the user must still be a member of the organization.
-//     Only then is the code consumed and a new session minted here.
+//     Only then is the code consumed. A valid session the browser already
+//     holds here for the same user is kept, with its organization; otherwise,
+//     or when start mode was given replace_session, a new session is minted.
 //
 // The nonce exists because a code alone is a bearer credential for its
 // account: anyone holding one could send it to someone else and sign them
@@ -479,6 +481,19 @@ func (s *Service) transferInCallback(ctx context.Context, logger *slog.Logger, c
 		issuedAt = authsessions.EpochZero
 	}
 
+	// Each host holds its own session, and the source session keeps whatever
+	// organization it last had. A browser that switched organization here
+	// would be sent back to the source's organization on every visit to the
+	// source host, so a valid session of the same user here wins unless the
+	// transfer follows a switch on the source host.
+	keep := false
+	if !replaceSession {
+		keep, err = s.keepsTargetSession(ctx, record.UserID)
+		if err != nil {
+			return nil, failTransfer(signinTransferTemporaryError, "target_session_check_failed", err)
+		}
+	}
+
 	// Consume only after every check passes, so a transient failure above
 	// leaves the code redeemable. Consume is atomic: a concurrent second use
 	// fails here.
@@ -490,12 +505,7 @@ func (s *Service) transferInCallback(ctx context.Context, logger *slog.Logger, c
 		return nil, codeFailure("consume", err)
 	}
 
-	// Each host holds its own session, and the source session keeps whatever
-	// organization it last had. A browser that switched organization here
-	// would be sent back to the source's organization on every visit to the
-	// source host, so a valid session of the same user here wins unless the
-	// transfer follows a switch on the source host.
-	if !replaceSession && s.keepsTargetSession(ctx, record.UserID) {
+	if keep {
 		logger.InfoContext(ctx, "kept existing session on session transfer",
 			attr.SlogSourceHost(record.SourceHost),
 			attr.SlogTargetHost(currentURL.Host),
@@ -537,21 +547,27 @@ func (s *Service) transferInCallback(ctx context.Context, logger *slog.Logger, c
 // keepsTargetSession reports whether the browser already holds a valid session
 // on this host for userID that a transfer should leave in place. Support and
 // impersonation sessions are always replaced: they belong to a staff operator
-// and must not outlive a transfer of the user's own session.
-func (s *Service) keepsTargetSession(ctx context.Context, userID string) bool {
+// and must not outlive a transfer of the user's own session. A session that
+// fails authentication is replaced; any other authentication error is
+// returned, so an outage cannot replace a session that is still valid.
+func (s *Service) keepsTargetSession(ctx context.Context, userID string) (bool, error) {
 	sessionID, _ := contextvalues.GetSessionTokenFromContext(ctx)
 	if sessionID == "" {
-		return false
+		return false, nil
 	}
 
 	sessionCtx, err := s.sessions.Authenticate(ctx, sessionID)
 	if err != nil {
-		return false
+		if shareable, ok := errors.AsType[*oops.ShareableError](err); ok &&
+			(shareable.Code == oops.CodeUnauthorized || shareable.Code == oops.CodeForbidden) {
+			return false, nil
+		}
+		return false, fmt.Errorf("authenticate target session: %w", err)
 	}
 
 	existing, ok := contextvalues.GetAuthContext(sessionCtx)
 	if !ok || existing == nil || existing.SupportOrganizationID != "" || contextvalues.IsLegacyImpersonatedSession(sessionCtx) {
-		return false
+		return false, nil
 	}
-	return existing.UserID == userID && existing.ActiveOrganizationID != ""
+	return existing.UserID == userID && existing.ActiveOrganizationID != "", nil
 }

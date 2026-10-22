@@ -709,13 +709,38 @@ func TestService_TransferIn_ReplacesAnotherUsersTargetSession(t *testing.T) {
 	t.Parallel()
 
 	ctx, f := newTransfer(t, defaultTransferOptions())
-	_, other := newTransfer(t, defaultTransferOptions())
 	code, _, b := f.begin(ctx, t)
 
-	// The other fixture's session lives in its own store, so store it here.
-	require.NoError(t, f.instance.sessionManager.StoreSessionIssuedAt(ctx, other.source, time.Now()))
-	targetCtx := contextvalues.SetSessionTokenInContext(ctx, other.source.SessionID)
+	other := f.source
+	other.SessionID = "other-user-" + strings.ReplaceAll(t.Name(), "/", "-")
+	other.UserID = "other-user-" + uuid.NewString()[:8]
+	require.NoError(t, f.instance.sessionManager.StoreSessionIssuedAt(ctx, other, time.Now()))
+	targetCtx := contextvalues.SetSessionTokenInContext(ctx, other.SessionID)
 	f.requireAccepted(ctx, t, f.in(targetCtx, t, testTargetBaseURL, code, b))
+}
+
+func TestService_TransferIn_TargetSessionCheckFailureIsTemporary(t *testing.T) {
+	t.Parallel()
+
+	ctx, f := newTransfer(t, defaultTransferOptions())
+	targetCtx, existing := f.storeTargetSession(ctx, t)
+	code, _, b := f.begin(ctx, t)
+
+	// Transfer codes live in the fixture's Redis; sessions cannot be read.
+	codes, err := infra.NewRedisClient(t, 0)
+	require.NoError(t, err)
+	svc := serviceWithRedis(ctx, t, f, brokenRedis(t), codes)
+
+	result, err := svc.TransferIn(auth.WithTransferCookieJar(atHost(targetCtx, testTargetBaseURL), b.clone()), callbackPayload(code, new(testTransferRedirect)))
+	require.NoError(t, err)
+	requireRefused(t, result, errTemporary)
+
+	// The outage neither used up the code nor replaced the session.
+	result = f.in(targetCtx, t, testTargetBaseURL, code, b)
+	require.Nil(t, result.SessionCookie)
+	kept, err := f.instance.sessionManager.GetSession(ctx, existing.SessionID)
+	require.NoError(t, err)
+	require.Equal(t, existing, kept)
 }
 
 func TestService_TransferIn_ReplayedCode(t *testing.T) {
