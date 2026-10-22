@@ -1264,6 +1264,31 @@ func (q *Queries) DeleteExpiredPlatformMCPOperationReceipt(ctx context.Context, 
 	return result.RowsAffected(), nil
 }
 
+const deleteExpiredPlatformMCPOperationReceiptsBatch = `-- name: DeleteExpiredPlatformMCPOperationReceiptsBatch :execrows
+DELETE FROM platform_mcp_operation_receipts
+WHERE id IN (
+    SELECT id
+    FROM platform_mcp_operation_receipts
+    WHERE expires_at <= clock_timestamp()
+    ORDER BY expires_at
+    LIMIT $1
+    FOR UPDATE SKIP LOCKED
+)
+`
+
+// The periodic sweep that bounds the receipt table. The per-key reclaim in the
+// receipt transaction only reaches a key that is written again, and a
+// project-creation receipt is never reclaimed that way at all. Bounded by
+// batch so one tick never holds a long delete; SKIP LOCKED leaves rows a
+// receipt transaction is touching to the next tick.
+func (q *Queries) DeleteExpiredPlatformMCPOperationReceiptsBatch(ctx context.Context, batchSize int32) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteExpiredPlatformMCPOperationReceiptsBatch, batchSize)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const deleteExpiredPlatformMCPReadiness = `-- name: DeleteExpiredPlatformMCPReadiness :execrows
 DELETE FROM platform_mcp_readiness AS stale
 WHERE stale.organization_id = $1
@@ -1914,6 +1939,33 @@ func (q *Queries) GetOwnedChatForRecall(ctx context.Context, arg GetOwnedChatFor
 	return i, err
 }
 
+const getPlatformChatSearchChat = `-- name: GetPlatformChatSearchChat :one
+SELECT c.id, COALESCE(c.user_id, '')::text AS owner_user_id, COALESCE(CASE WHEN octet_length(c.title) <= 4096 THEN c.title END, '')::text AS title
+FROM chats c
+JOIN projects p ON p.id = c.project_id AND p.organization_id = $1 AND p.deleted IS FALSE
+WHERE c.id = $2 AND c.project_id = $3 AND c.organization_id = $1
+  AND c.deleted IS FALSE
+`
+
+type GetPlatformChatSearchChatParams struct {
+	OrganizationID string
+	ChatID         uuid.UUID
+	ProjectID      uuid.UUID
+}
+
+type GetPlatformChatSearchChatRow struct {
+	ID          uuid.UUID
+	OwnerUserID string
+	Title       string
+}
+
+func (q *Queries) GetPlatformChatSearchChat(ctx context.Context, arg GetPlatformChatSearchChatParams) (GetPlatformChatSearchChatRow, error) {
+	row := q.db.QueryRow(ctx, getPlatformChatSearchChat, arg.OrganizationID, arg.ChatID, arg.ProjectID)
+	var i GetPlatformChatSearchChatRow
+	err := row.Scan(&i.ID, &i.OwnerUserID, &i.Title)
+	return i, err
+}
+
 const getPlatformMCPActiveNetworkIngress = `-- name: GetPlatformMCPActiveNetworkIngress :one
 SELECT
     ingress.provider,
@@ -2315,6 +2367,7 @@ func (q *Queries) GetPlatformMCPConnectionForUpdate(ctx context.Context, arg Get
 
 const getPlatformMCPConnectionSettings = `-- name: GetPlatformMCPConnectionSettings :one
 SELECT
+    CASE WHEN $1::text = 'gateway' THEN COALESCE(gateway.discovery_mode, 'progressive') ELSE '' END::text AS discovery_mode,
     CASE WHEN $1::text = 'gateway' THEN gateway.name ELSE COALESCE(server.name, server.slug, '') END::text AS name,
     CASE WHEN $1::text = 'gateway' THEN gateway.visibility ELSE server.visibility END::text AS visibility,
     COALESCE(
@@ -2403,6 +2456,7 @@ type GetPlatformMCPConnectionSettingsParams struct {
 }
 
 type GetPlatformMCPConnectionSettingsRow struct {
+	DiscoveryMode     string
 	Name              string
 	Visibility        string
 	NetworkMode       string
@@ -2422,6 +2476,7 @@ func (q *Queries) GetPlatformMCPConnectionSettings(ctx context.Context, arg GetP
 	)
 	var i GetPlatformMCPConnectionSettingsRow
 	err := row.Scan(
+		&i.DiscoveryMode,
 		&i.Name,
 		&i.Visibility,
 		&i.NetworkMode,
@@ -3090,7 +3145,8 @@ func (q *Queries) GetPlatformMCPPluginInventoryItem(ctx context.Context, arg Get
 
 const getPlatformMCPPluginMembershipVersion = `-- name: GetPlatformMCPPluginMembershipVersion :one
 SELECT md5(COALESCE(jsonb_agg(
-  jsonb_build_array(ps.id, ps.sort_order, ps.display_name, ps.policy, ps.toolset_id, ps.mcp_server_id, ps.meta_mcp_server_id)
+  -- NULL holds the retired toolset_id slot so versions stay stable.
+  jsonb_build_array(ps.id, ps.sort_order, ps.display_name, ps.policy, NULL::uuid, ps.mcp_server_id, ps.meta_mcp_server_id)
   ORDER BY ps.sort_order, ps.display_name, ps.id
 )::text, '[]'))::text AS membership_version
 FROM plugin_servers ps
@@ -3828,6 +3884,71 @@ func (q *Queries) GetPlatformMCPSubjectConnectionAuthState(ctx context.Context, 
 		&i.LatestRefreshExpiresAt,
 		&i.LatestSessionRevokedAt,
 		&i.Ready,
+	)
+	return i, err
+}
+
+const getUnexpiredPlatformMCPOperationReceipt = `-- name: GetUnexpiredPlatformMCPOperationReceipt :one
+SELECT receipt.id, receipt.organization_id, receipt.project_id, receipt.registration_id, receipt.connection_id, receipt.connection_generation, receipt.user_id, receipt.acting_surface, receipt.operation, receipt.idempotency_key, receipt.input_hash, receipt.status, receipt.result_code, receipt.result_payload, receipt.expires_at, receipt.created_at, receipt.updated_at
+FROM platform_mcp_operation_receipts AS receipt
+LEFT JOIN platform_mcp_connections AS connection
+  ON connection.id = receipt.connection_id
+ AND connection.organization_id = receipt.organization_id
+WHERE receipt.organization_id = $1
+  AND receipt.project_id = $2
+  AND receipt.operation = $3
+  AND receipt.idempotency_key = $4
+  AND receipt.expires_at > clock_timestamp()
+  AND (
+    receipt.user_id = $5
+    OR (receipt.user_id IS NULL AND connection.subject_urn = $6)
+  )
+ORDER BY receipt.created_at DESC, receipt.id DESC
+LIMIT 1
+`
+
+type GetUnexpiredPlatformMCPOperationReceiptParams struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+	Operation      string
+	IdempotencyKey string
+	UserID         pgtype.Text
+	SubjectUrn     string
+}
+
+// The unlocked replay pre-check that runs before a write charges its budget.
+// Same match as GetPlatformMCPOperationReceipt, but expiry is judged here with
+// the database clock, the same clock DeleteExpiredPlatformMCPOperationReceipt
+// uses under the lock, so the pre-check can never replay a receipt the locked
+// path would already treat as expired.
+func (q *Queries) GetUnexpiredPlatformMCPOperationReceipt(ctx context.Context, arg GetUnexpiredPlatformMCPOperationReceiptParams) (PlatformMcpOperationReceipt, error) {
+	row := q.db.QueryRow(ctx, getUnexpiredPlatformMCPOperationReceipt,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.Operation,
+		arg.IdempotencyKey,
+		arg.UserID,
+		arg.SubjectUrn,
+	)
+	var i PlatformMcpOperationReceipt
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.RegistrationID,
+		&i.ConnectionID,
+		&i.ConnectionGeneration,
+		&i.UserID,
+		&i.ActingSurface,
+		&i.Operation,
+		&i.IdempotencyKey,
+		&i.InputHash,
+		&i.Status,
+		&i.ResultCode,
+		&i.ResultPayload,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
 	)
 	return i, err
 }
@@ -5862,7 +5983,8 @@ func (q *Queries) ListPlatformMCPPluginInventory(ctx context.Context, arg ListPl
 const listPlatformMCPPluginMemberships = `-- name: ListPlatformMCPPluginMemberships :many
 WITH membership_version AS (
   SELECT md5(COALESCE(jsonb_agg(
-    jsonb_build_array(ps.id, ps.sort_order, ps.display_name, ps.policy, ps.toolset_id, ps.mcp_server_id, ps.meta_mcp_server_id)
+    -- NULL holds the retired toolset_id slot so versions stay stable.
+    jsonb_build_array(ps.id, ps.sort_order, ps.display_name, ps.policy, NULL::uuid, ps.mcp_server_id, ps.meta_mcp_server_id)
     ORDER BY ps.sort_order, ps.display_name, ps.id
   )::text, '[]'))::text AS value
   FROM plugin_servers ps
@@ -5875,28 +5997,29 @@ SELECT
     ps.policy,
     ps.sort_order,
     CASE
-      WHEN ps.toolset_id IS NOT NULL THEN 'toolset'
       WHEN ps.mcp_server_id IS NOT NULL THEN 'mcp_server'
       WHEN ps.meta_mcp_server_id IS NOT NULL THEN 'gateway'
+      -- A live toolset-only row lands here until AIM-581 drops plugin_servers.toolset_id.
+      ELSE 'unresolved'
     END::text AS target_kind,
-    COALESCE(ps.toolset_id, ps.mcp_server_id, ps.meta_mcp_server_id) AS target_id,
+    COALESCE(ps.mcp_server_id, ps.meta_mcp_server_id) AS target_id,
     (COALESCE(t.id, s.id, gateway.id) IS NOT NULL)::boolean AS target_resolved,
-    COALESCE(t.mcp_slug, ep.slug, gateway_ep.slug, '')::text AS mcp_slug,
-    COALESCE(t.mcp_enabled, s.visibility <> 'disabled', gateway.visibility <> 'disabled', FALSE)::boolean AS enabled,
+    COALESCE(ep.slug, t.mcp_slug, gateway_ep.slug, '')::text AS mcp_slug,
+    COALESCE(s.visibility <> 'disabled', t.mcp_enabled, gateway.visibility <> 'disabled', FALSE)::boolean AS enabled,
     membership_version.value AS membership_version
 FROM plugin_servers ps
 CROSS JOIN membership_version
 JOIN plugins p
   ON p.id = ps.plugin_id
   AND p.deleted IS FALSE
-LEFT JOIN toolsets t
-  ON t.id = ps.toolset_id
-  AND t.project_id = p.project_id
-  AND t.deleted IS FALSE
 LEFT JOIN mcp_servers s
   ON s.id = ps.mcp_server_id
   AND s.project_id = p.project_id
   AND s.deleted IS FALSE
+LEFT JOIN toolsets t
+  ON t.id = (CASE WHEN s.toolset_id = s.id THEN s.id END)
+  AND t.project_id = p.project_id
+  AND t.deleted IS FALSE
 LEFT JOIN meta_mcp_servers gateway
   ON gateway.id = ps.meta_mcp_server_id
   AND gateway.project_id = p.project_id
@@ -6002,22 +6125,22 @@ SELECT
     ps.display_name,
     ps.policy,
     ps.sort_order,
-    (ps.toolset_id IS NOT NULL)::boolean AS toolset_backed,
     (ps.meta_mcp_server_id IS NOT NULL)::boolean AS gateway_backed,
-    COALESCE(t.mcp_slug, ep.slug, gateway_ep.slug, '')::text AS mcp_slug,
-    COALESCE(t.mcp_enabled, s.visibility <> 'disabled', gateway.visibility <> 'disabled', FALSE)::boolean AS enabled
+    (ps.mcp_server_id IS NULL AND ps.meta_mcp_server_id IS NULL)::boolean AS unresolved,
+    COALESCE(ep.slug, t.mcp_slug, gateway_ep.slug, '')::text AS mcp_slug,
+    COALESCE(s.visibility <> 'disabled', t.mcp_enabled, gateway.visibility <> 'disabled', FALSE)::boolean AS enabled
 FROM plugin_servers ps
 JOIN plugins p
   ON p.id = ps.plugin_id
   AND p.deleted IS FALSE
-LEFT JOIN toolsets t
-  ON t.id = ps.toolset_id
-  AND t.project_id = p.project_id
-  AND t.deleted IS FALSE
 LEFT JOIN mcp_servers s
   ON s.id = ps.mcp_server_id
   AND s.project_id = p.project_id
   AND s.deleted IS FALSE
+LEFT JOIN toolsets t
+  ON t.id = (CASE WHEN s.toolset_id = s.id THEN s.id END)
+  AND t.project_id = p.project_id
+  AND t.deleted IS FALSE
 LEFT JOIN meta_mcp_servers gateway
   ON gateway.id = ps.meta_mcp_server_id
   AND gateway.project_id = p.project_id
@@ -6056,14 +6179,15 @@ type ListPlatformMCPPluginServersRow struct {
 	DisplayName   string
 	Policy        string
 	SortOrder     int32
-	ToolsetBacked bool
 	GatewayBacked bool
+	Unresolved    bool
 	McpSlug       string
 	Enabled       bool
 }
 
 // Member-facing compatibility projection. It deliberately omits membership and
 // backend IDs, which are administrative identity and must not cross this path.
+// A canonical wrapper with no endpoint falls back to its toolset's MCP slug.
 func (q *Queries) ListPlatformMCPPluginServers(ctx context.Context, arg ListPlatformMCPPluginServersParams) ([]ListPlatformMCPPluginServersRow, error) {
 	rows, err := q.db.Query(ctx, listPlatformMCPPluginServers,
 		arg.PluginID,
@@ -6083,8 +6207,8 @@ func (q *Queries) ListPlatformMCPPluginServers(ctx context.Context, arg ListPlat
 			&i.DisplayName,
 			&i.Policy,
 			&i.SortOrder,
-			&i.ToolsetBacked,
 			&i.GatewayBacked,
+			&i.Unresolved,
 			&i.McpSlug,
 			&i.Enabled,
 		); err != nil {
@@ -6511,6 +6635,87 @@ func (q *Queries) ListPlatformMCPProjects(ctx context.Context, arg ListPlatformM
 	return items, nil
 }
 
+const listPlatformMCPRoleDirectorySources = `-- name: ListPlatformMCPRoleDirectorySources :many
+SELECT
+  drm.role_urn::text AS role_urn,
+  drm.source_kind,
+  dg.name AS directory_group_name,
+  drm.attribute_key,
+  drm.attribute_value,
+  (
+    CASE
+      WHEN drm.source_kind = 'group' THEN (
+        SELECT COUNT(DISTINCT NULLIF(LOWER(TRIM(du.email)), ''))
+        FROM directory_user_group_memberships AS m
+        JOIN directory_users AS du
+          ON du.id = m.directory_user_id
+          AND du.organization_id = drm.organization_id
+          AND du.deleted IS FALSE
+          AND du.workos_deleted IS FALSE
+        WHERE m.directory_group_id = dg.id
+          AND m.deleted IS FALSE
+      )
+      ELSE (
+        SELECT COUNT(DISTINCT NULLIF(LOWER(TRIM(du.email)), ''))
+        FROM directory_users AS du
+        WHERE du.organization_id = drm.organization_id
+          AND du.deleted IS FALSE
+          AND du.workos_deleted IS FALSE
+          AND du.attributes ->> drm.attribute_key = drm.attribute_value
+      )
+    END
+  )::bigint AS member_count
+FROM directory_role_mappings AS drm
+LEFT JOIN directory_groups AS dg
+  ON dg.id = drm.directory_group_id
+  AND dg.organization_id = drm.organization_id
+  AND dg.deleted IS FALSE
+  AND dg.workos_deleted IS FALSE
+WHERE drm.organization_id = $1
+  AND drm.deleted IS FALSE
+ORDER BY drm.role_urn, drm.source_kind DESC, dg.name, drm.attribute_key, drm.attribute_value, drm.id
+`
+
+type ListPlatformMCPRoleDirectorySourcesRow struct {
+	RoleUrn            string
+	SourceKind         string
+	DirectoryGroupName pgtype.Text
+	AttributeKey       pgtype.Text
+	AttributeValue     pgtype.Text
+	MemberCount        int64
+}
+
+// Each live directory role mapping in the organization, with how many active
+// directory users its group or attribute value matches today, counted by
+// distinct email as the dashboard counts them. Mappings whose group is gone
+// still list, matching nobody.
+func (q *Queries) ListPlatformMCPRoleDirectorySources(ctx context.Context, organizationID string) ([]ListPlatformMCPRoleDirectorySourcesRow, error) {
+	rows, err := q.db.Query(ctx, listPlatformMCPRoleDirectorySources, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPlatformMCPRoleDirectorySourcesRow
+	for rows.Next() {
+		var i ListPlatformMCPRoleDirectorySourcesRow
+		if err := rows.Scan(
+			&i.RoleUrn,
+			&i.SourceKind,
+			&i.DirectoryGroupName,
+			&i.AttributeKey,
+			&i.AttributeValue,
+			&i.MemberCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listPlatformMCPServerIdentities = `-- name: ListPlatformMCPServerIdentities :many
 WITH server AS (
     SELECT
@@ -6518,7 +6723,16 @@ WITH server AS (
         m.toolset_id,
         COALESCE(m.name, '')::text AS mcp_name,
         COALESCE(m.slug, '')::text AS mcp_slug,
-        COALESCE(toolset.slug, '')::text AS toolset_slug
+        COALESCE(toolset.slug, '')::text AS toolset_slug,
+        (m.toolset_id IS NOT NULL AND (m.id = m.toolset_id OR NOT EXISTS (
+            SELECT 1 FROM mcp_servers AS canonical
+            WHERE canonical.id = m.toolset_id AND canonical.project_id = m.project_id AND canonical.deleted IS FALSE
+        )))::boolean AS hosts_toolset,
+        EXISTS (
+            SELECT 1 FROM mcp_servers AS sibling
+            WHERE sibling.toolset_id = m.toolset_id AND sibling.project_id = m.project_id
+              AND sibling.deleted IS FALSE AND sibling.id <> m.id
+        )::boolean AS toolset_shared
     FROM mcp_servers AS m
     JOIN projects AS project
       ON project.id = m.project_id
@@ -6535,7 +6749,6 @@ membership AS (
     SELECT
         plugin_server.id AS membership_id,
         plugin_server.mcp_server_id,
-        plugin_server.toolset_id,
         plugin.slug AS plugin_slug,
         plugin_server.display_name
     FROM plugins AS plugin
@@ -6553,22 +6766,13 @@ server_membership AS (
         membership.display_name
     FROM membership
     WHERE membership.mcp_server_id IS NOT NULL
-    UNION ALL
-    SELECT
-        server.id AS server_id,
-        membership.membership_id,
-        membership.plugin_slug,
-        membership.display_name
-    FROM server
-    JOIN membership
-      ON membership.toolset_id = server.toolset_id
-    WHERE server.toolset_id IS NOT NULL
 )
 SELECT
     server.id AS mcp_server_id,
     server.mcp_name,
     server.mcp_slug,
-    server.toolset_slug,
+    (CASE WHEN server.hosts_toolset THEN server.toolset_slug ELSE '' END)::text AS toolset_slug,
+    (server.hosts_toolset AND server.toolset_shared)::boolean AS toolset_shared,
     COALESCE(server_membership.plugin_slug, '')::text AS plugin_slug,
     COALESCE(server_membership.display_name, '')::text AS plugin_display_name
 FROM server
@@ -6587,6 +6791,7 @@ type ListPlatformMCPServerIdentitiesRow struct {
 	McpName           string
 	McpSlug           string
 	ToolsetSlug       string
+	ToolsetShared     bool
 	PluginSlug        string
 	PluginDisplayName string
 }
@@ -6596,11 +6801,10 @@ type ListPlatformMCPServerIdentitiesRow struct {
 // slug, name, hosted toolset slug, and each plugin membership's plugin slug and
 // display name (the key the plugin's mcp.json ships it under). One row per
 // (server, membership); a server with no membership yields one row with empty
-// plugin columns. Hosted servers are also reached through memberships attached
-// by toolset, so those memberships are included for the server fronting that
-// toolset. Memberships are gathered from the project's live plugins through the
-// (plugin_id, backend) indexes, one arm per backend kind: a live membership has
-// exactly one backend, so the arms never repeat a row.
+// plugin columns. The toolset slug belongs to the toolset's hosting server: its
+// canonical row (id = toolset id), or every server fronting it when it has
+// none. toolset_shared marks a hosting server whose toolset other live
+// servers also front, since their calls carry the same toolset slug.
 func (q *Queries) ListPlatformMCPServerIdentities(ctx context.Context, arg ListPlatformMCPServerIdentitiesParams) ([]ListPlatformMCPServerIdentitiesRow, error) {
 	rows, err := q.db.Query(ctx, listPlatformMCPServerIdentities, arg.OrganizationID, arg.ProjectID)
 	if err != nil {
@@ -6615,6 +6819,7 @@ func (q *Queries) ListPlatformMCPServerIdentities(ctx context.Context, arg ListP
 			&i.McpName,
 			&i.McpSlug,
 			&i.ToolsetSlug,
+			&i.ToolsetShared,
 			&i.PluginSlug,
 			&i.PluginDisplayName,
 		); err != nil {
@@ -7016,6 +7221,38 @@ func (q *Queries) LockPlatformMCPOperationReceipt(ctx context.Context, arg LockP
 	return err
 }
 
+const lockPlatformMCPOperationReceiptInput = `-- name: LockPlatformMCPOperationReceiptInput :exec
+SELECT pg_advisory_xact_lock(
+    hashtextextended(
+        jsonb_build_array('platform-mcp-receipt-input', $1::text, $2::text, $3::text, $4::text, $5::text)::text,
+        0
+    )
+)
+`
+
+type LockPlatformMCPOperationReceiptInputParams struct {
+	OrganizationID string
+	SubjectUrn     string
+	ProjectID      string
+	Operation      string
+	InputHash      string
+}
+
+// A single-use preview is claimed by its input, so confirmations racing for
+// one input serialize here. The namespace differs from the key lock above so
+// a caller-chosen idempotency key can never name this lock, which is what
+// keeps two confirmations from taking the pair in opposite orders.
+func (q *Queries) LockPlatformMCPOperationReceiptInput(ctx context.Context, arg LockPlatformMCPOperationReceiptInputParams) error {
+	_, err := q.db.Exec(ctx, lockPlatformMCPOperationReceiptInput,
+		arg.OrganizationID,
+		arg.SubjectUrn,
+		arg.ProjectID,
+		arg.Operation,
+		arg.InputHash,
+	)
+	return err
+}
+
 const lockPlatformMCPRemoteIssuerAttachment = `-- name: LockPlatformMCPRemoteIssuerAttachment :exec
 SELECT pg_advisory_xact_lock(
     hashtextextended(
@@ -7136,9 +7373,9 @@ type LockPlatformMCPToolsetForToolExposureParams struct {
 // Takes the toolset row lock, and must run BEFORE the server row is locked.
 //
 // The order is the constraint, not the lock. toolsets.UpdateToolset holds this
-// same row (via GetToolsetForUpdate) and then, inside reconcileHostedNetworkAccess,
-// updates the hosted mcp_servers row — an exclusive row lock taken by a plain
-// UPDATE rather than an explicit FOR UPDATE. For a hosted server both ids are
+// same row (via GetToolsetForUpdate) and then, inside hostedmcp.Sync, locks
+// the hosted mcp_servers row FOR UPDATE (LockMCPServerByIDAndProjectID) before
+// writing it. For a hosted server both ids are
 // the toolset id, so it is the same pair of rows this path touches. Locking the
 // server first here and the toolset first there is an ABBA cycle that
 // PostgreSQL resolves by aborting one side with deadlock_detected, so both
@@ -7195,6 +7432,148 @@ func (q *Queries) MarkPlatformMCPConnectionReauthorizationRequired(ctx context.C
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const platformMCPOperationReceiptInputClaimed = `-- name: PlatformMCPOperationReceiptInputClaimed :one
+SELECT EXISTS (
+    SELECT 1
+    FROM platform_mcp_operation_receipts
+    WHERE organization_id = $1
+      AND project_id = $2
+      AND operation = $3
+      AND user_id = $4
+      AND input_hash = $5
+      AND idempotency_key <> $6
+)
+`
+
+type PlatformMCPOperationReceiptInputClaimedParams struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+	Operation      string
+	UserID         pgtype.Text
+	InputHash      string
+	IdempotencyKey string
+}
+
+// Whether another idempotency key already holds this exact input for the same
+// user, project and operation. A write whose input is single-use, such as a
+// preview token, commits under one key only.
+func (q *Queries) PlatformMCPOperationReceiptInputClaimed(ctx context.Context, arg PlatformMCPOperationReceiptInputClaimedParams) (bool, error) {
+	row := q.db.QueryRow(ctx, platformMCPOperationReceiptInputClaimed,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.Operation,
+		arg.UserID,
+		arg.InputHash,
+		arg.IdempotencyKey,
+	)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
+const readPlatformChatMessages = `-- name: ReadPlatformChatMessages :many
+WITH anchor AS (
+    SELECT cm.seq FROM chat_messages cm
+    JOIN chats c ON c.id = cm.chat_id AND c.project_id = cm.project_id AND c.deleted IS FALSE
+    JOIN projects p ON p.id = c.project_id AND p.organization_id = c.organization_id AND p.deleted IS FALSE
+    WHERE c.organization_id = $2 AND p.organization_id = $2
+      AND ($3::uuid IS NULL OR cm.id = $3)
+      AND cm.chat_id = $4 AND cm.project_id = $1
+    ORDER BY cm.seq DESC LIMIT 1
+), preceding AS (
+    SELECT cm.id, cm.seq, cm.chat_id, cm.project_id, cm.role, cm.content, cm.content_raw, cm.content_asset_url, cm.model, cm.message_id, cm.finish_reason, cm.tool_calls, cm.prompt_tokens, cm.completion_tokens, cm.total_tokens, cm.storage_error, cm.user_id, cm.external_user_id, cm.external_message_id, cm.origin, cm.user_agent, cm.ip_address, cm.source, cm.tool_call_id, cm.tool_urn, cm.tool_outcome, cm.tool_outcome_notes, cm.tool_call_summaries, cm.content_hash, cm.generation, cm.replayed, cm.created_at, cm.risk_analyzed_at FROM chat_messages cm, anchor a
+     WHERE cm.chat_id = $4 AND cm.project_id = $1 AND cm.seq < a.seq
+     ORDER BY cm.seq DESC LIMIT $5::integer
+), following AS (
+    SELECT cm.id, cm.seq, cm.chat_id, cm.project_id, cm.role, cm.content, cm.content_raw, cm.content_asset_url, cm.model, cm.message_id, cm.finish_reason, cm.tool_calls, cm.prompt_tokens, cm.completion_tokens, cm.total_tokens, cm.storage_error, cm.user_id, cm.external_user_id, cm.external_message_id, cm.origin, cm.user_agent, cm.ip_address, cm.source, cm.tool_call_id, cm.tool_urn, cm.tool_outcome, cm.tool_outcome_notes, cm.tool_call_summaries, cm.content_hash, cm.generation, cm.replayed, cm.created_at, cm.risk_analyzed_at FROM chat_messages cm, anchor a
+     WHERE cm.chat_id = $4 AND cm.project_id = $1 AND cm.seq >= a.seq
+     ORDER BY cm.seq ASC LIMIT $6::integer
+), neighbors AS (SELECT id, seq, chat_id, project_id, role, content, content_raw, content_asset_url, model, message_id, finish_reason, tool_calls, prompt_tokens, completion_tokens, total_tokens, storage_error, user_id, external_user_id, external_message_id, origin, user_agent, ip_address, source, tool_call_id, tool_urn, tool_outcome, tool_outcome_notes, tool_call_summaries, content_hash, generation, replayed, created_at, risk_analyzed_at FROM preceding UNION ALL SELECT id, seq, chat_id, project_id, role, content, content_raw, content_asset_url, model, message_id, finish_reason, tool_calls, prompt_tokens, completion_tokens, total_tokens, storage_error, user_id, external_user_id, external_message_id, origin, user_agent, ip_address, source, tool_call_id, tool_urn, tool_outcome, tool_outcome_notes, tool_call_summaries, content_hash, generation, replayed, created_at, risk_analyzed_at FROM following)
+SELECT n.id, n.seq, n.created_at, n.role, n.generation,
+       COALESCE(CASE WHEN octet_length(n.source) <= 512 THEN n.source END, '')::text AS source,
+       COALESCE(CASE WHEN octet_length(n.user_id) <= 512 THEN n.user_id END, '')::text AS user_id,
+       CASE WHEN octet_length(n.content) <= 131072 THEN n.content ELSE '' END::text AS content,
+       CASE WHEN octet_length(n.tool_calls::text) <= 131072 THEN n.tool_calls END::jsonb AS tool_calls,
+       CASE WHEN octet_length(n.content_raw::text) <= 131072 THEN n.content_raw END::jsonb AS content_raw,
+       (octet_length(n.content) > 131072 OR COALESCE(octet_length(n.tool_calls::text), 0) > 131072
+        OR COALESCE(octet_length(n.content_raw::text), 0) > 131072)::boolean AS oversized,
+       COALESCE((
+         SELECT jsonb_agg(jsonb_build_object(
+                  'provider', CASE WHEN octet_length(cp.provider) <= 512 THEN cp.provider END, 'provider_user_id', CASE WHEN octet_length(cp.provider_user_id) <= 512 THEN cp.provider_user_id END,
+                  'user_id', COALESCE(CASE WHEN octet_length(cp.user_id) <= 512 THEN cp.user_id END, ''), 'display_name', COALESCE(CASE WHEN octet_length(cp.display_name) <= 1024 THEN cp.display_name END, '')))
+         FROM (SELECT id, project_id, chat_id, message_id, provider, provider_user_id, provider_team_id, user_id, display_name, created_at, updated_at FROM chat_message_participants cp
+               WHERE cp.project_id = $1 AND cp.chat_id = n.chat_id AND cp.message_id = n.id
+               ORDER BY cp.provider, cp.provider_user_id, cp.id LIMIT 5) cp
+       ), '[]')::jsonb AS participants
+FROM neighbors n ORDER BY n.seq
+`
+
+type ReadPlatformChatMessagesParams struct {
+	ProjectID      uuid.UUID
+	OrganizationID string
+	MessageID      uuid.NullUUID
+	ChatID         uuid.UUID
+	ContextSize    int32
+	FollowingLimit int32
+}
+
+type ReadPlatformChatMessagesRow struct {
+	ID           uuid.UUID
+	Seq          int64
+	CreatedAt    pgtype.Timestamptz
+	Role         string
+	Generation   int32
+	Source       string
+	UserID       string
+	Content      string
+	ToolCalls    []byte
+	ContentRaw   []byte
+	Oversized    bool
+	Participants []byte
+}
+
+// Capture-sequence window around one message of this chat, or its latest one,
+// with up to five recorded participants per message.
+func (q *Queries) ReadPlatformChatMessages(ctx context.Context, arg ReadPlatformChatMessagesParams) ([]ReadPlatformChatMessagesRow, error) {
+	rows, err := q.db.Query(ctx, readPlatformChatMessages,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.MessageID,
+		arg.ChatID,
+		arg.ContextSize,
+		arg.FollowingLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ReadPlatformChatMessagesRow
+	for rows.Next() {
+		var i ReadPlatformChatMessagesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Seq,
+			&i.CreatedAt,
+			&i.Role,
+			&i.Generation,
+			&i.Source,
+			&i.UserID,
+			&i.Content,
+			&i.ToolCalls,
+			&i.ContentRaw,
+			&i.Oversized,
+			&i.Participants,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const recordPlatformMCPCatalogExplored = `-- name: RecordPlatformMCPCatalogExplored :execrows
@@ -8181,75 +8560,127 @@ func (q *Queries) RotatePlatformMCPSession(ctx context.Context, arg RotatePlatfo
 	return i, err
 }
 
-const searchPlatformMCPAccessMembers = `-- name: SearchPlatformMCPAccessMembers :many
-WITH member_roles AS (
-  SELECT ora.workos_user_id,
-    array_agg(DISTINCT COALESCE(r.id::text, g.id::text)) AS role_ids,
-    array_agg(DISTINCT COALESCE(r.workos_name, g.workos_name)) AS role_names
-  FROM organization_role_assignments ora
-  LEFT JOIN organization_roles r ON ora.role_urn = 'role:organization:' || r.id::text
-    AND r.organization_id = $2 AND r.deleted IS FALSE AND r.workos_deleted IS FALSE
-  LEFT JOIN global_roles g ON ora.role_urn = 'role:global:' || g.id::text
-    AND g.deleted IS FALSE AND g.workos_deleted IS FALSE
-  WHERE ora.organization_id = $2 AND ora.deleted_at IS NULL
-    AND COALESCE(r.id, g.id) IS NOT NULL
-  GROUP BY ora.workos_user_id
-), matching AS (
-  SELECT DISTINCT u.id, u.display_name, u.email, COALESCE(m.role_ids, '{}'::text[])::text[] AS role_ids
-  FROM organization_user_relationships rel
-  JOIN users u ON u.id = rel.user_id AND u.deleted_at IS NULL
-  LEFT JOIN member_roles m ON m.workos_user_id = u.workos_id
-  WHERE rel.organization_id = $2 AND rel.deleted IS FALSE
-    AND ($3::text = '' OR $3::text = ANY(m.role_ids))
-    AND ($4::text = ''
-      OR strpos(lower(trim(regexp_replace(u.display_name, '[[:space:]]+', ' ', 'g'))), $4::text) > 0
-      OR strpos(lower(trim(regexp_replace(u.email, '[[:space:]]+', ' ', 'g'))), $4::text) > 0
-      OR EXISTS (SELECT 1 FROM unnest(m.role_names) AS role_name
-        WHERE strpos(lower(trim(regexp_replace(role_name, '[[:space:]]+', ' ', 'g'))), $4::text) > 0))
-)
-SELECT id, display_name, email, role_ids, count(*) OVER ()::bigint AS total_matches
-FROM matching
-ORDER BY email, id
-LIMIT $1
+const searchPlatformChatMessages = `-- name: SearchPlatformChatMessages :many
+SELECT m.id, m.chat_id, m.seq, m.created_at, m.role, m.generation,
+       COALESCE(CASE WHEN octet_length(m.source) <= 512 THEN m.source END, '')::text AS source,
+       COALESCE(CASE WHEN octet_length(m.user_id) <= 512 THEN m.user_id END, '')::text AS user_id,
+       COALESCE(CASE WHEN octet_length(c.title) <= 4096 THEN c.title END, '')::text AS chat_title,
+       COALESCE(c.user_id, '')::text AS owner_user_id,
+       CASE WHEN octet_length(m.content) <= 131072 THEN m.content ELSE '' END::text AS content,
+       CASE WHEN octet_length(m.tool_calls::text) <= 131072 THEN m.tool_calls END::jsonb AS tool_calls,
+       CASE WHEN octet_length(m.content_raw::text) <= 131072 THEN m.content_raw END::jsonb AS content_raw,
+       (octet_length(m.content) > 131072 OR COALESCE(octet_length(m.tool_calls::text), 0) > 131072
+        OR COALESCE(octet_length(m.content_raw::text), 0) > 131072)::boolean AS oversized
+FROM chat_messages m
+JOIN chats c ON c.id = m.chat_id AND c.project_id = m.project_id
+JOIN projects p ON p.id = c.project_id
+WHERE m.project_id = $1::uuid
+  AND c.organization_id = $2 AND p.organization_id = $2
+  AND c.deleted IS FALSE AND p.deleted IS FALSE
+  AND m.created_at >= $3 AND m.created_at < $4
+  AND (cardinality($5::uuid[]) = 0 OR m.chat_id = ANY($5::uuid[]))
+  AND ($6::text = '' OR c.user_id = $6)
+  AND ($7::text = '' OR m.source = $7)
+  AND ($8::text = ''
+       OR (octet_length(m.content) <= 131072 AND m.content ILIKE $8 ESCAPE '\')
+       OR (octet_length(m.tool_calls::text) <= 131072 AND m.tool_calls::text ILIKE $8 ESCAPE '\')
+       OR (octet_length(m.content_raw::text) <= 131072 AND m.content_raw::text ILIKE $8 ESCAPE '\')
+       OR c.title ILIKE $8 ESCAPE '\')
+  AND ($9::text = ''
+       OR ($10::text = '' AND m.user_id = $9)
+       OR EXISTS (
+         SELECT 1 FROM chat_message_participants cp
+         WHERE cp.project_id = m.project_id AND cp.chat_id = m.chat_id AND cp.message_id = m.id
+           AND (cp.user_id = $9 OR cp.provider_user_id = $9)
+           AND ($10 = '' OR cp.provider = $10)))
+  AND (NOT $11::boolean
+       OR ($12::boolean AND (m.created_at, m.id) > ($13::timestamptz, $14::uuid))
+       OR (NOT $12 AND (m.created_at, m.id) < ($13, $14)))
+ORDER BY CASE WHEN $12 THEN m.created_at END ASC,
+         CASE WHEN $12 THEN m.id END ASC,
+         CASE WHEN NOT $12 THEN m.created_at END DESC,
+         CASE WHEN NOT $12 THEN m.id END DESC
+LIMIT $15::integer
 `
 
-type SearchPlatformMCPAccessMembersParams struct {
-	ResultLimit    int32
-	OrganizationID string
-	RoleID         string
-	Query          string
+type SearchPlatformChatMessagesParams struct {
+	ProjectID           uuid.UUID
+	OrganizationID      string
+	FromTime            pgtype.Timestamptz
+	ToTime              pgtype.Timestamptz
+	ChatIds             []uuid.UUID
+	OwnerUserID         string
+	Source              string
+	Pattern             string
+	ParticipantID       string
+	ParticipantProvider string
+	HasCursor           bool
+	OldestFirst         bool
+	CursorAt            pgtype.Timestamptz
+	CursorID            uuid.UUID
+	RowLimit            int32
 }
 
-type SearchPlatformMCPAccessMembersRow struct {
-	ID           string
-	DisplayName  string
-	Email        string
-	RoleIds      []string
-	TotalMatches int64
+type SearchPlatformChatMessagesRow struct {
+	ID          uuid.UUID
+	ChatID      uuid.UUID
+	Seq         int64
+	CreatedAt   pgtype.Timestamptz
+	Role        string
+	Generation  int32
+	Source      string
+	UserID      string
+	ChatTitle   string
+	OwnerUserID string
+	Content     string
+	ToolCalls   []byte
+	ContentRaw  []byte
+	Oversized   bool
 }
 
-// Count distinct members and return only a bounded page from the same snapshot.
-// Active local role assignments follow the access roster's WorkOS identity join.
-func (q *Queries) SearchPlatformMCPAccessMembers(ctx context.Context, arg SearchPlatformMCPAccessMembersParams) ([]SearchPlatformMCPAccessMembersRow, error) {
-	rows, err := q.db.Query(ctx, searchPlatformMCPAccessMembers,
-		arg.ResultLimit,
+// Literal substring search over captured messages in one project and interval,
+// newest or oldest first by (created_at, id). Fields over 128 KiB are neither
+// matched nor returned. The caller requests one extra row to detect more pages.
+func (q *Queries) SearchPlatformChatMessages(ctx context.Context, arg SearchPlatformChatMessagesParams) ([]SearchPlatformChatMessagesRow, error) {
+	rows, err := q.db.Query(ctx, searchPlatformChatMessages,
+		arg.ProjectID,
 		arg.OrganizationID,
-		arg.RoleID,
-		arg.Query,
+		arg.FromTime,
+		arg.ToTime,
+		arg.ChatIds,
+		arg.OwnerUserID,
+		arg.Source,
+		arg.Pattern,
+		arg.ParticipantID,
+		arg.ParticipantProvider,
+		arg.HasCursor,
+		arg.OldestFirst,
+		arg.CursorAt,
+		arg.CursorID,
+		arg.RowLimit,
 	)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []SearchPlatformMCPAccessMembersRow
+	var items []SearchPlatformChatMessagesRow
 	for rows.Next() {
-		var i SearchPlatformMCPAccessMembersRow
+		var i SearchPlatformChatMessagesRow
 		if err := rows.Scan(
 			&i.ID,
-			&i.DisplayName,
-			&i.Email,
-			&i.RoleIds,
-			&i.TotalMatches,
+			&i.ChatID,
+			&i.Seq,
+			&i.CreatedAt,
+			&i.Role,
+			&i.Generation,
+			&i.Source,
+			&i.UserID,
+			&i.ChatTitle,
+			&i.OwnerUserID,
+			&i.Content,
+			&i.ToolCalls,
+			&i.ContentRaw,
+			&i.Oversized,
 		); err != nil {
 			return nil, err
 		}

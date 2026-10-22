@@ -51,7 +51,8 @@ type sharedAuthorizationServerRoute struct {
 // serves. RFC 8414 metadata is served at both the path-insertion location
 // §3.1 defines and the path-appended location some clients request instead.
 // The IdP and remote login callbacks are deployment-global and stay where they
-// are.
+// are. Every route is mounted on both the main mux and the authentication
+// host; each answers only on the host its issuer names.
 func (s *Service) sharedAuthorizationServerRoutes() []sharedAuthorizationServerRoute {
 	return []sharedAuthorizationServerRoute{
 		{method: http.MethodGet, path: wellknown.OAuthAuthorizationServerPath + sharedAuthorizationServerPattern, handler: s.HandleSharedAuthorizationServerMetadata},
@@ -91,6 +92,9 @@ func (s *Service) HandleSharedAuthorizationServerMetadata(w http.ResponseWriter,
 		return oops.E(oops.CodeUnexpected, err, "build OAuth server URLs").LogError(ctx, issuer.logger)
 	}
 	grantTypes := []string{oauthwire.GrantTypeAuthorizationCode, oauthwire.GrantTypeRefreshToken}
+	if s.assistantWorkloadTokens != nil {
+		grantTypes = append(grantTypes, "client_credentials")
+	}
 	var grantProfiles []string
 	if issuer.idJAGConfigured {
 		grantTypes = append(grantTypes, oauthwire.GrantTypeJWTBearer)
@@ -297,8 +301,10 @@ func (s *Service) sharedChallengeEndpoint(ctx context.Context, issuer *sharedIss
 
 // HandleSharedToken serves the token endpoint of a shared authorization
 // server. Code and refresh grants resolve their resource from stored state.
-// Assertion grants require exactly one explicit resource before dispatch to
-// the resource's client-authenticated ID-JAG or clientless workload handler.
+// Assertion grants naming exactly one resource dispatch to that resource's
+// client-authenticated ID-JAG or clientless workload handler. A clientless
+// workload grant naming no resource is served for all of the issuer's MCP
+// servers; an ID-JAG exchange must still name one.
 func (s *Service) HandleSharedToken(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	issuer, err := s.sharedIssuerForRequest(r)
@@ -319,8 +325,14 @@ func (s *Service) HandleSharedToken(w http.ResponseWriter, r *http.Request) erro
 		endpoint, err = s.sharedAuthorizationCodeEndpoint(ctx, w, logger, issuer.authorizationServer.issuerID, r.PostForm.Get(oauthwire.ParamCode))
 	case oauthwire.GrantTypeRefreshToken:
 		endpoint, err = s.sharedRefreshTokenEndpoint(ctx, w, logger, issuer.authorizationServer, r.PostForm.Get(oauthwire.ParamRefreshToken))
-	case oauthwire.GrantTypeJWTBearer:
+	case "client_credentials", oauthwire.GrantTypeJWTBearer:
+		if grantType == "client_credentials" && s.assistantWorkloadTokens == nil {
+			return writeTokenError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeUnsupportedGrantType, "unsupported grant_type")
+		}
 		resources := r.PostForm[oauthwire.ParamResource]
+		if grantType == oauthwire.GrantTypeJWTBearer && len(resources) == 0 && extractClientCredentials(r).clientless(r) {
+			return s.handleIssuerWorkloadAssertionGrant(ctx, w, r, issuer)
+		}
 		var rejection sharedResourceRejection
 		endpoint, rejection, err = s.resolveSharedResourceIndicators(ctx, logger, issuer.authorizationServer, resources)
 		if err != nil {

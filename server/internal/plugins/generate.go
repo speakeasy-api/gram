@@ -385,7 +385,7 @@ const platformMCPGeneratorVersion = "4"
 // line when it pins a new binary, because new checksums always change the
 // rendered bootstrap script. Any other change to hooks generation needs a
 // manual bump, which the Plugin Generate Check CI workflow enforces.
-const hooksGeneratorVersion = "49"
+const hooksGeneratorVersion = "50"
 
 // Fixed, non-empty sentinels substituted for the per-publish API keys when
 // computing a fingerprint. They must be non-empty: an empty HooksAPIKey omits
@@ -3206,7 +3206,13 @@ func generateClaudePluginInDir(files map[string][]byte, subdir string, p PluginI
 		}
 		// Public non-OAuth servers may need user-provided env vars.
 		for _, ec := range s.EnvConfigs {
+			title := strings.TrimSpace(ec.DisplayName)
+			if title == "" {
+				title = ec.VariableName
+			}
 			userConfig[ec.VariableName] = userConfigEntry{
+				Type:        "string",
+				Title:       title,
 				Description: ec.DisplayName,
 				Sensitive:   true,
 			}
@@ -3215,6 +3221,8 @@ func generateClaudePluginInDir(files map[string][]byte, subdir string, p PluginI
 
 	if needsGramKeyPrompt {
 		userConfig["SPEAKEASY_AI_API_KEY"] = userConfigEntry{
+			Type:        "string",
+			Title:       "Speakeasy API key",
 			Description: "Your Speakeasy API key for authenticating MCP server connections",
 			Sensitive:   true,
 		}
@@ -3544,6 +3552,8 @@ type claudePluginMeta struct {
 }
 
 type userConfigEntry struct {
+	Type        string `json:"type"`
+	Title       string `json:"title"`
 	Description string `json:"description"`
 	Sensitive   bool   `json:"sensitive"`
 }

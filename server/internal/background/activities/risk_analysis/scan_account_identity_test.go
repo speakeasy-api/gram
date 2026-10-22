@@ -121,7 +121,7 @@ func seedChatMessage(t *testing.T, conn *pgxpool.Pool, td testData, chatID uuid.
 	return msgID
 }
 
-func newAccountIdentityAnalyzeBatch(t *testing.T, conn *pgxpool.Pool, findingsPub gcp.Publisher[*riskv1.Finding]) *risk_analysis.AnalyzeBatch {
+func newAccountIdentityAnalyzeBatch(t *testing.T, conn *pgxpool.Pool, accountIdentityPub gcp.Publisher[*riskv1.AccountIdentityAnalysis]) *risk_analysis.AnalyzeBatch {
 	t.Helper()
 	ab, err := risk_analysis.NewAnalyzeBatch(
 		testenv.NewLogger(t),
@@ -140,7 +140,8 @@ func newAccountIdentityAnalyzeBatch(t *testing.T, conn *pgxpool.Pool, findingsPu
 		newPromptInjectionPub(),
 		newPromptPolicyPub(),
 		newCustomRulesPub(), newLLMPub(),
-		findingsPub,
+		newToolCallPub(),
+		accountIdentityPub,
 		mustCustomRuleScanner(t, nil),
 		mustCELEngine(t),
 		nil,
@@ -195,7 +196,7 @@ func TestAnalyzeBatch_AccountIdentityPersonalAccountOnePerChat(t *testing.T) {
 	msg1 := seedChatMessage(t, conn, td, chatID)
 	msg2 := seedChatMessage(t, conn, td, chatID)
 
-	ab := newAccountIdentityAnalyzeBatch(t, conn, newFindingsPub())
+	ab := newAccountIdentityAnalyzeBatch(t, conn, newAccountIdentityPub())
 	runAccountIdentityBatch(t, ab, td, policyID, policyVersion, []uuid.UUID{msg1, msg2})
 
 	findings := accountIdentityFindings(t, conn, td, policyID)
@@ -205,7 +206,7 @@ func TestAnalyzeBatch_AccountIdentityPersonalAccountOnePerChat(t *testing.T) {
 	assert.Contains(t, []uuid.UUID{msg1, msg2}, findings[0].ChatMessageID.UUID)
 }
 
-func TestAnalyzeBatch_AccountIdentityPublishesFindingsToTopic(t *testing.T) {
+func TestAnalyzeBatch_AccountIdentityPublishesAnalysisRequest(t *testing.T) {
 	t.Parallel()
 	conn := cloneDB(t)
 	td := seedTestData(t, conn, true)
@@ -214,32 +215,20 @@ func TestAnalyzeBatch_AccountIdentityPublishesFindingsToTopic(t *testing.T) {
 	chatID := seedAccountChat(t, conn, td, "personal", "jane@gmail.com")
 	msg1 := seedChatMessage(t, conn, td, chatID)
 
-	pub, published := capturingFindingsPub(t)
+	pub, published := capturingAccountIdentityPub(t)
 	ab := newAccountIdentityAnalyzeBatch(t, conn, pub)
 	runAccountIdentityBatch(t, ab, td, policyID, policyVersion, []uuid.UUID{msg1})
 
-	// The batch path has no stream publisher for account_identity, so it must
-	// mirror the finding onto the findings topic itself (the ClickHouse
-	// risk_findings writer consumes it).
 	require.Len(t, *published, 1)
-	finding := (*published)[0]
-	assert.Equal(t, "account_identity", finding.GetSource())
-	assert.Equal(t, "identity.personal_account", finding.GetRuleId())
-	assert.Equal(t, "jane@gmail.com", finding.GetMatch())
-	assert.Equal(t, td.orgID, finding.GetOrganizationId())
-	assert.Equal(t, td.projectID.String(), finding.GetProjectId())
-	assert.Equal(t, policyID.String(), finding.GetRiskPolicyId())
-	assert.Equal(t, policyVersion, finding.GetRiskPolicyVersion())
-	assert.Equal(t, msg1.String(), finding.GetChatMessageId())
-	firstID, err := uuid.Parse(finding.GetId())
-	require.NoError(t, err)
-
-	// Re-analyzing the same message replaces the Postgres row and republishes;
-	// the deterministic finding id must not change, so ClickHouse's
-	// uniqExact(id) reads dedupe the redundant append.
-	runAccountIdentityBatch(t, ab, td, policyID, policyVersion, []uuid.UUID{msg1})
-	require.Len(t, *published, 2)
-	assert.Equal(t, firstID.String(), (*published)[1].GetId())
+	request := (*published)[0]
+	assert.Equal(t, "personal", request.GetAccountType())
+	assert.Equal(t, "jane@gmail.com", request.GetEmail())
+	assert.Equal(t, td.orgID, request.GetOrganizationId())
+	assert.Equal(t, td.projectID.String(), request.GetProjectId())
+	assert.Equal(t, policyID.String(), request.GetRiskPolicyId())
+	assert.Equal(t, policyVersion, request.GetRiskPolicyVersion())
+	assert.Equal(t, chatID.String(), request.GetChatId())
+	assert.Equal(t, msg1.String(), request.GetChatMessageId())
 }
 
 func TestAnalyzeBatch_AccountIdentityDedupesAcrossBatches(t *testing.T) {
@@ -252,7 +241,7 @@ func TestAnalyzeBatch_AccountIdentityDedupesAcrossBatches(t *testing.T) {
 	msg1 := seedChatMessage(t, conn, td, chatID)
 	msg2 := seedChatMessage(t, conn, td, chatID)
 
-	ab := newAccountIdentityAnalyzeBatch(t, conn, newFindingsPub())
+	ab := newAccountIdentityAnalyzeBatch(t, conn, newAccountIdentityPub())
 	runAccountIdentityBatch(t, ab, td, policyID, policyVersion, []uuid.UUID{msg1})
 	require.Len(t, accountIdentityFindings(t, conn, td, policyID), 1)
 
@@ -280,7 +269,7 @@ func TestAnalyzeBatch_AccountIdentityEnrichesMatchWhenEmailLearnedLater(t *testi
 	msg1 := seedChatMessage(t, conn, td, chatID)
 	msg2 := seedChatMessage(t, conn, td, chatID)
 
-	ab := newAccountIdentityAnalyzeBatch(t, conn, newFindingsPub())
+	ab := newAccountIdentityAnalyzeBatch(t, conn, newAccountIdentityPub())
 
 	// First batch flags the personal account with no email yet: generic
 	// description, empty match.
@@ -315,7 +304,7 @@ func TestAnalyzeBatch_AccountIdentityEnrichmentFillsMatchOnce(t *testing.T) {
 	msg2 := seedChatMessage(t, conn, td, chatID)
 	msg3 := seedChatMessage(t, conn, td, chatID)
 
-	ab := newAccountIdentityAnalyzeBatch(t, conn, newFindingsPub())
+	ab := newAccountIdentityAnalyzeBatch(t, conn, newAccountIdentityPub())
 
 	// Record the generic (empty-match) finding, then enrich it once the email
 	// is learned.
@@ -347,7 +336,7 @@ func TestAnalyzeBatch_AccountIdentityVersionBumpReemits(t *testing.T) {
 	msg1 := seedChatMessage(t, conn, td, chatID)
 	msg2 := seedChatMessage(t, conn, td, chatID)
 
-	ab := newAccountIdentityAnalyzeBatch(t, conn, newFindingsPub())
+	ab := newAccountIdentityAnalyzeBatch(t, conn, newAccountIdentityPub())
 	runAccountIdentityBatch(t, ab, td, policyID, policyVersion, []uuid.UUID{msg1})
 	require.Len(t, accountIdentityFindings(t, conn, td, policyID), 1)
 
@@ -385,7 +374,7 @@ func TestAnalyzeBatch_AccountIdentityUnapprovedDomainMatrix(t *testing.T) {
 		messageIDs = append(messageIDs, msgID)
 	}
 
-	ab := newAccountIdentityAnalyzeBatch(t, conn, newFindingsPub())
+	ab := newAccountIdentityAnalyzeBatch(t, conn, newAccountIdentityPub())
 	runAccountIdentityBatch(t, ab, td, policyID, policyVersion, messageIDs)
 
 	rulesByEmail := make(map[string][]string)
@@ -411,7 +400,7 @@ func TestAnalyzeBatch_AccountIdentityEmptyDomainListInert(t *testing.T) {
 	chatID := seedAccountChat(t, conn, td, "team", "bob@other.com")
 	msgID := seedChatMessage(t, conn, td, chatID)
 
-	ab := newAccountIdentityAnalyzeBatch(t, conn, newFindingsPub())
+	ab := newAccountIdentityAnalyzeBatch(t, conn, newAccountIdentityPub())
 	runAccountIdentityBatch(t, ab, td, policyID, policyVersion, []uuid.UUID{msgID})
 
 	require.Empty(t, accountIdentityFindings(t, conn, td, policyID))
@@ -426,7 +415,7 @@ func TestAnalyzeBatch_AccountIdentityUnattributedChatEmitsNothing(t *testing.T) 
 	// td.chatID has no user_account_id: no identity, no finding.
 	msgID := seedChatMessage(t, conn, td, td.chatID)
 
-	ab := newAccountIdentityAnalyzeBatch(t, conn, newFindingsPub())
+	ab := newAccountIdentityAnalyzeBatch(t, conn, newAccountIdentityPub())
 	runAccountIdentityBatch(t, ab, td, policyID, policyVersion, []uuid.UUID{msgID})
 
 	require.Empty(t, accountIdentityFindings(t, conn, td, policyID))
@@ -441,7 +430,7 @@ func TestAnalyzeBatch_AccountIdentityDisabledRuleFiltered(t *testing.T) {
 	chatID := seedAccountChat(t, conn, td, "personal", "jane@gmail.com")
 	msgID := seedChatMessage(t, conn, td, chatID)
 
-	ab := newAccountIdentityAnalyzeBatch(t, conn, newFindingsPub())
+	ab := newAccountIdentityAnalyzeBatch(t, conn, newAccountIdentityPub())
 	runAccountIdentityBatch(t, ab, td, policyID, policyVersion, []uuid.UUID{msgID})
 
 	require.Empty(t, accountIdentityFindings(t, conn, td, policyID))
@@ -470,7 +459,7 @@ func TestAnalyzeBatch_AccountIdentityHonorsExclusions(t *testing.T) {
 	chatID := seedAccountChat(t, conn, td, "personal", "jane@gmail.com")
 	msgID := seedChatMessage(t, conn, td, chatID)
 
-	ab := newAccountIdentityAnalyzeBatch(t, conn, newFindingsPub())
+	ab := newAccountIdentityAnalyzeBatch(t, conn, newAccountIdentityPub())
 	runAccountIdentityBatch(t, ab, td, policyID, policyVersion, []uuid.UUID{msgID})
 
 	require.Empty(t, accountIdentityFindings(t, conn, td, policyID))
@@ -488,7 +477,7 @@ func TestAnalyzeBatch_AccountIdentityLateFieldEmitsRemainingRule(t *testing.T) {
 	msg1 := seedChatMessage(t, conn, td, chatID)
 	msg2 := seedChatMessage(t, conn, td, chatID)
 
-	ab := newAccountIdentityAnalyzeBatch(t, conn, newFindingsPub())
+	ab := newAccountIdentityAnalyzeBatch(t, conn, newAccountIdentityPub())
 	runAccountIdentityBatch(t, ab, td, policyID, policyVersion, []uuid.UUID{msg1})
 	findings := accountIdentityFindings(t, conn, td, policyID)
 	require.Len(t, findings, 1)

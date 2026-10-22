@@ -798,6 +798,7 @@ func TestToolsetsService_UpdateToolset_EnableMcp_AttachesToDefaultPlugin(t *test
 	servers, err = pluginsQueries.ListPluginServers(ctx, defaultPlugin.ID)
 	require.NoError(t, err)
 	require.Len(t, servers, 2)
+	require.Contains(t, []uuid.UUID{servers[0].McpServerID.UUID, servers[1].McpServerID.UUID}, uuid.MustParse(second.ID))
 
 	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionPluginServerAdd)
 	require.NoError(t, err)

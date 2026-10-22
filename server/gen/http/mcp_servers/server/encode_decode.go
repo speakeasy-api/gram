@@ -292,6 +292,7 @@ func DecodeGetMcpServerRequest(mux goahttp.Muxer, decoder func(*http.Request) go
 		var (
 			id               *string
 			slug             *string
+			toolsetID        *string
 			sessionToken     *string
 			apikeyToken      *string
 			projectSlugInput *string
@@ -309,6 +310,13 @@ func DecodeGetMcpServerRequest(mux goahttp.Muxer, decoder func(*http.Request) go
 		if slugRaw != "" {
 			slug = &slugRaw
 		}
+		toolsetIDRaw := qp.Get("toolset_id")
+		if toolsetIDRaw != "" {
+			toolsetID = &toolsetIDRaw
+		}
+		if toolsetID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("toolset_id", *toolsetID, goa.FormatUUID))
+		}
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
@@ -324,7 +332,7 @@ func DecodeGetMcpServerRequest(mux goahttp.Muxer, decoder func(*http.Request) go
 		if err != nil {
 			return payload, err
 		}
-		payload = NewGetMcpServerPayload(id, slug, sessionToken, apikeyToken, projectSlugInput)
+		payload = NewGetMcpServerPayload(id, slug, toolsetID, sessionToken, apikeyToken, projectSlugInput)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -2984,6 +2992,36 @@ func EncodeDeleteMcpServerError(encoder func(context.Context, http.ResponseWrite
 	}
 }
 
+// marshalTypesMcpServerToolsetSummaryToMcpServerToolsetSummaryResponseBody
+// builds a value of type *McpServerToolsetSummaryResponseBody from a value of
+// type *types.McpServerToolsetSummary.
+func marshalTypesMcpServerToolsetSummaryToMcpServerToolsetSummaryResponseBody(v *types.McpServerToolsetSummary) *McpServerToolsetSummaryResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &McpServerToolsetSummaryResponseBody{
+		ID:                    v.ID,
+		Slug:                  v.Slug,
+		Name:                  v.Name,
+		Description:           v.Description,
+		ToolCount:             v.ToolCount,
+		ToolSelectionMode:     v.ToolSelectionMode,
+		ExternalMcpProxyOnly:  v.ExternalMcpProxyOnly,
+		ExternalOauthServerID: v.ExternalOauthServerID,
+		RegistrySpecifier:     v.RegistrySpecifier,
+	}
+	if v.ExternalMcpSlugs != nil {
+		res.ExternalMcpSlugs = make([]string, len(v.ExternalMcpSlugs))
+		for i, val := range v.ExternalMcpSlugs {
+			res.ExternalMcpSlugs[i] = val
+		}
+	} else {
+		res.ExternalMcpSlugs = []string{}
+	}
+
+	return res
+}
+
 // marshalTypesMcpServerToMcpServerResponseBody builds a value of type
 // *McpServerResponseBody from a value of type *types.McpServer.
 func marshalTypesMcpServerToMcpServerResponseBody(v *types.McpServer) *McpServerResponseBody {
@@ -2992,6 +3030,7 @@ func marshalTypesMcpServerToMcpServerResponseBody(v *types.McpServer) *McpServer
 		ProjectID:             v.ProjectID,
 		Name:                  v.Name,
 		Slug:                  v.Slug,
+		PlatformEndpointSlug:  v.PlatformEndpointSlug,
 		EnvironmentID:         v.EnvironmentID,
 		UserSessionIssuerID:   v.UserSessionIssuerID,
 		RemoteMcpServerID:     v.RemoteMcpServerID,
@@ -3001,8 +3040,14 @@ func marshalTypesMcpServerToMcpServerResponseBody(v *types.McpServer) *McpServer
 		ToolVariationsGroupID: v.ToolVariationsGroupID,
 		Visibility:            string(v.Visibility),
 		NetworkAccessMode:     string(v.NetworkAccessMode),
+		PrimaryEndpointID:     v.PrimaryEndpointID,
+		PrimaryEndpointURL:    v.PrimaryEndpointURL,
+		HasEndpoint:           v.HasEndpoint,
 		CreatedAt:             v.CreatedAt,
 		UpdatedAt:             v.UpdatedAt,
+	}
+	if v.Toolset != nil {
+		res.Toolset = marshalTypesMcpServerToolsetSummaryToMcpServerToolsetSummaryResponseBody(v.Toolset)
 	}
 
 	return res

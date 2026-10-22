@@ -218,7 +218,6 @@ func TestServiceCreateAssistantAutoEnablesMCPOnAttachedToolsets(t *testing.T) {
 	t.Parallel()
 
 	svc, ctx, projectID, conn := newRBACServiceWithConn(t, "assistants_mcp_autoenable")
-	ctx = authztest.WithExactGrants(t, ctx, assistantWriteGrant(projectID), mcpConnectGrant())
 
 	toolsetsQ := toolsetsRepo.New(conn)
 	ts, err := toolsetsQ.CreateToolset(t.Context(), toolsetsRepo.CreateToolsetParams{
@@ -239,6 +238,7 @@ func TestServiceCreateAssistantAutoEnablesMCPOnAttachedToolsets(t *testing.T) {
 	})
 	require.NoError(t, err)
 
+	ctx = authztest.WithExactGrants(t, ctx, assistantWriteGrant(projectID), mcpConnectGrant(), mcpWriteGrant(ts.ID))
 	_, err = svc.CreateAssistant(ctx, &gen.CreateAssistantPayload{
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
@@ -278,6 +278,7 @@ func TestServiceAttachingRequiresMCPConnect(t *testing.T) {
 		McpEnabled:     true,
 	})
 	require.NoError(t, err)
+	syncCanonicalWrapper(t, conn, ts)
 	toolsets := []*types.AssistantToolsetRef{{ToolsetSlug: ts.Slug, EnvironmentSlug: nil}}
 
 	writerCtx := authztest.WithExactGrants(t, ctx, assistantWriteGrant(projectID))
@@ -293,11 +294,184 @@ func TestServiceAttachingRequiresMCPConnect(t *testing.T) {
 	require.NoError(t, err)
 }
 
+type mcpEnableFixture struct {
+	svc       *Service
+	projectID uuid.UUID
+	conn      *pgxpool.Pool
+	disabled  toolsetsRepo.Toolset
+	enabled   toolsetsRepo.Toolset
+}
+
+func newMCPEnableFixture(t *testing.T, dbName string) (mcpEnableFixture, context.Context) {
+	t.Helper()
+	svc, ctx, projectID, conn := newRBACServiceWithConn(t, dbName)
+	toolsetsQ := toolsetsRepo.New(conn)
+	disabled, err := toolsetsQ.CreateToolset(t.Context(), toolsetsRepo.CreateToolsetParams{
+		OrganizationID: "org-test",
+		ProjectID:      projectID,
+		Name:           "Disabled",
+		Slug:           "disabled",
+		McpSlug:        pgtype.Text{String: "org-test-disabled-write", Valid: true},
+		McpEnabled:     false,
+	})
+	require.NoError(t, err)
+	_, err = mcpserversRepo.New(conn).CreateMCPServer(t.Context(), mcpserversRepo.CreateMCPServerParams{
+		ID: disabled.ID, ProjectID: projectID, Name: pgtype.Text{String: disabled.Name, Valid: true},
+		Slug: disabled.McpSlug, ToolsetID: uuid.NullUUID{UUID: disabled.ID, Valid: true}, Visibility: "disabled",
+	})
+	require.NoError(t, err)
+	enabled, err := toolsetsQ.CreateToolset(t.Context(), toolsetsRepo.CreateToolsetParams{
+		OrganizationID: "org-test",
+		ProjectID:      projectID,
+		Name:           "Enabled",
+		Slug:           "enabled",
+		McpSlug:        pgtype.Text{String: "org-test-enabled-write", Valid: true},
+		McpEnabled:     true,
+	})
+	require.NoError(t, err)
+	syncCanonicalWrapper(t, conn, enabled)
+	return mcpEnableFixture{svc: svc, projectID: projectID, conn: conn, disabled: disabled, enabled: enabled}, ctx
+}
+
+func (f mcpEnableFixture) connectCtx(t *testing.T, ctx context.Context) context.Context {
+	t.Helper()
+	return authztest.WithExactGrants(t, ctx, assistantWriteGrant(f.projectID), mcpConnectGrant())
+}
+
+func (f mcpEnableFixture) writerCtx(t *testing.T, ctx context.Context, toolsetID uuid.UUID) context.Context {
+	t.Helper()
+	return authztest.WithExactGrants(t, ctx, assistantWriteGrant(f.projectID), mcpConnectGrant(), mcpWriteGrant(toolsetID))
+}
+
+func (f mcpEnableFixture) disable(t *testing.T, toolsetID uuid.UUID) {
+	t.Helper()
+	require.NoError(t, toolsetsRepo.New(f.conn).SetToolsetMCPEnabledByID(t.Context(), toolsetsRepo.SetToolsetMCPEnabledByIDParams{McpEnabled: false, ID: toolsetID, ProjectID: f.projectID}))
+}
+
+func (f mcpEnableFixture) requireMCPEnabled(t *testing.T, toolsetID uuid.UUID, want bool) {
+	t.Helper()
+	reloaded, err := toolsetsRepo.New(f.conn).GetToolsetByIDAndProject(t.Context(), toolsetsRepo.GetToolsetByIDAndProjectParams{ID: toolsetID, ProjectID: f.projectID})
+	require.NoError(t, err)
+	require.Equal(t, want, reloaded.McpEnabled)
+}
+
+func requireMCPEnableForbidden(t *testing.T, err error) {
+	t.Helper()
+	requireOopsCode(t, err, oops.CodeForbidden)
+	require.Equal(t, "attaching a toolset with MCP disabled requires mcp:write on it", err.Error())
+}
+
+func toolsetRefs(toolsets ...toolsetsRepo.Toolset) []*types.AssistantToolsetRef {
+	refs := make([]*types.AssistantToolsetRef, 0, len(toolsets))
+	for _, ts := range toolsets {
+		refs = append(refs, &types.AssistantToolsetRef{ToolsetSlug: ts.Slug, EnvironmentSlug: nil})
+	}
+	return refs
+}
+
+func TestServiceEnablingMCPOnAttachRequiresMCPWrite(t *testing.T) {
+	t.Parallel()
+
+	f, ctx := newMCPEnableFixture(t, "assistants_attach_enable_requires_write")
+	connectCtx := f.connectCtx(t, ctx)
+
+	_, err := f.svc.CreateAssistant(connectCtx, &gen.CreateAssistantPayload{Name: "Denied", Model: "openai/gpt-4o-mini", Toolsets: toolsetRefs(f.disabled)})
+	requireMCPEnableForbidden(t, err)
+	f.requireMCPEnabled(t, f.disabled.ID, false)
+	server, err := mcpserversRepo.New(f.conn).GetMCPServerByIDAndProjectID(t.Context(), mcpserversRepo.GetMCPServerByIDAndProjectIDParams{ID: f.disabled.ID, ProjectID: f.projectID})
+	require.NoError(t, err)
+	require.Equal(t, "disabled", server.Visibility)
+
+	plain := createTestAssistant(t, f.svc, connectCtx, "Plain")
+	_, err = f.svc.UpdateAssistant(connectCtx, &gen.UpdateAssistantPayload{ID: plain.ID, Toolsets: toolsetRefs(f.disabled)})
+	requireMCPEnableForbidden(t, err)
+	f.requireMCPEnabled(t, f.disabled.ID, false)
+
+	_, err = f.svc.CreateAssistant(connectCtx, &gen.CreateAssistantPayload{Name: "Already enabled", Model: "openai/gpt-4o-mini", Toolsets: toolsetRefs(f.enabled)})
+	require.NoError(t, err)
+	_, err = f.svc.UpdateAssistant(connectCtx, &gen.UpdateAssistantPayload{ID: plain.ID, Toolsets: toolsetRefs(f.enabled)})
+	require.NoError(t, err)
+
+	_, err = f.svc.CreateAssistant(f.writerCtx(t, ctx, f.disabled.ID), &gen.CreateAssistantPayload{Name: "Writer", Model: "openai/gpt-4o-mini", Toolsets: toolsetRefs(f.disabled)})
+	require.NoError(t, err)
+	f.requireMCPEnabled(t, f.disabled.ID, true)
+	server, err = mcpserversRepo.New(f.conn).GetMCPServerByIDAndProjectID(t.Context(), mcpserversRepo.GetMCPServerByIDAndProjectIDParams{ID: f.disabled.ID, ProjectID: f.projectID})
+	require.NoError(t, err)
+	require.Equal(t, "private", server.Visibility)
+}
+
+func TestServiceMixedAttachWithoutMCPWriteWritesNothing(t *testing.T) {
+	t.Parallel()
+
+	f, ctx := newMCPEnableFixture(t, "assistants_attach_enable_mixed")
+	connectCtx := f.connectCtx(t, ctx)
+	before, err := f.svc.core.ListAssistants(t.Context(), f.projectID)
+	require.NoError(t, err)
+
+	_, err = f.svc.CreateAssistant(connectCtx, &gen.CreateAssistantPayload{Name: "Mixed", Model: "openai/gpt-4o-mini", Toolsets: toolsetRefs(f.enabled, f.disabled)})
+	requireMCPEnableForbidden(t, err)
+
+	after, err := f.svc.core.ListAssistants(t.Context(), f.projectID)
+	require.NoError(t, err)
+	require.Len(t, after, len(before))
+	f.requireMCPEnabled(t, f.disabled.ID, false)
+
+	plain := createTestAssistant(t, f.svc, connectCtx, "Plain")
+	_, err = f.svc.UpdateAssistant(connectCtx, &gen.UpdateAssistantPayload{ID: plain.ID, Name: new("Renamed"), Toolsets: toolsetRefs(f.enabled, f.disabled)})
+	requireMCPEnableForbidden(t, err)
+	reloaded, err := f.svc.core.GetAssistant(t.Context(), f.projectID, uuid.MustParse(plain.ID))
+	require.NoError(t, err)
+	require.Equal(t, "Plain", reloaded.Name)
+	require.Empty(t, reloaded.MCPServers)
+}
+
+func TestServiceAlreadyAttachedDisabledToolsetStaysDisabled(t *testing.T) {
+	t.Parallel()
+
+	f, ctx := newMCPEnableFixture(t, "assistants_attach_already_attached")
+	attached, err := f.svc.CreateAssistant(f.connectCtx(t, ctx), &gen.CreateAssistantPayload{Name: "Attached", Model: "openai/gpt-4o-mini", Toolsets: toolsetRefs(f.enabled)})
+	require.NoError(t, err)
+	f.disable(t, f.enabled.ID)
+
+	_, err = f.svc.UpdateAssistant(f.connectCtx(t, ctx), &gen.UpdateAssistantPayload{ID: attached.ID, Name: new("Renamed"), Toolsets: toolsetRefs(f.enabled), McpServers: []*types.AssistantMCPServerRef{}})
+	require.NoError(t, err)
+	f.requireMCPEnabled(t, f.enabled.ID, false)
+
+	_, err = f.svc.UpdateAssistant(f.writerCtx(t, ctx, f.enabled.ID), &gen.UpdateAssistantPayload{ID: attached.ID, Toolsets: toolsetRefs(f.enabled)})
+	require.NoError(t, err)
+	f.requireMCPEnabled(t, f.enabled.ID, false)
+}
+
+func TestServiceDisableBetweenAuthorizationAndWriteIsRejected(t *testing.T) {
+	t.Parallel()
+
+	f, ctx := newMCPEnableFixture(t, "assistants_attach_enable_interleaved")
+	connectCtx := f.connectCtx(t, ctx)
+	canEnableMCP, err := f.svc.requireAttachmentAccess(connectCtx, f.projectID, toolsetRefs(f.enabled), nil)
+	require.NoError(t, err)
+	f.disable(t, f.enabled.ID)
+
+	_, err = f.svc.core.CreateAssistant(connectCtx, "org-test", f.projectID, "user-test", "Raced", "openai/gpt-4o-mini", "", toolsetRefs(f.enabled), nil, 300, 1, StatusActive, false, canEnableMCP)
+	require.ErrorIs(t, err, errMCPEnableForbidden)
+	f.requireMCPEnabled(t, f.enabled.ID, false)
+}
+
+func TestServiceDisabledHostedServerRefIsRejected(t *testing.T) {
+	t.Parallel()
+
+	f, ctx := newMCPEnableFixture(t, "assistants_attach_disabled_server_ref")
+	_, err := f.svc.CreateAssistant(f.writerCtx(t, ctx, f.disabled.ID), &gen.CreateAssistantPayload{
+		Name: "Server ref", Model: "openai/gpt-4o-mini",
+		McpServers: []*types.AssistantMCPServerRef{{McpServerSlug: f.disabled.McpSlug.String, EnvironmentSlug: nil}},
+	})
+	requireOopsCode(t, err, oops.CodeBadRequest)
+	f.requireMCPEnabled(t, f.disabled.ID, false)
+}
+
 func TestServiceUpdateAssistantAutoEnablesMCPOnAttachedToolsets(t *testing.T) {
 	t.Parallel()
 
 	svc, ctx, projectID, conn := newRBACServiceWithConn(t, "assistants_mcp_autoenable_update")
-	ctx = authztest.WithExactGrants(t, ctx, assistantWriteGrant(projectID), mcpConnectGrant())
 
 	toolsetsQ := toolsetsRepo.New(conn)
 	ts, err := toolsetsQ.CreateToolset(t.Context(), toolsetsRepo.CreateToolsetParams{
@@ -317,6 +491,7 @@ func TestServiceUpdateAssistantAutoEnablesMCPOnAttachedToolsets(t *testing.T) {
 	})
 	require.NoError(t, err)
 
+	ctx = authztest.WithExactGrants(t, ctx, assistantWriteGrant(projectID), mcpConnectGrant(), mcpWriteGrant(ts.ID))
 	created, err := svc.CreateAssistant(ctx, &gen.CreateAssistantPayload{
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
@@ -355,6 +530,34 @@ func TestServiceUpdateAssistantAutoEnablesMCPOnAttachedToolsets(t *testing.T) {
 	server, err := mcpserversRepo.New(conn).GetMCPServerByIDAndProjectID(t.Context(), mcpserversRepo.GetMCPServerByIDAndProjectIDParams{ID: ts.ID, ProjectID: projectID})
 	require.NoError(t, err)
 	require.Equal(t, "private", server.Visibility, "updating assistant toolsets must also enable the hosted wrapper")
+}
+
+func TestServiceAssistantEnableMaterializesCanonicalWrapper(t *testing.T) {
+	t.Parallel()
+
+	svc, ctx, projectID, conn := newRBACServiceWithConn(t, "assistants_mcp_autoenable_canonical")
+	ts, err := toolsetsRepo.New(conn).CreateToolset(t.Context(), toolsetsRepo.CreateToolsetParams{
+		OrganizationID: "org-test", ProjectID: projectID, Name: "Linear", Slug: "linear",
+		McpSlug: pgtype.Text{String: "org-test-linear-canonical", Valid: true}, McpEnabled: false,
+	})
+	require.NoError(t, err)
+
+	ctx = authztest.WithExactGrants(t, ctx, assistantWriteGrant(projectID), mcpConnectGrant(), mcpWriteGrant(ts.ID))
+	_, err = svc.CreateAssistant(ctx, &gen.CreateAssistantPayload{
+		Name: "Assistant", Model: "openai/gpt-4o-mini",
+		Toolsets: []*types.AssistantToolsetRef{{ToolsetSlug: ts.Slug, EnvironmentSlug: nil}},
+	})
+	require.NoError(t, err)
+
+	server, err := mcpserversRepo.New(conn).GetMCPServerByIDAndProjectID(t.Context(), mcpserversRepo.GetMCPServerByIDAndProjectIDParams{ID: ts.ID, ProjectID: projectID})
+	require.NoError(t, err, "enabling through an assistant creates the canonical wrapper")
+	require.Equal(t, uuid.NullUUID{UUID: ts.ID, Valid: true}, server.ToolsetID)
+	require.Equal(t, "private", server.Visibility)
+	endpoints, err := mcpendpointsRepo.New(conn).ListMCPEndpointsByMCPServerID(t.Context(), mcpendpointsRepo.ListMCPEndpointsByMCPServerIDParams{ProjectID: projectID, McpServerID: ts.ID})
+	require.NoError(t, err)
+	require.Len(t, endpoints, 1)
+	require.Equal(t, ts.McpSlug.String, endpoints[0].Slug)
+	require.False(t, endpoints[0].CustomDomainID.Valid)
 }
 
 // A remote-backed MCP server (no toolset) can be attached to an assistant and
@@ -440,7 +643,7 @@ func TestServiceAttachRemoteMcpServerToAssistant(t *testing.T) {
 	require.NoError(t, err)
 	serverURL, err := url.Parse("https://gram.test")
 	require.NoError(t, err)
-	resolved := resolveAssistantMCPServers(t.Context(), testenv.NewLogger(t), serverURL, nil, rows[assistantID], nil)
+	resolved := resolveAssistantMCPServers(t.Context(), testenv.NewLogger(t), serverURL, rows[assistantID], nil)
 	require.Len(t, resolved, 1)
 	require.Equal(t, "external-remote-mcp-xyz", resolved[0].ID)
 	require.Equal(t, "https://gram.test/mcp/team-remote-mcp", resolved[0].URL)
@@ -514,7 +717,7 @@ func TestAssistantsService_AttachMCPServer_RejectsUnreachable(t *testing.T) {
 		tx := testenv.BeginTx(t, t.Context(), conn)
 		_, resolveErr := svc.core.resolveMcpServerRefsForWrite(t.Context(), tx, projectID, []*types.AssistantMCPServerRef{
 			{McpServerSlug: tt.slug, EnvironmentSlug: nil},
-		})
+		}, nil)
 		require.NoError(t, tx.Rollback(t.Context()))
 		require.ErrorContains(t, resolveErr, tt.wantErr)
 
@@ -565,9 +768,8 @@ func newRBACServiceWithConn(t *testing.T, dbName string) (*Service, context.Cont
 		logger:   logger,
 		auth:     nil,
 		authz:    authzEngine,
-		core:     NewServiceCore(logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, testRuntimeBackend{backend: runtimeBackendFlyIO, runTurnErr: nil}, nil, nil, nil, telemetry.NewStub(logger), nil, newTestAuditLogger(), testIdentityService, newTestAuthzEngine(t, conn)),
+		core:     NewServiceCore(logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, testRuntimeBackend{backend: runtimeBackendGKE, runTurnErr: nil}, nil, nil, nil, telemetry.NewStub(logger), nil, newTestAuditLogger(), testIdentityService, newTestAuthzEngine(t, conn)),
 		signaler: &stubWorkflowSignaler{signalledThreads: nil},
-		features: identityFlags(true),
 	}
 
 	sessionID := "session-test"

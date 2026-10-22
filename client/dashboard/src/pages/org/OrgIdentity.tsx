@@ -22,8 +22,11 @@ import { Button } from "@/components/ui/Button";
 import { ExternalLink, FolderSync, Globe, Loader2, Lock } from "lucide-react";
 import { toast } from "sonner";
 
+import { DirectoryPeopleSummary } from "@/pages/identities/DirectoryPeopleSummary";
+
 import { DirectoryRoleMappings } from "./identity-provider/DirectoryRoleMappings";
 import { IdentityProviders } from "./identity-provider/IdentityProviders";
+import { useEnterpriseIssuer } from "./identity-provider/useEnterpriseIssuer";
 import {
   identityProvidersHref,
   IDENTITY_TABS,
@@ -311,11 +314,20 @@ export default function OrgIdentity(): JSX.Element {
     "tab",
     parseAsStringLiteral(IDENTITY_TABS).withDefault("sso"),
   );
-  // The only read of the rollout flag: without it (or org:admin) the tab does not exist.
+  // Without the rollout flag (or org:admin) the tab does not exist.
   const providerFlag = useFeatureFlag(FEATURE_FLAGS.oktaConnections);
   const { hasScope } = useRBAC();
+  const issuer = useEnterpriseIssuer();
+  const showExternalProviders = providerFlag.status === "enabled";
+  // Speakeasy's own issuer is listed once the organization is offered it, and
+  // whenever one exists or its status failed to load, so Disable and Retry stay
+  // reachable.
+  const showSpeakeasyProvider =
+    issuer.isError ||
+    (issuer.data !== undefined &&
+      (issuer.data.state !== "unavailable" || !!issuer.data.issuer));
   const showIdentityProviders =
-    providerFlag.status === "enabled" && hasScope("org:admin");
+    (showExternalProviders || showSpeakeasyProvider) && hasScope("org:admin");
 
   const showSlack = hasScope("org:admin");
   let activeTab: IdentityPageTab = requestedTab;
@@ -356,7 +368,12 @@ export default function OrgIdentity(): JSX.Element {
       tabs={tabs}
     >
       {activeTab === "sso" && <SingleSignOnTab />}
-      {activeTab === "identity-providers" && <IdentityProviders />}
+      {activeTab === "identity-providers" && (
+        <IdentityProviders
+          showExternal={showExternalProviders}
+          showSpeakeasy={showSpeakeasyProvider}
+        />
+      )}
       {activeTab === "slack-workspaces" && <SlackWorkspaces />}
     </TabbedPage>
   );
@@ -495,20 +512,23 @@ function SingleSignOnTab(): JSX.Element {
         hideCard={showRoleMappings}
         below={
           scimActive && (
-            // "section" renders nothing for non-admins, so the admin-only
-            // listing is never requested.
-            <RequireScope scope="org:admin" level="section">
-              <DirectoryRoleMappings
-                footerAction={
-                  <WorkOSPortalButton
-                    intent="dsync"
-                    errorFallback="Failed to open the directory connection"
-                    label="Manage connection"
-                    external
-                  />
-                }
-              />
-            </RequireScope>
+            <>
+              <DirectoryPeopleSummary className="my-4 text-sm" />
+              {/* "section" renders nothing for non-admins, so the admin-only
+                  listing is never requested. */}
+              <RequireScope scope="org:admin" level="section">
+                <DirectoryRoleMappings
+                  footerAction={
+                    <WorkOSPortalButton
+                      intent="dsync"
+                      errorFallback="Failed to open the directory connection"
+                      label="Manage connection"
+                      external
+                    />
+                  }
+                />
+              </RequireScope>
+            </>
           )
         }
       />

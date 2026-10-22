@@ -29,6 +29,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"os"
 	"strings"
 	"time"
 
@@ -142,6 +143,7 @@ func (h *Handler) Handler() http.Handler {
 
 	mux.HandleFunc("POST /user_management/authenticate", h.routeAuthenticate)
 	mux.HandleFunc("POST /sso/token", h.proxySSOToken)
+	mux.Handle("GET /google/userinfo", googleUserInfoProxy())
 	mux.Handle("/", h.proxy)
 	return h.authenticateClients(mux)
 }
@@ -179,6 +181,11 @@ func (h *Handler) isPublicRoute(mux *http.ServeMux, r *http.Request) bool {
 	// falls through to the catch-all upstream proxy, handing unauthenticated
 	// callers the real WorkOS API under the workos backend.
 	if _, pattern := mux.Handler(r); strings.HasPrefix(pattern, "GET /_inspect/") {
+		return true
+	}
+	// Google userinfo authenticates with the Google token: the local mock's
+	// or, under the workos backend, a real one forwarded to Google.
+	if r.Method == http.MethodGet && r.URL.Path == "/google/userinfo" {
 		return true
 	}
 	if h.cfg.Backend != BackendLocal {
@@ -389,6 +396,9 @@ func (h *Handler) handleAuthenticate(w http.ResponseWriter, r *http.Request) {
 		},
 		"access_token":  unsignedSessionJWT("devidp_session_" + uuid.NewString()),
 		"refresh_token": uuid.NewString(),
+	}
+	if method := authenticationMethod(); method != "" {
+		resp["authentication_method"] = method
 	}
 	if orgID != "" {
 		resp["organization_id"] = orgID
@@ -603,4 +613,33 @@ func strPtr(s string) *string {
 		return nil
 	}
 	return &s
+}
+
+// authenticationMethod is what an authorization-code exchange reports.
+// DEVIDP_AUTHENTICATION_METHOD overrides the "SSO" default (e.g. "Password");
+// "none" omits it.
+func authenticationMethod() string {
+	switch v := os.Getenv("DEVIDP_AUTHENTICATION_METHOD"); v {
+	case "":
+		return "SSO"
+	case "none":
+		return ""
+	default:
+		return v
+	}
+}
+
+// googleUserInfoURL is where the workos backend forwards userinfo requests,
+// so the same configured URL works under both backends.
+var googleUserInfoURL = "https://openidconnect.googleapis.com/v1/userinfo"
+
+func googleUserInfoProxy() http.Handler {
+	return &httputil.ReverseProxy{Rewrite: func(r *httputil.ProxyRequest) {
+		target, err := url.Parse(googleUserInfoURL)
+		if err != nil {
+			return
+		}
+		r.Out.URL = target
+		r.Out.Host = target.Host
+	}}
 }

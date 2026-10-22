@@ -16,6 +16,7 @@ export const AUDIT_ACTIONS = [
   "slack-identity-mapping:reconfirm",
   "slack-identity-mapping:unmap",
   "access_challenge:resolve",
+  "access_member:revoke_sign_ins",
   "access_member:update_role",
   "access_role:create",
   "access_role:delete",
@@ -80,6 +81,10 @@ export const AUDIT_ACTIONS = [
   "device_integration:retry_schedule",
   "device_integration:update_schedule",
   "device_integration:upsert",
+  "directory_review_item:approve",
+  "directory_review_item:dismiss",
+  "directory_review_item:opt_out",
+  "directory_review_settings:update",
   "directory_role_mapping:delete",
   "directory_role_mapping:set",
   "environment:create",
@@ -99,6 +104,8 @@ export const AUDIT_ACTIONS = [
   "identity-provider-connection:submit-client-id",
   "identity-provider-connection:sync-applications",
   "identity-provider-connection:verify",
+  "internal_session_issuer:disable",
+  "internal_session_issuer:enable",
   "json_web_key:activate",
   "json_web_key:delete",
   "json_web_key:publish",
@@ -148,6 +155,8 @@ export const AUDIT_ACTIONS = [
   "organization:disabled",
   "organization:enabled",
   "organization:whitelist_updated",
+  "organization:account_type_changed",
+  "organization:inference_key_repaired",
   "organization:enterprise_trial_armed",
   "organization:enterprise_trial_converted",
   "organization:enterprise_trial_demoted",
@@ -161,6 +170,8 @@ export const AUDIT_ACTIONS = [
   "organization:onboarding_stack_updated",
   "organization:onboarding_playbook_assigned",
   "organization:onboarding_playbook_unassigned",
+  "organization:partner_signup_attributed",
+  "organization:promotion_redeemed",
   "organization:payg_activated",
   "organization:payg_deactivated",
   "organization:product_feature_disabled",
@@ -212,12 +223,16 @@ export const AUDIT_ACTIONS = [
   "remote-session-client:detach-json-web-key-set",
   "remote-session-client:detach-mcp-server",
   "remote-session-client:detach-user-session-issuer",
+  "remote-session-client:disable-identity-chaining",
+  "remote-session-client:enable-identity-chaining",
   "remote-session-client:revoke-sessions",
   "remote-session-client:update",
+  "remote-session-client:update-identity-chaining-scopes",
   "remote-session-issuer:create",
   "remote-session-issuer:delete",
   "remote-session-issuer:migrate",
   "remote-session-issuer:update",
+  "remote-session-issuer:update_ema_providers",
   "remote-session:attach",
   "remote-session:delete",
   "remote-session:detach",
@@ -242,6 +257,12 @@ export const AUDIT_ACTIONS = [
   "risk_result:unmask",
   "session_quarantine:open",
   "session_quarantine:release",
+  "sigint-sensor:create",
+  "sigint-sensor:delete",
+  "sigint-sensor:update",
+  "sigint-signal:create",
+  "sigint-signal:delete",
+  "sigint-signal:update",
   "skill:add_version",
   "skill:archive",
   "skill:create",
@@ -267,6 +288,7 @@ export const AUDIT_ACTIONS = [
   "toolset:delete",
   "toolset:detach_external_oauth",
   "toolset:detach_oauth_proxy",
+  "toolset:migrate_to_remote_mcp",
   "toolset:update",
   "toolset:update_external_oauth_issuer",
   "toolset:update_oauth_proxy",
@@ -302,6 +324,8 @@ export const AUDIT_ACTIONS = [
   "workload-admission:admit",
   "workload-admission:update",
   "workload-admission:withdraw",
+  "workload-device-join-token:create",
+  "workload-device-join-token:redeem",
   "workload-issuer:create",
   "workload-issuer:delete",
   "workload-issuer:update",
@@ -342,6 +366,8 @@ export function staticActionPhrase(action: AuditAction): string {
       return "disconnected Slack workspace";
     case "access_challenge:resolve":
       return "resolved access challenge";
+    case "access_member:revoke_sign_ins":
+      return "revoked sign-ins for";
     case "access_member:update_role":
       return "changed member role for";
     case "access_role:create":
@@ -456,6 +482,10 @@ export function staticActionPhrase(action: AuditAction): string {
       return "updated JSON Web Key Set";
     case "json_web_key_set:delete":
       return "deleted JSON Web Key Set";
+    case "internal_session_issuer:enable":
+      return "enabled Speakeasy signing with issuer";
+    case "internal_session_issuer:disable":
+      return "disabled Speakeasy signing with issuer";
     case "json_web_key:publish":
       return "published JSON Web Key";
     case "json_web_key:activate":
@@ -536,6 +566,15 @@ export function staticActionPhrase(action: AuditAction): string {
       return "updated device integration schedule";
     case "device_integration:retry_schedule":
       return "retried device integration sync";
+
+    case "directory_review_item:approve":
+      return "approved directory change";
+    case "directory_review_item:dismiss":
+      return "dismissed directory change";
+    case "directory_review_item:opt_out":
+      return "stopped review of new attribute values";
+    case "directory_review_settings:update":
+      return "updated directory review emails";
 
     case "directory_role_mapping:set":
       return "set directory role mapping";
@@ -640,6 +679,10 @@ export function staticActionPhrase(action: AuditAction): string {
       return "disabled fail-open for hooks";
     case "organization:device_agent_configuration_updated":
       return "updated device agent configuration";
+    case "organization:account_type_changed":
+      return "changed account type for";
+    case "organization:inference_key_repaired":
+      return "repaired inference key for";
     case "organization:enterprise_trial_armed":
       return "started enterprise trial";
     case "organization:enterprise_trial_demoted":
@@ -654,6 +697,10 @@ export function staticActionPhrase(action: AuditAction): string {
       return "started a new enterprise trial";
     case "organization:enterprise_trial_converted":
       return "converted enterprise trial for";
+    case "organization:partner_signup_attributed":
+      return "attributed a partner signup to";
+    case "organization:promotion_redeemed":
+      return "redeemed a promotion for";
     case "organization:payg_activated":
       return "activated pay-as-you-go billing for";
     case "organization:payg_deactivated":
@@ -787,12 +834,20 @@ export function staticActionPhrase(action: AuditAction): string {
       return "detached an MCP server from";
     case "remote-session-client:revoke-sessions":
       return "revoked sessions for";
+    case "remote-session-client:enable-identity-chaining":
+      return "enabled identity chaining for";
+    case "remote-session-client:update-identity-chaining-scopes":
+      return "updated identity chaining scopes for";
+    case "remote-session-client:disable-identity-chaining":
+      return "disabled identity chaining for";
     case "remote-session-issuer:create":
       return "created remote session issuer";
     case "remote-session-issuer:update":
       return "updated remote session issuer";
     case "remote-session-issuer:delete":
       return "deleted remote session issuer";
+    case "remote-session-issuer:update_ema_providers":
+      return "changed the enabled identity providers for";
     case "remote-session-issuer:migrate":
       return "migrated remote session issuer";
 
@@ -839,6 +894,19 @@ export function staticActionPhrase(action: AuditAction): string {
       return "quarantined agent session";
     case "session_quarantine:release":
       return "released quarantined agent session";
+
+    case "sigint-sensor:create":
+      return "created signals intelligence sensor";
+    case "sigint-sensor:update":
+      return "updated signals intelligence sensor";
+    case "sigint-sensor:delete":
+      return "deleted signals intelligence sensor";
+    case "sigint-signal:create":
+      return "created signals intelligence signal";
+    case "sigint-signal:update":
+      return "updated signals intelligence signal";
+    case "sigint-signal:delete":
+      return "deleted signals intelligence signal";
 
     case "skill:create":
       return "created skill";
@@ -899,6 +967,8 @@ export function staticActionPhrase(action: AuditAction): string {
       return "updated the OAuth proxy on";
     case "toolset:detach_oauth_proxy":
       return "detached an OAuth proxy from";
+    case "toolset:migrate_to_remote_mcp":
+      return "migrated the external MCP server";
 
     case "trigger-instance:create":
       return "created trigger";
@@ -970,6 +1040,10 @@ export function staticActionPhrase(action: AuditAction): string {
       return "updated workload";
     case "workload-admission:withdraw":
       return "withdrew workload";
+    case "workload-device-join-token:create":
+      return "created a device join token for";
+    case "workload-device-join-token:redeem":
+      return "enrolled a device with a join token for";
 
     default:
       return assertNever(action);

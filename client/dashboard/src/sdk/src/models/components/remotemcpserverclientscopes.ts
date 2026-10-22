@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
@@ -26,7 +27,7 @@ export const ScopeSource = {
 /**
  * The precedence step that decided the request.
  */
-export type ScopeSource = ClosedEnum<typeof ScopeSource>;
+export type ScopeSource = OpenEnum<typeof ScopeSource>;
 
 /**
  * What a login through one client bound to the MCP server would request now, resolved from cached state.
@@ -36,6 +37,14 @@ export type RemoteMcpServerClientScopes = {
    * The remote session client's ID.
    */
   clientId: string;
+  /**
+   * The configured name of the client's authorization server; absent when it has none.
+   */
+  issuerName?: string | undefined;
+  /**
+   * The issuer URL of the client's authorization server.
+   */
+  issuerUrl?: string | undefined;
   /**
    * Whether a pin, if set, decides this client's request: discovery is on, the client owns the resource, and neither its own scope nor a challenge outranks the pin.
    */
@@ -55,8 +64,8 @@ export type RemoteMcpServerClientScopes = {
 };
 
 /** @internal */
-export const ScopeSource$inboundSchema: z.ZodMiniEnum<typeof ScopeSource> = z
-  .enum(ScopeSource);
+export const ScopeSource$inboundSchema: z.ZodMiniType<ScopeSource, unknown> =
+  openEnums.inboundSchema(ScopeSource);
 
 /** @internal */
 export const RemoteMcpServerClientScopes$inboundSchema: z.ZodMiniType<
@@ -65,6 +74,8 @@ export const RemoteMcpServerClientScopes$inboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     client_id: z.string(),
+    issuer_name: z.optional(z.string()),
+    issuer_url: z.optional(z.string()),
     pin_would_decide: z.boolean(),
     requested_scopes: z.array(z.string()),
     scope_source: ScopeSource$inboundSchema,
@@ -73,6 +84,8 @@ export const RemoteMcpServerClientScopes$inboundSchema: z.ZodMiniType<
   z.transform((v) => {
     return remap$(v, {
       "client_id": "clientId",
+      "issuer_name": "issuerName",
+      "issuer_url": "issuerUrl",
       "pin_would_decide": "pinWouldDecide",
       "requested_scopes": "requestedScopes",
       "scope_source": "scopeSource",

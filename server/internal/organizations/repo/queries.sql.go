@@ -141,6 +141,30 @@ func (q *Queries) AttachWorkOSUserToOrg(ctx context.Context, arg AttachWorkOSUse
 	return err
 }
 
+const attributePartnerSignup = `-- name: AttributePartnerSignup :execrows
+INSERT INTO organization_promotion_applications (organization_id, stripe_promotion_code_id)
+SELECT $1, $2
+WHERE NOT EXISTS (
+  SELECT 1 FROM organization_promotion_applications WHERE organization_id = $1
+)
+ON CONFLICT DO NOTHING
+`
+
+type AttributePartnerSignupParams struct {
+	OrganizationID        pgtype.Text
+	StripePromotionCodeID string
+}
+
+// Acceptance is immutable even after redemption. Call only during signup or a
+// verified first partner Checkout, under the billing/offer acceptance locks.
+func (q *Queries) AttributePartnerSignup(ctx context.Context, arg AttributePartnerSignupParams) (int64, error) {
+	result, err := q.db.Exec(ctx, attributePartnerSignup, arg.OrganizationID, arg.StripePromotionCodeID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const clearOnboardingDefaultPlaybook = `-- name: ClearOnboardingDefaultPlaybook :exec
 UPDATE onboarding_playbooks
 SET is_default = false, updated_at = clock_timestamp()
@@ -706,6 +730,37 @@ func (q *Queries) FilterOrganizationMemberUserIDs(ctx context.Context, arg Filte
 	return items, nil
 }
 
+const getAcceptedSignupOfferFlow = `-- name: GetAcceptedSignupOfferFlow :one
+SELECT 'tailscale_partner_gateway'::text AS signup_flow
+FROM organization_promotion_applications
+WHERE organization_id = $1::text
+LIMIT 1
+`
+
+// All accepted applications originate in the partner gateway signup path.
+// Derive display context from that immutable acceptance, not mutable offer mappings.
+// Persist the accepted flow before introducing another signup flow or ledger writer.
+func (q *Queries) GetAcceptedSignupOfferFlow(ctx context.Context, organizationID string) (string, error) {
+	row := q.db.QueryRow(ctx, getAcceptedSignupOfferFlow, organizationID)
+	var signup_flow string
+	err := row.Scan(&signup_flow)
+	return signup_flow, err
+}
+
+const getEnabledSignupOffer = `-- name: GetEnabledSignupOffer :one
+SELECT id FROM signup_offers
+WHERE stripe_promotion_code_id = $1
+  AND signup_flow = 'tailscale_partner_gateway' AND enabled
+FOR SHARE
+`
+
+func (q *Queries) GetEnabledSignupOffer(ctx context.Context, stripePromotionCodeID string) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, getEnabledSignupOffer, stripePromotionCodeID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const getInvitationByID = `-- name: GetInvitationByID :one
 SELECT id, organization_id, email, token_hash, inviter_user_id, role_slug, state, expires_at, accepted_at, revoked_at, created_at, updated_at
 FROM organization_invitations
@@ -1080,6 +1135,28 @@ func (q *Queries) GetOrganizationOnboardingStack(ctx context.Context, organizati
 		&i.Slug,
 		&i.MdmVendor,
 		&i.MdmVendorName,
+	)
+	return i, err
+}
+
+const getOrganizationPromotionApplication = `-- name: GetOrganizationPromotionApplication :one
+SELECT redeemed_at, created_at, updated_at, organization_id, stripe_promotion_code_id, stripe_subscription_id, id FROM organization_promotion_applications
+WHERE organization_id = $1::text
+ORDER BY redeemed_at IS NULL DESC, created_at DESC, id DESC
+LIMIT 1
+`
+
+func (q *Queries) GetOrganizationPromotionApplication(ctx context.Context, organizationID string) (OrganizationPromotionApplication, error) {
+	row := q.db.QueryRow(ctx, getOrganizationPromotionApplication, organizationID)
+	var i OrganizationPromotionApplication
+	err := row.Scan(
+		&i.RedeemedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.OrganizationID,
+		&i.StripePromotionCodeID,
+		&i.StripeSubscriptionID,
+		&i.ID,
 	)
 	return i, err
 }
@@ -2186,6 +2263,62 @@ func (q *Queries) ListPendingInvitations(ctx context.Context, organizationID str
 			&i.RevokedAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPendingInvitationsForEmail = `-- name: ListPendingInvitationsForEmail :many
+SELECT
+  organization_invitations.id,
+  organization_invitations.organization_id,
+  organization_metadata.name AS organization_name,
+  organization_metadata.workos_id AS organization_workos_id,
+  COALESCE(organization_metadata.sso_enabled, FALSE)::boolean AS sso_enabled,
+  COALESCE(organization_metadata.verified_domains, '{}'::text[])::text[] AS verified_domains
+FROM organization_invitations
+JOIN organization_metadata ON organization_metadata.id = organization_invitations.organization_id
+WHERE organization_invitations.email = $1
+  AND organization_invitations.state = 'pending'
+  AND organization_invitations.expires_at > clock_timestamp()
+  AND organization_metadata.disabled_at IS NULL
+ORDER BY organization_invitations.created_at DESC
+`
+
+type ListPendingInvitationsForEmailRow struct {
+	ID                   uuid.UUID
+	OrganizationID       string
+	OrganizationName     string
+	OrganizationWorkosID pgtype.Text
+	SsoEnabled           bool
+	VerifiedDomains      []string
+}
+
+// Lists the live invitations addressed to this email in every organization,
+// newest first. A signed-in user with no organization is offered these before
+// creating one, so an invited teammate joins their team instead.
+func (q *Queries) ListPendingInvitationsForEmail(ctx context.Context, email string) ([]ListPendingInvitationsForEmailRow, error) {
+	rows, err := q.db.Query(ctx, listPendingInvitationsForEmail, email)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPendingInvitationsForEmailRow
+	for rows.Next() {
+		var i ListPendingInvitationsForEmailRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.OrganizationName,
+			&i.OrganizationWorkosID,
+			&i.SsoEnabled,
+			&i.VerifiedDomains,
 		); err != nil {
 			return nil, err
 		}

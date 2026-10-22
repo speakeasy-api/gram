@@ -32,6 +32,7 @@ func registerPluginTools(reg *Registrar, plugins *PluginsService) {
 		Name:        operationSetPluginAssignments,
 		Title:       "Set Plugin Assignments",
 		Description: setDescription,
+		Annotations: setPluginAssignmentsAnnotations(),
 	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input SetPluginAssignmentsInput) (*mcp.CallToolResult, SetPluginAssignmentsOutput, error) {
 		return principalToolCall(ctx, pluginToolResult, func(principal Principal) (SetPluginAssignmentsOutput, error) {
 			return plugins.SetPluginAssignments(ctx, principal, input)
@@ -70,7 +71,7 @@ func registerPluginTools(reg *Registrar, plugins *PluginsService) {
 	addTool(reg, &mcp.Tool{
 		Name:        "get_plugin",
 		Title:       "Get One Plugin",
-		Description: "Get one exact plugin in an explicit project. Organization administrators see its administrative inventory, exact typed MCP membership IDs and targets, assignment controls including each current assignment's install mode, and publication evidence when configured. Admin membership results are cursor-paginated and complete beyond 100 entries, and a changed membership set requires restarting pagination. Publication evidence shows the addresses a package would contain now and compares its stored MCP fingerprints: fresh=true means matching stored inputs, fresh=false means different inputs, null means unknown. If unavailable=true, package inputs could not be resolved; do not treat an empty packages list as a package with no MCPs. This does not verify installed clients or live marketplace contents; publication=published alone does not mean addresses are current. Publication evidence also carries last_publish for the project's marketplace: last_recorded_publish_at (the last publish Speakeasy successfully recorded; it can lag the marketplace), and the latest publish attempt's state (none, queued, running, retrying, succeeded, failed) with a failure_category and a fixed failure_message when it failed. Read it together with fresh: fresh=false with queued, running, or retrying means an update is on its way; fresh=false with failed means the update did not reach the marketplace, and the remedy is to republish, then Speakeasy support if it keeps failing, except repository_conflict, which needs Speakeasy support and does not clear on republish; fresh=false with succeeded or none means no publish has picked up the latest change yet. An administrator republishes with republish_plugin, which is offered only on external Platform MCP connections; a managed assistant, which cannot call it, should direct the administrator to the AICP dashboard instead. When publication evidence has not_configured=true, no publish has ever been recorded and republish_plugin refuses the project, so for a failed first publish send the administrator straight to the AICP dashboard or Speakeasy support rather than offering it; follow failure_message, which offers republish_plugin only when a recorded publish proves it will be accepted. After republish_plugin returns enqueued, the request can be accepted before its run starts, so get_plugin may still describe the previous attempt: treat the request as pending until last_publish.requested_at is later than the republish or publication evidence reports fresh=true (a republish can fold into a run already in flight without moving requested_at), and do not read an older failed or succeeded attempt as the new request failing or being missed, or republish again on that basis. The marketplace repository is managed by Speakeasy, so there is no GitHub connection for the user to repair. If last_publish.unavailable=true, the attempt could not be read; do not infer a failure. Other members can read only a published plugin assigned to them, with its MCP servers and skills but no recipient identities, counts, assignment references, membership IDs, backend target IDs, package location, repository details, or credentials.",
+		Description: "Get one exact plugin in an explicit project. Organization administrators see its administrative inventory, exact typed MCP membership IDs and targets, assignment controls including each current assignment's install mode, and publication evidence when configured. Admin membership results are cursor-paginated and complete beyond 100 entries, and a changed membership set requires restarting pagination. Publication evidence shows the addresses a package would contain now and compares its stored MCP fingerprints: fresh=true means matching stored inputs, fresh=false means different inputs, null means unknown. If unavailable=true, package inputs could not be resolved; do not treat an empty packages list as a package with no MCPs. This does not verify installed clients or live marketplace contents; publication=published alone does not mean addresses are current. Publication evidence also carries last_publish for the project's marketplace: last_recorded_publish_at (the last publish Speakeasy successfully recorded; it can lag the marketplace), and the latest publish attempt's state (none, queued, running, retrying, succeeded, failed) with a failure_category and a fixed failure_message when it failed. Read it together with fresh: fresh=false with queued, running, or retrying means an update is on its way; fresh=false with failed means the update did not reach the marketplace, and the remedy is to republish, then Speakeasy support if it keeps failing, except repository_conflict, which needs Speakeasy support and does not clear on republish; fresh=false with succeeded or none means no publish has picked up the latest change yet. An administrator republishes with republish_plugin, which is offered only on external Platform MCP connections; a managed assistant, which cannot call it, should direct the administrator to the AICP dashboard instead. When publication evidence has not_configured=true, no publish has ever been recorded and republish_plugin refuses the project, so for a failed first publish send the administrator straight to the AICP dashboard or Speakeasy support rather than offering it; follow failure_message, which offers republish_plugin only when a recorded publish proves it will be accepted. After republish_plugin returns enqueued, the request can be accepted before its run starts, so get_plugin may still describe the previous attempt: treat the request as pending until last_publish.requested_at is later than the republish or publication evidence reports fresh=true (a republish can fold into a run already in flight without moving requested_at), and do not read an older failed or succeeded attempt as the new request failing or being missed, or republish again on that basis. The marketplace repository is managed by Speakeasy, so there is no GitHub connection for the user to repair. If last_publish.unavailable=true, the attempt could not be read; do not infer a failure. A server entry with backend unresolved has no current MCP server and can only be removed. Other members can read only a published plugin assigned to them, with its MCP servers and skills but no recipient identities, counts, assignment references, membership IDs, backend target IDs, package location, repository details, or credentials.",
 		Annotations: readOnlyAnnotations(),
 	}, ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit, DiscoveryScopes: discoveryOrgRead}, func(ctx context.Context, _ *mcp.CallToolRequest, input GetPluginInput) (*mcp.CallToolResult, GetPluginOutput, error) {
 		return principalToolCall(ctx, pluginToolResult, func(principal Principal) (GetPluginOutput, error) {
@@ -90,9 +91,9 @@ func registerPluginTools(reg *Registrar, plugins *PluginsService) {
 	addTool(reg, &mcp.Tool{
 		Name:        "get_my_install_instructions",
 		Title:       "Get My Install Instructions",
-		Description: "Get non-secret, client-specific installation guidance for one assigned published plugin or one configured MCP server the caller may connect to. Name exactly one target in an explicit project. Plugin guidance rechecks the caller's current recipient assignments; standalone MCP guidance rechecks mcp:connect. No marketplace token, repository credential, package bytes, API key, or OAuth credential is returned.",
+		Description: "Get non-secret, client-specific installation guidance for one assigned published plugin or one configured MCP server the caller may connect to. Name exactly one target in a named project, or in the organization's default project when no project is named. Plugin guidance rechecks the caller's current recipient assignments; standalone MCP guidance rechecks mcp:connect. No marketplace token, repository credential, package bytes, API key, or OAuth credential is returned.",
 		Annotations: readOnlyAnnotations(),
-	}, ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: externalOnly, ProjectScope: ProjectScopeExplicit, DiscoveryScopes: discoveryOrgReadOrMCPConnect}, func(ctx context.Context, _ *mcp.CallToolRequest, input GetMyInstallInstructionsInput) (*mcp.CallToolResult, GetMyInstallInstructionsOutput, error) {
+	}, ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: externalOnly, ProjectScope: ProjectScopeDefaultable, DiscoveryScopes: discoveryOrgReadOrMCPConnect}, func(ctx context.Context, _ *mcp.CallToolRequest, input GetMyInstallInstructionsInput) (*mcp.CallToolResult, GetMyInstallInstructionsOutput, error) {
 		return principalToolCall(ctx, installInstructionToolResult, func(principal Principal) (GetMyInstallInstructionsOutput, error) {
 			return plugins.GetMyInstallInstructions(ctx, principal, input)
 		})
@@ -112,7 +113,7 @@ func registerPluginTools(reg *Registrar, plugins *PluginsService) {
 	addTool(reg, &mcp.Tool{
 		Name:        "get_my_mcp_connection_status",
 		Title:       "Check My MCP Connection",
-		Description: "Check only your current authorization state for one exact MCP server. Returns a bounded state and the canonical MCP endpoint for reconnecting through the existing client-owned OAuth flow. Never returns tokens, OAuth codes, secrets, account identities, upstream-granted scopes, raw sessions, provider diagnostics, or other users' connections.",
+		Description: "Check only your current authorization state for one exact MCP server. Returns a bounded state and the canonical MCP endpoint for reconnecting through the existing client-owned OAuth flow. Reason identity_chaining means an active credential from your organization's identity provider; identity_chaining_configured means it will supply access on your first call, so try the server before reconnecting. Never returns tokens, OAuth codes, secrets, account identities, upstream-granted scopes, raw sessions, provider diagnostics, or other users' connections.",
 		Annotations: readOnlyAnnotations(),
 	}, ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: externalOnly, ProjectScope: ProjectScopeExplicit, DiscoveryScopes: discoveryMCPReadOrConnect}, func(ctx context.Context, _ *mcp.CallToolRequest, input GetMyMCPStatusInput) (*mcp.CallToolResult, GetMyMCPConnectionStatusOutput, error) {
 		return principalToolCall(ctx, memberMCPStatusToolResult, func(principal Principal) (GetMyMCPConnectionStatusOutput, error) {
@@ -136,7 +137,7 @@ func registerUnavailablePluginTools(reg *Registrar) {
 		{"get_my_mcp_access", "Check My MCP Access", "Check your access to one MCP server. This is not switched on for your organization yet.", true},
 		{"get_my_mcp_connection_status", "Check My MCP Connection", "Check your authorization state for one MCP server. This is not switched on for your organization yet.", true},
 	} {
-		manifest := &mcp.Tool{Name: tool.name, Title: tool.title, Description: tool.description}
+		manifest := &mcp.Tool{Name: tool.name, Title: tool.title, Description: tool.description, Annotations: setPluginAssignmentsAnnotations()}
 		if tool.readOnly {
 			manifest.Annotations = readOnlyAnnotations()
 		}
@@ -160,7 +161,12 @@ func registerUnavailablePluginTools(reg *Registrar) {
 		if tool.name == "list_plugins" || tool.name == "get_plugin" || tool.name == "list_plugin_assignments" {
 			audiences = bothAudiences
 		}
-		addTool(reg, manifest, ToolMeta{Authorization: authority, Audiences: audiences, ProjectScope: ProjectScopeExplicit, DiscoveryScopes: discoveryScopes}, unavailableTool("plugins"))
+		// Same project scope as the live registration of each tool.
+		projectScope := ProjectScopeExplicit
+		if tool.name == "get_my_install_instructions" {
+			projectScope = ProjectScopeDefaultable
+		}
+		addTool(reg, manifest, ToolMeta{Authorization: authority, Audiences: audiences, ProjectScope: projectScope, DiscoveryScopes: discoveryScopes}, unavailableTool("plugins"))
 	}
 	registerRepublishPluginTool(reg, nil)
 }
@@ -177,7 +183,13 @@ const unavailableRepublishPluginDescription = "Request a publish of a project's 
 // registrations. Republishing unchanged inputs is a no-op, so the tool is
 // idempotent, and it never removes anything.
 func republishPluginAnnotations() *mcp.ToolAnnotations {
-	return &mcp.ToolAnnotations{IdempotentHint: true, DestructiveHint: new(false)}
+	return &mcp.ToolAnnotations{IdempotentHint: true, DestructiveHint: new(false), OpenWorldHint: new(false)}
+}
+
+// set_plugin_assignments replaces the whole set, so it can take a plugin away
+// from people who had it.
+func setPluginAssignmentsAnnotations() *mcp.ToolAnnotations {
+	return writeAnnotations(true, true, false)
 }
 
 // registerRepublishPluginTool keeps one manifest for both registrations, so
@@ -256,6 +268,8 @@ func pluginToolResult(err error) (*mcp.CallToolResult, bool) {
 	switch {
 	case errors.Is(err, ErrPluginProjectNotFound):
 		result = pluginRefusalResult{Code: "not_found", Message: "That project is not one you can use here. Pick one returned by list_projects."}
+	case errors.Is(err, ErrDefaultProjectNotFound):
+		result = pluginRefusalResult{Code: defaultProjectNotFoundResult.Code, Message: defaultProjectNotFoundResult.Message}
 	case errors.Is(err, ErrPluginNotFound):
 		result = pluginRefusalResult{Code: "not_found", Message: "No plugin in this project has that exact name. List the project's plugins with list_plugins and name one of them; nothing is picked by default."}
 	case errors.Is(err, ErrPluginAmbiguous):

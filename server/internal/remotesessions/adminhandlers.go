@@ -16,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/issuerurl"
+	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -127,17 +128,7 @@ func (s *Service) createGlobalIssuer(ctx context.Context, payload *adminrsgen.Cr
 		return nil, oops.E(oops.CodeBadRequest, nil, "op_tos_uri must be an absolute http(s) URL").LogError(ctx, logger)
 	}
 
-	dbtx := callerTx
-	if dbtx == nil {
-		ownTx, err := s.db.Begin(ctx)
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
-		}
-		defer o11y.NoLogDefer(func() error { return ownTx.Rollback(ctx) })
-		dbtx = ownTx
-	}
-
-	issuer, err := repo.New(dbtx).CreateRemoteSessionIssuer(ctx, repo.CreateRemoteSessionIssuerParams{
+	params := repo.CreateRemoteSessionIssuerParams{
 		ProjectID:                           uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		OrganizationID:                      pgtype.Text{String: "", Valid: false},
 		Slug:                                strings.TrimSpace(payload.Slug),
@@ -155,7 +146,7 @@ func (s *Service) createGlobalIssuer(ctx context.Context, payload *adminrsgen.Cr
 		OpTosUri:                            conv.PtrToPGTextEmpty(payload.OpTosURI),
 		ScopesSupported:                     orEmptySlice(payload.ScopesSupported),
 		GrantTypesSupported:                 orEmptySlice(payload.GrantTypesSupported),
-		AuthorizationGrantProfilesSupported: orEmptySlice(payload.AuthorizationGrantProfilesSupported),
+		AuthorizationGrantProfilesSupported: payload.AuthorizationGrantProfilesSupported,
 		ResponseTypesSupported:              orEmptySlice(payload.ResponseTypesSupported),
 		TokenEndpointAuthMethodsSupported:   orEmptySlice(payload.TokenEndpointAuthMethodsSupported),
 		// Unlike the NOT NULL siblings above, deliberately not orEmptySlice:
@@ -183,7 +174,20 @@ func (s *Service) createGlobalIssuer(ctx context.Context, payload *adminrsgen.Cr
 		MetadataFetchedAt:                          pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
 		MetadataLastError:                          "",
 		MetadataLastErrorUrl:                       "",
-	})
+	}
+	s.recordCreateDiscovery(ctx, logger, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, &params, time.Now())
+
+	dbtx := callerTx
+	if dbtx == nil {
+		ownTx, err := s.db.Begin(ctx)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
+		}
+		defer o11y.NoLogDefer(func() error { return ownTx.Rollback(ctx) })
+		dbtx = ownTx
+	}
+
+	issuer, err := repo.New(dbtx).CreateRemoteSessionIssuer(ctx, params)
 	if err != nil {
 		if isGlobalRemoteSessionIssuerSlugConflict(err) {
 			return nil, oops.E(oops.CodeConflict, err, "a global issuer with this slug already exists").LogError(ctx, logger)
@@ -476,6 +480,10 @@ func (s *Service) updateGlobalIssuer(ctx context.Context, payload *adminrsgen.Up
 		if err := guardEMABindingsForIssuer(ctx, repo.New(dbtx), "", uuid.Nil, issuerID); err != nil {
 			return nil, err
 		}
+	}
+
+	if err := requireIssuerTokenEndpointForSelfClients(ctx, logger, txRepo, updated); err != nil {
+		return nil, err
 	}
 
 	if err := validateTrustedIdentityProviderIssuerClients(ctx, txRepo, updated); err != nil {
@@ -1075,7 +1083,7 @@ func (s *Service) CreateGlobalClient(ctx context.Context, payload *adminrsgen.Cr
 		return nil, oops.E(oops.CodeUnexpected, err, "get global remote session issuer").LogError(ctx, logger)
 	}
 
-	if err := requirePrivateKeyJWTKeySet(payload.TokenEndpointAuthMethod, uuid.NullUUID{UUID: uuid.Nil, Valid: false}); err != nil {
+	if err := refuseGlobalPrivateKeyJWT(payload.TokenEndpointAuthMethod); err != nil {
 		return nil, err
 	}
 
@@ -1097,6 +1105,10 @@ func (s *Service) CreateGlobalClient(ctx context.Context, payload *adminrsgen.Cr
 		// Global clients are shared across organizations and stay on the
 		// pinned outbound callback origin.
 		CallbackBaseUrl: pgtype.Text{String: "", Valid: false},
+		// Global clients have no organization, so the credential_owner
+		// constraint keeps them subject.
+		GrantTypes:      nil,
+		CredentialOwner: pgtype.Text{String: "", Valid: false},
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "create global remote session client").LogError(ctx, logger)
@@ -1211,7 +1223,7 @@ func (s *Service) UpdateGlobalClient(ctx context.Context, payload *adminrsgen.Up
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
-	if err := requirePrivateKeyJWTKeySet(payload.TokenEndpointAuthMethod, uuid.NullUUID{UUID: uuid.Nil, Valid: false}); err != nil {
+	if err := refuseGlobalPrivateKeyJWT(payload.TokenEndpointAuthMethod); err != nil {
 		return nil, err
 	}
 
@@ -1299,6 +1311,10 @@ func (s *Service) DeleteGlobalClient(ctx context.Context, payload *adminrsgen.De
 	cascaded, err := txRepo.SoftDeleteRemoteSessionsByClientID(ctx, deleted.ID)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "soft-delete dependent remote sessions").LogError(ctx, logger)
+	}
+
+	if _, err := upstreamclientsrepo.New(dbtx).RemoveGlobalClientAssociations(ctx, deleted.ID); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "remove deleted client's mcp server associations").LogError(ctx, logger)
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {

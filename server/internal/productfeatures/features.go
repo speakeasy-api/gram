@@ -46,21 +46,23 @@ const (
 	// FeatureRemoteSessionAutoRefresh, which only governs whether the opt-in
 	// control is visible and leaves the choice to each user.
 	FeatureRemoteSessionAutoRefreshEnforced Feature = "remote_session_auto_refresh_enforced"
-	// FeatureConsentToolFiltering lets organization admins turn on the
-	// consent-screen tool picker for their organization. Enforcement of stored
-	// selections is always on; this only governs whether new approvals can
-	// author one.
-	FeatureConsentToolFiltering Feature = "consent_tool_filtering"
 	// FeatureNetworkIngress is the durable staff-managed entitlement for private
 	// network ingress. It is never included in default bundles or demo seed data.
 	FeatureNetworkIngress Feature = "network_ingress"
+	// FeatureSignalsIntelligence gates signals intelligence configuration access.
+	FeatureSignalsIntelligence Feature = "signals_intelligence"
+	// FeatureOrganizationGatewayDisabled turns the organization gateway off:
+	// while set, every gateway route answers 404. Unconfigured organizations
+	// also default off; a soft-deleted flag records explicit opt-in.
+	FeatureOrganizationGatewayDisabled Feature = "organization_gateway_disabled"
 )
 
 // RequiresPlatformAdmin reports whether toggling f through productFeatures.set
 // requires a platform admin in addition to org:admin on the target
 // organization. The org-settable cases are the toggles organization admins
 // manage themselves through the dashboard's organization settings (Logs,
-// Skills content upload, consent tool filtering, Platform MCP access); every
+// Skills content upload, Platform MCP access, the
+// organization gateway); every
 // other settable feature is a staff-managed entitlement, and features missing
 // a case fail closed so a new feature cannot silently become self-serve.
 func (f Feature) RequiresPlatformAdmin() bool {
@@ -71,8 +73,8 @@ func (f Feature) RequiresPlatformAdmin() bool {
 		FeatureHooksBrowserLogin,
 		FeatureHooksFailOpen,
 		FeatureSkillCaptureMetadataOnly,
-		FeatureConsentToolFiltering,
-		FeaturePlatformMCP:
+		FeaturePlatformMCP,
+		FeatureOrganizationGatewayDisabled:
 		return false
 	default:
 		return true
@@ -92,6 +94,9 @@ func (f FeatureCache) CacheKey() string {
 }
 
 func FeatureCacheKey(organizationID string, feature Feature) string {
+	if feature == FeatureOrganizationGatewayDisabled {
+		return fmt.Sprintf("feature:v2:%s:%s", organizationID, string(feature))
+	}
 	return fmt.Sprintf("feature:%s:%s", organizationID, string(feature))
 }
 

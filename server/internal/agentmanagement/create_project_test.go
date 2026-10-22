@@ -14,7 +14,6 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/agents"
 	"github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -33,7 +32,6 @@ func newProjectScopedService(t *testing.T, conn *pgxpool.Pool) *Service {
 	t.Helper()
 	engine := authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return false, nil }, nil)
 	service := newTestService(conn, engine)
-	service.features = &recordingAgentManagementFeatures{evaluation: feature.EvaluationEnabled}
 	return service
 }
 
@@ -124,7 +122,12 @@ func TestCreateAgentRejectsProjectFromAnotherOrganization(t *testing.T) {
 	// exist, and naming it is the client being wrong, not a fault.
 	requireOopsCode(t, err, oops.CodeNotFound)
 
-	stored, err := repo.New(conn).ListManagedAgents(t.Context(), "org-agent-tenant-a")
+	stored, err := repo.New(conn).ListManagedAgents(t.Context(), repo.ListManagedAgentsParams{
+		OrganizationID: "org-agent-tenant-a",
+		Lifecycles:     []string{},
+		OwnerUserIds:   []string{},
+		PageLimit:      50,
+	})
 	require.NoError(t, err)
 	require.Empty(t, stored, "a rejected create must leave no agent behind")
 }
@@ -172,7 +175,12 @@ func TestCreateAgentRejectsDeletedProject(t *testing.T) {
 	require.Error(t, err)
 	requireOopsCode(t, err, oops.CodeNotFound)
 
-	stored, err := repo.New(conn).ListManagedAgents(t.Context(), "org-agent-deleted-project")
+	stored, err := repo.New(conn).ListManagedAgents(t.Context(), repo.ListManagedAgentsParams{
+		OrganizationID: "org-agent-deleted-project",
+		Lifecycles:     []string{},
+		OwnerUserIds:   []string{},
+		PageLimit:      50,
+	})
 	require.NoError(t, err)
 	require.Empty(t, stored)
 }
@@ -210,7 +218,12 @@ func TestCreateAgentSerializesWithConcurrentProjectDeletion(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("agent creation did not resume after project deletion committed")
 	}
-	stored, err := repo.New(conn).ListManagedAgents(t.Context(), organizationID)
+	stored, err := repo.New(conn).ListManagedAgents(t.Context(), repo.ListManagedAgentsParams{
+		OrganizationID: organizationID,
+		Lifecycles:     []string{},
+		OwnerUserIds:   []string{},
+		PageLimit:      50,
+	})
 	require.NoError(t, err)
 	require.Empty(t, stored)
 }

@@ -359,6 +359,7 @@ function AddServersDialog({
         (server) =>
           !!server.slug &&
           !server.tunneledMcpServerId &&
+          server.toolsetId !== server.id &&
           server.visibility !== "disabled" &&
           serverIdsWithGramEndpoint.has(server.id),
       )

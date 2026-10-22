@@ -3,6 +3,7 @@ package mcpmetadata_test
 import (
 	"context"
 	"fmt"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -28,6 +29,7 @@ import (
 	mcpendpoints_repo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpmetadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
+	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	metamcp_repo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/metamcp/visibility"
 	"github.com/speakeasy-api/gram/server/internal/networkaccess"
@@ -296,6 +298,8 @@ func TestServeInstallPage_Instructions(t *testing.T) {
 		ProjectID:   toolset.ProjectID,
 	})
 	require.NoError(t, err)
+	toolset.McpIsPublic = true
+	createCanonicalWrapper(t, ctx, testInstance, toolset)
 
 	// Set metadata with instructions
 	instructions := "Test Hub - Search and analyze test data\n\n## Key Capabilities\n\n- Search test records\n- Filter by status\n\n## Usage Patterns\n\nUse search before filtering"
@@ -1372,9 +1376,13 @@ func TestServeInstallPage_ExternalMCP_FiltersNonUserProvidedHeaders(t *testing.T
 	require.NoError(t, err)
 
 	mcpRepo := mcpmetadata_repo.New(ti.conn)
-	metadata, err := mcpRepo.UpsertMetadata(ctx, mcpmetadata_repo.UpsertMetadataParams{
-		ToolsetID: uuid.NullUUID{UUID: toolset.ID, Valid: true},
-		ProjectID: projectID,
+	_, err = testrepo.New(ti.conn).CreateRemoteMCPServerFixture(ctx, testrepo.CreateRemoteMCPServerFixtureParams{
+		ID: toolset.ID, ProjectID: projectID, ToolsetID: uuid.NullUUID{UUID: toolset.ID, Valid: true}, Visibility: mcpservers.VisibilityPublic,
+	})
+	require.NoError(t, err)
+	metadata, err := mcpRepo.UpsertMetadataByMcpServerID(ctx, mcpmetadata_repo.UpsertMetadataByMcpServerIDParams{
+		McpServerID: uuid.NullUUID{UUID: toolset.ID, Valid: true},
+		ProjectID:   projectID,
 	})
 	require.NoError(t, err)
 
@@ -1760,11 +1768,9 @@ func TestServeInstallPage_McpServer_ToolsetBacked_WrapperVisibilityGates(t *test
 }
 
 // TestServeInstallPage_McpServer_PrefersMcpServerKeyedMetadata confirms
-// that when both toolset-keyed and mcp_server-keyed metadata rows exist
-// for a toolset-backed mcp_server, the mcp_server-keyed row is the one
-// surfaced on the install page. This is the precondition for letting the
-// dashboard Edit Branding affordance on the Remote MCP page take effect
-// without rewriting legacy toolset rows.
+// that when both the toolset's metadata and a fresh-id server's own row exist
+// for a toolset-backed mcp_server, the server's own row is the one surfaced
+// on the install page.
 func TestServeInstallPage_McpServer_PrefersMcpServerKeyedMetadata(t *testing.T) {
 	t.Parallel()
 
@@ -1790,6 +1796,8 @@ func TestServeInstallPage_McpServer_PrefersMcpServerKeyedMetadata(t *testing.T) 
 		ProjectID:   toolset.ProjectID,
 	})
 	require.NoError(t, err)
+	toolset.McpIsPublic = true
+	createCanonicalWrapper(t, ctx, ti, toolset)
 
 	endpointSlug := "prefer-endpoint-" + uuid.NewString()[:8]
 	server, _ := createMcpServerWithEndpoint(t, ctx, ti, mcpServerFixtureOptions{
@@ -1798,15 +1806,15 @@ func TestServeInstallPage_McpServer_PrefersMcpServerKeyedMetadata(t *testing.T) 
 		toolsetID:    uuid.NullUUID{UUID: toolset.ID, Valid: true},
 	})
 
-	// Write toolset-keyed metadata (legacy path).
-	toolsetDocs := "https://legacy-toolset-docs.example.com"
+	// The toolset's metadata, stored under its canonical wrapper.
+	toolsetDocs := "https://toolset-docs.example.com"
 	_, err = ti.service.SetMcpMetadata(ctx, &gen.SetMcpMetadataPayload{
 		ToolsetSlug:              conv.PtrEmpty(types.Slug(toolset.Slug)),
 		ExternalDocumentationURL: &toolsetDocs,
 	})
 	require.NoError(t, err)
 
-	// Write mcp_server-keyed metadata (new path).
+	// Write the fresh-id server's own metadata.
 	serverDocs := "https://new-mcp-server-docs.example.com"
 	serverID := server.ID.String()
 	_, err = ti.service.SetMcpMetadata(ctx, &gen.SetMcpMetadataPayload{
@@ -1826,13 +1834,12 @@ func TestServeInstallPage_McpServer_PrefersMcpServerKeyedMetadata(t *testing.T) 
 
 	body := rr.Body.String()
 	assert.Contains(t, body, serverDocs, "mcp_server-keyed metadata should win")
-	assert.NotContains(t, body, toolsetDocs, "toolset-keyed metadata should not leak when mcp_server-keyed exists")
+	assert.NotContains(t, body, toolsetDocs, "the toolset's metadata should not leak when the server has its own")
 }
 
-// TestServeInstallPage_McpServer_FallsBackToToolsetMetadata covers the
-// migration bridge for AGE-1902: a toolset-backed mcp_server with no
-// mcp_server-keyed metadata row must still render branding from the
-// existing toolset-keyed metadata.
+// TestServeInstallPage_McpServer_FallsBackToToolsetMetadata covers AGE-1902:
+// a toolset-backed mcp_server with no metadata row of its own renders
+// branding from its toolset's metadata.
 func TestServeInstallPage_McpServer_FallsBackToToolsetMetadata(t *testing.T) {
 	t.Parallel()
 
@@ -1858,6 +1865,8 @@ func TestServeInstallPage_McpServer_FallsBackToToolsetMetadata(t *testing.T) {
 		ProjectID:   toolset.ProjectID,
 	})
 	require.NoError(t, err)
+	toolset.McpIsPublic = true
+	createCanonicalWrapper(t, ctx, ti, toolset)
 
 	endpointSlug := "fallback-endpoint-" + uuid.NewString()[:8]
 	createMcpServerWithEndpoint(t, ctx, ti, mcpServerFixtureOptions{
@@ -1866,24 +1875,38 @@ func TestServeInstallPage_McpServer_FallsBackToToolsetMetadata(t *testing.T) {
 		toolsetID:    uuid.NullUUID{UUID: toolset.ID, Valid: true},
 	})
 
-	// Only toolset-keyed metadata exists.
-	legacyDocs := "https://legacy-toolset.example.com"
+	// Only the toolset's metadata exists, under its canonical wrapper.
+	toolsetDocs := "https://toolset.example.com"
 	_, err = ti.service.SetMcpMetadata(ctx, &gen.SetMcpMetadataPayload{
 		ToolsetSlug:              conv.PtrEmpty(types.Slug(toolset.Slug)),
-		ExternalDocumentationURL: &legacyDocs,
+		ExternalDocumentationURL: &toolsetDocs,
 	})
 	require.NoError(t, err)
 
-	req := httptest.NewRequest("GET", "/mcp/"+endpointSlug+"/install", nil)
-	rctx := chi.NewRouteContext()
-	rctx.URLParams.Add("mcpSlug", endpointSlug)
-	req = req.WithContext(context.WithValue(context.Background(), chi.RouteCtxKey, rctx))
+	render := func() string {
+		req := httptest.NewRequest("GET", "/mcp/"+endpointSlug+"/install", nil)
+		rctx := chi.NewRouteContext()
+		rctx.URLParams.Add("mcpSlug", endpointSlug)
+		req = req.WithContext(context.WithValue(context.Background(), chi.RouteCtxKey, rctx))
+		rr := httptest.NewRecorder()
+		require.NoError(t, ti.service.ServeInstallPage(rr, req))
+		require.Equal(t, http.StatusOK, rr.Code)
+		return rr.Body.String()
+	}
+	assert.Contains(t, render(), toolsetDocs,
+		"the toolset's metadata should be the fallback source when the server has no row")
 
-	rr := httptest.NewRecorder()
-	require.NoError(t, ti.service.ServeInstallPage(rr, req))
-	require.Equal(t, http.StatusOK, rr.Code)
-	assert.Contains(t, rr.Body.String(), legacyDocs,
-		"toolset-keyed metadata should be the fallback source when no mcp_server-keyed row exists")
+	// A later save updates the same row; the fallback follows it.
+	savedDocs := "https://saved-toolset.example.com"
+	_, err = ti.service.SetMcpMetadata(ctx, &gen.SetMcpMetadataPayload{
+		ToolsetSlug:              conv.PtrEmpty(types.Slug(toolset.Slug)),
+		ExternalDocumentationURL: &savedDocs,
+	})
+	require.NoError(t, err)
+	count, err := testrepo.New(ti.conn).CountMcpMetadataForBackendIDFixture(ctx, testrepo.CountMcpMetadataForBackendIDFixtureParams{ProjectID: toolset.ProjectID, BackendID: toolset.ID})
+	require.NoError(t, err)
+	require.EqualValues(t, 1, count)
+	assert.Contains(t, render(), savedDocs)
 }
 
 // TestServeInstallPage_McpServer_InstallationOverrideURL ensures the override
@@ -2961,5 +2984,55 @@ func installTargetTemplateHTML(t *testing.T, body, target string) string {
 			return body[templateStart : abs+endRel]
 		}
 		searchFrom = abs + len(marker)
+	}
+}
+
+// Legacy install pages must enforce the same canonical-wrapper gate as serving.
+func TestServeInstallPage_LegacyCanonicalWrapper(t *testing.T) {
+	t.Parallel()
+	for _, visibility := range []string{mcpservers.VisibilityPublic, mcpservers.VisibilityPrivate, mcpservers.VisibilityDisabled} {
+		t.Run(visibility, func(t *testing.T) {
+			t.Parallel()
+			ctx, ti := newTestMCPMetadataService(t)
+			authCtx, ok := contextvalues.GetAuthContext(ctx)
+			require.True(t, ok)
+			require.NotNil(t, authCtx.ProjectID)
+			slug := "legacy-install-" + uuid.NewString()
+			toolset, err := ti.toolsetRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
+				OrganizationID: authCtx.ActiveOrganizationID,
+				ProjectID:      *authCtx.ProjectID,
+				Name:           "Legacy Install Fixture",
+				Slug:           slug,
+				McpSlug:        conv.ToPGText(slug),
+				McpEnabled:     true,
+			})
+			require.NoError(t, err)
+			require.NoError(t, ti.toolsetRepo.SetToolsetMCPPublicByID(ctx, toolsets_repo.SetToolsetMCPPublicByIDParams{
+				ID: toolset.ID, ProjectID: toolset.ProjectID, McpIsPublic: true,
+			}))
+			// No endpoint row: force lookup through the legacy slug, with the
+			// canonical wrapper ID equal to the toolset ID.
+			_, err = mcpservers_repo.New(ti.conn).CreateMCPServer(ctx, mcpservers_repo.CreateMCPServerParams{
+				ID:                toolset.ID,
+				ProjectID:         toolset.ProjectID,
+				Name:              conv.ToPGText("Canonical Wrapper"),
+				Slug:              conv.ToPGText("wrapper-" + slug),
+				ToolsetID:         uuid.NullUUID{UUID: toolset.ID, Valid: true},
+				Visibility:        visibility,
+				NetworkAccessMode: networkaccess.Storage(networkaccess.ModePublicOnly),
+			})
+			require.NoError(t, err)
+			req := httptest.NewRequest(http.MethodGet, "/mcp/"+slug+"/install", nil)
+			rctx := chi.NewRouteContext()
+			rctx.URLParams.Add("mcpSlug", slug)
+			req = req.WithContext(context.WithValue(context.Background(), chi.RouteCtxKey, rctx))
+			rr := httptest.NewRecorder()
+			require.NoError(t, ti.service.ServeInstallPage(rr, req))
+			if visibility == mcpservers.VisibilityPublic {
+				require.Equal(t, http.StatusOK, rr.Code)
+			} else {
+				require.Equal(t, http.StatusNotFound, rr.Code)
+			}
+		})
 	}
 }

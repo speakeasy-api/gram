@@ -1,5 +1,32 @@
 # admin
 
+## 0.9.4
+
+### Patch Changes
+
+- e2ab479: The typed auth client backfill now also records static credential and pass-through clients from a source's credential headers, copies credential headers onto upstream OAuth clients, and records EMA clients from ready identity chaining bindings. It keeps copies and scopes in sync, retires what the configuration no longer yields, runs each phase independently under a per-organization lock, and reports per-kind counts and why anything is unresolved.
+- 03b4725: Record a typed auth client for every upstream OAuth client an MCP server uses, as a separate step of the admin upstream OAuth migration, retire backfilled records whose association or client is gone, and mark servers that offer one as needing upstream authentication where that is still undecided. Nothing reads these records yet.
+
+## 0.9.3
+
+### Patch Changes
+
+- 23b1010: Add a guarded staff Admin MCP proposal for adding a new MCP server to the registry, with schema validation, a full-record approval preview, duplicate-name checks at prepare, approval and execution, and a receipt that commits with the entry. Drop the outdated note that customer catalog reads still use Pulse from the admin registry pages.
+- 27d5b6c: The MCP server health page's copied investigation prompt now tells ForgeBot to use the Speakeasy Admin MCP server.
+- 56ac009: Add "Open in Stripe" links beside the Stripe customer ID and Stripe subscription ID on the admin organization record. They point at the live or test Stripe dashboard to match the admin API's Stripe key, and are hidden when no Stripe key is configured.
+
+## 0.9.2
+
+### Patch Changes
+
+- 4c811b0: The admin command palette lists enterprise organizations first, then pro and pay-as-you-go, then free, then any other account type. The organization list and the staff Admin MCP `find_organizations` tool accept the same `account_tier` sort.
+
+## 0.9.1
+
+### Patch Changes
+
+- 4470b2a: Global identity providers created or rediscovered in the admin app keep the authorization grant profiles their discovery document advertises (including the ID-JAG profile), so identity chaining no longer reports them as unsupported. Providers entered by hand omit the field, so the server does not treat them as discovered. Saving a global provider with a changed issuer URL and no rediscovery sends an empty grant profile list.
+
 ## 0.9.0
 
 ### Minor Changes

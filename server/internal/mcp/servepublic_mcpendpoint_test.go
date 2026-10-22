@@ -76,6 +76,23 @@ func createToolsetMcpEndpoint(
 	t.Helper()
 	id, err := uuid.NewV7()
 	require.NoError(t, err)
+	return createToolsetMcpEndpointWithID(t, ctx, conn, id, projectID, toolsetID, slug, visibility, customDomainID, issuerID)
+}
+
+// createToolsetMcpEndpointWithID is createToolsetMcpEndpoint with an explicit
+// server id; passing the toolset id creates the toolset's canonical wrapper.
+func createToolsetMcpEndpointWithID(
+	t *testing.T,
+	ctx context.Context,
+	conn *pgxpool.Pool,
+	id uuid.UUID,
+	projectID uuid.UUID,
+	toolsetID uuid.UUID,
+	slug, visibility string,
+	customDomainID uuid.NullUUID,
+	issuerID uuid.UUID,
+) mcpserversrepo.McpServer {
+	t.Helper()
 
 	var issuer uuid.NullUUID
 	if issuerID != uuid.Nil {
@@ -232,9 +249,8 @@ func TestServePublic_McpEndpoint_PublicTunneledBacked_FailsClosed(t *testing.T) 
 }
 
 // createUserSessionIssuer inserts a user_session_issuers row in the
-// given project and returns its id. Mirrors the seed pattern used by
-// the xmcp issuer-gated tests so the resulting issuer is structurally
-// identical to what the management API would produce.
+// given project and returns its id, structurally identical to what the
+// management API would produce.
 func createUserSessionIssuer(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID uuid.UUID) uuid.UUID {
 	t.Helper()
 	project, err := projectsrepo.New(conn).GetProjectByID(ctx, projectID)
@@ -517,9 +533,8 @@ func TestServePublic_McpEndpoint_PrivateRemoteBacked_NoAuth_Returns401(t *testin
 // verifies the issuer-gated branch of /mcp/{slug} (mcp_server with
 // user_session_issuer_id set): an unauthenticated request receives 401
 // + a WWW-Authenticate header whose resource_metadata URL points at
-// /.well-known/oauth-protected-resource/mcp/<slug>. The /mcp prefix
-// (not /x/mcp) is the load-bearing part — mcpRouteBase must propagate
-// through ApplyIssuerGate as "mcp" for requests arriving via ServePublic.
+// /.well-known/oauth-protected-resource/mcp/<slug>. mcpRouteBase must
+// propagate through ApplyIssuerGate as "mcp" for requests arriving via ServePublic.
 func TestServePublic_McpEndpoint_IssuerGated_NoAuth_EmitsChallenge(t *testing.T) {
 	t.Parallel()
 
@@ -539,7 +554,7 @@ func TestServePublic_McpEndpoint_IssuerGated_NoAuth_EmitsChallenge(t *testing.T)
 	wwwAuth := w.Header().Get("WWW-Authenticate")
 	require.NotEmpty(t, wwwAuth, "challenge must include WWW-Authenticate")
 	expected := `Bearer resource_metadata="` + ti.serverURL.String() + `/.well-known/oauth-protected-resource/mcp/` + endpointSlug + `"`
-	require.Equal(t, expected, wwwAuth, "mcpRouteBase must be 'mcp' (not 'x/mcp') for /mcp callers")
+	require.Equal(t, expected, wwwAuth, "mcpRouteBase must be 'mcp' for /mcp callers")
 }
 
 // TestServePublic_McpEndpoint_DisabledMcpServer_DoesNotFallBack pins the
@@ -891,7 +906,8 @@ func TestServePublic_McpEndpoint_IssuerGatedPrivateRemote_RBACEnforced_ResolvesG
 	// Mint a user-session JWT for the issuer-gated endpoint. The audience is
 	// the issuer URN (remote-backed endpoints bind the audience to the
 	// issuer, not the backend id). Subject is the dev user, an active member
-	// of the org, so PrepareContext can resolve principals.
+	// of the org, so PrepareContext can resolve principals. The legacy
+	// /x/mcp iss keeps validating on /mcp.
 	token, jti, err := usersessions.NewSigner("test-jwt-secret").Mint(usersessions.MintParams{
 		Subject:  urn.NewUserSubject(mockidp.MockUserID),
 		Audience: urn.NewUserSessionIssuer(issuerID).String(),

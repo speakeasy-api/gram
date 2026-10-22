@@ -10,17 +10,30 @@ import (
 )
 
 type Widget struct {
-	ID              uuid.UUID
-	ProjectID       uuid.UUID
-	OrganizationID  string
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
 	CreatedByUserID pgtype.Text
-	Name            string
-	Description     pgtype.Text
-	Dataset         string
-	Query           []byte
-	Visualization   []byte
-	CreatedAt       pgtype.Timestamptz
-	UpdatedAt       pgtype.Timestamptz
-	DeletedAt       pgtype.Timestamptz
-	Deleted         bool
+	// @access: confidential
+	Name string
+	// @access: opaque-restricted
+	Description pgtype.Text
+	// @access: confidential
+	Dataset string
+	// @access: opaque-restricted
+	Query []byte
+	// @access: opaque-restricted
+	Visualization []byte
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
 }

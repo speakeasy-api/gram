@@ -407,6 +407,25 @@ SELECT EXISTS (
     AND expires_at > clock_timestamp()
 );
 
+-- name: ListPendingInvitationsForEmail :many
+-- Lists the live invitations addressed to this email in every organization,
+-- newest first. A signed-in user with no organization is offered these before
+-- creating one, so an invited teammate joins their team instead.
+SELECT
+  organization_invitations.id,
+  organization_invitations.organization_id,
+  organization_metadata.name AS organization_name,
+  organization_metadata.workos_id AS organization_workos_id,
+  COALESCE(organization_metadata.sso_enabled, FALSE)::boolean AS sso_enabled,
+  COALESCE(organization_metadata.verified_domains, '{}'::text[])::text[] AS verified_domains
+FROM organization_invitations
+JOIN organization_metadata ON organization_metadata.id = organization_invitations.organization_id
+WHERE organization_invitations.email = @email
+  AND organization_invitations.state = 'pending'
+  AND organization_invitations.expires_at > clock_timestamp()
+  AND organization_metadata.disabled_at IS NULL
+ORDER BY organization_invitations.created_at DESC;
+
 -- name: ExpireInvitationForTest :exec
 UPDATE organization_invitations
 SET expires_at = clock_timestamp() - interval '1 hour'
@@ -1412,3 +1431,34 @@ JOIN onboarding_steps s ON s.id = sm.step_id AND s.deleted_at IS NULL
 JOIN support_matrix_integration_methods m ON m.id = sm.integration_method_id AND m.deleted_at IS NULL
 WHERE s.slug = ANY(@step_slugs::text[])
 ORDER BY s.slug, m.sort_order, m.slug;
+
+-- Acceptance is immutable even after redemption. Call only during signup or a
+-- verified first partner Checkout, under the billing/offer acceptance locks.
+-- name: AttributePartnerSignup :execrows
+INSERT INTO organization_promotion_applications (organization_id, stripe_promotion_code_id)
+SELECT sqlc.narg(organization_id), @stripe_promotion_code_id
+WHERE NOT EXISTS (
+  SELECT 1 FROM organization_promotion_applications WHERE organization_id = sqlc.narg(organization_id)
+)
+ON CONFLICT DO NOTHING;
+
+-- name: GetOrganizationPromotionApplication :one
+SELECT * FROM organization_promotion_applications
+WHERE organization_id = @organization_id::text
+ORDER BY redeemed_at IS NULL DESC, created_at DESC, id DESC
+LIMIT 1;
+
+-- name: GetEnabledSignupOffer :one
+SELECT id FROM signup_offers
+WHERE stripe_promotion_code_id = @stripe_promotion_code_id
+  AND signup_flow = 'tailscale_partner_gateway' AND enabled
+FOR SHARE;
+
+-- name: GetAcceptedSignupOfferFlow :one
+-- All accepted applications originate in the partner gateway signup path.
+-- Derive display context from that immutable acceptance, not mutable offer mappings.
+-- Persist the accepted flow before introducing another signup flow or ledger writer.
+SELECT 'tailscale_partner_gateway'::text AS signup_flow
+FROM organization_promotion_applications
+WHERE organization_id = @organization_id::text
+LIMIT 1;

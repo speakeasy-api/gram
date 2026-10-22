@@ -174,6 +174,9 @@ export function ExternalKeySelect({
           <Button.Text>New</Button.Text>
         </Button>
       </Stack>
+      <Text small muted>
+        Google Cloud KMS keys only. AWS KMS keys can&apos;t back a key set yet.
+      </Text>
       {createSheet}
     </div>
   );

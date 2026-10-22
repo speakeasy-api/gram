@@ -301,150 +301,6 @@ func TestTemplatesService_RenderTemplateByID_Mustache_NestedObjects(t *testing.T
 	require.Equal(t, "Hello Alice! Your email is alice@example.com and you work at ACME Corp.", result.Prompt, "rendered prompt mismatch")
 }
 
-func TestTemplatesService_RenderTemplateByID_HigherOrderTool_JSON_Success(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestTemplateService(t)
-
-	// Create a higher order tool template with JSON prompt
-	jsonPrompt := `{
-		"toolName": "summarize_document",
-		"purpose": "Create a summary of the provided document",
-		"inputs": [
-			{
-				"name": "document",
-				"description": "The document to summarize"
-			}
-		],
-		"steps": [
-			{
-				"id": "step1",
-				"tool": "read_file",
-				"canonicalTool": "read_file",
-				"instructions": "Read the document content",
-				"inputs": ["document"]
-			}
-		]
-	}`
-
-	created, err := ti.service.CreateTemplate(ctx, &gen.CreateTemplatePayload{
-		Name:             types.Slug("higher-order-json-template"),
-		Prompt:           jsonPrompt,
-		Engine:           "mustache",
-		Kind:             "higher_order_tool",
-		ApikeyToken:      nil,
-		SessionToken:     nil,
-		ProjectSlugInput: nil,
-		Description:      new("A test higher order tool"),
-		Arguments:        new(`{"type": "object", "properties": {"document": {"type": "string"}}, "required": ["document"]}`),
-		ToolsHint:        []string{"read_file"},
-	})
-	require.NoError(t, err, "create template")
-
-	// Render the template by ID
-	result, err := ti.service.RenderTemplateByID(ctx, &gen.RenderTemplateByIDPayload{
-		ID: created.Template.ID,
-		Arguments: map[string]any{
-			"document": "{{document}}",
-		},
-		ApikeyToken:      nil,
-		SessionToken:     nil,
-		ProjectSlugInput: nil,
-	})
-	require.NoError(t, err, "render template by ID")
-
-	require.NotNil(t, result, "result is nil")
-
-	// Check that the JSON was converted to XML format
-	require.Contains(t, result.Prompt, "The following is a step-by-step plan to achieve a <Purpose>.", "should contain XML header")
-	require.Contains(t, result.Prompt, "Do NOT use this tool (summarize_document) again", "should contain tool name")
-	require.Contains(t, result.Prompt, "Create a summary of the provided document", "should contain purpose")
-	require.Contains(t, result.Prompt, `<Input name="document" description="The document to summarize" />`, "should contain input definition")
-	require.Contains(t, result.Prompt, `<CallTool tool_name="read_file">`, "should contain call tool")
-	require.Contains(t, result.Prompt, "Read the document content", "should contain step instructions")
-	require.Contains(t, result.Prompt, `<Input name="document" />`, "should contain step input")
-}
-
-func TestTemplatesService_RenderTemplateByID_HigherOrderTool_JSON_InvalidJSON(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestTemplateService(t)
-
-	// Create a higher order tool template with invalid JSON prompt
-	invalidJSONPrompt := `{
-		"toolName": "broken_tool",
-		"purpose": "This JSON is missing closing brace"
-		// Missing closing brace and other fields
-	`
-
-	created, err := ti.service.CreateTemplate(ctx, &gen.CreateTemplatePayload{
-		Name:             types.Slug("invalid-json-template"),
-		Prompt:           invalidJSONPrompt,
-		Engine:           "mustache",
-		Kind:             "higher_order_tool",
-		ApikeyToken:      nil,
-		SessionToken:     nil,
-		ProjectSlugInput: nil,
-		Description:      new("A test higher order tool with invalid JSON"),
-		Arguments:        nil,
-		ToolsHint:        []string{},
-	})
-	require.NoError(t, err, "create template")
-
-	// Try to render the template with invalid JSON by ID
-	_, err = ti.service.RenderTemplateByID(ctx, &gen.RenderTemplateByIDPayload{
-		ID:               created.Template.ID,
-		Arguments:        map[string]any{},
-		ApikeyToken:      nil,
-		SessionToken:     nil,
-		ProjectSlugInput: nil,
-	})
-	require.Error(t, err, "expected error for invalid JSON")
-	require.Contains(t, err.Error(), "failed to render template")
-}
-
-func TestTemplatesService_RenderTemplateByID_HigherOrderTool_JSON_EmptySteps(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestTemplateService(t)
-
-	// Create a higher order tool template with empty steps
-	jsonPrompt := `{
-		"toolName": "empty_tool",
-		"purpose": "A tool with no steps",
-		"inputs": [],
-		"steps": []
-	}`
-
-	created, err := ti.service.CreateTemplate(ctx, &gen.CreateTemplatePayload{
-		Name:             types.Slug("empty-steps-template"),
-		Prompt:           jsonPrompt,
-		Engine:           "mustache",
-		Kind:             "higher_order_tool",
-		ApikeyToken:      nil,
-		SessionToken:     nil,
-		ProjectSlugInput: nil,
-		Description:      new("A test higher order tool with no steps"),
-		Arguments:        new(`{"type": "object", "properties": {}, "required": []}`),
-		ToolsHint:        []string{},
-	})
-	require.NoError(t, err, "create template")
-
-	// Render the template by ID
-	result, err := ti.service.RenderTemplateByID(ctx, &gen.RenderTemplateByIDPayload{
-		ID:               created.Template.ID,
-		Arguments:        map[string]any{},
-		ApikeyToken:      nil,
-		SessionToken:     nil,
-		ProjectSlugInput: nil,
-	})
-	require.NoError(t, err, "render template by ID")
-
-	require.NotNil(t, result, "result is nil")
-	require.Contains(t, result.Prompt, "A tool with no steps", "should contain purpose")
-	require.Contains(t, result.Prompt, "No inputs needed", "should handle empty inputs")
-}
-
 func TestTemplatesService_RenderTemplateByID_RegularPrompt_NotHigherOrderTool(t *testing.T) {
 	t.Parallel()
 
@@ -570,48 +426,19 @@ func TestTemplatesService_RenderTemplate_NoEngine_Success(t *testing.T) {
 	require.Equal(t, "Hello world, this is plain text", result.Prompt, "rendered prompt mismatch")
 }
 
-func TestTemplatesService_RenderTemplate_HigherOrderTool_Success(t *testing.T) {
+func TestTemplatesService_RenderTemplate_HigherOrderTool_Error(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestTemplateService(t)
 
-	// JSON prompt for higher order tool
-	jsonPrompt := `{
-		"toolName": "test_tool",
-		"purpose": "Test purpose",
-		"inputs": [
-			{
-				"name": "input1",
-				"description": "Test input"
-			}
-		],
-		"steps": [
-			{
-				"id": "step1",
-				"tool": "test_action",
-				"canonicalTool": "test_action",
-				"instructions": "Do something",
-				"inputs": ["input1"]
-			}
-		]
-	}`
-
-	// Render template directly with higher order tool kind
-	result, err := ti.service.RenderTemplate(ctx, &gen.RenderTemplatePayload{
-		Prompt:           jsonPrompt,
-		Engine:           "mustache",
-		Kind:             "higher_order_tool",
-		Arguments:        map[string]any{},
-		ApikeyToken:      nil,
-		SessionToken:     nil,
-		ProjectSlugInput: nil,
+	_, err := ti.service.RenderTemplate(ctx, &gen.RenderTemplatePayload{
+		Prompt:    `{"toolName": "retired"}`,
+		Engine:    "mustache",
+		Kind:      "higher_order_tool",
+		Arguments: map[string]any{},
 	})
-	require.NoError(t, err, "render template with higher order tool")
-
-	require.NotNil(t, result, "result is nil")
-	require.Contains(t, result.Prompt, "It relies on executing other tools available in context to achieve the desired purpose", "should contain XML header")
-	require.Contains(t, result.Prompt, "Test purpose", "should contain purpose")
-	require.Contains(t, result.Prompt, "Do NOT use this tool (test_tool) again", "should contain tool name")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "can no longer be rendered")
 }
 
 func TestTemplatesService_RenderTemplate_UnsupportedEngine_Error(t *testing.T) {

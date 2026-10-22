@@ -78,7 +78,7 @@ func newPlatformHostMux(t *testing.T, ti *testInstance) (http.Handler, platformH
 	mux.Use(mcpSecurity)
 	mux.Use(customdomains.Middleware(ti.logger, ti.conn, platformHostChecklistEnvironment, ti.serverURL, platformHosts))
 	mux.Use(middleware.SessionMiddleware)
-	mcp.Attach(mux, ti.service, metadataService)
+	mcp.Attach(mux, ti.service.Service, metadataService)
 
 	canonical := platformHostTarget{host: ti.serverURL.Host, baseURL: strings.TrimSuffix(ti.serverURL.String(), "/")}
 	extra := platformHostTarget{host: platformHostChecklistExtraHost, baseURL: platformHosts[platformHostChecklistExtraHost]}
@@ -273,4 +273,22 @@ func TestPlatformHostVerificationChecklist(t *testing.T) {
 			require.Equal(t, mcp.AuthenticateChallengeHeader(other.baseURL+"/.well-known/oauth-protected-resource/mcp/"+slug), crossHost.Header().Get("WWW-Authenticate"))
 		})
 	}
+}
+
+// The per-client IdP callback is mounted beside the shared one and admits the
+// cross-site navigation an upstream IdP redirect arrives as.
+func TestPlatformHostMountsPerClientIDPCallback(t *testing.T) {
+	t.Parallel()
+
+	_, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
+	handler, canonical, _ := newPlatformHostMux(t, ti)
+	crossSite := http.Header{"Sec-Fetch-Site": {"cross-site"}, "Sec-Fetch-Mode": {"navigate"}}
+	path := "/mcp/idp_callback/" + uuid.NewString()
+
+	missing := serveOnHost(t, handler, http.MethodGet, canonical.host, path, nil, crossSite)
+	require.Equal(t, http.StatusBadRequest, missing.Code, "the handler, not the router, rejects a stateless callback")
+	unknown := serveOnHost(t, handler, http.MethodGet, canonical.host, path+"?"+url.Values{"state": {uuid.NewString()}, "code": {"idp-code"}}.Encode(), nil, crossSite)
+	require.Equal(t, http.StatusUnauthorized, unknown.Code)
+	nested := serveOnHost(t, handler, http.MethodGet, canonical.host, path+"/extra", nil, crossSite)
+	require.Equal(t, http.StatusNotFound, nested.Code)
 }

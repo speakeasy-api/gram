@@ -214,6 +214,173 @@ func BuildCommitServerIdentityConfigurationPayload(remoteSessionsCommitServerIde
 	return v, nil
 }
 
+// BuildGetServerIdentityImpactPayload builds the payload for the
+// remoteSessions getServerIdentityImpact endpoint from CLI flags.
+func BuildGetServerIdentityImpactPayload(remoteSessionsGetServerIdentityImpactUserSessionIssuerID string, remoteSessionsGetServerIdentityImpactMcpServerID string, remoteSessionsGetServerIdentityImpactChange string, remoteSessionsGetServerIdentityImpactProviderID string, remoteSessionsGetServerIdentityImpactClientID string, remoteSessionsGetServerIdentityImpactSessionToken string, remoteSessionsGetServerIdentityImpactApikeyToken string, remoteSessionsGetServerIdentityImpactProjectSlugInput string) (*remotesessions.GetServerIdentityImpactPayload, error) {
+	var err error
+	var userSessionIssuerID string
+	{
+		userSessionIssuerID = remoteSessionsGetServerIdentityImpactUserSessionIssuerID
+		err = goa.MergeErrors(err, goa.ValidateFormat("user_session_issuer_id", userSessionIssuerID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var mcpServerID *string
+	{
+		if remoteSessionsGetServerIdentityImpactMcpServerID != "" {
+			mcpServerID = &remoteSessionsGetServerIdentityImpactMcpServerID
+			err = goa.MergeErrors(err, goa.ValidateFormat("mcp_server_id", *mcpServerID, goa.FormatUUID))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var change string
+	{
+		change = remoteSessionsGetServerIdentityImpactChange
+		if !(change == "replace" || change == "attach" || change == "detach") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("change", change, []any{"replace", "attach", "detach"}))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var providerID *string
+	{
+		if remoteSessionsGetServerIdentityImpactProviderID != "" {
+			providerID = &remoteSessionsGetServerIdentityImpactProviderID
+			err = goa.MergeErrors(err, goa.ValidateFormat("provider_id", *providerID, goa.FormatUUID))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var clientID *string
+	{
+		if remoteSessionsGetServerIdentityImpactClientID != "" {
+			clientID = &remoteSessionsGetServerIdentityImpactClientID
+			err = goa.MergeErrors(err, goa.ValidateFormat("client_id", *clientID, goa.FormatUUID))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var sessionToken *string
+	{
+		if remoteSessionsGetServerIdentityImpactSessionToken != "" {
+			sessionToken = &remoteSessionsGetServerIdentityImpactSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if remoteSessionsGetServerIdentityImpactApikeyToken != "" {
+			apikeyToken = &remoteSessionsGetServerIdentityImpactApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if remoteSessionsGetServerIdentityImpactProjectSlugInput != "" {
+			projectSlugInput = &remoteSessionsGetServerIdentityImpactProjectSlugInput
+		}
+	}
+	v := &remotesessions.GetServerIdentityImpactPayload{}
+	v.UserSessionIssuerID = userSessionIssuerID
+	v.McpServerID = mcpServerID
+	v.Change = change
+	v.ProviderID = providerID
+	v.ClientID = clientID
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildListServerClientAssociationsPayload builds the payload for the
+// remoteSessions listServerClientAssociations endpoint from CLI flags.
+func BuildListServerClientAssociationsPayload(remoteSessionsListServerClientAssociationsMcpServerID string, remoteSessionsListServerClientAssociationsSessionToken string, remoteSessionsListServerClientAssociationsApikeyToken string, remoteSessionsListServerClientAssociationsProjectSlugInput string) (*remotesessions.ListServerClientAssociationsPayload, error) {
+	var err error
+	var mcpServerID string
+	{
+		mcpServerID = remoteSessionsListServerClientAssociationsMcpServerID
+		err = goa.MergeErrors(err, goa.ValidateFormat("mcp_server_id", mcpServerID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if remoteSessionsListServerClientAssociationsSessionToken != "" {
+			sessionToken = &remoteSessionsListServerClientAssociationsSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if remoteSessionsListServerClientAssociationsApikeyToken != "" {
+			apikeyToken = &remoteSessionsListServerClientAssociationsApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if remoteSessionsListServerClientAssociationsProjectSlugInput != "" {
+			projectSlugInput = &remoteSessionsListServerClientAssociationsProjectSlugInput
+		}
+	}
+	v := &remotesessions.ListServerClientAssociationsPayload{}
+	v.McpServerID = mcpServerID
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildDetachServerClientAssociationPayload builds the payload for the
+// remoteSessions detachServerClientAssociation endpoint from CLI flags.
+func BuildDetachServerClientAssociationPayload(remoteSessionsDetachServerClientAssociationBody string, remoteSessionsDetachServerClientAssociationSessionToken string, remoteSessionsDetachServerClientAssociationApikeyToken string, remoteSessionsDetachServerClientAssociationProjectSlugInput string) (*remotesessions.DetachServerClientAssociationPayload, error) {
+	var err error
+	var body DetachServerClientAssociationRequestBody
+	{
+		err = json.Unmarshal([]byte(remoteSessionsDetachServerClientAssociationBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"remote_session_client_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", body.McpServerID, goa.FormatUUID))
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.remote_session_client_id", body.RemoteSessionClientID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if remoteSessionsDetachServerClientAssociationSessionToken != "" {
+			sessionToken = &remoteSessionsDetachServerClientAssociationSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if remoteSessionsDetachServerClientAssociationApikeyToken != "" {
+			apikeyToken = &remoteSessionsDetachServerClientAssociationApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if remoteSessionsDetachServerClientAssociationProjectSlugInput != "" {
+			projectSlugInput = &remoteSessionsDetachServerClientAssociationProjectSlugInput
+		}
+	}
+	v := &remotesessions.DetachServerClientAssociationPayload{
+		McpServerID:           body.McpServerID,
+		RemoteSessionClientID: body.RemoteSessionClientID,
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
 // BuildListRemoteSessionsPayload builds the payload for the remoteSessions
 // listRemoteSessions endpoint from CLI flags.
 func BuildListRemoteSessionsPayload(remoteSessionsListRemoteSessionsPrincipalID string, remoteSessionsListRemoteSessionsUserSessionIssuerID string, remoteSessionsListRemoteSessionsSubjectUrn string, remoteSessionsListRemoteSessionsRemoteSessionClientID string, remoteSessionsListRemoteSessionsCursor string, remoteSessionsListRemoteSessionsLimit string, remoteSessionsListRemoteSessionsSessionToken string, remoteSessionsListRemoteSessionsApikeyToken string, remoteSessionsListRemoteSessionsProjectSlugInput string) (*remotesessions.ListRemoteSessionsPayload, error) {

@@ -7,6 +7,8 @@ import (
 	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/constants"
+	"github.com/speakeasy-api/gram/server/internal/otel/enrich"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -55,12 +57,19 @@ func TestLogTransformHandlerNormalizesEnrichesAndPublishes(t *testing.T) {
 	for _, item := range published.GetAttributes() {
 		attributes[item.GetKey()] = item.GetValue()
 	}
-	require.Equal(t, "producer.scope", attributes[string(OriginalInstrumentationScopeNameKey)].GetStringValue())
-	require.Equal(t, testLogOrganizationID, attributes[string(OrganizationIDKey)].GetStringValue())
-	require.Equal(t, testLogProjectID, attributes[string(ProjectIDKey)].GetStringValue())
-	require.Positive(t, attributes[string(TokensCountKey)].GetIntValue())
-	require.NotEmpty(t, attributes[string(TokensCodecKey)].GetStringValue())
+	require.Equal(t, "producer.scope", attributes[string(enrich.OriginalInstrumentationScopeNameKey)].GetStringValue())
+	require.Equal(t, testLogOrganizationID, attributes[string(enrich.OrganizationIDKey)].GetStringValue())
+	require.Equal(t, testLogProjectID, attributes[string(enrich.ProjectIDKey)].GetStringValue())
+	require.Positive(t, attributes[string(enrich.TokensCountKey)].GetIntValue())
+	require.NotEmpty(t, attributes[string(enrich.TokensCodecKey)].GetStringValue())
 	require.Contains(t, attributes, "gen_ai.input.messages")
+
+	// The column enrichers classified the record on the way through: a
+	// resource without a service name is the unknown source, and a record
+	// no dialect classifies carries no type key at all.
+	require.Equal(t, enrich.SourceUnknown, attributes[string(enrich.AgentSourceKey)].GetStringValue())
+	require.NotContains(t, attributes, string(enrich.AgentEventTypeKey))
+	require.NotContains(t, attributes, string(enrich.AgentRawEventNameKey))
 }
 
 func TestLogAnyValueConvertsHeterogeneousSlice(t *testing.T) {
@@ -151,11 +160,12 @@ func TestMaxSizeLogRecordFitsRelayExportAfterFullEnrichment(t *testing.T) {
 	for _, item := range published.GetAttributes() {
 		attributes[item.GetKey()] = item.GetValue()
 	}
-	require.Equal(t, originalScopeName, attributes[string(OriginalInstrumentationScopeNameKey)].GetStringValue())
-	require.Equal(t, testLogOrganizationID, attributes[string(OrganizationIDKey)].GetStringValue())
-	require.Equal(t, testLogProjectID, attributes[string(ProjectIDKey)].GetStringValue())
-	require.Positive(t, attributes[string(TokensCountKey)].GetIntValue())
-	require.NotEmpty(t, attributes[string(TokensCodecKey)].GetStringValue())
+	require.Equal(t, originalScopeName, attributes[string(enrich.OriginalInstrumentationScopeNameKey)].GetStringValue())
+	require.Equal(t, testLogOrganizationID, attributes[string(enrich.OrganizationIDKey)].GetStringValue())
+	require.Equal(t, testLogProjectID, attributes[string(enrich.ProjectIDKey)].GetStringValue())
+	require.Positive(t, attributes[string(enrich.TokensCountKey)].GetIntValue())
+	require.NotEmpty(t, attributes[string(enrich.TokensCodecKey)].GetStringValue())
+	require.Equal(t, "pathological-size-test", attributes[string(enrich.AgentSourceKey)].GetStringValue())
 
 	request, err := newLogRelayExportRequest([]*otelv1.LogRecord{published}, true)
 	require.NoError(t, err)
@@ -185,4 +195,206 @@ func logStringAttribute(key, value string) *otelv1.InboundLogRecord_KeyValue {
 		Key:   &key,
 		Value: (&otelv1.InboundLogRecord_AnyValue_builder{StringValue: &value}).Build(),
 	}).Build()
+}
+
+// A producer may not classify its own record: anything it sends under the
+// reserved speakeasy.agent namespace is dropped, and only what the agent
+// attribute enrichers wrote reaches a consumer.
+func TestLogTransformHandlerDropsForgedCanonicalColumns(t *testing.T) {
+	t.Parallel()
+
+	// publish runs one record through the handler and returns what reached
+	// the topic.
+	publish := func(t *testing.T, inbound *otelv1.InboundLogRecord) map[string]*otelv1.LogRecord_AnyValue {
+		t.Helper()
+		var published *otelv1.LogRecord
+		publisher := gcp.NewMockPublisher[*otelv1.LogRecord]()
+		publisher.On("Publish", mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
+			record, ok := args.Get(1).(*otelv1.LogRecord)
+			require.True(t, ok)
+			published = record
+		}).Return(gcp.NewSuccessPublishResult()).Once()
+		meterProvider := testenv.NewMeterProvider(t)
+		handler := NewLogTransformHandler(testenv.NewLogger(t), meterProvider, publisher, newTestDatabase(t), cache.NoopCache)
+		require.NoError(t, handler.Handle(t.Context(), inbound, gcp.MessageMetadata{}))
+		require.NotNil(t, published)
+		attributes := make(map[string]*otelv1.LogRecord_AnyValue, len(published.GetAttributes()))
+		for _, item := range published.GetAttributes() {
+			attributes[item.GetKey()] = item.GetValue()
+		}
+		return attributes
+	}
+
+	t.Run("a classified record keeps the enricher's classification, not the producer's", func(t *testing.T) {
+		t.Parallel()
+		inbound := (&otelv1.InboundLogRecord_builder{
+			RecordId:  new("record-id"),
+			EventName: new("api_request"),
+			Scope:     (&otelv1.InboundLogRecord_InstrumentationScope_builder{Name: new(claudeCodeScopeName)}).Build(),
+			Provenance: (&otelv1.InboundLogRecord_Provenance_builder{
+				Source:         new("speakeasy"),
+				OrganizationId: new(testLogOrganizationID),
+				ProjectId:      new(testLogProjectID),
+			}).Build(),
+			Attributes: []*otelv1.InboundLogRecord_KeyValue{
+				logStringAttribute(string(enrich.AgentEventTypeKey), "tool_call"),
+				logStringAttribute(string(enrich.AgentProviderKey), "forged"),
+				logStringAttribute(string(enrich.AgentTextKey), "forged words"),
+			},
+		}).Build()
+
+		attributes := publish(t, inbound)
+		require.Equal(t, "api_request", attributes[string(enrich.AgentEventTypeKey)].GetStringValue())
+		require.Equal(t, "anthropic", attributes[string(enrich.AgentProviderKey)].GetStringValue())
+		require.NotContains(t, attributes, string(enrich.AgentTextKey), "a key no enricher writes is gone, not kept")
+	})
+
+	t.Run("an unclassified record gets no type key however hard the producer tries", func(t *testing.T) {
+		t.Parallel()
+		inbound := (&otelv1.InboundLogRecord_builder{
+			RecordId: new("record-id"),
+			Scope:    (&otelv1.InboundLogRecord_InstrumentationScope_builder{Name: new("producer.scope")}).Build(),
+			Provenance: (&otelv1.InboundLogRecord_Provenance_builder{
+				Source:         new("speakeasy"),
+				OrganizationId: new(testLogOrganizationID),
+				ProjectId:      new(testLogProjectID),
+			}).Build(),
+			Attributes: []*otelv1.InboundLogRecord_KeyValue{
+				logStringAttribute(string(enrich.AgentEventTypeKey), "api_request"),
+				logStringAttribute("gen_ai.input.messages", `[{"role":"user","parts":[{"type":"text","content":"hello"}]}]`),
+			},
+		}).Build()
+
+		attributes := publish(t, inbound)
+		require.NotContains(t, attributes, string(enrich.AgentEventTypeKey))
+		require.Equal(t, enrich.SourceUnknown, attributes[string(enrich.AgentSourceKey)].GetStringValue())
+		require.Contains(t, attributes, "gen_ai.input.messages", "the producer's own attributes stay")
+	})
+
+	t.Run("a record that sends nothing reserved keeps its own attributes", func(t *testing.T) {
+		t.Parallel()
+		inbound := (&otelv1.InboundLogRecord_builder{
+			RecordId:  new("record-id"),
+			EventName: new("api_request"),
+			Scope:     (&otelv1.InboundLogRecord_InstrumentationScope_builder{Name: new(claudeCodeScopeName)}).Build(),
+			Provenance: (&otelv1.InboundLogRecord_Provenance_builder{
+				Source:         new("speakeasy"),
+				OrganizationId: new(testLogOrganizationID),
+				ProjectId:      new(testLogProjectID),
+			}).Build(),
+			Attributes: []*otelv1.InboundLogRecord_KeyValue{logStringAttribute("model", "claude-sonnet-4")},
+		}).Build()
+
+		require.Equal(t, "claude-sonnet-4", publish(t, inbound)["model"].GetStringValue())
+	})
+}
+
+// The pipeline owns the whole speakeasy namespace, not only the column
+// keys: a producer that sends the pipeline's own keys could claim another
+// tenant or pose as another producer's scope, which is how the relays tell
+// a gateway record from a customer's. Every such key is dropped before the
+// transform writes its own, so exactly one copy of each is left.
+func TestLogTransformHandlerDropsProducerSentPipelineKeys(t *testing.T) {
+	t.Parallel()
+
+	inbound := (&otelv1.InboundLogRecord_builder{
+		RecordId:  new("record-id"),
+		EventName: new("api_request"),
+		Scope:     (&otelv1.InboundLogRecord_InstrumentationScope_builder{Name: new(claudeCodeScopeName)}).Build(),
+		Provenance: (&otelv1.InboundLogRecord_Provenance_builder{
+			Source:         new("speakeasy"),
+			OrganizationId: new(testLogOrganizationID),
+			ProjectId:      new(testLogProjectID),
+		}).Build(),
+		Attributes: []*otelv1.InboundLogRecord_KeyValue{
+			logStringAttribute(string(enrich.OriginalInstrumentationScopeNameKey), "com.example.forged"),
+			logStringAttribute(string(enrich.OrganizationIDKey), "forged-org"),
+			logStringAttribute(string(enrich.ProjectIDKey), "forged-project"),
+			logStringAttribute(string(enrich.DirectoryGroupNamesKey), "forged-group"),
+			logStringAttribute("model", "claude-sonnet-4"),
+		},
+	}).Build()
+
+	var published *otelv1.LogRecord
+	publisher := gcp.NewMockPublisher[*otelv1.LogRecord]()
+	publisher.On("Publish", mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
+		record, ok := args.Get(1).(*otelv1.LogRecord)
+		require.True(t, ok)
+		published = record
+	}).Return(gcp.NewSuccessPublishResult()).Once()
+	meterProvider := testenv.NewMeterProvider(t)
+	handler := NewLogTransformHandler(testenv.NewLogger(t), meterProvider, publisher, newTestDatabase(t), cache.NoopCache)
+
+	require.NoError(t, handler.Handle(t.Context(), inbound, gcp.MessageMetadata{}))
+	require.NotNil(t, published)
+
+	values := make(map[string][]string)
+	for _, item := range published.GetAttributes() {
+		values[item.GetKey()] = append(values[item.GetKey()], item.GetValue().GetStringValue())
+	}
+	require.Equal(t, []string{claudeCodeScopeName}, values[string(enrich.OriginalInstrumentationScopeNameKey)], "the transform's copy of the scope is the only one")
+	require.Equal(t, []string{testLogOrganizationID}, values[string(enrich.OrganizationIDKey)], "tenancy comes from provenance, not from the producer")
+	require.Equal(t, []string{testLogProjectID}, values[string(enrich.ProjectIDKey)])
+	require.Empty(t, values[string(enrich.DirectoryGroupNamesKey)], "a group the directory lookup did not find stays empty rather than taking the producer's")
+	require.Equal(t, []string{"claude-sonnet-4"}, values["model"], "the producer's own attributes stay")
+}
+
+// A record may arrive at the size limit with its whole budget spent on an
+// opted-in prompt. The transform copies the words onto the canonical text
+// key beside the original, so without a cap the copy would double them and
+// the record would no longer fit a relay export. The copy is cut to the
+// cap and the enriched record still fits.
+func TestNearLimitPromptStillFitsRelayExportAfterEnrichment(t *testing.T) {
+	t.Parallel()
+
+	// Leave room for the record's own fields and the enrichments other
+	// than the words, which the headroom covers. The words are ordinary
+	// text: the tokens enricher counts a prompt's tokens, and one word of
+	// several megabytes would keep its merge loop busy for an hour.
+	sentence := "the quick brown fox jumps over the lazy dog. "
+	prompt := strings.Repeat(sentence, (maxOTLPLogRecordBytes-16*constants.KiB)/len(sentence))
+	inbound := (&otelv1.InboundLogRecord_builder{
+		RecordId:  new("record-id"),
+		EventName: new("user_prompt"),
+		Resource: (&otelv1.InboundLogRecord_Resource_builder{
+			Attributes: []*otelv1.InboundLogRecord_KeyValue{logStringAttribute("service.name", "claude-code")},
+		}).Build(),
+		Scope: (&otelv1.InboundLogRecord_InstrumentationScope_builder{Name: new(claudeCodeScopeName)}).Build(),
+		Provenance: (&otelv1.InboundLogRecord_Provenance_builder{
+			Source:         new("speakeasy"),
+			OrganizationId: new(testLogOrganizationID),
+			ProjectId:      new(testLogProjectID),
+		}).Build(),
+		Attributes: []*otelv1.InboundLogRecord_KeyValue{
+			logStringAttribute("prompt", prompt),
+			logStringAttribute("message.uuid", "m1"),
+		},
+	}).Build()
+	require.LessOrEqual(t, proto.Size(inbound), maxOTLPLogRecordBytes)
+	require.NoError(t, ValidateInboundLogRecord(inbound))
+
+	var published *otelv1.LogRecord
+	publisher := gcp.NewMockPublisher[*otelv1.LogRecord]()
+	publisher.On("Publish", mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
+		record, ok := args.Get(1).(*otelv1.LogRecord)
+		require.True(t, ok)
+		published = record
+	}).Return(gcp.NewSuccessPublishResult()).Once()
+	meterProvider := testenv.NewMeterProvider(t)
+	handler := NewLogTransformHandler(testenv.NewLogger(t), meterProvider, publisher, newTestDatabase(t), cache.NoopCache)
+
+	require.NoError(t, handler.Handle(t.Context(), inbound, gcp.MessageMetadata{}))
+	require.NotNil(t, published)
+
+	attributes := make(map[string]*otelv1.LogRecord_AnyValue, len(published.GetAttributes()))
+	for _, item := range published.GetAttributes() {
+		attributes[item.GetKey()] = item.GetValue()
+	}
+	require.Equal(t, "prompt", attributes[string(enrich.AgentEventTypeKey)].GetStringValue())
+	require.Len(t, attributes["prompt"].GetStringValue(), len(prompt), "the producer's own words are untouched")
+	require.Len(t, attributes[string(enrich.AgentTextKey)].GetStringValue(), 64*constants.KiB, "the copy is cut to the cap")
+
+	request, err := newLogRelayExportRequest([]*otelv1.LogRecord{published}, true)
+	require.NoError(t, err)
+	require.LessOrEqual(t, proto.Size(request), maxLogRelayExportBytes)
 }

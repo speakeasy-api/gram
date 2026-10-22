@@ -53,6 +53,15 @@ type CommitServerIdentityConfigurationRequestBody struct {
 	RegistrationMethod *string `form:"registration_method,omitempty" json:"registration_method,omitempty" xml:"registration_method,omitempty"`
 }
 
+// DetachServerClientAssociationRequestBody is the type of the "remoteSessions"
+// service "detachServerClientAssociation" endpoint HTTP request body.
+type DetachServerClientAssociationRequestBody struct {
+	// The MCP server.
+	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
+	// The associated remote session client.
+	RemoteSessionClientID *string `form:"remote_session_client_id,omitempty" json:"remote_session_client_id,omitempty" xml:"remote_session_client_id,omitempty"`
+}
+
 // ListBindingsResponseBody is the type of the "remoteSessions" service
 // "listBindings" endpoint HTTP response body.
 type ListBindingsResponseBody struct {
@@ -101,6 +110,24 @@ type CommitServerIdentityConfigurationResponseBody struct {
 	// Completed DCR failure. Mutually exclusive with status and
 	// manual_setup_required=true.
 	Failure *ServerIdentityRegistrationFailureResponseBody `form:"failure,omitempty" json:"failure,omitempty" xml:"failure,omitempty"`
+}
+
+// GetServerIdentityImpactResponseBody is the type of the "remoteSessions"
+// service "getServerIdentityImpact" endpoint HTTP response body.
+type GetServerIdentityImpactResponseBody struct {
+	// Affected MCP servers the caller can read.
+	Servers []*ServerIdentityImpactServerResponseBody `form:"servers" json:"servers" xml:"servers"`
+	// MCP servers and gateways the caller cannot read; they are not named. When
+	// the change touches an organization-level client this counts every such
+	// server on the issuer, affected or not.
+	HiddenServerCount int `form:"hidden_server_count" json:"hidden_server_count" xml:"hidden_server_count"`
+}
+
+// ListServerClientAssociationsResponseBody is the type of the "remoteSessions"
+// service "listServerClientAssociations" endpoint HTTP response body.
+type ListServerClientAssociationsResponseBody struct {
+	// The server's associated upstream OAuth clients, oldest first.
+	Associations []*ServerClientAssociationResponseBody `form:"associations" json:"associations" xml:"associations"`
 }
 
 // ListRemoteSessionsResponseBody is the type of the "remoteSessions" service
@@ -870,6 +897,576 @@ type CommitServerIdentityConfigurationGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// GetServerIdentityImpactUnauthorizedResponseBody is the type of the
+// "remoteSessions" service "getServerIdentityImpact" endpoint HTTP response
+// body for the "unauthorized" error.
+type GetServerIdentityImpactUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetServerIdentityImpactForbiddenResponseBody is the type of the
+// "remoteSessions" service "getServerIdentityImpact" endpoint HTTP response
+// body for the "forbidden" error.
+type GetServerIdentityImpactForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetServerIdentityImpactBadRequestResponseBody is the type of the
+// "remoteSessions" service "getServerIdentityImpact" endpoint HTTP response
+// body for the "bad_request" error.
+type GetServerIdentityImpactBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetServerIdentityImpactNotFoundResponseBody is the type of the
+// "remoteSessions" service "getServerIdentityImpact" endpoint HTTP response
+// body for the "not_found" error.
+type GetServerIdentityImpactNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetServerIdentityImpactConflictResponseBody is the type of the
+// "remoteSessions" service "getServerIdentityImpact" endpoint HTTP response
+// body for the "conflict" error.
+type GetServerIdentityImpactConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetServerIdentityImpactUnsupportedMediaResponseBody is the type of the
+// "remoteSessions" service "getServerIdentityImpact" endpoint HTTP response
+// body for the "unsupported_media" error.
+type GetServerIdentityImpactUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetServerIdentityImpactInvalidResponseBody is the type of the
+// "remoteSessions" service "getServerIdentityImpact" endpoint HTTP response
+// body for the "invalid" error.
+type GetServerIdentityImpactInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetServerIdentityImpactInvariantViolationResponseBody is the type of the
+// "remoteSessions" service "getServerIdentityImpact" endpoint HTTP response
+// body for the "invariant_violation" error.
+type GetServerIdentityImpactInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetServerIdentityImpactUnexpectedResponseBody is the type of the
+// "remoteSessions" service "getServerIdentityImpact" endpoint HTTP response
+// body for the "unexpected" error.
+type GetServerIdentityImpactUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetServerIdentityImpactGatewayErrorResponseBody is the type of the
+// "remoteSessions" service "getServerIdentityImpact" endpoint HTTP response
+// body for the "gateway_error" error.
+type GetServerIdentityImpactGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListServerClientAssociationsUnauthorizedResponseBody is the type of the
+// "remoteSessions" service "listServerClientAssociations" endpoint HTTP
+// response body for the "unauthorized" error.
+type ListServerClientAssociationsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListServerClientAssociationsForbiddenResponseBody is the type of the
+// "remoteSessions" service "listServerClientAssociations" endpoint HTTP
+// response body for the "forbidden" error.
+type ListServerClientAssociationsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListServerClientAssociationsBadRequestResponseBody is the type of the
+// "remoteSessions" service "listServerClientAssociations" endpoint HTTP
+// response body for the "bad_request" error.
+type ListServerClientAssociationsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListServerClientAssociationsNotFoundResponseBody is the type of the
+// "remoteSessions" service "listServerClientAssociations" endpoint HTTP
+// response body for the "not_found" error.
+type ListServerClientAssociationsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListServerClientAssociationsConflictResponseBody is the type of the
+// "remoteSessions" service "listServerClientAssociations" endpoint HTTP
+// response body for the "conflict" error.
+type ListServerClientAssociationsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListServerClientAssociationsUnsupportedMediaResponseBody is the type of the
+// "remoteSessions" service "listServerClientAssociations" endpoint HTTP
+// response body for the "unsupported_media" error.
+type ListServerClientAssociationsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListServerClientAssociationsInvalidResponseBody is the type of the
+// "remoteSessions" service "listServerClientAssociations" endpoint HTTP
+// response body for the "invalid" error.
+type ListServerClientAssociationsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListServerClientAssociationsInvariantViolationResponseBody is the type of
+// the "remoteSessions" service "listServerClientAssociations" endpoint HTTP
+// response body for the "invariant_violation" error.
+type ListServerClientAssociationsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListServerClientAssociationsUnexpectedResponseBody is the type of the
+// "remoteSessions" service "listServerClientAssociations" endpoint HTTP
+// response body for the "unexpected" error.
+type ListServerClientAssociationsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListServerClientAssociationsGatewayErrorResponseBody is the type of the
+// "remoteSessions" service "listServerClientAssociations" endpoint HTTP
+// response body for the "gateway_error" error.
+type ListServerClientAssociationsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DetachServerClientAssociationUnauthorizedResponseBody is the type of the
+// "remoteSessions" service "detachServerClientAssociation" endpoint HTTP
+// response body for the "unauthorized" error.
+type DetachServerClientAssociationUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DetachServerClientAssociationForbiddenResponseBody is the type of the
+// "remoteSessions" service "detachServerClientAssociation" endpoint HTTP
+// response body for the "forbidden" error.
+type DetachServerClientAssociationForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DetachServerClientAssociationBadRequestResponseBody is the type of the
+// "remoteSessions" service "detachServerClientAssociation" endpoint HTTP
+// response body for the "bad_request" error.
+type DetachServerClientAssociationBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DetachServerClientAssociationNotFoundResponseBody is the type of the
+// "remoteSessions" service "detachServerClientAssociation" endpoint HTTP
+// response body for the "not_found" error.
+type DetachServerClientAssociationNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DetachServerClientAssociationConflictResponseBody is the type of the
+// "remoteSessions" service "detachServerClientAssociation" endpoint HTTP
+// response body for the "conflict" error.
+type DetachServerClientAssociationConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DetachServerClientAssociationUnsupportedMediaResponseBody is the type of the
+// "remoteSessions" service "detachServerClientAssociation" endpoint HTTP
+// response body for the "unsupported_media" error.
+type DetachServerClientAssociationUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DetachServerClientAssociationInvalidResponseBody is the type of the
+// "remoteSessions" service "detachServerClientAssociation" endpoint HTTP
+// response body for the "invalid" error.
+type DetachServerClientAssociationInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DetachServerClientAssociationInvariantViolationResponseBody is the type of
+// the "remoteSessions" service "detachServerClientAssociation" endpoint HTTP
+// response body for the "invariant_violation" error.
+type DetachServerClientAssociationInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DetachServerClientAssociationUnexpectedResponseBody is the type of the
+// "remoteSessions" service "detachServerClientAssociation" endpoint HTTP
+// response body for the "unexpected" error.
+type DetachServerClientAssociationUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DetachServerClientAssociationGatewayErrorResponseBody is the type of the
+// "remoteSessions" service "detachServerClientAssociation" endpoint HTTP
+// response body for the "gateway_error" error.
+type DetachServerClientAssociationGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // ListRemoteSessionsUnauthorizedResponseBody is the type of the
 // "remoteSessions" service "listRemoteSessions" endpoint HTTP response body
 // for the "unauthorized" error.
@@ -1595,9 +2192,53 @@ type RemoteSessionIssuerResponseBody struct {
 	OmitScopeFallback *bool `form:"omit_scope_fallback,omitempty" json:"omit_scope_fallback,omitempty" xml:"omit_scope_fallback,omitempty"`
 	// Whether the issuer accepts the RFC 8707 resource parameter, as an operator
 	// stated it. Null when unset; false omits the parameter on every grant.
-	ResourceIndicatorSupported *bool  `form:"resource_indicator_supported,omitempty" json:"resource_indicator_supported,omitempty" xml:"resource_indicator_supported,omitempty"`
-	CreatedAt                  string `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt                  string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	ResourceIndicatorSupported *bool `form:"resource_indicator_supported,omitempty" json:"resource_indicator_supported,omitempty" xml:"resource_indicator_supported,omitempty"`
+	// The organization's EMA provider order for this issuer's vendor. Returned by
+	// organizationRemoteSessionIssuers.getIssuer only.
+	EmaProviders *EMAProviderOrderResponseBody `form:"ema_providers,omitempty" json:"ema_providers,omitempty" xml:"ema_providers,omitempty"`
+	CreatedAt    string                        `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt    string                        `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
+// EMAProviderOrderResponseBody is used to define fields on response body types.
+type EMAProviderOrderResponseBody struct {
+	// The vendor authorization server issuer, canonicalized.
+	VendorIssuer string `form:"vendor_issuer" json:"vendor_issuer" xml:"vendor_issuer"`
+	// Nothing is saved, so every provider is accepted. An endpoint whose sign-in
+	// trusts an external issuer uses that issuer alone; one that trusts none uses
+	// the organization's Speakeasy issuer when it has one.
+	IsDefault bool `form:"is_default" json:"is_default" xml:"is_default"`
+	// The saved providers in their stored order, or the derived default described
+	// by is_default.
+	Providers []*EMAProviderResponseBody `form:"providers" json:"providers" xml:"providers"`
+}
+
+// EMAProviderResponseBody is used to define fields on response body types.
+type EMAProviderResponseBody struct {
+	// external or speakeasy.
+	Kind string `form:"kind" json:"kind" xml:"kind"`
+	// The external provider's remote session issuer. Omitted for speakeasy, and in
+	// the organization-wide default order, where an external entry stands for each
+	// endpoint's own trusted issuer.
+	RemoteSessionIssuerID *string `form:"remote_session_issuer_id,omitempty" json:"remote_session_issuer_id,omitempty" xml:"remote_session_issuer_id,omitempty"`
+	// The organization's internal session issuer, for speakeasy.
+	InternalSessionIssuerID *string `form:"internal_session_issuer_id,omitempty" json:"internal_session_issuer_id,omitempty" xml:"internal_session_issuer_id,omitempty"`
+	// Why the provider cannot serve now; omitted when it can. Identity chaining
+	// skips it and tries the next provider. not_trusted_by_endpoint means the
+	// endpoint's sign-in doesn't go through this provider, so it can't vouch for
+	// people there: an external issuer other than the sign-in's trusted issuer, or
+	// Speakeasy on a sign-in federated through an external issuer.
+	// readiness_unknown means the Speakeasy issuer's state could not be read just
+	// now; retry the read.
+	UnavailableReason *string `form:"unavailable_reason,omitempty" json:"unavailable_reason,omitempty" xml:"unavailable_reason,omitempty"`
+	// When the vendor last accepted an assertion from this provider anywhere in
+	// the organization, so the vendor already trusts it, from cached credentials
+	// that still hold an access token. Attributed to the exact issuer that
+	// vouched; the organization-wide default's external entry takes the newest
+	// acceptance of any external issuer. Set on every response that returns an
+	// order; omitted when the vendor has never accepted it, when acceptance could
+	// not be read, or on readEMA when the caller lacks org:read.
+	LastAcceptedAt *string `form:"last_accepted_at,omitempty" json:"last_accepted_at,omitempty" xml:"last_accepted_at,omitempty"`
 }
 
 // RemoteSessionClientResponseBody is used to define fields on response body
@@ -1639,8 +2280,8 @@ type RemoteSessionClientResponseBody struct {
 	// Identifier used as the aud claim in private_key_jwt assertions. Null
 	// resolves to issuer.
 	TokenEndpointAuthAudienceFormat *string `form:"token_endpoint_auth_audience_format,omitempty" json:"token_endpoint_auth_audience_format,omitempty" xml:"token_endpoint_auth_audience_format,omitempty"`
-	// The organization JSON Web Key Set attached to this client, managed through
-	// attachKeySet and detachKeySet. Null when no key set is attached.
+	// The organization JSON Web Key Set attached to this client, set on create or
+	// through attachKeySet and detachKeySet. Null when no key set is attached.
 	JSONWebKeySetID *string `form:"json_web_key_set_id,omitempty" json:"json_web_key_set_id,omitempty" xml:"json_web_key_set_id,omitempty"`
 	// Explicit upstream OAuth scopes the dance requests for this client. Null
 	// falls back to the issuer's scopes_supported.
@@ -1652,11 +2293,23 @@ type RemoteSessionClientResponseBody struct {
 	// authorize leg then sends that URL and a JSON state instead of the current
 	// callback. Cleared when the client is rotated.
 	LegacyCallbackURL bool `form:"legacy_callback_url" json:"legacy_callback_url" xml:"legacy_callback_url"`
+	// Who the upstream access credential belongs to. subject means each caller
+	// connects their own upstream account; self means the client holds one
+	// credential for itself, obtained with the client_credentials grant, that
+	// every caller shares.
+	CredentialOwner string `form:"credential_owner" json:"credential_owner" xml:"credential_owner"`
 	// The redirect URI this client registers with its upstream provider. It never
-	// changes after the client is created. Absent on global clients.
+	// changes after the client is created. Absent on global clients and on clients
+	// with credential_owner self, which have no callback.
 	CallbackURL *string `form:"callback_url,omitempty" json:"callback_url,omitempty" xml:"callback_url,omitempty"`
-	CreatedAt   string  `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt   string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	// The redirect URI to register in the customer identity provider's app when
+	// this client is a user session issuer's trusted sign-in client. Present only
+	// on organization-owned clients outside any project and not managed by an
+	// identity provider connection, the only clients a user session issuer can
+	// trust.
+	FederatedCallbackURL *string `form:"federated_callback_url,omitempty" json:"federated_callback_url,omitempty" xml:"federated_callback_url,omitempty"`
+	CreatedAt            string  `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt            string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // ServerIdentityRegistrationFailureResponseBody is used to define fields on
@@ -1669,6 +2322,54 @@ type ServerIdentityRegistrationFailureResponseBody struct {
 	ProviderMessage *string `form:"provider_message,omitempty" json:"provider_message,omitempty" xml:"provider_message,omitempty"`
 	// Optional upstream HTTP status.
 	HTTPStatus *int `form:"http_status,omitempty" json:"http_status,omitempty" xml:"http_status,omitempty"`
+}
+
+// ServerIdentityImpactServerResponseBody is used to define fields on response
+// body types.
+type ServerIdentityImpactServerResponseBody struct {
+	// The MCP server or gateway id.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Whether this is an MCP server or a gateway.
+	Kind string `form:"kind" json:"kind" xml:"kind"`
+	// The MCP server or gateway name.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// The MCP server slug. Gateways have none.
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
+	// The owning project.
+	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// The name of the owning project.
+	ProjectName string `form:"project_name" json:"project_name" xml:"project_name"`
+	// repoint: its upstream authorization server changes to another single
+	// provider. clear: it is left with no single provider and loses its upstream.
+	// resignin: its upstream is unchanged but its client is replaced, so everyone
+	// signs in again. client_removed: a gateway loses a provider client its
+	// members sign in through.
+	Impact string `form:"impact" json:"impact" xml:"impact"`
+}
+
+// ServerClientAssociationResponseBody is used to define fields on response
+// body types.
+type ServerClientAssociationResponseBody struct {
+	// The associated remote session client.
+	RemoteSessionClientID string `form:"remote_session_client_id" json:"remote_session_client_id" xml:"remote_session_client_id"`
+	// The provider-issued client_id.
+	ClientID string `form:"client_id" json:"client_id" xml:"client_id"`
+	// The client's remote session issuer: the upstream authorization server it
+	// signs in with.
+	RemoteSessionIssuerID string `form:"remote_session_issuer_id" json:"remote_session_issuer_id" xml:"remote_session_issuer_id"`
+	// Display name of the remote session issuer, if set.
+	IssuerName *string `form:"issuer_name,omitempty" json:"issuer_name,omitempty" xml:"issuer_name,omitempty"`
+	// Slug of the remote session issuer.
+	IssuerSlug string `form:"issuer_slug" json:"issuer_slug" xml:"issuer_slug"`
+	// The remote session issuer's issuer identifier.
+	IssuerURL string `form:"issuer_url" json:"issuer_url" xml:"issuer_url"`
+	// Who owns the client.
+	Scope string `form:"scope" json:"scope" xml:"scope"`
+	// How many live MCP servers are associated with this client, including this
+	// one.
+	ServerCount int64 `form:"server_count" json:"server_count" xml:"server_count"`
+	// When the association was recorded.
+	AssociatedAt string `form:"associated_at" json:"associated_at" xml:"associated_at"`
 }
 
 // CreateRemoteSessionIssuerFormRequestBody is used to define fields on request
@@ -1847,6 +2548,48 @@ func NewCommitServerIdentityConfigurationResponseBody(res *remotesessions.Commit
 	}
 	if res.Failure != nil {
 		body.Failure = marshalRemotesessionsServerIdentityRegistrationFailureToServerIdentityRegistrationFailureResponseBody(res.Failure)
+	}
+	return body
+}
+
+// NewGetServerIdentityImpactResponseBody builds the HTTP response body from
+// the result of the "getServerIdentityImpact" endpoint of the "remoteSessions"
+// service.
+func NewGetServerIdentityImpactResponseBody(res *remotesessions.ServerIdentityImpactResult) *GetServerIdentityImpactResponseBody {
+	body := &GetServerIdentityImpactResponseBody{
+		HiddenServerCount: res.HiddenServerCount,
+	}
+	if res.Servers != nil {
+		body.Servers = make([]*ServerIdentityImpactServerResponseBody, len(res.Servers))
+		for i, val := range res.Servers {
+			if val == nil {
+				body.Servers[i] = nil
+				continue
+			}
+			body.Servers[i] = marshalRemotesessionsServerIdentityImpactServerToServerIdentityImpactServerResponseBody(val)
+		}
+	} else {
+		body.Servers = []*ServerIdentityImpactServerResponseBody{}
+	}
+	return body
+}
+
+// NewListServerClientAssociationsResponseBody builds the HTTP response body
+// from the result of the "listServerClientAssociations" endpoint of the
+// "remoteSessions" service.
+func NewListServerClientAssociationsResponseBody(res *remotesessions.ListServerClientAssociationsResult) *ListServerClientAssociationsResponseBody {
+	body := &ListServerClientAssociationsResponseBody{}
+	if res.Associations != nil {
+		body.Associations = make([]*ServerClientAssociationResponseBody, len(res.Associations))
+		for i, val := range res.Associations {
+			if val == nil {
+				body.Associations[i] = nil
+				continue
+			}
+			body.Associations[i] = marshalRemotesessionsServerClientAssociationToServerClientAssociationResponseBody(val)
+		}
+	} else {
+		body.Associations = []*ServerClientAssociationResponseBody{}
 	}
 	return body
 }
@@ -2457,6 +3200,456 @@ func NewCommitServerIdentityConfigurationGatewayErrorResponseBody(res *goa.Servi
 	return body
 }
 
+// NewGetServerIdentityImpactUnauthorizedResponseBody builds the HTTP response
+// body from the result of the "getServerIdentityImpact" endpoint of the
+// "remoteSessions" service.
+func NewGetServerIdentityImpactUnauthorizedResponseBody(res *goa.ServiceError) *GetServerIdentityImpactUnauthorizedResponseBody {
+	body := &GetServerIdentityImpactUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetServerIdentityImpactForbiddenResponseBody builds the HTTP response
+// body from the result of the "getServerIdentityImpact" endpoint of the
+// "remoteSessions" service.
+func NewGetServerIdentityImpactForbiddenResponseBody(res *goa.ServiceError) *GetServerIdentityImpactForbiddenResponseBody {
+	body := &GetServerIdentityImpactForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetServerIdentityImpactBadRequestResponseBody builds the HTTP response
+// body from the result of the "getServerIdentityImpact" endpoint of the
+// "remoteSessions" service.
+func NewGetServerIdentityImpactBadRequestResponseBody(res *goa.ServiceError) *GetServerIdentityImpactBadRequestResponseBody {
+	body := &GetServerIdentityImpactBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetServerIdentityImpactNotFoundResponseBody builds the HTTP response body
+// from the result of the "getServerIdentityImpact" endpoint of the
+// "remoteSessions" service.
+func NewGetServerIdentityImpactNotFoundResponseBody(res *goa.ServiceError) *GetServerIdentityImpactNotFoundResponseBody {
+	body := &GetServerIdentityImpactNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetServerIdentityImpactConflictResponseBody builds the HTTP response body
+// from the result of the "getServerIdentityImpact" endpoint of the
+// "remoteSessions" service.
+func NewGetServerIdentityImpactConflictResponseBody(res *goa.ServiceError) *GetServerIdentityImpactConflictResponseBody {
+	body := &GetServerIdentityImpactConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetServerIdentityImpactUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "getServerIdentityImpact" endpoint of
+// the "remoteSessions" service.
+func NewGetServerIdentityImpactUnsupportedMediaResponseBody(res *goa.ServiceError) *GetServerIdentityImpactUnsupportedMediaResponseBody {
+	body := &GetServerIdentityImpactUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetServerIdentityImpactInvalidResponseBody builds the HTTP response body
+// from the result of the "getServerIdentityImpact" endpoint of the
+// "remoteSessions" service.
+func NewGetServerIdentityImpactInvalidResponseBody(res *goa.ServiceError) *GetServerIdentityImpactInvalidResponseBody {
+	body := &GetServerIdentityImpactInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetServerIdentityImpactInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "getServerIdentityImpact" endpoint of
+// the "remoteSessions" service.
+func NewGetServerIdentityImpactInvariantViolationResponseBody(res *goa.ServiceError) *GetServerIdentityImpactInvariantViolationResponseBody {
+	body := &GetServerIdentityImpactInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetServerIdentityImpactUnexpectedResponseBody builds the HTTP response
+// body from the result of the "getServerIdentityImpact" endpoint of the
+// "remoteSessions" service.
+func NewGetServerIdentityImpactUnexpectedResponseBody(res *goa.ServiceError) *GetServerIdentityImpactUnexpectedResponseBody {
+	body := &GetServerIdentityImpactUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetServerIdentityImpactGatewayErrorResponseBody builds the HTTP response
+// body from the result of the "getServerIdentityImpact" endpoint of the
+// "remoteSessions" service.
+func NewGetServerIdentityImpactGatewayErrorResponseBody(res *goa.ServiceError) *GetServerIdentityImpactGatewayErrorResponseBody {
+	body := &GetServerIdentityImpactGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListServerClientAssociationsUnauthorizedResponseBody builds the HTTP
+// response body from the result of the "listServerClientAssociations" endpoint
+// of the "remoteSessions" service.
+func NewListServerClientAssociationsUnauthorizedResponseBody(res *goa.ServiceError) *ListServerClientAssociationsUnauthorizedResponseBody {
+	body := &ListServerClientAssociationsUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListServerClientAssociationsForbiddenResponseBody builds the HTTP
+// response body from the result of the "listServerClientAssociations" endpoint
+// of the "remoteSessions" service.
+func NewListServerClientAssociationsForbiddenResponseBody(res *goa.ServiceError) *ListServerClientAssociationsForbiddenResponseBody {
+	body := &ListServerClientAssociationsForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListServerClientAssociationsBadRequestResponseBody builds the HTTP
+// response body from the result of the "listServerClientAssociations" endpoint
+// of the "remoteSessions" service.
+func NewListServerClientAssociationsBadRequestResponseBody(res *goa.ServiceError) *ListServerClientAssociationsBadRequestResponseBody {
+	body := &ListServerClientAssociationsBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListServerClientAssociationsNotFoundResponseBody builds the HTTP response
+// body from the result of the "listServerClientAssociations" endpoint of the
+// "remoteSessions" service.
+func NewListServerClientAssociationsNotFoundResponseBody(res *goa.ServiceError) *ListServerClientAssociationsNotFoundResponseBody {
+	body := &ListServerClientAssociationsNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListServerClientAssociationsConflictResponseBody builds the HTTP response
+// body from the result of the "listServerClientAssociations" endpoint of the
+// "remoteSessions" service.
+func NewListServerClientAssociationsConflictResponseBody(res *goa.ServiceError) *ListServerClientAssociationsConflictResponseBody {
+	body := &ListServerClientAssociationsConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListServerClientAssociationsUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "listServerClientAssociations" endpoint
+// of the "remoteSessions" service.
+func NewListServerClientAssociationsUnsupportedMediaResponseBody(res *goa.ServiceError) *ListServerClientAssociationsUnsupportedMediaResponseBody {
+	body := &ListServerClientAssociationsUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListServerClientAssociationsInvalidResponseBody builds the HTTP response
+// body from the result of the "listServerClientAssociations" endpoint of the
+// "remoteSessions" service.
+func NewListServerClientAssociationsInvalidResponseBody(res *goa.ServiceError) *ListServerClientAssociationsInvalidResponseBody {
+	body := &ListServerClientAssociationsInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListServerClientAssociationsInvariantViolationResponseBody builds the
+// HTTP response body from the result of the "listServerClientAssociations"
+// endpoint of the "remoteSessions" service.
+func NewListServerClientAssociationsInvariantViolationResponseBody(res *goa.ServiceError) *ListServerClientAssociationsInvariantViolationResponseBody {
+	body := &ListServerClientAssociationsInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListServerClientAssociationsUnexpectedResponseBody builds the HTTP
+// response body from the result of the "listServerClientAssociations" endpoint
+// of the "remoteSessions" service.
+func NewListServerClientAssociationsUnexpectedResponseBody(res *goa.ServiceError) *ListServerClientAssociationsUnexpectedResponseBody {
+	body := &ListServerClientAssociationsUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListServerClientAssociationsGatewayErrorResponseBody builds the HTTP
+// response body from the result of the "listServerClientAssociations" endpoint
+// of the "remoteSessions" service.
+func NewListServerClientAssociationsGatewayErrorResponseBody(res *goa.ServiceError) *ListServerClientAssociationsGatewayErrorResponseBody {
+	body := &ListServerClientAssociationsGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDetachServerClientAssociationUnauthorizedResponseBody builds the HTTP
+// response body from the result of the "detachServerClientAssociation"
+// endpoint of the "remoteSessions" service.
+func NewDetachServerClientAssociationUnauthorizedResponseBody(res *goa.ServiceError) *DetachServerClientAssociationUnauthorizedResponseBody {
+	body := &DetachServerClientAssociationUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDetachServerClientAssociationForbiddenResponseBody builds the HTTP
+// response body from the result of the "detachServerClientAssociation"
+// endpoint of the "remoteSessions" service.
+func NewDetachServerClientAssociationForbiddenResponseBody(res *goa.ServiceError) *DetachServerClientAssociationForbiddenResponseBody {
+	body := &DetachServerClientAssociationForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDetachServerClientAssociationBadRequestResponseBody builds the HTTP
+// response body from the result of the "detachServerClientAssociation"
+// endpoint of the "remoteSessions" service.
+func NewDetachServerClientAssociationBadRequestResponseBody(res *goa.ServiceError) *DetachServerClientAssociationBadRequestResponseBody {
+	body := &DetachServerClientAssociationBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDetachServerClientAssociationNotFoundResponseBody builds the HTTP
+// response body from the result of the "detachServerClientAssociation"
+// endpoint of the "remoteSessions" service.
+func NewDetachServerClientAssociationNotFoundResponseBody(res *goa.ServiceError) *DetachServerClientAssociationNotFoundResponseBody {
+	body := &DetachServerClientAssociationNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDetachServerClientAssociationConflictResponseBody builds the HTTP
+// response body from the result of the "detachServerClientAssociation"
+// endpoint of the "remoteSessions" service.
+func NewDetachServerClientAssociationConflictResponseBody(res *goa.ServiceError) *DetachServerClientAssociationConflictResponseBody {
+	body := &DetachServerClientAssociationConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDetachServerClientAssociationUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "detachServerClientAssociation"
+// endpoint of the "remoteSessions" service.
+func NewDetachServerClientAssociationUnsupportedMediaResponseBody(res *goa.ServiceError) *DetachServerClientAssociationUnsupportedMediaResponseBody {
+	body := &DetachServerClientAssociationUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDetachServerClientAssociationInvalidResponseBody builds the HTTP response
+// body from the result of the "detachServerClientAssociation" endpoint of the
+// "remoteSessions" service.
+func NewDetachServerClientAssociationInvalidResponseBody(res *goa.ServiceError) *DetachServerClientAssociationInvalidResponseBody {
+	body := &DetachServerClientAssociationInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDetachServerClientAssociationInvariantViolationResponseBody builds the
+// HTTP response body from the result of the "detachServerClientAssociation"
+// endpoint of the "remoteSessions" service.
+func NewDetachServerClientAssociationInvariantViolationResponseBody(res *goa.ServiceError) *DetachServerClientAssociationInvariantViolationResponseBody {
+	body := &DetachServerClientAssociationInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDetachServerClientAssociationUnexpectedResponseBody builds the HTTP
+// response body from the result of the "detachServerClientAssociation"
+// endpoint of the "remoteSessions" service.
+func NewDetachServerClientAssociationUnexpectedResponseBody(res *goa.ServiceError) *DetachServerClientAssociationUnexpectedResponseBody {
+	body := &DetachServerClientAssociationUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDetachServerClientAssociationGatewayErrorResponseBody builds the HTTP
+// response body from the result of the "detachServerClientAssociation"
+// endpoint of the "remoteSessions" service.
+func NewDetachServerClientAssociationGatewayErrorResponseBody(res *goa.ServiceError) *DetachServerClientAssociationGatewayErrorResponseBody {
+	body := &DetachServerClientAssociationGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewListRemoteSessionsUnauthorizedResponseBody builds the HTTP response body
 // from the result of the "listRemoteSessions" endpoint of the "remoteSessions"
 // service.
@@ -2970,6 +4163,48 @@ func NewCommitServerIdentityConfigurationPayload(body *CommitServerIdentityConfi
 	return v
 }
 
+// NewGetServerIdentityImpactPayload builds a remoteSessions service
+// getServerIdentityImpact endpoint payload.
+func NewGetServerIdentityImpactPayload(userSessionIssuerID string, mcpServerID *string, change string, providerID *string, clientID *string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *remotesessions.GetServerIdentityImpactPayload {
+	v := &remotesessions.GetServerIdentityImpactPayload{}
+	v.UserSessionIssuerID = userSessionIssuerID
+	v.McpServerID = mcpServerID
+	v.Change = change
+	v.ProviderID = providerID
+	v.ClientID = clientID
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewListServerClientAssociationsPayload builds a remoteSessions service
+// listServerClientAssociations endpoint payload.
+func NewListServerClientAssociationsPayload(mcpServerID string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *remotesessions.ListServerClientAssociationsPayload {
+	v := &remotesessions.ListServerClientAssociationsPayload{}
+	v.McpServerID = mcpServerID
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewDetachServerClientAssociationPayload builds a remoteSessions service
+// detachServerClientAssociation endpoint payload.
+func NewDetachServerClientAssociationPayload(body *DetachServerClientAssociationRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *remotesessions.DetachServerClientAssociationPayload {
+	v := &remotesessions.DetachServerClientAssociationPayload{
+		McpServerID:           *body.McpServerID,
+		RemoteSessionClientID: *body.RemoteSessionClientID,
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
 // NewListRemoteSessionsPayload builds a remoteSessions service
 // listRemoteSessions endpoint payload.
 func NewListRemoteSessionsPayload(principalID *string, userSessionIssuerID *string, subjectUrn *string, remoteSessionClientID *string, cursor *string, limit *int, sessionToken *string, apikeyToken *string, projectSlugInput *string) *remotesessions.ListRemoteSessionsPayload {
@@ -3096,6 +4331,24 @@ func ValidateCommitServerIdentityConfigurationRequestBody(body *CommitServerIden
 		if !(*body.RegistrationMethod == "cimd" || *body.RegistrationMethod == "dcr") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.registration_method", *body.RegistrationMethod, []any{"cimd", "dcr"}))
 		}
+	}
+	return
+}
+
+// ValidateDetachServerClientAssociationRequestBody runs the validations
+// defined on DetachServerClientAssociationRequestBody
+func ValidateDetachServerClientAssociationRequestBody(body *DetachServerClientAssociationRequestBody) (err error) {
+	if body.McpServerID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("mcp_server_id", "body"))
+	}
+	if body.RemoteSessionClientID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("remote_session_client_id", "body"))
+	}
+	if body.McpServerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", *body.McpServerID, goa.FormatUUID))
+	}
+	if body.RemoteSessionClientID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.remote_session_client_id", *body.RemoteSessionClientID, goa.FormatUUID))
 	}
 	return
 }

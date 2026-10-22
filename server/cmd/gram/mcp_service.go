@@ -1,13 +1,18 @@
 package gram
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"net"
 	"net/url"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
+	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
+	"github.com/speakeasy-api/gram/infra/pkg/gcp"
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
 	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
@@ -21,6 +26,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/internalsessionissuers"
 	"github.com/speakeasy-api/gram/server/internal/killswitches/mcptoolexecution"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
@@ -29,6 +35,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	"github.com/speakeasy-api/gram/server/internal/oauth/protectedresource"
 	"github.com/speakeasy-api/gram/server/internal/oktaresourceconnections"
+	"github.com/speakeasy-api/gram/server/internal/otel/dialect"
+	"github.com/speakeasy-api/gram/server/internal/otelpub"
 	"github.com/speakeasy-api/gram/server/internal/platformmcp"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	"github.com/speakeasy-api/gram/server/internal/rag"
@@ -41,31 +49,49 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
+	"github.com/speakeasy-api/gram/tunnel/metrics"
+	"github.com/speakeasy-api/gram/tunnel/metricspub"
 	"github.com/speakeasy-api/gram/tunnel/route"
 	"github.com/urfave/cli/v2"
 	"go.opentelemetry.io/otel/metric"
+	"go.opentelemetry.io/otel/sdk/resource"
+	semconv "go.opentelemetry.io/otel/semconv/v1.41.0"
 	"go.opentelemetry.io/otel/trace"
 )
 
+// gatewayRecordsServiceName is the service.name on gateway tool call records,
+// whichever process serves the gateway, so they share one agent_events source.
+const gatewayRecordsServiceName = "gram-server"
+
+// newToolCallLogs is the otelpub logger the gateway writes its tool call records through.
+func newToolCallLogs(publisher gcp.Publisher[*otelv1.InboundLogRecord]) *otelpub.Logger {
+	return otelpub.NewLogger(publisher,
+		resource.NewWithAttributes(semconv.SchemaURL, semconv.ServiceNameKey.String(gatewayRecordsServiceName)),
+		dialect.GatewayLogScope)
+}
+
 type mcpServiceDependencies struct {
-	Logger                 *slog.Logger
-	Tracer                 trace.TracerProvider
-	Meter                  metric.MeterProvider
-	DB                     *pgxpool.Pool
-	Redis                  *redis.Client
-	Sessions               *sessions.Manager
-	ChatSessions           *chatsessions.Manager
-	Environment            toolconfig.EnvironmentLoader
-	Posthog                *posthog.Posthog
-	Features               feature.Provider
-	ServerURL              *url.URL
-	SiteURL                *url.URL
-	Encryption             *encryption.Client
-	Guardian               *guardian.Policy
-	Functions              functions.ToolCaller
-	BillingTracker         billing.Tracker
-	Billing                billing.Repository
-	Telemetry              *tm.Logger
+	TunnelMetrics  *metrics.Collector
+	Logger         *slog.Logger
+	Tracer         trace.TracerProvider
+	Meter          metric.MeterProvider
+	DB             *pgxpool.Pool
+	Redis          *redis.Client
+	Sessions       *sessions.Manager
+	ChatSessions   *chatsessions.Manager
+	Environment    toolconfig.EnvironmentLoader
+	Posthog        *posthog.Posthog
+	Features       feature.Provider
+	ServerURL      *url.URL
+	SiteURL        *url.URL
+	Encryption     *encryption.Client
+	Guardian       *guardian.Policy
+	Functions      functions.ToolCaller
+	BillingTracker billing.Tracker
+	Billing        billing.Repository
+	Telemetry      *tm.Logger
+	// ToolCallLogs is closed by the service on Shutdown.
+	ToolCallLogs           *otelpub.Logger
 	TelemetryService       *tm.Service
 	RAG                    *rag.ToolsetVectorStore
 	Triggers               *bgtriggers.App
@@ -84,6 +110,8 @@ type mcpServiceDependencies struct {
 	CallbackOrigins        remotesessions.CallbackOrigins
 	PlatformHosts          map[string]string
 	CallerAssertions       *mcpauthz.Issuer
+	IssuerGate             *internalsessionissuers.Gate
+	IssuerSigner           *internalsessionissuers.Signer
 }
 
 func newMCPService(c *cli.Context, d mcpServiceDependencies) (*mcp.Service, error) {
@@ -94,6 +122,7 @@ func newMCPService(c *cli.Context, d mcpServiceDependencies) (*mcp.Service, erro
 	}
 	proxy := remotemcp.NewProxyManager(d.Logger, d.Tracer, d.Meter, d.DB, d.Guardian, d.Authz, d.Posthog, d.Telemetry, d.Billing, d.BillingTracker,
 		mcpservers.NewToolDispositionCache(d.Logger, d.DB, cacheImpl), platformmcp.NewSelectedUseRecorder(d.DB), toolfilter.NewSessionToolWitnessStore(d.Logger, cacheImpl), checkpoint, d.MCPRisk, d.ProtectedResources)
+	proxy.TunnelMetrics = d.TunnelMetrics
 	cidrs := c.StringSlice("tunnel-gateway-cidr-blocks")
 	for _, cidr := range cidrs {
 		if _, _, err := net.ParseCIDR(cidr); err != nil {
@@ -101,7 +130,7 @@ func newMCPService(c *cli.Context, d mcpServiceDependencies) (*mcp.Service, erro
 		}
 	}
 	service, err := mcp.NewService(d.Logger, d.Tracer, d.Meter, d.DB, d.Sessions, d.ChatSessions, d.Environment, d.Posthog, d.Features, d.ServerURL, d.SiteURL, d.Encryption, cacheImpl,
-		d.Guardian, d.Functions, d.BillingTracker, d.Billing, d.Telemetry, d.TelemetryService, d.RAG, d.Triggers, d.Authz, d.AssistantTokens, d.PrincipalCredentials, d.ShadowMCP, d.Audit, d.PlatformExtras, d.PlatformFeatureChecker, d.PlatformToolsets,
+		d.Guardian, d.Functions, d.BillingTracker, d.Billing, d.Telemetry, d.ToolCallLogs, d.TelemetryService, d.RAG, d.Triggers, d.Authz, d.AssistantTokens, d.PrincipalCredentials, d.ShadowMCP, d.Audit, d.PlatformExtras, d.PlatformFeatureChecker, d.PlatformToolsets,
 		d.Identity, usersessions.NewSigner(c.String(usersessions.JWTSigningKeyFlag)), d.Challenges, d.MCPRisk, proxy, route.NewRedis(d.Redis), c.String("tunnel-forward-token"), cidrs, d.CallerAssertions, d.Redis,
 		mcp.TunnelPublicConfig{SessionTTL: 0, LiveSessionCap: c.Int("public-tunnels-live-session-cap"), InitializeRate: ratelimit.Rate{Tokens: 0, Interval: 0, Burst: 0}, RequestRate: ratelimit.Rate{Tokens: 0, Interval: 0, Burst: 0}, MaxRequestLifetime: 0},
 		mcp.MetaRuntimeConfig{MemberCallTimeout: c.Duration("meta-member-call-timeout"), ValidationTimeout: 0, AutoVerifyWait: 0, RecheckInterval: c.Duration("remote-session-recheck-interval")})
@@ -110,16 +139,46 @@ func newMCPService(c *cli.Context, d mcpServiceDependencies) (*mcp.Service, erro
 	}
 	service.SetCallbackOrigins(d.CallbackOrigins)
 	service.SetPlatformHosts(d.PlatformHosts)
+	service.SetOpenAIAppsChallengeToken(c.String("openai-apps-challenge-token"))
+	if err := service.SetMCPRegistryAuth(c.String("mcp-registry-auth")); err != nil {
+		return nil, fmt.Errorf("configure MCP registry auth: %w", err)
+	}
 	delegation := remotesessions.NewDelegationService(d.DB, d.Encryption, d.Challenges)
 	service.SetFederatedLoginConsumer(mcp.NewFederatedDelegationConsumer(delegation))
+	chainer, err := newIdentityChainer(d.Logger, d.Meter, d.DB, d.Redis, d.Encryption, d.Guardian, d.Challenges, delegation, d.Audit)
+	if err != nil {
+		return nil, err
+	}
+	chainer.SetSpeakeasyIssuer(d.IssuerGate, d.IssuerSigner, d.Features)
+	service.SetIdentityChainer(chainer)
+	return service, nil
+}
+
+func newIdentityChainer(logger *slog.Logger, meter metric.MeterProvider, db *pgxpool.Pool, redisClient *redis.Client, enc *encryption.Client, policy *guardian.Policy, challenges *remotesessions.ChallengeManager, delegation *remotesessions.DelegationService, auditLogger *audit.Logger) (*identitychaining.Chainer, error) {
 	// Identity-assertion grants are verified against the trusted IdP's keys
 	// under the same fetch budgets as its ID tokens.
-	assertionKeys, err := remotesessions.NewIDTokenKeyResolver(d.Logger, d.Guardian, d.Meter, ratelimit.NewRedisStore(d.Redis))
+	assertionKeys, err := remotesessions.NewIDTokenKeyResolver(logger, policy, meter, ratelimit.NewRedisStore(redisClient))
 	if err != nil {
 		return nil, fmt.Errorf("initialize identity chaining key resolver: %w", err)
 	}
-	chainer := identitychaining.New(d.Logger, d.DB, d.Encryption, d.Challenges, delegation, assertionKeys, cacheImpl)
-	chainer.SetObserver(oktaresourceconnections.NewObserver(d.Logger, d.Meter, d.DB, d.Audit))
-	service.SetIdentityChainer(chainer)
-	return service, nil
+	chainer := identitychaining.New(logger, db, enc, challenges, delegation, assertionKeys, cache.NewRedisCacheAdapter(redisClient))
+	chainer.SetResourceResolver(challenges.ResolveEMAResource)
+	chainer.SetCachedResourceResolver(challenges.CachedEMAResource)
+	chainer.SetMeterProvider(meter)
+	chainer.SetObserver(oktaresourceconnections.NewObserver(logger, meter, db, auditLogger))
+	return chainer, nil
+}
+
+// newTunnelMetrics starts request metrics for an MCP server.
+// If the publisher is unavailable, requests continue without metrics.
+func newTunnelMetrics(ctx context.Context, logger *slog.Logger, broker gcp.PublisherBroker) (*metrics.Collector, func(context.Context) error) {
+	const publisherInitTimeout = 5 * time.Second
+	initCtx, cancel := context.WithTimeout(ctx, publisherInitTimeout)
+	defer cancel()
+	pub, err := metricspub.NewPublisher(initCtx, broker)
+	if err != nil {
+		logger.WarnContext(ctx, "tunnel metrics unavailable", attr.SlogError(err))
+		return nil, func(context.Context) error { return nil }
+	}
+	return metricspub.Start(ctx, pub)
 }

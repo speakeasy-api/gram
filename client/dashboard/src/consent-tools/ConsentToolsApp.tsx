@@ -1,11 +1,6 @@
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { CfWorkerJsonSchemaValidator } from "@modelcontextprotocol/sdk/validation/cfworker";
-import {
-  StreamableHTTPClientTransport,
-  StreamableHTTPError,
-} from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import { StreamableHTTPError } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { AlertTriangle, Check } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useState } from "react";
 
 import {
   ANNOTATION_OPTIONS,
@@ -13,7 +8,13 @@ import {
 } from "@/components/tool-selection/annotations";
 import { cn } from "@/lib/utils";
 
-import { isRecord, type ConsentSelection } from "./prefill";
+import type { ConsentSelection } from "./prefill";
+import {
+  fetchConsentInventory,
+  type ConsentInventory,
+  type ConsentTool,
+  type RoleHiddenTools,
+} from "./consentInventory";
 
 export interface ConsentToolsAppProps {
   toolsUrl: string;
@@ -22,30 +23,20 @@ export interface ConsentToolsAppProps {
   formId: string;
   approveButtonId: string;
   consentEnabled: boolean;
+  /**
+   * Set by the server when every service is linked or reached through
+   * identity chaining: a "not connected" inventory then only means chaining
+   * runs after approval, so access is given with all tools.
+   */
+  inventoryDeferred: boolean;
   serverName: string;
   prefill: ConsentSelection;
 }
 
-interface ConsentTool {
-  name: string;
-  annotations: ToolAnnotation[];
-}
-
-interface RoleHiddenTools {
-  /** Full count of tools the caller's role hides from this inventory. */
-  count: number;
-  /** Hidden tool names; the server caps the list, so it may trail count. */
-  names: string[];
-}
-
-interface ConsentInventory {
-  tools: ConsentTool[];
-  roleHiddenTools: RoleHiddenTools;
-}
-
 type ConsentPhase =
   | { name: "loading" }
-  | { name: "error"; conflict: boolean; message: string }
+  | { name: "error"; conflict: boolean; message: string; reload?: boolean }
+  | { name: "deferred" }
   | { name: "ready"; inventory: ConsentInventory };
 
 /**
@@ -64,6 +55,28 @@ type ToolAccessMode = "all" | "specific";
 const GENERIC_ERROR_MESSAGE = "Couldn't load this server's tools.";
 
 /**
+ * The consent page script raises this, and sets the matching attribute on
+ * the document element, when any identity-chained service is refused. A
+ * deferred page is chain-only, so its inventory can no longer load after
+ * approval.
+ */
+export const CHAIN_REJECTED_EVENT = "gram:consent-chain-rejected";
+const CHAIN_REJECTED_ATTRIBUTE = "data-consent-chain-rejected";
+
+const CHAIN_REJECTED_PHASE: ConsentPhase = {
+  name: "error",
+  conflict: true,
+  message:
+    "Your identity provider couldn't connect this service, so its tools can't load.",
+};
+
+function chainRejectedOnPage(): boolean {
+  return (
+    document.documentElement.getAttribute(CHAIN_REJECTED_ATTRIBUTE) === "true"
+  );
+}
+
+/**
  * Chip labels for the group filters. Deliberately terse: all six groups have to
  * sit on one line at the consent card's width, and the full label still names
  * the group in the "Select all in …" control below them.
@@ -75,96 +88,20 @@ const SHORT_GROUP_LABELS: Record<ToolAnnotation, string> = {
   open_world: "Open world",
 };
 
-/**
- * The island is an ordinary MCP client of the consent-scoped transport: the
- * official SDK performs initialize, paginated tools/list, and session
- * termination against the URL the page provided; state and CSRF ride
- * headers so every message stays pure MCP. The attempt id keys the
- * server-side inventory snapshot this session accumulates — approval later
- * binds to it, so the caller must submit it only after this resolves.
- */
-async function fetchConsentInventory(
-  toolsUrl: string,
-  state: string,
-  csrfToken: string,
-  attempt: string,
-): Promise<ConsentInventory> {
-  const transport = new StreamableHTTPClientTransport(
-    new URL(toolsUrl, window.location.origin),
-    {
-      requestInit: {
-        credentials: "omit",
-        headers: {
-          "Gram-Consent-State": state,
-          "Gram-Consent-Csrf": csrfToken,
-          "Gram-Consent-Inventory-Attempt": attempt,
-        },
-      },
-    },
-  );
-  // The consent page CSP has no unsafe-eval, so the SDK's default Ajv
-  // validator (new Function codegen) throws on any upstream tool that
-  // declares an outputSchema. The cfworker validator interprets schemas
-  // instead of compiling them.
-  const client = new Client(
-    { name: "gram-consent", version: "1.0.0" },
-    { jsonSchemaValidator: new CfWorkerJsonSchemaValidator() },
-  );
-  try {
-    await client.connect(transport);
-    const tools: ConsentTool[] = [];
-    const seen = new Set<string>();
-    const roleHiddenTools: RoleHiddenTools = { count: 0, names: [] };
-    let cursor: string | undefined = undefined;
-    do {
-      const page = await client.listTools(cursor ? { cursor } : undefined);
-      for (const tool of page.tools) {
-        if (seen.has(tool.name)) throw new Error("duplicate tool name");
-        seen.add(tool.name);
-        tools.push({
-          name: tool.name,
-          annotations: annotationsFromHints(tool.annotations),
-        });
-      }
-      const meta = (page as { _meta?: Record<string, unknown> })._meta;
-      const hidden = meta?.["gram.dev/roleHiddenTools"];
-      if (isRecord(hidden)) {
-        if (typeof hidden.count === "number" && hidden.count > 0) {
-          roleHiddenTools.count += hidden.count;
-        }
-        if (Array.isArray(hidden.names)) {
-          for (const name of hidden.names) {
-            if (typeof name === "string" && name !== "") {
-              roleHiddenTools.names.push(name);
-            }
-          }
-        }
-      }
-      cursor = page.nextCursor;
-    } while (cursor);
-    return { tools, roleHiddenTools };
-  } finally {
-    await transport.terminateSession().catch(() => undefined);
-    await client.close().catch(() => undefined);
-  }
-}
-
-const HINT_TO_ANNOTATION: ReadonlyArray<[string, ToolAnnotation]> = [
-  ["readOnlyHint", "read_only"],
-  ["destructiveHint", "destructive"],
-  ["idempotentHint", "idempotent"],
-  ["openWorldHint", "open_world"],
-];
-
-function annotationsFromHints(value: unknown): ToolAnnotation[] {
-  if (!isRecord(value)) return [];
-  return HINT_TO_ANNOTATION.filter(([hint]) => value[hint] === true).map(
-    ([, annotation]) => annotation,
-  );
-}
-
-function errorPhase(err: unknown): ConsentPhase {
+function errorPhase(err: unknown, canDefer: boolean): ConsentPhase {
   const status = err instanceof StreamableHTTPError ? err.code : undefined;
+  if (status === 412) {
+    return {
+      name: "error",
+      conflict: false,
+      message:
+        "This server’s configuration changed. Reload this page to review access.",
+      reload: true,
+    };
+  }
+  if (status === 409 && canDefer) {
+    return { name: "deferred" };
+  }
   if (status === 409) {
     return {
       name: "error",
@@ -194,10 +131,11 @@ export function ConsentToolsApp({
   formId,
   approveButtonId,
   consentEnabled,
+  inventoryDeferred,
   serverName,
   prefill,
 }: ConsentToolsAppProps): JSX.Element {
-  const [phase, setPhase] = useState<ConsentPhase>({ name: "loading" });
+  const [loadPhase, setPhase] = useState<ConsentPhase>({ name: "loading" });
   const [attemptID, setAttemptID] = useState(() => crypto.randomUUID());
   // Tool access is a two-step choice: almost nobody narrows the grant, so the
   // picker stays behind "Specific tools" and "All tools" is the one-glance
@@ -256,18 +194,36 @@ export function ConsentToolsApp({
       setPhase({ name: "ready", inventory });
     };
     load().catch((err: unknown) => {
-      if (!cancelled) setPhase(errorPhase(err));
+      // A stored narrower selection must never be replaced by all tools.
+      if (!cancelled) {
+        setPhase(errorPhase(err, inventoryDeferred && prefill === null));
+      }
     });
     return () => {
       cancelled = true;
     };
-  }, [attemptID, toolsUrl, state, csrfToken, prefill]);
+  }, [attemptID, toolsUrl, state, csrfToken, prefill, inventoryDeferred]);
+
+  const [chainRejected, setChainRejected] = useState(chainRejectedOnPage);
+  useEffect(() => {
+    const onRejected = () => setChainRejected(true);
+    document.addEventListener(CHAIN_REJECTED_EVENT, onRejected);
+    if (chainRejectedOnPage()) setChainRejected(true);
+    return () => document.removeEventListener(CHAIN_REJECTED_EVENT, onRejected);
+  }, []);
+  const phase: ConsentPhase =
+    loadPhase.name === "deferred" && chainRejected
+      ? CHAIN_REJECTED_PHASE
+      : loadPhase;
 
   // Approval is gated on both a successfully loaded inventory and the
   // server-rendered remote-session readiness flag; anything else (loading,
-  // error, retry, malformed response) keeps the button disabled.
-  const approveReady = phase.name === "ready" && consentEnabled;
-  useEffect(() => {
+  // error, retry, malformed response) keeps the button disabled. A layout
+  // effect keeps the server-rendered button in step with the commit, so it is
+  // never enabled while the island already shows a blocking error.
+  const approveReady =
+    (phase.name === "ready" || phase.name === "deferred") && consentEnabled;
+  useLayoutEffect(() => {
     const button = document.getElementById(approveButtonId);
     if (button instanceof HTMLButtonElement) {
       button.dataset["consentSelfReady"] = approveReady ? "true" : "false";
@@ -317,6 +273,32 @@ export function ConsentToolsApp({
     );
   }
 
+  if (phase.name === "deferred") {
+    return (
+      <div
+        role="status"
+        className="border-border text-muted-foreground space-y-1 border px-3 py-3 text-sm"
+      >
+        <p>
+          Tools load after you give access. This connection starts with all
+          tools available to you, because tool selection needs the service
+          connected first.
+        </p>
+        <input type="hidden" name="tool_filtering" value="off" form={formId} />
+        <p>
+          Signed in to the service separately?{" "}
+          <button
+            type="button"
+            onClick={() => setAttemptID(crypto.randomUUID())}
+            className="text-primary hover:underline"
+          >
+            Load tools
+          </button>
+        </p>
+      </div>
+    );
+  }
+
   if (phase.name === "error") {
     return (
       <div
@@ -334,10 +316,13 @@ export function ConsentToolsApp({
         )}
         <button
           type="button"
-          onClick={() => setAttemptID(crypto.randomUUID())}
+          onClick={() => {
+            if (phase.reload) window.location.reload();
+            else setAttemptID(crypto.randomUUID());
+          }}
           className="text-primary hover:underline"
         >
-          Retry
+          {phase.reload ? "Reload page" : "Retry"}
         </button>
       </div>
     );

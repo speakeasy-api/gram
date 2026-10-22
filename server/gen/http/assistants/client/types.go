@@ -24,9 +24,13 @@ type CreateAssistantRequestBody struct {
 	Model string `form:"model" json:"model" xml:"model"`
 	// The system instructions for the assistant.
 	Instructions string `form:"instructions" json:"instructions" xml:"instructions"`
-	// Toolsets available to the assistant.
+	// Hosted (toolset-backed) MCP servers to attach, by toolset slug. When sent,
+	// replaces the assistant's hosted servers.
 	Toolsets []*AssistantToolsetRefRequestBody `form:"toolsets" json:"toolsets" xml:"toolsets"`
-	// MCP servers attached directly to the assistant (remote- or tunnelled-backed).
+	// MCP servers to attach. When sent, replaces the assistant's servers that are
+	// not hosted (toolset-backed). A hosted server listed here is attached if it
+	// is not already; attached hosted servers are left unchanged, and toolsets
+	// governs them when both are sent.
 	McpServers []*AssistantMCPServerRefRequestBody `form:"mcp_servers,omitempty" json:"mcp_servers,omitempty" xml:"mcp_servers,omitempty"`
 	// Optional warm runtime TTL in seconds.
 	WarmTTLSeconds *int `form:"warm_ttl_seconds,omitempty" json:"warm_ttl_seconds,omitempty" xml:"warm_ttl_seconds,omitempty"`
@@ -59,14 +63,24 @@ type UpdateAssistantRequestBody struct {
 	Model *string `form:"model,omitempty" json:"model,omitempty" xml:"model,omitempty"`
 	// The system instructions for the assistant.
 	Instructions *string `form:"instructions,omitempty" json:"instructions,omitempty" xml:"instructions,omitempty"`
-	// Toolsets available to the assistant.
+	// Hosted (toolset-backed) MCP servers to attach, by toolset slug. When sent,
+	// replaces the assistant's hosted servers.
 	Toolsets []*AssistantToolsetRefRequestBody `form:"toolsets,omitempty" json:"toolsets,omitempty" xml:"toolsets,omitempty"`
-	// MCP servers attached directly to the assistant (remote- or tunnelled-backed).
+	// MCP servers to attach. When sent, replaces the assistant's servers that are
+	// not hosted (toolset-backed). A hosted server listed here is attached if it
+	// is not already; attached hosted servers are left unchanged, and toolsets
+	// governs them when both are sent.
 	McpServers []*AssistantMCPServerRefRequestBody `form:"mcp_servers,omitempty" json:"mcp_servers,omitempty" xml:"mcp_servers,omitempty"`
 	// Warm runtime TTL in seconds.
 	WarmTTLSeconds *int `form:"warm_ttl_seconds,omitempty" json:"warm_ttl_seconds,omitempty" xml:"warm_ttl_seconds,omitempty"`
 	// Maximum active warm runtimes.
 	MaxConcurrency *int `form:"max_concurrency,omitempty" json:"max_concurrency,omitempty" xml:"max_concurrency,omitempty"`
+	// Desired runtime protocol: 2 for the default runtime, 3 for Kit. Switching
+	// requires the assistant and all background work to be settled.
+	RuntimeVersion *int `form:"runtime_version,omitempty" json:"runtime_version,omitempty" xml:"runtime_version,omitempty"`
+	// The runtime version read before requesting a switch. Required with
+	// runtime_version; conflicts require a fresh read.
+	ExpectedRuntimeVersion *int `form:"expected_runtime_version,omitempty" json:"expected_runtime_version,omitempty" xml:"expected_runtime_version,omitempty"`
 	// The assistant status.
 	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
 }
@@ -127,9 +141,11 @@ type GetAssistantResponseBody struct {
 	Model *string `form:"model,omitempty" json:"model,omitempty" xml:"model,omitempty"`
 	// The system instructions for the assistant.
 	Instructions *string `form:"instructions,omitempty" json:"instructions,omitempty" xml:"instructions,omitempty"`
-	// Toolsets available to the assistant.
+	// Hosted (toolset-backed) MCP servers attached to the assistant, by toolset
+	// slug.
 	Toolsets []*AssistantToolsetRefResponseBody `form:"toolsets,omitempty" json:"toolsets,omitempty" xml:"toolsets,omitempty"`
-	// MCP servers attached directly to the assistant (remote- or tunnelled-backed).
+	// MCP servers attached to the assistant that are not hosted (toolset-backed);
+	// hosted servers are listed under toolsets.
 	McpServers []*AssistantMCPServerRefResponseBody `form:"mcp_servers,omitempty" json:"mcp_servers,omitempty" xml:"mcp_servers,omitempty"`
 	// Skills attached to the assistant.
 	Skills []*AssistantSkillRefResponseBody `form:"skills,omitempty" json:"skills,omitempty" xml:"skills,omitempty"`
@@ -137,6 +153,9 @@ type GetAssistantResponseBody struct {
 	WarmTTLSeconds *int `form:"warm_ttl_seconds,omitempty" json:"warm_ttl_seconds,omitempty" xml:"warm_ttl_seconds,omitempty"`
 	// Maximum active warm runtimes for the assistant.
 	MaxConcurrency *int `form:"max_concurrency,omitempty" json:"max_concurrency,omitempty" xml:"max_concurrency,omitempty"`
+	// Desired runtime protocol version: 2 is the default runtime, 3 is Kit.
+	// Runtime changes require a settled assistant and available destination.
+	RuntimeVersion *int `form:"runtime_version,omitempty" json:"runtime_version,omitempty" xml:"runtime_version,omitempty"`
 	// The assistant status.
 	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
 	// Creation timestamp.
@@ -166,9 +185,11 @@ type CreateAssistantResponseBody struct {
 	Model *string `form:"model,omitempty" json:"model,omitempty" xml:"model,omitempty"`
 	// The system instructions for the assistant.
 	Instructions *string `form:"instructions,omitempty" json:"instructions,omitempty" xml:"instructions,omitempty"`
-	// Toolsets available to the assistant.
+	// Hosted (toolset-backed) MCP servers attached to the assistant, by toolset
+	// slug.
 	Toolsets []*AssistantToolsetRefResponseBody `form:"toolsets,omitempty" json:"toolsets,omitempty" xml:"toolsets,omitempty"`
-	// MCP servers attached directly to the assistant (remote- or tunnelled-backed).
+	// MCP servers attached to the assistant that are not hosted (toolset-backed);
+	// hosted servers are listed under toolsets.
 	McpServers []*AssistantMCPServerRefResponseBody `form:"mcp_servers,omitempty" json:"mcp_servers,omitempty" xml:"mcp_servers,omitempty"`
 	// Skills attached to the assistant.
 	Skills []*AssistantSkillRefResponseBody `form:"skills,omitempty" json:"skills,omitempty" xml:"skills,omitempty"`
@@ -176,6 +197,9 @@ type CreateAssistantResponseBody struct {
 	WarmTTLSeconds *int `form:"warm_ttl_seconds,omitempty" json:"warm_ttl_seconds,omitempty" xml:"warm_ttl_seconds,omitempty"`
 	// Maximum active warm runtimes for the assistant.
 	MaxConcurrency *int `form:"max_concurrency,omitempty" json:"max_concurrency,omitempty" xml:"max_concurrency,omitempty"`
+	// Desired runtime protocol version: 2 is the default runtime, 3 is Kit.
+	// Runtime changes require a settled assistant and available destination.
+	RuntimeVersion *int `form:"runtime_version,omitempty" json:"runtime_version,omitempty" xml:"runtime_version,omitempty"`
 	// The assistant status.
 	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
 	// Creation timestamp.
@@ -205,9 +229,11 @@ type UpgradeAssistantIdentityResponseBody struct {
 	Model *string `form:"model,omitempty" json:"model,omitempty" xml:"model,omitempty"`
 	// The system instructions for the assistant.
 	Instructions *string `form:"instructions,omitempty" json:"instructions,omitempty" xml:"instructions,omitempty"`
-	// Toolsets available to the assistant.
+	// Hosted (toolset-backed) MCP servers attached to the assistant, by toolset
+	// slug.
 	Toolsets []*AssistantToolsetRefResponseBody `form:"toolsets,omitempty" json:"toolsets,omitempty" xml:"toolsets,omitempty"`
-	// MCP servers attached directly to the assistant (remote- or tunnelled-backed).
+	// MCP servers attached to the assistant that are not hosted (toolset-backed);
+	// hosted servers are listed under toolsets.
 	McpServers []*AssistantMCPServerRefResponseBody `form:"mcp_servers,omitempty" json:"mcp_servers,omitempty" xml:"mcp_servers,omitempty"`
 	// Skills attached to the assistant.
 	Skills []*AssistantSkillRefResponseBody `form:"skills,omitempty" json:"skills,omitempty" xml:"skills,omitempty"`
@@ -215,6 +241,9 @@ type UpgradeAssistantIdentityResponseBody struct {
 	WarmTTLSeconds *int `form:"warm_ttl_seconds,omitempty" json:"warm_ttl_seconds,omitempty" xml:"warm_ttl_seconds,omitempty"`
 	// Maximum active warm runtimes for the assistant.
 	MaxConcurrency *int `form:"max_concurrency,omitempty" json:"max_concurrency,omitempty" xml:"max_concurrency,omitempty"`
+	// Desired runtime protocol version: 2 is the default runtime, 3 is Kit.
+	// Runtime changes require a settled assistant and available destination.
+	RuntimeVersion *int `form:"runtime_version,omitempty" json:"runtime_version,omitempty" xml:"runtime_version,omitempty"`
 	// The assistant status.
 	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
 	// Creation timestamp.
@@ -244,9 +273,11 @@ type UpdateAssistantResponseBody struct {
 	Model *string `form:"model,omitempty" json:"model,omitempty" xml:"model,omitempty"`
 	// The system instructions for the assistant.
 	Instructions *string `form:"instructions,omitempty" json:"instructions,omitempty" xml:"instructions,omitempty"`
-	// Toolsets available to the assistant.
+	// Hosted (toolset-backed) MCP servers attached to the assistant, by toolset
+	// slug.
 	Toolsets []*AssistantToolsetRefResponseBody `form:"toolsets,omitempty" json:"toolsets,omitempty" xml:"toolsets,omitempty"`
-	// MCP servers attached directly to the assistant (remote- or tunnelled-backed).
+	// MCP servers attached to the assistant that are not hosted (toolset-backed);
+	// hosted servers are listed under toolsets.
 	McpServers []*AssistantMCPServerRefResponseBody `form:"mcp_servers,omitempty" json:"mcp_servers,omitempty" xml:"mcp_servers,omitempty"`
 	// Skills attached to the assistant.
 	Skills []*AssistantSkillRefResponseBody `form:"skills,omitempty" json:"skills,omitempty" xml:"skills,omitempty"`
@@ -254,6 +285,9 @@ type UpdateAssistantResponseBody struct {
 	WarmTTLSeconds *int `form:"warm_ttl_seconds,omitempty" json:"warm_ttl_seconds,omitempty" xml:"warm_ttl_seconds,omitempty"`
 	// Maximum active warm runtimes for the assistant.
 	MaxConcurrency *int `form:"max_concurrency,omitempty" json:"max_concurrency,omitempty" xml:"max_concurrency,omitempty"`
+	// Desired runtime protocol version: 2 is the default runtime, 3 is Kit.
+	// Runtime changes require a settled assistant and available destination.
+	RuntimeVersion *int `form:"runtime_version,omitempty" json:"runtime_version,omitempty" xml:"runtime_version,omitempty"`
 	// The assistant status.
 	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
 	// Creation timestamp.
@@ -308,9 +342,11 @@ type GetManagedAssistantResponseBody struct {
 	Model *string `form:"model,omitempty" json:"model,omitempty" xml:"model,omitempty"`
 	// The system instructions for the assistant.
 	Instructions *string `form:"instructions,omitempty" json:"instructions,omitempty" xml:"instructions,omitempty"`
-	// Toolsets available to the assistant.
+	// Hosted (toolset-backed) MCP servers attached to the assistant, by toolset
+	// slug.
 	Toolsets []*AssistantToolsetRefResponseBody `form:"toolsets,omitempty" json:"toolsets,omitempty" xml:"toolsets,omitempty"`
-	// MCP servers attached directly to the assistant (remote- or tunnelled-backed).
+	// MCP servers attached to the assistant that are not hosted (toolset-backed);
+	// hosted servers are listed under toolsets.
 	McpServers []*AssistantMCPServerRefResponseBody `form:"mcp_servers,omitempty" json:"mcp_servers,omitempty" xml:"mcp_servers,omitempty"`
 	// Skills attached to the assistant.
 	Skills []*AssistantSkillRefResponseBody `form:"skills,omitempty" json:"skills,omitempty" xml:"skills,omitempty"`
@@ -318,6 +354,9 @@ type GetManagedAssistantResponseBody struct {
 	WarmTTLSeconds *int `form:"warm_ttl_seconds,omitempty" json:"warm_ttl_seconds,omitempty" xml:"warm_ttl_seconds,omitempty"`
 	// Maximum active warm runtimes for the assistant.
 	MaxConcurrency *int `form:"max_concurrency,omitempty" json:"max_concurrency,omitempty" xml:"max_concurrency,omitempty"`
+	// Desired runtime protocol version: 2 is the default runtime, 3 is Kit.
+	// Runtime changes require a settled assistant and available destination.
+	RuntimeVersion *int `form:"runtime_version,omitempty" json:"runtime_version,omitempty" xml:"runtime_version,omitempty"`
 	// The assistant status.
 	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
 	// Creation timestamp.
@@ -347,9 +386,11 @@ type EnsureManagedAssistantResponseBody struct {
 	Model *string `form:"model,omitempty" json:"model,omitempty" xml:"model,omitempty"`
 	// The system instructions for the assistant.
 	Instructions *string `form:"instructions,omitempty" json:"instructions,omitempty" xml:"instructions,omitempty"`
-	// Toolsets available to the assistant.
+	// Hosted (toolset-backed) MCP servers attached to the assistant, by toolset
+	// slug.
 	Toolsets []*AssistantToolsetRefResponseBody `form:"toolsets,omitempty" json:"toolsets,omitempty" xml:"toolsets,omitempty"`
-	// MCP servers attached directly to the assistant (remote- or tunnelled-backed).
+	// MCP servers attached to the assistant that are not hosted (toolset-backed);
+	// hosted servers are listed under toolsets.
 	McpServers []*AssistantMCPServerRefResponseBody `form:"mcp_servers,omitempty" json:"mcp_servers,omitempty" xml:"mcp_servers,omitempty"`
 	// Skills attached to the assistant.
 	Skills []*AssistantSkillRefResponseBody `form:"skills,omitempty" json:"skills,omitempty" xml:"skills,omitempty"`
@@ -357,6 +398,9 @@ type EnsureManagedAssistantResponseBody struct {
 	WarmTTLSeconds *int `form:"warm_ttl_seconds,omitempty" json:"warm_ttl_seconds,omitempty" xml:"warm_ttl_seconds,omitempty"`
 	// Maximum active warm runtimes for the assistant.
 	MaxConcurrency *int `form:"max_concurrency,omitempty" json:"max_concurrency,omitempty" xml:"max_concurrency,omitempty"`
+	// Desired runtime protocol version: 2 is the default runtime, 3 is Kit.
+	// Runtime changes require a settled assistant and available destination.
+	RuntimeVersion *int `form:"runtime_version,omitempty" json:"runtime_version,omitempty" xml:"runtime_version,omitempty"`
 	// The assistant status.
 	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
 	// Creation timestamp.
@@ -2245,9 +2289,11 @@ type AssistantResponseBody struct {
 	Model *string `form:"model,omitempty" json:"model,omitempty" xml:"model,omitempty"`
 	// The system instructions for the assistant.
 	Instructions *string `form:"instructions,omitempty" json:"instructions,omitempty" xml:"instructions,omitempty"`
-	// Toolsets available to the assistant.
+	// Hosted (toolset-backed) MCP servers attached to the assistant, by toolset
+	// slug.
 	Toolsets []*AssistantToolsetRefResponseBody `form:"toolsets,omitempty" json:"toolsets,omitempty" xml:"toolsets,omitempty"`
-	// MCP servers attached directly to the assistant (remote- or tunnelled-backed).
+	// MCP servers attached to the assistant that are not hosted (toolset-backed);
+	// hosted servers are listed under toolsets.
 	McpServers []*AssistantMCPServerRefResponseBody `form:"mcp_servers,omitempty" json:"mcp_servers,omitempty" xml:"mcp_servers,omitempty"`
 	// Skills attached to the assistant.
 	Skills []*AssistantSkillRefResponseBody `form:"skills,omitempty" json:"skills,omitempty" xml:"skills,omitempty"`
@@ -2255,6 +2301,9 @@ type AssistantResponseBody struct {
 	WarmTTLSeconds *int `form:"warm_ttl_seconds,omitempty" json:"warm_ttl_seconds,omitempty" xml:"warm_ttl_seconds,omitempty"`
 	// Maximum active warm runtimes for the assistant.
 	MaxConcurrency *int `form:"max_concurrency,omitempty" json:"max_concurrency,omitempty" xml:"max_concurrency,omitempty"`
+	// Desired runtime protocol version: 2 is the default runtime, 3 is Kit.
+	// Runtime changes require a settled assistant and available destination.
+	RuntimeVersion *int `form:"runtime_version,omitempty" json:"runtime_version,omitempty" xml:"runtime_version,omitempty"`
 	// The assistant status.
 	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
 	// Creation timestamp.
@@ -2275,8 +2324,8 @@ type AssistantToolsetRefResponseBody struct {
 // AssistantMCPServerRefResponseBody is used to define fields on response body
 // types.
 type AssistantMCPServerRefResponseBody struct {
-	// The MCP server slug exposed to the assistant. Covers remote- and
-	// tunnelled-backed MCP servers, which have no toolset to attach.
+	// The MCP server slug exposed to the assistant. Covers every backend,
+	// including hosted (toolset-backed) servers.
 	McpServerSlug *string `form:"mcp_server_slug,omitempty" json:"mcp_server_slug,omitempty" xml:"mcp_server_slug,omitempty"`
 	// Optional environment slug used when connecting to the MCP server.
 	EnvironmentSlug *string `form:"environment_slug,omitempty" json:"environment_slug,omitempty" xml:"environment_slug,omitempty"`
@@ -2309,8 +2358,8 @@ type AssistantToolsetRefRequestBody struct {
 // AssistantMCPServerRefRequestBody is used to define fields on request body
 // types.
 type AssistantMCPServerRefRequestBody struct {
-	// The MCP server slug exposed to the assistant. Covers remote- and
-	// tunnelled-backed MCP servers, which have no toolset to attach.
+	// The MCP server slug exposed to the assistant. Covers every backend,
+	// including hosted (toolset-backed) servers.
 	McpServerSlug string `form:"mcp_server_slug" json:"mcp_server_slug" xml:"mcp_server_slug"`
 	// Optional environment slug used when connecting to the MCP server.
 	EnvironmentSlug *string `form:"environment_slug,omitempty" json:"environment_slug,omitempty" xml:"environment_slug,omitempty"`
@@ -2381,13 +2430,15 @@ func NewUpgradeAssistantIdentityRequestBody(p *assistants.UpgradeAssistantIdenti
 // of the "updateAssistant" endpoint of the "assistants" service.
 func NewUpdateAssistantRequestBody(p *assistants.UpdateAssistantPayload) *UpdateAssistantRequestBody {
 	body := &UpdateAssistantRequestBody{
-		ID:             p.ID,
-		Name:           p.Name,
-		Model:          p.Model,
-		Instructions:   p.Instructions,
-		WarmTTLSeconds: p.WarmTTLSeconds,
-		MaxConcurrency: p.MaxConcurrency,
-		Status:         p.Status,
+		ID:                     p.ID,
+		Name:                   p.Name,
+		Model:                  p.Model,
+		Instructions:           p.Instructions,
+		WarmTTLSeconds:         p.WarmTTLSeconds,
+		MaxConcurrency:         p.MaxConcurrency,
+		RuntimeVersion:         p.RuntimeVersion,
+		ExpectedRuntimeVersion: p.ExpectedRuntimeVersion,
+		Status:                 p.Status,
 	}
 	if p.Toolsets != nil {
 		body.Toolsets = make([]*AssistantToolsetRefRequestBody, len(p.Toolsets))
@@ -2630,6 +2681,7 @@ func NewGetAssistantAssistantOK(body *GetAssistantResponseBody) *types.Assistant
 		Instructions:    *body.Instructions,
 		WarmTTLSeconds:  *body.WarmTTLSeconds,
 		MaxConcurrency:  *body.MaxConcurrency,
+		RuntimeVersion:  *body.RuntimeVersion,
 		Status:          *body.Status,
 		CreatedAt:       *body.CreatedAt,
 		UpdatedAt:       *body.UpdatedAt,
@@ -2826,6 +2878,7 @@ func NewCreateAssistantAssistantOK(body *CreateAssistantResponseBody) *types.Ass
 		Instructions:    *body.Instructions,
 		WarmTTLSeconds:  *body.WarmTTLSeconds,
 		MaxConcurrency:  *body.MaxConcurrency,
+		RuntimeVersion:  *body.RuntimeVersion,
 		Status:          *body.Status,
 		CreatedAt:       *body.CreatedAt,
 		UpdatedAt:       *body.UpdatedAt,
@@ -3022,6 +3075,7 @@ func NewUpgradeAssistantIdentityAssistantOK(body *UpgradeAssistantIdentityRespon
 		Instructions:    *body.Instructions,
 		WarmTTLSeconds:  *body.WarmTTLSeconds,
 		MaxConcurrency:  *body.MaxConcurrency,
+		RuntimeVersion:  *body.RuntimeVersion,
 		Status:          *body.Status,
 		CreatedAt:       *body.CreatedAt,
 		UpdatedAt:       *body.UpdatedAt,
@@ -3218,6 +3272,7 @@ func NewUpdateAssistantAssistantOK(body *UpdateAssistantResponseBody) *types.Ass
 		Instructions:    *body.Instructions,
 		WarmTTLSeconds:  *body.WarmTTLSeconds,
 		MaxConcurrency:  *body.MaxConcurrency,
+		RuntimeVersion:  *body.RuntimeVersion,
 		Status:          *body.Status,
 		CreatedAt:       *body.CreatedAt,
 		UpdatedAt:       *body.UpdatedAt,
@@ -3888,6 +3943,7 @@ func NewGetManagedAssistantAssistantOK(body *GetManagedAssistantResponseBody) *t
 		Instructions:    *body.Instructions,
 		WarmTTLSeconds:  *body.WarmTTLSeconds,
 		MaxConcurrency:  *body.MaxConcurrency,
+		RuntimeVersion:  *body.RuntimeVersion,
 		Status:          *body.Status,
 		CreatedAt:       *body.CreatedAt,
 		UpdatedAt:       *body.UpdatedAt,
@@ -4084,6 +4140,7 @@ func NewEnsureManagedAssistantAssistantOK(body *EnsureManagedAssistantResponseBo
 		Instructions:    *body.Instructions,
 		WarmTTLSeconds:  *body.WarmTTLSeconds,
 		MaxConcurrency:  *body.MaxConcurrency,
+		RuntimeVersion:  *body.RuntimeVersion,
 		Status:          *body.Status,
 		CreatedAt:       *body.CreatedAt,
 		UpdatedAt:       *body.UpdatedAt,
@@ -4315,6 +4372,9 @@ func ValidateGetAssistantResponseBody(body *GetAssistantResponseBody) (err error
 	if body.MaxConcurrency == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("max_concurrency", "body"))
 	}
+	if body.RuntimeVersion == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("runtime_version", "body"))
+	}
 	if body.Status == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("status", "body"))
 	}
@@ -4357,6 +4417,11 @@ func ValidateGetAssistantResponseBody(body *GetAssistantResponseBody) (err error
 			if err2 := ValidateAssistantSkillRefResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
+		}
+	}
+	if body.RuntimeVersion != nil {
+		if !(*body.RuntimeVersion == 2 || *body.RuntimeVersion == 3) {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.runtime_version", *body.RuntimeVersion, []any{2, 3}))
 		}
 	}
 	if body.Status != nil {
@@ -4406,6 +4471,9 @@ func ValidateCreateAssistantResponseBody(body *CreateAssistantResponseBody) (err
 	if body.MaxConcurrency == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("max_concurrency", "body"))
 	}
+	if body.RuntimeVersion == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("runtime_version", "body"))
+	}
 	if body.Status == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("status", "body"))
 	}
@@ -4448,6 +4516,11 @@ func ValidateCreateAssistantResponseBody(body *CreateAssistantResponseBody) (err
 			if err2 := ValidateAssistantSkillRefResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
+		}
+	}
+	if body.RuntimeVersion != nil {
+		if !(*body.RuntimeVersion == 2 || *body.RuntimeVersion == 3) {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.runtime_version", *body.RuntimeVersion, []any{2, 3}))
 		}
 	}
 	if body.Status != nil {
@@ -4497,6 +4570,9 @@ func ValidateUpgradeAssistantIdentityResponseBody(body *UpgradeAssistantIdentity
 	if body.MaxConcurrency == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("max_concurrency", "body"))
 	}
+	if body.RuntimeVersion == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("runtime_version", "body"))
+	}
 	if body.Status == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("status", "body"))
 	}
@@ -4539,6 +4615,11 @@ func ValidateUpgradeAssistantIdentityResponseBody(body *UpgradeAssistantIdentity
 			if err2 := ValidateAssistantSkillRefResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
+		}
+	}
+	if body.RuntimeVersion != nil {
+		if !(*body.RuntimeVersion == 2 || *body.RuntimeVersion == 3) {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.runtime_version", *body.RuntimeVersion, []any{2, 3}))
 		}
 	}
 	if body.Status != nil {
@@ -4588,6 +4669,9 @@ func ValidateUpdateAssistantResponseBody(body *UpdateAssistantResponseBody) (err
 	if body.MaxConcurrency == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("max_concurrency", "body"))
 	}
+	if body.RuntimeVersion == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("runtime_version", "body"))
+	}
 	if body.Status == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("status", "body"))
 	}
@@ -4630,6 +4714,11 @@ func ValidateUpdateAssistantResponseBody(body *UpdateAssistantResponseBody) (err
 			if err2 := ValidateAssistantSkillRefResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
+		}
+	}
+	if body.RuntimeVersion != nil {
+		if !(*body.RuntimeVersion == 2 || *body.RuntimeVersion == 3) {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.runtime_version", *body.RuntimeVersion, []any{2, 3}))
 		}
 	}
 	if body.Status != nil {
@@ -4712,6 +4801,9 @@ func ValidateGetManagedAssistantResponseBody(body *GetManagedAssistantResponseBo
 	if body.MaxConcurrency == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("max_concurrency", "body"))
 	}
+	if body.RuntimeVersion == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("runtime_version", "body"))
+	}
 	if body.Status == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("status", "body"))
 	}
@@ -4754,6 +4846,11 @@ func ValidateGetManagedAssistantResponseBody(body *GetManagedAssistantResponseBo
 			if err2 := ValidateAssistantSkillRefResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
+		}
+	}
+	if body.RuntimeVersion != nil {
+		if !(*body.RuntimeVersion == 2 || *body.RuntimeVersion == 3) {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.runtime_version", *body.RuntimeVersion, []any{2, 3}))
 		}
 	}
 	if body.Status != nil {
@@ -4803,6 +4900,9 @@ func ValidateEnsureManagedAssistantResponseBody(body *EnsureManagedAssistantResp
 	if body.MaxConcurrency == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("max_concurrency", "body"))
 	}
+	if body.RuntimeVersion == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("runtime_version", "body"))
+	}
 	if body.Status == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("status", "body"))
 	}
@@ -4845,6 +4945,11 @@ func ValidateEnsureManagedAssistantResponseBody(body *EnsureManagedAssistantResp
 			if err2 := ValidateAssistantSkillRefResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
+		}
+	}
+	if body.RuntimeVersion != nil {
+		if !(*body.RuntimeVersion == 2 || *body.RuntimeVersion == 3) {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.runtime_version", *body.RuntimeVersion, []any{2, 3}))
 		}
 	}
 	if body.Status != nil {
@@ -7297,6 +7402,9 @@ func ValidateAssistantResponseBody(body *AssistantResponseBody) (err error) {
 	if body.MaxConcurrency == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("max_concurrency", "body"))
 	}
+	if body.RuntimeVersion == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("runtime_version", "body"))
+	}
 	if body.Status == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("status", "body"))
 	}
@@ -7339,6 +7447,11 @@ func ValidateAssistantResponseBody(body *AssistantResponseBody) (err error) {
 			if err2 := ValidateAssistantSkillRefResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
+		}
+	}
+	if body.RuntimeVersion != nil {
+		if !(*body.RuntimeVersion == 2 || *body.RuntimeVersion == 3) {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.runtime_version", *body.RuntimeVersion, []any{2, 3}))
 		}
 	}
 	if body.Status != nil {

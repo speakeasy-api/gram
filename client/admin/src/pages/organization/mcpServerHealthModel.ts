@@ -7,8 +7,9 @@ export const DATADOG_ORIGIN = "https://app.datadoghq.com";
 
 export type ToolCallTotals = {
   total: number;
-  // Every outcome at status 400 or above, which is what the chart's buckets
-  // count as failed. `unknown` is neither.
+  // Every outcome at status 400 or above, plus isError tool errors below 400
+  // and hook-reported tool errors, which the chart's buckets do not count.
+  // `unknown` is neither.
   failed: number;
   unauthorized: number;
   // 0 to 1. Zero calls is a zero share, never NaN.
@@ -241,7 +242,7 @@ export function loginChallengeUrl(
   });
 }
 
-export function platformMcpPrompt({
+export function adminMcpPrompt({
   serverName,
   serverId,
   projectName,
@@ -259,7 +260,7 @@ export function platformMcpPrompt({
   // name are the customer's to set, so they follow as quoted labels the agent
   // is told not to act on: a name written as an instruction stays a name.
   return (
-    `Using the Speakeasy Platform MCP, investigate the MCP server with mcp_id ` +
+    `Using the Speakeasy Admin MCP server, investigate the MCP server with mcp_id ` +
     `${serverId}. Run get_mcp_diagnostics for ${range} and compare its call ` +
     `outcomes with the organization's. Tell me which tools failed, which apps ` +
     `reported the failures${spike}, and whether the fault most likely lies with ` +

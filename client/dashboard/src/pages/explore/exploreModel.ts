@@ -11,7 +11,15 @@ import type { AnalyticsQueryResult } from "@gram/client/models/components/analyt
 // fields each has, what each field can be filtered or aggregated by. Nothing
 // here knows a dataset by name, so a new dataset ships with no client change.
 
-export type ChartType = "line" | "area" | "bar" | "ranked" | "table" | "number";
+export type ChartType =
+  | "line"
+  | "area"
+  | "bar"
+  | "stacked_bar"
+  | "stacked_area"
+  | "ranked"
+  | "table"
+  | "number";
 /**
  * A relative window: the dashboard's date-range presets, so a widget, the
  * builder and the page around them speak one vocabulary.
@@ -28,6 +36,8 @@ export type ResultRow = AnalyticsQueryResult["rows"][number];
 export const MAX_DIMENSIONS = 3;
 export const DEFAULT_LIMIT = 100;
 export const MAX_LIMIT = 1000;
+// Rows at the dataset's grain are capped lower than a grouped result.
+export const MAX_ROWS_LIMIT = 200;
 
 // Result columns the server adds beside the requested ones: the bucket start
 // of a grouped, bucketed query and the event time of a row.
@@ -38,6 +48,8 @@ export const CHART_TYPE_OPTIONS: { value: ChartType; label: string }[] = [
   { value: "line", label: "Line" },
   { value: "area", label: "Area" },
   { value: "bar", label: "Bar" },
+  { value: "stacked_bar", label: "Stacked bar" },
+  { value: "stacked_area", label: "Stacked area" },
   { value: "ranked", label: "Ranked" },
   { value: "table", label: "Table" },
   { value: "number", label: "Number" },
@@ -210,7 +222,43 @@ export function specGrain(spec: Pick<ExploreSpec, "window" | "range">): Grain {
 
 /** Whether the chart type renders a bucketed timeseries. */
 function isTimeseries(chartType: ChartType): boolean {
-  return chartType === "line" || chartType === "area" || chartType === "bar";
+  return (
+    chartType === "line" ||
+    chartType === "area" ||
+    chartType === "bar" ||
+    isStacked(chartType)
+  );
+}
+
+/**
+ * Whether the chart stacks its series. A line, bar or area answers "how did
+ * each series move"; a stack answers "what made up the total", so it needs a
+ * breakdown to stack by.
+ */
+export function isStacked(chartType: ChartType): boolean {
+  return chartType === "stacked_bar" || chartType === "stacked_area";
+}
+
+/**
+ * Whether a measure's values add up across the groups it is broken down
+ * by, so a stack of them is a total: a count or a sum is, an average or a
+ * percentile is not. The server holds the same rule.
+ */
+export function additiveOp(op: MeasureOp): boolean {
+  return op === "count" || op === "sum";
+}
+
+/**
+ * The chart a spec is drawn with and saved as, as the server will check it.
+ * Rows draw only as a table, and a stack with no breakdown is the bar or
+ * area it is, whatever the builder's controls were last left on.
+ */
+export function drawnChart(spec: ExploreSpec): ChartType {
+  if (isRowsMode(spec)) return "table";
+  if (isStacked(spec.chartType) && queryDimensions(spec).length === 0) {
+    return spec.chartType === "stacked_bar" ? "bar" : "area";
+  }
+  return spec.chartType;
 }
 
 export function findDataset(
@@ -234,11 +282,17 @@ export function dimensionFields(
   return (dataset?.fields ?? []).filter((field) => field.role === "dimension");
 }
 
-/** The dataset's numeric quantities. */
-function measureFields(
+/**
+ * Fields an aggregation can target: anything the catalog declares
+ * aggregations for. A measure declares sums and percentiles; a dimension
+ * declares count_distinct over its own values.
+ */
+function aggregatableFields(
   dataset: AnalyticsDataset | undefined,
 ): AnalyticsField[] {
-  return (dataset?.fields ?? []).filter((field) => field.role === "measure");
+  return (dataset?.fields ?? []).filter(
+    (field) => (field.aggregations ?? []).length > 0,
+  );
 }
 
 /** Fields a WHERE row can target: anything the catalog declares operators for. */
@@ -253,6 +307,7 @@ export function filterableFields(
 // The order aggregations are offered in, whichever fields declare them.
 const MEASURE_OP_ORDER: MeasureOp[] = [
   "count",
+  "count_distinct",
   "sum",
   "avg",
   "min",
@@ -268,13 +323,13 @@ export function isMeasureOp(value: unknown): value is MeasureOp {
 
 /**
  * The aggregations a dataset admits: count (every dataset), then every op
- * at least one measure field declares.
+ * at least one field declares.
  */
 export function opsForDataset(
   dataset: AnalyticsDataset | undefined,
 ): MeasureOp[] {
   const declared = new Set<string>();
-  for (const field of measureFields(dataset)) {
+  for (const field of aggregatableFields(dataset)) {
     for (const aggregation of field.aggregations ?? []) {
       declared.add(aggregation);
     }
@@ -282,13 +337,13 @@ export function opsForDataset(
   return MEASURE_OP_ORDER.filter((op) => op === "count" || declared.has(op));
 }
 
-/** The measure fields an aggregation can target; count targets none. */
+/** The fields an aggregation can target; count targets none. */
 export function fieldsForOp(
   dataset: AnalyticsDataset | undefined,
   op: MeasureOp,
 ): AnalyticsField[] {
   if (op === "count") return [];
-  return measureFields(dataset).filter((field) =>
+  return aggregatableFields(dataset).filter((field) =>
     (field.aggregations ?? []).includes(op),
   );
 }
@@ -410,6 +465,7 @@ function defaultChartForKind(kind: AnalyticsDataset["kind"]): ChartType {
     case "metric":
       return "bar";
   }
+  return "line";
 }
 
 /**
@@ -517,11 +573,14 @@ export function specProblem(
   return "";
 }
 
-/** Parse the LIMIT control's text into a spec limit (0 = server default). */
-export function parseLimit(raw: string): number {
+/**
+ * Parse the LIMIT control's text into a spec limit (0 = server default),
+ * capped at what the server allows for rows or for a grouped result.
+ */
+export function parseLimit(raw: string, rows = false): number {
   const parsed = Number(raw);
   if (!Number.isInteger(parsed) || parsed <= 0) return 0;
-  return Math.min(parsed, MAX_LIMIT);
+  return Math.min(parsed, rows ? MAX_ROWS_LIMIT : MAX_LIMIT);
 }
 
 /**
@@ -558,7 +617,8 @@ export function queryBodyFromSpec(spec: ExploreSpec): AnalyticsQueryPayload {
 
   if (measures.length === 0) {
     // Rows at the dataset's grain, newest first; the dimensions are the
-    // projection rather than a grouping.
+    // projection rather than a grouping. A limit carried over from a grouped
+    // query is clamped to what rows allow.
     return {
       dataset: spec.dataset,
       from,
@@ -567,7 +627,7 @@ export function queryBodyFromSpec(spec: ExploreSpec): AnalyticsQueryPayload {
       dimensions,
       filters,
       ungrouped: true,
-      limit,
+      limit: limit === undefined ? undefined : Math.min(limit, MAX_ROWS_LIMIT),
     };
   }
 

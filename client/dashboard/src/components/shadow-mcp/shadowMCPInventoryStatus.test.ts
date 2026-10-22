@@ -1,3 +1,4 @@
+import { unrecognized } from "@gram/client/types/unrecognized.js";
 import type { RiskPolicy } from "@gram/client/models/components/riskpolicy.js";
 import type { ShadowMCPAccessSummary } from "@gram/client/models/components/shadowmcpaccesssummary.js";
 import type { ShadowMCPInventoryServer } from "@gram/client/models/components/shadowmcpinventoryserver.js";
@@ -22,12 +23,10 @@ function policy(overrides: Partial<RiskPolicy>): RiskPolicy {
     enabled: true,
     id: "policy-1",
     name: "Policy",
-    pendingMessages: 0,
     policyType: "standard",
     projectId: "project-1",
     score: 5,
     sources: ["shadow_mcp"],
-    totalMessages: 0,
     updatedAt: new Date("2026-01-01T00:00:00Z"),
     version: 1,
     ...overrides,
@@ -425,4 +424,13 @@ describe("shadowMCPInventoryStatusDescription", () => {
       shadowMCPInventoryStatusDescription(access({ state: "unenforced" })),
     ).toBe("Not blocking");
   });
+});
+
+it("presents an unknown access state without labeling it allowed or blocked", () => {
+  const status = shadowMCPInventoryStatus(
+    access({ state: unrecognized("future_state") }),
+  );
+  expect(status).toBe("unknown");
+  expect(shadowMCPInventoryStatusLabel(status)).toBe("Unknown");
+  expect(shadowMCPInventoryStatusBadgeVariant(status)).toBe("neutral");
 });

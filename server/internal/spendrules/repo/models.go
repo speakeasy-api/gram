@@ -11,22 +11,40 @@ import (
 )
 
 type SpendRule struct {
-	ID             uuid.UUID
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
 	OrganizationID string
-	Name           string
-	Slug           string
-	Description    string
-	TargetExpr     string
-	LimitUsdCents  money.Cents
-	RuleExpr       string
-	WindowKind     string
-	WarnAtPct      int32
-	Action         string
-	Enabled        bool
-	Version        int64
-	CreatedAt      pgtype.Timestamptz
-	UpdatedAt      pgtype.Timestamptz
-	ArchivedAt     pgtype.Timestamptz
-	Archived       bool
-	SupersededBy   uuid.NullUUID
+	// @access: confidential
+	Name string
+	// @access: confidential
+	Slug string
+	// @access: opaque-restricted
+	Description string
+	// @access: opaque-restricted
+	TargetExpr string
+	// @access: restricted
+	LimitUsdCents money.Cents
+	// @access: opaque-restricted
+	RuleExpr string
+	// @access: confidential
+	WindowKind string
+	// @access: confidential
+	WarnAtPct int32
+	// @access: confidential
+	Action string
+	// @access: confidential
+	Enabled bool
+	// @access: confidential
+	Version int64
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	ArchivedAt pgtype.Timestamptz
+	// @access: confidential
+	Archived bool
+	// @access: confidential
+	SupersededBy uuid.NullUUID
 }

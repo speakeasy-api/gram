@@ -1,7 +1,7 @@
+import { invalidateAllMcpServers } from "@gram/client/react-query/mcpServers.js";
+import { ToolsetSessionsTab } from "./ToolsetSessionsTab";
 import { Block, BlockInner } from "@/components/block";
 import { CodeBlock } from "@/components/code";
-import { ToolsetAttachedUserSessions } from "@/components/sessions/AttachedUserSessions";
-import { ClientsAndSessionsTab } from "@/components/sessions/ClientsAndSessionsTab";
 import { MCPToolFilteringSection } from "@/components/mcp-tool-filtering-section";
 import {
   useMcpMetadataMetadataForm,
@@ -245,11 +245,7 @@ function renderMcpDetailTabContent(
     case "sessions":
       return (
         <RequireScope scope="project:read" level="page">
-          <ClientsAndSessionsTab
-            issuerId={toolset.userSessionIssuerId}
-            authTabPath="authentication"
-            attachedSessions={<ToolsetAttachedUserSessions toolset={toolset} />}
-          />
+          <ToolsetSessionsTab toolset={toolset} />
         </RequireScope>
       );
     case "team-access":
@@ -367,6 +363,7 @@ export function RenameMCPServerButton({
         onSuccess: () => {
           void invalidateAllToolset(queryClient);
           void invalidateAllListToolsets(queryClient);
+          void invalidateAllMcpServers(queryClient);
           telemetry.capture("mcp_event", {
             action: "mcp_server_renamed",
             slug: toolset.slug,
@@ -573,6 +570,7 @@ export function MCPStatusDropdown({
       {
         onSuccess: () => {
           void invalidateAllToolset(queryClient);
+          void invalidateAllMcpServers(queryClient);
           void invalidateAllGetPeriodUsage(queryClient);
           telemetry.capture("mcp_event", {
             action:
@@ -963,6 +961,7 @@ function MCPToolsTab({ toolset }: { toolset: Toolset }) {
       telemetry.capture("toolset_event", { action: "toolset_updated" });
       void refetch();
       void invalidateAllToolset(queryClient);
+      void invalidateAllMcpServers(queryClient);
     },
     onError: (error) => {
       telemetry.capture("toolset_event", {
@@ -1076,13 +1075,6 @@ function MCPToolsTab({ toolset }: { toolset: Toolset }) {
           </div>
           <Stack direction="horizontal" gap={2}>
             {canWrite && (
-              <routes.customTools.Link>
-                <Button variant="secondary" size="sm">
-                  <Button.Text>Custom Tools</Button.Text>
-                </Button>
-              </routes.customTools.Link>
-            )}
-            {canWrite && (
               <Button onClick={() => setAddToolsDialogOpen(true)} size="sm">
                 <Button.LeftIcon>
                   <Icon name="plus" className="h-4 w-4" />
@@ -1173,6 +1165,7 @@ function MCPToolsTab({ toolset }: { toolset: Toolset }) {
 
               await refetch();
               void invalidateAllToolset(queryClient);
+              void invalidateAllMcpServers(queryClient);
             })(toolUrns);
           }}
         />
@@ -1367,10 +1360,11 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
       void invalidateAllToolset(queryClient, { refetchType: "none" });
       void invalidateAllGetPeriodUsage(queryClient);
       void refetchDeployment();
-      // Wait for the toolset list to refresh before navigating so the
-      // listing page never renders a card for the deleted toolset (which
-      // would trigger a per-card getBySlug refetch that 404s).
-      await toolsets.refetch();
+      // Refresh both lists before navigating so the listing never shows the deleted server.
+      await Promise.all([
+        toolsets.refetch(),
+        invalidateAllMcpServers(queryClient, { refetchType: "all" }),
+      ]);
 
       toast.success(`MCP server "${toolset.slug}" deleted`);
       setIsDeleteDialogOpen(false);
@@ -1386,6 +1380,7 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
   const updateToolsetMutation = useUpdateToolsetMutation({
     onSuccess: () => {
       void invalidateAllToolset(queryClient);
+      void invalidateAllMcpServers(queryClient);
       toast.success("MCP settings saved successfully");
       telemetry.capture("mcp_event", {
         action: "mcp_settings_saved",
@@ -1767,6 +1762,7 @@ export function OAuthDetailsModal({
   const removeOAuthMutation = useRemoveOAuthServerMutation({
     onSuccess: () => {
       void invalidateAllToolset(queryClient);
+      void invalidateAllMcpServers(queryClient);
       onClose();
     },
   });

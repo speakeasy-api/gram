@@ -15,6 +15,7 @@ export type UseIssuerDiscoveryInitial = {
   jwksUri: string;
   scopesSupported: string[];
   grantTypesSupported: string[];
+  authorizationGrantProfilesSupported: string[];
   responseTypesSupported: string[];
   tokenEndpointAuthMethodsSupported: string[];
   // Null when the saved record has never had the field captured; preserved
@@ -102,6 +103,8 @@ function useIssuerDiscoveryImpl(
             jwksUri: initial.jwksUri,
             scopesSupported: initial.scopesSupported,
             grantTypesSupported: initial.grantTypesSupported,
+            authorizationGrantProfilesSupported:
+              initial.authorizationGrantProfilesSupported,
             responseTypesSupported: initial.responseTypesSupported,
             tokenEndpointAuthMethodsSupported:
               initial.tokenEndpointAuthMethodsSupported,
@@ -158,6 +161,8 @@ function useIssuerDiscoveryImpl(
         jwksUri: draft.jwksUri ?? "",
         scopesSupported: draft.scopesSupported ?? [],
         grantTypesSupported: draft.grantTypesSupported ?? [],
+        authorizationGrantProfilesSupported:
+          draft.authorizationGrantProfilesSupported ?? [],
         responseTypesSupported: draft.responseTypesSupported ?? [],
         tokenEndpointAuthMethodsSupported:
           draft.tokenEndpointAuthMethodsSupported ?? [],

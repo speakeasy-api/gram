@@ -7,7 +7,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	approvalrepo "github.com/speakeasy-api/gram/server/internal/mcpapproval/repo"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
@@ -42,15 +41,14 @@ func TestShadowDistributionReadReportsRepairForPluginAndTarget(t *testing.T) {
 	_, err = platformrepo.New(conn).UpdatePlatformMCPCatalogRegistrationComponents(ctx, platformrepo.UpdatePlatformMCPCatalogRegistrationComponentsParams{ID: registration.ID, OrganizationID: principal.OrganizationID, ProjectID: project.ID, Status: "registered", RemoteMcpServerID: uuid.NullUUID{UUID: target.RemoteMcpServerID.UUID, Valid: true}, McpServerID: uuid.NullUUID{UUID: target.McpServerID, Valid: true}})
 	require.NoError(t, err)
 	plugin := seedPlugin(t, ctx, conn, principal.OrganizationID, project.ID, "Repair", "repair")
-	_, err = pluginsrepo.New(conn).AddPluginServer(ctx, pluginsrepo.AddPluginServerParams{PluginID: plugin.ID, ToolsetID: uuid.NullUUID{}, McpServerID: uuid.NullUUID{UUID: target.McpServerID, Valid: true}, DisplayName: "Repair target", Policy: "required", SortOrder: 0})
+	_, err = pluginsrepo.New(conn).AddPluginServer(ctx, pluginsrepo.AddPluginServerParams{PluginID: plugin.ID, McpServerID: uuid.NullUUID{UUID: target.McpServerID, Valid: true}, DisplayName: "Repair target", Policy: "required", SortOrder: 0})
 	require.NoError(t, err)
 	_, err = pluginsrepo.New(conn).AddPluginAssignment(ctx, pluginsrepo.AddPluginAssignmentParams{PluginID: plugin.ID, OrganizationID: principal.OrganizationID, PrincipalUrn: "role:developers"})
 	require.NoError(t, err)
 	_, err = riskrepo.New(conn).CreateRiskPolicy(ctx, riskrepo.CreateRiskPolicyParams{ID: uuid.New(), ProjectID: project.ID, OrganizationID: principal.OrganizationID, Name: "Blocking Shadow MCP", PolicyType: "standard", Sources: []string{shadowmcp.SourceShadowMCP}, PresidioEntities: nil, AnalyzerConfig: nil, PromptInjectionRules: nil, DisabledRules: nil, CustomRuleIds: nil, Enabled: true, Action: "block", AudienceType: "everyone", ShadowMcpDisposition: pgtype.Text{}, AutoName: false, UserMessage: pgtype.Text{}, Prompt: pgtype.Text{}, ModelConfig: nil, Score: pgtype.Float8{}})
 	require.NoError(t, err)
 
-	flags := newFeatureRollout(principal.OrganizationID)
-	service := NewShadowDistributionReadService(testenv.NewLogger(t), conn, admission.NewGuard(flags, nil), NewPostgresOrganizationSlugResolver(conn))
+	service := NewShadowDistributionReadService(testenv.NewLogger(t), conn)
 	pluginResult := service.ForPlugin(ctx, principal.OrganizationID, project.ID, plugin.ID)
 	targetResult := service.ForTarget(ctx, principal.OrganizationID, project.ID, canonicalTarget.CanonicalURL)
 
@@ -82,12 +80,4 @@ func TestShadowDistributionReadReportsRepairForPluginAndTarget(t *testing.T) {
 	require.Equal(t, DistributionAdmissionCovered, targetResult.State)
 	require.Equal(t, admission.MissingAudienceCounts{}, targetResult.MissingAudienceCounts)
 	require.True(t, targetResult.Complete)
-}
-
-func newFeatureRollout(organizationID string) *feature.InMemory {
-	flags := new(feature.InMemory)
-	flags.SetFlag(feature.FlagPlatformMCPShadowAudienceEnforcement, organizationID, true)
-	flags.SetFlagPayload(feature.FlagPlatformMCPShadowAudienceEnforcement, organizationID, []byte(`{"mode":"enforce"}`))
-	flags.SetFlag(feature.FlagPlatformMCPDirectRemoteDistributionDisabled, organizationID, false)
-	return flags
 }

@@ -32,7 +32,8 @@ type QueryRequestBody struct {
 	// Sort for a grouped result, by measure alias. Ungrouped rows are always
 	// newest first.
 	OrderBy []*AnalyticsOrderByRequestBody `form:"order_by,omitempty" json:"order_by,omitempty" xml:"order_by,omitempty"`
-	// Maximum rows. Defaults to 100, at most 1000.
+	// Maximum rows. Defaults to 100; at most 1000 for a grouped result and 200 for
+	// ungrouped rows.
 	Limit *int `form:"limit,omitempty" json:"limit,omitempty" xml:"limit,omitempty"`
 	// Return rows at the dataset's grain instead of aggregating.
 	Ungrouped *bool `form:"ungrouped,omitempty" json:"ungrouped,omitempty" xml:"ungrouped,omitempty"`
@@ -646,8 +647,20 @@ type AnalyticsFieldResponseBody struct {
 	Unit *string `form:"unit,omitempty" json:"unit,omitempty" xml:"unit,omitempty"`
 	// Filter operators a dimension admits
 	Operators []string `form:"operators,omitempty" json:"operators,omitempty" xml:"operators,omitempty"`
-	// Ops a measure admits
+	// Ops a field admits: aggregations on a measure, count_distinct on a dimension
 	Aggregations []string `form:"aggregations,omitempty" json:"aggregations,omitempty" xml:"aggregations,omitempty"`
+	// What the field is and which producers fill it, when the catalog has
+	// something to say beyond the name
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// The map this dimension reads through, when it reads through one
+	Lookup *AnalyticsLookupResponseBody `form:"lookup,omitempty" json:"lookup,omitempty" xml:"lookup,omitempty"`
+}
+
+// AnalyticsLookupResponseBody is used to define fields on response body types.
+type AnalyticsLookupResponseBody struct {
+	Name string `form:"name" json:"name" xml:"name"`
+	// What the map is and where it is set
+	Description string `form:"description" json:"description" xml:"description"`
 }
 
 // AnalyticsDimensionValueResponseBody is used to define fields on response
@@ -661,10 +674,12 @@ type AnalyticsDimensionValueResponseBody struct {
 
 // AnalyticsMeasureRequestBody is used to define fields on request body types.
 type AnalyticsMeasureRequestBody struct {
-	// Aggregation to apply. count takes no field; every other op needs a measure
-	// field that admits it, per describe.
+	// Aggregation to apply. count takes no field; count_distinct takes a dimension
+	// that admits it; every other op needs a measure field that admits it, per
+	// describe.
 	Op *string `form:"op,omitempty" json:"op,omitempty" xml:"op,omitempty"`
-	// Measure field the op applies to. Absent for count.
+	// Field the op applies to: a dimension for count_distinct, a measure
+	// otherwise. Absent for count.
 	Field *string `form:"field,omitempty" json:"field,omitempty" xml:"field,omitempty"`
 	// Result column name. Defaults to the op, or op_field.
 	Alias *string `form:"alias,omitempty" json:"alias,omitempty" xml:"alias,omitempty"`
@@ -1361,8 +1376,8 @@ func ValidateAnalyticsMeasureRequestBody(body *AnalyticsMeasureRequestBody) (err
 		err = goa.MergeErrors(err, goa.MissingFieldError("op", "body"))
 	}
 	if body.Op != nil {
-		if !(*body.Op == "count" || *body.Op == "sum" || *body.Op == "avg" || *body.Op == "min" || *body.Op == "max" || *body.Op == "p50" || *body.Op == "p95" || *body.Op == "p99") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.op", *body.Op, []any{"count", "sum", "avg", "min", "max", "p50", "p95", "p99"}))
+		if !(*body.Op == "count" || *body.Op == "count_distinct" || *body.Op == "sum" || *body.Op == "avg" || *body.Op == "min" || *body.Op == "max" || *body.Op == "p50" || *body.Op == "p95" || *body.Op == "p99") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.op", *body.Op, []any{"count", "count_distinct", "sum", "avg", "min", "max", "p50", "p95", "p99"}))
 		}
 	}
 	return

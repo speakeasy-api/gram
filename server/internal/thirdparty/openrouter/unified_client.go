@@ -11,6 +11,7 @@ import (
 	"slices"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 	"github.com/tiktoken-go/tokenizer"
@@ -552,9 +553,10 @@ func (c *ChatClient) GetObjectCompletion(ctx context.Context, req ObjectCompleti
 	// Optional system prompt
 	if req.SystemPrompt != "" {
 		messages = append(messages, or.CreateChatMessagesSystem(or.ChatSystemMessage{
-			Role:    or.ChatSystemMessageRoleSystem,
-			Content: or.CreateChatSystemMessageContentStr(req.SystemPrompt),
-			Name:    nil,
+			ConfigurationUpdate: nil,
+			Role:                or.ChatSystemMessageRoleSystem,
+			Content:             or.CreateChatSystemMessageContentStr(req.SystemPrompt),
+			Name:                nil,
 		}))
 	}
 
@@ -1006,7 +1008,7 @@ func limitOpenAIEmbeddingInputs(inputs []string) ([]string, int, error) {
 		if limited == nil {
 			limited = slices.Clone(inputs)
 		}
-		limited[i] = truncated
+		limited[i] = trimPartialTrailingRune(truncated)
 		truncatedCount++
 	}
 
@@ -1014,6 +1016,23 @@ func limitOpenAIEmbeddingInputs(inputs []string) ([]string, int, error) {
 		return inputs, 0, nil
 	}
 	return limited, truncatedCount, nil
+}
+
+// trimPartialTrailingRune drops a multi-byte character cut short at the end
+// of s. Tokens hold raw bytes, so a token boundary can fall inside a character
+// (cl100k splits 😀 into two tokens) and leave invalid UTF-8.
+func trimPartialTrailingRune(s string) string {
+	for i := 1; i < utf8.UTFMax && i <= len(s); i++ {
+		start := len(s) - i
+		if !utf8.RuneStart(s[start]) {
+			continue
+		}
+		if !utf8.FullRuneInString(s[start:]) {
+			return s[:start]
+		}
+		return s
+	}
+	return s
 }
 
 func embeddingInputTokensOverLimit(codec *tokenizer.Codec, input string, index int) ([]uint, bool, error) {
@@ -1076,6 +1095,8 @@ func (c *ChatClient) createEmbeddings(ctx context.Context, orgID string, model s
 
 	orClient := or_base.New(or_base.WithSecurity(openrouterKey))
 	result, err := orClient.Embeddings.Generate(ctx, or_operations.CreateEmbeddingsRequest{
+		SessionID:      nil,
+		Trace:          nil,
 		Model:          model,
 		Input:          or_operations.CreateInputUnionArrayOfStr(inputs),
 		EncodingFormat: nil,

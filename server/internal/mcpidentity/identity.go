@@ -65,11 +65,12 @@ const (
 // construct or mutate it; only a ValidatorBoundary can stamp one after its
 // owning authentication strategy accepts a credential.
 type Identity struct {
-	kind      Kind
-	userID    string
-	agentID   string
-	apiKeyID  string
-	expiresAt time.Time
+	kind       Kind
+	userID     string
+	agentID    string
+	apiKeyID   string
+	expiresAt  time.Time
+	sessionJTI string
 }
 
 // Kind returns the validated credential class.
@@ -79,6 +80,9 @@ func (i Identity) Kind() Kind { return i.kind }
 // KindConsentDiscovery. Other classes return empty. Check Kind before using
 // a user ID for runtime enforcement: consent proves discovery identity only.
 func (i Identity) UserID() string { return i.userID }
+
+// SessionJTI returns the identifier carried by the validated session token.
+func (i Identity) SessionJTI() string { return i.sessionJTI }
 
 // AgentID returns the authenticated agent ID, never its owner or authorizer.
 func (i Identity) AgentID() string { return i.agentID }
@@ -108,7 +112,7 @@ func (b *ValidatorBoundary) withIdentity(ctx context.Context, kind Kind, userID 
 	if b == nil || !b.initialized {
 		return ctx
 	}
-	return context.WithValue(ctx, contextKey{}, Identity{kind: kind, userID: userID, agentID: "", apiKeyID: "", expiresAt: time.Time{}})
+	return context.WithValue(ctx, contextKey{}, Identity{kind: kind, userID: userID, agentID: "", apiKeyID: "", expiresAt: time.Time{}, sessionJTI: ""})
 }
 
 // StampValidatedSession records provenance from an opaque session proof returned
@@ -119,7 +123,7 @@ func (b *ValidatorBoundary) StampValidatedSession(ctx context.Context, session s
 		return ctx
 	}
 	subject := session.Subject()
-	identity := Identity{kind: "", userID: "", agentID: "", apiKeyID: "", expiresAt: session.ExpiresAt()}
+	identity := Identity{kind: "", userID: "", agentID: "", apiKeyID: "", expiresAt: session.ExpiresAt(), sessionJTI: session.JTI()}
 	switch subject.Kind {
 	case urn.SessionSubjectKindUser:
 		if subject.ID == "" {
@@ -150,7 +154,7 @@ func (b *ValidatorBoundary) StampAPIKey(ctx context.Context, keyID string) conte
 	if b == nil || !b.initialized {
 		return ctx
 	}
-	return context.WithValue(ctx, contextKey{}, Identity{kind: KindAPIKey, userID: "", agentID: "", apiKeyID: keyID, expiresAt: time.Time{}})
+	return context.WithValue(ctx, contextKey{}, Identity{kind: KindAPIKey, userID: "", agentID: "", apiKeyID: keyID, expiresAt: time.Time{}, sessionJTI: ""})
 }
 
 // StampChatSession records an accepted embedded-chat session token.
@@ -176,7 +180,7 @@ func (b *ValidatorBoundary) stampAgentID(ctx context.Context, agentID string) co
 	if b == nil || !b.initialized {
 		return ctx
 	}
-	return context.WithValue(ctx, contextKey{}, Identity{kind: KindAgent, agentID: agentID, userID: "", apiKeyID: "", expiresAt: time.Time{}})
+	return context.WithValue(ctx, contextKey{}, Identity{kind: KindAgent, agentID: agentID, userID: "", apiKeyID: "", expiresAt: time.Time{}, sessionJTI: ""})
 }
 
 // StampConsentDiscovery records a user after the consent owner validates a live,
@@ -186,11 +190,21 @@ func (b *ValidatorBoundary) StampConsentDiscovery(ctx context.Context, userID st
 	if b == nil || !b.initialized || userID == "" || expiresAt.IsZero() || !expiresAt.After(time.Now()) {
 		return ctx
 	}
-	return context.WithValue(ctx, contextKey{}, Identity{kind: KindConsentDiscovery, userID: userID, agentID: "", apiKeyID: "", expiresAt: expiresAt})
+	return context.WithValue(ctx, contextKey{}, Identity{kind: KindConsentDiscovery, userID: userID, agentID: "", apiKeyID: "", expiresAt: expiresAt, sessionJTI: ""})
 }
 
 // WithoutIdentity clears inherited provenance on entry to another authentication
 // surface. It leaves the context without an identity.
 func WithoutIdentity(ctx context.Context) context.Context {
-	return context.WithValue(ctx, contextKey{}, Identity{kind: "", userID: "", agentID: "", apiKeyID: "", expiresAt: time.Time{}})
+	return context.WithValue(ctx, contextKey{}, Identity{kind: "", userID: "", agentID: "", apiKeyID: "", expiresAt: time.Time{}, sessionJTI: ""})
+}
+
+// StampValidatedWorkloadSession binds a validated machine session to the agent
+// resolved by live admission. The workload actor and session lifetime remain
+// unchanged; agent provenance supplies the kill-switch principal candidate.
+func (b *ValidatorBoundary) StampValidatedWorkloadSession(ctx context.Context, session sessiontokens.ValidatedSession, agentID uuid.UUID) context.Context {
+	if b == nil || !b.initialized || !session.Valid() || session.Subject().Kind != urn.SessionSubjectKindWorkload || agentID == uuid.Nil {
+		return ctx
+	}
+	return context.WithValue(ctx, contextKey{}, Identity{kind: KindAgent, userID: "", apiKeyID: "", agentID: agentID.String(), expiresAt: session.ExpiresAt(), sessionJTI: session.JTI()})
 }

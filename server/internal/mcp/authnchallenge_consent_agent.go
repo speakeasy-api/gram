@@ -14,7 +14,6 @@ import (
 	agentsrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
 	"github.com/speakeasy-api/gram/server/internal/authz"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -88,37 +87,20 @@ func (t AgentAuthorizationTarget) connectCheck() authz.Check {
 	return authz.MCPCheck(t.Scope, t.MCPResourceID.String(), t.ProjectID.String())
 }
 
-// agentAuthorizationRollout reports whether agent authorization is switched on
-// for the endpoint's organization. Every caller hides the feature when it is
-// off, so the boolean is false whenever the answer is not a confident yes.
-//
-// The error separates "off" from "unknown". An organization row or flag
-// evaluation that could not be read leaves the rollout state undetermined,
-// which callers that report why a request was refused must not record as a
-// deliberate rollout decision.
-func (s *Service) agentAuthorizationRollout(ctx context.Context, logger *slog.Logger, endpoint *ResolvedMcpEndpoint) (bool, string, error) {
-	organization, err := orgrepo.New(s.db).GetOrganizationMetadata(ctx, endpoint.OrganizationID)
+// agentSetupURL is the dashboard page where the organization's humans
+// register and manage agents, linked from the consent page.
+func (s *Service) agentSetupURL(ctx context.Context, logger *slog.Logger, organizationID string) (string, error) {
+	organization, err := orgrepo.New(s.db).GetOrganizationMetadata(ctx, organizationID)
 	if err != nil {
-		logger.WarnContext(ctx, "agent authorization rollout organization unavailable")
-		return false, "", fmt.Errorf("read organization metadata: %w", err)
-	}
-	groups := feature.OrgProjectGroups(organization.Slug, "")
-	for _, flag := range []feature.Flag{feature.FlagAgentManagement, feature.FlagAgentIdentityCredentials} {
-		evaluation, err := feature.EvaluateFlag(ctx, s.features, flag, endpoint.OrganizationID, groups)
-		if err != nil {
-			logger.WarnContext(ctx, "agent authorization rollout evaluation unavailable")
-			return false, "", fmt.Errorf("evaluate flag %s: %w", flag, err)
-		}
-		if evaluation != feature.EvaluationEnabled {
-			return false, "", nil
-		}
+		logger.WarnContext(ctx, "agent setup organization unavailable")
+		return "", fmt.Errorf("read organization metadata: %w", err)
 	}
 	setupURL, err := url.JoinPath(s.siteURL.String(), organization.Slug, "agent-management")
 	if err != nil {
 		logger.WarnContext(ctx, "agent setup URL unavailable")
-		return false, "", fmt.Errorf("build agent setup URL: %w", err)
+		return "", fmt.Errorf("build agent setup URL: %w", err)
 	}
-	return true, setupURL, nil
+	return setupURL, nil
 }
 
 // Only positive authorization denials are forbidden. Dependency failures must

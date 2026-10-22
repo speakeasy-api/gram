@@ -11,7 +11,6 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	telemetryRepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
-	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 func toolOutcomeCounts(rows []telemetryRepo.MCPToolOutcomeBreakdownRow) map[string]map[string]uint64 {
@@ -61,8 +60,6 @@ func TestGetMCPToolOutcomeBreakdown_SplitsFailuresByTool(t *testing.T) {
 		statusCode:  500,
 	})
 
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
-
 	rows, err := ti.chClient.GetMCPToolOutcomeBreakdown(ctx, telemetryRepo.GetMCPToolOutcomeBreakdownParams{
 		GetMCPOutcomeBreakdownParams: telemetryRepo.GetMCPOutcomeBreakdownParams{
 			GramProjectIDs: []string{projectID},
@@ -97,8 +94,6 @@ func TestListMCPTraceReferences_NewestFirstAndFilterable(t *testing.T) {
 			statusCode:  status,
 		})
 	}
-
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	base := telemetryRepo.GetMCPOutcomeBreakdownParams{
 		GramProjectIDs: []string{projectID},
@@ -149,8 +144,6 @@ func TestListMCPTraceReferences_PagesBackwardsInTime(t *testing.T) {
 			statusCode:  500,
 		})
 	}
-
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	base := telemetryRepo.GetMCPOutcomeBreakdownParams{
 		GramProjectIDs: []string{projectID},
@@ -217,7 +210,6 @@ func TestListMCPTraceReferences_CapsThePageSize(t *testing.T) {
 		userEmail:   "alice@example.com",
 		statusCode:  200,
 	})
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	// An unbounded or oversized request is clamped rather than honoured, so a
 	// caller cannot turn drill-down into a bulk export.
@@ -263,7 +255,8 @@ func TestGetMCPToolOutcomeBreakdown_HookObservedSharedSessionStaysServerScoped(t
 		encoded, err := json.Marshal(attrs)
 		require.NoError(t, err)
 		spanID := uuid.NewString()[:16]
-		require.NoError(t, ti.chClient.InsertTelemetryLog(ctx, telemetryRepo.InsertTelemetryLogParams{
+		// Query fixtures must be committed before reading; do not depend on the shared async queue.
+		require.NoError(t, ti.chClient.InsertTelemetryLogsSync(ctx, []telemetryRepo.InsertTelemetryLogParams{{
 			ID:                   uuid.NewString(),
 			TimeUnixNano:         now.Add(-time.Minute).UnixNano(),
 			ObservedTimeUnixNano: now.Add(-time.Minute).UnixNano(),
@@ -280,12 +273,11 @@ func TestGetMCPToolOutcomeBreakdown_HookObservedSharedSessionStaysServerScoped(t
 			ServiceName:          "gram-hooks",
 			ServiceVersion:       nil,
 			GramChatID:           nil,
-		}))
+		}}))
 	}
 	insert("https://gram.example/mcp/billing", "charge", "call-billing-1", false)
 	insert("https://gram.example/mcp/billing", "refund", "call-billing-2", true)
 	insert("https://gram.example/mcp/shipping", "dispatch", "call-shipping-1", false)
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	rows, err := ti.chClient.GetMCPToolOutcomeBreakdown(ctx, telemetryRepo.GetMCPToolOutcomeBreakdownParams{
 		GetMCPOutcomeBreakdownParams: telemetryRepo.GetMCPOutcomeBreakdownParams{
@@ -358,7 +350,6 @@ func TestMCPDrilldownTraceIDsAreStable(t *testing.T) {
 		userEmail:   uuid.New().String() + "@example.com",
 		statusCode:  403,
 	})
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	params := telemetryRepo.ListMCPTraceReferencesParams{
 		GetMCPOutcomeBreakdownParams: telemetryRepo.GetMCPOutcomeBreakdownParams{

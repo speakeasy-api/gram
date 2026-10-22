@@ -18,7 +18,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
@@ -63,6 +62,18 @@ func seedToolsetBackedMcpServer(t *testing.T, ctx context.Context, conn *pgxpool
 
 	mcpServerID, err := uuid.NewV7()
 	require.NoError(t, err)
+	return seedToolsetBackedMcpServerWithID(t, ctx, conn, projectID, toolsetID, mcpServerID, "private")
+}
+
+// seedCanonicalToolsetWrapper creates the toolset's canonical wrapper, whose id is the toolset id.
+func seedCanonicalToolsetWrapper(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID uuid.UUID, toolsetID uuid.UUID) uuid.UUID {
+	t.Helper()
+	return seedToolsetBackedMcpServerWithID(t, ctx, conn, projectID, toolsetID, toolsetID, "private")
+}
+
+func seedToolsetBackedMcpServerWithID(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID, toolsetID, mcpServerID uuid.UUID, visibility string) uuid.UUID {
+	t.Helper()
+
 	server, err := mcpserversrepo.New(conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
 		ID:                  mcpServerID,
 		ProjectID:           projectID,
@@ -72,7 +83,7 @@ func seedToolsetBackedMcpServer(t *testing.T, ctx context.Context, conn *pgxpool
 		UserSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		RemoteMcpServerID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		ToolsetID:           uuid.NullUUID{UUID: toolsetID, Valid: true},
-		Visibility:          "private",
+		Visibility:          visibility,
 	})
 	require.NoError(t, err)
 
@@ -225,38 +236,29 @@ func TestCheckSlugAvailable_OwnerExclusionToolset(t *testing.T) {
 	require.True(t, available)
 }
 
-func TestHasPluginMembershipForMCPServer_LegacyToolsetWrapper(t *testing.T) {
+func TestToolsetWrapperLookups_PreferCanonicalWrapper(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
-	toolset := seedHostedToolset(t, ctx, ti.conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.OrganizationSlug+"-wrapper")
-	wrapperID := seedToolsetBackedMcpServer(t, ctx, ti.conn, *authCtx.ProjectID, toolset.ID)
-	pluginsQueries := pluginsrepo.New(ti.conn)
-	plugin, err := pluginsQueries.CreateDefaultPlugin(ctx, pluginsrepo.CreateDefaultPluginParams{
-		OrganizationID: authCtx.ActiveOrganizationID, ProjectID: *authCtx.ProjectID,
-	})
-	require.NoError(t, err)
-	_, err = pluginsQueries.AddPluginServer(ctx, pluginsrepo.AddPluginServerParams{
-		PluginID: plugin.ID, ToolsetID: uuid.NullUUID{UUID: toolset.ID, Valid: true},
-		DisplayName: "Legacy wrapper", Policy: "required",
-	})
-	require.NoError(t, err)
+	toolset := seedHostedToolset(t, ctx, ti.conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.OrganizationSlug+"-lookup")
+	servers := mcpserversrepo.New(ti.conn)
 
-	attached, err := pluginsQueries.HasPluginMembershipForMCPServer(ctx, pluginsrepo.HasPluginMembershipForMCPServerParams{
-		ProjectID: *authCtx.ProjectID, McpServerID: wrapperID,
-	})
+	memberID := seedToolsetBackedMcpServer(t, ctx, ti.conn, *authCtx.ProjectID, toolset.ID)
+	got, err := servers.GetMCPServerByToolsetID(ctx, mcpserversrepo.GetMCPServerByToolsetIDParams{ToolsetID: toolset.ID, ProjectID: *authCtx.ProjectID})
 	require.NoError(t, err)
-	require.True(t, attached)
+	require.Equal(t, memberID, got.ID, "without a canonical wrapper the oldest server is returned")
 
-	// An ambiguous toolset wrapper must not queue a publish that the publisher will reject.
-	seedToolsetBackedMcpServer(t, ctx, ti.conn, *authCtx.ProjectID, toolset.ID)
-	attached, err = pluginsQueries.HasPluginMembershipForMCPServer(ctx, pluginsrepo.HasPluginMembershipForMCPServerParams{
-		ProjectID: *authCtx.ProjectID, McpServerID: wrapperID,
-	})
+	canonicalID := seedCanonicalToolsetWrapper(t, ctx, ti.conn, *authCtx.ProjectID, toolset.ID)
+	got, err = servers.GetMCPServerByToolsetID(ctx, mcpserversrepo.GetMCPServerByToolsetIDParams{ToolsetID: toolset.ID, ProjectID: *authCtx.ProjectID})
 	require.NoError(t, err)
-	require.False(t, attached)
+	require.Equal(t, canonicalID, got.ID)
+
+	enabled, err := servers.ListEnabledMCPServersByToolsetID(ctx, mcpserversrepo.ListEnabledMCPServersByToolsetIDParams{ToolsetID: toolset.ID, ProjectID: *authCtx.ProjectID})
+	require.NoError(t, err)
+	require.Len(t, enabled, 1, "a canonical wrapper makes legacy attribution unambiguous")
+	require.Equal(t, canonicalID, enabled[0].ID)
 }
 
 func TestCheckSlugAvailable_OwnerExclusionMcpServer(t *testing.T) {
@@ -387,4 +389,32 @@ func TestUpdateMcpEndpoint_ConflictsWithToolsetMcpSlug(t *testing.T) {
 		Slug:             types.McpEndpointSlug(takenSlug),
 	})
 	requireOopsCode(t, err, oops.CodeConflict)
+}
+
+func TestGetMCPServerByToolsetID_PrefersEnabledServer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	projectID := *authCtx.ProjectID
+	servers := mcpserversrepo.New(ti.conn)
+	seedDisabled := func(toolsetID, id uuid.UUID) uuid.UUID {
+		return seedToolsetBackedMcpServerWithID(t, ctx, ti.conn, projectID, toolsetID, id, "disabled")
+	}
+	lookup := func(toolsetID uuid.UUID) uuid.UUID {
+		got, err := servers.GetMCPServerByToolsetID(ctx, mcpserversrepo.GetMCPServerByToolsetIDParams{ToolsetID: toolsetID, ProjectID: projectID})
+		require.NoError(t, err)
+		return got.ID
+	}
+
+	shadowed := seedHostedToolset(t, ctx, ti.conn, authCtx.ActiveOrganizationID, projectID, authCtx.OrganizationSlug+"-shadowed")
+	seedDisabled(shadowed.ID, shadowed.ID)
+	fresh := seedToolsetBackedMcpServer(t, ctx, ti.conn, projectID, shadowed.ID)
+	require.Equal(t, fresh, lookup(shadowed.ID), "a disabled canonical wrapper must not hide an enabled server")
+
+	allOff := seedHostedToolset(t, ctx, ti.conn, authCtx.ActiveOrganizationID, projectID, authCtx.OrganizationSlug+"-all-off")
+	allOffCanonical := seedDisabled(allOff.ID, allOff.ID)
+	seedDisabled(allOff.ID, uuid.Must(uuid.NewV7()))
+	require.Equal(t, allOffCanonical, lookup(allOff.ID), "among disabled servers the canonical wrapper still wins")
 }

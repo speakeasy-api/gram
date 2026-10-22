@@ -28,20 +28,65 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
+// Platform MCP: intentionally omitted for now, one outcome at a time.
+//
+// The outcomes this service adds are agent-identity administration for an org
+// admin: register an agent, rename it, suspend and resume it, revoke it,
+// delete it, issue it a credential, and read an agent with its accountable
+// owner. No existing Platform MCP tool represents any of them — the closest,
+// list_access_members and search_users, answer "which people hold MCP access"
+// and return masked identities only, and the access-role mutations pass
+// AgentIds: nil on purpose, so they never touch agent principals.
+//
+//   - Credential issuance (CreateKey, and the single-use install code that
+//     carries it) is omitted permanently, not deferred. The only useful result
+//     is a plaintext secret, which the Platform MCP contract never returns, and
+//     an agent-driven issuance would lose the dashboard's show-once surface and
+//     the 15-minute single-use exchange that keeps the key out of transcripts
+//     and shell history. This is the same reasoning as the plugin observability
+//     rotation omission (internal/plugins/rotate_observability.go).
+//
+//   - Register, rename, suspend, resume, revoke and delete are deferred while
+//     the capability sits behind the agent-management rollout and its product
+//     contract is still moving: lifecycle vocabulary, the delegable-grant
+//     ceiling, and ownership transfer all change shape in this change set, and
+//     the skill's rule is not to expose a capability whose authorization and
+//     product contract are not ready. Registering an agent is also not a
+//     standalone outcome without the credential step above, so it would hand an
+//     agent a half-provisioned identity it cannot finish. Suspend and revoke are
+//     the strongest first candidates once the contract settles: bounded, exactly
+//     targeted, already audited, and the operationally urgent ones.
+//
+//   - The agent-with-owner read is the most plausible candidate and is deferred
+//     on a privacy decision rather than on readiness. Nothing in Platform MCP
+//     returns an unmasked organization member today, so naming an owner would
+//     set a new precedent; the contract-consistent shape is a masked identity
+//     plus the opaque user reference search_users already mints, which an admin
+//     can then pivot through get_user_metrics_summary under its own audit entry.
+//     Note that agent:read is admin-only and does not expand from org:admin, so
+//     the tool's discovery and live authorization cannot reuse an existing
+//     member-default scope.
+//
+//   - Agent role assignment is deferred with the rest, for the same reason and
+//     not by oversight. The access API and the role dialog now take agent_ids,
+//     while Platform MCP's CreateRoleTx and UpdateRoleTx still pass
+//     AgentIds: nil, so an MCP caller editing a role cannot silently drop the
+//     agents already on it — the nil is "leave alone", not "clear". Exposing
+//     assignment before the lifecycle contract settles would let an agent grant
+//     another agent standing access, which is the one mutation here that widens
+//     authority rather than narrowing it.
+//
+// Revisit when the rollout flag is retired. Evidence that the deferred lane is
+// ready: agent:read grants are stable, the lifecycle enum is closed, and the
+// owner identity has an agreed masked wire form.
 type sessionAuthorizer interface {
-	AuthorizeWithPostAuthenticationCheck(
-		context.Context,
-		string,
-		*security.APIKeyScheme,
-		func(context.Context) error,
-	) (context.Context, error)
+	Authorize(context.Context, string, *security.APIKeyScheme) (context.Context, error)
 }
 
 type Service struct {
@@ -51,7 +96,6 @@ type Service struct {
 	auth           sessionAuthorizer
 	authorizer     *Authorizer
 	audit          *audit.Logger
-	features       feature.Provider
 	sessionTokens  sessionTokenRevoker
 	sessionRevoker agentSessionRevoker
 }
@@ -66,7 +110,6 @@ func NewService(
 	sessionManager *sessions.Manager,
 	authzEngine *authz.Engine,
 	auditLogger *audit.Logger,
-	features feature.Provider,
 	sessionTokens sessionTokenRevoker,
 	sessionRevoker agentSessionRevoker,
 ) *Service {
@@ -78,7 +121,6 @@ func NewService(
 		auth:           auth.New(logger, db, sessionManager, authzEngine),
 		authorizer:     NewAuthorizer(authzEngine),
 		audit:          auditLogger,
-		features:       features,
 		sessionTokens:  sessionTokens,
 		sessionRevoker: sessionRevoker,
 	}
@@ -92,34 +134,11 @@ func Attach(mux goahttp.Muxer, service *Service) {
 }
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
-	authorizedCtx, err := s.auth.AuthorizeWithPostAuthenticationCheck(ctx, key, schema, s.requireAgentManagementEnabled)
+	authorizedCtx, err := s.auth.Authorize(ctx, key, schema)
 	if err != nil {
 		return authorizedCtx, fmt.Errorf("authorize agent management session: %w", err)
 	}
 	return authorizedCtx, nil
-}
-
-func (s *Service) requireAgentManagementEnabled(ctx context.Context) error {
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx.ActiveOrganizationID == "" {
-		return oops.C(oops.CodeNotFound)
-	}
-
-	evaluation, err := feature.EvaluateFlag(
-		ctx,
-		s.features,
-		feature.FlagAgentManagement,
-		authCtx.ActiveOrganizationID,
-		feature.OrgProjectGroups(authCtx.OrganizationSlug, ""),
-	)
-	if err != nil {
-		s.logger.WarnContext(ctx, "failed to evaluate agent management rollout flag", attr.SlogError(err))
-	}
-	if evaluation != feature.EvaluationEnabled {
-		return oops.C(oops.CodeNotFound)
-	}
-
-	return nil
 }
 
 func (s *Service) Create(ctx context.Context, payload *gen.CreatePayload) (*gen.ManagedAgent, error) {
@@ -183,8 +202,8 @@ func (s *Service) Create(ctx context.Context, payload *gen.CreatePayload) (*gen.
 		if err := s.logAgent(ctx, tx, human, audit.ActionAgentCreate, nil, &agent); err != nil {
 			return err
 		}
-		// Policy grants are ceilings, not credentials. As with CreatePolicyGrant,
-		// intrinsic ownership permits setup; issuance still intersects live authority.
+		// Initial policy is bounded by caller and owner authority. Credential
+		// issuance independently checks its requested delegation against live policy.
 		for _, grant := range payload.PolicyGrants {
 			if grant == nil {
 				return oops.E(oops.CodeBadRequest, nil, "agent policy grant is required")

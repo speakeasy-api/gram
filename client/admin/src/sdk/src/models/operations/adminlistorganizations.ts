@@ -72,7 +72,7 @@ export type AdminListOrganizationsRequest = {
    */
   limit?: number | undefined;
   /**
-   * Column to sort by: name, slug, account_type, member_count, created_at, disabled_at or trial_ends_at. Omitted or unknown values use created_at descending. Ties always sort by id ascending. Supplying it selects offset paging.
+   * Column to sort by: name, slug, account_type, account_tier, member_count, created_at, disabled_at or trial_ends_at. account_tier ranks enterprise first, then pro and payg, then free, then any other account type; desc reverses that order. Omitted or unknown values use created_at descending. Ties always sort by id ascending. Supplying it selects offset paging.
    */
   sort?: string | undefined;
   /**

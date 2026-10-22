@@ -1,3 +1,4 @@
+import { enumPresentation } from "@/lib/enum";
 import { useEffect, type ReactNode } from "react";
 import { useLocation } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
@@ -24,6 +25,7 @@ import {
   CreateConnectionForm,
   SetupMethodChooser,
 } from "./OktaConnectionForms";
+import { OktaSignInSection } from "./OktaSignInSection";
 import { RevokeConnectionButton } from "./RevokeConnectionButton";
 import {
   CONNECTION_STATUS,
@@ -56,12 +58,12 @@ function VerificationOutcome({
   return (
     <div className="flex flex-col gap-3">
       {connection.lastError && (
-        <Alert variant="error" alignTop>
+        <Alert variant="error">
           <Text variant="small">{LAST_ERROR_LABELS[connection.lastError]}</Text>
         </Alert>
       )}
       {reasons.length > 0 && (
-        <Alert variant="warning" alignTop>
+        <Alert variant="warning">
           <div className="flex flex-col gap-1">
             <Text variant="small" className="font-medium">
               The connection needs attention
@@ -90,6 +92,7 @@ function VerificationOutcome({
 }
 
 const FOOTER_HINTS: Record<ConnectionStep, string> = {
+  unknown: "Refresh the page to check the connection status.",
   connected: "Re-verify after changing the app’s permissions in Okta.",
   repair: "Re-verify after changing the app’s permissions in Okta.",
   verify: "Verify once the app is set up to use the public key URL (JWKS).",
@@ -146,7 +149,10 @@ function ConnectionCard({
   }, [location.hash, location.key]);
   const queryClient = useQueryClient();
   const step = connectionStep(connection);
-  const status = CONNECTION_STATUS[connection.status];
+  const status = enumPresentation(CONNECTION_STATUS, connection.status, {
+    variant: "neutral",
+    label: "Unknown",
+  });
   const verify = useVerifyIdentityProviderConnectionMutation({
     onSuccess: (updated) => {
       if (updated.status === "verified") {
@@ -289,6 +295,7 @@ export function OktaConnectionTab({
         <SetupMethodChooser connection={connection} />
       )}
       <ChecklistSection connection={connection} />
+      <OktaSignInSection connection={connection} />
       <ConnectionCard connection={connection} />
     </div>
   );

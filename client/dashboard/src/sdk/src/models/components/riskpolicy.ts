@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
@@ -30,7 +31,7 @@ export const RiskPolicyAction = {
 /**
  * Policy action: flag (log only), warn (challenge: warn the user and require acknowledgement to proceed), block (deny in real-time), or quarantine (deny and freeze the hook session). MCP-scoped policies support flag and block only.
  */
-export type RiskPolicyAction = ClosedEnum<typeof RiskPolicyAction>;
+export type RiskPolicyAction = OpenEnum<typeof RiskPolicyAction>;
 
 /**
  * Policy audience type: everyone or targeted.
@@ -42,7 +43,7 @@ export const RiskPolicyAudienceType = {
 /**
  * Policy audience type: everyone or targeted.
  */
-export type RiskPolicyAudienceType = ClosedEnum<typeof RiskPolicyAudienceType>;
+export type RiskPolicyAudienceType = OpenEnum<typeof RiskPolicyAudienceType>;
 
 /**
  * Policy type: standard (regex/presidio/custom detection) or prompt_based (LLM-judge).
@@ -54,7 +55,7 @@ export const RiskPolicyPolicyType = {
 /**
  * Policy type: standard (regex/presidio/custom detection) or prompt_based (LLM-judge).
  */
-export type RiskPolicyPolicyType = ClosedEnum<typeof RiskPolicyPolicyType>;
+export type RiskPolicyPolicyType = OpenEnum<typeof RiskPolicyPolicyType>;
 
 /**
  * Default disposition for shadow MCP blocking policies: block_all blocks every non-Speakeasy-hosted server unless allowed, allow_all permits every server unless blocked. Blocked URLs are stored as risk_policy:block grants, not on the policy. Immutable after create. Only present on policies with the shadow_mcp source and block action.
@@ -66,7 +67,7 @@ export const RiskPolicyShadowMcpDisposition = {
 /**
  * Default disposition for shadow MCP blocking policies: block_all blocks every non-Speakeasy-hosted server unless allowed, allow_all permits every server unless blocked. Blocked URLs are stored as risk_policy:block grants, not on the policy. Immutable after create. Only present on policies with the shadow_mcp source and block action.
  */
-export type RiskPolicyShadowMcpDisposition = ClosedEnum<
+export type RiskPolicyShadowMcpDisposition = OpenEnum<
   typeof RiskPolicyShadowMcpDisposition
 >;
 
@@ -122,10 +123,6 @@ export type RiskPolicy = {
    */
   name: string;
   /**
-   * Number of messages not yet analyzed at the current policy version. Populated on single-policy reads; omitted from list responses (use riskPoliciesStatus for progress).
-   */
-  pendingMessages?: number | undefined;
-  /**
    * Policy type: standard (regex/presidio/custom detection) or prompt_based (LLM-judge).
    */
   policyType: RiskPolicyPolicyType;
@@ -162,10 +159,6 @@ export type RiskPolicy = {
    */
   sources: Array<string>;
   /**
-   * Total number of messages in the project. Populated on single-policy reads; omitted from list responses.
-   */
-  totalMessages?: number | undefined;
-  /**
    * When the policy was last updated.
    */
   updatedAt: Date;
@@ -180,24 +173,28 @@ export type RiskPolicy = {
 };
 
 /** @internal */
-export const RiskPolicyAction$inboundSchema: z.ZodMiniEnum<
-  typeof RiskPolicyAction
-> = z.enum(RiskPolicyAction);
+export const RiskPolicyAction$inboundSchema: z.ZodMiniType<
+  RiskPolicyAction,
+  unknown
+> = openEnums.inboundSchema(RiskPolicyAction);
 
 /** @internal */
-export const RiskPolicyAudienceType$inboundSchema: z.ZodMiniEnum<
-  typeof RiskPolicyAudienceType
-> = z.enum(RiskPolicyAudienceType);
+export const RiskPolicyAudienceType$inboundSchema: z.ZodMiniType<
+  RiskPolicyAudienceType,
+  unknown
+> = openEnums.inboundSchema(RiskPolicyAudienceType);
 
 /** @internal */
-export const RiskPolicyPolicyType$inboundSchema: z.ZodMiniEnum<
-  typeof RiskPolicyPolicyType
-> = z.enum(RiskPolicyPolicyType);
+export const RiskPolicyPolicyType$inboundSchema: z.ZodMiniType<
+  RiskPolicyPolicyType,
+  unknown
+> = openEnums.inboundSchema(RiskPolicyPolicyType);
 
 /** @internal */
-export const RiskPolicyShadowMcpDisposition$inboundSchema: z.ZodMiniEnum<
-  typeof RiskPolicyShadowMcpDisposition
-> = z.enum(RiskPolicyShadowMcpDisposition);
+export const RiskPolicyShadowMcpDisposition$inboundSchema: z.ZodMiniType<
+  RiskPolicyShadowMcpDisposition,
+  unknown
+> = openEnums.inboundSchema(RiskPolicyShadowMcpDisposition);
 
 /** @internal */
 export const RiskPolicy$inboundSchema: z.ZodMiniType<RiskPolicy, unknown> = z
@@ -223,7 +220,6 @@ export const RiskPolicy$inboundSchema: z.ZodMiniType<RiskPolicy, unknown> = z
       mcp_scope: z.optional(RiskMCPScope$inboundSchema),
       model_config: z.optional(RiskPolicyModelConfig$inboundSchema),
       name: z.string(),
-      pending_messages: z.optional(z.int()),
       policy_type: z._default(RiskPolicyPolicyType$inboundSchema, "standard"),
       presidio_entities: z.optional(z.array(z.string())),
       presidio_score_threshold: z.optional(z.number()),
@@ -235,7 +231,6 @@ export const RiskPolicy$inboundSchema: z.ZodMiniType<RiskPolicy, unknown> = z
         RiskPolicyShadowMcpDisposition$inboundSchema,
       ),
       sources: z.array(z.string()),
-      total_messages: z.optional(z.int()),
       updated_at: z.pipe(
         z.iso.datetime({ offset: true }),
         z.transform(v => new Date(v)),
@@ -255,14 +250,12 @@ export const RiskPolicy$inboundSchema: z.ZodMiniType<RiskPolicy, unknown> = z
         "disabled_rules": "disabledRules",
         "mcp_scope": "mcpScope",
         "model_config": "modelConfig",
-        "pending_messages": "pendingMessages",
         "policy_type": "policyType",
         "presidio_entities": "presidioEntities",
         "presidio_score_threshold": "presidioScoreThreshold",
         "project_id": "projectId",
         "prompt_injection_rules": "promptInjectionRules",
         "shadow_mcp_disposition": "shadowMcpDisposition",
-        "total_messages": "totalMessages",
         "updated_at": "updatedAt",
         "user_message": "userMessage",
       });

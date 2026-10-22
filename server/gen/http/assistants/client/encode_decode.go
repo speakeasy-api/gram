@@ -2389,6 +2389,7 @@ func unmarshalAssistantResponseBodyToTypesAssistant(v *AssistantResponseBody) *t
 		Instructions:    *v.Instructions,
 		WarmTTLSeconds:  *v.WarmTTLSeconds,
 		MaxConcurrency:  *v.MaxConcurrency,
+		RuntimeVersion:  *v.RuntimeVersion,
 		Status:          *v.Status,
 		CreatedAt:       *v.CreatedAt,
 		UpdatedAt:       *v.UpdatedAt,

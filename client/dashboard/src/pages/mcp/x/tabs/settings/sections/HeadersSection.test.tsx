@@ -173,6 +173,22 @@ describe("HeadersSection", () => {
     expect(box(values[1]!)).toContain("border-warning-default");
   });
 
+  it("refuses to forward the caller's Authorization upstream", () => {
+    const rows = [
+      draft({
+        key: "row-authorization",
+        name: "X-Token",
+        source: "request",
+        staticValue: "",
+        valueFromRequestHeader: " authorization ",
+      }),
+    ];
+    expect(headerDraftErrors(rows).get("row-authorization")).toEqual({
+      field: "value",
+      message: '"authorization" cannot be forwarded upstream.',
+    });
+  });
+
   it("refuses to forward the session cookie upstream", () => {
     // The proxy is the control that holds; this marks the row while editing
     // so the refusal is not a failed request much later.
@@ -213,6 +229,14 @@ describe("HeadersSection", () => {
     expect(name.parentElement?.className ?? "").not.toContain(
       "border-warning-default",
     );
+  });
+
+  it("shows the server's reason when a save is refused", () => {
+    const message =
+      'header "X-Upstream-Token" cannot read request header "Gram-Key": Speakeasy credentials and cookies are never forwarded to remote MCP servers';
+    renderSection(headerState({ error: new Error(message) }));
+
+    expect(screen.getByText(message)).toBeTruthy();
   });
 
   it("leaves the name free when no identity claims it", () => {

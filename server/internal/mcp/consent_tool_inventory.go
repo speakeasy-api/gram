@@ -52,9 +52,16 @@ const (
 // failure: approval cannot bind without it.
 var errConsentInventoryUnavailable = errors.New("consent tool inventory store unavailable")
 
+// errConsentConfigurationChanged requires a fresh page and discovery attempt.
+var errConsentConfigurationChanged = errors.New("server configuration changed; reload consent")
+
 // consentInventoryTool is one captured tool: name plus the known annotation
 // values whose raw hints are explicitly true.
 type consentInventoryTool struct {
+	// DefinitionHash detects changes to a tool's schema or metadata, even
+	// when its name and annotation choices are unchanged.
+	DefinitionHash string `json:"definition_hash,omitempty"`
+
 	Name        string   `json:"name"`
 	Annotations []string `json:"annotations"`
 }
@@ -62,6 +69,11 @@ type consentInventoryTool struct {
 // consentToolInventory is the per-(state, attempt) snapshot. It accumulates
 // across tools/list pages and becomes immutable once Complete.
 type consentToolInventory struct {
+	CompletedAt time.Time `json:"completed_at"`
+
+	// BackendHash pins evidence to the configured backend, not just a tool name.
+	BackendHash string `json:"backend_hash,omitempty"`
+
 	// StateID keys the snapshot to one authn challenge.
 	StateID string `json:"state_id"`
 
@@ -119,14 +131,23 @@ func consentAttemptID(raw string) (string, error) {
 // loadConsentInventoryDraft reads the attempt's draft, creating the initial
 // empty draft on first use.
 func (s *Service) loadConsentInventoryDraft(ctx context.Context, endpoint *ResolvedMcpEndpoint, stateID, attempt string) (consentToolInventory, error) {
+	backendHash, err := s.consentBackendFingerprint(ctx, endpoint)
+	if err != nil {
+		return consentToolInventory{}, err
+	}
 	cached, err := s.consentToolInventoryCache.Get(ctx, consentToolInventoryCacheKey(stateID, attempt))
 	if err == nil {
+		if cached.BackendHash != backendHash {
+			return consentToolInventory{}, errConsentConfigurationChanged
+		}
 		return cached, nil
 	}
 	if !errors.Is(err, redisCache.ErrCacheMiss) {
 		return consentToolInventory{}, fmt.Errorf("%w: %w", errConsentInventoryUnavailable, err)
 	}
 	return consentToolInventory{
+		CompletedAt:    time.Time{},
+		BackendHash:    backendHash,
 		StateID:        stateID,
 		Attempt:        attempt,
 		Resource:       endpointToolSelectionResource(endpoint),
@@ -188,6 +209,7 @@ func (s *Service) appendConsentInventoryPage(
 			return strings.Compare(a.Name, b.Name)
 		})
 		draft.Complete = true
+		draft.CompletedAt = time.Now()
 	}
 	if err := s.consentToolInventoryCache.Store(ctx, draft); err != nil {
 		return draft, fmt.Errorf("%w: store inventory snapshot: %w", errConsentInventoryUnavailable, err)
@@ -264,6 +286,9 @@ func (s *Service) enumerateToolsetConsentInventory(ctx context.Context, endpoint
 	connectResourceID := endpoint.connectResourceID().String()
 	tools = []consentInventoryTool{}
 	for _, tool := range toolset.Tools {
+		if cerr := ctx.Err(); cerr != nil {
+			return nil, nil, fmt.Errorf("enumerate consent inventory: %w", cerr)
+		}
 		if tool == nil || conv.IsProxyTool(tool) {
 			continue
 		}
@@ -293,8 +318,9 @@ func (s *Service) enumerateToolsetConsentInventory(ctx context.Context, endpoint
 			}
 		}
 		tools = append(tools, consentInventoryTool{
-			Name:        base.Name,
-			Annotations: values,
+			Name:           base.Name,
+			DefinitionHash: consentEvidenceHash(tool),
+			Annotations:    values,
 		})
 	}
 	return tools, roleHidden, nil

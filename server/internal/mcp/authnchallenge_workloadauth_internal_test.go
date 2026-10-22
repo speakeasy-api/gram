@@ -10,8 +10,8 @@ import (
 	workloadidentity_repo "github.com/speakeasy-api/gram/server/internal/workloadidentity/repo"
 )
 
-func workloadTestEndpoint(issuerID uuid.UUID) *ResolvedMcpEndpoint {
-	return &ResolvedMcpEndpoint{UserSessionIssuerID: issuerID}
+func workloadTestTenancy(issuerID uuid.UUID) workloadTenancy {
+	return workloadTenancy{OrganizationID: "", ProjectID: uuid.Nil, UserSessionIssuerID: issuerID}
 }
 
 func workloadTestIssuer(name string, jwksURI string) *workloadidentity_repo.WorkloadIssuer {
@@ -23,7 +23,7 @@ func TestWorkloadIssuerKeySource_BuildsRemoteSource(t *testing.T) {
 
 	issuerID := uuid.New()
 	source, err := workloadIssuerKeySource(
-		workloadTestEndpoint(issuerID),
+		workloadTestTenancy(issuerID),
 		workloadTestIssuer("gh-actions", "https://example.test/keys"),
 	)
 
@@ -37,7 +37,7 @@ func TestWorkloadIssuerKeySource_EmptyJwksURIIsRefused(t *testing.T) {
 	t.Parallel()
 
 	_, err := workloadIssuerKeySource(
-		workloadTestEndpoint(uuid.New()),
+		workloadTestTenancy(uuid.New()),
 		workloadTestIssuer("gh-actions", ""),
 	)
 
@@ -49,7 +49,7 @@ func TestWorkloadIssuerKeySource_RefusesPlainHTTPJwksURI(t *testing.T) {
 	t.Parallel()
 
 	_, err := workloadIssuerKeySource(
-		workloadTestEndpoint(uuid.New()),
+		workloadTestTenancy(uuid.New()),
 		workloadTestIssuer("gh-actions", "http://example.test/keys"),
 	)
 
@@ -61,7 +61,7 @@ func TestWorkloadIssuerKeySource_RejectsMalformedHTTPSJwksURI(t *testing.T) {
 	t.Parallel()
 
 	_, err := workloadIssuerKeySource(
-		workloadTestEndpoint(uuid.New()),
+		workloadTestTenancy(uuid.New()),
 		workloadTestIssuer("gh-actions", "https://example.test/keys#frag"),
 	)
 
@@ -75,8 +75,8 @@ func TestWorkloadFetchScope_IsPerAuthorizationServerAndSeparateFromClientAuth(t 
 
 	first, second := uuid.New(), uuid.New()
 
-	require.Equal(t, "workload:"+first.String(), workloadFetchScope(workloadTestEndpoint(first)),
+	require.Equal(t, "workload:"+first.String(), workloadFetchScope(workloadTestTenancy(first)),
 		"keyed by the authorization server, prefixed so this grant's budget is separate from client auth's on the same endpoint")
-	require.NotEqual(t, workloadFetchScope(workloadTestEndpoint(first)), workloadFetchScope(workloadTestEndpoint(second)),
+	require.NotEqual(t, workloadFetchScope(workloadTestTenancy(first)), workloadFetchScope(workloadTestTenancy(second)),
 		"one endpoint's issuers must not be able to exhaust another's budget")
 }

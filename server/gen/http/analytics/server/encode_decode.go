@@ -760,11 +760,12 @@ func marshalAnalyticsAnalyticsDatasetToAnalyticsDatasetResponseBody(v *analytics
 // *analytics.AnalyticsField.
 func marshalAnalyticsAnalyticsFieldToAnalyticsFieldResponseBody(v *analytics.AnalyticsField) *AnalyticsFieldResponseBody {
 	res := &AnalyticsFieldResponseBody{
-		Name:    v.Name,
-		Type:    v.Type,
-		Role:    v.Role,
-		Default: v.Default,
-		Unit:    v.Unit,
+		Name:        v.Name,
+		Type:        v.Type,
+		Role:        v.Role,
+		Default:     v.Default,
+		Unit:        v.Unit,
+		Description: v.Description,
 	}
 	if v.Operators != nil {
 		res.Operators = make([]string, len(v.Operators))
@@ -777,6 +778,24 @@ func marshalAnalyticsAnalyticsFieldToAnalyticsFieldResponseBody(v *analytics.Ana
 		for i, val := range v.Aggregations {
 			res.Aggregations[i] = val
 		}
+	}
+	if v.Lookup != nil {
+		res.Lookup = marshalAnalyticsAnalyticsLookupToAnalyticsLookupResponseBody(v.Lookup)
+	}
+
+	return res
+}
+
+// marshalAnalyticsAnalyticsLookupToAnalyticsLookupResponseBody builds a value
+// of type *AnalyticsLookupResponseBody from a value of type
+// *analytics.AnalyticsLookup.
+func marshalAnalyticsAnalyticsLookupToAnalyticsLookupResponseBody(v *analytics.AnalyticsLookup) *AnalyticsLookupResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &AnalyticsLookupResponseBody{
+		Name:        v.Name,
+		Description: v.Description,
 	}
 
 	return res

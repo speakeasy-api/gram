@@ -251,6 +251,44 @@ func (q *Queries) GetCustomDomainByDomain(ctx context.Context, domain string) (C
 	return i, err
 }
 
+const getCustomDomainByDomainAndOrganization = `-- name: GetCustomDomainByDomainAndOrganization :one
+SELECT id, organization_id, domain, verified, activated, ingress_name, cert_secret_name, provisioner_kind, ip_allowlist, openai_apps_challenge_token, health_status, health_issue, health_checked_at, unhealthy_since, certificate_expires_at, consecutive_failures, created_at, updated_at, deleted_at, deleted FROM custom_domains
+WHERE domain = $1 AND organization_id = $2 AND deleted IS FALSE
+`
+
+type GetCustomDomainByDomainAndOrganizationParams struct {
+	Domain         string
+	OrganizationID string
+}
+
+func (q *Queries) GetCustomDomainByDomainAndOrganization(ctx context.Context, arg GetCustomDomainByDomainAndOrganizationParams) (CustomDomain, error) {
+	row := q.db.QueryRow(ctx, getCustomDomainByDomainAndOrganization, arg.Domain, arg.OrganizationID)
+	var i CustomDomain
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.Domain,
+		&i.Verified,
+		&i.Activated,
+		&i.IngressName,
+		&i.CertSecretName,
+		&i.ProvisionerKind,
+		&i.IpAllowlist,
+		&i.OpenaiAppsChallengeToken,
+		&i.HealthStatus,
+		&i.HealthIssue,
+		&i.HealthCheckedAt,
+		&i.UnhealthySince,
+		&i.CertificateExpiresAt,
+		&i.ConsecutiveFailures,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const getCustomDomainByID = `-- name: GetCustomDomainByID :one
 SELECT id, organization_id, domain, verified, activated, ingress_name, cert_secret_name, provisioner_kind, ip_allowlist, openai_apps_challenge_token, health_status, health_issue, health_checked_at, unhealthy_since, certificate_expires_at, consecutive_failures, created_at, updated_at, deleted_at, deleted
 FROM custom_domains
@@ -480,7 +518,7 @@ func (q *Queries) GetEligibleRootMcpEndpoint(ctx context.Context, arg GetEligibl
 }
 
 const getEligibleRootMcpServerForOrganization = `-- name: GetEligibleRootMcpServerForOrganization :one
-SELECT s.id, s.project_id, s.name, s.slug, s.environment_id, s.user_session_issuer_id, s.remote_session_issuer_id, s.remote_mcp_server_id, s.tunneled_mcp_server_id, s.toolset_id, s.unproxied_mcp_server_id, s.tool_variations_group_id, s.visibility, s.network_access_mode, s.created_at, s.updated_at, s.deleted_at, s.deleted
+SELECT s.id, s.project_id, s.name, s.slug, s.environment_id, s.user_session_issuer_id, s.remote_session_issuer_id, s.remote_mcp_server_id, s.tunneled_mcp_server_id, s.toolset_id, s.unproxied_mcp_server_id, s.tool_variations_group_id, s.visibility, s.network_access_mode, s.requires_upstream_auth, s.created_at, s.updated_at, s.deleted_at, s.deleted
 FROM mcp_servers AS s
 JOIN projects AS p
   ON p.id = s.project_id
@@ -517,6 +555,7 @@ func (q *Queries) GetEligibleRootMcpServerForOrganization(ctx context.Context, a
 		&i.ToolVariationsGroupID,
 		&i.Visibility,
 		&i.NetworkAccessMode,
+		&i.RequiresUpstreamAuth,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -748,6 +787,7 @@ WHERE p.organization_id = $2
   AND s.deleted IS FALSE
   AND s.visibility <> 'disabled'
   AND (COALESCE(s.slug, '') <> '' OR e.id IS NOT NULL)
+  AND (s.toolset_id IS DISTINCT FROM s.id OR e.id IS NOT NULL)
 ORDER BY p.name, s.name NULLS LAST, s.id
 `
 
@@ -772,7 +812,8 @@ type ListEligibleRootMcpServersForOrganizationRow struct {
 // can carry several endpoints on a domain: prefer the root one, then the
 // oldest) so callers can distinguish attach-and-set from set. Slugless
 // servers are omitted unless already attached: the by-server path needs a
-// slug to name the endpoint it creates.
+// slug to name the endpoint it creates. A hosted server's canonical wrapper
+// (id = toolset id) is offered only when its one endpoint is on this domain.
 func (q *Queries) ListEligibleRootMcpServersForOrganization(ctx context.Context, arg ListEligibleRootMcpServersForOrganizationParams) ([]ListEligibleRootMcpServersForOrganizationRow, error) {
 	rows, err := q.db.Query(ctx, listEligibleRootMcpServersForOrganization, arg.CustomDomainID, arg.OrganizationID)
 	if err != nil {

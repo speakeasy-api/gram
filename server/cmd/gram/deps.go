@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"cloud.google.com/go/pubsub/v2"
+	cloudstorage "cloud.google.com/go/storage"
 	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/exaring/otelpgx"
@@ -54,6 +55,7 @@ import (
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 	telemetryv1 "github.com/speakeasy-api/gram/infra/gen/gram/telemetry/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
+	"github.com/speakeasy-api/gram/infra/pkg/storage"
 	"github.com/speakeasy-api/gram/infra/pkg/topics"
 	"github.com/speakeasy-api/gram/server/internal/access"
 	"github.com/speakeasy-api/gram/server/internal/admin"
@@ -75,7 +77,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/growthsignals"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/identityproviderconnections"
+	"github.com/speakeasy-api/gram/server/internal/internalsessionissuers"
 	"github.com/speakeasy-api/gram/server/internal/inv"
+	"github.com/speakeasy-api/gram/server/internal/lake"
 	"github.com/speakeasy-api/gram/server/internal/mcpauthz"
 	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/must"
@@ -133,6 +137,10 @@ func loadConfigFromFile(c *cli.Context, flags []cli.Flag) error {
 }
 
 func newGuardianPolicy(c *cli.Context, logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, redisClient redis.UniversalClient) (policy *guardian.Policy, err error) {
+	catalogOption, err := guardian.WithHostedMCPFrontEndCIDR(c.String("remote-mcp-catalog-ilb-cidr"))
+	if err != nil {
+		return nil, fmt.Errorf("configure remote MCP catalog: %w", err)
+	}
 	breaker := guardian.NewNoopBreaker(logger, meterProvider)
 	limiter := guardian.NewRedisRateLimiter(logger, meterProvider, redisClient)
 
@@ -166,6 +174,7 @@ func newGuardianPolicy(c *cli.Context, logger *slog.Logger, tracerProvider trace
 		}
 	}
 
+	catalogOption(policy)
 	return policy, nil
 }
 
@@ -255,6 +264,15 @@ func openClickhouseClient(ctx context.Context, logger *slog.Logger, opts clickho
 		},
 		Settings: clickhouse.Settings{
 			"max_execution_time": 60, // query timeout
+			// Async inserts that leave the wait to the connection are
+			// fire-and-forget: they ack once queued rather than once
+			// committed. Tests set 1 on their connection to read their own
+			// writes. ClickHouse defaults async_insert to 1 since 26.2, so an
+			// insert that sends no async settings is fire-and-forget here too:
+			// every insert must state its posture (async_insert=0, or
+			// async_insert=1 with an explicit wait_for_async_insert=1 when it
+			// must read its own writes).
+			"wait_for_async_insert": 0,
 		},
 		MaxOpenConns: opts.maxOpenConns,
 		MaxIdleConns: opts.maxIdleConns,
@@ -505,11 +523,21 @@ func newTemporalClient(logger *slog.Logger, meterProvider metric.MeterProvider, 
 	}, nil
 }
 
+// newFeatureFlags returns PostHog, or the CSV-backed in-memory provider in local dev.
+func newFeatureFlags(ctx context.Context, c *cli.Context, logger *slog.Logger, posthogClient feature.Provider) feature.Provider {
+	if c.String("environment") == "local" {
+		return newLocalFeatureFlags(ctx, logger, c.String("local-feature-flags-csv"))
+	}
+	return posthogClient
+}
+
 func newLocalFeatureFlags(ctx context.Context, logger *slog.Logger, csvPath string) *feature.InMemory {
 	inmem := &feature.InMemory{}
 	// Local dev has no Presidio HTTP analyzer, so realtime scans must take the
 	// Pub/Sub lanes to pystreams. A CSV row can still turn this off.
 	inmem.SetFlag(feature.FlagRiskEnforcementPubsub, feature.AnyDistinctID, true)
+	// The issuer kill switch fails closed when unset, so local dev sets it off.
+	inmem.SetFlag(feature.FlagInternalSessionIssuerSigningPaused, feature.AnyDistinctID, false)
 
 	if csvPath == "" {
 		logger.DebugContext(ctx, "newLocalFeatureFlags: no csv path provided, using empty in-memory feature flag provider")
@@ -787,8 +815,9 @@ func newStripeCatalog(c *cli.Context) metering.StripeCatalog {
 // the dev-idp's WorkOS emulator without changing any wiring.
 func workosClientOpts(c *cli.Context) workos.ClientOpts {
 	return workos.ClientOpts{
-		Endpoint: c.String("workos-endpoint"),
-		ClientID: c.String("idp-client-id"),
+		Endpoint:    c.String("workos-endpoint"),
+		ClientID:    c.String("idp-client-id"),
+		RetryConfig: nil,
 	}
 }
 
@@ -1296,6 +1325,46 @@ func newSvixClient(c *cli.Context, logger *slog.Logger, guardianPolicy *guardian
 type pubSubBroker interface {
 	gcp.PublisherBroker
 	gcp.SubscriberBroker
+	storage.Broker
+}
+
+func newLakeStorage(ctx context.Context, logger *slog.Logger, c *cli.Context) (storage.Store, map[string]string, func(context.Context) error, error) {
+	buckets, err := storage.ParseBucketMapping(c.String("storage-buckets"))
+	if err != nil {
+		return nil, nil, noopShutdown, fmt.Errorf("parse storage bucket mapping: %w", err)
+	}
+
+	if c.String("environment") == "local" {
+		if buckets["lake"] == "" {
+			buckets["lake"] = "lake"
+		}
+
+		store, err := lake.NewFilesystemStore(ctx, logger, c.String("lake-directory"))
+		if err != nil {
+			return nil, nil, noopShutdown, fmt.Errorf("create filesystem lake: %w", err)
+		}
+
+		return store, buckets, func(context.Context) error { return store.Close() }, nil
+	}
+
+	// Preview environments emulate Pub/Sub and map no lake bucket. They have no
+	// persistent disk either, so the lake is disabled rather than faked: a nil
+	// store tells the caller not to start the lake consumer.
+	if buckets["lake"] == "" && c.String("pubsub-emulator-host") != "" {
+		logger.WarnContext(ctx, "lake disabled: Pub/Sub is emulated and no lake bucket is mapped")
+		return nil, buckets, noopShutdown, nil
+	}
+
+	if buckets["lake"] == "" {
+		return nil, nil, noopShutdown, errors.New("storage bucket mapping for lake is required")
+	}
+
+	client, err := cloudstorage.NewClient(ctx)
+	if err != nil {
+		return nil, nil, noopShutdown, fmt.Errorf("create lake GCS client: %w", err)
+	}
+
+	return &storage.GCSStore{Client: client}, buckets, func(context.Context) error { return client.Close() }, nil
 }
 
 func newPubSubClient(ctx context.Context, c *cli.Context, logger *slog.Logger) (*pubsub.Client, pubSubBroker, func(ctx context.Context) error, error) {
@@ -1389,6 +1458,18 @@ func newPublishers(ctx context.Context, psbroker pubSubBroker) (*background.Publ
 		return nil, noopShutdown, fmt.Errorf("failed to create pubsub publisher for llm analysis: %w", err)
 	}
 	pubs = append(pubs, labelledStop{label: "llmAnalysis", pub: llmAnalysis})
+
+	toolCallAnalysis, err := gcp.PubSubPublisherForMessage(ctx, psbroker, &riskv1.ToolCallAnalysis{})
+	if err != nil {
+		return nil, noopShutdown, fmt.Errorf("failed to create pubsub publisher for tool call analysis: %w", err)
+	}
+	pubs = append(pubs, labelledStop{label: "toolCallAnalysis", pub: toolCallAnalysis})
+
+	accountIdentityAnalysis, err := gcp.PubSubPublisherForMessage(ctx, psbroker, &riskv1.AccountIdentityAnalysis{})
+	if err != nil {
+		return nil, noopShutdown, fmt.Errorf("failed to create pubsub publisher for account identity analysis: %w", err)
+	}
+	pubs = append(pubs, labelledStop{label: "accountIdentityAnalysis", pub: accountIdentityAnalysis})
 
 	riskFindings, err := gcp.PubSubPublisherForMessage(ctx, psbroker, &riskv1.Finding{})
 	if err != nil {
@@ -1494,6 +1575,8 @@ func newPublishers(ctx context.Context, psbroker pubSubBroker) (*background.Publ
 		PromptPolicyAnalysis:    promptPolicyAnalysis,
 		CustomRulesAnalysis:     customRulesAnalysis,
 		LLMAnalysis:             llmAnalysis,
+		ToolCallAnalysis:        toolCallAnalysis,
+		AccountIdentityAnalysis: accountIdentityAnalysis,
 		RiskFindings:            riskFindings,
 		MeterReadings:           meterReadings,
 		TelemetryLogs:           telemetryLogs,
@@ -1665,6 +1748,7 @@ func newIdentityProviderConnectionsProvisioner(ctx context.Context, logger *slog
 		SigningCredentialID:   credentialID,
 		SigningServiceAccount: strings.TrimSpace(c.String(identityProviderSigningServiceAccount)),
 		ServerURL:             serverURL,
+		AllowLoopbackIssuer:   c.String("environment") == "local",
 	})
 	if err != nil {
 		return nil, fmt.Errorf("build identity provider connections provisioner: %w", err)
@@ -1732,4 +1816,38 @@ func preserveLegacyLocalSigningKey(sourcePath, targetPath string) error {
 // capacity.
 func newGrowthSignalsEmitter(logger *slog.Logger, posthogClient *posthog.Posthog, replicaDB *pgxpool.Pool, siteURL *url.URL) *growthsignals.Emitter {
 	return growthsignals.NewEmitter(logger, posthogClient, growthsignals.NewDatabaseEnricher(replicaDB), siteURL)
+}
+
+// newInternalSessionIssuerGate reports what each organization may do with its
+// issuer, honoring the startup kill switch.
+func newInternalSessionIssuerGate(c *cli.Context, db *pgxpool.Pool, featureFlags feature.Provider, provisioning bool) *internalsessionissuers.Gate {
+	return internalsessionissuers.NewGate(db, featureFlags, internalsessionissuers.GateConfig{
+		Provisioning:  provisioning,
+		SigningPaused: c.Bool(internalSessionIssuerSigningPausedFlag),
+	})
+}
+
+// internalSessionIssuerManager keeps a nil provisioner a nil interface.
+func internalSessionIssuerManager(provisioner *identityproviderconnections.Provisioner) internalsessionissuers.Manager {
+	if provisioner == nil {
+		return nil
+	}
+	return provisioner
+}
+
+// enableIssuerKeyAutoActivation lets the key sweep finish routine rotations,
+// approving each key with the same checks a signature passes.
+func enableIssuerKeyAutoActivation(provisioner *identityproviderconnections.Provisioner, signer *internalsessionissuers.Signer) {
+	if provisioner == nil {
+		return
+	}
+	provisioner.SetEMAIssuerActivationCheck(signer.CheckActivation)
+}
+
+// issuerKeySweeper keeps a nil provisioner a nil interface.
+func issuerKeySweeper(provisioner *identityproviderconnections.Provisioner) background.InternalSessionIssuerKeySweeper {
+	if provisioner == nil {
+		return nil
+	}
+	return provisioner
 }

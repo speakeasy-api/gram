@@ -495,6 +495,245 @@ func DecodeListPlatformsResponse(decoder func(*http.Response) goahttp.Decoder, r
 	}
 }
 
+// BuildGetCustomFlowsRequest instantiates a HTTP request object with method
+// and path set to call the "workloadIdentities" service "getCustomFlows"
+// endpoint
+func (c *Client) BuildGetCustomFlowsRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetCustomFlowsWorkloadIdentitiesPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("workloadIdentities", "getCustomFlows", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGetCustomFlowsRequest returns an encoder for requests sent to the
+// workloadIdentities getCustomFlows server.
+func EncodeGetCustomFlowsRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*workloadidentities.GetCustomFlowsPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("workloadIdentities", "getCustomFlows", "*workloadidentities.GetCustomFlowsPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		return nil
+	}
+}
+
+// DecodeGetCustomFlowsResponse returns a decoder for responses returned by the
+// workloadIdentities getCustomFlows endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeGetCustomFlowsResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeGetCustomFlowsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body GetCustomFlowsResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "getCustomFlows", err)
+			}
+			err = ValidateGetCustomFlowsResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "getCustomFlows", err)
+			}
+			res := NewGetCustomFlowsWorkloadCustomFlowsOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body GetCustomFlowsUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "getCustomFlows", err)
+			}
+			err = ValidateGetCustomFlowsUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "getCustomFlows", err)
+			}
+			return nil, NewGetCustomFlowsUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetCustomFlowsForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "getCustomFlows", err)
+			}
+			err = ValidateGetCustomFlowsForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "getCustomFlows", err)
+			}
+			return nil, NewGetCustomFlowsForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetCustomFlowsBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "getCustomFlows", err)
+			}
+			err = ValidateGetCustomFlowsBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "getCustomFlows", err)
+			}
+			return nil, NewGetCustomFlowsBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetCustomFlowsNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "getCustomFlows", err)
+			}
+			err = ValidateGetCustomFlowsNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "getCustomFlows", err)
+			}
+			return nil, NewGetCustomFlowsNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetCustomFlowsConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "getCustomFlows", err)
+			}
+			err = ValidateGetCustomFlowsConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "getCustomFlows", err)
+			}
+			return nil, NewGetCustomFlowsConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetCustomFlowsUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "getCustomFlows", err)
+			}
+			err = ValidateGetCustomFlowsUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "getCustomFlows", err)
+			}
+			return nil, NewGetCustomFlowsUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetCustomFlowsInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "getCustomFlows", err)
+			}
+			err = ValidateGetCustomFlowsInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "getCustomFlows", err)
+			}
+			return nil, NewGetCustomFlowsInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetCustomFlowsInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("workloadIdentities", "getCustomFlows", err)
+				}
+				err = ValidateGetCustomFlowsInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("workloadIdentities", "getCustomFlows", err)
+				}
+				return nil, NewGetCustomFlowsInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetCustomFlowsUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("workloadIdentities", "getCustomFlows", err)
+				}
+				err = ValidateGetCustomFlowsUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("workloadIdentities", "getCustomFlows", err)
+				}
+				return nil, NewGetCustomFlowsUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("workloadIdentities", "getCustomFlows", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GetCustomFlowsGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "getCustomFlows", err)
+			}
+			err = ValidateGetCustomFlowsGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "getCustomFlows", err)
+			}
+			return nil, NewGetCustomFlowsGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("workloadIdentities", "getCustomFlows", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildListTokenEndpointsRequest instantiates a HTTP request object with
 // method and path set to call the "workloadIdentities" service
 // "listTokenEndpoints" endpoint
@@ -2187,6 +2426,480 @@ func DecodeWithdrawSubjectResponse(decoder func(*http.Response) goahttp.Decoder,
 	}
 }
 
+// BuildCreateDeviceJoinTokenRequest instantiates a HTTP request object with
+// method and path set to call the "workloadIdentities" service
+// "createDeviceJoinToken" endpoint
+func (c *Client) BuildCreateDeviceJoinTokenRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: CreateDeviceJoinTokenWorkloadIdentitiesPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("workloadIdentities", "createDeviceJoinToken", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeCreateDeviceJoinTokenRequest returns an encoder for requests sent to
+// the workloadIdentities createDeviceJoinToken server.
+func EncodeCreateDeviceJoinTokenRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*workloadidentities.CreateDeviceJoinTokenPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("workloadIdentities", "createDeviceJoinToken", "*workloadidentities.CreateDeviceJoinTokenPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		body := NewCreateDeviceJoinTokenRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("workloadIdentities", "createDeviceJoinToken", err)
+		}
+		return nil
+	}
+}
+
+// DecodeCreateDeviceJoinTokenResponse returns a decoder for responses returned
+// by the workloadIdentities createDeviceJoinToken endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeCreateDeviceJoinTokenResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeCreateDeviceJoinTokenResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body CreateDeviceJoinTokenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "createDeviceJoinToken", err)
+			}
+			err = ValidateCreateDeviceJoinTokenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "createDeviceJoinToken", err)
+			}
+			res := NewCreateDeviceJoinTokenWorkloadDeviceJoinTokenOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body CreateDeviceJoinTokenUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "createDeviceJoinToken", err)
+			}
+			err = ValidateCreateDeviceJoinTokenUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "createDeviceJoinToken", err)
+			}
+			return nil, NewCreateDeviceJoinTokenUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body CreateDeviceJoinTokenForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "createDeviceJoinToken", err)
+			}
+			err = ValidateCreateDeviceJoinTokenForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "createDeviceJoinToken", err)
+			}
+			return nil, NewCreateDeviceJoinTokenForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body CreateDeviceJoinTokenBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "createDeviceJoinToken", err)
+			}
+			err = ValidateCreateDeviceJoinTokenBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "createDeviceJoinToken", err)
+			}
+			return nil, NewCreateDeviceJoinTokenBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body CreateDeviceJoinTokenNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "createDeviceJoinToken", err)
+			}
+			err = ValidateCreateDeviceJoinTokenNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "createDeviceJoinToken", err)
+			}
+			return nil, NewCreateDeviceJoinTokenNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body CreateDeviceJoinTokenConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "createDeviceJoinToken", err)
+			}
+			err = ValidateCreateDeviceJoinTokenConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "createDeviceJoinToken", err)
+			}
+			return nil, NewCreateDeviceJoinTokenConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body CreateDeviceJoinTokenUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "createDeviceJoinToken", err)
+			}
+			err = ValidateCreateDeviceJoinTokenUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "createDeviceJoinToken", err)
+			}
+			return nil, NewCreateDeviceJoinTokenUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body CreateDeviceJoinTokenInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "createDeviceJoinToken", err)
+			}
+			err = ValidateCreateDeviceJoinTokenInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "createDeviceJoinToken", err)
+			}
+			return nil, NewCreateDeviceJoinTokenInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body CreateDeviceJoinTokenInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("workloadIdentities", "createDeviceJoinToken", err)
+				}
+				err = ValidateCreateDeviceJoinTokenInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("workloadIdentities", "createDeviceJoinToken", err)
+				}
+				return nil, NewCreateDeviceJoinTokenInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body CreateDeviceJoinTokenUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("workloadIdentities", "createDeviceJoinToken", err)
+				}
+				err = ValidateCreateDeviceJoinTokenUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("workloadIdentities", "createDeviceJoinToken", err)
+				}
+				return nil, NewCreateDeviceJoinTokenUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("workloadIdentities", "createDeviceJoinToken", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body CreateDeviceJoinTokenGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "createDeviceJoinToken", err)
+			}
+			err = ValidateCreateDeviceJoinTokenGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "createDeviceJoinToken", err)
+			}
+			return nil, NewCreateDeviceJoinTokenGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("workloadIdentities", "createDeviceJoinToken", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildRegisterDeviceRequest instantiates a HTTP request object with method
+// and path set to call the "workloadIdentities" service "registerDevice"
+// endpoint
+func (c *Client) BuildRegisterDeviceRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: RegisterDeviceWorkloadIdentitiesPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("workloadIdentities", "registerDevice", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeRegisterDeviceRequest returns an encoder for requests sent to the
+// workloadIdentities registerDevice server.
+func EncodeRegisterDeviceRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*workloadidentities.RegisterDevicePayload)
+		if !ok {
+			return goahttp.ErrInvalidType("workloadIdentities", "registerDevice", "*workloadidentities.RegisterDevicePayload", v)
+		}
+		body := NewRegisterDeviceRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("workloadIdentities", "registerDevice", err)
+		}
+		return nil
+	}
+}
+
+// DecodeRegisterDeviceResponse returns a decoder for responses returned by the
+// workloadIdentities registerDevice endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeRegisterDeviceResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeRegisterDeviceResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body RegisterDeviceResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "registerDevice", err)
+			}
+			err = ValidateRegisterDeviceResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "registerDevice", err)
+			}
+			res := NewRegisterDeviceWorkloadDeviceRegistrationOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body RegisterDeviceUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "registerDevice", err)
+			}
+			err = ValidateRegisterDeviceUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "registerDevice", err)
+			}
+			return nil, NewRegisterDeviceUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body RegisterDeviceForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "registerDevice", err)
+			}
+			err = ValidateRegisterDeviceForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "registerDevice", err)
+			}
+			return nil, NewRegisterDeviceForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body RegisterDeviceBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "registerDevice", err)
+			}
+			err = ValidateRegisterDeviceBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "registerDevice", err)
+			}
+			return nil, NewRegisterDeviceBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body RegisterDeviceNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "registerDevice", err)
+			}
+			err = ValidateRegisterDeviceNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "registerDevice", err)
+			}
+			return nil, NewRegisterDeviceNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body RegisterDeviceConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "registerDevice", err)
+			}
+			err = ValidateRegisterDeviceConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "registerDevice", err)
+			}
+			return nil, NewRegisterDeviceConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body RegisterDeviceUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "registerDevice", err)
+			}
+			err = ValidateRegisterDeviceUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "registerDevice", err)
+			}
+			return nil, NewRegisterDeviceUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body RegisterDeviceInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "registerDevice", err)
+			}
+			err = ValidateRegisterDeviceInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "registerDevice", err)
+			}
+			return nil, NewRegisterDeviceInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body RegisterDeviceInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("workloadIdentities", "registerDevice", err)
+				}
+				err = ValidateRegisterDeviceInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("workloadIdentities", "registerDevice", err)
+				}
+				return nil, NewRegisterDeviceInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body RegisterDeviceUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("workloadIdentities", "registerDevice", err)
+				}
+				err = ValidateRegisterDeviceUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("workloadIdentities", "registerDevice", err)
+				}
+				return nil, NewRegisterDeviceUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("workloadIdentities", "registerDevice", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body RegisterDeviceGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "registerDevice", err)
+			}
+			err = ValidateRegisterDeviceGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "registerDevice", err)
+			}
+			return nil, NewRegisterDeviceGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("workloadIdentities", "registerDevice", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // unmarshalWorkloadIssuerResponseBodyToTypesWorkloadIssuer builds a value of
 // type *types.WorkloadIssuer from a value of type *WorkloadIssuerResponseBody.
 func unmarshalWorkloadIssuerResponseBodyToTypesWorkloadIssuer(v *WorkloadIssuerResponseBody) *types.WorkloadIssuer {
@@ -2260,14 +2973,6 @@ func unmarshalWorkloadPlatformResponseBodyToWorkloadidentitiesWorkloadPlatform(v
 		res.Variables[i] = unmarshalWorkloadPlatformVariableResponseBodyToWorkloadidentitiesWorkloadPlatformVariable(val)
 	}
 	res.Subject = unmarshalWorkloadPlatformSubjectResponseBodyToWorkloadidentitiesWorkloadPlatformSubject(v.Subject)
-	res.Steps = make([]*workloadidentities.WorkloadPlatformStep, len(v.Steps))
-	for i, val := range v.Steps {
-		if val == nil {
-			res.Steps[i] = nil
-			continue
-		}
-		res.Steps[i] = unmarshalWorkloadPlatformStepResponseBodyToWorkloadidentitiesWorkloadPlatformStep(val)
-	}
 
 	return res
 }
@@ -2313,42 +3018,63 @@ func unmarshalWorkloadPlatformSubjectResponseBodyToWorkloadidentitiesWorkloadPla
 	return res
 }
 
-// unmarshalWorkloadPlatformStepResponseBodyToWorkloadidentitiesWorkloadPlatformStep
-// builds a value of type *workloadidentities.WorkloadPlatformStep from a value
-// of type *WorkloadPlatformStepResponseBody.
-func unmarshalWorkloadPlatformStepResponseBodyToWorkloadidentitiesWorkloadPlatformStep(v *WorkloadPlatformStepResponseBody) *workloadidentities.WorkloadPlatformStep {
-	res := &workloadidentities.WorkloadPlatformStep{
-		ID:    *v.ID,
-		Title: *v.Title,
-		Phase: *v.Phase,
+// unmarshalWorkloadFormResponseBodyToWorkloadidentitiesWorkloadForm builds a
+// value of type *workloadidentities.WorkloadForm from a value of type
+// *WorkloadFormResponseBody.
+func unmarshalWorkloadFormResponseBodyToWorkloadidentitiesWorkloadForm(v *WorkloadFormResponseBody) *workloadidentities.WorkloadForm {
+	res := &workloadidentities.WorkloadForm{
+		Title:        *v.Title,
+		Description:  *v.Description,
+		SubmitLabel:  *v.SubmitLabel,
+		PendingLabel: *v.PendingLabel,
 	}
-	res.Blocks = make([]*workloadidentities.WorkloadPlatformBlock, len(v.Blocks))
-	for i, val := range v.Blocks {
+	res.Steps = make([]*workloadidentities.WorkloadFormStep, len(v.Steps))
+	for i, val := range v.Steps {
 		if val == nil {
-			res.Blocks[i] = nil
+			res.Steps[i] = nil
 			continue
 		}
-		res.Blocks[i] = unmarshalWorkloadPlatformBlockResponseBodyToWorkloadidentitiesWorkloadPlatformBlock(val)
+		res.Steps[i] = unmarshalWorkloadFormStepResponseBodyToWorkloadidentitiesWorkloadFormStep(val)
 	}
 
 	return res
 }
 
-// unmarshalWorkloadPlatformBlockResponseBodyToWorkloadidentitiesWorkloadPlatformBlock
-// builds a value of type *workloadidentities.WorkloadPlatformBlock from a
-// value of type *WorkloadPlatformBlockResponseBody.
-func unmarshalWorkloadPlatformBlockResponseBodyToWorkloadidentitiesWorkloadPlatformBlock(v *WorkloadPlatformBlockResponseBody) *workloadidentities.WorkloadPlatformBlock {
-	res := &workloadidentities.WorkloadPlatformBlock{
-		Type:     *v.Type,
-		Markdown: *v.Markdown,
-		Src:      *v.Src,
-		Alt:      *v.Alt,
-		Caption:  *v.Caption,
-		Href:     *v.Href,
-		Label:    *v.Label,
-		Variable: *v.Variable,
-		Value:    *v.Value,
-		Help:     *v.Help,
+// unmarshalWorkloadFormStepResponseBodyToWorkloadidentitiesWorkloadFormStep
+// builds a value of type *workloadidentities.WorkloadFormStep from a value of
+// type *WorkloadFormStepResponseBody.
+func unmarshalWorkloadFormStepResponseBodyToWorkloadidentitiesWorkloadFormStep(v *WorkloadFormStepResponseBody) *workloadidentities.WorkloadFormStep {
+	res := &workloadidentities.WorkloadFormStep{
+		ID:    *v.ID,
+		Title: *v.Title,
+	}
+	res.Blocks = make([]*workloadidentities.WorkloadFormBlock, len(v.Blocks))
+	for i, val := range v.Blocks {
+		if val == nil {
+			res.Blocks[i] = nil
+			continue
+		}
+		res.Blocks[i] = unmarshalWorkloadFormBlockResponseBodyToWorkloadidentitiesWorkloadFormBlock(val)
+	}
+
+	return res
+}
+
+// unmarshalWorkloadFormBlockResponseBodyToWorkloadidentitiesWorkloadFormBlock
+// builds a value of type *workloadidentities.WorkloadFormBlock from a value of
+// type *WorkloadFormBlockResponseBody.
+func unmarshalWorkloadFormBlockResponseBodyToWorkloadidentitiesWorkloadFormBlock(v *WorkloadFormBlockResponseBody) *workloadidentities.WorkloadFormBlock {
+	res := &workloadidentities.WorkloadFormBlock{
+		Type:        *v.Type,
+		Markdown:    *v.Markdown,
+		Href:        *v.Href,
+		Label:       *v.Label,
+		Field:       *v.Field,
+		Placeholder: *v.Placeholder,
+		Help:        *v.Help,
+		Multiline:   *v.Multiline,
+		ReadOnly:    *v.ReadOnly,
+		Format:      *v.Format,
 	}
 
 	return res

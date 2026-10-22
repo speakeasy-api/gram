@@ -23,6 +23,8 @@ fi
 
 git diff "${range[@]}" -U0 --no-color --no-ext-diff -- . \
   ':(exclude)server/migrations/**' \
+  ':(exclude)server/clickhouse/migrations/**' \
+  ':(exclude)server/clickhouse/local/golang_migrate/**' \
   ':(exclude)server/gen/**' \
   ':(exclude)**/gen/**' \
   ':(exclude).speakeasy/**' \

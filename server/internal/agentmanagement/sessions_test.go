@@ -92,6 +92,7 @@ func createManagedUserSession(t *testing.T, db *pgxpool.Pool, issuerID uuid.UUID
 		RefreshTokenHash:    conv.ToPGText(refreshHash),
 		ExpiresAt:           pgtype.Timestamptz{Time: now.Add(time.Hour), InfinityModifier: 0, Valid: true},
 		RefreshExpiresAt:    pgtype.Timestamptz{Time: now.Add(24 * time.Hour), InfinityModifier: 0, Valid: true},
+		SignInID:            uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 	})
 	require.NoError(t, err)
 	return session.ID

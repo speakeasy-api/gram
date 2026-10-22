@@ -875,11 +875,12 @@ func unmarshalAnalyticsDatasetResponseBodyToAnalyticsAnalyticsDataset(v *Analyti
 // *AnalyticsFieldResponseBody.
 func unmarshalAnalyticsFieldResponseBodyToAnalyticsAnalyticsField(v *AnalyticsFieldResponseBody) *analytics.AnalyticsField {
 	res := &analytics.AnalyticsField{
-		Name:    *v.Name,
-		Type:    *v.Type,
-		Role:    *v.Role,
-		Default: *v.Default,
-		Unit:    v.Unit,
+		Name:        *v.Name,
+		Type:        *v.Type,
+		Role:        *v.Role,
+		Default:     *v.Default,
+		Unit:        v.Unit,
+		Description: v.Description,
 	}
 	if v.Operators != nil {
 		res.Operators = make([]string, len(v.Operators))
@@ -892,6 +893,24 @@ func unmarshalAnalyticsFieldResponseBodyToAnalyticsAnalyticsField(v *AnalyticsFi
 		for i, val := range v.Aggregations {
 			res.Aggregations[i] = val
 		}
+	}
+	if v.Lookup != nil {
+		res.Lookup = unmarshalAnalyticsLookupResponseBodyToAnalyticsAnalyticsLookup(v.Lookup)
+	}
+
+	return res
+}
+
+// unmarshalAnalyticsLookupResponseBodyToAnalyticsAnalyticsLookup builds a
+// value of type *analytics.AnalyticsLookup from a value of type
+// *AnalyticsLookupResponseBody.
+func unmarshalAnalyticsLookupResponseBodyToAnalyticsAnalyticsLookup(v *AnalyticsLookupResponseBody) *analytics.AnalyticsLookup {
+	if v == nil {
+		return nil
+	}
+	res := &analytics.AnalyticsLookup{
+		Name:        *v.Name,
+		Description: *v.Description,
 	}
 
 	return res

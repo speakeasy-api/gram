@@ -116,7 +116,7 @@ var AdminMcpServerHealthRemoteSessionClient = Type("AdminMcpServerHealthRemoteSe
 
 var AdminMcpServerHealthUserSessionIssuer = Type("AdminMcpServerHealthUserSessionIssuer", func() {
 	Description("The user session issuer that authenticates the server's users.")
-	Required("id", "slug", "classification", "authn_challenge_mode", "session_duration_hours", "attachment_scope", "use_authentication_host", "other_servers_using_issuer", "created_at", "sessions", "remote_session_clients")
+	Required("id", "slug", "classification", "authn_challenge_mode", "session_duration_hours", "attachment_scope", "use_authentication_host", "authorization_server_mode", "issuer_url_pinned", "other_servers_using_issuer", "created_at", "sessions", "remote_session_clients")
 
 	Attribute("id", String, "The user session issuer ID.")
 	Attribute("slug", String, "The issuer slug.")
@@ -132,6 +132,10 @@ var AdminMcpServerHealthUserSessionIssuer = Type("AdminMcpServerHealthUserSessio
 		Enum("disabled", "presets", "reporting", "open")
 	})
 	Attribute("use_authentication_host", Boolean, "Whether the issuer announces the authentication host as its origin.")
+	Attribute("authorization_server_mode", String, "Which OAuth authorization server the issuer's MCP servers point clients to: one per MCP server (endpoint), or one for the issuer at /oauth/usi/{id} (shared).", func() {
+		Enum("endpoint", "shared")
+	})
+	Attribute("issuer_url_pinned", Boolean, "Whether a shared authorization server's issuer URL is pinned, so it stays the same if the deployment's hosts change.")
 	Attribute("trusted_remote_session", AdminMcpServerHealthTrustedRemoteSession, "Set when the issuer trusts an external authorization server's assertions.")
 	Attribute("other_servers_using_issuer", ArrayOf(AdminMcpServerHealthServerRef), "Other live servers in the project that share this issuer.")
 	Attribute("created_at", String, func() { Format(FormatDateTime) })
@@ -140,7 +144,7 @@ var AdminMcpServerHealthUserSessionIssuer = Type("AdminMcpServerHealthUserSessio
 })
 
 var AdminMcpServerToolCallOutcomes = Type("AdminMcpServerToolCallOutcomes", func() {
-	Description("Tool calls inside the window by outcome class. In-band tool errors (isError inside HTTP 200) count as success.")
+	Description("Tool calls inside the window by outcome class. failed counts isError tool errors in 2xx/3xx responses and hook-reported tool errors; hosted rows recorded before 2026-10-15 and remote rows recorded before this change shipped still count as success.")
 	Required("success", "unauthorized", "client_error", "server_error", "blocked", "failed", "unknown")
 
 	Attribute("success", Int64)
@@ -158,7 +162,7 @@ var AdminMcpServerToolCallBucket = Type("AdminMcpServerToolCallBucket", func() {
 
 	Attribute("bucket_start", String, func() { Format(FormatDateTime) })
 	Attribute("total", Int64, "Tool calls in the bucket.")
-	Attribute("failed", Int64, "Failed tool calls in the bucket.")
+	Attribute("failed", Int64, "Tool calls in the bucket that failed with status 400 or above. Tool errors returned inside HTTP 200 (isError) are not counted here.")
 })
 
 var AdminMcpServerToolCalls = Type("AdminMcpServerToolCalls", func() {

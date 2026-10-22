@@ -1,3 +1,4 @@
+import { Badge } from "@/components/ui/Badge";
 import { RequireScope } from "@/components/require-scope";
 import { TableRowContextMenu } from "@/components/table-row-context-menu";
 import { DotRow } from "@/components/ui/DotRow";
@@ -50,7 +51,7 @@ export function ClientsTab({
   } else if (!isLoading && items.length === 0) {
     body = (
       <Text muted className="py-8 text-center">
-        No clients registered with this provider.
+        No clients registered with this authorization server.
       </Text>
     );
   } else {
@@ -87,13 +88,20 @@ export function ClientsTab({
                 ariaLabel={`View client ${remoteSessionClientDisplayName(item.client)}`}
               >
                 <td className="px-3 py-3">
-                  <Text
-                    variant="subheading"
-                    as="div"
-                    className="group-hover:text-primary truncate text-sm transition-colors group-hover:underline"
-                  >
-                    {remoteSessionClientDisplayName(item.client)}
-                  </Text>
+                  <div className="flex min-w-0 items-center gap-2">
+                    <Text
+                      variant="subheading"
+                      as="div"
+                      className="group-hover:text-primary truncate text-sm transition-colors group-hover:underline"
+                    >
+                      {remoteSessionClientDisplayName(item.client)}
+                    </Text>
+                    {item.client.credentialOwner === "self" && (
+                      <Badge variant="information" size="sm">
+                        <Badge.Text>Service account</Badge.Text>
+                      </Badge>
+                    )}
+                  </div>
                 </td>
                 <td className="px-3 py-3">
                   <Text small muted>

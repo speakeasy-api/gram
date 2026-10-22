@@ -10,8 +10,6 @@ import {
 } from "@/components/ui/Tabs";
 import { Text } from "@/components/ui/Text";
 import { useProject } from "@/contexts/Auth";
-import { useFeatureFlag } from "@/hooks/useFeatureFlag";
-import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { useRoutes } from "@/routes";
 import { useAssistantsDeleteMutation } from "@gram/client/react-query/assistantsDelete.js";
 import { invalidateAllAssistantsList } from "@gram/client/react-query/assistantsList.js";
@@ -50,7 +48,6 @@ function instructionsActionLabel(
 
 export function AssistantDraftPanel(): JSX.Element {
   const draft = useAssistantDraft();
-  const identityFlag = useFeatureFlag(FEATURE_FLAGS.agentCredentials);
   const routes = useRoutes();
   const project = useProject();
   const { hasScope } = useRBAC();
@@ -151,20 +148,14 @@ export function AssistantDraftPanel(): JSX.Element {
         </Stack>
       ) : (
         <Tabs
-          value={
-            activeTab === "identity" && identityFlag.status !== "enabled"
-              ? "overview"
-              : activeTab
-          }
+          value={activeTab}
           onValueChange={(value) => void setActiveTab(toDetailTab(value))}
           className="flex min-h-0 flex-1 flex-col"
         >
           <div className="border-border border-b px-4">
             <PageTabsList className="h-auto gap-6 bg-transparent p-0">
               <PageTabsTrigger value="overview">Overview</PageTabsTrigger>
-              {identityFlag.status === "enabled" && (
-                <PageTabsTrigger value="identity">Identity</PageTabsTrigger>
-              )}
+              <PageTabsTrigger value="identity">Identity</PageTabsTrigger>
               <PageTabsTrigger value="sessions">Sessions</PageTabsTrigger>
               <PageTabsTrigger value="triggers">Triggers</PageTabsTrigger>
             </PageTabsList>

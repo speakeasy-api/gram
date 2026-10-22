@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
@@ -20,7 +21,7 @@ export const ToolUsageTargetToolBreakdownRowTargetKind = {
 /**
  * Tool usage aggregation target kind
  */
-export type ToolUsageTargetToolBreakdownRowTargetKind = ClosedEnum<
+export type ToolUsageTargetToolBreakdownRowTargetKind = OpenEnum<
   typeof ToolUsageTargetToolBreakdownRowTargetKind
 >;
 
@@ -38,7 +39,7 @@ export const ToolUsageTargetToolBreakdownRowTargetType = {
 /**
  * Tool usage target type
  */
-export type ToolUsageTargetToolBreakdownRowTargetType = ClosedEnum<
+export type ToolUsageTargetToolBreakdownRowTargetType = OpenEnum<
   typeof ToolUsageTargetToolBreakdownRowTargetType
 >;
 
@@ -86,15 +87,13 @@ export type ToolUsageTargetToolBreakdownRow = {
 
 /** @internal */
 export const ToolUsageTargetToolBreakdownRowTargetKind$inboundSchema:
-  z.ZodMiniEnum<typeof ToolUsageTargetToolBreakdownRowTargetKind> = z.enum(
-    ToolUsageTargetToolBreakdownRowTargetKind,
-  );
+  z.ZodMiniType<ToolUsageTargetToolBreakdownRowTargetKind, unknown> = openEnums
+    .inboundSchema(ToolUsageTargetToolBreakdownRowTargetKind);
 
 /** @internal */
 export const ToolUsageTargetToolBreakdownRowTargetType$inboundSchema:
-  z.ZodMiniEnum<typeof ToolUsageTargetToolBreakdownRowTargetType> = z.enum(
-    ToolUsageTargetToolBreakdownRowTargetType,
-  );
+  z.ZodMiniType<ToolUsageTargetToolBreakdownRowTargetType, unknown> = openEnums
+    .inboundSchema(ToolUsageTargetToolBreakdownRowTargetType);
 
 /** @internal */
 export const ToolUsageTargetToolBreakdownRow$inboundSchema: z.ZodMiniType<

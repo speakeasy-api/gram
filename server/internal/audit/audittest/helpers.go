@@ -49,7 +49,19 @@ func LatestAuditLogByAction(ctx context.Context, dbtx repo.DBTX, action audit.Ac
 	if err != nil {
 		return LogRecord{}, fmt.Errorf("get latest audit log by action: %w", err)
 	}
+	return toLogRecord(row), nil
+}
 
+// LatestAuditLogByActionAndSubject picks one subject's row when a single call audits several.
+func LatestAuditLogByActionAndSubject(ctx context.Context, dbtx repo.DBTX, action audit.Action, subjectID string) (LogRecord, error) {
+	row, err := repo.New(dbtx).GetLatestAuditLogByActionAndSubject(ctx, repo.GetLatestAuditLogByActionAndSubjectParams{Action: string(action), SubjectID: subjectID})
+	if err != nil {
+		return LogRecord{}, fmt.Errorf("get latest audit log by action and subject: %w", err)
+	}
+	return toLogRecord(repo.GetLatestAuditLogByActionRow(row)), nil
+}
+
+func toLogRecord(row repo.GetLatestAuditLogByActionRow) LogRecord {
 	return LogRecord{
 		Action:           row.Action,
 		OrganizationID:   row.OrganizationID,
@@ -68,7 +80,7 @@ func LatestAuditLogByAction(ctx context.Context, dbtx repo.DBTX, action audit.Ac
 		AfterSnapshot:    row.AfterSnapshot,
 		ActingSurface:    conv.FromPGText[string](row.ActingSurface),
 		ActingClientID:   conv.FromPGText[string](row.ActingClientID),
-	}, nil
+	}
 }
 
 func AuditLogCount(ctx context.Context, dbtx repo.DBTX) (int64, error) {

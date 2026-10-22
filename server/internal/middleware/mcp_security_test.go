@@ -197,7 +197,6 @@ func TestMCPSecurity_CoversEveryMCPJSONRPCRoute(t *testing.T) {
 
 	for _, path := range []string{
 		"/mcp/petstore",              // toolset-backed and meta-MCP-backed
-		"/x/mcp/petstore",            // experimental runtime
 		"/platform/mcp/gram-billing", // platform toolsets
 		"/platform-mcp",              // Speakeasy's own platform MCP server
 		// The per-agent gateway, addressed by agent id rather than slug.
@@ -219,7 +218,7 @@ func TestMCPSecurity_CoversEveryMCPJSONRPCRoute(t *testing.T) {
 }
 
 // The OAuth callbacks and hashed browser assets registered directly under
-// /mcp/ and /x/mcp/ sit in the same one-segment shape as a slug, so the
+// /mcp/ sit in the same one-segment shape as a slug, so the
 // original predicate read them as MCP endpoints and origin-checked them.
 //
 // A callback is reached by the browser following the upstream IdP's redirect,
@@ -235,8 +234,8 @@ func TestMCPSecurity_AllowsOAuthCallbackNavigation(t *testing.T) {
 		"/mcp/idp_callback",
 		"/mcp/remote_login_callback",
 		"/mcp/remote_login_bind",
-		"/x/mcp/idp_callback",
-		"/x/mcp/remote_login_callback",
+		// Exempt by shape: a two-segment tail is never an endpoint slug.
+		"/mcp/idp_callback/0190a6f8-5b2c-7d3e-8f41-2a6b9c0d1e2f",
 	} {
 		t.Run(path, func(t *testing.T) {
 			t.Parallel()

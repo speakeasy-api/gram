@@ -18,17 +18,18 @@ import (
 
 // Server lists the dashboards service endpoint HTTP handlers.
 type Server struct {
-	Mounts                []*MountPoint
-	ListDashboards        http.Handler
-	GetDashboard          http.Handler
-	CreateDashboard       http.Handler
-	UpdateDashboard       http.Handler
-	SaveDashboardLayout   http.Handler
-	AddDashboardWidget    http.Handler
-	RemoveDashboardWidget http.Handler
-	SaveDashboardFilters  http.Handler
-	DuplicateDashboard    http.Handler
-	DeleteDashboard       http.Handler
+	Mounts                    []*MountPoint
+	ListDashboards            http.Handler
+	GetDashboard              http.Handler
+	CreateDashboard           http.Handler
+	UpdateDashboard           http.Handler
+	SaveDashboardLayout       http.Handler
+	AddDashboardWidget        http.Handler
+	RemoveDashboardWidget     http.Handler
+	SaveDashboardFilters      http.Handler
+	DuplicateDashboard        http.Handler
+	DuplicateBuiltInDashboard http.Handler
+	DeleteDashboard           http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -67,18 +68,20 @@ func New(
 			{"RemoveDashboardWidget", "POST", "/rpc/dashboards.removeWidget"},
 			{"SaveDashboardFilters", "POST", "/rpc/dashboards.saveFilters"},
 			{"DuplicateDashboard", "POST", "/rpc/dashboards.duplicate"},
+			{"DuplicateBuiltInDashboard", "POST", "/rpc/dashboards.duplicateBuiltIn"},
 			{"DeleteDashboard", "DELETE", "/rpc/dashboards.delete"},
 		},
-		ListDashboards:        NewListDashboardsHandler(e.ListDashboards, mux, decoder, encoder, errhandler, formatter),
-		GetDashboard:          NewGetDashboardHandler(e.GetDashboard, mux, decoder, encoder, errhandler, formatter),
-		CreateDashboard:       NewCreateDashboardHandler(e.CreateDashboard, mux, decoder, encoder, errhandler, formatter),
-		UpdateDashboard:       NewUpdateDashboardHandler(e.UpdateDashboard, mux, decoder, encoder, errhandler, formatter),
-		SaveDashboardLayout:   NewSaveDashboardLayoutHandler(e.SaveDashboardLayout, mux, decoder, encoder, errhandler, formatter),
-		AddDashboardWidget:    NewAddDashboardWidgetHandler(e.AddDashboardWidget, mux, decoder, encoder, errhandler, formatter),
-		RemoveDashboardWidget: NewRemoveDashboardWidgetHandler(e.RemoveDashboardWidget, mux, decoder, encoder, errhandler, formatter),
-		SaveDashboardFilters:  NewSaveDashboardFiltersHandler(e.SaveDashboardFilters, mux, decoder, encoder, errhandler, formatter),
-		DuplicateDashboard:    NewDuplicateDashboardHandler(e.DuplicateDashboard, mux, decoder, encoder, errhandler, formatter),
-		DeleteDashboard:       NewDeleteDashboardHandler(e.DeleteDashboard, mux, decoder, encoder, errhandler, formatter),
+		ListDashboards:            NewListDashboardsHandler(e.ListDashboards, mux, decoder, encoder, errhandler, formatter),
+		GetDashboard:              NewGetDashboardHandler(e.GetDashboard, mux, decoder, encoder, errhandler, formatter),
+		CreateDashboard:           NewCreateDashboardHandler(e.CreateDashboard, mux, decoder, encoder, errhandler, formatter),
+		UpdateDashboard:           NewUpdateDashboardHandler(e.UpdateDashboard, mux, decoder, encoder, errhandler, formatter),
+		SaveDashboardLayout:       NewSaveDashboardLayoutHandler(e.SaveDashboardLayout, mux, decoder, encoder, errhandler, formatter),
+		AddDashboardWidget:        NewAddDashboardWidgetHandler(e.AddDashboardWidget, mux, decoder, encoder, errhandler, formatter),
+		RemoveDashboardWidget:     NewRemoveDashboardWidgetHandler(e.RemoveDashboardWidget, mux, decoder, encoder, errhandler, formatter),
+		SaveDashboardFilters:      NewSaveDashboardFiltersHandler(e.SaveDashboardFilters, mux, decoder, encoder, errhandler, formatter),
+		DuplicateDashboard:        NewDuplicateDashboardHandler(e.DuplicateDashboard, mux, decoder, encoder, errhandler, formatter),
+		DuplicateBuiltInDashboard: NewDuplicateBuiltInDashboardHandler(e.DuplicateBuiltInDashboard, mux, decoder, encoder, errhandler, formatter),
+		DeleteDashboard:           NewDeleteDashboardHandler(e.DeleteDashboard, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -96,6 +99,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.RemoveDashboardWidget = m(s.RemoveDashboardWidget)
 	s.SaveDashboardFilters = m(s.SaveDashboardFilters)
 	s.DuplicateDashboard = m(s.DuplicateDashboard)
+	s.DuplicateBuiltInDashboard = m(s.DuplicateBuiltInDashboard)
 	s.DeleteDashboard = m(s.DeleteDashboard)
 }
 
@@ -113,6 +117,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountRemoveDashboardWidgetHandler(mux, h.RemoveDashboardWidget)
 	MountSaveDashboardFiltersHandler(mux, h.SaveDashboardFilters)
 	MountDuplicateDashboardHandler(mux, h.DuplicateDashboard)
+	MountDuplicateBuiltInDashboardHandler(mux, h.DuplicateBuiltInDashboard)
 	MountDeleteDashboardHandler(mux, h.DeleteDashboard)
 }
 
@@ -575,6 +580,60 @@ func NewDuplicateDashboardHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "duplicateDashboard")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "dashboards")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountDuplicateBuiltInDashboardHandler configures the mux to serve the
+// "dashboards" service "duplicateBuiltInDashboard" endpoint.
+func MountDuplicateBuiltInDashboardHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/dashboards.duplicateBuiltIn", f)
+}
+
+// NewDuplicateBuiltInDashboardHandler creates a HTTP handler which loads the
+// HTTP request and calls the "dashboards" service "duplicateBuiltInDashboard"
+// endpoint.
+func NewDuplicateBuiltInDashboardHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeDuplicateBuiltInDashboardRequest(mux, decoder)
+		encodeResponse = EncodeDuplicateBuiltInDashboardResponse(encoder)
+		encodeError    = EncodeDuplicateBuiltInDashboardError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "duplicateBuiltInDashboard")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "dashboards")
 		payload, err := decodeRequest(r)
 		if err != nil {

@@ -57,6 +57,16 @@ type UpdateIssuerRequestBody struct {
 	ClientIDMetadataAdmissionMode *string `form:"client_id_metadata_admission_mode,omitempty" json:"client_id_metadata_admission_mode,omitempty" xml:"client_id_metadata_admission_mode,omitempty"`
 }
 
+// SetAuthenticationHostRequestBody is the type of the
+// "organizationUserSessionIssuers" service "setAuthenticationHost" endpoint
+// HTTP request body.
+type SetAuthenticationHostRequestBody struct {
+	// The user_session_issuer id.
+	ID string `form:"id" json:"id" xml:"id"`
+	// True to move onto the authentication host, false to move off it.
+	UseAuthenticationHost bool `form:"use_authentication_host" json:"use_authentication_host" xml:"use_authentication_host"`
+}
+
 // MoveIssuerRequestBody is the type of the "organizationUserSessionIssuers"
 // service "moveIssuer" endpoint HTTP request body.
 type MoveIssuerRequestBody struct {
@@ -121,8 +131,46 @@ type CreateIssuerResponseBody struct {
 	// The organization-level remote_session_client Speakeasy uses with the trusted
 	// issuer. Absent when enterprise-managed authorization is disabled.
 	TrustedRemoteSessionClientID *string `form:"trusted_remote_session_client_id,omitempty" json:"trusted_remote_session_client_id,omitempty" xml:"trusted_remote_session_client_id,omitempty"`
-	CreatedAt                    *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt                    *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	// Which OAuth authorization server the issuer's MCP servers point clients to.
+	// 'endpoint' gives every MCP server its own authorization server, rooted at
+	// the server's URL. 'shared' serves one authorization server for the issuer,
+	// used by all of its MCP servers; issuer_url and token_endpoint locate it. A
+	// shared issuer whose authorization server this deployment does not serve
+	// falls back to per-endpoint authorization servers, and
+	// authorization_server_unavailable_reason says why.
+	AuthorizationServerMode *string `form:"authorization_server_mode,omitempty" json:"authorization_server_mode,omitempty" xml:"authorization_server_mode,omitempty"`
+	// Whether the issuer opts in to announcing its authorization servers on the
+	// deployment's authentication host rather than the MCP host. This is the
+	// stored setting: on a deployment without an authentication host it has no
+	// effect, and issuer_url shows the host actually used.
+	UseAuthenticationHost *bool `form:"use_authentication_host,omitempty" json:"use_authentication_host,omitempty" xml:"use_authentication_host,omitempty"`
+	// Whether the shared authorization server's issuer URL was fixed when the
+	// issuer was set up, so it stays the same if the deployment's hosts change. An
+	// unpinned shared issuer derives its issuer URL from the deployment's current
+	// hosts, so a host change also changes the values configured on other
+	// platforms. Always false outside shared mode.
+	IssuerURLPinned *bool `form:"issuer_url_pinned,omitempty" json:"issuer_url_pinned,omitempty" xml:"issuer_url_pinned,omitempty"`
+	// The RFC 8414 issuer identifier of the issuer's shared authorization server.
+	// Present only for a shared issuer whose authorization server this deployment
+	// serves.
+	IssuerURL *string `form:"issuer_url,omitempty" json:"issuer_url,omitempty" xml:"issuer_url,omitempty"`
+	// The token endpoint of the issuer's shared authorization server. Present
+	// exactly when issuer_url is.
+	TokenEndpoint *string `form:"token_endpoint,omitempty" json:"token_endpoint,omitempty" xml:"token_endpoint,omitempty"`
+	// Why a shared issuer's authorization server is not served, so its MCP servers
+	// fall back to per-endpoint authorization servers: the pinned issuer URL is
+	// not this issuer's shared authorization server (pinned_issuer_url_invalid),
+	// or it is on a host this deployment does not serve (host_not_served). Absent
+	// otherwise.
+	AuthorizationServerUnavailableReason *string `form:"authorization_server_unavailable_reason,omitempty" json:"authorization_server_unavailable_reason,omitempty" xml:"authorization_server_unavailable_reason,omitempty"`
+	// The owning project's name. Present on organization-level reads of
+	// project-specific issuers.
+	ProjectName *string `form:"project_name,omitempty" json:"project_name,omitempty" xml:"project_name,omitempty"`
+	// Whether this deployment has an authentication host the issuer can be moved
+	// onto. Present on responses, not audit snapshots.
+	AuthenticationHostAvailable *bool   `form:"authentication_host_available,omitempty" json:"authentication_host_available,omitempty" xml:"authentication_host_available,omitempty"`
+	CreatedAt                   *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt                   *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // ListIssuersResponseBody is the type of the "organizationUserSessionIssuers"
@@ -164,8 +212,46 @@ type GetIssuerResponseBody struct {
 	// The organization-level remote_session_client Speakeasy uses with the trusted
 	// issuer. Absent when enterprise-managed authorization is disabled.
 	TrustedRemoteSessionClientID *string `form:"trusted_remote_session_client_id,omitempty" json:"trusted_remote_session_client_id,omitempty" xml:"trusted_remote_session_client_id,omitempty"`
-	CreatedAt                    *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt                    *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	// Which OAuth authorization server the issuer's MCP servers point clients to.
+	// 'endpoint' gives every MCP server its own authorization server, rooted at
+	// the server's URL. 'shared' serves one authorization server for the issuer,
+	// used by all of its MCP servers; issuer_url and token_endpoint locate it. A
+	// shared issuer whose authorization server this deployment does not serve
+	// falls back to per-endpoint authorization servers, and
+	// authorization_server_unavailable_reason says why.
+	AuthorizationServerMode *string `form:"authorization_server_mode,omitempty" json:"authorization_server_mode,omitempty" xml:"authorization_server_mode,omitempty"`
+	// Whether the issuer opts in to announcing its authorization servers on the
+	// deployment's authentication host rather than the MCP host. This is the
+	// stored setting: on a deployment without an authentication host it has no
+	// effect, and issuer_url shows the host actually used.
+	UseAuthenticationHost *bool `form:"use_authentication_host,omitempty" json:"use_authentication_host,omitempty" xml:"use_authentication_host,omitempty"`
+	// Whether the shared authorization server's issuer URL was fixed when the
+	// issuer was set up, so it stays the same if the deployment's hosts change. An
+	// unpinned shared issuer derives its issuer URL from the deployment's current
+	// hosts, so a host change also changes the values configured on other
+	// platforms. Always false outside shared mode.
+	IssuerURLPinned *bool `form:"issuer_url_pinned,omitempty" json:"issuer_url_pinned,omitempty" xml:"issuer_url_pinned,omitempty"`
+	// The RFC 8414 issuer identifier of the issuer's shared authorization server.
+	// Present only for a shared issuer whose authorization server this deployment
+	// serves.
+	IssuerURL *string `form:"issuer_url,omitempty" json:"issuer_url,omitempty" xml:"issuer_url,omitempty"`
+	// The token endpoint of the issuer's shared authorization server. Present
+	// exactly when issuer_url is.
+	TokenEndpoint *string `form:"token_endpoint,omitempty" json:"token_endpoint,omitempty" xml:"token_endpoint,omitempty"`
+	// Why a shared issuer's authorization server is not served, so its MCP servers
+	// fall back to per-endpoint authorization servers: the pinned issuer URL is
+	// not this issuer's shared authorization server (pinned_issuer_url_invalid),
+	// or it is on a host this deployment does not serve (host_not_served). Absent
+	// otherwise.
+	AuthorizationServerUnavailableReason *string `form:"authorization_server_unavailable_reason,omitempty" json:"authorization_server_unavailable_reason,omitempty" xml:"authorization_server_unavailable_reason,omitempty"`
+	// The owning project's name. Present on organization-level reads of
+	// project-specific issuers.
+	ProjectName *string `form:"project_name,omitempty" json:"project_name,omitempty" xml:"project_name,omitempty"`
+	// Whether this deployment has an authentication host the issuer can be moved
+	// onto. Present on responses, not audit snapshots.
+	AuthenticationHostAvailable *bool   `form:"authentication_host_available,omitempty" json:"authentication_host_available,omitempty" xml:"authentication_host_available,omitempty"`
+	CreatedAt                   *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt                   *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // UpdateIssuerResponseBody is the type of the "organizationUserSessionIssuers"
@@ -199,8 +285,150 @@ type UpdateIssuerResponseBody struct {
 	// The organization-level remote_session_client Speakeasy uses with the trusted
 	// issuer. Absent when enterprise-managed authorization is disabled.
 	TrustedRemoteSessionClientID *string `form:"trusted_remote_session_client_id,omitempty" json:"trusted_remote_session_client_id,omitempty" xml:"trusted_remote_session_client_id,omitempty"`
-	CreatedAt                    *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt                    *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	// Which OAuth authorization server the issuer's MCP servers point clients to.
+	// 'endpoint' gives every MCP server its own authorization server, rooted at
+	// the server's URL. 'shared' serves one authorization server for the issuer,
+	// used by all of its MCP servers; issuer_url and token_endpoint locate it. A
+	// shared issuer whose authorization server this deployment does not serve
+	// falls back to per-endpoint authorization servers, and
+	// authorization_server_unavailable_reason says why.
+	AuthorizationServerMode *string `form:"authorization_server_mode,omitempty" json:"authorization_server_mode,omitempty" xml:"authorization_server_mode,omitempty"`
+	// Whether the issuer opts in to announcing its authorization servers on the
+	// deployment's authentication host rather than the MCP host. This is the
+	// stored setting: on a deployment without an authentication host it has no
+	// effect, and issuer_url shows the host actually used.
+	UseAuthenticationHost *bool `form:"use_authentication_host,omitempty" json:"use_authentication_host,omitempty" xml:"use_authentication_host,omitempty"`
+	// Whether the shared authorization server's issuer URL was fixed when the
+	// issuer was set up, so it stays the same if the deployment's hosts change. An
+	// unpinned shared issuer derives its issuer URL from the deployment's current
+	// hosts, so a host change also changes the values configured on other
+	// platforms. Always false outside shared mode.
+	IssuerURLPinned *bool `form:"issuer_url_pinned,omitempty" json:"issuer_url_pinned,omitempty" xml:"issuer_url_pinned,omitempty"`
+	// The RFC 8414 issuer identifier of the issuer's shared authorization server.
+	// Present only for a shared issuer whose authorization server this deployment
+	// serves.
+	IssuerURL *string `form:"issuer_url,omitempty" json:"issuer_url,omitempty" xml:"issuer_url,omitempty"`
+	// The token endpoint of the issuer's shared authorization server. Present
+	// exactly when issuer_url is.
+	TokenEndpoint *string `form:"token_endpoint,omitempty" json:"token_endpoint,omitempty" xml:"token_endpoint,omitempty"`
+	// Why a shared issuer's authorization server is not served, so its MCP servers
+	// fall back to per-endpoint authorization servers: the pinned issuer URL is
+	// not this issuer's shared authorization server (pinned_issuer_url_invalid),
+	// or it is on a host this deployment does not serve (host_not_served). Absent
+	// otherwise.
+	AuthorizationServerUnavailableReason *string `form:"authorization_server_unavailable_reason,omitempty" json:"authorization_server_unavailable_reason,omitempty" xml:"authorization_server_unavailable_reason,omitempty"`
+	// The owning project's name. Present on organization-level reads of
+	// project-specific issuers.
+	ProjectName *string `form:"project_name,omitempty" json:"project_name,omitempty" xml:"project_name,omitempty"`
+	// Whether this deployment has an authentication host the issuer can be moved
+	// onto. Present on responses, not audit snapshots.
+	AuthenticationHostAvailable *bool   `form:"authentication_host_available,omitempty" json:"authentication_host_available,omitempty" xml:"authentication_host_available,omitempty"`
+	CreatedAt                   *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt                   *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+}
+
+// ListMcpServersResponseBody is the type of the
+// "organizationUserSessionIssuers" service "listMcpServers" endpoint HTTP
+// response body.
+type ListMcpServersResponseBody struct {
+	Items []*UserSessionIssuerMcpServerResponseBody `form:"items,omitempty" json:"items,omitempty" xml:"items,omitempty"`
+	// Cursor for the next page; empty when exhausted.
+	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
+}
+
+// GetAuthenticationHostImpactResponseBody is the type of the
+// "organizationUserSessionIssuers" service "getAuthenticationHostImpact"
+// endpoint HTTP response body.
+type GetAuthenticationHostImpactResponseBody struct {
+	// The issuer as it is now.
+	Issuer *UserSessionIssuerResponseBody `form:"issuer,omitempty" json:"issuer,omitempty" xml:"issuer,omitempty"`
+	// Where clients sign in now: the shared authorization server's issuer URL, or
+	// the origin that announces each MCP server's own authorization server. Empty
+	// for a shared issuer this deployment does not serve.
+	AuthorizationServerBefore *string `form:"authorization_server_before,omitempty" json:"authorization_server_before,omitempty" xml:"authorization_server_before,omitempty"`
+	// Where clients sign in after the move, in the same terms.
+	AuthorizationServerAfter *string `form:"authorization_server_after,omitempty" json:"authorization_server_after,omitempty" xml:"authorization_server_after,omitempty"`
+	// Whether the move changes where clients sign in. False when the issuer is
+	// already where it would move.
+	Changes *bool `form:"changes,omitempty" json:"changes,omitempty" xml:"changes,omitempty"`
+	// Live MCP servers, toolsets, and meta MCP servers attached to the issuer.
+	// Those on a custom domain keep announcing their own authorization servers
+	// there.
+	McpServerCount *int `form:"mcp_server_count,omitempty" json:"mcp_server_count,omitempty" xml:"mcp_server_count,omitempty"`
+}
+
+// SetAuthenticationHostResponseBody is the type of the
+// "organizationUserSessionIssuers" service "setAuthenticationHost" endpoint
+// HTTP response body.
+type SetAuthenticationHostResponseBody struct {
+	// The user_session_issuer id.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// The owning project id; empty for organization-owned issuers.
+	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	// The owning organization id.
+	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	// Issuer slug. Unique for project-owned issuers; organization-owned issuer
+	// slugs may repeat.
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
+	// chain | interactive.
+	AuthnChallengeMode *string `form:"authn_challenge_mode,omitempty" json:"authn_challenge_mode,omitempty" xml:"authn_challenge_mode,omitempty"`
+	// Maximum issued user session lifetime, in hours.
+	SessionDurationHours *int `form:"session_duration_hours,omitempty" json:"session_duration_hours,omitempty" xml:"session_duration_hours,omitempty"`
+	// The EFFECTIVE CIMD admission policy in force for this issuer: disabled |
+	// presets | reporting | open. Always populated, so clients never have to
+	// reason about an unset state. 'open' is the resting policy an issuer carries
+	// unless an operator chooses otherwise: it admits any spec-valid document, and
+	// 'presets' enforcement is opt-in because a denial under it is unrecoverable
+	// for the end user. Note 'reporting' can be READ but not written: it is a
+	// legacy value that admits exactly what 'open' admits, and no issuer is
+	// created with it.
+	ClientIDMetadataAdmissionMode *string `form:"client_id_metadata_admission_mode,omitempty" json:"client_id_metadata_admission_mode,omitempty" xml:"client_id_metadata_admission_mode,omitempty"`
+	// The organization-level or global remote_session_issuer whose assertions this
+	// issuer trusts. Absent when enterprise-managed authorization is disabled.
+	TrustedRemoteSessionIssuerID *string `form:"trusted_remote_session_issuer_id,omitempty" json:"trusted_remote_session_issuer_id,omitempty" xml:"trusted_remote_session_issuer_id,omitempty"`
+	// The organization-level remote_session_client Speakeasy uses with the trusted
+	// issuer. Absent when enterprise-managed authorization is disabled.
+	TrustedRemoteSessionClientID *string `form:"trusted_remote_session_client_id,omitempty" json:"trusted_remote_session_client_id,omitempty" xml:"trusted_remote_session_client_id,omitempty"`
+	// Which OAuth authorization server the issuer's MCP servers point clients to.
+	// 'endpoint' gives every MCP server its own authorization server, rooted at
+	// the server's URL. 'shared' serves one authorization server for the issuer,
+	// used by all of its MCP servers; issuer_url and token_endpoint locate it. A
+	// shared issuer whose authorization server this deployment does not serve
+	// falls back to per-endpoint authorization servers, and
+	// authorization_server_unavailable_reason says why.
+	AuthorizationServerMode *string `form:"authorization_server_mode,omitempty" json:"authorization_server_mode,omitempty" xml:"authorization_server_mode,omitempty"`
+	// Whether the issuer opts in to announcing its authorization servers on the
+	// deployment's authentication host rather than the MCP host. This is the
+	// stored setting: on a deployment without an authentication host it has no
+	// effect, and issuer_url shows the host actually used.
+	UseAuthenticationHost *bool `form:"use_authentication_host,omitempty" json:"use_authentication_host,omitempty" xml:"use_authentication_host,omitempty"`
+	// Whether the shared authorization server's issuer URL was fixed when the
+	// issuer was set up, so it stays the same if the deployment's hosts change. An
+	// unpinned shared issuer derives its issuer URL from the deployment's current
+	// hosts, so a host change also changes the values configured on other
+	// platforms. Always false outside shared mode.
+	IssuerURLPinned *bool `form:"issuer_url_pinned,omitempty" json:"issuer_url_pinned,omitempty" xml:"issuer_url_pinned,omitempty"`
+	// The RFC 8414 issuer identifier of the issuer's shared authorization server.
+	// Present only for a shared issuer whose authorization server this deployment
+	// serves.
+	IssuerURL *string `form:"issuer_url,omitempty" json:"issuer_url,omitempty" xml:"issuer_url,omitempty"`
+	// The token endpoint of the issuer's shared authorization server. Present
+	// exactly when issuer_url is.
+	TokenEndpoint *string `form:"token_endpoint,omitempty" json:"token_endpoint,omitempty" xml:"token_endpoint,omitempty"`
+	// Why a shared issuer's authorization server is not served, so its MCP servers
+	// fall back to per-endpoint authorization servers: the pinned issuer URL is
+	// not this issuer's shared authorization server (pinned_issuer_url_invalid),
+	// or it is on a host this deployment does not serve (host_not_served). Absent
+	// otherwise.
+	AuthorizationServerUnavailableReason *string `form:"authorization_server_unavailable_reason,omitempty" json:"authorization_server_unavailable_reason,omitempty" xml:"authorization_server_unavailable_reason,omitempty"`
+	// The owning project's name. Present on organization-level reads of
+	// project-specific issuers.
+	ProjectName *string `form:"project_name,omitempty" json:"project_name,omitempty" xml:"project_name,omitempty"`
+	// Whether this deployment has an authentication host the issuer can be moved
+	// onto. Present on responses, not audit snapshots.
+	AuthenticationHostAvailable *bool   `form:"authentication_host_available,omitempty" json:"authentication_host_available,omitempty" xml:"authentication_host_available,omitempty"`
+	CreatedAt                   *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt                   *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // GetIssuerDeletePreflightResponseBody is the type of the
@@ -221,6 +449,10 @@ type GetIssuerDeletePreflightResponseBody struct {
 	// Active identity-chaining bindings that must be explicitly unlinked before
 	// deletion.
 	EmaBindingCount *int64 `form:"ema_binding_count,omitempty" json:"ema_binding_count,omitempty" xml:"ema_binding_count,omitempty"`
+	// True when this is the organization's only organization-level issuer, so
+	// deleting it stops serving the organization gateway its members sign in to.
+	// Does not block deletion.
+	WithdrawsOrganizationGateway *bool `form:"withdraws_organization_gateway,omitempty" json:"withdraws_organization_gateway,omitempty" xml:"withdraws_organization_gateway,omitempty"`
 }
 
 // MoveIssuerResponseBody is the type of the "organizationUserSessionIssuers"
@@ -254,8 +486,46 @@ type MoveIssuerResponseBody struct {
 	// The organization-level remote_session_client Speakeasy uses with the trusted
 	// issuer. Absent when enterprise-managed authorization is disabled.
 	TrustedRemoteSessionClientID *string `form:"trusted_remote_session_client_id,omitempty" json:"trusted_remote_session_client_id,omitempty" xml:"trusted_remote_session_client_id,omitempty"`
-	CreatedAt                    *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt                    *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	// Which OAuth authorization server the issuer's MCP servers point clients to.
+	// 'endpoint' gives every MCP server its own authorization server, rooted at
+	// the server's URL. 'shared' serves one authorization server for the issuer,
+	// used by all of its MCP servers; issuer_url and token_endpoint locate it. A
+	// shared issuer whose authorization server this deployment does not serve
+	// falls back to per-endpoint authorization servers, and
+	// authorization_server_unavailable_reason says why.
+	AuthorizationServerMode *string `form:"authorization_server_mode,omitempty" json:"authorization_server_mode,omitempty" xml:"authorization_server_mode,omitempty"`
+	// Whether the issuer opts in to announcing its authorization servers on the
+	// deployment's authentication host rather than the MCP host. This is the
+	// stored setting: on a deployment without an authentication host it has no
+	// effect, and issuer_url shows the host actually used.
+	UseAuthenticationHost *bool `form:"use_authentication_host,omitempty" json:"use_authentication_host,omitempty" xml:"use_authentication_host,omitempty"`
+	// Whether the shared authorization server's issuer URL was fixed when the
+	// issuer was set up, so it stays the same if the deployment's hosts change. An
+	// unpinned shared issuer derives its issuer URL from the deployment's current
+	// hosts, so a host change also changes the values configured on other
+	// platforms. Always false outside shared mode.
+	IssuerURLPinned *bool `form:"issuer_url_pinned,omitempty" json:"issuer_url_pinned,omitempty" xml:"issuer_url_pinned,omitempty"`
+	// The RFC 8414 issuer identifier of the issuer's shared authorization server.
+	// Present only for a shared issuer whose authorization server this deployment
+	// serves.
+	IssuerURL *string `form:"issuer_url,omitempty" json:"issuer_url,omitempty" xml:"issuer_url,omitempty"`
+	// The token endpoint of the issuer's shared authorization server. Present
+	// exactly when issuer_url is.
+	TokenEndpoint *string `form:"token_endpoint,omitempty" json:"token_endpoint,omitempty" xml:"token_endpoint,omitempty"`
+	// Why a shared issuer's authorization server is not served, so its MCP servers
+	// fall back to per-endpoint authorization servers: the pinned issuer URL is
+	// not this issuer's shared authorization server (pinned_issuer_url_invalid),
+	// or it is on a host this deployment does not serve (host_not_served). Absent
+	// otherwise.
+	AuthorizationServerUnavailableReason *string `form:"authorization_server_unavailable_reason,omitempty" json:"authorization_server_unavailable_reason,omitempty" xml:"authorization_server_unavailable_reason,omitempty"`
+	// The owning project's name. Present on organization-level reads of
+	// project-specific issuers.
+	ProjectName *string `form:"project_name,omitempty" json:"project_name,omitempty" xml:"project_name,omitempty"`
+	// Whether this deployment has an authentication host the issuer can be moved
+	// onto. Present on responses, not audit snapshots.
+	AuthenticationHostAvailable *bool   `form:"authentication_host_available,omitempty" json:"authentication_host_available,omitempty" xml:"authentication_host_available,omitempty"`
+	CreatedAt                   *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt                   *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // GetIssuerMigratePreflightResponseBody is the type of the
@@ -286,7 +556,13 @@ type GetIssuerMigratePreflightResponseBody struct {
 	PlatformOwned *bool `form:"platform_owned,omitempty" json:"platform_owned,omitempty" xml:"platform_owned,omitempty"`
 	// Configuration differences that do not block the migration. The target's
 	// values become authoritative for future authorization; existing sessions and
-	// refresh tokens are unaffected.
+	// refresh tokens are unaffected. Besides the issuer settings, this reports
+	// authorization_server_mode, use_authentication_host, and issuer_url (the
+	// shared authorization server's issuer identifier, empty when not served)
+	// whenever they differ: repointed MCP servers then direct clients to a
+	// different authorization server, so anything configured with the source's
+	// values, such as an identity provider or a federated platform, must be
+	// updated.
 	Warnings []*UserSessionIssuerFieldMismatchResponseBody `form:"warnings,omitempty" json:"warnings,omitempty" xml:"warnings,omitempty"`
 	// Stable fingerprint of the current warnings. Empty when there are no
 	// warnings; otherwise pass this exact value to migrateIssuer to confirm them.
@@ -1094,6 +1370,576 @@ type UpdateIssuerUnexpectedResponseBody struct {
 // "organizationUserSessionIssuers" service "updateIssuer" endpoint HTTP
 // response body for the "gateway_error" error.
 type UpdateIssuerGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListMcpServersUnauthorizedResponseBody is the type of the
+// "organizationUserSessionIssuers" service "listMcpServers" endpoint HTTP
+// response body for the "unauthorized" error.
+type ListMcpServersUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListMcpServersForbiddenResponseBody is the type of the
+// "organizationUserSessionIssuers" service "listMcpServers" endpoint HTTP
+// response body for the "forbidden" error.
+type ListMcpServersForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListMcpServersBadRequestResponseBody is the type of the
+// "organizationUserSessionIssuers" service "listMcpServers" endpoint HTTP
+// response body for the "bad_request" error.
+type ListMcpServersBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListMcpServersNotFoundResponseBody is the type of the
+// "organizationUserSessionIssuers" service "listMcpServers" endpoint HTTP
+// response body for the "not_found" error.
+type ListMcpServersNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListMcpServersConflictResponseBody is the type of the
+// "organizationUserSessionIssuers" service "listMcpServers" endpoint HTTP
+// response body for the "conflict" error.
+type ListMcpServersConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListMcpServersUnsupportedMediaResponseBody is the type of the
+// "organizationUserSessionIssuers" service "listMcpServers" endpoint HTTP
+// response body for the "unsupported_media" error.
+type ListMcpServersUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListMcpServersInvalidResponseBody is the type of the
+// "organizationUserSessionIssuers" service "listMcpServers" endpoint HTTP
+// response body for the "invalid" error.
+type ListMcpServersInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListMcpServersInvariantViolationResponseBody is the type of the
+// "organizationUserSessionIssuers" service "listMcpServers" endpoint HTTP
+// response body for the "invariant_violation" error.
+type ListMcpServersInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListMcpServersUnexpectedResponseBody is the type of the
+// "organizationUserSessionIssuers" service "listMcpServers" endpoint HTTP
+// response body for the "unexpected" error.
+type ListMcpServersUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListMcpServersGatewayErrorResponseBody is the type of the
+// "organizationUserSessionIssuers" service "listMcpServers" endpoint HTTP
+// response body for the "gateway_error" error.
+type ListMcpServersGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetAuthenticationHostImpactUnauthorizedResponseBody is the type of the
+// "organizationUserSessionIssuers" service "getAuthenticationHostImpact"
+// endpoint HTTP response body for the "unauthorized" error.
+type GetAuthenticationHostImpactUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetAuthenticationHostImpactForbiddenResponseBody is the type of the
+// "organizationUserSessionIssuers" service "getAuthenticationHostImpact"
+// endpoint HTTP response body for the "forbidden" error.
+type GetAuthenticationHostImpactForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetAuthenticationHostImpactBadRequestResponseBody is the type of the
+// "organizationUserSessionIssuers" service "getAuthenticationHostImpact"
+// endpoint HTTP response body for the "bad_request" error.
+type GetAuthenticationHostImpactBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetAuthenticationHostImpactNotFoundResponseBody is the type of the
+// "organizationUserSessionIssuers" service "getAuthenticationHostImpact"
+// endpoint HTTP response body for the "not_found" error.
+type GetAuthenticationHostImpactNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetAuthenticationHostImpactConflictResponseBody is the type of the
+// "organizationUserSessionIssuers" service "getAuthenticationHostImpact"
+// endpoint HTTP response body for the "conflict" error.
+type GetAuthenticationHostImpactConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetAuthenticationHostImpactUnsupportedMediaResponseBody is the type of the
+// "organizationUserSessionIssuers" service "getAuthenticationHostImpact"
+// endpoint HTTP response body for the "unsupported_media" error.
+type GetAuthenticationHostImpactUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetAuthenticationHostImpactInvalidResponseBody is the type of the
+// "organizationUserSessionIssuers" service "getAuthenticationHostImpact"
+// endpoint HTTP response body for the "invalid" error.
+type GetAuthenticationHostImpactInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetAuthenticationHostImpactInvariantViolationResponseBody is the type of the
+// "organizationUserSessionIssuers" service "getAuthenticationHostImpact"
+// endpoint HTTP response body for the "invariant_violation" error.
+type GetAuthenticationHostImpactInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetAuthenticationHostImpactUnexpectedResponseBody is the type of the
+// "organizationUserSessionIssuers" service "getAuthenticationHostImpact"
+// endpoint HTTP response body for the "unexpected" error.
+type GetAuthenticationHostImpactUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetAuthenticationHostImpactGatewayErrorResponseBody is the type of the
+// "organizationUserSessionIssuers" service "getAuthenticationHostImpact"
+// endpoint HTTP response body for the "gateway_error" error.
+type GetAuthenticationHostImpactGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetAuthenticationHostUnauthorizedResponseBody is the type of the
+// "organizationUserSessionIssuers" service "setAuthenticationHost" endpoint
+// HTTP response body for the "unauthorized" error.
+type SetAuthenticationHostUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetAuthenticationHostForbiddenResponseBody is the type of the
+// "organizationUserSessionIssuers" service "setAuthenticationHost" endpoint
+// HTTP response body for the "forbidden" error.
+type SetAuthenticationHostForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetAuthenticationHostBadRequestResponseBody is the type of the
+// "organizationUserSessionIssuers" service "setAuthenticationHost" endpoint
+// HTTP response body for the "bad_request" error.
+type SetAuthenticationHostBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetAuthenticationHostNotFoundResponseBody is the type of the
+// "organizationUserSessionIssuers" service "setAuthenticationHost" endpoint
+// HTTP response body for the "not_found" error.
+type SetAuthenticationHostNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetAuthenticationHostConflictResponseBody is the type of the
+// "organizationUserSessionIssuers" service "setAuthenticationHost" endpoint
+// HTTP response body for the "conflict" error.
+type SetAuthenticationHostConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetAuthenticationHostUnsupportedMediaResponseBody is the type of the
+// "organizationUserSessionIssuers" service "setAuthenticationHost" endpoint
+// HTTP response body for the "unsupported_media" error.
+type SetAuthenticationHostUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetAuthenticationHostInvalidResponseBody is the type of the
+// "organizationUserSessionIssuers" service "setAuthenticationHost" endpoint
+// HTTP response body for the "invalid" error.
+type SetAuthenticationHostInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetAuthenticationHostInvariantViolationResponseBody is the type of the
+// "organizationUserSessionIssuers" service "setAuthenticationHost" endpoint
+// HTTP response body for the "invariant_violation" error.
+type SetAuthenticationHostInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetAuthenticationHostUnexpectedResponseBody is the type of the
+// "organizationUserSessionIssuers" service "setAuthenticationHost" endpoint
+// HTTP response body for the "unexpected" error.
+type SetAuthenticationHostUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetAuthenticationHostGatewayErrorResponseBody is the type of the
+// "organizationUserSessionIssuers" service "setAuthenticationHost" endpoint
+// HTTP response body for the "gateway_error" error.
+type SetAuthenticationHostGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2850,8 +3696,64 @@ type UserSessionIssuerResponseBody struct {
 	// The organization-level remote_session_client Speakeasy uses with the trusted
 	// issuer. Absent when enterprise-managed authorization is disabled.
 	TrustedRemoteSessionClientID *string `form:"trusted_remote_session_client_id,omitempty" json:"trusted_remote_session_client_id,omitempty" xml:"trusted_remote_session_client_id,omitempty"`
-	CreatedAt                    *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt                    *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	// Which OAuth authorization server the issuer's MCP servers point clients to.
+	// 'endpoint' gives every MCP server its own authorization server, rooted at
+	// the server's URL. 'shared' serves one authorization server for the issuer,
+	// used by all of its MCP servers; issuer_url and token_endpoint locate it. A
+	// shared issuer whose authorization server this deployment does not serve
+	// falls back to per-endpoint authorization servers, and
+	// authorization_server_unavailable_reason says why.
+	AuthorizationServerMode *string `form:"authorization_server_mode,omitempty" json:"authorization_server_mode,omitempty" xml:"authorization_server_mode,omitempty"`
+	// Whether the issuer opts in to announcing its authorization servers on the
+	// deployment's authentication host rather than the MCP host. This is the
+	// stored setting: on a deployment without an authentication host it has no
+	// effect, and issuer_url shows the host actually used.
+	UseAuthenticationHost *bool `form:"use_authentication_host,omitempty" json:"use_authentication_host,omitempty" xml:"use_authentication_host,omitempty"`
+	// Whether the shared authorization server's issuer URL was fixed when the
+	// issuer was set up, so it stays the same if the deployment's hosts change. An
+	// unpinned shared issuer derives its issuer URL from the deployment's current
+	// hosts, so a host change also changes the values configured on other
+	// platforms. Always false outside shared mode.
+	IssuerURLPinned *bool `form:"issuer_url_pinned,omitempty" json:"issuer_url_pinned,omitempty" xml:"issuer_url_pinned,omitempty"`
+	// The RFC 8414 issuer identifier of the issuer's shared authorization server.
+	// Present only for a shared issuer whose authorization server this deployment
+	// serves.
+	IssuerURL *string `form:"issuer_url,omitempty" json:"issuer_url,omitempty" xml:"issuer_url,omitempty"`
+	// The token endpoint of the issuer's shared authorization server. Present
+	// exactly when issuer_url is.
+	TokenEndpoint *string `form:"token_endpoint,omitempty" json:"token_endpoint,omitempty" xml:"token_endpoint,omitempty"`
+	// Why a shared issuer's authorization server is not served, so its MCP servers
+	// fall back to per-endpoint authorization servers: the pinned issuer URL is
+	// not this issuer's shared authorization server (pinned_issuer_url_invalid),
+	// or it is on a host this deployment does not serve (host_not_served). Absent
+	// otherwise.
+	AuthorizationServerUnavailableReason *string `form:"authorization_server_unavailable_reason,omitempty" json:"authorization_server_unavailable_reason,omitempty" xml:"authorization_server_unavailable_reason,omitempty"`
+	// The owning project's name. Present on organization-level reads of
+	// project-specific issuers.
+	ProjectName *string `form:"project_name,omitempty" json:"project_name,omitempty" xml:"project_name,omitempty"`
+	// Whether this deployment has an authentication host the issuer can be moved
+	// onto. Present on responses, not audit snapshots.
+	AuthenticationHostAvailable *bool   `form:"authentication_host_available,omitempty" json:"authentication_host_available,omitempty" xml:"authentication_host_available,omitempty"`
+	CreatedAt                   *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt                   *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+}
+
+// UserSessionIssuerMcpServerResponseBody is used to define fields on response
+// body types.
+type UserSessionIssuerMcpServerResponseBody struct {
+	// Which kind of MCP server this is.
+	Kind *string `form:"kind,omitempty" json:"kind,omitempty" xml:"kind,omitempty"`
+	// The MCP server, toolset, or meta MCP server id.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// The display name.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// The MCP server or toolset slug. Absent for meta MCP servers and MCP servers
+	// without one.
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
+	// The owning project id.
+	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	// The owning project name.
+	ProjectName *string `form:"project_name,omitempty" json:"project_name,omitempty" xml:"project_name,omitempty"`
 }
 
 // OrganizationUserSessionIssuerReferenceResponseBody is used to define fields
@@ -2923,6 +3825,17 @@ func NewUpdateIssuerRequestBody(p *organizationusersessionissuers.UpdateIssuerPa
 	return body
 }
 
+// NewSetAuthenticationHostRequestBody builds the HTTP request body from the
+// payload of the "setAuthenticationHost" endpoint of the
+// "organizationUserSessionIssuers" service.
+func NewSetAuthenticationHostRequestBody(p *organizationusersessionissuers.SetAuthenticationHostPayload) *SetAuthenticationHostRequestBody {
+	body := &SetAuthenticationHostRequestBody{
+		ID:                    p.ID,
+		UseAuthenticationHost: p.UseAuthenticationHost,
+	}
+	return body
+}
+
 // NewMoveIssuerRequestBody builds the HTTP request body from the payload of
 // the "moveIssuer" endpoint of the "organizationUserSessionIssuers" service.
 func NewMoveIssuerRequestBody(p *organizationusersessionissuers.MoveIssuerPayload) *MoveIssuerRequestBody {
@@ -2959,17 +3872,25 @@ func NewCreateCimdClientRequestBody(p *organizationusersessionissuers.CreateCimd
 // service "createIssuer" endpoint result from a HTTP "OK" response.
 func NewCreateIssuerUserSessionIssuerOK(body *CreateIssuerResponseBody) *types.UserSessionIssuer {
 	v := &types.UserSessionIssuer{
-		ID:                            *body.ID,
-		ProjectID:                     *body.ProjectID,
-		OrganizationID:                *body.OrganizationID,
-		Slug:                          *body.Slug,
-		AuthnChallengeMode:            *body.AuthnChallengeMode,
-		SessionDurationHours:          *body.SessionDurationHours,
-		ClientIDMetadataAdmissionMode: *body.ClientIDMetadataAdmissionMode,
-		TrustedRemoteSessionIssuerID:  body.TrustedRemoteSessionIssuerID,
-		TrustedRemoteSessionClientID:  body.TrustedRemoteSessionClientID,
-		CreatedAt:                     *body.CreatedAt,
-		UpdatedAt:                     *body.UpdatedAt,
+		ID:                                   *body.ID,
+		ProjectID:                            *body.ProjectID,
+		OrganizationID:                       *body.OrganizationID,
+		Slug:                                 *body.Slug,
+		AuthnChallengeMode:                   *body.AuthnChallengeMode,
+		SessionDurationHours:                 *body.SessionDurationHours,
+		ClientIDMetadataAdmissionMode:        *body.ClientIDMetadataAdmissionMode,
+		TrustedRemoteSessionIssuerID:         body.TrustedRemoteSessionIssuerID,
+		TrustedRemoteSessionClientID:         body.TrustedRemoteSessionClientID,
+		AuthorizationServerMode:              *body.AuthorizationServerMode,
+		UseAuthenticationHost:                *body.UseAuthenticationHost,
+		IssuerURLPinned:                      *body.IssuerURLPinned,
+		IssuerURL:                            body.IssuerURL,
+		TokenEndpoint:                        body.TokenEndpoint,
+		AuthorizationServerUnavailableReason: body.AuthorizationServerUnavailableReason,
+		ProjectName:                          body.ProjectName,
+		AuthenticationHostAvailable:          body.AuthenticationHostAvailable,
+		CreatedAt:                            *body.CreatedAt,
+		UpdatedAt:                            *body.UpdatedAt,
 	}
 
 	return v
@@ -3298,17 +4219,25 @@ func NewListIssuersGatewayError(body *ListIssuersGatewayErrorResponseBody) *goa.
 // service "getIssuer" endpoint result from a HTTP "OK" response.
 func NewGetIssuerUserSessionIssuerOK(body *GetIssuerResponseBody) *types.UserSessionIssuer {
 	v := &types.UserSessionIssuer{
-		ID:                            *body.ID,
-		ProjectID:                     *body.ProjectID,
-		OrganizationID:                *body.OrganizationID,
-		Slug:                          *body.Slug,
-		AuthnChallengeMode:            *body.AuthnChallengeMode,
-		SessionDurationHours:          *body.SessionDurationHours,
-		ClientIDMetadataAdmissionMode: *body.ClientIDMetadataAdmissionMode,
-		TrustedRemoteSessionIssuerID:  body.TrustedRemoteSessionIssuerID,
-		TrustedRemoteSessionClientID:  body.TrustedRemoteSessionClientID,
-		CreatedAt:                     *body.CreatedAt,
-		UpdatedAt:                     *body.UpdatedAt,
+		ID:                                   *body.ID,
+		ProjectID:                            *body.ProjectID,
+		OrganizationID:                       *body.OrganizationID,
+		Slug:                                 *body.Slug,
+		AuthnChallengeMode:                   *body.AuthnChallengeMode,
+		SessionDurationHours:                 *body.SessionDurationHours,
+		ClientIDMetadataAdmissionMode:        *body.ClientIDMetadataAdmissionMode,
+		TrustedRemoteSessionIssuerID:         body.TrustedRemoteSessionIssuerID,
+		TrustedRemoteSessionClientID:         body.TrustedRemoteSessionClientID,
+		AuthorizationServerMode:              *body.AuthorizationServerMode,
+		UseAuthenticationHost:                *body.UseAuthenticationHost,
+		IssuerURLPinned:                      *body.IssuerURLPinned,
+		IssuerURL:                            body.IssuerURL,
+		TokenEndpoint:                        body.TokenEndpoint,
+		AuthorizationServerUnavailableReason: body.AuthorizationServerUnavailableReason,
+		ProjectName:                          body.ProjectName,
+		AuthenticationHostAvailable:          body.AuthenticationHostAvailable,
+		CreatedAt:                            *body.CreatedAt,
+		UpdatedAt:                            *body.UpdatedAt,
 	}
 
 	return v
@@ -3468,17 +4397,25 @@ func NewGetIssuerGatewayError(body *GetIssuerGatewayErrorResponseBody) *goa.Serv
 // service "updateIssuer" endpoint result from a HTTP "OK" response.
 func NewUpdateIssuerUserSessionIssuerOK(body *UpdateIssuerResponseBody) *types.UserSessionIssuer {
 	v := &types.UserSessionIssuer{
-		ID:                            *body.ID,
-		ProjectID:                     *body.ProjectID,
-		OrganizationID:                *body.OrganizationID,
-		Slug:                          *body.Slug,
-		AuthnChallengeMode:            *body.AuthnChallengeMode,
-		SessionDurationHours:          *body.SessionDurationHours,
-		ClientIDMetadataAdmissionMode: *body.ClientIDMetadataAdmissionMode,
-		TrustedRemoteSessionIssuerID:  body.TrustedRemoteSessionIssuerID,
-		TrustedRemoteSessionClientID:  body.TrustedRemoteSessionClientID,
-		CreatedAt:                     *body.CreatedAt,
-		UpdatedAt:                     *body.UpdatedAt,
+		ID:                                   *body.ID,
+		ProjectID:                            *body.ProjectID,
+		OrganizationID:                       *body.OrganizationID,
+		Slug:                                 *body.Slug,
+		AuthnChallengeMode:                   *body.AuthnChallengeMode,
+		SessionDurationHours:                 *body.SessionDurationHours,
+		ClientIDMetadataAdmissionMode:        *body.ClientIDMetadataAdmissionMode,
+		TrustedRemoteSessionIssuerID:         body.TrustedRemoteSessionIssuerID,
+		TrustedRemoteSessionClientID:         body.TrustedRemoteSessionClientID,
+		AuthorizationServerMode:              *body.AuthorizationServerMode,
+		UseAuthenticationHost:                *body.UseAuthenticationHost,
+		IssuerURLPinned:                      *body.IssuerURLPinned,
+		IssuerURL:                            body.IssuerURL,
+		TokenEndpoint:                        body.TokenEndpoint,
+		AuthorizationServerUnavailableReason: body.AuthorizationServerUnavailableReason,
+		ProjectName:                          body.ProjectName,
+		AuthenticationHostAvailable:          body.AuthenticationHostAvailable,
+		CreatedAt:                            *body.CreatedAt,
+		UpdatedAt:                            *body.UpdatedAt,
 	}
 
 	return v
@@ -3634,15 +4571,541 @@ func NewUpdateIssuerGatewayError(body *UpdateIssuerGatewayErrorResponseBody) *go
 	return v
 }
 
+// NewListMcpServersListUserSessionIssuerMcpServersResultOK builds a
+// "organizationUserSessionIssuers" service "listMcpServers" endpoint result
+// from a HTTP "OK" response.
+func NewListMcpServersListUserSessionIssuerMcpServersResultOK(body *ListMcpServersResponseBody) *organizationusersessionissuers.ListUserSessionIssuerMcpServersResult {
+	v := &organizationusersessionissuers.ListUserSessionIssuerMcpServersResult{
+		NextCursor: body.NextCursor,
+	}
+	v.Items = make([]*organizationusersessionissuers.UserSessionIssuerMcpServer, len(body.Items))
+	for i, val := range body.Items {
+		if val == nil {
+			v.Items[i] = nil
+			continue
+		}
+		v.Items[i] = unmarshalUserSessionIssuerMcpServerResponseBodyToOrganizationusersessionissuersUserSessionIssuerMcpServer(val)
+	}
+
+	return v
+}
+
+// NewListMcpServersUnauthorized builds a organizationUserSessionIssuers
+// service listMcpServers endpoint unauthorized error.
+func NewListMcpServersUnauthorized(body *ListMcpServersUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListMcpServersForbidden builds a organizationUserSessionIssuers service
+// listMcpServers endpoint forbidden error.
+func NewListMcpServersForbidden(body *ListMcpServersForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListMcpServersBadRequest builds a organizationUserSessionIssuers service
+// listMcpServers endpoint bad_request error.
+func NewListMcpServersBadRequest(body *ListMcpServersBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListMcpServersNotFound builds a organizationUserSessionIssuers service
+// listMcpServers endpoint not_found error.
+func NewListMcpServersNotFound(body *ListMcpServersNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListMcpServersConflict builds a organizationUserSessionIssuers service
+// listMcpServers endpoint conflict error.
+func NewListMcpServersConflict(body *ListMcpServersConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListMcpServersUnsupportedMedia builds a organizationUserSessionIssuers
+// service listMcpServers endpoint unsupported_media error.
+func NewListMcpServersUnsupportedMedia(body *ListMcpServersUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListMcpServersInvalid builds a organizationUserSessionIssuers service
+// listMcpServers endpoint invalid error.
+func NewListMcpServersInvalid(body *ListMcpServersInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListMcpServersInvariantViolation builds a organizationUserSessionIssuers
+// service listMcpServers endpoint invariant_violation error.
+func NewListMcpServersInvariantViolation(body *ListMcpServersInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListMcpServersUnexpected builds a organizationUserSessionIssuers service
+// listMcpServers endpoint unexpected error.
+func NewListMcpServersUnexpected(body *ListMcpServersUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListMcpServersGatewayError builds a organizationUserSessionIssuers
+// service listMcpServers endpoint gateway_error error.
+func NewListMcpServersGatewayError(body *ListMcpServersGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetAuthenticationHostImpactUserSessionIssuerAuthenticationHostImpactOK
+// builds a "organizationUserSessionIssuers" service
+// "getAuthenticationHostImpact" endpoint result from a HTTP "OK" response.
+func NewGetAuthenticationHostImpactUserSessionIssuerAuthenticationHostImpactOK(body *GetAuthenticationHostImpactResponseBody) *organizationusersessionissuers.UserSessionIssuerAuthenticationHostImpact {
+	v := &organizationusersessionissuers.UserSessionIssuerAuthenticationHostImpact{
+		AuthorizationServerBefore: *body.AuthorizationServerBefore,
+		AuthorizationServerAfter:  *body.AuthorizationServerAfter,
+		Changes:                   *body.Changes,
+		McpServerCount:            *body.McpServerCount,
+	}
+	v.Issuer = unmarshalUserSessionIssuerResponseBodyToTypesUserSessionIssuer(body.Issuer)
+
+	return v
+}
+
+// NewGetAuthenticationHostImpactUnauthorized builds a
+// organizationUserSessionIssuers service getAuthenticationHostImpact endpoint
+// unauthorized error.
+func NewGetAuthenticationHostImpactUnauthorized(body *GetAuthenticationHostImpactUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetAuthenticationHostImpactForbidden builds a
+// organizationUserSessionIssuers service getAuthenticationHostImpact endpoint
+// forbidden error.
+func NewGetAuthenticationHostImpactForbidden(body *GetAuthenticationHostImpactForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetAuthenticationHostImpactBadRequest builds a
+// organizationUserSessionIssuers service getAuthenticationHostImpact endpoint
+// bad_request error.
+func NewGetAuthenticationHostImpactBadRequest(body *GetAuthenticationHostImpactBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetAuthenticationHostImpactNotFound builds a
+// organizationUserSessionIssuers service getAuthenticationHostImpact endpoint
+// not_found error.
+func NewGetAuthenticationHostImpactNotFound(body *GetAuthenticationHostImpactNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetAuthenticationHostImpactConflict builds a
+// organizationUserSessionIssuers service getAuthenticationHostImpact endpoint
+// conflict error.
+func NewGetAuthenticationHostImpactConflict(body *GetAuthenticationHostImpactConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetAuthenticationHostImpactUnsupportedMedia builds a
+// organizationUserSessionIssuers service getAuthenticationHostImpact endpoint
+// unsupported_media error.
+func NewGetAuthenticationHostImpactUnsupportedMedia(body *GetAuthenticationHostImpactUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetAuthenticationHostImpactInvalid builds a
+// organizationUserSessionIssuers service getAuthenticationHostImpact endpoint
+// invalid error.
+func NewGetAuthenticationHostImpactInvalid(body *GetAuthenticationHostImpactInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetAuthenticationHostImpactInvariantViolation builds a
+// organizationUserSessionIssuers service getAuthenticationHostImpact endpoint
+// invariant_violation error.
+func NewGetAuthenticationHostImpactInvariantViolation(body *GetAuthenticationHostImpactInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetAuthenticationHostImpactUnexpected builds a
+// organizationUserSessionIssuers service getAuthenticationHostImpact endpoint
+// unexpected error.
+func NewGetAuthenticationHostImpactUnexpected(body *GetAuthenticationHostImpactUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetAuthenticationHostImpactGatewayError builds a
+// organizationUserSessionIssuers service getAuthenticationHostImpact endpoint
+// gateway_error error.
+func NewGetAuthenticationHostImpactGatewayError(body *GetAuthenticationHostImpactGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetAuthenticationHostUserSessionIssuerOK builds a
+// "organizationUserSessionIssuers" service "setAuthenticationHost" endpoint
+// result from a HTTP "OK" response.
+func NewSetAuthenticationHostUserSessionIssuerOK(body *SetAuthenticationHostResponseBody) *types.UserSessionIssuer {
+	v := &types.UserSessionIssuer{
+		ID:                                   *body.ID,
+		ProjectID:                            *body.ProjectID,
+		OrganizationID:                       *body.OrganizationID,
+		Slug:                                 *body.Slug,
+		AuthnChallengeMode:                   *body.AuthnChallengeMode,
+		SessionDurationHours:                 *body.SessionDurationHours,
+		ClientIDMetadataAdmissionMode:        *body.ClientIDMetadataAdmissionMode,
+		TrustedRemoteSessionIssuerID:         body.TrustedRemoteSessionIssuerID,
+		TrustedRemoteSessionClientID:         body.TrustedRemoteSessionClientID,
+		AuthorizationServerMode:              *body.AuthorizationServerMode,
+		UseAuthenticationHost:                *body.UseAuthenticationHost,
+		IssuerURLPinned:                      *body.IssuerURLPinned,
+		IssuerURL:                            body.IssuerURL,
+		TokenEndpoint:                        body.TokenEndpoint,
+		AuthorizationServerUnavailableReason: body.AuthorizationServerUnavailableReason,
+		ProjectName:                          body.ProjectName,
+		AuthenticationHostAvailable:          body.AuthenticationHostAvailable,
+		CreatedAt:                            *body.CreatedAt,
+		UpdatedAt:                            *body.UpdatedAt,
+	}
+
+	return v
+}
+
+// NewSetAuthenticationHostUnauthorized builds a organizationUserSessionIssuers
+// service setAuthenticationHost endpoint unauthorized error.
+func NewSetAuthenticationHostUnauthorized(body *SetAuthenticationHostUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetAuthenticationHostForbidden builds a organizationUserSessionIssuers
+// service setAuthenticationHost endpoint forbidden error.
+func NewSetAuthenticationHostForbidden(body *SetAuthenticationHostForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetAuthenticationHostBadRequest builds a organizationUserSessionIssuers
+// service setAuthenticationHost endpoint bad_request error.
+func NewSetAuthenticationHostBadRequest(body *SetAuthenticationHostBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetAuthenticationHostNotFound builds a organizationUserSessionIssuers
+// service setAuthenticationHost endpoint not_found error.
+func NewSetAuthenticationHostNotFound(body *SetAuthenticationHostNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetAuthenticationHostConflict builds a organizationUserSessionIssuers
+// service setAuthenticationHost endpoint conflict error.
+func NewSetAuthenticationHostConflict(body *SetAuthenticationHostConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetAuthenticationHostUnsupportedMedia builds a
+// organizationUserSessionIssuers service setAuthenticationHost endpoint
+// unsupported_media error.
+func NewSetAuthenticationHostUnsupportedMedia(body *SetAuthenticationHostUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetAuthenticationHostInvalid builds a organizationUserSessionIssuers
+// service setAuthenticationHost endpoint invalid error.
+func NewSetAuthenticationHostInvalid(body *SetAuthenticationHostInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetAuthenticationHostInvariantViolation builds a
+// organizationUserSessionIssuers service setAuthenticationHost endpoint
+// invariant_violation error.
+func NewSetAuthenticationHostInvariantViolation(body *SetAuthenticationHostInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetAuthenticationHostUnexpected builds a organizationUserSessionIssuers
+// service setAuthenticationHost endpoint unexpected error.
+func NewSetAuthenticationHostUnexpected(body *SetAuthenticationHostUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetAuthenticationHostGatewayError builds a organizationUserSessionIssuers
+// service setAuthenticationHost endpoint gateway_error error.
+func NewSetAuthenticationHostGatewayError(body *SetAuthenticationHostGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewGetIssuerDeletePreflightOrganizationUserSessionIssuerDeletePreflightOK
 // builds a "organizationUserSessionIssuers" service "getIssuerDeletePreflight"
 // endpoint result from a HTTP "OK" response.
 func NewGetIssuerDeletePreflightOrganizationUserSessionIssuerDeletePreflightOK(body *GetIssuerDeletePreflightResponseBody) *organizationusersessionissuers.OrganizationUserSessionIssuerDeletePreflight {
 	v := &organizationusersessionissuers.OrganizationUserSessionIssuerDeletePreflight{
-		ClientCount:      *body.ClientCount,
-		LiveSessionCount: *body.LiveSessionCount,
-		CanDelete:        *body.CanDelete,
-		EmaBindingCount:  *body.EmaBindingCount,
+		ClientCount:                  *body.ClientCount,
+		LiveSessionCount:             *body.LiveSessionCount,
+		CanDelete:                    *body.CanDelete,
+		EmaBindingCount:              *body.EmaBindingCount,
+		WithdrawsOrganizationGateway: *body.WithdrawsOrganizationGateway,
 	}
 	v.McpServers = make([]*organizationusersessionissuers.OrganizationUserSessionIssuerReference, len(body.McpServers))
 	for i, val := range body.McpServers {
@@ -3974,17 +5437,25 @@ func NewDeleteIssuerGatewayError(body *DeleteIssuerGatewayErrorResponseBody) *go
 // service "moveIssuer" endpoint result from a HTTP "OK" response.
 func NewMoveIssuerUserSessionIssuerOK(body *MoveIssuerResponseBody) *types.UserSessionIssuer {
 	v := &types.UserSessionIssuer{
-		ID:                            *body.ID,
-		ProjectID:                     *body.ProjectID,
-		OrganizationID:                *body.OrganizationID,
-		Slug:                          *body.Slug,
-		AuthnChallengeMode:            *body.AuthnChallengeMode,
-		SessionDurationHours:          *body.SessionDurationHours,
-		ClientIDMetadataAdmissionMode: *body.ClientIDMetadataAdmissionMode,
-		TrustedRemoteSessionIssuerID:  body.TrustedRemoteSessionIssuerID,
-		TrustedRemoteSessionClientID:  body.TrustedRemoteSessionClientID,
-		CreatedAt:                     *body.CreatedAt,
-		UpdatedAt:                     *body.UpdatedAt,
+		ID:                                   *body.ID,
+		ProjectID:                            *body.ProjectID,
+		OrganizationID:                       *body.OrganizationID,
+		Slug:                                 *body.Slug,
+		AuthnChallengeMode:                   *body.AuthnChallengeMode,
+		SessionDurationHours:                 *body.SessionDurationHours,
+		ClientIDMetadataAdmissionMode:        *body.ClientIDMetadataAdmissionMode,
+		TrustedRemoteSessionIssuerID:         body.TrustedRemoteSessionIssuerID,
+		TrustedRemoteSessionClientID:         body.TrustedRemoteSessionClientID,
+		AuthorizationServerMode:              *body.AuthorizationServerMode,
+		UseAuthenticationHost:                *body.UseAuthenticationHost,
+		IssuerURLPinned:                      *body.IssuerURLPinned,
+		IssuerURL:                            body.IssuerURL,
+		TokenEndpoint:                        body.TokenEndpoint,
+		AuthorizationServerUnavailableReason: body.AuthorizationServerUnavailableReason,
+		ProjectName:                          body.ProjectName,
+		AuthenticationHostAvailable:          body.AuthenticationHostAvailable,
+		CreatedAt:                            *body.CreatedAt,
+		UpdatedAt:                            *body.UpdatedAt,
 	}
 
 	return v
@@ -5168,6 +6639,15 @@ func ValidateCreateIssuerResponseBody(body *CreateIssuerResponseBody) (err error
 	if body.ClientIDMetadataAdmissionMode == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("client_id_metadata_admission_mode", "body"))
 	}
+	if body.AuthorizationServerMode == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("authorization_server_mode", "body"))
+	}
+	if body.UseAuthenticationHost == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("use_authentication_host", "body"))
+	}
+	if body.IssuerURLPinned == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("issuer_url_pinned", "body"))
+	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
 	}
@@ -5187,6 +6667,16 @@ func ValidateCreateIssuerResponseBody(body *CreateIssuerResponseBody) (err error
 	}
 	if body.TrustedRemoteSessionClientID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.trusted_remote_session_client_id", *body.TrustedRemoteSessionClientID, goa.FormatUUID))
+	}
+	if body.AuthorizationServerMode != nil {
+		if !(*body.AuthorizationServerMode == "endpoint" || *body.AuthorizationServerMode == "shared") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.authorization_server_mode", *body.AuthorizationServerMode, []any{"endpoint", "shared"}))
+		}
+	}
+	if body.AuthorizationServerUnavailableReason != nil {
+		if !(*body.AuthorizationServerUnavailableReason == "pinned_issuer_url_invalid" || *body.AuthorizationServerUnavailableReason == "host_not_served") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.authorization_server_unavailable_reason", *body.AuthorizationServerUnavailableReason, []any{"pinned_issuer_url_invalid", "host_not_served"}))
+		}
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
@@ -5237,6 +6727,15 @@ func ValidateGetIssuerResponseBody(body *GetIssuerResponseBody) (err error) {
 	if body.ClientIDMetadataAdmissionMode == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("client_id_metadata_admission_mode", "body"))
 	}
+	if body.AuthorizationServerMode == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("authorization_server_mode", "body"))
+	}
+	if body.UseAuthenticationHost == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("use_authentication_host", "body"))
+	}
+	if body.IssuerURLPinned == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("issuer_url_pinned", "body"))
+	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
 	}
@@ -5256,6 +6755,16 @@ func ValidateGetIssuerResponseBody(body *GetIssuerResponseBody) (err error) {
 	}
 	if body.TrustedRemoteSessionClientID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.trusted_remote_session_client_id", *body.TrustedRemoteSessionClientID, goa.FormatUUID))
+	}
+	if body.AuthorizationServerMode != nil {
+		if !(*body.AuthorizationServerMode == "endpoint" || *body.AuthorizationServerMode == "shared") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.authorization_server_mode", *body.AuthorizationServerMode, []any{"endpoint", "shared"}))
+		}
+	}
+	if body.AuthorizationServerUnavailableReason != nil {
+		if !(*body.AuthorizationServerUnavailableReason == "pinned_issuer_url_invalid" || *body.AuthorizationServerUnavailableReason == "host_not_served") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.authorization_server_unavailable_reason", *body.AuthorizationServerUnavailableReason, []any{"pinned_issuer_url_invalid", "host_not_served"}))
+		}
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
@@ -5290,6 +6799,15 @@ func ValidateUpdateIssuerResponseBody(body *UpdateIssuerResponseBody) (err error
 	if body.ClientIDMetadataAdmissionMode == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("client_id_metadata_admission_mode", "body"))
 	}
+	if body.AuthorizationServerMode == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("authorization_server_mode", "body"))
+	}
+	if body.UseAuthenticationHost == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("use_authentication_host", "body"))
+	}
+	if body.IssuerURLPinned == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("issuer_url_pinned", "body"))
+	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
 	}
@@ -5309,6 +6827,130 @@ func ValidateUpdateIssuerResponseBody(body *UpdateIssuerResponseBody) (err error
 	}
 	if body.TrustedRemoteSessionClientID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.trusted_remote_session_client_id", *body.TrustedRemoteSessionClientID, goa.FormatUUID))
+	}
+	if body.AuthorizationServerMode != nil {
+		if !(*body.AuthorizationServerMode == "endpoint" || *body.AuthorizationServerMode == "shared") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.authorization_server_mode", *body.AuthorizationServerMode, []any{"endpoint", "shared"}))
+		}
+	}
+	if body.AuthorizationServerUnavailableReason != nil {
+		if !(*body.AuthorizationServerUnavailableReason == "pinned_issuer_url_invalid" || *body.AuthorizationServerUnavailableReason == "host_not_served") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.authorization_server_unavailable_reason", *body.AuthorizationServerUnavailableReason, []any{"pinned_issuer_url_invalid", "host_not_served"}))
+		}
+	}
+	if body.CreatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
+	}
+	if body.UpdatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateListMcpServersResponseBody runs the validations defined on
+// ListMcpServersResponseBody
+func ValidateListMcpServersResponseBody(body *ListMcpServersResponseBody) (err error) {
+	if body.Items == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("items", "body"))
+	}
+	for _, e := range body.Items {
+		if e != nil {
+			if err2 := ValidateUserSessionIssuerMcpServerResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateGetAuthenticationHostImpactResponseBody runs the validations defined
+// on GetAuthenticationHostImpactResponseBody
+func ValidateGetAuthenticationHostImpactResponseBody(body *GetAuthenticationHostImpactResponseBody) (err error) {
+	if body.Issuer == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("issuer", "body"))
+	}
+	if body.AuthorizationServerBefore == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("authorization_server_before", "body"))
+	}
+	if body.AuthorizationServerAfter == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("authorization_server_after", "body"))
+	}
+	if body.Changes == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("changes", "body"))
+	}
+	if body.McpServerCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("mcp_server_count", "body"))
+	}
+	if body.Issuer != nil {
+		if err2 := ValidateUserSessionIssuerResponseBody(body.Issuer); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	return
+}
+
+// ValidateSetAuthenticationHostResponseBody runs the validations defined on
+// SetAuthenticationHostResponseBody
+func ValidateSetAuthenticationHostResponseBody(body *SetAuthenticationHostResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.ProjectID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "body"))
+	}
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
+	if body.Slug == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
+	}
+	if body.AuthnChallengeMode == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("authn_challenge_mode", "body"))
+	}
+	if body.SessionDurationHours == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("session_duration_hours", "body"))
+	}
+	if body.ClientIDMetadataAdmissionMode == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("client_id_metadata_admission_mode", "body"))
+	}
+	if body.AuthorizationServerMode == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("authorization_server_mode", "body"))
+	}
+	if body.UseAuthenticationHost == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("use_authentication_host", "body"))
+	}
+	if body.IssuerURLPinned == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("issuer_url_pinned", "body"))
+	}
+	if body.CreatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
+	}
+	if body.UpdatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if body.ClientIDMetadataAdmissionMode != nil {
+		if !(*body.ClientIDMetadataAdmissionMode == "disabled" || *body.ClientIDMetadataAdmissionMode == "presets" || *body.ClientIDMetadataAdmissionMode == "reporting" || *body.ClientIDMetadataAdmissionMode == "open") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.client_id_metadata_admission_mode", *body.ClientIDMetadataAdmissionMode, []any{"disabled", "presets", "reporting", "open"}))
+		}
+	}
+	if body.TrustedRemoteSessionIssuerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.trusted_remote_session_issuer_id", *body.TrustedRemoteSessionIssuerID, goa.FormatUUID))
+	}
+	if body.TrustedRemoteSessionClientID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.trusted_remote_session_client_id", *body.TrustedRemoteSessionClientID, goa.FormatUUID))
+	}
+	if body.AuthorizationServerMode != nil {
+		if !(*body.AuthorizationServerMode == "endpoint" || *body.AuthorizationServerMode == "shared") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.authorization_server_mode", *body.AuthorizationServerMode, []any{"endpoint", "shared"}))
+		}
+	}
+	if body.AuthorizationServerUnavailableReason != nil {
+		if !(*body.AuthorizationServerUnavailableReason == "pinned_issuer_url_invalid" || *body.AuthorizationServerUnavailableReason == "host_not_served") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.authorization_server_unavailable_reason", *body.AuthorizationServerUnavailableReason, []any{"pinned_issuer_url_invalid", "host_not_served"}))
+		}
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
@@ -5339,6 +6981,9 @@ func ValidateGetIssuerDeletePreflightResponseBody(body *GetIssuerDeletePreflight
 	}
 	if body.EmaBindingCount == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("ema_binding_count", "body"))
+	}
+	if body.WithdrawsOrganizationGateway == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("withdraws_organization_gateway", "body"))
 	}
 	for _, e := range body.McpServers {
 		if e != nil {
@@ -5381,6 +7026,15 @@ func ValidateMoveIssuerResponseBody(body *MoveIssuerResponseBody) (err error) {
 	if body.ClientIDMetadataAdmissionMode == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("client_id_metadata_admission_mode", "body"))
 	}
+	if body.AuthorizationServerMode == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("authorization_server_mode", "body"))
+	}
+	if body.UseAuthenticationHost == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("use_authentication_host", "body"))
+	}
+	if body.IssuerURLPinned == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("issuer_url_pinned", "body"))
+	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
 	}
@@ -5400,6 +7054,16 @@ func ValidateMoveIssuerResponseBody(body *MoveIssuerResponseBody) (err error) {
 	}
 	if body.TrustedRemoteSessionClientID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.trusted_remote_session_client_id", *body.TrustedRemoteSessionClientID, goa.FormatUUID))
+	}
+	if body.AuthorizationServerMode != nil {
+		if !(*body.AuthorizationServerMode == "endpoint" || *body.AuthorizationServerMode == "shared") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.authorization_server_mode", *body.AuthorizationServerMode, []any{"endpoint", "shared"}))
+		}
+	}
+	if body.AuthorizationServerUnavailableReason != nil {
+		if !(*body.AuthorizationServerUnavailableReason == "pinned_issuer_url_invalid" || *body.AuthorizationServerUnavailableReason == "host_not_served") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.authorization_server_unavailable_reason", *body.AuthorizationServerUnavailableReason, []any{"pinned_issuer_url_invalid", "host_not_served"}))
+		}
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
@@ -6499,6 +8163,730 @@ func ValidateUpdateIssuerUnexpectedResponseBody(body *UpdateIssuerUnexpectedResp
 // ValidateUpdateIssuerGatewayErrorResponseBody runs the validations defined on
 // updateIssuer_gateway_error_response_body
 func ValidateUpdateIssuerGatewayErrorResponseBody(body *UpdateIssuerGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListMcpServersUnauthorizedResponseBody runs the validations defined
+// on listMcpServers_unauthorized_response_body
+func ValidateListMcpServersUnauthorizedResponseBody(body *ListMcpServersUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListMcpServersForbiddenResponseBody runs the validations defined on
+// listMcpServers_forbidden_response_body
+func ValidateListMcpServersForbiddenResponseBody(body *ListMcpServersForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListMcpServersBadRequestResponseBody runs the validations defined on
+// listMcpServers_bad_request_response_body
+func ValidateListMcpServersBadRequestResponseBody(body *ListMcpServersBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListMcpServersNotFoundResponseBody runs the validations defined on
+// listMcpServers_not_found_response_body
+func ValidateListMcpServersNotFoundResponseBody(body *ListMcpServersNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListMcpServersConflictResponseBody runs the validations defined on
+// listMcpServers_conflict_response_body
+func ValidateListMcpServersConflictResponseBody(body *ListMcpServersConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListMcpServersUnsupportedMediaResponseBody runs the validations
+// defined on listMcpServers_unsupported_media_response_body
+func ValidateListMcpServersUnsupportedMediaResponseBody(body *ListMcpServersUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListMcpServersInvalidResponseBody runs the validations defined on
+// listMcpServers_invalid_response_body
+func ValidateListMcpServersInvalidResponseBody(body *ListMcpServersInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListMcpServersInvariantViolationResponseBody runs the validations
+// defined on listMcpServers_invariant_violation_response_body
+func ValidateListMcpServersInvariantViolationResponseBody(body *ListMcpServersInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListMcpServersUnexpectedResponseBody runs the validations defined on
+// listMcpServers_unexpected_response_body
+func ValidateListMcpServersUnexpectedResponseBody(body *ListMcpServersUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListMcpServersGatewayErrorResponseBody runs the validations defined
+// on listMcpServers_gateway_error_response_body
+func ValidateListMcpServersGatewayErrorResponseBody(body *ListMcpServersGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetAuthenticationHostImpactUnauthorizedResponseBody runs the
+// validations defined on getAuthenticationHostImpact_unauthorized_response_body
+func ValidateGetAuthenticationHostImpactUnauthorizedResponseBody(body *GetAuthenticationHostImpactUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetAuthenticationHostImpactForbiddenResponseBody runs the
+// validations defined on getAuthenticationHostImpact_forbidden_response_body
+func ValidateGetAuthenticationHostImpactForbiddenResponseBody(body *GetAuthenticationHostImpactForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetAuthenticationHostImpactBadRequestResponseBody runs the
+// validations defined on getAuthenticationHostImpact_bad_request_response_body
+func ValidateGetAuthenticationHostImpactBadRequestResponseBody(body *GetAuthenticationHostImpactBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetAuthenticationHostImpactNotFoundResponseBody runs the validations
+// defined on getAuthenticationHostImpact_not_found_response_body
+func ValidateGetAuthenticationHostImpactNotFoundResponseBody(body *GetAuthenticationHostImpactNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetAuthenticationHostImpactConflictResponseBody runs the validations
+// defined on getAuthenticationHostImpact_conflict_response_body
+func ValidateGetAuthenticationHostImpactConflictResponseBody(body *GetAuthenticationHostImpactConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetAuthenticationHostImpactUnsupportedMediaResponseBody runs the
+// validations defined on
+// getAuthenticationHostImpact_unsupported_media_response_body
+func ValidateGetAuthenticationHostImpactUnsupportedMediaResponseBody(body *GetAuthenticationHostImpactUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetAuthenticationHostImpactInvalidResponseBody runs the validations
+// defined on getAuthenticationHostImpact_invalid_response_body
+func ValidateGetAuthenticationHostImpactInvalidResponseBody(body *GetAuthenticationHostImpactInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetAuthenticationHostImpactInvariantViolationResponseBody runs the
+// validations defined on
+// getAuthenticationHostImpact_invariant_violation_response_body
+func ValidateGetAuthenticationHostImpactInvariantViolationResponseBody(body *GetAuthenticationHostImpactInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetAuthenticationHostImpactUnexpectedResponseBody runs the
+// validations defined on getAuthenticationHostImpact_unexpected_response_body
+func ValidateGetAuthenticationHostImpactUnexpectedResponseBody(body *GetAuthenticationHostImpactUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetAuthenticationHostImpactGatewayErrorResponseBody runs the
+// validations defined on
+// getAuthenticationHostImpact_gateway_error_response_body
+func ValidateGetAuthenticationHostImpactGatewayErrorResponseBody(body *GetAuthenticationHostImpactGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetAuthenticationHostUnauthorizedResponseBody runs the validations
+// defined on setAuthenticationHost_unauthorized_response_body
+func ValidateSetAuthenticationHostUnauthorizedResponseBody(body *SetAuthenticationHostUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetAuthenticationHostForbiddenResponseBody runs the validations
+// defined on setAuthenticationHost_forbidden_response_body
+func ValidateSetAuthenticationHostForbiddenResponseBody(body *SetAuthenticationHostForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetAuthenticationHostBadRequestResponseBody runs the validations
+// defined on setAuthenticationHost_bad_request_response_body
+func ValidateSetAuthenticationHostBadRequestResponseBody(body *SetAuthenticationHostBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetAuthenticationHostNotFoundResponseBody runs the validations
+// defined on setAuthenticationHost_not_found_response_body
+func ValidateSetAuthenticationHostNotFoundResponseBody(body *SetAuthenticationHostNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetAuthenticationHostConflictResponseBody runs the validations
+// defined on setAuthenticationHost_conflict_response_body
+func ValidateSetAuthenticationHostConflictResponseBody(body *SetAuthenticationHostConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetAuthenticationHostUnsupportedMediaResponseBody runs the
+// validations defined on setAuthenticationHost_unsupported_media_response_body
+func ValidateSetAuthenticationHostUnsupportedMediaResponseBody(body *SetAuthenticationHostUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetAuthenticationHostInvalidResponseBody runs the validations
+// defined on setAuthenticationHost_invalid_response_body
+func ValidateSetAuthenticationHostInvalidResponseBody(body *SetAuthenticationHostInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetAuthenticationHostInvariantViolationResponseBody runs the
+// validations defined on
+// setAuthenticationHost_invariant_violation_response_body
+func ValidateSetAuthenticationHostInvariantViolationResponseBody(body *SetAuthenticationHostInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetAuthenticationHostUnexpectedResponseBody runs the validations
+// defined on setAuthenticationHost_unexpected_response_body
+func ValidateSetAuthenticationHostUnexpectedResponseBody(body *SetAuthenticationHostUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetAuthenticationHostGatewayErrorResponseBody runs the validations
+// defined on setAuthenticationHost_gateway_error_response_body
+func ValidateSetAuthenticationHostGatewayErrorResponseBody(body *SetAuthenticationHostGatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -8708,6 +11096,15 @@ func ValidateUserSessionIssuerResponseBody(body *UserSessionIssuerResponseBody) 
 	if body.ClientIDMetadataAdmissionMode == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("client_id_metadata_admission_mode", "body"))
 	}
+	if body.AuthorizationServerMode == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("authorization_server_mode", "body"))
+	}
+	if body.UseAuthenticationHost == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("use_authentication_host", "body"))
+	}
+	if body.IssuerURLPinned == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("issuer_url_pinned", "body"))
+	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
 	}
@@ -8728,11 +11125,53 @@ func ValidateUserSessionIssuerResponseBody(body *UserSessionIssuerResponseBody) 
 	if body.TrustedRemoteSessionClientID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.trusted_remote_session_client_id", *body.TrustedRemoteSessionClientID, goa.FormatUUID))
 	}
+	if body.AuthorizationServerMode != nil {
+		if !(*body.AuthorizationServerMode == "endpoint" || *body.AuthorizationServerMode == "shared") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.authorization_server_mode", *body.AuthorizationServerMode, []any{"endpoint", "shared"}))
+		}
+	}
+	if body.AuthorizationServerUnavailableReason != nil {
+		if !(*body.AuthorizationServerUnavailableReason == "pinned_issuer_url_invalid" || *body.AuthorizationServerUnavailableReason == "host_not_served") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.authorization_server_unavailable_reason", *body.AuthorizationServerUnavailableReason, []any{"pinned_issuer_url_invalid", "host_not_served"}))
+		}
+	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
 	}
 	if body.UpdatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateUserSessionIssuerMcpServerResponseBody runs the validations defined
+// on UserSessionIssuerMcpServerResponseBody
+func ValidateUserSessionIssuerMcpServerResponseBody(body *UserSessionIssuerMcpServerResponseBody) (err error) {
+	if body.Kind == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("kind", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ProjectID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "body"))
+	}
+	if body.ProjectName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("project_name", "body"))
+	}
+	if body.Kind != nil {
+		if !(*body.Kind == "mcp_server" || *body.Kind == "toolset" || *body.Kind == "meta_mcp_server") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.kind", *body.Kind, []any{"mcp_server", "toolset", "meta_mcp_server"}))
+		}
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if body.ProjectID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
 	}
 	return
 }

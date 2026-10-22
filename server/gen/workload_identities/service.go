@@ -25,9 +25,15 @@ type Service interface {
 	// workload:read.
 	List(context.Context, *ListPayload) (res *WorkloadIdentityPolicy, err error)
 	// List the platforms the catalog offers to trust without looking anything up,
-	// each with the guided setup that connects it. The same for every
-	// organization. Requires workload:read.
+	// each with the policy that trusting it writes: the issuer and signing keys it
+	// is recognised by, the values the operator supplies, and the access rule it
+	// produces. How the setup is explained belongs to the dashboard. The same for
+	// every organization. Requires workload:read.
 	ListPlatforms(context.Context, *ListPlatformsPayload) (res *WorkloadPlatformCatalog, err error)
+	// Get the forms for trusting a platform the catalog does not list and allowing
+	// its workloads: registering and editing a trusted platform, and allowing and
+	// editing access. The same for every organization. Requires workload:read.
+	GetCustomFlows(context.Context, *GetCustomFlowsPayload) (res *WorkloadCustomFlows, err error)
 	// List the token endpoints an external platform can be pointed at: one per
 	// user session issuer in shared mode, at the organization level and in each
 	// project, with the issuer it serves. Issuers this deployment does not serve a
@@ -61,6 +67,22 @@ type Service interface {
 	// Withdraw an admitted subject and its agent assignment, stopping it
 	// authenticating. Requires workload:write.
 	WithdrawSubject(context.Context, *WithdrawSubjectPayload) (res *WorkloadIdentityPolicy, err error)
+	// Create a single-use join token that enrolls one headless box with no
+	// platform identity as a workload assigned to an agent. The token is returned
+	// once and only its hash is kept. Only a person can create one: a key backed
+	// by a principal rather than a user is refused with 403 whatever its grants.
+	// Requires workload:write, and either owning the agent or agent:authorize on
+	// it, since an enrolled box acts under the agent's policy.
+	CreateDeviceJoinToken(context.Context, *CreateDeviceJoinTokenPayload) (res *WorkloadDeviceJoinToken, err error)
+	// Enroll a device with its public key, redeeming a join token. No session or
+	// API key: the single-use join token is the credential, and an unknown,
+	// expired, or already redeemed token returns 401. A key already registered to
+	// another device returns 409, and an agent whose policy no longer grants
+	// org:device_agent_sync returns a failed precondition without spending the
+	// token. In one transaction the device's key is registered, the device is
+	// admitted under the organization's Speakeasy device issuer, and it is
+	// assigned the token's agent.
+	RegisterDevice(context.Context, *RegisterDevicePayload) (res *WorkloadDeviceRegistration, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -83,7 +105,7 @@ const ServiceName = "workloadIdentities"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [9]string{"list", "listPlatforms", "listTokenEndpoints", "registerIssuer", "updateIssuer", "withdrawIssuer", "admitSubject", "updateSubject", "withdrawSubject"}
+var MethodNames = [12]string{"list", "listPlatforms", "getCustomFlows", "listTokenEndpoints", "registerIssuer", "updateIssuer", "withdrawIssuer", "admitSubject", "updateSubject", "withdrawSubject", "createDeviceJoinToken", "registerDevice"}
 
 // AdmitSubjectPayload is the payload type of the workloadIdentities service
 // admitSubject method.
@@ -117,6 +139,26 @@ type AdmitSubjectPayload struct {
 	ProjectScoped bool
 }
 
+// CreateDeviceJoinTokenPayload is the payload type of the workloadIdentities
+// service createDeviceJoinToken method.
+type CreateDeviceJoinTokenPayload struct {
+	// The agent the enrolled device inherits its policy from.
+	AgentID string
+	// How long the token stays redeemable. Defaults to one hour.
+	ExpiresInSeconds int
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
+}
+
+// GetCustomFlowsPayload is the payload type of the workloadIdentities service
+// getCustomFlows method.
+type GetCustomFlowsPayload struct {
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
+}
+
 // ListPayload is the payload type of the workloadIdentities service list
 // method.
 type ListPayload struct {
@@ -139,6 +181,20 @@ type ListTokenEndpointsPayload struct {
 	SessionToken     *string
 	ApikeyToken      *string
 	ProjectSlugInput *string
+}
+
+// RegisterDevicePayload is the payload type of the workloadIdentities service
+// registerDevice method.
+type RegisterDevicePayload struct {
+	// The join token from createDeviceJoinToken.
+	JoinToken string
+	// The device's public signing key as a JWK: EC P-256 (ES256) or OKP Ed25519
+	// (EdDSA). Private key material is refused.
+	PublicJwk map[string]any
+	// The device's hostname, shown to administrators. Self-reported.
+	Hostname *string
+	// The device's serial number, shown to administrators. Self-reported.
+	Serial *string
 }
 
 // RegisterIssuerPayload is the payload type of the workloadIdentities service
@@ -235,6 +291,96 @@ type WithdrawSubjectPayload struct {
 	ProjectSlugInput *string
 }
 
+// WorkloadCustomFlows is the result type of the workloadIdentities service
+// getCustomFlows method.
+type WorkloadCustomFlows struct {
+	// Trusts a new platform; submits registerIssuer.
+	RegisterPlatform *WorkloadForm
+	// Edits a trusted platform; submits updateIssuer.
+	EditPlatform *WorkloadForm
+	// Allows a subject under a trusted platform; submits admitSubject.
+	AllowAccess *WorkloadForm
+	// Edits allowed access; submits updateSubject.
+	EditAccess *WorkloadForm
+}
+
+// WorkloadDeviceJoinToken is the result type of the workloadIdentities service
+// createDeviceJoinToken method.
+type WorkloadDeviceJoinToken struct {
+	// The join token. Shown once; only its hash is stored.
+	Token string
+	// When the token stops being redeemable.
+	ExpiresAt string
+}
+
+// WorkloadDeviceRegistration is the result type of the workloadIdentities
+// service registerDevice method.
+type WorkloadDeviceRegistration struct {
+	// The device's workload subject, device:<uuid>. Its assertions carry this as
+	// sub.
+	DeviceSubject string
+	// The issuer its assertions carry as iss.
+	Issuer string
+	// The agent the device inherits its policy from.
+	AgentID string
+	// The organization the device enrolled in.
+	OrganizationID string
+}
+
+// A custom flow's form, held to the management API form it submits.
+type WorkloadForm struct {
+	// Heads the form.
+	Title string
+	// Shown under the title.
+	Description string
+	// The submit button's label.
+	SubmitLabel string
+	// The submit button's label while the form submits.
+	PendingLabel string
+	// The form's steps, in order.
+	Steps []*WorkloadFormStep
+}
+
+// One piece of a custom flow's form. Which fields are set depends on type; the
+// rest are empty.
+type WorkloadFormBlock struct {
+	// The kind of content. wildcard_caution marks where the form warns that a
+	// wildcard rule admits more than one identity; the dashboard writes that
+	// warning, since it names the rule and the agent.
+	Type string
+	// A text block's Markdown. Raw HTML in it must not be rendered.
+	Markdown string
+	// A link's https target.
+	Href string
+	// A link's label, or a form control's.
+	Label string
+	// The form value an input collects. label is submitted as an admission's name.
+	Field string
+	// Shown in an empty form control.
+	Placeholder string
+	// Markdown shown under a form control while it has no validation message. Raw
+	// HTML in it must not be rendered.
+	Help string
+	// Whether an input is a text area.
+	Multiline bool
+	// Whether an input shows its value without letting it change. A read-only
+	// value is not submitted.
+	ReadOnly bool
+	// The dashboard validator an input's value must pass. The server applies the
+	// same rules when the form is submitted.
+	Format string
+}
+
+// One screen of a custom flow's form.
+type WorkloadFormStep struct {
+	// Stable within the form.
+	ID string
+	// Heads the step.
+	Title string
+	// Rendered in order.
+	Blocks []*WorkloadFormBlock
+}
+
 // WorkloadIdentityPolicy is the result type of the workloadIdentities service
 // list method.
 type WorkloadIdentityPolicy struct {
@@ -244,8 +390,9 @@ type WorkloadIdentityPolicy struct {
 	Admissions []*types.WorkloadAdmission
 }
 
-// A platform the catalog offers to trust, with what the operator supplies and
-// the guided setup that connects it.
+// A platform the catalog offers to trust, with what the operator supplies to
+// connect it. How the setup is explained belongs to the dashboard, not to this
+// policy.
 type WorkloadPlatform struct {
 	// Identifies the entry permanently.
 	Key string
@@ -266,36 +413,6 @@ type WorkloadPlatform struct {
 	Variables []*WorkloadPlatformVariable
 	// The access rule it produces.
 	Subject *WorkloadPlatformSubject
-	// The guided setup. Empty for a platform without one, which is listed as
-	// coming soon and cannot be opened.
-	Steps []*WorkloadPlatformStep
-}
-
-// One piece of a guided setup step. Which fields are set depends on type; the
-// rest are empty.
-type WorkloadPlatformBlock struct {
-	// The kind of content.
-	Type string
-	// A text block's Markdown, or what a checklist item without a value asks the
-	// operator to do. Raw HTML in it must not be rendered.
-	Markdown string
-	// An image's path on the dashboard's origin.
-	Src string
-	// An image's alternative text.
-	Alt string
-	// Shown under an image.
-	Caption string
-	// A link's https target.
-	Href string
-	// A link's or computed value's label, or the console field or control a
-	// checklist item names.
-	Label string
-	// The variable key a field collects.
-	Variable string
-	// The value a computed block or checklist item shows.
-	Value string
-	// Shown under a computed value or checklist item.
-	Help string
 }
 
 // WorkloadPlatformCatalog is the result type of the workloadIdentities service
@@ -311,19 +428,6 @@ type WorkloadPlatformConstant struct {
 	Value string
 	// Whether the operator sees the value.
 	Visibility string
-}
-
-// One screen of a guided setup.
-type WorkloadPlatformStep struct {
-	// Stable within the platform; used in the dashboard URL.
-	ID string
-	// Heads the step.
-	Title string
-	// collect steps gather values, the create step writes the rows, connect steps
-	// describe the platform's side.
-	Phase string
-	// Rendered in order.
-	Blocks []*WorkloadPlatformBlock
 }
 
 // The access rule a catalog platform produces.

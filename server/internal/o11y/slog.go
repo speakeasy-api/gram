@@ -62,10 +62,12 @@ func NewLogHandler(opts *LogHandlerOptions) slog.Handler {
 	}
 
 	temporalKeys := getTemporalKeyRemaps(opts.DataDogAttr)
+	var component slog.Attr
 
 	if opts.Pretty {
 		return &ContextHandler{
 			DataDogAttr: opts.DataDogAttr,
+			component:   component,
 			Handler: plog.NewHandler(
 				plog.WithAddSource(true),
 				plog.WithHideTimestamp(true),
@@ -80,6 +82,7 @@ func NewLogHandler(opts *LogHandlerOptions) slog.Handler {
 	} else {
 		return &ContextHandler{
 			DataDogAttr: opts.DataDogAttr,
+			component:   component,
 			Handler: slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{
 				AddSource: true,
 				Level:     LogLevels[rl].Slog,
@@ -108,8 +111,15 @@ func NewLogHandler(opts *LogHandlerOptions) slog.Handler {
 }
 
 type ContextHandler struct {
-	Handler     slog.Handler
+	// Handler writes the enriched log record.
+	Handler slog.Handler
+
+	// DataDogAttr enables Datadog-specific trace and span attributes.
 	DataDogAttr bool
+
+	// component is deferred until emission so child loggers can replace it
+	// without leaving duplicate JSON keys in the current group.
+	component slog.Attr
 }
 
 var _ slog.Handler = (*ContextHandler)(nil)
@@ -119,16 +129,39 @@ func (h *ContextHandler) Enabled(ctx context.Context, level slog.Level) bool {
 }
 
 func (h *ContextHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
+	component := h.component
+	forwarded := make([]slog.Attr, 0, len(attrs))
+	for _, a := range attrs {
+		if a.Key == string(attr.ComponentKey) {
+			a.Value = a.Value.Resolve()
+			component = a
+		} else {
+			forwarded = append(forwarded, a)
+		}
+	}
+
 	return &ContextHandler{
-		Handler:     h.Handler.WithAttrs(attrs),
+		Handler:     h.Handler.WithAttrs(forwarded),
 		DataDogAttr: h.DataDogAttr,
+		component:   component,
 	}
 }
 
 func (h *ContextHandler) WithGroup(name string) slog.Handler {
+	if name == "" {
+		return h
+	}
+
+	handler := h.Handler
+	if h.component.Key != "" {
+		handler = handler.WithAttrs([]slog.Attr{h.component})
+	}
+	var component slog.Attr
+
 	return &ContextHandler{
-		Handler:     h.Handler.WithGroup(name),
+		Handler:     handler.WithGroup(name),
 		DataDogAttr: h.DataDogAttr,
+		component:   component,
 	}
 }
 
@@ -163,7 +196,21 @@ func (h *ContextHandler) Handle(ctx context.Context, record slog.Record) error {
 		)
 	}
 
-	err := h.Handler.Handle(ctx, record)
+	component := h.component
+	filtered := slog.NewRecord(record.Time, record.Level, record.Message, record.PC)
+	record.Attrs(func(a slog.Attr) bool {
+		if a.Key == string(attr.ComponentKey) {
+			component = a
+		} else {
+			filtered.AddAttrs(a)
+		}
+		return true
+	})
+	if component.Key != "" {
+		filtered.AddAttrs(component)
+	}
+
+	err := h.Handler.Handle(ctx, filtered)
 	if err != nil {
 		return fmt.Errorf("contexthandler: handle slog record: %w", err)
 	}

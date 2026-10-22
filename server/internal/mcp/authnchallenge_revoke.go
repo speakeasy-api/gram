@@ -16,6 +16,8 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
+	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
@@ -30,7 +32,7 @@ func (s *Service) HandleRevoke(w http.ResponseWriter, r *http.Request) error {
 		return oops.E(oops.CodeBadRequest, nil, "an mcp slug must be provided").LogError(ctx, s.logger)
 	}
 	logger := s.logger.With(attr.SlogToolsetMCPSlug(mcpSlug))
-	endpoint, err := s.LoadResolvedMcpEndpointBySlug(ctx, logger, mcpSlug, "mcp")
+	endpoint, err := s.LoadResolvedMcpEndpointBySlug(ctx, logger, mcpSlug, mcproute.MCP)
 	if err != nil {
 		return err
 	}
@@ -38,8 +40,7 @@ func (s *Service) HandleRevoke(w http.ResponseWriter, r *http.Request) error {
 }
 
 // ServeRevoke implements RFC 7009 token revocation. Post-resolution entry
-// point shared by /mcp's HandleRevoke (toolset-keyed) and /x/mcp's
-// mcp_endpoint-keyed route registration.
+// point called by HandleRevoke after slug resolution.
 //
 // Per RFC 7009 §2.2: the response is HTTP 200 unconditionally on success or
 // when the token is unknown / already revoked / was never valid -- the spec
@@ -109,12 +110,12 @@ func (s *Service) serveRevoke(w http.ResponseWriter, r *http.Request, logger *sl
 	}
 	logOAuthClientCredentialEvent(ctx, logger, r, "oauth revoke client authenticated", clientID, presentedAuthMethod, "", "")
 
-	token := r.PostForm.Get("token")
+	token := r.PostForm.Get(oauthwire.ParamToken)
 	if token == "" {
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth revoke request rejected", clientID, presentedAuthMethod, "", "missing_token")
 		return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_request", "token is required")
 	}
-	hint := r.PostForm.Get("token_type_hint")
+	hint := r.PostForm.Get(oauthwire.ParamTokenTypeHint)
 
 	// Try the hinted type first; on miss, fall through to the other. Per
 	// RFC 7009 §2.1 each path verifies the token belongs to the

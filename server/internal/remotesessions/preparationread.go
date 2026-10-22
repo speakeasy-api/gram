@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
@@ -37,6 +38,23 @@ func (s *Service) readIdentityChaining(ctx context.Context, in PreparationInput)
 	return readIdentityChainingSnapshot(ctx, repo.New(tx), project, org, in)
 }
 
+// reportConnectionScopes fills r's ConnectionScopes and ScopesOutOfDate when
+// it selects a client. The runtime's read never calls it: chaining requests
+// the recorded scopes alone.
+func reportConnectionScopes(ctx context.Context, db repo.DBTX, project uuid.UUID, org string, userSessionIssuerID uuid.UUID, discover bool, r *PreparationResult) error {
+	if r == nil || r.ClientID == uuid.Nil {
+		return nil
+	}
+	connection, err := ConnectionScopes(ctx, db, BindingConnection{ProjectID: project, OrganizationID: org, UserSessionIssuerID: userSessionIssuerID, ClientID: r.ClientID, Resource: r.Resource, Discover: discover})
+	if err != nil {
+		return fmt.Errorf("resolve identity chaining connection scopes: %w", err)
+	}
+	current := BindingScopes(connection, r.Scopes).Scopes
+	r.ConnectionScopes = current
+	r.ScopesOutOfDate = !SameBindingScopes(current, r.Scopes)
+	return nil
+}
+
 // ReadIdentityChainingForTenant recomputes a binding's readiness exactly as
 // the preparation API reports it, for a tenant the caller already authorized
 // from its own request context rather than an HTTP auth context.
@@ -51,6 +69,39 @@ func ReadIdentityChainingForTenant(ctx context.Context, db *pgxpool.Pool, projec
 	}
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(context.WithoutCancel(ctx)) })
 	return readIdentityChainingSnapshot(ctx, repo.New(tx), project, org, in)
+}
+
+// InspectIdentityChainingForTenant reports every live binding naming one
+// upstream, each as readEMA reports it, connection scopes included, for a
+// tenant the caller already authorized. discover is as for BindingConnection.
+// It never mutates or contacts a provider.
+func InspectIdentityChainingForTenant(ctx context.Context, db *pgxpool.Pool, project uuid.UUID, org string, userSessionIssuerID uuid.UUID, remoteSessionIssuerID uuid.NullUUID, upstream string, discover bool) ([]*PreparationResult, error) {
+	tx, err := db.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly, DeferrableMode: "", BeginQuery: "", CommitQuery: ""})
+	if err != nil {
+		return nil, fmt.Errorf("begin identity chaining snapshot: %w", err)
+	}
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(context.WithoutCancel(ctx)) })
+	q := repo.New(tx)
+	bindings, err := q.ListEMABindingsForUpstream(ctx, repo.ListEMABindingsForUpstreamParams{ProjectID: project, OrganizationID: org, UserSessionIssuerID: userSessionIssuerID, RemoteSessionIssuerID: remoteSessionIssuerID, UpstreamResource: strings.TrimRight(upstream, "/")})
+	if err != nil {
+		return nil, fmt.Errorf("list identity chaining bindings: %w", err)
+	}
+	results := make([]*PreparationResult, 0, len(bindings))
+	for _, b := range bindings {
+		in, err := normalizePreparationInput(PreparationInput{UserSessionIssuerID: b.UserSessionIssuerID, RemoteSessionIssuerID: b.RemoteSessionIssuerID, Resource: b.Resource, ClientID: uuid.Nil, Scopes: nil, Mechanism: "", ConfirmGrants: nil, ExpectedGeneration: 0, TokenEndpointAuthMethod: "", ResourceMetadata: nil})
+		if err != nil {
+			return nil, err
+		}
+		result, err := readIdentityChainingSnapshot(ctx, q, project, org, in)
+		if err != nil {
+			return nil, err
+		}
+		if err := reportConnectionScopes(ctx, tx, project, org, b.UserSessionIssuerID, discover, result); err != nil {
+			return nil, err
+		}
+		results = append(results, result)
+	}
+	return results, nil
 }
 
 // readIdentityChainingSnapshot recomputes a binding's readiness for an already
@@ -73,7 +124,7 @@ func readIdentityChainingSnapshot(ctx context.Context, q *repo.Queries, project 
 	b, err := q.GetEMABinding(ctx, repo.GetEMABindingParams{ProjectID: project, OrganizationID: org, UserSessionIssuerID: in.UserSessionIssuerID, RemoteSessionIssuerID: in.RemoteSessionIssuerID, Resource: in.Resource})
 	if errors.Is(err, pgx.ErrNoRows) {
 		state := PreparationStateConfigurationRequired
-		if eligibility := PreparationEligibility(issuer.AuthorizationGrantProfilesSupported, issuer.GrantTypesSupported); eligibility != preparationEligible {
+		if eligibility := IssuerPreparationEligibility(issuer); eligibility != preparationEligible {
 			state = eligibility
 		} else if preparationMetadataTransient(issuer) {
 			state = PreparationStateTransientFailure
@@ -108,7 +159,7 @@ func readIdentityChainingSnapshot(ctx context.Context, q *repo.Queries, project 
 	if b.RemoteSessionClientID.Valid && preparationBindingGrantSource(b.GrantSource) == PreparationGrantSourceProviderReturned {
 		return preparationResult(b, issuer, client, preparationRegistrationReadiness(ctx, q, client, issuer, org, true)), nil
 	}
-	eligibility := PreparationEligibility(issuer.AuthorizationGrantProfilesSupported, issuer.GrantTypesSupported)
+	eligibility := IssuerPreparationEligibility(issuer)
 	if eligibility != preparationEligible {
 		return preparationResult(b, issuer, client, eligibility), nil
 	}

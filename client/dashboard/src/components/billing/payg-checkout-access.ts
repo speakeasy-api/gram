@@ -15,13 +15,16 @@ import {
  *   where checkout converts a running trial.
  * - `"gated"`: the dashboard lockout pages, where checkout is the way out of
  *   the gate for an organization that is walled off entirely.
+ * - `"unsubscribed-base"`: billing has confirmed no Stripe subscription for a
+ *   Free/Base organization; existing paid and contracted plans are excluded.
  * - `"unsubscribed-payg"`: billing has confirmed there is no Stripe subscription,
  *   so a PAYG organization can finish or restart checkout without an active trial.
  */
 export type PaygCheckoutEligibility =
   | "active-trial"
   | "gated"
-  | "unsubscribed-payg";
+  | "unsubscribed-payg"
+  | "unsubscribed-base";
 
 /**
  * Whether this viewer may start a self-serve checkout, plus the organization
@@ -40,8 +43,13 @@ export function usePaygCheckoutAccess(eligibility: PaygCheckoutEligibility): {
 } {
   const flag = useFeatureFlag(FEATURE_FLAGS.paygSelfServeBilling);
   const { hasScope } = useRBAC();
-  const { trial, activeOrganizationId, whitelisted, rawGramAccountType } =
-    useSession();
+  const {
+    trial,
+    activeOrganizationId,
+    whitelisted,
+    rawGramAccountType,
+    hasActiveSubscription,
+  } = useSession();
   // A trial that ends while the page is open has to take the CTA with it, so
   // the lifecycle below reads a clock that re-renders on the trial's own
   // boundaries instead of whenever a parent happens to re-render.
@@ -55,6 +63,11 @@ export function usePaygCheckoutAccess(eligibility: PaygCheckoutEligibility): {
       break;
     case "gated":
       eligibleForSurface = !whitelisted;
+      break;
+    case "unsubscribed-base":
+      eligibleForSurface =
+        (rawGramAccountType === "free" || rawGramAccountType === "base") &&
+        !hasActiveSubscription;
       break;
     case "unsubscribed-payg":
       eligibleForSurface = rawGramAccountType === "payg";

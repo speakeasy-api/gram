@@ -1,13 +1,33 @@
+import { unrecognized } from "@gram/client/types/unrecognized.js";
 import type { ResourceAudienceEntry } from "@gram/client/models/components/resourceaudienceentry.js";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // What the page sends when a row changes. The rules the surface writes are the
 // whole point, so the tests assert the payload rather than the rendering alone.
-const { mutate, mutationOptions, invalidate } = vi.hoisted(() => ({
-  mutate: vi.fn(),
-  mutationOptions: vi.fn(),
-  invalidate: vi.fn(),
+const { mutate, mutationOptions, invalidate, permission, directory } =
+  vi.hoisted(() => ({
+    mutate: vi.fn(),
+    mutationOptions: vi.fn(),
+    invalidate: vi.fn(),
+    permission: { admin: true },
+    // The directory role mappings the list reads, when it reads them.
+    directory: {
+      data: undefined as unknown,
+      enabled: vi.fn(),
+    },
+  }));
+
+vi.mock("@gram/client/react-query/directoryRoleMappings.js", () => ({
+  useDirectoryRoleMappings: (
+    _request: unknown,
+    _security: unknown,
+    options: { enabled?: boolean },
+  ) => {
+    directory.enabled(options.enabled);
+    // Like react-query, a disabled query still returns what it cached.
+    return { data: directory.data };
+  },
 }));
 
 vi.mock("@gram/client/react-query/setResourceAudience.js", () => ({
@@ -74,7 +94,7 @@ vi.mock("@gram/client/react-query/audienceOptions.js", () => ({
 }));
 
 vi.mock("@tanstack/react-query", () => ({
-  useQueryClient: () => ({}),
+  useQueryClient: () => ({ invalidateQueries: invalidate }),
 }));
 
 vi.mock("react-router", () => ({
@@ -85,13 +105,18 @@ vi.mock("react-router", () => ({
 }));
 
 vi.mock("@/routes", () => ({
+  useRoutes: () => ({
+    plugins: { detail: { href: (id: string) => `/org/plugins/${id}` } },
+  }),
   useOrgRoutes: () => ({
+    plugins: { detail: { href: (id: string) => `/org/plugins/${id}` } },
     access: { roles: { href: () => "/org/access/roles" } },
+    identity: { href: () => "/org/identity" },
   }),
 }));
 
 vi.mock("@/hooks/useRBAC", () => ({
-  useRBAC: () => ({ hasAnyScope: () => true }),
+  useRBAC: () => ({ hasAnyScope: () => permission.admin }),
 }));
 
 vi.mock("@/components/require-scope", () => ({
@@ -110,7 +135,11 @@ import { TooltipProvider } from "@/components/ui/Tooltip";
 import { ManageAccess } from "./ManageAccess";
 
 afterEach(cleanup);
-beforeEach(() => vi.clearAllMocks());
+beforeEach(() => {
+  vi.clearAllMocks();
+  permission.admin = true;
+  directory.data = undefined;
+});
 
 function entry(
   overrides: Partial<ResourceAudienceEntry>,
@@ -360,7 +389,8 @@ describe("the access list", () => {
       ],
     });
     await mutationOptions.mock.calls.at(-1)![0].onSuccess();
-    expect(invalidate).toHaveBeenCalledTimes(4);
+    expect(invalidate).toHaveBeenCalledTimes(5);
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ["mcpAssignments"] });
   });
 
   it("says when nobody reaches the server", () => {
@@ -458,4 +488,303 @@ it("confirms removing an agent that remains covered by a broader role allow", ()
     ["agent:a1", "blocked_manage"],
     ["agent:a1", "blocked_view"],
   ]);
+});
+
+describe("role plugin distribution", () => {
+  const role = entry({
+    principalUrn: "role:global:1",
+    kind: "role",
+    displayName: "Engineering",
+  });
+  const plugin = {
+    principalUrn: role.principalUrn,
+    pluginId: "plugin-1",
+    name: "Tools",
+    slug: "tools",
+  };
+  const ui = (rolePlugins: (typeof plugin)[], entries = [role]) => (
+    <TooltipProvider>
+      <ManageAccess
+        resourceId="server-1"
+        entries={entries}
+        version="v1"
+        isLoading={false}
+        rolePlugins={rolePlugins}
+      />
+    </TooltipProvider>
+  );
+
+  it("shows an empty distribution without inventing links", () => {
+    render(ui([]));
+    expect(screen.getByText("Distributed via")).toBeDefined();
+    expect(screen.queryByRole("link", { name: "Tools" })).toBeNull();
+  });
+
+  it("links one exact role match to its plugin detail", () => {
+    render(
+      ui([
+        plugin,
+        {
+          ...plugin,
+          principalUrn: "role:other:1",
+          pluginId: "wrong",
+          name: "Unrelated",
+        },
+      ]),
+    );
+    expect(
+      screen.getByRole("link", { name: "Tools" }).getAttribute("href"),
+    ).toBe("/org/plugins/plugin-1");
+    expect(screen.queryByText("Unrelated")).toBeNull();
+  });
+
+  it("sorts multiple plugins and disambiguates duplicate names with slugs", () => {
+    render(
+      ui([
+        { ...plugin, pluginId: "z", slug: "z" },
+        { ...plugin, pluginId: "a", slug: "a" },
+        { ...plugin, pluginId: "first", name: "Alpha" },
+      ]),
+    );
+    const links = screen
+      .getAllByRole("link")
+      .filter((link) => link.getAttribute("href")?.includes("/plugins/"));
+    expect(links.map((link) => link.textContent)).toEqual([
+      "Alpha",
+      "Tools (a)",
+      "Tools (z)",
+    ]);
+    expect(links[0]?.parentElement?.textContent).toBe(
+      "Alpha, Tools (a), Tools (z)",
+    );
+  });
+
+  it("does not show plugins on non-role rows", () => {
+    render(ui([{ ...plugin, principalUrn: "user:1" }], [entry({})]));
+    expect(screen.queryByRole("link", { name: "Tools" })).toBeNull();
+  });
+
+  it("keeps plugin links visible while unsupported rules disable all editing", () => {
+    render(
+      ui(
+        [plugin],
+        [
+          role,
+          {
+            ...role,
+            level: "blocked",
+            dispositions: [unrecognized("future_disposition")],
+          },
+        ],
+      ),
+    );
+    expect(screen.getByRole("link", { name: "Tools" })).toBeDefined();
+    expect(screen.getByText("Distributed via")).toBeDefined();
+    expect(
+      screen
+        .getByRole("button", { name: /Grant access/ })
+        .hasAttribute("disabled"),
+    ).toBe(true);
+    expandFirstRow();
+    for (const control of screen.getAllByRole("button", {
+      name: "Access unknown",
+    })) {
+      expect(control.hasAttribute("disabled")).toBe(true);
+      fireEvent.click(control);
+    }
+    expect(screen.queryByRole("menuitem", { name: "All tools" })).toBeNull();
+    expect(mutate).not.toHaveBeenCalled();
+  });
+
+  it("hides cached plugin data immediately after permission downgrade", () => {
+    const { rerender } = render(ui([plugin]));
+    expect(screen.getByRole("link", { name: "Tools" })).toBeDefined();
+    permission.admin = false;
+    rerender(ui([plugin]));
+    expect(screen.queryByRole("link", { name: "Tools" })).toBeNull();
+    expect(screen.queryByText("Distributed via")).toBeNull();
+    expect(screen.getByRole("link", { name: "Engineering" })).toBeDefined();
+  });
+});
+
+describe("directory sources on role rows", () => {
+  const role = entry({
+    principalUrn: "role:global:1",
+    kind: "role",
+    displayName: "Engineer",
+  });
+  const mapping = (
+    id: string,
+    overrides: Record<string, unknown>,
+  ): Record<string, unknown> => ({
+    id,
+    roleUrn: role.principalUrn,
+    sourceStatus: "active",
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    ...overrides,
+  });
+
+  beforeEach(() => {
+    directory.data = {
+      groups: [{ id: "group-1", name: "Platform", memberCount: 3 }],
+      attributes: [{ key: "department", value: "Sales", memberCount: 2 }],
+      mappings: [
+        mapping("m1", {
+          sourceKind: "group",
+          directoryGroupId: "group-1",
+          directoryGroupName: "Platform",
+        }),
+        mapping("m2", {
+          sourceKind: "attribute",
+          attributeKey: "department",
+          attributeValue: "Sales",
+        }),
+        mapping("m3", {
+          sourceKind: "group",
+          directoryGroupId: "group-gone",
+          directoryGroupName: "Contractors",
+          sourceStatus: "missing",
+        }),
+        mapping("m4", {
+          sourceKind: "group",
+          directoryGroupId: "group-1",
+          roleUrn: "role:global:other",
+        }),
+      ],
+    };
+  });
+
+  it("names the sources giving out the role and links a removed one to review", () => {
+    renderList([role]);
+    expect(
+      screen.getByText(
+        "Via directory: Platform, department = Sales · 1 removed source",
+      ),
+    ).toBeDefined();
+    expect(
+      screen.getByRole("link", { name: "Review" }).getAttribute("href"),
+    ).toBe("/org/identity");
+  });
+
+  it("offers no review link while every source is live", () => {
+    directory.data = {
+      ...(directory.data as object),
+      mappings: (directory.data as { mappings: unknown[] }).mappings.slice(
+        0,
+        2,
+      ),
+    };
+    renderList([role]);
+    expect(
+      screen.getByText("Via directory: Platform, department = Sales"),
+    ).toBeDefined();
+    expect(screen.queryByRole("link", { name: "Review" })).toBeNull();
+  });
+
+  it("does not read or show the mappings for someone who is not an administrator", () => {
+    permission.admin = false;
+    renderList([role]);
+    expect(directory.enabled).toHaveBeenCalledWith(false);
+    expect(screen.queryByText(/Via directory/)).toBeNull();
+  });
+
+  it("hides cached mappings immediately after permission downgrade", () => {
+    const { rerender } = renderList([role]);
+    expect(screen.getByText(/Via directory/)).toBeDefined();
+    permission.admin = false;
+    rerender(
+      <TooltipProvider>
+        <ManageAccess
+          resourceId="server-1"
+          resourceName="Acme Ops"
+          entries={[role]}
+          version="v1"
+          isLoading={false}
+        />
+      </TooltipProvider>,
+    );
+    expect(screen.queryByText(/Via directory/)).toBeNull();
+  });
+});
+
+it("closes an open mutation dialog when a refreshed rule becomes unsupported", () => {
+  const props = { resourceId: "server-1", version: "v1", isLoading: false };
+  const known = entry({ appliesTo: "all_resources" });
+  const { rerender } = render(
+    <TooltipProvider>
+      <ManageAccess {...props} entries={[known]} />
+    </TooltipProvider>,
+  );
+  fireEvent.click(screen.getByLabelText("Remove Hana Sato from this server"));
+  expect(screen.getByRole("button", { name: "Remove" })).toBeDefined();
+  rerender(
+    <TooltipProvider>
+      <ManageAccess
+        {...props}
+        entries={[known, entry({ level: unrecognized("future_level") })]}
+      />
+    </TooltipProvider>,
+  );
+  expect(screen.queryByRole("button", { name: "Remove" })).toBeNull();
+  expect(screen.getByText(/Some access rules are not supported/)).toBeDefined();
+  expect(mutate).not.toHaveBeenCalled();
+});
+
+it("disables all editing for an unknown audience applicability", () => {
+  renderList([entry({ appliesTo: unrecognized("future_applicability") })]);
+  expandFirstRow();
+  for (const button of screen.getAllByRole("button", {
+    name: "Access unknown",
+  })) {
+    expect(button.hasAttribute("disabled")).toBe(true);
+  }
+  expect(
+    screen
+      .getByRole("button", { name: "Access cannot be changed here." })
+      .hasAttribute("disabled"),
+  ).toBe(true);
+  expect(
+    screen
+      .getByRole("button", { name: /Grant access/ })
+      .hasAttribute("disabled"),
+  ).toBe(true);
+  expect(mutate).not.toHaveBeenCalled();
+});
+
+it("explains the required admin permission on disabled remove controls", () => {
+  permission.admin = false;
+  renderList([entry({})]);
+  expect(
+    screen
+      .getByRole("button", {
+        name: "Only organization admins can change access.",
+      })
+      .hasAttribute("disabled"),
+  ).toBe(true);
+  expect(
+    screen.queryByRole("button", { name: "Access cannot be changed here." }),
+  ).toBeNull();
+});
+
+it("keeps an unsupported principal visible with all audience edits disabled", () => {
+  renderList([entry({ kind: unrecognized("future_kind") })]);
+  expect(screen.getByText("Hana Sato")).toBeTruthy();
+  expandFirstRow();
+  for (const button of screen.getAllByRole("button", {
+    name: "Access unknown",
+  })) {
+    expect(button.hasAttribute("disabled")).toBe(true);
+  }
+  expect(
+    screen
+      .getByRole("button", { name: "Access cannot be changed here." })
+      .hasAttribute("disabled"),
+  ).toBe(true);
+  expect(
+    screen
+      .getByRole("button", { name: /Grant access/ })
+      .hasAttribute("disabled"),
+  ).toBe(true);
+  expect(mutate).not.toHaveBeenCalled();
 });

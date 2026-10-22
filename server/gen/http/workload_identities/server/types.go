@@ -109,6 +109,29 @@ type UpdateSubjectRequestBody struct {
 	AgentID *string `form:"agent_id,omitempty" json:"agent_id,omitempty" xml:"agent_id,omitempty"`
 }
 
+// CreateDeviceJoinTokenRequestBody is the type of the "workloadIdentities"
+// service "createDeviceJoinToken" endpoint HTTP request body.
+type CreateDeviceJoinTokenRequestBody struct {
+	// The agent the enrolled device inherits its policy from.
+	AgentID *string `form:"agent_id,omitempty" json:"agent_id,omitempty" xml:"agent_id,omitempty"`
+	// How long the token stays redeemable. Defaults to one hour.
+	ExpiresInSeconds *int `form:"expires_in_seconds,omitempty" json:"expires_in_seconds,omitempty" xml:"expires_in_seconds,omitempty"`
+}
+
+// RegisterDeviceRequestBody is the type of the "workloadIdentities" service
+// "registerDevice" endpoint HTTP request body.
+type RegisterDeviceRequestBody struct {
+	// The join token from createDeviceJoinToken.
+	JoinToken *string `form:"join_token,omitempty" json:"join_token,omitempty" xml:"join_token,omitempty"`
+	// The device's public signing key as a JWK: EC P-256 (ES256) or OKP Ed25519
+	// (EdDSA). Private key material is refused.
+	PublicJwk map[string]any `form:"public_jwk,omitempty" json:"public_jwk,omitempty" xml:"public_jwk,omitempty"`
+	// The device's hostname, shown to administrators. Self-reported.
+	Hostname *string `form:"hostname,omitempty" json:"hostname,omitempty" xml:"hostname,omitempty"`
+	// The device's serial number, shown to administrators. Self-reported.
+	Serial *string `form:"serial,omitempty" json:"serial,omitempty" xml:"serial,omitempty"`
+}
+
 // ListResponseBody is the type of the "workloadIdentities" service "list"
 // endpoint HTTP response body.
 type ListResponseBody struct {
@@ -123,6 +146,19 @@ type ListResponseBody struct {
 type ListPlatformsResponseBody struct {
 	// The catalog entries.
 	Platforms []*WorkloadPlatformResponseBody `form:"platforms" json:"platforms" xml:"platforms"`
+}
+
+// GetCustomFlowsResponseBody is the type of the "workloadIdentities" service
+// "getCustomFlows" endpoint HTTP response body.
+type GetCustomFlowsResponseBody struct {
+	// Trusts a new platform; submits registerIssuer.
+	RegisterPlatform *WorkloadFormResponseBody `form:"register_platform" json:"register_platform" xml:"register_platform"`
+	// Edits a trusted platform; submits updateIssuer.
+	EditPlatform *WorkloadFormResponseBody `form:"edit_platform" json:"edit_platform" xml:"edit_platform"`
+	// Allows a subject under a trusted platform; submits admitSubject.
+	AllowAccess *WorkloadFormResponseBody `form:"allow_access" json:"allow_access" xml:"allow_access"`
+	// Edits allowed access; submits updateSubject.
+	EditAccess *WorkloadFormResponseBody `form:"edit_access" json:"edit_access" xml:"edit_access"`
 }
 
 // ListTokenEndpointsResponseBody is the type of the "workloadIdentities"
@@ -184,6 +220,29 @@ type WithdrawSubjectResponseBody struct {
 	Issuers []*WorkloadIssuerResponseBody `form:"issuers" json:"issuers" xml:"issuers"`
 	// Admitted subjects.
 	Admissions []*WorkloadAdmissionResponseBody `form:"admissions" json:"admissions" xml:"admissions"`
+}
+
+// CreateDeviceJoinTokenResponseBody is the type of the "workloadIdentities"
+// service "createDeviceJoinToken" endpoint HTTP response body.
+type CreateDeviceJoinTokenResponseBody struct {
+	// The join token. Shown once; only its hash is stored.
+	Token string `form:"token" json:"token" xml:"token"`
+	// When the token stops being redeemable.
+	ExpiresAt string `form:"expires_at" json:"expires_at" xml:"expires_at"`
+}
+
+// RegisterDeviceResponseBody is the type of the "workloadIdentities" service
+// "registerDevice" endpoint HTTP response body.
+type RegisterDeviceResponseBody struct {
+	// The device's workload subject, device:<uuid>. Its assertions carry this as
+	// sub.
+	DeviceSubject string `form:"device_subject" json:"device_subject" xml:"device_subject"`
+	// The issuer its assertions carry as iss.
+	Issuer string `form:"issuer" json:"issuer" xml:"issuer"`
+	// The agent the device inherits its policy from.
+	AgentID string `form:"agent_id" json:"agent_id" xml:"agent_id"`
+	// The organization the device enrolled in.
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
 }
 
 // ListUnauthorizedResponseBody is the type of the "workloadIdentities" service
@@ -540,6 +599,195 @@ type ListPlatformsUnexpectedResponseBody struct {
 // "workloadIdentities" service "listPlatforms" endpoint HTTP response body for
 // the "gateway_error" error.
 type ListPlatformsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetCustomFlowsUnauthorizedResponseBody is the type of the
+// "workloadIdentities" service "getCustomFlows" endpoint HTTP response body
+// for the "unauthorized" error.
+type GetCustomFlowsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetCustomFlowsForbiddenResponseBody is the type of the "workloadIdentities"
+// service "getCustomFlows" endpoint HTTP response body for the "forbidden"
+// error.
+type GetCustomFlowsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetCustomFlowsBadRequestResponseBody is the type of the "workloadIdentities"
+// service "getCustomFlows" endpoint HTTP response body for the "bad_request"
+// error.
+type GetCustomFlowsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetCustomFlowsNotFoundResponseBody is the type of the "workloadIdentities"
+// service "getCustomFlows" endpoint HTTP response body for the "not_found"
+// error.
+type GetCustomFlowsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetCustomFlowsConflictResponseBody is the type of the "workloadIdentities"
+// service "getCustomFlows" endpoint HTTP response body for the "conflict"
+// error.
+type GetCustomFlowsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetCustomFlowsUnsupportedMediaResponseBody is the type of the
+// "workloadIdentities" service "getCustomFlows" endpoint HTTP response body
+// for the "unsupported_media" error.
+type GetCustomFlowsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetCustomFlowsInvalidResponseBody is the type of the "workloadIdentities"
+// service "getCustomFlows" endpoint HTTP response body for the "invalid" error.
+type GetCustomFlowsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetCustomFlowsInvariantViolationResponseBody is the type of the
+// "workloadIdentities" service "getCustomFlows" endpoint HTTP response body
+// for the "invariant_violation" error.
+type GetCustomFlowsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetCustomFlowsUnexpectedResponseBody is the type of the "workloadIdentities"
+// service "getCustomFlows" endpoint HTTP response body for the "unexpected"
+// error.
+type GetCustomFlowsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetCustomFlowsGatewayErrorResponseBody is the type of the
+// "workloadIdentities" service "getCustomFlows" endpoint HTTP response body
+// for the "gateway_error" error.
+type GetCustomFlowsGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1873,6 +2121,385 @@ type WithdrawSubjectGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// CreateDeviceJoinTokenUnauthorizedResponseBody is the type of the
+// "workloadIdentities" service "createDeviceJoinToken" endpoint HTTP response
+// body for the "unauthorized" error.
+type CreateDeviceJoinTokenUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateDeviceJoinTokenForbiddenResponseBody is the type of the
+// "workloadIdentities" service "createDeviceJoinToken" endpoint HTTP response
+// body for the "forbidden" error.
+type CreateDeviceJoinTokenForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateDeviceJoinTokenBadRequestResponseBody is the type of the
+// "workloadIdentities" service "createDeviceJoinToken" endpoint HTTP response
+// body for the "bad_request" error.
+type CreateDeviceJoinTokenBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateDeviceJoinTokenNotFoundResponseBody is the type of the
+// "workloadIdentities" service "createDeviceJoinToken" endpoint HTTP response
+// body for the "not_found" error.
+type CreateDeviceJoinTokenNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateDeviceJoinTokenConflictResponseBody is the type of the
+// "workloadIdentities" service "createDeviceJoinToken" endpoint HTTP response
+// body for the "conflict" error.
+type CreateDeviceJoinTokenConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateDeviceJoinTokenUnsupportedMediaResponseBody is the type of the
+// "workloadIdentities" service "createDeviceJoinToken" endpoint HTTP response
+// body for the "unsupported_media" error.
+type CreateDeviceJoinTokenUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateDeviceJoinTokenInvalidResponseBody is the type of the
+// "workloadIdentities" service "createDeviceJoinToken" endpoint HTTP response
+// body for the "invalid" error.
+type CreateDeviceJoinTokenInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateDeviceJoinTokenInvariantViolationResponseBody is the type of the
+// "workloadIdentities" service "createDeviceJoinToken" endpoint HTTP response
+// body for the "invariant_violation" error.
+type CreateDeviceJoinTokenInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateDeviceJoinTokenUnexpectedResponseBody is the type of the
+// "workloadIdentities" service "createDeviceJoinToken" endpoint HTTP response
+// body for the "unexpected" error.
+type CreateDeviceJoinTokenUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateDeviceJoinTokenGatewayErrorResponseBody is the type of the
+// "workloadIdentities" service "createDeviceJoinToken" endpoint HTTP response
+// body for the "gateway_error" error.
+type CreateDeviceJoinTokenGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RegisterDeviceUnauthorizedResponseBody is the type of the
+// "workloadIdentities" service "registerDevice" endpoint HTTP response body
+// for the "unauthorized" error.
+type RegisterDeviceUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RegisterDeviceForbiddenResponseBody is the type of the "workloadIdentities"
+// service "registerDevice" endpoint HTTP response body for the "forbidden"
+// error.
+type RegisterDeviceForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RegisterDeviceBadRequestResponseBody is the type of the "workloadIdentities"
+// service "registerDevice" endpoint HTTP response body for the "bad_request"
+// error.
+type RegisterDeviceBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RegisterDeviceNotFoundResponseBody is the type of the "workloadIdentities"
+// service "registerDevice" endpoint HTTP response body for the "not_found"
+// error.
+type RegisterDeviceNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RegisterDeviceConflictResponseBody is the type of the "workloadIdentities"
+// service "registerDevice" endpoint HTTP response body for the "conflict"
+// error.
+type RegisterDeviceConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RegisterDeviceUnsupportedMediaResponseBody is the type of the
+// "workloadIdentities" service "registerDevice" endpoint HTTP response body
+// for the "unsupported_media" error.
+type RegisterDeviceUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RegisterDeviceInvalidResponseBody is the type of the "workloadIdentities"
+// service "registerDevice" endpoint HTTP response body for the "invalid" error.
+type RegisterDeviceInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RegisterDeviceInvariantViolationResponseBody is the type of the
+// "workloadIdentities" service "registerDevice" endpoint HTTP response body
+// for the "invariant_violation" error.
+type RegisterDeviceInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RegisterDeviceUnexpectedResponseBody is the type of the "workloadIdentities"
+// service "registerDevice" endpoint HTTP response body for the "unexpected"
+// error.
+type RegisterDeviceUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RegisterDeviceGatewayErrorResponseBody is the type of the
+// "workloadIdentities" service "registerDevice" endpoint HTTP response body
+// for the "gateway_error" error.
+type RegisterDeviceGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // WorkloadIssuerResponseBody is used to define fields on response body types.
 type WorkloadIssuerResponseBody struct {
 	// The workload issuer id.
@@ -1957,9 +2584,6 @@ type WorkloadPlatformResponseBody struct {
 	Variables []*WorkloadPlatformVariableResponseBody `form:"variables" json:"variables" xml:"variables"`
 	// The access rule it produces.
 	Subject *WorkloadPlatformSubjectResponseBody `form:"subject" json:"subject" xml:"subject"`
-	// The guided setup. Empty for a platform without one, which is listed as
-	// coming soon and cannot be opened.
-	Steps []*WorkloadPlatformStepResponseBody `form:"steps" json:"steps" xml:"steps"`
 }
 
 // WorkloadPlatformConstantResponseBody is used to define fields on response
@@ -2000,45 +2624,58 @@ type WorkloadPlatformSubjectResponseBody struct {
 	Wildcard bool `form:"wildcard" json:"wildcard" xml:"wildcard"`
 }
 
-// WorkloadPlatformStepResponseBody is used to define fields on response body
-// types.
-type WorkloadPlatformStepResponseBody struct {
-	// Stable within the platform; used in the dashboard URL.
+// WorkloadFormResponseBody is used to define fields on response body types.
+type WorkloadFormResponseBody struct {
+	// Heads the form.
+	Title string `form:"title" json:"title" xml:"title"`
+	// Shown under the title.
+	Description string `form:"description" json:"description" xml:"description"`
+	// The submit button's label.
+	SubmitLabel string `form:"submit_label" json:"submit_label" xml:"submit_label"`
+	// The submit button's label while the form submits.
+	PendingLabel string `form:"pending_label" json:"pending_label" xml:"pending_label"`
+	// The form's steps, in order.
+	Steps []*WorkloadFormStepResponseBody `form:"steps" json:"steps" xml:"steps"`
+}
+
+// WorkloadFormStepResponseBody is used to define fields on response body types.
+type WorkloadFormStepResponseBody struct {
+	// Stable within the form.
 	ID string `form:"id" json:"id" xml:"id"`
 	// Heads the step.
 	Title string `form:"title" json:"title" xml:"title"`
-	// collect steps gather values, the create step writes the rows, connect steps
-	// describe the platform's side.
-	Phase string `form:"phase" json:"phase" xml:"phase"`
 	// Rendered in order.
-	Blocks []*WorkloadPlatformBlockResponseBody `form:"blocks" json:"blocks" xml:"blocks"`
+	Blocks []*WorkloadFormBlockResponseBody `form:"blocks" json:"blocks" xml:"blocks"`
 }
 
-// WorkloadPlatformBlockResponseBody is used to define fields on response body
+// WorkloadFormBlockResponseBody is used to define fields on response body
 // types.
-type WorkloadPlatformBlockResponseBody struct {
-	// The kind of content.
+type WorkloadFormBlockResponseBody struct {
+	// The kind of content. wildcard_caution marks where the form warns that a
+	// wildcard rule admits more than one identity; the dashboard writes that
+	// warning, since it names the rule and the agent.
 	Type string `form:"type" json:"type" xml:"type"`
-	// A text block's Markdown, or what a checklist item without a value asks the
-	// operator to do. Raw HTML in it must not be rendered.
+	// A text block's Markdown. Raw HTML in it must not be rendered.
 	Markdown string `form:"markdown" json:"markdown" xml:"markdown"`
-	// An image's path on the dashboard's origin.
-	Src string `form:"src" json:"src" xml:"src"`
-	// An image's alternative text.
-	Alt string `form:"alt" json:"alt" xml:"alt"`
-	// Shown under an image.
-	Caption string `form:"caption" json:"caption" xml:"caption"`
 	// A link's https target.
 	Href string `form:"href" json:"href" xml:"href"`
-	// A link's or computed value's label, or the console field or control a
-	// checklist item names.
+	// A link's label, or a form control's.
 	Label string `form:"label" json:"label" xml:"label"`
-	// The variable key a field collects.
-	Variable string `form:"variable" json:"variable" xml:"variable"`
-	// The value a computed block or checklist item shows.
-	Value string `form:"value" json:"value" xml:"value"`
-	// Shown under a computed value or checklist item.
+	// The form value an input collects. label is submitted as an admission's name.
+	Field string `form:"field" json:"field" xml:"field"`
+	// Shown in an empty form control.
+	Placeholder string `form:"placeholder" json:"placeholder" xml:"placeholder"`
+	// Markdown shown under a form control while it has no validation message. Raw
+	// HTML in it must not be rendered.
 	Help string `form:"help" json:"help" xml:"help"`
+	// Whether an input is a text area.
+	Multiline bool `form:"multiline" json:"multiline" xml:"multiline"`
+	// Whether an input shows its value without letting it change. A read-only
+	// value is not submitted.
+	ReadOnly bool `form:"read_only" json:"read_only" xml:"read_only"`
+	// The dashboard validator an input's value must pass. The server applies the
+	// same rules when the form is submitted.
+	Format string `form:"format" json:"format" xml:"format"`
 }
 
 // WorkloadTokenEndpointResponseBody is used to define fields on response body
@@ -2108,6 +2745,25 @@ func NewListPlatformsResponseBody(res *workloadidentities.WorkloadPlatformCatalo
 		}
 	} else {
 		body.Platforms = []*WorkloadPlatformResponseBody{}
+	}
+	return body
+}
+
+// NewGetCustomFlowsResponseBody builds the HTTP response body from the result
+// of the "getCustomFlows" endpoint of the "workloadIdentities" service.
+func NewGetCustomFlowsResponseBody(res *workloadidentities.WorkloadCustomFlows) *GetCustomFlowsResponseBody {
+	body := &GetCustomFlowsResponseBody{}
+	if res.RegisterPlatform != nil {
+		body.RegisterPlatform = marshalWorkloadidentitiesWorkloadFormToWorkloadFormResponseBody(res.RegisterPlatform)
+	}
+	if res.EditPlatform != nil {
+		body.EditPlatform = marshalWorkloadidentitiesWorkloadFormToWorkloadFormResponseBody(res.EditPlatform)
+	}
+	if res.AllowAccess != nil {
+		body.AllowAccess = marshalWorkloadidentitiesWorkloadFormToWorkloadFormResponseBody(res.AllowAccess)
+	}
+	if res.EditAccess != nil {
+		body.EditAccess = marshalWorkloadidentitiesWorkloadFormToWorkloadFormResponseBody(res.EditAccess)
 	}
 	return body
 }
@@ -2314,6 +2970,29 @@ func NewWithdrawSubjectResponseBody(res *workloadidentities.WorkloadIdentityPoli
 		}
 	} else {
 		body.Admissions = []*WorkloadAdmissionResponseBody{}
+	}
+	return body
+}
+
+// NewCreateDeviceJoinTokenResponseBody builds the HTTP response body from the
+// result of the "createDeviceJoinToken" endpoint of the "workloadIdentities"
+// service.
+func NewCreateDeviceJoinTokenResponseBody(res *workloadidentities.WorkloadDeviceJoinToken) *CreateDeviceJoinTokenResponseBody {
+	body := &CreateDeviceJoinTokenResponseBody{
+		Token:     res.Token,
+		ExpiresAt: res.ExpiresAt,
+	}
+	return body
+}
+
+// NewRegisterDeviceResponseBody builds the HTTP response body from the result
+// of the "registerDevice" endpoint of the "workloadIdentities" service.
+func NewRegisterDeviceResponseBody(res *workloadidentities.WorkloadDeviceRegistration) *RegisterDeviceResponseBody {
+	body := &RegisterDeviceResponseBody{
+		DeviceSubject:  res.DeviceSubject,
+		Issuer:         res.Issuer,
+		AgentID:        res.AgentID,
+		OrganizationID: res.OrganizationID,
 	}
 	return body
 }
@@ -2594,6 +3273,153 @@ func NewListPlatformsUnexpectedResponseBody(res *goa.ServiceError) *ListPlatform
 // service.
 func NewListPlatformsGatewayErrorResponseBody(res *goa.ServiceError) *ListPlatformsGatewayErrorResponseBody {
 	body := &ListPlatformsGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetCustomFlowsUnauthorizedResponseBody builds the HTTP response body from
+// the result of the "getCustomFlows" endpoint of the "workloadIdentities"
+// service.
+func NewGetCustomFlowsUnauthorizedResponseBody(res *goa.ServiceError) *GetCustomFlowsUnauthorizedResponseBody {
+	body := &GetCustomFlowsUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetCustomFlowsForbiddenResponseBody builds the HTTP response body from
+// the result of the "getCustomFlows" endpoint of the "workloadIdentities"
+// service.
+func NewGetCustomFlowsForbiddenResponseBody(res *goa.ServiceError) *GetCustomFlowsForbiddenResponseBody {
+	body := &GetCustomFlowsForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetCustomFlowsBadRequestResponseBody builds the HTTP response body from
+// the result of the "getCustomFlows" endpoint of the "workloadIdentities"
+// service.
+func NewGetCustomFlowsBadRequestResponseBody(res *goa.ServiceError) *GetCustomFlowsBadRequestResponseBody {
+	body := &GetCustomFlowsBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetCustomFlowsNotFoundResponseBody builds the HTTP response body from the
+// result of the "getCustomFlows" endpoint of the "workloadIdentities" service.
+func NewGetCustomFlowsNotFoundResponseBody(res *goa.ServiceError) *GetCustomFlowsNotFoundResponseBody {
+	body := &GetCustomFlowsNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetCustomFlowsConflictResponseBody builds the HTTP response body from the
+// result of the "getCustomFlows" endpoint of the "workloadIdentities" service.
+func NewGetCustomFlowsConflictResponseBody(res *goa.ServiceError) *GetCustomFlowsConflictResponseBody {
+	body := &GetCustomFlowsConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetCustomFlowsUnsupportedMediaResponseBody builds the HTTP response body
+// from the result of the "getCustomFlows" endpoint of the "workloadIdentities"
+// service.
+func NewGetCustomFlowsUnsupportedMediaResponseBody(res *goa.ServiceError) *GetCustomFlowsUnsupportedMediaResponseBody {
+	body := &GetCustomFlowsUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetCustomFlowsInvalidResponseBody builds the HTTP response body from the
+// result of the "getCustomFlows" endpoint of the "workloadIdentities" service.
+func NewGetCustomFlowsInvalidResponseBody(res *goa.ServiceError) *GetCustomFlowsInvalidResponseBody {
+	body := &GetCustomFlowsInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetCustomFlowsInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "getCustomFlows" endpoint of the
+// "workloadIdentities" service.
+func NewGetCustomFlowsInvariantViolationResponseBody(res *goa.ServiceError) *GetCustomFlowsInvariantViolationResponseBody {
+	body := &GetCustomFlowsInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetCustomFlowsUnexpectedResponseBody builds the HTTP response body from
+// the result of the "getCustomFlows" endpoint of the "workloadIdentities"
+// service.
+func NewGetCustomFlowsUnexpectedResponseBody(res *goa.ServiceError) *GetCustomFlowsUnexpectedResponseBody {
+	body := &GetCustomFlowsUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetCustomFlowsGatewayErrorResponseBody builds the HTTP response body from
+// the result of the "getCustomFlows" endpoint of the "workloadIdentities"
+// service.
+func NewGetCustomFlowsGatewayErrorResponseBody(res *goa.ServiceError) *GetCustomFlowsGatewayErrorResponseBody {
+	body := &GetCustomFlowsGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -3631,6 +4457,303 @@ func NewWithdrawSubjectGatewayErrorResponseBody(res *goa.ServiceError) *Withdraw
 	return body
 }
 
+// NewCreateDeviceJoinTokenUnauthorizedResponseBody builds the HTTP response
+// body from the result of the "createDeviceJoinToken" endpoint of the
+// "workloadIdentities" service.
+func NewCreateDeviceJoinTokenUnauthorizedResponseBody(res *goa.ServiceError) *CreateDeviceJoinTokenUnauthorizedResponseBody {
+	body := &CreateDeviceJoinTokenUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateDeviceJoinTokenForbiddenResponseBody builds the HTTP response body
+// from the result of the "createDeviceJoinToken" endpoint of the
+// "workloadIdentities" service.
+func NewCreateDeviceJoinTokenForbiddenResponseBody(res *goa.ServiceError) *CreateDeviceJoinTokenForbiddenResponseBody {
+	body := &CreateDeviceJoinTokenForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateDeviceJoinTokenBadRequestResponseBody builds the HTTP response body
+// from the result of the "createDeviceJoinToken" endpoint of the
+// "workloadIdentities" service.
+func NewCreateDeviceJoinTokenBadRequestResponseBody(res *goa.ServiceError) *CreateDeviceJoinTokenBadRequestResponseBody {
+	body := &CreateDeviceJoinTokenBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateDeviceJoinTokenNotFoundResponseBody builds the HTTP response body
+// from the result of the "createDeviceJoinToken" endpoint of the
+// "workloadIdentities" service.
+func NewCreateDeviceJoinTokenNotFoundResponseBody(res *goa.ServiceError) *CreateDeviceJoinTokenNotFoundResponseBody {
+	body := &CreateDeviceJoinTokenNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateDeviceJoinTokenConflictResponseBody builds the HTTP response body
+// from the result of the "createDeviceJoinToken" endpoint of the
+// "workloadIdentities" service.
+func NewCreateDeviceJoinTokenConflictResponseBody(res *goa.ServiceError) *CreateDeviceJoinTokenConflictResponseBody {
+	body := &CreateDeviceJoinTokenConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateDeviceJoinTokenUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "createDeviceJoinToken" endpoint of the
+// "workloadIdentities" service.
+func NewCreateDeviceJoinTokenUnsupportedMediaResponseBody(res *goa.ServiceError) *CreateDeviceJoinTokenUnsupportedMediaResponseBody {
+	body := &CreateDeviceJoinTokenUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateDeviceJoinTokenInvalidResponseBody builds the HTTP response body
+// from the result of the "createDeviceJoinToken" endpoint of the
+// "workloadIdentities" service.
+func NewCreateDeviceJoinTokenInvalidResponseBody(res *goa.ServiceError) *CreateDeviceJoinTokenInvalidResponseBody {
+	body := &CreateDeviceJoinTokenInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateDeviceJoinTokenInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "createDeviceJoinToken" endpoint of the
+// "workloadIdentities" service.
+func NewCreateDeviceJoinTokenInvariantViolationResponseBody(res *goa.ServiceError) *CreateDeviceJoinTokenInvariantViolationResponseBody {
+	body := &CreateDeviceJoinTokenInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateDeviceJoinTokenUnexpectedResponseBody builds the HTTP response body
+// from the result of the "createDeviceJoinToken" endpoint of the
+// "workloadIdentities" service.
+func NewCreateDeviceJoinTokenUnexpectedResponseBody(res *goa.ServiceError) *CreateDeviceJoinTokenUnexpectedResponseBody {
+	body := &CreateDeviceJoinTokenUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateDeviceJoinTokenGatewayErrorResponseBody builds the HTTP response
+// body from the result of the "createDeviceJoinToken" endpoint of the
+// "workloadIdentities" service.
+func NewCreateDeviceJoinTokenGatewayErrorResponseBody(res *goa.ServiceError) *CreateDeviceJoinTokenGatewayErrorResponseBody {
+	body := &CreateDeviceJoinTokenGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRegisterDeviceUnauthorizedResponseBody builds the HTTP response body from
+// the result of the "registerDevice" endpoint of the "workloadIdentities"
+// service.
+func NewRegisterDeviceUnauthorizedResponseBody(res *goa.ServiceError) *RegisterDeviceUnauthorizedResponseBody {
+	body := &RegisterDeviceUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRegisterDeviceForbiddenResponseBody builds the HTTP response body from
+// the result of the "registerDevice" endpoint of the "workloadIdentities"
+// service.
+func NewRegisterDeviceForbiddenResponseBody(res *goa.ServiceError) *RegisterDeviceForbiddenResponseBody {
+	body := &RegisterDeviceForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRegisterDeviceBadRequestResponseBody builds the HTTP response body from
+// the result of the "registerDevice" endpoint of the "workloadIdentities"
+// service.
+func NewRegisterDeviceBadRequestResponseBody(res *goa.ServiceError) *RegisterDeviceBadRequestResponseBody {
+	body := &RegisterDeviceBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRegisterDeviceNotFoundResponseBody builds the HTTP response body from the
+// result of the "registerDevice" endpoint of the "workloadIdentities" service.
+func NewRegisterDeviceNotFoundResponseBody(res *goa.ServiceError) *RegisterDeviceNotFoundResponseBody {
+	body := &RegisterDeviceNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRegisterDeviceConflictResponseBody builds the HTTP response body from the
+// result of the "registerDevice" endpoint of the "workloadIdentities" service.
+func NewRegisterDeviceConflictResponseBody(res *goa.ServiceError) *RegisterDeviceConflictResponseBody {
+	body := &RegisterDeviceConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRegisterDeviceUnsupportedMediaResponseBody builds the HTTP response body
+// from the result of the "registerDevice" endpoint of the "workloadIdentities"
+// service.
+func NewRegisterDeviceUnsupportedMediaResponseBody(res *goa.ServiceError) *RegisterDeviceUnsupportedMediaResponseBody {
+	body := &RegisterDeviceUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRegisterDeviceInvalidResponseBody builds the HTTP response body from the
+// result of the "registerDevice" endpoint of the "workloadIdentities" service.
+func NewRegisterDeviceInvalidResponseBody(res *goa.ServiceError) *RegisterDeviceInvalidResponseBody {
+	body := &RegisterDeviceInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRegisterDeviceInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "registerDevice" endpoint of the
+// "workloadIdentities" service.
+func NewRegisterDeviceInvariantViolationResponseBody(res *goa.ServiceError) *RegisterDeviceInvariantViolationResponseBody {
+	body := &RegisterDeviceInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRegisterDeviceUnexpectedResponseBody builds the HTTP response body from
+// the result of the "registerDevice" endpoint of the "workloadIdentities"
+// service.
+func NewRegisterDeviceUnexpectedResponseBody(res *goa.ServiceError) *RegisterDeviceUnexpectedResponseBody {
+	body := &RegisterDeviceUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRegisterDeviceGatewayErrorResponseBody builds the HTTP response body from
+// the result of the "registerDevice" endpoint of the "workloadIdentities"
+// service.
+func NewRegisterDeviceGatewayErrorResponseBody(res *goa.ServiceError) *RegisterDeviceGatewayErrorResponseBody {
+	body := &RegisterDeviceGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewListPayload builds a workloadIdentities service list endpoint payload.
 func NewListPayload(sessionToken *string, apikeyToken *string, projectSlugInput *string) *workloadidentities.ListPayload {
 	v := &workloadidentities.ListPayload{}
@@ -3645,6 +4768,17 @@ func NewListPayload(sessionToken *string, apikeyToken *string, projectSlugInput 
 // endpoint payload.
 func NewListPlatformsPayload(sessionToken *string, apikeyToken *string, projectSlugInput *string) *workloadidentities.ListPlatformsPayload {
 	v := &workloadidentities.ListPlatformsPayload{}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewGetCustomFlowsPayload builds a workloadIdentities service getCustomFlows
+// endpoint payload.
+func NewGetCustomFlowsPayload(sessionToken *string, apikeyToken *string, projectSlugInput *string) *workloadidentities.GetCustomFlowsPayload {
+	v := &workloadidentities.GetCustomFlowsPayload{}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
@@ -3793,6 +4927,43 @@ func NewWithdrawSubjectPayload(id string, sessionToken *string, apikeyToken *str
 	return v
 }
 
+// NewCreateDeviceJoinTokenPayload builds a workloadIdentities service
+// createDeviceJoinToken endpoint payload.
+func NewCreateDeviceJoinTokenPayload(body *CreateDeviceJoinTokenRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *workloadidentities.CreateDeviceJoinTokenPayload {
+	v := &workloadidentities.CreateDeviceJoinTokenPayload{
+		AgentID: *body.AgentID,
+	}
+	if body.ExpiresInSeconds != nil {
+		v.ExpiresInSeconds = *body.ExpiresInSeconds
+	}
+	if body.ExpiresInSeconds == nil {
+		v.ExpiresInSeconds = 3600
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewRegisterDevicePayload builds a workloadIdentities service registerDevice
+// endpoint payload.
+func NewRegisterDevicePayload(body *RegisterDeviceRequestBody) *workloadidentities.RegisterDevicePayload {
+	v := &workloadidentities.RegisterDevicePayload{
+		JoinToken: *body.JoinToken,
+		Hostname:  body.Hostname,
+		Serial:    body.Serial,
+	}
+	v.PublicJwk = make(map[string]any, len(body.PublicJwk))
+	for key, val := range body.PublicJwk {
+		tk := key
+		tv := val
+		v.PublicJwk[tk] = tv
+	}
+
+	return v
+}
+
 // ValidateRegisterIssuerRequestBody runs the validations defined on
 // RegisterIssuerRequestBody
 func ValidateRegisterIssuerRequestBody(body *RegisterIssuerRequestBody) (err error) {
@@ -3891,6 +5062,60 @@ func ValidateUpdateSubjectRequestBody(body *UpdateSubjectRequestBody) (err error
 	}
 	if body.AgentID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.agent_id", *body.AgentID, goa.FormatUUID))
+	}
+	return
+}
+
+// ValidateCreateDeviceJoinTokenRequestBody runs the validations defined on
+// CreateDeviceJoinTokenRequestBody
+func ValidateCreateDeviceJoinTokenRequestBody(body *CreateDeviceJoinTokenRequestBody) (err error) {
+	if body.AgentID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("agent_id", "body"))
+	}
+	if body.AgentID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.agent_id", *body.AgentID, goa.FormatUUID))
+	}
+	if body.ExpiresInSeconds != nil {
+		if *body.ExpiresInSeconds < 60 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.expires_in_seconds", *body.ExpiresInSeconds, 60, true))
+		}
+	}
+	if body.ExpiresInSeconds != nil {
+		if *body.ExpiresInSeconds > 86400 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.expires_in_seconds", *body.ExpiresInSeconds, 86400, false))
+		}
+	}
+	return
+}
+
+// ValidateRegisterDeviceRequestBody runs the validations defined on
+// RegisterDeviceRequestBody
+func ValidateRegisterDeviceRequestBody(body *RegisterDeviceRequestBody) (err error) {
+	if body.JoinToken == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("join_token", "body"))
+	}
+	if body.PublicJwk == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("public_jwk", "body"))
+	}
+	if body.JoinToken != nil {
+		if utf8.RuneCountInString(*body.JoinToken) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.join_token", *body.JoinToken, utf8.RuneCountInString(*body.JoinToken), 1, true))
+		}
+	}
+	if body.JoinToken != nil {
+		if utf8.RuneCountInString(*body.JoinToken) > 512 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.join_token", *body.JoinToken, utf8.RuneCountInString(*body.JoinToken), 512, false))
+		}
+	}
+	if body.Hostname != nil {
+		if utf8.RuneCountInString(*body.Hostname) > 255 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.hostname", *body.Hostname, utf8.RuneCountInString(*body.Hostname), 255, false))
+		}
+	}
+	if body.Serial != nil {
+		if utf8.RuneCountInString(*body.Serial) > 255 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.serial", *body.Serial, utf8.RuneCountInString(*body.Serial), 255, false))
+		}
 	}
 	return
 }

@@ -14,7 +14,8 @@ import (
 )
 
 // Visitors can leave both completed bindings and in-flight preparation claims.
-// Neither is seeded, so ordinary idempotence checks miss their required FKs.
+// The seed's own bindings use other resources, so ordinary idempotence checks
+// miss the visitor rows' required FKs.
 func TestReseedCleansVisitorEMABindings(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
@@ -45,16 +46,22 @@ func TestReseedCleansVisitorEMABindings(t *testing.T) {
 	before, err := demoseedtest.SnapshotPostgres(ctx, db)
 	require.NoError(t, err)
 
+	countBindings := func() int64 {
+		t.Helper()
+		count, err := queries.CountVisitorEMABindings(ctx, demoseedtest.CountVisitorEMABindingsParams{
+			OrganizationID: DefaultSpec().OrgID,
+			ProjectID:      DefaultSpec().ProjectID(),
+		})
+		require.NoError(t, err)
+		return count
+	}
 	seedLocalPostgres(ctx, t, db, DefaultSpec())
+	seeded := countBindings()
+	require.EqualValues(t, 2, seeded, "the seed's own EMA bindings")
 	plantBindings(DefaultSpec())
 	seedLocalPostgres(ctx, t, db, DefaultSpec())
 
-	count, err := queries.CountVisitorEMABindings(ctx, demoseedtest.CountVisitorEMABindingsParams{
-		OrganizationID: DefaultSpec().OrgID,
-		ProjectID:      DefaultSpec().ProjectID(),
-	})
-	require.NoError(t, err)
-	require.Zero(t, count, "reseed must remove visitor bindings and active claims")
+	require.Equal(t, seeded, countBindings(), "reseed must remove visitor bindings and active claims")
 	after, err := demoseedtest.SnapshotPostgres(ctx, db)
 	require.NoError(t, err)
 	requirePostgresRowsPreserved(t, before, after)

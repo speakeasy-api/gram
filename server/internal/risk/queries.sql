@@ -129,6 +129,14 @@ WHERE project_id = @project_id
   AND enabled IS TRUE
   AND deleted IS FALSE;
 
+-- name: ListEnabledRiskPolicyIDsByOrganizationProject :many
+SELECT id
+FROM risk_policies
+WHERE organization_id = @organization_id
+  AND project_id = @project_id
+  AND enabled IS TRUE
+  AND deleted IS FALSE;
+
 -- name: ListEnabledUnscopedRiskPoliciesByProject :many
 -- MCP-scoped policies are evaluated only at the MCP seams.
 SELECT *
@@ -224,6 +232,98 @@ SET deleted_at = clock_timestamp()
 WHERE id = @id
   AND project_id = @project_id
   AND deleted IS FALSE;
+
+-- name: ListLifecycleBoundRiskPoliciesByMCPServer :many
+-- A policy belongs to one server's lifecycle only when that server is its
+-- sole explicit target. Multi-server and all-server policies survive one
+-- target's deletion.
+-- The JSON guards below never raise on a malformed scope: Postgres does not
+-- order AND operands, so a cast or array function cannot rely on an earlier
+-- filter to skip a scalar such as {"servers": null}. Only a missing or JSON
+-- false all_servers marks a policy server-bound; any other value keeps it.
+SELECT *
+FROM risk_policies
+WHERE project_id = @project_id
+  AND deleted IS FALSE
+  AND COALESCE(mcp_scope->'all_servers', 'false'::jsonb) = 'false'::jsonb
+  AND jsonb_array_length(CASE WHEN jsonb_typeof(mcp_scope->'servers') = 'array' THEN mcp_scope->'servers' ELSE '[]'::jsonb END) = 1
+  AND mcp_scope @> jsonb_build_object(
+    'servers',
+    jsonb_build_array(jsonb_build_object('mcp_server_id', @mcp_server_id::text))
+  )
+ORDER BY id;
+
+-- name: ListRiskPoliciesScopingMCPServerForUpdate :many
+-- Containment never raises on a malformed scope.
+SELECT *
+FROM risk_policies
+WHERE project_id = @project_id
+  AND deleted IS FALSE
+  AND mcp_scope @> jsonb_build_object(
+    'servers',
+    jsonb_build_array(jsonb_build_object('mcp_server_id', @mcp_server_id::text))
+  )
+ORDER BY id
+FOR UPDATE;
+
+-- name: PruneRiskPolicyMCPScope :one
+-- Only for dropping a deleted server: it gets no traffic, so version stays.
+UPDATE risk_policies
+SET mcp_scope = @mcp_scope::jsonb
+  , updated_at = clock_timestamp()
+WHERE id = @id
+  AND project_id = @project_id
+  AND deleted IS FALSE
+RETURNING *;
+
+-- name: ListProjectIDsWithOrphanedLifecycleBoundRiskPolicies :many
+SELECT DISTINCT policy.project_id
+FROM risk_policies AS policy
+WHERE policy.deleted IS FALSE
+  AND COALESCE(policy.mcp_scope->'all_servers', 'false'::jsonb) = 'false'::jsonb
+  AND jsonb_array_length(CASE WHEN jsonb_typeof(policy.mcp_scope->'servers') = 'array' THEN policy.mcp_scope->'servers' ELSE '[]'::jsonb END) = 1
+  AND (
+    EXISTS (
+      SELECT 1
+      FROM mcp_servers AS server
+      WHERE server.project_id = policy.project_id
+        AND server.id::text = policy.mcp_scope #>> '{servers,0,mcp_server_id}'
+        AND server.deleted IS TRUE
+    )
+    OR EXISTS (
+      SELECT 1
+      FROM meta_mcp_servers AS gateway
+      WHERE gateway.project_id = policy.project_id
+        AND gateway.id::text = policy.mcp_scope #>> '{servers,0,mcp_server_id}'
+        AND gateway.deleted IS TRUE
+    )
+  )
+ORDER BY policy.project_id;
+
+-- name: ListOrphanedLifecycleBoundRiskPoliciesByProject :many
+SELECT *
+FROM risk_policies AS policy
+WHERE policy.project_id = @project_id
+  AND policy.deleted IS FALSE
+  AND COALESCE(policy.mcp_scope->'all_servers', 'false'::jsonb) = 'false'::jsonb
+  AND jsonb_array_length(CASE WHEN jsonb_typeof(policy.mcp_scope->'servers') = 'array' THEN policy.mcp_scope->'servers' ELSE '[]'::jsonb END) = 1
+  AND (
+    EXISTS (
+      SELECT 1
+      FROM mcp_servers AS server
+      WHERE server.project_id = policy.project_id
+        AND server.id::text = policy.mcp_scope #>> '{servers,0,mcp_server_id}'
+        AND server.deleted IS TRUE
+    )
+    OR EXISTS (
+      SELECT 1
+      FROM meta_mcp_servers AS gateway
+      WHERE gateway.project_id = policy.project_id
+        AND gateway.id::text = policy.mcp_scope #>> '{servers,0,mcp_server_id}'
+        AND gateway.deleted IS TRUE
+    )
+  )
+ORDER BY policy.id;
 
 -- name: DeleteRiskPolicyBypassRequestsByPolicy :exec
 UPDATE risk_policy_bypass_requests
@@ -568,32 +668,6 @@ WHERE id = @id
   AND project_id = @project_id
   AND deleted IS FALSE;
 
--- name: CountTotalMessages :one
-SELECT COUNT(*)::BIGINT
-FROM chat_messages cm
-WHERE cm.project_id = @project_id;
-
--- name: CountAnalyzedMessages :one
-SELECT COUNT(DISTINCT rr.chat_message_id)::BIGINT
-FROM risk_results rr
-WHERE rr.project_id = @project_id
-  AND rr.risk_policy_id = @risk_policy_id
-  AND rr.risk_policy_version = @risk_policy_version;
-
--- name: CountFindingsByPolicy :one
--- Reported next to CountAnalyzedMessages, so it stays message-scoped: a
--- skill-anchored finding has no message behind it and would inflate the
--- numerator over a denominator that never counted it. (cubic)
-SELECT COUNT(*)::BIGINT
-FROM risk_results
-WHERE project_id = @project_id
-  AND risk_policy_id = @risk_policy_id
-  AND risk_policy_version = @risk_policy_version
-  AND found IS TRUE
-  AND excluded_at IS NULL
-  AND false_positive_at IS NULL
-  AND skill_version_id IS NULL;
-
 -- name: CountAllFindings :one
 -- Project-wide total_count reported with the chat-scoped ListRiskResults
 -- page. Skill-anchored rows have no chat, so that listing never returns them.
@@ -604,63 +678,10 @@ WHERE rr.project_id = @project_id
   AND rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
   AND rr.skill_version_id IS NULL;
 
--- name: GetRiskOverviewScanCounts :one
--- messages_scanned counts every scanned message in the window regardless of
--- found state. chat_message_id is NOT NULL with a FK to chat_messages, so the
--- old JOIN was lossless — dropping it lets this be an index-only distinct on
--- risk_results_project_created_msg_idx (project_id, created_at, chat_message_id).
--- active_policies is a cheap scalar subquery, folded in here to save a round trip.
-SELECT
-    COUNT(DISTINCT rr.chat_message_id)::BIGINT AS messages_scanned
-  , (
-      SELECT COUNT(*)::BIGINT
-      FROM risk_policies active_rp
-      WHERE active_rp.project_id = @project_id
-        AND enabled IS TRUE
-        AND deleted IS FALSE
-    ) AS active_policies
-FROM risk_results rr
-WHERE rr.project_id = @project_id
-  AND rr.created_at >= @from_time
-  AND rr.created_at < @to_time;
-
--- name: GetRiskOverviewFindingCounts :one
--- findings + flagged_sessions over the live-found subset. Pushing the found
--- predicate into WHERE lets the partial risk_results_project_found_idx serve the
--- scan, so the JOIN to chat_messages only touches found rows instead of every
--- scanned row. COUNT(DISTINCT cm.chat_id) already skips NULL chat_ids.
-SELECT
-    COUNT(*)::BIGINT AS findings
-  , COUNT(DISTINCT cm.chat_id)::BIGINT AS flagged_sessions
-FROM risk_results rr
-JOIN chat_messages cm ON cm.id = rr.chat_message_id
-WHERE rr.project_id = @project_id
-  AND rr.created_at >= @from_time
-  AND rr.created_at < @to_time
-  AND rr.found IS TRUE
-  AND rr.excluded_at IS NULL
-  AND rr.false_positive_at IS NULL;
-
--- name: ListRiskOverviewTopRules :many
--- Project-wide finding counts grouped by rule_id within a window.
-SELECT
-  COALESCE(rr.rule_id, '')::TEXT AS rule_id,
-  rr.source,
-  COUNT(*)::BIGINT AS findings
-FROM risk_results rr
-WHERE rr.project_id = @project_id
-  AND rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
-  AND rr.skill_version_id IS NULL
-  AND rr.created_at >= @from_time
-  AND rr.created_at < @to_time
-GROUP BY rr.rule_id, rr.source
-ORDER BY findings DESC, rule_id ASC
-LIMIT @row_limit;
-
 -- name: ListRiskUserCategoryBreakdown :many
 -- Per-category finding counts for a single external_user_id in a window.
--- The category CASE expression must stay in sync with the other ListRisk*
--- queries.
+-- The category CASE expression must stay in sync with the Go classifier in
+-- internal/risk/categories.
 WITH user_findings AS (
   SELECT
     CASE
@@ -742,193 +763,6 @@ WHERE rr.project_id = @project_id
 GROUP BY rr.rule_id, rr.source
 ORDER BY findings DESC, rule_id ASC;
 
--- name: ListRiskRulesByCategory :many
--- Returns per-rule_id finding counts for a category within a window.
--- The CASE expression must stay in sync with ListRiskOverviewTimeSeriesFindings;
--- both classify rr.rule_id the same way.
-WITH categorized AS (
-  SELECT
-    COALESCE(rr.rule_id, '')::TEXT AS rule_id,
-    rr.source,
-    CASE
-      WHEN rr.source = 'llm_judge' THEN 'prompt_policy'
-      WHEN rr.source IN ('shadow_mcp', 'destructive_tool', 'cli_destructive', 'prompt_injection') THEN rr.source
-      WHEN rr.rule_id = 'destructive_tool.llm' THEN 'destructive_tool'
-      WHEN rr.rule_id = 'cli_destructive.llm' THEN 'cli_destructive'
-      WHEN rr.rule_id = 'prompt_injection.llm' THEN 'prompt_injection'
-      WHEN rr.rule_id LIKE 'secret.%' THEN 'secrets'
-      WHEN rr.rule_id IN ('pii.credit_card', 'pii.iban_code', 'pii.us_bank_number', 'pii.crypto') THEN 'financial'
-      WHEN rr.rule_id IN (
-          'pii.us_ssn'
-        , 'pii.us_passport'
-        , 'pii.us_driver_license'
-        , 'pii.us_itin'
-        , 'pii.uk_nhs'
-        , 'pii.uk_nino'
-        , 'pii.uk_passport'
-        , 'pii.es_nif'
-        , 'pii.it_fiscal_code'
-        , 'pii.au_tfn'
-        , 'pii.in_pan'
-        , 'pii.in_aadhaar'
-        , 'pii.sg_nric_fin'
-      ) THEN 'government_ids'
-      WHEN rr.rule_id IN (
-          'pii.medical_license'
-        , 'pii.us_mbi'
-        , 'pii.us_npi'
-        , 'pii.medical_disease_disorder'
-        , 'pii.medical_medication'
-        , 'pii.medical_therapeutic_procedure'
-        , 'pii.medical_clinical_event'
-        , 'pii.medical_biological_attribute'
-        , 'pii.medical_family_history'
-      ) THEN 'healthcare'
-      WHEN rr.rule_id IN (
-          'pii.harmful_content_request'
-        , 'pii.policy_violation'
-        , 'pii.unauthorized_action'
-        , 'pii.topic_boundary_violation'
-      ) THEN 'off_policy'
-      WHEN rr.rule_id LIKE 'pii.%' THEN 'pii'
-      -- Scanner-source fallbacks: keep these LAST so any prefixed
-      -- rule_id wins. Stay in sync with the Go classifier in
-      -- internal/risk/categories.
-      WHEN rr.source = 'gitleaks' THEN 'secrets'
-      WHEN rr.source = 'presidio' THEN 'pii'
-      ELSE 'custom'
-    END AS category
-  FROM risk_results rr
-  -- Soft-deleted policies keep their findings until the cleanup catches up;
-  -- the breakdown must not count them, matching the listing's visibility.
-  JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE
-  WHERE rr.project_id = @project_id
-    AND rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
-    AND rr.skill_version_id IS NULL
-    AND rr.created_at >= @from_time
-    AND rr.created_at < @to_time
-)
-SELECT rule_id, source, COUNT(*)::BIGINT AS findings
-FROM categorized
-WHERE category = @category::text
-GROUP BY rule_id, source
-ORDER BY findings DESC, rule_id ASC
--- A NULL page_limit is LIMIT ALL: the dashboard reads every rule, while
--- bounded callers pass one extra row to detect truncation.
-LIMIT sqlc.narg(page_limit)::int;
-
--- name: ListRiskOverviewTopUsers :many
-WITH user_findings AS (
-  SELECT
-    COALESCE(NULLIF(cm.external_user_id, ''), NULLIF(c.external_user_id, ''), '')::TEXT AS external_user_id,
-    COALESCE(
-      NULLIF(u.email, ''),
-      CASE WHEN cm.external_user_id LIKE '%@%' THEN cm.external_user_id END,
-      CASE WHEN c.external_user_id LIKE '%@%' THEN c.external_user_id END,
-      'Unknown user'
-    )::TEXT AS email
-  FROM risk_results rr
-  JOIN chat_messages cm ON cm.id = rr.chat_message_id
-  LEFT JOIN chats c ON c.id = cm.chat_id AND c.deleted IS FALSE
-  LEFT JOIN users u ON u.id = COALESCE(NULLIF(cm.user_id, ''), NULLIF(c.user_id, ''))
-  WHERE rr.project_id = @project_id
-    AND rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
-    AND rr.created_at >= @from_time
-    AND rr.created_at < @to_time
-)
-SELECT external_user_id, email, COUNT(*)::BIGINT AS findings
-FROM user_findings
-GROUP BY external_user_id, email
-ORDER BY findings DESC, email ASC
-LIMIT @row_limit;
-
--- name: ListRiskOverviewTimeSeriesFindings :many
-WITH buckets AS (
-  SELECT generate_series(
-      date_trunc('hour', sqlc.arg(from_time)::timestamptz)
-    , date_trunc('hour', (sqlc.arg(to_time)::timestamptz - INTERVAL '1 microsecond'))
-    , INTERVAL '1 hour'
-  )::timestamptz AS bucket_start
-),
-categorized AS (
-  SELECT
-      date_trunc('hour', rr.created_at)::timestamptz AS bucket_start
-    , CASE
-        WHEN rr.source = 'llm_judge' THEN 'prompt_policy'
-        WHEN rr.source IN ('shadow_mcp', 'destructive_tool', 'cli_destructive', 'prompt_injection') THEN rr.source
-        WHEN rr.rule_id = 'destructive_tool.llm' THEN 'destructive_tool'
-        WHEN rr.rule_id = 'cli_destructive.llm' THEN 'cli_destructive'
-        WHEN rr.rule_id = 'prompt_injection.llm' THEN 'prompt_injection'
-        WHEN rr.rule_id LIKE 'secret.%' THEN 'secrets'
-        WHEN rr.rule_id IN ('pii.credit_card', 'pii.iban_code', 'pii.us_bank_number', 'pii.crypto') THEN 'financial'
-        WHEN rr.rule_id IN (
-            'pii.us_ssn'
-          , 'pii.us_passport'
-          , 'pii.us_driver_license'
-          , 'pii.us_itin'
-          , 'pii.uk_nhs'
-          , 'pii.uk_nino'
-          , 'pii.uk_passport'
-          , 'pii.es_nif'
-          , 'pii.it_fiscal_code'
-          , 'pii.au_tfn'
-          , 'pii.in_pan'
-          , 'pii.in_aadhaar'
-          , 'pii.sg_nric_fin'
-        ) THEN 'government_ids'
-        WHEN rr.rule_id IN (
-            'pii.medical_license'
-          , 'pii.us_mbi'
-          , 'pii.us_npi'
-          , 'pii.medical_disease_disorder'
-          , 'pii.medical_medication'
-          , 'pii.medical_therapeutic_procedure'
-          , 'pii.medical_clinical_event'
-          , 'pii.medical_biological_attribute'
-          , 'pii.medical_family_history'
-        ) THEN 'healthcare'
-        WHEN rr.rule_id IN (
-            'pii.harmful_content_request'
-          , 'pii.policy_violation'
-          , 'pii.unauthorized_action'
-          , 'pii.topic_boundary_violation'
-        ) THEN 'off_policy'
-        WHEN rr.rule_id LIKE 'pii.%' THEN 'pii'
-        -- Scanner-source fallbacks: keep these LAST so any prefixed
-        -- rule_id wins. Stay in sync with the Go classifier in
-        -- internal/risk/categories.
-        WHEN rr.source = 'gitleaks' THEN 'secrets'
-        WHEN rr.source = 'presidio' THEN 'pii'
-        ELSE 'custom'
-      END AS category
-  FROM risk_results rr
-  WHERE rr.project_id = sqlc.arg(project_id)::uuid
-    AND rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
-    AND rr.skill_version_id IS NULL
-    AND rr.created_at >= @from_time
-    AND rr.created_at < @to_time
-),
-categories AS (
-  SELECT DISTINCT category
-  FROM categorized
-),
-findings_by_bucket AS (
-  SELECT
-      bucket_start
-    , category
-    , COUNT(*)::BIGINT AS findings
-  FROM categorized
-  GROUP BY bucket_start, category
-)
-SELECT
-    buckets.bucket_start
-  , categories.category
-  , COALESCE(findings_by_bucket.findings, 0)::BIGINT AS findings
-FROM buckets
-CROSS JOIN categories
-LEFT JOIN findings_by_bucket ON findings_by_bucket.bucket_start = buckets.bucket_start AND findings_by_bucket.category = categories.category
-ORDER BY buckets.bucket_start ASC, categories.category ASC;
-
 -- name: FetchUnanalyzedMessageIDs :many
 -- Scans the partial index chat_messages_risk_analyzed_at_null_idx
 -- (project_id, id WHERE risk_analyzed_at IS NULL), which shrinks toward
@@ -975,7 +809,7 @@ WHERE id = ANY(@content_part_ids::uuid[])
 -- name: GetMessageContentBatch :many
 -- The scanned user's id rides along so the LLM judge's completion telemetry
 -- can attribute scanning volume to whose traffic was analyzed. Same
--- attribution rule as ListRiskOverviewTopUsers: the message's own user_id
+-- attribution rule as the risk overview top users: the message's own user_id
 -- wins, the chat owner's is the fallback — and a soft-deleted chat's owner
 -- never is, while its messages remain eligible for scanning.
 -- The lateral probes capture bounded causal context at the same event read:
@@ -2240,6 +2074,60 @@ UPDATE chat_messages
 SET external_user_id = @external_user_id
 WHERE id = @id
   AND project_id = @project_id;
+
+-- name: GetJudgeMessageWindow :many
+-- Two bounded index probes around a tenant-validated anchor. Keep the target
+-- even when no neighbors exist; an absent target is never a valid window.
+-- Tool evidence remains valid JSON: one overflow call/rune preserves truncation
+-- indicators in the renderer without transferring the full stored payload.
+WITH target AS (
+  SELECT cm.id, cm.chat_id, cm.project_id, cm.role, cm.content, cm.tool_calls, cm.created_at, cm.seq, cm.generation FROM chat_messages cm
+  JOIN chats c ON c.id = cm.chat_id AND c.project_id = cm.project_id
+  JOIN projects p ON p.id = c.project_id
+  WHERE cm.id = @anchor_id::uuid AND cm.project_id = @project_id::uuid
+    AND p.organization_id = @organization_id::text
+)
+SELECT evidence.id, evidence.role, LEFT(evidence.content, 4001)::text AS content,
+  COALESCE((SELECT jsonb_agg(jsonb_build_object('function', jsonb_build_object(
+    'name', LEFT(call->'function'->>'name', 257),
+    'arguments', LEFT(call->'function'->>'arguments', 4001))))
+    FROM jsonb_array_elements(jsonb_path_query_array(
+      COALESCE(NULLIF(CASE WHEN jsonb_typeof(evidence.tool_calls) = 'string'
+        THEN (evidence.tool_calls #>> '{}')::jsonb
+        ELSE evidence.tool_calls END, 'null'::jsonb), '[]'::jsonb),
+      '$[0 to 8]')) AS call), '[]'::jsonb)::text AS tool_calls
+FROM (
+SELECT n.id, n.chat_id, n.project_id, n.role, n.content, n.tool_calls, n.created_at, n.seq FROM target t
+JOIN LATERAL (
+  (SELECT prev.id, prev.chat_id, prev.project_id, prev.role, prev.content, prev.tool_calls, prev.created_at, prev.seq FROM chat_messages prev
+   WHERE prev.chat_id = t.chat_id AND prev.project_id = t.project_id AND prev.generation = t.generation
+     AND (prev.created_at, prev.seq) < (t.created_at, t.seq)
+   ORDER BY prev.created_at DESC, prev.seq DESC LIMIT 2)
+  UNION ALL
+  SELECT t.id, t.chat_id, t.project_id, t.role, t.content, t.tool_calls, t.created_at, t.seq
+  UNION ALL
+  (SELECT next.id, next.chat_id, next.project_id, next.role, next.content, next.tool_calls, next.created_at, next.seq FROM chat_messages next
+   WHERE next.chat_id = t.chat_id AND next.project_id = t.project_id AND next.generation = t.generation
+     AND (next.created_at, next.seq) > (t.created_at, t.seq)
+   ORDER BY next.created_at, next.seq LIMIT 2)
+) n ON TRUE
+UNION ALL
+(SELECT recent.id, recent.chat_id, recent.project_id, recent.role, recent.content, recent.tool_calls, recent.created_at, recent.seq FROM chat_messages recent
+ JOIN chats c ON c.id = recent.chat_id AND c.project_id = recent.project_id
+ JOIN projects p ON p.id = c.project_id
+ WHERE @anchor_id::uuid = '00000000-0000-0000-0000-000000000000'::uuid
+   AND recent.chat_id = @chat_id::uuid AND recent.project_id = @project_id::uuid
+   AND p.organization_id = @organization_id::text
+   AND recent.generation = (SELECT MAX(latest.generation) FROM chat_messages latest
+     WHERE latest.chat_id = @chat_id::uuid AND latest.project_id = @project_id::uuid)
+ ORDER BY recent.created_at DESC, recent.seq DESC LIMIT 4)
+) evidence
+ORDER BY evidence.created_at, evidence.seq;
+
+-- name: CreateJudgeWindowMessageForTest :one
+INSERT INTO chat_messages (chat_id, project_id, role, content, generation)
+VALUES (@chat_id, @project_id, 'user', @content, @generation)
+RETURNING id;
 
 -- name: SetRiskResultExcludedForTest :exec
 UPDATE risk_results

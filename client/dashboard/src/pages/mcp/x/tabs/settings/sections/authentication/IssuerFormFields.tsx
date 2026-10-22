@@ -1,3 +1,4 @@
+import { isKnownEnumValue } from "@/lib/enum";
 import { CopyButton } from "@/components/ui/CopyButton";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
@@ -24,7 +25,6 @@ import {
   isPrivateKeyJwtAuthMethod,
   type ClientType,
 } from "./issuerFormUtils";
-import type { ReactNode } from "react";
 
 // RedirectURICallout shows the redirect_uri operators must register on the
 // upstream provider's OAuth app before typed-in client credentials will
@@ -80,8 +80,8 @@ function RedirectURICallout({
         </div>
       </div>
       <Text muted small>
-        Register this as the callback / redirect URI on the upstream provider's
-        OAuth app before pasting credentials below.
+        Register this as the callback / redirect URI on the upstream
+        authorization server's OAuth app before pasting credentials below.
       </Text>
     </Stack>
   );
@@ -283,13 +283,38 @@ export function TokenEndpointAuthMethodField({
   value,
   onChange,
   allowPrivateKeyJwt = false,
+  privateKeyJwtUnavailable,
+  hideNone = false,
+  disabled = false,
+  unsupported = false,
 }: {
   value: CreateRemoteSessionClientFormTokenEndpointAuthMethod | "";
   onChange: (
     value: CreateRemoteSessionClientFormTokenEndpointAuthMethod | "",
   ) => void;
   allowPrivateKeyJwt?: boolean;
+  /**
+   * Lists private_key_jwt even when it can't be picked, with this reason
+   * beside it, so the option is visible rather than missing.
+   */
+  privateKeyJwtUnavailable?: string;
+  /** A service account must prove who it is, so `none` is not offered. */
+  hideNone?: boolean;
+  disabled?: boolean;
+  unsupported?: boolean;
 }): JSX.Element {
+  if (unsupported) {
+    return (
+      <Stack gap={2}>
+        <Label className="text-muted-foreground text-xs">
+          Token endpoint authentication
+        </Label>
+        <Text small muted>
+          Unsupported authentication method
+        </Text>
+      </Stack>
+    );
+  }
   return (
     <Stack gap={2}>
       <Label className="text-muted-foreground text-xs">
@@ -300,6 +325,7 @@ export function TokenEndpointAuthMethodField({
         onValueChange={(next) =>
           onChange(next as CreateRemoteSessionClientFormTokenEndpointAuthMethod)
         }
+        disabled={disabled}
       >
         <SelectTrigger>
           <SelectValue placeholder="client_secret_basic (default)" />
@@ -319,11 +345,26 @@ export function TokenEndpointAuthMethodField({
           >
             client_secret_post
           </SelectItem>
-          <SelectItem
-            value={CreateRemoteSessionClientFormTokenEndpointAuthMethod.None}
-          >
-            none
-          </SelectItem>
+          {!hideNone && (
+            <SelectItem
+              value={CreateRemoteSessionClientFormTokenEndpointAuthMethod.None}
+            >
+              none
+            </SelectItem>
+          )}
+          {privateKeyJwtUnavailable !== undefined &&
+            !allowPrivateKeyJwt &&
+            value !==
+              CreateRemoteSessionClientFormTokenEndpointAuthMethod.PrivateKeyJwt && (
+              <SelectItem
+                value={
+                  CreateRemoteSessionClientFormTokenEndpointAuthMethod.PrivateKeyJwt
+                }
+                disabled
+              >
+                private_key_jwt · {privateKeyJwtUnavailable}
+              </SelectItem>
+            )}
           {(allowPrivateKeyJwt ||
             value ===
               CreateRemoteSessionClientFormTokenEndpointAuthMethod.PrivateKeyJwt) && (
@@ -344,10 +385,16 @@ export function TokenEndpointAuthMethodField({
 export function ClientAssertionAudienceField({
   value,
   onChange,
+  disabled = false,
 }: {
-  value: AuthAudienceFormat;
+  value: string;
   onChange: (value: AuthAudienceFormat) => void;
+  disabled?: boolean;
 }): JSX.Element {
+  const isKnown = isKnownEnumValue(
+    UpdateRemoteSessionClientFormTokenEndpointAuthAudienceFormat,
+    value,
+  );
   return (
     <Stack gap={2}>
       <Label className="text-muted-foreground text-xs">
@@ -356,11 +403,17 @@ export function ClientAssertionAudienceField({
       <Select
         value={value}
         onValueChange={(next) => onChange(next as AuthAudienceFormat)}
+        disabled={disabled}
       >
         <SelectTrigger>
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
+          {!isKnown && (
+            <SelectItem value={value} disabled>
+              Unsupported audience format
+            </SelectItem>
+          )}
           <SelectItem
             value={
               UpdateRemoteSessionClientFormTokenEndpointAuthAudienceFormat.Issuer
@@ -396,6 +449,7 @@ export function ClientCredentialsFields({
   clientSecret,
   tokenEndpointAuthMethod,
   allowPrivateKeyJwt = false,
+  unsupportedAuthMethod = false,
   clientIdEditable = true,
   clientSecretLabel = "Client Secret (optional)",
   clientSecretPlaceholder = "••••••••",
@@ -411,6 +465,7 @@ export function ClientCredentialsFields({
     | CreateRemoteSessionClientFormTokenEndpointAuthMethod
     | "";
   allowPrivateKeyJwt?: boolean;
+  unsupportedAuthMethod?: boolean;
   clientIdEditable?: boolean;
   clientSecretLabel?: string;
   clientSecretPlaceholder?: string;
@@ -467,6 +522,7 @@ export function ClientCredentialsFields({
             {clientSecretLabel}
           </Label>
           <Input
+            disabled={unsupportedAuthMethod}
             type="password"
             value={clientSecret}
             onChange={onClientSecretChange}
@@ -479,6 +535,7 @@ export function ClientCredentialsFields({
         value={tokenEndpointAuthMethod}
         onChange={onTokenEndpointAuthMethodChange}
         allowPrivateKeyJwt={allowPrivateKeyJwt}
+        unsupported={unsupportedAuthMethod}
       />
     </Stack>
   );
@@ -487,20 +544,17 @@ export function ClientCredentialsFields({
 // OverridesFields renders the per-client OAuth dance overrides. Both fields
 // are optional and apply in both DCR and manual modes — they control what
 // Speakeasy sends at authorize/token time, independent of how the client was
-// registered. scopeWarning renders under the scope input once it has text, for
-// callers whose issuer pins the requested scopes and so makes this field inert.
+// registered.
 export function OverridesFields({
   scopeOverride,
   audienceOverride,
   onScopeOverrideChange,
   onAudienceOverrideChange,
-  scopeWarning,
 }: {
   scopeOverride: string;
   audienceOverride: string;
   onScopeOverrideChange: (value: string) => void;
   onAudienceOverrideChange: (value: string) => void;
-  scopeWarning?: ReactNode;
 }): JSX.Element {
   return (
     <Stack gap={4} className="border-t pt-6">
@@ -514,12 +568,10 @@ export function OverridesFields({
           placeholder="read, write, openid"
         />
         <Text muted small>
-          Comma-separated. When provided, the platform requests these scopes
-          during the OAuth dance; otherwise it falls back to the issuer's
-          scopes_supported.
+          Comma-separated. When provided, every sign-in requests these scopes.
+          Otherwise sign-ins request what the MCP server asks for, falling back
+          to the issuer's scopes_supported.
         </Text>
-        {/* Only warn once there are client scopes to be overridden. */}
-        {scopeOverride.trim() && scopeWarning}
       </Stack>
 
       <Stack gap={2}>

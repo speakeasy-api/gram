@@ -136,6 +136,44 @@ export interface ToolRow {
   generation: number;
 }
 
+/** Interpret the retained Kit patch without changing its lossless output text.
+ * Require the patch discriminator and matching call ID, not an arbitrary
+ * tool's JSON output containing a field named status.
+ */
+export function toolResultStatus(
+  row: ToolRow,
+): "complete" | "error" | "running" | "pending" {
+  const message = row.resultMessage;
+  if (!message) return "complete";
+  try {
+    const patch: unknown = JSON.parse(joinedTextParts(message.content));
+    if (
+      typeof patch !== "object" ||
+      patch === null ||
+      !("sessionUpdate" in patch) ||
+      patch.sessionUpdate !== "tool_call_update" ||
+      !("toolCallId" in patch) ||
+      !message.toolCallId ||
+      patch.toolCallId !== message.toolCallId ||
+      !("status" in patch)
+    )
+      return "complete";
+    switch (patch.status) {
+      case "failed":
+      case "cancelled":
+        return "error";
+      case "in_progress":
+        return "running";
+      case "pending":
+        return "pending";
+      default:
+        return "complete";
+    }
+  } catch {
+    return "complete";
+  }
+}
+
 export type TranscriptRow = MessageRow | ToolRow;
 
 function attachmentMetadata(part: ChatContentPart): {
@@ -154,7 +192,7 @@ function attachmentMetadata(part: ChatContentPart): {
   };
 }
 
-function promptAttachmentFromContentPart(
+export function promptAttachmentFromContentPart(
   part: ChatContentPart,
 ): PromptAttachment {
   const metadata = attachmentMetadata(part);

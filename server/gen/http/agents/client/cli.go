@@ -107,7 +107,98 @@ func BuildRevokeSessionPayload(agentsRevokeSessionBody string, agentsRevokeSessi
 
 // BuildListPayload builds the payload for the agents list endpoint from CLI
 // flags.
-func BuildListPayload(agentsListSessionToken string) (*agents.ListPayload, error) {
+func BuildListPayload(agentsListCursor string, agentsListLimit string, agentsListSearch string, agentsListNameOrder string, agentsListLifecycle string, agentsListOwnerUserIds string, agentsListRegisteredAfter string, agentsListRegisteredBefore string, agentsListSessionToken string) (*agents.ListPayload, error) {
+	var err error
+	var cursor *string
+	{
+		if agentsListCursor != "" {
+			cursor = &agentsListCursor
+		}
+	}
+	var limit int
+	{
+		if agentsListLimit != "" {
+			var v int64
+			v, err = strconv.ParseInt(agentsListLimit, 10, strconv.IntSize)
+			limit = int(v)
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for limit, must be INT")
+			}
+			if limit < 1 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 1, true))
+			}
+			if limit > 200 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 200, false))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var search *string
+	{
+		if agentsListSearch != "" {
+			search = &agentsListSearch
+		}
+	}
+	var nameOrder string
+	{
+		if agentsListNameOrder != "" {
+			nameOrder = agentsListNameOrder
+			if !(nameOrder == "asc" || nameOrder == "desc") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("name_order", nameOrder, []any{"asc", "desc"}))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var lifecycle []string
+	{
+		if agentsListLifecycle != "" {
+			err = json.Unmarshal([]byte(agentsListLifecycle), &lifecycle)
+			if err != nil {
+				return nil, fmt.Errorf("invalid JSON for lifecycle, \nerror: %s, \nexample of valid JSON:\n%s", err, "'[\n      \"suspended\"\n   ]'")
+			}
+			for _, e := range lifecycle {
+				if !(e == "active" || e == "suspended" || e == "revoked") {
+					err = goa.MergeErrors(err, goa.InvalidEnumValueError("lifecycle[*]", e, []any{"active", "suspended", "revoked"}))
+				}
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var ownerUserIds []string
+	{
+		if agentsListOwnerUserIds != "" {
+			err = json.Unmarshal([]byte(agentsListOwnerUserIds), &ownerUserIds)
+			if err != nil {
+				return nil, fmt.Errorf("invalid JSON for ownerUserIds, \nerror: %s, \nexample of valid JSON:\n%s", err, "'[\n      \"abc123\"\n   ]'")
+			}
+		}
+	}
+	var registeredAfter *string
+	{
+		if agentsListRegisteredAfter != "" {
+			registeredAfter = &agentsListRegisteredAfter
+			err = goa.MergeErrors(err, goa.ValidateFormat("registered_after", *registeredAfter, goa.FormatDateTime))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var registeredBefore *string
+	{
+		if agentsListRegisteredBefore != "" {
+			registeredBefore = &agentsListRegisteredBefore
+			err = goa.MergeErrors(err, goa.ValidateFormat("registered_before", *registeredBefore, goa.FormatDateTime))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
 	var sessionToken *string
 	{
 		if agentsListSessionToken != "" {
@@ -115,6 +206,14 @@ func BuildListPayload(agentsListSessionToken string) (*agents.ListPayload, error
 		}
 	}
 	v := &agents.ListPayload{}
+	v.Cursor = cursor
+	v.Limit = limit
+	v.Search = search
+	v.NameOrder = nameOrder
+	v.Lifecycle = lifecycle
+	v.OwnerUserIds = ownerUserIds
+	v.RegisteredAfter = registeredAfter
+	v.RegisteredBefore = registeredBefore
 	v.SessionToken = sessionToken
 
 	return v, nil
@@ -128,7 +227,7 @@ func BuildCreatePayload(agentsCreateBody string, agentsCreateSessionToken string
 	{
 		err = json.Unmarshal([]byte(agentsCreateBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"name\": \"aa\",\n      \"owner_user_id\": \"abc123\",\n      \"policy_grants\": [\n         {\n            \"effect\": \"allow\",\n            \"scope\": \"aa\",\n            \"selector\": {\n               \"disposition\": \"destructive\",\n               \"project_id\": \"abc123\",\n               \"resource_id\": \"abc123\",\n               \"resource_kind\": \"mcp\",\n               \"server_identity\": \"abc123\",\n               \"server_url\": \"https://example.com/foo\",\n               \"tool\": \"abc123\"\n            }\n         }\n      ],\n      \"project_id\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"name\": \"aa\",\n      \"owner_user_id\": \"abc123\",\n      \"policy_grants\": [\n         {\n            \"effect\": \"allow\",\n            \"scope\": \"aa\",\n            \"selector\": {\n               \"client_type\": \"service_account\",\n               \"connection_owner\": \"abc123\",\n               \"disposition\": \"destructive\",\n               \"project_id\": \"abc123\",\n               \"resource_id\": \"abc123\",\n               \"resource_kind\": \"mcp\",\n               \"server_identity\": \"abc123\",\n               \"server_url\": \"https://example.com/foo\",\n               \"tool\": \"abc123\"\n            }\n         }\n      ],\n      \"project_id\": \"abc123\"\n   }'")
 		}
 		if utf8.RuneCountInString(body.Name) < 1 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", body.Name, utf8.RuneCountInString(body.Name), 1, true))
@@ -322,7 +421,7 @@ func BuildCreatePolicyGrantPayload(agentsCreatePolicyGrantBody string, agentsCre
 	{
 		err = json.Unmarshal([]byte(agentsCreatePolicyGrantBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"agent_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"effect\": \"allow\",\n      \"scope\": \"aa\",\n      \"selector\": {\n         \"disposition\": \"destructive\",\n         \"project_id\": \"abc123\",\n         \"resource_id\": \"abc123\",\n         \"resource_kind\": \"mcp\",\n         \"server_identity\": \"abc123\",\n         \"server_url\": \"https://example.com/foo\",\n         \"tool\": \"abc123\"\n      }\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"agent_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"effect\": \"allow\",\n      \"scope\": \"aa\",\n      \"selector\": {\n         \"client_type\": \"service_account\",\n         \"connection_owner\": \"abc123\",\n         \"disposition\": \"destructive\",\n         \"project_id\": \"abc123\",\n         \"resource_id\": \"abc123\",\n         \"resource_kind\": \"mcp\",\n         \"server_identity\": \"abc123\",\n         \"server_url\": \"https://example.com/foo\",\n         \"tool\": \"abc123\"\n      }\n   }'")
 		}
 		if body.Selector == nil {
 			err = goa.MergeErrors(err, goa.MissingFieldError("selector", "body"))
@@ -370,7 +469,7 @@ func BuildUpdatePolicyGrantPayload(agentsUpdatePolicyGrantBody string, agentsUpd
 	{
 		err = json.Unmarshal([]byte(agentsUpdatePolicyGrantBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"agent_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"effect\": \"allow\",\n      \"grant_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"scope\": \"aa\",\n      \"selector\": {\n         \"disposition\": \"destructive\",\n         \"project_id\": \"abc123\",\n         \"resource_id\": \"abc123\",\n         \"resource_kind\": \"mcp\",\n         \"server_identity\": \"abc123\",\n         \"server_url\": \"https://example.com/foo\",\n         \"tool\": \"abc123\"\n      }\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"agent_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"effect\": \"allow\",\n      \"grant_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"scope\": \"aa\",\n      \"selector\": {\n         \"client_type\": \"service_account\",\n         \"connection_owner\": \"abc123\",\n         \"disposition\": \"destructive\",\n         \"project_id\": \"abc123\",\n         \"resource_id\": \"abc123\",\n         \"resource_kind\": \"mcp\",\n         \"server_identity\": \"abc123\",\n         \"server_url\": \"https://example.com/foo\",\n         \"tool\": \"abc123\"\n      }\n   }'")
 		}
 		if body.Selector == nil {
 			err = goa.MergeErrors(err, goa.MissingFieldError("selector", "body"))

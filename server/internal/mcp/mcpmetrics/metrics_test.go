@@ -45,7 +45,7 @@ func TestMetrics_RecordMCPToolCall(t *testing.T) {
 		m := NewMetrics(meter, logger)
 
 		// Should not panic
-		m.RecordMCPToolCall(context.Background(), "org-123", "https://mcp.example.com", "test-tool")
+		m.RecordMCPToolCall(context.Background(), "org-123", "https://mcp.example.com", "", "test-tool")
 	})
 
 	t.Run("handles_nil_counter_gracefully", func(t *testing.T) {
@@ -55,7 +55,7 @@ func TestMetrics_RecordMCPToolCall(t *testing.T) {
 		}
 
 		// Should not panic when counter is nil
-		m.RecordMCPToolCall(context.Background(), "org-123", "https://mcp.example.com", "test-tool")
+		m.RecordMCPToolCall(context.Background(), "org-123", "https://mcp.example.com", "", "test-tool")
 	})
 }
 
@@ -69,7 +69,7 @@ func TestMetrics_RecordMCPRequestDuration(t *testing.T) {
 		m := NewMetrics(meter, logger)
 
 		// Should not panic
-		m.RecordMCPRequestDuration(context.Background(), "tools/call", "https://mcp.example.com", 100*time.Millisecond)
+		m.RecordMCPRequestDuration(context.Background(), "tools/call", "https://mcp.example.com", "", 100*time.Millisecond)
 	})
 
 	t.Run("handles_nil_histogram_gracefully", func(t *testing.T) {
@@ -79,7 +79,7 @@ func TestMetrics_RecordMCPRequestDuration(t *testing.T) {
 		}
 
 		// Should not panic when histogram is nil
-		m.RecordMCPRequestDuration(context.Background(), "tools/call", "https://mcp.example.com", 100*time.Millisecond)
+		m.RecordMCPRequestDuration(context.Background(), "tools/call", "https://mcp.example.com", "", 100*time.Millisecond)
 	})
 }
 
@@ -314,13 +314,55 @@ func TestRecordMCPRequestDuration_ClampsMethodLabel(t *testing.T) {
 	meter := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)).Meter("test")
 
 	m := NewMetrics(meter, testenv.NewLogger(t))
-	m.RecordMCPRequestDuration(t.Context(), "rpc.discover", "mcp.example.com/mcp/demo", 100*time.Millisecond)
+	m.RecordMCPRequestDuration(t.Context(), "rpc.discover", "mcp.example.com/mcp/demo", "", 100*time.Millisecond)
 
 	metricdatatest.AssertHasAttributes(t, collectMetric(t, reader, "mcp.request.duration"),
 		attr.McpMethod(mcprequests.MethodOther),
 		attr.McpURL("mcp.example.com/mcp/demo"),
 		attr.NetworkSurface(NetworkSurfacePublic),
 	)
+}
+
+func TestRecordMCPServerID_OnlyWhenKnown(t *testing.T) {
+	t.Parallel()
+
+	reader := sdkmetric.NewManualReader()
+	meter := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)).Meter("test")
+	m := NewMetrics(meter, testenv.NewLogger(t))
+	serverID := uuid.NewString()
+
+	m.RecordMCPToolCall(t.Context(), "org-123", "mcp.example.com/mcp/demo", serverID, "test-tool")
+	m.RecordMCPRequestDuration(t.Context(), "tools/call", "mcp.example.com/mcp/demo", serverID, 100*time.Millisecond)
+	m.RecordMCPToolCall(t.Context(), "org-123", "mcp.example.com/mcp/legacy", "", "test-tool")
+	m.RecordMCPRequestDuration(t.Context(), "tools/call", "mcp.example.com/mcp/legacy", "", 100*time.Millisecond)
+
+	durations, ok := collectMetric(t, reader, "mcp.request.duration").Data.(metricdata.Histogram[float64])
+	require.True(t, ok)
+	require.Len(t, durations.DataPoints, 2)
+	for _, dp := range durations.DataPoints {
+		url, _ := dp.Attributes.Value(attr.McpURLKey)
+		got, has := dp.Attributes.Value(attr.McpServerIDKey)
+		if url.AsString() == "mcp.example.com/mcp/legacy" {
+			require.False(t, has)
+			continue
+		}
+		require.True(t, has)
+		require.Equal(t, serverID, got.AsString())
+	}
+
+	toolCalls, ok := collectMetric(t, reader, "mcp.tool.call").Data.(metricdata.Sum[int64])
+	require.True(t, ok)
+	require.Len(t, toolCalls.DataPoints, 2)
+	for _, dp := range toolCalls.DataPoints {
+		url, _ := dp.Attributes.Value(attr.McpURLKey)
+		got, has := dp.Attributes.Value(attr.McpServerIDKey)
+		if url.AsString() == "mcp.example.com/mcp/legacy" {
+			require.False(t, has)
+			continue
+		}
+		require.True(t, has)
+		require.Equal(t, serverID, got.AsString())
+	}
 }
 
 func TestRecordMCPRequestDuration_TracksPrivateTraffic(t *testing.T) {
@@ -333,7 +375,7 @@ func TestRecordMCPRequestDuration_TracksPrivateTraffic(t *testing.T) {
 		Surface: requestorigin.SurfacePrivateNetwork,
 		BaseURL: "https://private.example",
 	})
-	m.RecordMCPRequestDuration(ctx, "tools/call", "mcp.example.com/mcp/demo", 100*time.Millisecond)
+	m.RecordMCPRequestDuration(ctx, "tools/call", "mcp.example.com/mcp/demo", "", 100*time.Millisecond)
 
 	metricdatatest.AssertHasAttributes(t, collectMetric(t, reader, "mcp.request.duration"),
 		attr.McpURL("mcp.example.com/mcp/demo"),

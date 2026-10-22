@@ -133,6 +133,15 @@ type ListSessionsResponseBody struct {
 	NextCursor *string                     `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
 }
 
+// ListResponseBody is the type of the "agents" service "list" endpoint HTTP
+// response body.
+type ListResponseBody struct {
+	// The agents in this page.
+	Items []*ManagedAgentResponseBody `form:"items,omitempty" json:"items,omitempty" xml:"items,omitempty"`
+	// Cursor for the next page; absent when exhausted.
+	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
+}
+
 // CreateResponseBody is the type of the "agents" service "create" endpoint
 // HTTP response body.
 type CreateResponseBody struct {
@@ -3428,13 +3437,13 @@ type AgentSessionResponseBody struct {
 	LastUsedAt       *string `form:"last_used_at,omitempty" json:"last_used_at,omitempty" xml:"last_used_at,omitempty"`
 }
 
-// ManagedAgentResponse is used to define fields on response body types.
-type ManagedAgentResponse struct {
+// ManagedAgentResponseBody is used to define fields on response body types.
+type ManagedAgentResponseBody struct {
 	ID          *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	OwnerUserID *string `form:"owner_user_id,omitempty" json:"owner_user_id,omitempty" xml:"owner_user_id,omitempty"`
 	// Safe profile of the active same-organization owner; does not require
 	// directory access
-	OwnerProfile *AgentOwnerProfileResponse `form:"owner_profile,omitempty" json:"owner_profile,omitempty" xml:"owner_profile,omitempty"`
+	OwnerProfile *AgentOwnerProfileResponseBody `form:"owner_profile,omitempty" json:"owner_profile,omitempty" xml:"owner_profile,omitempty"`
 	// When owner loss durably blocked this agent
 	OwnerReassignmentRequiredAt *string `form:"owner_reassignment_required_at,omitempty" json:"owner_reassignment_required_at,omitempty" xml:"owner_reassignment_required_at,omitempty"`
 	// Stable reason that explicit reassignment is required
@@ -3442,21 +3451,22 @@ type ManagedAgentResponse struct {
 	Name                    *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// The optional project this agent is scoped to; absent for an
 	// organization-wide agent
-	ProjectID   *string                   `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
-	Lifecycle   *string                   `form:"lifecycle,omitempty" json:"lifecycle,omitempty" xml:"lifecycle,omitempty"`
-	Permissions *AgentPermissionsResponse `form:"permissions,omitempty" json:"permissions,omitempty" xml:"permissions,omitempty"`
-	CreatedAt   *string                   `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt   *string                   `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	ProjectID   *string                       `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	Lifecycle   *string                       `form:"lifecycle,omitempty" json:"lifecycle,omitempty" xml:"lifecycle,omitempty"`
+	Permissions *AgentPermissionsResponseBody `form:"permissions,omitempty" json:"permissions,omitempty" xml:"permissions,omitempty"`
+	CreatedAt   *string                       `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt   *string                       `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
-// AgentOwnerProfileResponse is used to define fields on response body types.
-type AgentOwnerProfileResponse struct {
+// AgentOwnerProfileResponseBody is used to define fields on response body
+// types.
+type AgentOwnerProfileResponseBody struct {
 	DisplayName *string `form:"display_name,omitempty" json:"display_name,omitempty" xml:"display_name,omitempty"`
 	PhotoURL    *string `form:"photo_url,omitempty" json:"photo_url,omitempty" xml:"photo_url,omitempty"`
 }
 
-// AgentPermissionsResponse is used to define fields on response body types.
-type AgentPermissionsResponse struct {
+// AgentPermissionsResponseBody is used to define fields on response body types.
+type AgentPermissionsResponseBody struct {
 	// Whether the current human may read this agent
 	Read *bool `form:"read,omitempty" json:"read,omitempty" xml:"read,omitempty"`
 	// Whether the current human may configure or change this agent
@@ -3484,35 +3494,21 @@ type AgentPolicySelectorRequestBodyRequestBody struct {
 	ResourceKind string `form:"resource_kind" json:"resource_kind" xml:"resource_kind"`
 	// The resource identifier, or '*' for all resources of this kind.
 	ResourceID string `form:"resource_id" json:"resource_id" xml:"resource_id"`
+	// Auth client type filter (mcp:auth scopes only).
+	ClientType *string `form:"client_type,omitempty" json:"client_type,omitempty" xml:"client_type,omitempty"`
+	// Personal connection owner filter (mcp:auth scopes on remote_session clients
+	// only): a user ID, '*', or '$represented_user'.
+	ConnectionOwner *string `form:"connection_owner,omitempty" json:"connection_owner,omitempty" xml:"connection_owner,omitempty"`
 	// Tool disposition filter (MCP scopes only).
 	Disposition *string `form:"disposition,omitempty" json:"disposition,omitempty" xml:"disposition,omitempty"`
 	// Specific tool name filter (MCP scopes only).
 	Tool *string `form:"tool,omitempty" json:"tool,omitempty" xml:"tool,omitempty"`
-	// Project filter (MCP, environment, and assistant scopes).
+	// Project filter (MCP, environment, assistant, and mcp:auth scopes).
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	// Server URL filter (risk policy scopes only).
 	ServerURL *string `form:"server_url,omitempty" json:"server_url,omitempty" xml:"server_url,omitempty"`
 	// Server identity filter (risk policy scopes only).
 	ServerIdentity *string `form:"server_identity,omitempty" json:"server_identity,omitempty" xml:"server_identity,omitempty"`
-}
-
-// AgentOwnerProfileResponseBody is used to define fields on response body
-// types.
-type AgentOwnerProfileResponseBody struct {
-	DisplayName *string `form:"display_name,omitempty" json:"display_name,omitempty" xml:"display_name,omitempty"`
-	PhotoURL    *string `form:"photo_url,omitempty" json:"photo_url,omitempty" xml:"photo_url,omitempty"`
-}
-
-// AgentPermissionsResponseBody is used to define fields on response body types.
-type AgentPermissionsResponseBody struct {
-	// Whether the current human may read this agent
-	Read *bool `form:"read,omitempty" json:"read,omitempty" xml:"read,omitempty"`
-	// Whether the current human may configure or change this agent
-	Write *bool `form:"write,omitempty" json:"write,omitempty" xml:"write,omitempty"`
-	// Whether the current human may manage credentials for this agent
-	Authorize *bool `form:"authorize,omitempty" json:"authorize,omitempty" xml:"authorize,omitempty"`
-	// Whether the current human may transfer or reassign this agent
-	Transfer *bool `form:"transfer,omitempty" json:"transfer,omitempty" xml:"transfer,omitempty"`
 }
 
 // AgentPolicyGrantFormResponse is used to define fields on response body types.
@@ -3530,11 +3526,16 @@ type AgentPolicySelectorResponse struct {
 	ResourceKind *string `form:"resource_kind,omitempty" json:"resource_kind,omitempty" xml:"resource_kind,omitempty"`
 	// The resource identifier, or '*' for all resources of this kind.
 	ResourceID *string `form:"resource_id,omitempty" json:"resource_id,omitempty" xml:"resource_id,omitempty"`
+	// Auth client type filter (mcp:auth scopes only).
+	ClientType *string `form:"client_type,omitempty" json:"client_type,omitempty" xml:"client_type,omitempty"`
+	// Personal connection owner filter (mcp:auth scopes on remote_session clients
+	// only): a user ID, '*', or '$represented_user'.
+	ConnectionOwner *string `form:"connection_owner,omitempty" json:"connection_owner,omitempty" xml:"connection_owner,omitempty"`
 	// Tool disposition filter (MCP scopes only).
 	Disposition *string `form:"disposition,omitempty" json:"disposition,omitempty" xml:"disposition,omitempty"`
 	// Specific tool name filter (MCP scopes only).
 	Tool *string `form:"tool,omitempty" json:"tool,omitempty" xml:"tool,omitempty"`
-	// Project filter (MCP, environment, and assistant scopes).
+	// Project filter (MCP, environment, assistant, and mcp:auth scopes).
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	// Server URL filter (risk policy scopes only).
 	ServerURL *string `form:"server_url,omitempty" json:"server_url,omitempty" xml:"server_url,omitempty"`
@@ -3558,11 +3559,16 @@ type AgentPolicySelector struct {
 	ResourceKind string `form:"resource_kind" json:"resource_kind" xml:"resource_kind"`
 	// The resource identifier, or '*' for all resources of this kind.
 	ResourceID string `form:"resource_id" json:"resource_id" xml:"resource_id"`
+	// Auth client type filter (mcp:auth scopes only).
+	ClientType *string `form:"client_type,omitempty" json:"client_type,omitempty" xml:"client_type,omitempty"`
+	// Personal connection owner filter (mcp:auth scopes on remote_session clients
+	// only): a user ID, '*', or '$represented_user'.
+	ConnectionOwner *string `form:"connection_owner,omitempty" json:"connection_owner,omitempty" xml:"connection_owner,omitempty"`
 	// Tool disposition filter (MCP scopes only).
 	Disposition *string `form:"disposition,omitempty" json:"disposition,omitempty" xml:"disposition,omitempty"`
 	// Specific tool name filter (MCP scopes only).
 	Tool *string `form:"tool,omitempty" json:"tool,omitempty" xml:"tool,omitempty"`
-	// Project filter (MCP, environment, and assistant scopes).
+	// Project filter (MCP, environment, assistant, and mcp:auth scopes).
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	// Server URL filter (risk policy scopes only).
 	ServerURL *string `form:"server_url,omitempty" json:"server_url,omitempty" xml:"server_url,omitempty"`
@@ -3577,11 +3583,16 @@ type AgentPolicySelectorResponseBody struct {
 	ResourceKind *string `form:"resource_kind,omitempty" json:"resource_kind,omitempty" xml:"resource_kind,omitempty"`
 	// The resource identifier, or '*' for all resources of this kind.
 	ResourceID *string `form:"resource_id,omitempty" json:"resource_id,omitempty" xml:"resource_id,omitempty"`
+	// Auth client type filter (mcp:auth scopes only).
+	ClientType *string `form:"client_type,omitempty" json:"client_type,omitempty" xml:"client_type,omitempty"`
+	// Personal connection owner filter (mcp:auth scopes on remote_session clients
+	// only): a user ID, '*', or '$represented_user'.
+	ConnectionOwner *string `form:"connection_owner,omitempty" json:"connection_owner,omitempty" xml:"connection_owner,omitempty"`
 	// Tool disposition filter (MCP scopes only).
 	Disposition *string `form:"disposition,omitempty" json:"disposition,omitempty" xml:"disposition,omitempty"`
 	// Specific tool name filter (MCP scopes only).
 	Tool *string `form:"tool,omitempty" json:"tool,omitempty" xml:"tool,omitempty"`
-	// Project filter (MCP, environment, and assistant scopes).
+	// Project filter (MCP, environment, assistant, and mcp:auth scopes).
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	// Server URL filter (risk policy scopes only).
 	ServerURL *string `form:"server_url,omitempty" json:"server_url,omitempty" xml:"server_url,omitempty"`
@@ -4043,16 +4054,19 @@ func NewRevokeSessionGatewayError(body *RevokeSessionGatewayErrorResponseBody) *
 	return v
 }
 
-// NewListManagedAgentOK builds a "agents" service "list" endpoint result from
+// NewListAgentsResultOK builds a "agents" service "list" endpoint result from
 // a HTTP "OK" response.
-func NewListManagedAgentOK(body []*ManagedAgentResponse) []*agents.ManagedAgent {
-	v := make([]*agents.ManagedAgent, len(body))
-	for i, val := range body {
+func NewListAgentsResultOK(body *ListResponseBody) *agents.ListAgentsResult {
+	v := &agents.ListAgentsResult{
+		NextCursor: body.NextCursor,
+	}
+	v.Items = make([]*agents.ManagedAgent, len(body.Items))
+	for i, val := range body.Items {
 		if val == nil {
-			v[i] = nil
+			v.Items[i] = nil
 			continue
 		}
-		v[i] = unmarshalManagedAgentResponseToAgentsManagedAgent(val)
+		v.Items[i] = unmarshalManagedAgentResponseBodyToAgentsManagedAgent(val)
 	}
 
 	return v
@@ -6505,6 +6519,21 @@ func ValidateListSessionsResponseBody(body *ListSessionsResponseBody) (err error
 	for _, e := range body.Items {
 		if e != nil {
 			if err2 := ValidateAgentSessionResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateListResponseBody runs the validations defined on ListResponseBody
+func ValidateListResponseBody(body *ListResponseBody) (err error) {
+	if body.Items == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("items", "body"))
+	}
+	for _, e := range body.Items {
+		if e != nil {
+			if err2 := ValidateManagedAgentResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -11174,9 +11203,9 @@ func ValidateAgentSessionResponseBody(body *AgentSessionResponseBody) (err error
 	return
 }
 
-// ValidateManagedAgentResponse runs the validations defined on
-// ManagedAgentResponse
-func ValidateManagedAgentResponse(body *ManagedAgentResponse) (err error) {
+// ValidateManagedAgentResponseBody runs the validations defined on
+// ManagedAgentResponseBody
+func ValidateManagedAgentResponseBody(body *ManagedAgentResponseBody) (err error) {
 	if body.ID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
 	}
@@ -11202,7 +11231,7 @@ func ValidateManagedAgentResponse(body *ManagedAgentResponse) (err error) {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
 	}
 	if body.OwnerProfile != nil {
-		if err2 := ValidateAgentOwnerProfileResponse(body.OwnerProfile); err2 != nil {
+		if err2 := ValidateAgentOwnerProfileResponseBody(body.OwnerProfile); err2 != nil {
 			err = goa.MergeErrors(err, err2)
 		}
 	}
@@ -11218,7 +11247,7 @@ func ValidateManagedAgentResponse(body *ManagedAgentResponse) (err error) {
 		}
 	}
 	if body.Permissions != nil {
-		if err2 := ValidateAgentPermissionsResponse(body.Permissions); err2 != nil {
+		if err2 := ValidateAgentPermissionsResponseBody(body.Permissions); err2 != nil {
 			err = goa.MergeErrors(err, err2)
 		}
 	}
@@ -11231,18 +11260,18 @@ func ValidateManagedAgentResponse(body *ManagedAgentResponse) (err error) {
 	return
 }
 
-// ValidateAgentOwnerProfileResponse runs the validations defined on
-// AgentOwnerProfileResponse
-func ValidateAgentOwnerProfileResponse(body *AgentOwnerProfileResponse) (err error) {
+// ValidateAgentOwnerProfileResponseBody runs the validations defined on
+// AgentOwnerProfileResponseBody
+func ValidateAgentOwnerProfileResponseBody(body *AgentOwnerProfileResponseBody) (err error) {
 	if body.DisplayName == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("display_name", "body"))
 	}
 	return
 }
 
-// ValidateAgentPermissionsResponse runs the validations defined on
-// AgentPermissionsResponse
-func ValidateAgentPermissionsResponse(body *AgentPermissionsResponse) (err error) {
+// ValidateAgentPermissionsResponseBody runs the validations defined on
+// AgentPermissionsResponseBody
+func ValidateAgentPermissionsResponseBody(body *AgentPermissionsResponseBody) (err error) {
 	if body.Read == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("read", "body"))
 	}
@@ -11281,8 +11310,13 @@ func ValidateAgentPolicyGrantFormRequestBodyRequestBody(body *AgentPolicyGrantFo
 // ValidateAgentPolicySelectorRequestBodyRequestBody runs the validations
 // defined on AgentPolicySelectorRequestBodyRequestBody
 func ValidateAgentPolicySelectorRequestBodyRequestBody(body *AgentPolicySelectorRequestBodyRequestBody) (err error) {
-	if !(body.ResourceKind == "project" || body.ResourceKind == "mcp" || body.ResourceKind == "org" || body.ResourceKind == "environment" || body.ResourceKind == "skill" || body.ResourceKind == "assistant" || body.ResourceKind == "risk_policy" || body.ResourceKind == "chat" || body.ResourceKind == "agent" || body.ResourceKind == "*") {
-		err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.resource_kind", body.ResourceKind, []any{"project", "mcp", "org", "environment", "skill", "assistant", "risk_policy", "chat", "agent", "*"}))
+	if !(body.ResourceKind == "project" || body.ResourceKind == "mcp" || body.ResourceKind == "org" || body.ResourceKind == "environment" || body.ResourceKind == "skill" || body.ResourceKind == "assistant" || body.ResourceKind == "risk_policy" || body.ResourceKind == "chat" || body.ResourceKind == "agent" || body.ResourceKind == "mcp_auth_client" || body.ResourceKind == "*") {
+		err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.resource_kind", body.ResourceKind, []any{"project", "mcp", "org", "environment", "skill", "assistant", "risk_policy", "chat", "agent", "mcp_auth_client", "*"}))
+	}
+	if body.ClientType != nil {
+		if !(*body.ClientType == "remote_session" || *body.ClientType == "service_account" || *body.ClientType == "static_credential" || *body.ClientType == "pass_through" || *body.ClientType == "ema" || *body.ClientType == "*") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.client_type", *body.ClientType, []any{"remote_session", "service_account", "static_credential", "pass_through", "ema", "*"}))
+		}
 	}
 	if body.Disposition != nil {
 		if !(*body.Disposition == "read_only" || *body.Disposition == "destructive" || *body.Disposition == "idempotent" || *body.Disposition == "open_world") {
@@ -11291,33 +11325,6 @@ func ValidateAgentPolicySelectorRequestBodyRequestBody(body *AgentPolicySelector
 	}
 	if body.ServerURL != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.server_url", *body.ServerURL, goa.FormatURI))
-	}
-	return
-}
-
-// ValidateAgentOwnerProfileResponseBody runs the validations defined on
-// AgentOwnerProfileResponseBody
-func ValidateAgentOwnerProfileResponseBody(body *AgentOwnerProfileResponseBody) (err error) {
-	if body.DisplayName == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("display_name", "body"))
-	}
-	return
-}
-
-// ValidateAgentPermissionsResponseBody runs the validations defined on
-// AgentPermissionsResponseBody
-func ValidateAgentPermissionsResponseBody(body *AgentPermissionsResponseBody) (err error) {
-	if body.Read == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("read", "body"))
-	}
-	if body.Write == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("write", "body"))
-	}
-	if body.Authorize == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("authorize", "body"))
-	}
-	if body.Transfer == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("transfer", "body"))
 	}
 	return
 }
@@ -11362,8 +11369,13 @@ func ValidateAgentPolicySelectorResponse(body *AgentPolicySelectorResponse) (err
 		err = goa.MergeErrors(err, goa.MissingFieldError("resource_id", "body"))
 	}
 	if body.ResourceKind != nil {
-		if !(*body.ResourceKind == "project" || *body.ResourceKind == "mcp" || *body.ResourceKind == "org" || *body.ResourceKind == "environment" || *body.ResourceKind == "skill" || *body.ResourceKind == "assistant" || *body.ResourceKind == "risk_policy" || *body.ResourceKind == "chat" || *body.ResourceKind == "agent" || *body.ResourceKind == "*") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.resource_kind", *body.ResourceKind, []any{"project", "mcp", "org", "environment", "skill", "assistant", "risk_policy", "chat", "agent", "*"}))
+		if !(*body.ResourceKind == "project" || *body.ResourceKind == "mcp" || *body.ResourceKind == "org" || *body.ResourceKind == "environment" || *body.ResourceKind == "skill" || *body.ResourceKind == "assistant" || *body.ResourceKind == "risk_policy" || *body.ResourceKind == "chat" || *body.ResourceKind == "agent" || *body.ResourceKind == "mcp_auth_client" || *body.ResourceKind == "*") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.resource_kind", *body.ResourceKind, []any{"project", "mcp", "org", "environment", "skill", "assistant", "risk_policy", "chat", "agent", "mcp_auth_client", "*"}))
+		}
+	}
+	if body.ClientType != nil {
+		if !(*body.ClientType == "remote_session" || *body.ClientType == "service_account" || *body.ClientType == "static_credential" || *body.ClientType == "pass_through" || *body.ClientType == "ema" || *body.ClientType == "*") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.client_type", *body.ClientType, []any{"remote_session", "service_account", "static_credential", "pass_through", "ema", "*"}))
 		}
 	}
 	if body.Disposition != nil {
@@ -11423,8 +11435,13 @@ func ValidateAgentPolicyGrantResponse(body *AgentPolicyGrantResponse) (err error
 // ValidateAgentPolicySelector runs the validations defined on
 // AgentPolicySelector
 func ValidateAgentPolicySelector(body *AgentPolicySelector) (err error) {
-	if !(body.ResourceKind == "project" || body.ResourceKind == "mcp" || body.ResourceKind == "org" || body.ResourceKind == "environment" || body.ResourceKind == "skill" || body.ResourceKind == "assistant" || body.ResourceKind == "risk_policy" || body.ResourceKind == "chat" || body.ResourceKind == "agent" || body.ResourceKind == "*") {
-		err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.resource_kind", body.ResourceKind, []any{"project", "mcp", "org", "environment", "skill", "assistant", "risk_policy", "chat", "agent", "*"}))
+	if !(body.ResourceKind == "project" || body.ResourceKind == "mcp" || body.ResourceKind == "org" || body.ResourceKind == "environment" || body.ResourceKind == "skill" || body.ResourceKind == "assistant" || body.ResourceKind == "risk_policy" || body.ResourceKind == "chat" || body.ResourceKind == "agent" || body.ResourceKind == "mcp_auth_client" || body.ResourceKind == "*") {
+		err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.resource_kind", body.ResourceKind, []any{"project", "mcp", "org", "environment", "skill", "assistant", "risk_policy", "chat", "agent", "mcp_auth_client", "*"}))
+	}
+	if body.ClientType != nil {
+		if !(*body.ClientType == "remote_session" || *body.ClientType == "service_account" || *body.ClientType == "static_credential" || *body.ClientType == "pass_through" || *body.ClientType == "ema" || *body.ClientType == "*") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.client_type", *body.ClientType, []any{"remote_session", "service_account", "static_credential", "pass_through", "ema", "*"}))
+		}
 	}
 	if body.Disposition != nil {
 		if !(*body.Disposition == "read_only" || *body.Disposition == "destructive" || *body.Disposition == "idempotent" || *body.Disposition == "open_world") {
@@ -11447,8 +11464,13 @@ func ValidateAgentPolicySelectorResponseBody(body *AgentPolicySelectorResponseBo
 		err = goa.MergeErrors(err, goa.MissingFieldError("resource_id", "body"))
 	}
 	if body.ResourceKind != nil {
-		if !(*body.ResourceKind == "project" || *body.ResourceKind == "mcp" || *body.ResourceKind == "org" || *body.ResourceKind == "environment" || *body.ResourceKind == "skill" || *body.ResourceKind == "assistant" || *body.ResourceKind == "risk_policy" || *body.ResourceKind == "chat" || *body.ResourceKind == "agent" || *body.ResourceKind == "*") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.resource_kind", *body.ResourceKind, []any{"project", "mcp", "org", "environment", "skill", "assistant", "risk_policy", "chat", "agent", "*"}))
+		if !(*body.ResourceKind == "project" || *body.ResourceKind == "mcp" || *body.ResourceKind == "org" || *body.ResourceKind == "environment" || *body.ResourceKind == "skill" || *body.ResourceKind == "assistant" || *body.ResourceKind == "risk_policy" || *body.ResourceKind == "chat" || *body.ResourceKind == "agent" || *body.ResourceKind == "mcp_auth_client" || *body.ResourceKind == "*") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.resource_kind", *body.ResourceKind, []any{"project", "mcp", "org", "environment", "skill", "assistant", "risk_policy", "chat", "agent", "mcp_auth_client", "*"}))
+		}
+	}
+	if body.ClientType != nil {
+		if !(*body.ClientType == "remote_session" || *body.ClientType == "service_account" || *body.ClientType == "static_credential" || *body.ClientType == "pass_through" || *body.ClientType == "ema" || *body.ClientType == "*") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.client_type", *body.ClientType, []any{"remote_session", "service_account", "static_credential", "pass_through", "ema", "*"}))
 		}
 	}
 	if body.Disposition != nil {

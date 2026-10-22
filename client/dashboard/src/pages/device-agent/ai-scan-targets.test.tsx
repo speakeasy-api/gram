@@ -49,6 +49,7 @@ const targets: AiScanTarget[] = [
     },
     origin: "organization",
     customized: false,
+    access: { state: "unreviewed", decision: "unreviewed", enforceable: false },
     createdAt: new Date("2026-09-09T00:00:00Z"),
     updatedAt: new Date("2026-09-09T00:00:00Z"),
   },
@@ -69,6 +70,7 @@ const targets: AiScanTarget[] = [
     },
     origin: "default",
     customized: false,
+    access: { state: "unreviewed", decision: "unreviewed", enforceable: false },
   },
   {
     id: "chatgpt-classic",
@@ -87,6 +89,7 @@ const targets: AiScanTarget[] = [
     },
     origin: "default",
     customized: true,
+    access: { state: "unreviewed", decision: "unreviewed", enforceable: false },
     createdAt: new Date("2026-09-08T00:00:00Z"),
     updatedAt: new Date("2026-09-08T00:00:00Z"),
   },
@@ -107,6 +110,7 @@ const targets: AiScanTarget[] = [
     },
     origin: "default",
     customized: false,
+    access: { state: "unreviewed", decision: "unreviewed", enforceable: false },
   },
   {
     id: "ollama",
@@ -125,6 +129,7 @@ const targets: AiScanTarget[] = [
     },
     origin: "default",
     customized: false,
+    access: { state: "unreviewed", decision: "unreviewed", enforceable: false },
   },
 ];
 

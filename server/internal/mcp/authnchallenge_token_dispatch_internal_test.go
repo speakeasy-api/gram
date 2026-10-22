@@ -16,6 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/assertion/privatekeyjwt"
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
@@ -35,7 +36,7 @@ func newTokenDispatchTestService(t *testing.T) (*Service, *ResolvedMcpEndpoint, 
 	endpoint := &ResolvedMcpEndpoint{
 		OrganizationID:      "org_test",
 		ProjectID:           uuid.New(),
-		RouteBase:           "mcp",
+		RouteBase:           mcproute.MCP,
 		Slug:                "test",
 		UserSessionIssuerID: uuid.New(),
 	}

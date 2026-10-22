@@ -26,6 +26,7 @@ func TestWorkloadAdmissionReplacesEarlierAdmittedPolicies(t *testing.T) {
 				OwnerUserID:    "user_123",
 				Ceiling:        []Grant{NewGrant(ScopeProjectRead, "project-one")},
 				Agent:          nil,
+				Owner:          []Grant{NewGrant(ScopeProjectRead, "project-one")},
 			}, nil
 		},
 		AdmitPrincipalCredential:         nil,
@@ -43,4 +44,61 @@ func TestWorkloadAdmissionReplacesEarlierAdmittedPolicies(t *testing.T) {
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
+}
+
+func TestWorkloadAdmissionRequiresEveryPolicy(t *testing.T) {
+	t.Parallel()
+	for _, empty := range []string{"ceiling", "agent", "owner"} {
+		t.Run(empty, func(t *testing.T) {
+			t.Parallel()
+			check := Check{Scope: ScopeProjectRead, ResourceID: "project-one"}
+			allow := []Grant{NewGrant(check.Scope, check.ResourceID)}
+			admission := WorkloadSessionAdmission{
+				AgentPrincipal: "agent:018f8d7b-58d7-7cc4-bb16-9f8c6b99a001", OwnerUserID: "user_123",
+				Ceiling: allow, Agent: allow, Owner: allow,
+			}
+			switch empty {
+			case "ceiling":
+				admission.Ceiling = nil
+			case "agent":
+				admission.Agent = nil
+			case "owner":
+				admission.Owner = nil
+			}
+			engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient(), EngineOpts{
+				AdmitWorkloadSession: func(context.Context, *pgxpool.Pool) (WorkloadSessionAdmission, error) { return admission, nil },
+			})
+			ctx := principalPolicyTestContext(t, allow, allow, allow)
+			admitted, err := engine.AdmitWorkloadSession(ctx)
+			require.NoError(t, err)
+			var denied *oops.ShareableError
+			require.ErrorAs(t, engine.Require(admitted, check), &denied)
+			require.Equal(t, oops.CodeForbidden, denied.Code)
+		})
+	}
+}
+
+func TestWorkloadAdmissionRetainsOnlyValidAgentPrincipal(t *testing.T) {
+	t.Parallel()
+	for _, principal := range []string{"agent:018f8d7b-58d7-7cc4-bb16-9f8c6b99a001", "user:user_test", "agent:invalid", "agent:00000000-0000-0000-0000-000000000000", ""} {
+		t.Run(principal, func(t *testing.T) {
+			t.Parallel()
+			engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient(), EngineOpts{
+				AdmitWorkloadSession: func(context.Context, *pgxpool.Pool) (WorkloadSessionAdmission, error) {
+					return WorkloadSessionAdmission{AgentPrincipal: principal, OwnerUserID: "user_test"}, nil
+				},
+			})
+			ctx, err := engine.AdmitWorkloadSession(t.Context())
+			if principal == "agent:018f8d7b-58d7-7cc4-bb16-9f8c6b99a001" {
+				require.NoError(t, err)
+				id, ok := AdmittedWorkloadAgent(ctx)
+				require.True(t, ok)
+				require.Equal(t, "018f8d7b-58d7-7cc4-bb16-9f8c6b99a001", id.String())
+			} else {
+				require.Error(t, err)
+				_, ok := AdmittedWorkloadAgent(ctx)
+				require.False(t, ok)
+			}
+		})
+	}
 }

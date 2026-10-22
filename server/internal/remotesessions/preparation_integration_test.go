@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	issuersgen "github.com/speakeasy-api/gram/server/gen/remote_session_issuers"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
@@ -34,6 +35,23 @@ func preparationAdvertise(t *testing.T, ctx context.Context, ti *testInstance, i
 	auth, _ := contextvalues.GetAuthContext(ctx)
 	err := testrepo.New(ti.conn).SetPreparationFixtureIssuerCapability(ctx, testrepo.SetPreparationFixtureIssuerCapabilityParams{ID: issuer, ProjectID: conv.ToNullUUID(*auth.ProjectID)})
 	require.NoError(t, err)
+}
+
+// preparationConfidentialClient makes client authenticate with
+// private_key_jwt: identity chaining refuses public clients.
+func preparationConfidentialClient(t *testing.T, ctx context.Context, ti *testInstance, issuer, client uuid.UUID) {
+	t.Helper()
+	auth, _ := contextvalues.GetAuthContext(ctx)
+	setID := createJsonWebKeySet(t, ctx, ti.conn, auth.ActiveOrganizationID, "preparation-"+client.String())
+	rows, err := testrepo.New(ti.conn).SetPreparationFixtureConfidentialClient(ctx, testrepo.SetPreparationFixtureConfidentialClientParams{
+		JsonWebKeySetID:       conv.ToNullUUID(setID),
+		OrganizationID:        conv.ToPGText(auth.ActiveOrganizationID),
+		ID:                    client,
+		ProjectID:             conv.ToNullUUID(*auth.ProjectID),
+		RemoteSessionIssuerID: issuer,
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), rows)
 }
 
 func preparationRecordGrants(t *testing.T, ctx context.Context, ti *testInstance, client uuid.UUID, grants []string) {
@@ -81,6 +99,31 @@ func TestPreparationIntegration_ManualGrantEvidence(t *testing.T) {
 			require.Equal(t, confirmed, repeated, "identical confirmation must replay its durable result without a new generation")
 		})
 	}
+}
+
+func TestPreparationIntegration_DeclaredAdvertisementIsNotEligible(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	issuer := uuid.MustParse(createRemoteIssuer(t, ctx, ti, "declared", ""))
+	user := createUserSessionIssuer(t, ctx, ti.conn, "declared-human")
+	_, err := ti.service.UpdateRemoteSessionIssuer(ctx, &issuersgen.UpdateRemoteSessionIssuerPayload{
+		ID:                                  issuer.String(),
+		GrantTypesSupported:                 []string{oauthwire.GrantTypeJWTBearer},
+		AuthorizationGrantProfilesSupported: []string{oauthwire.GrantProfileIDJAG},
+	})
+	require.NoError(t, err)
+	auth, _ := contextvalues.GetAuthContext(ctx)
+	client := preparationManualClient(t, ctx, ti, *auth.ProjectID, issuer, "declared-client")
+	in := remotesessions.PreparationInput{UserSessionIssuerID: user, RemoteSessionIssuerID: issuer, ClientID: client, Resource: "https://resource.example.com/", Mechanism: "manual", Scopes: []string{"openid"}}
+
+	declared, err := ti.service.ReadIdentityChaining(ctx, in)
+	require.NoError(t, err)
+	require.Equal(t, "incomplete_metadata", declared.State, "an advertisement no discovery recorded must not make the issuer eligible")
+
+	preparationAdvertise(t, ctx, ti, issuer)
+	discovered, err := ti.service.ReadIdentityChaining(ctx, in)
+	require.NoError(t, err)
+	require.Equal(t, "configuration_required", discovered.State)
 }
 
 func TestPreparationIntegration_TenantAndIssuerSubstitution(t *testing.T) {
@@ -202,6 +245,7 @@ func TestPreparationIntegration_CIMDExactGrantsStableIdentity(t *testing.T) {
 	client := createCimdClient(t, ctx, ti, issuer.String(), user.String(), []string{"openid"})
 	otherUser := createUserSessionIssuer(t, ctx, ti.conn, "cimd-unselected-human")
 	other := createCimdClient(t, ctx, ti, issuer.String(), otherUser.String(), []string{"openid"})
+	preparationConfidentialClient(t, ctx, ti, issuer, uuid.MustParse(client.ID))
 	grants := []string{"authorization_code", "refresh_token", oauthwire.GrantTypeJWTBearer}
 	in := remotesessions.PreparationInput{UserSessionIssuerID: user, RemoteSessionIssuerID: issuer, ClientID: uuid.MustParse(client.ID), Resource: "https://resource.example.com/", Mechanism: "cimd", ConfirmGrants: grants, Scopes: []string{"openid"}}
 	prepared, err := ti.service.PrepareIdentityChaining(ctx, in)

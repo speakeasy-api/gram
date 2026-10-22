@@ -8,7 +8,7 @@ import { useRotateOrganizationRemoteSessionClientMutation } from "@gram/client/r
 import { invalidateAllOrganizationRemoteSessionClient } from "@gram/client/react-query/organizationRemoteSessionClient.js";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { ConfirmDialog } from "./ConfirmDialog";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 
 // DeleteClientDialog confirms deletion of a remote session client, surfacing the
 // server-side pre-flight (active session count + affected MCP server names).
@@ -161,7 +161,7 @@ export function RotateClientDialog({
           refetchType: "all",
         }),
       ]);
-      toast.success("Client re-registered with the identity provider");
+      toast.success("Client re-registered with the authorization server");
       onClose();
     },
     onError: (error) => {
@@ -178,7 +178,7 @@ export function RotateClientDialog({
         if (!open) onClose();
       }}
       title={`Rotate client "${clientLabel}"?`}
-      description="Speakeasy registers a new client with the identity provider and replaces this client's ID and secret in place. Its attachments are kept, but every session minted against the old client is revoked, so users reconnect once."
+      description="Speakeasy registers a new client with the authorization server and replaces this client's ID and secret in place. Its attachments are kept, but every session minted against the old client is revoked, so users reconnect once."
       confirmLabel="Rotate client"
       isPending={rotate.isPending}
       impact={{

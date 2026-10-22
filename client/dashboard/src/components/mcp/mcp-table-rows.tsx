@@ -3,39 +3,32 @@ import { Badge } from "@/components/ui/Badge";
 import { CopyButton } from "@/components/ui/CopyButton";
 import { DotRow } from "@/components/ui/DotRow";
 import { Text } from "@/components/ui/Text";
-import { useMcpUrl, useResolvedMcpServerUrl } from "@/hooks/useToolsetUrl";
-import { mcpServerRouteParam } from "@/lib/sources";
+import { useResolvedMcpServerUrl } from "@/hooks/useToolsetUrl";
 import { useRoutes } from "@/routes";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import type { McpEndpoint } from "@gram/client/models/components/mcpendpoint.js";
 import type { MetaMcpServer } from "@gram/client/models/components/metamcpserver.js";
-import type { ToolsetEntry } from "@gram/client/models/components/toolsetentry.js";
-import { useLatestDeployment } from "@gram/client/react-query/latestDeployment.js";
-import { AlertTriangleIcon, Link2, Network } from "lucide-react";
-import { useMemo } from "react";
+import { ExternalMcpIcon } from "./MCPToolsetIcon";
 import {
-  useCatalogIconMap,
-  useExternalMcpOAuthConfigStatus,
-} from "../sources/sources-hooks";
+  hostedToolCountLabel,
+  MCP_SERVER_KIND_LABEL,
+  mcpServerDisplayName,
+  mcpServerHref,
+  type McpServerKind,
+} from "./mcp-server-kind";
+import { SpeakeasyMark } from "./OrganizationGatewayCard";
+import { AlertTriangleIcon, Link2, Network } from "lucide-react";
+import { useHostedMcpOAuthConfigStatus } from "../sources/sources-hooks";
 
-/**
- * The table rows of the /mcp listing: one per backend kind, mirroring the
- * three cards of the grid view. All three fill the same four columns — Name,
- * Kind, Address, Contents — so the kinds line up in one table.
- *
- * TODO(AGE-1902): collapse into one row once Hosted (toolset-backed) servers
- * also source from mcp_servers.
- */
+/** Table rows of the /mcp listing; gateways and servers share Name, Kind, Address, Contents. */
 
 const CELL = "px-3 py-3";
 
 function NameCell({
   name,
-  title,
   children,
 }: {
   name: string;
-  title?: string;
   children?: React.ReactNode;
 }): JSX.Element {
   return (
@@ -45,7 +38,7 @@ function NameCell({
           variant="subheading"
           as="div"
           className="group-hover:text-primary min-w-0 truncate text-sm transition-colors"
-          title={title ?? name}
+          title={name}
         >
           {name}
         </Text>
@@ -55,109 +48,31 @@ function NameCell({
   );
 }
 
-/** A Hosted server: a toolset Speakeasy serves itself. */
-export function MCPTableRow({
-  toolset,
-}: {
-  toolset: ToolsetEntry;
-}): JSX.Element {
-  const routes = useRoutes();
-  const { url: mcpUrl } = useMcpUrl(toolset);
-  const catalogIconMap = useCatalogIconMap();
-  const { data: deploymentResult } = useLatestDeployment();
-  const oauthStatus = useExternalMcpOAuthConfigStatus(toolset.slug);
-
-  const externalMcpLogoUrl = useMemo(() => {
-    const externalMcpUrn = toolset.toolUrns?.find((urn) =>
-      urn.includes(":externalmcp:"),
-    );
-    const slug = externalMcpUrn?.split(":")[2];
-    if (!slug) return undefined;
-    const matchingMcp = deploymentResult?.deployment?.externalMcps?.find(
-      (mcp) => mcp.slug === slug,
-    );
-    return matchingMcp?.registryServerSpecifier
-      ? catalogIconMap.get(matchingMcp.registryServerSpecifier)
-      : undefined;
-  }, [toolset.toolUrns, catalogIconMap, deploymentResult]);
-
-  // A server still waiting on OAuth setup opens on that step, as the card does.
-  const href =
-    oauthStatus === "required-unconfigured"
-      ? routes.mcp.details.authentication.href(toolset.slug)
-      : routes.mcp.details.href(toolset.slug);
-
-  // Same reading as MCPCard: a proxy-only toolset can't count its tools until
-  // someone signs in, so neither "1 tool" nor "0 tools" would be true.
-  const isProxyOnly =
-    toolset.tools.length > 0 &&
-    toolset.tools.every(
-      (tool) => tool.type === "externalmcp" && tool.name.endsWith(":proxy"),
-    );
-  const toolCount = toolset.tools.filter(
-    (tool) => !(tool.type === "externalmcp" && tool.name.endsWith(":proxy")),
-  ).length;
-
+function AddressCell({ url }: { url: string | undefined }): JSX.Element {
   return (
-    <DotRow
-      href={href}
-      ariaLabel={`Open MCP server ${toolset.name}`}
-      icon={
-        externalMcpLogoUrl ? (
-          <img
-            src={externalMcpLogoUrl}
-            alt={toolset.name}
-            className="h-6 w-6 object-contain"
-          />
-        ) : (
-          <Network className="text-muted-foreground h-5 w-5" />
-        )
-      }
-    >
-      <NameCell name={toolset.name}>
-        {oauthStatus === "required-unconfigured" && (
-          <Badge variant="warning">
-            <Badge.LeftIcon>
-              <AlertTriangleIcon />
-            </Badge.LeftIcon>
-            <Badge.Text>OAuth Required</Badge.Text>
-          </Badge>
-        )}
-      </NameCell>
-      <td className={CELL}>
-        <Badge variant="neutral">Hosted</Badge>
-      </td>
-      <td className={`max-w-xs ${CELL}`}>
-        {mcpUrl ? (
-          // The copy button must sit above the row's click handler.
-          <div
-            className="relative z-20 flex items-center gap-1.5"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <Text small muted className="truncate font-mono text-xs">
-              {mcpUrl.replace(/^https?:\/\//, "")}
-            </Text>
-            <CopyButton
-              text={mcpUrl}
-              size="sm"
-              icon={Link2}
-              tooltip="Copy MCP URL"
-            />
-          </div>
-        ) : (
-          <Text small muted>
-            —
+    <td className={`max-w-xs ${CELL}`}>
+      {url ? (
+        // The copy button must sit above the row's click handler.
+        <div
+          className="relative z-20 flex items-center gap-1.5"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <Text small muted className="truncate font-mono text-xs">
+            {url.replace(/^https?:\/\//, "")}
           </Text>
-        )}
-      </td>
-      <td className={CELL}>
+          <CopyButton
+            text={url}
+            size="sm"
+            icon={Link2}
+            tooltip="Copy MCP URL"
+          />
+        </div>
+      ) : (
         <Text small muted>
-          {isProxyOnly
-            ? "Tools listed once you sign in"
-            : `${toolCount} ${toolCount === 1 ? "tool" : "tools"}`}
+          —
         </Text>
-      </td>
-    </DotRow>
+      )}
+    </td>
   );
 }
 
@@ -184,17 +99,48 @@ export function GatewayTableRow({
       <td className={CELL}>
         <Badge variant="neutral">Gateway</Badge>
       </td>
+      <AddressCell url={mcpUrl} />
+      <td className={CELL}>
+        <Text small muted>
+          {`${memberCount} ${memberCount === 1 ? "member" : "members"}`}
+        </Text>
+      </td>
+    </DotRow>
+  );
+}
+
+/** The Organization Gateway: every server a person can reach. */
+export function OrganizationGatewayTableRow({
+  url,
+  isOff,
+}: {
+  url: string | undefined;
+  isOff: boolean;
+}): JSX.Element {
+  const routes = useRoutes();
+  return (
+    <DotRow
+      href={routes.mcp.organizationGateway.href()}
+      ariaLabel="Open Organization Gateway"
+      icon={<SpeakeasyMark className="h-5 w-5" />}
+    >
+      <NameCell name="Organization Gateway">
+        {isOff && <Badge variant="warning">Off</Badge>}
+      </NameCell>
+      <td className={CELL}>
+        <Badge variant="neutral">Gateway</Badge>
+      </td>
       <td className={`max-w-xs ${CELL}`}>
-        {mcpUrl ? (
+        {url ? (
           <div
             className="relative z-20 flex items-center gap-1.5"
             onClick={(e) => e.stopPropagation()}
           >
             <Text small muted className="truncate font-mono text-xs">
-              {mcpUrl.replace(/^https?:\/\//, "")}
+              {url.replace(/^https?:\/\//, "")}
             </Text>
             <CopyButton
-              text={mcpUrl}
+              text={url}
               size="sm"
               icon={Link2}
               tooltip="Copy MCP URL"
@@ -208,56 +154,79 @@ export function GatewayTableRow({
       </td>
       <td className={CELL}>
         <Text small muted>
-          {`${memberCount} ${memberCount === 1 ? "member" : "members"}`}
+          Every server your team can reach
         </Text>
       </td>
     </DotRow>
   );
 }
 
-/** A remote, tunneled, or unproxied server: an mcp_servers row. */
+/** One row per mcp_servers row, whatever its backend. */
 export function MCPServerTableRow({
   server,
+  kind,
 }: {
   server: McpServer;
+  kind: McpServerKind;
 }): JSX.Element {
   const routes = useRoutes();
-  const kindLabel = server.unproxiedMcpServerId
-    ? "Unproxied"
-    : server.tunneledMcpServerId
-      ? "Tunneled"
-      : "Remote";
+  const hosted = kind === "hosted";
+  const toolset = hosted ? server.toolset : undefined;
+  const oauthStatus = useHostedMcpOAuthConfigStatus({
+    toolset,
+    userSessionIssuerId: server.userSessionIssuerId,
+  });
+  const name = mcpServerDisplayName(server);
   return (
     <DotRow
-      href={routes.mcp.x.overview.href(mcpServerRouteParam(server))}
-      ariaLabel={`Open MCP server ${server.name || "MCP Server"}`}
+      href={mcpServerHref(routes, server, oauthStatus)}
+      ariaLabel={`Open MCP server ${name}`}
       icon={
-        <SourceMcpIcon
-          mcpServerId={server.id}
-          className="h-5 w-5 object-contain"
-        />
+        hosted ? (
+          <ExternalMcpIcon
+            externalMcpSlug={toolset?.externalMcpSlugs[0]}
+            alt={name}
+            className="h-6 w-6"
+            fallbackClassName="h-5 w-5"
+          />
+        ) : (
+          <SourceMcpIcon
+            mcpServerId={server.id}
+            className="h-5 w-5 object-contain"
+          />
+        )
       }
     >
-      <NameCell
-        name={server.name || "MCP Server"}
-        title={server.name ?? undefined}
-      />
+      <NameCell name={name}>
+        {oauthStatus === "required-unconfigured" && (
+          <Badge variant="warning">
+            <Badge.LeftIcon>
+              <AlertTriangleIcon />
+            </Badge.LeftIcon>
+            <Badge.Text>OAuth Required</Badge.Text>
+          </Badge>
+        )}
+      </NameCell>
       <td className={CELL}>
-        <Badge variant="neutral">{kindLabel}</Badge>
+        <Badge variant="neutral">{MCP_SERVER_KIND_LABEL[kind]}</Badge>
       </td>
-      <td className={CELL}>
-        <Text
-          small
-          muted
-          className="truncate font-mono text-xs"
-          title={server.slug ?? undefined}
-        >
-          {server.slug ?? "No slug yet"}
-        </Text>
-      </td>
+      {server.primaryEndpointUrl || hosted ? (
+        <AddressCell url={server.primaryEndpointUrl} />
+      ) : (
+        <td className={CELL}>
+          <Text
+            small
+            muted
+            className="truncate font-mono text-xs"
+            title={server.slug ?? undefined}
+          >
+            {server.slug ?? "No slug yet"}
+          </Text>
+        </td>
+      )}
       <td className={CELL}>
         <Text small muted>
-          —
+          {hostedToolCountLabel(toolset) ?? "—"}
         </Text>
       </td>
     </DotRow>

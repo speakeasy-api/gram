@@ -1,6 +1,6 @@
--- name: GetMetadataForToolset :one
+-- name: GetMetadataByBackendID :one
+-- Addressed by toolset id, the row counts only under the toolset's canonical wrapper, which shares its id.
 SELECT id,
-       toolset_id,
        mcp_server_id,
        project_id,
        external_documentation_url,
@@ -13,62 +13,9 @@ SELECT id,
        created_at,
        updated_at
 FROM mcp_metadata
-WHERE toolset_id = @toolset_id
-ORDER BY updated_at DESC
-LIMIT 1;
-
--- name: GetMetadataByMcpServerID :one
-SELECT id,
-       toolset_id,
-       mcp_server_id,
-       project_id,
-       external_documentation_url,
-       external_documentation_text,
-       logo_id,
-       instructions,
-       header_display_names,
-       default_environment_id,
-       installation_override_url,
-       created_at,
-       updated_at
-FROM mcp_metadata
-WHERE mcp_server_id = @mcp_server_id
-ORDER BY updated_at DESC
-LIMIT 1;
-
--- name: UpsertMetadata :one
-INSERT INTO mcp_metadata (
-    toolset_id,
-    project_id,
-    external_documentation_url,
-    external_documentation_text,
-    logo_id,
-    instructions,
-    default_environment_id,
-    installation_override_url
-) VALUES (@toolset_id, @project_id, @external_documentation_url, @external_documentation_text, @logo_id, @instructions, @default_environment_id, @installation_override_url)
-ON CONFLICT (toolset_id) WHERE toolset_id IS NOT NULL
-DO UPDATE SET project_id = EXCLUDED.project_id,
-              external_documentation_url = EXCLUDED.external_documentation_url,
-              external_documentation_text = EXCLUDED.external_documentation_text,
-              logo_id = EXCLUDED.logo_id,
-              instructions = EXCLUDED.instructions,
-              default_environment_id = EXCLUDED.default_environment_id,
-              installation_override_url = EXCLUDED.installation_override_url,
-              updated_at = clock_timestamp()
-RETURNING id,
-          toolset_id,
-          mcp_server_id,
-          project_id,
-          external_documentation_url,
-          external_documentation_text,
-          logo_id,
-          instructions,
-          header_display_names,
-          default_environment_id,
-          installation_override_url,
-          created_at,
-          updated_at;
+WHERE mcp_metadata.project_id = @project_id::uuid
+  AND mcp_metadata.mcp_server_id = @backend_id::uuid
+  AND (NOT @toolset_backend::bool OR EXISTS (SELECT 1 FROM mcp_servers s WHERE s.id = @backend_id::uuid AND s.toolset_id = s.id AND s.project_id = @project_id::uuid));
 
 -- name: UpsertMetadataByMcpServerID :one
 INSERT INTO mcp_metadata (
@@ -91,7 +38,6 @@ DO UPDATE SET project_id = EXCLUDED.project_id,
               installation_override_url = EXCLUDED.installation_override_url,
               updated_at = clock_timestamp()
 RETURNING id,
-          toolset_id,
           mcp_server_id,
           project_id,
           external_documentation_url,
@@ -119,7 +65,6 @@ DO UPDATE SET logo_id = EXCLUDED.logo_id,
               updated_at = clock_timestamp()
 WHERE mcp_metadata.logo_id IS NULL
 RETURNING id,
-          toolset_id,
           mcp_server_id,
           project_id,
           external_documentation_url,
@@ -132,16 +77,63 @@ RETURNING id,
           created_at,
           updated_at;
 
+-- name: SetHeaderDisplayNames :one
+UPDATE mcp_metadata
+SET header_display_names = @header_display_names
+WHERE id = @id
+  AND project_id = @project_id
+RETURNING id,
+          mcp_server_id,
+          project_id,
+          external_documentation_url,
+          external_documentation_text,
+          logo_id,
+          instructions,
+          header_display_names,
+          default_environment_id,
+          installation_override_url,
+          created_at,
+          updated_at;
+
+-- name: LockMetadataByBackendID :one
+-- The same match as GetMetadataByBackendID.
+SELECT id,
+       mcp_server_id,
+       project_id,
+       external_documentation_url,
+       external_documentation_text,
+       logo_id,
+       instructions,
+       header_display_names,
+       default_environment_id,
+       installation_override_url,
+       created_at,
+       updated_at
+FROM mcp_metadata
+WHERE mcp_metadata.project_id = @project_id::uuid
+  AND mcp_metadata.mcp_server_id = @backend_id::uuid
+  AND (NOT @toolset_backend::bool OR EXISTS (SELECT 1 FROM mcp_servers s WHERE s.id = @backend_id::uuid AND s.toolset_id = s.id AND s.project_id = @project_id::uuid))
+FOR UPDATE;
+
+-- name: AcquireMetadataBackendLock :exec
+-- Serializes saves for one backend id, so a save sees any row a concurrent save inserted for it.
+SELECT pg_advisory_xact_lock(hashtextextended('mcp_metadata:' || (@project_id::uuid)::text || ':' || (@backend_id::uuid)::text, 0));
+
 -- name: GetHeaderDisplayNames :one
+-- Addressed by toolset id: the row counts only under the toolset's canonical wrapper.
 SELECT header_display_names
 FROM mcp_metadata
-WHERE toolset_id = @toolset_id;
+WHERE mcp_metadata.project_id = @project_id::uuid
+  AND mcp_metadata.mcp_server_id = @backend_id::uuid
+  AND EXISTS (SELECT 1 FROM mcp_servers s WHERE s.id = @backend_id::uuid AND s.toolset_id = s.id AND s.project_id = @project_id::uuid);
 
 -- name: GetHeaderDisplayNamesByToolsetIDs :many
-SELECT toolset_id, header_display_names
-FROM mcp_metadata
-WHERE project_id = @project_id
-  AND toolset_id = ANY(@toolset_ids::uuid[]);
+-- A row counts only under the toolset's canonical wrapper, which shares its id.
+SELECT m.mcp_server_id::uuid AS toolset_id, m.header_display_names
+FROM mcp_metadata m
+WHERE m.project_id = @project_id
+  AND m.mcp_server_id = ANY(@toolset_ids::uuid[])
+  AND EXISTS (SELECT 1 FROM mcp_servers s WHERE s.id = m.mcp_server_id AND s.toolset_id = s.id AND s.project_id = m.project_id);
 
 -- name: GetHeaderDisplayNamesByMcpServerID :one
 SELECT header_display_names

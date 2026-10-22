@@ -134,7 +134,7 @@ func sharedAuthorize(t *testing.T, ctx context.Context, ti *testInstance, f shar
 	q := url.Values{
 		"response_type":         {"code"},
 		"client_id":             {f.client.ClientID},
-		"redirect_uri":          {sharedTestRedirectURI},
+		"redirect_uri":          {f.client.RedirectUris[0]},
 		"state":                 {"client-state"},
 		"code_challenge":        {challenge},
 		"code_challenge_method": {"S256"},
@@ -227,7 +227,7 @@ func TestSharedAuthorizationServer_ServesMetadataAtBothLocations(t *testing.T) {
 		require.Equal(t, f.issuerURL+"/token", meta["token_endpoint"])
 		require.Equal(t, f.issuerURL+"/register", meta["registration_endpoint"])
 		require.Equal(t, f.issuerURL+"/revoke", meta["revocation_endpoint"])
-		require.ElementsMatch(t, []any{"authorization_code", "refresh_token", "urn:ietf:params:oauth:grant-type:jwt-bearer"}, meta["grant_types_supported"])
+		require.ElementsMatch(t, []any{"authorization_code", "refresh_token", "client_credentials", "urn:ietf:params:oauth:grant-type:jwt-bearer"}, meta["grant_types_supported"])
 		require.Equal(t, true, meta["authorization_response_iss_parameter_supported"])
 	}
 }
@@ -425,6 +425,7 @@ func TestSharedAuthorizationServer_AuthorizeRefusesMissingOrForeignResource(t *t
 		"unknown":  {f.resource(ti, "no-such-server-"+uuid.NewString()[:8])},
 		"host":     {"https://unknown.example.com/mcp/" + f.slugA},
 		"case":     {strings.ToUpper(f.resource(ti, f.slugA))},
+		"xmcp":     {ti.serverURL.JoinPath("x", "mcp", f.slugA).String()},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
@@ -779,28 +780,6 @@ func TestSharedAuthorizationServer_ModeSwitchClosesInFlightFlows(t *testing.T) {
 	req = req.WithContext(context.WithValue(ctx, chi.RouteCtxKey, routeCtx))
 	err = ti.service.HandleConsent(httptest.NewRecorder(), req)
 	requireOopsCode(t, err, oops.CodeUnauthorized)
-}
-
-func TestSharedAuthorizationServer_ResolvesXMCPResource(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestMCPService(t)
-	f := seedSharedIssuer(t, ctx, ti)
-	resource := ti.serverURL.JoinPath("x", "mcp", f.slugA).String()
-
-	verifier := pkceVerifier(t)
-	code, _ := sharedAuthorizationCode(t, ctx, ti, f, verifier, resource)
-	w := sharedToken(t, ctx, ti, f.issuer.ID.String(), url.Values{
-		"grant_type":    {"authorization_code"},
-		"code":          {code},
-		"redirect_uri":  {sharedTestRedirectURI},
-		"client_id":     {f.client.ClientID},
-		"code_verifier": {verifier},
-	})
-	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
-	aud, err := unverifiedClaims(t, decodeSharedTokenResponse(t, w).AccessToken).GetAudience()
-	require.NoError(t, err)
-	require.Equal(t, jwt.ClaimStrings{resource}, aud)
 }
 
 // A remote session connect from the shared consent page returns there, while

@@ -72,6 +72,17 @@ WHERE id = @id
   AND expires_at > created_at
   AND expires_at <= created_at + INTERVAL '365 days';
 
+-- name: GetActiveLegacyAPIKeyForAdmission :one
+-- A legacy key is admitted as its own principal only while its live row is in
+-- the tenant, unrevoked and unexpired; agent keys keep their own admission.
+SELECT id, project_id, scopes
+FROM api_keys
+WHERE id = @id
+  AND organization_id = @organization_id
+  AND deleted IS FALSE
+  AND subject_urn IS NULL
+  AND (expires_at IS NULL OR expires_at > clock_timestamp());
+
 -- name: CurrentDatabaseTime :one
 -- The database clock, used as the cutoff a credential rotation retires keys
 -- against so the comparison shares a clock with api_keys.created_at.

@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 	agentgen "github.com/speakeasy-api/gram/server/gen/agents"
 	gen "github.com/speakeasy-api/gram/server/gen/keys"
+	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/agentmanagement"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -35,19 +36,29 @@ func TestKeysService_InitialAgentPolicyCannotElevateCredentialAuthority(t *testi
 			caller := urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID)
 			owner := urn.NewPrincipal(urn.PrincipalTypeUser, ownerID)
 			upsertGrant(t, ctx, ti, caller, authz.ScopeAgentWrite, "*")
+			upsertGrant(t, ctx, ti, caller, authz.ScopeMCPConnect, "*")
+			upsertGrant(t, ctx, ti, owner, authz.ScopeMCPConnect, "*")
 			logger := testenv.NewLogger(t)
 			engine := authz.NewEngine(logger, ti.conn, func(context.Context, string) (bool, error) { return false, nil }, nil)
-			management := agentmanagement.NewService(logger, testenv.NewTracerProvider(t), ti.conn, ti.sessionManager, engine, audit.NewLogger(), ti.features, nil, nil)
+			management := agentmanagement.NewService(logger, testenv.NewTracerProvider(t), ti.conn, ti.sessionManager, engine, audit.NewLogger(), nil, nil)
 			agent, err := management.Create(ctx, &agentgen.CreatePayload{Name: "Initial policy agent", OwnerUserID: &ownerID, PolicyGrants: []*agentgen.AgentPolicyGrantForm{{Scope: string(authz.ScopeMCPConnect), Effect: "allow", Selector: &agentgen.AgentPolicySelector{ResourceKind: "mcp", ResourceID: "*"}}}})
 			require.NoError(t, err)
 			agentID, err := uuid.Parse(agent.ID)
 			require.NoError(t, err)
 			upsertGrant(t, ctx, ti, caller, authz.ScopeAgentAuthorize, agent.ID)
-			limited, broad := owner, caller
+			limited := owner
 			if constrained == "authorizer" {
-				limited, broad = caller, owner
+				limited = caller
 			}
-			upsertGrant(t, ctx, ti, broad, authz.ScopeMCPConnect, "*")
+			// Policy setup requires both humans' authority; removing it afterward
+			// must still independently constrain credential issuance.
+			selectorRaw, err := authz.NewSelector(authz.ScopeMCPConnect, "*").MarshalJSON()
+			require.NoError(t, err)
+			deleted, err := accessrepo.New(ti.conn).DeletePrincipalGrantByIdentity(ctx, accessrepo.DeletePrincipalGrantByIdentityParams{
+				OrganizationID: authCtx.ActiveOrganizationID, PrincipalUrn: limited, Scope: string(authz.ScopeMCPConnect), Selectors: selectorRaw,
+			})
+			require.NoError(t, err)
+			require.EqualValues(t, 1, deleted)
 			payload := agentKeyPayload(agentID, *authCtx.ProjectID)
 			payload.RequestedGrants = []*gen.AgentPolicyGrantForm{{Scope: string(authz.ScopeMCPConnect), Effect: "allow", Selector: &gen.AgentPolicySelector{ResourceKind: "mcp", ResourceID: "example-server", Tool: new("allowed-tool")}}}
 			// The initial broad policy and explicit management rights cannot supply missing live resource rights.

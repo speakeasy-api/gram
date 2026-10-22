@@ -1,12 +1,10 @@
+import { AgentGatewayInstall } from "./AgentGatewayInstall";
 import { sessionAccountIdentity } from "@/components/sessions/session-account-identity";
 import { useEffect, useRef, useState } from "react";
 import { Check } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useOrganization, useSession } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
-import { useFeatureFlag, type FeatureFlagResult } from "@/hooks/useFeatureFlag";
-import { FEATURE_FLAGS } from "@/lib/featureFlags";
-import { SettingsSection } from "@/components/page-templates";
 import { Button } from "@/components/ui/Button";
 import {
   Select,
@@ -15,7 +13,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/Select";
-import { CopyButton } from "@/components/ui/CopyButton";
 import { AgentKeyReview, type KeyReviewAccount } from "./AgentKeyReview";
 import type { RemoteSession } from "@gram/client/models/components/remotesession.js";
 import type { ListBindingsResponseBody } from "@gram/client/models/components/listbindingsresponsebody.js";
@@ -25,9 +22,16 @@ import { queryKeyRemoteSessionsListBindings } from "@gram/client/react-query/rem
 import { Dialog } from "@/components/ui/Dialog";
 import { Input } from "@/components/ui/Input";
 import { Text } from "@/components/ui/Text";
-import { Table, type Column } from "@/components/ui/Table";
+import { agentIssuanceBlocked } from "./agent-issuance";
+import {
+  IdentityPanel,
+  IdentityPanelEmpty,
+  IdentityPanelRow,
+} from "@/pages/identities/IdentityPanel";
 import type { ManagedAgent } from "@gram/client/models/components/managedagent.js";
 import type { Key } from "@gram/client/models/components/key.js";
+import { GramError } from "@gram/client/models/errors/gramerror.js";
+import { dateTimeFormatters } from "@/lib/dates";
 import type { AgentPolicyGrantForm } from "@gram/client/models/components/agentpolicygrantform.js";
 import {
   buildRequestedGrants,
@@ -49,12 +53,20 @@ const security = { sessionHeaderGramSession: "" };
 export function AgentAPIKeys({
   agent,
   creation = false,
+  federated = false,
   onCreate,
   onDone,
   onBusy,
 }: {
   agent: ManagedAgent;
   creation?: boolean;
+  /**
+   * The agent signs in with a platform's tokens, so a key is optional.
+   * "unknown" where the caller's own read of that has not settled: the panel
+   * then claims neither, rather than telling a federated agent it cannot
+   * authenticate.
+   */
+  federated?: boolean | "unknown";
   onCreate?: () => void;
   onDone?: () => void;
   onBusy?: (busy: boolean) => void;
@@ -63,42 +75,49 @@ export function AgentAPIKeys({
   // Delegable candidates are specific to the authorizer, and the signed-in
   // user can change without the organization changing.
   const { user } = useSession();
-  const flag = useFeatureFlag(FEATURE_FLAGS.agentCredentials);
+  // The mode is part of the key: both branches render the same component in
+  // the same position now, so without it React keeps the listing's state when
+  // the caller switches to issuance, and the wizard opens closed.
   if (creation)
     return (
       <AgentAPIKeysContent
-        key={`${organization.id}:${user.id}:${agent.id}:${agent.permissions.authorize}`}
+        key={`creation:${organization.id}:${user.id}:${agent.id}:${agent.permissions.authorize}`}
         agent={agent}
         organizationId={organization.id}
         userId={user.id}
-        flag={flag}
         creation
         onDone={onDone}
         onBusy={onBusy}
       />
     );
+  // The listing brings its own panel, the same one the federated platforms
+  // beside it use, so the caller supplies only the section around them.
   return (
-    <SettingsSection>
-      <SettingsSection.Header>
-        <SettingsSection.Title>API keys</SettingsSection.Title>
-        <SettingsSection.Description>
-          Credentials delegated to this agent, limited by its policy, its
-          owner's live permissions, and your own.
-        </SettingsSection.Description>
-      </SettingsSection.Header>
-      <SettingsSection.Panel>
-        <SettingsSection.Body>
-          <AgentAPIKeysContent
-            key={`${organization.id}:${user.id}:${agent.id}:${agent.permissions.authorize}`}
-            agent={agent}
-            organizationId={organization.id}
-            userId={user.id}
-            flag={flag}
-            onCreate={onCreate}
-          />
-        </SettingsSection.Body>
-      </SettingsSection.Panel>
-    </SettingsSection>
+    <AgentAPIKeysContent
+      key={`${organization.id}:${user.id}:${agent.id}:${agent.permissions.authorize}`}
+      agent={agent}
+      organizationId={organization.id}
+      userId={user.id}
+      federated={federated}
+      onCreate={onCreate}
+    />
+  );
+}
+
+/**
+ * One date shape for every credential column on this page: the day, with the
+ * exact moment on hover. The page previously mixed a numeric locale string, a
+ * truncated timestamp and a relative label in adjacent columns.
+ */
+function KeyDate({ date }: { date: Date }): JSX.Element {
+  return (
+    <time
+      className="tabular-nums"
+      title={dateTimeFormatters.full.format(date)}
+      dateTime={date.toISOString()}
+    >
+      {dateTimeFormatters.day.format(date)}
+    </time>
   );
 }
 
@@ -106,8 +125,8 @@ function AgentAPIKeysContent({
   agent,
   organizationId,
   userId,
-  flag,
   creation = false,
+  federated = false,
   onCreate,
   onDone,
   onBusy,
@@ -115,22 +134,18 @@ function AgentAPIKeysContent({
   agent: ManagedAgent;
   organizationId: string;
   userId: string;
-  flag: FeatureFlagResult;
   creation?: boolean;
+  federated?: boolean | "unknown";
   onCreate?: () => void;
   onDone?: () => void;
   onBusy?: (busy: boolean) => void;
 }) {
   const sdk = useSdkClient();
   const queryClient = useQueryClient();
-  const enabled = flag.status === "enabled";
-  const rolloutEnabled = useRef(enabled);
+  const mounted = useRef(true);
   const canManage = agent.permissions.authorize;
-  const canIssue =
-    enabled &&
-    canManage &&
-    agent.lifecycle === "active" &&
-    !agent.ownerReassignmentRequiredAt;
+  const issuanceBlocked = agentIssuanceBlocked(agent, canManage);
+  const canIssue = issuanceBlocked === null;
   const [open, setOpen] = useState(creation);
   const [step, setStep] = useState(0);
   const [inventory, setInventory] = useState<KeyServer[]>([]);
@@ -145,12 +160,11 @@ function AgentAPIKeysContent({
   const [reviewGrants, setReviewGrants] = useState<AgentPolicyGrantForm[]>([]);
   const [reviewAccounts, setReviewAccounts] = useState<KeyReviewAccount[]>([]);
   const [secret, setSecret] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [revoke, setRevoke] = useState<Key | null>(null);
   const keys = useListAPIKeys({ agentId: agent.id }, security, {
     queryKeyHashFn: (key) => JSON.stringify([organizationId, key]),
-    enabled: enabled && canManage,
+    enabled: canManage,
     retry: false,
     throwOnError: false,
   });
@@ -218,30 +232,21 @@ function AgentAPIKeysContent({
   useEffect(() => {
     onBusy?.(navigationBusy);
   }, [navigationBusy, onBusy]);
-  const resetCreation = create.reset;
+  // Issuance resolves after this component may have unmounted; the secret is
+  // shown only while it is still on screen.
   useEffect(() => {
-    rolloutEnabled.current = enabled;
-    if (!enabled) {
-      setIssued(false);
-      setOpen(false);
-      setSecret(null);
-      setCopied(false);
-      resetCreation();
-      if (creation && flag.status !== "loading") onDone?.();
-    }
+    mounted.current = true;
     return () => {
-      rolloutEnabled.current = false;
+      mounted.current = false;
     };
-  }, [enabled, resetCreation, creation, flag.status, onDone]);
+  }, []);
   const [revokedIds, setRevokedIds] = useState<string[]>([]);
   const knownKeys = keys.data?.keys.filter(
     (key) => !revokedIds.includes(key.id),
   );
   const revocation = useRevokeAPIKeyMutation({ retry: false });
-  const unavailable =
-    keys.isError && "statusCode" in keys.error && keys.error.statusCode === 404;
   const refresh = () => {
-    if (!rolloutEnabled.current) return;
+    if (!mounted.current) return;
     void keys.refetch();
     void queryClient.invalidateQueries({
       queryKey: ["@gram/client", "keys", "list"],
@@ -250,7 +255,6 @@ function AgentAPIKeysContent({
   const close = () => {
     setOpen(false);
     setSecret(null);
-    setCopied(false);
     setIssued(false);
     setName("");
     setNarrowings({});
@@ -281,6 +285,46 @@ function AgentAPIKeysContent({
     return { expiresAt, reason };
   };
   const expiryReason = expiryValidation(Date.now()).reason;
+  // One place decides whether the wizard can move on, and says why not. The
+  // order runs from the conditions the user cannot fix (no authority, nothing
+  // to grant) to the ones they can (pick a server, name the key).
+  const blockedReason: string | null = !canIssue
+    ? "You cannot issue keys for this agent."
+    : !discoveryComplete
+      ? "Loading what this agent can be delegated…"
+      : serversBusy
+        ? "Checking the servers you selected…"
+        : !servers.length
+          ? "Select at least one MCP server."
+          : scopedGrants.length === 0
+            ? "The agent's policy delegates nothing on these servers."
+            : step >= 1 && !accountsReady
+              ? "Connect an account for every server that needs one."
+              : step >= 2 && !name.trim()
+                ? "Name this key."
+                : step >= 2 && expiryReason
+                  ? expiryReason
+                  : step >= 2 && !hasSelections
+                    ? "Select at least one permission."
+                    : null;
+  // A name is required, so the wizard offers one rather than blocking on an
+  // empty field. Names are unique per organization, so a name already in the
+  // list is dated to keep the suggestion usable as typed.
+  const takenNames = (knownKeys ?? []).map((key) => key.name).join("\u0000");
+  useEffect(() => {
+    // Nothing is suggested until the list has been read once: a name chosen
+    // against an empty list sticks, because the effect leaves a name the user
+    // may have typed alone, and creation then fails on the uniqueness check.
+    if (step !== 2 || keys.isPending) return;
+    setName((current) => {
+      if (current.trim()) return current;
+      const base = `${agent.name} key`;
+      const taken = new Set(takenNames.split("\u0000"));
+      if (!taken.has(base)) return base;
+      const dated = `${base} ${new Date().toISOString().slice(0, 10)}`;
+      return taken.has(dated) ? "" : dated;
+    });
+  }, [step, agent.name, takenNames, keys.isPending]);
   const returnToStep = (next: number) => {
     setStep(next);
     setNarrowings({});
@@ -447,70 +491,37 @@ function AgentAPIKeysContent({
       },
       {
         onSuccess: (key) => {
-          if (rolloutEnabled.current) {
+          if (mounted.current) {
             setIssued(true);
             setSecret(key.key ?? null);
           }
           create.reset();
           refresh();
         },
-        onError: () => {
+        onError: (failure) => {
           // A failed issuance may reflect a live policy change. Withdraw the
           // reviewed ceiling even when the error does not identify its cause.
           setNarrowings({});
           setReviewGrants([]);
           setReviewAccounts([]);
           setStep(2);
-          if (rolloutEnabled.current) void delegable.refetch();
+          if (mounted.current) void delegable.refetch();
+          // A name already in use is the one failure the caller can fix from
+          // this screen, and the server names it. Everything else keeps the
+          // policy explanation, which is what the other causes have in common.
+          const conflict =
+            failure instanceof GramError &&
+            failure.statusCode === 409 &&
+            failure.message;
           setError(
-            "Could not create API key. Check that the requested grants are allowed by the agent policy, the owner's live permissions and your own, and that the agent is active with a valid owner.",
+            conflict ||
+              "Could not create API key. Check that the requested grants are allowed by the agent policy, the owner's live permissions and your own, and that the agent is active with a valid owner.",
           );
           create.reset();
         },
       },
     );
   };
-  const columns: Column<Key>[] = [
-    { key: "name", header: "Name", render: (key) => key.name },
-    { key: "keyPrefix", header: "Prefix", render: (key) => key.keyPrefix },
-    {
-      key: "expiresAt",
-      header: "Expires",
-      // Absolute, like agent session expiry: a relative label reads a future
-      // expiry as elapsed time, so a fresh 90-day key showed "3 months ago".
-      render: (key) =>
-        key.expiresAt ? (
-          // Table cells clip their overflow, so a long localized date needs a
-          // truncation and the full value on hover.
-          <time
-            className="min-w-0 truncate"
-            title={key.expiresAt.toLocaleString()}
-            dateTime={key.expiresAt.toISOString()}
-          >
-            {key.expiresAt.toLocaleString()}
-          </time>
-        ) : (
-          "—"
-        ),
-    },
-    {
-      key: "id",
-      header: "",
-      render: (key) => (
-        <Button
-          size="sm"
-          variant="destructive-secondary"
-          onClick={() => {
-            setError(null);
-            setRevoke(key);
-          }}
-        >
-          Revoke API key
-        </Button>
-      ),
-    },
-  ];
-  if (!enabled) return <Text muted>Agent API keys are unavailable.</Text>;
   if (!canManage)
     return (
       <Text muted>
@@ -520,59 +531,114 @@ function AgentAPIKeysContent({
   return (
     <>
       {!creation && (
-        <>
-          {enabled && keys.isLoading ? (
-            <Text muted>Loading API keys…</Text>
-          ) : enabled && keys.isError ? (
-            <div role="alert">
-              <Text>
-                {unavailable
-                  ? "Agent API keys are unavailable. The credential feature may be disabled."
-                  : "Could not load API keys."}
-              </Text>
-              <Button variant="secondary" onClick={() => void keys.refetch()}>
-                Retry API keys
-              </Button>
-            </div>
-          ) : null}
+        <IdentityPanel
+          title="API keys"
+          loading={keys.isPending}
+          // A failed refetch keeps the keys it already has: they were really
+          // returned, and blanking the list throws away the only true thing
+          // the panel holds. The failure is said above them instead.
+          error={keys.isError && !keys.data}
+          refreshFailed={keys.isError && !!keys.data}
+          onRetry={() => void keys.refetch()}
+          loadingRows={1}
+          footer={
+            issuanceBlocked
+              ? `${issuanceBlocked} Existing keys can still be revoked.`
+              : "API keys are long-lived. Anyone holding one acts as this agent, so store them in a secret manager and revoke any that leak."
+          }
+          action={
+            <Button
+              size="sm"
+              variant={knownKeys?.length ? "secondary" : "primary"}
+              disabled={!canIssue}
+              onClick={() => {
+                onCreate?.();
+              }}
+            >
+              Issue a key
+            </Button>
+          }
+        >
           {knownKeys?.length ? (
-            <Table
-              data={knownKeys}
-              columns={columns}
-              rowKey={(key) => key.id}
-            />
-          ) : keys.data ? (
-            <Text muted>No API keys yet</Text>
-          ) : null}
-          {!canIssue && (
+            knownKeys.map((key) => (
+              <IdentityPanelRow
+                key={key.id}
+                title={key.name}
+                // Prefix, issue date and expiry together: which key a machine
+                // holds is remembered as the one issued then, and the expiry
+                // is the next thing anyone asks of it.
+                detail={
+                  <span className="flex flex-wrap items-center gap-x-2">
+                    <span className="font-mono">{key.keyPrefix}</span>
+                    <span aria-hidden="true">·</span>
+                    <span>
+                      Issued{" "}
+                      {key.createdAt ? <KeyDate date={key.createdAt} /> : "—"}
+                    </span>
+                    <span aria-hidden="true">·</span>
+                    <span>
+                      Expires{" "}
+                      {key.expiresAt ? <KeyDate date={key.expiresAt} /> : "—"}
+                    </span>
+                  </span>
+                }
+                trailing={
+                  <Button
+                    size="sm"
+                    variant="destructive-secondary"
+                    onClick={() => {
+                      setError(null);
+                      setRevoke(key);
+                    }}
+                    aria-label={`Revoke API key ${key.name}`}
+                  >
+                    Revoke
+                  </Button>
+                }
+              />
+            ))
+          ) : (
+            // The state that matters most on this page: an identity nothing
+            // is holding yet, and the one step that changes that.
+            <IdentityPanelEmpty>
+              {federated === "unknown"
+                ? // Whether a key is this agent's only way in is not settled
+                  // yet, and the guess that it is tells a federated agent it
+                  // cannot authenticate.
+                  "No key issued."
+                : federated
+                  ? "No key issued. This agent signs in with its platform's own tokens, so it only needs a key for a runtime that cannot do that."
+                  : "No key issued yet. The agent cannot authenticate until you issue one and install it where it runs."}
+            </IdentityPanelEmpty>
+          )}
+        </IdentityPanel>
+      )}
+      {creation && open && (
+        <div className="space-y-6">
+          {/* Each step states its own purpose, so the shell speaks only for
+              the one state that has none of its own: the issued key. */}
+          {issued && (
             <Text muted>
-              Issuance requires an active agent with a valid owner and
-              credential authorization. Existing keys can still be revoked.
+              This key is shown only once. Copy it now and store it securely.
             </Text>
           )}
-          <Button
-            disabled={!canIssue || unavailable}
-            onClick={() => {
-              onCreate?.();
-            }}
-          >
-            Create API key
-          </Button>
-        </>
-      )}
-      {creation && open && enabled && (
-        <div className="space-y-6">
-          <Text muted>
-            {issued
-              ? "This key is shown only once. Copy it now and store it securely."
-              : "Choose where this key can connect and what it can do. Choose an expiration of up to 365 days."}
-          </Text>
+          {/* At the top of the step, not below the buttons: the old position
+              put a failure off-screen on a long step, so a click that did
+              nothing looked like a broken button. */}
+          {error && (
+            <p
+              role="alert"
+              className="border-destructive text-destructive border p-3 text-sm"
+            >
+              {error}
+            </p>
+          )}
           {!issued && (
             <ol
               aria-label="Creation steps"
               className="flex flex-wrap gap-4 text-sm"
             >
-              {["MCP servers", "Accounts", "Permissions", "Review"].map(
+              {["Servers", "Accounts", "Access", "Review"].map(
                 (label, index) => (
                   <li key={label} className="min-w-32 flex-1">
                     <button
@@ -624,31 +690,19 @@ function AgentAPIKeysContent({
           )}
           {issued ? (
             <div className="space-y-4">
-              <h2 className="text-lg font-semibold">Save your API key</h2>
-              {secret ? (
-                <code className="block break-all">{secret}</code>
-              ) : (
+              {secret ? null : (
                 <Text role="alert">
                   The key was created but its secret was not returned. Revoke it
                   from the agent page before creating another.
                 </Text>
               )}
-              <ServerEndpoints servers={servers} />
-              <Button
-                disabled={!secret}
-                onClick={() => {
-                  if (!secret) return;
-                  void navigator.clipboard.writeText(secret).then(
-                    () => setCopied(true),
-                    () => setError("Could not copy API key. Copy it manually."),
-                  );
-                }}
-              >
-                {copied ? "Copied" : "Copy API key"}
-              </Button>
-              <Button variant="secondary" onClick={close}>
-                Done
-              </Button>
+              <h2 className="text-lg font-semibold">Connect your agent</h2>
+              <AgentGatewayInstall agentID={agent.id} secret={secret} />
+              <div className="flex justify-end border-t pt-5">
+                <Button variant="secondary" onClick={close}>
+                  Done
+                </Button>
+              </div>
             </div>
           ) : step >= 2 ? (
             <form
@@ -660,14 +714,18 @@ function AgentAPIKeysContent({
             >
               {step === 2 ? (
                 <>
-                  <h2 className="text-lg font-semibold">Choose permissions</h2>
-                  <label className="block space-y-2">
+                  <h2 className="text-lg font-semibold">Choose access</h2>
+                  <Text small muted>
+                    Pick what this key may do on the servers you chose. Nothing
+                    is selected by default.
+                  </Text>
+                  <label className="block space-y-2 text-sm font-medium">
                     Key name
                     <Input required value={name} onChange={setName} />
                   </label>
                   <Text small muted>
-                    Select access for your servers, then choose the tools this
-                    key can use.
+                    Names are unique in the organization. Say where the key
+                    lives — the laptop, the CI job, the container.
                   </Text>
                   <div className="space-y-2">
                     <label
@@ -756,37 +814,33 @@ function AgentAPIKeysContent({
                   Cancel
                 </Button>
               </div>
-              <Button
-                title={expiryReason}
-                disabled={
-                  !canIssue ||
-                  create.isPending ||
-                  serversBusy ||
-                  !discoveryComplete ||
-                  !servers.length ||
-                  scopedGrants.length === 0 ||
-                  (step >= 1 && !accountsReady) ||
-                  (step >= 2 &&
-                    (!discoveryComplete ||
-                      !hasSelections ||
-                      !name.trim() ||
-                      !!expiryReason))
-                }
-                onClick={() =>
-                  step < 2 ? setStep(step + 1) : issue(step === 2)
-                }
-              >
-                {create.isPending
-                  ? "Creating…"
-                  : step < 2
-                    ? "Continue"
-                    : step === 2
-                      ? "Review key"
-                      : "Create key"}
-              </Button>
+              <div className="flex items-center gap-3">
+                {/* A disabled primary with no stated reason is the wizard's
+                    commonest dead end, so the gate says what it is waiting
+                    for rather than leaving the button silently inert. */}
+                {blockedReason && !create.isPending && (
+                  <Text muted small>
+                    {blockedReason}
+                  </Text>
+                )}
+                <Button
+                  title={blockedReason ?? undefined}
+                  disabled={!!blockedReason || create.isPending}
+                  onClick={() =>
+                    step < 2 ? setStep(step + 1) : issue(step === 2)
+                  }
+                >
+                  {create.isPending
+                    ? "Creating…"
+                    : step < 2
+                      ? "Continue"
+                      : step === 2
+                        ? "Review key"
+                        : "Create key"}
+                </Button>
+              </div>
             </div>
           )}
-          {error && <p role="alert">{error}</p>}
         </div>
       )}
       <Dialog
@@ -882,39 +936,6 @@ function DelegableGrantSection({
       <Button type="button" variant="secondary" onClick={onRetry}>
         Retry permissions
       </Button>
-    </div>
-  );
-}
-
-function ServerEndpoints({ servers }: { servers: KeyServer[] }) {
-  return (
-    <div className="space-y-3">
-      {servers.map((server) => (
-        <div key={server.id}>
-          <Text className="font-medium">{server.name}</Text>
-          {server.endpoints?.length ? (
-            server.endpoints.map((url) => (
-              <div
-                key={url}
-                className="flex items-center gap-2 rounded-md border p-3"
-              >
-                <code className="min-w-0 flex-1 break-all text-sm">{url}</code>
-                <CopyButton text={url} tooltip="Copy server URL" />
-              </div>
-            ))
-          ) : (
-            <Text small muted>
-              {server.kind === "Unproxied"
-                ? "Unproxied servers require their own upstream connection and do not accept this Speakeasy key."
-                : "No connection URL is available. Open this server’s settings to configure its endpoint."}
-            </Text>
-          )}
-        </div>
-      ))}
-      <Text small muted>
-        Use the key as a Bearer token only with Speakeasy endpoints. Do not send
-        it to an upstream server.
-      </Text>
     </div>
   );
 }

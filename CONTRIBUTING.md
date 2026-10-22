@@ -4,6 +4,38 @@ Run `./zero` until it succeeds. This script is what you will use to run the dash
 
 The main dependencies for this project are Mise and Docker. The `./zero` script will guide you to install these if they are not found.
 
+### Agentation
+
+Optional dashboard annotation toolbar. From your worktree, run:
+
+```sh
+mise run start:agentation
+```
+
+Setup and any needed dashboard restart are handled for you. Refresh the page. You can close the terminal.
+
+Stop with `pitchfork stop agentation` (clears annotations). It won't start again automatically.
+
+### Development over Tailscale
+
+With the Tailscale CLI installed, logged in, and a Tailnet DNS name assigned to this machine, `./zero` offers to configure remote development before generating TLS certificates. Accepting saves the DNS name as `GRAM_HOST`, switches `GRAM_BIND_IP` to the machine's Tailnet IP (preferring IPv4), and refreshes their dependent settings in `mise.local.toml`. Assigned ports and explicit per-service listener overrides are preserved. The machine's DNS name and IPs are also included in the mkcert certificate. Other devices must trust the local mkcert CA.
+
+Services using `GRAM_BIND_IP` default to `127.0.0.1` for local development; Tailscale is optional. Accepting Tailscale setup opts these services into listening on the Tailnet address. Health/control listeners stay on `127.0.0.1` independently of the public bind address. The dashboard and parking server have separate listener settings.
+
+Declining adds `zero:tailscale` to the comma-separated `GRAM_ZERO_SKIP` setting. That task also honors `*`. Completed setup does not prompt again unless forced or the machine's hostname, IPs, shared bind address, or dependent templates change. To retry setup, run `mise run zero:tailscale --force`, then `mise run zero:tls` and restart the stack with `mise run start`. Agent-mode setup skips the interactive Tailscale step.
+
+`GRAM_SSL_EXTRA_HOSTS` accepts comma-separated DNS names or bare IP addresses, not URLs or hostnames with ports. Invalid entries are rejected before TLS configuration or CA trust changes.
+
+When you accept Tailscale configuration, setup stages the edits and applies them with an atomic replacement after successful writes. Concurrent-edit detection is best-effort, not a shared writer lock: avoid editing `mise.local.toml` or running other configuration-writing mise commands while setup saves it.
+
+### Local assistant callbacks from Docker
+
+On native Linux Docker, the `assistant-relay` Pitchfork daemon forwards TCP from the default Docker bridge gateway to `GRAM_SERVER_ADDRESS`. It uses the port from `GRAM_ASSISTANT_RUNTIME_SERVER_URL` when that override targets `host.docker.internal`; without an override it uses the port from `GRAM_SERVER_URL`. Runtime containers keep using `host.docker.internal` while the API stays on loopback (or an opted-in Tailnet address). HTTPS is the default, and TLS passes through unchanged, including the existing certificate and runtime CA trust. An explicitly configured HTTP-only development stack remains HTTP through the relay. The relay starts before the server and worker and stops with the stack.
+
+If the API already listens on the gateway or a wildcard address at the callback port, the relay does not open another listener. Docker Desktop uses its built-in host forwarding instead; its VM bridge address is not bound on the host, and `GRAM_ASSISTANT_RELAY_HOST` does not enable a relay there. An explicit `GRAM_ASSISTANT_RUNTIME_SERVER_URL` using a hostname other than `host.docker.internal` also bypasses the relay.
+
+For a customized Docker `host-gateway`, set `GRAM_ASSISTANT_RELAY_HOST` in `mise.local.toml` to the corresponding local interface IP. The relay never falls back to a wildcard listener. If Docker discovery fails or the auto-detected bridge gateway is not a local interface (as with some CI or remote Docker engines), the relay logs that it is inactive and lets the rest of the stack start. Assistant callbacks in those environments need an explicit container-reachable `GRAM_ASSISTANT_RUNTIME_SERVER_URL`. An invalid explicit `GRAM_ASSISTANT_RELAY_HOST` still fails startup. Restart `assistant-relay` after recovering Docker, and restart the stack after changing listener settings or Docker contexts.
+
 ### Seeding the database
 
 Once `./zero` succeeds and all services are running, seed the local database with sample data:

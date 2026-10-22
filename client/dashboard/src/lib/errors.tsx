@@ -36,7 +36,9 @@ export function isNotFoundError(error: unknown): boolean {
   return "statusCode" in error && error.statusCode === 404;
 }
 
-function isExpectedAPIError(error: unknown): boolean {
+// isExpectedAPIError reports whether the server refused a request (a 4xx), as
+// opposed to a network failure, a timeout or a server fault.
+export function isExpectedAPIError(error: unknown): boolean {
   return (
     error instanceof GramError &&
     error.statusCode >= 400 &&

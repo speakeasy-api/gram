@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
@@ -20,7 +21,7 @@ export const ConnectionAuthState = {
 /**
  * Bounded authorization state for the authenticated user's latest Platform MCP connection.
  */
-export type ConnectionAuthState = ClosedEnum<typeof ConnectionAuthState>;
+export type ConnectionAuthState = OpenEnum<typeof ConnectionAuthState>;
 
 /**
  * Bounded package-publication state for the selected project's Default plugin after a distribution change.
@@ -34,7 +35,7 @@ export const DistributionPublicationState = {
 /**
  * Bounded package-publication state for the selected project's Default plugin after a distribution change.
  */
-export type DistributionPublicationState = ClosedEnum<
+export type DistributionPublicationState = OpenEnum<
   typeof DistributionPublicationState
 >;
 
@@ -49,7 +50,7 @@ export const DistributionState = {
 /**
  * Bounded lifecycle state for the selected MCP's existing-Default-plugin distribution.
  */
-export type DistributionState = ClosedEnum<typeof DistributionState>;
+export type DistributionState = OpenEnum<typeof DistributionState>;
 
 /**
  * Whether selected-registration readiness is currently fresh.
@@ -63,7 +64,7 @@ export const ReadinessFreshness = {
 /**
  * Whether selected-registration readiness is currently fresh.
  */
-export type ReadinessFreshness = ClosedEnum<typeof ReadinessFreshness>;
+export type ReadinessFreshness = OpenEnum<typeof ReadinessFreshness>;
 
 /**
  * Bounded current readiness state for the selected registration.
@@ -84,7 +85,7 @@ export const ReadinessState = {
 /**
  * Bounded current readiness state for the selected registration.
  */
-export type ReadinessState = ClosedEnum<typeof ReadinessState>;
+export type ReadinessState = OpenEnum<typeof ReadinessState>;
 
 /**
  * Bounded reason why interactive Platform MCP authorization is required again.
@@ -101,7 +102,7 @@ export const ReauthorizationReason = {
 /**
  * Bounded reason why interactive Platform MCP authorization is required again.
  */
-export type ReauthorizationReason = ClosedEnum<typeof ReauthorizationReason>;
+export type ReauthorizationReason = OpenEnum<typeof ReauthorizationReason>;
 
 /**
  * A bounded next action when the workflow cannot progress.
@@ -122,7 +123,7 @@ export const RepairAction = {
 /**
  * A bounded next action when the workflow cannot progress.
  */
-export type RepairAction = ClosedEnum<typeof RepairAction>;
+export type RepairAction = OpenEnum<typeof RepairAction>;
 
 /**
  * Current server-derived onboarding stage.
@@ -136,7 +137,7 @@ export const Stage = {
 /**
  * Current server-derived onboarding stage.
  */
-export type Stage = ClosedEnum<typeof Stage>;
+export type Stage = OpenEnum<typeof Stage>;
 
 /**
  * Safe, session-authenticated Platform MCP onboarding projection. It contains no provider URLs, credentials, OAuth values, setup handoffs, or internal resource identifiers.
@@ -245,41 +246,48 @@ export type PlatformMCPOnboardingState = {
 };
 
 /** @internal */
-export const ConnectionAuthState$inboundSchema: z.ZodMiniEnum<
-  typeof ConnectionAuthState
-> = z.enum(ConnectionAuthState);
+export const ConnectionAuthState$inboundSchema: z.ZodMiniType<
+  ConnectionAuthState,
+  unknown
+> = openEnums.inboundSchema(ConnectionAuthState);
 
 /** @internal */
-export const DistributionPublicationState$inboundSchema: z.ZodMiniEnum<
-  typeof DistributionPublicationState
-> = z.enum(DistributionPublicationState);
+export const DistributionPublicationState$inboundSchema: z.ZodMiniType<
+  DistributionPublicationState,
+  unknown
+> = openEnums.inboundSchema(DistributionPublicationState);
 
 /** @internal */
-export const DistributionState$inboundSchema: z.ZodMiniEnum<
-  typeof DistributionState
-> = z.enum(DistributionState);
+export const DistributionState$inboundSchema: z.ZodMiniType<
+  DistributionState,
+  unknown
+> = openEnums.inboundSchema(DistributionState);
 
 /** @internal */
-export const ReadinessFreshness$inboundSchema: z.ZodMiniEnum<
-  typeof ReadinessFreshness
-> = z.enum(ReadinessFreshness);
+export const ReadinessFreshness$inboundSchema: z.ZodMiniType<
+  ReadinessFreshness,
+  unknown
+> = openEnums.inboundSchema(ReadinessFreshness);
 
 /** @internal */
-export const ReadinessState$inboundSchema: z.ZodMiniEnum<
-  typeof ReadinessState
-> = z.enum(ReadinessState);
+export const ReadinessState$inboundSchema: z.ZodMiniType<
+  ReadinessState,
+  unknown
+> = openEnums.inboundSchema(ReadinessState);
 
 /** @internal */
-export const ReauthorizationReason$inboundSchema: z.ZodMiniEnum<
-  typeof ReauthorizationReason
-> = z.enum(ReauthorizationReason);
+export const ReauthorizationReason$inboundSchema: z.ZodMiniType<
+  ReauthorizationReason,
+  unknown
+> = openEnums.inboundSchema(ReauthorizationReason);
 
 /** @internal */
-export const RepairAction$inboundSchema: z.ZodMiniEnum<typeof RepairAction> = z
-  .enum(RepairAction);
+export const RepairAction$inboundSchema: z.ZodMiniType<RepairAction, unknown> =
+  openEnums.inboundSchema(RepairAction);
 
 /** @internal */
-export const Stage$inboundSchema: z.ZodMiniEnum<typeof Stage> = z.enum(Stage);
+export const Stage$inboundSchema: z.ZodMiniType<Stage, unknown> = openEnums
+  .inboundSchema(Stage);
 
 /** @internal */
 export const PlatformMCPOnboardingState$inboundSchema: z.ZodMiniType<

@@ -11,6 +11,8 @@ export type DiscoveredEndpoints = {
   jwksUri: string;
   scopesSupported: string[];
   grantTypesSupported: string[];
+  // RFC 7523bis profiles; the ID-JAG profile gates identity chaining.
+  authorizationGrantProfilesSupported: string[];
   responseTypesSupported: string[];
   tokenEndpointAuthMethodsSupported: string[];
   // PKCE methods (RFC 8414 code_challenge_methods_supported). Unlike the
@@ -144,7 +146,7 @@ export function deriveNameFromUrl(url: string): string | null {
 export type ClientType = "dcr" | "manual" | "cimd";
 
 export const TUNNELED_DCR_PERMISSION_MESSAGE =
-  "Dynamic client registration through this provider's tunnel requires platform admin access. Use Manual, or CIMD when supported.";
+  "Dynamic client registration through this authorization server's tunnel requires platform admin access. Use Manual, or CIMD when supported.";
 
 export function dynamicClientRegistrationAvailability({
   registrationEndpoint,

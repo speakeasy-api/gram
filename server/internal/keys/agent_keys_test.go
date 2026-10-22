@@ -22,7 +22,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -97,9 +96,7 @@ func TestKeysService_AgentKeyLifecycle(t *testing.T) {
 	_, err = ti.service.APIKeyAuth(t.Context(), *rotated.Key, agentAPIKeyScheme())
 	require.NoError(t, err)
 
-	ti.features.SetFlag(feature.FlagAgentIdentityCredentials, testAuthContext(t, ctx).ActiveOrganizationID, false)
-	require.NoError(t, ti.service.RevokeKey(ctx, &gen.RevokeKeyPayload{ID: rotated.ID}), "rollout disablement must not strand active credentials")
-	ti.features.SetFlag(feature.FlagAgentIdentityCredentials, testAuthContext(t, ctx).ActiveOrganizationID, true)
+	require.NoError(t, ti.service.RevokeKey(ctx, &gen.RevokeKeyPayload{ID: rotated.ID}))
 	require.NoError(t, ti.service.RevokeKey(ctx, &gen.RevokeKeyPayload{ID: rotated.ID}), "direct revocation is idempotent")
 	_, err = ti.service.APIKeyAuth(t.Context(), *rotated.Key, agentAPIKeyScheme())
 	require.Error(t, err)
@@ -370,11 +367,10 @@ func TestKeysService_AgentKeyRejectsBroaderRequestThanLiveGrant(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeForbidden)
 }
 
-func TestKeysService_AgentGateDoesNotBlockOrdinaryKeyCreation(t *testing.T) {
+func TestKeysService_OrdinaryKeyCreation(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestKeysService(t)
-	ti.features.SetFlag(feature.FlagAgentIdentityCredentials, testAuthContext(t, ctx).ActiveOrganizationID, false)
 	created, err := ti.service.CreateKey(ctx, &gen.CreateKeyPayload{Name: "ordinary key", Scopes: []string{auth.APIKeyScopeConsumer.String()}})
 	require.NoError(t, err)
 	require.NotNil(t, created.Key)
@@ -424,19 +420,23 @@ func TestKeysService_AgentKeyParentAdmission(t *testing.T) {
 	require.Equal(t, oops.CodeUnauthorized, oopsErr.Code)
 }
 
-//nolint:paralleltest,tparallel // Subtests share mutable feature-flag state.
 func TestKeysService_AgentKeyValidation(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestKeysService(t)
 	agentID, projectID := createAgentKeyFixture(t, ctx, ti)
-	base := agentKeyPayload(agentID, projectID)
 
-	t.Run("rollout gate fails closed", func(t *testing.T) {
-		ti.features.SetFlag(feature.FlagAgentIdentityCredentials, testAuthContext(t, ctx).ActiveOrganizationID, false)
-		_, err := ti.service.CreateKey(ctx, base)
-		requireOopsCode(t, err, oops.CodeNotFound)
-		ti.features.SetFlag(feature.FlagAgentIdentityCredentials, testAuthContext(t, ctx).ActiveOrganizationID, true)
+	t.Run("duplicate name reads as a conflict", func(t *testing.T) {
+		payload := agentKeyPayload(agentID, projectID)
+		payload.Name = "duplicate name key"
+		_, err := ti.service.CreateKey(ctx, payload)
+		require.NoError(t, err)
+
+		again := agentKeyPayload(agentID, projectID)
+		again.Name = payload.Name
+		_, err = ti.service.CreateKey(ctx, again)
+		requireOopsCode(t, err, oops.CodeConflict)
+		require.Contains(t, err.Error(), payload.Name, "the message must name the key the caller must rename")
 	})
 
 	tests := []struct {
@@ -445,10 +445,12 @@ func TestKeysService_AgentKeyValidation(t *testing.T) {
 		code   oops.Code
 	}{
 		{name: "project binding", mutate: func(p *gen.CreateKeyPayload) { p.ProjectID = new(projectID.String()) }, code: oops.CodeBadRequest},
-		{name: "unsupported policy version", mutate: func(p *gen.CreateKeyPayload) { p.DelegatedGrantsVersion = new(5) }, code: oops.CodeBadRequest},
+		{name: "unsupported policy version", mutate: func(p *gen.CreateKeyPayload) {
+			p.DelegatedGrantsVersion = new(int(runtimepolicy.IssuedDelegatedPolicyVersion) + 1)
+		}, code: oops.CodeBadRequest},
 		{name: "deny effect", mutate: func(p *gen.CreateKeyPayload) { p.RequestedGrants[0].Effect = "deny" }, code: oops.CodeBadRequest},
 		{name: "blocklist only", mutate: func(p *gen.CreateKeyPayload) {
-			p.DelegatedGrantsVersion = new(int(runtimepolicy.CurrentDelegatedPolicyVersion))
+			p.DelegatedGrantsVersion = new(int(runtimepolicy.IssuedDelegatedPolicyVersion))
 			p.RequestedGrants[0].Scope = string(authz.ScopeProjectBlockedRead)
 		}, code: oops.CodeBadRequest},
 		{name: "duplicate grant", mutate: func(p *gen.CreateKeyPayload) {
@@ -469,6 +471,7 @@ func TestKeysService_AgentKeyValidation(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
 			payload := agentKeyPayload(agentID, projectID)
 			test.mutate(payload)
 			_, err := ti.service.CreateKey(ctx, payload)

@@ -17,11 +17,12 @@ type DistributeMCPToolInput struct {
 }
 
 type DistributeMCPToolOutput struct {
-	ProjectSlug      string `json:"project_slug"`
-	Plugin           string `json:"plugin"`
-	Attached         bool   `json:"attached"`
-	PublicationState string `json:"publication_state"`
-	Message          string `json:"message"`
+	ProjectSlug      string             `json:"project_slug"`
+	Plugin           string             `json:"plugin"`
+	Attached         bool               `json:"attached"`
+	PublicationState string             `json:"publication_state"`
+	ShadowMCP        *ShadowMCPStanding `json:"shadow_mcp,omitempty"`
+	Message          string             `json:"message"`
 }
 
 type distributionErrorResult struct {
@@ -33,7 +34,8 @@ func registerDistributionTools(reg *Registrar, onboarding *OnboardingService, di
 	addTool(reg, &mcp.Tool{
 		Name:        "distribute_mcp_to_plugin",
 		Title:       "Add an MCP Server to a Plugin",
-		Description: "Give a working MCP server to one plugin — the bundle of MCP servers and skills you share with people — so everyone it is shared with gets it. Constraints: the project must already be selected, the MCP server registered, and freshly confirmed working through the dashboard setup flow. Name the plugin exactly by ID, slug, or name: a name matching nothing is refused as not_found and a name matching more than one plugin as ambiguous_target, and neither falls back to the default plugin. This never creates a plugin.",
+		Description: "Give a working MCP server to one plugin — the bundle of MCP servers and skills you share with people — so everyone it is shared with gets it. Constraints: the project must already be selected, the MCP server registered, and freshly confirmed working through the dashboard setup flow. Name the plugin exactly by ID, slug, or name: a name matching nothing is refused as not_found and a name matching more than one plugin as ambiguous_target, and neither falls back to the default plugin. This never creates a plugin. For a server added by URL, the administrator's own distribution counts as the Shadow MCP review when the project has a policy that blocks unreviewed servers: the server is recorded in Shadow MCP as approved for this plugin's audience, and shadow_mcp in the result says so with the page where that standing is seen and changed.",
+		Annotations: distributeMCPToPluginAnnotations(),
 	}, ToolMeta{
 		Authorization: ExternalAuthorizationOrgAdmin,
 		// External-only: distribution rows require a connection, which a
@@ -80,14 +82,16 @@ func registerDistributionTools(reg *Registrar, onboarding *OnboardingService, di
 			Plugin:           distribution.Plugin,
 			Attached:         distribution.AttachmentLive,
 			PublicationState: distribution.PublicationState,
-			Message:          distributionOutcomeMessage(distribution.Plugin, distribution.PublicationState, distribution.AttachmentLive, false),
+			ShadowMCP:        distribution.ShadowMCP,
+			Message:          distributionOutcomeMessage(distribution.Plugin, distribution.PublicationState, distribution.AttachmentLive, false) + shadowMCPStandingMessage(distribution.ShadowMCP),
 		}, nil
 	})
 
 	addTool(reg, &mcp.Tool{
 		Name:        "remove_mcp_from_plugin",
 		Title:       "Remove an MCP Server from a Plugin",
-		Description: "Take an MCP server back out of one plugin, undoing distribute_mcp_to_plugin, so the people it is shared with stop getting it. Constraints: only a membership this flow created is removed; one an administrator made by hand stays. Name the plugin exactly, on the same terms as distribute_mcp_to_plugin.",
+		Description: "Take an MCP server back out of one plugin, undoing distribute_mcp_to_plugin, so the people it is shared with stop getting it. Constraints: only a membership this flow created is removed; one an administrator made by hand stays. Name the plugin exactly, on the same terms as distribute_mcp_to_plugin. Removing it from a plugin does not revoke any Shadow MCP approval recorded for it; adding it back to a plugin whose audience that approval covers is admitted without a new approval. Narrow or revoke the approval itself with decide_shadow_mcp_access, or from the server's Shadow MCP page.",
+		Annotations: removeMCPFromPluginAnnotations(),
 	}, ToolMeta{
 		Authorization: ExternalAuthorizationOrgAdmin,
 		// External-only for the same reason as distribution: the removal is
@@ -125,6 +129,7 @@ func registerDistributionTools(reg *Registrar, onboarding *OnboardingService, di
 			Plugin:           distribution.Plugin,
 			Attached:         distribution.AttachmentLive,
 			PublicationState: distribution.PublicationState,
+			ShadowMCP:        nil,
 			Message:          distributionOutcomeMessage(distribution.Plugin, distribution.PublicationState, distribution.AttachmentLive, true),
 		}, nil
 	})
@@ -148,9 +153,7 @@ func distributionToolError(err error) (*mcp.CallToolResult, bool) {
 	case errors.Is(err, ErrDistributionConflict):
 		result = distributionErrorResult{Code: "conflict", Message: "What this project shares has changed since you last looked. Check where setup got to and try the next step it offers."}
 	case errors.Is(err, ErrDistributionBlockedPendingApproval):
-		result = distributionErrorResult{Code: "approval_required", Message: "This MCP server does not have the approval required for this operation. Review the server approval for the requesting user and, when audience enforcement applies, the plugin's complete audience before trying again."}
-	case errors.Is(err, ErrDistributionDisabled):
-		result = distributionErrorResult{Code: "distribution_disabled", Message: "Direct-remote distribution is temporarily disabled. Existing attachments can still be removed and audiences can still be narrowed."}
+		result = distributionErrorResult{Code: "approval_required", Message: "This organisation's Shadow MCP policy blocks this server for the people it would reach, and this call could not be recorded as its approval. Review the server in the dashboard, then try again."}
 	case errors.Is(err, ErrDistributionAdmissionUnavailable):
 		result = distributionErrorResult{Code: "distribution_unavailable", Message: "Distribution approval could not be verified safely. No sharing change was made."}
 	default:
@@ -199,5 +202,25 @@ func distributionOutcomeMessage(plugin, publicationState string, attachmentLive,
 		// there, and repair_required does not distinguish them, so the copy says
 		// the change has not landed rather than that nobody has the MCP server.
 		return "This MCP server is now part of the " + plugin + " plugin, but the package that carries it to people could not be updated, so the change may not have reached them yet. Publish it again from the dashboard."
+	}
+}
+
+// shadowMCPStandingMessage tells the administrator what their distribution
+// meant for the project's Shadow MCP policy, in the words the policy page uses.
+func shadowMCPStandingMessage(standing *ShadowMCPStanding) string {
+	if standing == nil {
+		return ""
+	}
+	switch standing.State {
+	case shadowMCPStandingApproved:
+		// Not attributed to this write: an earlier decision may already have
+		// covered the audience, in which case nothing new was recorded.
+		return " This project has a Shadow MCP policy, and the server is approved under it for the people this plugin reaches; an administrator's distribution is what records that approval when none covers them yet. Narrow or revoke it by deciding the server's Shadow MCP access, or from its Shadow MCP page."
+	case DistributionAdmissionNotApplicable, "not_required":
+		return ""
+	case DistributionAdmissionEmptyAudience:
+		return " No one is assigned to this plugin yet, so the project's Shadow MCP policy has nothing to approve until people are."
+	default:
+		return " Its standing with the project's Shadow MCP policy could not be confirmed; check its Shadow MCP page."
 	}
 }

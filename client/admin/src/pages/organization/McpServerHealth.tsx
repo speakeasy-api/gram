@@ -46,6 +46,7 @@ import { cn } from "@/lib/utils";
 
 import { SOURCE_LABELS, VISIBILITY_LABELS } from "./mcpServerLabels";
 import {
+  adminMcpPrompt,
   admissionLabel,
   bucketSquares,
   callsPerSquare,
@@ -60,7 +61,6 @@ import {
   linkedAccounts,
   loginChallengeQuery,
   loginChallengeUrl,
-  platformMcpPrompt,
   SCOPE_LABELS,
   toolCallTailQuery,
   toolCallTailUrl,
@@ -679,12 +679,12 @@ function ToolCallsChart({
       <p className={cn(MUTED, "border-t px-5 pt-2.5 pb-3.5 text-xs")}>
         The chart counts calls that reach the server directly. The Tool calls
         total above also counts calls reported by client hooks, so it can be
-        higher. Failed means status 400 or above. A single failed call still
-        fills a red square. Tool errors returned inside a 200 response count as
-        OK.
+        higher. In the chart, failed means status 400 or above, and tool errors
+        returned inside a 200 response count as OK; the total above counts them
+        as failed. A single failed call still fills a red square.
       </p>
       <PromptBlock
-        prompt={platformMcpPrompt({
+        prompt={adminMcpPrompt({
           ...prompt,
           range: rangeLabel(range),
           worst: worst && bucketName(worst, weekly),
@@ -805,7 +805,7 @@ function PromptBlock({ prompt }: { prompt: string }): JSX.Element {
     <div className="bg-muted/30 flex flex-col gap-2.5 border-t px-5 pt-4 pb-4.5">
       <div className="flex items-center justify-between gap-3">
         <span className="text-sm font-medium">
-          Investigate with the Platform MCP
+          Investigate with the Speakeasy Admin MCP server
         </span>
         <Button
           variant="outline"
@@ -949,6 +949,11 @@ function IssuerPanel({
         </KeyValue>
         <KeyValue label="Authentication host">
           {issuer.useAuthenticationHost ? "Used" : "Not used"}
+        </KeyValue>
+        <KeyValue label="Authorization server">
+          {issuer.authorizationServerMode === "shared"
+            ? `Shared by the issuer · issuer URL ${issuer.issuerUrlPinned ? "pinned" : "not pinned"}`
+            : "One per MCP server"}
         </KeyValue>
         <KeyValue label="Trusted remote session">
           {trusted ? (

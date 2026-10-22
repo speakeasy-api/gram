@@ -15,7 +15,7 @@ import (
 )
 
 type GetMyInstallInstructionsInput struct {
-	ProjectID    string                 `json:"project_id" jsonschema:"explicit project ID that owns the target"`
+	ProjectID    string                 `json:"project_id,omitempty" jsonschema:"optional project ID that owns the target; defaults to the organization's default project for external callers; a project assistant always uses its own project"`
 	Plugin       string                 `json:"plugin,omitempty" jsonschema:"exact assigned plugin ID, slug, or name; mutually exclusive with mcp_id"`
 	MCPID        string                 `json:"mcp_id,omitempty" jsonschema:"exact configured MCP ID; mutually exclusive with plugin"`
 	ClientFamily OnboardingClientFamily `json:"client_family" jsonschema:"client receiving the installation guidance"`
@@ -42,9 +42,12 @@ func (s *PluginsService) GetMyInstallInstructions(ctx context.Context, principal
 	if !s.valid() || s.authorization == nil || !validOnboardingClient(input.ClientFamily) {
 		return GetMyInstallInstructionsOutput{}, ErrUnavailable
 	}
-	projectID, err := uuid.Parse(strings.TrimSpace(input.ProjectID))
-	if err != nil || (strings.TrimSpace(input.Plugin) == "") == (strings.TrimSpace(input.MCPID) == "") {
+	if (strings.TrimSpace(input.Plugin) == "") == (strings.TrimSpace(input.MCPID) == "") {
 		return GetMyInstallInstructionsOutput{}, ErrPluginProjectNotFound
+	}
+	projectID, err := s.installProjectID(ctx, principal, input.ProjectID)
+	if err != nil {
+		return GetMyInstallInstructionsOutput{}, err
 	}
 	if strings.TrimSpace(input.Plugin) != "" {
 		plugin, err := s.GetAssignedPlugin(ctx, principal, GetPluginInput{ProjectID: projectID.String(), Plugin: input.Plugin, MembershipLimit: 0, MembershipCursor: ""})
@@ -83,6 +86,30 @@ func (s *PluginsService) GetMyInstallInstructions(ctx context.Context, principal
 		name = row.Slug.String
 	}
 	return s.standaloneMCPInstallInstructions(ctx, input.ClientFamily, name, row.EndpointSlug), nil
+}
+
+// installProjectID parses the named project ID, or resolves the organization's
+// default project when none is named.
+func (s *PluginsService) installProjectID(ctx context.Context, principal Principal, projectID string) (uuid.UUID, error) {
+	projectID = strings.TrimSpace(projectID)
+	if projectID != "" {
+		parsed, err := uuid.Parse(projectID)
+		if err != nil {
+			return uuid.Nil, ErrPluginProjectNotFound
+		}
+		return parsed, nil
+	}
+	row, err := platformrepo.New(s.db).ResolvePlatformMCPProjectBySlug(ctx, platformrepo.ResolvePlatformMCPProjectBySlugParams{
+		OrganizationID: principal.OrganizationID,
+		Slug:           defaultProjectSlug,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return uuid.Nil, ErrDefaultProjectNotFound
+	}
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("resolve platform mcp install default project: %w", err)
+	}
+	return row.ID, nil
 }
 
 func (s *PluginsService) pluginInstallInstructions(ctx context.Context, client OnboardingClientFamily, name string) GetMyInstallInstructionsOutput {

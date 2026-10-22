@@ -43,6 +43,7 @@ func TestReviewSecurityCIMDPreparationRequiresExplicitGrantEvidence(t *testing.T
 			user := createUserSessionIssuer(t, ctx, ti.conn, "security-human")
 			client := createCimdClient(t, ctx, ti, issuer.String(), user.String(), []string{"openid"})
 			in := remotesessions.PreparationInput{UserSessionIssuerID: user, RemoteSessionIssuerID: issuer, ClientID: uuid.MustParse(client.ID), Resource: "https://resource.example.com/", Mechanism: "cimd", Scopes: []string{"openid"}, ConfirmGrants: tc.confirmed}
+			preparationConfidentialClient(t, ctx, ti, issuer, in.ClientID)
 			preparationRecordGrants(t, ctx, ti, in.ClientID, tc.recorded)
 			auth, _ := contextvalues.GetAuthContext(ctx)
 			q := testrepo.New(ti.conn)

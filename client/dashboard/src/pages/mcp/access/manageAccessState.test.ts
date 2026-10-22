@@ -1,6 +1,8 @@
+import { unrecognized } from "@gram/client/types/unrecognized.js";
 import { describe, expect, it } from "vitest";
 import type { ResourceAudienceEntry } from "@gram/client/models/components/resourceaudienceentry.js";
 import {
+  supportsAudienceEditing,
   pageCount,
   pageOf,
   withAdded,
@@ -105,4 +107,18 @@ describe("audience edits", () => {
       { principalUrn: "user:3", level: "use" },
     ]);
   });
+});
+
+describe("unsupported audience rules", () => {
+  it.each([
+    { level: unrecognized("future_level") },
+    { dispositions: [unrecognized("future_annotation")] },
+  ])(
+    "blocks whole-audience replacement when a rule is unsupported: %j",
+    (overrides) => {
+      const entries = [entry({ principalUrn: "user:1", ...overrides })];
+      expect(supportsAudienceEditing(entries)).toBe(false);
+      expect(() => withRule(entries, "user:2", "use")).toThrow("not supported");
+    },
+  );
 });

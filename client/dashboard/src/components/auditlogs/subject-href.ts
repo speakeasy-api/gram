@@ -58,9 +58,16 @@ export function subjectHref(log: AuditLog, orgSlug: string): string | null {
       return log.subjectId ? `/${orgSlug}/killswitch/${log.subjectId}` : null;
     case "api_key":
       return `/${orgSlug}/api-keys`;
+    case "internal_session_issuer":
+      return speakeasyProviderHref(orgSlug);
     case "json_web_key_set":
+      // The Speakeasy issuer's set isn't listed on the signing-keys pages.
+      if (log.metadata?.["internal_session_issuer"] === true)
+        return speakeasyProviderHref(orgSlug);
       return `/${orgSlug}/signing-keys/${log.subjectId}/overview`;
     case "json_web_key": {
+      if (log.metadata?.["internal_session_issuer"] === true)
+        return speakeasyProviderHref(orgSlug);
       // A key event names the key as its subject; the set it belongs to rides
       // along in metadata, and the Keys tab is where the key is listed.
       const setId = log.metadata?.["json_web_key_set_id"];
@@ -71,4 +78,8 @@ export function subjectHref(log: AuditLog, orgSlug: string): string | null {
     default:
       return null;
   }
+}
+
+function speakeasyProviderHref(orgSlug: string): string {
+  return `/${orgSlug}/identity?tab=identity-providers&provider=speakeasy`;
 }

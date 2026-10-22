@@ -147,6 +147,7 @@ var allowList = map[string]bool{
 	"anthropic/claude-fable-5.1":    true,
 	"anthropic/claude-opus-5":       true,
 	"anthropic/claude-fable-5":      true,
+	"anthropic/claude-sonnet-5.5":   true,
 	"anthropic/claude-sonnet-5":     true,
 	"anthropic/claude-opus-4.8":     true,
 	"anthropic/claude-opus-4.7":     true,
@@ -195,6 +196,18 @@ var allowList = map[string]bool{
 	"mistralai/codestral-2508":      true,
 	"mistralai/devstral-2512":       true,
 	"mistralai/mistral-medium-3.1":  true,
+}
+
+// AllowedModels returns a sorted copy of the models supported by the proxy.
+func AllowedModels() []string {
+	models := make([]string, 0, len(allowList))
+	for model, allowed := range allowList {
+		if allowed {
+			models = append(models, model)
+		}
+	}
+	slices.Sort(models)
+	return models
 }
 
 // IsModelAllowed checks if a model is in the allowlist

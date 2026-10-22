@@ -1,3 +1,6 @@
+import { requireKnownEnumValue } from "@/lib/enum";
+import { UpdateMcpServerFormVisibility as KnownUpdateMcpServerFormVisibility } from "@gram/client/models/components/updatemcpserverform.js";
+import { invalidateAllResourceAudience } from "@gram/client/react-query/resourceAudience.js";
 import type {
   McpServer,
   McpServerVisibility,
@@ -28,7 +31,10 @@ export function mcpServerVisibilityUpdateForm(
     unproxiedMcpServerId: mcpServer.unproxiedMcpServerId ?? undefined,
     environmentId: mcpServer.environmentId ?? undefined,
     toolVariationsGroupId: mcpServer.toolVariationsGroupId ?? undefined,
-    visibility,
+    visibility: requireKnownEnumValue(
+      KnownUpdateMcpServerFormVisibility,
+      visibility,
+    ),
   };
 }
 
@@ -59,6 +65,7 @@ export async function invalidateMcpServerQueries(
 ): Promise<void> {
   await Promise.all([
     invalidateAllMcpServers(queryClient, { refetchType: "all" }),
+    invalidateAllResourceAudience(queryClient, { refetchType: "all" }),
     invalidateAllGetMcpServer(queryClient, { refetchType: "all" }),
     invalidateAllMcpEndpoints(queryClient, { refetchType: "all" }),
     invalidateAllPlugins(queryClient, { refetchType: "all" }),

@@ -24,7 +24,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -46,7 +45,7 @@ func TestConsentAgentBindingActionsUseRealAttachmentService(t *testing.T) {
 	require.NoError(t, policyErr)
 	meterProvider := testenv.NewMeterProvider(t)
 	refresher := remotesessions.NewRefreshService(ti.logger, meterProvider, ti.conn, ti.enc, policy, nil, ti.cacheAdapter)
-	bindings := remotesessions.NewService(ti.logger, ti.tracerProvider, meterProvider, ti.conn, ti.sessionManager, ti.authzEngine, ti.enc, nil, policy, nil, ti.audit, ti.serverURL, remotesessions.NewIdentityCommitter(ti.logger, ti.conn, ti.enc, ti.audit, ti.serverURL, policy, nil, nil), refresher, nil)
+	bindings := remotesessions.NewService(ti.logger, ti.tracerProvider, meterProvider, ti.conn, ti.sessionManager, ti.authzEngine, ti.enc, nil, policy, nil, ti.audit, ti.serverURL, remotesessions.NewIdentityCommitter(ti.logger, ti.conn, ti.enc, ti.audit, ti.serverURL, policy, nil, nil), refresher, nil, nil)
 	bindings.SetBindingAuthorizer(func(ctx context.Context, tx pgx.Tx, id uuid.UUID) error {
 		require.False(t, contextvalues.HasValidatedGramSession(ctx))
 		auth, ok := contextvalues.GetAuthContext(ctx)
@@ -177,17 +176,6 @@ func TestConsentAgentBindingActionsUseRealAttachmentService(t *testing.T) {
 	require.Error(t, err)
 	_, err = agentsrepo.New(ti.conn).TransferAgent(ctx, agentsrepo.TransferAgentParams{OwnerUserID: fx.userID, OrganizationID: fx.orgID, ID: agent.ID})
 	require.NoError(t, err)
-	for _, flag := range []feature.Flag{feature.FlagAgentManagement, feature.FlagAgentIdentityCredentials} {
-		ti.features.SetFlag(flag, fx.orgID, false)
-		_, err := call("agent_connections", false, nil)
-		var denied *oops.ShareableError
-		require.ErrorAs(t, err, &denied)
-		require.Equal(t, oops.CodeNotFound, denied.Code)
-		_, err = call("agent_connections", true, nil)
-		require.ErrorAs(t, err, &denied)
-		require.Equal(t, oops.CodeNotFound, denied.Code)
-		ti.features.SetFlag(flag, fx.orgID, true)
-	}
 	_, err = call("agent_attach", false, url.Values{"csrf_token": {"wrong"}, "remote_session_id": {owned.String()}})
 	require.Error(t, err)
 	_, err = call("agent_attach", false, url.Values{"remote_session_id": {other.String()}})

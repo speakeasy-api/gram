@@ -125,6 +125,7 @@ func TestSyncClaim_CIMDRequiresBindingEvidenceOrConfirmation(t *testing.T) {
 				preparationRecordGrants(t, ctx, ti, in.ClientID, grants)
 			}
 			require.NoError(t, fixtures.SetPreparationFixtureCIMDURI(ctx, testrepo.SetPreparationFixtureCIMDURIParams{ID: in.ClientID, ProjectID: conv.ToNullUUID(*auth.ProjectID)}))
+			preparationConfidentialClient(t, ctx, ti, in.RemoteSessionIssuerID, in.ClientID)
 			key := repo.GetEMABindingParams{ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID, UserSessionIssuerID: in.UserSessionIssuerID, RemoteSessionIssuerID: in.RemoteSessionIssuerID, Resource: in.Resource}
 			require.NoError(t, q.EnsureEMABinding(ctx, repo.EnsureEMABindingParams(key)))
 			before, err := q.GetEMABinding(ctx, key)

@@ -27,10 +27,24 @@ func callbackOriginFlags() []cli.Flag {
 		},
 		&cli.StringFlag{
 			Name:    registrationCallbackURLFlag,
-			Usage:   "Origin recorded on newly created organization-owned remote session clients, e.g. https://ai.speakeasy.com. Empty records none, so new clients use the outbound callback URL.",
+			Usage:   "Fallback origin for new organization-owned remote session clients when organization-host resolution is not configured. The server uses the organization default host instead, taking precedence over this flag. Empty fallback uses the outbound callback URL.",
 			EnvVars: []string{"GRAM_REGISTRATION_CALLBACK_URL"},
 		},
 	}
+}
+
+// outboundCallbackOriginFromCLI parses only the outbound origin, defaulting to
+// the server URL.
+func outboundCallbackOriginFromCLI(c *cli.Context, serverURL *url.URL, environment string, platformHosts map[string]string) (*url.URL, error) {
+	raw := c.String(outboundCallbackURLFlag)
+	if raw == "" {
+		return remotesessions.DefaultCallbackOrigins(serverURL).Outbound, nil
+	}
+	outbound, err := parseCallbackOrigin(raw, serverURL, environment, platformHosts)
+	if err != nil {
+		return nil, fmt.Errorf("invalid --%s: %w", outboundCallbackURLFlag, err)
+	}
+	return outbound, nil
 }
 
 // callbackOriginsFromCLI parses the callback origin flags. Both must be

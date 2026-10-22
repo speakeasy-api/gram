@@ -121,8 +121,6 @@ type Policy struct {
 	Version                int64
 	CreatedAt              time.Time
 	UpdatedAt              time.Time
-	PendingMessages        *int64
-	TotalMessages          *int64
 }
 
 // DetectionScope is one category's message-level detection scope.
@@ -138,12 +136,6 @@ type ModelConfig struct {
 	FailOpen    *bool    `json:"fail_open,omitempty"`
 }
 
-// Progress describes the message-analysis progress attached to single-policy reads.
-type Progress struct {
-	Total    int64
-	Analyzed int64
-}
-
 // AuditSnapshot strips policy content that must not enter audit or outbox
 // telemetry while preserving the administrative fields needed for change logs.
 func AuditSnapshot(policy Policy) Policy {
@@ -152,15 +144,7 @@ func AuditSnapshot(policy Policy) Policy {
 }
 
 // Project maps a database policy row into its canonical transport-neutral form.
-func Project(row repo.RiskPolicy, audiencePrincipalURNs []string, progress *Progress) Policy {
-	var pendingMessages, totalMessages *int64
-	if progress != nil {
-		total := progress.Total
-		pending := max(progress.Total-progress.Analyzed, 0)
-		totalMessages = &total
-		pendingMessages = &pending
-	}
-
+func Project(row repo.RiskPolicy, audiencePrincipalURNs []string) Policy {
 	audience := slices.Clone(audiencePrincipalURNs)
 	if audience == nil {
 		audience = []string{}
@@ -194,8 +178,6 @@ func Project(row repo.RiskPolicy, audiencePrincipalURNs []string, progress *Prog
 		Version:                row.Version,
 		CreatedAt:              row.CreatedAt.Time,
 		UpdatedAt:              row.UpdatedAt.Time,
-		PendingMessages:        pendingMessages,
-		TotalMessages:          totalMessages,
 	}
 }
 
@@ -221,6 +203,11 @@ func shadowMCPDisposition(row repo.RiskPolicy) *string {
 		return nil
 	}
 	return &disposition
+}
+
+// DecodeMCPScope reads a stored scope as evaluation does; nil means the policy is not MCP-scoped.
+func DecodeMCPScope(raw []byte) *MCPScope {
+	return unmarshalMCPScope(raw)
 }
 
 func unmarshalMCPScope(raw []byte) *MCPScope {

@@ -26,6 +26,7 @@ const mocks = vi.hoisted(() => {
     setToolsetUserSessionIssuer: vi.fn().mockResolvedValue(undefined),
     capture: vi.fn(),
     invalidateAllToolset: vi.fn(),
+    invalidateAllMcpServers: vi.fn(),
     invalidateAllGetMcpMetadata: vi.fn(),
     invalidateAllListEnvironments: vi.fn(),
     isFeatureEnabled: vi.fn(() => false),
@@ -37,6 +38,9 @@ vi.mock("@gram/client/react-query/toolset.js", () => ({
   invalidateAllToolset: mocks.invalidateAllToolset,
 }));
 
+vi.mock("@gram/client/react-query/mcpServers.js", () => ({
+  invalidateAllMcpServers: mocks.invalidateAllMcpServers,
+}));
 vi.mock("@gram/client/react-query/getMcpMetadata.js", () => ({
   invalidateAllGetMcpMetadata: mocks.invalidateAllGetMcpMetadata,
 }));
@@ -381,6 +385,7 @@ describe("OAuthWizard — existing external OAuth config", () => {
       expect(mocks.updateExternalOAuth).toHaveBeenCalledTimes(1),
     );
     expect(mocks.invalidateAllToolset).toHaveBeenCalled();
+    expect(mocks.invalidateAllMcpServers).toHaveBeenCalled();
     expect(mocks.invalidateAllGetMcpMetadata).toHaveBeenCalled();
   });
 
@@ -656,9 +661,21 @@ describe("OAuthWizard — happy proxy create", () => {
 
     expect(mocks.createUserSessionIssuer).toHaveBeenCalledTimes(1);
     expect(mocks.createRemoteSessionIssuer).toHaveBeenCalledTimes(1);
+    // Discovery succeeded with a document that omits the lists; entered scopes are kept.
+    expect(
+      mocks.createRemoteSessionIssuer.mock.calls[0]![0].request
+        .createRemoteSessionIssuerForm,
+    ).toMatchObject({
+      scopesSupported: ["read", "write"],
+      grantTypesSupported: [],
+      authorizationGrantProfilesSupported: [],
+      responseTypesSupported: [],
+      tokenEndpointAuthMethodsSupported: [],
+    });
     expect(mocks.createRemoteSessionClient).toHaveBeenCalledTimes(1);
     expect(mocks.setToolsetUserSessionIssuer).toHaveBeenCalledTimes(1);
     expect(mocks.invalidateAllToolset).toHaveBeenCalled();
+    expect(mocks.invalidateAllMcpServers).toHaveBeenCalled();
     expect(mocks.invalidateAllGetMcpMetadata).toHaveBeenCalled();
     expect(mocks.invalidateAllListEnvironments).toHaveBeenCalled();
     expect(mocks.capture).toHaveBeenCalledWith(
@@ -668,6 +685,52 @@ describe("OAuthWizard — happy proxy create", () => {
 
     fireEvent.click(screen.getByText("Done"));
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("OAuthWizard — proxy create without discovery", () => {
+  it("falls back to operator defaults and omits grant profiles", async () => {
+    mocks.fetchRemoteSessionIssuerMetadata.mockRejectedValueOnce(
+      new Error("discovery failed"),
+    );
+    renderWizard();
+
+    fireEvent.click(screen.getByRole("button", { name: /OAuth Proxy/ }));
+    fireEvent.change(screen.getByPlaceholderText("my-oauth-proxy"), {
+      target: { value: "new-proxy" },
+    });
+    fireEvent.change(
+      screen.getByPlaceholderText("https://provider.com/oauth/authorize"),
+      { target: { value: "https://e.example/auth" } },
+    );
+    fireEvent.change(
+      screen.getByPlaceholderText("https://provider.com/oauth/token"),
+      { target: { value: "https://e.example/token" } },
+    );
+    fireEvent.change(screen.getByPlaceholderText("read, write, openid"), {
+      target: { value: "read" },
+    });
+    fireEvent.click(screen.getByText("Next"));
+    fireEvent.change(screen.getByPlaceholderText("your-client-id"), {
+      target: { value: "cid" },
+    });
+    fireEvent.change(screen.getByPlaceholderText("your-client-secret"), {
+      target: { value: "csec" },
+    });
+    fireEvent.click(screen.getByText("Configure OAuth Proxy"));
+
+    await waitFor(() => {
+      expect(mocks.createRemoteSessionIssuer).toHaveBeenCalledTimes(1);
+    });
+    const form =
+      mocks.createRemoteSessionIssuer.mock.calls[0]![0].request
+        .createRemoteSessionIssuerForm;
+    expect(form).toMatchObject({
+      scopesSupported: ["read"],
+      grantTypesSupported: ["authorization_code", "refresh_token"],
+      responseTypesSupported: ["code"],
+    });
+    expect(form.authorizationGrantProfilesSupported).toBeUndefined();
   });
 });
 

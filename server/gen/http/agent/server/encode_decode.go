@@ -15,6 +15,7 @@ import (
 	"strings"
 
 	agent "github.com/speakeasy-api/gram/server/gen/agent"
+	types "github.com/speakeasy-api/gram/server/gen/types"
 	goahttp "goa.design/goa/v3/http"
 	goa "goa.design/goa/v3/pkg"
 )
@@ -37,16 +38,21 @@ func DecodeGetPluginsRequest(mux goahttp.Muxer, decoder func(*http.Request) goah
 	return func(r *http.Request) (*agent.GetPluginsPayload, error) {
 		var payload *agent.GetPluginsPayload
 		var (
-			legacyEmail  *string
-			apikeyToken  *string
-			email        *string
-			serialNumber *string
-			hostname     *string
-			environment  *string
+			legacyEmail      *string
+			deviceAgentToken *string
+			apikeyToken      *string
+			email            *string
+			serialNumber     *string
+			hostname         *string
+			environment      *string
 		)
 		legacyEmailRaw := r.URL.Query().Get("email")
 		if legacyEmailRaw != "" {
 			legacyEmail = &legacyEmailRaw
+		}
+		deviceAgentTokenRaw := r.Header.Get("Authorization")
+		if deviceAgentTokenRaw != "" {
+			deviceAgentToken = &deviceAgentTokenRaw
 		}
 		apikeyTokenRaw := r.Header.Get("Gram-Key")
 		if apikeyTokenRaw != "" {
@@ -68,7 +74,14 @@ func DecodeGetPluginsRequest(mux goahttp.Muxer, decoder func(*http.Request) goah
 		if environmentRaw != "" {
 			environment = &environmentRaw
 		}
-		payload = NewGetPluginsPayload(legacyEmail, apikeyToken, email, serialNumber, hostname, environment)
+		payload = NewGetPluginsPayload(legacyEmail, deviceAgentToken, apikeyToken, email, serialNumber, hostname, environment)
+		if payload.DeviceAgentToken != nil {
+			if strings.Contains(*payload.DeviceAgentToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.DeviceAgentToken, " ", 2)[1]
+				payload.DeviceAgentToken = &cred
+			}
+		}
 		if payload.ApikeyToken != nil {
 			if strings.Contains(*payload.ApikeyToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -2394,6 +2407,26 @@ func marshalAgentAgentPollingPrincipalToAgentPollingPrincipalResponseBody(v *age
 	return res
 }
 
+// marshalAgentAgentMCPServerToAgentMCPServerResponseBody builds a value of
+// type *AgentMCPServerResponseBody from a value of type *agent.AgentMCPServer.
+func marshalAgentAgentMCPServerToAgentMCPServerResponseBody(v *agent.AgentMCPServer) *AgentMCPServerResponseBody {
+	res := &AgentMCPServerResponseBody{
+		Name:          v.Name,
+		URL:           v.URL,
+		TokenEndpoint: v.TokenEndpoint,
+		Audience:      v.Audience,
+		Resource:      v.Resource,
+	}
+	if v.Tools != nil {
+		res.Tools = make([]string, len(v.Tools))
+		for i, val := range v.Tools {
+			res.Tools[i] = val
+		}
+	}
+
+	return res
+}
+
 // marshalAgentSyncedAgentUserToSyncedAgentUserResponseBody builds a value of
 // type *SyncedAgentUserResponseBody from a value of type
 // *agent.SyncedAgentUser.
@@ -2425,6 +2458,9 @@ func marshalAgentAiScanTargetToAiScanTargetResponseBody(v *agent.AiScanTarget) *
 	}
 	if v.GatewayClient != nil {
 		res.GatewayClient = marshalAgentAiScanTargetGatewayClientToAiScanTargetGatewayClientResponseBody(v.GatewayClient)
+	}
+	if v.Access != nil {
+		res.Access = marshalTypesAIToolAccessSummaryToAIToolAccessSummaryResponseBody(v.Access)
 	}
 
 	return res
@@ -2499,6 +2535,23 @@ func marshalAgentAiScanTargetGatewayClientToAiScanTargetGatewayClientResponseBod
 		}
 	} else {
 		res.ClientInfoNames = []string{}
+	}
+
+	return res
+}
+
+// marshalTypesAIToolAccessSummaryToAIToolAccessSummaryResponseBody builds a
+// value of type *AIToolAccessSummaryResponseBody from a value of type
+// *types.AIToolAccessSummary.
+func marshalTypesAIToolAccessSummaryToAIToolAccessSummaryResponseBody(v *types.AIToolAccessSummary) *AIToolAccessSummaryResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &AIToolAccessSummaryResponseBody{
+		State:       v.State,
+		Decision:    v.Decision,
+		Enforceable: v.Enforceable,
+		Rationale:   v.Rationale,
 	}
 
 	return res

@@ -10,46 +10,138 @@ import (
 )
 
 type WorkloadAgentAssignment struct {
-	ID               uuid.UUID
-	OrganizationID   string
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
 	WorkloadIssuerID uuid.UUID
-	Subject          string
-	MatchKind        string
-	AgentID          uuid.UUID
-	CreatedAt        pgtype.Timestamptz
-	UpdatedAt        pgtype.Timestamptz
-	DeletedAt        pgtype.Timestamptz
-	Deleted          bool
+	// @access: restricted
+	Subject string
+	// @access: confidential
+	MatchKind string
+	// @access: confidential
+	AgentID uuid.UUID
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
+}
+
+type WorkloadDeviceJoinToken struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: secret-restricted
+	TokenHash string
+	// @access: confidential
+	AgentID uuid.UUID
+	// @access: confidential
+	CreatedByUserID string
+	// @access: confidential
+	ExpiresAt pgtype.Timestamptz
+	// @access: confidential
+	ConsumedAt pgtype.Timestamptz
+	// @access: restricted
+	ConsumedBySubject pgtype.Text
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
+}
+
+type WorkloadDeviceKey struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	WorkloadIssuerID uuid.UUID
+	// @access: restricted
+	Subject string
+	// @access: confidential
+	PublicJwk []byte
+	// @access: confidential
+	Thumbprint string
+	// @access: confidential-pii
+	Hostname pgtype.Text
+	// @access: confidential-pii
+	Serial pgtype.Text
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
 }
 
 type WorkloadIdentityAdmission struct {
-	ID               uuid.UUID
-	OrganizationID   string
-	ProjectID        uuid.NullUUID
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	ProjectID uuid.NullUUID
+	// @access: confidential
 	WorkloadIssuerID uuid.UUID
-	Subject          string
-	MatchKind        string
-	Name             pgtype.Text
-	Tags             []string
-	CreatedAt        pgtype.Timestamptz
-	UpdatedAt        pgtype.Timestamptz
-	DeletedAt        pgtype.Timestamptz
-	Deleted          bool
+	// @access: restricted
+	Subject string
+	// @access: confidential
+	MatchKind string
+	// @access: confidential
+	Name pgtype.Text
+	// @access: opaque-confidential
+	Tags []string
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
 }
 
 type WorkloadIssuer struct {
-	ID                     uuid.UUID
-	OrganizationID         string
-	ProjectID              uuid.NullUUID
-	Name                   string
-	Description            pgtype.Text
-	Tags                   []string
-	Issuer                 string
-	JwksUri                string
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	ProjectID uuid.NullUUID
+	// @access: confidential
+	Name string
+	// @access: opaque-restricted
+	Description pgtype.Text
+	// @access: opaque-confidential
+	Tags []string
+	// @access: restricted
+	Issuer string
+	// @access: restricted
+	JwksUri string
+	// @access: confidential
 	AllowWildcardAdmission bool
-	Metadata               []byte
-	CreatedAt              pgtype.Timestamptz
-	UpdatedAt              pgtype.Timestamptz
-	DeletedAt              pgtype.Timestamptz
-	Deleted                bool
+	// @access: confidential
+	KeySource pgtype.Text
+	// @access: opaque-restricted
+	Metadata []byte
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
 }

@@ -19,13 +19,21 @@ type BillingDiagnosticsReader interface {
 	GetSpendBreakdown(context.Context, *gen.GetSpendBreakdownPayload) (*gen.AdminSpendBreakdownResponse, error)
 }
 
+type InferenceKeyCauseDiagnostic struct {
+	Cause         string  `json:"cause"`
+	Description   string  `json:"description"`
+	Removable     bool    `json:"removable"`
+	BlockedReason *string `json:"blocked_reason,omitempty"`
+}
+
 type InferenceKeyState struct {
-	KeyType                 string   `json:"key_type"`
-	CreditsUsed             float64  `json:"credits_used"`
-	MonthlyCredits          int64    `json:"monthly_credits"`
-	Disabled                bool     `json:"disabled"`
-	DisableCauses           []string `json:"disable_causes"`
-	DisableCausesClassified bool     `json:"disable_causes_classified"`
+	CauseDiagnostics        []InferenceKeyCauseDiagnostic `json:"cause_diagnostics"`
+	KeyType                 string                        `json:"key_type"`
+	CreditsUsed             float64                       `json:"credits_used"`
+	MonthlyCredits          int64                         `json:"monthly_credits"`
+	Disabled                bool                          `json:"disabled"`
+	DisableCauses           []string                      `json:"disable_causes"`
+	DisableCausesClassified bool                          `json:"disable_causes_classified"`
 }
 
 type InferenceKeyStates struct {
@@ -72,7 +80,7 @@ type SpendBreakdownSummary struct {
 func registerBillingDiagnosticTools(server *mcp.Server, organizations OrganizationReader, reads BillingDiagnosticsReader) {
 	mcp.AddTool(server, &mcp.Tool{
 		Name: "get_organization_inference_key_state", Title: "Get Inference Key State",
-		Description: "Read configured state and usage of up to four platform-managed inference key types for an exact organization. No key material or provider identifiers are returned.",
+		Description: "Read configured state and usage of up to four platform-managed inference key types for an exact organization. Includes disable-cause diagnostics and removal eligibility, without changing keys. No key material or provider identifiers are returned.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, input OrganizationIDInput) (*mcp.CallToolResult, InferenceKeyStates, error) {
 		out := InferenceKeyStates{Keys: []InferenceKeyState{}}
@@ -91,7 +99,7 @@ func registerBillingDiagnosticTools(server *mcp.Server, organizations Organizati
 			return nil, out, errBillingDiagnosticsUnavailable
 		}
 		for _, key := range keys {
-			if key == nil || len(key.KeyType) > 32 || len(key.DisableCauses) > 8 {
+			if key == nil || len(key.KeyType) > 32 || len(key.DisableCauses) > 8 || len(key.CauseDiagnostics) > 8 {
 				return nil, InferenceKeyStates{}, errBillingDiagnosticsUnavailable
 			}
 			for _, cause := range key.DisableCauses {
@@ -99,9 +107,16 @@ func registerBillingDiagnosticTools(server *mcp.Server, organizations Organizati
 					return nil, InferenceKeyStates{}, errBillingDiagnosticsUnavailable
 				}
 			}
+			diagnostics := make([]InferenceKeyCauseDiagnostic, 0, len(key.CauseDiagnostics))
+			for _, diagnostic := range key.CauseDiagnostics {
+				if diagnostic == nil || len(diagnostic.Cause) > 64 || len(diagnostic.Description) > 512 || (diagnostic.BlockedReason != nil && len(*diagnostic.BlockedReason) > 512) {
+					return nil, InferenceKeyStates{}, errBillingDiagnosticsUnavailable
+				}
+				diagnostics = append(diagnostics, InferenceKeyCauseDiagnostic{Cause: diagnostic.Cause, Description: diagnostic.Description, Removable: diagnostic.Removable, BlockedReason: diagnostic.BlockedReason})
+			}
 			// Legacy unclassified keys have nil causes; disable_causes_classified carries that distinction.
 			causes := append([]string{}, key.DisableCauses...)
-			out.Keys = append(out.Keys, InferenceKeyState{KeyType: key.KeyType, CreditsUsed: key.CreditsUsed, MonthlyCredits: key.MonthlyCredits, Disabled: key.Disabled, DisableCauses: causes, DisableCausesClassified: key.DisableCausesClassified})
+			out.Keys = append(out.Keys, InferenceKeyState{CauseDiagnostics: diagnostics, KeyType: key.KeyType, CreditsUsed: key.CreditsUsed, MonthlyCredits: key.MonthlyCredits, Disabled: key.Disabled, DisableCauses: causes, DisableCausesClassified: key.DisableCausesClassified})
 		}
 		out.OrganizationID = org.ID
 		return nil, out, nil

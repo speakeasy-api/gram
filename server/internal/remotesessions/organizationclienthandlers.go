@@ -21,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/managedrows"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -298,15 +299,38 @@ func (s *Service) CreateClient(ctx context.Context, payload *orgclientsgen.Creat
 		return nil, oops.E(oops.CodeBadRequest, nil, "client_id is required").LogError(ctx, logger)
 	}
 
+	owner, err := parseCreateCredentialOwner(ctx, logger, payload.CredentialOwner)
+	if err != nil {
+		return nil, err
+	}
+
+	authMethod := selfClientCreateAuthMethod(owner, payload.TokenEndpointAuthMethod)
+	hasSecret := payload.ClientSecret != nil && *payload.ClientSecret != ""
+
+	if err := requireSelfClientCredential(clientCredentialState{
+		owner:             owner,
+		method:            conv.PtrValOr(authMethod, ""),
+		hasSecret:         hasSecret,
+		hasKeySet:         payload.JSONWebKeySetID != nil,
+		legacyCallbackURL: false,
+	}); err != nil {
+		return nil, err
+	}
+
 	// Encrypt a supplied client secret before it touches the database; an absent
 	// secret leaves the stored ciphertext NULL.
 	var secretCiphertext pgtype.Text
-	if payload.ClientSecret != nil && *payload.ClientSecret != "" {
+	if hasSecret {
 		ciphertext, encErr := s.enc.Encrypt([]byte(*payload.ClientSecret))
 		if encErr != nil {
 			return nil, oops.E(oops.CodeUnexpected, encErr, "encrypt client secret").LogError(ctx, logger)
 		}
 		secretCiphertext = conv.ToPGText(ciphertext)
+	}
+
+	callbackBaseURL, err := s.newClientCallbackBaseURL(ctx, authCtx.ActiveOrganizationID, owner)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "resolve organization callback origin").LogError(ctx, logger)
 	}
 
 	dbtx, err := s.db.Begin(ctx)
@@ -350,7 +374,16 @@ func (s *Service) CreateClient(ctx context.Context, payload *orgclientsgen.Creat
 		return nil, err
 	}
 
-	if err := requirePrivateKeyJWTKeySet(payload.TokenEndpointAuthMethod, uuid.NullUUID{UUID: uuid.Nil, Valid: false}); err != nil {
+	if err := requireSelfClientIssuer(owner, issuer); err != nil {
+		return nil, err
+	}
+
+	keySetID, err := s.resolveCreateKeySet(ctx, logger, txRepo, payload.JSONWebKeySetID, authCtx.ActiveOrganizationID)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := requirePrivateKeyJWTKeySet(authMethod, keySetID); err != nil {
 		return nil, err
 	}
 
@@ -367,17 +400,25 @@ func (s *Service) CreateClient(ctx context.Context, payload *orgclientsgen.Creat
 		ClientSecretEncrypted:           secretCiphertext,
 		ClientIDIssuedAt:                provenance.clientIDIssuedAt,
 		ClientSecretExpiresAt:           provenance.clientSecretExpiresAt,
-		TokenEndpointAuthMethod:         conv.PtrToPGText(payload.TokenEndpointAuthMethod),
+		TokenEndpointAuthMethod:         conv.PtrToPGText(authMethod),
 		TokenEndpointAuthAudienceFormat: conv.PtrToPGText(payload.TokenEndpointAuthAudienceFormat),
 		Scope:                           payload.Scope,
 		Audience:                        conv.PtrToPGText(payload.Audience),
 		LegacyCallbackUrl:               false,
-		JsonWebKeySetID:                 uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		JsonWebKeySetID:                 keySetID,
 		IdentityProviderConnectionID:    uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		CallbackBaseUrl:                 s.origins.NewClientBaseURL(true),
+		CallbackBaseUrl:                 callbackBaseURL,
+		GrantTypes:                      clientCreateGrantTypes(owner),
+		CredentialOwner:                 conv.ToPGText(string(owner)),
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "create organization admin remote session client").LogError(ctx, logger)
+	}
+
+	// Standalone client: no user_session_issuer attachments.
+	snapshot, err := mv.BuildRemoteSessionClientView(created, nil)
+	if err != nil {
+		return nil, oops.E(oops.CodeInvariantViolation, err, "build remote session client view").LogError(ctx, logger)
 	}
 
 	if err := s.auditLogger.LogRemoteSessionClientCreate(ctx, dbtx, audit.LogRemoteSessionClientCreateEvent{
@@ -388,6 +429,7 @@ func (s *Service) CreateClient(ctx context.Context, payload *orgclientsgen.Creat
 		ActorSlug:              nil,
 		RemoteSessionClientURN: urn.NewRemoteSessionClient(created.ID),
 		ClientID:               created.ClientID,
+		SnapshotAfter:          snapshot,
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "log organization admin remote session client creation").LogError(ctx, logger)
 	}
@@ -466,6 +508,11 @@ func (s *Service) CreateCimdClient(ctx context.Context, payload *orgclientsgen.C
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid remote_session_issuer_id").LogError(ctx, logger)
 	}
 
+	callbackBaseURL, err := s.newClientCallbackBaseURL(ctx, authCtx.ActiveOrganizationID, CredentialOwnerSubject)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "resolve organization callback origin").LogError(ctx, logger)
+	}
+
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
@@ -514,7 +561,6 @@ func (s *Service) CreateCimdClient(ctx context.Context, payload *orgclientsgen.C
 		return nil, oops.E(oops.CodeUnexpected, err, "generate client id").LogError(ctx, logger)
 	}
 
-	callbackBaseURL := s.origins.NewClientBaseURL(true)
 	created, err := txRepo.CreateRemoteSessionClientCIMD(ctx, repo.CreateRemoteSessionClientCIMDParams{
 		ID:                    clientID,
 		ProjectID:             clientProjectID,
@@ -530,6 +576,12 @@ func (s *Service) CreateCimdClient(ctx context.Context, payload *orgclientsgen.C
 		return nil, oops.E(oops.CodeUnexpected, err, "create organization admin remote session client").LogError(ctx, logger)
 	}
 
+	// Standalone client: no user_session_issuer attachments.
+	snapshot, err := mv.BuildRemoteSessionClientView(created, nil)
+	if err != nil {
+		return nil, oops.E(oops.CodeInvariantViolation, err, "build remote session client view").LogError(ctx, logger)
+	}
+
 	if err := s.auditLogger.LogRemoteSessionClientCreate(ctx, dbtx, audit.LogRemoteSessionClientCreateEvent{
 		OrganizationID:         authCtx.ActiveOrganizationID,
 		ProjectID:              orgProjectID(created.ProjectID),
@@ -538,6 +590,7 @@ func (s *Service) CreateCimdClient(ctx context.Context, payload *orgclientsgen.C
 		ActorSlug:              nil,
 		RemoteSessionClientURN: urn.NewRemoteSessionClient(created.ID),
 		ClientID:               created.ClientID,
+		SnapshotAfter:          snapshot,
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "log organization admin remote session client creation").LogError(ctx, logger)
 	}
@@ -650,6 +703,10 @@ func (s *Service) UpdateClient(ctx context.Context, payload *orgclientsgen.Updat
 		return nil, err
 	}
 
+	if err := requireSelfClientCredential(updatedClientCredentialState(existing.RemoteSessionClient, payload.TokenEndpointAuthMethod, clientSecretEncrypted.Valid, payload.LegacyCallbackURL)); err != nil {
+		return nil, err
+	}
+
 	if err := guardEMABindingsForClient(ctx, txRepo, authCtx.ActiveOrganizationID, existing.RemoteSessionClient.ProjectID.UUID, clientID); err != nil {
 		return nil, err
 	}
@@ -713,7 +770,8 @@ func (s *Service) UpdateClient(ctx context.Context, payload *orgclientsgen.Updat
 	}
 
 	// Set after the audit snapshot so it matches the snapshot before.
-	afterView.CallbackURL = new(s.origins.ClientCallbackURL(updated.CallbackBaseUrl))
+	afterView.CallbackURL = s.clientCallbackURL(updated)
+	afterView.FederatedCallbackURL = s.origins.ClientFederatedCallbackURL(updated)
 	return afterView, nil
 }
 
@@ -776,7 +834,7 @@ func (s *Service) RotateClient(ctx context.Context, payload *orgclientsgen.Rotat
 		case errors.Is(err, ErrRotationSnapshotChanged):
 			return nil, oops.E(oops.CodeConflict, err, "client or issuer changed during rotation; reload before retrying").LogWarn(ctx, logger)
 		case errors.Is(err, ErrClientNotRotatable):
-			return nil, oops.E(oops.CodeBadRequest, err, "only dynamically registered clients using a client secret or no client authentication can be rotated").LogWarn(ctx, logger)
+			return nil, oops.E(oops.CodeBadRequest, err, "only dynamically registered clients that sign users in and use a client secret or no client authentication can be rotated; client metadata document, managed, private_key_jwt and credential_owner self clients cannot").LogWarn(ctx, logger)
 		case errors.Is(err, ErrIssuerHasNoRegistrationEndpoint):
 			return nil, oops.E(oops.CodeBadRequest, err, "the identity provider publishes no registration endpoint to re-register the client at").LogWarn(ctx, logger)
 		case errors.Is(err, ErrClientRotationInProgress):
@@ -880,6 +938,13 @@ func (s *Service) DeleteClient(ctx context.Context, payload *orgclientsgen.Delet
 	cascaded, err := txRepo.SoftDeleteRemoteSessionsByClientID(ctx, deleted.ID)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "soft-delete dependent remote sessions").LogError(ctx, logger)
+	}
+
+	if _, err := upstreamclientsrepo.New(dbtx).PruneRemoteSessionClientAssociations(ctx, upstreamclientsrepo.PruneRemoteSessionClientAssociationsParams{
+		RemoteSessionClientID: deleted.ID,
+		OrganizationID:        authCtx.ActiveOrganizationID,
+	}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "remove deleted client's mcp server associations").LogError(ctx, logger)
 	}
 
 	if err := s.auditLogger.LogRemoteSessionClientDelete(ctx, dbtx, audit.LogRemoteSessionClientDeleteEvent{
@@ -994,6 +1059,15 @@ func (s *Service) RemoveClientFromMcpServer(ctx context.Context, payload *orgcli
 
 	if err := guardEMABindingsForClientUserIssuer(ctx, txRepo, authCtx.ActiveOrganizationID, uuid.Nil, clientID, server.UserSessionIssuerID.UUID); err != nil {
 		return err
+	}
+
+	// The binding is removed for every server on the issuer, in any project,
+	// so their associations with this client go with it.
+	if _, err := upstreamclientsrepo.New(dbtx).PruneRemoteSessionClientAssociations(ctx, upstreamclientsrepo.PruneRemoteSessionClientAssociationsParams{
+		RemoteSessionClientID: clientID,
+		OrganizationID:        authCtx.ActiveOrganizationID,
+	}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "remove mcp server associations for detached client").LogError(ctx, logger)
 	}
 
 	if err := s.auditLogger.LogRemoteSessionClientDetachMcpServer(ctx, dbtx, audit.LogRemoteSessionClientDetachMcpServerEvent{

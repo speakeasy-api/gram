@@ -135,15 +135,16 @@ func NewRuntimeWithFeedback(logger *slog.Logger, authenticator Authenticator, ga
 // identities and declared configuration fields, never an arbitrary endpoint or
 // provider credential.
 func NewRuntimeWithLifecycle(logger *slog.Logger, authenticator Authenticator, gate Gate, authorizer Authorizer, protectedResourceURL, cursorKeyMaterial string, reader Reader, catalog Catalog, registrations *RegistrationService, readiness ReadinessRecorder, setupResources []SetupResource, feedback *FeedbackService, onboarding *OnboardingService, distributions *DistributionService, skills *SkillsService, diagnostics *DiagnosticsService, plugins *PluginsService, sessionRecall *SessionRecallService, candidate CatalogDescriptor) *Runtime {
-	return NewRuntimeWithRiskMutations(logger, authenticator, gate, authorizer, protectedResourceURL, cursorKeyMaterial, reader, catalog, registrations, readiness, setupResources, feedback, onboarding, distributions, skills, diagnostics, nil, plugins, sessionRecall, nil, candidate, nil, nil, nil)
+	return NewRuntimeWithRiskMutations(logger, authenticator, gate, authorizer, protectedResourceURL, cursorKeyMaterial, reader, catalog, registrations, readiness, setupResources, feedback, onboarding, distributions, skills, diagnostics, nil, plugins, sessionRecall, nil, candidate, nil, nil, nil, nil)
 }
 
-func NewRuntimeWithRiskMutations(logger *slog.Logger, authenticator Authenticator, gate Gate, authorizer Authorizer, protectedResourceURL, cursorKeyMaterial string, reader Reader, catalog Catalog, registrations *RegistrationService, readiness ReadinessRecorder, setupResources []SetupResource, feedback *FeedbackService, onboarding *OnboardingService, distributions *DistributionService, skills *SkillsService, diagnostics *DiagnosticsService, workflowRun *WorkflowRunService, plugins *PluginsService, sessionRecall *SessionRecallService, riskMutations *RiskMutationHandlers, candidate CatalogDescriptor, accessReads *AccessReadService, accessRoleMutations *AccessRoleMutationService, assistantIdentity *AssistantIdentityService, connectionMutations ...*MCPConnectionMutationService) *Runtime {
+func NewRuntimeWithRiskMutations(logger *slog.Logger, authenticator Authenticator, gate Gate, authorizer Authorizer, protectedResourceURL, cursorKeyMaterial string, reader Reader, catalog Catalog, registrations *RegistrationService, readiness ReadinessRecorder, setupResources []SetupResource, feedback *FeedbackService, onboarding *OnboardingService, distributions *DistributionService, skills *SkillsService, diagnostics *DiagnosticsService, workflowRun *WorkflowRunService, plugins *PluginsService, sessionRecall *SessionRecallService, riskMutations *RiskMutationHandlers, candidate CatalogDescriptor, accessReads *AccessReadService, accessRoleMutations *AccessRoleMutationService, assistantIdentity *AssistantIdentityService, signalAuthoring *SignalAuthoringService, connectionMutations ...*MCPConnectionMutationService) *Runtime {
 	if postgresReader, ok := reader.(*PostgresReader); ok {
 		postgresReader.setInventoryCursorKey(cursorKeyMaterial)
 	}
-	server, registrar := newServerWithRiskMutations(reader, catalog, registrations, cursorKeyMaterial, setupResources, feedback, onboarding, distributions, skills, diagnostics, workflowRun, plugins, sessionRecall, riskMutations, candidate, accessReads, accessRoleMutations, assistantIdentity, connectionMutations...)
+	server, registrar := newServerWithRiskMutations(reader, catalog, registrations, cursorKeyMaterial, setupResources, feedback, onboarding, distributions, skills, diagnostics, workflowRun, plugins, sessionRecall, riskMutations, candidate, accessReads, accessRoleMutations, assistantIdentity, signalAuthoring, connectionMutations...)
 	registrar.withExternalAuthorizer(authorizer)
+	registrar.withLogger(logger)
 	runtime := &Runtime{
 		authenticator:        authenticator,
 		gate:                 gate,
@@ -157,7 +158,7 @@ func NewRuntimeWithRiskMutations(logger *slog.Logger, authenticator Authenticato
 	// Register both wrappers together so their order is reviewable: readiness is
 	// outside catalogue aggregation and therefore observes one completed external
 	// tools/list call, never the SDK pages the catalogue middleware reads inside.
-	middlewares := []mcp.Middleware{capabilityCatalogueMiddleware(registrar)}
+	middlewares := []mcp.Middleware{clientToolAllowlistMiddleware(registrar), capabilityCatalogueMiddleware(registrar)}
 	if readiness != nil {
 		middlewares = append([]mcp.Middleware{readinessMiddleware(runtime, logger)}, middlewares...)
 	}
@@ -179,6 +180,39 @@ func readinessMiddleware(runtime *Runtime, logger *slog.Logger) mcp.Middleware {
 				}
 			}
 			return result, err
+		}
+	}
+}
+
+// clientToolAllowlistMiddleware makes a client with a tool allowlist meet a
+// server that has only those tools. tools/list is narrowed by
+// FilterExternalTools; this covers the rest. A call to a tool outside the list
+// gets the same unknown-tool error the SDK returns for a name that was never
+// registered, and the server instructions drop every paragraph that points at
+// such a tool, so the client never meets a tool it was not shown.
+func clientToolAllowlistMiddleware(registrar *Registrar) mcp.Middleware {
+	return func(next mcp.MethodHandler) mcp.MethodHandler {
+		return func(ctx context.Context, method string, req mcp.Request) (mcp.Result, error) {
+			clientID := mustPrincipal(ctx).ClientID
+			if method == "tools/call" {
+				if callReq, ok := req.(*mcp.CallToolRequest); ok && callReq.Params != nil && !toolAllowedForClient(clientID, callReq.Params.Name) {
+					return nil, &jsonrpc.Error{Code: jsonrpc.CodeInvalidParams, Message: fmt.Sprintf("unknown tool %q", callReq.Params.Name)}
+				}
+			}
+			result, err := next(ctx, method, req)
+			if err != nil {
+				return result, err
+			}
+			switch typed := result.(type) {
+			case *mcp.InitializeResult:
+				typed.Instructions = registrar.instructionsForClient(clientID, typed.Instructions)
+			case *mcp.DiscoverResult:
+				typed.Instructions = registrar.instructionsForClient(clientID, typed.Instructions)
+				// The instructions now depend on the caller, so no shared cache
+				// may hand one client's answer to another.
+				typed.CacheScope = "private"
+			}
+			return result, nil
 		}
 	}
 }

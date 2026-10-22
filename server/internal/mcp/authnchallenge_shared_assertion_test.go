@@ -15,7 +15,6 @@ import (
 	mockidp "github.com/speakeasy-api/gram/dev-idp/pkg/testidp"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/oauthtest"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
@@ -245,9 +244,6 @@ func TestSharedAuthorizationServer_WorkloadRetainsAdmissionAndClientDispatch(t *
 		oauthwire.ParamGrantType: {oauthwire.GrantTypeJWTBearer}, oauthwire.ParamResource: {f.resource},
 		oauthwire.ParamAssertion: {f.assertion(t, issuerURL)},
 	}
-	f.ti.features.SetFlag(feature.FlagAgentManagement, f.fx.orgID, false)
-	requireWorkloadGrantRefused(t, sharedToken(t, t.Context(), f.ti, f.fx.target.UserSessionIssuerID.String(), form))
-	f.ti.features.SetFlag(feature.FlagAgentManagement, f.fx.orgID, true)
 	// Presenting client credentials must not fall back to workload admission.
 	form[oauthwire.ParamClientID] = []string{"unknown-client"}
 	w := sharedToken(t, t.Context(), f.ti, f.fx.target.UserSessionIssuerID.String(), form)

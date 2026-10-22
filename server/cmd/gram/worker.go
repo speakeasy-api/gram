@@ -37,8 +37,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/environments"
 	"github.com/speakeasy-api/gram/server/internal/externalmcp"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/functions"
+	"github.com/speakeasy-api/gram/server/internal/identityproviderconnections"
+	"github.com/speakeasy-api/gram/server/internal/internalsessionissuers"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/mcpauthz"
@@ -60,7 +61,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/scanners"
 	"github.com/speakeasy-api/gram/server/internal/scanners/customruleanalyzer"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
-	piopenrouter "github.com/speakeasy-api/gram/server/internal/scanners/promptinjection/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 	"github.com/speakeasy-api/gram/server/internal/skills/efficacy"
@@ -145,6 +145,11 @@ func newWorkerCommand() *cli.Command {
 		&cli.StringFlag{Name: "authz-private-key", EnvVars: []string{"GRAM_AUTHZ_PRIVATE_KEY"}, Usage: "Speakeasy platform signing key for principal credentials"},
 		&cli.StringFlag{Name: "authz-public-keys", EnvVars: []string{"GRAM_AUTHZ_PUBLIC_KEYS"}, Usage: "Speakeasy platform verification keys for principal credentials"},
 		&cli.StringFlag{
+			Name:    "authentication-host-url",
+			Usage:   "Alternate MCP OAuth authentication host used by Kit workload issuer validation.",
+			EnvVars: []string{"GRAM_AUTHENTICATION_HOST_URL"},
+		},
+		&cli.StringFlag{
 			Name:     "server-url",
 			Usage:    "The public URL of the server",
 			EnvVars:  []string{"GRAM_SERVER_URL"},
@@ -209,6 +214,7 @@ func newWorkerCommand() *cli.Command {
 			EnvVars:  []string{"GRAM_DISALLOWED_CIDR_BLOCKS"},
 			Required: false,
 		},
+		internalCatalogFlag(),
 		&cli.StringFlag{
 			Name:     "tunnel-forward-token",
 			Usage:    "Shared secret presented to the tunnel gateway forward listener to authenticate gram-worker",
@@ -361,6 +367,7 @@ func newWorkerCommand() *cli.Command {
 	flags = append(flags, riskLLMFlags()...)
 	flags = append(flags, gcpFlags()...)
 	flags = append(flags, platformHostsCLIFlag())
+	flags = append(flags, callbackOriginFlags()...)
 	flags = append(flags, orgDefaultHostFlags()...)
 
 	return &cli.Command{
@@ -479,17 +486,14 @@ func newWorkerCommand() *cli.Command {
 				logger.InfoContext(ctx, "GitHub publishing for plugins: using local fixture publisher")
 			}
 			posthogClient := posthog.New(ctx, logger, c.String("posthog-api-key"), c.String("posthog-endpoint"), c.String("posthog-personal-api-key"))
-			var featureFlags feature.Provider = posthogClient
-			if c.String("environment") == "local" {
-				featureFlags = newLocalFeatureFlags(ctx, logger, c.String("local-feature-flags-csv"))
-			}
+			featureFlags := newFeatureFlags(ctx, c, logger, posthogClient)
 
 			productFeatures := productfeatures.NewClient(logger, tracerProvider, db, redisClient)
 			var pluginPublisher *plugins.Service
 			if pluginsGitHub != nil {
 				logger.InfoContext(ctx, "GitHub publishing for plugins: enabled")
 				pluginPublisher = plugins.NewPublisher(logger, db, auditLogger, pluginsGitHub, c.String("environment"), c.String("server-url"), featureFlags).
-					WithDistributionAdmission(admission.NewGuard(featureFlags, admission.NewReportMetrics(meterProvider, logger)))
+					WithDistributionAdmission(admission.NewGuard())
 			} else {
 				logger.InfoContext(ctx, "GitHub publishing for plugins: disabled")
 			}
@@ -749,6 +753,7 @@ func newWorkerCommand() *cli.Command {
 			)
 
 			sessionManager := sessions.NewManager(logger, tracerProvider, db, redisClient, cache.SuffixNone, idpClient, billingRepo, identityResolver)
+			sessionManager.SetFlags(featureFlags)
 
 			// The worker never serves webhook ingress (ProcessWebhook lives in
 			// the HTTP server), so the dashboard site URL used for Slack link
@@ -796,11 +801,14 @@ func newWorkerCommand() *cli.Command {
 			assistantsCore.SetWakeCanceller(triggerApp)
 			assistantsCore.SetDashboardIngestor(triggerApp)
 			assistantsCore.SetChatMessageWriter(chatWriter)
+			if err := installKitLocalRuntimeFromCLI(c, assistantsCore, db, auditLogger, redisClient, serverURL); err != nil {
+				return err
+			}
 			assistantsCore.SetAssetStorage(assetStorage)
 			assistantsCore.SetAssetSigningKey(c.String(usersessions.JWTSigningKeyFlag))
 			assistantsCore.SetSlackImageInlining(env, slackapi.NewClient("", guardianPolicy.PooledClient()))
 			assistantsCore.SetFeatureProvider(featureFlags)
-			assistantsSvc := assistants.NewService(logger, tracerProvider, meterProvider, db, sessionManager, authzEngine, assistantsCore, &background.AssistantWorkflowSignaler{TemporalEnv: temporalEnv}, ratelimit.NewRedisStore(redisClient), featureFlags)
+			assistantsSvc := assistants.NewService(logger, tracerProvider, meterProvider, db, sessionManager, authzEngine, assistantsCore, &background.AssistantWorkflowSignaler{TemporalEnv: temporalEnv}, ratelimit.NewRedisStore(redisClient))
 			triggerApp.RegisterDispatcher(assistantsSvc)
 
 			/**
@@ -813,7 +821,7 @@ func newWorkerCommand() *cli.Command {
 				logger.InfoContext(ctx, "presidio PII scanner enabled", attr.SlogURL(presidioURL))
 			}
 
-			piScanner := promptinjection.NewScanner(logger, piopenrouter.New(logger, tracerProvider, meterProvider, completionsClient, openrouter.NewJudgeRateLimiter(ratelimit.NewRedisStore(redisClient))).Classify)
+			piScanner := promptinjection.NewScanner(logger, newPICascade(logger, tracerProvider, meterProvider, completionsClient, guardianPolicy, openRouter, db).Classify)
 
 			customRuleScanner, err := customruleanalyzer.NewScanner(db)
 			if err != nil {
@@ -853,6 +861,26 @@ func newWorkerCommand() *cli.Command {
 			}
 			clientAssertionSigner := remotesessions.NewKMSClientAssertionSigner(logger, db, gcpIdentity, kmsSigningClients)
 			clientAssertionSigner.PinManagedSigner(c.String(identityProviderSigningServiceAccount))
+			// Issuer URLs are pinned to the outbound origin, as on the server.
+			// The worker only sweeps issuer keys, so a bad issuer setting turns
+			// the sweep off with an error log instead of stopping every
+			// workflow; issuers fail closed meanwhile.
+			outboundOrigin, err := outboundCallbackOriginFromCLI(c, serverURL, c.String("environment"), platformHosts)
+			var issuerProvisioner *identityproviderconnections.Provisioner
+			if err != nil {
+				logger.ErrorContext(ctx, "invalid outbound callback origin; internal session issuer key sweep is off", attr.SlogError(err))
+			} else if issuerProvisioner, err = newIdentityProviderConnectionsProvisioner(ctx, logger, c, db, gcpIdentity, kmsSigningClients, auditLogger, outboundOrigin); err != nil {
+				// Nil where KMS provisioning is unconfigured, too.
+				logger.ErrorContext(ctx, "identity provider provisioner unavailable; internal session issuer key sweep is off", attr.SlogError(err))
+				issuerProvisioner = nil
+			}
+			// No signer authority without a valid outbound origin.
+			if issuerProvisioner != nil {
+				issuerGate := newInternalSessionIssuerGate(c, db, featureFlags, true)
+				issuerSigner := internalsessionissuers.NewSigner(logger, tracerProvider, meterProvider, db, issuerGate, gcpIdentity, kmsSigningClients, internalIssuerSignerConfig(c, outboundOrigin))
+				issuerGate.SetSigningAuthority(issuerSigner.CheckAuthority)
+				enableIssuerKeyAutoActivation(issuerProvisioner, issuerSigner)
+			}
 
 			var slackDirectoryRefresher slackdirectoryconnections.TokenRefresher
 			if id, secret := c.String("slack-client-id"), c.String("slack-client-secret"); id != "" && id != "unset" && secret != "" && secret != "unset" {
@@ -897,6 +925,7 @@ func newWorkerCommand() *cli.Command {
 				CacheAdapter:                 remoteSessionsCache,
 				IssuerMetadataRefresher:      issuerMetadataRefresher,
 				RemoteSessionAssertionSigner: clientAssertionSigner,
+				IssuerKeySweeper:             issuerKeySweeper(issuerProvisioner),
 				StartupSeeds:                 startupSeeds(logger, db),
 				AssistantsCore:               assistantsCore,
 				TemporalEnv:                  temporalEnv,

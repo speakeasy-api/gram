@@ -32,6 +32,7 @@ const (
 	ChecklistKeyLinkAgentApp            = "link_agent_app"
 	ChecklistKeyActivateAgentApp        = "activate_agent_app"
 	ChecklistKeyRecordAIAgent           = "record_ai_agent"
+	ChecklistKeyAddAgentPublicKey       = "add_agent_public_key"
 	ChecklistKeyFirstResourceConnection = "first_resource_connection"
 )
 
@@ -95,8 +96,8 @@ type AgentAppSignal struct {
 
 const (
 	accessInstruction   = "On the app's Admin roles tab, assign these roles. Speakeasy checks whether it can read apps, users, and groups through the Okta API; it does not check which named admin roles are assigned. Okta will ask you to confirm your identity with multi-factor authentication first."
-	linkInstruction     = "On User access and authentication, keep Allow users to access this agent checked and Create a new OIDC app linked to this AI agent selected, then click Next. You can skip the Add owners step that follows. Okta uses the linked app only to decide which users the agent may act for; it does not change how your people sign in to Speakeasy."
-	activateInstruction = "Okta creates the agent in Staged status and its linked app as Inactive. Open the linked app (linked from the agent's User access section), set it to Active, and on its Assignments tab assign the users or groups who use MCP servers through Speakeasy. Okta issues assertions only for the users assigned here."
+	linkInstruction     = "On User access and authentication, keep Allow users to access this agent checked and Create a new OIDC app linked to this AI agent selected, then click Next. You can skip the Add owners step that follows. The linked app becomes the app your people use to sign in to Speakeasy, which is what lets Okta turn that sign-in into Cross App Access assertions."
+	activateInstruction = "Okta creates the agent in Staged status and its linked app as Inactive. Open the linked app (linked from the agent's User access section), set it to Active, and on its Assignments tab assign the users or groups who use MCP servers through Speakeasy. Okta issues assertions only for the users assigned here. People who sign in through Okta must already exist in Speakeasy, provisioned through directory sync (SCIM); Speakeasy does not create accounts at sign-in."
 )
 
 // completions holds each observable step's tri-state; nil is not observed.
@@ -323,10 +324,11 @@ func agentItems(app *AgentAppSignal, done completions) []ChecklistItem {
 	return []ChecklistItem{
 		// Verified against the live console 2026-10-05. The wizard creates the
 		// agent STAGED on its second step; it turns ACTIVE when its linked app is
-		// activated, with no credential. The linked app's Client ID shows the
-		// agent ID (wlp...); its own ID (0oa...) is only in its page URL. The
-		// agent key is separate from the management service app key; its JWKS URI
-		// ships with AIM-62.
+		// activated. The linked app's Client ID shows the agent ID (wlp...); its
+		// own ID (0oa...) is only in its page URL. Okta only exchanges ID tokens
+		// minted for the requesting client, so the linked app is also Speakeasy's
+		// trusted sign-in client. The agent key is separate from the management
+		// service app key.
 		{
 			Key:         ChecklistKeyRegisterAIAgent,
 			Group:       ChecklistGroupCrossAppAccess,
@@ -346,6 +348,28 @@ func agentItems(app *AgentAppSignal, done completions) []ChecklistItem {
 			Completed: done.agentAppLinked,
 		},
 		{
+			Key:         ChecklistKeyRecordAIAgent,
+			Group:       ChecklistGroupCrossAppAccess,
+			Title:       "Record the agent ID",
+			Description: "Enter the agent ID and the linked app's ID below. The agent ID is the wlp... value in the agent page URL; the bound application ID is the 0oa... value in the linked app's page URL (not its Client ID, which Okta sets to the agent ID), which lets Speakeasy check the linked app after the next applications sync.",
+			Details: []string{
+				"This step is done once the agent ID is recorded. Speakeasy does not check the Okta settings in the next steps; the Okta sign-in section shows what Speakeasy has set up on its side.",
+			},
+			Completed: done.agentRecorded,
+		},
+		{
+			Key:         ChecklistKeyAddAgentPublicKey,
+			Group:       ChecklistGroupCrossAppAccess,
+			Title:       "Add the agent's public key",
+			Description: "Use Set up Okta sign-in on this page. It registers the linked app, whose Client ID is the agent ID, as the organization's sign-in client and shows its public key. In Okta, open the agent's Credentials (Client registration), paste this key in the agent's Credentials and click Activate.",
+			Details: []string{
+				"Okta rejects edits to the linked app, including activating it, until the agent has an active public key, so do this before the next step.",
+				"Okta stores the pasted key, not a key URL. Rotating the signing key set or publishing a new key in it means pasting the new public key in Okta again.",
+				"Set up Okta sign-in needs customer-managed encryption keys enabled for your organization and a Google Cloud KMS key to sign with.",
+			},
+			Completed: nil,
+		},
+		{
 			Key:         ChecklistKeyActivateAgentApp,
 			Group:       ChecklistGroupCrossAppAccess,
 			Title:       "Activate the linked app and assign users",
@@ -353,17 +377,9 @@ func agentItems(app *AgentAppSignal, done completions) []ChecklistItem {
 			Details: []string{
 				"Activating the linked app also moves the agent from Staged to Active.",
 				"Owners and Machine access can stay unset.",
-				"Skip Client registration for now: the agent only needs that credential when it requests access on a user's behalf, and Speakeasy will provide the key URL (JWKS URI) for it in an upcoming release.",
+				"On the linked app's General tab, enable the Authorization Code and Refresh Token grant types and add the sign-in redirect URI shown in the Okta sign-in section.",
 			},
 			Completed: done.agentAppReady,
-		},
-		{
-			Key:         ChecklistKeyRecordAIAgent,
-			Group:       ChecklistGroupCrossAppAccess,
-			Title:       "Record the agent ID",
-			Description: "Enter the agent ID and the linked app's ID below. The agent ID is the wlp... value in the agent page URL; the bound application ID is the 0oa... value in the linked app's page URL (not its Client ID, which Okta sets to the agent ID), which lets Speakeasy check the steps above after the next applications sync.",
-			Details:     []string{},
-			Completed:   done.agentRecorded,
 		},
 		{
 			Key:         ChecklistKeyFirstResourceConnection,
@@ -371,9 +387,10 @@ func agentItems(app *AgentAppSignal, done completions) []ChecklistItem {
 			Title:       "Set up your first Cross App Access connection",
 			Description: "The agent needs one resource connection per MCP server. Open the Cross App Access tab and pick a server: Speakeasy shows the values to copy into Okta, on the agent's Resource connections section, and records the connection once you confirm it. Repeat for each MCP server your agents use.",
 			Details: []string{
-				"First enable Cross App Access on the app for that service: under Applications, open the app, go to Resource Server > Cross-app access (XAA) > Edit, and set it to Enabled. If Okta asks for an Issuer URL, enter the server's authorization server issuer shown on the Cross App Access tab; Audience/tenant ID can stay empty.",
+				"First enable Cross App Access on the app for that service: under Applications, open the app, go to Machine Assignments > Callers > Cross-app access (XAA) > Edit, and set it to Enabled. For Issuer URL, enter the server's authorization server issuer shown on the Cross App Access tab, and add the scopes your agents use; Audience/tenant ID can stay empty.",
 				"Then on the agent choose Add resource connection > Application > App configured for AI Agent access and pick that app, listed with an XAA suffix (for example, Linear - XAA). Okta lists only apps with Cross App Access enabled.",
 				"Speakeasy records what you confirm. It does not create the connection in Okta or prove that access works.",
+				"Each vendor must also enable enterprise-managed authorization in its own admin console and trust your Okta issuer. For example, Linear needs SAML via Okta and \"MCP enterprise managed authentication\" turned on with your Okta issuer. Many vendors require an Enterprise or SSO plan, and some only allow specific clients. Speakeasy cannot do this step for you.",
 			},
 			Completed: done.firstConnection,
 		},

@@ -119,10 +119,10 @@ func TestContentHashIgnoresEncodingWhitespace(t *testing.T) {
 	require.NotEqual(t, contentHash(compact), contentHash(Message{Role: "assistant", Content: compact.Content}))
 }
 
-func TestCurrentTurnStartsAfterLastAssistantMessage(t *testing.T) {
+func TestLatestExchangeStartsAtLastAssistantMessage(t *testing.T) {
 	t.Parallel()
-	require.Equal(t, 0, currentTurnStart(nil))
-	require.Equal(t, 0, currentTurnStart([]Message{textMessage("user", "a")}))
-	require.Equal(t, 2, currentTurnStart([]Message{textMessage("user", "a"), textMessage("assistant", "b"), textMessage("user", "c"), textMessage("user", "d")}))
-	require.Equal(t, 3, currentTurnStart([]Message{textMessage("user", "a"), textMessage("assistant", "b"), textMessage("assistant", "c")}))
+	require.Equal(t, 0, latestExchangeStart(nil))
+	require.Equal(t, 0, latestExchangeStart([]Message{textMessage("user", "a")}))
+	require.Equal(t, 1, latestExchangeStart([]Message{textMessage("user", "a"), textMessage("assistant", "b"), textMessage("user", "c"), textMessage("user", "d")}))
+	require.Equal(t, 2, latestExchangeStart([]Message{textMessage("user", "a"), textMessage("assistant", "b"), textMessage("assistant", "c")}))
 }

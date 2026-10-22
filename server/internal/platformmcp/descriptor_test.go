@@ -240,7 +240,16 @@ func TestEveryExternalToolUsesAKnownAuthorizationPolicy(t *testing.T) {
 		"search_gram_docs", "list_skills", "get_skill", "list_skill_versions",
 		"list_skill_feedback", "list_skill_suggestions", "list_skill_suggestion_feedback",
 		"create_skill", "add_skill_version", "update_skill_metadata", "list_skill_distributions",
-		"list_my_sessions", "continue_session",
+		"list_my_sessions", "continue_session", searchChatsToolName, readChatToolName,
+		// The analytics reads hold the caller to project:read in the handler.
+		describeAnalyticsCatalogToolName, listAnalyticsDimensionValuesToolName, runAnalyticsQueryToolName,
+		// The widget tools hold the caller to project:read in the handler; the
+		// widgets service's creator-or-write rule decides updates and deletes.
+		listWidgetsToolName, getWidgetToolName, saveWidgetToolName, duplicateWidgetToolName, deleteWidgetToolName,
+		// The dashboard tools hold the caller to project:read; the
+		// dashboards service decides creator or project:write for a change.
+		listDashboardsToolName, getDashboardToolName, saveDashboardToolName, duplicateDashboardToolName,
+		deleteDashboardToolName, editDashboardLayoutToolName, saveDashboardFiltersToolName,
 	} {
 		require.Equal(t, ExternalAuthorizationMember, byName[name], name)
 	}
@@ -249,9 +258,12 @@ func TestEveryExternalToolUsesAKnownAuthorizationPolicy(t *testing.T) {
 	for _, name := range []string{"list_skill_insights", "compare_skill_versions"} {
 		require.Equal(t, ExternalAuthorizationOrgAdmin, byName[name], "session cost is organization spend: %s", name)
 	}
-	// search_tool_calls returns masked identities and person references, so it
-	// stays admin-gated like the drill-downs that do the same.
-	require.Equal(t, ExternalAuthorizationOrgAdmin, byName["search_tool_calls"])
+	// The individual-call tools hold the caller to log:read on the project in
+	// the handler, matching the dashboard Tool Logs list. log:read is never a
+	// system-role default, so membership alone admits nobody to the rows.
+	for _, name := range []string{"search_tool_calls", "query_mcp_traces"} {
+		require.Equal(t, ExternalAuthorizationMember, byName[name], name)
+	}
 	for _, resource := range registrar.resources {
 		if resource.Meta.servesAudience(AudienceExternal) {
 			require.Equal(t, ExternalAuthorizationMember, resource.Meta.Authorization, resource.URI)
@@ -279,7 +291,8 @@ func TestGetPlatformContextPreservesAssistantCallsWithoutExternalGrants(t *testi
 	contextResult, ok := result.(PlatformContext)
 	require.True(t, ok)
 	require.Equal(t, principal.OrganizationID, contextResult.OrganizationID)
-	require.Contains(t, contextResult.Overview, "binding inspection, unlinking, and rebinding are not available through this server")
+	require.Contains(t, contextResult.Overview, "binding unlinking and rebinding are not available through this server")
+	require.Contains(t, contextResult.Overview, "where the catalogue lists get_xaa_readiness (organization administrators on external clients only)")
 	require.Contains(t, contextResult.Overview, "explicitly unlink affected bindings")
 	require.Contains(t, contextResult.Overview, "blocking_reason=identity_chaining and ema_binding_count greater than zero (can_delete=false)")
 	require.Contains(t, contextResult.Overview, "current generation before retrying deletion")
@@ -422,6 +435,7 @@ func TestAssistantAudienceExcludesConnectionScopedTools(t *testing.T) {
 		operationRepublishPlugin,
 		"list_my_sessions",
 		"continue_session",
+		searchChatsToolName, readChatToolName,
 		"list_data_exports",
 		"create_data_export",
 		pauseDataExportToolName,
@@ -434,11 +448,30 @@ func TestAssistantAudienceExcludesConnectionScopedTools(t *testing.T) {
 		// Authoring a new server from a project's functions is the same kind
 		// of administrator decision.
 		createMCPFromFunctionsToolName,
+		// Gateways decide which servers people reach through one endpoint,
+		// the same kind of administrator decision.
+		createGatewayToolName,
+		setGatewayMembersToolName,
 		// An assistant is bound to its own project: creating another is
 		// outside its reach, and renaming its own is a decision for a person
 		// with write access to it, not for the assistant.
 		createProjectToolName,
 		renameProjectToolName,
+		// Widget writes are audited under a user; an assistant has no user identity.
+		listWidgetsToolName,
+		getWidgetToolName,
+		saveWidgetToolName,
+		duplicateWidgetToolName,
+		deleteWidgetToolName,
+		// Every dashboard write is audited under a user's email, and the
+		// assistant has no user identity; the reads stay with the writes.
+		listDashboardsToolName,
+		getDashboardToolName,
+		saveDashboardToolName,
+		duplicateDashboardToolName,
+		deleteDashboardToolName,
+		editDashboardLayoutToolName,
+		saveDashboardFiltersToolName,
 	} {
 		require.False(t, admitted[name], "tool %q must not be admitted to the assistant", name)
 	}
@@ -483,6 +516,8 @@ func TestAssistantAudienceExcludesConnectionScopedTools(t *testing.T) {
 		"list_risk_exclusions",
 		"get_risk_analysis_status",
 		"list_watchdog_findings",
+		"list_risk_presets",
+		"suggest_risk_policy",
 		"list_risk_findings",
 		"list_risk_findings_by_chat",
 		"get_risk_rule_breakdown",
@@ -494,6 +529,9 @@ func TestAssistantAudienceExcludesConnectionScopedTools(t *testing.T) {
 		"mark_risk_findings_false_positive",
 		"unmark_risk_findings_false_positive",
 		listProjectToolsToolName,
+		describeAnalyticsCatalogToolName,
+		listAnalyticsDimensionValuesToolName,
+		runAnalyticsQueryToolName,
 	} {
 		require.True(t, admitted[name], "tool %q works without a connection and should serve the assistant", name)
 	}

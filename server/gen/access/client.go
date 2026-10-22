@@ -21,9 +21,17 @@ type Client struct {
 	UpdateRoleEndpoint                           goa.Endpoint
 	DeleteRoleEndpoint                           goa.Endpoint
 	ListDirectoryRoleMappingsEndpoint            goa.Endpoint
+	ListDirectoryPeopleEndpoint                  goa.Endpoint
 	SyncDirectoryGroupsEndpoint                  goa.Endpoint
 	SetDirectoryRoleMappingEndpoint              goa.Endpoint
+	SetDirectoryRoleMappingsEndpoint             goa.Endpoint
 	DeleteDirectoryRoleMappingEndpoint           goa.Endpoint
+	PreviewDirectoryRoleSetupEndpoint            goa.Endpoint
+	ApplyDirectoryRoleSetupEndpoint              goa.Endpoint
+	ListDirectoryReviewItemsEndpoint             goa.Endpoint
+	ResolveDirectoryReviewItemEndpoint           goa.Endpoint
+	GetDirectoryReviewSettingsEndpoint           goa.Endpoint
+	UpdateDirectoryReviewSettingsEndpoint        goa.Endpoint
 	ListScopesEndpoint                           goa.Endpoint
 	ListMembersEndpoint                          goa.Endpoint
 	ListGrantsEndpoint                           goa.Endpoint
@@ -50,7 +58,7 @@ type Client struct {
 }
 
 // NewClient initializes a "access" service client given the endpoints.
-func NewClient(listRoles, getRole, createRole, updateRole, deleteRole, listDirectoryRoleMappings, syncDirectoryGroups, setDirectoryRoleMapping, deleteDirectoryRoleMapping, listScopes, listMembers, listGrants, updateMemberRoles, listShadowMCPInventory, getShadowMCPInventoryServer, updateShadowMCPInventoryServerName, listShadowMCPInventoryUsers, listShadowMCPInventoryServersForUser, resolveShadowMCPInventoryRequest, listAIDetections, listEmployeeAIDetections, listAIDetectionUsers, setAIToolDecision, listResourceAudience, setResourceAudience, listAudienceOptions, explainResourceAccess, requestAccess, listChallenges, listChallengeBuckets, resolveChallenge, listIdentityAccess goa.Endpoint) *Client {
+func NewClient(listRoles, getRole, createRole, updateRole, deleteRole, listDirectoryRoleMappings, listDirectoryPeople, syncDirectoryGroups, setDirectoryRoleMapping, setDirectoryRoleMappings, deleteDirectoryRoleMapping, previewDirectoryRoleSetup, applyDirectoryRoleSetup, listDirectoryReviewItems, resolveDirectoryReviewItem, getDirectoryReviewSettings, updateDirectoryReviewSettings, listScopes, listMembers, listGrants, updateMemberRoles, listShadowMCPInventory, getShadowMCPInventoryServer, updateShadowMCPInventoryServerName, listShadowMCPInventoryUsers, listShadowMCPInventoryServersForUser, resolveShadowMCPInventoryRequest, listAIDetections, listEmployeeAIDetections, listAIDetectionUsers, setAIToolDecision, listResourceAudience, setResourceAudience, listAudienceOptions, explainResourceAccess, requestAccess, listChallenges, listChallengeBuckets, resolveChallenge, listIdentityAccess goa.Endpoint) *Client {
 	return &Client{
 		ListRolesEndpoint:                            listRoles,
 		GetRoleEndpoint:                              getRole,
@@ -58,9 +66,17 @@ func NewClient(listRoles, getRole, createRole, updateRole, deleteRole, listDirec
 		UpdateRoleEndpoint:                           updateRole,
 		DeleteRoleEndpoint:                           deleteRole,
 		ListDirectoryRoleMappingsEndpoint:            listDirectoryRoleMappings,
+		ListDirectoryPeopleEndpoint:                  listDirectoryPeople,
 		SyncDirectoryGroupsEndpoint:                  syncDirectoryGroups,
 		SetDirectoryRoleMappingEndpoint:              setDirectoryRoleMapping,
+		SetDirectoryRoleMappingsEndpoint:             setDirectoryRoleMappings,
 		DeleteDirectoryRoleMappingEndpoint:           deleteDirectoryRoleMapping,
+		PreviewDirectoryRoleSetupEndpoint:            previewDirectoryRoleSetup,
+		ApplyDirectoryRoleSetupEndpoint:              applyDirectoryRoleSetup,
+		ListDirectoryReviewItemsEndpoint:             listDirectoryReviewItems,
+		ResolveDirectoryReviewItemEndpoint:           resolveDirectoryReviewItem,
+		GetDirectoryReviewSettingsEndpoint:           getDirectoryReviewSettings,
+		UpdateDirectoryReviewSettingsEndpoint:        updateDirectoryReviewSettings,
 		ListScopesEndpoint:                           listScopes,
 		ListMembersEndpoint:                          listMembers,
 		ListGrantsEndpoint:                           listGrants,
@@ -216,6 +232,29 @@ func (c *Client) ListDirectoryRoleMappings(ctx context.Context, p *ListDirectory
 	return ires.(*ListDirectoryRoleMappingsResult), nil
 }
 
+// ListDirectoryPeople calls the "listDirectoryPeople" endpoint of the "access"
+// service.
+// ListDirectoryPeople may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ListDirectoryPeople(ctx context.Context, p *ListDirectoryPeoplePayload) (res *ListDirectoryPeopleResult, err error) {
+	var ires any
+	ires, err = c.ListDirectoryPeopleEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*ListDirectoryPeopleResult), nil
+}
+
 // SyncDirectoryGroups calls the "syncDirectoryGroups" endpoint of the "access"
 // service.
 // SyncDirectoryGroups may return the following errors:
@@ -262,6 +301,29 @@ func (c *Client) SetDirectoryRoleMapping(ctx context.Context, p *SetDirectoryRol
 	return ires.(*DirectoryRoleMapping), nil
 }
 
+// SetDirectoryRoleMappings calls the "setDirectoryRoleMappings" endpoint of
+// the "access" service.
+// SetDirectoryRoleMappings may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) SetDirectoryRoleMappings(ctx context.Context, p *SetDirectoryRoleMappingsPayload) (res []*DirectoryRoleMapping, err error) {
+	var ires any
+	ires, err = c.SetDirectoryRoleMappingsEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.([]*DirectoryRoleMapping), nil
+}
+
 // DeleteDirectoryRoleMapping calls the "deleteDirectoryRoleMapping" endpoint
 // of the "access" service.
 // DeleteDirectoryRoleMapping may return the following errors:
@@ -279,6 +341,144 @@ func (c *Client) SetDirectoryRoleMapping(ctx context.Context, p *SetDirectoryRol
 func (c *Client) DeleteDirectoryRoleMapping(ctx context.Context, p *DeleteDirectoryRoleMappingPayload) (err error) {
 	_, err = c.DeleteDirectoryRoleMappingEndpoint(ctx, p)
 	return
+}
+
+// PreviewDirectoryRoleSetup calls the "previewDirectoryRoleSetup" endpoint of
+// the "access" service.
+// PreviewDirectoryRoleSetup may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) PreviewDirectoryRoleSetup(ctx context.Context, p *PreviewDirectoryRoleSetupPayload) (res *DirectoryRoleSetupPreviewResult, err error) {
+	var ires any
+	ires, err = c.PreviewDirectoryRoleSetupEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*DirectoryRoleSetupPreviewResult), nil
+}
+
+// ApplyDirectoryRoleSetup calls the "applyDirectoryRoleSetup" endpoint of the
+// "access" service.
+// ApplyDirectoryRoleSetup may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ApplyDirectoryRoleSetup(ctx context.Context, p *ApplyDirectoryRoleSetupPayload) (res *ApplyDirectoryRoleSetupResult, err error) {
+	var ires any
+	ires, err = c.ApplyDirectoryRoleSetupEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*ApplyDirectoryRoleSetupResult), nil
+}
+
+// ListDirectoryReviewItems calls the "listDirectoryReviewItems" endpoint of
+// the "access" service.
+// ListDirectoryReviewItems may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ListDirectoryReviewItems(ctx context.Context, p *ListDirectoryReviewItemsPayload) (res *ListDirectoryReviewItemsResult, err error) {
+	var ires any
+	ires, err = c.ListDirectoryReviewItemsEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*ListDirectoryReviewItemsResult), nil
+}
+
+// ResolveDirectoryReviewItem calls the "resolveDirectoryReviewItem" endpoint
+// of the "access" service.
+// ResolveDirectoryReviewItem may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ResolveDirectoryReviewItem(ctx context.Context, p *ResolveDirectoryReviewItemPayload) (res *ResolveDirectoryReviewItemResult, err error) {
+	var ires any
+	ires, err = c.ResolveDirectoryReviewItemEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*ResolveDirectoryReviewItemResult), nil
+}
+
+// GetDirectoryReviewSettings calls the "getDirectoryReviewSettings" endpoint
+// of the "access" service.
+// GetDirectoryReviewSettings may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) GetDirectoryReviewSettings(ctx context.Context, p *GetDirectoryReviewSettingsPayload) (res *DirectoryReviewSettings, err error) {
+	var ires any
+	ires, err = c.GetDirectoryReviewSettingsEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*DirectoryReviewSettings), nil
+}
+
+// UpdateDirectoryReviewSettings calls the "updateDirectoryReviewSettings"
+// endpoint of the "access" service.
+// UpdateDirectoryReviewSettings may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) UpdateDirectoryReviewSettings(ctx context.Context, p *UpdateDirectoryReviewSettingsPayload) (res *DirectoryReviewSettings, err error) {
+	var ires any
+	ires, err = c.UpdateDirectoryReviewSettingsEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*DirectoryReviewSettings), nil
 }
 
 // ListScopes calls the "listScopes" endpoint of the "access" service.

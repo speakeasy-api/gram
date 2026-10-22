@@ -2,7 +2,7 @@
 name = "gram-infra"
 version = "0.1.0"
 description = "Speakeasy infra Python package: generated protobuf types and a Pub/Sub convenience layer"
-requires-python = ">=3.14"
+requires-python = ">=3.14.8,<3.15"
 dependencies = [
   # protobuf must satisfy the runtime-version guard emitted in the generated
   # gen_py/**/*_pb2.py (ValidateProtobufRuntimeVersion(PUBLIC, 7, 35, 0)). The
@@ -38,6 +38,7 @@ dev = [
   "anyio[trio]>=4.14.0",
   "ty>=0.0.64",
   "types-protobuf>=7.34.1.20260518",
+  "duckdb==1.5.6",
 ]
 
 [build-system]

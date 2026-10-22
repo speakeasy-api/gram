@@ -26,6 +26,19 @@ verify those as an ordinary human in the local organization, not through imperso
 
 ## Checks
 
+### Signals Intelligence
+
+Open `/signals-intelligence` in the seeded project with the organization's
+`signals_intelligence` product feature enabled. Confirm nine signals and four
+sensors, with nine total memberships. Expand sensors and inspect their modes and
+ordered signal labels, including incomplete drafts. Both tabs should show populated
+configuration without console errors; this page does not execute classifiers.
+Read-only demo access must not permit mutations. In the local writable org, open
+the signal editor and type a name; confirm no input exception. When deleting a
+temporary configuration, confirm the dialog stays disabled until list refresh and
+closure complete. With the product feature disabled, navigation is hidden and a
+direct URL returns to project overview.
+
 A check FAILS when the page shows an empty state, an error boundary, or zero
 where a value is expected.
 
@@ -94,7 +107,7 @@ remains hidden and the PAGES.md row stays `[~]`, not UI-verified.
     **Key-authenticated** badge, `Vendor Sync (misconfigured)` a red **Cannot
     authenticate** one, and the remaining three carry none (a missing badge on
     the first two means the credential columns did not land). `Acme Legacy
-Connector` appears under **Inactive** with no connections. Its row menu's
+    Connector` appears under **Inactive** with no connections. Its row menu's
     **View registration** opens the detail sheet with an **Authentication**
     field. The organization **MCP Sessions** page shows the same five
     connections and the same two badges.
@@ -117,6 +130,30 @@ Connector` appears under **Inactive** with no connections. Its row menu's
     provider-hosted metadata, and offers **Review update**. Opening the review
     starts with the fictional `https://auth.example.com` issuer; live discovery
     does not need to succeed for this seeded-page check.
+
+12a. **Organization Gateway** — after seeding, open **MCP**
+(`/<org>/projects/default/mcp`). The **Organization Gateway** card leads the
+unfiltered grid and table with an **Off** badge for organization admins.
+`organizations.getGateway` reports `available: false`. Open the card and confirm
+**View assignments** opens the role and member access view for organization
+admins before enabling. Use the gateway switch to start the assignment review. Acknowledge the completed
+review and select **Enable Organization Gateway**. The same page then shows
+the endpoint `<server>/mcp/gateway/<org>` with a copy button and client install
+instructions. Derive `<org>` from the active organization slug at the start of
+the dashboard URL (`/<org>/projects/default/mcp`), for both the shared demo
+and local seed. Confirm `organizations.getGateway` returns the matching endpoint.
+The page header uses the brand-mesh background with grain texture. Its endpoint has a
+white box and copy button with the enabled/disabled switch alongside it,
+above separate **Install** and **View assignments** tabs. Organization admins
+can inspect and edit assignments without turning the gateway off. The gateway response reports `available: true` with that URL.
+The old organization settings gateway URL redirects to this page.
+
+In **MCP Assignments**, confirm one row per role with stacked server icons under
+**Connect**. Expand **Support Desk** to inspect unrestricted and
+read-only access; expand **Contractors** to see its blocked server after allowed
+servers, with red styling and a blocked icon badge. The MCP filter opens a
+searchable list directly. Click a role’s member avatars and select a person to
+open their effective assignments; the dropdown always offers compact member search and **Edit role**. Default-project labels and per-row totals stay hidden.
 
 13. **Killswitches on the identity Access tab (local rewritten seed only)** —
     Killswitch management intentionally rejects demo/support sessions. Verify this
@@ -198,8 +235,7 @@ Connector` appears under **Inactive** with no connections. Its row menu's
     view all agents and authorize credentials (for example, the local seeded
     admin). Shared demo impersonation remains intentionally restricted by the
     ordinary-human authorization requirement; it is not the browser verification
-    target. Enable `agent-management` for inventory and
-    `agent-identity-credentials` for API key management.
+    target.
     - Open **Agents**. Confirm **Release assistant** is Active, **Support triage**
       is Suspended, and **Retired documentation bot** is Revoked. Confirm
       **Release notes assistant** is Active with its attachment-backed session. List and detail
@@ -208,13 +244,11 @@ Connector` appears under **Inactive** with no connections. Its row menu's
       avatars. Local seeded fixtures must be visible to the authorized human.
     - Open Release assistant's sessions. Its one display-only session is
       expired; suspended/revoked agents have no seeded sessions. This fixture has no signing token, an invalid refresh
-      hash, and empty delegation: it must not authenticate or refresh. The
-      `agent-identity-credentials` flag gates live MCP authorization, not
-      the inventory check; no live connection is promised by these fixtures.
-    - API keys are empty after the shared SQL runs. With the credentials flag
-      enabled, only the active agent permits key creation; suspended/revoked
-      agents must not offer usable credentials. With the flag disabled, confirm
-      the unavailable-rollout state, not a misleading empty-key success state.
+      hash, and empty delegation: it must not authenticate or refresh. No live
+      connection is promised by these fixtures.
+    - API keys are empty after the shared SQL runs. Only the active agent
+      permits key creation; suspended/revoked agents must not offer usable
+      credentials.
       Never add usable keys to shared SQL.
     - Both active release agents have one direct `mcp:connect` grant scoped to
       the demo project and Linear MCP server. Release assistant also inherits
@@ -296,9 +330,7 @@ Connector` appears under **Inactive** with no connections. Its row menu's
     - **Allowed and denied usage (local only):** use a private standalone MCP
       endpoint without a session issuer and a locally executable harmless tool.
       Send the UI-issued key in `Authorization: Bearer <key>` to its `/mcp/…`
-      endpoint. Issuer-gated gateways require OAuth/session credentials instead;
-      `agent-identity-credentials` controls OAuth agent selection and agent
-      API-key issuance and management, not standalone API-key admission.
+      endpoint. Issuer-gated gateways require OAuth/session credentials instead.
       Display-only seeded tools cannot prove
       successful tool execution; filtered `tools/list` proves discovery only.
       Create a short-lived key from the UI's narrowed candidate. Confirm the
@@ -468,8 +500,8 @@ Connector` appears under **Inactive** with no connections. Its row menu's
     in destructive red under the field and **Allow machine** stays disabled.
 
 26. **Explore widgets** — open `/<org>/projects/default/explore` and click
-    the **Widgets** tab, which shows a count of 5. Five widgets, most
-    recently updated first, starting with Amara Okafor's "Sessions by
+    the **Widgets** tab, which shows a count of 6. Six widgets, most
+    recently updated first, starting with Amara Okafor's "Tool calls by
     surface" with its description beneath; Hana Sato's widget of the same
     name sits further down with her name beside it. Each row shows its
     dataset and chart type, and none carries the broken-widget warning.
@@ -477,6 +509,14 @@ Connector` appears under **Inactive** with no connections. Its row menu's
     tool_calls dataset, a 7-day window and a table ordered by p95 duration,
     runs it, and returns rows; the bar names the widget with Priya Raman as
     its creator and **Save** stays disabled until something is edited.
+    Still on the Explore tab, switch the dataset to `skills`: the builder
+    opens grouped by `skill` with a count, and the description beside the
+    grain says which producers report skills. Run, and the table shows
+    `review-pr`, `write-tests` and `release-notes` with counts and no empty
+    group, since a call that named no skill is not a row. Add a filter on
+    `skill`: the values picker offers those three names with counts and
+    never an empty value. Then flip the Explore row in `PAGES.md` from
+    `[~]` to `[x]`.
 27. **Check access** — open MCP → **GitHub** → Team Access and pick Mateo
     Alvarez in Check access. Connect is **Blocked**: the Contractors block
     wins, Engineer's grants show as blocked, and his own grant covering
@@ -495,16 +535,71 @@ Connector` appears under **Inactive** with no connections. Its row menu's
     `mcp:read` and `mcp:write` carry the note that they also connect. Edit
     **Read-only Tools**: All servers is chosen with a Read-Only Tools badge.
     Save stays disabled on each until something is edited.
+29. **Self remote session client**
+    - Run `mise run seed` twice. In the `default` project, open **Remote
+      Identity Providers → Jamf Pro**. The Overview must render the issuer
+      `https://<org-slug>.jamfcloud.example` and its `/api/oauth/token` token
+      endpoint, without an error boundary. No discovery has run. Its
+      **Client Setup Documentation** link opens Jamf's API Roles and Clients
+      guide.
+    - Open **Clients → demo-jamf-pro-api-client**. Its Overview must render
+      client ID `demo-jamf-pro-api-client` and token endpoint authentication
+      method `client_secret_post`, with no scopes. The **MCP Servers** tab is
+      empty, and the **Sessions** tab shows **No active sessions for this
+      client**.
+    - The dashboard does not yet display `credential_owner` (AIM-464). Check the
+      management API response instead: the client's `credential_owner` is
+      `self` and `grant_types` is `client_credentials`. Do not describe these
+      fields as rendered UI.
+    - The client must have no user session issuer binding and no MCP server
+      that uses it. Do not bind it to a server to populate a page: its secret
+      is an invalid ciphertext, so any request would fail with the
+      administrator misconfiguration error.
+
+30. **Enterprise Managed Authorization**
+    - Open **Team → IDP and SSO → Identity providers**. The Services table
+      lists Acme Tracker (default order, "Each server's own identity
+      provider", Not accepted yet) and Acme Wiki (saved order: Acme
+      Identity, Not accepted yet), one server each.
+    - Open Acme Wiki's page. It shows Acme Identity's issuer URL
+      `https://login.acme-identity.example` to copy, and the saved order with
+      **Use default**.
+    - **MCP → Acme Tracker → Settings** has no Enterprise Managed
+      Authorization section: `acme-workforce` does not trust Acme Identity,
+      on purpose, so interactive sign-in through it (GitHub, the organization
+      gateway) keeps working.
+    - Both servers are seeded disabled. Connect through the organization
+      gateway: its consent page must not list Acme Tracker or Acme Wiki.
+
+31. **Gateway discovery modes**
+    - Open a gateway with tools.
+    - In Settings, save Direct, then open Inspect: its default connection lists qualified member tools.
+    - Select Progressive and reconnect: expect three discovery tools plus `execute_tool`. Reload Inspect and confirm the selected mode is retained.
+    - Select Direct in Inspect and apply/reconnect, then restore the gateway default to Progressive. Confirm the explicit Direct connection stays Direct while a connection using the gateway default follows Progressive.
+    - Connect a client to the organization gateway (`<server>/mcp/gateway/<org>`), choose Direct under Configuration on the consent page, and confirm tools/list shows `server--tool` names from every project you can reach. Reconnect: Direct is pre-selected. A connection that keeps the default lists the Progressive tools.
 
 ## On failure
 
-Fix the seed SQL (see rules in `PAGES.md`), then re-run the target that owns
+Fix the seed (see rules in `PAGES.md`), then re-run the target that owns
 the failed check: `mise run seed` for the local-only Killswitch, managed-agent,
 and exact remote-session attachment checks, or
 `mise run seed:demo` for shared demo-org checks. Re-check only the failed pages,
-and commit the SQL change once green.
+and commit the seed change once green.
 Screenshots of failures go to `.playwright-cli/` (ignored) — reference them in
 the PR, don't commit them.
+
+## Enterprise authorization
+
+Open Organization Identity > Identity providers. The Speakeasy card shows a
+not-configured or unavailable state in the fresh demo; no synthetic signing key
+is presented as working. The Single sign-on tab no longer shows the issuer. In a
+local organization with signing configured and a verified email domain, open
+Manage Speakeasy, enable the issuer and copy its URI. Without a verified domain,
+the page links to the Single sign-on tab. Disable the issuer and confirm the URI
+remains visible. Disabling must remain possible after removing the last verified
+domain; re-enabling requires one. Read-only and support sessions show
+the URI without mutation controls; check status messages in states that render one. At a 400px viewport, the URI wraps
+and the copy control remains visible.
 
 ## Slack workspaces
 
@@ -532,3 +627,7 @@ In shared Explore Demo, verify the mapping dialog shows its read-only notice and
 4. Do not run workloads using the illustrative issuer/JWKS URLs: these fixtures
    are display-only, not usable credentials. Leave the page marked `[~]` until
    the browser checks above are performed.
+
+## Tunnel observability
+
+Open MCP Servers → Private inventory → Overview. Verify request, connection and latency charts contain history, the latest missing intervals stay gaps, and the current agent count is zero. The marketplace callout appears above the tunnel status, which reads "No connected tunnel agents" with a View tunnel agent setup action. The sidebar Readiness card does not call the server ready: its Tunnel agent item says no tunnel agent is connected and links to tunnel agent setup. Check 1 hour / 24 hours / 7 days, the Requests by client list, and the data table under About these numbers. The synthetic source must not initiate any network connection.

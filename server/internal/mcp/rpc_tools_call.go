@@ -39,11 +39,12 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata"
 	mcpmetadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpriskscan"
-	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oauth/jwtclaims"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/otel/dialect"
+	"github.com/speakeasy-api/gram/server/internal/otelpub"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	"github.com/speakeasy-api/gram/server/internal/rag"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
@@ -100,6 +101,7 @@ func handleToolsCall(
 	billingRepository billing.Repository,
 	toolsetCache *cache.TypedCacheObject[mv.ToolsetBaseContents],
 	telemLogger *tm.Logger,
+	toolCallLogger *otelpub.Logger,
 	vectorToolStore *rag.ToolsetVectorStore,
 	mcpMetadataRepo *mcpmetadata_repo.Queries,
 	auditLogger *audit.Logger,
@@ -126,6 +128,15 @@ func handleToolsCall(
 	// Direct internal callers do not pass through handleRequest's method
 	// boundary, so record them once the toolset supplies the organization.
 	recordToolsCallIdentityCoverage(ctx, identityCoverage, toolset.OrganizationID, payload)
+
+	toolsetID, err := uuid.Parse(toolset.ID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "invalid toolset ID").LogError(ctx, logger)
+	}
+	// Dynamic search/describe return before execution, but still need request
+	// attribution. Preserve their availability when optional lookup fails.
+	attributionErr := payload.resolveServingAttribution(ctx, logger, db, toolsetID)
+	attributedMCPServerID := payload.servingServerID()
 
 	// Apply the ?tags= filter before any tool resolution — dynamic dispatch,
 	// proxy matching, and the static name lookup all read this slice, so a
@@ -185,40 +196,17 @@ func handleToolsCall(
 	var mcpURL string
 	if requestContext, _ := contextvalues.GetRequestContext(ctx); requestContext != nil {
 		mcpURL = requestContext.Host + requestContext.ReqURL
-		metrics.RecordMCPToolCall(ctx, toolset.OrganizationID, mcpURL, params.Name)
+		// Count attempts even when legacy server attribution fails. Resolve the
+		// optional metric identity before recording, without changing authorization.
+		defer func() {
+			metrics.RecordMCPToolCall(ctx, toolset.OrganizationID, mcpURL, conv.PtrValOr(optionalUUIDString(attributedMCPServerID), ""), params.Name)
+		}()
 	}
 
 	toolsetHelpers := toolsets.NewToolsets(db, platformExtras...)
 
-	toolsetID, err := uuid.Parse(toolset.ID)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "invalid toolset ID").LogError(ctx, logger)
-	}
-
-	// Legacy /mcp/<toolset slug> calls do not carry the wrapper server id in
-	// their route payload. Attribute only when exactly one enabled wrapper
-	// exists. Disabled wrappers do not serve, and choosing among multiple live
-	// wrappers would apply an arbitrary server's policy and telemetry identity.
-	// Keep the payload unchanged because its nil server id still identifies the
-	// legacy authorization path.
-	attributedMCPServerID := payload.mcpServerID
-	if attributedMCPServerID == nil {
-		servers, lookupErr := mcpservers_repo.New(db).ListEnabledMCPServersByToolsetID(ctx, mcpservers_repo.ListEnabledMCPServersByToolsetIDParams{
-			ToolsetID: toolsetID,
-			ProjectID: uuid.UUID(projectID),
-		})
-		if lookupErr != nil {
-			return nil, oops.E(oops.CodeUnexpected, lookupErr, "resolve MCP server for toolset").LogError(ctx, logger)
-		}
-		switch len(servers) {
-		case 0:
-		case 1:
-			serverID := servers[0].ID
-			attributedMCPServerID = &serverID
-		default:
-			// Ambiguous wrappers leave the call unattributed rather than failing it.
-			logger.WarnContext(ctx, "multiple enabled MCP servers wrap the legacy toolset; skipping server attribution", attr.SlogToolsetID(toolsetID.String()))
-		}
+	if attributionErr != nil {
+		return nil, oops.E(oops.CodeUnexpected, attributionErr, "resolve MCP server for toolset").LogError(ctx, logger)
 	}
 
 	executor := externalmcp.BuildProxyToolExecutor(logger, guardianPolicy, toolset.Tools)
@@ -350,7 +338,7 @@ func handleToolsCall(
 		MCPClient:  clientIdentity,
 	}
 
-	err = filterOmittedEnvVars(ctx, toolCallEnv, mcpMetadataRepo, toolsetID)
+	err = filterOmittedEnvVars(ctx, toolCallEnv, mcpMetadataRepo, payload.projectID, toolsetID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to filter omitted environment variables").LogError(ctx, logger)
 	}
@@ -360,9 +348,11 @@ func handleToolsCall(
 	ctx, logger = o11y.EnrichToolCallContext(ctx, logger, descriptor.OrganizationSlug, descriptor.ProjectSlug)
 
 	rw := &toolCallResponseWriter{
-		headers:    make(http.Header),
-		body:       new(bytes.Buffer),
-		statusCode: http.StatusOK,
+		headers:       make(http.Header),
+		body:          new(bytes.Buffer),
+		statusCode:    http.StatusOK,
+		failure:       nil,
+		resultIsError: false,
 	}
 
 	requestBodyBytes := params.Arguments
@@ -393,6 +383,42 @@ func handleToolsCall(
 		})
 	}
 
+	serverID := ""
+	if attributedMCPServerID != nil {
+		serverID = attributedMCPServerID.String()
+	}
+	toolName := descriptor.Name
+	if plan.Kind == gateway.ToolKindExternalMCP {
+		toolName = descriptor.URN.Name
+	}
+	externalUserID := payload.externalUserID
+	if externalUserID == "" && oauthToken != "" {
+		externalUserID = jwtclaims.UnsafeExtractSubject(oauthToken)
+	}
+
+	callerID, callerEmail := toolCallCaller(ctx, payload, descriptor.OrganizationID, gramEmail)
+
+	// One id names the call on its telemetry_logs row and its agent_events row.
+	call := toolCall{
+		id:              uuid.NewString(),
+		start:           time.Now(),
+		organizationID:  descriptor.OrganizationID,
+		projectID:       descriptor.ProjectID,
+		sessionID:       payload.sessionID,
+		chatID:          payload.chatID,
+		toolName:        toolName,
+		toolURN:         toolURN.String(),
+		toolsetSlug:     payload.toolset,
+		mcpServerID:     serverID,
+		metaMCPServerID: payload.metaMcpServerID,
+		mcpURL:          mcpURL,
+		clientName:      clientIdentity.Name,
+		clientVersion:   clientIdentity.Version,
+		externalUserID:  externalUserID,
+		userID:          callerID,
+		userEmail:       callerEmail,
+	}
+
 	logAttrs := tm.HTTPLogAttributes{}
 	defer func() {
 		go billingTracker.TrackToolCallUsage(context.WithoutCancel(ctx), billing.ToolCallUsageEvent{
@@ -410,6 +436,8 @@ func handleToolsCall(
 			MCPURL:                &mcpURL,
 			MCPSessionID:          &payload.sessionID,
 			ChatID:                conv.PtrEmpty(payload.chatID),
+			MCPServerID:           optionalUUIDString(attributedMCPServerID),
+			MCPEndpointID:         optionalUUIDString(payload.mcpEndpointID),
 			MetaMCPServerID:       conv.PtrEmpty(payload.metaMcpServerID),
 			Type:                  plan.BillingType,
 			ResourceURI:           "",
@@ -419,6 +447,9 @@ func handleToolsCall(
 		})
 
 		logAttrs[attr.EventSourceKey] = string(tm.EventSourceToolCall)
+		logAttrs[attr.ToolCallIDKey] = call.id
+		logAttrs[attr.OutcomeKey] = dialect.ToolCallOutcome(rw.statusCode, rw.resultIsError)
+		logAttrs[attr.ToolCallDurationKey] = time.Since(call.start).Seconds()
 		logAttrs.RecordStatusCode(rw.statusCode)
 		logAttrs.RecordRequestBody(requestBytes)
 		logAttrs.RecordResponseBody(outputBytes)
@@ -430,10 +461,6 @@ func handleToolsCall(
 		if payload.chatID != "" {
 			logAttrs[attr.GenAIConversationIDKey] = payload.chatID
 		}
-		externalUserID := payload.externalUserID
-		if externalUserID == "" && oauthToken != "" {
-			externalUserID = jwtclaims.UnsafeExtractSubject(oauthToken)
-		}
 		if externalUserID != "" {
 			logAttrs[attr.ExternalUserIDKey] = externalUserID
 		}
@@ -441,9 +468,7 @@ func handleToolsCall(
 			logAttrs[attr.APIKeyIDKey] = payload.apiKeyID
 		}
 		logAttrs.RecordToolsetSlug(payload.toolset)
-		if attributedMCPServerID != nil {
-			logAttrs[attr.McpServerIDKey] = attributedMCPServerID.String()
-		}
+		recordServingLogAttrs(logAttrs, attributedMCPServerID, payload.mcpEndpointID)
 		if payload.metaMcpServerID != "" {
 			logAttrs[attr.MetaMcpServerIDKey] = payload.metaMcpServerID
 		}
@@ -466,14 +491,13 @@ func handleToolsCall(
 		telemLogger.Log(ctx, params)
 	}()
 
-	serverID := ""
-	if attributedMCPServerID != nil {
-		serverID = attributedMCPServerID.String()
-	}
-	toolName := descriptor.Name
-	if plan.Kind == gateway.ToolKindExternalMCP {
-		toolName = descriptor.URN.Name
-	}
+	// The record is built when the call returns, so a call the scan stops still
+	// shows, and published off the response path.
+	defer func() {
+		record := call.record(time.Now(), rw.statusCode, rw.resultIsError, rw.failure)
+		go publishToolCallRecord(context.WithoutCancel(ctx), toolCallLogger, logger, call, record)
+	}()
+
 	requestSubject := mcpriskscan.NewRequest(ctx, mcpriskscan.Event{
 		Surface:         mcpriskscan.SurfaceHostedMCP,
 		Method:          mcpriskscan.MethodToolsCall,
@@ -548,6 +572,8 @@ func handleToolsCall(
 			recordToolCallErrorStatus(ctx, rw, failure)
 			return nil, failure
 		}
+		// The call's records follow the upstream's own isError verdict.
+		rw.resultIsError = dialect.MCPResultIsError(rw.body.Bytes())
 		bs, err := json.Marshal(result[json.RawMessage]{
 			ID:             req.ID,
 			Result:         json.RawMessage(rw.body.Bytes()),
@@ -555,17 +581,20 @@ func handleToolsCall(
 			cacheHints:     nil,
 		})
 		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize MCP result").LogError(ctx, logger)
+			failure := oops.E(oops.CodeUnexpected, err, "failed to serialize MCP result").LogError(ctx, logger)
+			recordToolCallErrorStatus(ctx, rw, failure)
+			return nil, failure
 		}
 
 		return bs, nil
 	}
 
-	chunk, structured, err := formatResult(*rw, plan.Kind)
+	responseContent, structured, err := formatResult(*rw, plan.Kind)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed format tool call result").LogError(ctx, logger)
+		failure := oops.E(oops.CodeUnexpected, err, "failed format tool call result").LogError(ctx, logger)
+		recordToolCallErrorStatus(ctx, rw, failure)
+		return nil, failure
 	}
-	responseContent := []json.RawMessage{chunk}
 	if plan.Kind != gateway.ToolKindPrompt {
 		responsePayload, parseErr := mcpriskscan.ToolResultPayload(responseContent, structured)
 		if parseErr != nil {
@@ -591,7 +620,9 @@ func handleToolsCall(
 		cacheHints:     nil,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize tools/call result").LogError(ctx, logger)
+		failure := oops.E(oops.CodeUnexpected, err, "failed to serialize tools/call result").LogError(ctx, logger)
+		recordToolCallErrorStatus(ctx, rw, failure)
+		return nil, failure
 	}
 
 	return bs, nil
@@ -623,6 +654,7 @@ func toolCallRejection(ctx context.Context, logger *slog.Logger, err error, args
 func recordToolCallErrorStatus(ctx context.Context, rw *toolCallResponseWriter, err error) {
 	if shareableErr, ok := errors.AsType[*oops.ShareableError](err); ok {
 		rw.statusCode = shareableErr.HTTPStatus(ctx)
+		rw.failure = shareableErr
 	}
 }
 
@@ -768,6 +800,11 @@ type toolCallResponseWriter struct {
 	statusCode int
 	headers    http.Header
 	body       *bytes.Buffer
+	// failure is the error the gateway answered with; nil when the tool
+	// produced the response itself.
+	failure *oops.ShareableError
+	// resultIsError is the upstream's isError on a forwarded result.
+	resultIsError bool
 }
 
 func (w *toolCallResponseWriter) Header() http.Header {
@@ -792,15 +829,16 @@ func discardWithheldBody(body *bytes.Buffer) {
 }
 
 // formatResult turns a tool's raw HTTP response body into an MCP content
-// chunk. When the body is a JSON object it also returns it verbatim as
+// array. When the body is a JSON object it also returns it verbatim as
 // structuredContent so spec-compliant clients (MCP 2025-06-18) receive a
 // parsed object instead of having to re-parse the stringified text block.
 // structured is nil for non-JSON bodies and for JSON that is not an object
 // (arrays/scalars), which the spec reserves the field for.
-func formatResult(rw toolCallResponseWriter, toolKind gateway.ToolKind) (chunk json.RawMessage, structured json.RawMessage, err error) {
+func formatResult(rw toolCallResponseWriter, toolKind gateway.ToolKind) (content []json.RawMessage, structured json.RawMessage, err error) {
 	body := rw.body.Bytes()
 	if len(body) == 0 {
-		return nil, nil, nil
+		// MCP requires an array of content blocks, not null or [null].
+		return []json.RawMessage{}, nil, nil
 	}
 
 	ct := rw.headers.Get("content-type")
@@ -830,7 +868,7 @@ func formatResult(rw toolCallResponseWriter, toolKind gateway.ToolKind) (chunk j
 			}
 		}
 
-		return bs, structured, nil
+		return []json.RawMessage{bs}, structured, nil
 	case strings.HasPrefix(mt, "image/"):
 		encoded := base64.StdEncoding.EncodeToString(body)
 		bs, err := json.Marshal(contentChunk[json.RawMessage, string]{
@@ -844,7 +882,7 @@ func formatResult(rw toolCallResponseWriter, toolKind gateway.ToolKind) (chunk j
 			return nil, nil, fmt.Errorf("serialize image content: %w", err)
 		}
 
-		return bs, nil, nil
+		return []json.RawMessage{bs}, nil, nil
 	case strings.HasPrefix(mt, "audio/"):
 		encoded := base64.StdEncoding.EncodeToString(body)
 		bs, err := json.Marshal(contentChunk[json.RawMessage, string]{
@@ -858,7 +896,7 @@ func formatResult(rw toolCallResponseWriter, toolKind gateway.ToolKind) (chunk j
 			return nil, nil, fmt.Errorf("serialize audio content: %w", err)
 		}
 
-		return bs, nil, nil
+		return []json.RawMessage{bs}, nil, nil
 	default:
 		return nil, nil, fmt.Errorf("unsupported content type %q", ct)
 	}
@@ -884,9 +922,10 @@ func filterOmittedEnvVars(
 	ctx context.Context,
 	env toolconfig.ToolCallEnv,
 	repo *mcpmetadata_repo.Queries,
+	projectID uuid.UUID,
 	toolsetID uuid.UUID,
 ) error {
-	rawMetadata, err := repo.GetMetadataForToolset(ctx, uuid.NullUUID{UUID: toolsetID, Valid: true})
+	rawMetadata, err := repo.GetMetadataByBackendID(ctx, mcpmetadata_repo.GetMetadataByBackendIDParams{ProjectID: projectID, BackendID: toolsetID, ToolsetBackend: true})
 	if err != nil {
 		// Fallback behavior for backwards compatibility
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -895,7 +934,7 @@ func filterOmittedEnvVars(
 		return fmt.Errorf("get metadata for toolset: %w", err)
 	}
 
-	mcpMeta, err := mcpmetadata.ToMCPMetadata(ctx, repo, rawMetadata)
+	mcpMeta, err := mcpmetadata.ToMCPMetadata(ctx, repo, mcpmetadata.MetadataRecord(rawMetadata))
 	if err != nil {
 		return fmt.Errorf("convert to mcp metadata: %w", err)
 	}

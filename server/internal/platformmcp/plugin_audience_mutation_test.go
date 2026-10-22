@@ -21,7 +21,6 @@ func TestPluginAssignmentAdmissionErrorMappings(t *testing.T) {
 	}{
 		{cause: admission.ErrApprovalRequired, code: "approval_required"},
 		{cause: admission.ErrPrivateGatewayAudience, code: "conflict"},
-		{cause: admission.ErrDistributionDisabled, code: "distribution_disabled"},
 		{cause: admission.ErrUnavailable, code: "feature_unavailable"},
 	} {
 		err := pluginAssignmentAdmissionError(fmt.Errorf("guard: %w", test.cause))

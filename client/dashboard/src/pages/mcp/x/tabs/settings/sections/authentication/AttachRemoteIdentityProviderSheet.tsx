@@ -1,5 +1,6 @@
 import { AssetImageUploadField } from "@/components/asset-image-upload-field";
 import { Combobox } from "@/components/ui/Combobox";
+import { Dialog } from "@/components/ui/Dialog";
 import { FieldError } from "@/components/ui/Field";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
@@ -47,6 +48,13 @@ import {
   useRemoteSessionIssuersInfinite,
 } from "@gram/client/react-query/remoteSessionIssuers.js";
 import { invalidateAllUserSessionIssuers } from "@gram/client/react-query/userSessionIssuers.js";
+import {
+  invalidateSharedIssuerImpact,
+  needsSharedIssuerConfirm,
+  sharedIssuerChangeBlocked,
+  useSharedIssuerImpact,
+} from "@/lib/remote-identity/model/upstreamRepointing";
+import { RepointedServersNotice } from "./RepointedServersNotice";
 import { Button } from "@/components/ui/Button";
 import { Stack } from "@/components/ui/Stack";
 import { CommandItem } from "@/components/ui/Command";
@@ -55,7 +63,6 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import type { AuthTarget } from "./authTarget";
-import { IssuerScopeOverrideAlert } from "@/pages/remote-identity-providers/clientAlerts";
 import {
   ClientTypeFields,
   EndpointsFields,
@@ -330,6 +337,9 @@ export function AttachRemoteIdentityProviderSheet({
           jwksUri: jwksUri.trim() || undefined,
           scopesSupported: discoveredSnapshot?.scopesSupported ?? [],
           grantTypesSupported: discoveredSnapshot?.grantTypesSupported ?? [],
+          // Omitted without discovery: the server treats any value as discovered.
+          authorizationGrantProfilesSupported:
+            discoveredSnapshot?.authorizationGrantProfilesSupported,
           responseTypesSupported:
             discoveredSnapshot?.responseTypesSupported ?? [],
           tokenEndpointAuthMethodsSupported:
@@ -503,13 +513,14 @@ export function AttachRemoteIdentityProviderSheet({
         invalidateAllUserSessionIssuers(queryClient, { refetchType: "all" }),
         invalidateAllRemoteSessionIssuers(queryClient, { refetchType: "all" }),
         invalidateAllRemoteSessionClients(queryClient, { refetchType: "all" }),
+        invalidateSharedIssuerImpact(queryClient),
         target.invalidate(queryClient),
       ]);
 
-      toast.success("Identity provider attached");
+      toast.success("Authorization server attached");
       if (unsupportedDcrAuthMethod) {
         toast.warning(
-          `Upstream issuer reported token endpoint auth method "${unsupportedDcrAuthMethod}", which the platform doesn't model. The client falls back to ${tokenEndpointAuthMethod || "client_secret_basic"} — adjust on the identity provider's Modify sheet if needed.`,
+          `Upstream issuer reported token endpoint auth method "${unsupportedDcrAuthMethod}", which the platform doesn't model. The client falls back to ${tokenEndpointAuthMethod || "client_secret_basic"} — adjust on the authorization server's Modify sheet if needed.`,
         );
       }
       onOpenChange(false);
@@ -520,7 +531,7 @@ export function AttachRemoteIdentityProviderSheet({
       // "an identity provider with slug already exists" or 4xx validation
       // errors absolutely are — useMutation surfaces error.message via
       // attachMutation.error so we only need to log here.
-      console.error("Attach identity provider failed", error);
+      console.error("Attach authorization server failed", error);
     },
   });
 
@@ -655,8 +666,35 @@ export function AttachRemoteIdentityProviderSheet({
     clientId,
   ]);
 
+  // Linking another provider changes the upstream derived for every server
+  // sharing this user session issuer, in any project for an organization one.
+  const sharedIssuerId = userSessionIssuer?.id;
+  const sharedIssuerImpact = useSharedIssuerImpact(
+    open && sharedIssuerId && submittable
+      ? {
+          userSessionIssuerId: sharedIssuerId,
+          mcpServerId: target.mcpServerId,
+          change: "attach",
+          providerId: mode === "select" ? selectedIssuerId : undefined,
+          clientId:
+            effectiveClientMode === "select"
+              ? effectiveSelectedClientId
+              : undefined,
+        }
+      : null,
+  );
+  const repointLookupPending = sharedIssuerImpact.pending;
+  const [confirmRepointOpen, setConfirmRepointOpen] = useState(false);
+  useEffect(() => {
+    setConfirmRepointOpen(false);
+  }, [open]);
+
   const handleSubmit = () => {
     if (!submittable || submitting || logoUploading) return;
+    if (needsSharedIssuerConfirm(sharedIssuerImpact)) {
+      setConfirmRepointOpen(true);
+      return;
+    }
     attachMutation.mutate();
   };
 
@@ -709,197 +747,245 @@ export function AttachRemoteIdentityProviderSheet({
           audienceOverride={audienceOverride}
           onScopeOverrideChange={setScopeOverride}
           onAudienceOverrideChange={setAudienceOverride}
-          scopeWarning={<IssuerScopeOverrideAlert issuer={selectedIssuer} />}
         />
       </Stack>
     );
   }
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent
-        side="right"
-        className="flex w-[560px] flex-col sm:max-w-[560px]"
-      >
-        <SheetHeader className="px-6 pt-6 pb-0">
-          <SheetTitle className="text-lg font-semibold">
-            Attach Remote Identity Provider
-          </SheetTitle>
-        </SheetHeader>
+    <>
+      <Sheet open={open} onOpenChange={onOpenChange}>
+        <SheetContent
+          side="right"
+          className="flex w-[560px] flex-col sm:max-w-[560px]"
+        >
+          <SheetHeader className="px-6 pt-6 pb-0">
+            <SheetTitle className="text-lg font-semibold">
+              Attach Authorization Server
+            </SheetTitle>
+          </SheetHeader>
 
-        <div className="flex-1 space-y-6 overflow-y-auto px-6 py-6">
-          <Stack gap={4}>
-            <SectionHeading
-              title="Identity Provider"
-              description="The upstream OAuth authorization server Speakeasy delegates to."
-            />
-            {hasSelectable && <ModeSwitch mode={mode} onChange={setMode} />}
-
-            {mode === "select" ? (
-              <SelectExistingFields
-                excludedIssuerIds={excludedIds}
-                selectedIssuerId={selectedIssuerId}
-                selectedIssuer={selectedIssuer}
-                pickFailed={pickedIssuerError}
-                onChange={setSelectedIssuerId}
+          <div className="flex-1 space-y-6 overflow-y-auto px-6 py-6">
+            <Stack gap={4}>
+              <SectionHeading
+                title="Authorization Server"
+                description="The upstream OAuth authorization server Speakeasy delegates to."
               />
-            ) : (
-              <Stack gap={4}>
-                <IssuerUrlField
-                  issuerUrl={issuerUrl}
-                  onIssuerUrlSettled={setSettledIssuerUrl}
-                  duplicateWarning={
-                    <IssuerDuplicateWarning
-                      viewerScope="project"
-                      matches={duplicateMatches}
-                      onUseExisting={
-                        canReuseDuplicate ? handleUseExistingIssuer : undefined
+              {hasSelectable && <ModeSwitch mode={mode} onChange={setMode} />}
+
+              {mode === "select" ? (
+                <SelectExistingFields
+                  excludedIssuerIds={excludedIds}
+                  selectedIssuerId={selectedIssuerId}
+                  selectedIssuer={selectedIssuer}
+                  pickFailed={pickedIssuerError}
+                  onChange={setSelectedIssuerId}
+                />
+              ) : (
+                <Stack gap={4}>
+                  <IssuerUrlField
+                    issuerUrl={issuerUrl}
+                    onIssuerUrlSettled={setSettledIssuerUrl}
+                    duplicateWarning={
+                      <IssuerDuplicateWarning
+                        viewerScope="project"
+                        matches={duplicateMatches}
+                        onUseExisting={
+                          canReuseDuplicate
+                            ? handleUseExistingIssuer
+                            : undefined
+                        }
+                      />
+                    }
+                    onIssuerUrlChange={(value) => {
+                      setIssuerUrl(value);
+                      // Any edit invalidates the last blur, so the warning cannot
+                      // outlive the URL it describes and "Use existing" cannot
+                      // adopt a record for a URL no longer in the field.
+                      setSettledIssuerUrl("");
+                      // A stale error from a previous URL would be misleading once
+                      // the operator starts typing a new target; clear it so the
+                      // next Discover click starts fresh.
+                      clearDiscoverError();
+                      // Auto-derive the slug from the hostname while the operator
+                      // hasn't customized it. We swallow URL parse failures so the
+                      // slug stays stable while a partial URL is being typed.
+                      if (!slugDirty) {
+                        const derived = deriveSlugFromUrl(value);
+                        if (derived) setSlug(derived);
                       }
+                      // Same auto-derive-until-edited behavior for the Display
+                      // name, seeded from the URL hostname.
+                      if (!nameDirty) {
+                        const derivedName =
+                          deriveRemoteSessionIssuerNameFromUrl(value);
+                        if (derivedName) setName(derivedName);
+                      }
+                      // When the URL diverges from a settled discovery, every
+                      // downstream field (endpoints, credentials, scope/audience,
+                      // DCR-vs-manual decision) was tied to that prior URL and is
+                      // now stale. Reset the form so the operator runs Discover
+                      // again against the new target and gets a coherent state.
+                      if (
+                        discoveredSnapshot &&
+                        value.trim() !== discoveredSnapshot.url
+                      ) {
+                        resetEndpointState();
+                        setClientId("");
+                        setClientSecret("");
+                        setTokenEndpointAuthMethod("");
+                        setScopeOverride("");
+                        setAudienceOverride("");
+                      }
+                    }}
+                  />
+
+                  <Stack gap={2}>
+                    <Label className="text-muted-foreground text-xs">
+                      Slug
+                    </Label>
+                    <Input
+                      value={slug}
+                      onChange={(value) => {
+                        setSlug(value);
+                        setSlugDirty(true);
+                      }}
+                      placeholder="my-authorization-server"
                     />
-                  }
-                  onIssuerUrlChange={(value) => {
-                    setIssuerUrl(value);
-                    // Any edit invalidates the last blur, so the warning cannot
-                    // outlive the URL it describes and "Use existing" cannot
-                    // adopt a record for a URL no longer in the field.
-                    setSettledIssuerUrl("");
-                    // A stale error from a previous URL would be misleading once
-                    // the operator starts typing a new target; clear it so the
-                    // next Discover click starts fresh.
-                    clearDiscoverError();
-                    // Auto-derive the slug from the hostname while the operator
-                    // hasn't customized it. We swallow URL parse failures so the
-                    // slug stays stable while a partial URL is being typed.
-                    if (!slugDirty) {
-                      const derived = deriveSlugFromUrl(value);
-                      if (derived) setSlug(derived);
-                    }
-                    // Same auto-derive-until-edited behavior for the Display
-                    // name, seeded from the URL hostname.
-                    if (!nameDirty) {
-                      const derivedName =
-                        deriveRemoteSessionIssuerNameFromUrl(value);
-                      if (derivedName) setName(derivedName);
-                    }
-                    // When the URL diverges from a settled discovery, every
-                    // downstream field (endpoints, credentials, scope/audience,
-                    // DCR-vs-manual decision) was tied to that prior URL and is
-                    // now stale. Reset the form so the operator runs Discover
-                    // again against the new target and gets a coherent state.
-                    if (
-                      discoveredSnapshot &&
-                      value.trim() !== discoveredSnapshot.url
-                    ) {
-                      resetEndpointState();
-                      setClientId("");
-                      setClientSecret("");
-                      setTokenEndpointAuthMethod("");
-                      setScopeOverride("");
-                      setAudienceOverride("");
-                    }
-                  }}
-                />
+                    <Text muted small>
+                      Project-unique identifier for this authorization server.
+                      Auto-derived from the Issuer URL until you edit it.
+                    </Text>
+                  </Stack>
 
-                <Stack gap={2}>
-                  <Label className="text-muted-foreground text-xs">Slug</Label>
-                  <Input
-                    value={slug}
-                    onChange={(value) => {
-                      setSlug(value);
-                      setSlugDirty(true);
-                    }}
-                    placeholder="my-identity-provider"
+                  <Stack gap={2}>
+                    <Label className="text-muted-foreground text-xs">
+                      Display name (optional)
+                    </Label>
+                    <Input
+                      value={name}
+                      onChange={(value) => {
+                        setName(value);
+                        setNameDirty(true);
+                      }}
+                      placeholder="My Authorization Server"
+                    />
+                    <Text muted small>
+                      Friendly label shown in the dashboard. Auto-derived from
+                      the Issuer URL until you edit it; falls back to the Issuer
+                      URL when left blank.
+                    </Text>
+                  </Stack>
+
+                  <AssetImageUploadField
+                    tier="project"
+                    value={logoAssetId}
+                    onChange={setLogoAssetId}
+                    onUploadingChange={setLogoUploading}
+                    description="Shown beside this authorization server in the dashboard and on the connect consent page."
                   />
-                  <Text muted small>
-                    Project-unique identifier for this identity provider.
-                    Auto-derived from the Issuer URL until you edit it.
-                  </Text>
-                </Stack>
 
-                <Stack gap={2}>
-                  <Label className="text-muted-foreground text-xs">
-                    Display name (optional)
-                  </Label>
-                  <Input
-                    value={name}
-                    onChange={(value) => {
-                      setName(value);
-                      setNameDirty(true);
+                  <EndpointsFields
+                    issuerUrl={issuerUrl}
+                    authorizationEndpoint={authorizationEndpoint}
+                    tokenEndpoint={tokenEndpoint}
+                    registrationEndpoint={registrationEndpoint}
+                    jwksUri={jwksUri}
+                    endpointWarnings={endpointWarnings}
+                    discoverPending={discoverPending}
+                    discoverError={discoverError}
+                    showDiscoverControls={showDiscoverControls}
+                    showResetControls={showResetControls}
+                    onAuthorizationEndpointChange={setAuthorizationEndpoint}
+                    onTokenEndpointChange={setTokenEndpoint}
+                    onRegistrationEndpointChange={setRegistrationEndpoint}
+                    onJwksUriChange={setJwksUri}
+                    onDiscover={() => {
+                      runDiscover(issuerUrl);
                     }}
-                    placeholder="My Identity Provider"
+                    onResetEndpoints={handleResetEndpoints}
                   />
-                  <Text muted small>
-                    Friendly label shown in the dashboard. Auto-derived from the
-                    Issuer URL until you edit it; falls back to the Issuer URL
-                    when left blank.
-                  </Text>
                 </Stack>
+              )}
+            </Stack>
 
-                <AssetImageUploadField
-                  tier="project"
-                  value={logoAssetId}
-                  onChange={setLogoAssetId}
-                  onUploadingChange={setLogoUploading}
-                  description="Shown beside this provider in the dashboard and on the connect consent page."
+            {issuerResolved && (
+              <Stack gap={4} className="border-t pt-6">
+                <SectionHeading
+                  title="Session Client"
+                  description="The OAuth client Speakeasy registers and uses with this authorization server."
                 />
-
-                <EndpointsFields
-                  issuerUrl={issuerUrl}
-                  authorizationEndpoint={authorizationEndpoint}
-                  tokenEndpoint={tokenEndpoint}
-                  registrationEndpoint={registrationEndpoint}
-                  jwksUri={jwksUri}
-                  endpointWarnings={endpointWarnings}
-                  discoverPending={discoverPending}
-                  discoverError={discoverError}
-                  showDiscoverControls={showDiscoverControls}
-                  showResetControls={showResetControls}
-                  onAuthorizationEndpointChange={setAuthorizationEndpoint}
-                  onTokenEndpointChange={setTokenEndpoint}
-                  onRegistrationEndpointChange={setRegistrationEndpoint}
-                  onJwksUriChange={setJwksUri}
-                  onDiscover={() => {
-                    runDiscover(issuerUrl);
-                  }}
-                  onResetEndpoints={handleResetEndpoints}
-                />
+                {clientSectionBody}
               </Stack>
             )}
-          </Stack>
 
-          {issuerResolved && (
-            <Stack gap={4} className="border-t pt-6">
-              <SectionHeading
-                title="Session Client"
-                description="The OAuth client Speakeasy registers and uses with this provider."
-              />
-              {clientSectionBody}
-            </Stack>
-          )}
+            <IdentityProviderAttachmentErrorAlert
+              error={attachMutation.error}
+            />
+          </div>
 
-          <IdentityProviderAttachmentErrorAlert error={attachMutation.error} />
-        </div>
-
-        <SheetFooter className="flex-row items-center justify-end gap-2 border-t px-6 py-4">
-          <Button
-            variant="secondary"
-            disabled={submitting}
-            onClick={() => onOpenChange(false)}
-          >
-            <Button.Text>Cancel</Button.Text>
-          </Button>
-          <Button
-            variant="primary"
-            disabled={!submittable || submitting || logoUploading}
-            onClick={handleSubmit}
-          >
-            <Button.Text>
-              {submitting ? "Attaching…" : "Attach Identity Provider"}
-            </Button.Text>
-          </Button>
-        </SheetFooter>
-      </SheetContent>
-    </Sheet>
+          <SheetFooter className="flex-row items-center justify-end gap-2 border-t px-6 py-4">
+            <Button
+              variant="secondary"
+              disabled={submitting}
+              onClick={() => onOpenChange(false)}
+            >
+              <Button.Text>Cancel</Button.Text>
+            </Button>
+            <Button
+              variant="primary"
+              disabled={
+                !submittable ||
+                submitting ||
+                logoUploading ||
+                repointLookupPending
+              }
+              onClick={handleSubmit}
+            >
+              <Button.Text>
+                {submitting ? "Attaching…" : "Attach Authorization Server"}
+              </Button.Text>
+            </Button>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
+      <Dialog open={confirmRepointOpen} onOpenChange={setConfirmRepointOpen}>
+        <Dialog.Content className="max-w-md">
+          <Dialog.Header>
+            <Dialog.Title>Change the upstream of other servers?</Dialog.Title>
+            <Dialog.Description className="sr-only">
+              Attaching changes the upstream of other servers.
+            </Dialog.Description>
+          </Dialog.Header>
+          <RepointedServersNotice
+            impact={sharedIssuerImpact}
+            projectId={target.projectId}
+          />
+          <Dialog.Footer>
+            <Button
+              variant="secondary"
+              onClick={() => setConfirmRepointOpen(false)}
+            >
+              <Button.Text>Cancel</Button.Text>
+            </Button>
+            <Button
+              variant="destructive-primary"
+              disabled={
+                submitting ||
+                repointLookupPending ||
+                sharedIssuerChangeBlocked(sharedIssuerImpact)
+              }
+              onClick={() => {
+                setConfirmRepointOpen(false);
+                attachMutation.mutate();
+              }}
+            >
+              <Button.Text>Attach Authorization Server</Button.Text>
+            </Button>
+          </Dialog.Footer>
+        </Dialog.Content>
+      </Dialog>
+    </>
   );
 }
 
@@ -995,8 +1081,8 @@ function SelectExistingFields({
     [data, excludedIssuerIds],
   );
 
-  let emptyMessage = "No identity providers match.";
-  if (isError) emptyMessage = "Failed to load identity providers.";
+  let emptyMessage = "No authorization servers match.";
+  if (isError) emptyMessage = "Failed to load authorization servers.";
   else if (isFetching) emptyMessage = "Searching…";
 
   const loadMore = hasNextPage ? (
@@ -1012,7 +1098,9 @@ function SelectExistingFields({
 
   return (
     <Stack gap={2}>
-      <Label className="text-muted-foreground text-xs">Identity Provider</Label>
+      <Label className="text-muted-foreground text-xs">
+        Authorization Server
+      </Label>
       <Combobox
         items={issuerOptions}
         selected={selectedIssuerId}
@@ -1020,22 +1108,22 @@ function SelectExistingFields({
         onSearchChange={setSearch}
         emptyMessage={emptyMessage}
         listFooter={loadMore}
-        searchPlaceholder="Search identity providers…"
+        searchPlaceholder="Search authorization servers…"
         className="w-full justify-between"
         contentClassName="w-[min(500px,calc(100vw-2rem))]"
       >
         {selectedIssuer
           ? issuerOptionLabel(selectedIssuer)
-          : "Choose an identity provider…"}
+          : "Choose an authorization server…"}
       </Combobox>
       {pickFailed ? (
         <FieldError>
-          Failed to load this identity provider. Pick it again, or refresh the
-          page.
+          Failed to load this authorization server. Pick it again, or refresh
+          the page.
         </FieldError>
       ) : (
         <Text muted small>
-          Pick an identity provider this project already has: its own, its
+          Pick an authorization server this project already has: its own, its
           organization&apos;s, or one from the platform catalog.
         </Text>
       )}
@@ -1071,8 +1159,8 @@ function SelectExistingClientFields({
           </SelectContent>
         </Select>
         <Text muted small>
-          Bind an existing client of this provider to this MCP server. The
-          client's stored configuration is reused as-is.
+          Bind an existing client of this authorization server to this MCP
+          server. The client's stored configuration is reused as-is.
         </Text>
       </Stack>
 

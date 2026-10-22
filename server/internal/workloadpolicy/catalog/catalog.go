@@ -8,7 +8,8 @@
 // workload signs in; this package must never be imported by workloadidentity.
 //
 // Entries are YAML files under platforms/, embedded in the binary and validated
-// when loaded. Adding a platform is adding a file.
+// when loaded. Adding a platform is adding a file. custom.yaml beside them holds
+// the forms for trusting a platform the catalog does not list.
 package catalog
 
 import (
@@ -31,8 +32,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/issuerurl"
 )
 
-//go:embed platforms/*.yaml
-var platformFiles embed.FS
+//go:embed platforms/*.yaml custom.yaml
+var embeddedFiles embed.FS
 
 // Visibility is whether the operator sees a value an entry supplies.
 type Visibility string
@@ -112,7 +113,21 @@ const (
 	// checkbox the operator ticks as they go: a console field and the value
 	// Speakeasy derives for it, or a field or control and what to do with it.
 	BlockChecklistItem BlockType = "checklist_item"
+
+	// BlockInput collects one value a custom flow's form submits.
+	BlockInput BlockType = "input"
+
+	// BlockWildcardCaution warns, while the subject being allowed is a
+	// wildcard rule, that it admits more than one identity. Its copy names the
+	// rule and the agent, so the dashboard writes it.
+	BlockWildcardCaution BlockType = "wildcard_caution"
 )
+
+// platformBlocks are the blocks a catalog platform's guided setup may use.
+var platformBlocks = []BlockType{
+	BlockText, BlockImage, BlockLink, BlockField, BlockSubjectRule, BlockAgentPicker,
+	BlockTags, BlockComputedStatus, BlockComputed, BlockChecklistItem,
+}
 
 // Computed values a definition may place. Each is derived by the server, the
 // same way its authorization server metadata derives it; a definition can never
@@ -191,8 +206,8 @@ type Block struct {
 	// Href is a link's target.
 	Href string `yaml:"href"`
 
-	// Label is a link's or computed value's label, or the console field or
-	// control a checklist item names.
+	// Label is a link's or computed value's label, the console field or
+	// control a checklist item names, or a form control's label.
 	Label string `yaml:"label"`
 
 	// Variable is the key a field collects.
@@ -201,8 +216,25 @@ type Block struct {
 	// Value is the computed value a computed block or checklist item shows.
 	Value string `yaml:"value"`
 
-	// Help is shown under a computed value or checklist item.
+	// Help is shown under a computed value, checklist item or form control.
+	// Under a form control it is Markdown, and gives way to the control's
+	// validation message while there is one.
 	Help string `yaml:"help"`
+
+	// Field is the form value an input collects.
+	Field FormField `yaml:"field"`
+
+	// Placeholder is shown in an empty form control.
+	Placeholder string `yaml:"placeholder"`
+
+	// Multiline makes an input a text area.
+	Multiline bool `yaml:"multiline"`
+
+	// ReadOnly shows an input's value without letting it change.
+	ReadOnly bool `yaml:"read_only"`
+
+	// Format names the dashboard validator an input's value must pass.
+	Format InputFormat `yaml:"format"`
 }
 
 // Step is one screen of a guided setup.
@@ -218,12 +250,6 @@ type Step struct {
 
 	// Blocks are rendered in order.
 	Blocks []Block `yaml:"blocks"`
-}
-
-// Setup is an entry's guided setup.
-type Setup struct {
-	// Steps run in order: collect steps, the create step, then connect steps.
-	Steps []Step `yaml:"steps"`
 }
 
 // Platform is one catalog entry.
@@ -256,16 +282,17 @@ type Platform struct {
 
 	// Subject is the access rule the entry produces.
 	Subject Subject `yaml:"subject"`
-
-	// Setup is the guided setup. Without one, the entry is listed as coming
-	// soon and cannot be opened.
-	Setup *Setup `yaml:"setup"`
 }
 
 // Source provides the catalog. Files are the only source today; a staff-edited
 // store can replace them without changing callers.
 type Source interface {
+	// Platforms returns every catalog entry, ordered by key.
 	Platforms(ctx context.Context) ([]Platform, error)
+
+	// CustomFlows returns the forms for trusting a platform the catalog does
+	// not list and allowing its workloads.
+	CustomFlows(ctx context.Context) (CustomFlows, error)
 }
 
 // Embedded returns the platforms shipped with the server.
@@ -276,7 +303,7 @@ func Embedded() Source {
 type embeddedSource struct{}
 
 var loadEmbedded = sync.OnceValues(func() ([]Platform, error) {
-	return Load(platformFiles, "platforms")
+	return Load(embeddedFiles, "platforms")
 })
 
 func (embeddedSource) Platforms(_ context.Context) ([]Platform, error) {
@@ -316,21 +343,31 @@ func Load(fsys fs.FS, dir string) ([]Platform, error) {
 // Parse decodes and validates one platform file. Unknown fields are refused, so
 // a misspelled key fails instead of silently dropping its value.
 func Parse(raw []byte) (Platform, error) {
-	decoder := yaml.NewDecoder(bytes.NewReader(raw))
-	decoder.KnownFields(true)
-
-	var platform Platform
-	if err := decoder.Decode(&platform); err != nil {
-		return Platform{}, fmt.Errorf("decode: %w", err)
-	}
-	var extra yaml.Node
-	if err := decoder.Decode(&extra); !errors.Is(err, io.EOF) {
-		return Platform{}, errors.New("a platform file holds exactly one document")
+	platform, err := decodeOne[Platform](raw, "a platform file")
+	if err != nil {
+		return Platform{}, err
 	}
 	if err := validate(platform); err != nil {
 		return Platform{}, err
 	}
 	return platform, nil
+}
+
+// decodeOne decodes raw, which must hold exactly one YAML document, refusing
+// fields T does not declare. what names the file in the error.
+func decodeOne[T any](raw []byte, what string) (T, error) {
+	decoder := yaml.NewDecoder(bytes.NewReader(raw))
+	decoder.KnownFields(true)
+
+	var value, zero T
+	if err := decoder.Decode(&value); err != nil {
+		return zero, fmt.Errorf("decode: %w", err)
+	}
+	var extra yaml.Node
+	if err := decoder.Decode(&extra); !errors.Is(err, io.EOF) {
+		return zero, fmt.Errorf("%s holds exactly one document", what)
+	}
+	return value, nil
 }
 
 var (
@@ -382,12 +419,6 @@ func validate(p Platform) error {
 	}
 	if err := validateSubject(p.Subject, variables); err != nil {
 		return err
-	}
-
-	if p.Setup != nil {
-		if err := validateSetup(*p.Setup, variables); err != nil {
-			return err
-		}
 	}
 	return nil
 }
@@ -495,50 +526,12 @@ func validateSubject(s Subject, variables map[string]Variable) error {
 	return nil
 }
 
-func validateSetup(setup Setup, variables map[string]Variable) error {
-	if len(setup.Steps) == 0 {
-		return errors.New("setup has no steps")
+func validateBlock(b Block, allowed []BlockType, variables map[string]Variable) error {
+	known := slices.Contains(platformBlocks, b.Type) || slices.Contains(customFlowBlocks, b.Type)
+	if known && !slices.Contains(allowed, b.Type) {
+		return fmt.Errorf("%s blocks are not allowed here", b.Type)
 	}
 
-	order := map[Phase]int{PhaseCollect: 0, PhaseCreate: 1, PhaseConnect: 2}
-	ids := make(map[string]bool, len(setup.Steps))
-	creates := 0
-	last := 0
-	for _, step := range setup.Steps {
-		rank, ok := order[step.Phase]
-		if !ok {
-			return fmt.Errorf("step %q: unknown phase %q", step.ID, step.Phase)
-		}
-		if rank < last {
-			return fmt.Errorf("step %q: steps must run collect, then create, then connect", step.ID)
-		}
-		last = rank
-		if step.Phase == PhaseCreate {
-			creates++
-		}
-		if !keyPattern.MatchString(step.ID) {
-			return fmt.Errorf("step id %q must be lowercase words joined by hyphens", step.ID)
-		}
-		if ids[step.ID] {
-			return fmt.Errorf("step id %q is used twice", step.ID)
-		}
-		ids[step.ID] = true
-		if strings.TrimSpace(step.Title) == "" {
-			return fmt.Errorf("step %q: title is required", step.ID)
-		}
-		for i, block := range step.Blocks {
-			if err := validateBlock(block, variables); err != nil {
-				return fmt.Errorf("step %q block %d: %w", step.ID, i+1, err)
-			}
-		}
-	}
-	if creates != 1 {
-		return fmt.Errorf("setup must have exactly one create step, found %d", creates)
-	}
-	return nil
-}
-
-func validateBlock(b Block, variables map[string]Variable) error {
 	switch b.Type {
 	case BlockText:
 		if strings.TrimSpace(b.Markdown) == "" {
@@ -590,7 +583,18 @@ func validateBlock(b Block, variables map[string]Variable) error {
 		case strings.Contains(b.Markdown, "!["):
 			return errors.New("checklist item must not hold an image; use an image block")
 		}
-	case BlockSubjectRule, BlockAgentPicker, BlockTags, BlockComputedStatus:
+	case BlockInput:
+		want, ok := inputFormats[b.Field]
+		if !ok {
+			return fmt.Errorf("input names unknown field %q", b.Field)
+		}
+		if b.Format != want {
+			return fmt.Errorf("input %s must have format %q", b.Field, want)
+		}
+		if strings.TrimSpace(b.Label) == "" {
+			return fmt.Errorf("input %s needs a label", b.Field)
+		}
+	case BlockSubjectRule, BlockAgentPicker, BlockTags, BlockComputedStatus, BlockWildcardCaution:
 	default:
 		return fmt.Errorf("unknown block type %q", b.Type)
 	}

@@ -47,28 +47,28 @@ func TestRouteMetaMemberToken(t *testing.T) {
 		t.Parallel()
 		got, err := routeMetaMemberToken(tokens(entry("a", "https://a.example.com/mcp"), entry("b", "https://b.example.com/mcp")), remoteMember, "https://a.example.com/mcp")
 		require.NoError(t, err)
-		require.Equal(t, "a", got)
+		require.Equal(t, "a", got.Token)
 	})
 
 	t.Run("remote trailing slash normalized", func(t *testing.T) {
 		t.Parallel()
 		got, err := routeMetaMemberToken(tokens(entry("a", "https://a.example.com/mcp/")), remoteMember, "https://a.example.com/mcp")
 		require.NoError(t, err)
-		require.Equal(t, "a", got)
+		require.Equal(t, "a", got.Token)
 	})
 
 	t.Run("remote lone mismatched token is never forwarded", func(t *testing.T) {
 		t.Parallel()
 		got, err := routeMetaMemberToken(tokens(entry("a", "https://elsewhere.example.com/mcp")), remoteMember, "https://a.example.com/mcp")
 		require.NoError(t, err)
-		require.Empty(t, got, "no lone-token fallback: an unmatched lone token means an anonymous call")
+		require.Empty(t, got.Token, "no lone-token fallback: an unmatched lone token means an anonymous call")
 	})
 
 	t.Run("remote lone unqualified token is never forwarded", func(t *testing.T) {
 		t.Parallel()
 		got, err := routeMetaMemberToken(tokens(entry("a", "")), remoteMember, "https://a.example.com/mcp")
 		require.NoError(t, err)
-		require.Empty(t, got)
+		require.Empty(t, got.Token)
 	})
 
 	t.Run("remote duplicate resource fails member-scoped", func(t *testing.T) {
@@ -82,21 +82,21 @@ func TestRouteMetaMemberToken(t *testing.T) {
 		t.Parallel()
 		got, err := routeMetaMemberToken(nil, remoteMember, "https://a.example.com/mcp")
 		require.NoError(t, err)
-		require.Empty(t, got)
+		require.Empty(t, got.Token)
 	})
 
 	t.Run("tunneled own-issuer unqualified token forwards", func(t *testing.T) {
 		t.Parallel()
 		got, err := routeMetaMemberToken(map[uuid.UUID]remotesessions.UpstreamToken{tunnelIssuerID: entry("a", "")}, tunnelMember, "")
 		require.NoError(t, err)
-		require.Equal(t, "a", got)
+		require.Equal(t, "a", got.Token)
 	})
 
 	t.Run("tunneled own-issuer qualified token belongs elsewhere", func(t *testing.T) {
 		t.Parallel()
 		got, err := routeMetaMemberToken(map[uuid.UUID]remotesessions.UpstreamToken{tunnelIssuerID: entry("a", "https://a.example.com/mcp")}, tunnelMember, "")
 		require.NoError(t, err)
-		require.Empty(t, got)
+		require.Empty(t, got.Token)
 	})
 
 	t.Run("tunneled sibling token is never forwarded", func(t *testing.T) {
@@ -106,7 +106,7 @@ func TestRouteMetaMemberToken(t *testing.T) {
 		// connected — must degrade to an anonymous call.
 		got, err := routeMetaMemberToken(tokens(entry("sibling", "")), tunnelMember, "")
 		require.NoError(t, err)
-		require.Empty(t, got)
+		require.Empty(t, got.Token)
 	})
 
 	t.Run("tunneled member without derived issuer is anonymous", func(t *testing.T) {
@@ -114,7 +114,7 @@ func TestRouteMetaMemberToken(t *testing.T) {
 		bare := metaMember{slug: "m", tunneledServerID: uuid.NullUUID{UUID: uuid.New(), Valid: true}}
 		got, err := routeMetaMemberToken(tokens(entry("a", "")), bare, "")
 		require.NoError(t, err)
-		require.Empty(t, got)
+		require.Empty(t, got.Token)
 	})
 
 	t.Run("tunneled routes its own entry among several", func(t *testing.T) {
@@ -123,7 +123,7 @@ func TestRouteMetaMemberToken(t *testing.T) {
 		m[tunnelIssuerID] = entry("own", "")
 		got, err := routeMetaMemberToken(m, tunnelMember, "")
 		require.NoError(t, err)
-		require.Equal(t, "own", got)
+		require.Equal(t, "own", got.Token)
 	})
 
 	t.Run("tunneled identifier matches its own grant", func(t *testing.T) {
@@ -132,7 +132,7 @@ func TestRouteMetaMemberToken(t *testing.T) {
 		m[tunnelIssuerID] = entry("own", "https://tunneled.internal/mcp/")
 		got, err := routeMetaMemberToken(m, tunnelMember, "https://tunneled.internal/mcp")
 		require.NoError(t, err)
-		require.Equal(t, "own", got)
+		require.Equal(t, "own", got.Token)
 	})
 
 	t.Run("tunneled identifier never selects across issuers", func(t *testing.T) {
@@ -143,7 +143,7 @@ func TestRouteMetaMemberToken(t *testing.T) {
 		// bearer to the tunnel.
 		got, err := routeMetaMemberToken(tokens(entry("sibling", "https://api.vendor.com/mcp")), tunnelMember, "https://api.vendor.com/mcp")
 		require.NoError(t, err)
-		require.Empty(t, got)
+		require.Empty(t, got.Token)
 	})
 
 	t.Run("tunneled grant qualified elsewhere is anonymous", func(t *testing.T) {
@@ -151,7 +151,7 @@ func TestRouteMetaMemberToken(t *testing.T) {
 		m := map[uuid.UUID]remotesessions.UpstreamToken{tunnelIssuerID: entry("own", "https://elsewhere.example.com/mcp")}
 		got, err := routeMetaMemberToken(m, tunnelMember, "https://tunneled.internal/mcp")
 		require.NoError(t, err)
-		require.Empty(t, got, "a credential qualified to another upstream degrades to an anonymous call")
+		require.Empty(t, got.Token, "a credential qualified to another upstream degrades to an anonymous call")
 	})
 
 	t.Run("tunneled pre-identifier grant routes by own issuer", func(t *testing.T) {
@@ -163,7 +163,7 @@ func TestRouteMetaMemberToken(t *testing.T) {
 		m[tunnelIssuerID] = entry("own", "")
 		got, err := routeMetaMemberToken(m, tunnelMember, "https://tunneled.internal/mcp")
 		require.NoError(t, err)
-		require.Equal(t, "own", got)
+		require.Equal(t, "own", got.Token)
 	})
 
 	t.Run("remote duplicate resource errors before any rescue", func(t *testing.T) {
@@ -193,4 +193,66 @@ func TestUnobservedMemberSessionClose_DetachedContext(t *testing.T) {
 	}
 	closeUnobservedMemberSession(canceled, nil, build, "sess-1", memberSessionCloseTimeout)
 	require.NoError(t, buildCtxErr, "the session DELETE must not be built on the expired call context")
+}
+
+func TestRouteMetaMemberToken_SelfCredential(t *testing.T) {
+	t.Parallel()
+
+	memberIssuer := uuid.New()
+	remoteMember := metaMember{slug: "m", remoteServerID: uuid.NullUUID{UUID: uuid.New(), Valid: true}, remoteSessionIssuerID: uuid.NullUUID{UUID: memberIssuer, Valid: true}}
+	self := func(token string, err error) remotesessions.UpstreamToken {
+		return remotesessions.UpstreamToken{Token: token, CredentialOwner: remotesessions.CredentialOwnerSelf, ClientCredentialErr: err}
+	}
+
+	t.Run("routes by the member's own issuer", func(t *testing.T) {
+		t.Parallel()
+		got, err := routeMetaMemberToken(map[uuid.UUID]remotesessions.UpstreamToken{memberIssuer: self("self-token", nil)}, remoteMember, "https://a.example.com/mcp")
+		require.NoError(t, err)
+		require.Equal(t, "self-token", got.Token)
+		require.Equal(t, remotesessions.CredentialOwnerSelf, got.CredentialOwner)
+	})
+
+	t.Run("another issuer's self credential is never forwarded", func(t *testing.T) {
+		t.Parallel()
+		got, err := routeMetaMemberToken(map[uuid.UUID]remotesessions.UpstreamToken{uuid.New(): self("self-token", nil)}, remoteMember, "https://a.example.com/mcp")
+		require.NoError(t, err)
+		require.Empty(t, got.Token)
+	})
+
+	t.Run("misconfigured self credential names the administrator", func(t *testing.T) {
+		t.Parallel()
+		_, err := routeMetaMemberToken(map[uuid.UUID]remotesessions.UpstreamToken{memberIssuer: self("", remotesessions.ErrClientCredentialMisconfigured)}, remoteMember, "https://a.example.com/mcp")
+		memberErr, ok := errors.AsType[*metaMemberError](err)
+		require.True(t, ok, "error: %v", err)
+		require.Contains(t, memberErr.message, "contact the MCP server administrator")
+	})
+
+	t.Run("self credential for another resource names the administrator", func(t *testing.T) {
+		t.Parallel()
+		minted := remotesessions.UpstreamToken{Token: "self-token", Resource: "https://b.example.com/mcp", CredentialOwner: remotesessions.CredentialOwnerSelf}
+		_, err := routeMetaMemberToken(map[uuid.UUID]remotesessions.UpstreamToken{memberIssuer: minted}, remoteMember, "https://a.example.com/mcp")
+		memberErr, ok := errors.AsType[*metaMemberError](err)
+		require.True(t, ok, "never an anonymous call: %v", err)
+		require.Contains(t, memberErr.message, "issued for a different resource")
+	})
+
+	t.Run("unavailable self credential asks for a retry", func(t *testing.T) {
+		t.Parallel()
+		_, err := routeMetaMemberToken(map[uuid.UUID]remotesessions.UpstreamToken{memberIssuer: self("", remotesessions.ErrClientCredentialUnavailable)}, remoteMember, "https://a.example.com/mcp")
+		memberErr, ok := errors.AsType[*metaMemberError](err)
+		require.True(t, ok, "error: %v", err)
+		require.Contains(t, memberErr.message, "retry shortly")
+	})
+}
+
+func TestMemberAuthFailure_SelfCredentialNamesAdministrator(t *testing.T) {
+	t.Parallel()
+
+	member := metaMember{slug: "m"}
+	err := memberAuthFailure(member, memberDial{anonymous: false, clientCredential: true})
+	require.Contains(t, err.Error(), "contact the MCP server administrator")
+	require.NotContains(t, err.Error(), "reconnect")
+
+	err = memberAuthFailure(member, memberDial{anonymous: false, clientCredential: false})
+	require.Contains(t, err.Error(), "reconnect it from this gateway's sign-in page")
 }

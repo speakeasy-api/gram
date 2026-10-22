@@ -1,13 +1,19 @@
+import type {
+  SpendRuleWindowKind,
+  SpendRuleAction,
+} from "@gram/client/models/components/spendrule.js";
+import type { SpendRuleUsageStatus } from "@gram/client/models/components/spendruleusage.js";
+import type { EventType } from "@gram/client/models/components/spendruleevent.js";
 /* -------------------------------------------------------------------------- */
 /*  Vocabulary                                                                 */
 /* -------------------------------------------------------------------------- */
 
-export type BudgetWindow = "daily" | "weekly" | "monthly";
+export type BudgetWindow = SpendRuleWindowKind;
 /** Mirrors the security policy actions: flag for review, or block requests. */
-export type RuleAction = "flag" | "block";
+export type RuleAction = SpendRuleAction;
 /** Lifecycle state derived from the worst matched actor, computed server-side. */
-export type RuleStatus = "healthy" | "approaching" | "flagging" | "blocking";
-export type SpendEventType = "warning" | "breach";
+export type RuleStatus = SpendRuleUsageStatus;
+export type SpendEventType = EventType;
 export type RuleTargetOperator =
   | "equals"
   | "not_equals"
@@ -19,7 +25,8 @@ export type RuleTargetOperator =
 
 export interface RuleTargetCondition {
   attribute: string;
-  operator: RuleTargetOperator;
+  // Preserve future operators from the API; only known operators can be edited.
+  operator: string;
   value: string;
 }
 
@@ -29,26 +36,51 @@ export interface RuleTargetCondition {
  *  server would reject. */
 export interface ActorAttribute {
   name: string;
-  /** Value kind: a scalar string, or a list of strings (uses `includes`). */
-  type: "string" | "list";
+  /** Preserve future kinds so unsupported targets never become string conditions. */
+  type: string;
   description: string;
 }
 
-interface RuleTargetLike {
-  attribute: string;
-  operator: string;
-  value: string;
+const STRING_TARGET_OPERATORS: readonly RuleTargetOperator[] = [
+  "equals",
+  "not_equals",
+  "starts_with",
+  "ends_with",
+  "contains",
+  "matches",
+];
+const LIST_TARGET_OPERATORS: readonly RuleTargetOperator[] = ["includes"];
+
+/** Missing custom attributes retain the existing string picker; explicit future types are unsupported. */
+export function operatorsForAttribute(
+  attribute: ActorAttribute | undefined,
+): readonly RuleTargetOperator[] {
+  if (!attribute || attribute.type === "string") return STRING_TARGET_OPERATORS;
+  if (attribute?.type === "list") return LIST_TARGET_OPERATORS;
+  return [];
+}
+
+export function isSupportedRuleTarget(
+  target: RuleTargetCondition,
+  attributes: readonly ActorAttribute[],
+): boolean {
+  const attribute = attributes.find(
+    (attribute) => attribute.name === target.attribute,
+  );
+  if (!attribute) return isRuleTargetOperator(target.operator);
+  return operatorsForAttribute(attribute).some(
+    (operator) => operator === target.operator,
+  );
 }
 
 /* -------------------------------------------------------------------------- */
 /*  Models                                                                     */
 /* -------------------------------------------------------------------------- */
 
-/* App-owned budget view types. They mirror the spend-rules API responses but
- * are defined here, not re-exported from the generated SDK, so a regeneration
- * that reshapes an SDK model surfaces as a type error in the mapping layer
- * (budgets-queries.ts) rather than silently rippling through every component.
- * The SDK→app mapping happens once, at the react-query boundary. */
+/* App-owned budget view models share the SDK's open enum vocabulary above,
+ * preserving future values for safe display and guarded editing. Other SDK
+ * response fields are mapped into these models in budgets-queries.ts, keeping
+ * response-shape changes at the query boundary. */
 
 /** A budget rule as the UI consumes it. One immutable version row: editing a
  *  rule archives the current row and creates a successor with a fresh id. */
@@ -212,7 +244,7 @@ export function toDraft(rule: SpendRule): RuleDraft {
   return {
     name: rule.name,
     description: rule.description,
-    target: normalizeTargetCondition(rule.target),
+    target: { ...rule.target },
     limitUsd: rule.limitUsd,
     windowKind: rule.windowKind,
     warnAtPct: rule.warnAtPct,
@@ -282,6 +314,8 @@ export function timeUntilWindowReset(windowKind: BudgetWindow): string {
     case "monthly":
       next = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
       break;
+    default:
+      return "unknown";
   }
   const hours = Math.max(
     1,
@@ -317,8 +351,22 @@ export function formatUsd(amount: number): string {
   }).format(amount);
 }
 
-export function targetSummary(target: RuleTargetLike): string {
+export function targetSummary(target: RuleTargetCondition): string {
+  if (!isRuleTargetOperator(target.operator))
+    return "Unsupported target condition";
   return `${targetAttributeLabel(target.attribute)} ${operatorSummary(target.operator)} ${target.value}`;
+}
+
+/** Keep target values searchable even when their presentation is unsupported. */
+export function matchesRuleSearch(rule: SpendRule, query: string): boolean {
+  const needle = query.trim().toLowerCase();
+  return [
+    rule.name,
+    rule.description,
+    targetSummary(rule.target),
+    rule.target.attribute,
+    rule.target.value,
+  ].some((text) => text.toLowerCase().includes(needle));
 }
 
 /** Title-case an attribute name for display, e.g. department_name → Department
@@ -330,19 +378,7 @@ function targetAttributeLabel(name: string): string {
     .join(" ");
 }
 
-export function normalizeTargetCondition(
-  target: RuleTargetLike,
-): RuleTargetCondition {
-  return {
-    attribute: target.attribute,
-    operator: isRuleTargetOperator(target.operator)
-      ? target.operator
-      : "contains",
-    value: target.value,
-  };
-}
-
-function isRuleTargetOperator(
+export function isRuleTargetOperator(
   operator: string,
 ): operator is RuleTargetOperator {
   return (
@@ -356,7 +392,7 @@ function isRuleTargetOperator(
   );
 }
 
-function operatorSummary(operator: string): string {
+function operatorSummary(operator: RuleTargetOperator): string {
   switch (operator) {
     case "equals":
       return "is";
@@ -370,7 +406,7 @@ function operatorSummary(operator: string): string {
       return "matches";
     case "includes":
       return "includes";
-    default:
+    case "contains":
       return "contains";
   }
 }

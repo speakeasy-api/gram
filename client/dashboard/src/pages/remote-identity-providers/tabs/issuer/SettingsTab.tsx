@@ -3,9 +3,9 @@ import { RequireScope } from "@/components/require-scope";
 import { useIsPlatformAdmin } from "@/contexts/Auth";
 import { useRBAC } from "@/hooks/useRBAC";
 import { Label } from "@/components/ui/Label";
-import { MultiSelect } from "@/components/ui/MultiSelect";
 import { Switch } from "@/components/ui/Switch";
 import { Text } from "@/components/ui/Text";
+import { ScopeMultiSelect } from "@/lib/remote-identity";
 import { useRoutes } from "@/routes";
 import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
 import { invalidateAllOrganizationRemoteSessionIssuer } from "@gram/client/react-query/organizationRemoteSessionIssuer.js";
@@ -16,7 +16,7 @@ import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { ExistingIssuerLink } from "../../ExistingIssuerLink";
 import { useQueryClient } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { toast } from "sonner";
 import {
   EndpointsFields,
@@ -57,14 +57,6 @@ export function SettingsTab({
   // on the next unrelated save.
   const [scopeOverride, setScopeOverride] = useState<string[]>(
     issuer.scopeOverride ?? [],
-  );
-  // Typed scopes join the list so the menu shows every selection.
-  const scopeOptions = useMemo(
-    () =>
-      [...new Set([...(issuer.scopesSupported ?? []), ...scopeOverride])].map(
-        (scope) => ({ label: scope, value: scope }),
-      ),
-    [issuer.scopesSupported, scopeOverride],
   );
   // Undefined until the operator flips the switch, so it tracks the saved
   // value and a save only sends the flag when it was deliberately changed:
@@ -111,6 +103,8 @@ export function SettingsTab({
       jwksUri: issuer.jwksUri ?? "",
       scopesSupported: issuer.scopesSupported ?? [],
       grantTypesSupported: issuer.grantTypesSupported ?? [],
+      authorizationGrantProfilesSupported:
+        issuer.authorizationGrantProfilesSupported ?? [],
       responseTypesSupported: issuer.responseTypesSupported ?? [],
       tokenEndpointAuthMethodsSupported:
         issuer.tokenEndpointAuthMethodsSupported ?? [],
@@ -148,10 +142,10 @@ export function SettingsTab({
         refetchType: "all",
       });
       setOmitScopeFallback(undefined);
-      toast.success("Provider updated");
+      toast.success("Authorization server updated");
     },
     onError: (error) => {
-      console.error("Update remote identity provider failed", error);
+      console.error("Update authorization server failed", error);
     },
   });
 
@@ -245,6 +239,7 @@ export function SettingsTab({
           registrationEndpoint,
           jwksUri,
           discoveredSnapshot,
+          savedIssuerUrl: issuer.issuer,
           scopeOverride,
           omitScopeFallback:
             omitScopeFallback !== undefined &&
@@ -263,8 +258,8 @@ export function SettingsTab({
   return (
     <div className="flex max-w-2xl flex-col gap-6">
       <SettingsSection
-        title="Provider"
-        description="How this identity provider is labelled in the dashboard."
+        title="Authorization server"
+        description="How this authorization server is labelled in the dashboard."
       >
         <SettingsField label="Display name" value={name} onChange={setName} />
         <SettingsField label="Slug" value={slug} onChange={setSlug} />
@@ -274,7 +269,7 @@ export function SettingsTab({
           onChange={setLogoAssetId}
           onUploadingChange={setLogoUploading}
           canEdit={hasOrgAdminScope}
-          description="Shown beside this provider in the dashboard and on the connect consent page. Saved with your other changes."
+          description="Shown beside this authorization server in the dashboard and on the connect consent page. Saved with your other changes."
         />
       </SettingsSection>
 
@@ -286,7 +281,7 @@ export function SettingsTab({
 
       <SettingsSection
         title="Issuer configuration"
-        description="The upstream Authorization Server. Refresh to re-read its RFC 8414 metadata, or change the issuer URL and run discovery to point this provider somewhere else."
+        description="The upstream Authorization Server. Refresh to re-read its RFC 8414 metadata, or change the issuer URL and run discovery to point it somewhere else."
       >
         <IssuerUrlField
           issuerUrl={issuerUrl}
@@ -366,9 +361,9 @@ export function SettingsTab({
               </Button>
             </div>
             <Text small muted>
-              Re-reads this provider's RFC 8414 metadata and saves the endpoints
-              and advertised capabilities immediately. Your other changes on
-              this page are not saved.
+              Re-reads this authorization server's RFC 8414 metadata and saves
+              the endpoints and advertised capabilities immediately. Your other
+              changes on this page are not saved.
             </Text>
           </div>
         )}
@@ -376,29 +371,24 @@ export function SettingsTab({
 
       <SettingsSection
         title="Scopes"
-        description="When set, the override is requested exactly as chosen in place of this provider's supported scopes."
+        description="Requested exactly as chosen when neither the client nor the MCP server names scopes, in place of this authorization server's supported scopes."
       >
         <div className="flex flex-col gap-1.5">
           <Label id="scope-override-label" htmlFor="scope-override">
             Scope override
           </Label>
-          <MultiSelect
+          <ScopeMultiSelect
             id="scope-override"
-            aria-labelledby="scope-override-label"
-            options={scopeOptions}
+            labelId="scope-override-label"
+            options={issuer.scopesSupported ?? []}
             value={scopeOverride}
             onValueChange={setScopeOverride}
             placeholder="No override"
-            emptyIndicator="Type a scope to add it."
-            badgeClassName="normal-case tracking-normal"
-            maxCount={8}
-            creatable
-            caseSensitiveCreate
-            hideSelectAll
+            disabled={!hasOrgAdminScope}
           />
           <Text small muted>
-            Choose from the scopes this provider advertises, or type one to add
-            it.
+            Choose from the scopes this authorization server advertises, or type
+            one to add it.
           </Text>
         </div>
         <div className="flex flex-col gap-1.5">
@@ -425,7 +415,7 @@ export function SettingsTab({
 
       <SettingsSection
         title="Client setup"
-        description="Documentation linked from the New Client sheet so operators can set up an OAuth client with this provider themselves."
+        description="Documentation linked from the New Client sheet so operators can set up an OAuth client with this authorization server themselves."
       >
         <SettingsField
           label="Client setup documentation URL"
@@ -456,10 +446,10 @@ export function SettingsTab({
       </div>
 
       <div className="border-destructive/30 flex flex-col gap-2 border p-4">
-        <Text className="font-medium">Danger Zone</Text>
+        <Text className="font-medium">Danger zone</Text>
         <Text small muted>
-          Deleting this provider is permanent. All clients must be deleted
-          first.
+          Deleting this authorization server is permanent. All clients must be
+          deleted first.
         </Text>
         <div>
           <RequireScope scope="org:admin" level="component">
@@ -467,7 +457,7 @@ export function SettingsTab({
               variant="destructive-primary"
               onClick={() => setShowDelete(true)}
             >
-              <Button.Text>Delete provider</Button.Text>
+              <Button.Text>Delete authorization server</Button.Text>
             </Button>
           </RequireScope>
         </div>

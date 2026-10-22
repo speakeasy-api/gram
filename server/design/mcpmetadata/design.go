@@ -88,13 +88,13 @@ var McpExport = Type("McpExport", func() {
 var McpMetadata = Type("McpMetadata", func() {
 	Meta("struct:pkg:path", "types")
 
-	Description("Metadata used to configure the MCP install page. Exactly one of toolset_id or mcp_server_id identifies which backend the metadata belongs to.")
+	Description("Metadata used to configure the MCP install page. toolset_id or mcp_server_id identifies which backend the metadata belongs to; a hosted MCP server with a live canonical MCP server carries both, set to the same id.")
 
 	Attribute("id", String, "The ID of the metadata record")
-	Attribute("toolset_id", String, "The toolset associated with this install page metadata. Mutually exclusive with mcp_server_id.", func() {
+	Attribute("toolset_id", String, "The toolset associated with this install page metadata. Also set with mcp_server_id, to the same id, for a hosted MCP server with a live canonical MCP server.", func() {
 		Format(FormatUUID)
 	})
-	Attribute("mcp_server_id", String, "The MCP server associated with this install page metadata. Mutually exclusive with toolset_id.", func() {
+	Attribute("mcp_server_id", String, "The MCP server associated with this install page metadata. Also set with toolset_id, to the same id, for a hosted MCP server with a live canonical MCP server.", func() {
 		Format(FormatUUID)
 	})
 	Attribute("logo_asset_id", String, "The asset ID for the MCP install page logo", func() {
@@ -212,16 +212,17 @@ var _ = Service("mcpMetadata", func() {
 	})
 
 	Method("exportMcpMetadata", func() {
-		Description("Export MCP server details as JSON for documentation and integration purposes.")
+		Description("Export MCP server details as JSON for documentation and integration purposes. Exactly one of mcp_slug or mcp_server_id must be provided.")
 		Security(security.ByKey, security.ProjectSlug, func() {
 			Scope("consumer")
 		})
 		Security(security.Session, security.ProjectSlug)
 
 		Payload(func() {
-			Attribute("mcp_slug", shared.Slug, "The MCP server slug (from the install URL)")
-
-			Required("mcp_slug")
+			Attribute("mcp_slug", shared.Slug, "The MCP server slug (from the install URL). Mutually exclusive with mcp_server_id.")
+			Attribute("mcp_server_id", String, "The ID of a toolset-backed MCP server. Mutually exclusive with mcp_slug.", func() {
+				Format(FormatUUID)
+			})
 
 			security.ByKeyPayload()
 			security.SessionPayload()

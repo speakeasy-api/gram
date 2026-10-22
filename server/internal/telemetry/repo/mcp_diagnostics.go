@@ -5,6 +5,8 @@ import (
 	"fmt"
 
 	"github.com/Masterminds/squirrel"
+
+	"github.com/speakeasy-api/gram/server/internal/otel/dialect"
 )
 
 // MCP call outcome classes. The vocabulary is closed and server-side: a
@@ -12,8 +14,8 @@ import (
 // string, so nothing a provider or a client wrote can reach the result through
 // this path.
 const (
-	// MCPOutcomeSuccess is a 2xx/3xx call, or a hook-observed call that
-	// recorded a result.
+	// MCPOutcomeSuccess is a 2xx/3xx call not recorded as an error outcome, or
+	// a hook-observed call that recorded a result.
 	MCPOutcomeSuccess = "success"
 	// MCPOutcomeUnauthorized is 401/403 — the call was rejected before it ran.
 	MCPOutcomeUnauthorized = "unauthorized"
@@ -26,8 +28,9 @@ const (
 	// MCPOutcomeBlocked is a hook-observed call denied by local policy before the
 	// upstream server ran.
 	MCPOutcomeBlocked = "blocked"
-	// MCPOutcomeFailed is a hook-observed call that recorded an error without a
-	// status code.
+	// MCPOutcomeFailed is a call the client read as a tool error below status
+	// 400: an isError result, a redirect answered as isError, or a
+	// hook-observed tool error.
 	MCPOutcomeFailed = "failed"
 	// MCPOutcomeUnknown is a call whose trace carries neither.
 	MCPOutcomeUnknown = "unknown"
@@ -50,10 +53,9 @@ type GetMCPOutcomeBreakdownParams struct {
 	// MCPServerURLSuffixes matches the same servers in hook-observed traffic,
 	// where the server is identified by the URL the client called (/mcp/<slug>).
 	MCPServerURLSuffixes []string
-	// MCPServerIDs matches calls the gateway proxied to a configured MCP server
-	// and stamped with gram.mcp_server.id. Remote, tunneled, and gateway-member
-	// servers carry no toolset slug, so this is the only direct-lane identity
-	// they have.
+	// MCPServerIDs matches calls stamped with gram.mcp_server.id. When set,
+	// ToolsetSlugs only matches rows without a server id, so a hosted gateway
+	// member's calls, which carry both, stay with the member.
 	MCPServerIDs []string
 	// ToolSources matches hook-observed calls by the server name the calling
 	// agent reported (gram.tool_call.source), by exact value; the caller
@@ -124,9 +126,9 @@ type MCPUsageUserToolRow struct {
 
 // GetMCPOutcomeBreakdown counts calls by outcome class and by the client that
 // made them, over two lanes of the same traffic: calls that arrived directly at
-// a hosted or proxied MCP server (classified by HTTP status, no client
-// attribution available yet) and calls observed by an agent hook (classified by
-// result/error, attributed to the reporting client).
+// a hosted or proxied MCP server (classified by HTTP status and the result's
+// isError, no client attribution available yet) and calls observed by an agent
+// hook (classified by result/error, attributed to the reporting client).
 //
 // It returns counts only. No status codes, URLs, arguments, results, or
 // identities leave this query.
@@ -353,6 +355,8 @@ func unionSource(directSQL string, directArgs []any, hookSQL string, hookArgs []
 // groups lifecycle rows into one call.
 func (q *Queries) mcpOutcomeDirectSource(arg GetMCPOutcomeBreakdownParams) (string, []any, error) {
 	httpStatusCode := "toInt32OrZero(toString(attributes.http.response.status_code))"
+	// gram.outcome is error when the result said isError, even inside a 2xx.
+	toolError := "toUInt8(toString(attributes.gram.outcome) = '" + dialect.OutcomeError + "')"
 	eventID := chFirstNonEmpty("toString(span_id)", "toString(trace_id)")
 	grouped := sq.Select(
 		"trace_id",
@@ -363,6 +367,7 @@ func (q *Queries) mcpOutcomeDirectSource(arg GetMCPOutcomeBreakdownParams) (stri
 		"max(external_user_id) AS g_external_user_id",
 		"max(user_id) AS g_user_id",
 		"max("+httpStatusCode+") AS g_http_status_code",
+		"max("+toolError+") AS g_tool_error",
 	).
 		From("telemetry_logs").
 		Where(squirrel.Eq{"gram_project_id": arg.GramProjectIDs}).
@@ -378,7 +383,7 @@ func (q *Queries) mcpOutcomeDirectSource(arg GetMCPOutcomeBreakdownParams) (stri
 		// carries whichever applies, so matching either never counts one twice.
 		predicate := squirrel.Or{}
 		if len(arg.ToolsetSlugs) > 0 {
-			predicate = append(predicate, squirrel.Eq{"toolset_slug": arg.ToolsetSlugs})
+			predicate = append(predicate, toolsetSlugArm(arg.ToolsetSlugs, len(arg.MCPServerIDs) > 0))
 		}
 		if len(arg.MCPServerIDs) > 0 {
 			predicate = append(predicate, squirrel.Eq{"mcp_server_id": arg.MCPServerIDs})
@@ -403,6 +408,7 @@ func (q *Queries) mcpOutcomeDirectSource(arg GetMCPOutcomeBreakdownParams) (stri
 
 	outcome := chMultiIf(
 		"g_http_status_code = 401 OR g_http_status_code = 403", "'"+MCPOutcomeUnauthorized+"'",
+		"g_http_status_code >= 200 AND g_http_status_code < 400 AND g_tool_error = 1", "'"+MCPOutcomeFailed+"'",
 		"g_http_status_code >= 200 AND g_http_status_code < 400", "'"+MCPOutcomeSuccess+"'",
 		"g_http_status_code >= 500", "'"+MCPOutcomeServerError+"'",
 		"g_http_status_code >= 400", "'"+MCPOutcomeClientError+"'",
@@ -506,6 +512,16 @@ SELECT
 	g_user_id AS user_id,
 	%s AS outcome
 FROM (%s)`, chFirstNonEmpty("g_hook_source", "'"+MCPClientUnattributed+"'"), outcome, groupedSQL), groupedArgs, nil
+}
+
+// toolsetSlugArm matches hosted rows by toolset slug. Paired with a server id
+// arm, it leaves out rows stamped with another server's id, such as a gateway
+// member fronting the same toolset.
+func toolsetSlugArm(slugs []string, withServerArm bool) squirrel.Sqlizer {
+	if !withServerArm {
+		return squirrel.Eq{"toolset_slug": slugs}
+	}
+	return squirrel.And{squirrel.Eq{"toolset_slug": slugs}, squirrel.Eq{"mcp_server_id": ""}}
 }
 
 // hookServerURLExpr is the URL a hook-observed client called, as the hook

@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	accessgen "github.com/speakeasy-api/gram/server/gen/access"
+	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/access"
 	"github.com/speakeasy-api/gram/server/internal/agent/aitargets"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
@@ -62,7 +63,7 @@ func TestShadowAIListInventoryProjectsTheAccessVerdict(t *testing.T) {
 		UserCount:   3,
 		DeviceCount: 4,
 		LastSeen:    "2026-09-11T00:00:00Z",
-		Access:      &accessgen.AIToolAccessSummary{State: "blocked", Enforceable: true},
+		Access:      &types.AIToolAccessSummary{State: "blocked", Enforceable: true},
 	}}}}
 	service := NewShadowAIService(detections, &stubLibraryReader{}, stubAuthorizer{}, allowingBudget())
 	require.NotNil(t, service)
@@ -111,8 +112,8 @@ func TestShadowAIListLibraryReportsOriginAndBlockability(t *testing.T) {
 
 	list := &aitargets.OrganizationList{
 		Entries: []aitargets.Entry{
-			{Target: blockable, Source: aitargets.SourceDefault},
-			{Target: inert, Source: aitargets.SourceOrganization},
+			{Target: blockable, Source: aitargets.SourceDefault, Decision: aitargets.DecisionRecord{TargetID: "codex", Decision: aitargets.DecisionBlocked, Rationale: "not approved"}},
+			{Target: inert, Source: aitargets.SourceOrganization, Decision: aitargets.DecisionRecord{TargetID: "acme-tool", Decision: aitargets.DecisionBlocked, Rationale: "recorded but inert"}},
 		},
 		Snapshot: aitargets.NewSnapshot(7, nil),
 	}
@@ -129,9 +130,15 @@ func TestShadowAIListLibraryReportsOriginAndBlockability(t *testing.T) {
 	require.Equal(t, "codex", out.Targets[0].TargetID)
 	require.Equal(t, "default", out.Targets[0].Origin, "a target Speakeasy ships reports as a default")
 	require.True(t, out.Targets[0].Blockable, "a target publishing a CIMD document can be blocked at the gateway")
+	require.Equal(t, "blocked", out.Targets[0].State, "the recorded block is in force")
+	require.Equal(t, "blocked", out.Targets[0].Decision)
+	require.Equal(t, "not approved", out.Targets[0].Rationale)
 	require.Equal(t, "acme-tool", out.Targets[1].TargetID)
 	require.Equal(t, "organization", out.Targets[1].Origin, "one this organization added reports as its own")
 	require.False(t, out.Targets[1].Blockable, "one publishing none cannot")
+	require.Equal(t, "unreviewed", out.Targets[1].State, "a decision nothing can enforce is projected as unreviewed")
+	require.Equal(t, "unreviewed", out.Targets[1].Decision)
+	require.Empty(t, out.Targets[1].Rationale)
 }
 
 // A category the library does not use is the caller's mistake to correct, so it
@@ -171,7 +178,7 @@ func TestShadowAIListInventoryProjectsTheUnenforceableHalf(t *testing.T) {
 			DisplayName: "Reviewable",
 			Category:    "assistant",
 			Signals:     []string{"running"},
-			Access:      &accessgen.AIToolAccessSummary{State: "unreviewed", Enforceable: true},
+			Access:      &types.AIToolAccessSummary{State: "unreviewed", Enforceable: true},
 		},
 		{
 			// The headline case: it reads unreviewed BECAUSE no decision about
@@ -182,7 +189,7 @@ func TestShadowAIListInventoryProjectsTheUnenforceableHalf(t *testing.T) {
 			DisplayName: "Not blockable",
 			Category:    "harness",
 			Signals:     []string{"installed"},
-			Access:      &accessgen.AIToolAccessSummary{State: "unreviewed", Enforceable: false},
+			Access:      &types.AIToolAccessSummary{State: "unreviewed", Enforceable: false},
 		},
 		{
 			TargetID:    "no-summary-at-all",

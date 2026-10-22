@@ -37,23 +37,32 @@ FROM mcp_servers
 WHERE id = @id AND project_id = @project_id AND deleted IS FALSE;
 
 -- name: GetMCPServerByToolsetID :one
--- Deterministic pick until a partial unique index enforces one wrapper per toolset.
+-- Enabled first, then the canonical wrapper (id = toolset id), then oldest.
 SELECT *
 FROM mcp_servers
 WHERE toolset_id = @toolset_id::uuid AND project_id = @project_id AND deleted IS FALSE
-ORDER BY created_at, id
+ORDER BY (visibility = 'disabled'), (id = toolset_id) DESC, created_at, id
 LIMIT 1;
 
 -- name: ListEnabledMCPServersByToolsetID :many
 -- At most two rows are needed: zero means the legacy route has no attributable
 -- wrapper, one is unambiguous, and two means callers must reject attribution.
+-- A live canonical wrapper (id = toolset id) is the toolset's hosting wrapper,
+-- so other toolset-backed servers are candidates only when it is absent.
 SELECT *
-FROM mcp_servers
-WHERE toolset_id = @toolset_id::uuid
-  AND project_id = @project_id
-  AND deleted IS FALSE
-  AND visibility <> 'disabled'
-ORDER BY created_at, id
+FROM mcp_servers ms
+WHERE ms.toolset_id = @toolset_id::uuid
+  AND ms.project_id = @project_id
+  AND ms.deleted IS FALSE
+  AND ms.visibility <> 'disabled'
+  AND (
+    ms.id = ms.toolset_id
+    OR NOT EXISTS (
+      SELECT 1 FROM mcp_servers c
+      WHERE c.id = ms.toolset_id AND c.project_id = ms.project_id AND c.deleted IS FALSE
+    )
+  )
+ORDER BY ms.created_at, ms.id
 LIMIT 2;
 
 -- name: LockMCPServerByIDAndProjectID :one
@@ -124,15 +133,23 @@ FROM mcp_servers
 WHERE slug = @slug AND project_id = @project_id AND deleted IS FALSE;
 
 -- name: ListMCPServersByProjectID :many
-SELECT *
-FROM mcp_servers
-WHERE project_id = @project_id
-  AND deleted IS FALSE
-  AND (sqlc.narg('remote_mcp_server_id')::uuid IS NULL OR remote_mcp_server_id = sqlc.narg('remote_mcp_server_id')::uuid)
-  AND (sqlc.narg('tunneled_mcp_server_id')::uuid IS NULL OR tunneled_mcp_server_id = sqlc.narg('tunneled_mcp_server_id')::uuid)
-  AND (sqlc.narg('toolset_id')::uuid IS NULL OR toolset_id = sqlc.narg('toolset_id')::uuid)
-  AND (sqlc.narg('unproxied_mcp_server_id')::uuid IS NULL OR unproxied_mcp_server_id = sqlc.narg('unproxied_mcp_server_id')::uuid)
-ORDER BY created_at DESC;
+-- A toolset-backed row whose toolset is deleted serves nothing, so it is not listed.
+SELECT ms.*
+FROM mcp_servers ms
+WHERE ms.project_id = @project_id
+  AND ms.deleted IS FALSE
+  AND (
+    ms.toolset_id IS NULL
+    OR EXISTS (
+      SELECT 1 FROM toolsets t
+      WHERE t.id = ms.toolset_id AND t.project_id = ms.project_id AND t.deleted IS FALSE
+    )
+  )
+  AND (sqlc.narg('remote_mcp_server_id')::uuid IS NULL OR ms.remote_mcp_server_id = sqlc.narg('remote_mcp_server_id')::uuid)
+  AND (sqlc.narg('tunneled_mcp_server_id')::uuid IS NULL OR ms.tunneled_mcp_server_id = sqlc.narg('tunneled_mcp_server_id')::uuid)
+  AND (sqlc.narg('toolset_id')::uuid IS NULL OR ms.toolset_id = sqlc.narg('toolset_id')::uuid)
+  AND (sqlc.narg('unproxied_mcp_server_id')::uuid IS NULL OR ms.unproxied_mcp_server_id = sqlc.narg('unproxied_mcp_server_id')::uuid)
+ORDER BY ms.created_at DESC;
 
 -- name: ListMCPServersByOrganizationID :many
 -- List every MCP server in an organization via each project's organization_id.
@@ -144,6 +161,14 @@ JOIN projects AS p ON p.id = m.project_id
 WHERE p.organization_id = @organization_id
   AND m.deleted IS FALSE
   AND p.deleted IS FALSE
+  -- Same live-toolset rule as ListMCPServersByProjectID.
+  AND (
+    m.toolset_id IS NULL
+    OR EXISTS (
+      SELECT 1 FROM toolsets t
+      WHERE t.id = m.toolset_id AND t.project_id = m.project_id AND t.deleted IS FALSE
+    )
+  )
 ORDER BY m.created_at DESC;
 
 -- name: ListMCPServersByProjectIDLimited :many
@@ -209,6 +234,28 @@ SET
     END,
     updated_at = clock_timestamp()
 WHERE id = @id AND project_id = @project_id AND deleted IS FALSE
+RETURNING *;
+
+-- name: SyncHostedMCPServer :one
+-- Projects a toolset's hosting columns onto its canonical wrapper (id = toolset id).
+-- Unsetting the issuer clears the derived remote issuer, which no resync can reach.
+UPDATE mcp_servers
+SET
+    name = @name,
+    slug = @slug,
+    visibility = @visibility,
+    user_session_issuer_id = sqlc.narg('user_session_issuer_id'),
+    remote_session_issuer_id = CASE
+        WHEN sqlc.narg('user_session_issuer_id')::uuid IS NULL THEN NULL
+        ELSE remote_session_issuer_id
+    END,
+    tool_variations_group_id = @tool_variations_group_id,
+    network_access_mode = @network_access_mode,
+    updated_at = clock_timestamp()
+WHERE id = @id
+  AND project_id = @project_id
+  AND toolset_id = @id
+  AND deleted IS FALSE
 RETURNING *;
 
 -- name: DeleteMCPServer :one
@@ -632,9 +679,14 @@ WHERE mcp_server_id = @mcp_server_id AND project_id = @project_id;
 -- and dispatch columns that path needs, plus each member's project, since
 -- members no longer share one, and each member's network access mode, which
 -- the caller matches against the request's ingress surface so a private_only
--- server stays invisible on the public one. Ordered by project then slug: a derived
--- gateway has no operator-authored order, and slugs are unique only within a
--- project, so the pair is what makes the listing stable.
+-- server stays invisible on the public one. Also reports whether the backing
+-- toolset's latest live version contains a Platform tool, so the organization
+-- gateway can drop those toolsets the same way automatic plugin delivery does
+-- (roledelivery.HasPlatformTool). The check runs here rather than in Go because
+-- this query serves every gateway request, and returning every tool URN only to
+-- reduce it to one flag would scale with toolset size. Ordered by project then
+-- slug: a derived gateway has no operator-authored order, and slugs are unique
+-- only within a project, so the pair is what makes the listing stable.
 SELECT
     s.id AS mcp_server_id,
     s.project_id AS mcp_server_project_id,
@@ -650,7 +702,11 @@ SELECT
     s.environment_id AS mcp_server_environment_id,
     s.tool_variations_group_id AS mcp_server_tool_variations_group_id,
     s.remote_session_issuer_id AS mcp_server_remote_session_issuer_id,
-    COALESCE(t.resource_identifier, '')::text AS tunneled_resource_identifier
+    COALESCE(t.resource_identifier, '')::text AS tunneled_resource_identifier,
+    EXISTS (
+      SELECT 1 FROM unnest(latest.tool_urns) AS u(urn)
+      WHERE u.urn LIKE 'tools:platform:%'
+    )::boolean AS has_platform_tool
 FROM mcp_servers s
 JOIN projects p
   ON p.id = s.project_id
@@ -659,8 +715,141 @@ LEFT JOIN tunneled_mcp_servers t
   ON t.id = s.tunneled_mcp_server_id
  AND t.project_id = s.project_id
  AND t.deleted IS FALSE
+LEFT JOIN toolsets backing
+  ON backing.id = s.toolset_id
+ AND backing.project_id = s.project_id
+ AND backing.deleted IS FALSE
+LEFT JOIN LATERAL (
+  SELECT v.tool_urns FROM toolset_versions v
+  WHERE v.toolset_id = backing.id AND v.deleted IS FALSE
+  ORDER BY v.version DESC LIMIT 1
+) latest ON true
 WHERE p.organization_id = @organization_id
   AND s.deleted IS FALSE
   AND s.visibility <> 'disabled'
   AND s.slug IS NOT NULL
 ORDER BY s.project_id, s.slug;
+
+-- name: ListToolsetSummariesByIDs :many
+-- tool_count resolves URNs like mv.readToolsetTools, minus :proxy URNs; callers add platform_tool_urns.
+WITH active_deployments AS MATERIALIZED (
+  SELECT p.project_id, d.id
+  FROM (
+    SELECT DISTINCT ts.project_id
+    FROM toolsets ts
+    WHERE ts.id = ANY(@toolset_ids::uuid[])
+      AND ts.organization_id = @organization_id
+      AND ts.project_id = ANY(@project_ids::uuid[])
+      AND ts.deleted IS FALSE
+  ) p
+  CROSS JOIN LATERAL (
+    SELECT d.id
+    FROM deployments d
+    JOIN deployment_statuses ds ON ds.deployment_id = d.id
+    WHERE d.project_id = p.project_id
+      AND d.organization_id = @organization_id
+      AND ds.status = 'completed'
+    ORDER BY d.seq DESC
+    LIMIT 1
+  ) d
+)
+SELECT
+    t.id
+  , t.slug
+  , t.name
+  , t.description
+  , t.tool_selection_mode
+  , t.external_oauth_server_id
+  , (
+      (
+        SELECT COUNT(DISTINCT h.name)
+        FROM http_tool_definitions h
+        WHERE h.deployment_id = ANY(ARRAY(
+            SELECT ad.id
+            UNION ALL
+            SELECT pv.deployment_id
+            FROM deployments_packages dp
+            JOIN package_versions pv ON pv.id = dp.version_id
+            WHERE dp.deployment_id = ad.id
+          ))
+          AND h.tool_urn = ANY(lv.tool_urns)
+          AND h.deleted IS FALSE
+      )
+      + (
+        SELECT COUNT(*)
+        FROM function_tool_definitions f
+        WHERE f.deployment_id = ad.id
+          AND f.project_id = t.project_id
+          AND f.deleted IS FALSE
+          AND f.tool_urn = ANY(lv.tool_urns)
+      )
+      + (
+        SELECT COUNT(DISTINCT pt.tool_urn)
+        FROM prompt_templates pt
+        WHERE pt.project_id = t.project_id
+          AND pt.deleted IS FALSE
+          AND pt.tool_urn = ANY(lv.tool_urns)
+      )
+      + (
+        SELECT COUNT(*)
+        FROM external_mcp_tool_definitions x
+        JOIN external_mcp_attachments e ON e.id = x.external_mcp_attachment_id
+        WHERE e.deployment_id = ad.id
+          AND e.deleted IS FALSE
+          AND x.deleted IS FALSE
+          AND x.tool_urn = ANY(lv.tool_urns)
+          AND x.tool_urn NOT LIKE 'tools:externalmcp:%:proxy'
+      )
+    )::bigint AS tool_count
+  , ARRAY(
+      SELECT DISTINCT u.urn
+      FROM unnest(lv.tool_urns) AS u(urn)
+      WHERE u.urn LIKE 'tools:platform:%'
+      ORDER BY u.urn
+    )::text[] AS platform_tool_urns
+  , ARRAY(
+      SELECT DISTINCT split_part(u.urn, ':', 3) AS slug
+      FROM unnest(lv.tool_urns) AS u(urn)
+      WHERE u.urn LIKE 'tools:externalmcp:%'
+      ORDER BY slug
+    )::text[] AS external_mcp_slugs
+  , (
+      EXISTS (SELECT 1 FROM unnest(lv.tool_urns) AS u(urn) WHERE u.urn LIKE 'tools:externalmcp:%:proxy')
+      AND NOT EXISTS (SELECT 1 FROM unnest(lv.tool_urns) AS u(urn) WHERE u.urn NOT LIKE 'tools:externalmcp:%:proxy')
+    )::boolean AS external_mcp_proxy_only
+  , COALESCE(origin.origin_registry_specifier, '')::text AS registry_specifier
+FROM toolsets t
+LEFT JOIN LATERAL (
+  SELECT tv.tool_urns
+  FROM toolset_versions tv
+  WHERE tv.toolset_id = t.id
+    AND tv.deleted IS FALSE
+  ORDER BY tv.version DESC
+  LIMIT 1
+) lv ON TRUE
+LEFT JOIN active_deployments ad ON ad.project_id = t.project_id
+LEFT JOIN LATERAL (
+  SELECT o.origin_registry_specifier
+  FROM toolset_origins o
+  WHERE o.toolset_id = t.id
+    AND o.organization_id = t.organization_id
+    AND o.deleted IS FALSE
+  ORDER BY o.created_at DESC
+  LIMIT 1
+) origin ON TRUE
+WHERE t.id = ANY(@toolset_ids::uuid[])
+  AND t.organization_id = @organization_id
+  AND t.project_id = ANY(@project_ids::uuid[])
+  AND t.deleted IS FALSE;
+
+-- name: ListMCPServerIDsWithEndpoints :many
+-- Any live endpoint counts, addressable or not.
+SELECT DISTINCT e.mcp_server_id::uuid AS mcp_server_id
+FROM mcp_endpoints e
+JOIN projects p
+  ON p.id = e.project_id
+  AND p.organization_id = @organization_id
+  AND p.deleted IS FALSE
+WHERE e.project_id = ANY(@project_ids::uuid[])
+  AND e.mcp_server_id = ANY(@mcp_server_ids::uuid[])
+  AND e.deleted IS FALSE;

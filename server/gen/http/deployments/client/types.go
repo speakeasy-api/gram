@@ -79,6 +79,18 @@ type RedeployRequestBody struct {
 	DeploymentID string `form:"deployment_id" json:"deployment_id" xml:"deployment_id"`
 }
 
+// EvaluateOpenAPIv3RequestBody is the type of the "deployments" service
+// "evaluateOpenAPIv3" endpoint HTTP request body.
+type EvaluateOpenAPIv3RequestBody struct {
+	// The ID of the uploaded OpenAPI document asset to evaluate.
+	AssetID string `form:"asset_id" json:"asset_id" xml:"asset_id"`
+	// The slug of the OpenAPI source the document will replace. A slug that is not
+	// in the active deployment is evaluated as a new source.
+	Slug string `form:"slug" json:"slug" xml:"slug"`
+	// The display name of the source. Defaults to the deployed name or the slug.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+}
+
 // GetDeploymentResponseBody is the type of the "deployments" service
 // "getDeployment" endpoint HTTP response body.
 type GetDeploymentResponseBody struct {
@@ -181,6 +193,47 @@ type GetDeploymentLogsResponseBody struct {
 	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
 	// The logs for the deployment
 	Events []*DeploymentLogEventResponseBody `form:"events,omitempty" json:"events,omitempty" xml:"events,omitempty"`
+}
+
+// EvaluateOpenAPIv3ResponseBody is the type of the "deployments" service
+// "evaluateOpenAPIv3" endpoint HTTP response body.
+type EvaluateOpenAPIv3ResponseBody struct {
+	// The slug of the OpenAPI source.
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
+	// The display name of the OpenAPI source.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// Whether the source is new, changed, unchanged or removed.
+	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
+	// The asset ID of the evaluated document. Absent when the source was removed.
+	AssetID *string `form:"asset_id,omitempty" json:"asset_id,omitempty" xml:"asset_id,omitempty"`
+	// The asset ID of the deployed document. Absent for a new source.
+	BaseAssetID *string `form:"base_asset_id,omitempty" json:"base_asset_id,omitempty" xml:"base_asset_id,omitempty"`
+	// A summary of the deployed document.
+	Base *OpenAPIv3DocumentSnapshotResponseBody `form:"base,omitempty" json:"base,omitempty" xml:"base,omitempty"`
+	// A summary of the evaluated document.
+	Next *OpenAPIv3DocumentSnapshotResponseBody `form:"next,omitempty" json:"next,omitempty" xml:"next,omitempty"`
+	// Every change found, most severe first.
+	Changes []*OpenAPIv3EvaluationChangeResponseBody `form:"changes,omitempty" json:"changes,omitempty" xml:"changes,omitempty"`
+	// The number of breaking changes.
+	BreakingCount *int `form:"breaking_count,omitempty" json:"breaking_count,omitempty" xml:"breaking_count,omitempty"`
+	// The number of changes that need attention.
+	WarningCount *int `form:"warning_count,omitempty" json:"warning_count,omitempty" xml:"warning_count,omitempty"`
+	// The number of informational changes.
+	InfoCount *int `form:"info_count,omitempty" json:"info_count,omitempty" xml:"info_count,omitempty"`
+	// Toolsets (MCP servers) that include tools from this source.
+	AffectedToolsets []*OpenAPIv3AffectedToolsetResponseBody `form:"affected_toolsets,omitempty" json:"affected_toolsets,omitempty" xml:"affected_toolsets,omitempty"`
+}
+
+// GetDeploymentEvaluationResponseBody is the type of the "deployments" service
+// "getDeploymentEvaluation" endpoint HTTP response body.
+type GetDeploymentEvaluationResponseBody struct {
+	// The ID of the evaluated deployment.
+	DeploymentID *string `form:"deployment_id,omitempty" json:"deployment_id,omitempty" xml:"deployment_id,omitempty"`
+	// The ID of the deployment it is compared with. Absent for the first
+	// deployment in a project.
+	BaseDeploymentID *string `form:"base_deployment_id,omitempty" json:"base_deployment_id,omitempty" xml:"base_deployment_id,omitempty"`
+	// One evaluation per OpenAPI source that was added, changed or removed.
+	Documents []*OpenAPIv3EvaluationResponseBody `form:"documents,omitempty" json:"documents,omitempty" xml:"documents,omitempty"`
 }
 
 // GetDeploymentUnauthorizedResponseBody is the type of the "deployments"
@@ -1676,6 +1729,386 @@ type GetDeploymentLogsGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// EvaluateOpenAPIv3UnauthorizedResponseBody is the type of the "deployments"
+// service "evaluateOpenAPIv3" endpoint HTTP response body for the
+// "unauthorized" error.
+type EvaluateOpenAPIv3UnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// EvaluateOpenAPIv3ForbiddenResponseBody is the type of the "deployments"
+// service "evaluateOpenAPIv3" endpoint HTTP response body for the "forbidden"
+// error.
+type EvaluateOpenAPIv3ForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// EvaluateOpenAPIv3BadRequestResponseBody is the type of the "deployments"
+// service "evaluateOpenAPIv3" endpoint HTTP response body for the
+// "bad_request" error.
+type EvaluateOpenAPIv3BadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// EvaluateOpenAPIv3NotFoundResponseBody is the type of the "deployments"
+// service "evaluateOpenAPIv3" endpoint HTTP response body for the "not_found"
+// error.
+type EvaluateOpenAPIv3NotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// EvaluateOpenAPIv3ConflictResponseBody is the type of the "deployments"
+// service "evaluateOpenAPIv3" endpoint HTTP response body for the "conflict"
+// error.
+type EvaluateOpenAPIv3ConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// EvaluateOpenAPIv3UnsupportedMediaResponseBody is the type of the
+// "deployments" service "evaluateOpenAPIv3" endpoint HTTP response body for
+// the "unsupported_media" error.
+type EvaluateOpenAPIv3UnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// EvaluateOpenAPIv3InvalidResponseBody is the type of the "deployments"
+// service "evaluateOpenAPIv3" endpoint HTTP response body for the "invalid"
+// error.
+type EvaluateOpenAPIv3InvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// EvaluateOpenAPIv3InvariantViolationResponseBody is the type of the
+// "deployments" service "evaluateOpenAPIv3" endpoint HTTP response body for
+// the "invariant_violation" error.
+type EvaluateOpenAPIv3InvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// EvaluateOpenAPIv3UnexpectedResponseBody is the type of the "deployments"
+// service "evaluateOpenAPIv3" endpoint HTTP response body for the "unexpected"
+// error.
+type EvaluateOpenAPIv3UnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// EvaluateOpenAPIv3GatewayErrorResponseBody is the type of the "deployments"
+// service "evaluateOpenAPIv3" endpoint HTTP response body for the
+// "gateway_error" error.
+type EvaluateOpenAPIv3GatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetDeploymentEvaluationUnauthorizedResponseBody is the type of the
+// "deployments" service "getDeploymentEvaluation" endpoint HTTP response body
+// for the "unauthorized" error.
+type GetDeploymentEvaluationUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetDeploymentEvaluationForbiddenResponseBody is the type of the
+// "deployments" service "getDeploymentEvaluation" endpoint HTTP response body
+// for the "forbidden" error.
+type GetDeploymentEvaluationForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetDeploymentEvaluationBadRequestResponseBody is the type of the
+// "deployments" service "getDeploymentEvaluation" endpoint HTTP response body
+// for the "bad_request" error.
+type GetDeploymentEvaluationBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetDeploymentEvaluationNotFoundResponseBody is the type of the "deployments"
+// service "getDeploymentEvaluation" endpoint HTTP response body for the
+// "not_found" error.
+type GetDeploymentEvaluationNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetDeploymentEvaluationConflictResponseBody is the type of the "deployments"
+// service "getDeploymentEvaluation" endpoint HTTP response body for the
+// "conflict" error.
+type GetDeploymentEvaluationConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetDeploymentEvaluationUnsupportedMediaResponseBody is the type of the
+// "deployments" service "getDeploymentEvaluation" endpoint HTTP response body
+// for the "unsupported_media" error.
+type GetDeploymentEvaluationUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetDeploymentEvaluationInvalidResponseBody is the type of the "deployments"
+// service "getDeploymentEvaluation" endpoint HTTP response body for the
+// "invalid" error.
+type GetDeploymentEvaluationInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetDeploymentEvaluationInvariantViolationResponseBody is the type of the
+// "deployments" service "getDeploymentEvaluation" endpoint HTTP response body
+// for the "invariant_violation" error.
+type GetDeploymentEvaluationInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetDeploymentEvaluationUnexpectedResponseBody is the type of the
+// "deployments" service "getDeploymentEvaluation" endpoint HTTP response body
+// for the "unexpected" error.
+type GetDeploymentEvaluationUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetDeploymentEvaluationGatewayErrorResponseBody is the type of the
+// "deployments" service "getDeploymentEvaluation" endpoint HTTP response body
+// for the "gateway_error" error.
+type GetDeploymentEvaluationGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // OpenAPIv3DeploymentAssetResponseBody is used to define fields on response
 // body types.
 type OpenAPIv3DeploymentAssetResponseBody struct {
@@ -1888,6 +2321,102 @@ type DeploymentLogEventResponseBody struct {
 	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
 }
 
+// OpenAPIv3DocumentSnapshotResponseBody is used to define fields on response
+// body types.
+type OpenAPIv3DocumentSnapshotResponseBody struct {
+	// The number of tools the document produces.
+	ToolCount *int `form:"tool_count,omitempty" json:"tool_count,omitempty" xml:"tool_count,omitempty"`
+	// The number of operations that cannot be turned into tools.
+	SkippedOperationCount *int `form:"skipped_operation_count,omitempty" json:"skipped_operation_count,omitempty" xml:"skipped_operation_count,omitempty"`
+	// The security schemes tools can use.
+	SecuritySchemes []*OpenAPIv3SecuritySchemeSummaryResponseBody `form:"security_schemes,omitempty" json:"security_schemes,omitempty" xml:"security_schemes,omitempty"`
+	// The document-level security requirement.
+	DefaultSecurity *string `form:"default_security,omitempty" json:"default_security,omitempty" xml:"default_security,omitempty"`
+	// The default server URL tools call.
+	ServerURL *string `form:"server_url,omitempty" json:"server_url,omitempty" xml:"server_url,omitempty"`
+}
+
+// OpenAPIv3SecuritySchemeSummaryResponseBody is used to define fields on
+// response body types.
+type OpenAPIv3SecuritySchemeSummaryResponseBody struct {
+	// The name of the scheme under components.securitySchemes.
+	Key *string `form:"key,omitempty" json:"key,omitempty" xml:"key,omitempty"`
+	// The OpenAPI security scheme type.
+	Type *string `form:"type,omitempty" json:"type,omitempty" xml:"type,omitempty"`
+	// A short description of the scheme.
+	Summary *string `form:"summary,omitempty" json:"summary,omitempty" xml:"summary,omitempty"`
+	// The environment variables that supply credentials for the scheme.
+	EnvVariables []string `form:"env_variables,omitempty" json:"env_variables,omitempty" xml:"env_variables,omitempty"`
+}
+
+// OpenAPIv3EvaluationChangeResponseBody is used to define fields on response
+// body types.
+type OpenAPIv3EvaluationChangeResponseBody struct {
+	// How likely the change is to break existing MCP servers.
+	Severity *string `form:"severity,omitempty" json:"severity,omitempty" xml:"severity,omitempty"`
+	// The part of the MCP the change affects.
+	Category *string `form:"category,omitempty" json:"category,omitempty" xml:"category,omitempty"`
+	// A stable identifier for the kind of change.
+	Code *string `form:"code,omitempty" json:"code,omitempty" xml:"code,omitempty"`
+	// A one-line summary of the change.
+	Title *string `form:"title,omitempty" json:"title,omitempty" xml:"title,omitempty"`
+	// Supporting lines, such as before and after values.
+	Details []string `form:"details,omitempty" json:"details,omitempty" xml:"details,omitempty"`
+	// The names of the tools the change affects.
+	Tools []string `form:"tools,omitempty" json:"tools,omitempty" xml:"tools,omitempty"`
+}
+
+// OpenAPIv3AffectedToolsetResponseBody is used to define fields on response
+// body types.
+type OpenAPIv3AffectedToolsetResponseBody struct {
+	// The ID of the toolset.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// The name of the toolset.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// The slug of the toolset.
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
+	// The MCP slug of the toolset, when it is served as an MCP server.
+	McpSlug *string `form:"mcp_slug,omitempty" json:"mcp_slug,omitempty" xml:"mcp_slug,omitempty"`
+	// Whether the toolset is served as an MCP server.
+	McpEnabled *bool `form:"mcp_enabled,omitempty" json:"mcp_enabled,omitempty" xml:"mcp_enabled,omitempty"`
+	// Whether the MCP server has OAuth configured.
+	OauthConfigured *bool `form:"oauth_configured,omitempty" json:"oauth_configured,omitempty" xml:"oauth_configured,omitempty"`
+	// The number of tools from this source in the toolset.
+	ToolCount *int `form:"tool_count,omitempty" json:"tool_count,omitempty" xml:"tool_count,omitempty"`
+	// The number of those tools with breaking changes or changes that need
+	// attention.
+	AffectedToolCount *int `form:"affected_tool_count,omitempty" json:"affected_tool_count,omitempty" xml:"affected_tool_count,omitempty"`
+}
+
+// OpenAPIv3EvaluationResponseBody is used to define fields on response body
+// types.
+type OpenAPIv3EvaluationResponseBody struct {
+	// The slug of the OpenAPI source.
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
+	// The display name of the OpenAPI source.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// Whether the source is new, changed, unchanged or removed.
+	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
+	// The asset ID of the evaluated document. Absent when the source was removed.
+	AssetID *string `form:"asset_id,omitempty" json:"asset_id,omitempty" xml:"asset_id,omitempty"`
+	// The asset ID of the deployed document. Absent for a new source.
+	BaseAssetID *string `form:"base_asset_id,omitempty" json:"base_asset_id,omitempty" xml:"base_asset_id,omitempty"`
+	// A summary of the deployed document.
+	Base *OpenAPIv3DocumentSnapshotResponseBody `form:"base,omitempty" json:"base,omitempty" xml:"base,omitempty"`
+	// A summary of the evaluated document.
+	Next *OpenAPIv3DocumentSnapshotResponseBody `form:"next,omitempty" json:"next,omitempty" xml:"next,omitempty"`
+	// Every change found, most severe first.
+	Changes []*OpenAPIv3EvaluationChangeResponseBody `form:"changes,omitempty" json:"changes,omitempty" xml:"changes,omitempty"`
+	// The number of breaking changes.
+	BreakingCount *int `form:"breaking_count,omitempty" json:"breaking_count,omitempty" xml:"breaking_count,omitempty"`
+	// The number of changes that need attention.
+	WarningCount *int `form:"warning_count,omitempty" json:"warning_count,omitempty" xml:"warning_count,omitempty"`
+	// The number of informational changes.
+	InfoCount *int `form:"info_count,omitempty" json:"info_count,omitempty" xml:"info_count,omitempty"`
+	// Toolsets (MCP servers) that include tools from this source.
+	AffectedToolsets []*OpenAPIv3AffectedToolsetResponseBody `form:"affected_toolsets,omitempty" json:"affected_toolsets,omitempty" xml:"affected_toolsets,omitempty"`
+}
+
 // NewCreateDeploymentRequestBody builds the HTTP request body from the payload
 // of the "createDeployment" endpoint of the "deployments" service.
 func NewCreateDeploymentRequestBody(p *deployments.CreateDeploymentPayload) *CreateDeploymentRequestBody {
@@ -2021,6 +2550,17 @@ func NewEvolveRequestBody(p *deployments.EvolvePayload) *EvolveRequestBody {
 func NewRedeployRequestBody(p *deployments.RedeployPayload) *RedeployRequestBody {
 	body := &RedeployRequestBody{
 		DeploymentID: p.DeploymentID,
+	}
+	return body
+}
+
+// NewEvaluateOpenAPIv3RequestBody builds the HTTP request body from the
+// payload of the "evaluateOpenAPIv3" endpoint of the "deployments" service.
+func NewEvaluateOpenAPIv3RequestBody(p *deployments.EvaluateOpenAPIv3Payload) *EvaluateOpenAPIv3RequestBody {
+	body := &EvaluateOpenAPIv3RequestBody{
+		AssetID: p.AssetID,
+		Slug:    p.Slug,
+		Name:    p.Name,
 	}
 	return body
 }
@@ -3377,6 +3917,364 @@ func NewGetDeploymentLogsGatewayError(body *GetDeploymentLogsGatewayErrorRespons
 	return v
 }
 
+// NewEvaluateOpenAPIv3OpenAPIv3EvaluationOK builds a "deployments" service
+// "evaluateOpenAPIv3" endpoint result from a HTTP "OK" response.
+func NewEvaluateOpenAPIv3OpenAPIv3EvaluationOK(body *EvaluateOpenAPIv3ResponseBody) *deployments.OpenAPIv3Evaluation {
+	v := &deployments.OpenAPIv3Evaluation{
+		Slug:          *body.Slug,
+		Name:          *body.Name,
+		Status:        *body.Status,
+		AssetID:       body.AssetID,
+		BaseAssetID:   body.BaseAssetID,
+		BreakingCount: *body.BreakingCount,
+		WarningCount:  *body.WarningCount,
+		InfoCount:     *body.InfoCount,
+	}
+	if body.Base != nil {
+		v.Base = unmarshalOpenAPIv3DocumentSnapshotResponseBodyToDeploymentsOpenAPIv3DocumentSnapshot(body.Base)
+	}
+	if body.Next != nil {
+		v.Next = unmarshalOpenAPIv3DocumentSnapshotResponseBodyToDeploymentsOpenAPIv3DocumentSnapshot(body.Next)
+	}
+	v.Changes = make([]*deployments.OpenAPIv3EvaluationChange, len(body.Changes))
+	for i, val := range body.Changes {
+		if val == nil {
+			v.Changes[i] = nil
+			continue
+		}
+		v.Changes[i] = unmarshalOpenAPIv3EvaluationChangeResponseBodyToDeploymentsOpenAPIv3EvaluationChange(val)
+	}
+	v.AffectedToolsets = make([]*deployments.OpenAPIv3AffectedToolset, len(body.AffectedToolsets))
+	for i, val := range body.AffectedToolsets {
+		if val == nil {
+			v.AffectedToolsets[i] = nil
+			continue
+		}
+		v.AffectedToolsets[i] = unmarshalOpenAPIv3AffectedToolsetResponseBodyToDeploymentsOpenAPIv3AffectedToolset(val)
+	}
+
+	return v
+}
+
+// NewEvaluateOpenAPIv3Unauthorized builds a deployments service
+// evaluateOpenAPIv3 endpoint unauthorized error.
+func NewEvaluateOpenAPIv3Unauthorized(body *EvaluateOpenAPIv3UnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewEvaluateOpenAPIv3Forbidden builds a deployments service evaluateOpenAPIv3
+// endpoint forbidden error.
+func NewEvaluateOpenAPIv3Forbidden(body *EvaluateOpenAPIv3ForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewEvaluateOpenAPIv3BadRequest builds a deployments service
+// evaluateOpenAPIv3 endpoint bad_request error.
+func NewEvaluateOpenAPIv3BadRequest(body *EvaluateOpenAPIv3BadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewEvaluateOpenAPIv3NotFound builds a deployments service evaluateOpenAPIv3
+// endpoint not_found error.
+func NewEvaluateOpenAPIv3NotFound(body *EvaluateOpenAPIv3NotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewEvaluateOpenAPIv3Conflict builds a deployments service evaluateOpenAPIv3
+// endpoint conflict error.
+func NewEvaluateOpenAPIv3Conflict(body *EvaluateOpenAPIv3ConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewEvaluateOpenAPIv3UnsupportedMedia builds a deployments service
+// evaluateOpenAPIv3 endpoint unsupported_media error.
+func NewEvaluateOpenAPIv3UnsupportedMedia(body *EvaluateOpenAPIv3UnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewEvaluateOpenAPIv3Invalid builds a deployments service evaluateOpenAPIv3
+// endpoint invalid error.
+func NewEvaluateOpenAPIv3Invalid(body *EvaluateOpenAPIv3InvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewEvaluateOpenAPIv3InvariantViolation builds a deployments service
+// evaluateOpenAPIv3 endpoint invariant_violation error.
+func NewEvaluateOpenAPIv3InvariantViolation(body *EvaluateOpenAPIv3InvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewEvaluateOpenAPIv3Unexpected builds a deployments service
+// evaluateOpenAPIv3 endpoint unexpected error.
+func NewEvaluateOpenAPIv3Unexpected(body *EvaluateOpenAPIv3UnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewEvaluateOpenAPIv3GatewayError builds a deployments service
+// evaluateOpenAPIv3 endpoint gateway_error error.
+func NewEvaluateOpenAPIv3GatewayError(body *EvaluateOpenAPIv3GatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetDeploymentEvaluationResultOK builds a "deployments" service
+// "getDeploymentEvaluation" endpoint result from a HTTP "OK" response.
+func NewGetDeploymentEvaluationResultOK(body *GetDeploymentEvaluationResponseBody) *deployments.GetDeploymentEvaluationResult {
+	v := &deployments.GetDeploymentEvaluationResult{
+		DeploymentID:     *body.DeploymentID,
+		BaseDeploymentID: body.BaseDeploymentID,
+	}
+	v.Documents = make([]*deployments.OpenAPIv3Evaluation, len(body.Documents))
+	for i, val := range body.Documents {
+		if val == nil {
+			v.Documents[i] = nil
+			continue
+		}
+		v.Documents[i] = unmarshalOpenAPIv3EvaluationResponseBodyToDeploymentsOpenAPIv3Evaluation(val)
+	}
+
+	return v
+}
+
+// NewGetDeploymentEvaluationUnauthorized builds a deployments service
+// getDeploymentEvaluation endpoint unauthorized error.
+func NewGetDeploymentEvaluationUnauthorized(body *GetDeploymentEvaluationUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetDeploymentEvaluationForbidden builds a deployments service
+// getDeploymentEvaluation endpoint forbidden error.
+func NewGetDeploymentEvaluationForbidden(body *GetDeploymentEvaluationForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetDeploymentEvaluationBadRequest builds a deployments service
+// getDeploymentEvaluation endpoint bad_request error.
+func NewGetDeploymentEvaluationBadRequest(body *GetDeploymentEvaluationBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetDeploymentEvaluationNotFound builds a deployments service
+// getDeploymentEvaluation endpoint not_found error.
+func NewGetDeploymentEvaluationNotFound(body *GetDeploymentEvaluationNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetDeploymentEvaluationConflict builds a deployments service
+// getDeploymentEvaluation endpoint conflict error.
+func NewGetDeploymentEvaluationConflict(body *GetDeploymentEvaluationConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetDeploymentEvaluationUnsupportedMedia builds a deployments service
+// getDeploymentEvaluation endpoint unsupported_media error.
+func NewGetDeploymentEvaluationUnsupportedMedia(body *GetDeploymentEvaluationUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetDeploymentEvaluationInvalid builds a deployments service
+// getDeploymentEvaluation endpoint invalid error.
+func NewGetDeploymentEvaluationInvalid(body *GetDeploymentEvaluationInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetDeploymentEvaluationInvariantViolation builds a deployments service
+// getDeploymentEvaluation endpoint invariant_violation error.
+func NewGetDeploymentEvaluationInvariantViolation(body *GetDeploymentEvaluationInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetDeploymentEvaluationUnexpected builds a deployments service
+// getDeploymentEvaluation endpoint unexpected error.
+func NewGetDeploymentEvaluationUnexpected(body *GetDeploymentEvaluationUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetDeploymentEvaluationGatewayError builds a deployments service
+// getDeploymentEvaluation endpoint gateway_error error.
+func NewGetDeploymentEvaluationGatewayError(body *GetDeploymentEvaluationGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // ValidateGetDeploymentResponseBody runs the validations defined on
 // GetDeploymentResponseBody
 func ValidateGetDeploymentResponseBody(body *GetDeploymentResponseBody) (err error) {
@@ -3529,6 +4427,84 @@ func ValidateGetDeploymentLogsResponseBody(body *GetDeploymentLogsResponseBody) 
 	for _, e := range body.Events {
 		if e != nil {
 			if err2 := ValidateDeploymentLogEventResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateEvaluateOpenAPIv3ResponseBody runs the validations defined on
+// EvaluateOpenAPIv3ResponseBody
+func ValidateEvaluateOpenAPIv3ResponseBody(body *EvaluateOpenAPIv3ResponseBody) (err error) {
+	if body.Slug == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
+	}
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.Status == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("status", "body"))
+	}
+	if body.Changes == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("changes", "body"))
+	}
+	if body.BreakingCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("breaking_count", "body"))
+	}
+	if body.WarningCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("warning_count", "body"))
+	}
+	if body.InfoCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("info_count", "body"))
+	}
+	if body.AffectedToolsets == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("affected_toolsets", "body"))
+	}
+	if body.Status != nil {
+		if !(*body.Status == "new" || *body.Status == "changed" || *body.Status == "unchanged" || *body.Status == "removed") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.status", *body.Status, []any{"new", "changed", "unchanged", "removed"}))
+		}
+	}
+	if body.Base != nil {
+		if err2 := ValidateOpenAPIv3DocumentSnapshotResponseBody(body.Base); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.Next != nil {
+		if err2 := ValidateOpenAPIv3DocumentSnapshotResponseBody(body.Next); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	for _, e := range body.Changes {
+		if e != nil {
+			if err2 := ValidateOpenAPIv3EvaluationChangeResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.AffectedToolsets {
+		if e != nil {
+			if err2 := ValidateOpenAPIv3AffectedToolsetResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateGetDeploymentEvaluationResponseBody runs the validations defined on
+// GetDeploymentEvaluationResponseBody
+func ValidateGetDeploymentEvaluationResponseBody(body *GetDeploymentEvaluationResponseBody) (err error) {
+	if body.DeploymentID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("deployment_id", "body"))
+	}
+	if body.Documents == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("documents", "body"))
+	}
+	for _, e := range body.Documents {
+		if e != nil {
+			if err2 := ValidateOpenAPIv3EvaluationResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -5456,6 +6432,488 @@ func ValidateGetDeploymentLogsGatewayErrorResponseBody(body *GetDeploymentLogsGa
 	return
 }
 
+// ValidateEvaluateOpenAPIv3UnauthorizedResponseBody runs the validations
+// defined on evaluateOpenAPIv3_unauthorized_response_body
+func ValidateEvaluateOpenAPIv3UnauthorizedResponseBody(body *EvaluateOpenAPIv3UnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateEvaluateOpenAPIv3ForbiddenResponseBody runs the validations defined
+// on evaluateOpenAPIv3_forbidden_response_body
+func ValidateEvaluateOpenAPIv3ForbiddenResponseBody(body *EvaluateOpenAPIv3ForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateEvaluateOpenAPIv3BadRequestResponseBody runs the validations defined
+// on evaluateOpenAPIv3_bad_request_response_body
+func ValidateEvaluateOpenAPIv3BadRequestResponseBody(body *EvaluateOpenAPIv3BadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateEvaluateOpenAPIv3NotFoundResponseBody runs the validations defined
+// on evaluateOpenAPIv3_not_found_response_body
+func ValidateEvaluateOpenAPIv3NotFoundResponseBody(body *EvaluateOpenAPIv3NotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateEvaluateOpenAPIv3ConflictResponseBody runs the validations defined
+// on evaluateOpenAPIv3_conflict_response_body
+func ValidateEvaluateOpenAPIv3ConflictResponseBody(body *EvaluateOpenAPIv3ConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateEvaluateOpenAPIv3UnsupportedMediaResponseBody runs the validations
+// defined on evaluateOpenAPIv3_unsupported_media_response_body
+func ValidateEvaluateOpenAPIv3UnsupportedMediaResponseBody(body *EvaluateOpenAPIv3UnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateEvaluateOpenAPIv3InvalidResponseBody runs the validations defined on
+// evaluateOpenAPIv3_invalid_response_body
+func ValidateEvaluateOpenAPIv3InvalidResponseBody(body *EvaluateOpenAPIv3InvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateEvaluateOpenAPIv3InvariantViolationResponseBody runs the validations
+// defined on evaluateOpenAPIv3_invariant_violation_response_body
+func ValidateEvaluateOpenAPIv3InvariantViolationResponseBody(body *EvaluateOpenAPIv3InvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateEvaluateOpenAPIv3UnexpectedResponseBody runs the validations defined
+// on evaluateOpenAPIv3_unexpected_response_body
+func ValidateEvaluateOpenAPIv3UnexpectedResponseBody(body *EvaluateOpenAPIv3UnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateEvaluateOpenAPIv3GatewayErrorResponseBody runs the validations
+// defined on evaluateOpenAPIv3_gateway_error_response_body
+func ValidateEvaluateOpenAPIv3GatewayErrorResponseBody(body *EvaluateOpenAPIv3GatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetDeploymentEvaluationUnauthorizedResponseBody runs the validations
+// defined on getDeploymentEvaluation_unauthorized_response_body
+func ValidateGetDeploymentEvaluationUnauthorizedResponseBody(body *GetDeploymentEvaluationUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetDeploymentEvaluationForbiddenResponseBody runs the validations
+// defined on getDeploymentEvaluation_forbidden_response_body
+func ValidateGetDeploymentEvaluationForbiddenResponseBody(body *GetDeploymentEvaluationForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetDeploymentEvaluationBadRequestResponseBody runs the validations
+// defined on getDeploymentEvaluation_bad_request_response_body
+func ValidateGetDeploymentEvaluationBadRequestResponseBody(body *GetDeploymentEvaluationBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetDeploymentEvaluationNotFoundResponseBody runs the validations
+// defined on getDeploymentEvaluation_not_found_response_body
+func ValidateGetDeploymentEvaluationNotFoundResponseBody(body *GetDeploymentEvaluationNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetDeploymentEvaluationConflictResponseBody runs the validations
+// defined on getDeploymentEvaluation_conflict_response_body
+func ValidateGetDeploymentEvaluationConflictResponseBody(body *GetDeploymentEvaluationConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetDeploymentEvaluationUnsupportedMediaResponseBody runs the
+// validations defined on
+// getDeploymentEvaluation_unsupported_media_response_body
+func ValidateGetDeploymentEvaluationUnsupportedMediaResponseBody(body *GetDeploymentEvaluationUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetDeploymentEvaluationInvalidResponseBody runs the validations
+// defined on getDeploymentEvaluation_invalid_response_body
+func ValidateGetDeploymentEvaluationInvalidResponseBody(body *GetDeploymentEvaluationInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetDeploymentEvaluationInvariantViolationResponseBody runs the
+// validations defined on
+// getDeploymentEvaluation_invariant_violation_response_body
+func ValidateGetDeploymentEvaluationInvariantViolationResponseBody(body *GetDeploymentEvaluationInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetDeploymentEvaluationUnexpectedResponseBody runs the validations
+// defined on getDeploymentEvaluation_unexpected_response_body
+func ValidateGetDeploymentEvaluationUnexpectedResponseBody(body *GetDeploymentEvaluationUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetDeploymentEvaluationGatewayErrorResponseBody runs the validations
+// defined on getDeploymentEvaluation_gateway_error_response_body
+func ValidateGetDeploymentEvaluationGatewayErrorResponseBody(body *GetDeploymentEvaluationGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateOpenAPIv3DeploymentAssetResponseBody runs the validations defined on
 // OpenAPIv3DeploymentAssetResponseBody
 func ValidateOpenAPIv3DeploymentAssetResponseBody(body *OpenAPIv3DeploymentAssetResponseBody) (err error) {
@@ -5728,6 +7186,169 @@ func ValidateDeploymentLogEventResponseBody(body *DeploymentLogEventResponseBody
 	}
 	if body.Message == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	return
+}
+
+// ValidateOpenAPIv3DocumentSnapshotResponseBody runs the validations defined
+// on OpenAPIv3DocumentSnapshotResponseBody
+func ValidateOpenAPIv3DocumentSnapshotResponseBody(body *OpenAPIv3DocumentSnapshotResponseBody) (err error) {
+	if body.ToolCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tool_count", "body"))
+	}
+	if body.SkippedOperationCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("skipped_operation_count", "body"))
+	}
+	if body.SecuritySchemes == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("security_schemes", "body"))
+	}
+	if body.DefaultSecurity == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("default_security", "body"))
+	}
+	for _, e := range body.SecuritySchemes {
+		if e != nil {
+			if err2 := ValidateOpenAPIv3SecuritySchemeSummaryResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateOpenAPIv3SecuritySchemeSummaryResponseBody runs the validations
+// defined on OpenAPIv3SecuritySchemeSummaryResponseBody
+func ValidateOpenAPIv3SecuritySchemeSummaryResponseBody(body *OpenAPIv3SecuritySchemeSummaryResponseBody) (err error) {
+	if body.Key == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("key", "body"))
+	}
+	if body.Type == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("type", "body"))
+	}
+	if body.Summary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("summary", "body"))
+	}
+	if body.EnvVariables == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("env_variables", "body"))
+	}
+	return
+}
+
+// ValidateOpenAPIv3EvaluationChangeResponseBody runs the validations defined
+// on OpenAPIv3EvaluationChangeResponseBody
+func ValidateOpenAPIv3EvaluationChangeResponseBody(body *OpenAPIv3EvaluationChangeResponseBody) (err error) {
+	if body.Severity == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("severity", "body"))
+	}
+	if body.Category == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("category", "body"))
+	}
+	if body.Code == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("code", "body"))
+	}
+	if body.Title == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("title", "body"))
+	}
+	if body.Details == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("details", "body"))
+	}
+	if body.Tools == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tools", "body"))
+	}
+	if body.Severity != nil {
+		if !(*body.Severity == "breaking" || *body.Severity == "warning" || *body.Severity == "info") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.severity", *body.Severity, []any{"breaking", "warning", "info"}))
+		}
+	}
+	if body.Category != nil {
+		if !(*body.Category == "security" || *body.Category == "tools" || *body.Category == "server") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.category", *body.Category, []any{"security", "tools", "server"}))
+		}
+	}
+	return
+}
+
+// ValidateOpenAPIv3AffectedToolsetResponseBody runs the validations defined on
+// OpenAPIv3AffectedToolsetResponseBody
+func ValidateOpenAPIv3AffectedToolsetResponseBody(body *OpenAPIv3AffectedToolsetResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.Slug == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
+	}
+	if body.McpEnabled == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("mcp_enabled", "body"))
+	}
+	if body.OauthConfigured == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("oauth_configured", "body"))
+	}
+	if body.ToolCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tool_count", "body"))
+	}
+	if body.AffectedToolCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("affected_tool_count", "body"))
+	}
+	return
+}
+
+// ValidateOpenAPIv3EvaluationResponseBody runs the validations defined on
+// OpenAPIv3EvaluationResponseBody
+func ValidateOpenAPIv3EvaluationResponseBody(body *OpenAPIv3EvaluationResponseBody) (err error) {
+	if body.Slug == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
+	}
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.Status == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("status", "body"))
+	}
+	if body.Changes == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("changes", "body"))
+	}
+	if body.BreakingCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("breaking_count", "body"))
+	}
+	if body.WarningCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("warning_count", "body"))
+	}
+	if body.InfoCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("info_count", "body"))
+	}
+	if body.AffectedToolsets == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("affected_toolsets", "body"))
+	}
+	if body.Status != nil {
+		if !(*body.Status == "new" || *body.Status == "changed" || *body.Status == "unchanged" || *body.Status == "removed") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.status", *body.Status, []any{"new", "changed", "unchanged", "removed"}))
+		}
+	}
+	if body.Base != nil {
+		if err2 := ValidateOpenAPIv3DocumentSnapshotResponseBody(body.Base); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.Next != nil {
+		if err2 := ValidateOpenAPIv3DocumentSnapshotResponseBody(body.Next); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	for _, e := range body.Changes {
+		if e != nil {
+			if err2 := ValidateOpenAPIv3EvaluationChangeResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.AffectedToolsets {
+		if e != nil {
+			if err2 := ValidateOpenAPIv3AffectedToolsetResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
 	}
 	return
 }

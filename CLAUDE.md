@@ -104,7 +104,7 @@ Use `pull-request-demo` when a user-visible change needs a shareable PR screensh
 
 `./zero` (and `mise run zero:assistants`) writes `GRAM_ASSISTANT_RUNTIME_PROVIDER` and `GRAM_ASSISTANT_RUNTIME_OCI_IMAGE` into `mise.local.toml` when those keys are missing there — persisting a value already in the environment, or `local` / `gram-assistant-runtime` if unset — and builds `gram-assistant-runtime:dev` if that image is missing.
 
-`mise run zero:assistants --restart` rewrites those keys to the local defaults and rebuilds the image (use this when a stale `flyio` pin is in the way). Do not leave those keys in `mise.toml` — committed defaults make it impossible to tell an intentional override from a stale value. LLM chat still needs `OPENROUTER_DEV_KEY` in `mise.local.toml` (`mise run zero:openrouter`).
+`mise run zero:assistants --restart` rewrites those keys to the local defaults and rebuilds the image. Do not leave those keys in `mise.toml` — committed defaults make it impossible to tell an intentional override from a stale value. LLM chat still needs `OPENROUTER_DEV_KEY` in `mise.local.toml` (`mise run zero:openrouter`).
 
 `.mcp.json` registers the `assistants-dev` MCP server (`server/cmd/dev-mcp`), which drives the local management API without the dashboard UI. It logs into the local stack on its own (dev-idp auto-approves), so no setup is needed beyond a running dev stack. Use its tools — assistant CRUD, `run_turn` (send a message and wait for the assistant's reply), `load_chat`, and trigger CRUD — to exercise assistant runtime changes end to end. `whoami` lists the available project slugs.
 
@@ -123,6 +123,10 @@ Background-work rules live in the `gram-temporal` skill (`.agents/skills/gram-te
 ### Platform MCP
 
 The Platform MCP is a first-party product surface under `server/internal/platformmcp/`. When adding or changing backend APIs, dashboard workflows, permissions, or user-facing product capabilities, explicitly assess whether an existing Platform MCP tool must change or a new outcome-oriented tool should be added. Keep tool schemas, descriptions, authorization, audiences, server instructions, tests, and shipped Platform MCP skills in sync with the product behavior. Activate the `maintaining-platform-mcp` skill (`.agents/skills/maintaining-platform-mcp/SKILL.md`) for this assessment and any Platform MCP implementation. Use `authoring-platform-mcp-skills` as well when changing workflows under `server/internal/plugins/platform_mcp_skills/`.
+
+### Command K discoverability
+
+When adding or changing dashboard pages, navigation, named resource lists/details, resource names, permissions, feature gates, or Command K search candidates/ranking/registration, assess Command K page actions and individual resource candidates separately. Sidebar links and overview routes do not automatically index resources by name. Add/update and register the appropriate candidates, or record a justified exclusion with test evidence. Activate `.agents/skills/maintaining-command-palette/SKILL.md`; Cubic's `cubic.yaml` rule and `REVIEW.md` use the same checklist.
 
 ### Staff Admin MCP
 

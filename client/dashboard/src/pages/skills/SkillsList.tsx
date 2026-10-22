@@ -111,6 +111,16 @@ const METRIC_SORT_IDS = [
   "efficacy",
   "estimatedSavings",
 ] as const;
+/**
+ * The order the list opens on, named rather than left implicit.
+ *
+ * It is the order the server already returns (`sort: "updated"`, newest
+ * first), so sorting the page by it changes nothing a reader can see. Said
+ * out loud because a table header reports an order and never an absence of
+ * one: a column being sorted toggles ascending and descending, so there is no
+ * click that gets back to "whatever the backend sent".
+ */
+const DEFAULT_SORT: SortDescriptor = { id: "updated", direction: "desc" };
 
 function formatEfficacy(value: number): string {
   return `${(value * 100).toFixed(1)}%`;
@@ -134,7 +144,7 @@ export default function SkillsList(): JSX.Element {
   const queryClient = useQueryClient();
   const filters = useFilterState(SKILL_FILTERS);
   const [search, setSearch] = useState("");
-  const [sort, setSort] = useState<SortDescriptor | null>(null);
+  const [sort, setSort] = useState<SortDescriptor | null>(DEFAULT_SORT);
   const deferredSearch = useDeferredValue(search);
   const [dialogOpen, setDialogOpen] = useState(false);
   // Legacy deep links opened the skill as a sheet via ?skill=<id>; redirect
@@ -247,7 +257,7 @@ export default function SkillsList(): JSX.Element {
     filters.values.accessibleBy.length > 0;
   const insightsUnavailable = !!insightsQuery.error && !insightsQuery.data;
   const effectiveMetricSort = metricSort !== null && !insightsUnavailable;
-  const effectiveSort = insightsUnavailable && metricSort ? null : sort;
+  const effectiveSort = insightsUnavailable && metricSort ? DEFAULT_SORT : sort;
   const skills = effectiveMetricSort
     ? metricSkills
     : (pageQuery.data?.result.skills ?? EMPTY_SKILLS);
@@ -432,7 +442,7 @@ export default function SkillsList(): JSX.Element {
 
   useEffect(() => {
     if (!insightsUnavailable || !metricSort) return;
-    setSort(null);
+    setSort(DEFAULT_SORT);
     setPage(0);
     setPageCursors([undefined]);
   }, [insightsUnavailable, metricSort]);

@@ -107,6 +107,29 @@ type UpdateSubjectRequestBody struct {
 	AgentID *string `form:"agent_id,omitempty" json:"agent_id,omitempty" xml:"agent_id,omitempty"`
 }
 
+// CreateDeviceJoinTokenRequestBody is the type of the "workloadIdentities"
+// service "createDeviceJoinToken" endpoint HTTP request body.
+type CreateDeviceJoinTokenRequestBody struct {
+	// The agent the enrolled device inherits its policy from.
+	AgentID string `form:"agent_id" json:"agent_id" xml:"agent_id"`
+	// How long the token stays redeemable. Defaults to one hour.
+	ExpiresInSeconds int `form:"expires_in_seconds" json:"expires_in_seconds" xml:"expires_in_seconds"`
+}
+
+// RegisterDeviceRequestBody is the type of the "workloadIdentities" service
+// "registerDevice" endpoint HTTP request body.
+type RegisterDeviceRequestBody struct {
+	// The join token from createDeviceJoinToken.
+	JoinToken string `form:"join_token" json:"join_token" xml:"join_token"`
+	// The device's public signing key as a JWK: EC P-256 (ES256) or OKP Ed25519
+	// (EdDSA). Private key material is refused.
+	PublicJwk map[string]any `form:"public_jwk" json:"public_jwk" xml:"public_jwk"`
+	// The device's hostname, shown to administrators. Self-reported.
+	Hostname *string `form:"hostname,omitempty" json:"hostname,omitempty" xml:"hostname,omitempty"`
+	// The device's serial number, shown to administrators. Self-reported.
+	Serial *string `form:"serial,omitempty" json:"serial,omitempty" xml:"serial,omitempty"`
+}
+
 // ListResponseBody is the type of the "workloadIdentities" service "list"
 // endpoint HTTP response body.
 type ListResponseBody struct {
@@ -121,6 +144,19 @@ type ListResponseBody struct {
 type ListPlatformsResponseBody struct {
 	// The catalog entries.
 	Platforms []*WorkloadPlatformResponseBody `form:"platforms,omitempty" json:"platforms,omitempty" xml:"platforms,omitempty"`
+}
+
+// GetCustomFlowsResponseBody is the type of the "workloadIdentities" service
+// "getCustomFlows" endpoint HTTP response body.
+type GetCustomFlowsResponseBody struct {
+	// Trusts a new platform; submits registerIssuer.
+	RegisterPlatform *WorkloadFormResponseBody `form:"register_platform,omitempty" json:"register_platform,omitempty" xml:"register_platform,omitempty"`
+	// Edits a trusted platform; submits updateIssuer.
+	EditPlatform *WorkloadFormResponseBody `form:"edit_platform,omitempty" json:"edit_platform,omitempty" xml:"edit_platform,omitempty"`
+	// Allows a subject under a trusted platform; submits admitSubject.
+	AllowAccess *WorkloadFormResponseBody `form:"allow_access,omitempty" json:"allow_access,omitempty" xml:"allow_access,omitempty"`
+	// Edits allowed access; submits updateSubject.
+	EditAccess *WorkloadFormResponseBody `form:"edit_access,omitempty" json:"edit_access,omitempty" xml:"edit_access,omitempty"`
 }
 
 // ListTokenEndpointsResponseBody is the type of the "workloadIdentities"
@@ -182,6 +218,29 @@ type WithdrawSubjectResponseBody struct {
 	Issuers []*WorkloadIssuerResponseBody `form:"issuers,omitempty" json:"issuers,omitempty" xml:"issuers,omitempty"`
 	// Admitted subjects.
 	Admissions []*WorkloadAdmissionResponseBody `form:"admissions,omitempty" json:"admissions,omitempty" xml:"admissions,omitempty"`
+}
+
+// CreateDeviceJoinTokenResponseBody is the type of the "workloadIdentities"
+// service "createDeviceJoinToken" endpoint HTTP response body.
+type CreateDeviceJoinTokenResponseBody struct {
+	// The join token. Shown once; only its hash is stored.
+	Token *string `form:"token,omitempty" json:"token,omitempty" xml:"token,omitempty"`
+	// When the token stops being redeemable.
+	ExpiresAt *string `form:"expires_at,omitempty" json:"expires_at,omitempty" xml:"expires_at,omitempty"`
+}
+
+// RegisterDeviceResponseBody is the type of the "workloadIdentities" service
+// "registerDevice" endpoint HTTP response body.
+type RegisterDeviceResponseBody struct {
+	// The device's workload subject, device:<uuid>. Its assertions carry this as
+	// sub.
+	DeviceSubject *string `form:"device_subject,omitempty" json:"device_subject,omitempty" xml:"device_subject,omitempty"`
+	// The issuer its assertions carry as iss.
+	Issuer *string `form:"issuer,omitempty" json:"issuer,omitempty" xml:"issuer,omitempty"`
+	// The agent the device inherits its policy from.
+	AgentID *string `form:"agent_id,omitempty" json:"agent_id,omitempty" xml:"agent_id,omitempty"`
+	// The organization the device enrolled in.
+	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
 }
 
 // ListUnauthorizedResponseBody is the type of the "workloadIdentities" service
@@ -538,6 +597,195 @@ type ListPlatformsUnexpectedResponseBody struct {
 // "workloadIdentities" service "listPlatforms" endpoint HTTP response body for
 // the "gateway_error" error.
 type ListPlatformsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetCustomFlowsUnauthorizedResponseBody is the type of the
+// "workloadIdentities" service "getCustomFlows" endpoint HTTP response body
+// for the "unauthorized" error.
+type GetCustomFlowsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetCustomFlowsForbiddenResponseBody is the type of the "workloadIdentities"
+// service "getCustomFlows" endpoint HTTP response body for the "forbidden"
+// error.
+type GetCustomFlowsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetCustomFlowsBadRequestResponseBody is the type of the "workloadIdentities"
+// service "getCustomFlows" endpoint HTTP response body for the "bad_request"
+// error.
+type GetCustomFlowsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetCustomFlowsNotFoundResponseBody is the type of the "workloadIdentities"
+// service "getCustomFlows" endpoint HTTP response body for the "not_found"
+// error.
+type GetCustomFlowsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetCustomFlowsConflictResponseBody is the type of the "workloadIdentities"
+// service "getCustomFlows" endpoint HTTP response body for the "conflict"
+// error.
+type GetCustomFlowsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetCustomFlowsUnsupportedMediaResponseBody is the type of the
+// "workloadIdentities" service "getCustomFlows" endpoint HTTP response body
+// for the "unsupported_media" error.
+type GetCustomFlowsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetCustomFlowsInvalidResponseBody is the type of the "workloadIdentities"
+// service "getCustomFlows" endpoint HTTP response body for the "invalid" error.
+type GetCustomFlowsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetCustomFlowsInvariantViolationResponseBody is the type of the
+// "workloadIdentities" service "getCustomFlows" endpoint HTTP response body
+// for the "invariant_violation" error.
+type GetCustomFlowsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetCustomFlowsUnexpectedResponseBody is the type of the "workloadIdentities"
+// service "getCustomFlows" endpoint HTTP response body for the "unexpected"
+// error.
+type GetCustomFlowsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetCustomFlowsGatewayErrorResponseBody is the type of the
+// "workloadIdentities" service "getCustomFlows" endpoint HTTP response body
+// for the "gateway_error" error.
+type GetCustomFlowsGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1871,6 +2119,385 @@ type WithdrawSubjectGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// CreateDeviceJoinTokenUnauthorizedResponseBody is the type of the
+// "workloadIdentities" service "createDeviceJoinToken" endpoint HTTP response
+// body for the "unauthorized" error.
+type CreateDeviceJoinTokenUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateDeviceJoinTokenForbiddenResponseBody is the type of the
+// "workloadIdentities" service "createDeviceJoinToken" endpoint HTTP response
+// body for the "forbidden" error.
+type CreateDeviceJoinTokenForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateDeviceJoinTokenBadRequestResponseBody is the type of the
+// "workloadIdentities" service "createDeviceJoinToken" endpoint HTTP response
+// body for the "bad_request" error.
+type CreateDeviceJoinTokenBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateDeviceJoinTokenNotFoundResponseBody is the type of the
+// "workloadIdentities" service "createDeviceJoinToken" endpoint HTTP response
+// body for the "not_found" error.
+type CreateDeviceJoinTokenNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateDeviceJoinTokenConflictResponseBody is the type of the
+// "workloadIdentities" service "createDeviceJoinToken" endpoint HTTP response
+// body for the "conflict" error.
+type CreateDeviceJoinTokenConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateDeviceJoinTokenUnsupportedMediaResponseBody is the type of the
+// "workloadIdentities" service "createDeviceJoinToken" endpoint HTTP response
+// body for the "unsupported_media" error.
+type CreateDeviceJoinTokenUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateDeviceJoinTokenInvalidResponseBody is the type of the
+// "workloadIdentities" service "createDeviceJoinToken" endpoint HTTP response
+// body for the "invalid" error.
+type CreateDeviceJoinTokenInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateDeviceJoinTokenInvariantViolationResponseBody is the type of the
+// "workloadIdentities" service "createDeviceJoinToken" endpoint HTTP response
+// body for the "invariant_violation" error.
+type CreateDeviceJoinTokenInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateDeviceJoinTokenUnexpectedResponseBody is the type of the
+// "workloadIdentities" service "createDeviceJoinToken" endpoint HTTP response
+// body for the "unexpected" error.
+type CreateDeviceJoinTokenUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateDeviceJoinTokenGatewayErrorResponseBody is the type of the
+// "workloadIdentities" service "createDeviceJoinToken" endpoint HTTP response
+// body for the "gateway_error" error.
+type CreateDeviceJoinTokenGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RegisterDeviceUnauthorizedResponseBody is the type of the
+// "workloadIdentities" service "registerDevice" endpoint HTTP response body
+// for the "unauthorized" error.
+type RegisterDeviceUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RegisterDeviceForbiddenResponseBody is the type of the "workloadIdentities"
+// service "registerDevice" endpoint HTTP response body for the "forbidden"
+// error.
+type RegisterDeviceForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RegisterDeviceBadRequestResponseBody is the type of the "workloadIdentities"
+// service "registerDevice" endpoint HTTP response body for the "bad_request"
+// error.
+type RegisterDeviceBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RegisterDeviceNotFoundResponseBody is the type of the "workloadIdentities"
+// service "registerDevice" endpoint HTTP response body for the "not_found"
+// error.
+type RegisterDeviceNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RegisterDeviceConflictResponseBody is the type of the "workloadIdentities"
+// service "registerDevice" endpoint HTTP response body for the "conflict"
+// error.
+type RegisterDeviceConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RegisterDeviceUnsupportedMediaResponseBody is the type of the
+// "workloadIdentities" service "registerDevice" endpoint HTTP response body
+// for the "unsupported_media" error.
+type RegisterDeviceUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RegisterDeviceInvalidResponseBody is the type of the "workloadIdentities"
+// service "registerDevice" endpoint HTTP response body for the "invalid" error.
+type RegisterDeviceInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RegisterDeviceInvariantViolationResponseBody is the type of the
+// "workloadIdentities" service "registerDevice" endpoint HTTP response body
+// for the "invariant_violation" error.
+type RegisterDeviceInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RegisterDeviceUnexpectedResponseBody is the type of the "workloadIdentities"
+// service "registerDevice" endpoint HTTP response body for the "unexpected"
+// error.
+type RegisterDeviceUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RegisterDeviceGatewayErrorResponseBody is the type of the
+// "workloadIdentities" service "registerDevice" endpoint HTTP response body
+// for the "gateway_error" error.
+type RegisterDeviceGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // WorkloadIssuerResponseBody is used to define fields on response body types.
 type WorkloadIssuerResponseBody struct {
 	// The workload issuer id.
@@ -1955,9 +2582,6 @@ type WorkloadPlatformResponseBody struct {
 	Variables []*WorkloadPlatformVariableResponseBody `form:"variables,omitempty" json:"variables,omitempty" xml:"variables,omitempty"`
 	// The access rule it produces.
 	Subject *WorkloadPlatformSubjectResponseBody `form:"subject,omitempty" json:"subject,omitempty" xml:"subject,omitempty"`
-	// The guided setup. Empty for a platform without one, which is listed as
-	// coming soon and cannot be opened.
-	Steps []*WorkloadPlatformStepResponseBody `form:"steps,omitempty" json:"steps,omitempty" xml:"steps,omitempty"`
 }
 
 // WorkloadPlatformConstantResponseBody is used to define fields on response
@@ -1998,45 +2622,58 @@ type WorkloadPlatformSubjectResponseBody struct {
 	Wildcard *bool `form:"wildcard,omitempty" json:"wildcard,omitempty" xml:"wildcard,omitempty"`
 }
 
-// WorkloadPlatformStepResponseBody is used to define fields on response body
-// types.
-type WorkloadPlatformStepResponseBody struct {
-	// Stable within the platform; used in the dashboard URL.
+// WorkloadFormResponseBody is used to define fields on response body types.
+type WorkloadFormResponseBody struct {
+	// Heads the form.
+	Title *string `form:"title,omitempty" json:"title,omitempty" xml:"title,omitempty"`
+	// Shown under the title.
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// The submit button's label.
+	SubmitLabel *string `form:"submit_label,omitempty" json:"submit_label,omitempty" xml:"submit_label,omitempty"`
+	// The submit button's label while the form submits.
+	PendingLabel *string `form:"pending_label,omitempty" json:"pending_label,omitempty" xml:"pending_label,omitempty"`
+	// The form's steps, in order.
+	Steps []*WorkloadFormStepResponseBody `form:"steps,omitempty" json:"steps,omitempty" xml:"steps,omitempty"`
+}
+
+// WorkloadFormStepResponseBody is used to define fields on response body types.
+type WorkloadFormStepResponseBody struct {
+	// Stable within the form.
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// Heads the step.
 	Title *string `form:"title,omitempty" json:"title,omitempty" xml:"title,omitempty"`
-	// collect steps gather values, the create step writes the rows, connect steps
-	// describe the platform's side.
-	Phase *string `form:"phase,omitempty" json:"phase,omitempty" xml:"phase,omitempty"`
 	// Rendered in order.
-	Blocks []*WorkloadPlatformBlockResponseBody `form:"blocks,omitempty" json:"blocks,omitempty" xml:"blocks,omitempty"`
+	Blocks []*WorkloadFormBlockResponseBody `form:"blocks,omitempty" json:"blocks,omitempty" xml:"blocks,omitempty"`
 }
 
-// WorkloadPlatformBlockResponseBody is used to define fields on response body
+// WorkloadFormBlockResponseBody is used to define fields on response body
 // types.
-type WorkloadPlatformBlockResponseBody struct {
-	// The kind of content.
+type WorkloadFormBlockResponseBody struct {
+	// The kind of content. wildcard_caution marks where the form warns that a
+	// wildcard rule admits more than one identity; the dashboard writes that
+	// warning, since it names the rule and the agent.
 	Type *string `form:"type,omitempty" json:"type,omitempty" xml:"type,omitempty"`
-	// A text block's Markdown, or what a checklist item without a value asks the
-	// operator to do. Raw HTML in it must not be rendered.
+	// A text block's Markdown. Raw HTML in it must not be rendered.
 	Markdown *string `form:"markdown,omitempty" json:"markdown,omitempty" xml:"markdown,omitempty"`
-	// An image's path on the dashboard's origin.
-	Src *string `form:"src,omitempty" json:"src,omitempty" xml:"src,omitempty"`
-	// An image's alternative text.
-	Alt *string `form:"alt,omitempty" json:"alt,omitempty" xml:"alt,omitempty"`
-	// Shown under an image.
-	Caption *string `form:"caption,omitempty" json:"caption,omitempty" xml:"caption,omitempty"`
 	// A link's https target.
 	Href *string `form:"href,omitempty" json:"href,omitempty" xml:"href,omitempty"`
-	// A link's or computed value's label, or the console field or control a
-	// checklist item names.
+	// A link's label, or a form control's.
 	Label *string `form:"label,omitempty" json:"label,omitempty" xml:"label,omitempty"`
-	// The variable key a field collects.
-	Variable *string `form:"variable,omitempty" json:"variable,omitempty" xml:"variable,omitempty"`
-	// The value a computed block or checklist item shows.
-	Value *string `form:"value,omitempty" json:"value,omitempty" xml:"value,omitempty"`
-	// Shown under a computed value or checklist item.
+	// The form value an input collects. label is submitted as an admission's name.
+	Field *string `form:"field,omitempty" json:"field,omitempty" xml:"field,omitempty"`
+	// Shown in an empty form control.
+	Placeholder *string `form:"placeholder,omitempty" json:"placeholder,omitempty" xml:"placeholder,omitempty"`
+	// Markdown shown under a form control while it has no validation message. Raw
+	// HTML in it must not be rendered.
 	Help *string `form:"help,omitempty" json:"help,omitempty" xml:"help,omitempty"`
+	// Whether an input is a text area.
+	Multiline *bool `form:"multiline,omitempty" json:"multiline,omitempty" xml:"multiline,omitempty"`
+	// Whether an input shows its value without letting it change. A read-only
+	// value is not submitted.
+	ReadOnly *bool `form:"read_only,omitempty" json:"read_only,omitempty" xml:"read_only,omitempty"`
+	// The dashboard validator an input's value must pass. The server applies the
+	// same rules when the form is submitted.
+	Format *string `form:"format,omitempty" json:"format,omitempty" xml:"format,omitempty"`
 }
 
 // WorkloadTokenEndpointResponseBody is used to define fields on response body
@@ -2148,6 +2785,42 @@ func NewUpdateSubjectRequestBody(p *workloadidentities.UpdateSubjectPayload) *Up
 		body.Tags = make([]string, len(p.Tags))
 		for i, val := range p.Tags {
 			body.Tags[i] = val
+		}
+	}
+	return body
+}
+
+// NewCreateDeviceJoinTokenRequestBody builds the HTTP request body from the
+// payload of the "createDeviceJoinToken" endpoint of the "workloadIdentities"
+// service.
+func NewCreateDeviceJoinTokenRequestBody(p *workloadidentities.CreateDeviceJoinTokenPayload) *CreateDeviceJoinTokenRequestBody {
+	body := &CreateDeviceJoinTokenRequestBody{
+		AgentID:          p.AgentID,
+		ExpiresInSeconds: p.ExpiresInSeconds,
+	}
+	{
+		var zero int
+		if body.ExpiresInSeconds == zero {
+			body.ExpiresInSeconds = 3600
+		}
+	}
+	return body
+}
+
+// NewRegisterDeviceRequestBody builds the HTTP request body from the payload
+// of the "registerDevice" endpoint of the "workloadIdentities" service.
+func NewRegisterDeviceRequestBody(p *workloadidentities.RegisterDevicePayload) *RegisterDeviceRequestBody {
+	body := &RegisterDeviceRequestBody{
+		JoinToken: p.JoinToken,
+		Hostname:  p.Hostname,
+		Serial:    p.Serial,
+	}
+	if p.PublicJwk != nil {
+		body.PublicJwk = make(map[string]any, len(p.PublicJwk))
+		for key, val := range p.PublicJwk {
+			tk := key
+			tv := val
+			body.PublicJwk[tk] = tv
 		}
 	}
 	return body
@@ -2481,6 +3154,168 @@ func NewListPlatformsUnexpected(body *ListPlatformsUnexpectedResponseBody) *goa.
 // NewListPlatformsGatewayError builds a workloadIdentities service
 // listPlatforms endpoint gateway_error error.
 func NewListPlatformsGatewayError(body *ListPlatformsGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetCustomFlowsWorkloadCustomFlowsOK builds a "workloadIdentities" service
+// "getCustomFlows" endpoint result from a HTTP "OK" response.
+func NewGetCustomFlowsWorkloadCustomFlowsOK(body *GetCustomFlowsResponseBody) *workloadidentities.WorkloadCustomFlows {
+	v := &workloadidentities.WorkloadCustomFlows{}
+	v.RegisterPlatform = unmarshalWorkloadFormResponseBodyToWorkloadidentitiesWorkloadForm(body.RegisterPlatform)
+	v.EditPlatform = unmarshalWorkloadFormResponseBodyToWorkloadidentitiesWorkloadForm(body.EditPlatform)
+	v.AllowAccess = unmarshalWorkloadFormResponseBodyToWorkloadidentitiesWorkloadForm(body.AllowAccess)
+	v.EditAccess = unmarshalWorkloadFormResponseBodyToWorkloadidentitiesWorkloadForm(body.EditAccess)
+
+	return v
+}
+
+// NewGetCustomFlowsUnauthorized builds a workloadIdentities service
+// getCustomFlows endpoint unauthorized error.
+func NewGetCustomFlowsUnauthorized(body *GetCustomFlowsUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetCustomFlowsForbidden builds a workloadIdentities service
+// getCustomFlows endpoint forbidden error.
+func NewGetCustomFlowsForbidden(body *GetCustomFlowsForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetCustomFlowsBadRequest builds a workloadIdentities service
+// getCustomFlows endpoint bad_request error.
+func NewGetCustomFlowsBadRequest(body *GetCustomFlowsBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetCustomFlowsNotFound builds a workloadIdentities service getCustomFlows
+// endpoint not_found error.
+func NewGetCustomFlowsNotFound(body *GetCustomFlowsNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetCustomFlowsConflict builds a workloadIdentities service getCustomFlows
+// endpoint conflict error.
+func NewGetCustomFlowsConflict(body *GetCustomFlowsConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetCustomFlowsUnsupportedMedia builds a workloadIdentities service
+// getCustomFlows endpoint unsupported_media error.
+func NewGetCustomFlowsUnsupportedMedia(body *GetCustomFlowsUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetCustomFlowsInvalid builds a workloadIdentities service getCustomFlows
+// endpoint invalid error.
+func NewGetCustomFlowsInvalid(body *GetCustomFlowsInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetCustomFlowsInvariantViolation builds a workloadIdentities service
+// getCustomFlows endpoint invariant_violation error.
+func NewGetCustomFlowsInvariantViolation(body *GetCustomFlowsInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetCustomFlowsUnexpected builds a workloadIdentities service
+// getCustomFlows endpoint unexpected error.
+func NewGetCustomFlowsUnexpected(body *GetCustomFlowsUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetCustomFlowsGatewayError builds a workloadIdentities service
+// getCustomFlows endpoint gateway_error error.
+func NewGetCustomFlowsGatewayError(body *GetCustomFlowsGatewayErrorResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -3703,6 +4538,331 @@ func NewWithdrawSubjectGatewayError(body *WithdrawSubjectGatewayErrorResponseBod
 	return v
 }
 
+// NewCreateDeviceJoinTokenWorkloadDeviceJoinTokenOK builds a
+// "workloadIdentities" service "createDeviceJoinToken" endpoint result from a
+// HTTP "OK" response.
+func NewCreateDeviceJoinTokenWorkloadDeviceJoinTokenOK(body *CreateDeviceJoinTokenResponseBody) *workloadidentities.WorkloadDeviceJoinToken {
+	v := &workloadidentities.WorkloadDeviceJoinToken{
+		Token:     *body.Token,
+		ExpiresAt: *body.ExpiresAt,
+	}
+
+	return v
+}
+
+// NewCreateDeviceJoinTokenUnauthorized builds a workloadIdentities service
+// createDeviceJoinToken endpoint unauthorized error.
+func NewCreateDeviceJoinTokenUnauthorized(body *CreateDeviceJoinTokenUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateDeviceJoinTokenForbidden builds a workloadIdentities service
+// createDeviceJoinToken endpoint forbidden error.
+func NewCreateDeviceJoinTokenForbidden(body *CreateDeviceJoinTokenForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateDeviceJoinTokenBadRequest builds a workloadIdentities service
+// createDeviceJoinToken endpoint bad_request error.
+func NewCreateDeviceJoinTokenBadRequest(body *CreateDeviceJoinTokenBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateDeviceJoinTokenNotFound builds a workloadIdentities service
+// createDeviceJoinToken endpoint not_found error.
+func NewCreateDeviceJoinTokenNotFound(body *CreateDeviceJoinTokenNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateDeviceJoinTokenConflict builds a workloadIdentities service
+// createDeviceJoinToken endpoint conflict error.
+func NewCreateDeviceJoinTokenConflict(body *CreateDeviceJoinTokenConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateDeviceJoinTokenUnsupportedMedia builds a workloadIdentities service
+// createDeviceJoinToken endpoint unsupported_media error.
+func NewCreateDeviceJoinTokenUnsupportedMedia(body *CreateDeviceJoinTokenUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateDeviceJoinTokenInvalid builds a workloadIdentities service
+// createDeviceJoinToken endpoint invalid error.
+func NewCreateDeviceJoinTokenInvalid(body *CreateDeviceJoinTokenInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateDeviceJoinTokenInvariantViolation builds a workloadIdentities
+// service createDeviceJoinToken endpoint invariant_violation error.
+func NewCreateDeviceJoinTokenInvariantViolation(body *CreateDeviceJoinTokenInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateDeviceJoinTokenUnexpected builds a workloadIdentities service
+// createDeviceJoinToken endpoint unexpected error.
+func NewCreateDeviceJoinTokenUnexpected(body *CreateDeviceJoinTokenUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateDeviceJoinTokenGatewayError builds a workloadIdentities service
+// createDeviceJoinToken endpoint gateway_error error.
+func NewCreateDeviceJoinTokenGatewayError(body *CreateDeviceJoinTokenGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRegisterDeviceWorkloadDeviceRegistrationOK builds a "workloadIdentities"
+// service "registerDevice" endpoint result from a HTTP "OK" response.
+func NewRegisterDeviceWorkloadDeviceRegistrationOK(body *RegisterDeviceResponseBody) *workloadidentities.WorkloadDeviceRegistration {
+	v := &workloadidentities.WorkloadDeviceRegistration{
+		DeviceSubject:  *body.DeviceSubject,
+		Issuer:         *body.Issuer,
+		AgentID:        *body.AgentID,
+		OrganizationID: *body.OrganizationID,
+	}
+
+	return v
+}
+
+// NewRegisterDeviceUnauthorized builds a workloadIdentities service
+// registerDevice endpoint unauthorized error.
+func NewRegisterDeviceUnauthorized(body *RegisterDeviceUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRegisterDeviceForbidden builds a workloadIdentities service
+// registerDevice endpoint forbidden error.
+func NewRegisterDeviceForbidden(body *RegisterDeviceForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRegisterDeviceBadRequest builds a workloadIdentities service
+// registerDevice endpoint bad_request error.
+func NewRegisterDeviceBadRequest(body *RegisterDeviceBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRegisterDeviceNotFound builds a workloadIdentities service registerDevice
+// endpoint not_found error.
+func NewRegisterDeviceNotFound(body *RegisterDeviceNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRegisterDeviceConflict builds a workloadIdentities service registerDevice
+// endpoint conflict error.
+func NewRegisterDeviceConflict(body *RegisterDeviceConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRegisterDeviceUnsupportedMedia builds a workloadIdentities service
+// registerDevice endpoint unsupported_media error.
+func NewRegisterDeviceUnsupportedMedia(body *RegisterDeviceUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRegisterDeviceInvalid builds a workloadIdentities service registerDevice
+// endpoint invalid error.
+func NewRegisterDeviceInvalid(body *RegisterDeviceInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRegisterDeviceInvariantViolation builds a workloadIdentities service
+// registerDevice endpoint invariant_violation error.
+func NewRegisterDeviceInvariantViolation(body *RegisterDeviceInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRegisterDeviceUnexpected builds a workloadIdentities service
+// registerDevice endpoint unexpected error.
+func NewRegisterDeviceUnexpected(body *RegisterDeviceUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRegisterDeviceGatewayError builds a workloadIdentities service
+// registerDevice endpoint gateway_error error.
+func NewRegisterDeviceGatewayError(body *RegisterDeviceGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // ValidateListResponseBody runs the validations defined on ListResponseBody
 func ValidateListResponseBody(body *ListResponseBody) (err error) {
 	if body.Issuers == nil {
@@ -3739,6 +4899,44 @@ func ValidateListPlatformsResponseBody(body *ListPlatformsResponseBody) (err err
 			if err2 := ValidateWorkloadPlatformResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
+		}
+	}
+	return
+}
+
+// ValidateGetCustomFlowsResponseBody runs the validations defined on
+// GetCustomFlowsResponseBody
+func ValidateGetCustomFlowsResponseBody(body *GetCustomFlowsResponseBody) (err error) {
+	if body.RegisterPlatform == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("register_platform", "body"))
+	}
+	if body.EditPlatform == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("edit_platform", "body"))
+	}
+	if body.AllowAccess == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("allow_access", "body"))
+	}
+	if body.EditAccess == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("edit_access", "body"))
+	}
+	if body.RegisterPlatform != nil {
+		if err2 := ValidateWorkloadFormResponseBody(body.RegisterPlatform); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.EditPlatform != nil {
+		if err2 := ValidateWorkloadFormResponseBody(body.EditPlatform); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.AllowAccess != nil {
+		if err2 := ValidateWorkloadFormResponseBody(body.AllowAccess); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.EditAccess != nil {
+		if err2 := ValidateWorkloadFormResponseBody(body.EditAccess); err2 != nil {
+			err = goa.MergeErrors(err, err2)
 		}
 	}
 	return
@@ -3912,6 +5110,42 @@ func ValidateWithdrawSubjectResponseBody(body *WithdrawSubjectResponseBody) (err
 				err = goa.MergeErrors(err, err2)
 			}
 		}
+	}
+	return
+}
+
+// ValidateCreateDeviceJoinTokenResponseBody runs the validations defined on
+// CreateDeviceJoinTokenResponseBody
+func ValidateCreateDeviceJoinTokenResponseBody(body *CreateDeviceJoinTokenResponseBody) (err error) {
+	if body.Token == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("token", "body"))
+	}
+	if body.ExpiresAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("expires_at", "body"))
+	}
+	if body.ExpiresAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.expires_at", *body.ExpiresAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateRegisterDeviceResponseBody runs the validations defined on
+// RegisterDeviceResponseBody
+func ValidateRegisterDeviceResponseBody(body *RegisterDeviceResponseBody) (err error) {
+	if body.DeviceSubject == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("device_subject", "body"))
+	}
+	if body.Issuer == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("issuer", "body"))
+	}
+	if body.AgentID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("agent_id", "body"))
+	}
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
+	if body.AgentID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.agent_id", *body.AgentID, goa.FormatUUID))
 	}
 	return
 }
@@ -4375,6 +5609,246 @@ func ValidateListPlatformsUnexpectedResponseBody(body *ListPlatformsUnexpectedRe
 // ValidateListPlatformsGatewayErrorResponseBody runs the validations defined
 // on listPlatforms_gateway_error_response_body
 func ValidateListPlatformsGatewayErrorResponseBody(body *ListPlatformsGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetCustomFlowsUnauthorizedResponseBody runs the validations defined
+// on getCustomFlows_unauthorized_response_body
+func ValidateGetCustomFlowsUnauthorizedResponseBody(body *GetCustomFlowsUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetCustomFlowsForbiddenResponseBody runs the validations defined on
+// getCustomFlows_forbidden_response_body
+func ValidateGetCustomFlowsForbiddenResponseBody(body *GetCustomFlowsForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetCustomFlowsBadRequestResponseBody runs the validations defined on
+// getCustomFlows_bad_request_response_body
+func ValidateGetCustomFlowsBadRequestResponseBody(body *GetCustomFlowsBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetCustomFlowsNotFoundResponseBody runs the validations defined on
+// getCustomFlows_not_found_response_body
+func ValidateGetCustomFlowsNotFoundResponseBody(body *GetCustomFlowsNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetCustomFlowsConflictResponseBody runs the validations defined on
+// getCustomFlows_conflict_response_body
+func ValidateGetCustomFlowsConflictResponseBody(body *GetCustomFlowsConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetCustomFlowsUnsupportedMediaResponseBody runs the validations
+// defined on getCustomFlows_unsupported_media_response_body
+func ValidateGetCustomFlowsUnsupportedMediaResponseBody(body *GetCustomFlowsUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetCustomFlowsInvalidResponseBody runs the validations defined on
+// getCustomFlows_invalid_response_body
+func ValidateGetCustomFlowsInvalidResponseBody(body *GetCustomFlowsInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetCustomFlowsInvariantViolationResponseBody runs the validations
+// defined on getCustomFlows_invariant_violation_response_body
+func ValidateGetCustomFlowsInvariantViolationResponseBody(body *GetCustomFlowsInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetCustomFlowsUnexpectedResponseBody runs the validations defined on
+// getCustomFlows_unexpected_response_body
+func ValidateGetCustomFlowsUnexpectedResponseBody(body *GetCustomFlowsUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetCustomFlowsGatewayErrorResponseBody runs the validations defined
+// on getCustomFlows_gateway_error_response_body
+func ValidateGetCustomFlowsGatewayErrorResponseBody(body *GetCustomFlowsGatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -6076,6 +7550,487 @@ func ValidateWithdrawSubjectGatewayErrorResponseBody(body *WithdrawSubjectGatewa
 	return
 }
 
+// ValidateCreateDeviceJoinTokenUnauthorizedResponseBody runs the validations
+// defined on createDeviceJoinToken_unauthorized_response_body
+func ValidateCreateDeviceJoinTokenUnauthorizedResponseBody(body *CreateDeviceJoinTokenUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateDeviceJoinTokenForbiddenResponseBody runs the validations
+// defined on createDeviceJoinToken_forbidden_response_body
+func ValidateCreateDeviceJoinTokenForbiddenResponseBody(body *CreateDeviceJoinTokenForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateDeviceJoinTokenBadRequestResponseBody runs the validations
+// defined on createDeviceJoinToken_bad_request_response_body
+func ValidateCreateDeviceJoinTokenBadRequestResponseBody(body *CreateDeviceJoinTokenBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateDeviceJoinTokenNotFoundResponseBody runs the validations
+// defined on createDeviceJoinToken_not_found_response_body
+func ValidateCreateDeviceJoinTokenNotFoundResponseBody(body *CreateDeviceJoinTokenNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateDeviceJoinTokenConflictResponseBody runs the validations
+// defined on createDeviceJoinToken_conflict_response_body
+func ValidateCreateDeviceJoinTokenConflictResponseBody(body *CreateDeviceJoinTokenConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateDeviceJoinTokenUnsupportedMediaResponseBody runs the
+// validations defined on createDeviceJoinToken_unsupported_media_response_body
+func ValidateCreateDeviceJoinTokenUnsupportedMediaResponseBody(body *CreateDeviceJoinTokenUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateDeviceJoinTokenInvalidResponseBody runs the validations
+// defined on createDeviceJoinToken_invalid_response_body
+func ValidateCreateDeviceJoinTokenInvalidResponseBody(body *CreateDeviceJoinTokenInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateDeviceJoinTokenInvariantViolationResponseBody runs the
+// validations defined on
+// createDeviceJoinToken_invariant_violation_response_body
+func ValidateCreateDeviceJoinTokenInvariantViolationResponseBody(body *CreateDeviceJoinTokenInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateDeviceJoinTokenUnexpectedResponseBody runs the validations
+// defined on createDeviceJoinToken_unexpected_response_body
+func ValidateCreateDeviceJoinTokenUnexpectedResponseBody(body *CreateDeviceJoinTokenUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateDeviceJoinTokenGatewayErrorResponseBody runs the validations
+// defined on createDeviceJoinToken_gateway_error_response_body
+func ValidateCreateDeviceJoinTokenGatewayErrorResponseBody(body *CreateDeviceJoinTokenGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRegisterDeviceUnauthorizedResponseBody runs the validations defined
+// on registerDevice_unauthorized_response_body
+func ValidateRegisterDeviceUnauthorizedResponseBody(body *RegisterDeviceUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRegisterDeviceForbiddenResponseBody runs the validations defined on
+// registerDevice_forbidden_response_body
+func ValidateRegisterDeviceForbiddenResponseBody(body *RegisterDeviceForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRegisterDeviceBadRequestResponseBody runs the validations defined on
+// registerDevice_bad_request_response_body
+func ValidateRegisterDeviceBadRequestResponseBody(body *RegisterDeviceBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRegisterDeviceNotFoundResponseBody runs the validations defined on
+// registerDevice_not_found_response_body
+func ValidateRegisterDeviceNotFoundResponseBody(body *RegisterDeviceNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRegisterDeviceConflictResponseBody runs the validations defined on
+// registerDevice_conflict_response_body
+func ValidateRegisterDeviceConflictResponseBody(body *RegisterDeviceConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRegisterDeviceUnsupportedMediaResponseBody runs the validations
+// defined on registerDevice_unsupported_media_response_body
+func ValidateRegisterDeviceUnsupportedMediaResponseBody(body *RegisterDeviceUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRegisterDeviceInvalidResponseBody runs the validations defined on
+// registerDevice_invalid_response_body
+func ValidateRegisterDeviceInvalidResponseBody(body *RegisterDeviceInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRegisterDeviceInvariantViolationResponseBody runs the validations
+// defined on registerDevice_invariant_violation_response_body
+func ValidateRegisterDeviceInvariantViolationResponseBody(body *RegisterDeviceInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRegisterDeviceUnexpectedResponseBody runs the validations defined on
+// registerDevice_unexpected_response_body
+func ValidateRegisterDeviceUnexpectedResponseBody(body *RegisterDeviceUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRegisterDeviceGatewayErrorResponseBody runs the validations defined
+// on registerDevice_gateway_error_response_body
+func ValidateRegisterDeviceGatewayErrorResponseBody(body *RegisterDeviceGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateWorkloadIssuerResponseBody runs the validations defined on
 // WorkloadIssuerResponseBody
 func ValidateWorkloadIssuerResponseBody(body *WorkloadIssuerResponseBody) (err error) {
@@ -6225,9 +8180,6 @@ func ValidateWorkloadPlatformResponseBody(body *WorkloadPlatformResponseBody) (e
 	if body.Subject == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("subject", "body"))
 	}
-	if body.Steps == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("steps", "body"))
-	}
 	if body.Issuer != nil {
 		if err2 := ValidateWorkloadPlatformConstantResponseBody(body.Issuer); err2 != nil {
 			err = goa.MergeErrors(err, err2)
@@ -6248,13 +8200,6 @@ func ValidateWorkloadPlatformResponseBody(body *WorkloadPlatformResponseBody) (e
 	if body.Subject != nil {
 		if err2 := ValidateWorkloadPlatformSubjectResponseBody(body.Subject); err2 != nil {
 			err = goa.MergeErrors(err, err2)
-		}
-	}
-	for _, e := range body.Steps {
-		if e != nil {
-			if err2 := ValidateWorkloadPlatformStepResponseBody(e); err2 != nil {
-				err = goa.MergeErrors(err, err2)
-			}
 		}
 	}
 	return
@@ -6321,29 +8266,27 @@ func ValidateWorkloadPlatformSubjectResponseBody(body *WorkloadPlatformSubjectRe
 	return
 }
 
-// ValidateWorkloadPlatformStepResponseBody runs the validations defined on
-// WorkloadPlatformStepResponseBody
-func ValidateWorkloadPlatformStepResponseBody(body *WorkloadPlatformStepResponseBody) (err error) {
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
+// ValidateWorkloadFormResponseBody runs the validations defined on
+// WorkloadFormResponseBody
+func ValidateWorkloadFormResponseBody(body *WorkloadFormResponseBody) (err error) {
 	if body.Title == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("title", "body"))
 	}
-	if body.Phase == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("phase", "body"))
+	if body.Description == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("description", "body"))
 	}
-	if body.Blocks == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("blocks", "body"))
+	if body.SubmitLabel == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("submit_label", "body"))
 	}
-	if body.Phase != nil {
-		if !(*body.Phase == "collect" || *body.Phase == "create" || *body.Phase == "connect") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.phase", *body.Phase, []any{"collect", "create", "connect"}))
-		}
+	if body.PendingLabel == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("pending_label", "body"))
 	}
-	for _, e := range body.Blocks {
+	if body.Steps == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("steps", "body"))
+	}
+	for _, e := range body.Steps {
 		if e != nil {
-			if err2 := ValidateWorkloadPlatformBlockResponseBody(e); err2 != nil {
+			if err2 := ValidateWorkloadFormStepResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -6351,23 +8294,36 @@ func ValidateWorkloadPlatformStepResponseBody(body *WorkloadPlatformStepResponse
 	return
 }
 
-// ValidateWorkloadPlatformBlockResponseBody runs the validations defined on
-// WorkloadPlatformBlockResponseBody
-func ValidateWorkloadPlatformBlockResponseBody(body *WorkloadPlatformBlockResponseBody) (err error) {
+// ValidateWorkloadFormStepResponseBody runs the validations defined on
+// WorkloadFormStepResponseBody
+func ValidateWorkloadFormStepResponseBody(body *WorkloadFormStepResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Title == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("title", "body"))
+	}
+	if body.Blocks == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("blocks", "body"))
+	}
+	for _, e := range body.Blocks {
+		if e != nil {
+			if err2 := ValidateWorkloadFormBlockResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateWorkloadFormBlockResponseBody runs the validations defined on
+// WorkloadFormBlockResponseBody
+func ValidateWorkloadFormBlockResponseBody(body *WorkloadFormBlockResponseBody) (err error) {
 	if body.Type == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("type", "body"))
 	}
 	if body.Markdown == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("markdown", "body"))
-	}
-	if body.Src == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("src", "body"))
-	}
-	if body.Alt == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("alt", "body"))
-	}
-	if body.Caption == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("caption", "body"))
 	}
 	if body.Href == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("href", "body"))
@@ -6375,23 +8331,37 @@ func ValidateWorkloadPlatformBlockResponseBody(body *WorkloadPlatformBlockRespon
 	if body.Label == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("label", "body"))
 	}
-	if body.Variable == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("variable", "body"))
+	if body.Field == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("field", "body"))
 	}
-	if body.Value == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("value", "body"))
+	if body.Placeholder == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("placeholder", "body"))
 	}
 	if body.Help == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("help", "body"))
 	}
+	if body.Multiline == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("multiline", "body"))
+	}
+	if body.ReadOnly == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("read_only", "body"))
+	}
+	if body.Format == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("format", "body"))
+	}
 	if body.Type != nil {
-		if !(*body.Type == "text" || *body.Type == "image" || *body.Type == "link" || *body.Type == "field" || *body.Type == "subject_rule" || *body.Type == "agent_picker" || *body.Type == "tags" || *body.Type == "computed_status" || *body.Type == "computed" || *body.Type == "checklist_item") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.type", *body.Type, []any{"text", "image", "link", "field", "subject_rule", "agent_picker", "tags", "computed_status", "computed", "checklist_item"}))
+		if !(*body.Type == "text" || *body.Type == "link" || *body.Type == "input" || *body.Type == "agent_picker" || *body.Type == "tags" || *body.Type == "wildcard_caution") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.type", *body.Type, []any{"text", "link", "input", "agent_picker", "tags", "wildcard_caution"}))
 		}
 	}
-	if body.Value != nil {
-		if !(*body.Value == "" || *body.Value == "token_endpoint" || *body.Value == "issuer_url" || *body.Value == "mcp_host") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.value", *body.Value, []any{"", "token_endpoint", "issuer_url", "mcp_host"}))
+	if body.Field != nil {
+		if !(*body.Field == "" || *body.Field == "name" || *body.Field == "description" || *body.Field == "issuer" || *body.Field == "jwks_uri" || *body.Field == "subject" || *body.Field == "label") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.field", *body.Field, []any{"", "name", "description", "issuer", "jwks_uri", "subject", "label"}))
+		}
+	}
+	if body.Format != nil {
+		if !(*body.Format == "" || *body.Format == "issuer_url" || *body.Format == "jwks_uri" || *body.Format == "platform_name" || *body.Format == "platform_description" || *body.Format == "subject_rule" || *body.Format == "none") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.format", *body.Format, []any{"", "issuer_url", "jwks_uri", "platform_name", "platform_description", "subject_rule", "none"}))
 		}
 	}
 	return

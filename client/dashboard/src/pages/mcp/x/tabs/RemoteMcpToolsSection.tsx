@@ -165,7 +165,7 @@ function RemoteMcpToolsErrorFallback({
 }
 
 const unconfiguredAuthMessage =
-  "This server has no authentication configured yet. Set up an identity provider so its tools can be listed.";
+  "This server has no authentication configured yet. Set up an authorization server so its tools can be listed.";
 
 const unavailableConnectMessage =
   "Connect isn't available for this server. Review its authentication settings.";
@@ -269,7 +269,7 @@ function RemoteMcpToolsBody({
     return <RemoteMcpToolsConnectPrompt onConnect={onConnect} />;
   }
 
-  // A 401 with no connect target used to open /x/mcp/<slug>/connect/first-party
+  // A 401 with no connect target used to open the first-party connect route
   // anyway, which returns a bare not_found document. Point at settings instead.
   if (needsAuth) {
     return (

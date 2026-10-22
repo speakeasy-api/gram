@@ -17,6 +17,11 @@ func ListPlatformsWorkloadIdentitiesPath() string {
 	return "/rpc/workloadIdentities.listPlatforms"
 }
 
+// GetCustomFlowsWorkloadIdentitiesPath returns the URL path to the workloadIdentities service getCustomFlows HTTP endpoint.
+func GetCustomFlowsWorkloadIdentitiesPath() string {
+	return "/rpc/workloadIdentities.getCustomFlows"
+}
+
 // ListTokenEndpointsWorkloadIdentitiesPath returns the URL path to the workloadIdentities service listTokenEndpoints HTTP endpoint.
 func ListTokenEndpointsWorkloadIdentitiesPath() string {
 	return "/rpc/workloadIdentities.listTokenEndpoints"
@@ -50,4 +55,14 @@ func UpdateSubjectWorkloadIdentitiesPath() string {
 // WithdrawSubjectWorkloadIdentitiesPath returns the URL path to the workloadIdentities service withdrawSubject HTTP endpoint.
 func WithdrawSubjectWorkloadIdentitiesPath() string {
 	return "/rpc/workloadIdentities.withdrawSubject"
+}
+
+// CreateDeviceJoinTokenWorkloadIdentitiesPath returns the URL path to the workloadIdentities service createDeviceJoinToken HTTP endpoint.
+func CreateDeviceJoinTokenWorkloadIdentitiesPath() string {
+	return "/rpc/workloadIdentities.createDeviceJoinToken"
+}
+
+// RegisterDeviceWorkloadIdentitiesPath returns the URL path to the workloadIdentities service registerDevice HTTP endpoint.
+func RegisterDeviceWorkloadIdentitiesPath() string {
+	return "/rpc/workloadIdentities.registerDevice"
 }

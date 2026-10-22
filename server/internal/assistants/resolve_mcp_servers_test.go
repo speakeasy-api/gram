@@ -19,7 +19,7 @@ func TestResolveAssistantMCPServers_EmptyUserToolsetsStillGetsPlatformServer(t *
 	serverURL, err := url.Parse("https://gram.test")
 	require.NoError(t, err)
 
-	servers := resolveAssistantMCPServers(context.Background(), testenv.NewLogger(t), serverURL, nil, nil, []string{platformtools.AssistantsPlatformToolsetSlug})
+	servers := resolveAssistantMCPServers(context.Background(), testenv.NewLogger(t), serverURL, nil, []string{platformtools.AssistantsPlatformToolsetSlug})
 	require.Len(t, servers, 1)
 
 	require.Equal(t, "_p-"+platformtools.AssistantsPlatformToolsetSlug, servers[0].ID)
@@ -36,16 +36,16 @@ func TestResolveAssistantMCPServers_UserToolsetsListedBeforePlatformServer(t *te
 	serverURL, err := url.Parse("https://gram.test")
 	require.NoError(t, err)
 
-	rows := []assistantToolsetRow{
+	rows := []assistantMCPServerRow{
 		{
-			ToolsetSlug:     "billing",
-			McpEnabled:      true,
-			McpSlug:         pgtype.Text{String: "billing-mcp", Valid: true},
+			ToolsetSlug:     pgtype.Text{String: "billing", Valid: true},
+			Visibility:      visibility.Private,
+			EndpointSlug:    "billing-mcp",
 			EnvironmentSlug: pgtype.Text{String: "prod", Valid: true},
 		},
 	}
 
-	servers := resolveAssistantMCPServers(context.Background(), testenv.NewLogger(t), serverURL, rows, nil, []string{platformtools.AssistantsPlatformToolsetSlug})
+	servers := resolveAssistantMCPServers(context.Background(), testenv.NewLogger(t), serverURL, rows, []string{platformtools.AssistantsPlatformToolsetSlug})
 	require.Len(t, servers, 2)
 
 	require.Equal(t, "billing", servers[0].ID)
@@ -69,25 +69,25 @@ func TestResolveAssistantMCPServers_MisconfiguredToolsetIsOmitted(t *testing.T) 
 	serverURL, err := url.Parse("https://gram.test")
 	require.NoError(t, err)
 
-	rows := []assistantToolsetRow{
+	rows := []assistantMCPServerRow{
 		{
-			ToolsetSlug: "no-mcp-slug",
-			McpEnabled:  true,
-			McpSlug:     pgtype.Text{Valid: false},
+			ToolsetSlug:  pgtype.Text{String: "no-mcp-slug", Valid: true},
+			Visibility:   visibility.Private,
+			EndpointSlug: "",
 		},
 		{
-			ToolsetSlug: "mcp-disabled",
-			McpEnabled:  false,
-			McpSlug:     pgtype.Text{String: "mcp-disabled-mcp", Valid: true},
+			ToolsetSlug:  pgtype.Text{String: "mcp-disabled", Valid: true},
+			Visibility:   visibility.Disabled,
+			EndpointSlug: "mcp-disabled-mcp",
 		},
 		{
-			ToolsetSlug: "billing",
-			McpEnabled:  true,
-			McpSlug:     pgtype.Text{String: "billing-mcp", Valid: true},
+			ToolsetSlug:  pgtype.Text{String: "billing", Valid: true},
+			Visibility:   visibility.Private,
+			EndpointSlug: "billing-mcp",
 		},
 	}
 
-	servers := resolveAssistantMCPServers(context.Background(), testenv.NewLogger(t), serverURL, rows, nil, []string{platformtools.AssistantsPlatformToolsetSlug})
+	servers := resolveAssistantMCPServers(context.Background(), testenv.NewLogger(t), serverURL, rows, []string{platformtools.AssistantsPlatformToolsetSlug})
 	require.Len(t, servers, 2)
 
 	require.Equal(t, "billing", servers[0].ID)
@@ -106,7 +106,7 @@ func TestResolveAssistantMCPServers_GrantsEachRequestedPlatformToolset(t *testin
 	serverURL, err := url.Parse("https://gram.test")
 	require.NoError(t, err)
 
-	servers := resolveAssistantMCPServers(context.Background(), testenv.NewLogger(t), serverURL, nil, nil, []string{
+	servers := resolveAssistantMCPServers(context.Background(), testenv.NewLogger(t), serverURL, nil, []string{
 		platformtools.AssistantsPlatformToolsetSlug,
 		platformtools.ManagedAssistantPlatformToolsetSlug,
 	})
@@ -129,11 +129,11 @@ func TestResolveAssistantMCPServers_AttachedMCPServerAfterToolsetsBeforePlatform
 	serverURL, err := url.Parse("https://gram.test")
 	require.NoError(t, err)
 
-	toolsets := []assistantToolsetRow{
+	toolsets := []assistantMCPServerRow{
 		{
-			ToolsetSlug: "billing",
-			McpEnabled:  true,
-			McpSlug:     pgtype.Text{String: "billing-mcp", Valid: true},
+			ToolsetSlug:  pgtype.Text{String: "billing", Valid: true},
+			Visibility:   visibility.Private,
+			EndpointSlug: "billing-mcp",
 		},
 	}
 	mcpServers := []assistantMCPServerRow{
@@ -144,7 +144,7 @@ func TestResolveAssistantMCPServers_AttachedMCPServerAfterToolsetsBeforePlatform
 		},
 	}
 
-	servers := resolveAssistantMCPServers(context.Background(), testenv.NewLogger(t), serverURL, toolsets, mcpServers, []string{platformtools.AssistantsPlatformToolsetSlug})
+	servers := resolveAssistantMCPServers(context.Background(), testenv.NewLogger(t), serverURL, append(toolsets, mcpServers...), []string{platformtools.AssistantsPlatformToolsetSlug})
 	require.Len(t, servers, 3)
 
 	require.Equal(t, "billing", servers[0].ID)
@@ -171,7 +171,7 @@ func TestResolveAssistantMCPServers_AttachedMCPServerDefaults(t *testing.T) {
 		},
 	}
 
-	servers := resolveAssistantMCPServers(context.Background(), testenv.NewLogger(t), serverURL, nil, mcpServers, nil)
+	servers := resolveAssistantMCPServers(context.Background(), testenv.NewLogger(t), serverURL, mcpServers, nil)
 	require.Len(t, servers, 1)
 	require.Equal(t, "team-remote-saas", servers[0].ID)
 	require.Equal(t, "https://gram.test/mcp/team-remote-saas", servers[0].URL)
@@ -194,7 +194,7 @@ func TestResolveAssistantMCPServers_AttachedMCPServerWithoutEndpointOmitted(t *t
 		},
 	}
 
-	servers := resolveAssistantMCPServers(context.Background(), testenv.NewLogger(t), serverURL, nil, mcpServers, nil)
+	servers := resolveAssistantMCPServers(context.Background(), testenv.NewLogger(t), serverURL, mcpServers, nil)
 	require.Empty(t, servers)
 }
 
@@ -219,7 +219,7 @@ func TestResolveAssistantMCPServers_DisabledMCPServerOmitted(t *testing.T) {
 		},
 	}
 
-	servers := resolveAssistantMCPServers(context.Background(), testenv.NewLogger(t), serverURL, nil, mcpServers, nil)
+	servers := resolveAssistantMCPServers(context.Background(), testenv.NewLogger(t), serverURL, mcpServers, nil)
 	require.Len(t, servers, 1)
 	require.Equal(t, "remote-saas", servers[0].ID)
 }
@@ -234,11 +234,11 @@ func TestResolveAssistantMCPServers_CollidingServerSlugOmitted(t *testing.T) {
 	serverURL, err := url.Parse("https://gram.test")
 	require.NoError(t, err)
 
-	toolsets := []assistantToolsetRow{
+	toolsets := []assistantMCPServerRow{
 		{
-			ToolsetSlug: "billing",
-			McpEnabled:  true,
-			McpSlug:     pgtype.Text{String: "billing-mcp", Valid: true},
+			ToolsetSlug:  pgtype.Text{String: "billing", Valid: true},
+			Visibility:   visibility.Private,
+			EndpointSlug: "billing-mcp",
 		},
 	}
 	mcpServers := []assistantMCPServerRow{
@@ -248,7 +248,7 @@ func TestResolveAssistantMCPServers_CollidingServerSlugOmitted(t *testing.T) {
 		},
 	}
 
-	servers := resolveAssistantMCPServers(context.Background(), testenv.NewLogger(t), serverURL, toolsets, mcpServers, nil)
+	servers := resolveAssistantMCPServers(context.Background(), testenv.NewLogger(t), serverURL, append(toolsets, mcpServers...), nil)
 	require.Len(t, servers, 1)
 	require.Equal(t, "billing", servers[0].ID)
 	require.Equal(t, "https://gram.test/mcp/billing-mcp", servers[0].URL)
@@ -274,7 +274,7 @@ func TestResolveAssistantMCPServers_OverlongServerSlugCapped(t *testing.T) {
 		},
 	}
 
-	servers := resolveAssistantMCPServers(t.Context(), testenv.NewLogger(t), serverURL, nil, mcpServers, nil)
+	servers := resolveAssistantMCPServers(t.Context(), testenv.NewLogger(t), serverURL, mcpServers, nil)
 	require.Len(t, servers, 1)
 	require.Equal(t, "a-very-long-mcp-aa65ccda", servers[0].ID)
 	require.Equal(t, "https://gram.test/mcp/long-remote", servers[0].URL)

@@ -43,6 +43,34 @@ type Service interface {
 	// additionally requires project:write. Unsupported automatic registration
 	// returns manual_setup_required without changing local state.
 	CommitServerIdentityConfiguration(context.Context, *CommitServerIdentityConfigurationPayload) (res *CommitServerIdentityConfigurationResult, err error)
+	// Preview which other MCP servers and gateways a client binding change on a
+	// user session issuer would affect, across every project in the organization
+	// for an organization-level issuer. Each server's upstream authorization
+	// server is derived from the clients it can see (its own project's and
+	// organization-level ones), so a server is listed when that derivation changes
+	// (repoint or clear) or when a client it uses is replaced (resignin). A
+	// gateway is listed when a client it can see is unbound (client_removed). The
+	// target server is excluded. A change the commit would refuse, such as one
+	// that touches an organization-level client on an organization-level issuer,
+	// is refused here too. Requires mcp:write on mcp_server_id when given,
+	// otherwise project:write. Servers the caller cannot read are counted in
+	// hidden_server_count and never named.
+	GetServerIdentityImpact(context.Context, *GetServerIdentityImpactPayload) (res *ServerIdentityImpactResult, err error)
+	// List the upstream OAuth clients an MCP server is associated with. An
+	// association is a per-server configuration fact: one client can serve several
+	// servers, and server_count reports how many live servers share each client,
+	// since editing or rotating a shared client changes every one of them.
+	// Associations are recorded ahead of the serving path that will read them;
+	// until then the server keeps signing in through its user session issuer's
+	// bindings. Requires mcp:read on the server.
+	ListServerClientAssociations(context.Context, *ListServerClientAssociationsPayload) (res *ListServerClientAssociationsResult, err error)
+	// Remove one MCP server's association with an upstream OAuth client. The
+	// client and its associations with other servers are untouched. When the
+	// server is the only consumer of its user session issuer, the association
+	// follows the issuer's client binding and is refused here with a conflict:
+	// turn off User Identity on the server instead. Requires mcp:write on the
+	// server.
+	DetachServerClientAssociation(context.Context, *DetachServerClientAssociationPayload) (err error)
 	// List remote_sessions in the caller's project. Supplying both principal_id
 	// and user_session_issuer_id instead lists only the ordinary human caller's
 	// eligible sessions for an agent they own, without requiring project read
@@ -81,7 +109,7 @@ const ServiceName = "remoteSessions"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [7]string{"listBindings", "attachBinding", "detachBinding", "commitServerIdentityConfiguration", "listRemoteSessions", "countRemoteSessions", "revokeRemoteSession"}
+var MethodNames = [10]string{"listBindings", "attachBinding", "detachBinding", "commitServerIdentityConfiguration", "getServerIdentityImpact", "listServerClientAssociations", "detachServerClientAssociation", "listRemoteSessions", "countRemoteSessions", "revokeRemoteSession"}
 
 // AttachBindingPayload is the payload type of the remoteSessions service
 // attachBinding method.
@@ -276,6 +304,37 @@ type DetachBindingPayload struct {
 	ProjectSlugInput    *string
 }
 
+// DetachServerClientAssociationPayload is the payload type of the
+// remoteSessions service detachServerClientAssociation method.
+type DetachServerClientAssociationPayload struct {
+	// The MCP server.
+	McpServerID string
+	// The associated remote session client.
+	RemoteSessionClientID string
+	SessionToken          *string
+	ApikeyToken           *string
+	ProjectSlugInput      *string
+}
+
+// GetServerIdentityImpactPayload is the payload type of the remoteSessions
+// service getServerIdentityImpact method.
+type GetServerIdentityImpactPayload struct {
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
+	// The user session issuer whose client bindings change.
+	UserSessionIssuerID string
+	// The MCP server the change is made from. Excluded from the result.
+	McpServerID *string
+	// The kind of binding change.
+	Change string
+	// The Remote Identity Provider of the client being bound. Omit for a new
+	// provider.
+	ProviderID *string
+	// An existing client being bound. Omit for a new client.
+	ClientID *string
+}
+
 // ListBindingsPayload is the payload type of the remoteSessions service
 // listBindings method.
 type ListBindingsPayload struct {
@@ -319,6 +378,23 @@ type ListRemoteSessionsResult struct {
 	NextCursor *string
 }
 
+// ListServerClientAssociationsPayload is the payload type of the
+// remoteSessions service listServerClientAssociations method.
+type ListServerClientAssociationsPayload struct {
+	// The MCP server.
+	McpServerID      string
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
+}
+
+// ListServerClientAssociationsResult is the result type of the remoteSessions
+// service listServerClientAssociations method.
+type ListServerClientAssociationsResult struct {
+	// The server's associated upstream OAuth clients, oldest first.
+	Associations []*ServerClientAssociation
+}
+
 // PrincipalRemoteSessionBinding is the result type of the remoteSessions
 // service attachBinding method.
 type PrincipalRemoteSessionBinding struct {
@@ -343,6 +419,31 @@ type RevokeRemoteSessionPayload struct {
 	ProjectSlugInput *string
 }
 
+// One upstream OAuth client an MCP server is associated with. Client secrets
+// are never returned.
+type ServerClientAssociation struct {
+	// The associated remote session client.
+	RemoteSessionClientID string
+	// The provider-issued client_id.
+	ClientID string
+	// The client's remote session issuer: the upstream authorization server it
+	// signs in with.
+	RemoteSessionIssuerID string
+	// Display name of the remote session issuer, if set.
+	IssuerName *string
+	// Slug of the remote session issuer.
+	IssuerSlug string
+	// The remote session issuer's issuer identifier.
+	IssuerURL string
+	// Who owns the client.
+	Scope string
+	// How many live MCP servers are associated with this client, including this
+	// one.
+	ServerCount int64
+	// When the association was recorded.
+	AssociatedAt string
+}
+
 // Configuration for a newly-created project remote-session client. Manual mode
 // requires client_id. Auto mode forbids client_id and client_secret and uses
 // scope, audience, and token_endpoint_auth_method as registration preferences.
@@ -359,6 +460,39 @@ type ServerIdentityClientConfiguration struct {
 	Scope []string
 	// Optional upstream OAuth audience.
 	Audience *string
+}
+
+// ServerIdentityImpactResult is the result type of the remoteSessions service
+// getServerIdentityImpact method.
+type ServerIdentityImpactResult struct {
+	// Affected MCP servers the caller can read.
+	Servers []*ServerIdentityImpactServer
+	// MCP servers and gateways the caller cannot read; they are not named. When
+	// the change touches an organization-level client this counts every such
+	// server on the issuer, affected or not.
+	HiddenServerCount int
+}
+
+// An MCP server or gateway a proposed binding change affects.
+type ServerIdentityImpactServer struct {
+	// The MCP server or gateway id.
+	ID string
+	// Whether this is an MCP server or a gateway.
+	Kind string
+	// The MCP server or gateway name.
+	Name *string
+	// The MCP server slug. Gateways have none.
+	Slug *string
+	// The owning project.
+	ProjectID string
+	// The name of the owning project.
+	ProjectName string
+	// repoint: its upstream authorization server changes to another single
+	// provider. clear: it is left with no single provider and loses its upstream.
+	// resignin: its upstream is unchanged but its client is replaced, so everyone
+	// signs in again. client_removed: a gateway loses a provider client its
+	// members sign in through.
+	Impact string
 }
 
 // A completed automatic registration failure using the bounded OAuth

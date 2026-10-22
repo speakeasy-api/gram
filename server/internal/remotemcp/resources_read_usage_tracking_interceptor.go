@@ -4,11 +4,11 @@ import (
 	"context"
 	"log/slog"
 
+	"github.com/google/uuid"
 	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/billing"
-	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 )
@@ -25,12 +25,13 @@ import (
 //
 // Tracking is fire-and-forget: events are emitted in a goroutine bound to a
 // context derived via [context.WithoutCancel] so the call completes even if
-// the inbound request context cancels mid-relay. Missing auth context is
+// the inbound request context cancels mid-relay. Missing server context is
 // treated as a no-op and logged so operators can spot misconfiguration
 // without taking down resource reads.
 type ResourcesReadUsageTrackingInterceptor struct {
-	tracker billing.Tracker
-	logger  *slog.Logger
+	mcpServerID string
+	tracker     billing.Tracker
+	logger      *slog.Logger
 }
 
 var _ proxy.ResourcesReadResponseInterceptor = (*ResourcesReadUsageTrackingInterceptor)(nil)
@@ -39,9 +40,17 @@ var _ proxy.ResourcesReadResponseInterceptor = (*ResourcesReadUsageTrackingInter
 // the given billing tracker. The same instance can be reused across requests.
 func NewResourcesReadUsageTrackingInterceptor(tracker billing.Tracker, logger *slog.Logger) *ResourcesReadUsageTrackingInterceptor {
 	return &ResourcesReadUsageTrackingInterceptor{
-		tracker: tracker,
-		logger:  logger,
+		mcpServerID: "",
+		tracker:     tracker,
+		logger:      logger,
 	}
+}
+
+// WithMCPServerID returns a per-target copy, preserving isolation between proxies.
+func (i *ResourcesReadUsageTrackingInterceptor) WithMCPServerID(serverID string) *ResourcesReadUsageTrackingInterceptor {
+	clone := *i
+	clone.mcpServerID = serverID
+	return &clone
 }
 
 // Name implements [proxy.ResourcesReadResponseInterceptor].
@@ -60,9 +69,9 @@ func (i *ResourcesReadUsageTrackingInterceptor) Name() string {
 // available after a prior resources/list response is correlated through a
 // per-session cache, which lives outside the proxy today.
 func (i *ResourcesReadUsageTrackingInterceptor) InterceptResourcesReadResponse(ctx context.Context, read *proxy.ResourcesReadResponse) error {
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil || authCtx.ProjectID == nil {
-		i.logger.WarnContext(ctx, "skipping resource read usage tracking: missing auth context",
+	serverCtx, ok := GetServerContext(ctx)
+	if !ok || serverCtx.OrganizationID == "" || serverCtx.ProjectID == uuid.Nil {
+		i.logger.WarnContext(ctx, "skipping resource read usage tracking: missing server context",
 			attr.SlogComponent("xmcp"))
 		return nil
 	}
@@ -95,17 +104,17 @@ func (i *ResourcesReadUsageTrackingInterceptor) InterceptResourcesReadResponse(c
 		sessionID = conv.PtrEmpty(read.RemoteMessage.UserHTTPRequest.Header.Get("Mcp-Session-Id"))
 	}
 
-	projectID := authCtx.ProjectID.String()
+	projectID := serverCtx.ProjectID.String()
 	event := billing.ToolCallUsageEvent{
-		OrganizationID:        authCtx.ActiveOrganizationID,
+		OrganizationID:        serverCtx.OrganizationID,
 		RequestBytes:          requestBytes,
 		OutputBytes:           outputBytes,
 		ToolURN:               "",
 		ToolName:              "",
 		ResourceURI:           resourceURI,
 		ProjectID:             projectID,
-		ProjectSlug:           authCtx.ProjectSlug,
-		OrganizationSlug:      conv.PtrEmpty(authCtx.OrganizationSlug),
+		ProjectSlug:           conv.PtrEmpty(serverCtx.ProjectSlug),
+		OrganizationSlug:      conv.PtrEmpty(serverCtx.OrganizationSlug),
 		ToolsetSlug:           nil,
 		ChatID:                nil,
 		MCPURL:                nil,
@@ -113,6 +122,8 @@ func (i *ResourcesReadUsageTrackingInterceptor) InterceptResourcesReadResponse(c
 		ResponseStatusCode:    statusCode,
 		ToolsetID:             nil,
 		MCPSessionID:          sessionID,
+		MCPServerID:           conv.PtrEmpty(i.mcpServerID),
+		MCPEndpointID:         nil,
 		MetaMCPServerID:       nil,
 		FunctionCPUUsage:      nil,
 		FunctionMemUsage:      nil,

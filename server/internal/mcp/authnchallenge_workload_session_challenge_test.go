@@ -16,7 +16,6 @@ import (
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	agentsrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcpaccess"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -39,7 +38,7 @@ type workloadChallengeFixture struct {
 func newWorkloadChallengeFixture(t *testing.T, ctx context.Context, ti *testInstance) workloadChallengeFixture {
 	t.Helper()
 
-	fx := newAgentConsentFixture(t, ctx, ti)
+	fx := newWorkloadConsentFixture(t, ctx, ti)
 	agent := createConsentAgent(t, ctx, ti, fx, "Workload deploy agent")
 	seedPrincipalMCPConnectGrant(t, ctx, ti, fx.orgID, urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String()), fx.target.MCPResourceID)
 
@@ -172,7 +171,7 @@ func TestServePublic_WorkloadToolDeniedByAgentPolicyIsNotInvalidToken(t *testing
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
-	fx := newAgentConsentFixture(t, ctx, ti)
+	fx := newWorkloadConsentFixture(t, ctx, ti)
 	addHTTPTools(t, ctx, ti, fx.toolset.ID, fx.target.ProjectID, fx.orgID, "deploy", "rollback")
 
 	agent := createConsentAgent(t, ctx, ti, fx, "Workload deploy agent")
@@ -212,7 +211,7 @@ func TestServePublic_ExpiredHumanSessionChallengeIsUnchanged(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
-	fx := newAgentConsentFixture(t, ctx, ti)
+	fx := newWorkloadConsentFixture(t, ctx, ti)
 	session := seedWorkloadSession(t, ctx, ti, fx, urn.NewUserSubject(fx.userID))
 	expired := mintSessionBearerExpiringAt(t, ti, fx, session, time.Now().Add(-time.Minute))
 	slug := fx.toolset.McpSlug.String
@@ -234,23 +233,6 @@ func requireBareChallenge(t *testing.T, ti *testInstance, slug string, w *httpte
 		`Bearer resource_metadata="`+ti.serverURL.String()+`/.well-known/oauth-protected-resource/mcp/`+slug+`"`,
 		w.Header().Get("WWW-Authenticate"),
 	)
-}
-
-// The rollout gate hides the endpoint from a workload whose token is perfectly
-// good. Naming that invalid_token would send the workload to the token endpoint
-// for a credential that meets the same gate, forever.
-func TestServePublic_WorkloadSessionHiddenByRolloutGetsBareChallenge(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestMCPService(t)
-	fx := newWorkloadChallengeFixture(t, ctx, ti)
-	slug := fx.toolset.McpSlug.String
-
-	requireAdmitted(t, serveMCPResponse(t, ti, slug, makeInitializeBody(), fx.token))
-
-	ti.features.SetFlag(feature.FlagAgentIdentityCredentials, fx.orgID, false)
-
-	requireBareChallenge(t, ti, slug, serveMCPResponse(t, ti, slug, makeInitializeBody(), fx.token))
 }
 
 func TestServePublic_ForgedWorkloadBearerGetsBareChallenge(t *testing.T) {
