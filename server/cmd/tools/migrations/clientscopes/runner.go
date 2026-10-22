@@ -42,6 +42,7 @@ const (
 	OutcomeRestored     Outcome = "restored"
 	OutcomeWouldRestore Outcome = "would_restore"
 
+	OutcomeSkipExcluded         Outcome = "skip_excluded"
 	OutcomeSkipManaged          Outcome = "skip_managed"
 	OutcomeSkipKind             Outcome = "skip_kind"
 	OutcomeSkipSignIn           Outcome = "skip_sign_in_client"
@@ -59,6 +60,8 @@ type Options struct {
 	CreatedBefore time.Time
 	PageSize      int
 	Apply         bool
+	// ExcludedOrganizations are never written to, so their audit logs gain no entries.
+	ExcludedOrganizations map[string]bool
 }
 
 // RowReport is one client; it goes to the report file, never stdout.
@@ -141,11 +144,10 @@ func (r *Runner) Run(ctx context.Context) (Report, error) {
 			return report, fmt.Errorf("list client scope candidates: %w", err)
 		}
 		for _, row := range rows {
-			logins, err := loginsAfterClear(ctx, r.pool, row)
+			outcome, match, err := r.classify(ctx, r.pool, row)
 			if err != nil {
-				return report, fmt.Errorf("resolve logins for client %s: %w", row.ID, err)
+				return report, err
 			}
-			outcome, match := Classify(row, logins)
 			scope := row.Scope
 			if outcome == OutcomeWouldClear && r.options.Apply {
 				outcome, match, scope, err = r.clear(ctx, row)
@@ -177,9 +179,11 @@ func (r *Runner) Restore(ctx context.Context) (Report, error) {
 		return report, fmt.Errorf("list backfill clears: %w", err)
 	}
 	for _, entry := range clears {
-		outcome, err := r.restore(ctx, entry)
-		if err != nil {
-			return report, fmt.Errorf("restore client %s scope: %w", entry.ClientID, err)
+		outcome := OutcomeSkipExcluded
+		if !r.options.ExcludedOrganizations[entry.OrganizationID] {
+			if outcome, err = r.restore(ctx, entry); err != nil {
+				return report, fmt.Errorf("restore client %s scope: %w", entry.ClientID, err)
+			}
 		}
 		report.add(RowReport{
 			ClientID:       entry.ClientID,
@@ -201,6 +205,18 @@ func (r *Report) add(row RowReport) {
 	r.Scanned++
 	r.Outcomes[row.Outcome]++
 	r.Rows = append(r.Rows, row)
+}
+
+func (r *Runner) classify(ctx context.Context, db remotesessionsrepo.DBTX, row ListClientScopeCandidatesRow) (Outcome, string, error) {
+	if r.options.ExcludedOrganizations[row.OrganizationID] {
+		return OutcomeSkipExcluded, "", nil
+	}
+	logins, err := loginsAfterClear(ctx, db, row)
+	if err != nil {
+		return "", "", fmt.Errorf("resolve logins for client %s: %w", row.ID, err)
+	}
+	outcome, match := Classify(row, logins)
+	return outcome, match, nil
 }
 
 func (r *Runner) listParams(after uuid.UUID, clientID uuid.NullUUID) ListClientScopeCandidatesParams {
@@ -320,16 +336,15 @@ func (r *Runner) clear(ctx context.Context, row ListClientScopeCandidatesRow) (O
 	if len(rechecked) != 1 {
 		return OutcomeSkipChanged, "", before.Scope, nil
 	}
-	logins, err := loginsAfterClear(ctx, tx, rechecked[0])
+	outcome, match, err := r.classify(ctx, tx, rechecked[0])
 	if err != nil {
 		return "", "", nil, err
 	}
-	outcome, match := Classify(rechecked[0], logins)
 	if outcome != OutcomeWouldClear {
 		return outcome, match, before.Scope, nil
 	}
 
-	after, err := q.ClearClientScope(ctx, ClearClientScopeParams{ID: row.ID, ExpectedUpdatedAt: before.UpdatedAt})
+	after, err := q.ClearClientScope(ctx, ClearClientScopeParams{ID: row.ID, ExpectedUpdatedAt: before.UpdatedAt, ProjectID: row.ProjectID, OrganizationID: row.OrganizationID})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return OutcomeSkipChanged, "", before.Scope, nil
 	}
@@ -360,7 +375,7 @@ func (r *Runner) restore(ctx context.Context, entry ListBackfillClearsRow) (Outc
 	if err != nil {
 		return "", fmt.Errorf("lock client: %w", err)
 	}
-	after, err := q.RestoreClientScope(ctx, RestoreClientScopeParams{Scope: entry.Scope, ID: entry.ClientID, ExpectedUpdatedAt: before.UpdatedAt})
+	after, err := q.RestoreClientScope(ctx, RestoreClientScopeParams{Scope: entry.Scope, ID: entry.ClientID, ExpectedUpdatedAt: before.UpdatedAt, ProjectID: entry.ProjectID, OrganizationID: entry.OrganizationID})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return OutcomeSkipChanged, nil
 	}

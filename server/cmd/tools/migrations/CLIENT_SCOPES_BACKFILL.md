@@ -4,16 +4,20 @@ Before #7199, an automatically created remote session client stored a copy of th
 
 A client is cleared only when all of these hold:
 
-- live, with a live issuer and project, created before `-created-before`, with a non-empty scope
+- live, with a live issuer in its project or organization, and a live project when project-scoped, created before `-created-before`, with a non-empty scope
 - linked to a user session issuer (every automatic create path linked one)
-- not managed by an identity provider connection, not a trusted sign-in client of a user session issuer, not bound for identity chaining, owned by its subject, not on the legacy callback, and not platform-global
+- not managed by an identity provider connection, not a trusted sign-in client of a user session issuer, not bound for identity chaining (an unlinked binding does not count), owned by its subject, not on the legacy callback, and not platform-global
 - no `remote-session-client:update` audit entry changed `Scope` (an entry missing either snapshot counts as a change)
 - its scope equals, as a set, the issuer's `scopes_supported` or the last-read `scopes_supported` of a bound server's protected resource
 - for every server signing in through it, a login with no client scope would request that same set (`skip_request_changes` otherwise)
 
 The last rule makes the clear change nothing a login sends today, so providers that hold a client to its registered scopes keep accepting it. Clients it skips because a pin, override or challenge would now apply are left for an operator to decide.
 
-Run from `server/` after #7199 is live. `GRAM_DATABASE_URL` must point at the primary. Stdout carries aggregate counts only; ids and scopes go to the `-report` file, which is created `0600` and never overwritten. Keep it somewhere durable.
+Run from `server/` after #7199 is live. `GRAM_DATABASE_URL` must point at the primary. Stdout carries aggregate counts only; ids and scopes go to the `-report` file, which is created `0600` and never overwritten. Keep it somewhere durable. The report is written when the run exits, including on an error, interrupt, `SIGTERM` or `SIGHUP`; after a `SIGKILL` or crash it is empty, and the backfill's audit entries remain the record (see Restore).
+
+Writes require `-confirm-environment` matching `-environment` and `-confirm-target=<host>:<port>/<database>` matching `GRAM_DATABASE_URL`; a mismatch prints the expected target.
+
+Pass `-exclude-organization=<ORG_ID>` (repeatable) to leave an organization untouched: its clients report `skip_excluded`, and no row or audit entry is written for it in any mode, restore included. Keep the ids in the ticket, not in this repo, and pass the same set to every run.
 
 ## Preview (default)
 
@@ -31,6 +35,7 @@ GRAM_DATABASE_URL=... go run ./cmd/tools/migrations client-scopes \
   -apply \
   -environment=prod \
   -confirm-environment=prod \
+  -confirm-target=<host>:<port>/<database> \
   -created-before=<same value as the preview> \
   -report=<path>/client-scopes-apply.json
 ```
@@ -46,6 +51,7 @@ GRAM_DATABASE_URL=... go run ./cmd/tools/migrations client-scopes \
   -restore -apply \
   -environment=prod \
   -confirm-environment=prod \
+  -confirm-target=<host>:<port>/<database> \
   -report=<path>/client-scopes-restore.json
 ```
 

@@ -8,11 +8,15 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"os"
 	"os/signal"
+	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/speakeasy-api/gram/server/cmd/tools/migrations/clientscopes"
@@ -33,6 +37,7 @@ type clientScopesSummary struct {
 	Phase         string                       `json:"phase"`
 	Environment   string                       `json:"environment"`
 	CreatedBefore string                       `json:"created_before,omitempty"`
+	ExcludedOrgs  int                          `json:"excluded_organizations"`
 	Scanned       int                          `json:"scanned"`
 	Outcomes      map[clientscopes.Outcome]int `json:"outcomes"`
 	ReportPath    string                       `json:"report_path,omitempty"`
@@ -46,7 +51,10 @@ func parseClientScopesFlags(args []string, getenv func(string) string, now time.
 	restore := fs.Bool("restore", false, "put back every scope this backfill cleared that is still unset")
 	environment := fs.String("environment", "", "target environment name")
 	confirmEnvironment := fs.String("confirm-environment", "", "must exactly match -environment for writes")
+	confirmTarget := fs.String("confirm-target", "", "must exactly match the parsed host, port, and database for writes")
 	createdBefore := fs.String("created-before", "", "RFC 3339 time #7199 reached the environment; only older clients are considered")
+	excluded := organizationList{}
+	fs.Var(&excluded, "exclude-organization", "organization id never written to; repeatable")
 	reportPath := fs.String("report", "", "per-client JSON report path; refuses an existing file, required with -apply")
 	if err := fs.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
@@ -71,7 +79,7 @@ func parseClientScopesFlags(args []string, getenv func(string) string, now time.
 		environment: *environment,
 		reportPath:  *reportPath,
 		restore:     *restore,
-		options:     clientscopes.Options{CreatedBefore: time.Time{}, PageSize: 0, Apply: *apply},
+		options:     clientscopes.Options{CreatedBefore: time.Time{}, PageSize: 0, Apply: *apply, ExcludedOrganizations: map[string]bool(excluded)},
 	}
 	if *restore {
 		if *createdBefore != "" {
@@ -90,7 +98,27 @@ func parseClientScopesFlags(args []string, getenv func(string) string, now time.
 	if cfg.dbURL == "" {
 		return cfg, errors.New("missing $GRAM_DATABASE_URL")
 	}
+	dbConfig, err := pgx.ParseConfig(cfg.dbURL)
+	if err != nil {
+		return cfg, errors.New("invalid $GRAM_DATABASE_URL")
+	}
+	target := net.JoinHostPort(dbConfig.Host, strconv.Itoa(int(dbConfig.Port))) + "/" + dbConfig.Database
+	if *apply && *confirmTarget != target {
+		return cfg, fmt.Errorf("writes require -confirm-target=%s to match the parsed database target", target)
+	}
 	return cfg, nil
+}
+
+type organizationList map[string]bool
+
+func (l organizationList) String() string { return fmt.Sprint(len(l)) }
+
+func (l organizationList) Set(value string) error {
+	if strings.TrimSpace(value) == "" {
+		return errors.New("empty organization id")
+	}
+	l[strings.TrimSpace(value)] = true
+	return nil
 }
 
 func runClientScopes(args []string, stdout io.Writer, getenv func(string) string) int {
@@ -114,7 +142,7 @@ func runClientScopes(args []string, stdout io.Writer, getenv func(string) string
 		defer o11y.NoLogDefer(reportFile.Close)
 	}
 
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
 	defer stop()
 	pool, err := pgxpool.New(ctx, cfg.dbURL)
 	if err != nil {
@@ -147,6 +175,7 @@ func runClientScopes(args []string, stdout io.Writer, getenv func(string) string
 		Phase:         phase,
 		Environment:   cfg.environment,
 		CreatedBefore: "",
+		ExcludedOrgs:  len(cfg.options.ExcludedOrganizations),
 		Scanned:       report.Scanned,
 		Outcomes:      report.Outcomes,
 		ReportPath:    cfg.reportPath,

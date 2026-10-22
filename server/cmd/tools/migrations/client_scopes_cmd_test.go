@@ -14,7 +14,7 @@ var clientScopesNow = time.Date(2026, 10, 22, 0, 0, 0, 0, time.UTC)
 
 func clientScopesEnv(key string) string {
 	if key == "GRAM_DATABASE_URL" {
-		return "postgres://test"
+		return "postgres://db.internal:5432/gram"
 	}
 	return ""
 }
@@ -31,16 +31,19 @@ func TestParseClientScopesFlagsDryRunByDefault(t *testing.T) {
 func TestParseClientScopesFlagsRejectsUnsafeInput(t *testing.T) {
 	t.Parallel()
 	cases := map[string][]string{
-		"missing environment":     {"-created-before=2026-10-14T18:00:00Z"},
-		"missing cutoff":          {"-environment=prod"},
-		"malformed cutoff":        {"-environment=prod", "-created-before=2026-10-14"},
-		"future cutoff":           {"-environment=prod", "-created-before=2026-11-01T00:00:00Z"},
-		"unconfirmed apply":       {"-apply", "-environment=prod", "-created-before=2026-10-14T18:00:00Z", "-report=r.json"},
-		"mismatched confirm":      {"-apply", "-environment=prod", "-confirm-environment=dev", "-created-before=2026-10-14T18:00:00Z", "-report=r.json"},
-		"apply without report":    {"-apply", "-environment=prod", "-confirm-environment=prod", "-created-before=2026-10-14T18:00:00Z"},
-		"restore with cutoff":     {"-restore", "-environment=prod", "-created-before=2026-10-14T18:00:00Z"},
-		"restore apply no report": {"-restore", "-apply", "-environment=prod", "-confirm-environment=prod"},
-		"positional argument":     {"-environment=prod", "-created-before=2026-10-14T18:00:00Z", "extra"},
+		"missing environment":        {"-created-before=2026-10-14T18:00:00Z"},
+		"missing cutoff":             {"-environment=prod"},
+		"malformed cutoff":           {"-environment=prod", "-created-before=2026-10-14"},
+		"future cutoff":              {"-environment=prod", "-created-before=2026-11-01T00:00:00Z"},
+		"unconfirmed apply":          {"-apply", "-environment=prod", "-created-before=2026-10-14T18:00:00Z", "-report=r.json"},
+		"mismatched confirm":         {"-apply", "-environment=prod", "-confirm-environment=dev", "-created-before=2026-10-14T18:00:00Z", "-report=r.json"},
+		"apply without report":       {"-apply", "-environment=prod", "-confirm-environment=prod", "-confirm-target=db.internal:5432/gram", "-created-before=2026-10-14T18:00:00Z"},
+		"unconfirmed target":         {"-apply", "-environment=prod", "-confirm-environment=prod", "-created-before=2026-10-14T18:00:00Z", "-report=r.json"},
+		"mismatched target":          {"-apply", "-environment=prod", "-confirm-environment=prod", "-confirm-target=other:5432/gram", "-created-before=2026-10-14T18:00:00Z", "-report=r.json"},
+		"restore unconfirmed target": {"-restore", "-apply", "-environment=prod", "-confirm-environment=prod", "-report=r.json"},
+		"restore with cutoff":        {"-restore", "-environment=prod", "-created-before=2026-10-14T18:00:00Z"},
+		"restore apply no report":    {"-restore", "-apply", "-environment=prod", "-confirm-environment=prod", "-confirm-target=db.internal:5432/gram"},
+		"positional argument":        {"-environment=prod", "-created-before=2026-10-14T18:00:00Z", "extra"},
 	}
 	for name, args := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -53,12 +56,12 @@ func TestParseClientScopesFlagsRejectsUnsafeInput(t *testing.T) {
 
 func TestParseClientScopesFlagsAcceptsConfirmedWrites(t *testing.T) {
 	t.Parallel()
-	cfg, err := parseClientScopesFlags([]string{"-apply", "-environment=prod", "-confirm-environment=prod", "-created-before=2026-10-14T18:00:00Z", "-report=r.json"}, clientScopesEnv, clientScopesNow, io.Discard)
+	cfg, err := parseClientScopesFlags([]string{"-apply", "-environment=prod", "-confirm-environment=prod", "-confirm-target=db.internal:5432/gram", "-created-before=2026-10-14T18:00:00Z", "-report=r.json"}, clientScopesEnv, clientScopesNow, io.Discard)
 	require.NoError(t, err)
 	require.True(t, cfg.options.Apply)
 	require.Equal(t, "r.json", cfg.reportPath)
 
-	cfg, err = parseClientScopesFlags([]string{"-restore", "-apply", "-environment=prod", "-confirm-environment=prod", "-report=r.json"}, clientScopesEnv, clientScopesNow, io.Discard)
+	cfg, err = parseClientScopesFlags([]string{"-restore", "-apply", "-environment=prod", "-confirm-environment=prod", "-confirm-target=db.internal:5432/gram", "-report=r.json"}, clientScopesEnv, clientScopesNow, io.Discard)
 	require.NoError(t, err)
 	require.True(t, cfg.restore)
 	require.True(t, cfg.options.Apply)
@@ -78,4 +81,14 @@ func TestRunClientScopesRefusesExistingReport(t *testing.T) {
 	contents, err := os.ReadFile(path)
 	require.NoError(t, err)
 	require.Equal(t, "earlier apply", string(contents))
+}
+
+func TestParseClientScopesFlagsExcludesOrganizations(t *testing.T) {
+	t.Parallel()
+	cfg, err := parseClientScopesFlags([]string{"-environment=prod", "-created-before=2026-10-14T18:00:00Z", "-exclude-organization=org-a", "-exclude-organization", "org-b"}, clientScopesEnv, clientScopesNow, io.Discard)
+	require.NoError(t, err)
+	require.Equal(t, map[string]bool{"org-a": true, "org-b": true}, cfg.options.ExcludedOrganizations)
+
+	_, err = parseClientScopesFlags([]string{"-environment=prod", "-created-before=2026-10-14T18:00:00Z", "-exclude-organization="}, clientScopesEnv, clientScopesNow, io.Discard)
+	require.Error(t, err)
 }

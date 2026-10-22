@@ -56,6 +56,8 @@ SET scope = NULL,
     updated_at = clock_timestamp()
 WHERE id = $1
   AND updated_at = $2
+  AND project_id IS NOT DISTINCT FROM $3::uuid
+  AND (organization_id IS NULL OR organization_id = $4::text)
   AND deleted IS FALSE
   AND identity_provider_connection_id IS NULL
 RETURNING id, project_id, organization_id, attachment_scope, remote_session_issuer_id, client_id, client_secret_encrypted, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, json_web_key_set_id, scope, grant_types, audience, token_endpoint_auth_audience_format, client_id_metadata_uri, legacy_callback_url, callback_base_url, resource_identifier, resource_name, resource_documentation, resource_policy_uri, resource_tos_uri, upstream_rejected_at, identity_provider_connection_id, credential_owner, created_at, updated_at, deleted_at, deleted
@@ -64,10 +66,17 @@ RETURNING id, project_id, organization_id, attachment_scope, remote_session_issu
 type ClearClientScopeParams struct {
 	ID                uuid.UUID
 	ExpectedUpdatedAt pgtype.Timestamptz
+	ProjectID         uuid.NullUUID
+	OrganizationID    string
 }
 
 func (q *Queries) ClearClientScope(ctx context.Context, arg ClearClientScopeParams) (RemoteSessionClient, error) {
-	row := q.db.QueryRow(ctx, clearClientScope, arg.ID, arg.ExpectedUpdatedAt)
+	row := q.db.QueryRow(ctx, clearClientScope,
+		arg.ID,
+		arg.ExpectedUpdatedAt,
+		arg.ProjectID,
+		arg.OrganizationID,
+	)
 	var i RemoteSessionClient
 	err := row.Scan(
 		&i.ID,
@@ -340,6 +349,7 @@ SELECT
   EXISTS (
     SELECT 1 FROM remote_session_ema_bindings AS b
     WHERE b.remote_session_client_id = c.id
+      AND b.state IS DISTINCT FROM 'unlinked'
   )::boolean AS identity_chaining,
   EXISTS (
     SELECT 1
@@ -365,6 +375,11 @@ JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id AND i.dele
 LEFT JOIN projects AS p ON p.id = c.project_id
 WHERE c.deleted IS FALSE
   AND p.deleted IS NOT TRUE
+  AND (
+    i.project_id = c.project_id
+    OR (i.project_id IS NULL AND i.organization_id IS NULL)
+    OR (i.project_id IS NULL AND i.organization_id = CASE WHEN c.project_id IS NULL THEN c.organization_id ELSE p.organization_id END)
+  )
   AND cardinality(c.scope) > 0
   AND c.created_at < $1
   AND c.id > $2
@@ -500,6 +515,8 @@ SET scope = $1::text[],
     updated_at = clock_timestamp()
 WHERE id = $2
   AND updated_at = $3
+  AND project_id IS NOT DISTINCT FROM $4::uuid
+  AND (organization_id IS NULL OR organization_id = $5::text)
   AND scope IS NULL
   AND deleted IS FALSE
   AND identity_provider_connection_id IS NULL
@@ -510,10 +527,18 @@ type RestoreClientScopeParams struct {
 	Scope             []string
 	ID                uuid.UUID
 	ExpectedUpdatedAt pgtype.Timestamptz
+	ProjectID         uuid.NullUUID
+	OrganizationID    string
 }
 
 func (q *Queries) RestoreClientScope(ctx context.Context, arg RestoreClientScopeParams) (RemoteSessionClient, error) {
-	row := q.db.QueryRow(ctx, restoreClientScope, arg.Scope, arg.ID, arg.ExpectedUpdatedAt)
+	row := q.db.QueryRow(ctx, restoreClientScope,
+		arg.Scope,
+		arg.ID,
+		arg.ExpectedUpdatedAt,
+		arg.ProjectID,
+		arg.OrganizationID,
+	)
 	var i RemoteSessionClient
 	err := row.Scan(
 		&i.ID,
@@ -606,13 +631,13 @@ func (q *Queries) SeedClientUpdateAuditFixture(ctx context.Context, arg SeedClie
 }
 
 const seedIssuerFixture = `-- name: SeedIssuerFixture :one
-INSERT INTO remote_session_issuers (project_id, slug, issuer, scopes_supported)
+INSERT INTO remote_session_issuers (organization_id, slug, issuer, scopes_supported)
 VALUES ($1, $2, $3, $4)
 RETURNING id
 `
 
 type SeedIssuerFixtureParams struct {
-	ProjectID       uuid.NullUUID
+	OrganizationID  pgtype.Text
 	Slug            string
 	Issuer          string
 	ScopesSupported []string
@@ -620,7 +645,7 @@ type SeedIssuerFixtureParams struct {
 
 func (q *Queries) SeedIssuerFixture(ctx context.Context, arg SeedIssuerFixtureParams) (uuid.UUID, error) {
 	row := q.db.QueryRow(ctx, seedIssuerFixture,
-		arg.ProjectID,
+		arg.OrganizationID,
 		arg.Slug,
 		arg.Issuer,
 		arg.ScopesSupported,

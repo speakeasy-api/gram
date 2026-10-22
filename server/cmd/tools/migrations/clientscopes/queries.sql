@@ -19,6 +19,7 @@ SELECT
   EXISTS (
     SELECT 1 FROM remote_session_ema_bindings AS b
     WHERE b.remote_session_client_id = c.id
+      AND b.state IS DISTINCT FROM 'unlinked'
   )::boolean AS identity_chaining,
   EXISTS (
     SELECT 1
@@ -44,6 +45,11 @@ JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id AND i.dele
 LEFT JOIN projects AS p ON p.id = c.project_id
 WHERE c.deleted IS FALSE
   AND p.deleted IS NOT TRUE
+  AND (
+    i.project_id = c.project_id
+    OR (i.project_id IS NULL AND i.organization_id IS NULL)
+    OR (i.project_id IS NULL AND i.organization_id = CASE WHEN c.project_id IS NULL THEN c.organization_id ELSE p.organization_id END)
+  )
   AND cardinality(c.scope) > 0
   AND c.created_at < @created_before
   AND c.id > @after_id
@@ -113,6 +119,8 @@ SET scope = NULL,
     updated_at = clock_timestamp()
 WHERE id = @id
   AND updated_at = @expected_updated_at
+  AND project_id IS NOT DISTINCT FROM sqlc.narg('project_id')::uuid
+  AND (organization_id IS NULL OR organization_id = @organization_id::text)
   AND deleted IS FALSE
   AND identity_provider_connection_id IS NULL
 RETURNING *;
@@ -143,6 +151,8 @@ SET scope = @scope::text[],
     updated_at = clock_timestamp()
 WHERE id = @id
   AND updated_at = @expected_updated_at
+  AND project_id IS NOT DISTINCT FROM sqlc.narg('project_id')::uuid
+  AND (organization_id IS NULL OR organization_id = @organization_id::text)
   AND scope IS NULL
   AND deleted IS FALSE
   AND identity_provider_connection_id IS NULL
@@ -158,8 +168,8 @@ VALUES (@slug, @slug, @organization_id)
 RETURNING id;
 
 -- name: SeedIssuerFixture :one
-INSERT INTO remote_session_issuers (project_id, slug, issuer, scopes_supported)
-VALUES (@project_id, @slug, @issuer, @scopes_supported)
+INSERT INTO remote_session_issuers (organization_id, slug, issuer, scopes_supported)
+VALUES (@organization_id, @slug, @issuer, @scopes_supported)
 RETURNING id;
 
 -- name: SeedClientFixture :one

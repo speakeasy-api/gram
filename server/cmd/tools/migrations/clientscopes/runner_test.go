@@ -36,7 +36,7 @@ func newFixture(t *testing.T) *fixture {
 	require.NoError(t, err)
 	f := &fixture{pool: pool, orgID: "org_" + uuid.NewString(), issuerID: uuid.Nil}
 	require.NoError(t, New(pool).SeedOrganizationFixture(t.Context(), f.orgID))
-	f.issuerID, err = New(pool).SeedIssuerFixture(t.Context(), SeedIssuerFixtureParams{ProjectID: uuid.NullUUID{UUID: f.project(t), Valid: true}, Slug: "issuer", Issuer: "https://issuer.example", ScopesSupported: issuerScopes})
+	f.issuerID, err = New(pool).SeedIssuerFixture(t.Context(), SeedIssuerFixtureParams{OrganizationID: pgtype.Text{String: f.orgID, Valid: true}, Slug: "issuer", Issuer: "https://issuer.example", ScopesSupported: issuerScopes})
 	require.NoError(t, err)
 	return f
 }
@@ -337,4 +337,28 @@ func TestClassifyOrder(t *testing.T) {
 	outcome, match := Classify(base, neutral)
 	require.Equal(t, OutcomeWouldClear, outcome)
 	require.Equal(t, "issuer", match)
+}
+
+func TestExcludedOrganizationIsNeverWritten(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	project := f.project(t)
+	copied, _ := f.projectClient(t, project, issuerScopes)
+	excluded := map[string]bool{f.orgID: true}
+
+	report, err := NewRunner(f.pool, Options{CreatedBefore: cutoff, PageSize: 0, Apply: true, ExcludedOrganizations: excluded}).Run(t.Context())
+	require.NoError(t, err)
+	require.Equal(t, OutcomeSkipExcluded, outcomes(report)[copied])
+	require.Equal(t, issuerScopes, f.scope(t, copied))
+	entries, err := New(f.pool).ListClientAuditActionsFixture(t.Context(), copied.String())
+	require.NoError(t, err)
+	require.Empty(t, entries)
+
+	// A clear made without the exclusion is not restored while it applies.
+	f.run(t, true)
+	require.Nil(t, f.scope(t, copied))
+	restored, err := NewRunner(f.pool, Options{CreatedBefore: time.Time{}, PageSize: 0, Apply: true, ExcludedOrganizations: excluded}).Restore(t.Context())
+	require.NoError(t, err)
+	require.Equal(t, 1, restored.Outcomes[OutcomeSkipExcluded])
+	require.Nil(t, f.scope(t, copied))
 }
