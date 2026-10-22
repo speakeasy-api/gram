@@ -1,0 +1,42 @@
+server/internal/authz/grants.go
+  h_9630b74bdac540 180-200
+server/internal/access/updaterole_test.go
+  h_9630b74bdac540 13,230-269
+  s_0f6e11c95da437::t_76777596be0b03 270-271
+client/dashboard/src/pages/access/roleGrantTransform.ts
+  h_9630b74bdac540 282-297
+  s_0f6e11c95da437::t_47090b2cd39ef7 281
+client/dashboard/src/pages/access/CreateRoleDialog.tsx
+  h_9630b74bdac540 29,48-49,65,279,285-295,301-314,323,326,329,526
+  s_0f6e11c95da437::t_0ce369e66a7f98 47,50
+client/dashboard/src/pages/access/roundtrip.test.ts
+  h_9630b74bdac540 10,377-407
+  h_9630b74bdac540 408-431
+.changeset/role-grant-save-check.md
+  h_9630b74bdac540 1-6
+server/internal/access/queries.sql
+  h_9630b74bdac540 81-93
+server/internal/access/repo/queries.sql.go
+  h_9630b74bdac540 268-295
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "fcaf91e3608dcedd1b21fb420aa3065e0c97271a",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  },
+  "sessions": {
+    "s_0f6e11c95da437": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "cf5a290d-f17f-4ec9-adfe-738ead9b2bfc",
+        "model": "unknown"
+      },
+      "human_author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}
