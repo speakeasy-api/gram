@@ -12,8 +12,11 @@ export type ResourceType =
   | "skill"
   | "assistant"
   | "mcp"
+  | "plugin"
   | "risk_policy"
-  | "chat";
+  | "chat"
+  | "agent"
+  | "workload";
 
 export const SCOPE_DEFS: {
   scope: string;
@@ -100,6 +103,12 @@ export const SCOPE_DEFS: {
     description: "Execute MCP tool calls",
   },
   {
+    scope: "plugin:write",
+    label: "plugin:write",
+    resourceType: "plugin",
+    description: "Create, edit, and publish plugins within projects",
+  },
+  {
     scope: "risk_policy:evaluate",
     label: "risk_policy:evaluate",
     resourceType: "risk_policy",
@@ -124,10 +133,52 @@ export const SCOPE_DEFS: {
     description: "Read all agent session transcripts",
   },
   {
+    scope: "chat:write",
+    label: "chat:write",
+    resourceType: "chat",
+    description: "Manage agent session transcripts",
+  },
+  {
     scope: "log:read",
     label: "log:read",
     resourceType: "project",
     description: "View a project's tool-call logs and traces",
+  },
+  {
+    scope: "agent:read",
+    label: "agent:read",
+    resourceType: "agent",
+    description: "View agent identities and their activity",
+  },
+  {
+    scope: "agent:write",
+    label: "agent:write",
+    resourceType: "agent",
+    description: "Create, edit, and retire agent identities",
+  },
+  {
+    scope: "agent:authorize",
+    label: "agent:authorize",
+    resourceType: "agent",
+    description: "Authorize and manage agent credentials",
+  },
+  {
+    scope: "agent:transfer",
+    label: "agent:transfer",
+    resourceType: "agent",
+    description: "Transfer an agent to another owner",
+  },
+  {
+    scope: "workload:read",
+    label: "workload:read",
+    resourceType: "workload",
+    description: "View workload identity trust policy",
+  },
+  {
+    scope: "workload:write",
+    label: "workload:write",
+    resourceType: "workload",
+    description: "Manage workload issuers and admitted subjects",
   },
 ];
 
@@ -138,8 +189,11 @@ export const GROUP_ORDER: { key: ResourceType; label: string }[] = [
   { key: "skill", label: "Skills" },
   { key: "assistant", label: "Assistants" },
   { key: "mcp", label: "MCP" },
+  { key: "plugin", label: "Plugins" },
   { key: "risk_policy", label: "Risk Policies" },
   { key: "chat", label: "Agent Sessions" },
+  { key: "agent", label: "Agents" },
+  { key: "workload", label: "Workloads" },
 ];
 
 export type ScopeState = {
