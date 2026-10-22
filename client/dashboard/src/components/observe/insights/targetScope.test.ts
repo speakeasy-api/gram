@@ -23,7 +23,7 @@ describe("targetScope", () => {
   it("links a hosted target by its server id", () => {
     const id = "0198a3b2-7c4d-7e5f-8a9b-0c1d2e3f4a5b";
     expect(targetScope(target({ mcpServerId: id }))).toEqual({
-      target: { type: "hosted", id },
+      target: { type: "mcp_server", id },
     });
   });
 

@@ -19,6 +19,7 @@ const HOOK_SOURCE_FILTER_PATH = "gram.hook.source";
 const HOSTED_SERVER_PREFIX = "hosted:";
 const SHADOW_SERVER_PREFIX = "shadow:";
 const GATEWAY_SERVER_PREFIX = "gateway:";
+const MCP_SERVER_PREFIX = "mcp_server:";
 
 // Local tools are excluded by default: they dominate event volume and drown
 // out the MCP server and skill usage these pages are meant to surface. Users
@@ -84,22 +85,18 @@ export function toStatuses(
 }
 
 export type ParsedTargetFilter =
+  | { type: "mcp_server"; id: string }
   | { type: "hosted"; id: string }
   | { type: "shadow"; id: string }
   | { type: "gateway"; id: string };
 
-// Keyed by MCP server id. Links made before that carry a toolset slug, which
-// still filters.
-export function encodeHostedServerFilter(idOrSlug: string): string {
-  return `${HOSTED_SERVER_PREFIX}${idOrSlug}`;
+// Keyed by toolset slug; links made before servers were filtered by id use it.
+export function encodeHostedServerFilter(toolsetSlug: string): string {
+  return `${HOSTED_SERVER_PREFIX}${toolsetSlug}`;
 }
 
-const UUID_PATTERN =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-// Toolset slugs are never UUID-shaped, so the shape tells the two apart.
-export function isMcpServerId(id: string): boolean {
-  return UUID_PATTERN.test(id);
+export function encodeMcpServerFilter(mcpServerId: string): string {
+  return `${MCP_SERVER_PREFIX}${mcpServerId}`;
 }
 
 /** Hosted option value; a selected legacy slug value is kept so it stays selected. */
@@ -109,7 +106,7 @@ export function hostedServerFilterValue(
 ): string {
   const legacy = encodeHostedServerFilter(server.toolsetSlug);
   if (!server.mcpServerId || selectedValues.includes(legacy)) return legacy;
-  return encodeHostedServerFilter(server.mcpServerId);
+  return encodeMcpServerFilter(server.mcpServerId);
 }
 
 export function encodeShadowServerFilter(name: string): string {
@@ -122,6 +119,9 @@ export function encodeGatewayServerFilter(metaMcpServerId: string): string {
 }
 
 export function parseTargetFilter(value: string): ParsedTargetFilter {
+  if (value.startsWith(MCP_SERVER_PREFIX)) {
+    return { type: "mcp_server", id: value.slice(MCP_SERVER_PREFIX.length) };
+  }
   if (value.startsWith(HOSTED_SERVER_PREFIX)) {
     return { type: "hosted", id: value.slice(HOSTED_SERVER_PREFIX.length) };
   }
@@ -134,7 +134,7 @@ export function parseTargetFilter(value: string): ParsedTargetFilter {
   return { type: "shadow", id: value };
 }
 
-/** Splits hosted filters into server ids and legacy toolset slugs. */
+/** Splits server filters into server ids and legacy toolset slugs. */
 export function splitHostedTargets(filters: ParsedTargetFilter[]): {
   mcpServerIds: string[];
   hostedToolsetSlugs: string[];
@@ -142,9 +142,8 @@ export function splitHostedTargets(filters: ParsedTargetFilter[]): {
   const mcpServerIds: string[] = [];
   const hostedToolsetSlugs: string[] = [];
   for (const filter of filters) {
-    if (filter.type !== "hosted") continue;
-    if (isMcpServerId(filter.id)) mcpServerIds.push(filter.id);
-    else hostedToolsetSlugs.push(filter.id);
+    if (filter.type === "mcp_server") mcpServerIds.push(filter.id);
+    if (filter.type === "hosted") hostedToolsetSlugs.push(filter.id);
   }
   return { mcpServerIds, hostedToolsetSlugs };
 }
@@ -232,7 +231,10 @@ export function buildServerOptionGroups({
 
   for (const value of selectedValues) {
     const parsed = parseTargetFilter(value);
-    if (parsed.type === "hosted" && !hosted.has(value)) {
+    if (
+      (parsed.type === "hosted" || parsed.type === "mcp_server") &&
+      !hosted.has(value)
+    ) {
       hosted.set(value, { label: parsed.id, count: 0 });
     }
     if (parsed.type === "gateway" && !gateway.has(value)) {

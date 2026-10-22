@@ -6,9 +6,9 @@ export function targetScope(
 ): ObserveDeepLinkScope {
   switch (target.targetType) {
     case "hosted_mcp_server":
-      return {
-        target: { type: "hosted", id: target.mcpServerId ?? target.targetId },
-      };
+      return target.mcpServerId
+        ? { target: { type: "mcp_server", id: target.mcpServerId } }
+        : { target: { type: "hosted", id: target.targetId } };
     case "meta_mcp_server":
       return { target: { type: "gateway", id: target.targetId } };
     case "shadow_mcp_server":

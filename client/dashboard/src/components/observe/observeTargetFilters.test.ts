@@ -3,7 +3,6 @@ import {
   buildServerOptionGroups,
   encodeGatewayServerFilter,
   hostedServerFilterValue,
-  isMcpServerId,
   parseTargetFilter,
   selectedUserEmails,
   splitHostedTargets,
@@ -70,9 +69,15 @@ describe("hosted target filters", () => {
     typeof buildServerOptionGroups
   >[0]["serverNameMappings"];
 
-  it("tells server ids from legacy toolset slugs", () => {
-    expect(isMcpServerId(serverId)).toBe(true);
-    expect(isMcpServerId("payments")).toBe(false);
+  it("keeps a UUID-shaped legacy slug a slug", () => {
+    expect(parseTargetFilter(`hosted:${serverId}`)).toEqual({
+      type: "hosted",
+      id: serverId,
+    });
+    expect(parseTargetFilter(`mcp_server:${serverId}`)).toEqual({
+      type: "mcp_server",
+      id: serverId,
+    });
   });
 
   it("encodes a hosted option by server id", () => {
@@ -81,7 +86,7 @@ describe("hosted target filters", () => {
         { toolsetSlug: "payments", mcpServerId: serverId },
         [],
       ),
-    ).toBe(`hosted:${serverId}`);
+    ).toBe(`mcp_server:${serverId}`);
   });
 
   it("falls back to the slug when the option has no server id", () => {
@@ -133,7 +138,7 @@ describe("hosted target filters", () => {
       serverNameMappings,
     });
     expect(groups[0]?.options).toEqual([
-      { value: `hosted:${serverId}`, label: "Payments (4)" },
+      { value: `mcp_server:${serverId}`, label: "Payments (4)" },
     ]);
   });
 });
@@ -143,7 +148,7 @@ describe("splitHostedTargets", () => {
     const id = "0198a3b2-7c4d-7e5f-8a9b-0c1d2e3f4a5b";
     expect(
       splitHostedTargets([
-        { type: "hosted", id },
+        { type: "mcp_server", id },
         { type: "hosted", id: "payments" },
         { type: "shadow", id: "db" },
         { type: "gateway", id: "gw-1" },
