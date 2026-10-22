@@ -690,6 +690,43 @@ func (q *Queries) FindInferenceChatsByNewestMessageIdentity(ctx context.Context,
 	return items, nil
 }
 
+const findStoredInferenceMessageIdentities = `-- name: FindStoredInferenceMessageIdentities :many
+SELECT external_message_id
+FROM chat_messages
+WHERE chat_id = $1 AND project_id = $2
+  AND origin = 'anthropic-inference'
+  AND external_message_id = ANY($3::text[])
+`
+
+type FindStoredInferenceMessageIdentitiesParams struct {
+	ChatID             uuid.UUID
+	ProjectID          uuid.NullUUID
+	ExternalMessageIds []string
+}
+
+// Which of a frame's prefix identities this conversation already holds. After
+// a client rewinds past every alignment anchor, the longest stored prefix is
+// the point the new branch forks from.
+func (q *Queries) FindStoredInferenceMessageIdentities(ctx context.Context, arg FindStoredInferenceMessageIdentitiesParams) ([]pgtype.Text, error) {
+	rows, err := q.db.Query(ctx, findStoredInferenceMessageIdentities, arg.ChatID, arg.ProjectID, arg.ExternalMessageIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []pgtype.Text
+	for rows.Next() {
+		var external_message_id pgtype.Text
+		if err := rows.Scan(&external_message_id); err != nil {
+			return nil, err
+		}
+		items = append(items, external_message_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getActiveUserCountByMessages = `-- name: GetActiveUserCountByMessages :one
 SELECT
   COUNT(DISTINCT COALESCE(NULLIF(c.external_user_id, ''), c.user_id))::bigint as active_user_count

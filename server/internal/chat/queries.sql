@@ -2167,6 +2167,16 @@ WHERE chat_id = @chat_id AND project_id = @project_id
 ORDER BY created_at DESC, seq DESC
 LIMIT @row_limit;
 
+-- name: FindStoredInferenceMessageIdentities :many
+-- Which of a frame's prefix identities this conversation already holds. After
+-- a client rewinds past every alignment anchor, the longest stored prefix is
+-- the point the new branch forks from.
+SELECT external_message_id
+FROM chat_messages
+WHERE chat_id = @chat_id AND project_id = @project_id
+  AND origin = 'anthropic-inference'
+  AND external_message_id = ANY(@external_message_ids::text[]);
+
 -- name: CountInferenceMessages :one
 SELECT count(*) FROM chat_messages
 WHERE chat_id = @chat_id AND project_id = @project_id

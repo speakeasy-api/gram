@@ -548,14 +548,27 @@ func (s *postgresStore) scheduleTitle(ctx context.Context, config Config, chatID
 	}()
 }
 
-// alignFrame locates the incoming transcript within stored history. A frame
-// that shares no message with stored history is continued by count: history
-// stored before content hashing carries ordinals rather than hashes, and a
-// client that rewrote every stored message in place is still sending the same
-// conversation, so its history is not archived a second time.
+// alignFrame locates the incoming transcript within stored history. Three
+// outcomes:
+//
+//   - One of the newest stored messages is in the frame: the frame continues
+//     from it. This also absorbs a client rewriting its newest messages in
+//     place, since any older anchor still matches.
+//   - None is, but the stored rows carry content hashes: the client rewound
+//     past every anchor. The frame continues from the longest prefix whose
+//     chained identity is stored, so only the new branch is archived. When no
+//     prefix is stored, the frame's length decides: a frame shorter than the
+//     stored history was rewound to its start (or compacted) and is archived
+//     whole, since a conversation that only grew could not have shrunk; a
+//     frame at least as long rewrote its stored messages in place and is
+//     continued by count, so the original rows are kept.
+//   - The stored rows predate content hashing and carry ordinals, which
+//     cannot anchor anything: the frame is continued by count.
 func (s *postgresStore) alignFrame(ctx context.Context, config Config, chatID uuid.UUID, messages []Message) (int, []byte, error) {
-	rows, err := chatrepo.New(s.db).ListInferenceMessageIdentities(ctx, chatrepo.ListInferenceMessageIdentitiesParams{
-		ChatID: chatID, ProjectID: uuid.NullUUID{UUID: config.ProjectID, Valid: true}, RowLimit: alignmentAnchors,
+	queries := chatrepo.New(s.db)
+	project := uuid.NullUUID{UUID: config.ProjectID, Valid: true}
+	rows, err := queries.ListInferenceMessageIdentities(ctx, chatrepo.ListInferenceMessageIdentitiesParams{
+		ChatID: chatID, ProjectID: project, RowLimit: alignmentAnchors,
 	})
 	if err != nil {
 		return 0, nil, fmt.Errorf("list stored inference messages: %w", err)
@@ -573,9 +586,51 @@ func (s *postgresStore) alignFrame(ctx context.Context, config Config, chatID uu
 	if start, prev, ok := alignTranscript(stored, messages); ok {
 		return start, prev, nil
 	}
-	storedCount, err := chatrepo.New(s.db).CountInferenceMessages(ctx, chatrepo.CountInferenceMessagesParams{ChatID: chatID, ProjectID: uuid.NullUUID{UUID: config.ProjectID, Valid: true}})
+	if len(stored) > 0 {
+		return s.alignRewoundFrame(ctx, project, chatID, messages)
+	}
+
+	storedCount, err := queries.CountInferenceMessages(ctx, chatrepo.CountInferenceMessagesParams{ChatID: chatID, ProjectID: project})
 	if err != nil {
 		return 0, nil, fmt.Errorf("count stored inference messages: %w", err)
+	}
+	return min(int(storedCount), len(messages)), nil, nil
+}
+
+// alignRewoundFrame finds where a frame that shares none of the newest stored
+// messages forks from stored history. Every prefix of the frame has the
+// identity it would have been stored under, so one lookup tells which prefixes
+// exist; the longest is the fork point and the rest of the frame is new.
+func (s *postgresStore) alignRewoundFrame(ctx context.Context, project uuid.NullUUID, chatID uuid.UUID, messages []Message) (int, []byte, error) {
+	chains := prefixIdentities(messages)
+	identities := make([]string, len(chains))
+	for index, chain := range chains {
+		identities[index] = messageIdentityID(chain)
+	}
+	rows, err := chatrepo.New(s.db).FindStoredInferenceMessageIdentities(ctx, chatrepo.FindStoredInferenceMessageIdentitiesParams{
+		ChatID: chatID, ProjectID: project, ExternalMessageIds: identities,
+	})
+	if err != nil {
+		return 0, nil, fmt.Errorf("find stored inference prefixes: %w", err)
+	}
+	stored := make(map[string]struct{}, len(rows))
+	for _, row := range rows {
+		stored[row.String] = struct{}{}
+	}
+	if start, prev, ok := longestStoredPrefix(chains, stored); ok {
+		return start, prev, nil
+	}
+
+	storedCount, err := chatrepo.New(s.db).CountInferenceMessages(ctx, chatrepo.CountInferenceMessagesParams{ChatID: chatID, ProjectID: project})
+	if err != nil {
+		return 0, nil, fmt.Errorf("count stored inference messages: %w", err)
+	}
+	if len(messages) < int(storedCount) {
+		s.logger.WarnContext(ctx, "inference frame is shorter than stored history and shares no prefix with it, archiving it from the start",
+			attr.SlogChatID(chatID.String()),
+			attr.SlogProjectID(project.UUID.String()),
+		)
+		return 0, nil, nil
 	}
 	return min(int(storedCount), len(messages)), nil, nil
 }
