@@ -4174,7 +4174,8 @@ type ToolUsageUserFilter struct {
 type HostedMCPMatcher struct {
 	ToolsetSlug string
 	ToolsetName string
-	McpSlug     string
+	// McpSlug is empty for a toolset no longer served, kept only to map its past calls.
+	McpSlug string
 	// MCPServerID is the toolset's mcp_servers row, empty when it has none.
 	MCPServerID string
 }

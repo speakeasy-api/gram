@@ -4161,6 +4161,15 @@ func LoadToolUsageMatchers(ctx context.Context, db *pgxpool.Pool, projectID uuid
 	hostedMatchers := make([]repo.HostedMCPMatcher, 0, len(toolsets))
 	for _, toolset := range toolsets {
 		if !toolset.McpEnabled || !toolset.McpSlug.Valid || toolset.McpSlug.String == "" {
+			// Not served now, but its past calls still need their server id.
+			if serverID := toolsetServerIDs[toolset.ID]; serverID != "" {
+				hostedMatchers = append(hostedMatchers, repo.HostedMCPMatcher{
+					ToolsetSlug: toolset.Slug,
+					ToolsetName: toolset.Name,
+					McpSlug:     "",
+					MCPServerID: serverID,
+				})
+			}
 			continue
 		}
 		hostedMatchers = append(hostedMatchers, repo.HostedMCPMatcher{
@@ -4399,6 +4408,9 @@ func toToolUsageFilterOptionsResult(options *repo.ToolUsageFilterOptions, hosted
 
 		seen := make(map[string]struct{}, len(hostedMCPMatchers))
 		for _, matcher := range hostedMCPMatchers {
+			if matcher.McpSlug == "" {
+				continue
+			}
 			seen[matcher.ToolsetSlug] = struct{}{}
 			serverID, observed := hostedServerIDs[matcher.ToolsetSlug]
 			if !observed {

@@ -377,3 +377,43 @@ func TestToolUsage_DeletedCanonicalWrapperIsNotTheFallback(t *testing.T) {
 	require.Len(t, res.Traces, 1)
 	require.Equal(t, liveID.String(), *res.Traces[0].McpServerID)
 }
+
+func TestToolUsage_DisabledToolsetKeepsServerIDForPastCalls(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	now := time.Now().UTC()
+
+	toolset, err := toolsetsRepo.New(ti.conn).CreateToolset(ctx, toolsetsRepo.CreateToolsetParams{
+		OrganizationID:         authCtx.ActiveOrganizationID,
+		ProjectID:              *authCtx.ProjectID,
+		Name:                   "Retired",
+		Slug:                   "retired",
+		Description:            pgtype.Text{},
+		DefaultEnvironmentSlug: pgtype.Text{},
+		McpSlug:                pgtype.Text{String: "acme-retired", Valid: true},
+		McpEnabled:             false,
+	})
+	require.NoError(t, err)
+	serverID := addToolsetWrapper(t, ctx, ti, toolset.ID, toolset.ID, "acme-retired")
+
+	insertHostedToolEvent(t, ctx, ti, hostedToolEventParams{
+		projectID:   authCtx.ProjectID.String(),
+		timestamp:   now.Add(-10 * time.Minute),
+		toolsetSlug: "retired",
+		toolName:    "old_call",
+		userEmail:   "alice@example.com",
+		statusCode:  200,
+	})
+
+	res, err := ti.service.ListToolUsageTraces(ctx, &gen.ListToolUsageTracesPayload{
+		From:         now.Add(-1 * time.Hour).Format(time.RFC3339),
+		To:           now.Add(1 * time.Hour).Format(time.RFC3339),
+		McpServerIds: []string{serverID.String()},
+		Limit:        10,
+	})
+	require.NoError(t, err, "cause: %v", errors.Unwrap(err))
+	require.Len(t, res.Traces, 1)
+	require.Equal(t, "old_call", res.Traces[0].ToolName)
+}
