@@ -305,7 +305,7 @@ func (s *Service) resolveAuthClientForServing(ctx context.Context, selector *ups
 		if err != nil {
 			return res, fmt.Errorf("check auth client permission: %w", err)
 		}
-		s.shadowMandatory(ctx, mandatorySurfaceAuthClient, selector.organizationID, permitted, mandatoryAuthClientCheck(projectID, res.clientID, res.clientType, subject))
+		s.shadowAuthClientUse(ctx, selector.organizationID, permitted, projectID, res.clientID, res.clientType, subject)
 		if !permitted {
 			res.outcome = authClientNoAccess
 			res.reason = authClientReasonNotPermitted
@@ -524,7 +524,7 @@ func (s *Service) shadowAuthClient(ctx context.Context, selector *upstreamSelect
 	// the request, any other error is not a decision.
 	legacyDenied := errors.Is(choiceErr, errUpstreamSelectionMissing) || errors.Is(choiceErr, errUpstreamSelectionUnusable)
 	if res.outcome == authClientResolved && (choiceErr == nil || legacyDenied) {
-		s.shadowMandatory(ctx, mandatorySurfaceAuthClient, selector.organizationID, choiceErr == nil, mandatoryAuthClientCheck(projectID, res.clientID, res.clientType, subject))
+		s.shadowAuthClientUse(ctx, selector.organizationID, choiceErr == nil, projectID, res.clientID, res.clientType, subject)
 	}
 	annotateAuthClient(ctx, s.logger, res)
 	s.reportAuthClientParity(ctx, selector.organizationID, serverID, res, choice, choiceErr)

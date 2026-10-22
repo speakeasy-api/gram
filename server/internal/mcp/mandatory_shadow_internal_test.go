@@ -294,3 +294,35 @@ func TestShadowMandatoryDedupeHoldsUnderConcurrency(t *testing.T) {
 	wg.Wait()
 	require.Equal(t, 1, h.logLines("INFO"))
 }
+
+func TestShadowAuthClientUseSkipsPersonalClientsWithoutAUser(t *testing.T) {
+	t.Parallel()
+
+	h := newShadowHarness(t, true)
+	project, client := uuid.New(), uuid.New()
+	h.service.shadowAuthClientUse(sessionContext(t, shadowOrg), shadowOrg, true, project, client, authClientTypeRemoteSession, urn.NewAgentSubject(uuid.New()))
+	require.Equal(t, map[attribute.Set]int64{
+		shadowKey(mandatorySurfaceAuthClient, mandatoryCallerRepresented, "user", true, "skipped", "none", mandatoryReasonNoConnectionOwner): 1,
+	}, h.points(t), "a personal client used without a user to own it is not an invalid check")
+}
+
+func TestShadowMandatoryNeverRecordsCanceledRequests(t *testing.T) {
+	t.Parallel()
+
+	connect := authz.MCPCheck(authz.ScopeMCPConnect, "server_1", "project_1")
+	h := newShadowHarness(t, true)
+	ctx, cancel := context.WithCancel(sessionContext(t, shadowOrg))
+	shadow := h.service.newMandatoryShadow(ctx, shadowOrg)
+	cancel()
+	shadow.record(ctx, mandatorySurfaceHostedConnect, true, connect)
+	require.Empty(t, h.points(t))
+}
+
+func TestWithMandatoryAdmissionIsIdempotentForOneCaller(t *testing.T) {
+	t.Parallel()
+
+	ctx := withMandatoryAdmission(sessionContext(t, shadowOrg))
+	require.Equal(t, ctx, withMandatoryAdmission(ctx), "the same caller keeps its one admission")
+	other := withMandatoryAdmission(sessionContext(t, shadowOrg))
+	require.NotSame(t, ctx.Value(mandatoryAdmissionKey{}), other.Value(mandatoryAdmissionKey{}))
+}

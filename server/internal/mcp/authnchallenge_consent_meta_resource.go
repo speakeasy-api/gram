@@ -215,6 +215,7 @@ func (s *Service) gatewayMemberResourceScopes(
 		s.logger.WarnContext(ctx, "stamp consent subject for gateway member scopes", attr.SlogError(err))
 		return nil
 	}
+	memberCtx = withMandatoryAdmission(memberCtx)
 	// Members claim a client through their own association, so two clients
 	// of one authorization server can belong to different members and each is
 	// resolved on its own.

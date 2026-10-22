@@ -52,6 +52,10 @@ const (
 	// resolver, so no client was evaluated.
 	mandatoryReasonResolverOff = "resolver_off"
 
+	// mandatoryReasonNoConnectionOwner is a personal client used by a session
+	// that represents no user.
+	mandatoryReasonNoConnectionOwner = "no_connection_owner"
+
 	mandatoryShadowTimeout = 250 * time.Millisecond
 
 	mandatoryShadowLogTTL  = 10 * time.Minute
@@ -123,6 +127,9 @@ type mandatoryAdmission struct {
 // within one timeout instead of once per member.
 func withMandatoryAdmission(ctx context.Context) context.Context {
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	if shared, ok := ctx.Value(mandatoryAdmissionKey{}).(*mandatoryAdmission); ok && shared.authCtx == authCtx {
+		return ctx
+	}
 	return context.WithValue(ctx, mandatoryAdmissionKey{}, &mandatoryAdmission{authCtx: authCtx}) //nolint:exhaustruct // filled once on first use
 }
 
@@ -177,6 +184,17 @@ func isAccessDenial(err error) bool {
 	return errors.As(err, &shareable) && (shareable.Code == oops.CodeForbidden || shareable.Code == oops.CodeUnauthorized || shareable.Code == oops.CodeNotFound)
 }
 
+// shadowAuthClientUse records the check for using a resolved client. A
+// personal client a non-user session uses has no connection owner to check
+// yet, so it is recorded as skipped rather than as an invalid check.
+func (s *Service) shadowAuthClientUse(ctx context.Context, organizationID string, legacyAllowed bool, projectID, clientID uuid.UUID, clientType string, subject urn.SessionSubject) {
+	if clientType == authClientTypeRemoteSession && subject.Kind != urn.SessionSubjectKindUser {
+		s.newMandatoryShadow(ctx, organizationID).recordSkipped(ctx, mandatorySurfaceAuthClient, mandatoryReasonNoConnectionOwner, clientID.String(), projectID.String())
+		return
+	}
+	s.shadowMandatory(ctx, mandatorySurfaceAuthClient, organizationID, legacyAllowed, mandatoryAuthClientCheck(projectID, clientID, clientType, subject))
+}
+
 // mandatoryAuthClientCheck is the check for using a resolved client. A
 // personal client is checked against the connection's stored owner.
 func mandatoryAuthClientCheck(projectID, clientID uuid.UUID, clientType string, subject urn.SessionSubject) authz.Check {
@@ -206,7 +224,7 @@ func (m *mandatoryShadow) record(ctx context.Context, surface string, legacyAllo
 	if m == nil {
 		return
 	}
-	if m.err != nil && ctx.Err() != nil {
+	if ctx.Err() != nil {
 		// The client went away; there is no decision to compare.
 		return
 	}

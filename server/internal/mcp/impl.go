@@ -1317,12 +1317,14 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 	// re-reject the JWT it doesn't recognise.
 	runInToolsetGate := cfg.runInToolsetGate
 	callerAlreadyGated := cfg.callerGated
+	connect := authz.MCPCheck(authz.ScopeMCPConnect, cfg.rbacResourceID.String(), toolset.ProjectID.String())
 	if runInToolsetGate {
 		// The WWW-Authenticate URL, issuer URL, and consent action follow
 		// the surface the request arrived under.
 		endpoint := newResolvedMcpEndpointFromToolset(toolset, mcpRouteBase)
 		newCtx, authentication, gateToolSelection, err := s.authenticateIssuerGate(ctx, w, authToken, baseURL, endpoint)
 		if err != nil {
+			s.newMandatoryShadow(ctx, toolset.OrganizationID).shadowRequire(ctx, mandatorySurfaceHostedConnect, err, connect)
 			return err
 		}
 		ctx = newCtx
@@ -1360,7 +1362,6 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 		return oops.E(oops.CodeUnexpected, err, "failed to build OAuth protected resource URL").LogError(ctx, s.logger)
 	}
 
-	connect := authz.MCPCheck(authz.ScopeMCPConnect, cfg.rbacResourceID.String(), toolset.ProjectID.String())
 	if !runInToolsetGate && !callerAlreadyGated {
 		switch {
 		case cfg.isPublic && toolset.ExternalOauthServerID.Valid:
@@ -1388,6 +1389,7 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 	}
 
 	var selectedEnvironment string
+	ctx = withMandatoryAdmission(ctx)
 	authorizedCtx, authenticated, err := s.authorizeHostedRequest(ctx, toolset, cfg, connect)
 	s.newMandatoryShadow(authorizedCtx, toolset.OrganizationID).shadowRequire(authorizedCtx, mandatorySurfaceHostedConnect, err, connect)
 	if err != nil {

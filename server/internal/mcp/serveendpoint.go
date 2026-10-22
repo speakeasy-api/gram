@@ -206,7 +206,7 @@ func (s *Service) serveResolvedMCPEndpoint(
 		if err != nil {
 			return fmt.Errorf("apply issuer gate: %w", err)
 		}
-		ctx = newCtx
+		ctx = withMandatoryAdmission(newCtx)
 		r = r.WithContext(ctx)
 		pendingIssuerGate = authentication
 		if toolSelection != nil {
@@ -947,6 +947,7 @@ func (s *Service) prepareProxyBackendContext(
 		return nil, "", oops.E(oops.CodeUnexpected, nil, "unrecognized mcp server visibility %q", mcpServer.Visibility).LogError(ctx, logger)
 	}
 
+	ctx = withMandatoryAdmission(ctx)
 	ctx, err = s.authorizeProxyBackendAccess(ctx, logger, mandatorySurfaceProxiedConnect, organizationID, endpoint.ProjectID, mcpServer)
 	if err != nil {
 		return nil, "", err
