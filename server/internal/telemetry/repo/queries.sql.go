@@ -5780,8 +5780,9 @@ func appendMetaMCPTargetBranch(typeArgs, kindArgs, idArgs, labelArgs *[]string, 
 
 // Only the authenticated managed-agent actor is an agent identity; owners and
 // approving humans are credential provenance, never the caller. Keep in sync
-// with trace_summaries_mv.agent_id. Client-supplied hook attributes are untrusted.
-const toolUsageAgentIDExpr = "if(telemetry_logs.event_source IN ('tool_call', 'resource_read', 'meta_discovery') AND toString(attributes.gram.authorization.actor.type) = 'agent', toString(attributes.gram.authorization.actor.id), '')"
+// with trace_summaries_mv.agent_id. Every listed source must drop client-supplied
+// actor attributes and stamp only the authenticated one (hooks: withAgentActor).
+const toolUsageAgentIDExpr = "if(telemetry_logs.event_source IN ('tool_call', 'resource_read', 'meta_discovery', 'hook') AND toString(attributes.gram.authorization.actor.type) = 'agent', toString(attributes.gram.authorization.actor.id), '')"
 
 // The gateway an event belongs to: the target itself, else the gateway that dispatched it.
 const toolUsageGatewayIDExpr = "if(target_type = '" + ToolUsageTargetTypeMetaMCP + "', target_id, meta_mcp_server_id)"
