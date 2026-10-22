@@ -31,14 +31,22 @@ vi.mock("@/pages/mcp/overview/MCPOverviewTab", () => ({
   MCPOverviewTab: ({
     showPluginBanner,
     server,
+    pluginServer,
   }: {
     showPluginBanner?: boolean;
     server: { kind: string; slug: string };
+    pluginServer?: { kind: string; id: string };
   }) => (
     <div>
       {showPluginBanner !== false && <div>Marketplace</div>}
       <div>Shared usage dashboard</div>
-      <div data-testid="scope" data-scope={`${server.kind}:${server.slug}`} />
+      <div
+        data-testid="scope"
+        data-scope={`${server.kind}:${server.slug}`}
+        data-plugin={
+          pluginServer ? `${pluginServer.kind}:${pluginServer.id}` : ""
+        }
+      />
     </div>
   ),
 }));
@@ -112,11 +120,15 @@ it("retains the shared overview for servers without tunnels", () => {
 });
 
 it.each([
-  ["its canonical wrapper", "toolset-1"],
-  ["a hosting server that is not the canonical wrapper", "host-1"],
+  ["its canonical wrapper", "toolset-1", "toolset:toolset-1"],
+  [
+    "a hosting server that is not the canonical wrapper",
+    "host-1",
+    "mcp-server:host-1",
+  ],
 ])(
   "scopes a hosted server's overview to its toolset when it is %s",
-  (_, id) => {
+  (_, id, plugin) => {
     render(
       <OverviewTab
         mcpServer={
@@ -138,6 +150,9 @@ it.each([
     );
     expect(screen.getByTestId("scope").getAttribute("data-scope")).toBe(
       "toolset:toolset-slug",
+    );
+    expect(screen.getByTestId("scope").getAttribute("data-plugin")).toBe(
+      plugin,
     );
   },
 );

@@ -50,7 +50,13 @@ export function useHostedVisibilityGuard({
     canonical ? { toolsetSlug: toolsetSlug ?? "" } : { mcpServerId: server.id },
     undefined,
     // 404 means no attached environment, so it must not lock Public.
-    { enabled, retry: false, throwOnError: false },
+    {
+      enabled,
+      retry: (failureCount, err) =>
+        !(err instanceof GramError && err.statusCode === 404) &&
+        failureCount < 3,
+      throwOnError: false,
+    },
   );
   const environments = useMemo(
     () => environmentsData?.environments ?? [],
@@ -75,8 +81,10 @@ export function useHostedVisibilityGuard({
     next: McpServerVisibility;
     from: McpServerVisibility;
   } | null>(null);
-  const [enablePending, setEnablePending] =
-    useState<McpServerVisibility | null>(null);
+  const [enablePending, setEnablePending] = useState<{
+    next: McpServerVisibility;
+    from: McpServerVisibility;
+  } | null>(null);
   const [oauthBlockOpen, setOauthBlockOpen] = useState(false);
   // Until the attached environment resolves, Public could skip the warning.
   const publicUnavailable =
@@ -106,7 +114,7 @@ export function useHostedVisibilityGuard({
     } else if (next === "public") {
       setPublicPending({ next, from: current });
     } else if (needsEnableDialog(next)) {
-      setEnablePending(next);
+      setEnablePending({ next, from: current });
     } else {
       apply(next);
     }
@@ -137,7 +145,7 @@ export function useHostedVisibilityGuard({
             const pending = publicPending;
             setPublicPending(null);
             if (!pending) return;
-            if (pending.from === "disabled") setEnablePending(pending.next);
+            if (pending.from === "disabled") setEnablePending(pending);
             else apply(pending.next);
           }}
           isLoading={isApplying}
@@ -150,12 +158,12 @@ export function useHostedVisibilityGuard({
         isOpen={enablePending !== null}
         onClose={() => setEnablePending(null)}
         onConfirm={() => {
-          if (enablePending) apply(enablePending);
+          if (enablePending) apply(enablePending.next);
           setEnablePending(null);
         }}
         isLoading={isApplying}
-        currentlyEnabled={current !== "disabled"}
-        targetIsPublic={enablePending === "public"}
+        currentlyEnabled={(enablePending?.from ?? current) !== "disabled"}
+        targetIsPublic={enablePending?.next === "public"}
       />
     </>
   ) : null;

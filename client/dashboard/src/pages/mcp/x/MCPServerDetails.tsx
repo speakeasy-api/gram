@@ -228,6 +228,7 @@ export default function MCPServerDetails(): JSX.Element | null {
           mcpServer && (
             <OverviewTab
               mcpServer={mcpServer}
+              hostedToolset={hostedToolset}
               agentSetupHref={`${mcpServerTabHref(routes, idOrSlug, "settings")}#${MCP_AGENT_SETUP_SECTION_ID}`}
             />
           )
