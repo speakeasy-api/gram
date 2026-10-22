@@ -160,40 +160,61 @@ func (r *Resolver) ExpandIdentifier(ctx context.Context, orgID, identifier strin
 func (r *Resolver) ExpandEmail(ctx context.Context, orgID, email string) Subject {
 	subject := Subject{UserIDs: nil, Emails: []string{email, conv.NormalizeEmail(email)}}
 
-	rows, err := r.users.GetConnectedUsersMatchingEmails(ctx, usersRepo.GetConnectedUsersMatchingEmailsParams{
-		Emails:         subject.Emails,
-		OrganizationID: orgID,
-	})
-	if err != nil {
-		r.logger.WarnContext(ctx, "failed to resolve identity email to org user", attr.SlogError(err))
-		return subject
+	owner, directoryEmail := r.emailOwner(ctx, orgID, subject.Emails)
+	if owner != "" {
+		subject.UserIDs = append(subject.UserIDs, owner)
 	}
-
-	switch len(rows) {
-	case 0:
-		// Directory ownership wins, so a provider account is only
-		// reverse-resolved when the address has no directory row at all.
-		if owner, ok := r.accountOwner(ctx, orgID, subject.Emails); ok {
-			subject.UserIDs = append(subject.UserIDs, owner)
-			// A linked account email resolves through user_accounts rather
-			// than users, so the owner's own address still has to be added.
-			subject.Emails = append(subject.Emails, r.userEmails(ctx, orgID, subject.UserIDs)...)
-		}
-
-	case 1:
+	switch {
+	case directoryEmail != "":
 		// The member row already carries the canonical email, so there is
 		// nothing more to look up by id.
-		subject.UserIDs = append(subject.UserIDs, rows[0].ID)
-		subject.Emails = append(subject.Emails, rows[0].Email, conv.NormalizeEmail(rows[0].Email))
-
-	default:
-		// More than one member matches: ownership is ambiguous, so the address
-		// stays attached to no user.
+		subject.Emails = append(subject.Emails, directoryEmail, conv.NormalizeEmail(directoryEmail))
+	case owner != "":
+		// A linked account email resolves through user_accounts rather than
+		// users, so the owner's own address still has to be added.
+		subject.Emails = append(subject.Emails, r.userEmails(ctx, orgID, subject.UserIDs)...)
 	}
 
 	r.completeSubject(ctx, orgID, &subject)
 
 	return subject
+}
+
+// EmailOwnerUserID returns the Speakeasy user who owns an address, by the same
+// rule ExpandEmail applies, or "" when nobody does. It is the cheaper call for
+// a caller that needs only the owner and not every address they are known by.
+func (r *Resolver) EmailOwnerUserID(ctx context.Context, orgID, email string) string {
+	owner, _ := r.emailOwner(ctx, orgID, []string{email, conv.NormalizeEmail(email)})
+	return owner
+}
+
+// emailOwner returns the Speakeasy user who owns the addresses, and their
+// directory email when ownership came from a directory row. Directory
+// ownership wins, so a provider account is only reverse-resolved when the
+// addresses have no directory row at all. More than one matching member
+// makes ownership ambiguous, so the addresses resolve to nobody. Best effort:
+// a failed lookup also resolves to nobody.
+func (r *Resolver) emailOwner(ctx context.Context, orgID string, emails []string) (string, string) {
+	rows, err := r.users.GetConnectedUsersMatchingEmails(ctx, usersRepo.GetConnectedUsersMatchingEmailsParams{
+		Emails:         emails,
+		OrganizationID: orgID,
+	})
+	if err != nil {
+		r.logger.WarnContext(ctx, "failed to resolve identity email to org user", attr.SlogError(err))
+		return "", ""
+	}
+
+	switch len(rows) {
+	case 0:
+		if owner, ok := r.accountOwner(ctx, orgID, emails); ok {
+			return owner, ""
+		}
+		return "", ""
+	case 1:
+		return rows[0].ID, rows[0].Email
+	default:
+		return "", ""
+	}
 }
 
 // ExpandUserID folds a Speakeasy user id onto every identifier the same person's

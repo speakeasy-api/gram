@@ -27,19 +27,33 @@ func TestListToolUsageTraces_AuthorizerFoldsIntoUserFilter(t *testing.T) {
 	selfSignedTraceID := strings.ReplaceAll(uuid.NewString(), "-", "")
 	directTraceID := strings.ReplaceAll(uuid.NewString(), "-", "")
 	otherTraceID := strings.ReplaceAll(uuid.NewString(), "-", "")
+
+	// Two people linked a provider account under the same address, so the
+	// address belongs to neither of them.
+	sharerID, sharerEmail := seedConnectedOrgUser(t, ctx, ti, "sharer")
+	coSharerID, _ := seedConnectedOrgUser(t, ctx, ti, "co-sharer")
+	sharedEmail := "shared-" + uuid.NewString() + "@example.com"
+	linkUserAccount(t, ctx, ti, sharerID, sharedEmail, "personal")
+	linkUserAccount(t, ctx, ti, coSharerID, sharedEmail, "personal")
+	sharerAgentID := uuid.NewString()
+	sharerTraceID := strings.ReplaceAll(uuid.NewString(), "-", "")
+
 	for _, row := range []struct {
 		traceID    string
 		userEmail  string
 		actorType  string
+		agentID    string
 		authorizer string
 	}{
 		// The agent acted for the signed-in person.
-		{delegatedTraceID, "", "agent", authCtx.UserID},
+		{delegatedTraceID, "", "agent", agentID, authCtx.UserID},
 		// The agent signed in as itself: nobody stands behind the call.
-		{selfSignedTraceID, "", "agent", ""},
+		{selfSignedTraceID, "", "agent", agentID, ""},
 		// The person called the tool directly.
-		{directTraceID, email, "user", ""},
-		{otherTraceID, "other@example.com", "user", ""},
+		{directTraceID, email, "user", "", ""},
+		{otherTraceID, "other@example.com", "user", "", ""},
+		// Another agent acted for one of the people sharing an address.
+		{sharerTraceID, "", "agent", sharerAgentID, sharerID},
 	} {
 		attrs := map[string]any{
 			"gram.event.source":         "tool_call",
@@ -52,7 +66,7 @@ func TestListToolUsageTraces_AuthorizerFoldsIntoUserFilter(t *testing.T) {
 		}
 		if row.actorType == "agent" {
 			attrs["gram.authorization.actor.type"] = "agent"
-			attrs["gram.authorization.actor.id"] = agentID
+			attrs["gram.authorization.actor.id"] = row.agentID
 		}
 		if row.authorizer != "" {
 			attrs["gram.authorization.authorizer_user_id"] = row.authorizer
@@ -72,6 +86,28 @@ func TestListToolUsageTraces_AuthorizerFoldsIntoUserFilter(t *testing.T) {
 	to := now.Add(time.Hour).Format(time.RFC3339)
 	byEmail := []*gen.ToolUsageUserFilter{{Kind: "email", Key: email}}
 	rawQuery := ":"
+
+	// Every listed row names who it acted for, or nobody when no person
+	// stands behind it.
+	wantAuthorizer := map[string]struct{ userID, label string }{
+		delegatedTraceID: {authCtx.UserID, email},
+		sharerTraceID:    {sharerID, sharerEmail},
+	}
+	requireAuthorizers := func(t *testing.T, got map[string]*gen.ToolUsageTraceSummary) {
+		t.Helper()
+		for traceID, trace := range got {
+			want, delegated := wantAuthorizer[traceID]
+			if !delegated {
+				require.Nil(t, trace.AuthorizerUserID, traceID)
+				require.Nil(t, trace.AuthorizerLabel, traceID)
+				continue
+			}
+			require.NotNil(t, trace.AuthorizerUserID, traceID)
+			require.Equal(t, want.userID, *trace.AuthorizerUserID, traceID)
+			require.NotNil(t, trace.AuthorizerLabel, traceID)
+			require.Equal(t, want.label, *trace.AuthorizerLabel, traceID)
+		}
+	}
 
 	traceIDs := func(t *testing.T, payload *gen.ListToolUsageTracesPayload) map[string]*gen.ToolUsageTraceSummary {
 		t.Helper()
@@ -94,6 +130,9 @@ func TestListToolUsageTraces_AuthorizerFoldsIntoUserFilter(t *testing.T) {
 		{"it matches a person's direct calls and the calls made on their behalf", byEmail, nil, []string{directTraceID, delegatedTraceID}},
 		{"it narrows a person to one agent's calls on their behalf", byEmail, []string{agentID}, []string{delegatedTraceID}},
 		{"it matches every call an agent made when no person is picked", nil, []string{agentID}, []string{delegatedTraceID, selfSignedTraceID}},
+		{"it matches the calls made on behalf of a person picked by their own email", []*gen.ToolUsageUserFilter{{Kind: "email", Key: sharerEmail}}, nil, []string{sharerTraceID}},
+		{"it matches the calls made on behalf of a person picked by user id", []*gen.ToolUsageUserFilter{{Kind: "user_id", Key: sharerID}}, nil, []string{sharerTraceID}},
+		{"it does not match calls made on behalf of anyone sharing an ambiguous email", []*gen.ToolUsageUserFilter{{Kind: "email", Key: sharedEmail}}, nil, nil},
 	}
 	for _, tt := range tests {
 		for _, query := range []*string{nil, &rawQuery} {
@@ -108,6 +147,7 @@ func TestListToolUsageTraces_AuthorizerFoldsIntoUserFilter(t *testing.T) {
 					UserFilters: tt.users, AgentIds: tt.agents, Query: query,
 				})
 				require.ElementsMatch(t, tt.wantTrace, keys(got))
+				requireAuthorizers(t, got)
 			})
 		}
 	}
@@ -115,15 +155,9 @@ func TestListToolUsageTraces_AuthorizerFoldsIntoUserFilter(t *testing.T) {
 	t.Run("it names the authorizer on the delegated row", func(t *testing.T) {
 		t.Parallel()
 		got := traceIDs(t, &gen.ListToolUsageTracesPayload{From: from, To: to, Limit: 10})
-		delegated := got[delegatedTraceID]
-		require.NotNil(t, delegated)
-		require.Equal(t, gen.ToolUsageUserKind("agent_id"), delegated.UserKind)
-		require.NotNil(t, delegated.AuthorizerUserID)
-		require.Equal(t, authCtx.UserID, *delegated.AuthorizerUserID)
-		require.NotNil(t, delegated.AuthorizerLabel)
-		require.Equal(t, email, *delegated.AuthorizerLabel)
-		require.Nil(t, got[selfSignedTraceID].AuthorizerUserID)
-		require.Nil(t, got[directTraceID].AuthorizerUserID)
+		require.Len(t, got, 5)
+		require.Equal(t, gen.ToolUsageUserKind("agent_id"), got[delegatedTraceID].UserKind)
+		requireAuthorizers(t, got)
 	})
 
 	t.Run("it counts the delegated calls in the totals", func(t *testing.T) {

@@ -2,59 +2,42 @@ package telemetry
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	hooksRepo "github.com/speakeasy-api/gram/server/internal/hooks/repo"
 	"github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	usersRepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
-// authorizerUserIDsForEmailFilters resolves the email user filters to the user
-// ids an agent records as its authorizer, so picking a person also selects the
-// calls agents made on their behalf. Linked account emails resolve to their
-// owner too, the way the summary resolves them elsewhere.
+// authorizerUserIDsForUserFilters resolves the user filters to the user ids an
+// agent records as its authorizer, so picking a person also selects the calls
+// agents made on their behalf. A user id filter is that id already. An email
+// resolves to its owner through the identity rules: the directory owner wins,
+// a linked account email resolves to its single owner, and an address several
+// people share resolves to nobody, so a filter never selects someone else's
+// delegated calls.
 //
-// A failed lookup is an error rather than an empty result: dropping the ids
-// would quietly hide every delegated call from a filter that asked for them.
-func (s *Service) authorizerUserIDsForEmailFilters(ctx context.Context, orgID string, filters []repo.ToolUsageUserFilter) ([]string, error) {
+// Best effort, like the resolver: a failed lookup leaves that email matching
+// only the calls recorded under the address itself.
+func (s *Service) authorizerUserIDsForUserFilters(ctx context.Context, orgID string, filters []repo.ToolUsageUserFilter) []string {
+	if orgID == "" {
+		return nil
+	}
+
+	ids := make([]string, 0, len(filters))
 	emails := make([]string, 0, len(filters))
 	for _, filter := range filters {
-		if filter.Kind == "email" {
+		switch filter.Kind {
+		case "user_id":
+			ids = append(ids, filter.Key)
+		case "email":
 			emails = append(emails, filter.Key)
 		}
 	}
-	emails = conv.DedupeNonEmpty(emails)
-	if len(emails) == 0 || orgID == "" {
-		return nil, nil
+	for _, email := range conv.DedupeNonEmpty(emails) {
+		ids = append(ids, s.identities.EmailOwnerUserID(ctx, orgID, email))
 	}
-
-	users, err := usersRepo.New(s.db).GetConnectedUsersByEmails(ctx, usersRepo.GetConnectedUsersByEmailsParams{
-		Emails:         emails,
-		OrganizationID: orgID,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("resolve user filter emails to users: %w", err)
-	}
-	accounts, err := s.hooksRepo.ListUserAccountsByEmails(ctx, hooksRepo.ListUserAccountsByEmailsParams{
-		OrganizationID: orgID,
-		Emails:         emails,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("resolve user filter emails to linked accounts: %w", err)
-	}
-
-	ids := make([]string, 0, len(users)+len(accounts))
-	for _, user := range users {
-		ids = append(ids, user.ID)
-	}
-	for _, account := range accounts {
-		if account.UserID.Valid {
-			ids = append(ids, account.UserID.String)
-		}
-	}
-	return conv.DedupeNonEmpty(ids), nil
+	return conv.DedupeNonEmpty(ids)
 }
 
 // authorizerLabels names the people the listed agent calls acted for. Scoped to

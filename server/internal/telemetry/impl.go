@@ -3549,10 +3549,7 @@ func (s *Service) resolveToolUsageParams(ctx context.Context, f toolUsageFilters
 		})
 	}
 
-	authorizerUserIDs, err := s.authorizerUserIDsForEmailFilters(ctx, authCtx.ActiveOrganizationID, userFilters)
-	if err != nil {
-		return repo.GetToolUsageSummaryParams{}, oops.E(oops.CodeUnexpected, err, "error resolving user filters")
-	}
+	authorizerUserIDs := s.authorizerUserIDsForUserFilters(ctx, authCtx.ActiveOrganizationID, userFilters)
 
 	hostedMCPMatchers, mcpServerMatchers, err := LoadToolUsageMatchers(ctx, s.db, *authCtx.ProjectID)
 	if err != nil {
@@ -3903,10 +3900,7 @@ func (s *Service) ListToolUsageTraces(ctx context.Context, payload *telem_gen.Li
 		})
 	}
 
-	authorizerUserIDs, err := s.authorizerUserIDsForEmailFilters(ctx, authCtx.ActiveOrganizationID, userFilters)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error resolving user filters").LogError(ctx, logger)
-	}
+	authorizerUserIDs := s.authorizerUserIDsForUserFilters(ctx, authCtx.ActiveOrganizationID, userFilters)
 
 	cursorTimeUnixNano := int64(0)
 	cursorID := ""
