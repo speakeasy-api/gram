@@ -96,13 +96,18 @@ func (s Selector) strictMatches(check Selector, representedUser string) bool {
 }
 
 // selectorValueMatches compares one grant value with one check value. Without a
-// binding, $represented_user matches only itself, as containment needs.
+// binding, $represented_user matches only itself, as containment needs. With
+// one, the marker and the bound user are the same owner on either side, so a
+// symbolic candidate is contained by a grant pinned to the represented user.
 func selectorValueMatches(key, grantVal, checkVal, representedUser string) bool {
 	if grantVal == "*" || grantVal == checkVal {
 		return true
 	}
-	return key == SelectorKeyConnectionOwner && grantVal == SelectorValueRepresentedUser &&
-		representedUser != "" && checkVal == representedUser
+	if key != SelectorKeyConnectionOwner || representedUser == "" {
+		return false
+	}
+	return (grantVal == SelectorValueRepresentedUser && checkVal == representedUser) ||
+		(checkVal == SelectorValueRepresentedUser && grantVal == representedUser)
 }
 
 // ResourceKindForScope derives the selector resource kind from a scope.
@@ -224,6 +229,11 @@ func ValidateSelector(scope Scope, sel Selector) error {
 		if v == SelectorValueRepresentedUser && k != SelectorKeyConnectionOwner {
 			return fmt.Errorf("selector value %q is only allowed for %q", SelectorValueRepresentedUser, SelectorKeyConnectionOwner)
 		}
+		// Checked before resource keys are skipped: an empty auth client ID
+		// could never authorize a check.
+		if expectedKind == ResourceKindMCPAuthClient && v == "" {
+			return fmt.Errorf("selector key %q must not be empty", k)
+		}
 		if k == SelectorKeyResourceKind || k == SelectorKeyResourceID {
 			continue
 		}
@@ -240,9 +250,6 @@ func ValidateSelector(scope Scope, sel Selector) error {
 			if clientType, ok := sel[SelectorKeyClientType]; ok && clientType != WildcardResource && clientType != AuthClientTypeRemoteSession {
 				return fmt.Errorf("selector key %q requires client_type %q", k, AuthClientTypeRemoteSession)
 			}
-		}
-		if expectedKind == ResourceKindMCPAuthClient && v == "" {
-			return fmt.Errorf("selector key %q must not be empty", k)
 		}
 		if k == SelectorKeyServerURL {
 			parsed, err := url.Parse(v)

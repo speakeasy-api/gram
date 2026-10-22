@@ -86,6 +86,8 @@ func TestValidateSelectorForAuthClients(t *testing.T) {
 		"tool key":                {ScopeMCPAuth, authSelector("*", map[string]string{SelectorKeyTool: "search"})},
 		"empty owner":             {ScopeMCPAuth, authSelector("*", map[string]string{SelectorKeyConnectionOwner: ""})},
 		"empty project":           {ScopeMCPAuth, authSelector("*", map[string]string{SelectorKeyProjectID: ""})},
+		"empty client id":         {ScopeMCPAuth, authSelector("", nil)},
+		"empty blocked client id": {ScopeMCPBlockedAuth, authSelector("", nil)},
 		"marker as resource":      {ScopeMCPAuth, authSelector(SelectorValueRepresentedUser, nil)},
 		"marker as project":       {ScopeMCPAuth, authSelector("*", map[string]string{SelectorKeyProjectID: SelectorValueRepresentedUser})},
 		"owner on server scope":   {ScopeMCPConnect, Selector{SelectorKeyResourceKind: ResourceKindMCP, SelectorKeyResourceID: "*", SelectorKeyConnectionOwner: SelectorValueRepresentedUser}},
@@ -378,4 +380,19 @@ func TestEmbeddedChatSessionsRepresentNoUser(t *testing.T) {
 	ctx := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{ActiveOrganizationID: "org_123", UserID: sessionUserID, ExternalUserID: "ext-user", SessionID: &sessionID, AccountType: "enterprise"})
 	ctx = GrantsToContext(ctx, []Grant{markerGrant})
 	requireForbidden(t, engine.Require(ctx, personalClientCheck(sessionUserID))) // the session's minter is attribution
+}
+
+func TestContainmentBindsRepresentedUserOnEitherSide(t *testing.T) {
+	t.Parallel()
+
+	symbolic := authSelector("*", map[string]string{SelectorKeyClientType: AuthClientTypeRemoteSession, SelectorKeyConnectionOwner: SelectorValueRepresentedUser})
+	concrete := authSelector("*", map[string]string{SelectorKeyClientType: AuthClientTypeRemoteSession, SelectorKeyConnectionOwner: "user_u"})
+	symbolicGrant := []Grant{NewGrantWithSelector(ScopeMCPAuth, symbolic)}
+	concreteGrant := []Grant{NewGrantWithSelector(ScopeMCPAuth, concrete)}
+
+	require.True(t, GrantsContainSelectorFor("user_u", symbolicGrant, ScopeMCPAuth, concrete))
+	require.True(t, GrantsContainSelectorFor("user_u", concreteGrant, ScopeMCPAuth, symbolic))
+	require.False(t, GrantsContainSelectorFor("user_x", concreteGrant, ScopeMCPAuth, symbolic))
+	require.False(t, GrantsContainSelector(concreteGrant, ScopeMCPAuth, symbolic))
+	require.False(t, GrantsContainSelector(symbolicGrant, ScopeMCPAuth, concrete))
 }
