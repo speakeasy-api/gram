@@ -5945,12 +5945,7 @@ SELECT
     ps.display_name,
     ps.policy,
     ps.sort_order,
-    CASE
-      WHEN ps.mcp_server_id IS NOT NULL THEN 'mcp_server'
-      WHEN ps.meta_mcp_server_id IS NOT NULL THEN 'gateway'
-      -- A live toolset-only row lands here until AIM-581 drops plugin_servers.toolset_id.
-      ELSE 'unresolved'
-    END::text AS target_kind,
+    CASE WHEN ps.mcp_server_id IS NOT NULL THEN 'mcp_server' ELSE 'gateway' END::text AS target_kind,
     COALESCE(ps.mcp_server_id, ps.meta_mcp_server_id) AS target_id,
     (COALESCE(t.id, s.id, gateway.id) IS NOT NULL)::boolean AS target_resolved,
     COALESCE(ep.slug, t.mcp_slug, gateway_ep.slug, '')::text AS mcp_slug,
@@ -6075,7 +6070,6 @@ SELECT
     ps.policy,
     ps.sort_order,
     (ps.meta_mcp_server_id IS NOT NULL)::boolean AS gateway_backed,
-    (ps.mcp_server_id IS NULL AND ps.meta_mcp_server_id IS NULL)::boolean AS unresolved,
     COALESCE(ep.slug, t.mcp_slug, gateway_ep.slug, '')::text AS mcp_slug,
     COALESCE(s.visibility <> 'disabled', t.mcp_enabled, gateway.visibility <> 'disabled', FALSE)::boolean AS enabled
 FROM plugin_servers ps
@@ -6129,7 +6123,6 @@ type ListPlatformMCPPluginServersRow struct {
 	Policy        string
 	SortOrder     int32
 	GatewayBacked bool
-	Unresolved    bool
 	McpSlug       string
 	Enabled       bool
 }
@@ -6157,7 +6150,6 @@ func (q *Queries) ListPlatformMCPPluginServers(ctx context.Context, arg ListPlat
 			&i.Policy,
 			&i.SortOrder,
 			&i.GatewayBacked,
-			&i.Unresolved,
 			&i.McpSlug,
 			&i.Enabled,
 		); err != nil {
