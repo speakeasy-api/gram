@@ -32,6 +32,10 @@ type Grant struct {
 	PrincipalUrn string
 	Scope        Scope
 	Selector     Selector
+	// Inferred marks a grant provisioned by the default auth permission
+	// backfill that no explicit write has taken over. It allows like any
+	// other grant but never outranks an inherited block.
+	Inferred bool
 }
 
 type ScopedGrant struct {
@@ -290,6 +294,7 @@ func scopedGrantsFromGrantRows(rows []repo.GetPrincipalGrantsRow) ([]*ScopedGran
 			PrincipalUrn: row.PrincipalUrn.String(),
 			Scope:        scope,
 			Selector:     selectors,
+			Inferred:     false,
 		})
 	}
 

@@ -207,12 +207,11 @@ func indexUses(uses []ListSharedAuthClientServersRow) serverUses {
 }
 
 // planServerAccessGrants mirrors each server access grant onto the shared
-// clients its servers use, in the same shape: a role's or agent's grant
-// naming a server names its clients, and a wildcard grant, or any user's
-// grant, covers each client type it reaches, so an inferred grant never
-// becomes a concrete direct grant that outranks a block.
-// Agents also get the personal default, since user:all is not in their
-// policy. Connecting still requires mcp:connect, so nothing widens.
+// clients its servers use today, naming each client: a wildcard server grant
+// never becomes a grant on clients it does not reach now or on clients created
+// later. A user's grant is recorded as provisioned, which keeps it from
+// outranking an inherited block. Agents also get the personal default, since
+// user:all is not in their policy.
 func planServerAccessGrants(ctx context.Context, q *Queries, opts Options, uses []ListSharedAuthClientServersRow, plan *grantPlan) error {
 	rows, err := q.ListServerAccessGrants(ctx, ListServerAccessGrantsParams{OrganizationID: opts.OrganizationID, Scopes: serverAccessScopes})
 	if err != nil {
@@ -229,31 +228,17 @@ func planServerAccessGrants(ctx context.Context, q *Queries, opts Options, uses 
 				return err
 			}
 		}
-		grant := authz.Grant{PrincipalUrn: row.PrincipalUrn.String(), Scope: authz.Scope(row.Scope), Selector: selector}
-		resourceID := selector[authz.SelectorKeyResourceID]
-		if resourceID != authz.WildcardResource {
-			for _, use := range index.byID[resourceID] {
-				if !reachesServer(grant, use) {
-					continue
-				}
-				// A user's concrete grant outranks blocks it inherits, so a
-				// user gets the client's type in its project instead.
-				clientSelector := authz.AuthClientSelector(use.AuthClientID.String(), "")
-				if authz.IsDirectGrant(grant) {
-					clientSelector = authz.AuthClientTypeSelector(use.ClientType, use.ProjectID.String())
-				}
-				if err := plan.want(GrantSharedClient, row.PrincipalUrn, authz.ScopeMCPAuth, clientSelector); err != nil {
-					return err
-				}
-			}
-			continue
+		grant := authz.Grant{PrincipalUrn: row.PrincipalUrn.String(), Scope: authz.Scope(row.Scope), Selector: selector, Inferred: false}
+		candidates := index.all
+		if resourceID := selector[authz.SelectorKeyResourceID]; resourceID != authz.WildcardResource {
+			candidates = index.byID[resourceID]
 		}
-		project := selector[authz.SelectorKeyProjectID]
-		for _, use := range index.all {
-			if reachesServer(grant, use) {
-				if err := plan.want(GrantSharedClient, row.PrincipalUrn, authz.ScopeMCPAuth, authz.AuthClientTypeSelector(use.ClientType, project)); err != nil {
-					return err
-				}
+		for _, use := range candidates {
+			if !reachesServer(grant, use) {
+				continue
+			}
+			if err := plan.want(GrantSharedClient, row.PrincipalUrn, authz.ScopeMCPAuth, authz.AuthClientSelector(use.AuthClientID.String(), "")); err != nil {
+				return err
 			}
 		}
 	}
@@ -348,7 +333,7 @@ func planAPIKeyGrants(ctx context.Context, q *Queries, opts Options, uses []List
 		if err != nil {
 			selector = authz.Selector{}
 		}
-		policies[row.PrincipalUrn] = append(policies[row.PrincipalUrn], authz.Grant{PrincipalUrn: row.PrincipalUrn.String(), Scope: authz.Scope(row.Scope), Selector: selector})
+		policies[row.PrincipalUrn] = append(policies[row.PrincipalUrn], authz.Grant{PrincipalUrn: row.PrincipalUrn.String(), Scope: authz.Scope(row.Scope), Selector: selector, Inferred: false})
 	}
 	projects, err := q.ListLiveProjects(ctx, opts.OrganizationID)
 	if err != nil {

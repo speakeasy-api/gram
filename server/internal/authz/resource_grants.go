@@ -329,6 +329,7 @@ func ListGrantsForResource(ctx context.Context, db repo.DBTX, resource Resource)
 			PrincipalUrn: row.PrincipalUrn.String(),
 			Scope:        Scope(row.Scope),
 			Selector:     selector,
+			Inferred:     false,
 		})
 	}
 
@@ -374,6 +375,7 @@ func ListGrantsForResourceIDs(ctx context.Context, db repo.DBTX, organizationID 
 			PrincipalUrn: row.PrincipalUrn.String(),
 			Scope:        Scope(row.Scope),
 			Selector:     selector,
+			Inferred:     false,
 		})
 	}
 
