@@ -888,6 +888,7 @@ trackedFiles:
   src/models/components/agentownerprofile.ts: {}
   src/models/components/agentpermissions.ts: {}
   src/models/components/agentplugin.ts: {}
+  src/models/components/agentpluginserver.ts: {}
   src/models/components/agentpolicygrant.ts: {}
   src/models/components/agentpolicygrantform.ts: {}
   src/models/components/agentpolicygrantidform.ts: {}
