@@ -34,10 +34,20 @@ import {
 const RELEASES_BASE =
   "https://storage.googleapis.com/speakeasy-device-agent-releases-prod";
 const MANIFEST_URL = `${RELEASES_BASE}/releases.json`;
-// The server's stable link to the current signed Windows msi (a 302 to the
-// versioned file in the release bucket). It sits under /rpc, which the
-// Ingress routes to the server.
+// The server's stable links to the current signed macOS pkg and Windows msi
+// (a 302 to the versioned file in the release bucket). They sit under /rpc,
+// which the Ingress routes to the server.
+const STABLE_PKG_PATH = "/rpc/install/device-agent-macos.pkg";
 const STABLE_MSI_PATH = "/rpc/install/device-agent-windows.msi";
+
+// stableInstallerURL returns this server's stable link for path, or null when
+// the server URL isn't HTTPS. Install snippets run with admin rights, so they
+// never download over plaintext; callers fall back to the release bucket.
+function stableInstallerURL(path: string): string | null {
+  const serverURL = getServerURL();
+  if (!serverURL.startsWith("https:")) return null;
+  return `${serverURL}${path}`;
+}
 
 // Public docs: what the device agent is, and the MDM rollout guide.
 const DOCS_DEVICE_AGENT =
@@ -156,10 +166,18 @@ BASE=${RELEASES_BASE}/v$VERSION
 curl -fSL -o speakeasyd "$BASE/speakeasyd_\${VERSION}_linux_amd64" && \\
 curl -fSL -o speakeasy  "$BASE/speakeasy_\${VERSION}_linux_amd64"`;
 }
-// macInstall downloads and installs the pkg. Like linuxDownload, with a
-// resolved version the snippet uses no shell variables, so it also runs in
-// fish.
-function macInstall(version: string | null) {
+// macInstall downloads and installs the pkg. The stable link needs no version,
+// so the snippet never goes stale. Without it (a non-HTTPS server URL) it
+// builds the versioned bucket URL; like linuxDownload, with a resolved version
+// that snippet uses no shell variables, so every form also runs in fish.
+export function macInstall(
+  version: string | null,
+  stablePkgURL: string | null,
+) {
+  if (stablePkgURL) {
+    return `curl -fSL -o speakeasy-agent.pkg ${stablePkgURL} && \\
+sudo installer -pkg speakeasy-agent.pkg -target /`;
+  }
   version = inlinableVersion(version);
   if (version) {
     return `curl -fSL -o speakeasy-agent.pkg ${RELEASES_BASE}/v${version}/speakeasy-agent_${version}.pkg && \\
@@ -1021,11 +1039,12 @@ const MANAGED_CONFIG_PATHS = [
 
 // MacInstallerDownload / WinInstallerDownload are the direct installer
 // buttons, shared by the setup sheet's install step and onboarding's inline
-// box. While the manifest loads they say so; only a failed lookup shows how to
-// build the URL by hand.
+// box. While the manifest loads they say so; a failed lookup offers the
+// server's stable link, or how to build the URL by hand when there is none.
 function MacInstallerDownload() {
   const { data, isLoading } = useAgentReleases();
   const version = safeVersion(data?.latest?.["speakeasyd"]?.version);
+  const stablePkgURL = stableInstallerURL(STABLE_PKG_PATH);
 
   if (version) {
     // The pkg ships from the same bucket/version layout as the raw binaries
@@ -1049,22 +1068,20 @@ function MacInstallerDownload() {
       </Text>
     );
   }
-  return (
-    <ReleaseLookupError>
-      <code>speakeasy-agent_&lt;version&gt;.pkg</code>
-    </ReleaseLookupError>
-  );
+  if (!stablePkgURL) {
+    return (
+      <ReleaseLookupError>
+        <code>speakeasy-agent_&lt;version&gt;.pkg</code>
+      </ReleaseLookupError>
+    );
+  }
+  return <StableInstallerFallback href={stablePkgURL} />;
 }
 
 function WinInstallerDownload() {
   const { data, isLoading } = useAgentReleases();
   const version = safeVersion(data?.latest?.["speakeasyd"]?.version);
-  // Never offer a plaintext download: if the server URL is somehow non-HTTPS,
-  // fall back to the manifest rather than the stable link.
-  const serverURL = getServerURL();
-  const stableMsiUrl = serverURL.startsWith("https:")
-    ? `${serverURL}${STABLE_MSI_PATH}`
-    : null;
+  const stableMsiUrl = stableInstallerURL(STABLE_MSI_PATH);
 
   if (version) {
     return (
@@ -1090,13 +1107,19 @@ function WinInstallerDownload() {
       </ReleaseLookupError>
     );
   }
+  return <StableInstallerFallback href={stableMsiUrl} />;
+}
+
+// StableInstallerFallback replaces a download button whose version lookup
+// failed: the server's stable link still resolves the current version itself.
+function StableInstallerFallback({ href }: { href: string }) {
   return (
     <Alert variant="error">
       <AlertTitle>Couldn't look up the latest version</AlertTitle>
       <AlertDescription>
         Use the{" "}
         <a
-          href={stableMsiUrl}
+          href={href}
           target="_blank"
           rel="noopener noreferrer"
           className={LINK_CLASS}
@@ -1116,6 +1139,7 @@ function WinInstallerDownload() {
 function MacInstallStep() {
   const { data } = useAgentReleases();
   const version = safeVersion(data?.latest?.["speakeasyd"]?.version);
+  const stablePkgURL = stableInstallerURL(STABLE_PKG_PATH);
 
   return (
     <div className="flex flex-col gap-6">
@@ -1165,7 +1189,9 @@ function MacInstallStep() {
               first.
             </StepNote>
           )}
-          <CodeBlock language="bash">{macInstall(version)}</CodeBlock>
+          <CodeBlock language="bash">
+            {macInstall(version, stablePkgURL)}
+          </CodeBlock>
           <Text small muted>
             macOS then shows a{" "}
             <strong className="font-medium">Background Items Added</strong>{" "}
@@ -1284,13 +1310,9 @@ launchctl print "gui/$(id -u)/com.speakeasy.daemon"
 function WinInstallStep() {
   const { data } = useAgentReleases();
   const version = safeVersion(data?.latest?.["speakeasyd"]?.version);
-  // The snippet lands in an elevated shell, so never emit a plaintext
-  // download: if the server URL is somehow non-HTTPS, skip the stable link
-  // and build the snippet against the (always-HTTPS) release bucket instead.
-  const serverURL = getServerURL();
-  const stableMsiUrl = serverURL.startsWith("https:")
-    ? `${serverURL}${STABLE_MSI_PATH}`
-    : null;
+  // Without a stable link (a non-HTTPS server URL) the snippet builds the
+  // versioned URL against the always-HTTPS release bucket instead.
+  const stableMsiUrl = stableInstallerURL(STABLE_MSI_PATH);
   const downloadScript = stableMsiUrl
     ? `Invoke-WebRequest "${stableMsiUrl}" -OutFile speakeasy-agent.msi
 msiexec /i speakeasy-agent.msi`
