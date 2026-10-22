@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>Finish signing in · Speakeasy</title>
+    <style>
+      {{.Styles}}
+    </style>
+  </head>
+  <body class="bg-background text-foreground min-h-screen">
+    <main
+      class="mx-auto flex min-h-screen w-full max-w-[52rem] flex-col gap-6 px-4 py-12 sm:py-16"
+    >
+      <div class="text-foreground">{{template "speakeasyWordmark"}}</div>
+
+      <section class="bg-card border" aria-labelledby="finish-heading">
+        <div class="flex flex-col gap-5 px-6 py-8 sm:px-8">
+          <div class="flex flex-col gap-2">
+            <h1 id="finish-heading" class="text-display-xs">
+              Finish on the other machine
+            </h1>
+            <p class="text-sm text-muted-foreground">
+              You gave <span class="text-foreground">{{.ClientName}}</span>
+              access. It is waiting for this sign-in at
+              <span class="text-foreground font-mono">{{.ListenAddress}}</span>
+              on the machine where it runs. Run this command there:
+            </p>
+          </div>
+
+          <div class="flex flex-col gap-2 sm:flex-row sm:items-start">
+            <pre
+              class="bg-background m-0 min-w-0 flex-1 border px-4 py-3 font-mono text-xs break-all whitespace-pre-wrap select-all"
+            ><code id="finish-command" data-finish-command>{{.Command}}</code></pre>
+            <button
+              type="button"
+              data-copy-target="finish-command"
+              class="bg-primary text-primary-foreground interact:bg-foreground h-10 w-full shrink-0 px-6 text-sm sm:w-40"
+            >
+              Copy command
+            </button>
+          </div>
+
+          <div class="flex flex-col gap-2">
+            <p class="text-sm text-muted-foreground">
+              If {{.ClientName}} asks you to paste the address it was redirected
+              to, paste this instead:
+            </p>
+            <div class="flex flex-col gap-2 sm:flex-row sm:items-start">
+              <pre
+                class="bg-background m-0 min-w-0 flex-1 border px-4 py-3 font-mono text-xs break-all whitespace-pre-wrap select-all"
+              ><code id="finish-url" data-finish-url>{{.CallbackURL}}</code></pre>
+              <button
+                type="button"
+                data-copy-target="finish-url"
+                class="bg-card interact:bg-accent h-10 w-full shrink-0 border px-6 text-sm sm:w-40"
+              >
+                Copy address
+              </button>
+            </div>
+          </div>
+
+          <p class="text-xs text-default-warning">
+            Run it only on a machine you control, and never send it to anyone.
+            It works once, only for the app that started this sign-in, and
+            expires in {{.CodeLifetime}}.
+          </p>
+        </div>
+      </section>
+
+      <p class="text-xs text-muted-foreground">
+        Secured by Speakeasy. You can close this tab once {{.ClientName}} says
+        you are signed in.
+      </p>
+    </main>
+    <script src="{{.ScriptURL}}"></script>
+  </body>
+</html>

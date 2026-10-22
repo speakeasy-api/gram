@@ -73,9 +73,9 @@
         <p
           class="text-xs text-default-warning border-warning-softest bg-card border-b px-6 py-3 sm:px-8"
         >
-          This client receives its authorization at a local address on your
-          device. Only approve if you just started this request from an app
-          running on this computer.
+          This client receives its authorization at a local address. Only
+          approve if you just started this request yourself, from an app on
+          this computer or on a machine you control.
         </p>
         {{end}}
 
@@ -848,6 +848,27 @@
           {{if .RemoteSessionCards}}When you've connected the services above, you can close this tab.{{else}}You can close this tab.{{end}}
         </p>
         {{else}}
+        {{if .LoopbackRedirect}}
+        {{/* A browser can only follow a loopback redirect to a client on its
+        own machine. Ticked, the approval shows the redirect as a command to
+        run where the client listens (a VM, a container, an SSH session). */}}
+        <label class="flex items-start gap-3 px-6 pt-6 text-sm sm:px-8" data-finish-elsewhere>
+          <input
+            type="checkbox"
+            form="consent-approve-form"
+            name="finish_elsewhere"
+            value="1"
+            class="mt-1 size-4 shrink-0"
+          />
+          <span class="flex flex-col gap-1">
+            <span class="text-foreground">Finishing on another machine?</span>
+            <span class="text-muted-foreground"
+              >Tick this if {{.ClientName}} runs in a VM, a container or over
+              SSH. After you give access, you get a command to run there.</span
+            >
+          </span>
+        </label>
+        {{end}}
         <div class="flex flex-col gap-3 px-6 py-6 sm:flex-row sm:px-8">
           <form
             method="POST"

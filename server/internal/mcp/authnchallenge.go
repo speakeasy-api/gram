@@ -317,10 +317,14 @@ func userSessionGrantCacheKey(issuerID uuid.UUID, code string, agentAuthorizatio
 	return prefix + issuerID.String() + ":" + code
 }
 
-// TTL implements cache.CacheableObject. 10 minutes is the standard OAuth code
-// lifetime — enough for a slow round trip from the MCP client to /token, short
-// enough to limit exposure if the code leaks.
-func (g UserSessionGrant) TTL() time.Duration { return 10 * time.Minute }
+// userSessionGrantTTL is how long an authorization code can be exchanged. 10
+// minutes is the standard OAuth code lifetime: enough for a slow round trip
+// from the MCP client to /token, short enough to limit exposure if the code
+// leaks.
+const userSessionGrantTTL = 10 * time.Minute
+
+// TTL implements cache.CacheableObject.
+func (g UserSessionGrant) TTL() time.Duration { return userSessionGrantTTL }
 
 // errIssuerGateOrgLookup marks the post-validation operational path in
 // validateUserSessionToken: the bearer token itself was accepted but the
