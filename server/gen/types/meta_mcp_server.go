@@ -29,6 +29,8 @@ type MetaMcpServer struct {
 	// initialize response. Null when the gateway serves Speakeasy's built-in
 	// instructions.
 	Instructions *string
+	// Whether this project can select Code Mode: a code runtime must be configured.
+	CodeModeEnabled *bool
 	// The effective default discovery mode. Unconfigured connections follow this
 	// value.
 	DiscoveryMode string

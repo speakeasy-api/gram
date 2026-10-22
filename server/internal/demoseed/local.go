@@ -140,6 +140,7 @@ func RunLocalFixtures(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool
 		{"api key", localAPIKeySQL, []any{spec.OrgID, spec.ProjectID(), dev.ID, localAPIKeyID(), LocalAPIKeyName, apiKeyHash, apiKey[:len(auth.APIKeyPrefix(env))+5]}},
 		{"default environment", localEnvironmentSQL, []any{spec.OrgID, spec.ProjectID(), localEnvironmentID()}},
 		{"mcp registry", localMCPRegistrySQL, nil},
+		{"code mode gateway", localCodeModeGatewaySQL, []any{spec.OrgID, spec.ProjectID()}},
 		{"mcp app asset", localMCPAppAssetSQL, []any{
 			localMCPAppAssetID(), spec.ProjectID(), spec.OrgID, app.url, app.size, app.sha256,
 		}},
@@ -394,6 +395,13 @@ INSERT INTO environments (id, organization_id, project_id, name, slug)
 VALUES ($3, $1, $2, 'Default', 'default')
 ON CONFLICT (project_id, slug) WHERE deleted IS FALSE
 DO UPDATE SET name = EXCLUDED.name, updated_at = clock_timestamp()
+`
+
+// The shared seed stores this gateway as Progressive because the demo org has
+// no code runtime; local stacks can run one, so the gateway shows Code Mode.
+const localCodeModeGatewaySQL = `
+UPDATE meta_mcp_servers SET discovery_mode = 'code_mode', updated_at = clock_timestamp()
+WHERE organization_id = $1 AND project_id = $2 AND name = 'Python Code Gateway' AND deleted IS FALSE
 `
 
 // The default registry backing the Catalog page. Global, not tenant-scoped,

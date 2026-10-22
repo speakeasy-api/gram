@@ -2,10 +2,11 @@ package mcp
 
 import (
 	"encoding/json"
-	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"maps"
 	"slices"
 	"testing"
+
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"

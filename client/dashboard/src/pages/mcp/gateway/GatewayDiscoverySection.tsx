@@ -59,6 +59,8 @@ export function GatewayDiscoverySection({
         <SettingsSection.Description>
           Progressive discovers tools as needed. Direct lists every available
           tool and works with clients that cannot discover tools progressively.
+          Code Mode exposes one execute tool for discovering and calling tools
+          in Python.
         </SettingsSection.Description>
       </SettingsSection.Header>
       <SettingsSection.Panel>
@@ -89,8 +91,24 @@ export function GatewayDiscoverySection({
               <SelectContent>
                 <SelectItem value="progressive">Progressive</SelectItem>
                 <SelectItem value="direct">Direct</SelectItem>
+                {(metaMcpServer.codeModeEnabled ||
+                  metaMcpServer.discoveryMode === "code_mode") && (
+                  <SelectItem
+                    value="code_mode"
+                    disabled={!metaMcpServer.codeModeEnabled}
+                  >
+                    Code Mode
+                  </SelectItem>
+                )}
               </SelectContent>
             </Select>
+            {metaMcpServer.discoveryMode === "code_mode" &&
+              !metaMcpServer.codeModeEnabled && (
+                <p className="text-muted-foreground text-sm">
+                  The code runtime is unavailable. Connections currently use
+                  Progressive discovery; the saved default remains Code Mode.
+                </p>
+              )}
             {update.isError && <FieldError>{update.error.message}</FieldError>}
           </Field>
         </SettingsSection.Body>
@@ -113,7 +131,8 @@ export function GatewayDiscoverySection({
                   !supportsEditing ||
                   !knownDraft ||
                   mode === metaMcpServer.discoveryMode ||
-                  update.isPending
+                  update.isPending ||
+                  (mode === "code_mode" && !metaMcpServer.codeModeEnabled)
                 }
                 onClick={() => {
                   if (

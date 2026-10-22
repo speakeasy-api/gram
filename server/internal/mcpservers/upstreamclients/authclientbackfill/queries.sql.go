@@ -3269,6 +3269,24 @@ func (q *Queries) SoftDeleteServerAuthClientLinksFixture(ctx context.Context, mc
 	return err
 }
 
+const swapUpstreamAuthClientFixture = `-- name: SwapUpstreamAuthClientFixture :exec
+UPDATE upstream_client_selections
+SET auth_client_id = $1,
+    auth_client_attachment_scope = (SELECT attachment_scope FROM mcp_auth_clients WHERE id = $1)
+WHERE credential_id = $2 AND mcp_server_id = $3
+`
+
+type SwapUpstreamAuthClientFixtureParams struct {
+	AuthClientID uuid.NullUUID
+	CredentialID uuid.UUID
+	McpServerID  uuid.UUID
+}
+
+func (q *Queries) SwapUpstreamAuthClientFixture(ctx context.Context, arg SwapUpstreamAuthClientFixtureParams) error {
+	_, err := q.db.Exec(ctx, swapUpstreamAuthClientFixture, arg.AuthClientID, arg.CredentialID, arg.McpServerID)
+	return err
+}
+
 const tryLockOrganizationBackfill = `-- name: TryLockOrganizationBackfill :one
 SELECT pg_try_advisory_lock(hashtext('authclientbackfill:' || $1::text))::boolean AS locked,
        clock_timestamp()::timestamptz AS started_at

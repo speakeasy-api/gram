@@ -97439,6 +97439,9 @@ components:
     MetaMcpServer:
       type: object
       properties:
+        code_mode_enabled:
+          type: boolean
+          description: 'Whether this project can select Code Mode: a code runtime must be configured.'
         created_at:
           type: string
           description: When the meta MCP server was created
@@ -97449,6 +97452,7 @@ components:
           enum:
             - progressive
             - direct
+            - code_mode
         id:
           type: string
           description: The ID of the meta MCP server
@@ -97771,6 +97775,7 @@ components:
           enum:
             - progressive
             - direct
+            - code_mode
         mcp_server_id:
           type: string
           description: Bind the JWT to this MCP server's user_session_issuer audience (any issuer-gated backend, hosted servers included). Mutually exclusive with the other targets; exactly one must be set. Must be issuer-gated and live in the caller's project.
@@ -112582,6 +112587,7 @@ components:
           enum:
             - progressive
             - direct
+            - code_mode
         id:
           type: string
           description: The ID of the meta MCP server to update

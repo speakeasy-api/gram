@@ -382,3 +382,9 @@ On the Acme Agent Gateway, the picker groups member tools by server. Specific to
 First-party connect pages link services without issuing a client grant. Agent approvals and management-issued sessions use their explicit principal grants rather than a human tool catalogue. Existing v1 gateway policies retain their unrestricted member scope until their fixed authorization expiry or revocation. Refresh preserves that deadline and policy. A new browser consent records a v2 catalogue.
 
 Denying consent retires unadopted identity-provider credentials for the same issuer, subject, and sign-in across member projects. This also clears pending credentials from other concurrent consent flows; those flows re-exchange on retry. Credentials already adopted by a session remain usable.
+
+### Python code mode
+
+Browser verification: [~] — follow check 33 in `seed/demo/verify.md`.
+
+**Python Code Gateway** has two hosted members. The shared demo org has no code runtime, so the shared seed stores it as Progressive. The local seed switches it to `code_mode`. There, Inspect exposes one native `execute`, its generated description and prefixes, and a Python editor with results, printed output and nested calls. New explicit Code selections require a configured runtime. Without one, a stored `code_mode` gateway or connection is served in Progressive mode. Shared demo definitions are inert; use local fixtures for actual calls.

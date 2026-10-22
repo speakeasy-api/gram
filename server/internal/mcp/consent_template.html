@@ -750,7 +750,8 @@
                 </select>
               </dd>
             </div>
-            {{end}} {{if .ShowDiscoveryMode}}
+            {{end}}
+            {{if .ShowDiscoveryMode}}
             <div data-agent-self-only>
               <dt class="text-eyebrow">Tool discovery</dt>
               <dd class="mt-1 ml-0">
@@ -761,9 +762,10 @@
                   aria-describedby="discovery-mode-help"
                   class="bg-card border px-2 py-1.5 font-mono text-sm"
                 >
-                  <option value="">Use gateway default</option>
+                  <option value="">{{if .GatewayDefaultMode}}Gateway default ({{.GatewayDefaultMode}}){{else}}Use gateway default{{end}}</option>
                   <option value="progressive" {{if eq .PrefillDiscoveryMode "progressive"}}selected{{end}}>Progressive</option>
                   <option value="direct" {{if eq .PrefillDiscoveryMode "direct"}}selected{{end}}>Direct</option>
+                  {{if .ShowCodeMode}}<option value="code_mode"{{if eq .PrefillDiscoveryMode "code_mode"}} selected{{end}}>Code Mode</option>{{end}}
                 </select>
                 <p
                   id="discovery-mode-help"
@@ -771,11 +773,23 @@
                 >
                   Progressive discovers tools as needed. Direct lists every
                   available tool. Use Direct if your client cannot discover
-                  tools progressively.
+                  tools progressively. {{if .ShowCodeMode}}Code Mode exposes one execute tool to discover and call tools using Python.{{end}}
                 </p>
               </dd>
             </div>
-            {{end}} {{if .RemoteSessionCards}}
+            {{else if .GatewayDefaultMode}}
+            <div data-agent-self-only>
+              <dt class="text-eyebrow">Tool discovery</dt>
+              <dd class="mt-1 ml-0 text-sm text-muted-foreground">{{.GatewayDefaultMode}} (gateway default). Connections without an override follow this setting.</dd>
+            </div>
+            {{end}}
+            {{if .CodeModeUnavailable}}
+            <div data-agent-self-only>
+              <dt class="sr-only">Code Mode unavailable</dt>
+              <dd class="ml-0 text-muted-foreground text-sm">The code runtime is unavailable. Progressive discovery is available for this connection.</dd>
+            </div>
+            {{end}}
+            {{if .RemoteSessionCards}}
             <div>
               <dt class="text-eyebrow">Auto refresh</dt>
               <dd class="mt-1 ml-0">

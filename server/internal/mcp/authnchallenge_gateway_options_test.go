@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/speakeasy-api/gram/server/internal/codemode"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
@@ -14,12 +15,14 @@ import (
 
 func TestConsentGatewayModeChoices(t *testing.T) {
 	t.Parallel()
-	service := &Service{}
+	service := &Service{codeExecutor: codemode.Disabled{}}
 	endpoint := &ResolvedMcpEndpoint{MetaMcpServerID: uuid.NullUUID{UUID: uuid.New(), Valid: true}, OrganizationID: "org_test", ProjectID: uuid.New()}
 	ctx := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{ActiveOrganizationID: "org_test", OrganizationSlug: "test-org"})
 	policy, err := service.consentGatewayPolicy(ctx, endpoint, AuthnChallengeState{}, "", "")
 	require.NoError(t, err)
 	require.Nil(t, policy)
+	_, err = service.consentGatewayPolicy(ctx, endpoint, AuthnChallengeState{}, "", "code_mode")
+	require.ErrorContains(t, err, "code mode is not available", "missing runtime fails closed")
 	policy, err = service.consentGatewayPolicy(ctx, endpoint, AuthnChallengeState{}, "", "direct")
 	require.NoError(t, err)
 	require.Nil(t, policy.Selection)

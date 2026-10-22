@@ -569,3 +569,8 @@ LEFT JOIN sigint_custom_signals cs
 WHERE ss.project_id = @project_id::uuid AND ss.deleted IS FALSE
   AND (s.id IS NULL OR s.deleted IS TRUE
     OR cs.id IS NULL OR cs.deleted IS TRUE);
+
+-- name: PostflightIDGatewayIssuers :one
+SELECT count(DISTINCT user_session_issuer_id)::bigint
+FROM meta_mcp_servers
+WHERE project_id = @project_id::uuid AND deleted IS FALSE;

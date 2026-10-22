@@ -46,6 +46,7 @@ import (
 	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/codemode"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -114,6 +115,7 @@ type IdentityResolver interface {
 
 type Service struct {
 	assistantWorkloadTokens AssistantWorkloadTokenIssuer
+	codeExecutor            codemode.Executor
 	federatedLoginConsumer  FederatedLoginConsumer
 	identityChainer         identityChainer
 	// authClientPermitter decides whether the caller may use a resolved typed
@@ -269,6 +271,9 @@ type Service struct {
 
 	// metaRuntime bounds the gateway's per-member upstream work.
 	metaRuntime MetaRuntimeConfig
+	// codeSessions keeps proxied member sessions for verified callers'
+	// rapid successive Code Mode executions.
+	codeSessions *codeMemberSessions
 	// replayLiveness overrides the refresh-replay session check in unit tests
 	// that run without a database.
 	replayLiveness func(ctx context.Context, endpoint *ResolvedMcpEndpoint, jti string) (string, bool)
@@ -501,7 +506,11 @@ func NewService(
 	redisClient *redis.Client,
 	tunnelPublicConfig TunnelPublicConfig,
 	metaRuntimeConfig MetaRuntimeConfig,
+	codeExecutor codemode.Executor,
 ) (*Service, error) {
+	if codeExecutor == nil {
+		codeExecutor = codemode.Disabled{}
+	}
 	tracer := tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/mcp")
 	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/mcp")
 	logger = logger.With(attr.SlogComponent("mcp"))
@@ -632,6 +641,8 @@ func NewService(
 			cache.SuffixNone,
 		),
 		connectionCatalogCache: cacheImpl,
+		codeExecutor:           codeExecutor,
+		codeSessions:           newCodeMemberSessions(logger, codeSessionIdleTTL, codeSessionMaxAge, codeSessionPingAfter, codeSessionMaxEntries),
 		sessionClientInfo:      sessionClientInfo,
 		tunnelClientFamilies:   newTunnelClientFamilies(sessionClientInfo),
 		identityResolver:       identityResolver,

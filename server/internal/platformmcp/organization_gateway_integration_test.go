@@ -71,6 +71,10 @@ func TestOrganizationGatewayAvailableWithOneOrganizationIssuer(t *testing.T) {
 	require.True(t, output.Available)
 	require.Equal(t, "https://app.example.test/mcp/gateway/"+slug, output.URL)
 	require.Empty(t, output.UnavailableReason)
+	// Each discovery mode gets its own first step; only Progressive has list_servers.
+	require.Contains(t, output.NextAction, "Progressive: call list_servers")
+	require.Contains(t, output.NextAction, "Direct: call the server--tool tools")
+	require.Contains(t, output.NextAction, "Code Mode: run Python with the execute tool")
 }
 
 func TestOrganizationGatewayUnavailableWithoutOrganizationIssuer(t *testing.T) {

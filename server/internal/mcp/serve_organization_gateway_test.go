@@ -21,6 +21,7 @@ import (
 	goahttp "goa.design/goa/v3/http"
 
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/codemode"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
@@ -459,6 +460,23 @@ func TestOrganizationGatewayRoutes_ShadowedEndpointKeepsItsRoutes(t *testing.T) 
 // with the service behind it.
 func TestServeConsent_OrganizationGatewayPicksTools(t *testing.T) {
 	t.Parallel()
+	for _, tc := range []struct {
+		mode metamcp.DiscoveryMode
+		all  bool
+	}{
+		{metamcp.DiscoveryModeProgressive, false},
+		{metamcp.DiscoveryModeCode, false},
+		{metamcp.DiscoveryModeCode, true},
+	} {
+		t.Run(fmt.Sprintf("%s/all=%t", tc.mode, tc.all), func(t *testing.T) {
+			t.Parallel()
+			testOrganizationGatewayPicksTools(t, tc.mode, tc.all)
+		})
+	}
+}
+
+func testOrganizationGatewayPicksTools(t *testing.T, mode metamcp.DiscoveryMode, all bool) {
+	t.Helper()
 	ctx, ti := newTestMCPService(t)
 	fx := seedOrganizationGateway(t, ctx, ti)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -471,6 +489,41 @@ func TestServeConsent_OrganizationGatewayPicksTools(t *testing.T) {
 	require.NoError(t, testrepo.New(ti.conn).SetMCPServerVisibilityFixture(ctx, testrepo.SetMCPServerVisibilityFixtureParams{ID: remoteID, ProjectID: *authCtx.ProjectID, Visibility: mcpservers.VisibilityPrivate}))
 	for _, id := range []uuid.UUID{hosted.serverID, hosted.toolsetID, remoteID} {
 		seedUserMCPConnectGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, fx.subject.ID, id.String())
+	}
+	if mode == metamcp.DiscoveryModeCode {
+		mcp.SetTestCodeExecutor(ti.service.Service, &recordingCodeExecutor{run: func(ctx context.Context, code string, host codemode.Host) (*codemode.ExecutionResult, error) {
+			if code != "discover" {
+				result, err := host.Call(ctx, code, json.RawMessage(`{}`))
+				if err != nil {
+					return &codemode.ExecutionResult{Error: &codemode.ExecutionError{Code: "tool_unavailable", Message: err.Error()}}, nil
+				}
+				raw, err := json.Marshal(result)
+				require.NoError(t, err)
+				return &codemode.ExecutionResult{Value: raw}, nil
+			}
+			servers, err := host.Servers(ctx, codemode.PageArgs{})
+			require.NoError(t, err)
+			require.Contains(t, servers.Items, codemode.Server{Slug: hosted.slug, Name: "Hosted tools"})
+			require.Contains(t, servers.Items, codemode.Server{Slug: "remote-counted", Name: "Remote"})
+			page, err := host.Search(ctx, codemode.SearchArgs{Query: ""})
+			require.NoError(t, err)
+			require.False(t, page.Incomplete)
+			paths := make([]string, 0, len(page.Items))
+			for _, item := range page.Items {
+				paths = append(paths, item.Path)
+			}
+			require.Contains(t, paths, hosted.slug+"--alpha")
+			require.Contains(t, paths, "remote-counted--tool_000")
+			if !all {
+				require.NotContains(t, paths, hosted.slug+"--beta")
+			}
+			for _, path := range []string{hosted.slug + "--alpha", "remote-counted--tool_000"} {
+				described, err := host.Describe(ctx, path)
+				require.NoError(t, err)
+				require.Contains(t, string(described.Definition), `"inputSchema"`)
+			}
+			return &codemode.ExecutionResult{Value: json.RawMessage(`true`)}, nil
+		}})
 	}
 	// The browser request carries identity, while admission loads persisted grants.
 	caller := contextvalues.SetAuthContext(t.Context(), authCtx)
@@ -526,8 +579,16 @@ func TestServeConsent_OrganizationGatewayPicksTools(t *testing.T) {
 	form.Set("csrf_token", csrfToken)
 	form.Set("action", "approve")
 	form.Set("tool_inventory_id", attempt)
-	form.Set("tool_filtering", "on")
-	form.Add("tools", hosted.slug+"--alpha")
+	form.Set("discovery_mode", string(mode))
+	form.Set("tool_catalog_mode", string(toolfilter.CatalogModeCached))
+	form.Set("tool_filtering", "off")
+	if !all {
+		form.Set("tool_filtering", "on")
+		form.Add("tools", hosted.slug+"--alpha")
+		if mode == metamcp.DiscoveryModeCode {
+			form.Add("tools", "remote-counted--tool_000")
+		}
+	}
 	req := httptest.NewRequest(http.MethodPost, "/mcp/gateway/"+fx.organizationSlug+"/connect", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	approve := httptest.NewRecorder()
@@ -544,10 +605,14 @@ func TestServeConsent_OrganizationGatewayPicksTools(t *testing.T) {
 	require.NoError(t, err)
 	policy, err := toolfilter.ParseSessionPolicy(raw)
 	require.NoError(t, err)
-	require.NotNil(t, policy.Selection)
-	require.Equal(t, "meta_mcp_server:"+endpoint.MetaMcpServerID.UUID.String(), policy.Selection.Resource)
-	require.True(t, policy.Selection.AllowsName(hosted.slug+"--alpha"))
-	require.False(t, policy.Selection.AllowsName(hosted.slug+"--beta"))
+	if all {
+		require.Nil(t, policy.Selection)
+	} else {
+		require.NotNil(t, policy.Selection)
+		require.Equal(t, "meta_mcp_server:"+endpoint.MetaMcpServerID.UUID.String(), policy.Selection.Resource)
+		require.True(t, policy.Selection.AllowsName(hosted.slug+"--alpha"))
+		require.False(t, policy.Selection.AllowsName(hosted.slug+"--beta"))
+	}
 	require.NotNil(t, policy.Catalog)
 	tokenForm := url.Values{"grant_type": {"authorization_code"}, "code": {code}, "client_id": {client.ClientID}, "redirect_uri": {client.RedirectUris[0]}, "code_verifier": {gatewayConsentVerifier}}
 	tokenRequest := httptest.NewRequest(http.MethodPost, "/mcp/gateway/"+fx.organizationSlug+"/token", strings.NewReader(tokenForm.Encode())).WithContext(ctx)
@@ -561,8 +626,15 @@ func TestServeConsent_OrganizationGatewayPicksTools(t *testing.T) {
 	require.NoError(t, json.Unmarshal(issued.Body.Bytes(), &tokens))
 	tokenCalls := seedExpiredCatalogCredential(t, ctx, ti, fx.issuerID, fx.subject)
 	before := upstream.requests.Load()
-	for _, name := range []string{"list_servers", "describe_server", "connection_status"} {
+	namesToCall := []string{"list_servers", "describe_server", "connection_status"}
+	if mode == metamcp.DiscoveryModeCode {
+		namesToCall = []string{"execute"}
+	}
+	for _, name := range namesToCall {
 		arguments := map[string]any{}
+		if name == "execute" {
+			arguments["code"] = "discover"
+		}
 		if name == "describe_server" {
 			arguments["server"] = hosted.slug
 		}
@@ -574,6 +646,19 @@ func TestServeConsent_OrganizationGatewayPicksTools(t *testing.T) {
 	}
 	require.Equal(t, before, upstream.requests.Load(), "organization gateway discovery reuses the consent catalog")
 	require.Zero(t, tokenCalls.Load(), "organization gateway discovery never refreshes credentials")
+	if mode == metamcp.DiscoveryModeCode {
+		upstream.future.Store(true)
+		body := makeMetaRPCBody(t, "tools/call", map[string]any{"name": "execute", "arguments": map[string]any{"code": "remote-counted--tool_001"}})
+		rejected, err := serveOrganizationGatewayHTTP(t, t.Context(), ti, fx.organizationSlug, tokens.AccessToken, body)
+		require.NoError(t, err)
+		require.Contains(t, rejected.Body.String(), `"isError":true`)
+		require.Equal(t, before, upstream.requests.Load())
+		body = makeMetaRPCBody(t, "tools/call", map[string]any{"name": "execute", "arguments": map[string]any{"code": "remote-counted--tool_000"}})
+		called, err := serveOrganizationGatewayHTTP(t, t.Context(), ti, fx.organizationSlug, tokens.AccessToken, body)
+		require.NoError(t, err)
+		require.Contains(t, called.Body.String(), "executed live")
+		require.EqualValues(t, 1, upstream.calls.Load())
+	}
 }
 
 func TestServeConsent_OrganizationGatewayListsOnlyReachableServersClients(t *testing.T) {
