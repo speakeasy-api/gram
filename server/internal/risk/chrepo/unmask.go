@@ -255,7 +255,7 @@ func (q *Queries) ListPolicyFilterSweepCandidates(ctx context.Context, p ListPol
 		From("risk_findings").
 		Where("organization_id = ?", p.OrganizationID).
 		Where("project_id = ?", p.ProjectID).
-		Where(notShadowCond).
+		Where(NotShadowCond).
 		Where("created_at >= ?", p.From).
 		Where("created_at < ?", p.To)
 	if p.PolicyID != "" {
@@ -266,7 +266,7 @@ func (q *Queries) ListPolicyFilterSweepCandidates(ctx context.Context, p ListPol
 		FromSelect(inner, "latest").
 		Where("rn = 1").
 		Where("dead_letter_reason = ''").
-		Where(liveStateCond).
+		Where(LiveStateCond).
 		Where("(created_at, id) > (?, ?)", p.CursorTime, p.CursorID).
 		OrderBy("created_at ASC", "id ASC").
 		Suffix("LIMIT ?", p.Limit)
