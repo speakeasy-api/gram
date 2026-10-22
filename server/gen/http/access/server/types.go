@@ -7960,23 +7960,24 @@ type SelectorResponseBody struct {
 	ResourceKind string `form:"resource_kind" json:"resource_kind" xml:"resource_kind"`
 	// The resource identifier, or '*' for all resources of this kind.
 	ResourceID string `form:"resource_id" json:"resource_id" xml:"resource_id"`
-	// Auth client type filter (mcp:auth scopes only).
+	// Auth client type filter (mcp:auth and mcp:blocked_auth scopes only).
 	ClientType *string `form:"client_type,omitempty" json:"client_type,omitempty" xml:"client_type,omitempty"`
-	// Personal connection owner filter (mcp:auth scopes on remote_session clients
-	// only). A user ID, '*', or '$represented_user' for the user the request acts
-	// for. Never lets a caller use another user's connection.
+	// Personal connection owner filter (mcp:auth and mcp:blocked_auth scopes on
+	// remote_session clients only). A user ID, '*', or '$represented_user' for the
+	// user the request acts for. Never lets a caller use another user's connection.
 	ConnectionOwner *string `form:"connection_owner,omitempty" json:"connection_owner,omitempty" xml:"connection_owner,omitempty"`
-	// Upstream OAuth client filter (mcp:auth scopes on remote_session clients
-	// only). Together with connection_owner it names one person's connection
-	// across every auth client sharing that upstream client.
+	// Upstream OAuth client filter (mcp:auth and mcp:blocked_auth scopes on
+	// remote_session clients only). Together with connection_owner it names one
+	// person's connection across every auth client sharing that upstream client.
 	UpstreamClient *string `form:"upstream_client,omitempty" json:"upstream_client,omitempty" xml:"upstream_client,omitempty"`
 	// Tool disposition filter (MCP scopes only).
 	Disposition *string `form:"disposition,omitempty" json:"disposition,omitempty" xml:"disposition,omitempty"`
 	// Specific tool name filter (MCP scopes only).
 	Tool *string `form:"tool,omitempty" json:"tool,omitempty" xml:"tool,omitempty"`
-	// Project filter (MCP, environment, assistant, and mcp:auth scopes). When set
-	// with resource_id='*', grants access to every resource of the kind in the
-	// project. For mcp:auth it is the project of the server using the client.
+	// Project filter (MCP, environment, assistant, mcp:auth and mcp:blocked_auth
+	// scopes). When set with resource_id='*', grants access to every resource of
+	// the kind in the project. For the auth-client scopes it is the project of the
+	// server using the client.
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	// Server URL filter (risk policy scopes only). Include the URI scheme, for
 	// example https://api.example.com.
@@ -8717,23 +8718,24 @@ type SelectorRequestBody struct {
 	ResourceKind *string `form:"resource_kind,omitempty" json:"resource_kind,omitempty" xml:"resource_kind,omitempty"`
 	// The resource identifier, or '*' for all resources of this kind.
 	ResourceID *string `form:"resource_id,omitempty" json:"resource_id,omitempty" xml:"resource_id,omitempty"`
-	// Auth client type filter (mcp:auth scopes only).
+	// Auth client type filter (mcp:auth and mcp:blocked_auth scopes only).
 	ClientType *string `form:"client_type,omitempty" json:"client_type,omitempty" xml:"client_type,omitempty"`
-	// Personal connection owner filter (mcp:auth scopes on remote_session clients
-	// only). A user ID, '*', or '$represented_user' for the user the request acts
-	// for. Never lets a caller use another user's connection.
+	// Personal connection owner filter (mcp:auth and mcp:blocked_auth scopes on
+	// remote_session clients only). A user ID, '*', or '$represented_user' for the
+	// user the request acts for. Never lets a caller use another user's connection.
 	ConnectionOwner *string `form:"connection_owner,omitempty" json:"connection_owner,omitempty" xml:"connection_owner,omitempty"`
-	// Upstream OAuth client filter (mcp:auth scopes on remote_session clients
-	// only). Together with connection_owner it names one person's connection
-	// across every auth client sharing that upstream client.
+	// Upstream OAuth client filter (mcp:auth and mcp:blocked_auth scopes on
+	// remote_session clients only). Together with connection_owner it names one
+	// person's connection across every auth client sharing that upstream client.
 	UpstreamClient *string `form:"upstream_client,omitempty" json:"upstream_client,omitempty" xml:"upstream_client,omitempty"`
 	// Tool disposition filter (MCP scopes only).
 	Disposition *string `form:"disposition,omitempty" json:"disposition,omitempty" xml:"disposition,omitempty"`
 	// Specific tool name filter (MCP scopes only).
 	Tool *string `form:"tool,omitempty" json:"tool,omitempty" xml:"tool,omitempty"`
-	// Project filter (MCP, environment, assistant, and mcp:auth scopes). When set
-	// with resource_id='*', grants access to every resource of the kind in the
-	// project. For mcp:auth it is the project of the server using the client.
+	// Project filter (MCP, environment, assistant, mcp:auth and mcp:blocked_auth
+	// scopes). When set with resource_id='*', grants access to every resource of
+	// the kind in the project. For the auth-client scopes it is the project of the
+	// server using the client.
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	// Server URL filter (risk policy scopes only). Include the URI scheme, for
 	// example https://api.example.com.

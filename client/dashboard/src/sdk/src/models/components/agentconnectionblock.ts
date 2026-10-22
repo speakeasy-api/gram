@@ -11,7 +11,7 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 /**
  * An agent the caller blocked from their own connection through one upstream OAuth client.
  */
-export type AgentConnectionRestriction = {
+export type AgentConnectionBlock = {
   /**
    * The blocked agent
    */
@@ -19,14 +19,14 @@ export type AgentConnectionRestriction = {
   createdAt: Date;
   id: string;
   /**
-   * The upstream OAuth client the connection uses; the restriction covers every auth client sharing it
+   * The upstream OAuth client the connection uses; the block covers every auth client sharing it
    */
   remoteSessionClientId: string;
 };
 
 /** @internal */
-export const AgentConnectionRestriction$inboundSchema: z.ZodMiniType<
-  AgentConnectionRestriction,
+export const AgentConnectionBlock$inboundSchema: z.ZodMiniType<
+  AgentConnectionBlock,
   unknown
 > = z.pipe(
   z.object({
@@ -47,12 +47,12 @@ export const AgentConnectionRestriction$inboundSchema: z.ZodMiniType<
   }),
 );
 
-export function agentConnectionRestrictionFromJSON(
+export function agentConnectionBlockFromJSON(
   jsonString: string,
-): SafeParseResult<AgentConnectionRestriction, SDKValidationError> {
+): SafeParseResult<AgentConnectionBlock, SDKValidationError> {
   return safeParse(
     jsonString,
-    (x) => AgentConnectionRestriction$inboundSchema.parse(JSON.parse(x)),
-    `Failed to parse 'AgentConnectionRestriction' from JSON`,
+    (x) => AgentConnectionBlock$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'AgentConnectionBlock' from JSON`,
   );
 }

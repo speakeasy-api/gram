@@ -1321,23 +1321,24 @@ type Selector struct {
 	ResourceKind string
 	// The resource identifier, or '*' for all resources of this kind.
 	ResourceID string
-	// Auth client type filter (mcp:auth scopes only).
+	// Auth client type filter (mcp:auth and mcp:blocked_auth scopes only).
 	ClientType *string
-	// Personal connection owner filter (mcp:auth scopes on remote_session clients
-	// only). A user ID, '*', or '$represented_user' for the user the request acts
-	// for. Never lets a caller use another user's connection.
+	// Personal connection owner filter (mcp:auth and mcp:blocked_auth scopes on
+	// remote_session clients only). A user ID, '*', or '$represented_user' for the
+	// user the request acts for. Never lets a caller use another user's connection.
 	ConnectionOwner *string
-	// Upstream OAuth client filter (mcp:auth scopes on remote_session clients
-	// only). Together with connection_owner it names one person's connection
-	// across every auth client sharing that upstream client.
+	// Upstream OAuth client filter (mcp:auth and mcp:blocked_auth scopes on
+	// remote_session clients only). Together with connection_owner it names one
+	// person's connection across every auth client sharing that upstream client.
 	UpstreamClient *string
 	// Tool disposition filter (MCP scopes only).
 	Disposition *string
 	// Specific tool name filter (MCP scopes only).
 	Tool *string
-	// Project filter (MCP, environment, assistant, and mcp:auth scopes). When set
-	// with resource_id='*', grants access to every resource of the kind in the
-	// project. For mcp:auth it is the project of the server using the client.
+	// Project filter (MCP, environment, assistant, mcp:auth and mcp:blocked_auth
+	// scopes). When set with resource_id='*', grants access to every resource of
+	// the kind in the project. For the auth-client scopes it is the project of the
+	// server using the client.
 	ProjectID *string
 	// Server URL filter (risk policy scopes only). Include the URI scheme, for
 	// example https://api.example.com.

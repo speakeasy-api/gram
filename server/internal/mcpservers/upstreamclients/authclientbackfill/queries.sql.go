@@ -1779,7 +1779,35 @@ SELECT
   b.attached_by_subject_id,
   a.owner_user_id,
   COALESCE(rs.subject_urn, '')::text AS connection_subject,
-  (rs.id IS NOT NULL AND rs.deleted IS FALSE AND rs.grant_generation = b.grant_generation)::boolean AS connection_live,
+  (
+    a.revoked_at IS NULL AND a.suspended_at IS NULL AND a.owner_reassignment_required_at IS NULL
+    AND EXISTS (
+      SELECT 1
+      FROM users AS owner
+      JOIN organization_user_relationships AS membership ON membership.organization_id = a.organization_id
+        AND membership.user_id = owner.id AND membership.deleted_at IS NULL
+      WHERE owner.id = a.owner_user_id AND owner.deleted_at IS NULL
+    )
+  )::boolean AS agent_active,
+  (
+    rs.id IS NOT NULL AND rs.deleted IS FALSE AND rs.grant_generation = b.grant_generation
+    AND rs.remote_session_client_id = b.remote_session_client_id
+  )::boolean AS connection_live,
+  EXISTS (
+    SELECT 1
+    FROM remote_session_clients AS c
+    JOIN remote_session_issuers AS issuer ON issuer.id = c.remote_session_issuer_id AND issuer.deleted IS FALSE
+    JOIN user_session_issuers AS usi ON usi.id = b.user_session_issuer_id AND usi.deleted IS FALSE
+    JOIN user_session_issuers AS provenance ON provenance.id = rs.user_session_issuer_id AND provenance.deleted IS FALSE
+    JOIN projects AS p ON p.id = b.project_id AND p.organization_id = b.organization_id AND p.deleted IS FALSE
+    JOIN remote_session_client_user_session_issuers AS link ON link.remote_session_client_id = c.id AND link.user_session_issuer_id = usi.id
+    WHERE c.id = b.remote_session_client_id
+      AND c.deleted IS FALSE
+      AND (issuer.project_id = p.id OR (issuer.project_id IS NULL AND (issuer.organization_id IS NULL OR issuer.organization_id = p.organization_id)))
+      AND (provenance.project_id = p.id OR (provenance.project_id IS NULL AND provenance.organization_id = p.organization_id))
+      AND (usi.project_id = p.id OR (usi.project_id IS NULL AND usi.organization_id = p.organization_id))
+      AND (c.project_id = p.id OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = p.organization_id)))
+  )::boolean AS configuration_live,
   EXISTS (
     SELECT 1
     FROM mcp_auth_clients AS ac
@@ -1803,14 +1831,18 @@ type ListLiveAgentAttachmentsRow struct {
 	AttachedBySubjectID   string
 	OwnerUserID           string
 	ConnectionSubject     string
+	AgentActive           bool
 	ConnectionLive        bool
+	ConfigurationLive     bool
 	ClientRecorded        bool
 }
 
 // Unrevoked attachments of live agents to a user's connection, with what the
-// attachment runtime checks before serving one: the connection is still live
-// at the attached grant generation, it belongs to the user who attached it,
-// and that user still owns the agent.
+// attachment runtime (GetPrincipalRemoteSessionBinding) checks before serving
+// one: the connection is still live at the attached grant generation, it
+// belongs to the user who attached it, that user still owns the agent, the
+// agent and its owner are active, and the sign-in, project, upstream client
+// and issuer are live and reach the attachment's project.
 func (q *Queries) ListLiveAgentAttachments(ctx context.Context, organizationID string) ([]ListLiveAgentAttachmentsRow, error) {
 	rows, err := q.db.Query(ctx, listLiveAgentAttachments, organizationID)
 	if err != nil {
@@ -1827,7 +1859,9 @@ func (q *Queries) ListLiveAgentAttachments(ctx context.Context, organizationID s
 			&i.AttachedBySubjectID,
 			&i.OwnerUserID,
 			&i.ConnectionSubject,
+			&i.AgentActive,
 			&i.ConnectionLive,
+			&i.ConfigurationLive,
 			&i.ClientRecorded,
 		); err != nil {
 			return nil, err
@@ -4248,6 +4282,16 @@ func (q *Queries) SoftDeleteAssociationFixture(ctx context.Context, id uuid.UUID
 	return err
 }
 
+const softDeleteAttachmentUserSessionIssuerFixture = `-- name: SoftDeleteAttachmentUserSessionIssuerFixture :exec
+UPDATE user_session_issuers SET deleted_at = clock_timestamp()
+WHERE id = (SELECT user_session_issuer_id FROM principal_remote_session_bindings WHERE principal_remote_session_bindings.id = $1)
+`
+
+func (q *Queries) SoftDeleteAttachmentUserSessionIssuerFixture(ctx context.Context, bindingID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, softDeleteAttachmentUserSessionIssuerFixture, bindingID)
+	return err
+}
+
 const softDeleteAuthClientFixture = `-- name: SoftDeleteAuthClientFixture :exec
 UPDATE mcp_auth_clients SET deleted_at = clock_timestamp() WHERE id = $1
 `
@@ -4264,6 +4308,15 @@ WHERE id = (SELECT remote_session_issuer_id FROM remote_session_clients WHERE re
 
 func (q *Queries) SoftDeleteIssuerOfClientFixture(ctx context.Context, clientID uuid.UUID) error {
 	_, err := q.db.Exec(ctx, softDeleteIssuerOfClientFixture, clientID)
+	return err
+}
+
+const softDeleteProjectFixture = `-- name: SoftDeleteProjectFixture :exec
+UPDATE projects SET deleted_at = clock_timestamp() WHERE id = $1
+`
+
+func (q *Queries) SoftDeleteProjectFixture(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, softDeleteProjectFixture, id)
 	return err
 }
 

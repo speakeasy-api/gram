@@ -48,7 +48,12 @@ func ParseAuthClient(value string) (AuthClient, error) {
 		return AuthClient{}, fmt.Errorf("%w: invalid auth_client uuid", ErrInvalid)
 	}
 
-	return NewAuthClient(id), nil
+	a := NewAuthClient(id)
+	if a.err != nil {
+		return AuthClient{}, a.err
+	}
+
+	return a, nil
 }
 
 func (u AuthClient) IsZero() bool {

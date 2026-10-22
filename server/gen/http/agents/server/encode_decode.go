@@ -2411,31 +2411,60 @@ func EncodeDeletePolicyGrantError(encoder func(context.Context, http.ResponseWri
 	}
 }
 
-// EncodeListConnectionRestrictionsResponse returns an encoder for responses
-// returned by the agents listConnectionRestrictions endpoint.
-func EncodeListConnectionRestrictionsResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+// EncodeListConnectionBlocksResponse returns an encoder for responses returned
+// by the agents listConnectionBlocks endpoint.
+func EncodeListConnectionBlocksResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
 	return func(ctx context.Context, w http.ResponseWriter, v any) error {
-		res, _ := v.(*agents.ListAgentConnectionRestrictionsResult)
+		res, _ := v.(*agents.ListAgentConnectionBlocksResult)
 		enc := encoder(ctx, w)
-		body := NewListConnectionRestrictionsResponseBody(res)
+		body := NewListConnectionBlocksResponseBody(res)
 		w.WriteHeader(http.StatusOK)
 		return enc.Encode(body)
 	}
 }
 
-// DecodeListConnectionRestrictionsRequest returns a decoder for requests sent
-// to the agents listConnectionRestrictions endpoint.
-func DecodeListConnectionRestrictionsRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*agents.ListConnectionRestrictionsPayload, error) {
-	return func(r *http.Request) (*agents.ListConnectionRestrictionsPayload, error) {
-		var payload *agents.ListConnectionRestrictionsPayload
+// DecodeListConnectionBlocksRequest returns a decoder for requests sent to the
+// agents listConnectionBlocks endpoint.
+func DecodeListConnectionBlocksRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*agents.ListConnectionBlocksPayload, error) {
+	return func(r *http.Request) (*agents.ListConnectionBlocksPayload, error) {
+		var payload *agents.ListConnectionBlocksPayload
 		var (
+			cursor       *string
+			limit        int
 			sessionToken *string
+			err          error
 		)
+		qp := r.URL.Query()
+		cursorRaw := qp.Get("cursor")
+		if cursorRaw != "" {
+			cursor = &cursorRaw
+		}
+		{
+			limitRaw := qp.Get("limit")
+			if limitRaw == "" {
+				limit = 50
+			} else {
+				v, err2 := strconv.ParseInt(limitRaw, 10, strconv.IntSize)
+				if err2 != nil {
+					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("limit", limitRaw, "integer"))
+				}
+				limit = int(v)
+			}
+		}
+		if limit < 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 1, true))
+		}
+		if limit > 100 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 100, false))
+		}
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
 		}
-		payload = NewListConnectionRestrictionsPayload(sessionToken)
+		if err != nil {
+			return payload, err
+		}
+		payload = NewListConnectionBlocksPayload(cursor, limit, sessionToken)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -2448,9 +2477,9 @@ func DecodeListConnectionRestrictionsRequest(mux goahttp.Muxer, decoder func(*ht
 	}
 }
 
-// EncodeListConnectionRestrictionsError returns an encoder for errors returned
-// by the listConnectionRestrictions agents endpoint.
-func EncodeListConnectionRestrictionsError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+// EncodeListConnectionBlocksError returns an encoder for errors returned by
+// the listConnectionBlocks agents endpoint.
+func EncodeListConnectionBlocksError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
 	encodeError := goahttp.ErrorEncoder(encoder, formatter)
 	return func(ctx context.Context, w http.ResponseWriter, v error) error {
 		var en goa.GoaErrorNamer
@@ -2467,7 +2496,7 @@ func EncodeListConnectionRestrictionsError(encoder func(context.Context, http.Re
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewListConnectionRestrictionsUnauthorizedResponseBody(res)
+				body = NewListConnectionBlocksUnauthorizedResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnauthorized)
@@ -2481,7 +2510,7 @@ func EncodeListConnectionRestrictionsError(encoder func(context.Context, http.Re
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewListConnectionRestrictionsForbiddenResponseBody(res)
+				body = NewListConnectionBlocksForbiddenResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusForbidden)
@@ -2495,7 +2524,7 @@ func EncodeListConnectionRestrictionsError(encoder func(context.Context, http.Re
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewListConnectionRestrictionsBadRequestResponseBody(res)
+				body = NewListConnectionBlocksBadRequestResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusBadRequest)
@@ -2509,7 +2538,7 @@ func EncodeListConnectionRestrictionsError(encoder func(context.Context, http.Re
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewListConnectionRestrictionsNotFoundResponseBody(res)
+				body = NewListConnectionBlocksNotFoundResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusNotFound)
@@ -2523,7 +2552,7 @@ func EncodeListConnectionRestrictionsError(encoder func(context.Context, http.Re
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewListConnectionRestrictionsConflictResponseBody(res)
+				body = NewListConnectionBlocksConflictResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusConflict)
@@ -2537,7 +2566,7 @@ func EncodeListConnectionRestrictionsError(encoder func(context.Context, http.Re
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewListConnectionRestrictionsUnsupportedMediaResponseBody(res)
+				body = NewListConnectionBlocksUnsupportedMediaResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnsupportedMediaType)
@@ -2551,7 +2580,7 @@ func EncodeListConnectionRestrictionsError(encoder func(context.Context, http.Re
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewListConnectionRestrictionsInvalidResponseBody(res)
+				body = NewListConnectionBlocksInvalidResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnprocessableEntity)
@@ -2565,7 +2594,7 @@ func EncodeListConnectionRestrictionsError(encoder func(context.Context, http.Re
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewListConnectionRestrictionsInvariantViolationResponseBody(res)
+				body = NewListConnectionBlocksInvariantViolationResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusInternalServerError)
@@ -2579,7 +2608,7 @@ func EncodeListConnectionRestrictionsError(encoder func(context.Context, http.Re
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewListConnectionRestrictionsUnexpectedResponseBody(res)
+				body = NewListConnectionBlocksUnexpectedResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusInternalServerError)
@@ -2593,7 +2622,7 @@ func EncodeListConnectionRestrictionsError(encoder func(context.Context, http.Re
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewListConnectionRestrictionsGatewayErrorResponseBody(res)
+				body = NewListConnectionBlocksGatewayErrorResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusBadGateway)
@@ -2604,25 +2633,25 @@ func EncodeListConnectionRestrictionsError(encoder func(context.Context, http.Re
 	}
 }
 
-// EncodeRestrictAgentOnConnectionResponse returns an encoder for responses
-// returned by the agents restrictAgentOnConnection endpoint.
-func EncodeRestrictAgentOnConnectionResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+// EncodeBlockAgentOnConnectionResponse returns an encoder for responses
+// returned by the agents blockAgentOnConnection endpoint.
+func EncodeBlockAgentOnConnectionResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
 	return func(ctx context.Context, w http.ResponseWriter, v any) error {
-		res, _ := v.(*agents.AgentConnectionRestriction)
+		res, _ := v.(*agents.AgentConnectionBlock)
 		enc := encoder(ctx, w)
-		body := NewRestrictAgentOnConnectionResponseBody(res)
+		body := NewBlockAgentOnConnectionResponseBody(res)
 		w.WriteHeader(http.StatusOK)
 		return enc.Encode(body)
 	}
 }
 
-// DecodeRestrictAgentOnConnectionRequest returns a decoder for requests sent
-// to the agents restrictAgentOnConnection endpoint.
-func DecodeRestrictAgentOnConnectionRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*agents.RestrictAgentOnConnectionPayload, error) {
-	return func(r *http.Request) (*agents.RestrictAgentOnConnectionPayload, error) {
-		var payload *agents.RestrictAgentOnConnectionPayload
+// DecodeBlockAgentOnConnectionRequest returns a decoder for requests sent to
+// the agents blockAgentOnConnection endpoint.
+func DecodeBlockAgentOnConnectionRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*agents.BlockAgentOnConnectionPayload, error) {
+	return func(r *http.Request) (*agents.BlockAgentOnConnectionPayload, error) {
+		var payload *agents.BlockAgentOnConnectionPayload
 		var (
-			body RestrictAgentOnConnectionRequestBody
+			body BlockAgentOnConnectionRequestBody
 			err  error
 		)
 		err = decoder(r).Decode(&body)
@@ -2636,7 +2665,7 @@ func DecodeRestrictAgentOnConnectionRequest(mux goahttp.Muxer, decoder func(*htt
 			}
 			return payload, goa.DecodePayloadError(err.Error())
 		}
-		err = ValidateRestrictAgentOnConnectionRequestBody(&body)
+		err = ValidateBlockAgentOnConnectionRequestBody(&body)
 		if err != nil {
 			return payload, err
 		}
@@ -2648,7 +2677,7 @@ func DecodeRestrictAgentOnConnectionRequest(mux goahttp.Muxer, decoder func(*htt
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
 		}
-		payload = NewRestrictAgentOnConnectionPayload(&body, sessionToken)
+		payload = NewBlockAgentOnConnectionPayload(&body, sessionToken)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -2661,9 +2690,9 @@ func DecodeRestrictAgentOnConnectionRequest(mux goahttp.Muxer, decoder func(*htt
 	}
 }
 
-// EncodeRestrictAgentOnConnectionError returns an encoder for errors returned
-// by the restrictAgentOnConnection agents endpoint.
-func EncodeRestrictAgentOnConnectionError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+// EncodeBlockAgentOnConnectionError returns an encoder for errors returned by
+// the blockAgentOnConnection agents endpoint.
+func EncodeBlockAgentOnConnectionError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
 	encodeError := goahttp.ErrorEncoder(encoder, formatter)
 	return func(ctx context.Context, w http.ResponseWriter, v error) error {
 		var en goa.GoaErrorNamer
@@ -2680,7 +2709,7 @@ func EncodeRestrictAgentOnConnectionError(encoder func(context.Context, http.Res
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewRestrictAgentOnConnectionUnauthorizedResponseBody(res)
+				body = NewBlockAgentOnConnectionUnauthorizedResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnauthorized)
@@ -2694,7 +2723,7 @@ func EncodeRestrictAgentOnConnectionError(encoder func(context.Context, http.Res
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewRestrictAgentOnConnectionForbiddenResponseBody(res)
+				body = NewBlockAgentOnConnectionForbiddenResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusForbidden)
@@ -2708,7 +2737,7 @@ func EncodeRestrictAgentOnConnectionError(encoder func(context.Context, http.Res
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewRestrictAgentOnConnectionBadRequestResponseBody(res)
+				body = NewBlockAgentOnConnectionBadRequestResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusBadRequest)
@@ -2722,7 +2751,7 @@ func EncodeRestrictAgentOnConnectionError(encoder func(context.Context, http.Res
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewRestrictAgentOnConnectionNotFoundResponseBody(res)
+				body = NewBlockAgentOnConnectionNotFoundResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusNotFound)
@@ -2736,7 +2765,7 @@ func EncodeRestrictAgentOnConnectionError(encoder func(context.Context, http.Res
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewRestrictAgentOnConnectionConflictResponseBody(res)
+				body = NewBlockAgentOnConnectionConflictResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusConflict)
@@ -2750,7 +2779,7 @@ func EncodeRestrictAgentOnConnectionError(encoder func(context.Context, http.Res
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewRestrictAgentOnConnectionUnsupportedMediaResponseBody(res)
+				body = NewBlockAgentOnConnectionUnsupportedMediaResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnsupportedMediaType)
@@ -2764,7 +2793,7 @@ func EncodeRestrictAgentOnConnectionError(encoder func(context.Context, http.Res
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewRestrictAgentOnConnectionInvalidResponseBody(res)
+				body = NewBlockAgentOnConnectionInvalidResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnprocessableEntity)
@@ -2778,7 +2807,7 @@ func EncodeRestrictAgentOnConnectionError(encoder func(context.Context, http.Res
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewRestrictAgentOnConnectionInvariantViolationResponseBody(res)
+				body = NewBlockAgentOnConnectionInvariantViolationResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusInternalServerError)
@@ -2792,7 +2821,7 @@ func EncodeRestrictAgentOnConnectionError(encoder func(context.Context, http.Res
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewRestrictAgentOnConnectionUnexpectedResponseBody(res)
+				body = NewBlockAgentOnConnectionUnexpectedResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusInternalServerError)
@@ -2806,7 +2835,7 @@ func EncodeRestrictAgentOnConnectionError(encoder func(context.Context, http.Res
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewRestrictAgentOnConnectionGatewayErrorResponseBody(res)
+				body = NewBlockAgentOnConnectionGatewayErrorResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusBadGateway)
@@ -2817,22 +2846,22 @@ func EncodeRestrictAgentOnConnectionError(encoder func(context.Context, http.Res
 	}
 }
 
-// EncodeRemoveConnectionRestrictionResponse returns an encoder for responses
-// returned by the agents removeConnectionRestriction endpoint.
-func EncodeRemoveConnectionRestrictionResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+// EncodeRemoveConnectionBlockResponse returns an encoder for responses
+// returned by the agents removeConnectionBlock endpoint.
+func EncodeRemoveConnectionBlockResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
 	return func(ctx context.Context, w http.ResponseWriter, v any) error {
 		w.WriteHeader(http.StatusNoContent)
 		return nil
 	}
 }
 
-// DecodeRemoveConnectionRestrictionRequest returns a decoder for requests sent
-// to the agents removeConnectionRestriction endpoint.
-func DecodeRemoveConnectionRestrictionRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*agents.RemoveConnectionRestrictionPayload, error) {
-	return func(r *http.Request) (*agents.RemoveConnectionRestrictionPayload, error) {
-		var payload *agents.RemoveConnectionRestrictionPayload
+// DecodeRemoveConnectionBlockRequest returns a decoder for requests sent to
+// the agents removeConnectionBlock endpoint.
+func DecodeRemoveConnectionBlockRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*agents.RemoveConnectionBlockPayload, error) {
+	return func(r *http.Request) (*agents.RemoveConnectionBlockPayload, error) {
+		var payload *agents.RemoveConnectionBlockPayload
 		var (
-			body RemoveConnectionRestrictionRequestBody
+			body RemoveConnectionBlockRequestBody
 			err  error
 		)
 		err = decoder(r).Decode(&body)
@@ -2846,7 +2875,7 @@ func DecodeRemoveConnectionRestrictionRequest(mux goahttp.Muxer, decoder func(*h
 			}
 			return payload, goa.DecodePayloadError(err.Error())
 		}
-		err = ValidateRemoveConnectionRestrictionRequestBody(&body)
+		err = ValidateRemoveConnectionBlockRequestBody(&body)
 		if err != nil {
 			return payload, err
 		}
@@ -2858,7 +2887,7 @@ func DecodeRemoveConnectionRestrictionRequest(mux goahttp.Muxer, decoder func(*h
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
 		}
-		payload = NewRemoveConnectionRestrictionPayload(&body, sessionToken)
+		payload = NewRemoveConnectionBlockPayload(&body, sessionToken)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -2871,9 +2900,9 @@ func DecodeRemoveConnectionRestrictionRequest(mux goahttp.Muxer, decoder func(*h
 	}
 }
 
-// EncodeRemoveConnectionRestrictionError returns an encoder for errors
-// returned by the removeConnectionRestriction agents endpoint.
-func EncodeRemoveConnectionRestrictionError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+// EncodeRemoveConnectionBlockError returns an encoder for errors returned by
+// the removeConnectionBlock agents endpoint.
+func EncodeRemoveConnectionBlockError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
 	encodeError := goahttp.ErrorEncoder(encoder, formatter)
 	return func(ctx context.Context, w http.ResponseWriter, v error) error {
 		var en goa.GoaErrorNamer
@@ -2890,7 +2919,7 @@ func EncodeRemoveConnectionRestrictionError(encoder func(context.Context, http.R
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewRemoveConnectionRestrictionUnauthorizedResponseBody(res)
+				body = NewRemoveConnectionBlockUnauthorizedResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnauthorized)
@@ -2904,7 +2933,7 @@ func EncodeRemoveConnectionRestrictionError(encoder func(context.Context, http.R
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewRemoveConnectionRestrictionForbiddenResponseBody(res)
+				body = NewRemoveConnectionBlockForbiddenResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusForbidden)
@@ -2918,7 +2947,7 @@ func EncodeRemoveConnectionRestrictionError(encoder func(context.Context, http.R
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewRemoveConnectionRestrictionBadRequestResponseBody(res)
+				body = NewRemoveConnectionBlockBadRequestResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusBadRequest)
@@ -2932,7 +2961,7 @@ func EncodeRemoveConnectionRestrictionError(encoder func(context.Context, http.R
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewRemoveConnectionRestrictionNotFoundResponseBody(res)
+				body = NewRemoveConnectionBlockNotFoundResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusNotFound)
@@ -2946,7 +2975,7 @@ func EncodeRemoveConnectionRestrictionError(encoder func(context.Context, http.R
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewRemoveConnectionRestrictionConflictResponseBody(res)
+				body = NewRemoveConnectionBlockConflictResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusConflict)
@@ -2960,7 +2989,7 @@ func EncodeRemoveConnectionRestrictionError(encoder func(context.Context, http.R
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewRemoveConnectionRestrictionUnsupportedMediaResponseBody(res)
+				body = NewRemoveConnectionBlockUnsupportedMediaResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnsupportedMediaType)
@@ -2974,7 +3003,7 @@ func EncodeRemoveConnectionRestrictionError(encoder func(context.Context, http.R
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewRemoveConnectionRestrictionInvalidResponseBody(res)
+				body = NewRemoveConnectionBlockInvalidResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnprocessableEntity)
@@ -2988,7 +3017,7 @@ func EncodeRemoveConnectionRestrictionError(encoder func(context.Context, http.R
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewRemoveConnectionRestrictionInvariantViolationResponseBody(res)
+				body = NewRemoveConnectionBlockInvariantViolationResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusInternalServerError)
@@ -3002,7 +3031,7 @@ func EncodeRemoveConnectionRestrictionError(encoder func(context.Context, http.R
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewRemoveConnectionRestrictionUnexpectedResponseBody(res)
+				body = NewRemoveConnectionBlockUnexpectedResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusInternalServerError)
@@ -3016,7 +3045,7 @@ func EncodeRemoveConnectionRestrictionError(encoder func(context.Context, http.R
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewRemoveConnectionRestrictionGatewayErrorResponseBody(res)
+				body = NewRemoveConnectionBlockGatewayErrorResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusBadGateway)
@@ -4501,11 +4530,11 @@ func marshalAgentsAgentPolicySelectorToAgentPolicySelectorResponseBody(v *agents
 	return res
 }
 
-// marshalAgentsAgentConnectionRestrictionToAgentConnectionRestrictionResponseBody
-// builds a value of type *AgentConnectionRestrictionResponseBody from a value
-// of type *agents.AgentConnectionRestriction.
-func marshalAgentsAgentConnectionRestrictionToAgentConnectionRestrictionResponseBody(v *agents.AgentConnectionRestriction) *AgentConnectionRestrictionResponseBody {
-	res := &AgentConnectionRestrictionResponseBody{
+// marshalAgentsAgentConnectionBlockToAgentConnectionBlockResponseBody builds a
+// value of type *AgentConnectionBlockResponseBody from a value of type
+// *agents.AgentConnectionBlock.
+func marshalAgentsAgentConnectionBlockToAgentConnectionBlockResponseBody(v *agents.AgentConnectionBlock) *AgentConnectionBlockResponseBody {
+	res := &AgentConnectionBlockResponseBody{
 		ID:                    v.ID,
 		AgentID:               v.AgentID,
 		RemoteSessionClientID: v.RemoteSessionClientID,

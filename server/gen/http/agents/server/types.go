@@ -80,20 +80,20 @@ type DeletePolicyGrantRequestBody struct {
 	AgentID *string `form:"agent_id,omitempty" json:"agent_id,omitempty" xml:"agent_id,omitempty"`
 }
 
-// RestrictAgentOnConnectionRequestBody is the type of the "agents" service
-// "restrictAgentOnConnection" endpoint HTTP request body.
-type RestrictAgentOnConnectionRequestBody struct {
+// BlockAgentOnConnectionRequestBody is the type of the "agents" service
+// "blockAgentOnConnection" endpoint HTTP request body.
+type BlockAgentOnConnectionRequestBody struct {
 	// The agent to block; any agent in the caller's organization
 	AgentID *string `form:"agent_id,omitempty" json:"agent_id,omitempty" xml:"agent_id,omitempty"`
 	// The upstream OAuth client of the caller's own connection
 	RemoteSessionClientID *string `form:"remote_session_client_id,omitempty" json:"remote_session_client_id,omitempty" xml:"remote_session_client_id,omitempty"`
 }
 
-// RemoveConnectionRestrictionRequestBody is the type of the "agents" service
-// "removeConnectionRestriction" endpoint HTTP request body.
-type RemoveConnectionRestrictionRequestBody struct {
-	// Connection restriction identifier
-	RestrictionID *string `form:"restriction_id,omitempty" json:"restriction_id,omitempty" xml:"restriction_id,omitempty"`
+// RemoveConnectionBlockRequestBody is the type of the "agents" service
+// "removeConnectionBlock" endpoint HTTP request body.
+type RemoveConnectionBlockRequestBody struct {
+	// Connection block identifier
+	BlockID *string `form:"block_id,omitempty" json:"block_id,omitempty" xml:"block_id,omitempty"`
 }
 
 // TransferRequestBody is the type of the "agents" service "transfer" endpoint
@@ -254,21 +254,23 @@ type UpdatePolicyGrantResponseBody struct {
 	UpdatedAt string                           `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
-// ListConnectionRestrictionsResponseBody is the type of the "agents" service
-// "listConnectionRestrictions" endpoint HTTP response body.
-type ListConnectionRestrictionsResponseBody struct {
-	// Restrictions the caller wrote on their own connections
-	Items []*AgentConnectionRestrictionResponseBody `form:"items" json:"items" xml:"items"`
+// ListConnectionBlocksResponseBody is the type of the "agents" service
+// "listConnectionBlocks" endpoint HTTP response body.
+type ListConnectionBlocksResponseBody struct {
+	// Blocks the caller wrote on their own connections
+	Items []*AgentConnectionBlockResponseBody `form:"items" json:"items" xml:"items"`
+	// Cursor for the next page; absent when exhausted.
+	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
 }
 
-// RestrictAgentOnConnectionResponseBody is the type of the "agents" service
-// "restrictAgentOnConnection" endpoint HTTP response body.
-type RestrictAgentOnConnectionResponseBody struct {
+// BlockAgentOnConnectionResponseBody is the type of the "agents" service
+// "blockAgentOnConnection" endpoint HTTP response body.
+type BlockAgentOnConnectionResponseBody struct {
 	ID string `form:"id" json:"id" xml:"id"`
 	// The blocked agent
 	AgentID string `form:"agent_id" json:"agent_id" xml:"agent_id"`
-	// The upstream OAuth client the connection uses; the restriction covers every
-	// auth client sharing it
+	// The upstream OAuth client the connection uses; the block covers every auth
+	// client sharing it
 	RemoteSessionClientID string `form:"remote_session_client_id" json:"remote_session_client_id" xml:"remote_session_client_id"`
 	CreatedAt             string `form:"created_at" json:"created_at" xml:"created_at"`
 }
@@ -2386,10 +2388,10 @@ type DeletePolicyGrantGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// ListConnectionRestrictionsUnauthorizedResponseBody is the type of the
-// "agents" service "listConnectionRestrictions" endpoint HTTP response body
-// for the "unauthorized" error.
-type ListConnectionRestrictionsUnauthorizedResponseBody struct {
+// ListConnectionBlocksUnauthorizedResponseBody is the type of the "agents"
+// service "listConnectionBlocks" endpoint HTTP response body for the
+// "unauthorized" error.
+type ListConnectionBlocksUnauthorizedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2405,10 +2407,10 @@ type ListConnectionRestrictionsUnauthorizedResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// ListConnectionRestrictionsForbiddenResponseBody is the type of the "agents"
-// service "listConnectionRestrictions" endpoint HTTP response body for the
+// ListConnectionBlocksForbiddenResponseBody is the type of the "agents"
+// service "listConnectionBlocks" endpoint HTTP response body for the
 // "forbidden" error.
-type ListConnectionRestrictionsForbiddenResponseBody struct {
+type ListConnectionBlocksForbiddenResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2424,10 +2426,10 @@ type ListConnectionRestrictionsForbiddenResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// ListConnectionRestrictionsBadRequestResponseBody is the type of the "agents"
-// service "listConnectionRestrictions" endpoint HTTP response body for the
+// ListConnectionBlocksBadRequestResponseBody is the type of the "agents"
+// service "listConnectionBlocks" endpoint HTTP response body for the
 // "bad_request" error.
-type ListConnectionRestrictionsBadRequestResponseBody struct {
+type ListConnectionBlocksBadRequestResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2443,10 +2445,9 @@ type ListConnectionRestrictionsBadRequestResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// ListConnectionRestrictionsNotFoundResponseBody is the type of the "agents"
-// service "listConnectionRestrictions" endpoint HTTP response body for the
-// "not_found" error.
-type ListConnectionRestrictionsNotFoundResponseBody struct {
+// ListConnectionBlocksNotFoundResponseBody is the type of the "agents" service
+// "listConnectionBlocks" endpoint HTTP response body for the "not_found" error.
+type ListConnectionBlocksNotFoundResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2462,10 +2463,9 @@ type ListConnectionRestrictionsNotFoundResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// ListConnectionRestrictionsConflictResponseBody is the type of the "agents"
-// service "listConnectionRestrictions" endpoint HTTP response body for the
-// "conflict" error.
-type ListConnectionRestrictionsConflictResponseBody struct {
+// ListConnectionBlocksConflictResponseBody is the type of the "agents" service
+// "listConnectionBlocks" endpoint HTTP response body for the "conflict" error.
+type ListConnectionBlocksConflictResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2481,10 +2481,10 @@ type ListConnectionRestrictionsConflictResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// ListConnectionRestrictionsUnsupportedMediaResponseBody is the type of the
-// "agents" service "listConnectionRestrictions" endpoint HTTP response body
-// for the "unsupported_media" error.
-type ListConnectionRestrictionsUnsupportedMediaResponseBody struct {
+// ListConnectionBlocksUnsupportedMediaResponseBody is the type of the "agents"
+// service "listConnectionBlocks" endpoint HTTP response body for the
+// "unsupported_media" error.
+type ListConnectionBlocksUnsupportedMediaResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2500,10 +2500,9 @@ type ListConnectionRestrictionsUnsupportedMediaResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// ListConnectionRestrictionsInvalidResponseBody is the type of the "agents"
-// service "listConnectionRestrictions" endpoint HTTP response body for the
-// "invalid" error.
-type ListConnectionRestrictionsInvalidResponseBody struct {
+// ListConnectionBlocksInvalidResponseBody is the type of the "agents" service
+// "listConnectionBlocks" endpoint HTTP response body for the "invalid" error.
+type ListConnectionBlocksInvalidResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2519,10 +2518,10 @@ type ListConnectionRestrictionsInvalidResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// ListConnectionRestrictionsInvariantViolationResponseBody is the type of the
-// "agents" service "listConnectionRestrictions" endpoint HTTP response body
-// for the "invariant_violation" error.
-type ListConnectionRestrictionsInvariantViolationResponseBody struct {
+// ListConnectionBlocksInvariantViolationResponseBody is the type of the
+// "agents" service "listConnectionBlocks" endpoint HTTP response body for the
+// "invariant_violation" error.
+type ListConnectionBlocksInvariantViolationResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2538,10 +2537,10 @@ type ListConnectionRestrictionsInvariantViolationResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// ListConnectionRestrictionsUnexpectedResponseBody is the type of the "agents"
-// service "listConnectionRestrictions" endpoint HTTP response body for the
+// ListConnectionBlocksUnexpectedResponseBody is the type of the "agents"
+// service "listConnectionBlocks" endpoint HTTP response body for the
 // "unexpected" error.
-type ListConnectionRestrictionsUnexpectedResponseBody struct {
+type ListConnectionBlocksUnexpectedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2557,10 +2556,10 @@ type ListConnectionRestrictionsUnexpectedResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// ListConnectionRestrictionsGatewayErrorResponseBody is the type of the
-// "agents" service "listConnectionRestrictions" endpoint HTTP response body
-// for the "gateway_error" error.
-type ListConnectionRestrictionsGatewayErrorResponseBody struct {
+// ListConnectionBlocksGatewayErrorResponseBody is the type of the "agents"
+// service "listConnectionBlocks" endpoint HTTP response body for the
+// "gateway_error" error.
+type ListConnectionBlocksGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2576,10 +2575,10 @@ type ListConnectionRestrictionsGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// RestrictAgentOnConnectionUnauthorizedResponseBody is the type of the
-// "agents" service "restrictAgentOnConnection" endpoint HTTP response body for
-// the "unauthorized" error.
-type RestrictAgentOnConnectionUnauthorizedResponseBody struct {
+// BlockAgentOnConnectionUnauthorizedResponseBody is the type of the "agents"
+// service "blockAgentOnConnection" endpoint HTTP response body for the
+// "unauthorized" error.
+type BlockAgentOnConnectionUnauthorizedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2595,10 +2594,10 @@ type RestrictAgentOnConnectionUnauthorizedResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// RestrictAgentOnConnectionForbiddenResponseBody is the type of the "agents"
-// service "restrictAgentOnConnection" endpoint HTTP response body for the
+// BlockAgentOnConnectionForbiddenResponseBody is the type of the "agents"
+// service "blockAgentOnConnection" endpoint HTTP response body for the
 // "forbidden" error.
-type RestrictAgentOnConnectionForbiddenResponseBody struct {
+type BlockAgentOnConnectionForbiddenResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2614,10 +2613,10 @@ type RestrictAgentOnConnectionForbiddenResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// RestrictAgentOnConnectionBadRequestResponseBody is the type of the "agents"
-// service "restrictAgentOnConnection" endpoint HTTP response body for the
+// BlockAgentOnConnectionBadRequestResponseBody is the type of the "agents"
+// service "blockAgentOnConnection" endpoint HTTP response body for the
 // "bad_request" error.
-type RestrictAgentOnConnectionBadRequestResponseBody struct {
+type BlockAgentOnConnectionBadRequestResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2633,10 +2632,10 @@ type RestrictAgentOnConnectionBadRequestResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// RestrictAgentOnConnectionNotFoundResponseBody is the type of the "agents"
-// service "restrictAgentOnConnection" endpoint HTTP response body for the
+// BlockAgentOnConnectionNotFoundResponseBody is the type of the "agents"
+// service "blockAgentOnConnection" endpoint HTTP response body for the
 // "not_found" error.
-type RestrictAgentOnConnectionNotFoundResponseBody struct {
+type BlockAgentOnConnectionNotFoundResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2652,10 +2651,10 @@ type RestrictAgentOnConnectionNotFoundResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// RestrictAgentOnConnectionConflictResponseBody is the type of the "agents"
-// service "restrictAgentOnConnection" endpoint HTTP response body for the
+// BlockAgentOnConnectionConflictResponseBody is the type of the "agents"
+// service "blockAgentOnConnection" endpoint HTTP response body for the
 // "conflict" error.
-type RestrictAgentOnConnectionConflictResponseBody struct {
+type BlockAgentOnConnectionConflictResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2671,10 +2670,10 @@ type RestrictAgentOnConnectionConflictResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// RestrictAgentOnConnectionUnsupportedMediaResponseBody is the type of the
-// "agents" service "restrictAgentOnConnection" endpoint HTTP response body for
+// BlockAgentOnConnectionUnsupportedMediaResponseBody is the type of the
+// "agents" service "blockAgentOnConnection" endpoint HTTP response body for
 // the "unsupported_media" error.
-type RestrictAgentOnConnectionUnsupportedMediaResponseBody struct {
+type BlockAgentOnConnectionUnsupportedMediaResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2690,10 +2689,10 @@ type RestrictAgentOnConnectionUnsupportedMediaResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// RestrictAgentOnConnectionInvalidResponseBody is the type of the "agents"
-// service "restrictAgentOnConnection" endpoint HTTP response body for the
+// BlockAgentOnConnectionInvalidResponseBody is the type of the "agents"
+// service "blockAgentOnConnection" endpoint HTTP response body for the
 // "invalid" error.
-type RestrictAgentOnConnectionInvalidResponseBody struct {
+type BlockAgentOnConnectionInvalidResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2709,10 +2708,10 @@ type RestrictAgentOnConnectionInvalidResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// RestrictAgentOnConnectionInvariantViolationResponseBody is the type of the
-// "agents" service "restrictAgentOnConnection" endpoint HTTP response body for
+// BlockAgentOnConnectionInvariantViolationResponseBody is the type of the
+// "agents" service "blockAgentOnConnection" endpoint HTTP response body for
 // the "invariant_violation" error.
-type RestrictAgentOnConnectionInvariantViolationResponseBody struct {
+type BlockAgentOnConnectionInvariantViolationResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2728,10 +2727,10 @@ type RestrictAgentOnConnectionInvariantViolationResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// RestrictAgentOnConnectionUnexpectedResponseBody is the type of the "agents"
-// service "restrictAgentOnConnection" endpoint HTTP response body for the
+// BlockAgentOnConnectionUnexpectedResponseBody is the type of the "agents"
+// service "blockAgentOnConnection" endpoint HTTP response body for the
 // "unexpected" error.
-type RestrictAgentOnConnectionUnexpectedResponseBody struct {
+type BlockAgentOnConnectionUnexpectedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2747,10 +2746,10 @@ type RestrictAgentOnConnectionUnexpectedResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// RestrictAgentOnConnectionGatewayErrorResponseBody is the type of the
-// "agents" service "restrictAgentOnConnection" endpoint HTTP response body for
-// the "gateway_error" error.
-type RestrictAgentOnConnectionGatewayErrorResponseBody struct {
+// BlockAgentOnConnectionGatewayErrorResponseBody is the type of the "agents"
+// service "blockAgentOnConnection" endpoint HTTP response body for the
+// "gateway_error" error.
+type BlockAgentOnConnectionGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2766,10 +2765,10 @@ type RestrictAgentOnConnectionGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// RemoveConnectionRestrictionUnauthorizedResponseBody is the type of the
-// "agents" service "removeConnectionRestriction" endpoint HTTP response body
-// for the "unauthorized" error.
-type RemoveConnectionRestrictionUnauthorizedResponseBody struct {
+// RemoveConnectionBlockUnauthorizedResponseBody is the type of the "agents"
+// service "removeConnectionBlock" endpoint HTTP response body for the
+// "unauthorized" error.
+type RemoveConnectionBlockUnauthorizedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2785,10 +2784,10 @@ type RemoveConnectionRestrictionUnauthorizedResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// RemoveConnectionRestrictionForbiddenResponseBody is the type of the "agents"
-// service "removeConnectionRestriction" endpoint HTTP response body for the
+// RemoveConnectionBlockForbiddenResponseBody is the type of the "agents"
+// service "removeConnectionBlock" endpoint HTTP response body for the
 // "forbidden" error.
-type RemoveConnectionRestrictionForbiddenResponseBody struct {
+type RemoveConnectionBlockForbiddenResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2804,10 +2803,10 @@ type RemoveConnectionRestrictionForbiddenResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// RemoveConnectionRestrictionBadRequestResponseBody is the type of the
-// "agents" service "removeConnectionRestriction" endpoint HTTP response body
-// for the "bad_request" error.
-type RemoveConnectionRestrictionBadRequestResponseBody struct {
+// RemoveConnectionBlockBadRequestResponseBody is the type of the "agents"
+// service "removeConnectionBlock" endpoint HTTP response body for the
+// "bad_request" error.
+type RemoveConnectionBlockBadRequestResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2823,10 +2822,10 @@ type RemoveConnectionRestrictionBadRequestResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// RemoveConnectionRestrictionNotFoundResponseBody is the type of the "agents"
-// service "removeConnectionRestriction" endpoint HTTP response body for the
+// RemoveConnectionBlockNotFoundResponseBody is the type of the "agents"
+// service "removeConnectionBlock" endpoint HTTP response body for the
 // "not_found" error.
-type RemoveConnectionRestrictionNotFoundResponseBody struct {
+type RemoveConnectionBlockNotFoundResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2842,10 +2841,10 @@ type RemoveConnectionRestrictionNotFoundResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// RemoveConnectionRestrictionConflictResponseBody is the type of the "agents"
-// service "removeConnectionRestriction" endpoint HTTP response body for the
+// RemoveConnectionBlockConflictResponseBody is the type of the "agents"
+// service "removeConnectionBlock" endpoint HTTP response body for the
 // "conflict" error.
-type RemoveConnectionRestrictionConflictResponseBody struct {
+type RemoveConnectionBlockConflictResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2861,10 +2860,10 @@ type RemoveConnectionRestrictionConflictResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// RemoveConnectionRestrictionUnsupportedMediaResponseBody is the type of the
-// "agents" service "removeConnectionRestriction" endpoint HTTP response body
-// for the "unsupported_media" error.
-type RemoveConnectionRestrictionUnsupportedMediaResponseBody struct {
+// RemoveConnectionBlockUnsupportedMediaResponseBody is the type of the
+// "agents" service "removeConnectionBlock" endpoint HTTP response body for the
+// "unsupported_media" error.
+type RemoveConnectionBlockUnsupportedMediaResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2880,10 +2879,9 @@ type RemoveConnectionRestrictionUnsupportedMediaResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// RemoveConnectionRestrictionInvalidResponseBody is the type of the "agents"
-// service "removeConnectionRestriction" endpoint HTTP response body for the
-// "invalid" error.
-type RemoveConnectionRestrictionInvalidResponseBody struct {
+// RemoveConnectionBlockInvalidResponseBody is the type of the "agents" service
+// "removeConnectionBlock" endpoint HTTP response body for the "invalid" error.
+type RemoveConnectionBlockInvalidResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2899,10 +2897,10 @@ type RemoveConnectionRestrictionInvalidResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// RemoveConnectionRestrictionInvariantViolationResponseBody is the type of the
-// "agents" service "removeConnectionRestriction" endpoint HTTP response body
-// for the "invariant_violation" error.
-type RemoveConnectionRestrictionInvariantViolationResponseBody struct {
+// RemoveConnectionBlockInvariantViolationResponseBody is the type of the
+// "agents" service "removeConnectionBlock" endpoint HTTP response body for the
+// "invariant_violation" error.
+type RemoveConnectionBlockInvariantViolationResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2918,10 +2916,10 @@ type RemoveConnectionRestrictionInvariantViolationResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// RemoveConnectionRestrictionUnexpectedResponseBody is the type of the
-// "agents" service "removeConnectionRestriction" endpoint HTTP response body
-// for the "unexpected" error.
-type RemoveConnectionRestrictionUnexpectedResponseBody struct {
+// RemoveConnectionBlockUnexpectedResponseBody is the type of the "agents"
+// service "removeConnectionBlock" endpoint HTTP response body for the
+// "unexpected" error.
+type RemoveConnectionBlockUnexpectedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2937,10 +2935,10 @@ type RemoveConnectionRestrictionUnexpectedResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// RemoveConnectionRestrictionGatewayErrorResponseBody is the type of the
-// "agents" service "removeConnectionRestriction" endpoint HTTP response body
-// for the "gateway_error" error.
-type RemoveConnectionRestrictionGatewayErrorResponseBody struct {
+// RemoveConnectionBlockGatewayErrorResponseBody is the type of the "agents"
+// service "removeConnectionBlock" endpoint HTTP response body for the
+// "gateway_error" error.
+type RemoveConnectionBlockGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -4105,20 +4103,21 @@ type AgentPolicySelectorResponse struct {
 	ResourceKind string `form:"resource_kind" json:"resource_kind" xml:"resource_kind"`
 	// The resource identifier, or '*' for all resources of this kind.
 	ResourceID string `form:"resource_id" json:"resource_id" xml:"resource_id"`
-	// Auth client type filter (mcp:auth scopes only).
+	// Auth client type filter (mcp:auth and mcp:blocked_auth scopes only).
 	ClientType *string `form:"client_type,omitempty" json:"client_type,omitempty" xml:"client_type,omitempty"`
-	// Personal connection owner filter (mcp:auth scopes on remote_session clients
-	// only): a user ID, '*', or '$represented_user'.
+	// Personal connection owner filter (mcp:auth and mcp:blocked_auth scopes on
+	// remote_session clients only): a user ID, '*', or '$represented_user'.
 	ConnectionOwner *string `form:"connection_owner,omitempty" json:"connection_owner,omitempty" xml:"connection_owner,omitempty"`
-	// Upstream OAuth client filter (mcp:auth scopes on remote_session clients
-	// only). Together with connection_owner it names one person's connection
-	// across every auth client sharing that upstream client.
+	// Upstream OAuth client filter (mcp:auth and mcp:blocked_auth scopes on
+	// remote_session clients only). Together with connection_owner it names one
+	// person's connection across every auth client sharing that upstream client.
 	UpstreamClient *string `form:"upstream_client,omitempty" json:"upstream_client,omitempty" xml:"upstream_client,omitempty"`
 	// Tool disposition filter (MCP scopes only).
 	Disposition *string `form:"disposition,omitempty" json:"disposition,omitempty" xml:"disposition,omitempty"`
 	// Specific tool name filter (MCP scopes only).
 	Tool *string `form:"tool,omitempty" json:"tool,omitempty" xml:"tool,omitempty"`
-	// Project filter (MCP, environment, assistant, and mcp:auth scopes).
+	// Project filter (MCP, environment, assistant, mcp:auth and mcp:blocked_auth
+	// scopes).
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	// Server URL filter (risk policy scopes only).
 	ServerURL *string `form:"server_url,omitempty" json:"server_url,omitempty" xml:"server_url,omitempty"`
@@ -4143,20 +4142,21 @@ type AgentPolicySelectorResponseBody struct {
 	ResourceKind string `form:"resource_kind" json:"resource_kind" xml:"resource_kind"`
 	// The resource identifier, or '*' for all resources of this kind.
 	ResourceID string `form:"resource_id" json:"resource_id" xml:"resource_id"`
-	// Auth client type filter (mcp:auth scopes only).
+	// Auth client type filter (mcp:auth and mcp:blocked_auth scopes only).
 	ClientType *string `form:"client_type,omitempty" json:"client_type,omitempty" xml:"client_type,omitempty"`
-	// Personal connection owner filter (mcp:auth scopes on remote_session clients
-	// only): a user ID, '*', or '$represented_user'.
+	// Personal connection owner filter (mcp:auth and mcp:blocked_auth scopes on
+	// remote_session clients only): a user ID, '*', or '$represented_user'.
 	ConnectionOwner *string `form:"connection_owner,omitempty" json:"connection_owner,omitempty" xml:"connection_owner,omitempty"`
-	// Upstream OAuth client filter (mcp:auth scopes on remote_session clients
-	// only). Together with connection_owner it names one person's connection
-	// across every auth client sharing that upstream client.
+	// Upstream OAuth client filter (mcp:auth and mcp:blocked_auth scopes on
+	// remote_session clients only). Together with connection_owner it names one
+	// person's connection across every auth client sharing that upstream client.
 	UpstreamClient *string `form:"upstream_client,omitempty" json:"upstream_client,omitempty" xml:"upstream_client,omitempty"`
 	// Tool disposition filter (MCP scopes only).
 	Disposition *string `form:"disposition,omitempty" json:"disposition,omitempty" xml:"disposition,omitempty"`
 	// Specific tool name filter (MCP scopes only).
 	Tool *string `form:"tool,omitempty" json:"tool,omitempty" xml:"tool,omitempty"`
-	// Project filter (MCP, environment, assistant, and mcp:auth scopes).
+	// Project filter (MCP, environment, assistant, mcp:auth and mcp:blocked_auth
+	// scopes).
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	// Server URL filter (risk policy scopes only).
 	ServerURL *string `form:"server_url,omitempty" json:"server_url,omitempty" xml:"server_url,omitempty"`
@@ -4164,14 +4164,14 @@ type AgentPolicySelectorResponseBody struct {
 	ServerIdentity *string `form:"server_identity,omitempty" json:"server_identity,omitempty" xml:"server_identity,omitempty"`
 }
 
-// AgentConnectionRestrictionResponseBody is used to define fields on response
-// body types.
-type AgentConnectionRestrictionResponseBody struct {
+// AgentConnectionBlockResponseBody is used to define fields on response body
+// types.
+type AgentConnectionBlockResponseBody struct {
 	ID string `form:"id" json:"id" xml:"id"`
 	// The blocked agent
 	AgentID string `form:"agent_id" json:"agent_id" xml:"agent_id"`
-	// The upstream OAuth client the connection uses; the restriction covers every
-	// auth client sharing it
+	// The upstream OAuth client the connection uses; the block covers every auth
+	// client sharing it
 	RemoteSessionClientID string `form:"remote_session_client_id" json:"remote_session_client_id" xml:"remote_session_client_id"`
 	CreatedAt             string `form:"created_at" json:"created_at" xml:"created_at"`
 }
@@ -4193,20 +4193,21 @@ type AgentPolicySelectorRequestBodyRequestBody struct {
 	ResourceKind *string `form:"resource_kind,omitempty" json:"resource_kind,omitempty" xml:"resource_kind,omitempty"`
 	// The resource identifier, or '*' for all resources of this kind.
 	ResourceID *string `form:"resource_id,omitempty" json:"resource_id,omitempty" xml:"resource_id,omitempty"`
-	// Auth client type filter (mcp:auth scopes only).
+	// Auth client type filter (mcp:auth and mcp:blocked_auth scopes only).
 	ClientType *string `form:"client_type,omitempty" json:"client_type,omitempty" xml:"client_type,omitempty"`
-	// Personal connection owner filter (mcp:auth scopes on remote_session clients
-	// only): a user ID, '*', or '$represented_user'.
+	// Personal connection owner filter (mcp:auth and mcp:blocked_auth scopes on
+	// remote_session clients only): a user ID, '*', or '$represented_user'.
 	ConnectionOwner *string `form:"connection_owner,omitempty" json:"connection_owner,omitempty" xml:"connection_owner,omitempty"`
-	// Upstream OAuth client filter (mcp:auth scopes on remote_session clients
-	// only). Together with connection_owner it names one person's connection
-	// across every auth client sharing that upstream client.
+	// Upstream OAuth client filter (mcp:auth and mcp:blocked_auth scopes on
+	// remote_session clients only). Together with connection_owner it names one
+	// person's connection across every auth client sharing that upstream client.
 	UpstreamClient *string `form:"upstream_client,omitempty" json:"upstream_client,omitempty" xml:"upstream_client,omitempty"`
 	// Tool disposition filter (MCP scopes only).
 	Disposition *string `form:"disposition,omitempty" json:"disposition,omitempty" xml:"disposition,omitempty"`
 	// Specific tool name filter (MCP scopes only).
 	Tool *string `form:"tool,omitempty" json:"tool,omitempty" xml:"tool,omitempty"`
-	// Project filter (MCP, environment, assistant, and mcp:auth scopes).
+	// Project filter (MCP, environment, assistant, mcp:auth and mcp:blocked_auth
+	// scopes).
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	// Server URL filter (risk policy scopes only).
 	ServerURL *string `form:"server_url,omitempty" json:"server_url,omitempty" xml:"server_url,omitempty"`
@@ -4220,20 +4221,21 @@ type AgentPolicySelector struct {
 	ResourceKind *string `form:"resource_kind,omitempty" json:"resource_kind,omitempty" xml:"resource_kind,omitempty"`
 	// The resource identifier, or '*' for all resources of this kind.
 	ResourceID *string `form:"resource_id,omitempty" json:"resource_id,omitempty" xml:"resource_id,omitempty"`
-	// Auth client type filter (mcp:auth scopes only).
+	// Auth client type filter (mcp:auth and mcp:blocked_auth scopes only).
 	ClientType *string `form:"client_type,omitempty" json:"client_type,omitempty" xml:"client_type,omitempty"`
-	// Personal connection owner filter (mcp:auth scopes on remote_session clients
-	// only): a user ID, '*', or '$represented_user'.
+	// Personal connection owner filter (mcp:auth and mcp:blocked_auth scopes on
+	// remote_session clients only): a user ID, '*', or '$represented_user'.
 	ConnectionOwner *string `form:"connection_owner,omitempty" json:"connection_owner,omitempty" xml:"connection_owner,omitempty"`
-	// Upstream OAuth client filter (mcp:auth scopes on remote_session clients
-	// only). Together with connection_owner it names one person's connection
-	// across every auth client sharing that upstream client.
+	// Upstream OAuth client filter (mcp:auth and mcp:blocked_auth scopes on
+	// remote_session clients only). Together with connection_owner it names one
+	// person's connection across every auth client sharing that upstream client.
 	UpstreamClient *string `form:"upstream_client,omitempty" json:"upstream_client,omitempty" xml:"upstream_client,omitempty"`
 	// Tool disposition filter (MCP scopes only).
 	Disposition *string `form:"disposition,omitempty" json:"disposition,omitempty" xml:"disposition,omitempty"`
 	// Specific tool name filter (MCP scopes only).
 	Tool *string `form:"tool,omitempty" json:"tool,omitempty" xml:"tool,omitempty"`
-	// Project filter (MCP, environment, assistant, and mcp:auth scopes).
+	// Project filter (MCP, environment, assistant, mcp:auth and mcp:blocked_auth
+	// scopes).
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	// Server URL filter (risk policy scopes only).
 	ServerURL *string `form:"server_url,omitempty" json:"server_url,omitempty" xml:"server_url,omitempty"`
@@ -4412,31 +4414,31 @@ func NewUpdatePolicyGrantResponseBody(res *agents.AgentPolicyGrant) *UpdatePolic
 	return body
 }
 
-// NewListConnectionRestrictionsResponseBody builds the HTTP response body from
-// the result of the "listConnectionRestrictions" endpoint of the "agents"
-// service.
-func NewListConnectionRestrictionsResponseBody(res *agents.ListAgentConnectionRestrictionsResult) *ListConnectionRestrictionsResponseBody {
-	body := &ListConnectionRestrictionsResponseBody{}
+// NewListConnectionBlocksResponseBody builds the HTTP response body from the
+// result of the "listConnectionBlocks" endpoint of the "agents" service.
+func NewListConnectionBlocksResponseBody(res *agents.ListAgentConnectionBlocksResult) *ListConnectionBlocksResponseBody {
+	body := &ListConnectionBlocksResponseBody{
+		NextCursor: res.NextCursor,
+	}
 	if res.Items != nil {
-		body.Items = make([]*AgentConnectionRestrictionResponseBody, len(res.Items))
+		body.Items = make([]*AgentConnectionBlockResponseBody, len(res.Items))
 		for i, val := range res.Items {
 			if val == nil {
 				body.Items[i] = nil
 				continue
 			}
-			body.Items[i] = marshalAgentsAgentConnectionRestrictionToAgentConnectionRestrictionResponseBody(val)
+			body.Items[i] = marshalAgentsAgentConnectionBlockToAgentConnectionBlockResponseBody(val)
 		}
 	} else {
-		body.Items = []*AgentConnectionRestrictionResponseBody{}
+		body.Items = []*AgentConnectionBlockResponseBody{}
 	}
 	return body
 }
 
-// NewRestrictAgentOnConnectionResponseBody builds the HTTP response body from
-// the result of the "restrictAgentOnConnection" endpoint of the "agents"
-// service.
-func NewRestrictAgentOnConnectionResponseBody(res *agents.AgentConnectionRestriction) *RestrictAgentOnConnectionResponseBody {
-	body := &RestrictAgentOnConnectionResponseBody{
+// NewBlockAgentOnConnectionResponseBody builds the HTTP response body from the
+// result of the "blockAgentOnConnection" endpoint of the "agents" service.
+func NewBlockAgentOnConnectionResponseBody(res *agents.AgentConnectionBlock) *BlockAgentOnConnectionResponseBody {
+	body := &BlockAgentOnConnectionResponseBody{
 		ID:                    res.ID,
 		AgentID:               res.AgentID,
 		RemoteSessionClientID: res.RemoteSessionClientID,
@@ -6117,11 +6119,11 @@ func NewDeletePolicyGrantGatewayErrorResponseBody(res *goa.ServiceError) *Delete
 	return body
 }
 
-// NewListConnectionRestrictionsUnauthorizedResponseBody builds the HTTP
-// response body from the result of the "listConnectionRestrictions" endpoint
-// of the "agents" service.
-func NewListConnectionRestrictionsUnauthorizedResponseBody(res *goa.ServiceError) *ListConnectionRestrictionsUnauthorizedResponseBody {
-	body := &ListConnectionRestrictionsUnauthorizedResponseBody{
+// NewListConnectionBlocksUnauthorizedResponseBody builds the HTTP response
+// body from the result of the "listConnectionBlocks" endpoint of the "agents"
+// service.
+func NewListConnectionBlocksUnauthorizedResponseBody(res *goa.ServiceError) *ListConnectionBlocksUnauthorizedResponseBody {
+	body := &ListConnectionBlocksUnauthorizedResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -6132,11 +6134,101 @@ func NewListConnectionRestrictionsUnauthorizedResponseBody(res *goa.ServiceError
 	return body
 }
 
-// NewListConnectionRestrictionsForbiddenResponseBody builds the HTTP response
-// body from the result of the "listConnectionRestrictions" endpoint of the
+// NewListConnectionBlocksForbiddenResponseBody builds the HTTP response body
+// from the result of the "listConnectionBlocks" endpoint of the "agents"
+// service.
+func NewListConnectionBlocksForbiddenResponseBody(res *goa.ServiceError) *ListConnectionBlocksForbiddenResponseBody {
+	body := &ListConnectionBlocksForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListConnectionBlocksBadRequestResponseBody builds the HTTP response body
+// from the result of the "listConnectionBlocks" endpoint of the "agents"
+// service.
+func NewListConnectionBlocksBadRequestResponseBody(res *goa.ServiceError) *ListConnectionBlocksBadRequestResponseBody {
+	body := &ListConnectionBlocksBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListConnectionBlocksNotFoundResponseBody builds the HTTP response body
+// from the result of the "listConnectionBlocks" endpoint of the "agents"
+// service.
+func NewListConnectionBlocksNotFoundResponseBody(res *goa.ServiceError) *ListConnectionBlocksNotFoundResponseBody {
+	body := &ListConnectionBlocksNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListConnectionBlocksConflictResponseBody builds the HTTP response body
+// from the result of the "listConnectionBlocks" endpoint of the "agents"
+// service.
+func NewListConnectionBlocksConflictResponseBody(res *goa.ServiceError) *ListConnectionBlocksConflictResponseBody {
+	body := &ListConnectionBlocksConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListConnectionBlocksUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "listConnectionBlocks" endpoint of the "agents"
+// service.
+func NewListConnectionBlocksUnsupportedMediaResponseBody(res *goa.ServiceError) *ListConnectionBlocksUnsupportedMediaResponseBody {
+	body := &ListConnectionBlocksUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListConnectionBlocksInvalidResponseBody builds the HTTP response body
+// from the result of the "listConnectionBlocks" endpoint of the "agents"
+// service.
+func NewListConnectionBlocksInvalidResponseBody(res *goa.ServiceError) *ListConnectionBlocksInvalidResponseBody {
+	body := &ListConnectionBlocksInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListConnectionBlocksInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "listConnectionBlocks" endpoint of the
 // "agents" service.
-func NewListConnectionRestrictionsForbiddenResponseBody(res *goa.ServiceError) *ListConnectionRestrictionsForbiddenResponseBody {
-	body := &ListConnectionRestrictionsForbiddenResponseBody{
+func NewListConnectionBlocksInvariantViolationResponseBody(res *goa.ServiceError) *ListConnectionBlocksInvariantViolationResponseBody {
+	body := &ListConnectionBlocksInvariantViolationResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -6147,11 +6239,41 @@ func NewListConnectionRestrictionsForbiddenResponseBody(res *goa.ServiceError) *
 	return body
 }
 
-// NewListConnectionRestrictionsBadRequestResponseBody builds the HTTP response
-// body from the result of the "listConnectionRestrictions" endpoint of the
+// NewListConnectionBlocksUnexpectedResponseBody builds the HTTP response body
+// from the result of the "listConnectionBlocks" endpoint of the "agents"
+// service.
+func NewListConnectionBlocksUnexpectedResponseBody(res *goa.ServiceError) *ListConnectionBlocksUnexpectedResponseBody {
+	body := &ListConnectionBlocksUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListConnectionBlocksGatewayErrorResponseBody builds the HTTP response
+// body from the result of the "listConnectionBlocks" endpoint of the "agents"
+// service.
+func NewListConnectionBlocksGatewayErrorResponseBody(res *goa.ServiceError) *ListConnectionBlocksGatewayErrorResponseBody {
+	body := &ListConnectionBlocksGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewBlockAgentOnConnectionUnauthorizedResponseBody builds the HTTP response
+// body from the result of the "blockAgentOnConnection" endpoint of the
 // "agents" service.
-func NewListConnectionRestrictionsBadRequestResponseBody(res *goa.ServiceError) *ListConnectionRestrictionsBadRequestResponseBody {
-	body := &ListConnectionRestrictionsBadRequestResponseBody{
+func NewBlockAgentOnConnectionUnauthorizedResponseBody(res *goa.ServiceError) *BlockAgentOnConnectionUnauthorizedResponseBody {
+	body := &BlockAgentOnConnectionUnauthorizedResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -6162,11 +6284,26 @@ func NewListConnectionRestrictionsBadRequestResponseBody(res *goa.ServiceError) 
 	return body
 }
 
-// NewListConnectionRestrictionsNotFoundResponseBody builds the HTTP response
-// body from the result of the "listConnectionRestrictions" endpoint of the
+// NewBlockAgentOnConnectionForbiddenResponseBody builds the HTTP response body
+// from the result of the "blockAgentOnConnection" endpoint of the "agents"
+// service.
+func NewBlockAgentOnConnectionForbiddenResponseBody(res *goa.ServiceError) *BlockAgentOnConnectionForbiddenResponseBody {
+	body := &BlockAgentOnConnectionForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewBlockAgentOnConnectionBadRequestResponseBody builds the HTTP response
+// body from the result of the "blockAgentOnConnection" endpoint of the
 // "agents" service.
-func NewListConnectionRestrictionsNotFoundResponseBody(res *goa.ServiceError) *ListConnectionRestrictionsNotFoundResponseBody {
-	body := &ListConnectionRestrictionsNotFoundResponseBody{
+func NewBlockAgentOnConnectionBadRequestResponseBody(res *goa.ServiceError) *BlockAgentOnConnectionBadRequestResponseBody {
+	body := &BlockAgentOnConnectionBadRequestResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -6177,11 +6314,11 @@ func NewListConnectionRestrictionsNotFoundResponseBody(res *goa.ServiceError) *L
 	return body
 }
 
-// NewListConnectionRestrictionsConflictResponseBody builds the HTTP response
-// body from the result of the "listConnectionRestrictions" endpoint of the
-// "agents" service.
-func NewListConnectionRestrictionsConflictResponseBody(res *goa.ServiceError) *ListConnectionRestrictionsConflictResponseBody {
-	body := &ListConnectionRestrictionsConflictResponseBody{
+// NewBlockAgentOnConnectionNotFoundResponseBody builds the HTTP response body
+// from the result of the "blockAgentOnConnection" endpoint of the "agents"
+// service.
+func NewBlockAgentOnConnectionNotFoundResponseBody(res *goa.ServiceError) *BlockAgentOnConnectionNotFoundResponseBody {
+	body := &BlockAgentOnConnectionNotFoundResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -6192,11 +6329,11 @@ func NewListConnectionRestrictionsConflictResponseBody(res *goa.ServiceError) *L
 	return body
 }
 
-// NewListConnectionRestrictionsUnsupportedMediaResponseBody builds the HTTP
-// response body from the result of the "listConnectionRestrictions" endpoint
-// of the "agents" service.
-func NewListConnectionRestrictionsUnsupportedMediaResponseBody(res *goa.ServiceError) *ListConnectionRestrictionsUnsupportedMediaResponseBody {
-	body := &ListConnectionRestrictionsUnsupportedMediaResponseBody{
+// NewBlockAgentOnConnectionConflictResponseBody builds the HTTP response body
+// from the result of the "blockAgentOnConnection" endpoint of the "agents"
+// service.
+func NewBlockAgentOnConnectionConflictResponseBody(res *goa.ServiceError) *BlockAgentOnConnectionConflictResponseBody {
+	body := &BlockAgentOnConnectionConflictResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -6207,71 +6344,11 @@ func NewListConnectionRestrictionsUnsupportedMediaResponseBody(res *goa.ServiceE
 	return body
 }
 
-// NewListConnectionRestrictionsInvalidResponseBody builds the HTTP response
-// body from the result of the "listConnectionRestrictions" endpoint of the
-// "agents" service.
-func NewListConnectionRestrictionsInvalidResponseBody(res *goa.ServiceError) *ListConnectionRestrictionsInvalidResponseBody {
-	body := &ListConnectionRestrictionsInvalidResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewListConnectionRestrictionsInvariantViolationResponseBody builds the HTTP
-// response body from the result of the "listConnectionRestrictions" endpoint
-// of the "agents" service.
-func NewListConnectionRestrictionsInvariantViolationResponseBody(res *goa.ServiceError) *ListConnectionRestrictionsInvariantViolationResponseBody {
-	body := &ListConnectionRestrictionsInvariantViolationResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewListConnectionRestrictionsUnexpectedResponseBody builds the HTTP response
-// body from the result of the "listConnectionRestrictions" endpoint of the
-// "agents" service.
-func NewListConnectionRestrictionsUnexpectedResponseBody(res *goa.ServiceError) *ListConnectionRestrictionsUnexpectedResponseBody {
-	body := &ListConnectionRestrictionsUnexpectedResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewListConnectionRestrictionsGatewayErrorResponseBody builds the HTTP
-// response body from the result of the "listConnectionRestrictions" endpoint
-// of the "agents" service.
-func NewListConnectionRestrictionsGatewayErrorResponseBody(res *goa.ServiceError) *ListConnectionRestrictionsGatewayErrorResponseBody {
-	body := &ListConnectionRestrictionsGatewayErrorResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewRestrictAgentOnConnectionUnauthorizedResponseBody builds the HTTP
-// response body from the result of the "restrictAgentOnConnection" endpoint of
+// NewBlockAgentOnConnectionUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "blockAgentOnConnection" endpoint of
 // the "agents" service.
-func NewRestrictAgentOnConnectionUnauthorizedResponseBody(res *goa.ServiceError) *RestrictAgentOnConnectionUnauthorizedResponseBody {
-	body := &RestrictAgentOnConnectionUnauthorizedResponseBody{
+func NewBlockAgentOnConnectionUnsupportedMediaResponseBody(res *goa.ServiceError) *BlockAgentOnConnectionUnsupportedMediaResponseBody {
+	body := &BlockAgentOnConnectionUnsupportedMediaResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -6282,11 +6359,11 @@ func NewRestrictAgentOnConnectionUnauthorizedResponseBody(res *goa.ServiceError)
 	return body
 }
 
-// NewRestrictAgentOnConnectionForbiddenResponseBody builds the HTTP response
-// body from the result of the "restrictAgentOnConnection" endpoint of the
-// "agents" service.
-func NewRestrictAgentOnConnectionForbiddenResponseBody(res *goa.ServiceError) *RestrictAgentOnConnectionForbiddenResponseBody {
-	body := &RestrictAgentOnConnectionForbiddenResponseBody{
+// NewBlockAgentOnConnectionInvalidResponseBody builds the HTTP response body
+// from the result of the "blockAgentOnConnection" endpoint of the "agents"
+// service.
+func NewBlockAgentOnConnectionInvalidResponseBody(res *goa.ServiceError) *BlockAgentOnConnectionInvalidResponseBody {
+	body := &BlockAgentOnConnectionInvalidResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -6297,56 +6374,11 @@ func NewRestrictAgentOnConnectionForbiddenResponseBody(res *goa.ServiceError) *R
 	return body
 }
 
-// NewRestrictAgentOnConnectionBadRequestResponseBody builds the HTTP response
-// body from the result of the "restrictAgentOnConnection" endpoint of the
-// "agents" service.
-func NewRestrictAgentOnConnectionBadRequestResponseBody(res *goa.ServiceError) *RestrictAgentOnConnectionBadRequestResponseBody {
-	body := &RestrictAgentOnConnectionBadRequestResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewRestrictAgentOnConnectionNotFoundResponseBody builds the HTTP response
-// body from the result of the "restrictAgentOnConnection" endpoint of the
-// "agents" service.
-func NewRestrictAgentOnConnectionNotFoundResponseBody(res *goa.ServiceError) *RestrictAgentOnConnectionNotFoundResponseBody {
-	body := &RestrictAgentOnConnectionNotFoundResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewRestrictAgentOnConnectionConflictResponseBody builds the HTTP response
-// body from the result of the "restrictAgentOnConnection" endpoint of the
-// "agents" service.
-func NewRestrictAgentOnConnectionConflictResponseBody(res *goa.ServiceError) *RestrictAgentOnConnectionConflictResponseBody {
-	body := &RestrictAgentOnConnectionConflictResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewRestrictAgentOnConnectionUnsupportedMediaResponseBody builds the HTTP
-// response body from the result of the "restrictAgentOnConnection" endpoint of
+// NewBlockAgentOnConnectionInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "blockAgentOnConnection" endpoint of
 // the "agents" service.
-func NewRestrictAgentOnConnectionUnsupportedMediaResponseBody(res *goa.ServiceError) *RestrictAgentOnConnectionUnsupportedMediaResponseBody {
-	body := &RestrictAgentOnConnectionUnsupportedMediaResponseBody{
+func NewBlockAgentOnConnectionInvariantViolationResponseBody(res *goa.ServiceError) *BlockAgentOnConnectionInvariantViolationResponseBody {
+	body := &BlockAgentOnConnectionInvariantViolationResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -6357,11 +6389,11 @@ func NewRestrictAgentOnConnectionUnsupportedMediaResponseBody(res *goa.ServiceEr
 	return body
 }
 
-// NewRestrictAgentOnConnectionInvalidResponseBody builds the HTTP response
-// body from the result of the "restrictAgentOnConnection" endpoint of the
+// NewBlockAgentOnConnectionUnexpectedResponseBody builds the HTTP response
+// body from the result of the "blockAgentOnConnection" endpoint of the
 // "agents" service.
-func NewRestrictAgentOnConnectionInvalidResponseBody(res *goa.ServiceError) *RestrictAgentOnConnectionInvalidResponseBody {
-	body := &RestrictAgentOnConnectionInvalidResponseBody{
+func NewBlockAgentOnConnectionUnexpectedResponseBody(res *goa.ServiceError) *BlockAgentOnConnectionUnexpectedResponseBody {
+	body := &BlockAgentOnConnectionUnexpectedResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -6372,26 +6404,11 @@ func NewRestrictAgentOnConnectionInvalidResponseBody(res *goa.ServiceError) *Res
 	return body
 }
 
-// NewRestrictAgentOnConnectionInvariantViolationResponseBody builds the HTTP
-// response body from the result of the "restrictAgentOnConnection" endpoint of
-// the "agents" service.
-func NewRestrictAgentOnConnectionInvariantViolationResponseBody(res *goa.ServiceError) *RestrictAgentOnConnectionInvariantViolationResponseBody {
-	body := &RestrictAgentOnConnectionInvariantViolationResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewRestrictAgentOnConnectionUnexpectedResponseBody builds the HTTP response
-// body from the result of the "restrictAgentOnConnection" endpoint of the
+// NewBlockAgentOnConnectionGatewayErrorResponseBody builds the HTTP response
+// body from the result of the "blockAgentOnConnection" endpoint of the
 // "agents" service.
-func NewRestrictAgentOnConnectionUnexpectedResponseBody(res *goa.ServiceError) *RestrictAgentOnConnectionUnexpectedResponseBody {
-	body := &RestrictAgentOnConnectionUnexpectedResponseBody{
+func NewBlockAgentOnConnectionGatewayErrorResponseBody(res *goa.ServiceError) *BlockAgentOnConnectionGatewayErrorResponseBody {
+	body := &BlockAgentOnConnectionGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -6402,11 +6419,11 @@ func NewRestrictAgentOnConnectionUnexpectedResponseBody(res *goa.ServiceError) *
 	return body
 }
 
-// NewRestrictAgentOnConnectionGatewayErrorResponseBody builds the HTTP
-// response body from the result of the "restrictAgentOnConnection" endpoint of
-// the "agents" service.
-func NewRestrictAgentOnConnectionGatewayErrorResponseBody(res *goa.ServiceError) *RestrictAgentOnConnectionGatewayErrorResponseBody {
-	body := &RestrictAgentOnConnectionGatewayErrorResponseBody{
+// NewRemoveConnectionBlockUnauthorizedResponseBody builds the HTTP response
+// body from the result of the "removeConnectionBlock" endpoint of the "agents"
+// service.
+func NewRemoveConnectionBlockUnauthorizedResponseBody(res *goa.ServiceError) *RemoveConnectionBlockUnauthorizedResponseBody {
+	body := &RemoveConnectionBlockUnauthorizedResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -6417,11 +6434,11 @@ func NewRestrictAgentOnConnectionGatewayErrorResponseBody(res *goa.ServiceError)
 	return body
 }
 
-// NewRemoveConnectionRestrictionUnauthorizedResponseBody builds the HTTP
-// response body from the result of the "removeConnectionRestriction" endpoint
-// of the "agents" service.
-func NewRemoveConnectionRestrictionUnauthorizedResponseBody(res *goa.ServiceError) *RemoveConnectionRestrictionUnauthorizedResponseBody {
-	body := &RemoveConnectionRestrictionUnauthorizedResponseBody{
+// NewRemoveConnectionBlockForbiddenResponseBody builds the HTTP response body
+// from the result of the "removeConnectionBlock" endpoint of the "agents"
+// service.
+func NewRemoveConnectionBlockForbiddenResponseBody(res *goa.ServiceError) *RemoveConnectionBlockForbiddenResponseBody {
+	body := &RemoveConnectionBlockForbiddenResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -6432,11 +6449,56 @@ func NewRemoveConnectionRestrictionUnauthorizedResponseBody(res *goa.ServiceErro
 	return body
 }
 
-// NewRemoveConnectionRestrictionForbiddenResponseBody builds the HTTP response
-// body from the result of the "removeConnectionRestriction" endpoint of the
+// NewRemoveConnectionBlockBadRequestResponseBody builds the HTTP response body
+// from the result of the "removeConnectionBlock" endpoint of the "agents"
+// service.
+func NewRemoveConnectionBlockBadRequestResponseBody(res *goa.ServiceError) *RemoveConnectionBlockBadRequestResponseBody {
+	body := &RemoveConnectionBlockBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRemoveConnectionBlockNotFoundResponseBody builds the HTTP response body
+// from the result of the "removeConnectionBlock" endpoint of the "agents"
+// service.
+func NewRemoveConnectionBlockNotFoundResponseBody(res *goa.ServiceError) *RemoveConnectionBlockNotFoundResponseBody {
+	body := &RemoveConnectionBlockNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRemoveConnectionBlockConflictResponseBody builds the HTTP response body
+// from the result of the "removeConnectionBlock" endpoint of the "agents"
+// service.
+func NewRemoveConnectionBlockConflictResponseBody(res *goa.ServiceError) *RemoveConnectionBlockConflictResponseBody {
+	body := &RemoveConnectionBlockConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRemoveConnectionBlockUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "removeConnectionBlock" endpoint of the
 // "agents" service.
-func NewRemoveConnectionRestrictionForbiddenResponseBody(res *goa.ServiceError) *RemoveConnectionRestrictionForbiddenResponseBody {
-	body := &RemoveConnectionRestrictionForbiddenResponseBody{
+func NewRemoveConnectionBlockUnsupportedMediaResponseBody(res *goa.ServiceError) *RemoveConnectionBlockUnsupportedMediaResponseBody {
+	body := &RemoveConnectionBlockUnsupportedMediaResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -6447,11 +6509,11 @@ func NewRemoveConnectionRestrictionForbiddenResponseBody(res *goa.ServiceError) 
 	return body
 }
 
-// NewRemoveConnectionRestrictionBadRequestResponseBody builds the HTTP
-// response body from the result of the "removeConnectionRestriction" endpoint
-// of the "agents" service.
-func NewRemoveConnectionRestrictionBadRequestResponseBody(res *goa.ServiceError) *RemoveConnectionRestrictionBadRequestResponseBody {
-	body := &RemoveConnectionRestrictionBadRequestResponseBody{
+// NewRemoveConnectionBlockInvalidResponseBody builds the HTTP response body
+// from the result of the "removeConnectionBlock" endpoint of the "agents"
+// service.
+func NewRemoveConnectionBlockInvalidResponseBody(res *goa.ServiceError) *RemoveConnectionBlockInvalidResponseBody {
+	body := &RemoveConnectionBlockInvalidResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -6462,11 +6524,11 @@ func NewRemoveConnectionRestrictionBadRequestResponseBody(res *goa.ServiceError)
 	return body
 }
 
-// NewRemoveConnectionRestrictionNotFoundResponseBody builds the HTTP response
-// body from the result of the "removeConnectionRestriction" endpoint of the
+// NewRemoveConnectionBlockInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "removeConnectionBlock" endpoint of the
 // "agents" service.
-func NewRemoveConnectionRestrictionNotFoundResponseBody(res *goa.ServiceError) *RemoveConnectionRestrictionNotFoundResponseBody {
-	body := &RemoveConnectionRestrictionNotFoundResponseBody{
+func NewRemoveConnectionBlockInvariantViolationResponseBody(res *goa.ServiceError) *RemoveConnectionBlockInvariantViolationResponseBody {
+	body := &RemoveConnectionBlockInvariantViolationResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -6477,11 +6539,11 @@ func NewRemoveConnectionRestrictionNotFoundResponseBody(res *goa.ServiceError) *
 	return body
 }
 
-// NewRemoveConnectionRestrictionConflictResponseBody builds the HTTP response
-// body from the result of the "removeConnectionRestriction" endpoint of the
-// "agents" service.
-func NewRemoveConnectionRestrictionConflictResponseBody(res *goa.ServiceError) *RemoveConnectionRestrictionConflictResponseBody {
-	body := &RemoveConnectionRestrictionConflictResponseBody{
+// NewRemoveConnectionBlockUnexpectedResponseBody builds the HTTP response body
+// from the result of the "removeConnectionBlock" endpoint of the "agents"
+// service.
+func NewRemoveConnectionBlockUnexpectedResponseBody(res *goa.ServiceError) *RemoveConnectionBlockUnexpectedResponseBody {
+	body := &RemoveConnectionBlockUnexpectedResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -6492,71 +6554,11 @@ func NewRemoveConnectionRestrictionConflictResponseBody(res *goa.ServiceError) *
 	return body
 }
 
-// NewRemoveConnectionRestrictionUnsupportedMediaResponseBody builds the HTTP
-// response body from the result of the "removeConnectionRestriction" endpoint
-// of the "agents" service.
-func NewRemoveConnectionRestrictionUnsupportedMediaResponseBody(res *goa.ServiceError) *RemoveConnectionRestrictionUnsupportedMediaResponseBody {
-	body := &RemoveConnectionRestrictionUnsupportedMediaResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewRemoveConnectionRestrictionInvalidResponseBody builds the HTTP response
-// body from the result of the "removeConnectionRestriction" endpoint of the
-// "agents" service.
-func NewRemoveConnectionRestrictionInvalidResponseBody(res *goa.ServiceError) *RemoveConnectionRestrictionInvalidResponseBody {
-	body := &RemoveConnectionRestrictionInvalidResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewRemoveConnectionRestrictionInvariantViolationResponseBody builds the HTTP
-// response body from the result of the "removeConnectionRestriction" endpoint
-// of the "agents" service.
-func NewRemoveConnectionRestrictionInvariantViolationResponseBody(res *goa.ServiceError) *RemoveConnectionRestrictionInvariantViolationResponseBody {
-	body := &RemoveConnectionRestrictionInvariantViolationResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewRemoveConnectionRestrictionUnexpectedResponseBody builds the HTTP
-// response body from the result of the "removeConnectionRestriction" endpoint
-// of the "agents" service.
-func NewRemoveConnectionRestrictionUnexpectedResponseBody(res *goa.ServiceError) *RemoveConnectionRestrictionUnexpectedResponseBody {
-	body := &RemoveConnectionRestrictionUnexpectedResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewRemoveConnectionRestrictionGatewayErrorResponseBody builds the HTTP
-// response body from the result of the "removeConnectionRestriction" endpoint
-// of the "agents" service.
-func NewRemoveConnectionRestrictionGatewayErrorResponseBody(res *goa.ServiceError) *RemoveConnectionRestrictionGatewayErrorResponseBody {
-	body := &RemoveConnectionRestrictionGatewayErrorResponseBody{
+// NewRemoveConnectionBlockGatewayErrorResponseBody builds the HTTP response
+// body from the result of the "removeConnectionBlock" endpoint of the "agents"
+// service.
+func NewRemoveConnectionBlockGatewayErrorResponseBody(res *goa.ServiceError) *RemoveConnectionBlockGatewayErrorResponseBody {
+	body := &RemoveConnectionBlockGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -7551,19 +7553,21 @@ func NewDeletePolicyGrantPayload(body *DeletePolicyGrantRequestBody, sessionToke
 	return v
 }
 
-// NewListConnectionRestrictionsPayload builds a agents service
-// listConnectionRestrictions endpoint payload.
-func NewListConnectionRestrictionsPayload(sessionToken *string) *agents.ListConnectionRestrictionsPayload {
-	v := &agents.ListConnectionRestrictionsPayload{}
+// NewListConnectionBlocksPayload builds a agents service listConnectionBlocks
+// endpoint payload.
+func NewListConnectionBlocksPayload(cursor *string, limit int, sessionToken *string) *agents.ListConnectionBlocksPayload {
+	v := &agents.ListConnectionBlocksPayload{}
+	v.Cursor = cursor
+	v.Limit = limit
 	v.SessionToken = sessionToken
 
 	return v
 }
 
-// NewRestrictAgentOnConnectionPayload builds a agents service
-// restrictAgentOnConnection endpoint payload.
-func NewRestrictAgentOnConnectionPayload(body *RestrictAgentOnConnectionRequestBody, sessionToken *string) *agents.RestrictAgentOnConnectionPayload {
-	v := &agents.RestrictAgentOnConnectionPayload{
+// NewBlockAgentOnConnectionPayload builds a agents service
+// blockAgentOnConnection endpoint payload.
+func NewBlockAgentOnConnectionPayload(body *BlockAgentOnConnectionRequestBody, sessionToken *string) *agents.BlockAgentOnConnectionPayload {
+	v := &agents.BlockAgentOnConnectionPayload{
 		AgentID:               *body.AgentID,
 		RemoteSessionClientID: *body.RemoteSessionClientID,
 	}
@@ -7572,11 +7576,11 @@ func NewRestrictAgentOnConnectionPayload(body *RestrictAgentOnConnectionRequestB
 	return v
 }
 
-// NewRemoveConnectionRestrictionPayload builds a agents service
-// removeConnectionRestriction endpoint payload.
-func NewRemoveConnectionRestrictionPayload(body *RemoveConnectionRestrictionRequestBody, sessionToken *string) *agents.RemoveConnectionRestrictionPayload {
-	v := &agents.RemoveConnectionRestrictionPayload{
-		RestrictionID: *body.RestrictionID,
+// NewRemoveConnectionBlockPayload builds a agents service
+// removeConnectionBlock endpoint payload.
+func NewRemoveConnectionBlockPayload(body *RemoveConnectionBlockRequestBody, sessionToken *string) *agents.RemoveConnectionBlockPayload {
+	v := &agents.RemoveConnectionBlockPayload{
+		BlockID: *body.BlockID,
 	}
 	v.SessionToken = sessionToken
 
@@ -7808,9 +7812,9 @@ func ValidateDeletePolicyGrantRequestBody(body *DeletePolicyGrantRequestBody) (e
 	return
 }
 
-// ValidateRestrictAgentOnConnectionRequestBody runs the validations defined on
-// RestrictAgentOnConnectionRequestBody
-func ValidateRestrictAgentOnConnectionRequestBody(body *RestrictAgentOnConnectionRequestBody) (err error) {
+// ValidateBlockAgentOnConnectionRequestBody runs the validations defined on
+// BlockAgentOnConnectionRequestBody
+func ValidateBlockAgentOnConnectionRequestBody(body *BlockAgentOnConnectionRequestBody) (err error) {
 	if body.AgentID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("agent_id", "body"))
 	}
@@ -7826,14 +7830,14 @@ func ValidateRestrictAgentOnConnectionRequestBody(body *RestrictAgentOnConnectio
 	return
 }
 
-// ValidateRemoveConnectionRestrictionRequestBody runs the validations defined
-// on RemoveConnectionRestrictionRequestBody
-func ValidateRemoveConnectionRestrictionRequestBody(body *RemoveConnectionRestrictionRequestBody) (err error) {
-	if body.RestrictionID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("restriction_id", "body"))
+// ValidateRemoveConnectionBlockRequestBody runs the validations defined on
+// RemoveConnectionBlockRequestBody
+func ValidateRemoveConnectionBlockRequestBody(body *RemoveConnectionBlockRequestBody) (err error) {
+	if body.BlockID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("block_id", "body"))
 	}
-	if body.RestrictionID != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.restriction_id", *body.RestrictionID, goa.FormatUUID))
+	if body.BlockID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.block_id", *body.BlockID, goa.FormatUUID))
 	}
 	return
 }

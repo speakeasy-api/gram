@@ -30,12 +30,12 @@ GRAM_DATABASE_URL=... go run ./cmd/tools/migrations auth-permission-defaults \
 
 `mode=… environment=… organizations=N personal_default=N shared_client=N api_key=N attachment=N written=N keys_waiting=N attachments_to_remediate=N busy=N failed=N`
 
-Before it, one line per agent attachment that was not carried over:
+Before it, one line per agent attachment that was not carried over in an organization that completed. Failed and busy organizations print none until they are rerun:
 
 `remediate organization=… binding=… agent=… reason=…`
 
 - `attachment`: grants that let an attached agent keep using its owner's connection without the attachment: `mcp:auth` on that owner's connection through the attached upstream OAuth client.
-- `attachments_to_remediate`: attachments the backfill did not carry over. The owner must reconnect or configure the agent; the backfill never substitutes another user or a broader grant. Reasons: `owner_changed` (the attacher no longer owns the agent), `foreign_connection` (the connection is not the attacher's), `connection_gone` (the connection was removed or authorized again), `client_unrecorded` (run the upstream OAuth migration for the organization, then rerun), `not_attached_by_user`.
+- `attachments_to_remediate`: attachments the backfill did not carry over. The owner must reconnect or configure the agent; the backfill never substitutes another user or a broader grant. Reasons: `not_attached_by_user` (no user made the attachment), `owner_changed` (the attacher no longer owns the agent), `foreign_connection` (the connection is not the attacher's), `agent_inactive` (the agent is suspended, revoked or waiting for a new owner, or its owner is no longer an active member), `connection_gone` (the connection was removed or authorized again), `configuration_gone` (the attachment's sign-in, project, upstream client or issuer was removed), `client_unrecorded` (run the upstream OAuth migration for the organization, then rerun).
 - `keys_waiting`: organizations whose legacy API key policies were held back because some auth clients are not recorded yet. Run the upstream OAuth migration for them, then rerun.
 - `failed`: organizations whose grants phase failed and rolled back. Rerun; a persistent failure needs investigation.
 - `busy`: organizations another run held, which were skipped. Rerun.

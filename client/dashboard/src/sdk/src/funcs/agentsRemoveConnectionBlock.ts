@@ -4,7 +4,7 @@
 
 import * as z from "zod/v4-mini";
 import { GramCore } from "../core.js";
-import { encodeSimple } from "../lib/encodings.js";
+import { encodeJSON, encodeSimple } from "../lib/encodings.js";
 import { matchStatusCode } from "../lib/http.js";
 import * as M from "../lib/matchers.js";
 import { compactMap } from "../lib/primitives.js";
@@ -12,10 +12,6 @@ import { safeParse } from "../lib/schemas.js";
 import { RequestOptions } from "../lib/sdks.js";
 import { resolveSecurity } from "../lib/security.js";
 import { pathToFunc } from "../lib/url.js";
-import {
-  ListAgentConnectionRestrictionsResult,
-  ListAgentConnectionRestrictionsResult$inboundSchema,
-} from "../models/components/listagentconnectionrestrictionsresult.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -31,27 +27,27 @@ import {
   ServiceError$inboundSchema,
 } from "../models/errors/serviceerror.js";
 import {
-  ListAgentConnectionRestrictionsRequest,
-  ListAgentConnectionRestrictionsRequest$outboundSchema,
-  ListAgentConnectionRestrictionsSecurity,
-} from "../models/operations/listagentconnectionrestrictions.js";
+  RemoveAgentConnectionBlockRequest,
+  RemoveAgentConnectionBlockRequest$outboundSchema,
+  RemoveAgentConnectionBlockSecurity,
+} from "../models/operations/removeagentconnectionblock.js";
 import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
 /**
- * listConnectionRestrictions agents
+ * removeConnectionBlock agents
  *
  * @remarks
- * List the agents the caller blocked from their own connections. Needs no agent management access.
+ * Remove a block the caller wrote on their own connection. Blocks written by an agent manager are not affected.
  */
-export function agentsListConnectionRestrictions(
+export function agentsRemoveConnectionBlock(
   client: GramCore,
-  request?: ListAgentConnectionRestrictionsRequest | undefined,
-  security?: ListAgentConnectionRestrictionsSecurity | undefined,
+  request: RemoveAgentConnectionBlockRequest,
+  security?: RemoveAgentConnectionBlockSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
-    ListAgentConnectionRestrictionsResult,
+    void,
     | ServiceError
     | GramError
     | ResponseValidationError
@@ -73,13 +69,13 @@ export function agentsListConnectionRestrictions(
 
 async function $do(
   client: GramCore,
-  request?: ListAgentConnectionRestrictionsRequest | undefined,
-  security?: ListAgentConnectionRestrictionsSecurity | undefined,
+  request: RemoveAgentConnectionBlockRequest,
+  security?: RemoveAgentConnectionBlockSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [
     Result<
-      ListAgentConnectionRestrictionsResult,
+      void,
       | ServiceError
       | GramError
       | ResponseValidationError
@@ -95,24 +91,23 @@ async function $do(
 > {
   const parsed = safeParse(
     request,
-    (value) =>
-      z.parse(
-        z.optional(ListAgentConnectionRestrictionsRequest$outboundSchema),
-        value,
-      ),
+    (value) => z.parse(RemoveAgentConnectionBlockRequest$outboundSchema, value),
     "Input validation failed",
   );
   if (!parsed.ok) {
     return [parsed, { status: "invalid" }];
   }
   const payload = parsed.value;
-  const body = null;
+  const body = encodeJSON("body", payload.AgentConnectionBlockIDForm, {
+    explode: true,
+  });
 
-  const path = pathToFunc("/rpc/agents.listConnectionRestrictions")();
+  const path = pathToFunc("/rpc/agents.removeConnectionBlock")();
 
   const headers = new Headers(compactMap({
+    "Content-Type": "application/json",
     Accept: "application/json",
-    "Gram-Session": encodeSimple("Gram-Session", payload?.["Gram-Session"], {
+    "Gram-Session": encodeSimple("Gram-Session", payload["Gram-Session"], {
       explode: false,
       charEncoding: "none",
     }),
@@ -131,7 +126,7 @@ async function $do(
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "listAgentConnectionRestrictions",
+    operationID: "removeAgentConnectionBlock",
     oAuth2Scopes: null,
 
     resolvedSecurity: requestSecurity,
@@ -145,7 +140,7 @@ async function $do(
 
   const requestRes = client._createRequest(context, {
     security: requestSecurity,
-    method: "GET",
+    method: "POST",
     baseURL: options?.serverURL,
     path: path,
     headers: headers,
@@ -175,7 +170,7 @@ async function $do(
   };
 
   const [result] = await M.match<
-    ListAgentConnectionRestrictionsResult,
+    void,
     | ServiceError
     | GramError
     | ResponseValidationError
@@ -186,7 +181,7 @@ async function $do(
     | UnexpectedClientError
     | SDKValidationError
   >(
-    M.json(200, ListAgentConnectionRestrictionsResult$inboundSchema),
+    M.nil(204, z.void()),
     M.jsonErr([400, 401, 403, 404, 409, 415, 422], ServiceError$inboundSchema),
     M.jsonErr([500, 502], ServiceError$inboundSchema),
     M.fail("4XX"),

@@ -2605,14 +2605,14 @@ func DecodeDeletePolicyGrantResponse(decoder func(*http.Response) goahttp.Decode
 	}
 }
 
-// BuildListConnectionRestrictionsRequest instantiates a HTTP request object
-// with method and path set to call the "agents" service
-// "listConnectionRestrictions" endpoint
-func (c *Client) BuildListConnectionRestrictionsRequest(ctx context.Context, v any) (*http.Request, error) {
-	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ListConnectionRestrictionsAgentsPath()}
+// BuildListConnectionBlocksRequest instantiates a HTTP request object with
+// method and path set to call the "agents" service "listConnectionBlocks"
+// endpoint
+func (c *Client) BuildListConnectionBlocksRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ListConnectionBlocksAgentsPath()}
 	req, err := http.NewRequest("GET", u.String(), nil)
 	if err != nil {
-		return nil, goahttp.ErrInvalidURL("agents", "listConnectionRestrictions", u.String(), err)
+		return nil, goahttp.ErrInvalidURL("agents", "listConnectionBlocks", u.String(), err)
 	}
 	if ctx != nil {
 		req = req.WithContext(ctx)
@@ -2621,26 +2621,32 @@ func (c *Client) BuildListConnectionRestrictionsRequest(ctx context.Context, v a
 	return req, nil
 }
 
-// EncodeListConnectionRestrictionsRequest returns an encoder for requests sent
-// to the agents listConnectionRestrictions server.
-func EncodeListConnectionRestrictionsRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+// EncodeListConnectionBlocksRequest returns an encoder for requests sent to
+// the agents listConnectionBlocks server.
+func EncodeListConnectionBlocksRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
 	return func(req *http.Request, v any) error {
-		p, ok := v.(*agents.ListConnectionRestrictionsPayload)
+		p, ok := v.(*agents.ListConnectionBlocksPayload)
 		if !ok {
-			return goahttp.ErrInvalidType("agents", "listConnectionRestrictions", "*agents.ListConnectionRestrictionsPayload", v)
+			return goahttp.ErrInvalidType("agents", "listConnectionBlocks", "*agents.ListConnectionBlocksPayload", v)
 		}
 		if p.SessionToken != nil {
 			head := *p.SessionToken
 			req.Header.Set("Gram-Session", head)
 		}
+		values := req.URL.Query()
+		if p.Cursor != nil {
+			values.Add("cursor", *p.Cursor)
+		}
+		values.Add("limit", fmt.Sprintf("%v", p.Limit))
+		req.URL.RawQuery = values.Encode()
 		return nil
 	}
 }
 
-// DecodeListConnectionRestrictionsResponse returns a decoder for responses
-// returned by the agents listConnectionRestrictions endpoint. restoreBody
-// controls whether the response body should be restored after having been read.
-// DecodeListConnectionRestrictionsResponse may return the following errors:
+// DecodeListConnectionBlocksResponse returns a decoder for responses returned
+// by the agents listConnectionBlocks endpoint. restoreBody controls whether
+// the response body should be restored after having been read.
+// DecodeListConnectionBlocksResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
@@ -2652,7 +2658,7 @@ func EncodeListConnectionRestrictionsRequest(encoder func(*http.Request) goahttp
 //   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
 //   - error: internal error
-func DecodeListConnectionRestrictionsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+func DecodeListConnectionBlocksResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
 		if restoreBody {
 			b, err := io.ReadAll(resp.Body)
@@ -2669,181 +2675,181 @@ func DecodeListConnectionRestrictionsResponse(decoder func(*http.Response) goaht
 		switch resp.StatusCode {
 		case http.StatusOK:
 			var (
-				body ListConnectionRestrictionsResponseBody
+				body ListConnectionBlocksResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("agents", "listConnectionRestrictions", err)
+				return nil, goahttp.ErrDecodingError("agents", "listConnectionBlocks", err)
 			}
-			err = ValidateListConnectionRestrictionsResponseBody(&body)
+			err = ValidateListConnectionBlocksResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("agents", "listConnectionRestrictions", err)
+				return nil, goahttp.ErrValidationError("agents", "listConnectionBlocks", err)
 			}
-			res := NewListConnectionRestrictionsListAgentConnectionRestrictionsResultOK(&body)
+			res := NewListConnectionBlocksListAgentConnectionBlocksResultOK(&body)
 			return res, nil
 		case http.StatusUnauthorized:
 			var (
-				body ListConnectionRestrictionsUnauthorizedResponseBody
+				body ListConnectionBlocksUnauthorizedResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("agents", "listConnectionRestrictions", err)
+				return nil, goahttp.ErrDecodingError("agents", "listConnectionBlocks", err)
 			}
-			err = ValidateListConnectionRestrictionsUnauthorizedResponseBody(&body)
+			err = ValidateListConnectionBlocksUnauthorizedResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("agents", "listConnectionRestrictions", err)
+				return nil, goahttp.ErrValidationError("agents", "listConnectionBlocks", err)
 			}
-			return nil, NewListConnectionRestrictionsUnauthorized(&body)
+			return nil, NewListConnectionBlocksUnauthorized(&body)
 		case http.StatusForbidden:
 			var (
-				body ListConnectionRestrictionsForbiddenResponseBody
+				body ListConnectionBlocksForbiddenResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("agents", "listConnectionRestrictions", err)
+				return nil, goahttp.ErrDecodingError("agents", "listConnectionBlocks", err)
 			}
-			err = ValidateListConnectionRestrictionsForbiddenResponseBody(&body)
+			err = ValidateListConnectionBlocksForbiddenResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("agents", "listConnectionRestrictions", err)
+				return nil, goahttp.ErrValidationError("agents", "listConnectionBlocks", err)
 			}
-			return nil, NewListConnectionRestrictionsForbidden(&body)
+			return nil, NewListConnectionBlocksForbidden(&body)
 		case http.StatusBadRequest:
 			var (
-				body ListConnectionRestrictionsBadRequestResponseBody
+				body ListConnectionBlocksBadRequestResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("agents", "listConnectionRestrictions", err)
+				return nil, goahttp.ErrDecodingError("agents", "listConnectionBlocks", err)
 			}
-			err = ValidateListConnectionRestrictionsBadRequestResponseBody(&body)
+			err = ValidateListConnectionBlocksBadRequestResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("agents", "listConnectionRestrictions", err)
+				return nil, goahttp.ErrValidationError("agents", "listConnectionBlocks", err)
 			}
-			return nil, NewListConnectionRestrictionsBadRequest(&body)
+			return nil, NewListConnectionBlocksBadRequest(&body)
 		case http.StatusNotFound:
 			var (
-				body ListConnectionRestrictionsNotFoundResponseBody
+				body ListConnectionBlocksNotFoundResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("agents", "listConnectionRestrictions", err)
+				return nil, goahttp.ErrDecodingError("agents", "listConnectionBlocks", err)
 			}
-			err = ValidateListConnectionRestrictionsNotFoundResponseBody(&body)
+			err = ValidateListConnectionBlocksNotFoundResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("agents", "listConnectionRestrictions", err)
+				return nil, goahttp.ErrValidationError("agents", "listConnectionBlocks", err)
 			}
-			return nil, NewListConnectionRestrictionsNotFound(&body)
+			return nil, NewListConnectionBlocksNotFound(&body)
 		case http.StatusConflict:
 			var (
-				body ListConnectionRestrictionsConflictResponseBody
+				body ListConnectionBlocksConflictResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("agents", "listConnectionRestrictions", err)
+				return nil, goahttp.ErrDecodingError("agents", "listConnectionBlocks", err)
 			}
-			err = ValidateListConnectionRestrictionsConflictResponseBody(&body)
+			err = ValidateListConnectionBlocksConflictResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("agents", "listConnectionRestrictions", err)
+				return nil, goahttp.ErrValidationError("agents", "listConnectionBlocks", err)
 			}
-			return nil, NewListConnectionRestrictionsConflict(&body)
+			return nil, NewListConnectionBlocksConflict(&body)
 		case http.StatusUnsupportedMediaType:
 			var (
-				body ListConnectionRestrictionsUnsupportedMediaResponseBody
+				body ListConnectionBlocksUnsupportedMediaResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("agents", "listConnectionRestrictions", err)
+				return nil, goahttp.ErrDecodingError("agents", "listConnectionBlocks", err)
 			}
-			err = ValidateListConnectionRestrictionsUnsupportedMediaResponseBody(&body)
+			err = ValidateListConnectionBlocksUnsupportedMediaResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("agents", "listConnectionRestrictions", err)
+				return nil, goahttp.ErrValidationError("agents", "listConnectionBlocks", err)
 			}
-			return nil, NewListConnectionRestrictionsUnsupportedMedia(&body)
+			return nil, NewListConnectionBlocksUnsupportedMedia(&body)
 		case http.StatusUnprocessableEntity:
 			var (
-				body ListConnectionRestrictionsInvalidResponseBody
+				body ListConnectionBlocksInvalidResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("agents", "listConnectionRestrictions", err)
+				return nil, goahttp.ErrDecodingError("agents", "listConnectionBlocks", err)
 			}
-			err = ValidateListConnectionRestrictionsInvalidResponseBody(&body)
+			err = ValidateListConnectionBlocksInvalidResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("agents", "listConnectionRestrictions", err)
+				return nil, goahttp.ErrValidationError("agents", "listConnectionBlocks", err)
 			}
-			return nil, NewListConnectionRestrictionsInvalid(&body)
+			return nil, NewListConnectionBlocksInvalid(&body)
 		case http.StatusInternalServerError:
 			en := resp.Header.Get("goa-error")
 			switch en {
 			case "invariant_violation":
 				var (
-					body ListConnectionRestrictionsInvariantViolationResponseBody
+					body ListConnectionBlocksInvariantViolationResponseBody
 					err  error
 				)
 				err = decoder(resp).Decode(&body)
 				if err != nil {
-					return nil, goahttp.ErrDecodingError("agents", "listConnectionRestrictions", err)
+					return nil, goahttp.ErrDecodingError("agents", "listConnectionBlocks", err)
 				}
-				err = ValidateListConnectionRestrictionsInvariantViolationResponseBody(&body)
+				err = ValidateListConnectionBlocksInvariantViolationResponseBody(&body)
 				if err != nil {
-					return nil, goahttp.ErrValidationError("agents", "listConnectionRestrictions", err)
+					return nil, goahttp.ErrValidationError("agents", "listConnectionBlocks", err)
 				}
-				return nil, NewListConnectionRestrictionsInvariantViolation(&body)
+				return nil, NewListConnectionBlocksInvariantViolation(&body)
 			case "unexpected":
 				var (
-					body ListConnectionRestrictionsUnexpectedResponseBody
+					body ListConnectionBlocksUnexpectedResponseBody
 					err  error
 				)
 				err = decoder(resp).Decode(&body)
 				if err != nil {
-					return nil, goahttp.ErrDecodingError("agents", "listConnectionRestrictions", err)
+					return nil, goahttp.ErrDecodingError("agents", "listConnectionBlocks", err)
 				}
-				err = ValidateListConnectionRestrictionsUnexpectedResponseBody(&body)
+				err = ValidateListConnectionBlocksUnexpectedResponseBody(&body)
 				if err != nil {
-					return nil, goahttp.ErrValidationError("agents", "listConnectionRestrictions", err)
+					return nil, goahttp.ErrValidationError("agents", "listConnectionBlocks", err)
 				}
-				return nil, NewListConnectionRestrictionsUnexpected(&body)
+				return nil, NewListConnectionBlocksUnexpected(&body)
 			default:
 				body, _ := io.ReadAll(resp.Body)
-				return nil, goahttp.ErrInvalidResponse("agents", "listConnectionRestrictions", resp.StatusCode, string(body))
+				return nil, goahttp.ErrInvalidResponse("agents", "listConnectionBlocks", resp.StatusCode, string(body))
 			}
 		case http.StatusBadGateway:
 			var (
-				body ListConnectionRestrictionsGatewayErrorResponseBody
+				body ListConnectionBlocksGatewayErrorResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("agents", "listConnectionRestrictions", err)
+				return nil, goahttp.ErrDecodingError("agents", "listConnectionBlocks", err)
 			}
-			err = ValidateListConnectionRestrictionsGatewayErrorResponseBody(&body)
+			err = ValidateListConnectionBlocksGatewayErrorResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("agents", "listConnectionRestrictions", err)
+				return nil, goahttp.ErrValidationError("agents", "listConnectionBlocks", err)
 			}
-			return nil, NewListConnectionRestrictionsGatewayError(&body)
+			return nil, NewListConnectionBlocksGatewayError(&body)
 		default:
 			body, _ := io.ReadAll(resp.Body)
-			return nil, goahttp.ErrInvalidResponse("agents", "listConnectionRestrictions", resp.StatusCode, string(body))
+			return nil, goahttp.ErrInvalidResponse("agents", "listConnectionBlocks", resp.StatusCode, string(body))
 		}
 	}
 }
 
-// BuildRestrictAgentOnConnectionRequest instantiates a HTTP request object
-// with method and path set to call the "agents" service
-// "restrictAgentOnConnection" endpoint
-func (c *Client) BuildRestrictAgentOnConnectionRequest(ctx context.Context, v any) (*http.Request, error) {
-	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: RestrictAgentOnConnectionAgentsPath()}
+// BuildBlockAgentOnConnectionRequest instantiates a HTTP request object with
+// method and path set to call the "agents" service "blockAgentOnConnection"
+// endpoint
+func (c *Client) BuildBlockAgentOnConnectionRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: BlockAgentOnConnectionAgentsPath()}
 	req, err := http.NewRequest("POST", u.String(), nil)
 	if err != nil {
-		return nil, goahttp.ErrInvalidURL("agents", "restrictAgentOnConnection", u.String(), err)
+		return nil, goahttp.ErrInvalidURL("agents", "blockAgentOnConnection", u.String(), err)
 	}
 	if ctx != nil {
 		req = req.WithContext(ctx)
@@ -2852,30 +2858,30 @@ func (c *Client) BuildRestrictAgentOnConnectionRequest(ctx context.Context, v an
 	return req, nil
 }
 
-// EncodeRestrictAgentOnConnectionRequest returns an encoder for requests sent
-// to the agents restrictAgentOnConnection server.
-func EncodeRestrictAgentOnConnectionRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+// EncodeBlockAgentOnConnectionRequest returns an encoder for requests sent to
+// the agents blockAgentOnConnection server.
+func EncodeBlockAgentOnConnectionRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
 	return func(req *http.Request, v any) error {
-		p, ok := v.(*agents.RestrictAgentOnConnectionPayload)
+		p, ok := v.(*agents.BlockAgentOnConnectionPayload)
 		if !ok {
-			return goahttp.ErrInvalidType("agents", "restrictAgentOnConnection", "*agents.RestrictAgentOnConnectionPayload", v)
+			return goahttp.ErrInvalidType("agents", "blockAgentOnConnection", "*agents.BlockAgentOnConnectionPayload", v)
 		}
 		if p.SessionToken != nil {
 			head := *p.SessionToken
 			req.Header.Set("Gram-Session", head)
 		}
-		body := NewRestrictAgentOnConnectionRequestBody(p)
+		body := NewBlockAgentOnConnectionRequestBody(p)
 		if err := encoder(req).Encode(&body); err != nil {
-			return goahttp.ErrEncodingError("agents", "restrictAgentOnConnection", err)
+			return goahttp.ErrEncodingError("agents", "blockAgentOnConnection", err)
 		}
 		return nil
 	}
 }
 
-// DecodeRestrictAgentOnConnectionResponse returns a decoder for responses
-// returned by the agents restrictAgentOnConnection endpoint. restoreBody
-// controls whether the response body should be restored after having been read.
-// DecodeRestrictAgentOnConnectionResponse may return the following errors:
+// DecodeBlockAgentOnConnectionResponse returns a decoder for responses
+// returned by the agents blockAgentOnConnection endpoint. restoreBody controls
+// whether the response body should be restored after having been read.
+// DecodeBlockAgentOnConnectionResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
@@ -2887,7 +2893,7 @@ func EncodeRestrictAgentOnConnectionRequest(encoder func(*http.Request) goahttp.
 //   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
 //   - error: internal error
-func DecodeRestrictAgentOnConnectionResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+func DecodeBlockAgentOnConnectionResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
 		if restoreBody {
 			b, err := io.ReadAll(resp.Body)
@@ -2904,181 +2910,181 @@ func DecodeRestrictAgentOnConnectionResponse(decoder func(*http.Response) goahtt
 		switch resp.StatusCode {
 		case http.StatusOK:
 			var (
-				body RestrictAgentOnConnectionResponseBody
+				body BlockAgentOnConnectionResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("agents", "restrictAgentOnConnection", err)
+				return nil, goahttp.ErrDecodingError("agents", "blockAgentOnConnection", err)
 			}
-			err = ValidateRestrictAgentOnConnectionResponseBody(&body)
+			err = ValidateBlockAgentOnConnectionResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("agents", "restrictAgentOnConnection", err)
+				return nil, goahttp.ErrValidationError("agents", "blockAgentOnConnection", err)
 			}
-			res := NewRestrictAgentOnConnectionAgentConnectionRestrictionOK(&body)
+			res := NewBlockAgentOnConnectionAgentConnectionBlockOK(&body)
 			return res, nil
 		case http.StatusUnauthorized:
 			var (
-				body RestrictAgentOnConnectionUnauthorizedResponseBody
+				body BlockAgentOnConnectionUnauthorizedResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("agents", "restrictAgentOnConnection", err)
+				return nil, goahttp.ErrDecodingError("agents", "blockAgentOnConnection", err)
 			}
-			err = ValidateRestrictAgentOnConnectionUnauthorizedResponseBody(&body)
+			err = ValidateBlockAgentOnConnectionUnauthorizedResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("agents", "restrictAgentOnConnection", err)
+				return nil, goahttp.ErrValidationError("agents", "blockAgentOnConnection", err)
 			}
-			return nil, NewRestrictAgentOnConnectionUnauthorized(&body)
+			return nil, NewBlockAgentOnConnectionUnauthorized(&body)
 		case http.StatusForbidden:
 			var (
-				body RestrictAgentOnConnectionForbiddenResponseBody
+				body BlockAgentOnConnectionForbiddenResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("agents", "restrictAgentOnConnection", err)
+				return nil, goahttp.ErrDecodingError("agents", "blockAgentOnConnection", err)
 			}
-			err = ValidateRestrictAgentOnConnectionForbiddenResponseBody(&body)
+			err = ValidateBlockAgentOnConnectionForbiddenResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("agents", "restrictAgentOnConnection", err)
+				return nil, goahttp.ErrValidationError("agents", "blockAgentOnConnection", err)
 			}
-			return nil, NewRestrictAgentOnConnectionForbidden(&body)
+			return nil, NewBlockAgentOnConnectionForbidden(&body)
 		case http.StatusBadRequest:
 			var (
-				body RestrictAgentOnConnectionBadRequestResponseBody
+				body BlockAgentOnConnectionBadRequestResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("agents", "restrictAgentOnConnection", err)
+				return nil, goahttp.ErrDecodingError("agents", "blockAgentOnConnection", err)
 			}
-			err = ValidateRestrictAgentOnConnectionBadRequestResponseBody(&body)
+			err = ValidateBlockAgentOnConnectionBadRequestResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("agents", "restrictAgentOnConnection", err)
+				return nil, goahttp.ErrValidationError("agents", "blockAgentOnConnection", err)
 			}
-			return nil, NewRestrictAgentOnConnectionBadRequest(&body)
+			return nil, NewBlockAgentOnConnectionBadRequest(&body)
 		case http.StatusNotFound:
 			var (
-				body RestrictAgentOnConnectionNotFoundResponseBody
+				body BlockAgentOnConnectionNotFoundResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("agents", "restrictAgentOnConnection", err)
+				return nil, goahttp.ErrDecodingError("agents", "blockAgentOnConnection", err)
 			}
-			err = ValidateRestrictAgentOnConnectionNotFoundResponseBody(&body)
+			err = ValidateBlockAgentOnConnectionNotFoundResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("agents", "restrictAgentOnConnection", err)
+				return nil, goahttp.ErrValidationError("agents", "blockAgentOnConnection", err)
 			}
-			return nil, NewRestrictAgentOnConnectionNotFound(&body)
+			return nil, NewBlockAgentOnConnectionNotFound(&body)
 		case http.StatusConflict:
 			var (
-				body RestrictAgentOnConnectionConflictResponseBody
+				body BlockAgentOnConnectionConflictResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("agents", "restrictAgentOnConnection", err)
+				return nil, goahttp.ErrDecodingError("agents", "blockAgentOnConnection", err)
 			}
-			err = ValidateRestrictAgentOnConnectionConflictResponseBody(&body)
+			err = ValidateBlockAgentOnConnectionConflictResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("agents", "restrictAgentOnConnection", err)
+				return nil, goahttp.ErrValidationError("agents", "blockAgentOnConnection", err)
 			}
-			return nil, NewRestrictAgentOnConnectionConflict(&body)
+			return nil, NewBlockAgentOnConnectionConflict(&body)
 		case http.StatusUnsupportedMediaType:
 			var (
-				body RestrictAgentOnConnectionUnsupportedMediaResponseBody
+				body BlockAgentOnConnectionUnsupportedMediaResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("agents", "restrictAgentOnConnection", err)
+				return nil, goahttp.ErrDecodingError("agents", "blockAgentOnConnection", err)
 			}
-			err = ValidateRestrictAgentOnConnectionUnsupportedMediaResponseBody(&body)
+			err = ValidateBlockAgentOnConnectionUnsupportedMediaResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("agents", "restrictAgentOnConnection", err)
+				return nil, goahttp.ErrValidationError("agents", "blockAgentOnConnection", err)
 			}
-			return nil, NewRestrictAgentOnConnectionUnsupportedMedia(&body)
+			return nil, NewBlockAgentOnConnectionUnsupportedMedia(&body)
 		case http.StatusUnprocessableEntity:
 			var (
-				body RestrictAgentOnConnectionInvalidResponseBody
+				body BlockAgentOnConnectionInvalidResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("agents", "restrictAgentOnConnection", err)
+				return nil, goahttp.ErrDecodingError("agents", "blockAgentOnConnection", err)
 			}
-			err = ValidateRestrictAgentOnConnectionInvalidResponseBody(&body)
+			err = ValidateBlockAgentOnConnectionInvalidResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("agents", "restrictAgentOnConnection", err)
+				return nil, goahttp.ErrValidationError("agents", "blockAgentOnConnection", err)
 			}
-			return nil, NewRestrictAgentOnConnectionInvalid(&body)
+			return nil, NewBlockAgentOnConnectionInvalid(&body)
 		case http.StatusInternalServerError:
 			en := resp.Header.Get("goa-error")
 			switch en {
 			case "invariant_violation":
 				var (
-					body RestrictAgentOnConnectionInvariantViolationResponseBody
+					body BlockAgentOnConnectionInvariantViolationResponseBody
 					err  error
 				)
 				err = decoder(resp).Decode(&body)
 				if err != nil {
-					return nil, goahttp.ErrDecodingError("agents", "restrictAgentOnConnection", err)
+					return nil, goahttp.ErrDecodingError("agents", "blockAgentOnConnection", err)
 				}
-				err = ValidateRestrictAgentOnConnectionInvariantViolationResponseBody(&body)
+				err = ValidateBlockAgentOnConnectionInvariantViolationResponseBody(&body)
 				if err != nil {
-					return nil, goahttp.ErrValidationError("agents", "restrictAgentOnConnection", err)
+					return nil, goahttp.ErrValidationError("agents", "blockAgentOnConnection", err)
 				}
-				return nil, NewRestrictAgentOnConnectionInvariantViolation(&body)
+				return nil, NewBlockAgentOnConnectionInvariantViolation(&body)
 			case "unexpected":
 				var (
-					body RestrictAgentOnConnectionUnexpectedResponseBody
+					body BlockAgentOnConnectionUnexpectedResponseBody
 					err  error
 				)
 				err = decoder(resp).Decode(&body)
 				if err != nil {
-					return nil, goahttp.ErrDecodingError("agents", "restrictAgentOnConnection", err)
+					return nil, goahttp.ErrDecodingError("agents", "blockAgentOnConnection", err)
 				}
-				err = ValidateRestrictAgentOnConnectionUnexpectedResponseBody(&body)
+				err = ValidateBlockAgentOnConnectionUnexpectedResponseBody(&body)
 				if err != nil {
-					return nil, goahttp.ErrValidationError("agents", "restrictAgentOnConnection", err)
+					return nil, goahttp.ErrValidationError("agents", "blockAgentOnConnection", err)
 				}
-				return nil, NewRestrictAgentOnConnectionUnexpected(&body)
+				return nil, NewBlockAgentOnConnectionUnexpected(&body)
 			default:
 				body, _ := io.ReadAll(resp.Body)
-				return nil, goahttp.ErrInvalidResponse("agents", "restrictAgentOnConnection", resp.StatusCode, string(body))
+				return nil, goahttp.ErrInvalidResponse("agents", "blockAgentOnConnection", resp.StatusCode, string(body))
 			}
 		case http.StatusBadGateway:
 			var (
-				body RestrictAgentOnConnectionGatewayErrorResponseBody
+				body BlockAgentOnConnectionGatewayErrorResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("agents", "restrictAgentOnConnection", err)
+				return nil, goahttp.ErrDecodingError("agents", "blockAgentOnConnection", err)
 			}
-			err = ValidateRestrictAgentOnConnectionGatewayErrorResponseBody(&body)
+			err = ValidateBlockAgentOnConnectionGatewayErrorResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("agents", "restrictAgentOnConnection", err)
+				return nil, goahttp.ErrValidationError("agents", "blockAgentOnConnection", err)
 			}
-			return nil, NewRestrictAgentOnConnectionGatewayError(&body)
+			return nil, NewBlockAgentOnConnectionGatewayError(&body)
 		default:
 			body, _ := io.ReadAll(resp.Body)
-			return nil, goahttp.ErrInvalidResponse("agents", "restrictAgentOnConnection", resp.StatusCode, string(body))
+			return nil, goahttp.ErrInvalidResponse("agents", "blockAgentOnConnection", resp.StatusCode, string(body))
 		}
 	}
 }
 
-// BuildRemoveConnectionRestrictionRequest instantiates a HTTP request object
-// with method and path set to call the "agents" service
-// "removeConnectionRestriction" endpoint
-func (c *Client) BuildRemoveConnectionRestrictionRequest(ctx context.Context, v any) (*http.Request, error) {
-	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: RemoveConnectionRestrictionAgentsPath()}
+// BuildRemoveConnectionBlockRequest instantiates a HTTP request object with
+// method and path set to call the "agents" service "removeConnectionBlock"
+// endpoint
+func (c *Client) BuildRemoveConnectionBlockRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: RemoveConnectionBlockAgentsPath()}
 	req, err := http.NewRequest("POST", u.String(), nil)
 	if err != nil {
-		return nil, goahttp.ErrInvalidURL("agents", "removeConnectionRestriction", u.String(), err)
+		return nil, goahttp.ErrInvalidURL("agents", "removeConnectionBlock", u.String(), err)
 	}
 	if ctx != nil {
 		req = req.WithContext(ctx)
@@ -3087,30 +3093,30 @@ func (c *Client) BuildRemoveConnectionRestrictionRequest(ctx context.Context, v 
 	return req, nil
 }
 
-// EncodeRemoveConnectionRestrictionRequest returns an encoder for requests
-// sent to the agents removeConnectionRestriction server.
-func EncodeRemoveConnectionRestrictionRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+// EncodeRemoveConnectionBlockRequest returns an encoder for requests sent to
+// the agents removeConnectionBlock server.
+func EncodeRemoveConnectionBlockRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
 	return func(req *http.Request, v any) error {
-		p, ok := v.(*agents.RemoveConnectionRestrictionPayload)
+		p, ok := v.(*agents.RemoveConnectionBlockPayload)
 		if !ok {
-			return goahttp.ErrInvalidType("agents", "removeConnectionRestriction", "*agents.RemoveConnectionRestrictionPayload", v)
+			return goahttp.ErrInvalidType("agents", "removeConnectionBlock", "*agents.RemoveConnectionBlockPayload", v)
 		}
 		if p.SessionToken != nil {
 			head := *p.SessionToken
 			req.Header.Set("Gram-Session", head)
 		}
-		body := NewRemoveConnectionRestrictionRequestBody(p)
+		body := NewRemoveConnectionBlockRequestBody(p)
 		if err := encoder(req).Encode(&body); err != nil {
-			return goahttp.ErrEncodingError("agents", "removeConnectionRestriction", err)
+			return goahttp.ErrEncodingError("agents", "removeConnectionBlock", err)
 		}
 		return nil
 	}
 }
 
-// DecodeRemoveConnectionRestrictionResponse returns a decoder for responses
-// returned by the agents removeConnectionRestriction endpoint. restoreBody
-// controls whether the response body should be restored after having been read.
-// DecodeRemoveConnectionRestrictionResponse may return the following errors:
+// DecodeRemoveConnectionBlockResponse returns a decoder for responses returned
+// by the agents removeConnectionBlock endpoint. restoreBody controls whether
+// the response body should be restored after having been read.
+// DecodeRemoveConnectionBlockResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
@@ -3122,7 +3128,7 @@ func EncodeRemoveConnectionRestrictionRequest(encoder func(*http.Request) goahtt
 //   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
 //   - error: internal error
-func DecodeRemoveConnectionRestrictionResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+func DecodeRemoveConnectionBlockResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
 		if restoreBody {
 			b, err := io.ReadAll(resp.Body)
@@ -3141,154 +3147,154 @@ func DecodeRemoveConnectionRestrictionResponse(decoder func(*http.Response) goah
 			return nil, nil
 		case http.StatusUnauthorized:
 			var (
-				body RemoveConnectionRestrictionUnauthorizedResponseBody
+				body RemoveConnectionBlockUnauthorizedResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("agents", "removeConnectionRestriction", err)
+				return nil, goahttp.ErrDecodingError("agents", "removeConnectionBlock", err)
 			}
-			err = ValidateRemoveConnectionRestrictionUnauthorizedResponseBody(&body)
+			err = ValidateRemoveConnectionBlockUnauthorizedResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("agents", "removeConnectionRestriction", err)
+				return nil, goahttp.ErrValidationError("agents", "removeConnectionBlock", err)
 			}
-			return nil, NewRemoveConnectionRestrictionUnauthorized(&body)
+			return nil, NewRemoveConnectionBlockUnauthorized(&body)
 		case http.StatusForbidden:
 			var (
-				body RemoveConnectionRestrictionForbiddenResponseBody
+				body RemoveConnectionBlockForbiddenResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("agents", "removeConnectionRestriction", err)
+				return nil, goahttp.ErrDecodingError("agents", "removeConnectionBlock", err)
 			}
-			err = ValidateRemoveConnectionRestrictionForbiddenResponseBody(&body)
+			err = ValidateRemoveConnectionBlockForbiddenResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("agents", "removeConnectionRestriction", err)
+				return nil, goahttp.ErrValidationError("agents", "removeConnectionBlock", err)
 			}
-			return nil, NewRemoveConnectionRestrictionForbidden(&body)
+			return nil, NewRemoveConnectionBlockForbidden(&body)
 		case http.StatusBadRequest:
 			var (
-				body RemoveConnectionRestrictionBadRequestResponseBody
+				body RemoveConnectionBlockBadRequestResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("agents", "removeConnectionRestriction", err)
+				return nil, goahttp.ErrDecodingError("agents", "removeConnectionBlock", err)
 			}
-			err = ValidateRemoveConnectionRestrictionBadRequestResponseBody(&body)
+			err = ValidateRemoveConnectionBlockBadRequestResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("agents", "removeConnectionRestriction", err)
+				return nil, goahttp.ErrValidationError("agents", "removeConnectionBlock", err)
 			}
-			return nil, NewRemoveConnectionRestrictionBadRequest(&body)
+			return nil, NewRemoveConnectionBlockBadRequest(&body)
 		case http.StatusNotFound:
 			var (
-				body RemoveConnectionRestrictionNotFoundResponseBody
+				body RemoveConnectionBlockNotFoundResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("agents", "removeConnectionRestriction", err)
+				return nil, goahttp.ErrDecodingError("agents", "removeConnectionBlock", err)
 			}
-			err = ValidateRemoveConnectionRestrictionNotFoundResponseBody(&body)
+			err = ValidateRemoveConnectionBlockNotFoundResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("agents", "removeConnectionRestriction", err)
+				return nil, goahttp.ErrValidationError("agents", "removeConnectionBlock", err)
 			}
-			return nil, NewRemoveConnectionRestrictionNotFound(&body)
+			return nil, NewRemoveConnectionBlockNotFound(&body)
 		case http.StatusConflict:
 			var (
-				body RemoveConnectionRestrictionConflictResponseBody
+				body RemoveConnectionBlockConflictResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("agents", "removeConnectionRestriction", err)
+				return nil, goahttp.ErrDecodingError("agents", "removeConnectionBlock", err)
 			}
-			err = ValidateRemoveConnectionRestrictionConflictResponseBody(&body)
+			err = ValidateRemoveConnectionBlockConflictResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("agents", "removeConnectionRestriction", err)
+				return nil, goahttp.ErrValidationError("agents", "removeConnectionBlock", err)
 			}
-			return nil, NewRemoveConnectionRestrictionConflict(&body)
+			return nil, NewRemoveConnectionBlockConflict(&body)
 		case http.StatusUnsupportedMediaType:
 			var (
-				body RemoveConnectionRestrictionUnsupportedMediaResponseBody
+				body RemoveConnectionBlockUnsupportedMediaResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("agents", "removeConnectionRestriction", err)
+				return nil, goahttp.ErrDecodingError("agents", "removeConnectionBlock", err)
 			}
-			err = ValidateRemoveConnectionRestrictionUnsupportedMediaResponseBody(&body)
+			err = ValidateRemoveConnectionBlockUnsupportedMediaResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("agents", "removeConnectionRestriction", err)
+				return nil, goahttp.ErrValidationError("agents", "removeConnectionBlock", err)
 			}
-			return nil, NewRemoveConnectionRestrictionUnsupportedMedia(&body)
+			return nil, NewRemoveConnectionBlockUnsupportedMedia(&body)
 		case http.StatusUnprocessableEntity:
 			var (
-				body RemoveConnectionRestrictionInvalidResponseBody
+				body RemoveConnectionBlockInvalidResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("agents", "removeConnectionRestriction", err)
+				return nil, goahttp.ErrDecodingError("agents", "removeConnectionBlock", err)
 			}
-			err = ValidateRemoveConnectionRestrictionInvalidResponseBody(&body)
+			err = ValidateRemoveConnectionBlockInvalidResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("agents", "removeConnectionRestriction", err)
+				return nil, goahttp.ErrValidationError("agents", "removeConnectionBlock", err)
 			}
-			return nil, NewRemoveConnectionRestrictionInvalid(&body)
+			return nil, NewRemoveConnectionBlockInvalid(&body)
 		case http.StatusInternalServerError:
 			en := resp.Header.Get("goa-error")
 			switch en {
 			case "invariant_violation":
 				var (
-					body RemoveConnectionRestrictionInvariantViolationResponseBody
+					body RemoveConnectionBlockInvariantViolationResponseBody
 					err  error
 				)
 				err = decoder(resp).Decode(&body)
 				if err != nil {
-					return nil, goahttp.ErrDecodingError("agents", "removeConnectionRestriction", err)
+					return nil, goahttp.ErrDecodingError("agents", "removeConnectionBlock", err)
 				}
-				err = ValidateRemoveConnectionRestrictionInvariantViolationResponseBody(&body)
+				err = ValidateRemoveConnectionBlockInvariantViolationResponseBody(&body)
 				if err != nil {
-					return nil, goahttp.ErrValidationError("agents", "removeConnectionRestriction", err)
+					return nil, goahttp.ErrValidationError("agents", "removeConnectionBlock", err)
 				}
-				return nil, NewRemoveConnectionRestrictionInvariantViolation(&body)
+				return nil, NewRemoveConnectionBlockInvariantViolation(&body)
 			case "unexpected":
 				var (
-					body RemoveConnectionRestrictionUnexpectedResponseBody
+					body RemoveConnectionBlockUnexpectedResponseBody
 					err  error
 				)
 				err = decoder(resp).Decode(&body)
 				if err != nil {
-					return nil, goahttp.ErrDecodingError("agents", "removeConnectionRestriction", err)
+					return nil, goahttp.ErrDecodingError("agents", "removeConnectionBlock", err)
 				}
-				err = ValidateRemoveConnectionRestrictionUnexpectedResponseBody(&body)
+				err = ValidateRemoveConnectionBlockUnexpectedResponseBody(&body)
 				if err != nil {
-					return nil, goahttp.ErrValidationError("agents", "removeConnectionRestriction", err)
+					return nil, goahttp.ErrValidationError("agents", "removeConnectionBlock", err)
 				}
-				return nil, NewRemoveConnectionRestrictionUnexpected(&body)
+				return nil, NewRemoveConnectionBlockUnexpected(&body)
 			default:
 				body, _ := io.ReadAll(resp.Body)
-				return nil, goahttp.ErrInvalidResponse("agents", "removeConnectionRestriction", resp.StatusCode, string(body))
+				return nil, goahttp.ErrInvalidResponse("agents", "removeConnectionBlock", resp.StatusCode, string(body))
 			}
 		case http.StatusBadGateway:
 			var (
-				body RemoveConnectionRestrictionGatewayErrorResponseBody
+				body RemoveConnectionBlockGatewayErrorResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("agents", "removeConnectionRestriction", err)
+				return nil, goahttp.ErrDecodingError("agents", "removeConnectionBlock", err)
 			}
-			err = ValidateRemoveConnectionRestrictionGatewayErrorResponseBody(&body)
+			err = ValidateRemoveConnectionBlockGatewayErrorResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("agents", "removeConnectionRestriction", err)
+				return nil, goahttp.ErrValidationError("agents", "removeConnectionBlock", err)
 			}
-			return nil, NewRemoveConnectionRestrictionGatewayError(&body)
+			return nil, NewRemoveConnectionBlockGatewayError(&body)
 		default:
 			body, _ := io.ReadAll(resp.Body)
-			return nil, goahttp.ErrInvalidResponse("agents", "removeConnectionRestriction", resp.StatusCode, string(body))
+			return nil, goahttp.ErrInvalidResponse("agents", "removeConnectionBlock", resp.StatusCode, string(body))
 		}
 	}
 }
@@ -4936,11 +4942,11 @@ func unmarshalAgentPolicySelectorResponseBodyToAgentsAgentPolicySelector(v *Agen
 	return res
 }
 
-// unmarshalAgentConnectionRestrictionResponseBodyToAgentsAgentConnectionRestriction
-// builds a value of type *agents.AgentConnectionRestriction from a value of
-// type *AgentConnectionRestrictionResponseBody.
-func unmarshalAgentConnectionRestrictionResponseBodyToAgentsAgentConnectionRestriction(v *AgentConnectionRestrictionResponseBody) *agents.AgentConnectionRestriction {
-	res := &agents.AgentConnectionRestriction{
+// unmarshalAgentConnectionBlockResponseBodyToAgentsAgentConnectionBlock builds
+// a value of type *agents.AgentConnectionBlock from a value of type
+// *AgentConnectionBlockResponseBody.
+func unmarshalAgentConnectionBlockResponseBodyToAgentsAgentConnectionBlock(v *AgentConnectionBlockResponseBody) *agents.AgentConnectionBlock {
+	res := &agents.AgentConnectionBlock{
 		ID:                    *v.ID,
 		AgentID:               *v.AgentID,
 		RemoteSessionClientID: *v.RemoteSessionClientID,

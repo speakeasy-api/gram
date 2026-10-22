@@ -97,12 +97,13 @@ type LogAuthClientDetachMcpServerEvent struct {
 	AuthClientURN  urn.AuthClient
 	AuthClientName string
 	McpServerURN   urn.McpServer
+	McpServerName  string
 }
 
 func (l *Logger) LogAuthClientDetachMcpServer(ctx context.Context, dbtx repo.DBTX, event LogAuthClientDetachMcpServerEvent) error {
 	action := ActionAuthClientDetachMcpServer
 
-	metadata, err := marshalAuditPayload(map[string]any{"mcp_server_id": event.McpServerURN.ID.String()})
+	metadata, err := marshalAuditPayload(map[string]any{"mcp_server_id": event.McpServerURN.ID.String(), "mcp_server_name": event.McpServerName})
 	if err != nil {
 		return fmt.Errorf("build %s metadata: %w", action, err)
 	}

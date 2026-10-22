@@ -24,11 +24,11 @@ const (
 	ActionAgentPolicyGrantDelete Action = "agent:policy_grant_delete"
 	// A connection owner blocked an agent from, or unblocked it on, their own
 	// connection.
-	ActionAgentConnectionRestrictionCreate Action = "agent:connection_restriction_create"
-	ActionAgentConnectionRestrictionDelete Action = "agent:connection_restriction_delete"
-	ActionAgentOwnerLoss                   Action = "agent:owner_loss"
-	ActionAgentTransfer                    Action = "agent:transfer"
-	ActionAgentReassign                    Action = "agent:reassign"
+	ActionAgentConnectionBlockCreate Action = "agent:connection_block_create"
+	ActionAgentConnectionBlockDelete Action = "agent:connection_block_delete"
+	ActionAgentOwnerLoss             Action = "agent:owner_loss"
+	ActionAgentTransfer              Action = "agent:transfer"
+	ActionAgentReassign              Action = "agent:reassign"
 )
 
 // AgentSnapshot is the bounded, organization-visible audit projection of an

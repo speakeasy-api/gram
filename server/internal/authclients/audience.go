@@ -160,6 +160,9 @@ func (s *Service) SetAuthClientAudience(ctx context.Context, payload *gen.SetAut
 		if err := authz.PatchPrincipalGrants(ctx, dbtx, authCtx.ActiveOrganizationID, principal, nil, remove); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "remove auth client grant").LogError(ctx, logger)
 		}
+		if err := takeOver(ctx, dbtx, authCtx.ActiveOrganizationID, grant.PrincipalUrn, grant.Scope, grant.Selector); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "take over removed auth client grant").LogError(ctx, logger)
+		}
 	}
 
 	addKeys := make([]string, 0, len(desired))
@@ -172,9 +175,13 @@ func (s *Service) SetAuthClientAudience(ctx context.Context, payload *gen.SetAut
 	for _, key := range addKeys {
 		rule := desired[key]
 		scope := levelScopes[rule.level]
-		add := []*authz.RoleGrant{{Scope: string(scope), Selectors: []authz.Selector{ruleSelector(client, scope)}}}
+		selector := ruleSelector(client, scope)
+		add := []*authz.RoleGrant{{Scope: string(scope), Selectors: []authz.Selector{selector}}}
 		if err := authz.PatchPrincipalGrants(ctx, dbtx, authCtx.ActiveOrganizationID, rule.principal, add, nil); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "write auth client grant").LogError(ctx, logger)
+		}
+		if err := takeOver(ctx, dbtx, authCtx.ActiveOrganizationID, rule.principal.String(), scope, selector); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "take over auth client grant").LogError(ctx, logger)
 		}
 	}
 
@@ -266,8 +273,12 @@ func (s *Service) audience(ctx context.Context, db repo.DBTX, client repo.McpAut
 	for _, grant := range own {
 		add(grant, AppliesToClient)
 	}
+	serverProjects := make(map[string]struct{}, len(servers))
+	for _, srv := range servers {
+		serverProjects[srv.ProjectID.String()] = struct{}{}
+	}
 	for _, grant := range broad {
-		if !reaches(grant.Selector, client) {
+		if !reaches(grant.Selector, client, serverProjects) {
 			continue
 		}
 		appliesTo := AppliesToAllClients
@@ -305,15 +316,34 @@ func (s *Service) audience(ctx context.Context, db repo.DBTX, client repo.McpAut
 
 // reaches reports whether a grant covering many clients covers this one. A
 // project filter on an auth client grant names the project of the server
-// using the client, so it can reach an organization-wide client.
-func reaches(selector authz.Selector, client repo.McpAuthClient) bool {
+// using the client, so it reaches an organization-wide client only through a
+// server in that project.
+func reaches(selector authz.Selector, client repo.McpAuthClient, serverProjects map[string]struct{}) bool {
 	if clientType := selector[authz.SelectorKeyClientType]; clientType != "" && clientType != authz.WildcardResource && clientType != client.ClientType {
 		return false
 	}
-	if project := selector[authz.SelectorKeyProjectID]; project != "" && client.ProjectID.Valid && project != client.ProjectID.UUID.String() {
-		return false
+	project := selector[authz.SelectorKeyProjectID]
+	if project == "" {
+		return true
 	}
-	return true
+	if client.ProjectID.Valid {
+		return project == client.ProjectID.UUID.String()
+	}
+	_, offered := serverProjects[project]
+	return offered
+}
+
+// takeOver records that an explicit audience save wrote or removed a grant,
+// so the default auth permission backfill treats it as the admin's.
+func takeOver(ctx context.Context, dbtx pgx.Tx, organizationID, principalURN string, scope authz.Scope, selector authz.Selector) error {
+	raw, err := selector.MarshalJSON()
+	if err != nil {
+		return fmt.Errorf("marshal grant selector: %w", err)
+	}
+	if err := authz.MarkAuthPermissionTakenOverTx(ctx, dbtx, organizationID, principalURN, string(scope), raw); err != nil {
+		return fmt.Errorf("take over grant: %w", err)
+	}
+	return nil
 }
 
 func connectionNote(principalURN string) string {
