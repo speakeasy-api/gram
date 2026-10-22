@@ -80,7 +80,7 @@ export function OverviewTab({
       showPluginBanner={!tunneled}
       // Tool Logs cannot currently filter a tunneled target by id. Treating
       // it as hosted or shadow would silently show the wrong server's calls.
-      logsTarget={tunneled ? null : { type: "hosted", id: mcpServer.slug }}
+      logsTarget={tunneled ? null : { type: "hosted", id: mcpServer.id }}
     />
   ) : null;
 

@@ -88,8 +88,30 @@ export type ParsedTargetFilter =
   | { type: "shadow"; id: string }
   | { type: "gateway"; id: string };
 
-export function encodeHostedServerFilter(slug: string): string {
-  return `${HOSTED_SERVER_PREFIX}${slug}`;
+// Keyed by MCP server id. Links made before that carry a toolset slug, which
+// still filters.
+export function encodeHostedServerFilter(idOrSlug: string): string {
+  return `${HOSTED_SERVER_PREFIX}${idOrSlug}`;
+}
+
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export function isMcpServerId(id: string): boolean {
+  return UUID_PATTERN.test(id);
+}
+
+/**
+ * The filter value for a hosted server option. A selection still carried as a
+ * legacy slug keeps that value, so the option shows as selected and toggles off.
+ */
+export function hostedServerFilterValue(
+  server: { toolsetSlug: string; mcpServerId?: string | undefined },
+  selectedValues: string[],
+): string {
+  const legacy = encodeHostedServerFilter(server.toolsetSlug);
+  if (!server.mcpServerId || selectedValues.includes(legacy)) return legacy;
+  return encodeHostedServerFilter(server.mcpServerId);
 }
 
 export function encodeShadowServerFilter(name: string): string {
@@ -171,8 +193,9 @@ export function buildServerOptionGroups({
   const shadow = new Map<string, { label: string; count: number }>();
   const gateway = new Map<string, { label: string; count: number }>();
 
+  const selectedValues = selectedTargetValues(activeFilters);
   for (const server of hostedServers) {
-    hosted.set(encodeHostedServerFilter(server.toolsetSlug), {
+    hosted.set(hostedServerFilterValue(server, selectedValues), {
       label: server.toolsetName || server.toolsetSlug,
       count: server.eventCount,
     });
@@ -194,7 +217,7 @@ export function buildServerOptionGroups({
     });
   }
 
-  for (const value of selectedTargetValues(activeFilters)) {
+  for (const value of selectedValues) {
     const parsed = parseTargetFilter(value);
     if (parsed.type === "hosted" && !hosted.has(value)) {
       hosted.set(value, { label: parsed.id, count: 0 });

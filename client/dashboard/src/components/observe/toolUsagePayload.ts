@@ -3,6 +3,7 @@ import type {
   ObserveTypeFilterValue,
 } from "@/components/observe/ObserveFilterBar";
 import {
+  isMcpServerId,
   parseTargetFilter,
   selectedHookSources,
   selectedTargetValues,
@@ -63,10 +64,19 @@ export function useToolUsagePayload({
     () => selectedTargetValues(activeFilters).map(parseTargetFilter),
     [activeFilters],
   );
+  const mcpServerIds = useMemo(
+    () =>
+      serverFilters
+        .filter((filter) => filter.type === "hosted" && isMcpServerId(filter.id))
+        .map((filter) => filter.id),
+    [serverFilters],
+  );
   const hostedToolsetSlugs = useMemo(
     () =>
       serverFilters
-        .filter((filter) => filter.type === "hosted")
+        .filter(
+          (filter) => filter.type === "hosted" && !isMcpServerId(filter.id),
+        )
         .map((filter) => filter.id),
     [serverFilters],
   );
@@ -107,6 +117,7 @@ export function useToolUsagePayload({
     () => ({
       from,
       to,
+      mcpServerIds: mcpServerIds.length > 0 ? mcpServerIds : undefined,
       hostedToolsetSlugs:
         hostedToolsetSlugs.length > 0 ? hostedToolsetSlugs : undefined,
       shadowServerNames:
@@ -122,6 +133,7 @@ export function useToolUsagePayload({
     [
       from,
       to,
+      mcpServerIds,
       hostedToolsetSlugs,
       shadowServerNames,
       metaMcpServerIds,
@@ -139,6 +151,7 @@ export function useToolUsagePayload({
       projectSlug,
       from.toISOString(),
       to.toISOString(),
+      mcpServerIds,
       hostedToolsetSlugs,
       shadowServerNames,
       metaMcpServerIds,
@@ -153,6 +166,7 @@ export function useToolUsagePayload({
       projectSlug,
       from,
       to,
+      mcpServerIds,
       hostedToolsetSlugs,
       shadowServerNames,
       metaMcpServerIds,
