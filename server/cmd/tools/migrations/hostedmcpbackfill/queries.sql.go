@@ -28,6 +28,22 @@ func (q *Queries) BumpPluginServerDeletedAtFixture(ctx context.Context, arg Bump
 	return err
 }
 
+const bumpPluginServerUpdatedAtFixture = `-- name: BumpPluginServerUpdatedAtFixture :exec
+UPDATE plugin_servers AS ps SET updated_at = ps.updated_at + interval '1 second'
+FROM plugins AS pl
+WHERE ps.id = $1 AND pl.id = ps.plugin_id AND pl.project_id = $2
+`
+
+type BumpPluginServerUpdatedAtFixtureParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) BumpPluginServerUpdatedAtFixture(ctx context.Context, arg BumpPluginServerUpdatedAtFixtureParams) error {
+	_, err := q.db.Exec(ctx, bumpPluginServerUpdatedAtFixture, arg.ID, arg.ProjectID)
+	return err
+}
+
 const canonicalWrapperLive = `-- name: CanonicalWrapperLive :one
 SELECT EXISTS (
   SELECT 1
@@ -72,6 +88,24 @@ func (q *Queries) CountFreshIDServers(ctx context.Context, arg CountFreshIDServe
 	return count, err
 }
 
+const countLiveServerEndpoints = `-- name: CountLiveServerEndpoints :one
+SELECT count(*)
+FROM mcp_endpoints AS e
+WHERE e.mcp_server_id = $1::uuid AND e.project_id = $2 AND e.deleted IS FALSE
+`
+
+type CountLiveServerEndpointsParams struct {
+	McpServerID uuid.UUID
+	ProjectID   uuid.UUID
+}
+
+func (q *Queries) CountLiveServerEndpoints(ctx context.Context, arg CountLiveServerEndpointsParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countLiveServerEndpoints, arg.McpServerID, arg.ProjectID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countOutboxFixture = `-- name: CountOutboxFixture :one
 SELECT count(*)
 FROM publish_outbox
@@ -80,6 +114,24 @@ WHERE organization_id = $1
 
 func (q *Queries) CountOutboxFixture(ctx context.Context, organizationID string) (int64, error) {
 	row := q.db.QueryRow(ctx, countOutboxFixture, organizationID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countWrapperAssistantAttachments = `-- name: CountWrapperAssistantAttachments :one
+SELECT count(*)
+FROM assistant_mcp_servers AS a
+WHERE a.id = ANY($1::uuid[]) AND a.project_id = $2
+`
+
+type CountWrapperAssistantAttachmentsParams struct {
+	Ids       []uuid.UUID
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) CountWrapperAssistantAttachments(ctx context.Context, arg CountWrapperAssistantAttachmentsParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countWrapperAssistantAttachments, arg.Ids, arg.ProjectID)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -98,6 +150,71 @@ type DeleteAssistantMcpServerTwinParams struct {
 
 func (q *Queries) DeleteAssistantMcpServerTwin(ctx context.Context, arg DeleteAssistantMcpServerTwinParams) (int64, error) {
 	result, err := q.db.Exec(ctx, deleteAssistantMcpServerTwin, arg.ID, arg.ProjectID, arg.McpServerID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const deleteLeftoverRemovalRecord = `-- name: DeleteLeftoverRemovalRecord :execrows
+DELETE FROM plugin_servers AS ps
+USING plugins AS pl
+WHERE ps.id = $1
+  AND pl.id = ps.plugin_id
+  AND pl.project_id = $2
+  AND ps.toolset_id = $3::uuid
+  AND ps.mcp_server_id IS NULL
+  AND ps.meta_mcp_server_id IS NULL
+  AND ps.deleted IS TRUE
+  AND NOT EXISTS (
+    SELECT 1
+    FROM platform_mcp_distributions AS d
+    WHERE d.project_id = pl.project_id AND d.plugin_server_id = ps.id
+  )
+  AND CASE $4::text
+    WHEN 'project_deleted' THEN EXISTS (
+      SELECT 1 FROM projects AS p WHERE p.id = pl.project_id AND p.deleted IS TRUE
+    )
+    WHEN 'toolset_deleted' THEN NOT EXISTS (
+      SELECT 1
+      FROM mcp_servers AS ms
+      WHERE ms.project_id = pl.project_id AND ms.toolset_id = ps.toolset_id AND ms.deleted IS FALSE
+    )
+    WHEN 'duplicate' THEN EXISTS (
+      SELECT 1
+      FROM mcp_servers AS ms
+      WHERE ms.id = ps.toolset_id AND ms.project_id = pl.project_id AND ms.toolset_id = ps.toolset_id AND ms.deleted IS FALSE
+    ) AND NOT EXISTS (
+      SELECT 1
+      FROM mcp_servers AS ms
+      WHERE ms.project_id = pl.project_id
+        AND ms.toolset_id = ps.toolset_id
+        AND ms.deleted IS FALSE
+        AND NOT EXISTS (
+          SELECT 1
+          FROM plugin_servers AS r
+          WHERE r.plugin_id = ps.plugin_id AND r.mcp_server_id = ms.id AND r.deleted IS TRUE
+        )
+    )
+    ELSE FALSE
+  END
+`
+
+type DeleteLeftoverRemovalRecordParams struct {
+	ID          uuid.UUID
+	ProjectID   uuid.UUID
+	ToolsetID   uuid.UUID
+	Eligibility string
+}
+
+// Repeats the caller's eligibility checks so a concurrent change deletes nothing.
+func (q *Queries) DeleteLeftoverRemovalRecord(ctx context.Context, arg DeleteLeftoverRemovalRecordParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteLeftoverRemovalRecord,
+		arg.ID,
+		arg.ProjectID,
+		arg.ToolsetID,
+		arg.Eligibility,
+	)
 	if err != nil {
 		return 0, err
 	}
@@ -161,6 +278,21 @@ func (q *Queries) DeleteOrphanMetadata(ctx context.Context, arg DeleteOrphanMeta
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const deleteSessionClientLinkFixture = `-- name: DeleteSessionClientLinkFixture :exec
+DELETE FROM mcp_server_remote_session_clients
+WHERE id = $1 AND project_id = $2
+`
+
+type DeleteSessionClientLinkFixtureParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) DeleteSessionClientLinkFixture(ctx context.Context, arg DeleteSessionClientLinkFixtureParams) error {
+	_, err := q.db.Exec(ctx, deleteSessionClientLinkFixture, arg.ID, arg.ProjectID)
+	return err
 }
 
 const endpointAddressHeldElsewhere = `-- name: EndpointAddressHeldElsewhere :one
@@ -233,6 +365,27 @@ func (q *Queries) GetLiveCanonicalWrapper(ctx context.Context, arg GetLiveCanoni
 	row := q.db.QueryRow(ctx, getLiveCanonicalWrapper, arg.ToolsetID, arg.ProjectID)
 	var i GetLiveCanonicalWrapperRow
 	err := row.Scan(&i.ID, &i.Name, &i.Slug)
+	return i, err
+}
+
+const getRiskPolicyScopeFixture = `-- name: GetRiskPolicyScopeFixture :one
+SELECT mcp_scope::text AS scope, version FROM risk_policies WHERE id = $1 AND project_id = $2
+`
+
+type GetRiskPolicyScopeFixtureParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+type GetRiskPolicyScopeFixtureRow struct {
+	Scope   string
+	Version int64
+}
+
+func (q *Queries) GetRiskPolicyScopeFixture(ctx context.Context, arg GetRiskPolicyScopeFixtureParams) (GetRiskPolicyScopeFixtureRow, error) {
+	row := q.db.QueryRow(ctx, getRiskPolicyScopeFixture, arg.ID, arg.ProjectID)
+	var i GetRiskPolicyScopeFixtureRow
+	err := row.Scan(&i.Scope, &i.Version)
 	return i, err
 }
 
@@ -657,6 +810,126 @@ func (q *Queries) ListMetadataFixture(ctx context.Context, projectID uuid.UUID) 
 	return items, nil
 }
 
+const listOrphanWrapperToolsets = `-- name: ListOrphanWrapperToolsets :many
+SELECT DISTINCT ms.toolset_id::uuid AS toolset_id
+FROM mcp_servers AS ms
+JOIN toolsets AS t ON t.id = ms.toolset_id AND t.project_id = ms.project_id
+JOIN projects AS p ON p.id = ms.project_id AND p.organization_id = t.organization_id
+WHERE ms.deleted IS FALSE
+  AND t.deleted IS TRUE
+  AND p.deleted IS FALSE
+  AND ($1::uuid IS NULL OR ms.project_id = $1::uuid)
+  AND ms.toolset_id > $2::uuid
+ORDER BY 1
+LIMIT $3::int
+`
+
+type ListOrphanWrapperToolsetsParams struct {
+	ProjectID uuid.NullUUID
+	AfterID   uuid.UUID
+	PageSize  int32
+}
+
+// Deleted toolsets of live projects that still back a live server; canonical rows are listed so the run reports them.
+func (q *Queries) ListOrphanWrapperToolsets(ctx context.Context, arg ListOrphanWrapperToolsetsParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listOrphanWrapperToolsets, arg.ProjectID, arg.AfterID, arg.PageSize)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var toolset_id uuid.UUID
+		if err := rows.Scan(&toolset_id); err != nil {
+			return nil, err
+		}
+		items = append(items, toolset_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPluginServerImagesFixture = `-- name: ListPluginServerImagesFixture :many
+SELECT ps.id, to_jsonb(ps)::text AS row_text
+FROM plugin_servers AS ps
+JOIN plugins AS pl ON pl.id = ps.plugin_id
+WHERE pl.project_id = $1
+ORDER BY ps.id
+`
+
+type ListPluginServerImagesFixtureRow struct {
+	ID      uuid.UUID
+	RowText string
+}
+
+func (q *Queries) ListPluginServerImagesFixture(ctx context.Context, projectID uuid.UUID) ([]ListPluginServerImagesFixtureRow, error) {
+	rows, err := q.db.Query(ctx, listPluginServerImagesFixture, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPluginServerImagesFixtureRow
+	for rows.Next() {
+		var i ListPluginServerImagesFixtureRow
+		if err := rows.Scan(&i.ID, &i.RowText); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPluginServerRemovalsFixture = `-- name: ListPluginServerRemovalsFixture :many
+SELECT ps.id, ps.plugin_id, ps.toolset_id, ps.mcp_server_id, ps.deleted, COALESCE(ps.deleted_at::text, '')::text AS deleted_at, ps.updated_at::text AS updated_at
+FROM plugin_servers AS ps
+JOIN plugins AS pl ON pl.id = ps.plugin_id
+WHERE pl.project_id = $1
+ORDER BY ps.id
+`
+
+type ListPluginServerRemovalsFixtureRow struct {
+	ID          uuid.UUID
+	PluginID    uuid.UUID
+	ToolsetID   uuid.NullUUID
+	McpServerID uuid.NullUUID
+	Deleted     bool
+	DeletedAt   string
+	UpdatedAt   string
+}
+
+func (q *Queries) ListPluginServerRemovalsFixture(ctx context.Context, projectID uuid.UUID) ([]ListPluginServerRemovalsFixtureRow, error) {
+	rows, err := q.db.Query(ctx, listPluginServerRemovalsFixture, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPluginServerRemovalsFixtureRow
+	for rows.Next() {
+		var i ListPluginServerRemovalsFixtureRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.PluginID,
+			&i.ToolsetID,
+			&i.McpServerID,
+			&i.Deleted,
+			&i.DeletedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listPluginServersFixture = `-- name: ListPluginServersFixture :many
 SELECT ps.id, ps.toolset_id, ps.mcp_server_id, ps.deleted
 FROM plugin_servers AS ps
@@ -697,8 +970,48 @@ func (q *Queries) ListPluginServersFixture(ctx context.Context, projectID uuid.U
 	return items, nil
 }
 
+const listRemovalRecordToolsets = `-- name: ListRemovalRecordToolsets :many
+SELECT DISTINCT ps.toolset_id::uuid AS toolset_id
+FROM plugin_servers AS ps
+JOIN plugins AS pl ON pl.id = ps.plugin_id
+WHERE ps.toolset_id IS NOT NULL
+  AND ps.mcp_server_id IS NULL
+  AND ps.meta_mcp_server_id IS NULL
+  AND ($1::uuid IS NULL OR pl.project_id = $1::uuid)
+  AND ps.toolset_id > $2::uuid
+ORDER BY 1
+LIMIT $3::int
+`
+
+type ListRemovalRecordToolsetsParams struct {
+	ProjectID uuid.NullUUID
+	AfterID   uuid.UUID
+	PageSize  int32
+}
+
+// Live rows are listed too, so the run reports them as blocked_live.
+func (q *Queries) ListRemovalRecordToolsets(ctx context.Context, arg ListRemovalRecordToolsetsParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listRemovalRecordToolsets, arg.ProjectID, arg.AfterID, arg.PageSize)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var toolset_id uuid.UUID
+		if err := rows.Scan(&toolset_id); err != nil {
+			return nil, err
+		}
+		items = append(items, toolset_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listServersFixture = `-- name: ListServersFixture :many
-SELECT id, project_id, name, slug, environment_id, user_session_issuer_id, remote_session_issuer_id, remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, unproxied_mcp_server_id, tool_variations_group_id, visibility, network_access_mode, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, name, slug, environment_id, user_session_issuer_id, remote_session_issuer_id, remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, unproxied_mcp_server_id, tool_variations_group_id, visibility, network_access_mode, requires_upstream_auth, created_at, updated_at, deleted_at, deleted
 FROM mcp_servers
 WHERE project_id = $1
 ORDER BY id
@@ -728,6 +1041,7 @@ func (q *Queries) ListServersFixture(ctx context.Context, projectID uuid.UUID) (
 			&i.ToolVariationsGroupID,
 			&i.Visibility,
 			&i.NetworkAccessMode,
+			&i.RequiresUpstreamAuth,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
@@ -784,6 +1098,130 @@ func (q *Queries) ListToolsetDependents(ctx context.Context, arg ListToolsetDepe
 	for rows.Next() {
 		var i ListToolsetDependentsRow
 		if err := rows.Scan(&i.TableName, &i.ID, &i.ProjectID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listToolsetOrphanWrappers = `-- name: ListToolsetOrphanWrappers :many
+SELECT ms.id, ms.project_id
+FROM mcp_servers AS ms
+WHERE ms.toolset_id = $1::uuid
+  AND ms.deleted IS FALSE
+  AND ($2::uuid IS NULL OR ms.project_id = $2::uuid)
+ORDER BY ms.id
+`
+
+type ListToolsetOrphanWrappersParams struct {
+	ToolsetID uuid.UUID
+	ProjectID uuid.NullUUID
+}
+
+type ListToolsetOrphanWrappersRow struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) ListToolsetOrphanWrappers(ctx context.Context, arg ListToolsetOrphanWrappersParams) ([]ListToolsetOrphanWrappersRow, error) {
+	rows, err := q.db.Query(ctx, listToolsetOrphanWrappers, arg.ToolsetID, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListToolsetOrphanWrappersRow
+	for rows.Next() {
+		var i ListToolsetOrphanWrappersRow
+		if err := rows.Scan(&i.ID, &i.ProjectID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listToolsetRemovalRecords = `-- name: ListToolsetRemovalRecords :many
+SELECT ps.id, pl.project_id
+FROM plugin_servers AS ps
+JOIN plugins AS pl ON pl.id = ps.plugin_id
+WHERE ps.toolset_id = $1::uuid
+  AND ps.mcp_server_id IS NULL
+  AND ps.meta_mcp_server_id IS NULL
+  AND ($2::uuid IS NULL OR pl.project_id = $2::uuid)
+ORDER BY ps.id
+`
+
+type ListToolsetRemovalRecordsParams struct {
+	ToolsetID uuid.UUID
+	ProjectID uuid.NullUUID
+}
+
+type ListToolsetRemovalRecordsRow struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) ListToolsetRemovalRecords(ctx context.Context, arg ListToolsetRemovalRecordsParams) ([]ListToolsetRemovalRecordsRow, error) {
+	rows, err := q.db.Query(ctx, listToolsetRemovalRecords, arg.ToolsetID, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListToolsetRemovalRecordsRow
+	for rows.Next() {
+		var i ListToolsetRemovalRecordsRow
+		if err := rows.Scan(&i.ID, &i.ProjectID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listWrapperStateFixture = `-- name: ListWrapperStateFixture :many
+SELECT 'mcp_servers'::text AS table_name, ms.id, to_jsonb(ms)::text AS row_text FROM mcp_servers AS ms WHERE ms.project_id = $1
+UNION ALL
+SELECT 'mcp_endpoints', e.id, to_jsonb(e)::text FROM mcp_endpoints AS e WHERE e.project_id = $1
+UNION ALL
+SELECT 'meta_mcp_server_members', m.id, to_jsonb(m)::text FROM meta_mcp_server_members AS m WHERE m.project_id = $1
+UNION ALL
+SELECT 'plugin_servers', ps.id, to_jsonb(ps)::text FROM plugin_servers AS ps JOIN plugins AS pl ON pl.id = ps.plugin_id WHERE pl.project_id = $1
+UNION ALL
+SELECT 'assistant_mcp_servers', a.id, to_jsonb(a)::text FROM assistant_mcp_servers AS a WHERE a.project_id = $1
+UNION ALL
+SELECT 'mcp_server_remote_session_clients', c.id, to_jsonb(c)::text FROM mcp_server_remote_session_clients AS c WHERE c.project_id = $1
+UNION ALL
+SELECT 'risk_policies', r.id, to_jsonb(r)::text FROM risk_policies AS r WHERE r.project_id = $1
+ORDER BY 1, 2
+`
+
+type ListWrapperStateFixtureRow struct {
+	TableName string
+	ID        uuid.UUID
+	RowText   string
+}
+
+// Every row the wrapper delete can change in a project, as text.
+func (q *Queries) ListWrapperStateFixture(ctx context.Context, projectID uuid.UUID) ([]ListWrapperStateFixtureRow, error) {
+	rows, err := q.db.Query(ctx, listWrapperStateFixture, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListWrapperStateFixtureRow
+	for rows.Next() {
+		var i ListWrapperStateFixtureRow
+		if err := rows.Scan(&i.TableName, &i.ID, &i.RowText); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -940,6 +1378,41 @@ func (q *Queries) LockDependentToolset(ctx context.Context, arg LockDependentToo
 		&i.ProjectDeleted,
 	)
 	return i, err
+}
+
+const lockLiveToolsetServers = `-- name: LockLiveToolsetServers :many
+SELECT ms.id
+FROM mcp_servers AS ms
+WHERE ms.project_id = $1
+  AND ms.toolset_id = $2::uuid
+  AND ms.deleted IS FALSE
+ORDER BY ms.id
+FOR SHARE OF ms
+`
+
+type LockLiveToolsetServersParams struct {
+	ProjectID uuid.UUID
+	ToolsetID uuid.UUID
+}
+
+func (q *Queries) LockLiveToolsetServers(ctx context.Context, arg LockLiveToolsetServersParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, lockLiveToolsetServers, arg.ProjectID, arg.ToolsetID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const lockMetadataEnvironmentConfigs = `-- name: LockMetadataEnvironmentConfigs :many
@@ -1202,6 +1675,32 @@ func (q *Queries) LockServerKeyedPluginServerTwin(ctx context.Context, arg LockS
 	return i, err
 }
 
+const lockServerKeyedRemovalRecord = `-- name: LockServerKeyedRemovalRecord :one
+SELECT ps.id
+FROM plugin_servers AS ps
+JOIN plugins AS pl ON pl.id = ps.plugin_id
+WHERE ps.plugin_id = $1
+  AND pl.project_id = $2
+  AND ps.mcp_server_id = $3::uuid
+  AND ps.deleted IS TRUE
+ORDER BY ps.id
+LIMIT 1
+FOR UPDATE OF ps
+`
+
+type LockServerKeyedRemovalRecordParams struct {
+	PluginID    uuid.UUID
+	ProjectID   uuid.UUID
+	McpServerID uuid.UUID
+}
+
+func (q *Queries) LockServerKeyedRemovalRecord(ctx context.Context, arg LockServerKeyedRemovalRecordParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, lockServerKeyedRemovalRecord, arg.PluginID, arg.ProjectID, arg.McpServerID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const lockToolsetBackfill = `-- name: LockToolsetBackfill :exec
 SELECT pg_advisory_xact_lock(hashtextextended('hosted-mcp-backfill:' || $1::text, 0))
 `
@@ -1287,6 +1786,173 @@ func (q *Queries) LockToolsetKeyedPluginServer(ctx context.Context, arg LockTool
 	return i, err
 }
 
+const lockToolsetKeyedRemovalRecord = `-- name: LockToolsetKeyedRemovalRecord :one
+SELECT
+  ps.id,
+  ps.plugin_id,
+  ps.deleted,
+  COALESCE(ps.deleted_at::text, '')::text AS deleted_at,
+  to_jsonb(ps)::jsonb AS row_json,
+  EXISTS (
+    SELECT 1
+    FROM platform_mcp_distributions AS d
+    WHERE d.project_id = pl.project_id AND d.plugin_server_id = ps.id
+  ) AS distributed
+FROM plugin_servers AS ps
+JOIN plugins AS pl ON pl.id = ps.plugin_id
+WHERE ps.id = $1
+  AND pl.project_id = $2
+  AND ps.toolset_id = $3::uuid
+  AND ps.mcp_server_id IS NULL
+  AND ps.meta_mcp_server_id IS NULL
+FOR UPDATE OF ps
+`
+
+type LockToolsetKeyedRemovalRecordParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+	ToolsetID uuid.UUID
+}
+
+type LockToolsetKeyedRemovalRecordRow struct {
+	ID          uuid.UUID
+	PluginID    uuid.UUID
+	Deleted     bool
+	DeletedAt   string
+	RowJson     []byte
+	Distributed bool
+}
+
+// distributed lets a caller report blocked_distributed rather than let the NO ACTION FK fail its delete and stop the run.
+func (q *Queries) LockToolsetKeyedRemovalRecord(ctx context.Context, arg LockToolsetKeyedRemovalRecordParams) (LockToolsetKeyedRemovalRecordRow, error) {
+	row := q.db.QueryRow(ctx, lockToolsetKeyedRemovalRecord, arg.ID, arg.ProjectID, arg.ToolsetID)
+	var i LockToolsetKeyedRemovalRecordRow
+	err := row.Scan(
+		&i.ID,
+		&i.PluginID,
+		&i.Deleted,
+		&i.DeletedAt,
+		&i.RowJson,
+		&i.Distributed,
+	)
+	return i, err
+}
+
+const lockWrapperAssistantAttachments = `-- name: LockWrapperAssistantAttachments :many
+SELECT a.id, to_jsonb(a)::jsonb AS row_json
+FROM assistant_mcp_servers AS a
+WHERE a.mcp_server_id = $1 AND a.project_id = $2
+ORDER BY a.id
+FOR UPDATE OF a
+`
+
+type LockWrapperAssistantAttachmentsParams struct {
+	McpServerID uuid.UUID
+	ProjectID   uuid.UUID
+}
+
+type LockWrapperAssistantAttachmentsRow struct {
+	ID      uuid.UUID
+	RowJson []byte
+}
+
+func (q *Queries) LockWrapperAssistantAttachments(ctx context.Context, arg LockWrapperAssistantAttachmentsParams) ([]LockWrapperAssistantAttachmentsRow, error) {
+	rows, err := q.db.Query(ctx, lockWrapperAssistantAttachments, arg.McpServerID, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []LockWrapperAssistantAttachmentsRow
+	for rows.Next() {
+		var i LockWrapperAssistantAttachmentsRow
+		if err := rows.Scan(&i.ID, &i.RowJson); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const lockWrapperMemberships = `-- name: LockWrapperMemberships :many
+SELECT m.id, to_jsonb(m)::jsonb AS row_json
+FROM meta_mcp_server_members AS m
+WHERE m.mcp_server_id = $1 AND m.project_id = $2 AND m.deleted IS FALSE
+ORDER BY m.id
+FOR UPDATE OF m
+`
+
+type LockWrapperMembershipsParams struct {
+	McpServerID uuid.UUID
+	ProjectID   uuid.UUID
+}
+
+type LockWrapperMembershipsRow struct {
+	ID      uuid.UUID
+	RowJson []byte
+}
+
+func (q *Queries) LockWrapperMemberships(ctx context.Context, arg LockWrapperMembershipsParams) ([]LockWrapperMembershipsRow, error) {
+	rows, err := q.db.Query(ctx, lockWrapperMemberships, arg.McpServerID, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []LockWrapperMembershipsRow
+	for rows.Next() {
+		var i LockWrapperMembershipsRow
+		if err := rows.Scan(&i.ID, &i.RowJson); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const lockWrapperPluginMembers = `-- name: LockWrapperPluginMembers :many
+SELECT ps.id, to_jsonb(ps)::jsonb AS row_json
+FROM plugin_servers AS ps
+JOIN plugins AS pl ON pl.id = ps.plugin_id
+WHERE ps.mcp_server_id = $1::uuid AND pl.project_id = $2 AND ps.deleted IS FALSE
+ORDER BY ps.id
+FOR UPDATE OF ps
+`
+
+type LockWrapperPluginMembersParams struct {
+	McpServerID uuid.UUID
+	ProjectID   uuid.UUID
+}
+
+type LockWrapperPluginMembersRow struct {
+	ID      uuid.UUID
+	RowJson []byte
+}
+
+func (q *Queries) LockWrapperPluginMembers(ctx context.Context, arg LockWrapperPluginMembersParams) ([]LockWrapperPluginMembersRow, error) {
+	rows, err := q.db.Query(ctx, lockWrapperPluginMembers, arg.McpServerID, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []LockWrapperPluginMembersRow
+	for rows.Next() {
+		var i LockWrapperPluginMembersRow
+		if err := rows.Scan(&i.ID, &i.RowJson); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const metadataEnvironmentConfigsJSON = `-- name: MetadataEnvironmentConfigsJSON :one
 SELECT COALESCE(jsonb_agg(to_jsonb(c) ORDER BY c.variable_name), '[]'::jsonb)::jsonb AS configs
 FROM mcp_environment_configs AS c
@@ -1352,6 +2018,96 @@ func (q *Queries) MoveAssistantToolset(ctx context.Context, arg MoveAssistantToo
 	return result.RowsAffected(), nil
 }
 
+const pruneUnservableSessionClientLinks = `-- name: PruneUnservableSessionClientLinks :many
+DELETE FROM mcp_server_remote_session_clients AS a
+USING mcp_servers AS s
+WHERE a.mcp_server_id = s.id
+  AND a.project_id = $1::uuid
+  AND a.organization_id = $2::text
+  AND a.deleted IS FALSE
+  AND (
+    s.deleted IS TRUE
+    OR NOT EXISTS (
+      SELECT 1
+      FROM remote_session_client_user_session_issuers AS link
+      JOIN remote_session_clients AS c
+        ON c.id = link.remote_session_client_id
+       AND c.deleted IS FALSE
+      WHERE link.remote_session_client_id = a.remote_session_client_id
+        AND (
+          link.user_session_issuer_id = s.user_session_issuer_id
+          OR EXISTS (
+            SELECT 1
+            FROM meta_mcp_servers AS gateway
+            JOIN projects AS gateway_project
+              ON gateway_project.id = gateway.project_id
+             AND gateway_project.deleted IS FALSE
+            JOIN user_session_issuers AS gateway_issuer
+              ON gateway_issuer.id = gateway.user_session_issuer_id
+             AND gateway_issuer.deleted IS FALSE
+             AND (gateway_issuer.project_id = s.project_id
+                  OR (gateway_issuer.project_id IS NULL AND gateway_issuer.organization_id = a.organization_id))
+            JOIN meta_mcp_server_members AS member
+              ON member.meta_mcp_server_id = gateway.id
+             AND member.project_id = gateway.project_id
+             AND member.deleted IS FALSE
+            WHERE gateway.user_session_issuer_id = link.user_session_issuer_id
+              AND gateway.deleted IS FALSE
+              AND member.mcp_server_id = s.id
+          )
+          OR EXISTS (
+            SELECT 1
+            FROM user_session_issuers AS organization_issuer
+            WHERE organization_issuer.id = link.user_session_issuer_id
+              AND organization_issuer.project_id IS NULL
+              AND organization_issuer.organization_id = a.organization_id
+              AND organization_issuer.deleted IS FALSE
+              AND (
+              SELECT count(*)
+              FROM user_session_issuers AS sibling
+              WHERE sibling.organization_id = organization_issuer.organization_id
+                AND sibling.project_id IS NULL
+                AND sibling.deleted IS FALSE
+            ) = 1
+          )
+        )
+    )
+  )
+RETURNING a.id, a.mcp_server_id, to_jsonb(a)::jsonb AS row_json
+`
+
+type PruneUnservableSessionClientLinksParams struct {
+	ProjectID      uuid.UUID
+	OrganizationID string
+}
+
+type PruneUnservableSessionClientLinksRow struct {
+	ID          uuid.UUID
+	McpServerID uuid.UUID
+	RowJson     []byte
+}
+
+// PruneUnservableAssociations verbatim, as the app's post-delete issuer resync runs it, returning what it deleted.
+func (q *Queries) PruneUnservableSessionClientLinks(ctx context.Context, arg PruneUnservableSessionClientLinksParams) ([]PruneUnservableSessionClientLinksRow, error) {
+	rows, err := q.db.Query(ctx, pruneUnservableSessionClientLinks, arg.ProjectID, arg.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []PruneUnservableSessionClientLinksRow
+	for rows.Next() {
+		var i PruneUnservableSessionClientLinksRow
+		if err := rows.Scan(&i.ID, &i.McpServerID, &i.RowJson); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const rekeyMetadata = `-- name: RekeyMetadata :one
 UPDATE mcp_metadata
 SET toolset_id = NULL, mcp_server_id = $1, updated_at = clock_timestamp()
@@ -1411,6 +2167,39 @@ func (q *Queries) RekeyPluginServer(ctx context.Context, arg RekeyPluginServerPa
 	return result.RowsAffected(), nil
 }
 
+const rekeyRemovalRecord = `-- name: RekeyRemovalRecord :one
+UPDATE plugin_servers AS ps
+SET toolset_id = NULL, mcp_server_id = $1::uuid, updated_at = clock_timestamp()
+FROM plugins AS pl
+WHERE ps.id = $2
+  AND pl.id = ps.plugin_id
+  AND pl.project_id = $3
+  AND ps.toolset_id = $1::uuid
+  AND ps.mcp_server_id IS NULL
+  AND ps.meta_mcp_server_id IS NULL
+  AND ps.deleted IS TRUE
+RETURNING ps.deleted_at::text AS deleted_at, ps.updated_at::text AS updated_at
+`
+
+type RekeyRemovalRecordParams struct {
+	McpServerID uuid.UUID
+	ID          uuid.UUID
+	ProjectID   uuid.UUID
+}
+
+type RekeyRemovalRecordRow struct {
+	DeletedAt string
+	UpdatedAt string
+}
+
+// Soft-deleted rows only: every partial unique index on plugin_servers covers live rows, so none applies.
+func (q *Queries) RekeyRemovalRecord(ctx context.Context, arg RekeyRemovalRecordParams) (RekeyRemovalRecordRow, error) {
+	row := q.db.QueryRow(ctx, rekeyRemovalRecord, arg.McpServerID, arg.ID, arg.ProjectID)
+	var i RekeyRemovalRecordRow
+	err := row.Scan(&i.DeletedAt, &i.UpdatedAt)
+	return i, err
+}
+
 const restoreEnvironmentConfigsFixture = `-- name: RestoreEnvironmentConfigsFixture :exec
 INSERT INTO mcp_environment_configs
 SELECT (c).* FROM jsonb_populate_recordset(NULL::mcp_environment_configs, $1::jsonb) AS c
@@ -1457,6 +2246,21 @@ type RestoreProjectFixtureParams struct {
 
 func (q *Queries) RestoreProjectFixture(ctx context.Context, arg RestoreProjectFixtureParams) error {
 	_, err := q.db.Exec(ctx, restoreProjectFixture, arg.ID, arg.OrganizationID)
+	return err
+}
+
+const restoreToolsetFixture = `-- name: RestoreToolsetFixture :exec
+UPDATE toolsets SET deleted_at = NULL
+WHERE id = $1 AND project_id = $2
+`
+
+type RestoreToolsetFixtureParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) RestoreToolsetFixture(ctx context.Context, arg RestoreToolsetFixtureParams) error {
+	_, err := q.db.Exec(ctx, restoreToolsetFixture, arg.ID, arg.ProjectID)
 	return err
 }
 
@@ -1671,6 +2475,52 @@ func (q *Queries) SeedEnvironmentFixture(ctx context.Context, arg SeedEnvironmen
 	return err
 }
 
+const seedGatewayFixture = `-- name: SeedGatewayFixture :exec
+INSERT INTO meta_mcp_servers (id, organization_id, project_id, user_session_issuer_id, name)
+VALUES ($1, $2, $3, $4, $5)
+`
+
+type SeedGatewayFixtureParams struct {
+	ID                  uuid.UUID
+	OrganizationID      string
+	ProjectID           uuid.UUID
+	UserSessionIssuerID uuid.NullUUID
+	Name                string
+}
+
+func (q *Queries) SeedGatewayFixture(ctx context.Context, arg SeedGatewayFixtureParams) error {
+	_, err := q.db.Exec(ctx, seedGatewayFixture,
+		arg.ID,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.UserSessionIssuerID,
+		arg.Name,
+	)
+	return err
+}
+
+const seedGatewayMemberFixture = `-- name: SeedGatewayMemberFixture :exec
+INSERT INTO meta_mcp_server_members (id, project_id, meta_mcp_server_id, mcp_server_id)
+VALUES ($1, $2, $3, $4)
+`
+
+type SeedGatewayMemberFixtureParams struct {
+	ID              uuid.UUID
+	ProjectID       uuid.UUID
+	MetaMcpServerID uuid.UUID
+	McpServerID     uuid.UUID
+}
+
+func (q *Queries) SeedGatewayMemberFixture(ctx context.Context, arg SeedGatewayMemberFixtureParams) error {
+	_, err := q.db.Exec(ctx, seedGatewayMemberFixture,
+		arg.ID,
+		arg.ProjectID,
+		arg.MetaMcpServerID,
+		arg.McpServerID,
+	)
+	return err
+}
+
 const seedMetadataFixture = `-- name: SeedMetadataFixture :exec
 INSERT INTO mcp_metadata (id, toolset_id, mcp_server_id, project_id, default_environment_id, instructions)
 VALUES ($1, $2, $3, $4, $5, $6)
@@ -1741,7 +2591,7 @@ func (q *Queries) SeedPluginFixture(ctx context.Context, arg SeedPluginFixturePa
 
 const seedPluginGithubConnectionFixture = `-- name: SeedPluginGithubConnectionFixture :exec
 INSERT INTO plugin_github_connections (project_id, installation_id, repo_owner, repo_name)
-VALUES ($1, 1, 'owner', 'repo')
+VALUES ($1::uuid, 1, 'owner', 'repo-' || ($1::uuid)::text)
 `
 
 func (q *Queries) SeedPluginGithubConnectionFixture(ctx context.Context, projectID uuid.UUID) error {
@@ -1795,6 +2645,32 @@ func (q *Queries) SeedProjectFixture(ctx context.Context, arg SeedProjectFixture
 	return err
 }
 
+const seedRemovedPluginServerFixture = `-- name: SeedRemovedPluginServerFixture :exec
+INSERT INTO plugin_servers (id, plugin_id, toolset_id, mcp_server_id, display_name, deleted_at)
+VALUES ($1, $2, $3, $4, $5, $6)
+`
+
+type SeedRemovedPluginServerFixtureParams struct {
+	ID          uuid.UUID
+	PluginID    uuid.UUID
+	ToolsetID   uuid.NullUUID
+	McpServerID uuid.NullUUID
+	DisplayName string
+	DeletedAt   pgtype.Timestamptz
+}
+
+func (q *Queries) SeedRemovedPluginServerFixture(ctx context.Context, arg SeedRemovedPluginServerFixtureParams) error {
+	_, err := q.db.Exec(ctx, seedRemovedPluginServerFixture,
+		arg.ID,
+		arg.PluginID,
+		arg.ToolsetID,
+		arg.McpServerID,
+		arg.DisplayName,
+		arg.DeletedAt,
+	)
+	return err
+}
+
 const seedServerFixture = `-- name: SeedServerFixture :exec
 INSERT INTO mcp_servers (id, project_id, name, slug, toolset_id, visibility, network_access_mode, deleted_at)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
@@ -1821,6 +2697,119 @@ func (q *Queries) SeedServerFixture(ctx context.Context, arg SeedServerFixturePa
 		arg.Visibility,
 		arg.NetworkAccessMode,
 		arg.DeletedAt,
+	)
+	return err
+}
+
+const seedServerRiskPolicyFixture = `-- name: SeedServerRiskPolicyFixture :exec
+INSERT INTO risk_policies (id, project_id, organization_id, name, sources, version, mcp_scope)
+VALUES ($1, $2, $3, 'policy', ARRAY['fixture']::text[], 1,
+  jsonb_build_object('all_servers', false, 'servers', jsonb_build_array(jsonb_build_object('mcp_server_id', $4::text))))
+`
+
+type SeedServerRiskPolicyFixtureParams struct {
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID string
+	McpServerID    string
+}
+
+func (q *Queries) SeedServerRiskPolicyFixture(ctx context.Context, arg SeedServerRiskPolicyFixtureParams) error {
+	_, err := q.db.Exec(ctx, seedServerRiskPolicyFixture,
+		arg.ID,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.McpServerID,
+	)
+	return err
+}
+
+const seedSessionClientFixture = `-- name: SeedSessionClientFixture :exec
+WITH issuer AS (
+  INSERT INTO remote_session_issuers (project_id, slug, issuer)
+  VALUES ($2::uuid, $3::text, 'https://issuer.example.test/' || $3::text)
+  RETURNING id
+)
+INSERT INTO remote_session_clients (id, project_id, remote_session_issuer_id, client_id)
+SELECT $1::uuid, $2::uuid, issuer.id, 'client-' || $3::text
+FROM issuer
+`
+
+type SeedSessionClientFixtureParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+	Slug      string
+}
+
+func (q *Queries) SeedSessionClientFixture(ctx context.Context, arg SeedSessionClientFixtureParams) error {
+	_, err := q.db.Exec(ctx, seedSessionClientFixture, arg.ID, arg.ProjectID, arg.Slug)
+	return err
+}
+
+const seedSessionClientIssuerLinkFixture = `-- name: SeedSessionClientIssuerLinkFixture :exec
+INSERT INTO remote_session_client_user_session_issuers (remote_session_client_id, user_session_issuer_id)
+VALUES ($1, $2)
+`
+
+type SeedSessionClientIssuerLinkFixtureParams struct {
+	RemoteSessionClientID uuid.UUID
+	UserSessionIssuerID   uuid.UUID
+}
+
+func (q *Queries) SeedSessionClientIssuerLinkFixture(ctx context.Context, arg SeedSessionClientIssuerLinkFixtureParams) error {
+	_, err := q.db.Exec(ctx, seedSessionClientIssuerLinkFixture, arg.RemoteSessionClientID, arg.UserSessionIssuerID)
+	return err
+}
+
+const seedSessionClientLinkFixture = `-- name: SeedSessionClientLinkFixture :exec
+INSERT INTO mcp_server_remote_session_clients (id, project_id, organization_id, mcp_server_id, remote_session_client_id, client_attachment_scope)
+VALUES ($1, $2, $3, $4, $5, $6)
+`
+
+type SeedSessionClientLinkFixtureParams struct {
+	ID                    uuid.UUID
+	ProjectID             uuid.UUID
+	OrganizationID        string
+	McpServerID           uuid.UUID
+	RemoteSessionClientID uuid.UUID
+	ClientAttachmentScope string
+}
+
+func (q *Queries) SeedSessionClientLinkFixture(ctx context.Context, arg SeedSessionClientLinkFixtureParams) error {
+	_, err := q.db.Exec(ctx, seedSessionClientLinkFixture,
+		arg.ID,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.McpServerID,
+		arg.RemoteSessionClientID,
+		arg.ClientAttachmentScope,
+	)
+	return err
+}
+
+const seedSharedRiskPolicyFixture = `-- name: SeedSharedRiskPolicyFixture :exec
+INSERT INTO risk_policies (id, project_id, organization_id, name, sources, version, mcp_scope)
+VALUES ($1, $2, $3, 'shared policy', ARRAY['fixture']::text[], 1,
+  jsonb_build_object('servers', jsonb_build_array(
+    jsonb_build_object('mcp_server_id', $4::text),
+    jsonb_build_object('mcp_server_id', $5::text))))
+`
+
+type SeedSharedRiskPolicyFixtureParams struct {
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID string
+	FirstServerID  string
+	SecondServerID string
+}
+
+func (q *Queries) SeedSharedRiskPolicyFixture(ctx context.Context, arg SeedSharedRiskPolicyFixtureParams) error {
+	_, err := q.db.Exec(ctx, seedSharedRiskPolicyFixture,
+		arg.ID,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.FirstServerID,
+		arg.SecondServerID,
 	)
 	return err
 }
@@ -1860,6 +2849,28 @@ func (q *Queries) SeedToolsetFixture(ctx context.Context, arg SeedToolsetFixture
 	return err
 }
 
+const seedUserSessionIssuerFixture = `-- name: SeedUserSessionIssuerFixture :exec
+INSERT INTO user_session_issuers (id, project_id, organization_id, slug, authn_challenge_mode, session_duration)
+VALUES ($1, $2, $3, $4, 'interactive', interval '1 hour')
+`
+
+type SeedUserSessionIssuerFixtureParams struct {
+	ID             uuid.UUID
+	ProjectID      uuid.NullUUID
+	OrganizationID pgtype.Text
+	Slug           string
+}
+
+func (q *Queries) SeedUserSessionIssuerFixture(ctx context.Context, arg SeedUserSessionIssuerFixtureParams) error {
+	_, err := q.db.Exec(ctx, seedUserSessionIssuerFixture,
+		arg.ID,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.Slug,
+	)
+	return err
+}
+
 const serverSlugHeldElsewhere = `-- name: ServerSlugHeldElsewhere :one
 SELECT EXISTS (
   SELECT 1
@@ -1890,6 +2901,38 @@ SELECT set_config('lock_timeout', $1::text, true)
 
 func (q *Queries) SetMoveLockTimeout(ctx context.Context, lockTimeout string) error {
 	_, err := q.db.Exec(ctx, setMoveLockTimeout, lockTimeout)
+	return err
+}
+
+const setServerIssuerFixture = `-- name: SetServerIssuerFixture :exec
+UPDATE mcp_servers SET user_session_issuer_id = $1
+WHERE id = $2 AND project_id = $3
+`
+
+type SetServerIssuerFixtureParams struct {
+	UserSessionIssuerID uuid.NullUUID
+	ID                  uuid.UUID
+	ProjectID           uuid.UUID
+}
+
+func (q *Queries) SetServerIssuerFixture(ctx context.Context, arg SetServerIssuerFixtureParams) error {
+	_, err := q.db.Exec(ctx, setServerIssuerFixture, arg.UserSessionIssuerID, arg.ID, arg.ProjectID)
+	return err
+}
+
+const setServerToolsetFixture = `-- name: SetServerToolsetFixture :exec
+UPDATE mcp_servers SET toolset_id = $1
+WHERE id = $2 AND project_id = $3
+`
+
+type SetServerToolsetFixtureParams struct {
+	ToolsetID uuid.NullUUID
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) SetServerToolsetFixture(ctx context.Context, arg SetServerToolsetFixtureParams) error {
+	_, err := q.db.Exec(ctx, setServerToolsetFixture, arg.ToolsetID, arg.ID, arg.ProjectID)
 	return err
 }
 
@@ -1974,6 +3017,21 @@ func (q *Queries) SoftDeleteProjectFixture(ctx context.Context, arg SoftDeletePr
 	return err
 }
 
+const softDeleteServerFixture = `-- name: SoftDeleteServerFixture :exec
+UPDATE mcp_servers SET deleted_at = clock_timestamp()
+WHERE id = $1 AND project_id = $2
+`
+
+type SoftDeleteServerFixtureParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) SoftDeleteServerFixture(ctx context.Context, arg SoftDeleteServerFixtureParams) error {
+	_, err := q.db.Exec(ctx, softDeleteServerFixture, arg.ID, arg.ProjectID)
+	return err
+}
+
 const softDeleteToolsetFixture = `-- name: SoftDeleteToolsetFixture :exec
 UPDATE toolsets SET deleted_at = clock_timestamp()
 WHERE id = $1 AND project_id = $2
@@ -1987,4 +3045,129 @@ type SoftDeleteToolsetFixtureParams struct {
 func (q *Queries) SoftDeleteToolsetFixture(ctx context.Context, arg SoftDeleteToolsetFixtureParams) error {
 	_, err := q.db.Exec(ctx, softDeleteToolsetFixture, arg.ID, arg.ProjectID)
 	return err
+}
+
+const touchRiskPolicyFixture = `-- name: TouchRiskPolicyFixture :exec
+UPDATE risk_policies SET updated_at = clock_timestamp() WHERE id = $1 AND project_id = $2
+`
+
+type TouchRiskPolicyFixtureParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) TouchRiskPolicyFixture(ctx context.Context, arg TouchRiskPolicyFixtureParams) error {
+	_, err := q.db.Exec(ctx, touchRiskPolicyFixture, arg.ID, arg.ProjectID)
+	return err
+}
+
+const wrapperMembershipsDeletedAt = `-- name: WrapperMembershipsDeletedAt :many
+SELECT m.id, COALESCE(m.deleted_at::text, '')::text AS deleted_at
+FROM meta_mcp_server_members AS m
+WHERE m.id = ANY($1::uuid[]) AND m.project_id = $2
+ORDER BY m.id
+`
+
+type WrapperMembershipsDeletedAtParams struct {
+	Ids       []uuid.UUID
+	ProjectID uuid.UUID
+}
+
+type WrapperMembershipsDeletedAtRow struct {
+	ID        uuid.UUID
+	DeletedAt string
+}
+
+func (q *Queries) WrapperMembershipsDeletedAt(ctx context.Context, arg WrapperMembershipsDeletedAtParams) ([]WrapperMembershipsDeletedAtRow, error) {
+	rows, err := q.db.Query(ctx, wrapperMembershipsDeletedAt, arg.Ids, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []WrapperMembershipsDeletedAtRow
+	for rows.Next() {
+		var i WrapperMembershipsDeletedAtRow
+		if err := rows.Scan(&i.ID, &i.DeletedAt); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const wrapperPluginMembersDeletedAt = `-- name: WrapperPluginMembersDeletedAt :many
+SELECT ps.id, COALESCE(ps.deleted_at::text, '')::text AS deleted_at
+FROM plugin_servers AS ps
+JOIN plugins AS pl ON pl.id = ps.plugin_id
+WHERE ps.id = ANY($1::uuid[]) AND pl.project_id = $2
+ORDER BY ps.id
+`
+
+type WrapperPluginMembersDeletedAtParams struct {
+	Ids       []uuid.UUID
+	ProjectID uuid.UUID
+}
+
+type WrapperPluginMembersDeletedAtRow struct {
+	ID        uuid.UUID
+	DeletedAt string
+}
+
+func (q *Queries) WrapperPluginMembersDeletedAt(ctx context.Context, arg WrapperPluginMembersDeletedAtParams) ([]WrapperPluginMembersDeletedAtRow, error) {
+	rows, err := q.db.Query(ctx, wrapperPluginMembersDeletedAt, arg.Ids, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []WrapperPluginMembersDeletedAtRow
+	for rows.Next() {
+		var i WrapperPluginMembersDeletedAtRow
+		if err := rows.Scan(&i.ID, &i.DeletedAt); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const wrapperServerDeletedAt = `-- name: WrapperServerDeletedAt :one
+SELECT COALESCE(ms.deleted_at::text, '')::text AS deleted_at
+FROM mcp_servers AS ms
+WHERE ms.id = $1 AND ms.project_id = $2
+`
+
+type WrapperServerDeletedAtParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) WrapperServerDeletedAt(ctx context.Context, arg WrapperServerDeletedAtParams) (string, error) {
+	row := q.db.QueryRow(ctx, wrapperServerDeletedAt, arg.ID, arg.ProjectID)
+	var deleted_at string
+	err := row.Scan(&deleted_at)
+	return deleted_at, err
+}
+
+const wrapperServerImage = `-- name: WrapperServerImage :one
+SELECT to_jsonb(ms)::jsonb AS row_json
+FROM mcp_servers AS ms
+WHERE ms.id = $1 AND ms.project_id = $2
+`
+
+type WrapperServerImageParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) WrapperServerImage(ctx context.Context, arg WrapperServerImageParams) ([]byte, error) {
+	row := q.db.QueryRow(ctx, wrapperServerImage, arg.ID, arg.ProjectID)
+	var row_json []byte
+	err := row.Scan(&row_json)
+	return row_json, err
 }

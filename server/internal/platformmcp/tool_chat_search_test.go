@@ -30,7 +30,7 @@ func TestChatSearchToolContractAndDiscovery(t *testing.T) {
 		require.JSONEq(t, string(descriptor.InputSchema), string(unavailable.InputSchema))
 		require.Equal(t, descriptor.output, unavailable.output)
 		require.True(t, descriptor.Annotations.ReadOnlyHint)
-		require.Nil(t, descriptor.Annotations.DestructiveHint)
+		require.False(t, *descriptor.Annotations.DestructiveHint)
 		require.Contains(t, descriptor.Description, "untrusted")
 	}
 	tools := []*mcp.Tool{{Name: searchChatsToolName}, {Name: readChatToolName}}

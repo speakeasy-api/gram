@@ -13,6 +13,8 @@ import (
 	"fmt"
 	"net/url"
 	"slices"
+
+	"github.com/google/uuid"
 )
 
 // gatewayListOpenLimit is the most servers a gateway's page lists open by
@@ -183,7 +185,7 @@ func gatewayServersView(members []metaMember, cards []remoteSessionCard) *gatewa
 				server.Status = strongerStatus(server.Status, cardStatus(card))
 			}
 		}
-		if member.remoteSessionIssuerID.Valid && len(server.cardIDs) == 0 {
+		if memberNeedsSignIn(member) && len(server.cardIDs) == 0 {
 			server.Status = gatewayServerNotSetUp
 		}
 		if len(server.cardIDs) == 1 && (server.Status == gatewayServerNotConnected || server.Status == gatewayServerReconnect) {
@@ -201,10 +203,15 @@ func gatewayServersView(members []metaMember, cards []remoteSessionCard) *gatewa
 }
 
 func cardServesMember(card remoteSessionCard, member metaMember) bool {
-	if !member.remoteSessionIssuerID.Valid || card.remoteSessionIssuerID != member.remoteSessionIssuerID.UUID {
-		return false
+	clientID := uuid.Nil
+	if member.associatedClients != nil {
+		parsed, err := uuid.Parse(card.ClientID)
+		if err != nil {
+			return false
+		}
+		clientID = parsed
 	}
-	return !card.projectID.Valid || card.projectID.UUID == member.projectID
+	return memberUsesClient(member, clientID, card.remoteSessionIssuerID, card.projectID)
 }
 
 // cardStatus is the status one service gives the servers it signs in to.

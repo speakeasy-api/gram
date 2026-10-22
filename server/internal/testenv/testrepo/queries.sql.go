@@ -109,6 +109,17 @@ func (q *Queries) ClearAttachmentRefreshClaimFixture(ctx context.Context, id uui
 	return result.RowsAffected(), nil
 }
 
+const clearMCPServerRemoteSessionClientsFixture = `-- name: ClearMCPServerRemoteSessionClientsFixture :exec
+DELETE FROM mcp_server_remote_session_clients WHERE mcp_server_id = $1
+`
+
+// Test-only fixture: removes every upstream client association of one MCP
+// server, so a table-driven test can set each case's associations afresh.
+func (q *Queries) ClearMCPServerRemoteSessionClientsFixture(ctx context.Context, mcpServerID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, clearMCPServerRemoteSessionClientsFixture, mcpServerID)
+	return err
+}
+
 const clearPreparationFixtureState = `-- name: ClearPreparationFixtureState :exec
 UPDATE remote_session_ema_bindings SET state = NULL, grant_source = NULL
 WHERE id = $1 AND project_id = $2 AND organization_id = $3
@@ -1115,6 +1126,19 @@ func (q *Queries) CreateWorkloadIssuerFixture(ctx context.Context, arg CreateWor
 	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err
+}
+
+const currentDatabaseTime = `-- name: CurrentDatabaseTime :one
+SELECT clock_timestamp()::timestamptz AS now
+`
+
+// The database's clock, for tests that compare against timestamps the
+// database wrote.
+func (q *Queries) CurrentDatabaseTime(ctx context.Context) (pgtype.Timestamptz, error) {
+	row := q.db.QueryRow(ctx, currentDatabaseTime)
+	var now pgtype.Timestamptz
+	err := row.Scan(&now)
+	return now, err
 }
 
 const deferDeviceIntegrationSyncsFixture = `-- name: DeferDeviceIntegrationSyncsFixture :exec
@@ -4655,26 +4679,6 @@ ALTER TABLE publish_outbox ADD CONSTRAINT reject_publish_outbox_writes_fixture C
 func (q *Queries) RejectPublishOutboxWritesFixture(ctx context.Context) error {
 	_, err := q.db.Exec(ctx, rejectPublishOutboxWritesFixture)
 	return err
-}
-
-const rekeyMcpMetadataToMcpServerFixture = `-- name: RekeyMcpMetadataToMcpServerFixture :execrows
-UPDATE mcp_metadata
-SET toolset_id = NULL, mcp_server_id = toolset_id
-WHERE project_id = $1
-  AND toolset_id = $2
-`
-
-type RekeyMcpMetadataToMcpServerFixtureParams struct {
-	ProjectID uuid.UUID
-	ToolsetID uuid.NullUUID
-}
-
-func (q *Queries) RekeyMcpMetadataToMcpServerFixture(ctx context.Context, arg RekeyMcpMetadataToMcpServerFixtureParams) (int64, error) {
-	result, err := q.db.Exec(ctx, rekeyMcpMetadataToMcpServerFixture, arg.ProjectID, arg.ToolsetID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
 }
 
 const repointMCPServerToolsetFixture = `-- name: RepointMCPServerToolsetFixture :one

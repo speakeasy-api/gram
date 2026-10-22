@@ -68,10 +68,6 @@ const (
 	// like FlagBudgets. Evaluated server-side only; removed once the toolset
 	// is GA.
 	FlagAssistantPlatformMCP Flag = "assistant-platform-mcp"
-	// FlagRiskWatchdog gates the Watchdog signals endpoint (risk.getSignals).
-	// Key matches the dashboard's page-level flag so a single PostHog flag
-	// controls both the UI and the API surface.
-	FlagRiskWatchdog Flag = "gram-risk-watchdog"
 	// FlagExplore gates Explore and the Platform MCP analytics tools. The key
 	// matches the dashboard's page-level flag so one PostHog flag controls
 	// both surfaces; targeted by organization group (org slug), like
@@ -192,6 +188,26 @@ const (
 	// keeps serving. Server-evaluated; target everyone to pause the platform,
 	// or an organization group to pause one organization.
 	FlagInternalSessionIssuerSigningPaused Flag = "internal-session-issuer-signing-paused"
+
+	// FlagAuthClientResolver makes the typed auth client resolver
+	// authoritative for an organization's direct proxied servers. Off, the
+	// upstream client choice keeps serving and is the rollback.
+	//
+	// Precondition: the organization's backfill is complete and its choices
+	// are mapped onto auth clients (AIM-595), including the ones issuance
+	// writes. Until then an OAuth choice with no auth client falls back to the
+	// upstream client choice, so the flag only takes effect for mapped
+	// choices. Evaluated
+	// locally with the organization id as the distinct id, so the PostHog flag
+	// must be person-aggregated and match distinct_id in a list of
+	// organization ids.
+	FlagAuthClientResolver Flag = "auth-client-resolver"
+
+	// FlagAuthClientResolverShadow runs the typed auth client resolver beside
+	// the upstream client choice, without acquiring credentials or writing,
+	// and logs where they disagree. Ignored while FlagAuthClientResolver is on.
+	// Targeted the same way as FlagAuthClientResolver.
+	FlagAuthClientResolverShadow Flag = "auth-client-resolver-shadow"
 )
 
 // Variants of FlagAssistantPlatformMCP. Anything else — no variant, an

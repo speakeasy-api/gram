@@ -255,6 +255,9 @@ func TestRemoteSessionRecheck_UnusableEndpointDoesNotShadowLiveSibling(t *testin
 			prefix := "aim261-shadow-" + visibility
 			ctx, fx := seedStandaloneValidationFixture(t, prefix)
 			makeKeepaliveShaped(t, ctx, fx, prefix)
+			// The live server is configured before its sibling shares the
+			// issuer, as an organization migrated with one server would be.
+			fx.ti.service.migrate(ctx)
 			projectID := fx.endpoint.ProjectID
 			endpoints := mcpendpoints_repo.New(fx.ti.conn)
 

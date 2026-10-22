@@ -2,9 +2,11 @@ package mcp_test
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"log/slog"
+	"net/http"
 	"net/url"
 	"os"
 	"slices"
@@ -25,6 +27,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpauthz"
 	"github.com/speakeasy-api/gram/server/internal/mcpriskscan"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/associationbackfill"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/selectionbackfill"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/rag"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
@@ -110,7 +114,7 @@ func TestMain(m *testing.M) {
 
 type testInstance struct {
 	principalCredentials *principalcredential.Issuer
-	service              *mcp.Service
+	service              *migratedService
 	conn                 *pgxpool.Pool
 	sessionManager       *sessions.Manager
 	serverURL            *url.URL
@@ -133,6 +137,93 @@ type testInstance struct {
 	// tests replace it to control the upstream credential.
 	clientCredentials *testClientCredentials
 	toolCallRecords   *toolCallRecorder
+}
+
+// migratedService models an organization after the upstream OAuth migration:
+// every request entry point first runs the association and credential choice
+// backfills over the test database, as an operator runs them before serving
+// reads choices, so fixtures that write bindings, members and grants directly
+// are served as the migrated state they describe. Everything else is the
+// service itself.
+type migratedService struct {
+	*mcp.Service
+	conn *pgxpool.Pool
+	// manual leaves associations and choices to the test, for tests of how
+	// serving treats a missing or particular choice.
+	manual bool
+}
+
+// migrate is best effort: a test that breaks the database on purpose to
+// exercise a failure path sees the service meet the same broken database.
+func (s *migratedService) migrate(ctx context.Context) {
+	if s.manual {
+		return
+	}
+	ctx = context.WithoutCancel(ctx)
+	if _, err := associationbackfill.Run(ctx, s.conn, associationbackfill.Options{OrganizationID: "", Apply: true, PageSize: 0}); err != nil {
+		return
+	}
+	_, _ = selectionbackfill.Run(ctx, s.conn, selectionbackfill.Options{OrganizationID: "", Apply: true, PageSize: 0})
+}
+
+func (s *migratedService) ServePublic(w http.ResponseWriter, r *http.Request) error {
+	s.migrate(r.Context())
+	return s.Service.ServePublic(w, r) //nolint:wrapcheck // a transparent wrapper returns the service's own error
+}
+
+func (s *migratedService) ServeOrganizationGateway(w http.ResponseWriter, r *http.Request) error {
+	s.migrate(r.Context())
+	return s.Service.ServeOrganizationGateway(w, r) //nolint:wrapcheck // a transparent wrapper returns the service's own error
+}
+
+func (s *migratedService) ServeConsent(w http.ResponseWriter, r *http.Request, endpoint *mcp.ResolvedMcpEndpoint) error {
+	s.migrate(r.Context())
+	return s.Service.ServeConsent(w, r, endpoint) //nolint:wrapcheck // a transparent wrapper returns the service's own error
+}
+
+func (s *migratedService) ServeConsentAction(w http.ResponseWriter, r *http.Request, endpoint *mcp.ResolvedMcpEndpoint) error {
+	s.migrate(r.Context())
+	return s.Service.ServeConsentAction(w, r, endpoint) //nolint:wrapcheck // a transparent wrapper returns the service's own error
+}
+
+func (s *migratedService) ServeConsentMCP(w http.ResponseWriter, r *http.Request, endpoint *mcp.ResolvedMcpEndpoint) error {
+	s.migrate(r.Context())
+	return s.Service.ServeConsentMCP(w, r, endpoint) //nolint:wrapcheck // a transparent wrapper returns the service's own error
+}
+
+func (s *migratedService) HandleToken(w http.ResponseWriter, r *http.Request) error {
+	s.migrate(r.Context())
+	return s.Service.HandleToken(w, r) //nolint:wrapcheck // a transparent wrapper returns the service's own error
+}
+
+func (s *migratedService) HandleConsent(w http.ResponseWriter, r *http.Request) error {
+	s.migrate(r.Context())
+	return s.Service.HandleConsent(w, r) //nolint:wrapcheck // a transparent wrapper returns the service's own error
+}
+
+func (s *migratedService) ApplyIssuerGate(ctx context.Context, w http.ResponseWriter, authToken, baseURL string, endpoint *mcp.ResolvedMcpEndpoint) (context.Context, map[uuid.UUID]remotesessions.UpstreamToken, *toolfilter.SessionPolicy, error) {
+	s.migrate(ctx)
+	return s.Service.ApplyIssuerGate(ctx, w, authToken, baseURL, endpoint) //nolint:wrapcheck // a transparent wrapper returns the service's own error
+}
+
+func (s *migratedService) HandleToolsCall(ctx context.Context, inputs *mcp.McpInputs, toolName string, arguments json.RawMessage) (*mcp.ToolCallResult, error) {
+	s.migrate(ctx)
+	return s.Service.HandleToolsCall(ctx, inputs, toolName, arguments) //nolint:wrapcheck // a transparent wrapper returns the service's own error
+}
+
+func (s *migratedService) SweepRemoteSessionRechecks(ctx context.Context) (int, error) {
+	s.migrate(ctx)
+	return s.Service.SweepRemoteSessionRechecks(ctx) //nolint:wrapcheck // a transparent wrapper returns the service's own error
+}
+
+func (s *migratedService) VerifyRemoteGrant(ctx context.Context, grant remotesessions.RemoteGrant) time.Time {
+	s.migrate(ctx)
+	return s.Service.VerifyRemoteGrant(ctx, grant)
+}
+
+func (s *migratedService) VerifyRemoteGrantOn(ctx context.Context, endpoint *mcp.ResolvedMcpEndpoint, grant remotesessions.RemoteGrant) {
+	s.migrate(ctx)
+	s.Service.VerifyRemoteGrantOn(ctx, endpoint, grant)
 }
 
 // testClientCredentials is the challenge manager's client credential source.
@@ -633,7 +724,7 @@ func buildTestMCPService(
 
 	return ctx, &testInstance{
 		principalCredentials: principalCredentials,
-		service:              svc,
+		service:              &migratedService{Service: svc, conn: conn, manual: false},
 		conn:                 conn,
 		sessionManager:       sessionManager,
 		serverURL:            serverURL,

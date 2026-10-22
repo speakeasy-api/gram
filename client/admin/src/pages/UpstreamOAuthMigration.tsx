@@ -10,6 +10,7 @@ import { toast } from "sonner";
 
 import type { AdminUpstreamOAuthMigrationOrganization } from "@gram/admin-client/models/components/adminupstreamoauthmigrationorganization";
 import type { AdminUpstreamOAuthMigrationStatus } from "@gram/admin-client/models/components/adminupstreamoauthmigrationstatus";
+import type { AdminUpstreamOAuthMigrationUnresolvedAssociation } from "@gram/admin-client/models/components/adminupstreamoauthmigrationunresolvedassociation";
 
 import { useConfirmDialog } from "@/components/ConfirmDialog";
 import { Badge } from "@/components/ui/badge";
@@ -24,6 +25,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { errorMessage } from "@/lib/gramAdminApi";
+import { needsMigrationRun } from "@/lib/upstreamOAuthMigration";
 import {
   runUpstreamOAuthMigration,
   upstreamOAuthMigrationOrganizationsQuery,
@@ -74,6 +76,7 @@ export function UpstreamOAuthMigrationPage(): JSX.Element {
   });
   const statusByID = new Map(all.map((org, i) => [org.id, statuses[i]]));
   const migrated = statuses.filter((s) => s.data?.migrated).length;
+  const pendingCount = statuses.filter((s) => needsMigrationRun(s.data)).length;
 
   async function migrate(org: AdminUpstreamOAuthMigrationOrganization) {
     setRunning((current) => new Set(current).add(org.id));
@@ -97,16 +100,19 @@ export function UpstreamOAuthMigrationPage(): JSX.Element {
     const ok = await confirm({
       title: `Migrate ${org.name}?`,
       description:
-        "Records the upstream OAuth client associations its configuration proves, then each live credential's client choice. Safe to run again.",
+        "Records the upstream OAuth client associations its configuration proves, then each live credential's client choice, then a typed auth client for each upstream identity its servers use. Safe to run again.",
       confirmLabel: "Migrate",
     });
     if (!ok) return;
     try {
       const run = await migrate(org);
-      if (run.status.migrated) {
-        toast.success(`${org.name} is migrated`);
-      } else {
+      if (run.authClientsError) {
+        toast.warning(`${org.name}: ${run.authClientsError}`);
+      }
+      if (!run.status.migrated) {
         toast.warning(`${org.name} still needs attention`);
+      } else if (!run.authClientsError) {
+        toast.success(`${org.name} is migrated`);
       }
     } catch (e) {
       toast.error(`${org.name}: ${errorMessage(e)}`);
@@ -114,25 +120,26 @@ export function UpstreamOAuthMigrationPage(): JSX.Element {
   }
 
   async function migrateAllPending() {
-    const pending = all.filter((org) => {
-      const status = statusByID.get(org.id)?.data;
-      return status !== undefined && !status.migrated;
-    });
+    const pending = all.filter((org) =>
+      needsMigrationRun(statusByID.get(org.id)?.data),
+    );
     if (pending.length === 0) return;
     const ok = await confirm({
       title: `Migrate ${pending.length} ${pending.length === 1 ? "organization" : "organizations"}?`,
       description:
-        "Runs the migration for every organization not yet migrated, one at a time. Keep this tab open until it finishes; an interrupted run is safe to start again.",
+        "Runs the migration for every organization not yet migrated or with auth clients left to record, one at a time. Keep this tab open until it finishes; an interrupted run is safe to start again.",
       confirmLabel: "Migrate all",
     });
     if (!ok) return;
     setBulk({ done: 0, total: pending.length });
     let failed = 0;
     let incomplete = 0;
+    let authClientsFailed = 0;
     for (const org of pending) {
       try {
         const run = await migrate(org);
         if (!run.status.migrated) incomplete++;
+        if (run.authClientsError) authClientsFailed++;
       } catch (e) {
         failed++;
         toast.error(`${org.name}: ${errorMessage(e)}`);
@@ -142,11 +149,16 @@ export function UpstreamOAuthMigrationPage(): JSX.Element {
       );
     }
     setBulk(null);
+    if (authClientsFailed > 0) {
+      toast.warning(
+        `Auth clients weren't recorded for ${authClientsFailed} ${authClientsFailed === 1 ? "organization" : "organizations"}. Run again; the migration itself is unaffected.`,
+      );
+    }
     if (incomplete > 0) {
       toast.warning(
         `${incomplete} ${incomplete === 1 ? "organization still needs" : "organizations still need"} attention`,
       );
-    } else if (failed === 0) {
+    } else if (failed === 0 && authClientsFailed === 0) {
       toast.success(
         `Migrated ${pending.length} ${pending.length === 1 ? "organization" : "organizations"}`,
       );
@@ -159,10 +171,12 @@ export function UpstreamOAuthMigrationPage(): JSX.Element {
         <div>
           <h1 className="text-2xl font-semibold">Upstream OAuth migration</h1>
           <p className="text-muted-foreground max-w-3xl">
-            Records which upstream OAuth client each MCP server uses, and which
-            client each signed-in credential chose, for organizations whose
-            servers sign in through a user session issuer. Migrate one
-            organization to try it, then the rest.
+            Records which upstream OAuth client each MCP server uses, which
+            client each signed-in credential chose, and a typed auth client for
+            each associated client, for organizations whose servers sign in
+            through a user session issuer. Auth clients never decide whether an
+            organization is migrated. Migrate one organization to try it, then
+            the rest.
           </p>
         </div>
         <Button
@@ -171,7 +185,7 @@ export function UpstreamOAuthMigrationPage(): JSX.Element {
             bulk !== null ||
             all.length === 0 ||
             settled < all.length ||
-            migrated === all.length
+            pendingCount === 0
           }
         >
           {bulk
@@ -287,6 +301,7 @@ function MigrationStatus({
     );
   }
   const s = status.data;
+  const authClients = <AuthClientStatus status={s} />;
   const reconnect =
     s.reconnectCredentials > 0
       ? `${s.reconnectCredentials} ${s.reconnectCredentials === 1 ? "credential" : "credentials"} will be asked to reconnect`
@@ -301,6 +316,7 @@ function MigrationStatus({
         {reconnect ? (
           <p className="text-muted-foreground text-xs">{reconnect}</p>
         ) : null}
+        {authClients}
       </div>
     );
   }
@@ -344,6 +360,136 @@ function MigrationStatus({
       {reconnect ? (
         <p className="text-muted-foreground text-xs">{reconnect}</p>
       ) : null}
+      {authClients}
     </div>
   );
 }
+
+// Typed auth clients are reported apart from the migration: they never decide
+// whether an organization is migrated.
+function AuthClientStatus({
+  status,
+}: {
+  status: AdminUpstreamOAuthMigrationStatus;
+}): JSX.Element {
+  const a = status.authClients;
+  if (!a) {
+    return (
+      <p className="text-muted-foreground text-xs">
+        Auth clients: couldn't check
+      </p>
+    );
+  }
+  if (a.inProgress) {
+    return (
+      <p className="text-muted-foreground text-xs">
+        Auth clients: run in progress
+      </p>
+    );
+  }
+  if (a.complete) {
+    return (
+      <div className="space-y-1">
+        <p className="text-muted-foreground text-xs">Auth clients: recorded</p>
+        <AuthClientItems items={a.warnings} label="Worth a look" />
+      </div>
+    );
+  }
+  const parts = [
+    a.pendingClients > 0
+      ? `${a.pendingClients} ${a.pendingClients === 1 ? "client" : "clients"} to record`
+      : null,
+    a.pendingLinks > 0
+      ? `${a.pendingLinks} server ${a.pendingLinks === 1 ? "link" : "links"} to record`
+      : null,
+    a.pendingHeaders > 0
+      ? `${a.pendingHeaders} ${a.pendingHeaders === 1 ? "header or scope set" : "headers or scope sets"} to update`
+      : null,
+    a.pendingRetirements > 0
+      ? `${a.pendingRetirements} stale ${a.pendingRetirements === 1 ? "record" : "records"} to retire`
+      : null,
+    a.pendingMarkedServers > 0
+      ? `${a.pendingMarkedServers} ${a.pendingMarkedServers === 1 ? "server" : "servers"} to mark as needing upstream auth`
+      : null,
+    a.unresolved > 0 ? `${a.unresolved} need attention` : null,
+  ].filter((part) => part !== null);
+  const kinds = a.kinds.filter(
+    (k) =>
+      k.pendingClients +
+        k.pendingLinks +
+        k.pendingHeaders +
+        k.pendingRetirements +
+        k.unresolved >
+      0,
+  );
+  return (
+    <div className="space-y-1">
+      <p className="text-muted-foreground text-xs">
+        Auth clients: {parts.length > 0 ? parts.join(", ") : "run again"}
+      </p>
+      {a.failedPhases.length > 0 ? (
+        <p className="text-destructive text-xs">
+          Couldn't check: {a.failedPhases.join(", ")}
+        </p>
+      ) : null}
+      {kinds.length > 0 ? (
+        <ul className="text-muted-foreground text-xs">
+          {kinds.map((k) => (
+            <li key={k.kind}>
+              {k.kind}: {k.pendingClients} clients, {k.pendingLinks} links,{" "}
+              {k.pendingHeaders} headers to record; {k.pendingRetirements} to
+              retire; {k.unresolved} need attention
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      <AuthClientItems items={a.unresolvedAssociations} />
+      <AuthClientItems items={a.warnings} label="Worth a look" />
+    </div>
+  );
+}
+
+function AuthClientItems({
+  items,
+  label,
+}: {
+  items: AdminUpstreamOAuthMigrationUnresolvedAssociation[];
+  label?: string;
+}): JSX.Element | null {
+  if (items.length === 0) {
+    return null;
+  }
+  return (
+    <div className="space-y-1">
+      {label ? <p className="text-muted-foreground text-xs">{label}:</p> : null}
+      <ul className="text-muted-foreground font-mono text-xs">
+        {items.map((item) => (
+          <li
+            key={`${item.kind}:${item.reason}:${item.subjectId}:${item.mcpServerId}`}
+          >
+            {item.kind} {item.reason}: {item.subjectId}
+            {item.projectId !== NIL_UUID ? ` in project ${item.projectId}` : ""}
+            {item.mcpServerId !== NIL_UUID
+              ? `, server ${item.mcpServerId}`
+              : ""}
+            {item.remoteSessionClientId !== NIL_UUID &&
+            item.remoteSessionClientId !== item.subjectId
+              ? `, client ${item.remoteSessionClientId}`
+              : ""}
+            {item.bindingIds.length > 0
+              ? `, bindings ${item.bindingIds.join(", ")}`
+              : ""}
+            {item.sourceIds.length > 0
+              ? `, sources ${item.sourceIds.join(", ")}`
+              : ""}
+            {item.serverIds.length > 0
+              ? `, servers ${item.serverIds.join(", ")}`
+              : ""}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+const NIL_UUID = "00000000-0000-0000-0000-000000000000";

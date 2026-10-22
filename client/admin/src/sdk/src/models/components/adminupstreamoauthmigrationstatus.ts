@@ -8,14 +8,22 @@ import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
+  AdminUpstreamOAuthMigrationAuthClients,
+  AdminUpstreamOAuthMigrationAuthClients$inboundSchema,
+} from "./adminupstreamoauthmigrationauthclients.js";
+import {
   AdminUpstreamOAuthMigrationServer,
   AdminUpstreamOAuthMigrationServer$inboundSchema,
 } from "./adminupstreamoauthmigrationserver.js";
 
 /**
- * Where one organization stands in the upstream OAuth migration, read from a dry run of both backfills. The organization is migrated when nothing is left to write and no server needs configuring. Credentials that must reconnect do not block it: they are asked to sign in again once serving reads their choices.
+ * Where one organization stands in the upstream OAuth migration, read from a dry run of its backfills. The organization is migrated when nothing is left to write and no server needs configuring. Credentials that must reconnect do not block it: they are asked to sign in again once serving reads their choices. Typed auth clients are reported separately in auth_clients and never affect migrated.
  */
 export type AdminUpstreamOAuthMigrationStatus = {
+  /**
+   * Where one organization stands in recording a typed auth client for every upstream identity its servers are configured with (upstream OAuth clients, source credential headers and identity chaining upstreams), and in retiring backfilled records the configuration no longer yields. Nothing reads these records yet.
+   */
+  authClients?: AdminUpstreamOAuthMigrationAuthClients | undefined;
   /**
    * Live user session credentials scanned.
    */
@@ -56,6 +64,9 @@ export const AdminUpstreamOAuthMigrationStatus$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
+    auth_clients: z.optional(
+      AdminUpstreamOAuthMigrationAuthClients$inboundSchema,
+    ),
     credentials: z.int(),
     migrated: z.boolean(),
     organization_id: z.string(),
@@ -69,6 +80,7 @@ export const AdminUpstreamOAuthMigrationStatus$inboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
+      "auth_clients": "authClients",
       "organization_id": "organizationId",
       "pending_associations": "pendingAssociations",
       "pending_selections": "pendingSelections",
