@@ -120,7 +120,7 @@ func UsageCommands() []string {
 		"external receive-work-os-webhook",
 		"killswitches (list-capabilities|list-mcp-servers|list|get|create|edit|lift|preview-overlaps|batch-user-badges)",
 		"about openapi",
-		"access (list-roles|get-role|create-role|update-role|delete-role|list-directory-role-mappings|sync-directory-groups|set-directory-role-mapping|set-directory-role-mappings|delete-directory-role-mapping|preview-directory-role-setup|apply-directory-role-setup|list-directory-review-items|resolve-directory-review-item|get-directory-review-settings|update-directory-review-settings|list-scopes|list-members|list-grants|update-member-roles|list-shadow-mcp-inventory|get-shadow-mcp-inventory-server|update-shadow-mcp-inventory-server-name|list-shadow-mcp-inventory-users|list-shadow-mcp-inventory-servers-for-user|resolve-shadow-mcp-inventory-request|list-ai-detections|list-employee-ai-detections|list-ai-detection-users|set-ai-tool-decision|list-resource-audience|set-resource-audience|list-audience-options|explain-resource-access|request-access|list-challenges|list-challenge-buckets|resolve-challenge|list-identity-access)",
+		"access (list-roles|get-role|create-role|update-role|delete-role|list-directory-role-mappings|list-directory-people|sync-directory-groups|set-directory-role-mapping|set-directory-role-mappings|delete-directory-role-mapping|preview-directory-role-setup|apply-directory-role-setup|list-directory-review-items|resolve-directory-review-item|get-directory-review-settings|update-directory-review-settings|list-scopes|list-members|list-grants|update-member-roles|list-shadow-mcp-inventory|get-shadow-mcp-inventory-server|update-shadow-mcp-inventory-server-name|list-shadow-mcp-inventory-users|list-shadow-mcp-inventory-servers-for-user|resolve-shadow-mcp-inventory-request|list-ai-detections|list-employee-ai-detections|list-ai-detection-users|set-ai-tool-decision|list-resource-audience|set-resource-audience|list-audience-options|explain-resource-access|request-access|list-challenges|list-challenge-buckets|resolve-challenge|list-identity-access)",
 		"agent (get-plugins|list-synced-users|get-configuration|update-configuration|list-ai-scan-targets|upsert-ai-scan-target|delete-ai-scan-target|get-session-meta|report-session-moved|report-ai-scan|create-session-handoff)",
 		"agents (list-sessions|revoke-session|list|create|get|rename|list-delegable-grants|list-policy-grants|create-policy-grant|update-policy-grant|delete-policy-grant|transfer|reassign|suspend|resume|revoke|delete)",
 		"ai-integrations (get-anthropic-inference-config|upsert-anthropic-inference-config|delete-anthropic-inference-config|get-config|upsert-config|delete-config|list-schedules|set-schedule-enabled|retry-schedule)",
@@ -199,7 +199,7 @@ func UsageCommands() []string {
 		"tools list-tools",
 		"toolsets (create-toolset|list-toolsets|list-toolsets-for-org|update-toolset|delete-toolset|get-toolset|list-tool-filters|list-tool-schema-static-values|check-mcp-slug-availability|clone-toolset|add-externaloauth-server|update-externaloauth-server|removeoauth-server|set-user-session-issuer|set-tool-variations-group)",
 		"triggers (list-trigger-definitions|list-trigger-instances|list-trigger-events|get-trigger-instance|create-trigger-instance|update-trigger-instance|delete-trigger-instance|pause-trigger-instance|resume-trigger-instance)",
-		"tunneled-mcp (create-server|list-servers|get-server|list-server-connections|update-server|rotate-server-key|delete-server)",
+		"tunneled-mcp (create-server|list-servers|get-server|list-server-connections|get-server-metrics|update-server|rotate-server-key|delete-server)",
 		"unproxied-mcp (create-server|list-servers|get-server|delete-server)",
 		"usage (get-period-usage|get-meter-usage|get-spend-breakdown|get-tokens-under-management|set-billing-metadata|get-billing-email|set-billing-email|set-spend-cap|get-inference-spend-caps|get-usage-tiers|create-customer-session|create-checkout|create-stripe-checkout|get-stripe-subscription|get-payg-billing-summary|create-stripe-portal-session|cancel-stripe-subscription|resume-stripe-subscription|create-top-up-checkout)",
 		"admin (login|callback|logout|get-session|get-organization-features|set-organization-feature|get-organization-chat-analysis-settings|set-organization-chat-analysis-settings|trigger-organization-chat-analysis|open-organization-in-dashboard|get-project|update-organization|bulk-update-account-type|disable-organization|enable-organization|get-organization|list-organization-members|list-organization-projects|list-project-mcp-servers|list-organization-activity|list-users|list-user-organizations|list-organizations|extend-trial|create-organization|rearm-trial|get-organization-stats|repair-inference-key|get-inference-keys|set-inference-key-monthly-limit|get-inference-spend-history|get-payg-billing-summary|get-stripe-customer|set-stripe-customer|get-stripe-subscription|cancel-stripe-subscription|resume-stripe-subscription|mark-enterprise-trial-converted|create-global-issuer|get-global-issuer-duplicate-preflight|list-global-issuers|get-global-issuer|update-global-issuer|delete-global-issuer|fetch-global-issuer-metadata|refresh-global-issuer-metadata|list-global-issuer-convergence-candidates|get-global-issuer-migrate-preflight|migrate-to-global-issuer|upload-platform-image|serve-image|start-trial|change-trial-end-date|get-meter-usage|get-spend-breakdown|get-support-matrix|update-support-matrix|get-support-coverage|describe-mcp-server-health|get-mcp-server-tool-calls|get-hook-clients|list-external-mcp-migration-candidates|preview-external-mcp-migration|migrate-external-mcp-servers|get-registry-okta-candidates|list-registry-okta-unmapped|list-registry-entries|get-registry-entry|create-registry-entry|save-registry-entry|set-registry-entry-published|list-onboarding-steps|get-onboarding-stack-options|get-organization-onboarding-stack|set-organization-onboarding-stack|list-onboarding-use-cases|create-onboarding-use-case|update-onboarding-use-case|delete-onboarding-use-case|list-onboarding-playbooks|create-onboarding-playbook|update-onboarding-playbook|delete-onboarding-playbook|clone-onboarding-playbook|get-organization-onboarding-playbook|assign-organization-onboarding-playbook|list-signup-offers|create-signup-offer|update-signup-offer|get-stripe-subscription-candidate|set-stripe-subscription|list-customer-usage|list-upstreamoauth-migration-organizations|get-upstreamoauth-migration-status|run-upstreamoauth-migration)",
@@ -314,6 +314,11 @@ func ParseEndpoint(
 		accessListDirectoryRoleMappingsFlags            = flag.NewFlagSet("list-directory-role-mappings", flag.ExitOnError)
 		accessListDirectoryRoleMappingsApikeyTokenFlag  = accessListDirectoryRoleMappingsFlags.String("apikey-token", "", "")
 		accessListDirectoryRoleMappingsSessionTokenFlag = accessListDirectoryRoleMappingsFlags.String("session-token", "", "")
+
+		accessListDirectoryPeopleFlags            = flag.NewFlagSet("list-directory-people", flag.ExitOnError)
+		accessListDirectoryPeopleLimitFlag        = accessListDirectoryPeopleFlags.String("limit", "500", "")
+		accessListDirectoryPeopleCursorFlag       = accessListDirectoryPeopleFlags.String("cursor", "", "")
+		accessListDirectoryPeopleSessionTokenFlag = accessListDirectoryPeopleFlags.String("session-token", "", "")
 
 		accessSyncDirectoryGroupsFlags            = flag.NewFlagSet("sync-directory-groups", flag.ExitOnError)
 		accessSyncDirectoryGroupsApikeyTokenFlag  = accessSyncDirectoryGroupsFlags.String("apikey-token", "", "")
@@ -910,10 +915,11 @@ func ParseEndpoint(
 		authTransferOutRedirectFlag     = authTransferOutFlags.String("redirect", "", "")
 		authTransferOutSessionTokenFlag = authTransferOutFlags.String("session-token", "", "")
 
-		authTransferInFlags          = flag.NewFlagSet("transfer-in", flag.ExitOnError)
-		authTransferInSourceHostFlag = authTransferInFlags.String("source-host", "", "")
-		authTransferInCodeFlag       = authTransferInFlags.String("code", "", "")
-		authTransferInRedirectFlag   = authTransferInFlags.String("redirect", "", "")
+		authTransferInFlags              = flag.NewFlagSet("transfer-in", flag.ExitOnError)
+		authTransferInSourceHostFlag     = authTransferInFlags.String("source-host", "", "")
+		authTransferInCodeFlag           = authTransferInFlags.String("code", "", "")
+		authTransferInRedirectFlag       = authTransferInFlags.String("redirect", "", "")
+		authTransferInReplaceSessionFlag = authTransferInFlags.String("replace-session", "", "")
 
 		businessMemoriesFlags = flag.NewFlagSet("business-memories", flag.ContinueOnError)
 
@@ -4265,6 +4271,13 @@ func ParseEndpoint(
 		tunneledMcpListServerConnectionsApikeyTokenFlag      = tunneledMcpListServerConnectionsFlags.String("apikey-token", "", "")
 		tunneledMcpListServerConnectionsProjectSlugInputFlag = tunneledMcpListServerConnectionsFlags.String("project-slug-input", "", "")
 
+		tunneledMcpGetServerMetricsFlags                = flag.NewFlagSet("get-server-metrics", flag.ExitOnError)
+		tunneledMcpGetServerMetricsIDFlag               = tunneledMcpGetServerMetricsFlags.String("id", "REQUIRED", "")
+		tunneledMcpGetServerMetricsWindowFlag           = tunneledMcpGetServerMetricsFlags.String("window", "day", "")
+		tunneledMcpGetServerMetricsSessionTokenFlag     = tunneledMcpGetServerMetricsFlags.String("session-token", "", "")
+		tunneledMcpGetServerMetricsApikeyTokenFlag      = tunneledMcpGetServerMetricsFlags.String("apikey-token", "", "")
+		tunneledMcpGetServerMetricsProjectSlugInputFlag = tunneledMcpGetServerMetricsFlags.String("project-slug-input", "", "")
+
 		tunneledMcpUpdateServerFlags                = flag.NewFlagSet("update-server", flag.ExitOnError)
 		tunneledMcpUpdateServerBodyFlag             = tunneledMcpUpdateServerFlags.String("body", "REQUIRED", "")
 		tunneledMcpUpdateServerSessionTokenFlag     = tunneledMcpUpdateServerFlags.String("session-token", "", "")
@@ -5175,6 +5188,7 @@ func ParseEndpoint(
 	accessUpdateRoleFlags.Usage = accessUpdateRoleUsage
 	accessDeleteRoleFlags.Usage = accessDeleteRoleUsage
 	accessListDirectoryRoleMappingsFlags.Usage = accessListDirectoryRoleMappingsUsage
+	accessListDirectoryPeopleFlags.Usage = accessListDirectoryPeopleUsage
 	accessSyncDirectoryGroupsFlags.Usage = accessSyncDirectoryGroupsUsage
 	accessSetDirectoryRoleMappingFlags.Usage = accessSetDirectoryRoleMappingUsage
 	accessSetDirectoryRoleMappingsFlags.Usage = accessSetDirectoryRoleMappingsUsage
@@ -6037,6 +6051,7 @@ func ParseEndpoint(
 	tunneledMcpListServersFlags.Usage = tunneledMcpListServersUsage
 	tunneledMcpGetServerFlags.Usage = tunneledMcpGetServerUsage
 	tunneledMcpListServerConnectionsFlags.Usage = tunneledMcpListServerConnectionsUsage
+	tunneledMcpGetServerMetricsFlags.Usage = tunneledMcpGetServerMetricsUsage
 	tunneledMcpUpdateServerFlags.Usage = tunneledMcpUpdateServerUsage
 	tunneledMcpRotateServerKeyFlags.Usage = tunneledMcpRotateServerKeyUsage
 	tunneledMcpDeleteServerFlags.Usage = tunneledMcpDeleteServerUsage
@@ -6528,6 +6543,9 @@ func ParseEndpoint(
 
 			case "list-directory-role-mappings":
 				epf = accessListDirectoryRoleMappingsFlags
+
+			case "list-directory-people":
+				epf = accessListDirectoryPeopleFlags
 
 			case "sync-directory-groups":
 				epf = accessSyncDirectoryGroupsFlags
@@ -8957,6 +8975,9 @@ func ParseEndpoint(
 			case "list-server-connections":
 				epf = tunneledMcpListServerConnectionsFlags
 
+			case "get-server-metrics":
+				epf = tunneledMcpGetServerMetricsFlags
+
 			case "update-server":
 				epf = tunneledMcpUpdateServerFlags
 
@@ -9641,6 +9662,9 @@ func ParseEndpoint(
 			case "list-directory-role-mappings":
 				endpoint = c.ListDirectoryRoleMappings()
 				data, err = accessc.BuildListDirectoryRoleMappingsPayload(*accessListDirectoryRoleMappingsApikeyTokenFlag, *accessListDirectoryRoleMappingsSessionTokenFlag)
+			case "list-directory-people":
+				endpoint = c.ListDirectoryPeople()
+				data, err = accessc.BuildListDirectoryPeoplePayload(*accessListDirectoryPeopleLimitFlag, *accessListDirectoryPeopleCursorFlag, *accessListDirectoryPeopleSessionTokenFlag)
 			case "sync-directory-groups":
 				endpoint = c.SyncDirectoryGroups()
 				data, err = accessc.BuildSyncDirectoryGroupsPayload(*accessSyncDirectoryGroupsApikeyTokenFlag, *accessSyncDirectoryGroupsSessionTokenFlag)
@@ -10031,7 +10055,7 @@ func ParseEndpoint(
 				data, err = authc.BuildTransferOutPayload(*authTransferOutTargetHostFlag, *authTransferOutNonceFlag, *authTransferOutRedirectFlag, *authTransferOutSessionTokenFlag)
 			case "transfer-in":
 				endpoint = c.TransferIn()
-				data, err = authc.BuildTransferInPayload(*authTransferInSourceHostFlag, *authTransferInCodeFlag, *authTransferInRedirectFlag)
+				data, err = authc.BuildTransferInPayload(*authTransferInSourceHostFlag, *authTransferInCodeFlag, *authTransferInRedirectFlag, *authTransferInReplaceSessionFlag)
 			}
 		case "business-memories":
 			c := businessmemoriesc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -12096,6 +12120,9 @@ func ParseEndpoint(
 			case "list-server-connections":
 				endpoint = c.ListServerConnections()
 				data, err = tunneledmcpc.BuildListServerConnectionsPayload(*tunneledMcpListServerConnectionsIDFlag, *tunneledMcpListServerConnectionsSessionTokenFlag, *tunneledMcpListServerConnectionsApikeyTokenFlag, *tunneledMcpListServerConnectionsProjectSlugInputFlag)
+			case "get-server-metrics":
+				endpoint = c.GetServerMetrics()
+				data, err = tunneledmcpc.BuildGetServerMetricsPayload(*tunneledMcpGetServerMetricsIDFlag, *tunneledMcpGetServerMetricsWindowFlag, *tunneledMcpGetServerMetricsSessionTokenFlag, *tunneledMcpGetServerMetricsApikeyTokenFlag, *tunneledMcpGetServerMetricsProjectSlugInputFlag)
 			case "update-server":
 				endpoint = c.UpdateServer()
 				data, err = tunneledmcpc.BuildUpdateServerPayload(*tunneledMcpUpdateServerBodyFlag, *tunneledMcpUpdateServerSessionTokenFlag, *tunneledMcpUpdateServerApikeyTokenFlag, *tunneledMcpUpdateServerProjectSlugInputFlag)
@@ -12972,6 +12999,7 @@ func accessUsage() {
 	fmt.Fprintln(os.Stderr, `    update-role: Update an existing custom role.`)
 	fmt.Fprintln(os.Stderr, `    delete-role: Delete a custom role (system roles cannot be deleted).`)
 	fmt.Fprintln(os.Stderr, `    list-directory-role-mappings: List the organization's directory groups and attribute values, and the roles mapped to them.`)
+	fmt.Fprintln(os.Stderr, `    list-directory-people: List every live directory profile in the active organization with its name, groups and whether it belongs to a member. Requires an authenticated session authorized for org:admin, because it names people who are not members; API keys cannot enumerate it. Attribute values are not returned.`)
 	fmt.Fprintln(os.Stderr, `    sync-directory-groups: Fetch the organization's directory groups from WorkOS and save any that are new or changed.`)
 	fmt.Fprintln(os.Stderr, `    set-directory-role-mapping: Deprecated compatibility endpoint for older dashboard clients. Use setDirectoryRoleMappings. Rejects replacement when the source already grants multiple roles.`)
 	fmt.Fprintln(os.Stderr, `    set-directory-role-mappings: Replace the full set of roles granted by a directory group or attribute value. An empty role list removes all mappings for the source.`)
@@ -13135,6 +13163,28 @@ func accessListDirectoryRoleMappingsUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access list-directory-role-mappings --apikey-token \"abc123\" --session-token \"abc123\"")
+}
+
+func accessListDirectoryPeopleUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] access list-directory-people", os.Args[0])
+	fmt.Fprint(os.Stderr, " -limit INT")
+	fmt.Fprint(os.Stderr, " -cursor STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List every live directory profile in the active organization with its name, groups and whether it belongs to a member. Requires an authenticated session authorized for org:admin, because it names people who are not members; API keys cannot enumerate it. Attribute values are not returned.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -limit INT: `)
+	fmt.Fprintln(os.Stderr, `    -cursor STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access list-directory-people --limit 2 --cursor \"abc123\" --session-token \"abc123\"")
 }
 
 func accessSyncDirectoryGroupsUsage() {
@@ -15408,7 +15458,7 @@ func assistantsUpdateAssistantUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "assistants update-assistant --body '{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"instructions\": \"abc123\",\n      \"max_concurrency\": 1,\n      \"mcp_servers\": [\n         {\n            \"endpoint_slug\": \"abc123\",\n            \"environment_slug\": \"abc123\",\n            \"mcp_server_slug\": \"abc123\"\n         }\n      ],\n      \"model\": \"abc123\",\n      \"name\": \"abc123\",\n      \"status\": \"paused\",\n      \"toolsets\": [\n         {\n            \"environment_slug\": \"abc123\",\n            \"toolset_slug\": \"abc123\"\n         }\n      ],\n      \"warm_ttl_seconds\": 1\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "assistants update-assistant --body '{\n      \"expected_runtime_version\": 3,\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"instructions\": \"abc123\",\n      \"max_concurrency\": 1,\n      \"mcp_servers\": [\n         {\n            \"endpoint_slug\": \"abc123\",\n            \"environment_slug\": \"abc123\",\n            \"mcp_server_slug\": \"abc123\"\n         }\n      ],\n      \"model\": \"abc123\",\n      \"name\": \"abc123\",\n      \"runtime_version\": 3,\n      \"status\": \"paused\",\n      \"toolsets\": [\n         {\n            \"environment_slug\": \"abc123\",\n            \"toolset_slug\": \"abc123\"\n         }\n      ],\n      \"warm_ttl_seconds\": 1\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func assistantsDeleteAssistantUsage() {
@@ -15605,7 +15655,7 @@ func authUsage() {
 	fmt.Fprintln(os.Stderr, `    register: Register a new org for a user with their session information.`)
 	fmt.Fprintln(os.Stderr, `    info: Provides information about the current authentication status.`)
 	fmt.Fprintln(os.Stderr, `    transfer-out: Step 2/3 (authorize) of a cross-domain session transfer, on the source platform host. Reached from Step 1/3, transferIn's start mode on the target host; redirects to Step 3/3, transferIn's callback mode there. Authenticates the session from the session cookie or header, checks that its active organization's default host is the target, and stores a one-time transfer code bound to the browser's nonce. Only an ordinary session whose organization lives on the target host can transfer. On any failure the browser is sent to a login page with a signin_error code instead of an error. See the flow diagram in server/internal/auth/transfer.go.`)
-	fmt.Fprintln(os.Stderr, `    transfer-in: Steps 1/3 and 3/3 of a cross-domain session transfer, on the target platform host. Step 1/3 (start: source_host, no code) sets a short-lived cookie that binds the transfer to this browser and redirects to Step 2/3, transferOut on the source host. Step 3/3 (callback: code, no source_host) redeems the one-time code that transferOut issued, checks it against that cookie, and sets a new session cookie on this host. The cookie exists because a code alone would let anyone who holds one sign another person into the code's account (login CSRF). A request with both or neither, and any failed check, lands on this host's login page with a signin_error code; a failed callback never starts a new transfer. See the flow diagram in server/internal/auth/transfer.go.`)
+	fmt.Fprintln(os.Stderr, `    transfer-in: Steps 1/3 and 3/3 of a cross-domain session transfer, on the target platform host. Step 1/3 (start: source_host, no code) sets a short-lived cookie that binds the transfer to this browser and redirects to Step 2/3, transferOut on the source host. Step 3/3 (callback: code, no source_host) redeems the one-time code that transferOut issued, checks it against that cookie, and sets a new session cookie on this host, unless the browser already holds a valid session here for the same user and start mode did not set replace_session; that session is then kept. The cookie exists because a code alone would let anyone who holds one sign another person into the code's account (login CSRF). A request with both or neither, and any failed check, lands on this host's login page with a signin_error code; a failed callback never starts a new transfer. See the flow diagram in server/internal/auth/transfer.go.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s auth COMMAND --help\n", os.Args[0])
@@ -15800,20 +15850,22 @@ func authTransferInUsage() {
 	fmt.Fprint(os.Stderr, " -source-host STRING")
 	fmt.Fprint(os.Stderr, " -code STRING")
 	fmt.Fprint(os.Stderr, " -redirect STRING")
+	fmt.Fprint(os.Stderr, " -replace-session BOOL")
 	fmt.Fprintln(os.Stderr)
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Steps 1/3 and 3/3 of a cross-domain session transfer, on the target platform host. Step 1/3 (start: source_host, no code) sets a short-lived cookie that binds the transfer to this browser and redirects to Step 2/3, transferOut on the source host. Step 3/3 (callback: code, no source_host) redeems the one-time code that transferOut issued, checks it against that cookie, and sets a new session cookie on this host. The cookie exists because a code alone would let anyone who holds one sign another person into the code's account (login CSRF). A request with both or neither, and any failed check, lands on this host's login page with a signin_error code; a failed callback never starts a new transfer. See the flow diagram in server/internal/auth/transfer.go.`)
+	fmt.Fprintln(os.Stderr, `Steps 1/3 and 3/3 of a cross-domain session transfer, on the target platform host. Step 1/3 (start: source_host, no code) sets a short-lived cookie that binds the transfer to this browser and redirects to Step 2/3, transferOut on the source host. Step 3/3 (callback: code, no source_host) redeems the one-time code that transferOut issued, checks it against that cookie, and sets a new session cookie on this host, unless the browser already holds a valid session here for the same user and start mode did not set replace_session; that session is then kept. The cookie exists because a code alone would let anyone who holds one sign another person into the code's account (login CSRF). A request with both or neither, and any failed check, lands on this host's login page with a signin_error code; a failed callback never starts a new transfer. See the flow diagram in server/internal/auth/transfer.go.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -source-host STRING: `)
 	fmt.Fprintln(os.Stderr, `    -code STRING: `)
 	fmt.Fprintln(os.Stderr, `    -redirect STRING: `)
+	fmt.Fprintln(os.Stderr, `    -replace-session BOOL: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "auth transfer-in --source-host \"abc123\" --code \"abc123\" --redirect \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "auth transfer-in --source-host \"abc123\" --code \"abc123\" --redirect \"abc123\" --replace-session false")
 }
 
 // businessMemoriesUsage displays the usage of the business-memories command
@@ -30552,6 +30604,7 @@ func tunneledMcpUsage() {
 	fmt.Fprintln(os.Stderr, `    list-servers: List all tunneled MCP server sources for a project`)
 	fmt.Fprintln(os.Stderr, `    get-server: Get a tunneled MCP server by ID`)
 	fmt.Fprintln(os.Stderr, `    list-server-connections: List live tunnel connections for a tunneled MCP server`)
+	fmt.Fprintln(os.Stderr, `    get-server-metrics: Read seven-day payload-free tunnel activity aggregates`)
 	fmt.Fprintln(os.Stderr, `    update-server: Update a tunneled MCP server source`)
 	fmt.Fprintln(os.Stderr, `    rotate-server-key: Rotate a tunneled MCP server source key. Returns the new tunnel key once.`)
 	fmt.Fprintln(os.Stderr, `    delete-server: Delete a tunneled MCP server source`)
@@ -30651,6 +30704,32 @@ func tunneledMcpListServerConnectionsUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "tunneled-mcp list-server-connections --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func tunneledMcpGetServerMetricsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] tunneled-mcp get-server-metrics", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -window STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Read seven-day payload-free tunnel activity aggregates`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -window STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "tunneled-mcp get-server-metrics --id \"550e8400-e29b-41d4-a716-446655440000\" --window \"day\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func tunneledMcpUpdateServerUsage() {

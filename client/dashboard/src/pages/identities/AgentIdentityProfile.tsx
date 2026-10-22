@@ -22,6 +22,38 @@ import { IdentityPanel } from "./IdentityPanel";
 import { encodeIdentityUrn } from "@/lib/identity-urn";
 import { IdentitySection } from "./IdentitySection";
 
+/**
+ * Edit and rename, for the page header: they act on the agent itself, not on
+ * any one section, so they sit with its name rather than under a tab.
+ */
+export function AgentHeaderActions({
+  agent,
+  refresh,
+}: {
+  agent: ManagedAgent;
+  refresh: () => void;
+}): JSX.Element {
+  const routes = useRoutes();
+  return (
+    <div className="-ml-2 flex items-center gap-1">
+      {/* Changing what the agent reaches is the same set of questions it
+          was registered with, so it is the same flow. */}
+      {/* Same gate as rename: saving the edit flow needs write access. */}
+      {agent.permissions.write && (
+        <Button asChild variant="tertiary" size="xs">
+          <Link to={routes.identities.agents.edit.href(agent.id)}>Edit</Link>
+        </Button>
+      )}
+      <RenameAgentButton
+        agent={agent}
+        refresh={refresh}
+        variant="tertiary"
+        size="xs"
+      />
+    </div>
+  );
+}
+
 /** Agent data is keyed by its principal, never by its human owner's identifiers. */
 export function AgentIdentityProfile({
   agent,
@@ -193,18 +225,6 @@ export function AgentIdentityProfile({
         <IdentitySection
           title="Overview"
           meta="What this agent has been doing, and who answers for it"
-          action={
-            <div className="flex items-center gap-2">
-              {/* Changing what the agent reaches is the same set of
-                  questions it was registered with, so it is the same flow. */}
-              <Button asChild variant="secondary">
-                <Link to={routes.identities.agents.edit.href(agent.id)}>
-                  Edit
-                </Link>
-              </Button>
-              <RenameAgentButton agent={agent} refresh={refresh} />
-            </div>
-          }
         >
           {/* Who answers for it and whether it may act, as one line. The
               rest of what this card used to hold is said by the header above
@@ -227,7 +247,7 @@ export function AgentIdentityProfile({
               encodeIdentityUrn(`agent:${agent.id}`),
             )}${params.toString() ? `?${params}` : ""}`}
           >
-            <ManagedAgentSessions agent={agent} variant="bare" limit={3} />
+            <ManagedAgentSessions agent={agent} variant="panel" limit={3} />
           </IdentityPanel>
           <AgentIdentityAudit agent={agent} subject />
         </IdentitySection>

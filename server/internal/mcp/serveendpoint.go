@@ -838,9 +838,14 @@ func (s *Service) serveTunneledBackend(
 		UpstreamAuth:       upstream.Token,
 		WWWAuthenticate:    wwwAuthenticate,
 		Selection:          selection,
+		Request:            r,
 	}, buildOptions...)
 	if err != nil {
 		return err
+	}
+	// Only observed traffic needs attribution; otherwise skip the Redis work.
+	if p.RequestObserver != nil {
+		p.SessionClients = s.tunnelClientFamilies.forServer(logger, endpoint.ProjectID, mcpServer.ID)
 	}
 	renewal := s.renewClientCredentialOnRejection(p, logger, upstream)
 	rejectSurvivingClientCredentialRejection(w, p, logger, upstream, renewal)

@@ -12,8 +12,11 @@ export function ManagedAgentSessions({
   limit,
 }: {
   agent: ManagedAgent;
-  /** "bare" drops the section chrome for a caller that supplies its own. */
-  variant?: "section" | "bare";
+  /**
+   * "bare" drops the section chrome for a caller that supplies its own.
+   * "panel" also drops the table's frame, inside a bordered panel.
+   */
+  variant?: "section" | "bare" | "panel";
   /**
    * Show at most this many sessions and drop the pager. For a summary on
    * another page, whose "Show all" goes to the section that owns them.

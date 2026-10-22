@@ -423,6 +423,18 @@ func (q *Queries) CountOutboxEntriesByEventType(ctx context.Context, eventType s
 	return count, err
 }
 
+const countOutboxRows = `-- name: CountOutboxRows :one
+SELECT count(*) FROM outbox
+`
+
+// Counts all legacy events in an isolated cloned test database.
+func (q *Queries) CountOutboxRows(ctx context.Context) (int64, error) {
+	row := q.db.QueryRow(ctx, countOutboxRows)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countPendingSignInRevocationDeliveries = `-- name: CountPendingSignInRevocationDeliveries :one
 SELECT count(*)
 FROM sign_in_revocation_deliveries
@@ -1348,6 +1360,22 @@ type EnablePreparationFixtureCIMDParams struct {
 
 func (q *Queries) EnablePreparationFixtureCIMD(ctx context.Context, arg EnablePreparationFixtureCIMDParams) error {
 	_, err := q.db.Exec(ctx, enablePreparationFixtureCIMD, arg.ID, arg.ProjectID)
+	return err
+}
+
+const expireAssistantInferenceCredentialForTest = `-- name: ExpireAssistantInferenceCredentialForTest :exec
+UPDATE api_keys SET expires_at = clock_timestamp() - interval '1 hour'
+WHERE organization_id = $1 AND id IN (SELECT c.api_key_id FROM assistant_inference_credentials c WHERE c.project_id = $2 AND c.id = $3)
+`
+
+type ExpireAssistantInferenceCredentialForTestParams struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+	ID             uuid.UUID
+}
+
+func (q *Queries) ExpireAssistantInferenceCredentialForTest(ctx context.Context, arg ExpireAssistantInferenceCredentialForTestParams) error {
+	_, err := q.db.Exec(ctx, expireAssistantInferenceCredentialForTest, arg.OrganizationID, arg.ProjectID, arg.ID)
 	return err
 }
 

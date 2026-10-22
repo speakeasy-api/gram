@@ -62,6 +62,11 @@ type Session struct {
 	// session. Forwarded as the exact-target header so the gateway never
 	// spills the request to a sibling agent.
 	AgentSessionID string `json:"agent_session_id"`
+	// ClientFamily is the tunnel metrics family classified from the
+	// clientInfo.name the session reported at initialize, never the name
+	// itself. Empty when it reported none, and in records written before it
+	// existed; requests then fall back to their User-Agent.
+	ClientFamily string `json:"client_family,omitempty"`
 }
 
 // Store reads and writes anonymous tunnel session state in Redis.

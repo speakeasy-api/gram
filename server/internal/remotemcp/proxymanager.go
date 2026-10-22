@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"net/http"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -26,6 +27,7 @@ import (
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/toolcallobserver"
+	"github.com/speakeasy-api/gram/tunnel/metrics"
 )
 
 // ProxyManager builds configured remote-MCP proxies wired up with the
@@ -99,6 +101,7 @@ func WithHeaderPolicy(policy proxy.HeaderPolicy) BuildOption {
 }
 
 type ProxyManager struct {
+	TunnelMetrics  *metrics.Collector
 	logger         *slog.Logger
 	tracer         trace.Tracer
 	db             *pgxpool.Pool
@@ -171,6 +174,7 @@ func NewProxyManager(
 	}
 
 	return &ProxyManager{
+		TunnelMetrics:                         nil,
 		logger:                                logger,
 		tracer:                                tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/remotemcp"),
 		db:                                    db,
@@ -402,7 +406,15 @@ func (f *ProxyManager) BuildTarget(
 		toolsCallResponseInterceptors = append(toolsCallResponseInterceptors, NewPlatformMCPSelectedUseInterceptor(f.platformMCPSelectedUseRecorder, identity))
 	}
 
+	var observer proxy.RequestObserver
+	if f.TunnelMetrics != nil && identity.TunneledMCPServerID != "" {
+		observer = func(method, client, outcome string, elapsed time.Duration) {
+			f.TunnelMetrics.Observe(identity.TunneledMCPServerID, identity.McpServerID, method, client, outcome, elapsed)
+		}
+	}
 	return &proxy.Proxy{
+		RequestObserver:             observer,
+		SessionClients:              nil,
 		GuardianPolicy:              f.guardianPolicy,
 		GuardianClientOptions:       nil,
 		Logger:                      logger,
@@ -434,6 +446,9 @@ func (f *ProxyManager) BuildTarget(
 		ToolsCallPreForwardInterceptors: toolsCallPreForwardInterceptors,
 		ToolsCallRequestInterceptors:    toolsCallReqInterceptors,
 		ToolsCallResponseInterceptors:   toolsCallResponseInterceptors,
+		// Only the log row: a call that never got a reply has nothing to
+		// bill, scan, or record as a selected use.
+		ToolsCallFailureInterceptors: []proxy.ToolsCallFailureInterceptor{clickHouseLogInterceptor},
 		ToolsListRequestInterceptors: []proxy.ToolsListRequestInterceptor{
 			NewToolsListPostHogEventInterceptor(f.posthog, identity, logger),
 		},

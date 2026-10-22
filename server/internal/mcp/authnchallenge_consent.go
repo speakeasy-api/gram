@@ -29,6 +29,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/consentpage"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
@@ -51,15 +52,8 @@ import (
 //go:embed consent_template.html
 var consentTemplateHTML string
 
-// consentLogoHTML defines the "speakeasyWordmark" template. Kept in its own
-// file because it is generated from the dashboard's GramLogo component and is
-// almost entirely path data.
-//
-//go:embed consent_logo.html
-var consentLogoHTML string
-
 var consentTemplate = template.Must(
-	template.Must(template.New("consent").Parse(consentTemplateHTML)).Parse(consentLogoHTML),
+	template.Must(template.New("consent").Parse(consentTemplateHTML)).Parse(consentpage.LogoTemplate),
 )
 
 // consentScriptData is the consent page's client-side script. It is served
@@ -783,7 +777,7 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		ConsentToolsDeferred:    inventoryDeferred,
 		ValidationDeadlineMS:    validationDeadlineMS,
 		ConnectedCardCount:      connectedCardCount,
-		Styles:                  consentPageStyles,
+		Styles:                  consentpage.Styles,
 		SelectedSessionDuration: selectedSessionDuration(durationOptions),
 		AgentSelectionEnabled:   agentSelectionEnabled,
 		AgentOptions:            agentOptions,

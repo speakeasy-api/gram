@@ -174,6 +174,35 @@ var _ = Service("access", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DirectoryRoleMappings"}`)
 	})
 
+	Method("listDirectoryPeople", func() {
+		Description("List every live directory profile in the active organization with its name, groups and whether it belongs to a member. Requires an authenticated session authorized for org:admin, because it names people who are not members; API keys cannot enumerate it. Attribute values are not returned.")
+		Security(security.Session)
+
+		Payload(func() {
+			Attribute("limit", Int, "Maximum number of people to return.", func() {
+				Default(500)
+				Minimum(1)
+				Maximum(1000)
+			})
+			Attribute("cursor", String, "Cursor for the next page of results.")
+			security.SessionPayload()
+		})
+
+		Result(ListDirectoryPeopleResult)
+
+		HTTP(func() {
+			GET("/rpc/access.listDirectoryPeople")
+			Param("limit")
+			Param("cursor")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listDirectoryPeople")
+		Meta("openapi:extension:x-speakeasy-name-override", "listDirectoryPeople")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DirectoryPeople"}`)
+	})
+
 	Method("syncDirectoryGroups", func() {
 		Description("Fetch the organization's directory groups from WorkOS and save any that are new or changed.")
 		Security(security.ByKey, func() {
@@ -2070,6 +2099,44 @@ var ListDirectoryRoleMappingsResult = Type("ListDirectoryRoleMappingsResult", fu
 	Attribute("groups", ArrayOf(DirectoryGroupOptionModel), "Active directory groups in the organization.")
 	Attribute("attributes", ArrayOf(DirectoryAttributeOptionModel), "Distinct attribute values set on active directory users.")
 	Attribute("mappings", ArrayOf(DirectoryRoleMappingModel), "Live directory role mappings.")
+})
+
+var DirectoryPersonGroupModel = Type("DirectoryPersonGroup", func() {
+	Required("id", "name")
+
+	Attribute("id", String, "Directory group ID.", func() { Format(FormatUUID) })
+	Attribute("name", String, "Directory group name.")
+})
+
+var DirectoryPersonModel = Type("DirectoryPerson", func() {
+	Required("id", "email", "state", "groups")
+
+	Attribute("id", String, "Directory profile ID.", func() { Format(FormatUUID) })
+	Attribute("email", String, "Email the directory reports for the profile. Empty when the directory reports none.")
+	Attribute("first_name", String, "First name the directory reports, when it reports one.")
+	Attribute("last_name", String, "Last name the directory reports, when it reports one.")
+	Attribute("state", String, "How the profile relates to Speakeasy accounts. member: linked to, or the only email match of, a member of this organization. account_not_member: an account exists but is not a member here. not_signed_in: no matching account. ambiguous_email: the email matches more than one profile or account, so it is never matched.", func() {
+		Enum("member", "account_not_member", "not_signed_in", "ambiguous_email")
+	})
+	Attribute("user_id", String, "The matched Speakeasy user ID. Present only for member and account_not_member.")
+	Attribute("groups", ArrayOf(DirectoryPersonGroupModel), "Live directory groups the profile belongs to.")
+})
+
+var DirectoryPeopleStateCountsModel = Type("DirectoryPeopleStateCounts", func() {
+	Required("member", "account_not_member", "not_signed_in", "ambiguous_email")
+
+	Attribute("member", Int64, "Profiles in the member state.")
+	Attribute("account_not_member", Int64, "Profiles in the account_not_member state.")
+	Attribute("not_signed_in", Int64, "Profiles in the not_signed_in state.")
+	Attribute("ambiguous_email", Int64, "Profiles in the ambiguous_email state.")
+})
+
+var ListDirectoryPeopleResult = Type("ListDirectoryPeopleResult", func() {
+	Required("people", "counts")
+
+	Attribute("people", ArrayOf(DirectoryPersonModel), "One page of directory profiles, ordered by profile ID.")
+	Attribute("counts", DirectoryPeopleStateCountsModel, "Profiles per state across the whole organization, not just this page.")
+	Attribute("next_cursor", String, "Cursor for the next page. Absent on the last page.")
 })
 
 var SyncDirectoryGroupsResult = Type("SyncDirectoryGroupsResult", func() {

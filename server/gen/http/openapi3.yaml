@@ -9585,6 +9585,105 @@ paths:
             x-speakeasy-name-override: listChallenges
             x-speakeasy-react-hook:
                 name: Challenges
+    /rpc/access.listDirectoryPeople:
+        get:
+            description: List every live directory profile in the active organization with its name, groups and whether it belongs to a member. Requires an authenticated session authorized for org:admin, because it names people who are not members; API keys cannot enumerate it. Attribute values are not returned.
+            operationId: listDirectoryPeople
+            parameters:
+                - allowEmptyValue: true
+                  description: Maximum number of people to return.
+                  in: query
+                  name: limit
+                  schema:
+                    default: 500
+                    description: Maximum number of people to return.
+                    format: int64
+                    maximum: 1000
+                    minimum: 1
+                    type: integer
+                - allowEmptyValue: true
+                  description: Cursor for the next page of results.
+                  in: query
+                  name: cursor
+                  schema:
+                    description: Cursor for the next page of results.
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListDirectoryPeopleResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: listDirectoryPeople access
+            tags:
+                - access
+            x-speakeasy-name-override: listDirectoryPeople
+            x-speakeasy-react-hook:
+                name: DirectoryPeople
     /rpc/access.listDirectoryReviewItems:
         get:
             description: 'List the directory changes waiting for an admin decision, oldest first: a directory group first seen after review started, with no mapping; a new value of an attribute key that already has mappings; and a mapped group or attribute value that has gone from the directory. Each item carries the same proposal and version as previewDirectoryRoleSetup, for resolveDirectoryReviewItem. Nothing is written.'
@@ -22275,7 +22374,7 @@ paths:
                 name: SwitchScopes
     /rpc/auth.transferIn:
         get:
-            description: 'Steps 1/3 and 3/3 of a cross-domain session transfer, on the target platform host. Step 1/3 (start: source_host, no code) sets a short-lived cookie that binds the transfer to this browser and redirects to Step 2/3, transferOut on the source host. Step 3/3 (callback: code, no source_host) redeems the one-time code that transferOut issued, checks it against that cookie, and sets a new session cookie on this host. The cookie exists because a code alone would let anyone who holds one sign another person into the code''s account (login CSRF). A request with both or neither, and any failed check, lands on this host''s login page with a signin_error code; a failed callback never starts a new transfer. See the flow diagram in server/internal/auth/transfer.go.'
+            description: 'Steps 1/3 and 3/3 of a cross-domain session transfer, on the target platform host. Step 1/3 (start: source_host, no code) sets a short-lived cookie that binds the transfer to this browser and redirects to Step 2/3, transferOut on the source host. Step 3/3 (callback: code, no source_host) redeems the one-time code that transferOut issued, checks it against that cookie, and sets a new session cookie on this host, unless the browser already holds a valid session here for the same user and start mode did not set replace_session; that session is then kept. The cookie exists because a code alone would let anyone who holds one sign another person into the code''s account (login CSRF). A request with both or neither, and any failed check, lands on this host''s login page with a signin_error code; a failed callback never starts a new transfer. See the flow diagram in server/internal/auth/transfer.go.'
             operationId: authTransferIn
             parameters:
                 - allowEmptyValue: true
@@ -22299,6 +22398,13 @@ paths:
                   schema:
                     description: Optional URL path to land on once the session is established on this host
                     type: string
+                - allowEmptyValue: true
+                  description: 'Start mode: replace a session this browser already holds on this host for the same user. Without it, the callback keeps that session and its organization, so a stale source session cannot undo an organization switch made here. Set it right after switching organization on the source host.'
+                  in: query
+                  name: replace_session
+                  schema:
+                    description: 'Start mode: replace a session this browser already holds on this host for the same user. Without it, the callback keeps that session and its organization, so a stale source session cannot undo an organization switch made here. Set it right after switching organization on the source host.'
+                    type: boolean
             responses:
                 "307":
                     description: Temporary Redirect response.
@@ -22314,9 +22420,9 @@ paths:
                                 description: 'The URL to redirect to: the source host''s transferOut (start mode), the requested page (callback mode), or this host''s login page when a check fails'
                                 type: string
                         Set-Cookie:
-                            description: The new authentication session on this host. Set only when callback mode succeeds.
+                            description: The new authentication session on this host. Set only when callback mode mints one.
                             schema:
-                                description: The new authentication session on this host. Set only when callback mode succeeds.
+                                description: The new authentication session on this host. Set only when callback mode mints one.
                                 type: string
                 "400":
                     content:
@@ -81003,6 +81109,121 @@ paths:
             x-speakeasy-name-override: getServer
             x-speakeasy-react-hook:
                 name: GetTunneledMcpServer
+    /rpc/tunneledMcp.getServerMetrics:
+        get:
+            description: Read seven-day payload-free tunnel activity aggregates
+            operationId: getTunneledMcpServerMetrics
+            parameters:
+                - allowEmptyValue: true
+                  in: query
+                  name: id
+                  required: true
+                  schema:
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  in: query
+                  name: window
+                  schema:
+                    default: day
+                    enum:
+                        - hour
+                        - day
+                        - week
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/TunnelMetrics'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: getServerMetrics tunneledMcp
+            tags:
+                - tunneledMcp
+            x-speakeasy-name-override: getServerMetrics
+            x-speakeasy-react-hook:
+                name: GetTunneledMcpServerMetrics
     /rpc/tunneledMcp.listServerConnections:
         get:
             description: List live tunnel connections for a tunneled MCP server
@@ -93016,6 +93237,13 @@ components:
                     type: string
                     description: The project ID owning the assistant.
                     format: uuid
+                runtime_version:
+                    type: integer
+                    description: 'Desired runtime protocol version: 2 is the default runtime, 3 is Kit. Runtime changes require a settled assistant and available destination.'
+                    enum:
+                        - 2
+                        - 3
+                    format: int64
                 skills:
                     type: array
                     items:
@@ -93051,6 +93279,7 @@ components:
                 - skills
                 - warm_ttl_seconds
                 - max_concurrency
+                - runtime_version
                 - status
                 - created_at
                 - updated_at
@@ -98607,6 +98836,80 @@ components:
                 - id
                 - name
                 - member_count
+        DirectoryPeopleStateCounts:
+            type: object
+            properties:
+                account_not_member:
+                    type: integer
+                    description: Profiles in the account_not_member state.
+                    format: int64
+                ambiguous_email:
+                    type: integer
+                    description: Profiles in the ambiguous_email state.
+                    format: int64
+                member:
+                    type: integer
+                    description: Profiles in the member state.
+                    format: int64
+                not_signed_in:
+                    type: integer
+                    description: Profiles in the not_signed_in state.
+                    format: int64
+            required:
+                - member
+                - account_not_member
+                - not_signed_in
+                - ambiguous_email
+        DirectoryPerson:
+            type: object
+            properties:
+                email:
+                    type: string
+                    description: Email the directory reports for the profile. Empty when the directory reports none.
+                first_name:
+                    type: string
+                    description: First name the directory reports, when it reports one.
+                groups:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/DirectoryPersonGroup'
+                    description: Live directory groups the profile belongs to.
+                id:
+                    type: string
+                    description: Directory profile ID.
+                    format: uuid
+                last_name:
+                    type: string
+                    description: Last name the directory reports, when it reports one.
+                state:
+                    type: string
+                    description: 'How the profile relates to Speakeasy accounts. member: linked to, or the only email match of, a member of this organization. account_not_member: an account exists but is not a member here. not_signed_in: no matching account. ambiguous_email: the email matches more than one profile or account, so it is never matched.'
+                    enum:
+                        - member
+                        - account_not_member
+                        - not_signed_in
+                        - ambiguous_email
+                user_id:
+                    type: string
+                    description: The matched Speakeasy user ID. Present only for member and account_not_member.
+            required:
+                - id
+                - email
+                - state
+                - groups
+        DirectoryPersonGroup:
+            type: object
+            properties:
+                id:
+                    type: string
+                    description: Directory group ID.
+                    format: uuid
+                name:
+                    type: string
+                    description: Directory group name.
+            required:
+                - id
+                - name
         DirectoryReviewItem:
             type: object
             properties:
@@ -104838,6 +105141,22 @@ components:
                 - organization_id
                 - provider
                 - schedules
+        ListDirectoryPeopleResult:
+            type: object
+            properties:
+                counts:
+                    $ref: '#/components/schemas/DirectoryPeopleStateCounts'
+                next_cursor:
+                    type: string
+                    description: Cursor for the next page. Absent on the last page.
+                people:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/DirectoryPerson'
+                    description: One page of directory profiles, ordered by profile ID.
+            required:
+                - people
+                - counts
         ListDirectoryReviewItemsResult:
             type: object
             properties:
@@ -122368,6 +122687,230 @@ components:
                 - output_tokens
                 - cache_creation_tokens
                 - total_tokens
+        TunnelClientCount:
+            type: object
+            properties:
+                family:
+                    type: string
+                requests:
+                    type: integer
+                    format: int64
+            required:
+                - family
+                - requests
+        TunnelDiagnosticStep:
+            type: object
+            properties:
+                duration_ms:
+                    type: integer
+                    description: Elapsed probe time in milliseconds
+                    format: int64
+                failure:
+                    type: string
+                    description: Bounded failure category, never raw error text
+                state:
+                    type: string
+                    description: Probe state
+                    enum:
+                        - pass
+                        - fail
+                        - not_applicable
+                        - not_tested
+            required:
+                - state
+                - duration_ms
+                - failure
+        TunnelDiagnostics:
+            type: object
+            properties:
+                consecutive_failures:
+                    type: integer
+                    description: Consecutive failed transport probes
+                    format: int64
+                dns:
+                    $ref: '#/components/schemas/TunnelDiagnosticStep'
+                http_progress:
+                    $ref: '#/components/schemas/TunnelHTTPProgress'
+                last_http_response_age_ms:
+                    type: integer
+                    description: HTTP response age at view time, -1 if absent
+                    format: int64
+                last_http_status:
+                    type: integer
+                    description: Last observed HTTP status, including authentication challenges
+                    format: int64
+                last_transport_error:
+                    type: string
+                    description: Last transport failure category
+                last_transport_error_age_ms:
+                    type: integer
+                    description: Transport failure age at view time, -1 if absent
+                    format: int64
+                received_at:
+                    type: string
+                    description: Gateway receipt time
+                    format: date-time
+                requests_total:
+                    type: integer
+                    description: HTTP attempts since agent process start
+                    format: int64
+                sample_age_ms:
+                    type: integer
+                    description: Probe age at view time, -1 if never sampled
+                    format: int64
+                state:
+                    type: string
+                    description: Diagnostic collection state
+                    enum:
+                        - pending
+                        - available
+                        - stale
+                        - unavailable
+                        - unsupported
+                        - disabled
+                target_state:
+                    type: string
+                    description: Reachable means transport only, not MCP success.
+                    enum:
+                        - pending
+                        - reachable
+                        - unreachable
+                        - unknown
+                tcp:
+                    $ref: '#/components/schemas/TunnelDiagnosticStep'
+                tls:
+                    $ref: '#/components/schemas/TunnelDiagnosticStep'
+                transport_errors_total:
+                    type: integer
+                    description: Transport errors since agent process start
+                    format: int64
+            required:
+                - state
+        TunnelHTTPProgress:
+            type: object
+            properties:
+                open_responses:
+                    type: integer
+                    description: Open HTTP response bodies at the last sample; long-lived SSE may be expected
+                    format: int64
+                waiting_headers:
+                    type: integer
+                    description: Requests awaiting final HTTP response headers at the last sample
+                    format: int64
+            required:
+                - waiting_headers
+                - open_responses
+        TunnelMetricPoint:
+            type: object
+            properties:
+                active_requests:
+                    type: number
+                    format: double
+                canceled:
+                    type: integer
+                    format: int64
+                collection_partial:
+                    type: boolean
+                    description: An observed producer reported aggregate loss since its last restart
+                connections:
+                    type: number
+                    description: Average of time-aligned sums of observed gateway connections. Missing owners are not zero.
+                    format: double
+                connections_opened:
+                    type: integer
+                    format: int64
+                consumer_sessions:
+                    type: number
+                    format: double
+                coverage_samples:
+                    type: integer
+                    description: Number of observed 15-second gateway sampling slots
+                    format: int64
+                errors:
+                    type: integer
+                    description: Terminal errors completed in this bucket
+                    format: int64
+                incomplete:
+                    type: integer
+                    format: int64
+                other_requests:
+                    type: integer
+                    description: Other observed MCP request attempts
+                    format: int64
+                p50_ms:
+                    type: integer
+                    description: Histogram upper bound for median completion latency, -1 means above 60 seconds
+                    format: int64
+                p95_ms:
+                    type: integer
+                    description: Histogram upper bound for p95 completion latency, -1 means above 60 seconds
+                    format: int64
+                rejected:
+                    type: integer
+                    description: Requests Speakeasy rejected before they reached the MCP server, for example by policy. Not counted as errors.
+                    format: int64
+                request_coverage_samples:
+                    type: integer
+                    description: Observed producer-minute heartbeats; proves only observed coverage, not every replica
+                    format: int64
+                successes:
+                    type: integer
+                    description: Terminal MCP successes completed in this bucket
+                    format: int64
+                time:
+                    type: string
+                    format: date-time
+                tool_calls:
+                    type: integer
+                    description: Observed tools/call attempts
+                    format: int64
+                tools_list:
+                    type: integer
+                    description: Observed tools/list attempts
+                    format: int64
+            required:
+                - time
+                - coverage_samples
+                - request_coverage_samples
+                - collection_partial
+        TunnelMetrics:
+            type: object
+            properties:
+                active_servers:
+                    type: integer
+                    description: Distinct fronting MCP servers with requests in this range
+                    format: int64
+                bucket_seconds:
+                    type: integer
+                    format: int64
+                clients:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/TunnelClientCount'
+                last_sample_at:
+                    type: string
+                    format: date-time
+                observed_at:
+                    type: string
+                    format: date-time
+                points:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/TunnelMetricPoint'
+                state:
+                    type: string
+                    description: History availability
+                    enum:
+                        - available
+                        - unavailable
+                        - too_large
+            required:
+                - state
+                - observed_at
+                - bucket_seconds
+                - points
+                - clients
+                - active_servers
         TunneledMcpConnection:
             type: object
             properties:
@@ -122386,6 +122929,8 @@ components:
                     type: string
                     description: When this tunnel session connected
                     format: date-time
+                diagnostics:
+                    $ref: '#/components/schemas/TunnelDiagnostics'
                 gateway_session_id:
                     type: string
                     description: Gateway session ID for a live tunnel connection
@@ -122404,6 +122949,9 @@ components:
                 service_version:
                     type: string
                     description: Customer-declared version of the MCP service behind this tunnel connection
+                target_display:
+                    type: string
+                    description: Agent target scheme, hostname and port. The path, credentials, query and fragment are never shown, because some MCP servers put secrets in the path.
             required:
                 - gateway_session_id
                 - service_version
@@ -122514,11 +123062,18 @@ components:
                     type: integer
                     description: Total MCP consumer sessions currently pinned across active tunnel connections
                     format: int64
+                collection_state:
+                    type: string
+                    description: 'available or unavailable: whether live connection storage could be read'
                 connections:
                     type: array
                     items:
                         $ref: '#/components/schemas/TunneledMcpConnection'
                     description: Live tunnel connections currently visible in Redis
+                observed_at:
+                    type: string
+                    description: Server time when this view was read
+                    format: date-time
             description: Live connection details for a tunneled MCP server
             required:
                 - connections
@@ -122793,6 +123348,13 @@ components:
         UpdateAssistantForm:
             type: object
             properties:
+                expected_runtime_version:
+                    type: integer
+                    description: The runtime version read before requesting a switch. Required with runtime_version; conflicts require a fresh read.
+                    enum:
+                        - 2
+                        - 3
+                    format: int64
                 id:
                     type: string
                     description: The assistant ID.
@@ -122815,6 +123377,13 @@ components:
                 name:
                     type: string
                     description: The assistant name.
+                runtime_version:
+                    type: integer
+                    description: 'Desired runtime protocol: 2 for the default runtime, 3 for Kit. Switching requires the assistant and all background work to be settled.'
+                    enum:
+                        - 2
+                        - 3
+                    format: int64
                 status:
                     type: string
                     description: The assistant status.

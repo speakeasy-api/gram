@@ -184,6 +184,10 @@ Like the attachment above, every row has invalid ciphertext, no refresh token
 and auto-refresh disabled; they are display-only. IDs derive from
 `Spec.NameSeed` (`gram-demo-validated-session-<n>`).
 
+## Tunnel source observability
+
+The Private inventory tunnel source has one linked private MCP server and deterministic 24-hour request/connection history with a recent gap. It has no connected agent. Live HTTP progress is never seeded as fresh evidence. Open its Overview and verify charts, the gap, and the no-agent diagnostic state.
+
 ## Local only (RunLocalFixtures, never the demo org)
 
 These come from `server/internal/demoseed/local.go` after the seed, so they are
@@ -314,6 +318,15 @@ The Default project contains its Everyone Default plugin and a role-only plugin 
 
 AIM-409 assistant fixtures use one ordinary project-pinned trust registration (nonempty illustrative platform issuer/JWKS URLs, no wildcard admission), exact root admission/assignment, and complete generation-1 binding mirror tuples. The fifth managed agent belongs only to the bound assistant and has no grants or upstream credentials. Dashboard roots are durable, not per-wake. The demo trust URLs are inert display fixtures; runtime creation instead uses the deployment's configured Speakeasy issuer and existing JWKS. Browser verification pending.
 
+### Assistants: runtime selection
+
+Seeded assistants retain `runtime_version = 2`: the assistant insert omits this
+column and uses its database default. The Runtime row must display **Default**.
+No seed data change is needed to populate this row. Do not opt demo assistants
+into Kit or provision runtime credentials. When the feature flag hides the
+selector, the persisted runtime selection must remain unchanged; hiding the
+control is not a runtime migration.
+
 ### Optional private-network onboarding
 
 The `private-network` setup task is catalog-backed and hidden by default, including
@@ -346,3 +359,5 @@ No Stripe subscription, promotion, or local billing settings are seeded for it.
 Browser verification: [~] — follow check 30 in `seed/demo/verify.md`.
 
 The seeded gateway uses Progressive discovery. Settings shows this default and Inspect can reconnect in Direct mode to show qualified member tools. Choosing a mode in Inspect leaves the gateway default unchanged.
+
+Tunnel observability: [x] seeded and browser-verified for all three ranges, the data table, gaps, and no-agent state.

@@ -541,6 +541,7 @@ func NewTemporalWorker(
 
 	temporalWorker.RegisterActivity(activities.ProcessDeployment)
 	temporalWorker.RegisterActivity(activities.TransitionDeployment)
+	temporalWorker.RegisterActivity(activities.CompleteDeploymentWithExpectedActive)
 	temporalWorker.RegisterActivity(activities.ProvisionFunctionsAccess)
 	temporalWorker.RegisterActivity(activities.DeployFunctionRunners)
 	temporalWorker.RegisterActivity(activities.ReapFlyApps)
@@ -693,6 +694,7 @@ func NewTemporalWorker(
 	})
 
 	temporalWorker.RegisterWorkflow(ProcessDeploymentWorkflow)
+	temporalWorker.RegisterWorkflow(ProcessGuardedDeploymentWorkflow)
 	temporalWorker.RegisterWorkflow(FunctionsReaperWorkflow)
 	temporalWorker.RegisterWorkflow(OpenrouterKeyRefreshWorkflow)
 	temporalWorker.RegisterWorkflow(OpenRouterSpendCapWorkflow)

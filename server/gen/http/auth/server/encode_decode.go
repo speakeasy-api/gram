@@ -12,6 +12,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"unicode/utf8"
 
@@ -1903,9 +1904,11 @@ func DecodeTransferInRequest(mux goahttp.Muxer, decoder func(*http.Request) goah
 	return func(r *http.Request) (*auth.TransferInPayload, error) {
 		var payload *auth.TransferInPayload
 		var (
-			sourceHost *string
-			code       *string
-			redirect   *string
+			sourceHost     *string
+			code           *string
+			redirect       *string
+			replaceSession *bool
+			err            error
 		)
 		qp := r.URL.Query()
 		sourceHostRaw := qp.Get("source_host")
@@ -1920,7 +1923,20 @@ func DecodeTransferInRequest(mux goahttp.Muxer, decoder func(*http.Request) goah
 		if redirectRaw != "" {
 			redirect = &redirectRaw
 		}
-		payload = NewTransferInPayload(sourceHost, code, redirect)
+		{
+			replaceSessionRaw := qp.Get("replace_session")
+			if replaceSessionRaw != "" {
+				v, err2 := strconv.ParseBool(replaceSessionRaw)
+				if err2 != nil {
+					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("replace_session", replaceSessionRaw, "boolean"))
+				}
+				replaceSession = &v
+			}
+		}
+		if err != nil {
+			return payload, err
+		}
+		payload = NewTransferInPayload(sourceHost, code, redirect, replaceSession)
 
 		return payload, nil
 	}

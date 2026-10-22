@@ -31,7 +31,12 @@ import {
   activeTabFromPath,
   mcpServerTabHref,
 } from "@/pages/mcp/x/MCPServerDetailsRouting";
+import { MCP_AGENT_SETUP_SECTION_ID } from "@/pages/mcp/x/tabs/settings/sections/AgentSetupSection";
 import { MCP_AUTHENTICATION_SECTION_ID } from "@/pages/mcp/x/tabs/settings/sections/authentication/AuthenticationSection";
+import {
+  tunnelAgentReadiness,
+  useTunneledMcpConnections,
+} from "@/pages/mcp/x/tabs/tunnelStatus";
 import { useAllRemoteSessionClients } from "@/lib/remote-identity";
 import {
   deriveIdentityMode,
@@ -347,6 +352,11 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
     { enabled: unproxiedMcpServerId !== "" },
   );
   const upstreamUrl = remoteMcpServer?.url ?? unproxiedMcpServer?.url;
+  // Reads the snapshot the Overview's tunnel status polls, so the readiness
+  // card and the status beside it agree without a second poller.
+  const tunnelConnections = useTunneledMcpConnections(
+    mcpServer?.tunneledMcpServerId ?? "",
+  );
 
   const userSessionIssuerId = mcpServer?.userSessionIssuerId;
   // A remote identity provider is attached when this server's issuer has at
@@ -507,6 +517,17 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
           description: sourceDescription,
           ready: isSourceBacked,
         },
+        ...(isTunneledBacked
+          ? [
+              tunnelAgentReadiness({
+                connections: tunnelConnections.data,
+                loading: tunnelConnections.isLoading,
+                error: tunnelConnections.isError,
+                agentSetupHref: `${mcpServerTabHref(routes, idOrSlug, "settings")}#${MCP_AGENT_SETUP_SECTION_ID}`,
+                overviewHref: mcpServerTabHref(routes, idOrSlug, "overview"),
+              }),
+            ]
+          : []),
         ...(canReadPlugins
           ? [
               {
