@@ -96,7 +96,8 @@ export function GatewayNotServed({
     ? "Contact support"
     : "Ask an organization admin or contact support";
   switch (reason) {
-    // Only new organizations get one automatically.
+    // Only organizations inserted by signup get one automatically; identity-
+    // synced and existing organizations do not.
     case "no_organization_issuer":
       return (
         <Text small className="text-warning mt-3">

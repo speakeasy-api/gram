@@ -13,10 +13,12 @@ import { PlatformSetupStepBody } from "./platform-setup-steps";
 
 // The Organization Gateway as a Claude connector, inside the Anthropic admin
 // controls card. The gateway read is the only gate: its URL shows once the
-// server says the gateway is served. New organizations get the
-// organization-wide sign-in it needs when they are created, so the only thing
-// an admin does here is turn the gateway on, and that stays behind the MCP assignment review on
-// the Organization Gateway page. This section never turns it on itself.
+// server says the gateway is served. Signup creates the organization-wide
+// sign-in it needs when it inserts a new organization; organizations first
+// written by identity sync, and existing ones, get none from this path. For a
+// signup-created organization the only thing an admin does here is turn the
+// gateway on, and that stays behind the MCP assignment review on the
+// Organization Gateway page. This section never turns it on itself.
 export function OrganizationGatewayConnectorSection(): JSX.Element {
   const organization = useOrganization();
   const { hasScope, isLoading: permissionsLoading } = useRBAC();
