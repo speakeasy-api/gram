@@ -28,6 +28,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
+	"github.com/speakeasy-api/gram/server/internal/plugins/roledelivery"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 )
 
@@ -242,7 +243,17 @@ func (s *GatewayService) createGateway(ctx context.Context, principal Principal,
 	if len(refusals) > 0 {
 		return GatewayOutput{}, gatewayMembersRefused(refusals, "Nothing was created.")
 	}
-	if len(mcpIDs) > 0 {
+	// Evaluate the completed gateway, not the empty intermediate gateway whose
+	// address was created above. Members can change distribution eligibility.
+	admissionCtx, err := admission.AdministratorWriteContext(ctx, s.engine, principal.OrganizationID)
+	if err != nil {
+		return GatewayOutput{}, fmt.Errorf("prepare gateway role delivery admission: %w", err)
+	}
+	delivered, err := roledelivery.Eligible(admissionCtx, tx, principal.OrganizationID, project.ID, created.ID, s.writer.Admission)
+	if err != nil {
+		return GatewayOutput{}, fmt.Errorf("deliver eligible gateway: %w", err)
+	}
+	if delivered || len(mcpIDs) > 0 {
 		if _, err := s.publication.ProjectWithOutcome(ctx, tx, principal.OrganizationID, project.ID, principal.UserID); err != nil {
 			return GatewayOutput{}, fmt.Errorf("request gateway publication: %w", err)
 		}
@@ -250,9 +261,9 @@ func (s *GatewayService) createGateway(ctx context.Context, principal Principal,
 	if err := tx.Commit(ctx); err != nil {
 		return GatewayOutput{}, fmt.Errorf("commit gateway creation: %w", err)
 	}
-	if len(mcpIDs) > 0 {
-		metamcp.AfterMembershipCommit(ctx, s.logger, s.db, s.publisher, actor, meta)
-	}
+	// Creating the default address can deliver even an empty gateway to role
+	// plugins. Signal those memberships after commit as well.
+	metamcp.AfterMembershipCommit(ctx, s.logger, s.db, s.publisher, actor, meta)
 
 	return s.finish(ctx, project.ID, principal, created.ID, gatewayOutcomeCreated, uuidStrings(mcpIDs), nil), nil
 }
@@ -360,6 +371,9 @@ func (s *GatewayService) setGatewayMembers(ctx context.Context, principal Princi
 	if !changed {
 		return s.finish(ctx, project.ID, principal, meta.ID, gatewayOutcomeUnchanged, nil, nil), nil
 	}
+	if err := s.writer.DeliverEligibleGateway(ctx, tx, actor, meta.ID); err != nil {
+		return GatewayOutput{}, fmt.Errorf("deliver updated gateway: %w", err)
+	}
 	if _, err := s.publication.ProjectWithOutcome(ctx, tx, principal.OrganizationID, project.ID, principal.UserID); err != nil {
 		return GatewayOutput{}, fmt.Errorf("request gateway publication: %w", err)
 	}
@@ -429,7 +443,7 @@ func (s *GatewayService) createDefaultAddress(ctx context.Context, tx pgx.Tx, pr
 	}
 	authCtx := &contextvalues.AuthContext{ActiveOrganizationID: principal.OrganizationID, UserID: principal.UserID, ProjectID: &projectID, OrganizationSlug: organizationSlug}
 	if _, err := s.endpoints.CreateMcpEndpointInTransaction(ctx, tx, mcpendpoints.CreateMcpEndpointInTransactionInput{
-		AuthContext: authCtx, MetaMcpServerID: uuid.NullUUID{UUID: gateway.ID, Valid: true}, Slug: slug,
+		AuthContext: authCtx, MetaMcpServerID: uuid.NullUUID{UUID: gateway.ID, Valid: true}, Slug: slug, DeferGatewayDelivery: true,
 	}); err != nil {
 		if shareable, ok := errors.AsType[*oops.ShareableError](err); ok && shareable.Code == oops.CodeConflict {
 			return &GatewayError{Code: "conflict", Message: "The gateway's address was taken at the same moment, so nothing was created. Try again.", Cause: errors.Join(ErrGatewayConflict, err)}
@@ -508,6 +522,9 @@ func (s *GatewayService) sanitize(ctx context.Context, err error) error {
 	}
 	if _, ok := errors.AsType[*ExternalAuthorizationError](err); ok {
 		return err
+	}
+	if errors.Is(err, admission.ErrApprovalRequired) || errors.Is(err, admission.ErrPrivateGatewayAudience) {
+		return &GatewayError{Code: "conflict", Message: "The gateway cannot be delivered to its role-plugin audience. Review its distribution approval and private-network audience before retrying.", Members: nil, Cause: errors.Join(ErrGatewayConflict, err)}
 	}
 	refusal, ok := errors.AsType[*GatewayError](err)
 	if !ok {

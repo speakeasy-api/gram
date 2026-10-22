@@ -123,6 +123,51 @@ func (s *seeder) seedServers(ctx context.Context) error {
 		return fmt.Errorf("insert demo github user grants: %w", err)
 	}
 
+	if err := s.q.ServersInsertMetaMCPServer(ctx, repo.ServersInsertMetaMCPServerParams{
+		ID:                  s.det("metamcp-1"),
+		OrgID:               org,
+		ProjectID:           proj,
+		UserSessionIssuerID: s.det("issuer-gateway"),
+	}); err != nil {
+		return fmt.Errorf("insert demo meta mcp server: %w", err)
+	}
+	if err := s.q.ServersInsertMetaMCPServerMembers(ctx, repo.ServersInsertMetaMCPServerMembersParams{
+		SupportMemberID: s.det("metamember-support"),
+		ProjectID:       proj,
+		MetaID:          s.det("metamcp-1"),
+		SupportServerID: s.det("mcpserver-support"),
+		OpsMemberID:     s.det("metamember-ops"),
+		OpsServerID:     s.det("mcpserver-ops"),
+		LinearMemberID:  s.det("metamember-linear"),
+		LinearServerID:  s.det("mcpserver-linear"),
+		SlackMemberID:   s.det("metamember-slack"),
+		SlackServerID:   s.det("mcpserver-slack"),
+	}); err != nil {
+		return fmt.Errorf("insert demo meta mcp server members: %w", err)
+	}
+	if err := s.q.ServersInsertRemovedGitHubMember(ctx, repo.ServersInsertRemovedGitHubMemberParams{
+		ID:             s.det("metamember-github"),
+		ProjectID:      proj,
+		MetaID:         s.det("metamcp-1"),
+		GithubServerID: s.det("mcpserver-github"),
+	}); err != nil {
+		return fmt.Errorf("insert demo removed github meta member: %w", err)
+	}
+	if err := s.q.ServersInsertGatewayEndpoints(ctx, repo.ServersInsertGatewayEndpointsParams{
+		GatewayEndpointID: s.det("endpoint-gateway"),
+		ProjectID:         proj,
+		MetaID:            s.det("metamcp-1"),
+		GatewaySlug:       s.spec.OrgSlug + "-gateway",
+		LinearEndpointID:  s.det("endpoint-linear"),
+		LinearServerID:    s.det("mcpserver-linear"),
+		LinearSlug:        s.spec.OrgSlug + "-linear",
+		SlackEndpointID:   s.det("endpoint-slack"),
+		SlackServerID:     s.det("mcpserver-slack"),
+		SlackSlug:         s.spec.OrgSlug + "-slack",
+	}); err != nil {
+		return fmt.Errorf("insert demo gateway endpoints: %w", err)
+	}
+
 	n, err := s.q.ServersInsertRoleServerMemberships(ctx, repo.ServersInsertRoleServerMembershipsParams{
 		OrgID:     org,
 		ProjectID: proj,
@@ -130,8 +175,8 @@ func (s *seeder) seedServers(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("insert demo role server memberships: %w", err)
 	}
-	if n != 25 {
-		return fmt.Errorf("demo seed: expected 25 role server memberships, found %d", n)
+	if n != 30 {
+		return fmt.Errorf("demo seed: expected 30 role server memberships, found %d", n)
 	}
 
 	pluginID, err := s.q.ServersInsertEngineeringEssentialsPlugin(ctx, repo.ServersInsertEngineeringEssentialsPluginParams{
@@ -218,50 +263,6 @@ func (s *seeder) seedServers(ctx context.Context) error {
 		return fmt.Errorf("insert demo slack identity header: %w", err)
 	}
 
-	if err := s.q.ServersInsertMetaMCPServer(ctx, repo.ServersInsertMetaMCPServerParams{
-		ID:                  s.det("metamcp-1"),
-		OrgID:               org,
-		ProjectID:           proj,
-		UserSessionIssuerID: s.det("issuer-gateway"),
-	}); err != nil {
-		return fmt.Errorf("insert demo meta mcp server: %w", err)
-	}
-	if err := s.q.ServersInsertMetaMCPServerMembers(ctx, repo.ServersInsertMetaMCPServerMembersParams{
-		SupportMemberID: s.det("metamember-support"),
-		ProjectID:       proj,
-		MetaID:          s.det("metamcp-1"),
-		SupportServerID: s.det("mcpserver-support"),
-		OpsMemberID:     s.det("metamember-ops"),
-		OpsServerID:     s.det("mcpserver-ops"),
-		LinearMemberID:  s.det("metamember-linear"),
-		LinearServerID:  s.det("mcpserver-linear"),
-		SlackMemberID:   s.det("metamember-slack"),
-		SlackServerID:   s.det("mcpserver-slack"),
-	}); err != nil {
-		return fmt.Errorf("insert demo meta mcp server members: %w", err)
-	}
-	if err := s.q.ServersInsertRemovedGitHubMember(ctx, repo.ServersInsertRemovedGitHubMemberParams{
-		ID:             s.det("metamember-github"),
-		ProjectID:      proj,
-		MetaID:         s.det("metamcp-1"),
-		GithubServerID: s.det("mcpserver-github"),
-	}); err != nil {
-		return fmt.Errorf("insert demo removed github meta member: %w", err)
-	}
-	if err := s.q.ServersInsertGatewayEndpoints(ctx, repo.ServersInsertGatewayEndpointsParams{
-		GatewayEndpointID: s.det("endpoint-gateway"),
-		ProjectID:         proj,
-		MetaID:            s.det("metamcp-1"),
-		GatewaySlug:       s.spec.OrgSlug + "-gateway",
-		LinearEndpointID:  s.det("endpoint-linear"),
-		LinearServerID:    s.det("mcpserver-linear"),
-		LinearSlug:        s.spec.OrgSlug + "-linear",
-		SlackEndpointID:   s.det("endpoint-slack"),
-		SlackServerID:     s.det("mcpserver-slack"),
-		SlackSlug:         s.spec.OrgSlug + "-slack",
-	}); err != nil {
-		return fmt.Errorf("insert demo gateway endpoints: %w", err)
-	}
 	if err := s.seedServersTunnel(ctx); err != nil {
 		return err
 	}

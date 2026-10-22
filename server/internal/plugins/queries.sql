@@ -1207,7 +1207,7 @@ SELECT COALESCE((SELECT pid FROM pg_catalog.pg_stat_activity WHERE datname = cur
 -- Prefer the canonical wrapper, but allow fallback when it is enabled and endpointless.
 -- A disabled canonical wrapper still blocks automatic delivery through alternatives.
 -- A wrapper whose backing toolset is deleted is never delivered.
-SELECT m.id, m.project_id, COALESCE(NULLIF(m.name, ''), NULLIF(m.slug, ''), m.id::text)::text AS name,
+SELECT false::boolean AS is_gateway, m.id, m.project_id, COALESCE(NULLIF(m.name, ''), NULLIF(m.slug, ''), m.id::text)::text AS name,
   COALESCE(m.toolset_id, m.id)::uuid AS resource_id, m.toolset_id AS legacy_toolset_id,
   (m.visibility <> 'disabled' AND (m.toolset_id IS NULL OR backing.id IS NOT NULL) AND (m.unproxied_mcp_server_id IS NOT NULL OR EXISTS (
     SELECT 1 FROM mcp_endpoints e WHERE e.mcp_server_id = m.id AND e.project_id = p.id AND e.deleted IS FALSE
@@ -1226,7 +1226,25 @@ LEFT JOIN LATERAL (
 ) latest ON true
 WHERE p.organization_id = @organization_id AND p.id = @project_id
   AND p.deleted IS FALSE AND m.deleted IS FALSE
-ORDER BY m.id;
+UNION ALL
+SELECT true::boolean AS is_gateway, g.id, g.project_id, g.name,
+  g.id AS resource_id, NULL::uuid AS legacy_toolset_id,
+  (g.visibility <> 'disabled' AND EXISTS (
+    SELECT 1 FROM user_session_issuers i
+    WHERE i.id = g.user_session_issuer_id AND i.deleted IS FALSE
+      AND i.organization_id = g.organization_id
+      AND (i.project_id = g.project_id OR i.project_id IS NULL)
+  ) AND EXISTS (
+    SELECT 1 FROM mcp_endpoints e
+    LEFT JOIN custom_domains cd ON cd.id = e.custom_domain_id AND cd.organization_id = g.organization_id
+      AND cd.activated IS TRUE AND cd.verified IS TRUE AND cd.deleted IS FALSE
+    WHERE e.meta_mcp_server_id = g.id AND e.project_id = g.project_id AND e.deleted IS FALSE
+      AND (e.custom_domain_id IS NULL OR cd.id IS NOT NULL)
+  ))::boolean AS eligible, NULL::text[] AS tool_urns
+FROM meta_mcp_servers g JOIN projects p ON p.id = g.project_id AND p.organization_id = g.organization_id
+WHERE g.organization_id = @organization_id AND p.id = @project_id
+  AND p.deleted IS FALSE AND g.deleted IS FALSE
+ORDER BY id;
 
 -- name: HasRoleDeliveryMembership :one
 -- Automatic delivery treats all wrappers on the same toolset as one delivery.
@@ -1234,7 +1252,8 @@ ORDER BY m.id;
 SELECT EXISTS (
   SELECT 1 FROM plugin_servers ps JOIN plugins p ON p.id = ps.plugin_id
   WHERE p.id = @plugin_id AND p.organization_id = @organization_id AND p.project_id = @project_id
-    AND ((ps.mcp_server_id = sqlc.narg('mcp_server_id')::uuid)
+    AND ((ps.meta_mcp_server_id = sqlc.narg('meta_mcp_server_id')::uuid)
+      OR (ps.mcp_server_id = sqlc.narg('mcp_server_id')::uuid)
       OR (ps.mcp_server_id IN (
         SELECT m.id FROM mcp_servers m
         WHERE m.toolset_id = sqlc.narg('legacy_toolset_id')::uuid
@@ -1369,3 +1388,26 @@ WHERE ps.id = @id AND ps.plugin_id = @plugin_id AND ps.deleted IS FALSE
   AND project.id = p.project_id AND project.organization_id = @organization_id
   AND project.deleted IS FALSE
 RETURNING ps.id, ps.plugin_id, ps.project_id, ps.mcp_server_id, ps.meta_mcp_server_id, ps.display_name, ps.policy, ps.sort_order, ps.created_at, ps.updated_at, ps.deleted_at, ps.deleted;
+
+-- name: ListGatewayDeliveryToolURNs :many
+-- Batch all live gateway members in the project using their latest live toolset versions.
+SELECT g.id AS gateway_id, latest.tool_urns
+FROM meta_mcp_servers g
+JOIN projects p ON p.id = g.project_id AND p.organization_id = g.organization_id AND p.deleted IS FALSE
+JOIN meta_mcp_server_members member ON member.meta_mcp_server_id = g.id AND member.project_id = p.id AND member.deleted IS FALSE
+JOIN mcp_servers m ON m.id = member.mcp_server_id AND m.project_id = p.id AND m.deleted IS FALSE
+JOIN toolsets t ON t.id = m.toolset_id AND t.project_id = p.id AND t.deleted IS FALSE
+JOIN LATERAL (
+  SELECT v.tool_urns FROM toolset_versions v
+  WHERE v.toolset_id = t.id AND v.deleted IS FALSE
+  ORDER BY v.version DESC LIMIT 1
+) latest ON true
+WHERE g.organization_id = @organization_id
+  AND g.project_id = @project_id AND g.deleted IS FALSE;
+
+-- name: SetRoleGatewayIssuerFixture :exec
+UPDATE user_session_issuers
+SET project_id = sqlc.narg('project_id')::uuid,
+    deleted_at = CASE WHEN @deleted::boolean THEN clock_timestamp() ELSE NULL END
+WHERE id = (SELECT user_session_issuer_id FROM meta_mcp_servers
+  WHERE id = @gateway_id::uuid AND project_id = @gateway_project_id::uuid);

@@ -140,6 +140,9 @@ var gatewayWriteRefusals = []struct {
 	{ErrMemberAlreadyPresent, oops.CodeConflict},
 	{ErrMemberNeedsShadowApproval, oops.CodeConflict},
 	{ErrMemberAdmissionUnverifiable, oops.CodeUnavailable},
+	{admission.ErrApprovalRequired, oops.CodeConflict},
+	{admission.ErrPrivateGatewayAudience, oops.CodeConflict},
+	{admission.ErrUnavailable, oops.CodeUnavailable},
 }
 
 func gatewayWriteError(ctx context.Context, logger *slog.Logger, err error, unexpected string) error {
@@ -922,6 +925,10 @@ func (s *Service) RemoveMetaMcpMember(ctx context.Context, payload *gen.RemoveMe
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
+	if err := admission.LockProject(ctx, dbtx, *authCtx.ProjectID); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "lock distribution admission").LogError(ctx, logger)
+	}
+
 	existing, err := repo.New(dbtx).LockMetaMCPMember(ctx, repo.LockMetaMCPMemberParams{
 		ID:        memberID,
 		ProjectID: *authCtx.ProjectID,
@@ -949,6 +956,9 @@ func (s *Service) RemoveMetaMcpMember(ctx context.Context, payload *gen.RemoveMe
 	_, err = s.writer().RemoveMember(ctx, dbtx, actor, meta, memberID)
 	if err != nil {
 		return gatewayWriteError(ctx, logger, err, "remove meta mcp member")
+	}
+	if err := s.writer().DeliverEligibleGateway(ctx, dbtx, actor, meta.ID); err != nil {
+		return gatewayWriteError(ctx, logger, err, "deliver eligible gateway")
 	}
 
 	if err := s.publicationRequests.Project(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID); err != nil {

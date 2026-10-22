@@ -38,10 +38,22 @@ func servers(ctx context.Context, tx pgx.Tx, org string, projectID uuid.UUID) ([
 	if err != nil {
 		return nil, fmt.Errorf("list role delivery server candidates: %w", err)
 	}
+	versions, err := pluginsrepo.New(tx).ListGatewayDeliveryToolURNs(ctx, pluginsrepo.ListGatewayDeliveryToolURNsParams{
+		OrganizationID: org, ProjectID: projectID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("load gateway platform tool delivery eligibility: %w", err)
+	}
+	platformGateways := make(map[uuid.UUID]bool)
+	for _, version := range versions {
+		if HasPlatformTool(version.ToolUrns) {
+			platformGateways[version.GatewayID] = true
+		}
+	}
 	for i := range candidates {
 		s := &candidates[i]
 		// Keep the row for removals; only automatic additions use eligibility.
-		if HasPlatformTool(s.ToolUrns) {
+		if (s.IsGateway && platformGateways[s.ID]) || HasPlatformTool(s.ToolUrns) {
 			s.Eligible = false
 		}
 	}
@@ -99,7 +111,11 @@ func apply(ctx context.Context, tx pgx.Tx, org string, pluginID uuid.UUID, s ser
 		}
 		changed := false
 		for _, membership := range memberships {
-			if !membership.McpServerID.Valid || membership.McpServerID.UUID != s.ID {
+			backendID := membership.McpServerID
+			if s.IsGateway {
+				backendID = membership.MetaMcpServerID
+			}
+			if !backendID.Valid || backendID.UUID != s.ID {
 				continue
 			}
 			removed, err := pluginsrepo.New(tx).RemovePluginServer(ctx, pluginsrepo.RemovePluginServerParams{ID: membership.ID, PluginID: pluginID})
@@ -116,10 +132,16 @@ func apply(ctx context.Context, tx pgx.Tx, org string, pluginID uuid.UUID, s ser
 		}
 		return changed, nil
 	}
-	if !s.Eligible {
+	if !s.Eligible || (s.IsGateway && !guard.AutomaticGatewayPluginMembershipEnabled(ctx, tx, org, s.ProjectID)) {
 		return false, nil
 	}
-	exists, err := pluginsrepo.New(tx).HasRoleDeliveryMembership(ctx, pluginsrepo.HasRoleDeliveryMembershipParams{PluginID: pluginID, OrganizationID: org, ProjectID: s.ProjectID, McpServerID: uuid.NullUUID{UUID: s.ID, Valid: true}, LegacyToolsetID: s.LegacyToolsetID, PreserveRemoval: preserveRemoval})
+	mcpID, gatewayID := uuid.NullUUID{UUID: uuid.Nil, Valid: false}, uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+	if s.IsGateway {
+		gatewayID = uuid.NullUUID{UUID: s.ID, Valid: true}
+	} else {
+		mcpID = uuid.NullUUID{UUID: s.ID, Valid: true}
+	}
+	exists, err := pluginsrepo.New(tx).HasRoleDeliveryMembership(ctx, pluginsrepo.HasRoleDeliveryMembershipParams{PluginID: pluginID, OrganizationID: org, ProjectID: s.ProjectID, McpServerID: mcpID, MetaMcpServerID: gatewayID, LegacyToolsetID: s.LegacyToolsetID, PreserveRemoval: preserveRemoval})
 	if err != nil {
 		return false, fmt.Errorf("check existing role delivery membership: %w", err)
 	}
@@ -130,7 +152,12 @@ func apply(ctx context.Context, tx pgx.Tx, org string, pluginID uuid.UUID, s ser
 	// backends pass untouched. For those remotes it fails closed: it refuses
 	// when the project's Shadow MCP policy does not permit the audience, and
 	// also when provenance or the policy cannot be evaluated.
-	if err := checkAttachment(ctx, tx, guard, org, s.ProjectID, pluginID, s.ID); err != nil {
+	if s.IsGateway {
+		err = guard.CheckGatewayAttachment(ctx, tx, org, s.ProjectID, pluginID, s.ID)
+	} else {
+		err = checkAttachment(ctx, tx, guard, org, s.ProjectID, pluginID, s.ID)
+	}
+	if err != nil {
 		return false, err
 	}
 	// Choose an unused display name from the current inventory, including when
@@ -151,8 +178,17 @@ func apply(ctx context.Context, tx pgx.Tx, org string, pluginID uuid.UUID, s ser
 			name = fmt.Sprintf("%s %d", base, suffix)
 		}
 	}
-	params := pluginsrepo.AddPluginServerParams{PluginID: pluginID, DisplayName: name, Policy: "required", SortOrder: 0, McpServerID: uuid.NullUUID{UUID: s.ID, Valid: true}}
-	added, err := pluginsrepo.New(tx).AddPluginServer(ctx, params)
+	var added pluginsrepo.PluginServer
+	if s.IsGateway {
+		added, err = pluginsrepo.New(tx).AddGatewayPluginServer(ctx, pluginsrepo.AddGatewayPluginServerParams{
+			PluginID: pluginID, ProjectID: s.ProjectID, MetaMcpServerID: gatewayID,
+			DisplayName: name, Policy: "required", SortOrder: 0,
+		})
+	} else {
+		added, err = pluginsrepo.New(tx).AddPluginServer(ctx, pluginsrepo.AddPluginServerParams{
+			PluginID: pluginID, DisplayName: name, Policy: "required", SortOrder: 0, McpServerID: mcpID,
+		})
+	}
 	if err != nil {
 		return false, fmt.Errorf("add role-delivered membership: %w", err)
 	}
@@ -271,6 +307,7 @@ func RoleChanged(ctx context.Context, tx pgx.Tx, org, role string, before []auth
 	changed := []uuid.UUID{}
 	// Match audience/content writers: admission lock, then exact plugin row.
 	lockedProjects := map[uuid.UUID]bool{}
+	projectServers := map[uuid.UUID][]server{}
 	for _, p := range targets {
 		if !lockedProjects[p.ProjectID] {
 			if err := admission.LockProject(ctx, tx, p.ProjectID); err != nil {
@@ -302,9 +339,13 @@ func RoleChanged(ctx context.Context, tx pgx.Tx, org, role string, before []auth
 		if err != nil {
 			return nil, err
 		}
-		candidates, err := servers(ctx, tx, org, p.ProjectID)
-		if err != nil {
-			return nil, err
+		candidates, loaded := projectServers[p.ProjectID]
+		if !loaded {
+			candidates, err = servers(ctx, tx, org, p.ProjectID)
+			if err != nil {
+				return nil, err
+			}
+			projectServers[p.ProjectID] = candidates
 		}
 		for _, s := range candidates {
 			was, err := allowed(before, s)

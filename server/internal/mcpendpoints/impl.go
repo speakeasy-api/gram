@@ -240,8 +240,7 @@ func (s *Service) CreateMcpEndpoint(ctx context.Context, payload *gen.CreateMcpE
 		return nil, oops.E(oops.CodeUnexpected, err, "log mcp endpoint creation").LogError(ctx, logger)
 	}
 
-	// Meta-MCP-backed endpoints never participate in default-plugin attachment
-	// or marketplace publishing; that flow is exclusive to generic MCP servers.
+	// Gateway endpoints use role delivery below, not generic Default attachment.
 	attached, pluginCreated := false, false
 	if mcpServerID.Valid && mcpServer.Visibility != mcpservers.VisibilityDisabled {
 		admissionCtx, err := admission.AdministratorWriteContext(ctx, s.authz, authCtx.ActiveOrganizationID)
@@ -262,6 +261,9 @@ func (s *Service) CreateMcpEndpoint(ctx context.Context, payload *gen.CreateMcpE
 		}
 	}
 
+	if err := s.deliverEligibleGateway(ctx, dbtx, authCtx, metaMcpServerID); err != nil {
+		return nil, err.LogError(ctx, logger)
+	}
 	if err := s.requestPublicationForMCPMembership(ctx, dbtx, authCtx, []uuid.NullUUID{mcpServerID}, metaMcpServerID); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "enqueue endpoint publication").LogError(ctx, logger)
 	}
@@ -632,6 +634,9 @@ func (s *Service) UpdateMcpEndpoint(ctx context.Context, payload *gen.UpdateMcpE
 		}
 	}
 
+	if err := s.deliverEligibleGateway(ctx, dbtx, authCtx, updated.MetaMcpServerID); err != nil {
+		return nil, err.LogError(ctx, logger)
+	}
 	if err := s.requestPublicationForMCPMembership(ctx, dbtx, authCtx, []uuid.NullUUID{existing.McpServerID, updated.McpServerID}, existing.MetaMcpServerID, updated.MetaMcpServerID); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "enqueue endpoint publication").LogError(ctx, logger)
 	}

@@ -1223,18 +1223,31 @@ func (q *Queries) ServersInsertRemovedGitHubMember(ctx context.Context, arg Serv
 }
 
 const serversInsertRoleServerMemberships = `-- name: ServersInsertRoleServerMemberships :execrows
-INSERT INTO plugin_servers (plugin_id, mcp_server_id, display_name)
-SELECT p.id, s.id, s.name
+WITH backends AS (
+  -- Skip canonical hosted wrappers, which duplicate the fresh-id servers.
+  SELECT s.id AS mcp_server_id, NULL::uuid AS meta_mcp_server_id, s.name
+  FROM mcp_servers s
+  WHERE s.project_id = $2::uuid AND s.id IS DISTINCT FROM s.toolset_id
+  UNION ALL
+  SELECT NULL::uuid, g.id, g.name
+  FROM meta_mcp_servers g
+  JOIN user_session_issuers i ON i.id = g.user_session_issuer_id
+    AND i.organization_id = g.organization_id
+    AND (i.project_id = g.project_id OR i.project_id IS NULL)
+  WHERE g.project_id = $2::uuid AND g.organization_id = $1::text
+    AND g.deleted IS FALSE AND i.deleted IS FALSE
+    AND EXISTS (SELECT 1 FROM mcp_endpoints e
+      WHERE e.meta_mcp_server_id = g.id AND e.project_id = g.project_id AND e.deleted IS FALSE)
+)
+INSERT INTO plugin_servers (plugin_id, project_id, mcp_server_id, meta_mcp_server_id, display_name)
+SELECT p.id, CASE WHEN s.meta_mcp_server_id IS NOT NULL THEN p.project_id END,
+  s.mcp_server_id, s.meta_mcp_server_id, s.name
 FROM plugins p
 JOIN plugin_assignments a ON a.plugin_id = p.id AND a.organization_id = $1::text
 JOIN organization_roles r ON a.principal_urn = 'role:organization:' || r.id
   AND r.organization_id = $1::text
-CROSS JOIN mcp_servers s
+CROSS JOIN backends s
 WHERE p.organization_id = $1::text AND p.project_id = $2::uuid
-  AND s.project_id = $2::uuid
-  -- Canonical hosted wrappers share their toolset's name with the
-  -- fresh-id servers above; distribute those servers only.
-  AND s.id IS DISTINCT FROM s.toolset_id
   AND EXISTS (
     SELECT 1 FROM principal_grants g
     WHERE g.organization_id = $1::text AND g.principal_urn = a.principal_urn
@@ -1253,6 +1266,9 @@ type ServersInsertRoleServerMembershipsParams struct {
 // mcp:write still allow connecting at the endpoint but do not deliver
 // servers. Store server identities, not legacy toolset memberships. Content
 // has no manual/automatic distinction and never widens a plugin's audience.
+// This fixture intentionally models wildcard connect grants only. Exact grants
+// remain examples of access without automatic seed delivery; production evaluates
+// all selectors through the typed authorization engine.
 func (q *Queries) ServersInsertRoleServerMemberships(ctx context.Context, arg ServersInsertRoleServerMembershipsParams) (int64, error) {
 	result, err := q.db.Exec(ctx, serversInsertRoleServerMemberships, arg.OrgID, arg.ProjectID)
 	if err != nil {

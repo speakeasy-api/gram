@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/networkaccess"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
@@ -54,11 +55,12 @@ func (e *ApprovalRequiredError) Unwrap() error { return ErrApprovalRequired }
 // write proceed. The server then appears in the Shadow MCP inventory as
 // approved for exactly the people who receive it.
 type Guard struct {
-	approver Approver
+	approver                        Approver
+	gatewayPluginMembershipFeatures feature.Provider
 }
 
 func NewGuard() *Guard {
-	return &Guard{approver: nil}
+	return &Guard{approver: nil, gatewayPluginMembershipFeatures: nil}
 }
 
 // CheckAttachment validates adding one MCP server to an exact existing plugin.

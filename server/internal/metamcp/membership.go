@@ -21,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/networkaccess"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
+	"github.com/speakeasy-api/gram/server/internal/plugins/roledelivery"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
@@ -422,4 +423,19 @@ func SignalGatewayPluginPublish(ctx context.Context, logger *slog.Logger, db *pg
 			logger.WarnContext(ctx, "signal plugin publish after gateway mutation", attr.SlogError(err))
 		}
 	}
+}
+
+// DeliverEligibleGateway evaluates the final membership state before publication
+// and commit. Callers hold project admission before membership mutation.
+// Compound callers must not call this between removals and additions.
+// Eligibility delivery preserves tombstones left by explicit plugin removal.
+func (w GatewayWriter) DeliverEligibleGateway(ctx context.Context, tx pgx.Tx, actor Actor, gatewayID uuid.UUID) error {
+	admissionCtx, err := admission.AdministratorWriteContext(ctx, w.Authz, actor.OrganizationID)
+	if err != nil {
+		return fmt.Errorf("prepare gateway role delivery admission: %w", err)
+	}
+	if _, err := roledelivery.Eligible(admissionCtx, tx, actor.OrganizationID, actor.ProjectID, gatewayID, w.Admission); err != nil {
+		return fmt.Errorf("deliver eligible gateway: %w", err)
+	}
+	return nil
 }

@@ -12,14 +12,14 @@ import (
 // Eligible delivers only the backend whose eligibility just changed. Existing
 // role audiences supply access; replay never restores removed membership.
 // Callers hold project admission before any plugin locks and enqueue publication.
-func Eligible(ctx context.Context, tx pgx.Tx, org string, projectID, mcpServerID uuid.UUID, guard *admission.Guard) (bool, error) {
+func Eligible(ctx context.Context, tx pgx.Tx, org string, projectID, backendID uuid.UUID, guard *admission.Guard) (bool, error) {
 	candidates, err := servers(ctx, tx, org, projectID)
 	if err != nil {
 		return false, err
 	}
 	var selected *server
 	for _, candidate := range candidates {
-		if candidate.Eligible && candidate.ID == mcpServerID {
+		if candidate.Eligible && candidate.ID == backendID {
 			selected = &candidate
 			break
 		}

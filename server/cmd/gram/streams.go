@@ -799,7 +799,7 @@ func newStreamsCommand() *cli.Command {
 				mustReceiveBatch(rg, &sigintv1.Outcome{}, &sigintv1.OutcomeCHWriter{}, sigint.NewOutcomeCHWriter(logger, sigintchrepo.New(chConn)), gcp.BatchReceiveSettings{MaxMessages: 1000, MaxBytes: 10 * constants.MiB, MaxLatency: time.Second, MaxBufferedMessages: 0, MaxBufferedBytes: 0})
 
 				mustReceive(rg, &pingv2.Message{}, &pingv2.Processor{}, ping.NewHandler(logger, slog.LevelDebug))
-				roleDistributionGuard := admission.NewGuard()
+				roleDistributionGuard := admission.NewGuard().WithGatewayPluginMembershipFeatures(featureFlags)
 				roleDistributionHandler := roledistribution.NewHandler(logger, roledistribution.Processors{
 					Setup: func(ctx context.Context, roleURN, organizationID string) (bool, error) {
 						return roledistribution.ProcessRoleDistributionSetup(ctx, db, plugins.PublicationRequests{Enabled: c.Bool(pluginPublicationEmitFlagName)}, roleDistributionGuard, roleURN, organizationID)
