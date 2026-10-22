@@ -251,8 +251,8 @@ func (s *AccessRoleMutationService) Update(ctx context.Context, principal Princi
 		ProjectID: project.ID.String(), RoleID: roleID, ExpectedVersion: input.ExpectedVersion,
 		AddRules: addRules, RemoveRules: removeRules,
 	}
-	// A replayed receipt runs no transaction, so it leaves this empty and does
-	// not republish again.
+	// Only a fresh commit changes role plugins; a replayed receipt runs no
+	// transaction and must not republish again.
 	var delivery access.RoleReconciliation
 	receipt, err := s.receipts.ExecuteUpdate(ctx, principal, project, input.IdempotencyKey, normalized, s.charge(principal), func(ctx context.Context, tx pgx.Tx) (AccessRoleMutationReceiptResult, error) {
 		roleUUID, parseErr := uuid.Parse(roleID)
@@ -288,7 +288,9 @@ func (s *AccessRoleMutationService) Update(ctx context.Context, principal Princi
 	if err != nil {
 		return UpdateMCPAccessRoleOutput{}, err
 	}
-	s.backend.ReconcileRoleDelivery(ctx, delivery)
+	if !receipt.Replayed {
+		s.backend.ReconcileRoleDelivery(ctx, delivery)
+	}
 	result, err := decodeAccessRoleMutationReceipt(operationUpdateMCPAccessRole, receipt.ResultPayload)
 	if err != nil {
 		return UpdateMCPAccessRoleOutput{}, err
