@@ -53,3 +53,11 @@ func TestToolUsageAgentSummaryExpressionMatchesRaw(t *testing.T) {
 	require.Contains(t, string(schema), "max("+toolUsageAgentIDExpr+") AS agent_id")
 	require.Contains(t, string(schema), "agent_id SimpleAggregateFunction(max, String)")
 }
+
+func TestToolUsageAuthorizerSummaryExpressionMatchesRaw(t *testing.T) {
+	t.Parallel()
+	schema, err := os.ReadFile("../../../clickhouse/schema.sql")
+	require.NoError(t, err)
+	require.Contains(t, string(schema), "max("+toolUsageAuthorizerUserIDExpr+") AS authorizer_user_id")
+	require.Contains(t, string(schema), "authorizer_user_id SimpleAggregateFunction(max, String)")
+}
