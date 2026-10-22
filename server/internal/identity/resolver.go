@@ -160,16 +160,16 @@ func (r *Resolver) ExpandIdentifier(ctx context.Context, orgID, identifier strin
 func (r *Resolver) ExpandEmail(ctx context.Context, orgID, email string) Subject {
 	subject := Subject{UserIDs: nil, Emails: []string{email, conv.NormalizeEmail(email)}}
 
-	owner, directoryEmail := r.emailOwner(ctx, orgID, subject.Emails)
-	if owner != "" {
-		subject.UserIDs = append(subject.UserIDs, owner)
+	ownership := r.emailOwners(ctx, orgID, []string{email})[conv.NormalizeEmail(email)]
+	if ownership.userID != "" {
+		subject.UserIDs = append(subject.UserIDs, ownership.userID)
 	}
 	switch {
-	case directoryEmail != "":
+	case ownership.directoryEmail != "":
 		// The member row already carries the canonical email, so there is
 		// nothing more to look up by id.
-		subject.Emails = append(subject.Emails, directoryEmail, conv.NormalizeEmail(directoryEmail))
-	case owner != "":
+		subject.Emails = append(subject.Emails, ownership.directoryEmail, conv.NormalizeEmail(ownership.directoryEmail))
+	case ownership.userID != "":
 		// A linked account email resolves through user_accounts rather than
 		// users, so the owner's own address still has to be added.
 		subject.Emails = append(subject.Emails, r.userEmails(ctx, orgID, subject.UserIDs)...)
@@ -180,41 +180,79 @@ func (r *Resolver) ExpandEmail(ctx context.Context, orgID, email string) Subject
 	return subject
 }
 
-// EmailOwnerUserID returns the Speakeasy user who owns an address, by the same
-// rule ExpandEmail applies, or "" when nobody does. It is the cheaper call for
-// a caller that needs only the owner and not every address they are known by.
-func (r *Resolver) EmailOwnerUserID(ctx context.Context, orgID, email string) string {
-	owner, _ := r.emailOwner(ctx, orgID, []string{email, conv.NormalizeEmail(email)})
-	return owner
+// EmailOwnerUserIDs returns the Speakeasy user who owns each address, by the
+// same rule ExpandEmail applies, keyed by normalized address. Addresses nobody
+// owns are absent. It is the cheaper call for a caller that needs only the
+// owners and not every address they are known by, and it costs at most two
+// queries however many addresses it is given.
+func (r *Resolver) EmailOwnerUserIDs(ctx context.Context, orgID string, emails []string) map[string]string {
+	ownerships := r.emailOwners(ctx, orgID, emails)
+	owners := make(map[string]string, len(ownerships))
+	for key, ownership := range ownerships {
+		owners[key] = ownership.userID
+	}
+	return owners
 }
 
-// emailOwner returns the Speakeasy user who owns the addresses, and their
-// directory email when ownership came from a directory row. Directory
-// ownership wins, so a provider account is only reverse-resolved when the
-// addresses have no directory row at all. More than one matching member
-// makes ownership ambiguous, so the addresses resolve to nobody. Best effort:
+// emailOwnership is who owns an address, and their directory email when
+// ownership came from a directory row.
+type emailOwnership struct {
+	userID         string
+	directoryEmail string
+}
+
+// emailOwners returns the owner of each address, keyed by normalized address;
+// addresses nobody owns are absent. Directory ownership wins, so a provider
+// account is only reverse-resolved for addresses with no directory row at
+// all. More than one matching member, or more than one linked-account owner,
+// makes ownership ambiguous, so the address resolves to nobody. Best effort:
 // a failed lookup also resolves to nobody.
-func (r *Resolver) emailOwner(ctx context.Context, orgID string, emails []string) (string, string) {
+func (r *Resolver) emailOwners(ctx context.Context, orgID string, emails []string) map[string]emailOwnership {
+	// Each address is matched both verbatim and normalized; results are
+	// grouped under the normalized form.
+	query := make([]string, 0, len(emails)*2)
+	for _, email := range emails {
+		if key := conv.NormalizeEmail(email); key != "" {
+			query = append(query, email, key)
+		}
+	}
+	query = conv.DedupeNonEmpty(query)
+	if len(query) == 0 {
+		return nil
+	}
+
 	rows, err := r.users.GetConnectedUsersMatchingEmails(ctx, usersRepo.GetConnectedUsersMatchingEmailsParams{
-		Emails:         emails,
+		Emails:         query,
 		OrganizationID: orgID,
 	})
 	if err != nil {
 		r.logger.WarnContext(ctx, "failed to resolve identity email to org user", attr.SlogError(err))
-		return "", ""
+		return nil
 	}
 
-	switch len(rows) {
-	case 0:
-		if owner, ok := r.accountOwner(ctx, orgID, emails); ok {
-			return owner, ""
-		}
-		return "", ""
-	case 1:
-		return rows[0].ID, rows[0].Email
-	default:
-		return "", ""
+	members := make(map[string][]usersRepo.User, len(rows))
+	for _, row := range rows {
+		key := conv.NormalizeEmail(row.Email)
+		members[key] = append(members[key], row)
 	}
+
+	owners := make(map[string]emailOwnership, len(query))
+	unclaimed := make([]string, 0, len(query))
+	for _, email := range query {
+		key := conv.NormalizeEmail(email)
+		switch len(members[key]) {
+		case 0:
+			unclaimed = append(unclaimed, email)
+		case 1:
+			owners[key] = emailOwnership{userID: members[key][0].ID, directoryEmail: members[key][0].Email}
+		}
+	}
+
+	for key, owner := range r.accountOwners(ctx, orgID, unclaimed) {
+		owners[key] = emailOwnership{userID: owner, directoryEmail: ""}
+	}
+
+	return owners
 }
 
 // ExpandUserID folds a Speakeasy user id onto every identifier the same person's
@@ -239,29 +277,38 @@ func (r *Resolver) completeSubject(ctx context.Context, orgID string, subject *S
 	subject.UserIDs = conv.DedupeNonEmpty(subject.UserIDs)
 }
 
-// accountOwner returns the single Speakeasy user who linked an AI provider account
-// under one of these addresses. No owner and several owners are the same
-// answer: nobody the usage can be attributed to.
-func (r *Resolver) accountOwner(ctx context.Context, orgID string, emails []string) (string, bool) {
+// accountOwners returns, keyed by normalized address, the single Speakeasy user
+// who linked an AI provider account under each address. No owner and several
+// owners are the same answer: nobody the usage can be attributed to, so the
+// address is absent.
+func (r *Resolver) accountOwners(ctx context.Context, orgID string, emails []string) map[string]string {
+	if len(emails) == 0 {
+		return nil
+	}
+
 	accounts, err := r.hooks.ListUserAccountsByEmails(ctx, hooksRepo.ListUserAccountsByEmailsParams{
 		OrganizationID: orgID,
 		Emails:         emails,
 	})
 	if err != nil {
 		r.logger.WarnContext(ctx, "failed to resolve identity account email to org user", attr.SlogError(err))
-		return "", false
+		return nil
 	}
 
-	owners := make([]string, 0, len(accounts))
+	candidates := make(map[string][]string, len(accounts))
 	for _, account := range accounts {
-		owners = append(owners, conv.FromPGTextOrEmpty[string](account.UserID))
-	}
-	owners = conv.DedupeNonEmpty(owners)
-	if len(owners) != 1 {
-		return "", false
+		key := conv.NormalizeEmail(conv.FromPGTextOrEmpty[string](account.Email))
+		candidates[key] = append(candidates[key], conv.FromPGTextOrEmpty[string](account.UserID))
 	}
 
-	return owners[0], true
+	owners := make(map[string]string, len(candidates))
+	for key, ids := range candidates {
+		if ids = conv.DedupeNonEmpty(ids); len(ids) == 1 {
+			owners[key] = ids[0]
+		}
+	}
+
+	return owners
 }
 
 // userEmails returns the addresses of the given org members, both verbatim and

@@ -22,7 +22,8 @@ export function ToolUsageIdentity({
 }): JSX.Element {
   if (kind === "agent_id") {
     // Linked only once the agent itself resolved — an id read off a telemetry
-    // row is not proof the reader is allowed to open that agent.
+    // row is not proof the reader is allowed to open that agent. The same holds
+    // for the authorizer: only an id that resolved to an org member links.
     return (
       <ActingPrincipal
         agent={{ id: agent?.id ?? identityKey, name: agent?.name }}
@@ -31,7 +32,9 @@ export function ToolUsageIdentity({
             ? {
                 id: authorizer.userId,
                 name: authorizer.label,
-                identity: { userId: authorizer.userId },
+                identity: authorizer.label
+                  ? { userId: authorizer.userId }
+                  : undefined,
               }
             : undefined
         }

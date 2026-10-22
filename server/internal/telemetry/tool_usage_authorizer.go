@@ -17,8 +17,10 @@ import (
 // people share resolves to nobody, so a filter never selects someone else's
 // delegated calls.
 //
-// Best effort, like the resolver: a failed lookup leaves that email matching
-// only the calls recorded under the address itself.
+// Every email resolves in one batch, so a filter built from a large role costs
+// a fixed number of queries. Best effort, like the resolver: a failed lookup
+// leaves the emails matching only the calls recorded under the addresses
+// themselves.
 func (s *Service) authorizerUserIDsForUserFilters(ctx context.Context, orgID string, filters []repo.ToolUsageUserFilter) []string {
 	if orgID == "" {
 		return nil
@@ -34,8 +36,11 @@ func (s *Service) authorizerUserIDsForUserFilters(ctx context.Context, orgID str
 			emails = append(emails, filter.Key)
 		}
 	}
-	for _, email := range conv.DedupeNonEmpty(emails) {
-		ids = append(ids, s.identities.EmailOwnerUserID(ctx, orgID, email))
+	// Walk the filters rather than the map, so the same filter always builds
+	// the same id list.
+	owners := s.identities.EmailOwnerUserIDs(ctx, orgID, emails)
+	for _, email := range emails {
+		ids = append(ids, owners[conv.NormalizeEmail(email)])
 	}
 	return conv.DedupeNonEmpty(ids)
 }
@@ -64,6 +69,12 @@ func (s *Service) authorizerLabels(ctx context.Context, orgID string, rows []rep
 	}
 	labels := make(map[string]string, len(users))
 	for _, user := range users {
+		// GetConnectedUsersByIDs filters removed memberships but not
+		// soft-deleted users, who must not label rows any more than the
+		// filter resolves to them.
+		if user.DeletedAt.Valid {
+			continue
+		}
 		labels[user.ID] = user.Email
 	}
 	return labels
