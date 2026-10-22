@@ -62,6 +62,10 @@ func NewEnforceHandler(logger *slog.Logger, meterProvider metric.MeterProvider, 
 	if riskRecorder == nil {
 		return nil, errors.New("custom rules enforcement risk recorder is required")
 	}
+	truncations, err := enforce.NewTruncationCounter(meterProvider)
+	if err != nil {
+		return nil, fmt.Errorf("create custom rules enforcement truncation counter: %w", err)
+	}
 	if cfg.MaxRequestAge <= 0 {
 		cfg.MaxRequestAge = DefaultEnforcementMaxRequestAge
 	}
@@ -72,7 +76,7 @@ func NewEnforceHandler(logger *slog.Logger, meterProvider metric.MeterProvider, 
 		logger:          logger.With(attr.SlogComponent("custom-rules-enforcer")),
 		scanner:         scanner,
 		writer:          writer,
-		truncations:     enforce.NewTruncationCounter(meterProvider),
+		truncations:     truncations,
 		riskRecorder:    riskRecorder,
 		consumerID:      uuid.NewString(),
 		maxRequestAge:   cfg.MaxRequestAge,

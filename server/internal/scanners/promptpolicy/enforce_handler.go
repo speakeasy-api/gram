@@ -64,6 +64,10 @@ func NewEnforceHandler(logger *slog.Logger, meterProvider metric.MeterProvider, 
 	if riskRecorder == nil {
 		return nil, errors.New("prompt policy enforcement risk recorder is required")
 	}
+	truncations, err := enforce.NewTruncationCounter(meterProvider)
+	if err != nil {
+		return nil, fmt.Errorf("create prompt policy enforcement truncation counter: %w", err)
+	}
 	if cfg.MaxRequestAge <= 0 {
 		cfg.MaxRequestAge = DefaultEnforcementMaxRequestAge
 	}
@@ -74,7 +78,7 @@ func NewEnforceHandler(logger *slog.Logger, meterProvider metric.MeterProvider, 
 		logger:          logger.With(attr.SlogComponent("prompt-policy-enforcer")),
 		scanner:         scanner,
 		writer:          writer,
-		truncations:     enforce.NewTruncationCounter(meterProvider),
+		truncations:     truncations,
 		riskRecorder:    riskRecorder,
 		consumerID:      uuid.NewString(),
 		maxRequestAge:   cfg.MaxRequestAge,
@@ -98,8 +102,7 @@ func (h *EnforceHandler) Handle(ctx context.Context, m *riskv1.PromptPolicyEnfor
 		return nil
 	}
 
-	content := m.GetContent()
-	body := conv.Default(m.GetBody(), content)
+	body := conv.Default(m.GetBody(), m.GetContent())
 	argumentFields := make([]string, len(m.GetToolCalls()))
 	fields := make([]*string, 0, len(argumentFields)+1)
 	if len(argumentFields) == 0 {
@@ -110,10 +113,9 @@ func (h *EnforceHandler) Handle(ctx context.Context, m *riskv1.PromptPolicyEnfor
 			fields = append(fields, &argumentFields[i])
 		}
 	}
-	contentCut := enforce.TruncateFields(h.maxContentBytes, &content)
 	messageCut := enforce.TruncateFields(h.maxContentBytes, fields...)
-	truncated := m.GetContentTruncated() || contentCut || messageCut
-	if contentCut || messageCut {
+	truncated := m.GetContentTruncated() || messageCut
+	if messageCut {
 		enforce.RecordTruncation(ctx, h.truncations, "judge")
 	}
 	var judgeMessage judgemessage.Message

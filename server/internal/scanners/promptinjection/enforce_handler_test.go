@@ -168,3 +168,17 @@ func TestEnforceHandlerDropsRequestsOlderThanLaneWait(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, scanner.content)
 }
+
+func TestNewEnforceHandlerRejectsNilMeterProvider(t *testing.T) {
+	t.Parallel()
+
+	_, err := NewEnforceHandler(
+		testenv.NewLogger(t),
+		nil,
+		&capturePromptInjectionScanner{},
+		&captureEnforcementReply{},
+		metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
+		EnforceHandlerConfig{},
+	)
+	require.ErrorContains(t, err, "meter provider is required")
+}

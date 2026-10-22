@@ -2,6 +2,7 @@ package promptpolicy
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -88,6 +89,38 @@ func TestEnforceHandlerPreservesFailClosedFindingOnIncompleteJudge(t *testing.T)
 	require.Len(t, writer.reply.GetFindings(), 1)
 	require.Equal(t, Rule, writer.reply.GetFindings()[0].GetRuleId())
 	require.Equal(t, "judge unavailable", writer.reply.GetFindings()[0].GetDescription())
+}
+
+func TestEnforceHandlerDoesNotReportUnusedContentTruncation(t *testing.T) {
+	t.Parallel()
+
+	scanner := &incompletePromptPolicyScanner{}
+	writer := &captureEnforcementReply{}
+	handler, err := NewEnforceHandler(
+		testenv.NewLogger(t),
+		testenv.NewMeterProvider(t),
+		scanner,
+		writer,
+		metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
+		EnforceHandlerConfig{MaxContentBytes: 4},
+	)
+	require.NoError(t, err)
+
+	err = handler.Handle(t.Context(), riskv1.PromptPolicyEnforcement_builder{
+		CreatedAt:      new(time.Now().UTC().Format(time.RFC3339Nano)),
+		OrganizationId: new("org-test"),
+		ProjectId:      new("project-test"),
+		RiskPolicyId:   new("0198f1f4-0000-7000-8000-000000000001"),
+		Content:        new(strings.Repeat("x", 16)),
+		Body:           new("safe"),
+		Prompt:         new("deny unsafe requests"),
+		MessageType:    new("user"),
+	}.Build(), gcp.MessageMetadata{Attributes: map[string]string{
+		requestreply.ReplyURNAttribute: "urn:gram:risk:enforce:replica-test:0198f1f4-0000-7000-8000-000000000002",
+	}})
+	require.NoError(t, err)
+	require.Equal(t, "safe", scanner.message.Body)
+	require.False(t, writer.reply.GetContentTruncated())
 }
 
 func TestEnforceHandlerDropsRequestsOlderThanLaneWait(t *testing.T) {

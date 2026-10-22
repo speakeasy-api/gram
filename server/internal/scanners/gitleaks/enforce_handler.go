@@ -88,13 +88,17 @@ func NewEnforceHandler(
 	if err != nil {
 		return nil, err
 	}
+	truncations, err := enforce.NewTruncationCounter(meterProvider)
+	if err != nil {
+		return nil, fmt.Errorf("create gitleaks enforcement truncation counter: %w", err)
+	}
 	return &EnforceHandler{
 		logger:          logger.With(attr.SlogComponent("gitleaks-enforcer")),
 		writer:          writer,
 		scanner:         NewScanner(),
 		fingerprint:     fingerprint,
 		metrics:         metrics,
-		truncations:     enforce.NewTruncationCounter(meterProvider),
+		truncations:     truncations,
 		riskRecorder:    riskRecorder,
 		consumerID:      uuid.NewString(),
 		maxRequestAge:   cfg.MaxRequestAge,

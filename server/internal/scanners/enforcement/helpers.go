@@ -26,13 +26,19 @@ const (
 )
 
 // NewTruncationCounter records engine-local input cuts separately from transport cuts.
-func NewTruncationCounter(meterProvider metric.MeterProvider) metric.Int64Counter {
-	counter, _ := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/scanners/enforcement").Int64Counter(
+func NewTruncationCounter(meterProvider metric.MeterProvider) (metric.Int64Counter, error) {
+	if meterProvider == nil {
+		return nil, errors.New("enforcement meter provider is required")
+	}
+	counter, err := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/scanners/enforcement").Int64Counter(
 		"risk.enforcement.engine_truncations",
 		metric.WithDescription("Number of enforcement scans truncated to an engine input limit"),
 		metric.WithUnit("{scan}"),
 	)
-	return counter
+	if err != nil {
+		return nil, fmt.Errorf("create enforcement engine truncation counter: %w", err)
+	}
+	return counter, nil
 }
 
 // RecordTruncation records one engine-local input cut.
