@@ -441,11 +441,11 @@ func (s *seeder) agentSession(i int) agentSession {
 	client := ""
 	if onClaude {
 		client = "cli"
-		if i%3 == 0 {
+		if (i/6)%3 == 0 {
 			client = "ide"
 		}
 	}
-	// Every twelfth session from the fifth on ran as the release assistant.
+	// Every twelfth session from the fifth on ran as the release assistant, as Speakeasy hooks would attribute it.
 	agentID := ""
 	if i%12 == 4 {
 		agentID = s.det("managed-agent-1").String()
