@@ -3,7 +3,8 @@ import path from "node:path";
 import { defineConfig } from "vite";
 import tailwindcss from "@tailwindcss/vite";
 
-// Standalone stylesheet build for the server-rendered MCP consent page. The
+// Standalone stylesheet build for the server-rendered authorization pages (the
+// MCP consent page and the Platform MCP OAuth page). The
 // output is embedded in the Go server binary (go:embed), so it must land under
 // deterministic names with no JS entry of its own.
 //
@@ -26,7 +27,7 @@ export default defineConfig({
     // embed stops compiling.
     outDir: path.resolve(
       import.meta.dirname,
-      "../../server/internal/mcp/consent_page_assets",
+      "../../server/internal/consentpage/assets",
     ),
     emptyOutDir: true,
     sourcemap: false,

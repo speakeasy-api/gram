@@ -297,6 +297,8 @@ func (s *Service) ListScopes(ctx context.Context, _ *gen.ListScopesPayload) (*ge
 		{scope: authz.ScopeMCPBlockedWrite, description: "Store exceptions for MCP write access.", resourceType: "mcp"},
 		{scope: authz.ScopeMCPConnect, description: "Connect to and use MCP servers.", resourceType: "mcp"},
 		{scope: authz.ScopeMCPBlockedConnect, description: "Store exceptions for MCP connect access.", resourceType: "mcp"},
+		{scope: authz.ScopeMCPAuth, description: "Use an upstream auth client to reach MCP servers. Applies on every server that shares the client.", resourceType: "mcp_auth_client"},
+		{scope: authz.ScopeMCPBlockedAuth, description: "Store exceptions for auth client use.", resourceType: "mcp_auth_client"},
 		{scope: authz.ScopeEnvironmentRead, description: "View environments and their entries within the project.", resourceType: "environment"},
 		{scope: authz.ScopeEnvironmentBlockedRead, description: "Store exceptions for environment read access.", resourceType: "environment"},
 		{scope: authz.ScopeEnvironmentWrite, description: "Add, edit, clone, and remove environments within the project.", resourceType: "environment"},
@@ -663,17 +665,25 @@ func genSelectorToAuthz(s *gen.Selector) authz.Selector {
 	if s.ServerURL != nil {
 		sel["server_url"] = *s.ServerURL
 	}
+	if s.ClientType != nil {
+		sel[authz.SelectorKeyClientType] = *s.ClientType
+	}
+	if s.ConnectionOwner != nil {
+		sel[authz.SelectorKeyConnectionOwner] = *s.ConnectionOwner
+	}
 	return sel
 }
 
 func authzSelectorToGen(sel authz.Selector) *gen.Selector {
 	s := &gen.Selector{
-		ResourceKind: sel["resource_kind"],
-		ResourceID:   sel["resource_id"],
-		Disposition:  nil,
-		Tool:         nil,
-		ProjectID:    nil,
-		ServerURL:    nil,
+		ResourceKind:    sel["resource_kind"],
+		ResourceID:      sel["resource_id"],
+		Disposition:     nil,
+		Tool:            nil,
+		ProjectID:       nil,
+		ServerURL:       nil,
+		ClientType:      nil,
+		ConnectionOwner: nil,
 	}
 	if v, ok := sel["disposition"]; ok {
 		s.Disposition = &v
@@ -686,6 +696,12 @@ func authzSelectorToGen(sel authz.Selector) *gen.Selector {
 	}
 	if v, ok := sel["server_url"]; ok {
 		s.ServerURL = &v
+	}
+	if v, ok := sel[authz.SelectorKeyClientType]; ok {
+		s.ClientType = &v
+	}
+	if v, ok := sel[authz.SelectorKeyConnectionOwner]; ok {
+		s.ConnectionOwner = &v
 	}
 	return s
 }

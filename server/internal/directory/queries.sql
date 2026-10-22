@@ -77,6 +77,8 @@ INSERT INTO directory_users (
   workos_directory_user_id,
   directory_id,
   email,
+  first_name,
+  last_name,
   attributes,
   deleted_at,
   workos_created_at,
@@ -90,6 +92,8 @@ VALUES (
   @workos_directory_user_id,
   sqlc.narg(directory_id),
   @email,
+  sqlc.narg(first_name),
+  sqlc.narg(last_name),
   @attributes,
   NULL,
   @workos_created_at,
@@ -101,6 +105,10 @@ ON CONFLICT (workos_directory_user_id) DO UPDATE SET
   directory_id = COALESCE(EXCLUDED.directory_id, directory_users.directory_id),
   user_id = COALESCE(EXCLUDED.user_id, directory_users.user_id),
   email = EXCLUDED.email,
+  -- The event is the newest word on the profile, so its names replace the
+  -- stored ones, including clearing a name the directory no longer reports.
+  first_name = EXCLUDED.first_name,
+  last_name = EXCLUDED.last_name,
   attributes = EXCLUDED.attributes,
   -- Only an event that explicitly reports the directory user as active may
   -- resurrect a soft-deleted row. Events without a state keep the existing
@@ -363,6 +371,126 @@ WHERE dg.organization_id = @organization_id
 GROUP BY dg.id, dg.name
 ORDER BY dg.name, dg.id;
 
+-- name: ListDirectoryPeople :many
+-- Every live directory profile in the organization with its groups, name and
+-- exactly one state. A profile linked to an account uses that account. An
+-- unlinked profile (or one linked to a deleted account) falls back to email,
+-- but only when exactly one live account and no other live profile share the
+-- address; otherwise it is ambiguous and never matched. State counts cover the
+-- whole organization, not just the page, so a caller can read them with a
+-- page of one.
+WITH profiles AS (
+  SELECT
+    d.id,
+    d.organization_id,
+    d.email,
+    d.first_name,
+    d.last_name,
+    linked.id AS linked_user_id,
+    email_accounts.account_count,
+    email_accounts.user_id AS email_user_id,
+    other_profiles.profile_count AS other_profile_count
+  FROM directory_users AS d
+  LEFT JOIN users AS linked
+    ON linked.id = d.user_id
+    AND linked.deleted_at IS NULL
+    AND linked.workos_deleted_at IS NULL
+  LEFT JOIN LATERAL (
+    SELECT COUNT(*)::bigint AS account_count, MIN(u.id) AS user_id
+    FROM users AS u
+    WHERE linked.id IS NULL
+      AND NULLIF(TRIM(d.email), '') IS NOT NULL
+      AND LOWER(u.email) = LOWER(d.email)
+      AND u.deleted_at IS NULL
+      AND u.workos_deleted_at IS NULL
+  ) AS email_accounts ON TRUE
+  LEFT JOIN LATERAL (
+    SELECT COUNT(*)::bigint AS profile_count
+    FROM directory_users AS o
+    WHERE linked.id IS NULL
+      AND NULLIF(TRIM(d.email), '') IS NOT NULL
+      AND o.organization_id = d.organization_id
+      AND o.deleted IS FALSE
+      AND o.workos_deleted IS FALSE
+      AND LOWER(o.email) = LOWER(d.email)
+      AND o.id <> d.id
+  ) AS other_profiles ON TRUE
+  WHERE d.organization_id = @organization_id
+    AND d.deleted IS FALSE
+    AND d.workos_deleted IS FALSE
+),
+resolved AS (
+  SELECT
+    p.*,
+    (linked_user_id IS NULL AND (account_count > 1 OR other_profile_count > 0)) AS ambiguous,
+    CASE
+      WHEN linked_user_id IS NOT NULL THEN linked_user_id
+      WHEN account_count = 1 AND other_profile_count = 0 THEN email_user_id
+    END AS account_user_id
+  FROM profiles AS p
+),
+people AS (
+  SELECT
+    r.id,
+    r.email,
+    r.first_name,
+    r.last_name,
+    r.account_user_id,
+    CASE
+      WHEN r.ambiguous THEN 'ambiguous_email'
+      WHEN r.account_user_id IS NULL THEN 'not_signed_in'
+      WHEN EXISTS (
+        SELECT 1
+        FROM organization_user_relationships AS our
+        WHERE our.organization_id = r.organization_id
+          AND our.user_id = r.account_user_id
+          AND our.deleted IS FALSE
+      ) THEN 'member'
+      ELSE 'account_not_member'
+    END::text AS state
+  FROM resolved AS r
+),
+totals AS (
+  SELECT
+    COUNT(*) FILTER (WHERE state = 'member')::bigint AS member_count,
+    COUNT(*) FILTER (WHERE state = 'account_not_member')::bigint AS account_not_member_count,
+    COUNT(*) FILTER (WHERE state = 'not_signed_in')::bigint AS not_signed_in_count,
+    COUNT(*) FILTER (WHERE state = 'ambiguous_email')::bigint AS ambiguous_email_count
+  FROM people
+)
+SELECT
+  people.id,
+  people.email,
+  people.first_name,
+  people.last_name,
+  -- Only a resolved account is returned; an ambiguous profile never names one.
+  COALESCE(people.account_user_id, '')::text AS account_user_id,
+  people.state,
+  COALESCE(groups.group_ids, '{}'::uuid[])::uuid[] AS group_ids,
+  COALESCE(groups.group_names, '{}'::text[])::text[] AS group_names,
+  totals.member_count,
+  totals.account_not_member_count,
+  totals.not_signed_in_count,
+  totals.ambiguous_email_count
+FROM people
+CROSS JOIN totals
+LEFT JOIN LATERAL (
+  SELECT
+    ARRAY_AGG(dg.id ORDER BY dg.name, dg.id) AS group_ids,
+    ARRAY_AGG(dg.name ORDER BY dg.name, dg.id) AS group_names
+  FROM directory_user_group_memberships AS m
+  JOIN directory_groups AS dg
+    ON dg.id = m.directory_group_id
+    AND dg.organization_id = @organization_id
+    AND dg.deleted IS FALSE
+    AND dg.workos_deleted IS FALSE
+  WHERE m.directory_user_id = people.id
+    AND m.deleted IS FALSE
+) AS groups ON TRUE
+WHERE sqlc.narg(cursor)::uuid IS NULL OR people.id > sqlc.narg(cursor)::uuid
+ORDER BY people.id
+LIMIT @limit_value;
+
 -- name: ListActiveDirectoryGroupMemberEmails :many
 SELECT DISTINCT LOWER(du.email) AS email
 FROM directory_users AS du
@@ -562,6 +690,8 @@ INSERT INTO directory_users (
   workos_directory_user_id,
   directory_id,
   email,
+  first_name,
+  last_name,
   attributes,
   workos_created_at,
   workos_updated_at
@@ -572,11 +702,35 @@ VALUES (
   @workos_directory_user_id,
   sqlc.narg(directory_id),
   @email,
+  sqlc.narg(first_name),
+  sqlc.narg(last_name),
   @attributes,
   @workos_created_at,
   @workos_updated_at
 )
 ON CONFLICT (workos_directory_user_id) DO NOTHING;
+
+-- name: FillDirectoryUserNames :execrows
+-- Fills names from a live WorkOS listing on live rows that have none yet.
+-- Events stay the source of truth: a row with either name set is left alone,
+-- tombstoned rows are skipped, and the event cursor, timestamps and deletion
+-- markers are never touched.
+WITH listed AS (
+  SELECT unnest(@workos_directory_user_ids::text[]) AS workos_directory_user_id,
+    unnest(@first_names::text[]) AS first_name,
+    unnest(@last_names::text[]) AS last_name
+)
+UPDATE directory_users AS du
+SET first_name = NULLIF(listed.first_name, ''),
+  last_name = NULLIF(listed.last_name, '')
+FROM listed
+WHERE du.organization_id = @organization_id
+  AND du.workos_directory_user_id = listed.workos_directory_user_id
+  AND du.deleted IS FALSE
+  AND du.workos_deleted IS FALSE
+  AND du.first_name IS NULL
+  AND du.last_name IS NULL
+  AND (listed.first_name <> '' OR listed.last_name <> '');
 
 -- name: LockOrganizationDirectoryGroupByWorkOSID :one
 SELECT id

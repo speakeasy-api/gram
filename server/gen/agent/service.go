@@ -200,6 +200,20 @@ type AgentPlugin struct {
 	Name *string
 	// Short description of the plugin, when one is set.
 	Description *string
+	// MCP servers the plugin contains, in display order, possibly none.
+	// Display-only: the agent installs the plugin, not these entries. Absent for
+	// the synthesized observability plugin, which carries hooks rather than
+	// servers.
+	Servers []*AgentPluginServer `json:"servers,omitzero"`
+}
+
+type AgentPluginServer struct {
+	// Display name of the server within its plugin.
+	Name string
+	// Link to the server's page in the Speakeasy dashboard. Present only when the
+	// enrolled user holds mcp:read on the server; the agent tells the user that
+	// links need that scope when it is absent.
+	DashboardURL *string
 }
 
 type AgentPollingPrincipal struct {

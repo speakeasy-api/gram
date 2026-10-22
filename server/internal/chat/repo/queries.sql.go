@@ -156,6 +156,15 @@ candidate_chats AS (
       OR u.email ILIKE '%' || $10 || '%'
       OR ua.email ILIKE '%' || $10 || '%'
     )
+    -- Eager runtime warmup persists a blank chat, not a user session.
+    -- Apply this outside the optional assistant filter for ordinary lists too.
+    AND NOT EXISTS (
+      SELECT 1 FROM assistant_threads warmup
+      WHERE warmup.chat_id = c.id
+        AND warmup.project_id = c.project_id
+        AND warmup.deleted IS FALSE
+        AND warmup.source_kind = 'warmup'
+    )
     AND (
       $11 = ''
       OR EXISTS (
@@ -600,6 +609,21 @@ func (q *Queries) DeleteChatResolutionsAfterMessage(ctx context.Context, arg Del
 	return err
 }
 
+const deleteKitCompletionBindingFixture = `-- name: DeleteKitCompletionBindingFixture :exec
+DELETE FROM assistant_inference_credentials WHERE api_key_id = $1::uuid AND project_id = $2
+`
+
+type DeleteKitCompletionBindingFixtureParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+// Test fixture: remove only the binding, keeping the principal API key live.
+func (q *Queries) DeleteKitCompletionBindingFixture(ctx context.Context, arg DeleteKitCompletionBindingFixtureParams) error {
+	_, err := q.db.Exec(ctx, deleteKitCompletionBindingFixture, arg.ID, arg.ProjectID)
+	return err
+}
+
 const disableRiskPoliciesForTest = `-- name: DisableRiskPoliciesForTest :exec
 UPDATE risk_policies SET enabled = FALSE WHERE project_id = $1
 `
@@ -709,7 +733,7 @@ assistant_chats AS MATERIALIZED (
     AND c.project_id = at.project_id
     AND c.deleted IS FALSE
   WHERE at.project_id = $2
-    AND at.source_kind <> 'setup'
+    AND at.source_kind NOT IN ('setup', 'warmup')
     AND at.deleted IS FALSE
     AND ($3::text = '' OR c.external_user_id = $3::text)
     AND ($4::text = '' OR c.user_id = $4::text)
@@ -1236,6 +1260,56 @@ func (q *Queries) GetImportedSessionObservations(ctx context.Context, arg GetImp
 	return items, nil
 }
 
+const getKitProjectionMessage = `-- name: GetKitProjectionMessage :one
+SELECT id, seq, chat_id, project_id, role, content, content_raw, content_asset_url, model, message_id, finish_reason, tool_calls, prompt_tokens, completion_tokens, total_tokens, storage_error, user_id, external_user_id, external_message_id, origin, user_agent, ip_address, source, tool_call_id, tool_urn, tool_outcome, tool_outcome_notes, tool_call_summaries, content_hash, generation, replayed, created_at, risk_analyzed_at FROM chat_messages WHERE project_id = $1 AND id = $2
+`
+
+type GetKitProjectionMessageParams struct {
+	ProjectID uuid.NullUUID
+	ID        uuid.UUID
+}
+
+func (q *Queries) GetKitProjectionMessage(ctx context.Context, arg GetKitProjectionMessageParams) (ChatMessage, error) {
+	row := q.db.QueryRow(ctx, getKitProjectionMessage, arg.ProjectID, arg.ID)
+	var i ChatMessage
+	err := row.Scan(
+		&i.ID,
+		&i.Seq,
+		&i.ChatID,
+		&i.ProjectID,
+		&i.Role,
+		&i.Content,
+		&i.ContentRaw,
+		&i.ContentAssetUrl,
+		&i.Model,
+		&i.MessageID,
+		&i.FinishReason,
+		&i.ToolCalls,
+		&i.PromptTokens,
+		&i.CompletionTokens,
+		&i.TotalTokens,
+		&i.StorageError,
+		&i.UserID,
+		&i.ExternalUserID,
+		&i.ExternalMessageID,
+		&i.Origin,
+		&i.UserAgent,
+		&i.IpAddress,
+		&i.Source,
+		&i.ToolCallID,
+		&i.ToolUrn,
+		&i.ToolOutcome,
+		&i.ToolOutcomeNotes,
+		&i.ToolCallSummaries,
+		&i.ContentHash,
+		&i.Generation,
+		&i.Replayed,
+		&i.CreatedAt,
+		&i.RiskAnalyzedAt,
+	)
+	return i, err
+}
+
 const getLLMClientBreakdownByMessages = `-- name: GetLLMClientBreakdownByMessages :many
 SELECT
   COALESCE(m.source, 'unknown') as client_name,
@@ -1357,31 +1431,84 @@ func (q *Queries) GetMaxGenerationForChat(ctx context.Context, arg GetMaxGenerat
 }
 
 const getMessagesForPublication = `-- name: GetMessagesForPublication :many
-SELECT m.id, m.chat_id, m.role, m.created_at, m.source, m.replayed
-FROM chat_messages m
-JOIN chats c ON c.id = m.chat_id AND c.project_id = m.project_id
-WHERE m.project_id = $1::uuid AND m.id = ANY($2::uuid[])
+WITH messages AS MATERIALIZED (
+  SELECT m.id, m.chat_id, m.role, m.created_at, m.source, m.replayed, m.model, m.seq,
+    COALESCE(m.user_id, '') AS actor_id, COALESCE(input.email, '') AS email
+  FROM ROWS FROM (UNNEST($1::uuid[]), UNNEST($2::text[])) AS input(id, email)
+  JOIN chat_messages m ON m.id = input.id AND m.project_id = $3::uuid
+  JOIN chats c ON c.id = m.chat_id AND c.project_id = m.project_id
+  JOIN projects p ON p.id = m.project_id AND p.organization_id = $4::text
+), identities AS (
+  SELECT DISTINCT actor_id, email FROM messages
+), departments AS MATERIALIZED (
+  SELECT identity.actor_id, identity.email,
+    COALESCE(linked.department, fallback.department, '')::text AS department
+  FROM identities identity
+  LEFT JOIN LATERAL (
+    SELECT d.id, CASE WHEN jsonb_typeof(d.attributes -> 'department_name') = 'string'
+      THEN BTRIM(d.attributes ->> 'department_name') END AS department
+    FROM directory_users d
+    WHERE d.organization_id = $4::text
+      AND d.user_id = NULLIF(identity.actor_id, '')
+      AND d.user_id IS NOT NULL
+      AND d.deleted IS FALSE
+      AND d.workos_deleted IS FALSE
+    ORDER BY d.workos_updated_at DESC, d.updated_at DESC, d.id
+    LIMIT 1
+  ) linked ON TRUE
+  LEFT JOIN LATERAL (
+    SELECT CASE WHEN jsonb_typeof(email_candidate.attributes -> 'department_name') = 'string'
+      THEN BTRIM(email_candidate.attributes ->> 'department_name') END AS department
+    FROM (
+      SELECT d.attributes, d.user_id, COUNT(*) OVER () AS candidate_count
+      FROM directory_users d
+      WHERE linked.id IS NULL
+        AND d.organization_id = $4::text
+        AND identity.email <> ''
+        AND LOWER(d.email) = identity.email
+        AND d.deleted IS FALSE
+        AND d.workos_deleted IS FALSE
+    ) email_candidate
+    WHERE email_candidate.candidate_count = 1
+      AND (identity.actor_id = '' OR email_candidate.user_id IS NULL OR email_candidate.user_id = identity.actor_id)
+  ) fallback ON TRUE
+)
+SELECT m.id, m.chat_id, m.role, m.created_at, m.source, m.replayed, m.model, d.department
+FROM messages m
+JOIN departments d ON d.actor_id = m.actor_id AND d.email = m.email
 ORDER BY m.seq
 `
 
 type GetMessagesForPublicationParams struct {
-	ProjectID uuid.UUID
-	Ids       []uuid.UUID
+	Ids                []uuid.UUID
+	ObservedUserEmails []string
+	ProjectID          uuid.UUID
+	OrganizationID     string
 }
 
 type GetMessagesForPublicationRow struct {
-	ID        uuid.UUID
-	ChatID    uuid.UUID
-	Role      string
-	CreatedAt pgtype.Timestamptz
-	Source    pgtype.Text
-	Replayed  bool
+	ID         uuid.UUID
+	ChatID     uuid.UUID
+	Role       string
+	CreatedAt  pgtype.Timestamptz
+	Source     pgtype.Text
+	Replayed   bool
+	Model      pgtype.Text
+	Department string
 }
 
 // Read authoritative identity and attribution in the write transaction.
 // Content is fetched by consumers, never serialized into these events.
+// A linked directory profile wins as a complete snapshot. Email fallback must
+// identify exactly one active profile and must not contradict a known actor.
+// Materialize resolved departments so repeated identities share one lookup.
 func (q *Queries) GetMessagesForPublication(ctx context.Context, arg GetMessagesForPublicationParams) ([]GetMessagesForPublicationRow, error) {
-	rows, err := q.db.Query(ctx, getMessagesForPublication, arg.ProjectID, arg.Ids)
+	rows, err := q.db.Query(ctx, getMessagesForPublication,
+		arg.Ids,
+		arg.ObservedUserEmails,
+		arg.ProjectID,
+		arg.OrganizationID,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -1396,6 +1523,8 @@ func (q *Queries) GetMessagesForPublication(ctx context.Context, arg GetMessages
 			&i.CreatedAt,
 			&i.Source,
 			&i.Replayed,
+			&i.Model,
+			&i.Department,
 		); err != nil {
 			return nil, err
 		}
@@ -1788,7 +1917,7 @@ JOIN chats c
   AND c.deleted IS FALSE
 WHERE at.assistant_id = $1
   AND at.project_id = $2
-  AND at.source_kind <> 'setup'
+  AND at.source_kind NOT IN ('setup', 'warmup')
   AND at.deleted IS FALSE
   AND at.correlation_id > $3
   AND ($4::text = '' OR c.external_user_id = $4::text)
@@ -2919,6 +3048,15 @@ candidate_chats AS (
       OR u.email ILIKE '%' || $9 || '%'
       OR ua.email ILIKE '%' || $9 || '%'
     )
+    -- Eager runtime warmup persists a blank chat, not a user session.
+    -- Apply this outside the optional assistant filter for ordinary lists too.
+    AND NOT EXISTS (
+      SELECT 1 FROM assistant_threads warmup
+      WHERE warmup.chat_id = c.id
+        AND warmup.project_id = c.project_id
+        AND warmup.deleted IS FALSE
+        AND warmup.source_kind = 'warmup'
+    )
     AND (
       $10 = ''
       OR EXISTS (
@@ -3976,6 +4114,42 @@ func (q *Queries) MarkClaudeTagMessages(ctx context.Context, arg MarkClaudeTagMe
 	return err
 }
 
+const patchKitProjectionMessage = `-- name: PatchKitProjectionMessage :execrows
+UPDATE chat_messages SET content = $1, content_raw = $2,
+ tool_calls = $3, content_hash = $4, finish_reason = $5,
+ risk_analyzed_at = CASE WHEN content IS DISTINCT FROM $1 OR content_raw IS DISTINCT FROM $2 OR tool_calls IS DISTINCT FROM $3 THEN NULL ELSE risk_analyzed_at END
+WHERE project_id = $6 AND chat_id = $7 AND id = $8 AND source = 'kit'
+AND (content IS DISTINCT FROM $1 OR content_raw IS DISTINCT FROM $2 OR tool_calls IS DISTINCT FROM $3 OR finish_reason IS DISTINCT FROM $5)
+`
+
+type PatchKitProjectionMessageParams struct {
+	Content      string
+	ContentRaw   []byte
+	ToolCalls    []byte
+	ContentHash  []byte
+	FinishReason pgtype.Text
+	ProjectID    uuid.NullUUID
+	ChatID       uuid.UUID
+	ID           uuid.UUID
+}
+
+func (q *Queries) PatchKitProjectionMessage(ctx context.Context, arg PatchKitProjectionMessageParams) (int64, error) {
+	result, err := q.db.Exec(ctx, patchKitProjectionMessage,
+		arg.Content,
+		arg.ContentRaw,
+		arg.ToolCalls,
+		arg.ContentHash,
+		arg.FinishReason,
+		arg.ProjectID,
+		arg.ChatID,
+		arg.ID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const recordChatSlackChannel = `-- name: RecordChatSlackChannel :exec
 UPDATE chats SET slack_team_id = coalesce(nullif($1::text, ''), slack_team_id),
  slack_channel_name = coalesce(nullif($2::text, ''), CASE WHEN slack_channel_id = $3::text THEN slack_channel_name END),
@@ -4069,6 +4243,22 @@ func (q *Queries) RenameChat(ctx context.Context, arg RenameChatParams) error {
 		arg.ID,
 		arg.ProjectID,
 	)
+	return err
+}
+
+const revokeKitCompletionBindingFixture = `-- name: RevokeKitCompletionBindingFixture :exec
+UPDATE assistant_inference_credentials SET revoked_at = clock_timestamp()
+WHERE api_key_id = $1::uuid AND project_id = $2
+`
+
+type RevokeKitCompletionBindingFixtureParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+// Test fixture: revoke only the binding, keeping the principal API key live.
+func (q *Queries) RevokeKitCompletionBindingFixture(ctx context.Context, arg RevokeKitCompletionBindingFixtureParams) error {
+	_, err := q.db.Exec(ctx, revokeKitCompletionBindingFixture, arg.ID, arg.ProjectID)
 	return err
 }
 
@@ -4401,6 +4591,30 @@ type SetInferenceActorKeyParams struct {
 // key never changes for a chat, so an existing value is kept.
 func (q *Queries) SetInferenceActorKey(ctx context.Context, arg SetInferenceActorKeyParams) error {
 	_, err := q.db.Exec(ctx, setInferenceActorKey, arg.InferenceActorKey, arg.ID, arg.ProjectID)
+	return err
+}
+
+const setKitCompletionRuntimeFixture = `-- name: SetKitCompletionRuntimeFixture :exec
+UPDATE assistant_runtimes
+SET runtime_version = $1, ended_at = $2::timestamptz
+WHERE id = $3 AND project_id = $4
+`
+
+type SetKitCompletionRuntimeFixtureParams struct {
+	RuntimeVersion int16
+	EndedAt        pgtype.Timestamptz
+	RuntimeID      uuid.UUID
+	ProjectID      uuid.UUID
+}
+
+// Test fixture: exercise live runtime admission independently of key validity.
+func (q *Queries) SetKitCompletionRuntimeFixture(ctx context.Context, arg SetKitCompletionRuntimeFixtureParams) error {
+	_, err := q.db.Exec(ctx, setKitCompletionRuntimeFixture,
+		arg.RuntimeVersion,
+		arg.EndedAt,
+		arg.RuntimeID,
+		arg.ProjectID,
+	)
 	return err
 }
 
@@ -5059,6 +5273,37 @@ func (q *Queries) UpsertSetupAssistantThread(ctx context.Context, arg UpsertSetu
 		arg.ProjectID,
 		arg.CorrelationID,
 		arg.ChatID,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const validateKitTranscriptBinding = `-- name: ValidateKitTranscriptBinding :one
+SELECT t.id FROM assistant_threads t
+JOIN assistant_runtimes r ON r.assistant_id = t.assistant_id AND r.project_id = t.project_id
+JOIN assistants a ON a.id = t.assistant_id AND a.project_id = t.project_id
+JOIN chats c ON c.id = t.chat_id AND c.project_id = t.project_id
+WHERE t.project_id = $1 AND t.assistant_id = $2 AND t.id = $3 AND t.chat_id = $4
+AND r.id = $5 AND r.runtime_version = 3 AND NOT r.deleted AND NOT r.ended
+AND NOT t.deleted AND NOT c.deleted AND NOT a.deleted AND a.status = 'active'
+`
+
+type ValidateKitTranscriptBindingParams struct {
+	ProjectID   uuid.UUID
+	AssistantID uuid.UUID
+	ThreadID    uuid.UUID
+	ChatID      uuid.UUID
+	RuntimeID   uuid.UUID
+}
+
+func (q *Queries) ValidateKitTranscriptBinding(ctx context.Context, arg ValidateKitTranscriptBindingParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, validateKitTranscriptBinding,
+		arg.ProjectID,
+		arg.AssistantID,
+		arg.ThreadID,
+		arg.ChatID,
+		arg.RuntimeID,
 	)
 	var id uuid.UUID
 	err := row.Scan(&id)

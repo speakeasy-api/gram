@@ -223,8 +223,14 @@ func (s *Service) directUpstreamChoice(ctx context.Context, w http.ResponseWrite
 		}
 	}
 	choice, err := selector.forServer(ctx, endpoint.McpServerID.UUID)
-	if mode == feature.AuthClientResolverShadow {
-		s.shadowAuthClient(ctx, selector, endpoint.McpServerID.UUID, choice, err)
+	switch mode {
+	case feature.AuthClientResolverShadow:
+		s.shadowAuthClient(ctx, selector, endpoint.McpServerID.UUID, endpoint.ProjectID, authentication.subject, choice, err)
+	case feature.AuthClientResolverOff:
+		if err == nil {
+			s.newMandatoryShadow(ctx, endpoint.OrganizationID).recordSkipped(ctx, mandatorySurfaceAuthClient, true, mandatoryReasonResolverOff, endpoint.McpServerID.UUID.String(), endpoint.ProjectID.String())
+		}
+	case feature.AuthClientResolverEnforced:
 	}
 	switch {
 	case errors.Is(err, errUpstreamSelectionMissing), errors.Is(err, errUpstreamSelectionUnusable):
@@ -246,6 +252,22 @@ func (s *Service) resolveAccessTokens(ctx context.Context, authentication *issue
 	endpoint := authentication.endpoint
 	if authentication.chosenNoAuth {
 		return map[uuid.UUID]remotesessions.UpstreamToken{}, nil
+	}
+	if authentication.chosenClient.Valid && authentication.authClient != nil {
+		// A typed auth client was checked against the server, which authorizes
+		// its registration without a sign-in link.
+		tokens, err := s.remoteChallengeMgr.ResolveAuthClientAccessTokens(ctx, remotesessions.AuthClientTokenRequest{
+			ProjectID:           endpoint.ProjectID,
+			OrganizationID:      endpoint.OrganizationID,
+			UserSessionIssuerID: endpoint.UserSessionIssuerID,
+			Subject:             authentication.subject,
+			RegistrationID:      authentication.chosenClient.UUID,
+			SkipUnusable:        skipUnusable,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("resolve auth client: %w", err)
+		}
+		return tokens, nil
 	}
 	if authentication.chosenClient.Valid {
 		tokens, err := s.remoteChallengeMgr.ResolveClientAccessTokens(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, authentication.subject, authentication.chosenClient.UUID, skipUnusable)

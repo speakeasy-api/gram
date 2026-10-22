@@ -1,209 +1,111 @@
-// Local-only RBAC scope override state, persisted to localStorage. The SDK
-// fetcher reads the same STORAGE_KEY via getRBACScopeOverrideHeader (see
-// components/dev-toolbar-utils.ts) and turns it into the X-Gram-Scope-Override
-// header on every request, so the key and shape here must stay in sync with it.
-
+// Shared by the editor and request-header consumer, including before editor mount.
 const RBAC_OVERRIDE_STORAGE_KEY = "gram-rbac-dev-override";
-
-export type ResourceType =
-  | "org"
-  | "project"
-  | "environment"
-  | "skill"
-  | "assistant"
-  | "mcp"
-  | "risk_policy"
-  | "chat";
-
-export const SCOPE_DEFS: {
-  scope: string;
-  label: string;
-  resourceType: ResourceType;
+const CATALOG_KEY = "gram-rbac-dev-scope-catalog";
+export type CatalogScope = {
+  slug: string;
+  resourceType: string;
   description: string;
-}[] = [
-  {
-    scope: "org:read",
-    label: "org:read",
-    resourceType: "org",
-    description: "View org metadata & members",
-  },
-  {
-    scope: "org:admin",
-    label: "org:admin",
-    resourceType: "org",
-    description: "Manage org settings & access",
-  },
-  {
-    scope: "project:read",
-    label: "project:read",
-    resourceType: "project",
-    description: "View projects & build resources",
-  },
-  {
-    scope: "project:write",
-    label: "project:write",
-    resourceType: "project",
-    description: "Modify projects & build resources",
-  },
-  {
-    scope: "environment:read",
-    label: "environment:read",
-    resourceType: "environment",
-    description: "View environments & their entries",
-  },
-  {
-    scope: "environment:write",
-    label: "environment:write",
-    resourceType: "environment",
-    description: "Create, edit, clone & delete environments",
-  },
-  {
-    scope: "skill:read",
-    label: "skill:read",
-    resourceType: "skill",
-    description: "View skills within projects",
-  },
-  {
-    scope: "skill:write",
-    label: "skill:write",
-    resourceType: "skill",
-    description: "Create and modify skills within projects",
-  },
-  {
-    scope: "assistant:read",
-    label: "assistant:read",
-    resourceType: "assistant",
-    description: "View and use assistants within projects",
-  },
-  {
-    scope: "assistant:write",
-    label: "assistant:write",
-    resourceType: "assistant",
-    description: "Create and modify assistants within projects",
-  },
-  {
-    scope: "mcp:read",
-    label: "mcp:read",
-    resourceType: "mcp",
-    description: "View MCP servers",
-  },
-  {
-    scope: "mcp:write",
-    label: "mcp:write",
-    resourceType: "mcp",
-    description: "Manage MCP servers",
-  },
-  {
-    scope: "mcp:connect",
-    label: "mcp:connect",
-    resourceType: "mcp",
-    description: "Execute MCP tool calls",
-  },
-  {
-    scope: "risk_policy:evaluate",
-    label: "risk_policy:evaluate",
-    resourceType: "risk_policy",
-    description: "Subject to targeted risk policies",
-  },
-  {
-    scope: "risk_policy:bypass",
-    label: "risk_policy:bypass",
-    resourceType: "risk_policy",
-    description: "Exempt from risk policy enforcement",
-  },
-  {
-    scope: "risk_policy:block",
-    label: "risk_policy:block",
-    resourceType: "risk_policy",
-    description: "Hard-block on risk policy violations",
-  },
-  {
-    scope: "chat:read",
-    label: "chat:read",
-    resourceType: "chat",
-    description: "Read all agent session transcripts",
-  },
-  {
-    scope: "log:read",
-    label: "log:read",
-    resourceType: "project",
-    description: "View a project's tool-call logs and traces",
-  },
-];
-
-export const GROUP_ORDER: { key: ResourceType; label: string }[] = [
-  { key: "org", label: "Organization" },
-  { key: "project", label: "Project" },
-  { key: "environment", label: "Environments" },
-  { key: "skill", label: "Skills" },
-  { key: "assistant", label: "Assistants" },
-  { key: "mcp", label: "MCP" },
-  { key: "risk_policy", label: "Risk Policies" },
-  { key: "chat", label: "Agent Sessions" },
-];
-
-export type ScopeState = {
-  enabled: boolean;
-  resources: string[] | null; // null = unrestricted, string[] = specific resource IDs
+  visibility: string;
 };
-
+const RECOVERY_SCOPE: CatalogScope = {
+  slug: "org:read",
+  resourceType: "org",
+  description: "Read organization metadata and the scope catalog",
+  visibility: "user_visible",
+};
+// Overrides administer and never grant auth client use: the server drops
+// mcp:auth from them (authz.GrantsFromOverrides), so offering it would toggle
+// nothing.
+const NOT_OVERRIDABLE_RESOURCE_TYPES = new Set(["mcp_auth_client"]);
+function visibleCatalog(scopes: CatalogScope[]): CatalogScope[] {
+  return [
+    RECOVERY_SCOPE,
+    ...scopes.filter(
+      (scope) =>
+        scope.visibility === "user_visible" &&
+        scope.slug !== "org:read" &&
+        !NOT_OVERRIDABLE_RESOURCE_TYPES.has(scope.resourceType),
+    ),
+  ];
+}
+export function loadCatalog(): CatalogScope[] {
+  try {
+    const raw = localStorage.getItem(CATALOG_KEY);
+    if (raw) return visibleCatalog(JSON.parse(raw));
+  } catch {
+    /* A bad cache must not hide recovery. */
+  }
+  return [RECOVERY_SCOPE];
+}
+export function saveCatalog(scopes: CatalogScope[]): CatalogScope[] {
+  const catalog = visibleCatalog(scopes);
+  try {
+    localStorage.setItem(CATALOG_KEY, JSON.stringify(catalog));
+  } catch {
+    // Catalog caching is best-effort; persisted choices remain authoritative.
+  }
+  return catalog;
+}
+function normalizeScope(value: unknown): ScopeState {
+  if (typeof value === "boolean") return { enabled: value, resources: null };
+  if (
+    value &&
+    typeof value === "object" &&
+    "enabled" in value &&
+    typeof value.enabled === "boolean"
+  ) {
+    const resources = "resources" in value ? value.resources : null;
+    if (
+      resources == null ||
+      (Array.isArray(resources) &&
+        resources.every((id) => typeof id === "string"))
+    ) {
+      return { enabled: value.enabled, resources: resources ?? null };
+    }
+  }
+  // Corrupt entries must not make header serialization fall back to full access.
+  return { enabled: false, resources: null };
+}
+export type ScopeState = { enabled: boolean; resources: string[] | null };
 export type OverrideState = {
   enabled: boolean;
   scopes: Record<string, ScopeState>;
 };
-
-export function defaultScopeState(): Record<string, ScopeState> {
+export function defaultScopeState(
+  catalog = loadCatalog(),
+): Record<string, ScopeState> {
   return Object.fromEntries(
-    SCOPE_DEFS.map((s) => [s.scope, { enabled: true, resources: null }]),
+    catalog.map((scope) => [scope.slug, { enabled: true, resources: null }]),
   );
 }
-
-// mergeWithDefaults overlays existing scope state on top of defaultScopeState
-// so every scope in SCOPE_DEFS is present, but explicit user toggles win.
-function mergeWithDefaults(
-  existing: Record<string, ScopeState>,
-): Record<string, ScopeState> {
-  return { ...defaultScopeState(), ...existing };
+export function reconcileState(
+  state: OverrideState,
+  catalog = loadCatalog(),
+): OverrideState {
+  // Keep saved scopes even when the catalog is unavailable or changes.
+  return {
+    ...state,
+    scopes: { ...defaultScopeState(catalog), ...state.scopes },
+  };
 }
-
 export function loadState(): OverrideState {
   try {
     const raw = localStorage.getItem(RBAC_OVERRIDE_STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      // Migrate from old boolean-only format
-      if (
-        parsed.scopes &&
-        typeof Object.values(parsed.scopes)[0] !== "object"
-      ) {
-        return {
-          enabled: parsed.enabled,
-          scopes: mergeWithDefaults(
-            Object.fromEntries(
-              Object.entries(parsed.scopes).map(([scope, enabled]) => [
-                scope,
-                { enabled: enabled as boolean, resources: null },
-              ]),
-            ),
-          ),
-        };
-      }
-      // Merge SCOPE_DEFS defaults so any newly added scopes (since the user last
-      // saved state) are materialized in localStorage. Without this, new entries
-      // render as visually "enabled" via the per-row fallback in the JSX, but
-      // getRBACScopeOverrideHeader only iterates keys that exist in state.scopes
-      // — so the override header omits them despite them looking checked.
-      return {
-        enabled: parsed.enabled ?? false,
-        scopes: mergeWithDefaults(parsed.scopes ?? {}),
-      };
+      const scopes = Object.fromEntries(
+        Object.entries(parsed.scopes ?? {}).map(([scope, value]) => [
+          scope,
+          normalizeScope(value),
+        ]),
+      ) as Record<string, ScopeState>;
+      return reconcileState({ enabled: parsed.enabled ?? false, scopes });
     }
   } catch {
-    // ignore malformed localStorage
+    /* Ignore malformed localStorage. */
   }
   return { enabled: false, scopes: defaultScopeState() };
 }
-
 export function saveState(state: OverrideState): void {
   localStorage.setItem(RBAC_OVERRIDE_STORAGE_KEY, JSON.stringify(state));
 }

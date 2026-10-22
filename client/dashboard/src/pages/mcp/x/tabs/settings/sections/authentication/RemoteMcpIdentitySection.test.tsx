@@ -1611,7 +1611,10 @@ describe("RemoteMcpIdentitySectionBody", () => {
 
       const alert = await screen.findByRole("alert");
       expect(alert.querySelector("code")?.textContent).toBe(message);
-      expect(alert.textContent).toBe(message);
+      // The severity eyebrow every alert now carries, and then the message
+      // itself — the point of the assertion is that nothing else is added,
+      // not that the alert is unlabelled.
+      expect(alert.textContent).toBe(`Error${message}`);
       expect(within(alert).queryByRole("heading")).toBeNull();
       expect(screen.queryByRole("button", { name: "Retry" })).toBeNull();
       expect(screen.queryByText(/PRIVATE RESPONSE BODY/)).toBeNull();

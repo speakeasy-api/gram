@@ -5,7 +5,9 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"net/url"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -18,12 +20,16 @@ import (
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -211,7 +217,7 @@ func TestRefreshDecision(t *testing.T) {
 		})
 	}
 
-	reconnect, decided, err := (&Service{}).refreshNeedsAuthClientReconnect(t.Context(), &ResolvedMcpEndpoint{McpServerID: validUUID(uuid.New()), OrganizationID: "org_a"}, "jti")
+	reconnect, decided, err := (&Service{}).refreshNeedsAuthClientReconnect(t.Context(), &ResolvedMcpEndpoint{McpServerID: validUUID(uuid.New()), OrganizationID: "org_a"}, urn.NewUserSubject("user_a"), "jti")
 	require.NoError(t, err)
 	require.False(t, reconnect)
 	require.False(t, decided, "without the flag the upstream client choice decides")
@@ -325,7 +331,7 @@ func (f *authClientFixture) resolve(selector *upstreamSelector) authClientResolu
 
 func (f *authClientFixture) serve(selector *upstreamSelector) authClientResolution {
 	f.t.Helper()
-	res, err := f.service.resolveAuthClientForServing(f.t.Context(), selector, f.serverID, urn.NewUserSubject("user_1"))
+	res, err := f.service.resolveAuthClientForServing(f.t.Context(), selector, f.serverID, f.projectID, urn.NewUserSubject("user_1"))
 	require.NoError(f.t, err)
 	return res
 }
@@ -464,7 +470,7 @@ func TestResolveAuthClientReadsTheRecordedChoice(t *testing.T) {
 
 		var buf bytes.Buffer
 		f.service.logger = slog.New(slog.NewJSONHandler(&buf, nil))
-		f.service.shadowAuthClient(ctx, selector, f.serverID, choice, choiceErr)
+		f.service.shadowAuthClient(ctx, selector, f.serverID, f.projectID, urn.NewUserSubject("user_1"), choice, choiceErr)
 		require.Empty(t, buf.String(), "shadow reports no mismatch")
 	})
 
@@ -690,7 +696,7 @@ func TestResolveAuthClientReadsTheRecordedChoice(t *testing.T) {
 		f.service.authClientPermitter = permitter
 		id := f.oauthClient(authClientTypeRemoteSession)
 		selector := f.choose(validUUID(id))
-		f.service.shadowAuthClient(ctx, selector, f.serverID, upstreamChoice{clientID: validUUID(f.registration), remoteSessionIssuerID: validUUID(f.issuerID)}, nil)
+		f.service.shadowAuthClient(ctx, selector, f.serverID, f.projectID, urn.NewUserSubject("user_1"), upstreamChoice{clientID: validUUID(f.registration), remoteSessionIssuerID: validUUID(f.issuerID)}, nil)
 		require.Empty(t, permitter.asked)
 	})
 
@@ -905,7 +911,7 @@ func TestShadowAuthClientCountsResolverFailures(t *testing.T) {
 	selector := f.choose(uuid.NullUUID{})
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
-	f.service.shadowAuthClient(ctx, selector, f.serverID, upstreamChoice{}, nil)
+	f.service.shadowAuthClient(ctx, selector, f.serverID, f.projectID, urn.NewUserSubject("user_1"), upstreamChoice{}, nil)
 	require.Equal(t, map[attribute.Set]int64{
 		attribute.NewSet(attr.AuthClientParityAgreed(false), attr.AuthClientOutcome(authClientParityError), attr.AuthClientLegacyOutcome(string(authClientNoAuth)), attr.AuthClientReason(authClientReasonNone)): 1,
 	}, parityPoints(t, reader))
@@ -948,7 +954,7 @@ func TestUpstreamClientChoiceServesMappedHeadersOnlyClients(t *testing.T) {
 			choice, choiceErr := selector.forServer(t.Context(), f.serverID)
 			var buf bytes.Buffer
 			f.service.logger = slog.New(slog.NewJSONHandler(&buf, nil))
-			f.service.shadowAuthClient(t.Context(), selector, f.serverID, choice, choiceErr)
+			f.service.shadowAuthClient(t.Context(), selector, f.serverID, f.projectID, urn.NewUserSubject("user_1"), choice, choiceErr)
 			require.Empty(t, buf.String())
 		})
 	}
@@ -1009,4 +1015,109 @@ func TestAnnotateAuthClientLogsAtDebug(t *testing.T) {
 	buf.Reset()
 	annotateAuthClient(t.Context(), slog.New(slog.NewJSONHandler(&buf, nil)), res)
 	require.Empty(t, buf.String(), "silent above debug")
+}
+
+// Under enforcement the resolver's registration serves the caller's own
+// session whichever sign-in it was consented through; the upstream client
+// choice still needs the sign-in link.
+func TestResolveAccessTokensServesAnAuthClientWithoutTheSignInLink(t *testing.T) {
+	t.Parallel()
+
+	pool, err := TestInfra.CloneTestDatabase(t, "mcp_auth_client_tokens")
+	require.NoError(t, err)
+	f := newAuthClientFixture(t, pool)
+	ctx := t.Context()
+	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{})
+	require.NoError(t, err)
+	f.service.remoteChallengeMgr = remotesessions.NewChallengeManager(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), pool, f.service.enc, policy, nil, cache.NoopCache, &url.URL{Scheme: "http", Host: "localhost"})
+
+	consentedUnder, serverSignIn := uuid.New(), uuid.New()
+	for _, id := range []uuid.UUID{consentedUnder, serverSignIn} {
+		require.NoError(t, f.q.SeedUserSessionIssuerFixture(ctx, authclientbackfill.SeedUserSessionIssuerFixtureParams{ID: id, ProjectID: validUUID(f.projectID), Slug: "usi-" + id.String()[:8]}))
+	}
+	subject := urn.NewUserSubject("user_tokens")
+	accessEnc, err := f.service.enc.Encrypt([]byte("upstream-token"))
+	require.NoError(t, err)
+	_, err = remotesessionsrepo.New(pool).UpsertRemoteSession(ctx, remotesessionsrepo.UpsertRemoteSessionParams{
+		SubjectUrn:            subject,
+		UserSessionIssuerID:   consentedUnder,
+		RemoteSessionClientID: f.registration,
+		AccessTokenEncrypted:  accessEnc,
+		AccessExpiresAt:       pgtype.Timestamptz{Time: time.Now().Add(time.Hour), InfinityModifier: pgtype.Finite, Valid: true},
+		Scopes:                []string{},
+	})
+	require.NoError(t, err)
+
+	resolved := authClientResolution{outcome: authClientResolved, clientType: authClientTypeRemoteSession}
+	authentication := &issuerGateAuthentication{
+		endpoint:     &ResolvedMcpEndpoint{ProjectID: f.projectID, OrganizationID: f.orgID, UserSessionIssuerID: serverSignIn, McpServerID: validUUID(f.serverID)},
+		subject:      subject,
+		chosenClient: validUUID(f.registration),
+		authClient:   &resolved,
+	}
+	tokens, err := f.service.resolveAccessTokens(ctx, authentication, false)
+	require.NoError(t, err)
+	require.Equal(t, "upstream-token", tokens[f.issuerID].Token)
+
+	authentication.authClient = nil
+	_, err = f.service.resolveAccessTokens(ctx, authentication, false)
+	require.ErrorIs(t, err, remotesessions.ErrChosenClientUnbound)
+}
+
+// Under enforcement the resolved registration's stored grant decides a
+// refresh, whichever sign-in it was consented through; a failed check is
+// undecided, and the refresh then fails open.
+func TestRefreshNeedsAuthClientReconnectUnderEnforcement(t *testing.T) {
+	t.Parallel()
+
+	pool, err := TestInfra.CloneTestDatabase(t, "mcp_auth_client_refresh")
+	require.NoError(t, err)
+	redisClient, err := TestInfra.NewRedisClient(t, 0)
+	require.NoError(t, err)
+	f := newAuthClientFixture(t, pool)
+	ctx := t.Context()
+	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{})
+	require.NoError(t, err)
+	f.service.remoteChallengeMgr = remotesessions.NewChallengeManager(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), pool, f.service.enc, policy, nil, cache.NoopCache, &url.URL{Scheme: "http", Host: "localhost"})
+	flags := new(feature.InMemory)
+	flags.SetFlag(feature.FlagAuthClientResolver, f.orgID, true)
+	f.service.features = flags
+	f.service.sessionPolicyCache = cache.NewTypedObjectCache[sessionPolicyEntry](testenv.NewLogger(t), cache.NewRedisCacheAdapter(redisClient), cache.SuffixNone)
+
+	consentedUnder, serverSignIn := uuid.New(), uuid.New()
+	for _, id := range []uuid.UUID{consentedUnder, serverSignIn} {
+		require.NoError(t, f.q.SeedUserSessionIssuerFixture(ctx, authclientbackfill.SeedUserSessionIssuerFixtureParams{ID: id, ProjectID: validUUID(f.projectID), Slug: "usi-" + id.String()[:8]}))
+	}
+	selector := f.choose(validUUID(f.oauthClient(authClientTypeRemoteSession)))
+	require.NoError(t, f.service.sessionPolicyCache.Store(ctx, sessionPolicyEntry{IssuerID: serverSignIn.String(), JTI: "jti", Selection: nil, Refreshable: true, CredentialID: selector.credentialID}))
+	endpoint := &ResolvedMcpEndpoint{ProjectID: f.projectID, OrganizationID: f.orgID, UserSessionIssuerID: serverSignIn, McpServerID: validUUID(f.serverID)}
+
+	subject := urn.NewUserSubject("user_refresh")
+	reconnect, decided, err := f.service.refreshNeedsAuthClientReconnect(ctx, endpoint, subject, "jti")
+	require.NoError(t, err)
+	require.True(t, decided)
+	require.True(t, reconnect, "no stored grant needs a reconnect")
+
+	accessEnc, err := f.service.enc.Encrypt([]byte("upstream-token"))
+	require.NoError(t, err)
+	_, err = remotesessionsrepo.New(pool).UpsertRemoteSession(ctx, remotesessionsrepo.UpsertRemoteSessionParams{
+		SubjectUrn:            subject,
+		UserSessionIssuerID:   consentedUnder,
+		RemoteSessionClientID: f.registration,
+		AccessTokenEncrypted:  accessEnc,
+		AccessExpiresAt:       pgtype.Timestamptz{Time: time.Now().Add(time.Hour), InfinityModifier: pgtype.Finite, Valid: true},
+		Scopes:                []string{},
+	})
+	require.NoError(t, err)
+	reconnect, decided, err = f.service.refreshNeedsAuthClientReconnect(ctx, endpoint, subject, "jti")
+	require.NoError(t, err)
+	require.True(t, decided)
+	require.False(t, reconnect, "a live grant from another sign-in refreshes")
+
+	// A workload subject without workload authentication fails the check.
+	workload := urn.NewWorkloadSubject(uuid.New(), "run")
+	_, decided, err = f.service.refreshNeedsAuthClientReconnect(ctx, endpoint, workload, "jti")
+	require.ErrorIs(t, err, remotesessions.ErrInvalidAuthorizationRequest)
+	require.False(t, decided)
+	require.False(t, f.service.refreshNeedsUpstreamReconnect(ctx, testenv.NewLogger(t), endpoint, workload, "jti"), "a failed check fails open")
 }

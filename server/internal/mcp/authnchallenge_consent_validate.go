@@ -267,7 +267,7 @@ func (s *Service) metaValidationTarget(
 		return ctx, none, errRemoteSessionUnroutable
 	}
 
-	ctx, members, err := s.resolveEndpointMemberSnapshot(ctx, logger, endpoint)
+	ctx, members, err := s.resolveEndpointMemberSnapshot(ctx, logger, mandatorySurfaceConsent, endpoint)
 	if err != nil {
 		return ctx, none, fmt.Errorf("resolve meta MCP member snapshot: %w", err)
 	}
@@ -390,7 +390,7 @@ func (s *Service) standaloneValidationTarget(
 	}
 	token := selectedToken.Token
 
-	authorized, err := s.authorizeProxyBackendAccess(ctx, logger, endpoint.ProjectID, &server)
+	authorized, err := s.authorizeProxyBackendAccess(ctx, logger, mandatorySurfaceConsent, endpoint.OrganizationID, endpoint.ProjectID, &server)
 	if err != nil {
 		return ctx, none, fmt.Errorf("authorize validation access: %w", err)
 	}
@@ -417,6 +417,7 @@ func (s *Service) standaloneValidationTarget(
 			UpstreamAuth:       token,
 			WWWAuthenticate:    "",
 			Selection:          nil,
+			Request:            nil,
 		}, remotemcp.WithoutToolsCallIdentityCoverage())
 		if berr != nil {
 			return nil, fmt.Errorf("build tunnel proxy: %w", berr)
@@ -446,6 +447,7 @@ func probeProxyBuilder(build memberProxyBuilder) memberProxyBuilder {
 		p.InitializeRequestInterceptors = nil
 		p.UserRequestObservationInterceptors = nil
 		p.Metrics = nil
+		p.RequestObserver = nil
 		return p, nil
 	}
 }

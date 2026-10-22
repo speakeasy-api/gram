@@ -304,6 +304,17 @@ type ListDirectoryRoleMappingsResponseBody struct {
 	Mappings []*DirectoryRoleMappingResponseBody `form:"mappings" json:"mappings" xml:"mappings"`
 }
 
+// ListDirectoryPeopleResponseBody is the type of the "access" service
+// "listDirectoryPeople" endpoint HTTP response body.
+type ListDirectoryPeopleResponseBody struct {
+	// One page of directory profiles, ordered by profile ID.
+	People []*DirectoryPersonResponseBody `form:"people" json:"people" xml:"people"`
+	// Profiles per state across the whole organization, not just this page.
+	Counts *DirectoryPeopleStateCountsResponseBody `form:"counts" json:"counts" xml:"counts"`
+	// Cursor for the next page. Absent on the last page.
+	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
+}
+
 // SyncDirectoryGroupsResponseBody is the type of the "access" service
 // "syncDirectoryGroups" endpoint HTTP response body.
 type SyncDirectoryGroupsResponseBody struct {
@@ -1738,6 +1749,192 @@ type ListDirectoryRoleMappingsUnexpectedResponseBody struct {
 // "access" service "listDirectoryRoleMappings" endpoint HTTP response body for
 // the "gateway_error" error.
 type ListDirectoryRoleMappingsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListDirectoryPeopleUnauthorizedResponseBody is the type of the "access"
+// service "listDirectoryPeople" endpoint HTTP response body for the
+// "unauthorized" error.
+type ListDirectoryPeopleUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListDirectoryPeopleForbiddenResponseBody is the type of the "access" service
+// "listDirectoryPeople" endpoint HTTP response body for the "forbidden" error.
+type ListDirectoryPeopleForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListDirectoryPeopleBadRequestResponseBody is the type of the "access"
+// service "listDirectoryPeople" endpoint HTTP response body for the
+// "bad_request" error.
+type ListDirectoryPeopleBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListDirectoryPeopleNotFoundResponseBody is the type of the "access" service
+// "listDirectoryPeople" endpoint HTTP response body for the "not_found" error.
+type ListDirectoryPeopleNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListDirectoryPeopleConflictResponseBody is the type of the "access" service
+// "listDirectoryPeople" endpoint HTTP response body for the "conflict" error.
+type ListDirectoryPeopleConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListDirectoryPeopleUnsupportedMediaResponseBody is the type of the "access"
+// service "listDirectoryPeople" endpoint HTTP response body for the
+// "unsupported_media" error.
+type ListDirectoryPeopleUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListDirectoryPeopleInvalidResponseBody is the type of the "access" service
+// "listDirectoryPeople" endpoint HTTP response body for the "invalid" error.
+type ListDirectoryPeopleInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListDirectoryPeopleInvariantViolationResponseBody is the type of the
+// "access" service "listDirectoryPeople" endpoint HTTP response body for the
+// "invariant_violation" error.
+type ListDirectoryPeopleInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListDirectoryPeopleUnexpectedResponseBody is the type of the "access"
+// service "listDirectoryPeople" endpoint HTTP response body for the
+// "unexpected" error.
+type ListDirectoryPeopleUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListDirectoryPeopleGatewayErrorResponseBody is the type of the "access"
+// service "listDirectoryPeople" endpoint HTTP response body for the
+// "gateway_error" error.
+type ListDirectoryPeopleGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -7960,12 +8157,20 @@ type SelectorResponseBody struct {
 	ResourceKind string `form:"resource_kind" json:"resource_kind" xml:"resource_kind"`
 	// The resource identifier, or '*' for all resources of this kind.
 	ResourceID string `form:"resource_id" json:"resource_id" xml:"resource_id"`
+	// Auth client type filter (mcp:auth and mcp:blocked_auth only).
+	ClientType *string `form:"client_type,omitempty" json:"client_type,omitempty" xml:"client_type,omitempty"`
+	// Personal connection owner filter (mcp:auth and mcp:blocked_auth on
+	// remote_session clients only). A user ID, '*', or '$represented_user' for the
+	// user the request acts for. Never lets a caller use another user's connection.
+	ConnectionOwner *string `form:"connection_owner,omitempty" json:"connection_owner,omitempty" xml:"connection_owner,omitempty"`
 	// Tool disposition filter (MCP scopes only).
 	Disposition *string `form:"disposition,omitempty" json:"disposition,omitempty" xml:"disposition,omitempty"`
 	// Specific tool name filter (MCP scopes only).
 	Tool *string `form:"tool,omitempty" json:"tool,omitempty" xml:"tool,omitempty"`
-	// Project filter (MCP, environment, and assistant scopes). When set with
-	// resource_id='*', grants access to every resource of the kind in the project.
+	// Project filter (MCP, environment, assistant, mcp:auth, and mcp:blocked_auth
+	// scopes). When set with resource_id='*', grants access to every resource of
+	// the kind in the project. For mcp:auth and mcp:blocked_auth it is the project
+	// of the server using the client.
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	// Server URL filter (risk policy scopes only). Include the URI scheme, for
 	// example https://api.example.com.
@@ -8018,6 +8223,52 @@ type DirectoryRoleMappingResponseBody struct {
 	RoleUrn   string `form:"role_urn" json:"role_urn" xml:"role_urn"`
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
+// DirectoryPersonResponseBody is used to define fields on response body types.
+type DirectoryPersonResponseBody struct {
+	// Directory profile ID.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Email the directory reports for the profile. Empty when the directory
+	// reports none.
+	Email string `form:"email" json:"email" xml:"email"`
+	// First name the directory reports, when it reports one.
+	FirstName *string `form:"first_name,omitempty" json:"first_name,omitempty" xml:"first_name,omitempty"`
+	// Last name the directory reports, when it reports one.
+	LastName *string `form:"last_name,omitempty" json:"last_name,omitempty" xml:"last_name,omitempty"`
+	// How the profile relates to Speakeasy accounts. member: linked to, or the
+	// only email match of, a member of this organization. account_not_member: an
+	// account exists but is not a member here. not_signed_in: no matching account.
+	// ambiguous_email: the email matches more than one profile or account, so it
+	// is never matched.
+	State string `form:"state" json:"state" xml:"state"`
+	// The matched Speakeasy user ID. Present only for member and
+	// account_not_member.
+	UserID *string `form:"user_id,omitempty" json:"user_id,omitempty" xml:"user_id,omitempty"`
+	// Live directory groups the profile belongs to.
+	Groups []*DirectoryPersonGroupResponseBody `form:"groups" json:"groups" xml:"groups"`
+}
+
+// DirectoryPersonGroupResponseBody is used to define fields on response body
+// types.
+type DirectoryPersonGroupResponseBody struct {
+	// Directory group ID.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Directory group name.
+	Name string `form:"name" json:"name" xml:"name"`
+}
+
+// DirectoryPeopleStateCountsResponseBody is used to define fields on response
+// body types.
+type DirectoryPeopleStateCountsResponseBody struct {
+	// Profiles in the member state.
+	Member int64 `form:"member" json:"member" xml:"member"`
+	// Profiles in the account_not_member state.
+	AccountNotMember int64 `form:"account_not_member" json:"account_not_member" xml:"account_not_member"`
+	// Profiles in the not_signed_in state.
+	NotSignedIn int64 `form:"not_signed_in" json:"not_signed_in" xml:"not_signed_in"`
+	// Profiles in the ambiguous_email state.
+	AmbiguousEmail int64 `form:"ambiguous_email" json:"ambiguous_email" xml:"ambiguous_email"`
 }
 
 // DirectoryRoleMappingResponse is used to define fields on response body types.
@@ -8706,12 +8957,20 @@ type SelectorRequestBody struct {
 	ResourceKind *string `form:"resource_kind,omitempty" json:"resource_kind,omitempty" xml:"resource_kind,omitempty"`
 	// The resource identifier, or '*' for all resources of this kind.
 	ResourceID *string `form:"resource_id,omitempty" json:"resource_id,omitempty" xml:"resource_id,omitempty"`
+	// Auth client type filter (mcp:auth and mcp:blocked_auth only).
+	ClientType *string `form:"client_type,omitempty" json:"client_type,omitempty" xml:"client_type,omitempty"`
+	// Personal connection owner filter (mcp:auth and mcp:blocked_auth on
+	// remote_session clients only). A user ID, '*', or '$represented_user' for the
+	// user the request acts for. Never lets a caller use another user's connection.
+	ConnectionOwner *string `form:"connection_owner,omitempty" json:"connection_owner,omitempty" xml:"connection_owner,omitempty"`
 	// Tool disposition filter (MCP scopes only).
 	Disposition *string `form:"disposition,omitempty" json:"disposition,omitempty" xml:"disposition,omitempty"`
 	// Specific tool name filter (MCP scopes only).
 	Tool *string `form:"tool,omitempty" json:"tool,omitempty" xml:"tool,omitempty"`
-	// Project filter (MCP, environment, and assistant scopes). When set with
-	// resource_id='*', grants access to every resource of the kind in the project.
+	// Project filter (MCP, environment, assistant, mcp:auth, and mcp:blocked_auth
+	// scopes). When set with resource_id='*', grants access to every resource of
+	// the kind in the project. For mcp:auth and mcp:blocked_auth it is the project
+	// of the server using the client.
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	// Server URL filter (risk policy scopes only). Include the URI scheme, for
 	// example https://api.example.com.
@@ -8933,6 +9192,30 @@ func NewListDirectoryRoleMappingsResponseBody(res *access.ListDirectoryRoleMappi
 		}
 	} else {
 		body.Mappings = []*DirectoryRoleMappingResponseBody{}
+	}
+	return body
+}
+
+// NewListDirectoryPeopleResponseBody builds the HTTP response body from the
+// result of the "listDirectoryPeople" endpoint of the "access" service.
+func NewListDirectoryPeopleResponseBody(res *access.ListDirectoryPeopleResult) *ListDirectoryPeopleResponseBody {
+	body := &ListDirectoryPeopleResponseBody{
+		NextCursor: res.NextCursor,
+	}
+	if res.People != nil {
+		body.People = make([]*DirectoryPersonResponseBody, len(res.People))
+		for i, val := range res.People {
+			if val == nil {
+				body.People[i] = nil
+				continue
+			}
+			body.People[i] = marshalAccessDirectoryPersonToDirectoryPersonResponseBody(val)
+		}
+	} else {
+		body.People = []*DirectoryPersonResponseBody{}
+	}
+	if res.Counts != nil {
+		body.Counts = marshalAccessDirectoryPeopleStateCountsToDirectoryPeopleStateCountsResponseBody(res.Counts)
 	}
 	return body
 }
@@ -10528,6 +10811,155 @@ func NewListDirectoryRoleMappingsUnexpectedResponseBody(res *goa.ServiceError) *
 // the "access" service.
 func NewListDirectoryRoleMappingsGatewayErrorResponseBody(res *goa.ServiceError) *ListDirectoryRoleMappingsGatewayErrorResponseBody {
 	body := &ListDirectoryRoleMappingsGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListDirectoryPeopleUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "listDirectoryPeople" endpoint of the "access"
+// service.
+func NewListDirectoryPeopleUnauthorizedResponseBody(res *goa.ServiceError) *ListDirectoryPeopleUnauthorizedResponseBody {
+	body := &ListDirectoryPeopleUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListDirectoryPeopleForbiddenResponseBody builds the HTTP response body
+// from the result of the "listDirectoryPeople" endpoint of the "access"
+// service.
+func NewListDirectoryPeopleForbiddenResponseBody(res *goa.ServiceError) *ListDirectoryPeopleForbiddenResponseBody {
+	body := &ListDirectoryPeopleForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListDirectoryPeopleBadRequestResponseBody builds the HTTP response body
+// from the result of the "listDirectoryPeople" endpoint of the "access"
+// service.
+func NewListDirectoryPeopleBadRequestResponseBody(res *goa.ServiceError) *ListDirectoryPeopleBadRequestResponseBody {
+	body := &ListDirectoryPeopleBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListDirectoryPeopleNotFoundResponseBody builds the HTTP response body
+// from the result of the "listDirectoryPeople" endpoint of the "access"
+// service.
+func NewListDirectoryPeopleNotFoundResponseBody(res *goa.ServiceError) *ListDirectoryPeopleNotFoundResponseBody {
+	body := &ListDirectoryPeopleNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListDirectoryPeopleConflictResponseBody builds the HTTP response body
+// from the result of the "listDirectoryPeople" endpoint of the "access"
+// service.
+func NewListDirectoryPeopleConflictResponseBody(res *goa.ServiceError) *ListDirectoryPeopleConflictResponseBody {
+	body := &ListDirectoryPeopleConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListDirectoryPeopleUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "listDirectoryPeople" endpoint of the "access"
+// service.
+func NewListDirectoryPeopleUnsupportedMediaResponseBody(res *goa.ServiceError) *ListDirectoryPeopleUnsupportedMediaResponseBody {
+	body := &ListDirectoryPeopleUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListDirectoryPeopleInvalidResponseBody builds the HTTP response body from
+// the result of the "listDirectoryPeople" endpoint of the "access" service.
+func NewListDirectoryPeopleInvalidResponseBody(res *goa.ServiceError) *ListDirectoryPeopleInvalidResponseBody {
+	body := &ListDirectoryPeopleInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListDirectoryPeopleInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "listDirectoryPeople" endpoint of the
+// "access" service.
+func NewListDirectoryPeopleInvariantViolationResponseBody(res *goa.ServiceError) *ListDirectoryPeopleInvariantViolationResponseBody {
+	body := &ListDirectoryPeopleInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListDirectoryPeopleUnexpectedResponseBody builds the HTTP response body
+// from the result of the "listDirectoryPeople" endpoint of the "access"
+// service.
+func NewListDirectoryPeopleUnexpectedResponseBody(res *goa.ServiceError) *ListDirectoryPeopleUnexpectedResponseBody {
+	body := &ListDirectoryPeopleUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListDirectoryPeopleGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "listDirectoryPeople" endpoint of the "access"
+// service.
+func NewListDirectoryPeopleGatewayErrorResponseBody(res *goa.ServiceError) *ListDirectoryPeopleGatewayErrorResponseBody {
+	body := &ListDirectoryPeopleGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -15512,6 +15944,17 @@ func NewListDirectoryRoleMappingsPayload(apikeyToken *string, sessionToken *stri
 	return v
 }
 
+// NewListDirectoryPeoplePayload builds a access service listDirectoryPeople
+// endpoint payload.
+func NewListDirectoryPeoplePayload(limit int, cursor *string, sessionToken *string) *access.ListDirectoryPeoplePayload {
+	v := &access.ListDirectoryPeoplePayload{}
+	v.Limit = limit
+	v.Cursor = cursor
+	v.SessionToken = sessionToken
+
+	return v
+}
+
 // NewSyncDirectoryGroupsPayload builds a access service syncDirectoryGroups
 // endpoint payload.
 func NewSyncDirectoryGroupsPayload(apikeyToken *string, sessionToken *string) *access.SyncDirectoryGroupsPayload {
@@ -16342,8 +16785,8 @@ func ValidateRoleGrantRequestBody(body *RoleGrantRequestBody) (err error) {
 		err = goa.MergeErrors(err, goa.MissingFieldError("scope", "body"))
 	}
 	if body.Scope != nil {
-		if !(*body.Scope == "org:read" || *body.Scope == "org:blocked_read" || *body.Scope == "org:admin" || *body.Scope == "org:blocked_admin" || *body.Scope == "project:read" || *body.Scope == "project:blocked_read" || *body.Scope == "project:write" || *body.Scope == "project:blocked_write" || *body.Scope == "mcp:read" || *body.Scope == "mcp:blocked_read" || *body.Scope == "mcp:write" || *body.Scope == "mcp:blocked_write" || *body.Scope == "mcp:connect" || *body.Scope == "mcp:blocked_connect" || *body.Scope == "environment:read" || *body.Scope == "environment:blocked_read" || *body.Scope == "environment:write" || *body.Scope == "environment:blocked_write" || *body.Scope == "skill:read" || *body.Scope == "skill:blocked_read" || *body.Scope == "skill:write" || *body.Scope == "skill:blocked_write" || *body.Scope == "assistant:read" || *body.Scope == "assistant:blocked_read" || *body.Scope == "assistant:write" || *body.Scope == "assistant:blocked_write" || *body.Scope == "plugin:write" || *body.Scope == "plugin:blocked_write" || *body.Scope == "risk_policy:evaluate" || *body.Scope == "risk_policy:bypass" || *body.Scope == "risk_policy:block" || *body.Scope == "chat:read" || *body.Scope == "chat:write" || *body.Scope == "log:read" || *body.Scope == "agent:read" || *body.Scope == "agent:write" || *body.Scope == "agent:authorize" || *body.Scope == "agent:transfer" || *body.Scope == "workload:read" || *body.Scope == "workload:blocked_read" || *body.Scope == "workload:write" || *body.Scope == "workload:blocked_write" || *body.Scope == "org:device_agent_sync" || *body.Scope == "org:hooks_ingest") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.scope", *body.Scope, []any{"org:read", "org:blocked_read", "org:admin", "org:blocked_admin", "project:read", "project:blocked_read", "project:write", "project:blocked_write", "mcp:read", "mcp:blocked_read", "mcp:write", "mcp:blocked_write", "mcp:connect", "mcp:blocked_connect", "environment:read", "environment:blocked_read", "environment:write", "environment:blocked_write", "skill:read", "skill:blocked_read", "skill:write", "skill:blocked_write", "assistant:read", "assistant:blocked_read", "assistant:write", "assistant:blocked_write", "plugin:write", "plugin:blocked_write", "risk_policy:evaluate", "risk_policy:bypass", "risk_policy:block", "chat:read", "chat:write", "log:read", "agent:read", "agent:write", "agent:authorize", "agent:transfer", "workload:read", "workload:blocked_read", "workload:write", "workload:blocked_write", "org:device_agent_sync", "org:hooks_ingest"}))
+		if !(*body.Scope == "org:read" || *body.Scope == "org:blocked_read" || *body.Scope == "org:admin" || *body.Scope == "org:blocked_admin" || *body.Scope == "project:read" || *body.Scope == "project:blocked_read" || *body.Scope == "project:write" || *body.Scope == "project:blocked_write" || *body.Scope == "mcp:read" || *body.Scope == "mcp:blocked_read" || *body.Scope == "mcp:write" || *body.Scope == "mcp:blocked_write" || *body.Scope == "mcp:connect" || *body.Scope == "mcp:blocked_connect" || *body.Scope == "mcp:auth" || *body.Scope == "mcp:blocked_auth" || *body.Scope == "environment:read" || *body.Scope == "environment:blocked_read" || *body.Scope == "environment:write" || *body.Scope == "environment:blocked_write" || *body.Scope == "skill:read" || *body.Scope == "skill:blocked_read" || *body.Scope == "skill:write" || *body.Scope == "skill:blocked_write" || *body.Scope == "assistant:read" || *body.Scope == "assistant:blocked_read" || *body.Scope == "assistant:write" || *body.Scope == "assistant:blocked_write" || *body.Scope == "plugin:write" || *body.Scope == "plugin:blocked_write" || *body.Scope == "risk_policy:evaluate" || *body.Scope == "risk_policy:bypass" || *body.Scope == "risk_policy:block" || *body.Scope == "chat:read" || *body.Scope == "chat:write" || *body.Scope == "log:read" || *body.Scope == "agent:read" || *body.Scope == "agent:write" || *body.Scope == "agent:authorize" || *body.Scope == "agent:transfer" || *body.Scope == "workload:read" || *body.Scope == "workload:blocked_read" || *body.Scope == "workload:write" || *body.Scope == "workload:blocked_write" || *body.Scope == "org:device_agent_sync" || *body.Scope == "org:hooks_ingest") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.scope", *body.Scope, []any{"org:read", "org:blocked_read", "org:admin", "org:blocked_admin", "project:read", "project:blocked_read", "project:write", "project:blocked_write", "mcp:read", "mcp:blocked_read", "mcp:write", "mcp:blocked_write", "mcp:connect", "mcp:blocked_connect", "mcp:auth", "mcp:blocked_auth", "environment:read", "environment:blocked_read", "environment:write", "environment:blocked_write", "skill:read", "skill:blocked_read", "skill:write", "skill:blocked_write", "assistant:read", "assistant:blocked_read", "assistant:write", "assistant:blocked_write", "plugin:write", "plugin:blocked_write", "risk_policy:evaluate", "risk_policy:bypass", "risk_policy:block", "chat:read", "chat:write", "log:read", "agent:read", "agent:write", "agent:authorize", "agent:transfer", "workload:read", "workload:blocked_read", "workload:write", "workload:blocked_write", "org:device_agent_sync", "org:hooks_ingest"}))
 		}
 	}
 	for _, e := range body.Selectors {
@@ -16366,8 +16809,13 @@ func ValidateSelectorRequestBody(body *SelectorRequestBody) (err error) {
 		err = goa.MergeErrors(err, goa.MissingFieldError("resource_id", "body"))
 	}
 	if body.ResourceKind != nil {
-		if !(*body.ResourceKind == "project" || *body.ResourceKind == "mcp" || *body.ResourceKind == "org" || *body.ResourceKind == "environment" || *body.ResourceKind == "skill" || *body.ResourceKind == "assistant" || *body.ResourceKind == "risk_policy" || *body.ResourceKind == "chat" || *body.ResourceKind == "agent" || *body.ResourceKind == "workload" || *body.ResourceKind == "*") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.resource_kind", *body.ResourceKind, []any{"project", "mcp", "org", "environment", "skill", "assistant", "risk_policy", "chat", "agent", "workload", "*"}))
+		if !(*body.ResourceKind == "project" || *body.ResourceKind == "mcp" || *body.ResourceKind == "org" || *body.ResourceKind == "environment" || *body.ResourceKind == "skill" || *body.ResourceKind == "assistant" || *body.ResourceKind == "risk_policy" || *body.ResourceKind == "chat" || *body.ResourceKind == "agent" || *body.ResourceKind == "workload" || *body.ResourceKind == "mcp_auth_client" || *body.ResourceKind == "*") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.resource_kind", *body.ResourceKind, []any{"project", "mcp", "org", "environment", "skill", "assistant", "risk_policy", "chat", "agent", "workload", "mcp_auth_client", "*"}))
+		}
+	}
+	if body.ClientType != nil {
+		if !(*body.ClientType == "remote_session" || *body.ClientType == "service_account" || *body.ClientType == "static_credential" || *body.ClientType == "pass_through" || *body.ClientType == "ema" || *body.ClientType == "*") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.client_type", *body.ClientType, []any{"remote_session", "service_account", "static_credential", "pass_through", "ema", "*"}))
 		}
 	}
 	if body.Disposition != nil {

@@ -45,7 +45,7 @@ func encodeAgentSessionPolicy(target AgentAuthorizationTarget, version runtimepo
 }
 
 func newAgentSessionCredential(target AgentAuthorizationTarget, authorizerUserID string) (agentSessionCredential, error) {
-	version := runtimepolicy.CurrentDelegatedPolicyVersion
+	version := runtimepolicy.IssuedDelegatedPolicyVersion
 	encoded, err := encodeAgentSessionPolicy(target, version)
 	if err != nil {
 		return agentSessionCredential{}, err

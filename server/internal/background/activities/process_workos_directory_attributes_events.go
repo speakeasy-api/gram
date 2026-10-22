@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -343,6 +344,8 @@ func upsertDirectoryUser(ctx context.Context, logger *slog.Logger, dbtx database
 		WorkosDirectoryUserID: payload.ID,
 		DirectoryID:           conv.ToPGTextEmpty(payload.DirectoryID),
 		Email:                 conv.ToPGText(email),
+		FirstName:             conv.ToPGTextEmpty(strings.TrimSpace(payload.FirstName)),
+		LastName:              conv.ToPGTextEmpty(strings.TrimSpace(payload.LastName)),
 		Attributes:            attributes,
 		// Only an explicitly active state may resurrect a soft-deleted row.
 		// This keeps legitimate re-provisioning working while preventing

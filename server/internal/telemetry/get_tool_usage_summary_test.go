@@ -447,6 +447,8 @@ type hostedToolEventParams struct {
 	agentID        string
 	externalUserID string
 	userID         string
+	// outcome is gram.outcome; error on a 2xx models an isError result.
+	outcome string
 }
 
 func insertHostedToolEvent(t *testing.T, ctx context.Context, ti *testInstance, p hostedToolEventParams) {
@@ -476,6 +478,9 @@ func insertHostedToolEvent(t *testing.T, ctx context.Context, ti *testInstance, 
 		attrs["gram.event.source"] = "tool_call"
 		attrs["gram.authorization.actor.type"] = "agent"
 		attrs["gram.authorization.actor.id"] = p.agentID
+	}
+	if p.outcome != "" {
+		attrs["gram.outcome"] = p.outcome
 	}
 	attrs["gram.external_user.id"] = p.externalUserID
 	attrs["user.id"] = p.userID

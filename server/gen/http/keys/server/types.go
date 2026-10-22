@@ -33,6 +33,10 @@ type CreateKeyRequestBody struct {
 	RequestedGrants []*AgentPolicyGrantFormRequestBody `form:"requested_grants,omitempty" json:"requested_grants,omitempty" xml:"requested_grants,omitempty"`
 	// Agent credential expiry; defaults to 90 days and cannot exceed one year
 	ExpiresAt *string `form:"expires_at,omitempty" json:"expires_at,omitempty" xml:"expires_at,omitempty"`
+	// Optional policy for an ordinary key: mcp:connect and mcp:auth grants, and
+	// mcp:blocked_connect and mcp:blocked_auth blocks, that its server and auth
+	// client access is evaluated against. Not yet enforced. Requires org admin.
+	PolicyGrants []*APIKeyPolicyGrantRequestBody `form:"policy_grants,omitempty" json:"policy_grants,omitempty" xml:"policy_grants,omitempty"`
 }
 
 // RotateKeyRequestBody is the type of the "keys" service "rotateKey" endpoint
@@ -77,6 +81,8 @@ type CreateKeyResponseBody struct {
 	DelegatedGrants *AgentDelegatedPolicyResponseBody `form:"delegated_grants,omitempty" json:"delegated_grants,omitempty" xml:"delegated_grants,omitempty"`
 	// Delegated policy format version
 	DelegatedGrantsVersion *int `form:"delegated_grants_version,omitempty" json:"delegated_grants_version,omitempty" xml:"delegated_grants_version,omitempty"`
+	// An ordinary key's own policy
+	PolicyGrants []*APIKeyPolicyGrantResponseBody `form:"policy_grants,omitempty" json:"policy_grants,omitempty" xml:"policy_grants,omitempty"`
 	// Required expiry for an agent key; legacy keys may not expire.
 	ExpiresAt *string `form:"expires_at,omitempty" json:"expires_at,omitempty" xml:"expires_at,omitempty"`
 	// The creation date of the key.
@@ -112,6 +118,8 @@ type RotateKeyResponseBody struct {
 	DelegatedGrants *AgentDelegatedPolicyResponseBody `form:"delegated_grants,omitempty" json:"delegated_grants,omitempty" xml:"delegated_grants,omitempty"`
 	// Delegated policy format version
 	DelegatedGrantsVersion *int `form:"delegated_grants_version,omitempty" json:"delegated_grants_version,omitempty" xml:"delegated_grants_version,omitempty"`
+	// An ordinary key's own policy
+	PolicyGrants []*APIKeyPolicyGrantResponseBody `form:"policy_grants,omitempty" json:"policy_grants,omitempty" xml:"policy_grants,omitempty"`
 	// Required expiry for an agent key; legacy keys may not expire.
 	ExpiresAt *string `form:"expires_at,omitempty" json:"expires_at,omitempty" xml:"expires_at,omitempty"`
 	// The creation date of the key.
@@ -1060,16 +1068,44 @@ type AgentPolicySelectorResponseBody struct {
 	ResourceKind string `form:"resource_kind" json:"resource_kind" xml:"resource_kind"`
 	// The resource identifier, or '*' for all resources of this kind.
 	ResourceID string `form:"resource_id" json:"resource_id" xml:"resource_id"`
+	// Auth client type filter (mcp:auth scopes only).
+	ClientType *string `form:"client_type,omitempty" json:"client_type,omitempty" xml:"client_type,omitempty"`
+	// Personal connection owner filter (mcp:auth scopes on remote_session clients
+	// only): a user ID, '*', or '$represented_user'.
+	ConnectionOwner *string `form:"connection_owner,omitempty" json:"connection_owner,omitempty" xml:"connection_owner,omitempty"`
 	// Tool disposition filter (MCP scopes only).
 	Disposition *string `form:"disposition,omitempty" json:"disposition,omitempty" xml:"disposition,omitempty"`
 	// Specific tool name filter (MCP scopes only).
 	Tool *string `form:"tool,omitempty" json:"tool,omitempty" xml:"tool,omitempty"`
-	// Project filter (MCP, environment, and assistant scopes).
+	// Project filter (MCP, environment, assistant, and mcp:auth scopes).
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	// Server URL filter (risk policy scopes only).
 	ServerURL *string `form:"server_url,omitempty" json:"server_url,omitempty" xml:"server_url,omitempty"`
 	// Server identity filter (risk policy scopes only).
 	ServerIdentity *string `form:"server_identity,omitempty" json:"server_identity,omitempty" xml:"server_identity,omitempty"`
+}
+
+// APIKeyPolicyGrantResponseBody is used to define fields on response body
+// types.
+type APIKeyPolicyGrantResponseBody struct {
+	// mcp:connect, mcp:auth, or a block: mcp:blocked_connect, mcp:blocked_auth
+	Scope    string                            `form:"scope" json:"scope" xml:"scope"`
+	Selector *APIKeyPolicySelectorResponseBody `form:"selector" json:"selector" xml:"selector"`
+}
+
+// APIKeyPolicySelectorResponseBody is used to define fields on response body
+// types.
+type APIKeyPolicySelectorResponseBody struct {
+	// mcp for mcp:connect grants, mcp_auth_client for mcp:auth grants
+	ResourceKind string `form:"resource_kind" json:"resource_kind" xml:"resource_kind"`
+	// A server or auth client ID, or '*' for every server in project_id. mcp:auth
+	// grants must name their client.
+	ResourceID string `form:"resource_id" json:"resource_id" xml:"resource_id"`
+	// The project the servers are in; required when resource_id is '*', and the
+	// key's own project when it is bound to one.
+	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	// Auth client type filter (mcp:auth only).
+	ClientType *string `form:"client_type,omitempty" json:"client_type,omitempty" xml:"client_type,omitempty"`
 }
 
 // KeyResponseBody is used to define fields on response body types.
@@ -1096,6 +1132,8 @@ type KeyResponseBody struct {
 	DelegatedGrants *AgentDelegatedPolicyResponseBody `form:"delegated_grants,omitempty" json:"delegated_grants,omitempty" xml:"delegated_grants,omitempty"`
 	// Delegated policy format version
 	DelegatedGrantsVersion *int `form:"delegated_grants_version,omitempty" json:"delegated_grants_version,omitempty" xml:"delegated_grants_version,omitempty"`
+	// An ordinary key's own policy
+	PolicyGrants []*APIKeyPolicyGrantResponseBody `form:"policy_grants,omitempty" json:"policy_grants,omitempty" xml:"policy_grants,omitempty"`
 	// Required expiry for an agent key; legacy keys may not expire.
 	ExpiresAt *string `form:"expires_at,omitempty" json:"expires_at,omitempty" xml:"expires_at,omitempty"`
 	// The creation date of the key.
@@ -1145,16 +1183,43 @@ type AgentPolicySelectorRequestBody struct {
 	ResourceKind *string `form:"resource_kind,omitempty" json:"resource_kind,omitempty" xml:"resource_kind,omitempty"`
 	// The resource identifier, or '*' for all resources of this kind.
 	ResourceID *string `form:"resource_id,omitempty" json:"resource_id,omitempty" xml:"resource_id,omitempty"`
+	// Auth client type filter (mcp:auth scopes only).
+	ClientType *string `form:"client_type,omitempty" json:"client_type,omitempty" xml:"client_type,omitempty"`
+	// Personal connection owner filter (mcp:auth scopes on remote_session clients
+	// only): a user ID, '*', or '$represented_user'.
+	ConnectionOwner *string `form:"connection_owner,omitempty" json:"connection_owner,omitempty" xml:"connection_owner,omitempty"`
 	// Tool disposition filter (MCP scopes only).
 	Disposition *string `form:"disposition,omitempty" json:"disposition,omitempty" xml:"disposition,omitempty"`
 	// Specific tool name filter (MCP scopes only).
 	Tool *string `form:"tool,omitempty" json:"tool,omitempty" xml:"tool,omitempty"`
-	// Project filter (MCP, environment, and assistant scopes).
+	// Project filter (MCP, environment, assistant, and mcp:auth scopes).
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	// Server URL filter (risk policy scopes only).
 	ServerURL *string `form:"server_url,omitempty" json:"server_url,omitempty" xml:"server_url,omitempty"`
 	// Server identity filter (risk policy scopes only).
 	ServerIdentity *string `form:"server_identity,omitempty" json:"server_identity,omitempty" xml:"server_identity,omitempty"`
+}
+
+// APIKeyPolicyGrantRequestBody is used to define fields on request body types.
+type APIKeyPolicyGrantRequestBody struct {
+	// mcp:connect, mcp:auth, or a block: mcp:blocked_connect, mcp:blocked_auth
+	Scope    *string                          `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
+	Selector *APIKeyPolicySelectorRequestBody `form:"selector,omitempty" json:"selector,omitempty" xml:"selector,omitempty"`
+}
+
+// APIKeyPolicySelectorRequestBody is used to define fields on request body
+// types.
+type APIKeyPolicySelectorRequestBody struct {
+	// mcp for mcp:connect grants, mcp_auth_client for mcp:auth grants
+	ResourceKind *string `form:"resource_kind,omitempty" json:"resource_kind,omitempty" xml:"resource_kind,omitempty"`
+	// A server or auth client ID, or '*' for every server in project_id. mcp:auth
+	// grants must name their client.
+	ResourceID *string `form:"resource_id,omitempty" json:"resource_id,omitempty" xml:"resource_id,omitempty"`
+	// The project the servers are in; required when resource_id is '*', and the
+	// key's own project when it is bound to one.
+	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	// Auth client type filter (mcp:auth only).
+	ClientType *string `form:"client_type,omitempty" json:"client_type,omitempty" xml:"client_type,omitempty"`
 }
 
 // NewCreateKeyResponseBody builds the HTTP response body from the result of
@@ -1185,6 +1250,16 @@ func NewCreateKeyResponseBody(res *keys.Key) *CreateKeyResponseBody {
 	}
 	if res.DelegatedGrants != nil {
 		body.DelegatedGrants = marshalKeysAgentDelegatedPolicyToAgentDelegatedPolicyResponseBody(res.DelegatedGrants)
+	}
+	if res.PolicyGrants != nil {
+		body.PolicyGrants = make([]*APIKeyPolicyGrantResponseBody, len(res.PolicyGrants))
+		for i, val := range res.PolicyGrants {
+			if val == nil {
+				body.PolicyGrants[i] = nil
+				continue
+			}
+			body.PolicyGrants[i] = marshalKeysAPIKeyPolicyGrantToAPIKeyPolicyGrantResponseBody(val)
+		}
 	}
 	return body
 }
@@ -1217,6 +1292,16 @@ func NewRotateKeyResponseBody(res *keys.Key) *RotateKeyResponseBody {
 	}
 	if res.DelegatedGrants != nil {
 		body.DelegatedGrants = marshalKeysAgentDelegatedPolicyToAgentDelegatedPolicyResponseBody(res.DelegatedGrants)
+	}
+	if res.PolicyGrants != nil {
+		body.PolicyGrants = make([]*APIKeyPolicyGrantResponseBody, len(res.PolicyGrants))
+		for i, val := range res.PolicyGrants {
+			if val == nil {
+				body.PolicyGrants[i] = nil
+				continue
+			}
+			body.PolicyGrants[i] = marshalKeysAPIKeyPolicyGrantToAPIKeyPolicyGrantResponseBody(val)
+		}
 	}
 	return body
 }
@@ -1995,6 +2080,16 @@ func NewCreateKeyPayload(body *CreateKeyRequestBody, sessionToken *string) *keys
 			v.RequestedGrants[i] = unmarshalAgentPolicyGrantFormRequestBodyToKeysAgentPolicyGrantForm(val)
 		}
 	}
+	if body.PolicyGrants != nil {
+		v.PolicyGrants = make([]*keys.APIKeyPolicyGrant, len(body.PolicyGrants))
+		for i, val := range body.PolicyGrants {
+			if val == nil {
+				v.PolicyGrants[i] = nil
+				continue
+			}
+			v.PolicyGrants[i] = unmarshalAPIKeyPolicyGrantRequestBodyToKeysAPIKeyPolicyGrant(val)
+		}
+	}
 	v.SessionToken = sessionToken
 
 	return v
@@ -2085,6 +2180,16 @@ func ValidateCreateKeyRequestBody(body *CreateKeyRequestBody) (err error) {
 	if body.ExpiresAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.expires_at", *body.ExpiresAt, goa.FormatDateTime))
 	}
+	if len(body.PolicyGrants) > 100 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.policy_grants", body.PolicyGrants, len(body.PolicyGrants), 100, false))
+	}
+	for _, e := range body.PolicyGrants {
+		if e != nil {
+			if err2 := ValidateAPIKeyPolicyGrantRequestBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
 	return
 }
 
@@ -2169,8 +2274,13 @@ func ValidateAgentPolicySelectorRequestBody(body *AgentPolicySelectorRequestBody
 		err = goa.MergeErrors(err, goa.MissingFieldError("resource_id", "body"))
 	}
 	if body.ResourceKind != nil {
-		if !(*body.ResourceKind == "project" || *body.ResourceKind == "mcp" || *body.ResourceKind == "org" || *body.ResourceKind == "environment" || *body.ResourceKind == "skill" || *body.ResourceKind == "assistant" || *body.ResourceKind == "risk_policy" || *body.ResourceKind == "chat" || *body.ResourceKind == "agent" || *body.ResourceKind == "*") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.resource_kind", *body.ResourceKind, []any{"project", "mcp", "org", "environment", "skill", "assistant", "risk_policy", "chat", "agent", "*"}))
+		if !(*body.ResourceKind == "project" || *body.ResourceKind == "mcp" || *body.ResourceKind == "org" || *body.ResourceKind == "environment" || *body.ResourceKind == "skill" || *body.ResourceKind == "assistant" || *body.ResourceKind == "risk_policy" || *body.ResourceKind == "chat" || *body.ResourceKind == "agent" || *body.ResourceKind == "mcp_auth_client" || *body.ResourceKind == "*") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.resource_kind", *body.ResourceKind, []any{"project", "mcp", "org", "environment", "skill", "assistant", "risk_policy", "chat", "agent", "mcp_auth_client", "*"}))
+		}
+	}
+	if body.ClientType != nil {
+		if !(*body.ClientType == "remote_session" || *body.ClientType == "service_account" || *body.ClientType == "static_credential" || *body.ClientType == "pass_through" || *body.ClientType == "ema" || *body.ClientType == "*") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.client_type", *body.ClientType, []any{"remote_session", "service_account", "static_credential", "pass_through", "ema", "*"}))
 		}
 	}
 	if body.Disposition != nil {
@@ -2180,6 +2290,53 @@ func ValidateAgentPolicySelectorRequestBody(body *AgentPolicySelectorRequestBody
 	}
 	if body.ServerURL != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.server_url", *body.ServerURL, goa.FormatURI))
+	}
+	return
+}
+
+// ValidateAPIKeyPolicyGrantRequestBody runs the validations defined on
+// APIKeyPolicyGrantRequestBody
+func ValidateAPIKeyPolicyGrantRequestBody(body *APIKeyPolicyGrantRequestBody) (err error) {
+	if body.Scope == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("scope", "body"))
+	}
+	if body.Selector == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("selector", "body"))
+	}
+	if body.Scope != nil {
+		if !(*body.Scope == "mcp:connect" || *body.Scope == "mcp:blocked_connect" || *body.Scope == "mcp:auth" || *body.Scope == "mcp:blocked_auth") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.scope", *body.Scope, []any{"mcp:connect", "mcp:blocked_connect", "mcp:auth", "mcp:blocked_auth"}))
+		}
+	}
+	if body.Selector != nil {
+		if err2 := ValidateAPIKeyPolicySelectorRequestBody(body.Selector); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	return
+}
+
+// ValidateAPIKeyPolicySelectorRequestBody runs the validations defined on
+// APIKeyPolicySelectorRequestBody
+func ValidateAPIKeyPolicySelectorRequestBody(body *APIKeyPolicySelectorRequestBody) (err error) {
+	if body.ResourceKind == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("resource_kind", "body"))
+	}
+	if body.ResourceID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("resource_id", "body"))
+	}
+	if body.ResourceKind != nil {
+		if !(*body.ResourceKind == "mcp" || *body.ResourceKind == "mcp_auth_client") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.resource_kind", *body.ResourceKind, []any{"mcp", "mcp_auth_client"}))
+		}
+	}
+	if body.ProjectID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
+	}
+	if body.ClientType != nil {
+		if !(*body.ClientType == "service_account" || *body.ClientType == "static_credential" || *body.ClientType == "pass_through" || *body.ClientType == "ema" || *body.ClientType == "*") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.client_type", *body.ClientType, []any{"service_account", "static_credential", "pass_through", "ema", "*"}))
+		}
 	}
 	return
 }

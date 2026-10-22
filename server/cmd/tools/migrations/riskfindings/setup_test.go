@@ -195,6 +195,8 @@ type findingSpec struct {
 	startPos int32
 	endPos   int32
 	spans    []risk_analysis.FindingSpan
+	// project overrides the tenant's project when set.
+	project uuid.UUID
 }
 
 // newFinding seeds a true-positive risk_results row anchored to messageID with
@@ -210,10 +212,15 @@ func (tn *tenant) newFinding(t *testing.T, messageID uuid.UUID, createdAt time.T
 		spansJSON = b
 	}
 
+	projectID := tn.projectID
+	if spec.project != uuid.Nil {
+		projectID = spec.project
+	}
+
 	id := uuid.Must(uuid.NewV7())
 	n, err := riskrepo.New(tn.pool).InsertRiskResults(ctx, []riskrepo.InsertRiskResultsParams{{
 		ID:                id,
-		ProjectID:         tn.projectID,
+		ProjectID:         projectID,
 		OrganizationID:    tn.orgID,
 		RiskPolicyID:      tn.policyID,
 		RiskPolicyVersion: 1,

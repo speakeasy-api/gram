@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -165,6 +166,22 @@ type AttachToDefaultPluginParams struct {
 	DisplayName    string
 }
 
+// PluginServer is a plugin_servers row as the plugin queries return it.
+type PluginServer struct {
+	ID              uuid.UUID
+	PluginID        uuid.UUID
+	ProjectID       uuid.NullUUID
+	McpServerID     uuid.NullUUID
+	MetaMcpServerID uuid.NullUUID
+	DisplayName     string
+	Policy          string
+	SortOrder       int32
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+	DeletedAt       pgtype.Timestamptz
+	Deleted         bool
+}
+
 // AttachToDefaultPluginResult is nil when AttachToDefaultPlugin no-ops
 // (the server is already attached).
 type AttachToDefaultPluginResult struct {
@@ -172,7 +189,7 @@ type AttachToDefaultPluginResult struct {
 	PluginName    string
 	PluginSlug    string
 	PluginCreated bool
-	Server        repo.PluginServer
+	Server        PluginServer
 }
 
 // AttachToDefaultPlugin idempotently adds a server (toolset- or mcp_server-
@@ -357,7 +374,7 @@ func attachToPlugin(ctx context.Context, q *repo.Queries, plugin repo.Plugin, pl
 		PluginName:    plugin.Name,
 		PluginSlug:    plugin.Slug,
 		PluginCreated: pluginCreated,
-		Server:        server,
+		Server:        PluginServer(server),
 	}, nil
 }
 
@@ -520,14 +537,7 @@ func AttachToDefaultPluginAuditedWithOutcome(ctx context.Context, dbtx pgx.Tx, a
 		}
 	}
 
-	// Exactly one of the URNs is set, mirroring the stored row's toolset_id XOR
-	// mcp_server_id contract.
-	var toolsetURN *urn.Toolset
 	var mcpServerURN *urn.McpServer
-	if attached.Server.ToolsetID.Valid {
-		u := urn.NewToolset(attached.Server.ToolsetID.UUID)
-		toolsetURN = &u
-	}
 	if attached.Server.McpServerID.Valid {
 		u := urn.NewMcpServer(attached.Server.McpServerID.UUID)
 		mcpServerURN = &u
@@ -546,7 +556,7 @@ func AttachToDefaultPluginAuditedWithOutcome(ctx context.Context, dbtx pgx.Tx, a
 		ServerDisplayName: attached.Server.DisplayName,
 		ServerPolicy:      attached.Server.Policy,
 		ServerSortOrder:   attached.Server.SortOrder,
-		ToolsetURN:        toolsetURN,
+		ToolsetURN:        nil,
 		McpServerURN:      mcpServerURN,
 		MetaMcpServerURN:  nil,
 	}); err != nil {

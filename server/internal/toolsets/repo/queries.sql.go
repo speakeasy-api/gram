@@ -268,21 +268,6 @@ func (q *Queries) CreateToolsetVersion(ctx context.Context, arg CreateToolsetVer
 	return i, err
 }
 
-const deleteAssistantToolsetsByToolset = `-- name: DeleteAssistantToolsetsByToolset :exec
-DELETE FROM assistant_toolsets
-WHERE toolset_id = $1 AND project_id = $2
-`
-
-type DeleteAssistantToolsetsByToolsetParams struct {
-	ToolsetID uuid.UUID
-	ProjectID uuid.UUID
-}
-
-func (q *Queries) DeleteAssistantToolsetsByToolset(ctx context.Context, arg DeleteAssistantToolsetsByToolsetParams) error {
-	_, err := q.db.Exec(ctx, deleteAssistantToolsetsByToolset, arg.ToolsetID, arg.ProjectID)
-	return err
-}
-
 const deleteToolset = `-- name: DeleteToolset :one
 UPDATE toolsets
 SET deleted_at = clock_timestamp()
@@ -932,6 +917,53 @@ type GetToolsetByMcpSlugAndProjectParams struct {
 
 func (q *Queries) GetToolsetByMcpSlugAndProject(ctx context.Context, arg GetToolsetByMcpSlugAndProjectParams) (Toolset, error) {
 	row := q.db.QueryRow(ctx, getToolsetByMcpSlugAndProject, arg.McpSlug, arg.ProjectID)
+	var i Toolset
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.Name,
+		&i.Slug,
+		&i.Description,
+		&i.DefaultEnvironmentSlug,
+		&i.McpSlug,
+		&i.McpIsPublic,
+		&i.McpEnabled,
+		&i.ToolSelectionMode,
+		&i.CustomDomainID,
+		&i.ExternalOauthServerID,
+		&i.OauthProxyServerID,
+		&i.UserSessionIssuerID,
+		&i.ToolVariationsGroupID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const getToolsetByMcpSlugAndProjectAndCustomDomain = `-- name: GetToolsetByMcpSlugAndProjectAndCustomDomain :one
+SELECT id, organization_id, project_id, name, slug, description, default_environment_slug, mcp_slug, mcp_is_public, mcp_enabled, tool_selection_mode, custom_domain_id, external_oauth_server_id, oauth_proxy_server_id, user_session_issuer_id, tool_variations_group_id, created_at, updated_at, deleted_at, deleted FROM toolsets
+WHERE mcp_slug = $1 AND project_id = $2
+  AND organization_id = $3
+  AND custom_domain_id IS NOT DISTINCT FROM $4 AND deleted IS FALSE
+`
+
+type GetToolsetByMcpSlugAndProjectAndCustomDomainParams struct {
+	McpSlug        pgtype.Text
+	ProjectID      uuid.UUID
+	OrganizationID string
+	CustomDomainID uuid.NullUUID
+}
+
+func (q *Queries) GetToolsetByMcpSlugAndProjectAndCustomDomain(ctx context.Context, arg GetToolsetByMcpSlugAndProjectAndCustomDomainParams) (Toolset, error) {
+	row := q.db.QueryRow(ctx, getToolsetByMcpSlugAndProjectAndCustomDomain,
+		arg.McpSlug,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.CustomDomainID,
+	)
 	var i Toolset
 	err := row.Scan(
 		&i.ID,

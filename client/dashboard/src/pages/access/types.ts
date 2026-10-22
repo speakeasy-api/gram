@@ -29,7 +29,8 @@ export type ResourceType =
   | "risk_policy"
   | "chat"
   | "agent"
-  | "workload";
+  | "workload"
+  | "mcp_auth_client";
 
 export function isUnrestrictedResourceType(
   resourceType: ResourceType,

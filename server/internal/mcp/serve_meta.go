@@ -26,6 +26,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/externalmcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/httpheaders"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcprequests"
@@ -334,6 +335,9 @@ func (s *Service) serveResolvedMetaMCPEndpoint(
 		w.Header().Set("Mcp-Session-Id", gate.sessionID)
 	}
 
+	// Every member and toolset check this request shadows shares one
+	// admission of its caller.
+	ctx = withMandatoryAdmission(ctx)
 	body, err := s.handleMetaMCPRequest(ctx, logger, mcpEndpoint, metaServer, gate, &req, r.Header.Get(mcpversions.HTTPHeader))
 
 	switch {
@@ -518,6 +522,17 @@ func (s *Service) listMetaServerTools(ctx context.Context, logger *slog.Logger, 
 			Annotations: nil,
 			Meta:        nil,
 		})
+		// Only inspection tools are read-only; execute_tool can dispatch writes.
+		switch tool.Name {
+		case metamcp.ToolListServers, metamcp.ToolDescribeServer, metamcp.ToolDescribeTools, metamcp.ToolConnectionStatus:
+			tools[len(tools)-1].Annotations = &externalmcp.ToolAnnotations{
+				Title:           "",
+				ReadOnlyHint:    new(true),
+				DestructiveHint: nil,
+				IdempotentHint:  nil,
+				OpenWorldHint:   nil,
+			}
+		}
 		if tool.Name == metamcp.ToolConnectionStatus {
 			tools[len(tools)-1].Meta = map[string]any{
 				"ui":             map[string]any{"resourceUri": metamcp.ConnectionStatusResourceURI},

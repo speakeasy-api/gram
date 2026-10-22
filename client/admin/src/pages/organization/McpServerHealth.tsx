@@ -679,9 +679,9 @@ function ToolCallsChart({
       <p className={cn(MUTED, "border-t px-5 pt-2.5 pb-3.5 text-xs")}>
         The chart counts calls that reach the server directly. The Tool calls
         total above also counts calls reported by client hooks, so it can be
-        higher. Failed means status 400 or above. A single failed call still
-        fills a red square. Tool errors returned inside a 200 response count as
-        OK.
+        higher. In the chart, failed means status 400 or above, and tool errors
+        returned inside a 200 response count as OK; the total above counts them
+        as failed. A single failed call still fills a red square.
       </p>
       <PromptBlock
         prompt={adminMcpPrompt({

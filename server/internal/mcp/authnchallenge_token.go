@@ -267,6 +267,11 @@ type tokenGrant struct {
 // none takes the clientless branch.
 func (s *Service) tokenGrantFor(r *http.Request, grantType string, creds presentedClientCredentials) (tokenGrant, bool) {
 	switch grantType {
+	case "client_credentials":
+		if s.assistantWorkloadTokens == nil {
+			return tokenGrant{clientAuth: tokenClientAuthUndeclared, resolveMode: "", authenticated: nil, clientless: nil}, false
+		}
+		return tokenGrant{clientAuth: tokenClientAuthRequired, resolveMode: lookupClientOnly, authenticated: s.handleAssistantClientCredentialsGrant, clientless: nil}, true
 	// Authorization-code and refresh grants continue an authorization that
 	// already passed admission, so they resolve the client from the database
 	// only.
@@ -547,15 +552,17 @@ func (s *Service) handleTokenJWTBearerGrant(
 	authorizationCtx, err := s.contextForSessionSubject(ctx, endpoint, result.Subject, "id-jag:"+result.Claims.JTI, clientRow.ClientID)
 	if err == nil && endpoint.MetaMcpServerID.Valid {
 		var members []metaMember
-		authorizationCtx, members, err = s.resolveEndpointMemberSnapshot(authorizationCtx, logger, endpoint)
+		authorizationCtx, members, err = s.resolveEndpointMemberSnapshot(authorizationCtx, logger, mandatorySurfaceTokenIssuance, endpoint)
 		if err == nil && len(members) == 0 {
 			err = oops.E(oops.CodeForbidden, authz.ErrDenied, "subject cannot access any meta MCP members")
 		}
 	} else if err == nil {
+		connect := authz.MCPCheck(authz.ScopeMCPConnect, endpoint.connectResourceID().String(), endpoint.ProjectID.String())
 		authorizationCtx, err = s.authz.PrepareContext(authorizationCtx)
 		if err == nil {
-			err = s.authz.Require(authorizationCtx, authz.MCPCheck(authz.ScopeMCPConnect, endpoint.connectResourceID().String(), endpoint.ProjectID.String()))
+			err = s.authz.Require(authorizationCtx, connect)
 		}
+		s.newMandatoryShadow(authorizationCtx, endpoint.OrganizationID).shadowRequire(authorizationCtx, mandatorySurfaceTokenIssuance, err, connect)
 	}
 	if err != nil {
 		if shareable, ok := errors.AsType[*oops.ShareableError](err); ok && (shareable.Code == oops.CodeForbidden || shareable.Code == oops.CodeUnauthorized) {
@@ -1411,7 +1418,7 @@ func (s *Service) refreshNeedsUpstreamReconnect(ctx context.Context, logger *slo
 	// Where the auth client resolver serves the organization, a choice it
 	// cannot use sends the session to reconnect rather than refreshing into
 	// the same rejection.
-	if reconnect, decided, err := s.refreshNeedsAuthClientReconnect(ctx, endpoint, jti); err != nil {
+	if reconnect, decided, err := s.refreshNeedsAuthClientReconnect(ctx, endpoint, subject, jti); err != nil {
 		logger.WarnContext(ctx, "resolve auth client before refresh", attr.SlogError(err))
 	} else if decided {
 		return reconnect

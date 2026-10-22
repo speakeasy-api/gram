@@ -882,8 +882,12 @@ type MessageEvent_IngestionContext_builder struct {
 	BillingMode *string
 	// Historical source import/replay marker, not Pub/Sub redelivery.
 	Replayed *bool
-	// Customer-defined string labels observed by ingestion. Consumers preserve
-	// this snapshot rather than resolving labels from current configuration.
+	// String labels snapshotted when the message is created. model_name is the
+	// message's model identifier, model_family its recognized vendor, and
+	// inference_provider its reported inference service. department is the actor's
+	// active organization-scoped directory department at capture time, not the
+	// billing user's. Unknown values are omitted. Consumers preserve this
+	// snapshot across retries rather than resolving current directory state.
 	Attributes map[string]string
 }
 

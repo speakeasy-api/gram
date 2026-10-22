@@ -22,6 +22,7 @@ func TestHandleToken_ClientBoundGrantsWithoutClientAreInvalidClient(t *testing.T
 	toolset, _, _ := seedPrivateToolsetWithIssuer(t, ctx, ti)
 
 	forms := map[string]url.Values{
+		"client_credentials": {"grant_type": {"client_credentials"}},
 		oauthwire.GrantTypeAuthorizationCode: {
 			"grant_type":    {oauthwire.GrantTypeAuthorizationCode},
 			"code":          {"irrelevant"},
@@ -81,7 +82,6 @@ func TestHandleToken_UnsupportedGrantPrecedesClientAuthentication(t *testing.T) 
 	forms := map[string]url.Values{
 		"no client":           {"grant_type": {"urn:example:grant-type:unknown"}},
 		"no grant_type":       {},
-		"client_credentials":  {"grant_type": {"client_credentials"}},
 		"unregistered client": {"grant_type": {"urn:example:grant-type:unknown"}, "client_id": {"client_" + uuid.NewString()}},
 		"wrong secret":        {"grant_type": {"password"}, "client_id": {publicClient.ClientID}, "client_secret": {"wrong"}},
 	}

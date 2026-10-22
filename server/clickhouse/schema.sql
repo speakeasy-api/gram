@@ -1922,6 +1922,63 @@ TTL toDateTime(created_at) + INTERVAL 90 DAY
 SETTINGS index_granularity = 8192
 COMMENT 'Risk findings event log: one row per detected secret or sensitive-data match, hashed not plaintext, powering the Risk Events page and analytics.';
 
+-- One row per finding, folded from risk_findings as copies arrive, for
+-- analytics that count findings. A finding is an event log of copies: the
+-- scanner's row, its redeliveries, and the suppression and unsuppression
+-- copies that change its state. Copies rank as every risk read ranks them:
+-- a state-change copy outranks a finding copy, then the latest inserted wins
+-- (chrepo.LatestCopyOrderSQL). live is the winning copy's. Each other column
+-- is the best-ranked copy's that set it, as a state-change copy can carry
+-- fewer fields than the scanner's and a blank must not hide what a finding
+-- was. argMax is idempotent, so a redelivered copy
+-- changes nothing and no read-time de-duplication is needed. The shadow
+-- engine's comparison rows are never folded. Columns are only what counting
+-- needs: no matched value, fingerprint, description or chat location.
+CREATE TABLE IF NOT EXISTS risk_finding_states (
+    organization_id String COMMENT 'Organization the finding belongs to.\n@access: confidential' CODEC(ZSTD),
+    project_id String COMMENT 'Project the finding was scoped to. Empty string when unknown.\n@access: confidential' CODEC(ZSTD),
+    id UUID COMMENT 'Finding id that every copy of the finding shares.\n@access: confidential',
+
+    -- Ranked by version (state-change copy, inserted_at).
+    live AggregateFunction(argMax, UInt8, Tuple(UInt8, DateTime64(9))) COMMENT '1 while the finding is neither suppressed, a false positive nor a could-not-analyze sentinel.\n@access: confidential',
+    category AggregateFunction(argMaxIf, String, Tuple(UInt8, DateTime64(9)), UInt8) COMMENT 'Risk category of the rule that fired, e.g. secrets.\n@access: confidential',
+    rule_id AggregateFunction(argMaxIf, String, Tuple(UInt8, DateTime64(9)), UInt8) COMMENT 'Rule that fired, e.g. pii.email_address.\n@access: confidential',
+    source AggregateFunction(argMaxIf, String, Tuple(UInt8, DateTime64(9)), UInt8) COMMENT 'Detection source, e.g. gitleaks or presidio.\n@access: confidential',
+    risk_policy_id AggregateFunction(argMaxIf, String, Tuple(UInt8, DateTime64(9)), UInt8) COMMENT 'Risk policy the message was scanned against.\n@access: confidential',
+    chat_source AggregateFunction(argMaxIf, String, Tuple(UInt8, DateTime64(9)), UInt8) COMMENT 'Product surface the scanned message came from.\n@access: confidential',
+    team AggregateFunction(argMaxIf, String, Tuple(UInt8, DateTime64(9)), UInt8) COMMENT 'Directory department of the resolved user at ingest.\n@access: confidential-pii',
+    user_email AggregateFunction(argMaxIf, String, Tuple(UInt8, DateTime64(9)), UInt8) COMMENT 'Email of the resolved internal user at ingest.\n@access: confidential-pii',
+    external_user_id AggregateFunction(argMaxIf, String, Tuple(UInt8, DateTime64(9)), UInt8) COMMENT 'Resolved external user id, for findings with no internal user.\n@access: confidential-pii',
+    enforcement_outcome AggregateFunction(argMaxIf, String, Tuple(UInt8, DateTime64(9)), UInt8) COMMENT 'What enforcement did with the finding, e.g. denied. Empty when nothing was enforced.\n@access: confidential',
+    created_at_unix_nano SimpleAggregateFunction(min, Int64) COMMENT 'Time the finding was produced. Every copy of a finding keeps it.\n@access: confidential',
+
+    INDEX idx_risk_finding_states_created_at created_at_unix_nano TYPE minmax GRANULARITY 1
+) ENGINE = AggregatingMergeTree
+ORDER BY (organization_id, project_id, id)
+TTL fromUnixTimestamp64Nano(created_at_unix_nano) + INTERVAL 90 DAY
+SETTINGS index_granularity = 8192
+COMMENT 'One row per risk finding, folded from risk_findings by risk_finding_states_mv, for analytics counts.';
+
+CREATE MATERIALIZED VIEW IF NOT EXISTS risk_finding_states_mv TO risk_finding_states AS
+SELECT
+    organization_id,
+    project_id,
+    id,
+    argMaxState(toUInt8(excluded_at IS NULL AND false_positive_at IS NULL AND dead_letter_reason = ''), (toUInt8(event_kind IN ('suppression', 'unsuppression')), inserted_at)) AS live,
+    argMaxIfState(toString(category), (toUInt8(event_kind IN ('suppression', 'unsuppression')), inserted_at), category != '') AS category,
+    argMaxIfState(toString(rule_id), (toUInt8(event_kind IN ('suppression', 'unsuppression')), inserted_at), rule_id != '') AS rule_id,
+    argMaxIfState(toString(source), (toUInt8(event_kind IN ('suppression', 'unsuppression')), inserted_at), source != '') AS source,
+    argMaxIfState(risk_policy_id, (toUInt8(event_kind IN ('suppression', 'unsuppression')), inserted_at), risk_policy_id != '') AS risk_policy_id,
+    argMaxIfState(toString(chat_source), (toUInt8(event_kind IN ('suppression', 'unsuppression')), inserted_at), chat_source != '') AS chat_source,
+    argMaxIfState(toString(team), (toUInt8(event_kind IN ('suppression', 'unsuppression')), inserted_at), team != '') AS team,
+    argMaxIfState(user_email, (toUInt8(event_kind IN ('suppression', 'unsuppression')), inserted_at), user_email != '') AS user_email,
+    argMaxIfState(external_user_id, (toUInt8(event_kind IN ('suppression', 'unsuppression')), inserted_at), external_user_id != '') AS external_user_id,
+    argMaxIfState(toString(enforcement_outcome), (toUInt8(event_kind IN ('suppression', 'unsuppression')), inserted_at), enforcement_outcome != '') AS enforcement_outcome,
+    min(toUnixTimestamp64Nano(created_at)) AS created_at_unix_nano
+FROM risk_findings
+WHERE shadow = 0
+GROUP BY organization_id, project_id, id;
+
 -- Bloom filter indices for point lookups (organization_id and project_id are
 -- already in the ORDER BY so no bloom filters needed for them).
 CREATE INDEX IF NOT EXISTS idx_risk_findings_chat_message_id ON risk_findings (chat_message_id) TYPE bloom_filter(0.01) GRANULARITY 1;
@@ -2421,3 +2478,31 @@ ORDER BY (organization_id, project_id, occurred_at_unix_nano, canonical_metric, 
 TTL fromUnixTimestamp64Nano(occurred_at_unix_nano) + INTERVAL 730 DAY
 SETTINGS index_granularity = 8192
 COMMENT 'One row per measurement data point per measure, at the producer native grain. Carries a full dimension repeat so no join is required. Retained beyond agent_events so billing can read historical cycles. Replacing collapses only on background merges, so a reader must de-duplicate on metric_id (FINAL, or ORDER BY observed_at_unix_nano DESC then LIMIT 1 BY metric_id, since an unordered LIMIT 1 BY keeps an arbitrary version) and never sum raw rows.';
+
+-- Payload-free producer aggregates. Management reads first authorize source_id
+-- against the caller's project. UUID source IDs are globally unique.
+CREATE TABLE IF NOT EXISTS tunnel_metric_snapshots (
+    gram_project_id UUID COMMENT 'Project that owns the tunneled MCP source.\n@access: confidential',
+    source_id UUID COMMENT 'Tunneled MCP source the snapshot describes.\n@access: confidential',
+    bucket DateTime('UTC') COMMENT 'Start of the minute or 15-second sample interval.\n@access: confidential',
+    kind LowCardinality(String) COMMENT 'Snapshot kind, requests or connections.\n@access: confidential',
+    producer_id UUID COMMENT 'Tunnel gateway process that produced the snapshot.\n@access: confidential',
+    server_id UUID COMMENT 'MCP server the requests targeted, nil for connection samples.\n@access: confidential',
+    method LowCardinality(String) COMMENT 'MCP method from a fixed allowlist, other for anything else.\n@access: confidential',
+    client_family LowCardinality(String) COMMENT 'Fixed client family label derived from the MCP client name reported at initialize, falling back to the HTTP User-Agent. Never the raw client name or user agent.\n@access: confidential',
+    revision UInt64 COMMENT 'Producer revision. The highest revision of a key replaces earlier ones.\n@access: confidential',
+    attempts UInt64 COMMENT 'Requests started in the interval.\n@access: confidential',
+    successes UInt64 COMMENT 'Requests that completed with an MCP response.\n@access: confidential',
+    errors UInt64 COMMENT 'Requests that completed with an MCP error.\n@access: confidential',
+    canceled UInt64 COMMENT 'Requests canceled before completion.\n@access: confidential',
+    incomplete UInt64 COMMENT 'Requests: completions with no terminal result. Coverage and connections: the loss watermark of the producer for this source since boot. Growth since the previous row of that producer for the source marks the interval partial.\n@access: confidential',
+    rejected UInt64 COMMENT 'Requests Speakeasy rejected before they reached the MCP server.\n@access: confidential',
+    latency_bins Array(UInt64) COMMENT 'Request counts per fixed latency histogram bin.\n@access: confidential',
+    connections UInt32 COMMENT 'Connected tunnel agents at the sample time.\n@access: confidential',
+    consumers UInt32 COMMENT 'Client sessions open through the tunnel at the sample time.\n@access: confidential',
+    substreams UInt32 COMMENT 'Requests in flight through the tunnel at the sample time.\n@access: confidential',
+    connections_opened UInt64 COMMENT 'Agent connections opened since the previous sample.\n@access: confidential'
+) ENGINE = ReplacingMergeTree(revision)
+PARTITION BY toDate(bucket)
+ORDER BY (gram_project_id, source_id, bucket, kind, producer_id, server_id, method, client_family)
+TTL bucket + INTERVAL 90 DAY DELETE;

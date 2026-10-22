@@ -27,6 +27,11 @@ func ListServerConnectionsTunneledMcpPath() string {
 	return "/rpc/tunneledMcp.listServerConnections"
 }
 
+// GetServerMetricsTunneledMcpPath returns the URL path to the tunneledMcp service getServerMetrics HTTP endpoint.
+func GetServerMetricsTunneledMcpPath() string {
+	return "/rpc/tunneledMcp.getServerMetrics"
+}
+
 // UpdateServerTunneledMcpPath returns the URL path to the tunneledMcp service updateServer HTTP endpoint.
 func UpdateServerTunneledMcpPath() string {
 	return "/rpc/tunneledMcp.updateServer"
