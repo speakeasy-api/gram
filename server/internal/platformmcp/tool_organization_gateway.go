@@ -13,6 +13,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/orggateway"
+	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 )
 
 // Administrator assignment review already has list_access_members,
@@ -24,7 +25,7 @@ const getMyOrganizationGatewayName = "get_my_organization_gateway"
 
 const getMyOrganizationGatewayDescription = "Get the one MCP URL that gives you every MCP server in your organization you are allowed to reach, across all projects, signed in with your organization account. " +
 	"Returns available=true with the url to add to an MCP client, or available=false with unavailable_reason and the next action. It names no servers: once connected, the gateway's list_servers tool lists the servers your access reaches by slug, prefixed with the project only when two projects share a slug. A connection that chooses Direct at sign-in lists each tool as server--tool instead. " +
-	"No token, credential, or other member's access is returned."
+	"For a connection limited to one project, use get_my_project_gateway instead. No token, credential, or other member's access is returned."
 
 // getMyOrganizationGatewayMeta is shared by the live and unavailable
 // registrations. The gateway is the caller's own connection target, so only
@@ -106,6 +107,7 @@ func unavailableOrganizationGateway(reason orggateway.Unavailability, nextAction
 }
 
 func registerOrganizationGatewayTool(reg *Registrar, service *OrganizationGatewayService) {
+	registerProjectGatewayTool(reg, service)
 	if !service.valid() {
 		addTool(reg, &mcp.Tool{
 			Name:        getMyOrganizationGatewayName,
@@ -123,6 +125,56 @@ func registerOrganizationGatewayTool(reg *Registrar, service *OrganizationGatewa
 	}, getMyOrganizationGatewayMeta, func(ctx context.Context, _ *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, GetMyOrganizationGatewayOutput, error) {
 		return principalToolCall(ctx, func(error) (*mcp.CallToolResult, bool) { return nil, false }, func(principal Principal) (GetMyOrganizationGatewayOutput, error) {
 			return service.Get(ctx, principal)
+		})
+	})
+}
+
+// GetMyProjectGatewayInput selects one exact project in the caller's organization.
+type GetMyProjectGatewayInput struct {
+	ProjectSlug string `json:"project_slug" jsonschema:"Exact slug of a project in your organization; required, with no default project fallback"`
+}
+
+// GetProject returns the same organization-authorized connection limited to one
+// live project. Missing, deleted, and foreign projects have the same refusal.
+func (s *OrganizationGatewayService) GetProject(ctx context.Context, principal Principal, input GetMyProjectGatewayInput) (GetMyOrganizationGatewayOutput, error) {
+	if input.ProjectSlug == "" {
+		return GetMyOrganizationGatewayOutput{}, fmt.Errorf("project_slug is required")
+	}
+	project, err := projectsrepo.New(s.db).GetProjectBySlug(ctx, projectsrepo.GetProjectBySlugParams{
+		Slug: input.ProjectSlug, OrganizationID: principal.OrganizationID,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return GetMyOrganizationGatewayOutput{}, ErrUnavailable
+	}
+	if err != nil {
+		return GetMyOrganizationGatewayOutput{}, fmt.Errorf("load project: %w", err)
+	}
+	output, err := s.Get(ctx, principal)
+	if err != nil || !output.Available {
+		return output, err
+	}
+	gatewayURL, err := url.Parse(output.URL)
+	if err != nil {
+		return GetMyOrganizationGatewayOutput{}, fmt.Errorf("parse gateway URL: %w", err)
+	}
+	output.URL = gatewayURL.JoinPath("projects", project.Slug).String()
+	return output, nil
+}
+
+func registerProjectGatewayTool(reg *Registrar, service *OrganizationGatewayService) {
+	// A separate explicit-project tool preserves the organization tool's no-input
+	// behavior without pretending that an omitted selector means Default project.
+	addTool(reg, &mcp.Tool{
+		Name:        "get_my_project_gateway",
+		Title:       "Get My Project Gateway",
+		Description: "Get one MCP URL for the servers you are allowed to reach in an exact project. Requires project_slug. Uses the organization's gateway availability and organization sign-in, but lists and calls servers only in that project. Add the returned url to your MCP client and sign in with your organization account. Returns available=false and next_action when the organization gateway is unavailable. No tokens, credentials, server names, or other members' access are returned. For all projects, use get_my_organization_gateway.",
+		Annotations: readOnlyAnnotations(),
+	}, ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input GetMyProjectGatewayInput) (*mcp.CallToolResult, GetMyOrganizationGatewayOutput, error) {
+		return principalToolCall(ctx, func(error) (*mcp.CallToolResult, bool) { return nil, false }, func(principal Principal) (GetMyOrganizationGatewayOutput, error) {
+			if !service.valid() {
+				return GetMyOrganizationGatewayOutput{}, ErrUnavailable
+			}
+			return service.GetProject(ctx, principal, input)
 		})
 	})
 }
