@@ -158,7 +158,7 @@ func TestOAuthHTTPProviderSetupCompletionDoesNotExposeState(t *testing.T) {
 	require.Equal(t, http.StatusOK, response.Code)
 	require.Equal(t, "no-store", response.Header().Get("Cache-Control"))
 	require.NotContains(t, response.Body.String(), "secret")
-	require.Contains(t, response.Body.String(), "setting up Platform MCP")
+	require.Contains(t, response.Body.String(), "Go back to your chat to finish setting")
 	require.NotContains(t, response.Body.String(), "AICP")
 }
 
@@ -262,10 +262,10 @@ func TestOAuthHTTPSelectsOrganizationAfterIDPCallback(t *testing.T) {
 	require.Equal(t, http.StatusOK, selection.Code)
 	require.Contains(t, selection.Body.String(), "Organization one")
 	require.Contains(t, selection.Body.String(), "Choose an organization")
-	require.Contains(t, selection.Body.String(), "requests access to Platform MCP")
+	require.Contains(t, selection.Body.String(), "will work in")
 	require.NotContains(t, selection.Body.String(), "AICP")
-	require.Contains(t, selection.Body.String(), "auth-consent-container")
-	require.Contains(t, selection.Body.String(), "font-diatype-mono")
+	require.Contains(t, selection.Body.String(), `aria-label="Speakeasy"`)
+	require.Contains(t, selection.Body.String(), "/mcp/consent-fonts/")
 	require.NotContains(t, selection.Body.String(), "fonts.googleapis.com")
 }
 

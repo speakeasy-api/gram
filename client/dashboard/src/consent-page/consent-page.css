@@ -1,5 +1,6 @@
-/* Stylesheet for the server-rendered MCP consent page
-   (server/internal/mcp/consent_template.html).
+/* Stylesheet for the server-rendered authorization pages: the MCP consent
+   page (server/internal/mcp/consent_template.html) and the Platform MCP OAuth
+   page (server/internal/platformmcp/oauth_page.html).
 
    The page is Go-templated HTML served from the binary, not part of the
    dashboard bundle, but it is a first-party Speakeasy surface and has to look
@@ -9,7 +10,7 @@
    template so only the classes it actually references are emitted.
 
    The build (vite.consent-page.config.ts) writes the result plus the brand
-   woff2 files into server/internal/mcp/consent_page_assets/, which the server
+   woff2 files into server/internal/consentpage/assets/, which the server
    embeds. Never hand-edit the output. */
 
 /* Layer order for the whole document, declared before anything else so it is
@@ -28,7 +29,8 @@
    in Go template and plain-JS files. */
 @source "../../../../server/internal/mcp/consent_template.html";
 @source "../../../../server/internal/mcp/consent_reuse_template.html";
-@source "../../../../server/internal/mcp/consent_logo.html";
+@source "../../../../server/internal/consentpage/logo.html";
+@source "../../../../server/internal/platformmcp/oauth_page.html";
 @source "../../../../server/internal/mcp/consent_script.js";
 
 @import "../components/ui/styles/base.css";

@@ -5,386 +5,220 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="robots" content="noindex, nofollow" />
     <title>{{.Title}}</title>
-
+    {{/* The stylesheet is the one the MCP consent page uses, compiled from the
+    dashboard design system by `aube run -F dashboard build:consent-page` and
+    inlined, so both authorization pages look like the dashboard. */}}
     <style>
-      html,
-      body {
-        --font-diatype:
-          "Geist", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
-          Helvetica, Arial, sans-serif;
-        --font-diatype-mono:
-          "Geist Mono", SFMono-Regular, Menlo, Monaco, Consolas,
-          "Liberation Mono", "Courier New", monospace;
-        --color-base-white: hsl(0 0% 100%);
-        --color-base-black: hsl(0 0% 0%);
-        --color-neutral-100: hsl(0 0% 98%);
-        --color-neutral-200: hsl(0 0% 92%);
-        --color-neutral-700: hsl(0 0% 33%);
-        --color-neutral-800: hsl(0 0% 20%);
-        --color-feedback-green-100: hsl(102 35% 93%);
-        --color-feedback-green-300: hsl(99 30% 73%);
-        --color-feedback-green-700: hsl(105 24% 27%);
-        --color-brand-blue-600: hsl(215 71% 40%);
-        --text-default: var(--color-neutral-700);
-        --text-default-inverse: var(--color-neutral-100);
-        --text-default-success: var(--color-feedback-green-700);
-        --fill-neutral-highlight: var(--color-base-black);
-        --fill-neutral-default: var(--color-neutral-800);
-        --bg-surface-primary-default: var(--color-base-white);
-        --bg-surface-secondary-default: var(--color-neutral-100);
-        --bg-success-softest: var(--color-feedback-green-100);
-        --border-neutral-softest: var(--color-neutral-200);
-        --border-success-softest: var(--color-feedback-green-300);
-        --ease-in-out-quad: cubic-bezier(0.455, 0.03, 0.515, 0.955);
-
-        margin: 0;
-        padding: 0;
-        min-height: 100vh;
-        display: flex;
-        flex-direction: column;
-        font-family: var(--font-diatype);
-        font-weight: 300;
-        color: var(--text-default);
-        background: var(--bg-surface-secondary-default);
-      }
-
-      * {
-        box-sizing: border-box;
-      }
-
-      .main {
-        flex: 1;
-        display: flex;
-        justify-content: center;
-        align-items: flex-start;
-        padding: 6rem 1rem;
-      }
-
-      @media (min-width: 768px) {
-        .main {
-          padding: 6rem 2rem;
-        }
-      }
-
-      .auth-consent-container {
-        display: flex;
-        flex-direction: column;
-        gap: 1.5rem;
-        width: 100%;
-        max-width: 30rem;
-        padding: 2rem;
-        border: solid 1px var(--border-neutral-softest);
-        border-radius: 0.5rem;
-        background: var(--bg-surface-primary-default);
-      }
-
-      .header {
-        display: flex;
-        flex-direction: column;
-        gap: 0.5rem;
-      }
-
-      .header h1 {
-        margin: 0;
-        color: var(--fill-neutral-default);
-        font-size: 1.625rem;
-        font-weight: 300;
-        line-height: 150%;
-        text-wrap: balance;
-      }
-
-      .header p {
-        margin: 0;
-        font-size: 1rem;
-        line-height: 175%;
-        text-wrap: balance;
-      }
-
-      .header strong,
-      .info dt,
-      .field-label {
-        color: var(--fill-neutral-default);
-        font-weight: 500;
-      }
-
-      .info {
-        margin: 0;
-        padding: 1rem 1.25rem;
-        border: solid 1px var(--border-neutral-softest);
-        background: var(--bg-surface-secondary-default);
-        font-size: 0.8125rem;
-      }
-
-      .info dt {
-        margin-top: 0.75rem;
-        font-size: 0.6875rem;
-        letter-spacing: 0.03em;
-        text-transform: uppercase;
-      }
-
-      .info dt:first-child {
-        margin-top: 0;
-      }
-
-      .info dd {
-        margin: 0.25rem 0 0;
-        overflow-wrap: anywhere;
-        color: var(--text-default);
-        font-family: var(--font-diatype-mono);
-      }
-
-      .field {
-        display: flex;
-        flex-direction: column;
-        gap: 0.5rem;
-      }
-
-      .field-label {
-        font-size: 0.8125rem;
-      }
-
-      .field select,
-      .field input {
-        width: 100%;
-        padding: 0.75rem;
-        border: solid 1px var(--border-neutral-softest);
-        border-radius: 6px;
-        color: var(--text-default);
-        background: var(--bg-surface-primary-default);
-        font: 400 0.875rem var(--font-diatype);
-      }
-
-      .field select:focus-visible,
-      .field input:focus-visible,
-      .btn:focus-visible {
-        outline: 2px solid var(--color-brand-blue-600);
-        outline-offset: 2px;
-      }
-
-      .field-error {
-        margin: 0;
-        color: hsl(0 60% 40%);
-        font-size: 0.8125rem;
-      }
-
-      .actions {
-        display: flex;
-        gap: 0.75rem;
-      }
-
-      .actions form,
-      .actions .btn {
-        flex: 1;
-      }
-
-      .actions-stacked {
-        flex-direction: column;
-      }
-
-      .btn {
-        width: 100%;
-        padding: 0.75rem 1.25rem;
-        border: solid 1px transparent;
-        border-radius: 6px;
-        cursor: pointer;
-        font-family: var(--font-diatype);
-        font-size: 0.875rem;
-        font-weight: 400;
-        text-align: center;
-        text-decoration: none;
-        text-transform: uppercase;
-        transition:
-          background-color 300ms var(--ease-in-out-quad),
-          color 300ms var(--ease-in-out-quad),
-          border-color 300ms var(--ease-in-out-quad);
-      }
-
-      .btn-primary {
-        color: var(--text-default-inverse);
-        background: var(--fill-neutral-default);
-      }
-
-      .btn-primary:hover {
-        background: var(--fill-neutral-highlight);
-      }
-
-      .btn-secondary {
-        border-color: var(--border-neutral-softest);
-        color: var(--fill-neutral-default);
-        background: var(--bg-surface-primary-default);
-      }
-
-      .btn-secondary:hover {
-        color: var(--fill-neutral-highlight);
-        background: var(--bg-surface-secondary-default);
-      }
-
-      .success-icon {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        width: 3rem;
-        height: 3rem;
-        border: 1px solid var(--border-success-softest);
-        border-radius: 50%;
-        background: var(--bg-success-softest);
-      }
-
-      .success-icon svg {
-        width: 1.75rem;
-        height: 1.75rem;
-      }
+      {{.Styles}}
     </style>
   </head>
-  <body{{if .AutoClose}} data-auto-close{{end}}>
-    <main class="main">
-      <section class="auth-consent-container" aria-labelledby="page-title">
+  <body
+    class="bg-background text-foreground min-h-screen"
+    {{if .AutoClose}}data-auto-close{{end}}
+  >
+    <main
+      class="mx-auto flex min-h-screen w-full max-w-[34rem] flex-col gap-6 px-4 py-12 sm:py-16"
+    >
+      <div class="text-foreground">{{template "speakeasyWordmark"}}</div>
+
+      <section class="bg-card border" aria-labelledby="page-title">
         {{if eq .Kind "organization"}}
-        <header class="header">
-          <h1 id="page-title">Choose an organization</h1>
-          <p>
-            <strong>{{.ClientName}}</strong> requests access to Platform MCP.
+        <header class="flex flex-col gap-2 border-b px-6 py-6 sm:px-8">
+          <p class="text-eyebrow">Connect {{.ClientName}}</p>
+          <h1 id="page-title" class="text-display-xs">Choose an organization</h1>
+          <p class="text-sm text-muted-foreground">
+            Pick the Speakeasy organization
+            <span class="text-foreground">{{.ClientName}}</span> will work in.
           </p>
         </header>
-        <dl class="info">
-          <dt>After approval</dt>
-          <dd>Speakeasy will redirect to {{.RedirectURI}}</dd>
-        </dl>
-        <form method="post" class="field">
+        <form method="post" class="flex flex-col gap-4 px-6 py-6 sm:px-8">
           <input type="hidden" name="state" value="{{.State}}" />
           <input type="hidden" name="csrf_token" value="{{.CSRFToken}}" />
-          <label class="field-label" for="organization_id"
-            >Organization to administer</label
+          <div class="flex flex-col gap-2">
+            <label class="text-eyebrow" for="organization_id"
+              >Organization to administer</label
+            >
+            <select
+              id="organization_id"
+              name="organization_id"
+              class="bg-background w-full border px-4 py-3 text-sm"
+            >
+              {{range .Organizations}}
+              <option value="{{.ID}}">{{.Name}}</option>
+              {{end}}
+            </select>
+          </div>
+          <p class="text-xs text-muted-foreground">
+            After approval, Speakeasy redirects to
+            <span class="font-mono break-all">{{.RedirectURI}}</span>.
+          </p>
+          <button
+            type="submit"
+            class="bg-primary text-primary-foreground interact:bg-foreground h-10 w-full px-6 text-sm sm:w-fit"
           >
-          <select id="organization_id" name="organization_id">
-            {{range .Organizations}}
-            <option value="{{.ID}}">{{.Name}}</option>
-            {{end}}
-          </select>
-          <button class="btn btn-primary" type="submit">Continue</button>
+            Continue
+          </button>
         </form>
         {{else if eq .Kind "workspace"}}
-        <header class="header">
-          <h1 id="page-title">Name your workspace</h1>
-          <p>
-            <strong>{{.ClientName}}</strong> requests access to Platform MCP.
-            Your account has no Speakeasy workspace yet. Name one to continue.
-            It starts with a 14-day trial.
+        <header class="flex flex-col gap-2 border-b px-6 py-6 sm:px-8">
+          <p class="text-eyebrow">Connect {{.ClientName}}</p>
+          <h1 id="page-title" class="text-display-xs">Name your organization</h1>
+          <p class="text-sm text-muted-foreground">
+            To connect <span class="text-foreground">{{.ClientName}}</span>,
+            create a Speakeasy organization for your team. Most teams use their
+            company name. It starts with a 14-day trial.
           </p>
         </header>
-        <form method="post" action="create-workspace" class="field">
+        <form
+          method="post"
+          action="create-workspace"
+          class="flex flex-col gap-4 px-6 py-6 sm:px-8"
+        >
           <input type="hidden" name="state" value="{{.State}}" />
           <input type="hidden" name="csrf_token" value="{{.CSRFToken}}" />
-          <label class="field-label" for="workspace_name">Workspace name</label>
-          <input
-            id="workspace_name"
-            name="workspace_name"
-            type="text"
-            value="{{.WorkspaceName}}"
-            maxlength="100"
-            required
-            autofocus
-            {{if .WorkspaceError}}aria-invalid="true" aria-describedby="workspace_error"{{end}}
-          />
-          {{if .WorkspaceError}}
-          <p class="field-error" id="workspace_error" role="alert">{{.WorkspaceError}}</p>
-          {{end}}
-          <button class="btn btn-primary" type="submit">Create workspace</button>
+          <div class="flex flex-col gap-2">
+            <label class="text-eyebrow" for="workspace_name">Organization name</label>
+            <input
+              id="workspace_name"
+              name="workspace_name"
+              type="text"
+              value="{{.WorkspaceName}}"
+              maxlength="100"
+              required
+              autofocus
+              class="bg-background w-full border px-4 py-3 text-sm aria-invalid:border-destructive"
+              {{if .WorkspaceError}}aria-invalid="true" aria-describedby="workspace_error"{{end}}
+            />
+            {{if .WorkspaceError}}
+            <p class="text-xs text-destructive" id="workspace_error" role="alert">{{.WorkspaceError}}</p>
+            {{end}}
+          </div>
+          <button
+            type="submit"
+            class="bg-primary text-primary-foreground interact:bg-foreground h-10 w-full px-6 text-sm sm:w-fit"
+          >
+            Create organization
+          </button>
         </form>
         {{else if eq .Kind "invitation"}}
-        <header class="header">
-          <h1 id="page-title">Join your team</h1>
-          <p>
-            <strong>{{.ClientName}}</strong> requests access to Platform MCP.
-            You have an invitation to a Speakeasy organization. Join it to
-            continue.
+        <header class="flex flex-col gap-2 border-b px-6 py-6 sm:px-8">
+          <p class="text-eyebrow">Connect {{.ClientName}}</p>
+          <h1 id="page-title" class="text-display-xs">Join your team</h1>
+          <p class="text-sm text-muted-foreground">
+            Your team already uses Speakeasy and has invited you. Join them to
+            connect <span class="text-foreground">{{.ClientName}}</span>.
           </p>
         </header>
-        <div class="actions actions-stacked">
+        <div class="flex flex-col gap-3 px-6 py-6 sm:px-8">
           {{range .Invitations}}{{if not .RequiresSSO}}
           <form method="post" action="join-workspace">
             <input type="hidden" name="state" value="{{$.State}}" />
             <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}" />
             <input type="hidden" name="invitation_id" value="{{.ID}}" />
-            <button class="btn btn-primary" type="submit">Join {{.OrganizationName}}</button>
+            <button
+              type="submit"
+              class="bg-primary text-primary-foreground interact:bg-foreground h-10 w-full px-6 text-sm"
+            >
+              Join {{.OrganizationName}}
+            </button>
           </form>
           {{end}}{{end}}
+          {{range .Invitations}}{{if .RequiresSSO}}
+          <p class="bg-accent border px-4 py-3 text-xs text-muted-foreground">
+            To join <span class="text-foreground">{{.OrganizationName}}</span>,
+            sign in with your company's single sign-on, then connect again.
+          </p>
+          {{end}}{{end}}
         </div>
-        {{range .Invitations}}{{if .RequiresSSO}}
-        <p class="info">
-          To join <strong>{{.OrganizationName}}</strong>, sign in with your
-          company's single sign-on, then connect again.
-        </p>
-        {{end}}{{end}}
         {{else if eq .Kind "sso-required"}}
-        <header class="header">
-          <h1 id="page-title">Sign in with SSO</h1>
-          <p>
-            <strong>{{.ClientName}}</strong> requests access to Platform MCP.
+        <header class="flex flex-col gap-2 px-6 py-6 sm:px-8">
+          <p class="text-eyebrow">Connect {{.ClientName}}</p>
+          <h1 id="page-title" class="text-display-xs">Sign in with SSO</h1>
+          <p class="text-sm text-muted-foreground">
+            To connect <span class="text-foreground">{{.ClientName}}</span>,
+            sign in with your company's single sign-on.
             {{if gt (len .Invitations) 1}}Your invitations to{{else}}Your invitation to{{end}}
-            {{range $i, $invitation := .Invitations}}{{if $i}}, {{end}}<strong>{{$invitation.OrganizationName}}</strong>{{end}}
-            {{if gt (len .Invitations) 1}}require{{else}}requires{{end}} your
-            company's single sign-on. Sign in with SSO, then connect again.
+            {{range $i, $invitation := .Invitations}}{{if $i}}, {{end}}<span class="text-foreground">{{$invitation.OrganizationName}}</span>{{end}}
+            {{if gt (len .Invitations) 1}}require{{else}}requires{{end}} it. Sign
+            in with SSO, then connect again.
           </p>
         </header>
         {{else if eq .Kind "connect"}}
-        <header class="header">
-          <h1 id="page-title">Connect Platform MCP</h1>
-          <p>
-            Allow <strong>{{.ClientName}}</strong> to administer
-            <strong>{{.OrganizationName}}</strong> through Platform MCP.
+        <header class="flex flex-col gap-2 border-b px-6 py-6 sm:px-8">
+          <p class="text-eyebrow">Authorize</p>
+          <h1
+            id="page-title"
+            class="text-display-xs flex flex-wrap items-baseline gap-x-3 gap-y-1"
+          >
+            <span>{{.ClientName}}</span>
+            <span class="text-muted-foreground" aria-hidden="true">&rsaquo;</span>
+            <span>Speakeasy</span>
+          </h1>
+          <p class="text-sm text-muted-foreground">
+            Allow <span class="text-foreground">{{.ClientName}}</span> to manage
+            <span class="text-foreground">{{.OrganizationName}}</span> on
+            Speakeasy for you, such as adding MCP servers and giving your team
+            access to them.
           </p>
         </header>
-        <dl class="info">
-          <dt>Application</dt>
-          <dd>{{.ClientName}}</dd>
+        <dl class="m-0 flex flex-col gap-4 border-b px-6 py-6 sm:px-8">
+          <div>
+            <dt class="text-eyebrow">Organization</dt>
+            <dd class="mt-1 ml-0 text-sm">{{.OrganizationName}}</dd>
+          </div>
           {{if .ClientIDOrigin}}
-          <dt>Verified origin</dt>
-          <dd>{{.ClientIDOrigin}}</dd>
+          <div>
+            <dt class="text-eyebrow">Client verified from</dt>
+            <dd class="mt-1 ml-0 font-mono text-sm break-all">{{.ClientIDOrigin}}</dd>
+          </div>
           {{end}}
-          <dt>Organization</dt>
-          <dd>{{.OrganizationName}}</dd>
-          <dt>Will redirect to</dt>
-          <dd>{{.RedirectURI}}</dd>
+          <div>
+            <dt class="text-eyebrow">Will redirect to</dt>
+            <dd class="mt-1 ml-0 font-mono text-sm break-all">{{.RedirectURI}}</dd>
+          </div>
         </dl>
-        <div class="actions">
+        <div class="flex flex-col gap-3 px-6 py-6 sm:flex-row sm:px-8">
           <form method="post" data-single-submit>
             <input type="hidden" name="state" value="{{.State}}" />
             <input type="hidden" name="csrf_token" value="{{.CSRFToken}}" />
-            <button class="btn btn-primary" type="submit" name="action" value="approve">
+            <button
+              type="submit"
+              name="action"
+              value="approve"
+              class="bg-primary text-primary-foreground enabled:interact:bg-foreground disabled:bg-muted disabled:text-muted-foreground h-10 w-full px-6 text-sm sm:w-auto disabled:cursor-not-allowed"
+            >
               Give access
             </button>
           </form>
           <form method="post" data-single-submit>
             <input type="hidden" name="state" value="{{.State}}" />
             <input type="hidden" name="csrf_token" value="{{.CSRFToken}}" />
-            <button class="btn btn-secondary" type="submit" name="action" value="deny">
+            <button
+              type="submit"
+              name="action"
+              value="deny"
+              class="bg-card enabled:interact:bg-accent disabled:text-muted-foreground h-10 w-full border px-6 text-sm sm:w-auto disabled:cursor-not-allowed"
+            >
               Cancel
             </button>
           </form>
         </div>
         {{else}}
-        <div class="success-icon" aria-hidden="true">
-          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path
-              d="M20 6L9 17L4 12"
-              stroke="var(--text-default-success)"
-              stroke-width="2.5"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            />
-          </svg>
-        </div>
-        <header class="header">
-          <h1 id="page-title">Provider connected</h1>
-          <p>
-            Provider authorization is complete. Return to your agent to continue
-            setting up Platform MCP.
+        <header class="flex flex-col gap-2 border-b px-6 py-6 sm:px-8">
+          <p class="text-eyebrow text-default-success">Done</p>
+          <h1 id="page-title" class="text-display-xs">Sign-in complete</h1>
+          <p class="text-sm text-muted-foreground">
+            The MCP server is connected. Go back to your chat to finish setting
+            it up.
           </p>
         </header>
-        <p class="info">You can close this window.</p>
+        <p class="text-sm text-muted-foreground px-6 py-6 sm:px-8">
+          You can close this window.
+        </p>
         {{end}}
       </section>
+
+      <p class="text-xs text-muted-foreground">Secured by Speakeasy.</p>
     </main>
     {{if eq .Kind "connect"}}
     <script nonce="{{.ScriptNonce}}">

@@ -169,7 +169,7 @@ func TestOAuthHTTPUserWithoutOrganizationCreatesWorkspaceAndContinues(t *testing
 	selection := getSelection(service, state)
 	require.Equal(t, http.StatusOK, selection.Code)
 	body := selection.Body.String()
-	require.Contains(t, body, "Name your workspace")
+	require.Contains(t, body, "Name your organization")
 	require.Contains(t, body, `action="create-workspace"`)
 	require.Equal(t, "Acme", formValue(t, body, "workspace_name"))
 	csrf := formValue(t, body, "csrf_token")
@@ -279,7 +279,7 @@ func TestOAuthHTTPUnverifiedEmailIsNotOfferedInvitations(t *testing.T) {
 	// page does not offer it. Creating is refused server-side instead.
 	selection := getSelection(service, state)
 	require.Equal(t, http.StatusOK, selection.Code)
-	require.Contains(t, selection.Body.String(), "Name your workspace")
+	require.Contains(t, selection.Body.String(), "Name your organization")
 	require.NotContains(t, selection.Body.String(), "Join Team Org")
 	csrf := formValue(t, selection.Body.String(), "csrf_token")
 
@@ -389,7 +389,7 @@ func TestOAuthHTTPMixedInvitationsNameTheSSOOne(t *testing.T) {
 	body := getSelection(service, state).Body.String()
 	require.Contains(t, body, "Join Open Org")
 	require.NotContains(t, body, "Join SSO Org")
-	require.Contains(t, body, "To join <strong>SSO Org</strong>, sign in with your")
+	require.Contains(t, body, `To join <span class="text-foreground">SSO Org</span>,`)
 	require.Equal(t, "invitation-1", formValue(t, body, "invitation_id"))
 }
 
@@ -455,7 +455,7 @@ func TestOAuthHTTPUserWithOrganizationNeverSeesWorkspaceForm(t *testing.T) {
 	selection := getSelection(service, state)
 	require.Equal(t, http.StatusOK, selection.Code)
 	require.Contains(t, selection.Body.String(), "Choose an organization")
-	require.NotContains(t, selection.Body.String(), "Name your workspace")
+	require.NotContains(t, selection.Body.String(), "Name your organization")
 }
 
 func TestOAuthHTTPUserWithoutOrganizationIsRefusedWithoutProvisioner(t *testing.T) {

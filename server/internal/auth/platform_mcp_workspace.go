@@ -83,10 +83,10 @@ func suggestWorkspaceName(email, displayName string) string {
 		candidates = append(candidates, capitalizeFirst(orgprovision.NameFromHostname(domain)))
 	}
 	if name := strings.TrimSpace(displayName); name != "" {
-		candidates = append(candidates, name+"'s workspace")
+		candidates = append(candidates, name+"'s organization")
 	}
 	if local != "" {
-		candidates = append(candidates, local+"'s workspace")
+		candidates = append(candidates, local+"'s organization")
 	}
 	for _, candidate := range candidates {
 		if name, err := orgprovision.ValidateName(candidate); err == nil {

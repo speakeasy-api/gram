@@ -28,6 +28,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/identity"
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/consentpage"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
@@ -53,7 +54,7 @@ const (
 var oauthPageHTML string
 
 var (
-	oauthPageTemplate      = template.Must(template.New("platform-mcp-oauth-page").Parse(oauthPageHTML))
+	oauthPageTemplate      = template.Must(template.Must(template.New("platform-mcp-oauth-page").Parse(oauthPageHTML)).Parse(consentpage.LogoTemplate))
 	errPlatformMCPDisabled = fmt.Errorf("platform mcp disabled: %w", ErrForbidden)
 	supportedGrantTypes    = []string{oauthwire.GrantTypeAuthorizationCode, oauthwire.GrantTypeRefreshToken}
 
@@ -75,6 +76,9 @@ var (
 type oauthPageData struct {
 	Title string
 	Kind  string
+	// Styles is the shared authorization page stylesheet. renderOAuthPage
+	// sets it.
+	Styles template.CSS
 	// ClientName is attacker-chosen for any CIMD-resolved client: it comes
 	// from a document served at a URL the client picked. ClientIDOrigin is
 	// the trust anchor that name lacks — the host the document was fetched
@@ -545,7 +549,7 @@ func (s *OAuthHTTP) organizationSelectionGet(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	s.renderOAuthPage(w, oauthPageData{
-		Title:         "Choose an organization · Platform MCP",
+		Title:         "Choose an organization · Speakeasy",
 		Kind:          "organization",
 		ClientName:    client.Name,
 		Organizations: organizations,
@@ -597,7 +601,7 @@ func (s *OAuthHTTP) organizationSelectionPost(w http.ResponseWriter, r *http.Req
 
 func (s *OAuthHTTP) renderWorkspacePage(w http.ResponseWriter, clientName string, challenge oauthChallenge, name, problem string) {
 	s.renderOAuthPage(w, oauthPageData{
-		Title:          "Name your workspace · Platform MCP",
+		Title:          "Name your organization · Speakeasy",
 		Kind:           "workspace",
 		ClientName:     clientName,
 		RedirectURI:    challenge.RedirectURI,
@@ -610,7 +614,7 @@ func (s *OAuthHTTP) renderWorkspacePage(w http.ResponseWriter, clientName string
 
 func (s *OAuthHTTP) renderInvitationPage(w http.ResponseWriter, clientName string, challenge oauthChallenge, invitations []WorkspaceInvitation) {
 	s.renderOAuthPage(w, oauthPageData{
-		Title:       "Join your team · Platform MCP",
+		Title:       "Join your team · Speakeasy",
 		Kind:        "invitation",
 		ClientName:  clientName,
 		RedirectURI: challenge.RedirectURI,
@@ -643,7 +647,7 @@ func (s *OAuthHTTP) renderPendingInvitations(w http.ResponseWriter, r *http.Requ
 	}
 	if !slices.ContainsFunc(invitations, func(invitation WorkspaceInvitation) bool { return !invitation.RequiresSSO }) {
 		s.renderOAuthPage(w, oauthPageData{
-			Title:       "Sign in with SSO · Platform MCP",
+			Title:       "Sign in with SSO · Speakeasy",
 			Kind:        "sso-required",
 			ClientName:  clientName,
 			Invitations: invitations,
@@ -660,12 +664,12 @@ func (s *OAuthHTTP) renderPendingInvitations(w http.ResponseWriter, r *http.Requ
 // flow. The challenge is not consumed. ok is false once an error is written.
 func (s *OAuthHTTP) workspaceFormChallenge(w http.ResponseWriter, r *http.Request) (challenge oauthChallenge, userID string, ok bool) {
 	if s.workspaces == nil {
-		writeOAuthError(w, http.StatusNotFound, "invalid_request", "workspace creation is not available")
+		writeOAuthError(w, http.StatusNotFound, "invalid_request", "organization creation is not available")
 		return challenge, "", false
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, 16<<10)
 	if err := r.ParseForm(); err != nil {
-		writeOAuthError(w, http.StatusBadRequest, "invalid_request", "could not parse workspace")
+		writeOAuthError(w, http.StatusBadRequest, "invalid_request", "could not parse organization form")
 		return challenge, "", false
 	}
 	challenge, err := s.cache.Get(r.Context(), platformOAuthChallengePrefix+r.PostForm.Get("state"))
@@ -674,7 +678,7 @@ func (s *OAuthHTTP) workspaceFormChallenge(w http.ResponseWriter, r *http.Reques
 		return challenge, "", false
 	}
 	if challenge.CSRFToken == "" || subtle.ConstantTimeCompare([]byte(r.PostForm.Get("csrf_token")), []byte(challenge.CSRFToken)) != 1 {
-		writeOAuthError(w, http.StatusUnauthorized, "invalid_request", "workspace request is invalid")
+		writeOAuthError(w, http.StatusUnauthorized, "invalid_request", "organization request is invalid")
 		return challenge, "", false
 	}
 	subject, err := urn.ParseSessionSubject(challenge.Subject)
@@ -734,7 +738,7 @@ func (s *OAuthHTTP) CreateWorkspaceHandler() http.Handler {
 		// A refused name keeps the challenge, so the user can correct it.
 		submitted := r.PostForm.Get("workspace_name")
 		if _, err := orgprovision.ValidateName(submitted); err != nil {
-			problem := "Enter a workspace name."
+			problem := "Enter an organization name."
 			if shareable, ok := errors.AsType[*oops.ShareableError](err); ok {
 				problem = shareable.Error()
 			}
@@ -753,12 +757,12 @@ func (s *OAuthHTTP) CreateWorkspaceHandler() http.Handler {
 			return
 		case errors.Is(err, auth.ErrUserHasOrganization), errors.Is(err, auth.ErrWorkspaceCreationInProgress):
 			s.logger.WarnContext(r.Context(), "Platform MCP workspace creation refused", attr.SlogError(err))
-			redirectOAuthError(w, r, challenge.RedirectURI, challenge.State, &oauthwire.Error{Code: "access_denied", Description: "Your account already has a Speakeasy workspace, or one is being created. Connect again to choose it."})
+			redirectOAuthError(w, r, challenge.RedirectURI, challenge.State, &oauthwire.Error{Code: "access_denied", Description: "Your account already has a Speakeasy organization, or one is being created. Connect again to choose it."})
 			return
 		}
 		if err != nil {
 			s.logger.ErrorContext(r.Context(), "could not create Platform MCP workspace", attr.SlogError(err))
-			redirectOAuthError(w, r, challenge.RedirectURI, challenge.State, &oauthwire.Error{Code: "access_denied", Description: "Your workspace could not be created. Sign in to the Speakeasy dashboard to create one, then connect again."})
+			redirectOAuthError(w, r, challenge.RedirectURI, challenge.State, &oauthwire.Error{Code: "access_denied", Description: "Your organization could not be created. Sign in to the Speakeasy dashboard to create one, then connect again."})
 			return
 		}
 		s.continueWithOrganization(w, r, challenge, organization)
@@ -815,7 +819,7 @@ func (s *OAuthHTTP) selectedOrganization(ctx context.Context, challenge oauthCha
 func (s *OAuthHTTP) ProviderSetupCompleteHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		s.renderOAuthPage(w, oauthPageData{
-			Title:     "Provider connected · Platform MCP",
+			Title:     "Sign-in complete · Speakeasy",
 			Kind:      "provider-complete",
 			AutoClose: true,
 		})
@@ -856,7 +860,7 @@ func (s *OAuthHTTP) connectGet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.renderOAuthPage(w, oauthPageData{
-		Title:            "Connect Platform MCP",
+		Title:            "Connect to Speakeasy",
 		Kind:             "connect",
 		ClientName:       client.Name,
 		ClientIDOrigin:   clientIDOrigin(client),
@@ -1417,6 +1421,7 @@ func (s *OAuthHTTP) renderOAuthPage(w http.ResponseWriter, data oauthPageData) {
 		return
 	}
 	data.ScriptNonce = scriptNonce
+	data.Styles = consentpage.Styles
 
 	var page strings.Builder
 	if err := oauthPageTemplate.Execute(&page, data); err != nil {
@@ -1435,7 +1440,7 @@ func oauthPageContentSecurityPolicy(redirectURI, scriptNonce string) string {
 	if uri, err := url.Parse(redirectURI); err == nil && (uri.Scheme == "http" || uri.Scheme == "https") && uri.Host != "" {
 		formAction += " " + uri.Scheme + "://" + uri.Host
 	}
-	return "default-src 'none'; style-src 'unsafe-inline'; img-src data:; script-src 'nonce-" + scriptNonce + "'; base-uri 'none'; form-action " + formAction + "; frame-ancestors 'none'"
+	return "default-src 'none'; style-src 'unsafe-inline'; font-src 'self'; img-src data:; script-src 'nonce-" + scriptNonce + "'; base-uri 'none'; form-action " + formAction + "; frame-ancestors 'none'"
 }
 
 func writeOAuthError(w http.ResponseWriter, status int, code, description string) {
