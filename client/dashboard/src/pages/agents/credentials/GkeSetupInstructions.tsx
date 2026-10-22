@@ -54,7 +54,7 @@ function podManifest(values: Record<string, string>, audience?: string) {
     "          - serviceAccountToken:",
     "              path: token",
     `              audience: ${audience ?? "SPEAKEASY_AUDIENCE"}`,
-    "              expirationSeconds: 3600",
+    "              expirationSeconds: 600",
   ].join("\n");
 }
 
@@ -226,6 +226,15 @@ export function gkeSetupInstructions(entry: CatalogEntry): PlatformSetup {
               <code>spec.template.spec</code>. The audience must match exactly:
               Speakeasy refuses a token issued for any other.
             </p>
+            {/* Speakeasy accepts each token once, and Kubernetes writes a new
+                one at about 80% of its lifetime. At 600 seconds that is well
+                inside the 15-minute access token, so the next exchange always
+                finds an unused token. */}
+            <p className="text-muted-foreground text-sm">
+              Keep <code>expirationSeconds</code> at 600. Speakeasy accepts each
+              token once, and at 600 seconds Kubernetes writes a fresh one about
+              every 8 minutes, before the access token runs out.
+            </p>
             {issuerPicker}
           </>
         ),
@@ -249,7 +258,8 @@ export function gkeSetupInstructions(entry: CatalogEntry): PlatformSetup {
             />
             <p className="text-muted-foreground text-sm">
               The access token lasts up to 15 minutes and cannot be refreshed.
-              Exchange again, reading the file afresh, when it runs out.
+              When it runs out, read the file again and exchange the new token.
+              Exchange from one place in the pod: each token is accepted once.
             </p>
           </>
         ),
