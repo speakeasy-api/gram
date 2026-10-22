@@ -9,6 +9,8 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
+	"github.com/speakeasy-api/gram/server/internal/plugins/roledelivery"
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 )
 
 // requestPublicationForMCPMembership only enqueues when an affected backend is
@@ -26,6 +28,23 @@ func (s *Service) requestPublicationForMCPMembership(ctx context.Context, tx pgx
 	}
 	if err := s.publicationRequests.Project(ctx, tx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID); err != nil {
 		return fmt.Errorf("request plugin publication: %w", err)
+	}
+	return nil
+}
+
+// deliverEligibleGateway applies endpoint eligibility without changing authorization.
+func (s *Service) deliverEligibleGateway(ctx context.Context, tx pgx.Tx, authCtx *contextvalues.AuthContext, gatewayIDs ...uuid.NullUUID) error {
+	// Endpoint writers already hold ingress and project admission locks. Deliver
+	// newly usable gateways before probing membership for publication. Replays
+	// preserve deleted membership, including an explicit manual removal.
+	for _, gatewayID := range uniqueIDs(gatewayIDs...) {
+		admissionCtx, err := admission.AdministratorWriteContext(ctx, s.authz, authCtx.ActiveOrganizationID)
+		if err != nil {
+			return fmt.Errorf("prepare gateway role delivery admission: %w", err)
+		}
+		if _, err := roledelivery.Eligible(admissionCtx, tx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, gatewayID, s.distributionAdmission); err != nil {
+			return fmt.Errorf("deliver eligible gateway: %w", err)
+		}
 	}
 	return nil
 }

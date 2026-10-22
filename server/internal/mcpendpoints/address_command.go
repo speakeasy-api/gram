@@ -29,18 +29,21 @@ import (
 
 // CreateMcpEndpointInTransactionInput describes an endpoint created within a
 // caller-owned transaction. It does not attach generic backends to the Default
-// plugin or enqueue publication work.
+// plugin. Gateway role delivery and publication requests share the transaction.
 type CreateMcpEndpointInTransactionInput struct {
 	AuthContext     *contextvalues.AuthContext
 	CustomDomainID  uuid.NullUUID
 	McpServerID     uuid.NullUUID
 	MetaMcpServerID uuid.NullUUID
 	Slug            string
+	// DeferGatewayDelivery lets a compound create finish its members before delivery.
+	// The caller must deliver and enqueue publication before committing.
+	DeferGatewayDelivery bool
 }
 
 // CreateMcpEndpointInTransaction creates an endpoint using the caller's
-// transaction. The caller owns commit; default-plugin attachment and
-// publication are intentionally outside this transaction seam.
+// transaction. The caller owns commit and post-commit publication signaling;
+// generic default-plugin attachment remains outside this transaction seam.
 func (s *Service) CreateMcpEndpointInTransaction(ctx context.Context, tx pgx.Tx, input CreateMcpEndpointInTransactionInput) (*types.McpEndpoint, error) {
 	authCtx := input.AuthContext
 	if tx == nil || authCtx == nil || authCtx.ProjectID == nil || authCtx.ActiveOrganizationID == "" || authCtx.OrganizationSlug == "" || input.Slug == "" || input.McpServerID.Valid == input.MetaMcpServerID.Valid {
@@ -109,6 +112,14 @@ func (s *Service) CreateMcpEndpointInTransaction(ctx context.Context, tx pgx.Tx,
 		ActorSlug: nil, McpEndpointURN: urn.NewMcpEndpoint(created.ID), Slug: created.Slug,
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "log mcp endpoint creation")
+	}
+	if !input.DeferGatewayDelivery {
+		if err := s.deliverEligibleGateway(ctx, tx, authCtx, created.MetaMcpServerID); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "deliver eligible gateway")
+		}
+		if err := s.requestPublicationForMCPMembership(ctx, tx, authCtx, nil, created.MetaMcpServerID); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "enqueue gateway endpoint publication")
+		}
 	}
 	return mv.BuildMcpEndpointView(created), nil
 }

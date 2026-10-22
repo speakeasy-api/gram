@@ -1095,13 +1095,14 @@ const hasRoleDeliveryMembership = `-- name: HasRoleDeliveryMembership :one
 SELECT EXISTS (
   SELECT 1 FROM plugin_servers ps JOIN plugins p ON p.id = ps.plugin_id
   WHERE p.id = $1 AND p.organization_id = $2 AND p.project_id = $3
-    AND ((ps.mcp_server_id = $4::uuid)
+    AND ((ps.meta_mcp_server_id = $4::uuid)
+      OR (ps.mcp_server_id = $5::uuid)
       OR (ps.mcp_server_id IN (
         SELECT m.id FROM mcp_servers m
-        WHERE m.toolset_id = $5::uuid
+        WHERE m.toolset_id = $6::uuid
           AND m.project_id = $3 AND m.deleted IS FALSE
       )))
-    AND (ps.deleted IS FALSE OR $6::boolean)
+    AND (ps.deleted IS FALSE OR $7::boolean)
 )
 `
 
@@ -1109,6 +1110,7 @@ type HasRoleDeliveryMembershipParams struct {
 	PluginID        uuid.UUID
 	OrganizationID  string
 	ProjectID       uuid.UUID
+	MetaMcpServerID uuid.NullUUID
 	McpServerID     uuid.NullUUID
 	LegacyToolsetID uuid.NullUUID
 	PreserveRemoval bool
@@ -1121,6 +1123,7 @@ func (q *Queries) HasRoleDeliveryMembership(ctx context.Context, arg HasRoleDeli
 		arg.PluginID,
 		arg.OrganizationID,
 		arg.ProjectID,
+		arg.MetaMcpServerID,
 		arg.McpServerID,
 		arg.LegacyToolsetID,
 		arg.PreserveRemoval,
@@ -1467,6 +1470,49 @@ func (q *Queries) ListDeliveryToolsetToolURNs(ctx context.Context, arg ListDeliv
 		arg.ToolsetID,
 		arg.McpServerID,
 	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items [][]urn.Tool
+	for rows.Next() {
+		var tool_urns []urn.Tool
+		if err := rows.Scan(&tool_urns); err != nil {
+			return nil, err
+		}
+		items = append(items, tool_urns)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listGatewayDeliveryToolURNs = `-- name: ListGatewayDeliveryToolURNs :many
+SELECT latest.tool_urns
+FROM meta_mcp_servers g
+JOIN projects p ON p.id = g.project_id AND p.organization_id = g.organization_id AND p.deleted IS FALSE
+JOIN meta_mcp_server_members member ON member.meta_mcp_server_id = g.id AND member.project_id = p.id AND member.deleted IS FALSE
+JOIN mcp_servers m ON m.id = member.mcp_server_id AND m.project_id = p.id AND m.deleted IS FALSE
+JOIN toolsets t ON t.id = m.toolset_id AND t.project_id = p.id AND t.deleted IS FALSE
+JOIN LATERAL (
+  SELECT v.tool_urns FROM toolset_versions v
+  WHERE v.toolset_id = t.id AND v.deleted IS FALSE
+  ORDER BY v.version DESC LIMIT 1
+) latest ON true
+WHERE g.id = $1 AND g.organization_id = $2
+  AND g.project_id = $3 AND g.deleted IS FALSE
+`
+
+type ListGatewayDeliveryToolURNsParams struct {
+	MetaMcpServerID uuid.UUID
+	OrganizationID  string
+	ProjectID       uuid.UUID
+}
+
+// Classify all live gateway members using their latest live toolset versions.
+func (q *Queries) ListGatewayDeliveryToolURNs(ctx context.Context, arg ListGatewayDeliveryToolURNsParams) ([][]urn.Tool, error) {
+	rows, err := q.db.Query(ctx, listGatewayDeliveryToolURNs, arg.MetaMcpServerID, arg.OrganizationID, arg.ProjectID)
 	if err != nil {
 		return nil, err
 	}
@@ -2545,7 +2591,7 @@ func (q *Queries) ListRoleDeliveryProjects(ctx context.Context, organizationID s
 }
 
 const listRoleDeliveryServers = `-- name: ListRoleDeliveryServers :many
-SELECT m.id, m.project_id, COALESCE(NULLIF(m.name, ''), NULLIF(m.slug, ''), m.id::text)::text AS name,
+SELECT false::boolean AS is_gateway, m.id, m.project_id, COALESCE(NULLIF(m.name, ''), NULLIF(m.slug, ''), m.id::text)::text AS name,
   COALESCE(m.toolset_id, m.id)::uuid AS resource_id, m.toolset_id AS legacy_toolset_id,
   (m.visibility <> 'disabled' AND (m.toolset_id IS NULL OR backing.id IS NOT NULL) AND (m.unproxied_mcp_server_id IS NOT NULL OR EXISTS (
     SELECT 1 FROM mcp_endpoints e WHERE e.mcp_server_id = m.id AND e.project_id = p.id AND e.deleted IS FALSE
@@ -2564,7 +2610,20 @@ LEFT JOIN LATERAL (
 ) latest ON true
 WHERE p.organization_id = $1 AND p.id = $2
   AND p.deleted IS FALSE AND m.deleted IS FALSE
-ORDER BY m.id
+UNION ALL
+SELECT true::boolean AS is_gateway, g.id, g.project_id, g.name,
+  g.id AS resource_id, NULL::uuid AS legacy_toolset_id,
+  (g.visibility <> 'disabled' AND g.user_session_issuer_id IS NOT NULL AND EXISTS (
+    SELECT 1 FROM mcp_endpoints e
+    LEFT JOIN custom_domains cd ON cd.id = e.custom_domain_id AND cd.organization_id = g.organization_id
+      AND cd.activated IS TRUE AND cd.verified IS TRUE AND cd.deleted IS FALSE
+    WHERE e.meta_mcp_server_id = g.id AND e.project_id = g.project_id AND e.deleted IS FALSE
+      AND (e.custom_domain_id IS NULL OR cd.id IS NOT NULL)
+  ))::boolean AS eligible, NULL::text[] AS tool_urns
+FROM meta_mcp_servers g JOIN projects p ON p.id = g.project_id AND p.organization_id = g.organization_id
+WHERE g.organization_id = $1 AND p.id = $2
+  AND p.deleted IS FALSE AND g.deleted IS FALSE
+ORDER BY id
 `
 
 type ListRoleDeliveryServersParams struct {
@@ -2573,6 +2632,7 @@ type ListRoleDeliveryServersParams struct {
 }
 
 type ListRoleDeliveryServersRow struct {
+	IsGateway       bool
 	ID              uuid.UUID
 	ProjectID       uuid.UUID
 	Name            string
@@ -2597,6 +2657,7 @@ func (q *Queries) ListRoleDeliveryServers(ctx context.Context, arg ListRoleDeliv
 	for rows.Next() {
 		var i ListRoleDeliveryServersRow
 		if err := rows.Scan(
+			&i.IsGateway,
 			&i.ID,
 			&i.ProjectID,
 			&i.Name,

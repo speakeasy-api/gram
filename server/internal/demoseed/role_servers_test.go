@@ -64,6 +64,17 @@ func testRoleServersSurviveReseed(t *testing.T, spec Spec) {
 			require.NoError(t, err)
 			memberships[plugin.Slug] = []string{}
 			for _, server := range servers {
+				if server.MetaMcpServerID.Valid {
+					require.False(t, server.McpServerID.Valid)
+					gateway, err := q.GetGatewayForPluginServer(ctx, pluginrepo.GetGatewayForPluginServerParams{
+						MetaMcpServerID: server.MetaMcpServerID.UUID, ProjectID: projectID,
+					})
+					require.NoError(t, err)
+					require.True(t, gateway.HasOauth)
+					require.True(t, gateway.HasEndpoint)
+					memberships[plugin.Slug] = append(memberships[plugin.Slug], "gateway:"+gateway.Name)
+					continue
+				}
 				require.True(t, server.McpServerID.Valid)
 				require.False(t, server.MetaMcpServerID.Valid)
 				backend, err := q.GetMcpServerForPluginServer(ctx, pluginrepo.GetMcpServerForPluginServerParams{
@@ -82,6 +93,16 @@ func testRoleServersSurviveReseed(t *testing.T, spec Spec) {
 		// Representative build and read-only audiences must receive usable content.
 		for _, slug := range []string{"engineer", "read-only-tools"} {
 			require.NotEmpty(t, memberships[slug], "role plugin %s must deliver servers", slug)
+		}
+		// Existing wildcard connect grants deliver the OAuth gateway, including
+		// disposition-limited roles. Read/write and server-specific grants do not.
+		gatewayRoles := []string{"collaborator", "engineer", "analyst", "read-only-tools", "temporary-escalation"}
+		for slug, backends := range memberships {
+			if slices.Contains(gatewayRoles, slug) {
+				require.Contains(t, backends, "gateway:Acme Agent Gateway", slug)
+			} else {
+				require.NotContains(t, backends, "gateway:Acme Agent Gateway", slug)
+			}
 		}
 		require.Equal(t, []string{"github"}, memberships["engineering-essentials"])
 		require.Len(t, audiences["engineering-essentials"], 1)

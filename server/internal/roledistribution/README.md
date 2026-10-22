@@ -31,6 +31,16 @@ supplies them. Manual and automatic additions are the same membership, without
 separate ownership. Unrelated contents remain unchanged. This content path never
 creates a plugin or changes server permissions.
 
+Gateways participate through their own `mcp:connect` resource ID, not a grant
+on one of their members. Automatic gateway additions require the
+`gateway-plugin-membership` rollout flag, OAuth, and a usable published endpoint.
+They retain the same gateway admission checks as explicit attachments, including
+private-only audience restrictions. Gateway endpoints are exported unchanged to
+the supported clients, so one gateway login can reach its authorized members.
+Existing plugins receive gateways through setup/backfill or the next applicable
+grant, audience, or endpoint-eligibility event; publication alone does not
+reconcile their contents.
+
 Administrator removal is an ordinary content removal. Unchanged grant/audience
 replay and publication do not restore it; a new applicable grant or new role
 audience can add the server again. Bounded setup/backfill and server-eligibility

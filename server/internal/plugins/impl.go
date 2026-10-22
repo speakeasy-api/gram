@@ -897,7 +897,7 @@ func (s *Service) AddPluginServer(ctx context.Context, payload *gen.AddPluginSer
 		backend.toolsetID = uuid.NullUUID{UUID: uuid.Nil, Valid: false}
 		exists, err := s.repo.WithTx(tx).HasRoleDeliveryMembership(ctx, repo.HasRoleDeliveryMembershipParams{
 			PluginID: pluginID, OrganizationID: ac.ActiveOrganizationID, ProjectID: *ac.ProjectID,
-			McpServerID: backend.mcpServerID, LegacyToolsetID: legacyToolsetID, PreserveRemoval: false,
+			McpServerID: backend.mcpServerID, MetaMcpServerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, LegacyToolsetID: legacyToolsetID, PreserveRemoval: false,
 		})
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "check plugin server identity").LogError(ctx, s.logger)
