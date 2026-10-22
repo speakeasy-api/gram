@@ -173,8 +173,16 @@ func TestLogClassificationPlacesTheProductAndClient(t *testing.T) {
 			t.Parallel()
 
 			attrs := enriched(t, enricher, tt.record)
-			require.Equal(t, tt.product, attrs[AgentProductKey].AsString(), "product")
-			require.Equal(t, tt.client, attrs[AgentClientKey].AsString(), "client")
+			if tt.product == "" {
+				require.NotContains(t, attrs, AgentProductKey, "an unplaced surface writes no product")
+			} else {
+				require.Equal(t, tt.product, attrs[AgentProductKey].AsString(), "product")
+			}
+			if tt.client == "" {
+				require.NotContains(t, attrs, AgentClientKey, "an unknown client is not written")
+			} else {
+				require.Equal(t, tt.client, attrs[AgentClientKey].AsString(), "client")
+			}
 		})
 	}
 }
