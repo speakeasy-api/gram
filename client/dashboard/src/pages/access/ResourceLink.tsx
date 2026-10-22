@@ -10,6 +10,7 @@ import {
   Terminal,
 } from "lucide-react";
 import { Link } from "react-router";
+import type { ResourceLinkMaps } from "./useResourceLinkMaps";
 
 // Fallback for resource ids we cannot resolve to a display name (deleted
 // rows, kinds with no org-level lookup): a truncated mono chip with the full
@@ -32,15 +33,10 @@ export function ResourceLink({
   toolsetMap,
   mcpServerMap,
 }: {
-  challenge: ChallengeBucket;
+  /** A challenge bucket, or anything naming a resource the same way. */
+  challenge: Pick<ChallengeBucket, "resourceKind" | "resourceId" | "projectId">;
   orgSlug: string;
-  projectMap: Map<string, { slug: string; name: string }>;
-  toolsetMap: Map<string, { slug: string; name: string; projectId: string }>;
-  mcpServerMap: Map<
-    string,
-    { slug?: string; name?: string; projectId: string }
-  >;
-}): JSX.Element {
+} & ResourceLinkMaps): JSX.Element {
   const { resourceKind, resourceId, projectId } = challenge;
 
   if (!resourceKind || !resourceId) {

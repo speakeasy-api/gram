@@ -9,17 +9,15 @@ import {
 import { Text } from "@/components/ui/Text";
 import { HumanizeDateTime } from "@/lib/dates";
 import { cn } from "@/lib/utils";
-import { useSession } from "@/contexts/Auth";
 import { useSlugs } from "@/contexts/Sdk";
 import type { ChallengeBucket } from "@gram/client/models/components/challengebucket.js";
 import { useMembers } from "@gram/client/react-query/members.js";
-import { useListMcpServersForOrg } from "@gram/client/react-query/listMcpServersForOrg.js";
-import { useListToolsetsForOrg } from "@gram/client/react-query/listToolsetsForOrg.js";
 import { Column } from "@/components/ui/Table";
 import { KeyRound } from "lucide-react";
 import { useMemo } from "react";
 import { OutcomeBadge } from "./ChallengesTab";
 import { ResourceLink } from "./ResourceLink";
+import { useResourceLinkMaps } from "./useResourceLinkMaps";
 import {
   getInitials,
   principalDisplayName,
@@ -41,40 +39,8 @@ export function useChallengeRowColumns(
   agentsById?: Map<string, { name: string }>,
 ): Column<ChallengeBucket>[] {
   const { orgSlug } = useSlugs();
-  const { organization } = useSession();
   const { data: membersData } = useMembers();
-  const { data: toolsetsData } = useListToolsetsForOrg();
-  const { data: mcpServersData } = useListMcpServersForOrg();
-  const projectMap = useMemo(() => {
-    const m = new Map<string, { slug: string; name: string }>();
-    for (const p of organization.projects) {
-      m.set(p.id, { slug: p.slug, name: p.name });
-    }
-    return m;
-  }, [organization.projects]);
-  const toolsetMap = useMemo(() => {
-    const m = new Map<
-      string,
-      { slug: string; name: string; projectId: string }
-    >();
-    for (const t of toolsetsData?.toolsets ?? []) {
-      m.set(t.id, { slug: t.slug, name: t.name, projectId: t.projectId });
-    }
-    return m;
-  }, [toolsetsData]);
-  // Resolves grants stored against mcp_servers row ids (remote/tunneled
-  // backends). Toolset-backed grants store the toolset id and resolve via
-  // toolsetMap instead.
-  const mcpServerMap = useMemo(() => {
-    const m = new Map<
-      string,
-      { slug?: string; name?: string; projectId: string }
-    >();
-    for (const s of mcpServersData?.mcpServers ?? []) {
-      m.set(s.id, { slug: s.slug, name: s.name, projectId: s.projectId });
-    }
-    return m;
-  }, [mcpServersData]);
+  const { projectMap, toolsetMap, mcpServerMap } = useResourceLinkMaps();
   const memberMap = useMemo(() => {
     const m = new Map<string, { email: string; photoUrl?: string }>();
     for (const member of membersData?.members ?? []) {

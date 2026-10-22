@@ -29,8 +29,12 @@ export type AgentSessionRow = {
 };
 
 export type AgentSessionsSectionProps = {
-  /** "bare" drops the section chrome for a caller that supplies its own. */
-  variant?: "section" | "bare";
+  /**
+   * "bare" drops the section chrome for a caller that supplies its own.
+   * "panel" also drops the table's frame, for a caller whose panel border
+   * already encloses it.
+   */
+  variant?: "section" | "bare" | "panel";
   sessions: AgentSessionRow[];
   isLoading: boolean;
   isError: boolean;
@@ -276,12 +280,14 @@ export function AgentSessionsSection({
           icon="key-round"
           heading="No sessions yet"
           description="Choose this agent when authorizing an MCP connection to create a session."
+          className={variant === "panel" ? "border-none" : undefined}
         />
       ) : (
         <Table
           columns={columns}
           data={sessions}
           rowKey={(session) => session.id}
+          className={variant === "panel" ? "border-none" : undefined}
         />
       )}
       {canRead && loadMoreError && (
@@ -306,7 +312,7 @@ export function AgentSessionsSection({
 
   return (
     <>
-      {variant === "bare" ? (
+      {variant !== "section" ? (
         // No border and no padding: the table draws its own, and the caller
         // supplying "bare" has already drawn the panel around it. Three
         // nested rectangles read as a mistake, which it was.

@@ -18,9 +18,17 @@ import { encodeIdentityUrn } from "@/lib/identity-urn";
 import { isBadRequestError, isNotFoundError } from "@/lib/route-errors";
 import { useRoutes } from "@/routes";
 import type { IdentityModel } from "@gram/client/models/components/identitymodel.js";
-import { AgentIdentityProfile } from "./AgentIdentityProfile";
+import {
+  AgentHeaderActions,
+  AgentIdentityProfile,
+} from "./AgentIdentityProfile";
 import { useIdentitySubject } from "./useIdentitySubject";
-import { useCallback, useState, type CSSProperties } from "react";
+import {
+  useCallback,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from "react";
 import { Navigate, Outlet, useLocation, useParams } from "react-router";
 import type { IdentityOutletContext } from "./identityRoute";
 import { useCanReadRisk, useIdentityIsKnown } from "./useIdentityQueries";
@@ -215,7 +223,17 @@ function IdentityDetailContent(): JSX.Element {
           ref={measureHeader}
           className="bg-card border-border sticky top-0 z-20 border-b px-8 py-6"
         >
-          <IdentityHeader identity={identity} />
+          <IdentityHeader
+            identity={identity}
+            actions={
+              identity.agent && (
+                <AgentHeaderActions
+                  agent={identity.agent}
+                  refresh={() => void identityQuery.refetch()}
+                />
+              )
+            }
+          />
         </div>
         {/* Rail beside the content, not in the app sidebar: the reader keeps
             the project nav they arrived with. The recessed ground separates
@@ -280,8 +298,11 @@ function IdentityDetailContent(): JSX.Element {
 
 function IdentityHeader({
   identity,
+  actions,
 }: {
   identity: IdentityModel;
+  /** Controls on the subject itself, under its badges. */
+  actions?: ReactNode;
 }): JSX.Element {
   const {
     dateRange,
@@ -339,6 +360,7 @@ function IdentityHeader({
                 <Badge variant="neutral">No linked account</Badge>
               )}
             </div>
+            {actions}
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-2">
