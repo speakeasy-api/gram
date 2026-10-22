@@ -933,7 +933,7 @@ func filterOmittedEnvVars(
 		return fmt.Errorf("get metadata for toolset: %w", err)
 	}
 
-	mcpMeta, err := mcpmetadata.ToMCPMetadata(ctx, repo, rawMetadata)
+	mcpMeta, err := mcpmetadata.ToMCPMetadata(ctx, repo, mcpmetadata.MetadataRecord(rawMetadata))
 	if err != nil {
 		return fmt.Errorf("convert to mcp metadata: %w", err)
 	}

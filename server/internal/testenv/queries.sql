@@ -1109,11 +1109,8 @@ WHERE key_hash = @key_hash;
 
 -- name: CountAssistantAttachments :one
 -- Count stored attachments, including those whose targets are soft-deleted.
-SELECT
-  (SELECT count(*) FROM assistant_toolsets at
-   WHERE at.project_id = @project_id AND at.assistant_id = @assistant_id) AS toolsets,
-  (SELECT count(*) FROM assistant_mcp_servers ams
-   WHERE ams.project_id = @project_id AND ams.assistant_id = @assistant_id) AS mcp_servers;
+SELECT count(*) AS mcp_servers FROM assistant_mcp_servers ams
+WHERE ams.project_id = @project_id AND ams.assistant_id = @assistant_id;
 
 -- name: SetUserSessionIssuerUseAuthenticationHostFixture :execrows
 -- Project-scoped issuers carry no organization_id, so their tenancy is read
@@ -2026,7 +2023,7 @@ WHERE locktype = 'advisory' AND NOT granted
 SELECT count(*)
 FROM mcp_metadata
 WHERE project_id = @project_id
-  AND (toolset_id = @backend_id::uuid OR mcp_server_id = @backend_id::uuid);
+  AND mcp_server_id = @backend_id::uuid;
 
 -- name: SetMcpMetadataHeaderDisplayNamesFixture :execrows
 UPDATE mcp_metadata
@@ -2176,19 +2173,14 @@ WHERE organization_id = @organization_id AND id IN (SELECT c.api_key_id FROM ass
 SELECT count(*) FROM outbox;
 
 
--- name: InsertToolsetKeyedMcpMetadataFixture :one
--- Plants a row under the toolset key, as pods from before the server-key writers wrote.
-INSERT INTO mcp_metadata (toolset_id, project_id, instructions, header_display_names, default_environment_id, external_documentation_url)
-VALUES (@toolset_id, @project_id, @instructions, COALESCE(sqlc.narg('header_display_names')::jsonb, '{}'::jsonb), @default_environment_id, sqlc.narg('external_documentation_url'))
-RETURNING id;
-
--- name: InsertToolsetKeyedPluginServerFixture :one
--- Plants a plugin entry under the toolset key, as pods from before the server-key writers wrote.
-INSERT INTO plugin_servers (plugin_id, toolset_id, display_name, policy, sort_order, deleted_at)
-VALUES (@plugin_id, @toolset_id, @display_name, @policy, @sort_order, sqlc.narg('deleted_at'))
-RETURNING *;
-
 -- name: CurrentDatabaseTime :one
 -- The database's clock, for tests that compare against timestamps the
 -- database wrote.
 SELECT clock_timestamp()::timestamptz AS now;
+
+-- name: SoftDeleteHTTPToolDefinitionFixture :exec
+UPDATE http_tool_definitions
+SET deleted_at = clock_timestamp()
+WHERE project_id = @project_id
+  AND deployment_id = @deployment_id
+  AND tool_urn = @tool_urn;

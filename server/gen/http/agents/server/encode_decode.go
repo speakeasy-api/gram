@@ -3779,13 +3779,15 @@ func unmarshalAgentPolicyGrantFormRequestBodyRequestBodyToAgentsAgentPolicyGrant
 // *AgentPolicySelectorRequestBodyRequestBody.
 func unmarshalAgentPolicySelectorRequestBodyRequestBodyToAgentsAgentPolicySelector(v *AgentPolicySelectorRequestBodyRequestBody) *agents.AgentPolicySelector {
 	res := &agents.AgentPolicySelector{
-		ResourceKind:   *v.ResourceKind,
-		ResourceID:     *v.ResourceID,
-		Disposition:    v.Disposition,
-		Tool:           v.Tool,
-		ProjectID:      v.ProjectID,
-		ServerURL:      v.ServerURL,
-		ServerIdentity: v.ServerIdentity,
+		ResourceKind:    *v.ResourceKind,
+		ResourceID:      *v.ResourceID,
+		ClientType:      v.ClientType,
+		ConnectionOwner: v.ConnectionOwner,
+		Disposition:     v.Disposition,
+		Tool:            v.Tool,
+		ProjectID:       v.ProjectID,
+		ServerURL:       v.ServerURL,
+		ServerIdentity:  v.ServerIdentity,
 	}
 
 	return res
@@ -3811,13 +3813,15 @@ func marshalAgentsAgentPolicyGrantFormToAgentPolicyGrantFormResponse(v *agents.A
 // *agents.AgentPolicySelector.
 func marshalAgentsAgentPolicySelectorToAgentPolicySelectorResponse(v *agents.AgentPolicySelector) *AgentPolicySelectorResponse {
 	res := &AgentPolicySelectorResponse{
-		ResourceKind:   v.ResourceKind,
-		ResourceID:     v.ResourceID,
-		Disposition:    v.Disposition,
-		Tool:           v.Tool,
-		ProjectID:      v.ProjectID,
-		ServerURL:      v.ServerURL,
-		ServerIdentity: v.ServerIdentity,
+		ResourceKind:    v.ResourceKind,
+		ResourceID:      v.ResourceID,
+		ClientType:      v.ClientType,
+		ConnectionOwner: v.ConnectionOwner,
+		Disposition:     v.Disposition,
+		Tool:            v.Tool,
+		ProjectID:       v.ProjectID,
+		ServerURL:       v.ServerURL,
+		ServerIdentity:  v.ServerIdentity,
 	}
 
 	return res
@@ -3844,13 +3848,15 @@ func marshalAgentsAgentPolicyGrantToAgentPolicyGrantResponse(v *agents.AgentPoli
 // type *agents.AgentPolicySelector from a value of type *AgentPolicySelector.
 func unmarshalAgentPolicySelectorToAgentsAgentPolicySelector(v *AgentPolicySelector) *agents.AgentPolicySelector {
 	res := &agents.AgentPolicySelector{
-		ResourceKind:   *v.ResourceKind,
-		ResourceID:     *v.ResourceID,
-		Disposition:    v.Disposition,
-		Tool:           v.Tool,
-		ProjectID:      v.ProjectID,
-		ServerURL:      v.ServerURL,
-		ServerIdentity: v.ServerIdentity,
+		ResourceKind:    *v.ResourceKind,
+		ResourceID:      *v.ResourceID,
+		ClientType:      v.ClientType,
+		ConnectionOwner: v.ConnectionOwner,
+		Disposition:     v.Disposition,
+		Tool:            v.Tool,
+		ProjectID:       v.ProjectID,
+		ServerURL:       v.ServerURL,
+		ServerIdentity:  v.ServerIdentity,
 	}
 
 	return res
@@ -3861,13 +3867,15 @@ func unmarshalAgentPolicySelectorToAgentsAgentPolicySelector(v *AgentPolicySelec
 // *agents.AgentPolicySelector.
 func marshalAgentsAgentPolicySelectorToAgentPolicySelectorResponseBody(v *agents.AgentPolicySelector) *AgentPolicySelectorResponseBody {
 	res := &AgentPolicySelectorResponseBody{
-		ResourceKind:   v.ResourceKind,
-		ResourceID:     v.ResourceID,
-		Disposition:    v.Disposition,
-		Tool:           v.Tool,
-		ProjectID:      v.ProjectID,
-		ServerURL:      v.ServerURL,
-		ServerIdentity: v.ServerIdentity,
+		ResourceKind:    v.ResourceKind,
+		ResourceID:      v.ResourceID,
+		ClientType:      v.ClientType,
+		ConnectionOwner: v.ConnectionOwner,
+		Disposition:     v.Disposition,
+		Tool:            v.Tool,
+		ProjectID:       v.ProjectID,
+		ServerURL:       v.ServerURL,
+		ServerIdentity:  v.ServerIdentity,
 	}
 
 	return res

@@ -1436,6 +1436,27 @@ func (q *Queries) ListToolsetHostingMCPServerIDs(ctx context.Context, arg ListTo
 }
 
 const listToolsetSummariesByIDs = `-- name: ListToolsetSummariesByIDs :many
+WITH active_deployments AS MATERIALIZED (
+  SELECT p.project_id, d.id
+  FROM (
+    SELECT DISTINCT ts.project_id
+    FROM toolsets ts
+    WHERE ts.id = ANY($1::uuid[])
+      AND ts.organization_id = $2
+      AND ts.project_id = ANY($3::uuid[])
+      AND ts.deleted IS FALSE
+  ) p
+  CROSS JOIN LATERAL (
+    SELECT d.id
+    FROM deployments d
+    JOIN deployment_statuses ds ON ds.deployment_id = d.id
+    WHERE d.project_id = p.project_id
+      AND d.organization_id = $2
+      AND ds.status = 'completed'
+    ORDER BY d.seq DESC
+    LIMIT 1
+  ) d
+)
 SELECT
     t.id
   , t.slug
@@ -1444,10 +1465,52 @@ SELECT
   , t.tool_selection_mode
   , t.external_oauth_server_id
   , (
-      SELECT COUNT(DISTINCT u.urn)
-      FROM unnest(lv.tool_urns) AS u(urn)
-      WHERE u.urn NOT LIKE 'tools:externalmcp:%:proxy'
+      (
+        SELECT COUNT(DISTINCT h.name)
+        FROM http_tool_definitions h
+        WHERE h.deployment_id = ANY(ARRAY(
+            SELECT ad.id
+            UNION ALL
+            SELECT pv.deployment_id
+            FROM deployments_packages dp
+            JOIN package_versions pv ON pv.id = dp.version_id
+            WHERE dp.deployment_id = ad.id
+          ))
+          AND h.tool_urn = ANY(lv.tool_urns)
+          AND h.deleted IS FALSE
+      )
+      + (
+        SELECT COUNT(*)
+        FROM function_tool_definitions f
+        WHERE f.deployment_id = ad.id
+          AND f.project_id = t.project_id
+          AND f.deleted IS FALSE
+          AND f.tool_urn = ANY(lv.tool_urns)
+      )
+      + (
+        SELECT COUNT(DISTINCT pt.tool_urn)
+        FROM prompt_templates pt
+        WHERE pt.project_id = t.project_id
+          AND pt.deleted IS FALSE
+          AND pt.tool_urn = ANY(lv.tool_urns)
+      )
+      + (
+        SELECT COUNT(*)
+        FROM external_mcp_tool_definitions x
+        JOIN external_mcp_attachments e ON e.id = x.external_mcp_attachment_id
+        WHERE e.deployment_id = ad.id
+          AND e.deleted IS FALSE
+          AND x.deleted IS FALSE
+          AND x.tool_urn = ANY(lv.tool_urns)
+          AND x.tool_urn NOT LIKE 'tools:externalmcp:%:proxy'
+      )
     )::bigint AS tool_count
+  , ARRAY(
+      SELECT DISTINCT u.urn
+      FROM unnest(lv.tool_urns) AS u(urn)
+      WHERE u.urn LIKE 'tools:platform:%'
+      ORDER BY u.urn
+    )::text[] AS platform_tool_urns
   , ARRAY(
       SELECT DISTINCT split_part(u.urn, ':', 3) AS slug
       FROM unnest(lv.tool_urns) AS u(urn)
@@ -1468,6 +1531,7 @@ LEFT JOIN LATERAL (
   ORDER BY tv.version DESC
   LIMIT 1
 ) lv ON TRUE
+LEFT JOIN active_deployments ad ON ad.project_id = t.project_id
 LEFT JOIN LATERAL (
   SELECT o.origin_registry_specifier
   FROM toolset_origins o
@@ -1497,12 +1561,13 @@ type ListToolsetSummariesByIDsRow struct {
 	ToolSelectionMode     string
 	ExternalOauthServerID uuid.NullUUID
 	ToolCount             int64
+	PlatformToolUrns      []string
 	ExternalMcpSlugs      []string
 	ExternalMcpProxyOnly  bool
 	RegistrySpecifier     string
 }
 
-// Proxy URNs are tools:externalmcp:<slug>:proxy; tool_count skips them.
+// tool_count resolves URNs like mv.readToolsetTools, minus :proxy URNs; callers add platform_tool_urns.
 func (q *Queries) ListToolsetSummariesByIDs(ctx context.Context, arg ListToolsetSummariesByIDsParams) ([]ListToolsetSummariesByIDsRow, error) {
 	rows, err := q.db.Query(ctx, listToolsetSummariesByIDs, arg.ToolsetIds, arg.OrganizationID, arg.ProjectIds)
 	if err != nil {
@@ -1520,6 +1585,7 @@ func (q *Queries) ListToolsetSummariesByIDs(ctx context.Context, arg ListToolset
 			&i.ToolSelectionMode,
 			&i.ExternalOauthServerID,
 			&i.ToolCount,
+			&i.PlatformToolUrns,
 			&i.ExternalMcpSlugs,
 			&i.ExternalMcpProxyOnly,
 			&i.RegistrySpecifier,

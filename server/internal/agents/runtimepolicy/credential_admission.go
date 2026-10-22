@@ -21,7 +21,8 @@ import (
 
 // AdmitPrincipalCredential performs authoritative parent admission and loads
 // credential policy R, live direct agent policy A, and the current owner's live
-// policy O as three independent policy sets. R is the credential's stored
+// policy O as three independent policy sets, plus the authorizing user's live
+// policy, which also bounds auth-client checks. R is the credential's stored
 // delegated policy, or, for a credential that stores none, the policy derived
 // from A, O, and the authorizing user's live policy. The caller must first
 // load and validate the credential, stamp its profile with
@@ -133,26 +134,44 @@ func AdmitPrincipalCredentialWithDBTX(ctx context.Context, tx accessrepo.DBTX) (
 		return authz.PrincipalCredentialAdmission{}, fmt.Errorf("load live owner policy: %w", err)
 	}
 
-	credentialPolicy := storedPolicy
-	if credential.DerivesPolicyAtAdmission {
+	// The authorizer is the user the credential acts for. Their live policy
+	// bounds auth-client use, and derives R for credentials storing none.
+	authorizerPolicy := ownerPolicy
+	if credential.AuthorizerUserID != agent.OwnerUserID {
 		authorizerPrincipals, authorizerEligible, err := ResolveEligibleUser(ctx, tx, authCtx.ActiveOrganizationID, credential.AuthorizerUserID)
 		if err != nil {
 			return authz.PrincipalCredentialAdmission{}, fmt.Errorf("resolve credential authorizer: %w", err)
 		}
-		if !authorizerEligible {
+		switch {
+		case authorizerEligible:
+			authorizerPolicy, err = authz.LoadGrants(ctx, tx, authCtx.ActiveOrganizationID, authorizerPrincipals)
+			if err != nil {
+				return authz.PrincipalCredentialAdmission{}, fmt.Errorf("load live authorizer policy: %w", err)
+			}
+		case credential.DerivesPolicyAtAdmission:
 			return authz.PrincipalCredentialAdmission{}, oops.C(oops.CodeUnauthorized)
+		default:
+			// A stored policy admits on its own as before; an ineligible
+			// authorizer only leaves no auth client usable.
+			authorizerPolicy = []authz.Grant{}
 		}
-		authorizerPolicy, err := authz.LoadGrants(ctx, tx, authCtx.ActiveOrganizationID, authorizerPrincipals)
-		if err != nil {
-			return authz.PrincipalCredentialAdmission{}, fmt.Errorf("load live authorizer policy: %w", err)
-		}
-		credentialPolicy, err = DelegatedRuntimeGrants(agentPolicy, ownerPolicy, authorizerPolicy)
+	}
+
+	credentialPolicy := storedPolicy
+	if credential.DerivesPolicyAtAdmission {
+		credentialPolicy, err = DelegatedRuntimeGrantsFor(credential.AuthorizerUserID, agentPolicy, ownerPolicy, authorizerPolicy)
 		if err != nil {
 			return authz.PrincipalCredentialAdmission{}, fmt.Errorf("derive credential policy: %w", err)
 		}
 	}
 
-	return authz.PrincipalCredentialAdmission{OwnerUserID: agent.OwnerUserID, Credential: credentialPolicy, Agent: agentPolicy, Owner: ownerPolicy}, nil
+	return authz.PrincipalCredentialAdmission{
+		OwnerUserID: agent.OwnerUserID,
+		Credential:  credentialPolicy,
+		Agent:       agentPolicy,
+		Owner:       ownerPolicy,
+		Authorizer:  authz.RepresentedUserPolicy{UserID: credential.AuthorizerUserID, Policy: authorizerPolicy},
+	}, nil
 }
 
 func hasPrincipalCredentialAdmissionContext(ctx context.Context) bool {

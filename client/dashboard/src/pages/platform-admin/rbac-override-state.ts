@@ -13,12 +13,18 @@ const RECOVERY_SCOPE: CatalogScope = {
   description: "Read organization metadata and the scope catalog",
   visibility: "user_visible",
 };
+// Overrides administer and never grant auth client use: the server drops
+// mcp:auth from them (authz.GrantsFromOverrides), so offering it would toggle
+// nothing.
+const NOT_OVERRIDABLE_RESOURCE_TYPES = new Set(["mcp_auth_client"]);
 function visibleCatalog(scopes: CatalogScope[]): CatalogScope[] {
   return [
     RECOVERY_SCOPE,
     ...scopes.filter(
       (scope) =>
-        scope.visibility === "user_visible" && scope.slug !== "org:read",
+        scope.visibility === "user_visible" &&
+        scope.slug !== "org:read" &&
+        !NOT_OVERRIDABLE_RESOURCE_TYPES.has(scope.resourceType),
     ),
   ];
 }

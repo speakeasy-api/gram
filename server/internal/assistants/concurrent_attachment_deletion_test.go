@@ -111,9 +111,6 @@ func TestServiceDeletionWaitsForAssistantAttachments(t *testing.T) {
 					if kind == "toolset" {
 						queries := toolsetsrepo.New(deletionTx)
 						_, err = queries.DeleteToolset(ctx, toolsetsrepo.DeleteToolsetParams{ProjectID: projectID, Slug: ts.Slug})
-						if err == nil {
-							err = queries.DeleteAssistantToolsetsByToolset(ctx, toolsetsrepo.DeleteAssistantToolsetsByToolsetParams{ProjectID: projectID, ToolsetID: targetID})
-						}
 						// The toolset's canonical wrapper goes with it.
 						servers := mcpserversrepo.New(deletionTx)
 						if err == nil {
@@ -164,8 +161,7 @@ func TestServiceDeletionWaitsForAssistantAttachments(t *testing.T) {
 					ProjectID: projectID, AssistantID: id,
 				})
 				require.NoError(t, err)
-				require.Zero(t, counts.Toolsets)
-				require.EqualValues(t, 1, counts.McpServers)
+				require.EqualValues(t, 1, counts)
 				require.NoError(t, tx.Commit(ctx))
 				select {
 				case err := <-finished:
@@ -179,8 +175,7 @@ func TestServiceDeletionWaitsForAssistantAttachments(t *testing.T) {
 					ProjectID: projectID, AssistantID: id,
 				})
 				require.NoError(t, err)
-				require.Zero(t, counts.Toolsets)
-				require.Zero(t, counts.McpServers)
+				require.Zero(t, counts)
 				listed, err := svc.ListAssistants(ctx, &gen.ListAssistantsPayload{})
 				require.NoError(t, err)
 				require.Len(t, listed.Assistants, 1)

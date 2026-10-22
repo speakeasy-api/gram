@@ -49,7 +49,7 @@ func TestMCPPrincipalCredentialReadmissionErrors(t *testing.T) {
 					AdmitPrincipalCredential: func(context.Context, *pgxpool.Pool) (authz.PrincipalCredentialAdmission, error) {
 						calls++
 						if calls == 1 {
-							return authz.PrincipalCredentialAdmission{OwnerUserID: "test-owner"}, nil
+							return authz.PrincipalCredentialAdmission{OwnerUserID: "test-owner", Authorizer: authz.RepresentedUserPolicy{UserID: "test-owner"}}, nil
 						}
 						return authz.PrincipalCredentialAdmission{}, tt.admissionErr
 					},

@@ -910,23 +910,6 @@ type AssistantThreadEvent struct {
 	Deleted bool
 }
 
-type AssistantToolset struct {
-	// @access: confidential
-	ID uuid.UUID
-	// @access: confidential
-	AssistantID uuid.UUID
-	// @access: confidential
-	ToolsetID uuid.UUID
-	// @access: confidential
-	EnvironmentID uuid.NullUUID
-	// @access: confidential
-	ProjectID uuid.UUID
-	// @access: confidential
-	CreatedAt pgtype.Timestamptz
-	// @access: confidential
-	UpdatedAt pgtype.Timestamptz
-}
-
 type AuditLog struct {
 	// @access: confidential
 	ID uuid.UUID
@@ -3092,8 +3075,6 @@ type McpMetadatum struct {
 	// @access: confidential
 	ID uuid.UUID
 	// @access: confidential
-	ToolsetID uuid.NullUUID
-	// @access: confidential
 	McpServerID uuid.NullUUID
 	// @access: confidential
 	ProjectID uuid.UUID
@@ -4873,8 +4854,6 @@ type PluginServer struct {
 	PluginID uuid.UUID
 	// @access: confidential
 	ProjectID uuid.NullUUID
-	// @access: confidential
-	ToolsetID uuid.NullUUID
 	// @access: confidential
 	McpServerID uuid.NullUUID
 	// @access: confidential
