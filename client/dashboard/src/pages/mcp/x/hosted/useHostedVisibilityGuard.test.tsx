@@ -50,7 +50,9 @@ function Harness({ server }: { server: McpServer }) {
   const guard = useHostedVisibilityGuard({
     server,
     hosted: true,
-    apply,
+    apply: (next) => {
+      apply(next);
+    },
     isApplying: false,
   });
   request = guard.request;
