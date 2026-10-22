@@ -437,8 +437,7 @@ func (s *seeder) agentSession(i int) agentSession {
 	if onClaude {
 		surface, provider = "claude-code", "anthropic"
 	}
-	// Claude Code states its terminal, so a third of its sessions ran in an
-	// editor and the rest at a command line. Codex states no client at all.
+	// A third of Claude Code sessions ran in an editor; Codex states no client.
 	client := ""
 	if onClaude {
 		client = "cli"
@@ -446,8 +445,7 @@ func (s *seeder) agentSession(i int) agentSession {
 			client = "ide"
 		}
 	}
-	// Every twelfth session from the fifth on ran as the release assistant
-	// rather than as its person, so the agent dimension has a value.
+	// Every twelfth session from the fifth on ran as the release assistant.
 	agentID := ""
 	if i%12 == 4 {
 		agentID = s.det("managed-agent-1").String()

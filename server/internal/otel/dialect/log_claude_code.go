@@ -116,8 +116,7 @@ func (ClaudeCodeLog) Surface(*otelv1.InboundLogRecord) (string, string, error) {
 	return scopeNameKey, claudeCodeSurface, nil
 }
 
-// Client is the IDE when Claude Code runs in an editor's terminal and the CLI
-// in any other. terminal.type rides on every Claude Code event.
+// Client reads terminal.type, which Claude Code puts on every event.
 func (ClaudeCodeLog) Client(record *otelv1.InboundLogRecord) (string, string, error) {
 	key, value := getOneLogAttr(record, "terminal.type")
 	if client := agentsurface.ClientForTerminal(value); client != "" {

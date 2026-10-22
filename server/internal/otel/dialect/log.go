@@ -18,8 +18,6 @@ type LogDialect interface {
 	// answer is not read from the record.
 	Provider(record *otelv1.InboundLogRecord) (key string, val string, err error)
 	Surface(record *otelv1.InboundLogRecord) (key string, val string, err error)
-	// Client is the kind of client the product ran in (cli, ide, …), when the
-	// record says so beyond what the surface's name implies.
 	Client(record *otelv1.InboundLogRecord) (key string, val string, err error)
 
 	// What the record is, in agent vocabulary. Every answer names the

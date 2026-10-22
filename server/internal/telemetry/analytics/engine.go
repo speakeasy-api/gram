@@ -105,8 +105,7 @@ func mcpServerDisplayNames(hooks *hooksRepo.Queries) LookupLoader {
 	}
 }
 
-// agentNames loads the organization's agents, id to name, so an agent shows
-// under the name it has now.
+// agentNames loads the organization's agents, id to name.
 func agentNames(agents *agentsRepo.Queries) LookupLoader {
 	return func(ctx context.Context, tenant Tenant) (map[string]string, error) {
 		rows, err := agents.ListAgentNames(ctx, tenant.OrganizationID)

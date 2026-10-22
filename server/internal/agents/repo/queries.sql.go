@@ -524,8 +524,7 @@ type ListAgentNamesRow struct {
 	Name string
 }
 
-// Every agent the organization has had, deleted ones included, so activity an
-// agent recorded before its deletion still shows its name.
+// Deleted agents included, so older activity keeps its name.
 func (q *Queries) ListAgentNames(ctx context.Context, organizationID string) ([]ListAgentNamesRow, error) {
 	rows, err := q.db.Query(ctx, listAgentNames, organizationID)
 	if err != nil {

@@ -243,8 +243,6 @@ var Skills = &Dataset{
 // display name both match; the field says which name it shows.
 const mcpServerDescription = "MCP server the call went to, under the display name set in Hooks settings. A raw name with no override shows as reported; a filter may name either."
 
-// surface names the product and its client in one value, so product and
-// client replace it; it stays until readers have moved.
 const (
 	surfaceDescription = "Agent surface as the producer named it, mixing the product with where it ran. Deprecated: use product and client."
 	productDescription = "Agent product that made the call: claude-code, claude-chat, cowork, codex, chatgpt, cursor, copilot and others. Empty when the producer named none Speakeasy recognizes."
@@ -252,8 +250,7 @@ const (
 	agentDescription   = "Speakeasy agent the call ran as, under its name. Empty for a call a person made."
 )
 
-// AgentNamesLookup names the lookup agent reads through: the organization's
-// agents, id to name.
+// AgentNamesLookup reads agent ids as the organization's agent names.
 const AgentNamesLookup = "agent_names"
 
 // MCPServerDisplayNamesLookup names the lookup mcp_server reads through: the

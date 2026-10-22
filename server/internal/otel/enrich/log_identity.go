@@ -54,9 +54,7 @@ func (*logIdentity) Enrich(_ context.Context, record *otelv1.InboundLogRecord) (
 	return out, nil
 }
 
-// inboundLogAgentID is the agent principal a Speakeasy-emitted record names as
-// its actor. A producer can send the same attributes, so a record that came
-// through the ingest edge is never believed.
+// inboundLogAgentID trusts only Speakeasy-emitted records, since a producer can send the same attributes.
 func inboundLogAgentID(record *otelv1.InboundLogRecord) string {
 	if record.GetProvenance().GetSource() != InternalProvenanceSource {
 		return ""
