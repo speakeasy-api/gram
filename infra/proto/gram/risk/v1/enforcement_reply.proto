@@ -33,9 +33,9 @@ message EnforcementFinding {
   string tool_call_id = 9;
   string masked_preview = 10;
   string fingerprint = 11;
-  // Model rationale for the finding, limited to 500 Unicode characters. Set
-  // only by the LLM analyzer lane. It may paraphrase the flagged content, so
-  // it is treated with the same care as masked_preview.
+  // Human-readable scanner description or model rationale, limited to 500
+  // Unicode characters. It may paraphrase flagged content, so it is treated
+  // with the same care as masked_preview.
   string description = 12;
 }
 

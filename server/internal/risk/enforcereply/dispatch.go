@@ -62,6 +62,10 @@ const (
 	MaxContentBytes               = 1 * 1024 * 1024
 	presidioEngineMaxContentBytes = 50 * 1024
 
+	// MaxFindingDescriptionRunes bounds scanner descriptions and model rationale
+	// carried in an EnforcementFinding.
+	MaxFindingDescriptionRunes = 500
+
 	// contentLimitDistinctID keys the global content limit flag; the flag
 	// carries no targeting so any stable id resolves the same payload.
 	contentLimitDistinctID = "gram-server"

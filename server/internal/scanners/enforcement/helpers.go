@@ -123,7 +123,7 @@ func Findings(in []scanners.Finding) []*riskv1.EnforcementFinding {
 			ToolCallId:    new(finding.McpLookupToolCallID),
 			MaskedPreview: new(""),
 			Fingerprint:   new(""),
-			Description:   new(finding.Description),
+			Description:   new(conv.TruncateString(finding.Description, enforcereply.MaxFindingDescriptionRunes)),
 		}.Build())
 	}
 	return out

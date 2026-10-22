@@ -497,9 +497,9 @@ type EnforcementFinding_builder struct {
 	ToolCallId    *string
 	MaskedPreview *string
 	Fingerprint   *string
-	// Model rationale for the finding, limited to 500 Unicode characters. Set
-	// only by the LLM analyzer lane. It may paraphrase the flagged content, so
-	// it is treated with the same care as masked_preview.
+	// Human-readable scanner description or model rationale, limited to 500
+	// Unicode characters. It may paraphrase flagged content, so it is treated
+	// with the same care as masked_preview.
 	Description *string
 }
 
