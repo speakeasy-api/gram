@@ -15100,36 +15100,52 @@ func (q *Queries) UpdateGlobalRemoteSessionIssuer(ctx context.Context, arg Updat
 const updateOrganizationRemoteSessionClient = `-- name: UpdateOrganizationRemoteSessionClient :one
 UPDATE remote_session_clients AS c
 SET
-    client_secret_encrypted = COALESCE($1, c.client_secret_encrypted),
+    client_id = COALESCE($1, c.client_id),
+    client_id_issued_at = CASE
+        WHEN $1::text IS DISTINCT FROM c.client_id AND $1::text IS NOT NULL THEN clock_timestamp()
+        ELSE c.client_id_issued_at
+    END,
+    grant_types = CASE
+        WHEN $1::text IS DISTINCT FROM c.client_id AND $1::text IS NOT NULL THEN NULL
+        ELSE c.grant_types
+    END,
+    display_name = CASE
+        WHEN $2::text = '' THEN NULL
+        ELSE COALESCE($2, c.display_name)
+    END,
+    client_secret_encrypted = COALESCE($3, c.client_secret_encrypted),
     upstream_rejected_at = CASE
-        WHEN $1::text IS NULL THEN c.upstream_rejected_at
-        ELSE NULL
+        WHEN $3::text IS NOT NULL THEN NULL
+        WHEN $1::text IS DISTINCT FROM c.client_id AND $1::text IS NOT NULL THEN NULL
+        ELSE c.upstream_rejected_at
     END,
     -- A pasted-in replacement secret carries no issuer-reported expiry, and
     -- keeping the old secret's deadline would flag the new one as expired.
     client_secret_expires_at = CASE
-        WHEN $1::text IS NULL THEN c.client_secret_expires_at
+        WHEN $3::text IS NULL THEN c.client_secret_expires_at
         ELSE NULL
     END,
-    token_endpoint_auth_method = COALESCE($2, c.token_endpoint_auth_method),
-    token_endpoint_auth_audience_format = COALESCE($3, c.token_endpoint_auth_audience_format),
-    scope = COALESCE($4::text[], c.scope),
+    token_endpoint_auth_method = COALESCE($4, c.token_endpoint_auth_method),
+    token_endpoint_auth_audience_format = COALESCE($5, c.token_endpoint_auth_audience_format),
+    scope = COALESCE($6::text[], c.scope),
     audience = CASE
-        WHEN $5::text = '' THEN NULL
-        ELSE COALESCE($5, c.audience)
+        WHEN $7::text = '' THEN NULL
+        ELSE COALESCE($7, c.audience)
     END,
-    legacy_callback_url = COALESCE($6, c.legacy_callback_url),
+    legacy_callback_url = COALESCE($8, c.legacy_callback_url),
     updated_at = clock_timestamp()
 FROM remote_session_issuers AS i
-WHERE c.id = $7
+WHERE c.id = $9
   AND c.remote_session_issuer_id = i.id
-  AND (i.organization_id = $8 OR c.organization_id = $8)
+  AND (i.organization_id = $10 OR c.organization_id = $10)
   AND c.deleted IS FALSE
   AND i.deleted IS FALSE
 RETURNING c.id, c.project_id, c.organization_id, c.attachment_scope, c.remote_session_issuer_id, c.client_id, c.client_secret_encrypted, c.client_id_issued_at, c.client_secret_expires_at, c.token_endpoint_auth_method, c.json_web_key_set_id, c.scope, c.grant_types, c.audience, c.token_endpoint_auth_audience_format, c.client_id_metadata_uri, c.legacy_callback_url, c.callback_base_url, c.resource_identifier, c.resource_name, c.resource_documentation, c.resource_policy_uri, c.resource_tos_uri, c.upstream_rejected_at, c.identity_provider_connection_id, c.credential_owner, c.display_name, c.created_at, c.updated_at, c.deleted_at, c.deleted
 `
 
 type UpdateOrganizationRemoteSessionClientParams struct {
+	ClientID                        pgtype.Text
+	DisplayName                     pgtype.Text
 	ClientSecretEncrypted           pgtype.Text
 	TokenEndpointAuthMethod         pgtype.Text
 	TokenEndpointAuthAudienceFormat pgtype.Text
@@ -15144,9 +15160,12 @@ type UpdateOrganizationRemoteSessionClientParams struct {
 // passing it as client_secret_encrypted; an omitted narg keeps the existing
 // secret. See the ORG REACHABILITY note on
 // ListOrganizationRemoteSessionClientsByIssuerID. Note this mutates the CLIENT,
-// which the tenant owns, never the platform issuer it points at.
+// which the tenant owns, never the platform issuer it points at. A corrected
+// client_id resets the registration state as UpdateRemoteSessionClient does.
 func (q *Queries) UpdateOrganizationRemoteSessionClient(ctx context.Context, arg UpdateOrganizationRemoteSessionClientParams) (RemoteSessionClient, error) {
 	row := q.db.QueryRow(ctx, updateOrganizationRemoteSessionClient,
+		arg.ClientID,
+		arg.DisplayName,
 		arg.ClientSecretEncrypted,
 		arg.TokenEndpointAuthMethod,
 		arg.TokenEndpointAuthAudienceFormat,
@@ -15456,28 +15475,44 @@ func (q *Queries) UpdateOrganizationRemoteSessionIssuer(ctx context.Context, arg
 const updateRemoteSessionClient = `-- name: UpdateRemoteSessionClient :one
 UPDATE remote_session_clients
 SET
-    client_secret_encrypted = COALESCE($1, client_secret_encrypted),
+    client_id = COALESCE($1, client_id),
+    client_id_issued_at = CASE
+        WHEN $1::text IS DISTINCT FROM client_id AND $1::text IS NOT NULL THEN clock_timestamp()
+        ELSE client_id_issued_at
+    END,
+    grant_types = CASE
+        WHEN $1::text IS DISTINCT FROM client_id AND $1::text IS NOT NULL THEN NULL
+        ELSE grant_types
+    END,
+    display_name = CASE
+        WHEN $2::text = '' THEN NULL
+        ELSE COALESCE($2, display_name)
+    END,
+    client_secret_encrypted = COALESCE($3, client_secret_encrypted),
     upstream_rejected_at = CASE
-        WHEN $1::text IS NULL THEN upstream_rejected_at
-        ELSE NULL
+        WHEN $3::text IS NOT NULL THEN NULL
+        WHEN $1::text IS DISTINCT FROM client_id AND $1::text IS NOT NULL THEN NULL
+        ELSE upstream_rejected_at
     END,
     -- A replaced secret takes the expiry supplied with it, or none: keeping
     -- the old secret's deadline would flag the new secret as expired.
     client_secret_expires_at = CASE
-        WHEN $1::text IS NULL THEN client_secret_expires_at
-        ELSE $2
+        WHEN $3::text IS NULL THEN client_secret_expires_at
+        ELSE $4
     END,
-    token_endpoint_auth_method = COALESCE($3, token_endpoint_auth_method),
-    token_endpoint_auth_audience_format = COALESCE($4, token_endpoint_auth_audience_format),
-    scope = COALESCE($5::text[], scope),
-    audience = COALESCE($6, audience),
-    legacy_callback_url = COALESCE($7, legacy_callback_url),
+    token_endpoint_auth_method = COALESCE($5, token_endpoint_auth_method),
+    token_endpoint_auth_audience_format = COALESCE($6, token_endpoint_auth_audience_format),
+    scope = COALESCE($7::text[], scope),
+    audience = COALESCE($8, audience),
+    legacy_callback_url = COALESCE($9, legacy_callback_url),
     updated_at = clock_timestamp()
-WHERE id = $8 AND project_id = $9 AND deleted IS FALSE
+WHERE id = $10 AND project_id = $11 AND deleted IS FALSE
 RETURNING id, project_id, organization_id, attachment_scope, remote_session_issuer_id, client_id, client_secret_encrypted, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, json_web_key_set_id, scope, grant_types, audience, token_endpoint_auth_audience_format, client_id_metadata_uri, legacy_callback_url, callback_base_url, resource_identifier, resource_name, resource_documentation, resource_policy_uri, resource_tos_uri, upstream_rejected_at, identity_provider_connection_id, credential_owner, display_name, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdateRemoteSessionClientParams struct {
+	ClientID                        pgtype.Text
+	DisplayName                     pgtype.Text
 	ClientSecretEncrypted           pgtype.Text
 	ClientSecretExpiresAt           pgtype.Timestamptz
 	TokenEndpointAuthMethod         pgtype.Text
@@ -15489,11 +15524,15 @@ type UpdateRemoteSessionClientParams struct {
 	ProjectID                       uuid.NullUUID
 }
 
-// A rotated secret also clears the upstream rejection marker: the rejection
-// may have been the old secret, and a client whose refreshes succeed again
-// should not stay flagged for re-registration.
+// A rotated secret or corrected client_id also clears the upstream rejection
+// marker: the rejection may have been the old value, and a client whose
+// refreshes succeed again should not stay flagged for re-registration. A
+// corrected client_id is a new registration as far as the issuer is
+// concerned, so it drops the old one's grant evidence and issue time.
 func (q *Queries) UpdateRemoteSessionClient(ctx context.Context, arg UpdateRemoteSessionClientParams) (RemoteSessionClient, error) {
 	row := q.db.QueryRow(ctx, updateRemoteSessionClient,
+		arg.ClientID,
+		arg.DisplayName,
 		arg.ClientSecretEncrypted,
 		arg.ClientSecretExpiresAt,
 		arg.TokenEndpointAuthMethod,
