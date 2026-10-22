@@ -2251,15 +2251,23 @@ SELECT sel.id,
                    FROM (
                      SELECT rh.name, rh.value, rh.value_from_request_header, rh.is_secret
                      FROM mcp_servers AS s
+                     JOIN remote_mcp_servers AS r
+                       ON r.id = s.remote_mcp_server_id
+                      AND r.project_id = s.project_id
+                      AND r.deleted IS FALSE
                      JOIN remote_mcp_server_headers AS rh
-                       ON rh.remote_mcp_server_id = s.remote_mcp_server_id
+                       ON rh.remote_mcp_server_id = r.id
                       AND rh.deleted IS FALSE
                      WHERE s.id = sel.mcp_server_id
                      UNION ALL
                      SELECT th.name, th.value, th.value_from_request_header, th.is_secret
                      FROM mcp_servers AS s
+                     JOIN tunneled_mcp_servers AS t
+                       ON t.id = s.tunneled_mcp_server_id
+                      AND t.project_id = s.project_id
+                      AND t.deleted IS FALSE
                      JOIN tunneled_mcp_server_headers AS th
-                       ON th.tunneled_mcp_server_id = s.tunneled_mcp_server_id
+                       ON th.tunneled_mcp_server_id = t.id
                       AND th.deleted IS FALSE
                      WHERE s.id = sel.mcp_server_id
                    ) AS src
