@@ -21,9 +21,9 @@ import (
 )
 
 const (
-	// DefaultEnforcementMaxRequestAge leaves transport slack around the
-	// five-second dispatcher wait while staying below the ack deadline.
-	DefaultEnforcementMaxRequestAge = 8 * time.Second
+	// DefaultEnforcementMaxRequestAge matches the dispatcher's lane wait so
+	// requests cannot be scanned after the caller stops waiting.
+	DefaultEnforcementMaxRequestAge = 5 * time.Second
 	// DefaultEnforcementMaxContentBytes matches the maximum published content
 	// budget and protects direct-to-topic requests from unbounded evaluation.
 	DefaultEnforcementMaxContentBytes = 1 * 1024 * 1024

@@ -15,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/judgemessage"
+	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/requestreply"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
@@ -22,9 +23,9 @@ import (
 )
 
 const (
-	// DefaultEnforcementMaxRequestAge leaves transport slack around the
-	// 15-second dispatcher wait while staying below the ack deadline.
-	DefaultEnforcementMaxRequestAge = 20 * time.Second
+	// DefaultEnforcementMaxRequestAge matches the dispatcher's lane wait so
+	// requests cannot be scanned after the caller stops waiting.
+	DefaultEnforcementMaxRequestAge = 15 * time.Second
 	// DefaultEnforcementMaxContentBytes bounds model input while preserving
 	// enough context for long tool results and prompts.
 	DefaultEnforcementMaxContentBytes = 64 * 1024
@@ -116,9 +117,12 @@ func (h *EnforceHandler) Handle(ctx context.Context, m *riskv1.PromptPolicyEnfor
 		enforce.RecordTruncation(ctx, h.truncations, "judge")
 	}
 	var judgeMessage judgemessage.Message
-	if len(argumentFields) == 0 {
+	switch len(argumentFields) {
+	case 0:
 		judgeMessage = judgemessage.New(m.GetMessageType(), m.GetToolName(), body)
-	} else {
+	case 1:
+		judgeMessage = judgemessage.New(message.ToolRequest, m.GetToolCalls()[0].GetName(), argumentFields[0])
+	default:
 		calls := make([]judgemessage.ToolCall, 0, len(argumentFields))
 		for i, call := range m.GetToolCalls() {
 			calls = append(calls, judgemessage.NewToolCall(call.GetName(), argumentFields[i]))

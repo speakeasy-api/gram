@@ -117,7 +117,7 @@ func Findings(in []scanners.Finding) []*riskv1.EnforcementFinding {
 			ToolCallId:    new(finding.McpLookupToolCallID),
 			MaskedPreview: new(""),
 			Fingerprint:   new(""),
-			Description:   new(""),
+			Description:   new(finding.Description),
 		}.Build())
 	}
 	return out

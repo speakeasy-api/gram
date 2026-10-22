@@ -70,3 +70,30 @@ func TestEnforceHandlerSharesEngineBudgetAcrossContentAndArguments(t *testing.T)
 	require.True(t, writer.reply.GetContentTruncated())
 	require.False(t, writer.reply.GetIncomplete())
 }
+
+func TestEnforceHandlerDropsRequestsOlderThanLaneWait(t *testing.T) {
+	t.Parallel()
+
+	scanner := &captureCustomRulesScanner{}
+	handler, err := NewEnforceHandler(
+		testenv.NewLogger(t),
+		testenv.NewMeterProvider(t),
+		scanner,
+		&captureEnforcementReply{},
+		metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
+		EnforceHandlerConfig{},
+	)
+	require.NoError(t, err)
+
+	err = handler.Handle(t.Context(), riskv1.CustomRulesEnforcement_builder{
+		CreatedAt:      new(time.Now().Add(-6 * time.Second).UTC().Format(time.RFC3339Nano)),
+		OrganizationId: new("org-test"),
+		ProjectId:      new("0198f1f4-0000-7000-8000-000000000001"),
+		Content:        new("must not be scanned"),
+		MessageType:    new("user"),
+	}.Build(), gcp.MessageMetadata{Attributes: map[string]string{
+		requestreply.ReplyURNAttribute: "urn:gram:risk:enforce:replica-test:0198f1f4-0000-7000-8000-000000000002",
+	}})
+	require.NoError(t, err)
+	require.Zero(t, scanner.request)
+}

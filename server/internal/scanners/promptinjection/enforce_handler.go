@@ -15,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/judgemessage"
+	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/requestreply"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
@@ -22,9 +23,9 @@ import (
 )
 
 const (
-	// DefaultEnforcementMaxRequestAge leaves transport slack around the
-	// cascade's 55-second model budget while staying below its ack deadline.
-	DefaultEnforcementMaxRequestAge = 75 * time.Second
+	// DefaultEnforcementMaxRequestAge matches the dispatcher's lane wait so
+	// requests cannot be scanned after the caller stops waiting.
+	DefaultEnforcementMaxRequestAge = 60 * time.Second
 	// DefaultEnforcementMaxContentBytes bounds model input while preserving
 	// enough context for long tool results and prompts.
 	DefaultEnforcementMaxContentBytes = 64 * 1024
@@ -96,7 +97,6 @@ func (h *EnforceHandler) Handle(ctx context.Context, m *riskv1.PromptInjectionEn
 
 	content := m.GetContent()
 	body := conv.Default(m.GetBody(), content)
-	calls := make([]judgemessage.ToolCall, 0, len(m.GetToolCalls()))
 	argumentFields := make([]string, len(m.GetToolCalls()))
 	fields := make([]*string, 0, len(argumentFields)+1)
 	if len(argumentFields) == 0 {
@@ -114,14 +114,20 @@ func (h *EnforceHandler) Handle(ctx context.Context, m *riskv1.PromptInjectionEn
 		enforce.RecordTruncation(ctx, h.truncations, "prompt_injection")
 	}
 	var judgeMessage judgemessage.Message
-	if len(argumentFields) == 0 {
+	switch len(argumentFields) {
+	case 0:
 		judgeMessage = judgemessage.New(m.GetMessageType(), m.GetToolName(), body)
-	} else {
+	case 1:
+		judgeMessage = judgemessage.New(message.ToolRequest, m.GetToolCalls()[0].GetName(), argumentFields[0])
+	default:
+		calls := make([]judgemessage.ToolCall, 0, len(argumentFields))
 		for i, call := range m.GetToolCalls() {
 			calls = append(calls, judgemessage.NewToolCall(call.GetName(), argumentFields[i]))
 		}
 		judgeMessage = judgemessage.NewForToolCalls(calls)
 	}
+	judgeMessage.AnchorID, _ = uuid.Parse(m.GetChatMessageId())
+	judgeMessage.ChatID, _ = uuid.Parse(m.GetChatId())
 
 	started := time.Now().UTC()
 	result, verdict, scanErr := h.scanner.ScanWithVerdict(ctx, content, m.GetOrganizationId(), m.GetProjectId(), m.GetUserId(), judgeMessage)
