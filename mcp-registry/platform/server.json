@@ -2,7 +2,7 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "com.speakeasy.ai/platform",
   "title": "Speakeasy Platform MCP",
-  "description": "Set up and manage MCP servers through the Speakeasy MCP gateway from your agent.",
+  "description": "Secure and manage MCP servers through the Speakeasy AI Control Plane from your agent.",
   "version": "1.0.0",
   "websiteUrl": "https://www.speakeasy.com",
   "repository": {
