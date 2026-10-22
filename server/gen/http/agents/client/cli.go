@@ -542,6 +542,81 @@ func BuildDeletePolicyGrantPayload(agentsDeletePolicyGrantBody string, agentsDel
 	return v, nil
 }
 
+// BuildListConnectionRestrictionsPayload builds the payload for the agents
+// listConnectionRestrictions endpoint from CLI flags.
+func BuildListConnectionRestrictionsPayload(agentsListConnectionRestrictionsSessionToken string) (*agents.ListConnectionRestrictionsPayload, error) {
+	var sessionToken *string
+	{
+		if agentsListConnectionRestrictionsSessionToken != "" {
+			sessionToken = &agentsListConnectionRestrictionsSessionToken
+		}
+	}
+	v := &agents.ListConnectionRestrictionsPayload{}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildRestrictAgentOnConnectionPayload builds the payload for the agents
+// restrictAgentOnConnection endpoint from CLI flags.
+func BuildRestrictAgentOnConnectionPayload(agentsRestrictAgentOnConnectionBody string, agentsRestrictAgentOnConnectionSessionToken string) (*agents.RestrictAgentOnConnectionPayload, error) {
+	var err error
+	var body RestrictAgentOnConnectionRequestBody
+	{
+		err = json.Unmarshal([]byte(agentsRestrictAgentOnConnectionBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"agent_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"remote_session_client_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.agent_id", body.AgentID, goa.FormatUUID))
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.remote_session_client_id", body.RemoteSessionClientID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if agentsRestrictAgentOnConnectionSessionToken != "" {
+			sessionToken = &agentsRestrictAgentOnConnectionSessionToken
+		}
+	}
+	v := &agents.RestrictAgentOnConnectionPayload{
+		AgentID:               body.AgentID,
+		RemoteSessionClientID: body.RemoteSessionClientID,
+	}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildRemoveConnectionRestrictionPayload builds the payload for the agents
+// removeConnectionRestriction endpoint from CLI flags.
+func BuildRemoveConnectionRestrictionPayload(agentsRemoveConnectionRestrictionBody string, agentsRemoveConnectionRestrictionSessionToken string) (*agents.RemoveConnectionRestrictionPayload, error) {
+	var err error
+	var body RemoveConnectionRestrictionRequestBody
+	{
+		err = json.Unmarshal([]byte(agentsRemoveConnectionRestrictionBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"restriction_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.restriction_id", body.RestrictionID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if agentsRemoveConnectionRestrictionSessionToken != "" {
+			sessionToken = &agentsRemoveConnectionRestrictionSessionToken
+		}
+	}
+	v := &agents.RemoveConnectionRestrictionPayload{
+		RestrictionID: body.RestrictionID,
+	}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
 // BuildTransferPayload builds the payload for the agents transfer endpoint
 // from CLI flags.
 func BuildTransferPayload(agentsTransferBody string, agentsTransferSessionToken string) (*agents.TransferPayload, error) {

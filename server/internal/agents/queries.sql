@@ -317,3 +317,91 @@ SET deleted_at = COALESCE(s.deleted_at, clock_timestamp())
 FROM target
 WHERE s.id = target.id
 RETURNING s.id, s.project_id, s.user_session_issuer_id, s.jti, s.deleted_at, target.issuer_project_id, target.deleted AS already_revoked;
+
+-- name: HasOwnedPersonalConnection :one
+-- Whether the user holds a live connection through the upstream OAuth client,
+-- and the organization uses that client for personal connections.
+SELECT (EXISTS (
+  SELECT 1
+  FROM remote_sessions rs
+  WHERE rs.subject_urn = concat('user:', @user_id::text)
+    AND rs.remote_session_client_id = @remote_session_client_id
+    AND rs.deleted IS FALSE
+) AND EXISTS (
+  SELECT 1
+  FROM mcp_auth_clients ac
+  WHERE ac.organization_id = @organization_id
+    AND ac.remote_session_client_id = @remote_session_client_id
+    AND ac.client_type = 'remote_session'
+    AND ac.deleted IS FALSE
+))::boolean AS owned;
+
+-- name: CreateConnectionRestrictionGrant :one
+-- Writes the restriction's grant. Inserted is false when an identical grant
+-- already existed.
+WITH inserted AS (
+  INSERT INTO principal_grants (organization_id, principal_urn, scope, selectors)
+  VALUES (@organization_id, concat('agent:', @agent_id::uuid), 'mcp:blocked_auth', @selectors)
+  ON CONFLICT DO NOTHING
+  RETURNING id
+)
+SELECT EXISTS (SELECT 1 FROM inserted)::boolean AS inserted;
+
+-- name: RecordConnectionRestriction :one
+INSERT INTO agent_connection_restrictions (organization_id, agent_id, owner_user_id, remote_session_client_id, taken_over_at)
+VALUES (
+  @organization_id,
+  @agent_id,
+  @owner_user_id,
+  @remote_session_client_id,
+  CASE WHEN @grant_existed::boolean THEN clock_timestamp() END
+)
+ON CONFLICT (organization_id, agent_id, owner_user_id, remote_session_client_id) DO NOTHING
+RETURNING *;
+
+-- name: GetConnectionRestriction :one
+SELECT *
+FROM agent_connection_restrictions
+WHERE organization_id = @organization_id
+  AND agent_id = @agent_id
+  AND owner_user_id = @owner_user_id
+  AND remote_session_client_id = @remote_session_client_id;
+
+-- name: ListConnectionRestrictions :many
+SELECT *
+FROM agent_connection_restrictions
+WHERE organization_id = @organization_id
+  AND owner_user_id = @owner_user_id
+ORDER BY created_at, id;
+
+-- name: DeleteConnectionRestriction :one
+DELETE FROM agent_connection_restrictions
+WHERE organization_id = @organization_id
+  AND owner_user_id = @owner_user_id
+  AND id = @id
+RETURNING *;
+
+-- name: DeleteConnectionRestrictionGrant :exec
+DELETE FROM principal_grants
+WHERE organization_id = @organization_id
+  AND principal_urn = concat('agent:', @agent_id::uuid)
+  AND scope = 'mcp:blocked_auth'
+  AND selectors = @selectors;
+
+-- name: IsConnectionOwnerRestriction :one
+-- Whether a connection owner recorded the agent grant, which only that owner
+-- may then remove.
+SELECT EXISTS (
+  SELECT 1
+  FROM agent_connection_restrictions r
+  WHERE r.organization_id = @organization_id
+    AND r.agent_id = @agent_id
+    AND @scope::text = 'mcp:blocked_auth'
+    AND @selectors::jsonb = jsonb_build_object(
+      'resource_kind', 'mcp_auth_client',
+      'resource_id', '*',
+      'client_type', 'remote_session',
+      'upstream_client', r.remote_session_client_id::text,
+      'connection_owner', r.owner_user_id
+    )
+);

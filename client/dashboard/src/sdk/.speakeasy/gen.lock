@@ -120,11 +120,14 @@ trackedFiles:
   src/funcs/agentsDeletePolicyGrant.ts: {}
   src/funcs/agentsGet.ts: {}
   src/funcs/agentsList.ts: {}
+  src/funcs/agentsListConnectionRestrictions.ts: {}
   src/funcs/agentsListDelegableGrants.ts: {}
   src/funcs/agentsListPolicyGrants.ts: {}
   src/funcs/agentsListSessions.ts: {}
   src/funcs/agentsReassign.ts: {}
+  src/funcs/agentsRemoveConnectionRestriction.ts: {}
   src/funcs/agentsRename.ts: {}
+  src/funcs/agentsRestrictOnConnection.ts: {}
   src/funcs/agentsResume.ts: {}
   src/funcs/agentsRevoke.ts: {}
   src/funcs/agentsRevokeSession.ts: {}
@@ -886,6 +889,8 @@ trackedFiles:
   src/models/components/addtoolmetadatabatchresult.ts: {}
   src/models/components/adminopenrouterkey.ts: {}
   src/models/components/admitworkloadsubjectform.ts: {}
+  src/models/components/agentconnectionrestriction.ts: {}
+  src/models/components/agentconnectionrestrictionidform.ts: {}
   src/models/components/agentdelegatedgrant.ts: {}
   src/models/components/agentdelegatedpolicy.ts: {}
   src/models/components/agentidform.ts: {}
@@ -1336,6 +1341,7 @@ trackedFiles:
   src/models/components/launchercontext.ts: {}
   src/models/components/launcherjudgment.ts: {}
   src/models/components/listactorattributesresult.ts: {}
+  src/models/components/listagentconnectionrestrictionsresult.ts: {}
   src/models/components/listagentsresult.ts: {}
   src/models/components/listaidetectionsresult.ts: {}
   src/models/components/listaidetectionusersresult.ts: {}
@@ -1695,6 +1701,7 @@ trackedFiles:
   src/models/components/responsefilter.ts: {}
   src/models/components/restoreoktaserversuggestionrequestbody.ts: {}
   src/models/components/restoreskillversionrequestbody.ts: {}
+  src/models/components/restrictagentonconnectionform.ts: {}
   src/models/components/retryschedulerequestbody.ts: {}
   src/models/components/revokeallremotesessionsresult.ts: {}
   src/models/components/revokeidentityproviderconnectionrequestbody.ts: {}
@@ -2494,6 +2501,7 @@ trackedFiles:
   src/models/operations/killswitchespreviewoverlaps.ts: {}
   src/models/operations/launcherjudge.ts: {}
   src/models/operations/listadminopenrouterkeys.ts: {}
+  src/models/operations/listagentconnectionrestrictions.ts: {}
   src/models/operations/listagentdelegablegrants.ts: {}
   src/models/operations/listagentpolicygrants.ts: {}
   src/models/operations/listagents.ts: {}
@@ -2708,6 +2716,7 @@ trackedFiles:
   src/models/operations/registerdomain.ts: {}
   src/models/operations/registerworkloadissuer.ts: {}
   src/models/operations/releasesessionquarantine.ts: {}
+  src/models/operations/removeagentconnectionrestriction.ts: {}
   src/models/operations/removedashboardwidget.ts: {}
   src/models/operations/removemetamcpmember.ts: {}
   src/models/operations/removeoauthserver.ts: {}
@@ -2730,6 +2739,7 @@ trackedFiles:
   src/models/operations/resolveshadowmcpinventoryrequest.ts: {}
   src/models/operations/restoreoktaserversuggestion.ts: {}
   src/models/operations/restoreskillversion.ts: {}
+  src/models/operations/restrictagentonconnection.ts: {}
   src/models/operations/resumeagent.ts: {}
   src/models/operations/resumestripesubscription.ts: {}
   src/models/operations/resumetriggerinstance.ts: {}
@@ -2946,6 +2956,8 @@ trackedFiles:
   src/react-query/admitWorkloadSubject.ts: {}
   src/react-query/agent.core.ts: {}
   src/react-query/agent.ts: {}
+  src/react-query/agentConnectionRestrictions.core.ts: {}
+  src/react-query/agentConnectionRestrictions.ts: {}
   src/react-query/agentPlugins.core.ts: {}
   src/react-query/agentPlugins.ts: {}
   src/react-query/agentSessionMeta.core.ts: {}
@@ -3688,6 +3700,7 @@ trackedFiles:
   src/react-query/remoteSessionsDetachBinding.ts: {}
   src/react-query/remoteSessionsListBindings.core.ts: {}
   src/react-query/remoteSessionsListBindings.ts: {}
+  src/react-query/removeAgentConnectionRestriction.ts: {}
   src/react-query/removeDashboardWidget.ts: {}
   src/react-query/removeMetaMcpMember.ts: {}
   src/react-query/removeOAuthServer.ts: {}
@@ -3713,6 +3726,7 @@ trackedFiles:
   src/react-query/resourceAudience.ts: {}
   src/react-query/restoreOktaServerSuggestion.ts: {}
   src/react-query/restoreSkillVersion.ts: {}
+  src/react-query/restrictAgentOnConnection.ts: {}
   src/react-query/resumeStripeSubscription.ts: {}
   src/react-query/resumeTrigger.ts: {}
   src/react-query/retireJsonWebKey.ts: {}
@@ -8971,6 +8985,15 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  listAgentConnectionRestrictions:
+    speakeasy-default-list-agent-connection-restrictions:
+      responses:
+        "200":
+          application/json: {"items": []}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   listAgentDelegableGrants:
     speakeasy-default-list-agent-delegable-grants:
       parameters:
@@ -11426,6 +11449,15 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  removeAgentConnectionRestriction:
+    speakeasy-default-remove-agent-connection-restriction:
+      requestBody:
+        application/json: {"restriction_id": "fad513e5-9e06-43cc-bb6f-d9f20555b889"}
+      responses:
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   removeDashboardWidget:
     speakeasy-default-remove-dashboard-widget:
       requestBody:
@@ -11685,6 +11717,17 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  restrictAgentOnConnection:
+    speakeasy-default-restrict-agent-on-connection:
+      requestBody:
+        application/json: {"agent_id": "2105a5c8-3d18-4e1a-bdde-a65932a1fc97", "remote_session_client_id": "0a5d8e77-dbab-4756-882c-5e3a00310665"}
+      responses:
+        "200":
+          application/json: {"agent_id": "ec2e28f6-a1df-4ca3-a3c1-1afa0056dd3e", "created_at": "2025-02-10T07:16:23.463Z", "id": "af386e01-eed8-4ec0-8255-20a54f0376bd", "remote_session_client_id": "4d11a4ff-f333-4fe5-a6d9-0a61c13e9c11"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   resumeAgent:
     speakeasy-default-resume-agent:
       requestBody:

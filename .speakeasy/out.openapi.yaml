@@ -8534,6 +8534,88 @@ paths:
         type: cursor
       x-speakeasy-react-hook:
         name: Agents
+  /rpc/agents.listConnectionRestrictions:
+    get:
+      description: List the agents the caller blocked from their own connections. Needs no agent management access.
+      operationId: listAgentConnectionRestrictions
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListAgentConnectionRestrictionsResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: listConnectionRestrictions agents
+      tags:
+        - agents
+      x-speakeasy-name-override: listConnectionRestrictions
+      x-speakeasy-react-hook:
+        name: AgentConnectionRestrictions
   /rpc/agents.listDelegableGrants:
     get:
       description: List safe allow-only credential grant candidates shared by the live agent, owner, and current authorizer. Candidates with unrepresentable exclusions are conservatively omitted. Issuance revalidates every grant.
@@ -8936,6 +9018,90 @@ paths:
       x-speakeasy-name-override: reassign
       x-speakeasy-react-hook:
         name: ReassignAgent
+  /rpc/agents.removeConnectionRestriction:
+    post:
+      description: Remove a restriction the caller wrote on their own connection. Restrictions written by an agent manager are not affected.
+      operationId: removeAgentConnectionRestriction
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AgentConnectionRestrictionIDForm'
+        required: true
+      responses:
+        "204":
+          description: No Content response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: removeConnectionRestriction agents
+      tags:
+        - agents
+      x-speakeasy-name-override: removeConnectionRestriction
+      x-speakeasy-react-hook:
+        name: RemoveAgentConnectionRestriction
   /rpc/agents.rename:
     post:
       operationId: renameAgent
@@ -9023,6 +9189,94 @@ paths:
       x-speakeasy-name-override: rename
       x-speakeasy-react-hook:
         name: RenameAgent
+  /rpc/agents.restrictOnConnection:
+    post:
+      description: Block one agent in the caller's organization from the caller's own connection through an upstream OAuth client, across every auth client sharing it. Only the connection owner can do this, and it needs no agent management access. Blocks only; it never grants access.
+      operationId: restrictAgentOnConnection
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RestrictAgentOnConnectionForm'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentConnectionRestriction'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: restrictAgentOnConnection agents
+      tags:
+        - agents
+      x-speakeasy-name-override: restrictOnConnection
+      x-speakeasy-react-hook:
+        name: RestrictAgentOnConnection
   /rpc/agents.resume:
     post:
       operationId: resumeAgent
@@ -83083,6 +83337,38 @@ components:
         - issuer
         - subject
         - agent_id
+    AgentConnectionRestriction:
+      type: object
+      properties:
+        agent_id:
+          type: string
+          description: The blocked agent
+          format: uuid
+        created_at:
+          type: string
+          format: date-time
+        id:
+          type: string
+          format: uuid
+        remote_session_client_id:
+          type: string
+          description: The upstream OAuth client the connection uses; the restriction covers every auth client sharing it
+          format: uuid
+      description: An agent the caller blocked from their own connection through one upstream OAuth client.
+      required:
+        - id
+        - agent_id
+        - remote_session_client_id
+        - created_at
+    AgentConnectionRestrictionIDForm:
+      type: object
+      properties:
+        restriction_id:
+          type: string
+          description: Connection restriction identifier
+          format: uuid
+      required:
+        - restriction_id
     AgentDelegatedGrant:
       type: object
       properties:
@@ -95120,6 +95406,16 @@ components:
           description: The member attributes available to target conditions, in editor display order.
       required:
         - attributes
+    ListAgentConnectionRestrictionsResult:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/AgentConnectionRestriction'
+          description: Restrictions the caller wrote on their own connections
+      required:
+        - items
     ListAgentsResult:
       type: object
       properties:
@@ -103840,6 +104136,20 @@ components:
       required:
         - id
         - version_id
+    RestrictAgentOnConnectionForm:
+      type: object
+      properties:
+        agent_id:
+          type: string
+          description: The agent to block; any agent in the caller's organization
+          format: uuid
+        remote_session_client_id:
+          type: string
+          description: The upstream OAuth client of the caller's own connection
+          format: uuid
+      required:
+        - agent_id
+        - remote_session_client_id
     RetryScheduleRequestBody:
       type: object
       properties:

@@ -21,6 +21,8 @@ export const AUDIT_ACTIONS = [
   "access_role:create",
   "access_role:delete",
   "access_role:update",
+  "agent:connection_restriction_create",
+  "agent:connection_restriction_delete",
   "agent:create",
   "agent:delete",
   "agent:owner_loss",
@@ -377,6 +379,10 @@ export function staticActionPhrase(action: AuditAction): string {
     case "access_role:delete":
       return "deleted access role";
 
+    case "agent:connection_restriction_create":
+      return "blocked agent from their connection";
+    case "agent:connection_restriction_delete":
+      return "unblocked agent on their connection";
     case "agent:create":
       return "created agent";
     case "agent:delete":

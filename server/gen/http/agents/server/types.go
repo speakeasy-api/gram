@@ -80,6 +80,22 @@ type DeletePolicyGrantRequestBody struct {
 	AgentID *string `form:"agent_id,omitempty" json:"agent_id,omitempty" xml:"agent_id,omitempty"`
 }
 
+// RestrictAgentOnConnectionRequestBody is the type of the "agents" service
+// "restrictAgentOnConnection" endpoint HTTP request body.
+type RestrictAgentOnConnectionRequestBody struct {
+	// The agent to block; any agent in the caller's organization
+	AgentID *string `form:"agent_id,omitempty" json:"agent_id,omitempty" xml:"agent_id,omitempty"`
+	// The upstream OAuth client of the caller's own connection
+	RemoteSessionClientID *string `form:"remote_session_client_id,omitempty" json:"remote_session_client_id,omitempty" xml:"remote_session_client_id,omitempty"`
+}
+
+// RemoveConnectionRestrictionRequestBody is the type of the "agents" service
+// "removeConnectionRestriction" endpoint HTTP request body.
+type RemoveConnectionRestrictionRequestBody struct {
+	// Connection restriction identifier
+	RestrictionID *string `form:"restriction_id,omitempty" json:"restriction_id,omitempty" xml:"restriction_id,omitempty"`
+}
+
 // TransferRequestBody is the type of the "agents" service "transfer" endpoint
 // HTTP request body.
 type TransferRequestBody struct {
@@ -236,6 +252,25 @@ type UpdatePolicyGrantResponseBody struct {
 	Selector  *AgentPolicySelectorResponseBody `form:"selector" json:"selector" xml:"selector"`
 	CreatedAt string                           `form:"created_at" json:"created_at" xml:"created_at"`
 	UpdatedAt string                           `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
+// ListConnectionRestrictionsResponseBody is the type of the "agents" service
+// "listConnectionRestrictions" endpoint HTTP response body.
+type ListConnectionRestrictionsResponseBody struct {
+	// Restrictions the caller wrote on their own connections
+	Items []*AgentConnectionRestrictionResponseBody `form:"items" json:"items" xml:"items"`
+}
+
+// RestrictAgentOnConnectionResponseBody is the type of the "agents" service
+// "restrictAgentOnConnection" endpoint HTTP response body.
+type RestrictAgentOnConnectionResponseBody struct {
+	ID string `form:"id" json:"id" xml:"id"`
+	// The blocked agent
+	AgentID string `form:"agent_id" json:"agent_id" xml:"agent_id"`
+	// The upstream OAuth client the connection uses; the restriction covers every
+	// auth client sharing it
+	RemoteSessionClientID string `form:"remote_session_client_id" json:"remote_session_client_id" xml:"remote_session_client_id"`
+	CreatedAt             string `form:"created_at" json:"created_at" xml:"created_at"`
 }
 
 // TransferResponseBody is the type of the "agents" service "transfer" endpoint
@@ -2351,6 +2386,576 @@ type DeletePolicyGrantGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// ListConnectionRestrictionsUnauthorizedResponseBody is the type of the
+// "agents" service "listConnectionRestrictions" endpoint HTTP response body
+// for the "unauthorized" error.
+type ListConnectionRestrictionsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListConnectionRestrictionsForbiddenResponseBody is the type of the "agents"
+// service "listConnectionRestrictions" endpoint HTTP response body for the
+// "forbidden" error.
+type ListConnectionRestrictionsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListConnectionRestrictionsBadRequestResponseBody is the type of the "agents"
+// service "listConnectionRestrictions" endpoint HTTP response body for the
+// "bad_request" error.
+type ListConnectionRestrictionsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListConnectionRestrictionsNotFoundResponseBody is the type of the "agents"
+// service "listConnectionRestrictions" endpoint HTTP response body for the
+// "not_found" error.
+type ListConnectionRestrictionsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListConnectionRestrictionsConflictResponseBody is the type of the "agents"
+// service "listConnectionRestrictions" endpoint HTTP response body for the
+// "conflict" error.
+type ListConnectionRestrictionsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListConnectionRestrictionsUnsupportedMediaResponseBody is the type of the
+// "agents" service "listConnectionRestrictions" endpoint HTTP response body
+// for the "unsupported_media" error.
+type ListConnectionRestrictionsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListConnectionRestrictionsInvalidResponseBody is the type of the "agents"
+// service "listConnectionRestrictions" endpoint HTTP response body for the
+// "invalid" error.
+type ListConnectionRestrictionsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListConnectionRestrictionsInvariantViolationResponseBody is the type of the
+// "agents" service "listConnectionRestrictions" endpoint HTTP response body
+// for the "invariant_violation" error.
+type ListConnectionRestrictionsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListConnectionRestrictionsUnexpectedResponseBody is the type of the "agents"
+// service "listConnectionRestrictions" endpoint HTTP response body for the
+// "unexpected" error.
+type ListConnectionRestrictionsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListConnectionRestrictionsGatewayErrorResponseBody is the type of the
+// "agents" service "listConnectionRestrictions" endpoint HTTP response body
+// for the "gateway_error" error.
+type ListConnectionRestrictionsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RestrictAgentOnConnectionUnauthorizedResponseBody is the type of the
+// "agents" service "restrictAgentOnConnection" endpoint HTTP response body for
+// the "unauthorized" error.
+type RestrictAgentOnConnectionUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RestrictAgentOnConnectionForbiddenResponseBody is the type of the "agents"
+// service "restrictAgentOnConnection" endpoint HTTP response body for the
+// "forbidden" error.
+type RestrictAgentOnConnectionForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RestrictAgentOnConnectionBadRequestResponseBody is the type of the "agents"
+// service "restrictAgentOnConnection" endpoint HTTP response body for the
+// "bad_request" error.
+type RestrictAgentOnConnectionBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RestrictAgentOnConnectionNotFoundResponseBody is the type of the "agents"
+// service "restrictAgentOnConnection" endpoint HTTP response body for the
+// "not_found" error.
+type RestrictAgentOnConnectionNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RestrictAgentOnConnectionConflictResponseBody is the type of the "agents"
+// service "restrictAgentOnConnection" endpoint HTTP response body for the
+// "conflict" error.
+type RestrictAgentOnConnectionConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RestrictAgentOnConnectionUnsupportedMediaResponseBody is the type of the
+// "agents" service "restrictAgentOnConnection" endpoint HTTP response body for
+// the "unsupported_media" error.
+type RestrictAgentOnConnectionUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RestrictAgentOnConnectionInvalidResponseBody is the type of the "agents"
+// service "restrictAgentOnConnection" endpoint HTTP response body for the
+// "invalid" error.
+type RestrictAgentOnConnectionInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RestrictAgentOnConnectionInvariantViolationResponseBody is the type of the
+// "agents" service "restrictAgentOnConnection" endpoint HTTP response body for
+// the "invariant_violation" error.
+type RestrictAgentOnConnectionInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RestrictAgentOnConnectionUnexpectedResponseBody is the type of the "agents"
+// service "restrictAgentOnConnection" endpoint HTTP response body for the
+// "unexpected" error.
+type RestrictAgentOnConnectionUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RestrictAgentOnConnectionGatewayErrorResponseBody is the type of the
+// "agents" service "restrictAgentOnConnection" endpoint HTTP response body for
+// the "gateway_error" error.
+type RestrictAgentOnConnectionGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RemoveConnectionRestrictionUnauthorizedResponseBody is the type of the
+// "agents" service "removeConnectionRestriction" endpoint HTTP response body
+// for the "unauthorized" error.
+type RemoveConnectionRestrictionUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RemoveConnectionRestrictionForbiddenResponseBody is the type of the "agents"
+// service "removeConnectionRestriction" endpoint HTTP response body for the
+// "forbidden" error.
+type RemoveConnectionRestrictionForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RemoveConnectionRestrictionBadRequestResponseBody is the type of the
+// "agents" service "removeConnectionRestriction" endpoint HTTP response body
+// for the "bad_request" error.
+type RemoveConnectionRestrictionBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RemoveConnectionRestrictionNotFoundResponseBody is the type of the "agents"
+// service "removeConnectionRestriction" endpoint HTTP response body for the
+// "not_found" error.
+type RemoveConnectionRestrictionNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RemoveConnectionRestrictionConflictResponseBody is the type of the "agents"
+// service "removeConnectionRestriction" endpoint HTTP response body for the
+// "conflict" error.
+type RemoveConnectionRestrictionConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RemoveConnectionRestrictionUnsupportedMediaResponseBody is the type of the
+// "agents" service "removeConnectionRestriction" endpoint HTTP response body
+// for the "unsupported_media" error.
+type RemoveConnectionRestrictionUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RemoveConnectionRestrictionInvalidResponseBody is the type of the "agents"
+// service "removeConnectionRestriction" endpoint HTTP response body for the
+// "invalid" error.
+type RemoveConnectionRestrictionInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RemoveConnectionRestrictionInvariantViolationResponseBody is the type of the
+// "agents" service "removeConnectionRestriction" endpoint HTTP response body
+// for the "invariant_violation" error.
+type RemoveConnectionRestrictionInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RemoveConnectionRestrictionUnexpectedResponseBody is the type of the
+// "agents" service "removeConnectionRestriction" endpoint HTTP response body
+// for the "unexpected" error.
+type RemoveConnectionRestrictionUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RemoveConnectionRestrictionGatewayErrorResponseBody is the type of the
+// "agents" service "removeConnectionRestriction" endpoint HTTP response body
+// for the "gateway_error" error.
+type RemoveConnectionRestrictionGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // TransferUnauthorizedResponseBody is the type of the "agents" service
 // "transfer" endpoint HTTP response body for the "unauthorized" error.
 type TransferUnauthorizedResponseBody struct {
@@ -3559,6 +4164,18 @@ type AgentPolicySelectorResponseBody struct {
 	ServerIdentity *string `form:"server_identity,omitempty" json:"server_identity,omitempty" xml:"server_identity,omitempty"`
 }
 
+// AgentConnectionRestrictionResponseBody is used to define fields on response
+// body types.
+type AgentConnectionRestrictionResponseBody struct {
+	ID string `form:"id" json:"id" xml:"id"`
+	// The blocked agent
+	AgentID string `form:"agent_id" json:"agent_id" xml:"agent_id"`
+	// The upstream OAuth client the connection uses; the restriction covers every
+	// auth client sharing it
+	RemoteSessionClientID string `form:"remote_session_client_id" json:"remote_session_client_id" xml:"remote_session_client_id"`
+	CreatedAt             string `form:"created_at" json:"created_at" xml:"created_at"`
+}
+
 // AgentPolicyGrantFormRequestBodyRequestBody is used to define fields on
 // request body types.
 type AgentPolicyGrantFormRequestBodyRequestBody struct {
@@ -3791,6 +4408,39 @@ func NewUpdatePolicyGrantResponseBody(res *agents.AgentPolicyGrant) *UpdatePolic
 	}
 	if res.Selector != nil {
 		body.Selector = marshalAgentsAgentPolicySelectorToAgentPolicySelectorResponseBody(res.Selector)
+	}
+	return body
+}
+
+// NewListConnectionRestrictionsResponseBody builds the HTTP response body from
+// the result of the "listConnectionRestrictions" endpoint of the "agents"
+// service.
+func NewListConnectionRestrictionsResponseBody(res *agents.ListAgentConnectionRestrictionsResult) *ListConnectionRestrictionsResponseBody {
+	body := &ListConnectionRestrictionsResponseBody{}
+	if res.Items != nil {
+		body.Items = make([]*AgentConnectionRestrictionResponseBody, len(res.Items))
+		for i, val := range res.Items {
+			if val == nil {
+				body.Items[i] = nil
+				continue
+			}
+			body.Items[i] = marshalAgentsAgentConnectionRestrictionToAgentConnectionRestrictionResponseBody(val)
+		}
+	} else {
+		body.Items = []*AgentConnectionRestrictionResponseBody{}
+	}
+	return body
+}
+
+// NewRestrictAgentOnConnectionResponseBody builds the HTTP response body from
+// the result of the "restrictAgentOnConnection" endpoint of the "agents"
+// service.
+func NewRestrictAgentOnConnectionResponseBody(res *agents.AgentConnectionRestriction) *RestrictAgentOnConnectionResponseBody {
+	body := &RestrictAgentOnConnectionResponseBody{
+		ID:                    res.ID,
+		AgentID:               res.AgentID,
+		RemoteSessionClientID: res.RemoteSessionClientID,
+		CreatedAt:             res.CreatedAt,
 	}
 	return body
 }
@@ -5467,6 +6117,456 @@ func NewDeletePolicyGrantGatewayErrorResponseBody(res *goa.ServiceError) *Delete
 	return body
 }
 
+// NewListConnectionRestrictionsUnauthorizedResponseBody builds the HTTP
+// response body from the result of the "listConnectionRestrictions" endpoint
+// of the "agents" service.
+func NewListConnectionRestrictionsUnauthorizedResponseBody(res *goa.ServiceError) *ListConnectionRestrictionsUnauthorizedResponseBody {
+	body := &ListConnectionRestrictionsUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListConnectionRestrictionsForbiddenResponseBody builds the HTTP response
+// body from the result of the "listConnectionRestrictions" endpoint of the
+// "agents" service.
+func NewListConnectionRestrictionsForbiddenResponseBody(res *goa.ServiceError) *ListConnectionRestrictionsForbiddenResponseBody {
+	body := &ListConnectionRestrictionsForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListConnectionRestrictionsBadRequestResponseBody builds the HTTP response
+// body from the result of the "listConnectionRestrictions" endpoint of the
+// "agents" service.
+func NewListConnectionRestrictionsBadRequestResponseBody(res *goa.ServiceError) *ListConnectionRestrictionsBadRequestResponseBody {
+	body := &ListConnectionRestrictionsBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListConnectionRestrictionsNotFoundResponseBody builds the HTTP response
+// body from the result of the "listConnectionRestrictions" endpoint of the
+// "agents" service.
+func NewListConnectionRestrictionsNotFoundResponseBody(res *goa.ServiceError) *ListConnectionRestrictionsNotFoundResponseBody {
+	body := &ListConnectionRestrictionsNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListConnectionRestrictionsConflictResponseBody builds the HTTP response
+// body from the result of the "listConnectionRestrictions" endpoint of the
+// "agents" service.
+func NewListConnectionRestrictionsConflictResponseBody(res *goa.ServiceError) *ListConnectionRestrictionsConflictResponseBody {
+	body := &ListConnectionRestrictionsConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListConnectionRestrictionsUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "listConnectionRestrictions" endpoint
+// of the "agents" service.
+func NewListConnectionRestrictionsUnsupportedMediaResponseBody(res *goa.ServiceError) *ListConnectionRestrictionsUnsupportedMediaResponseBody {
+	body := &ListConnectionRestrictionsUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListConnectionRestrictionsInvalidResponseBody builds the HTTP response
+// body from the result of the "listConnectionRestrictions" endpoint of the
+// "agents" service.
+func NewListConnectionRestrictionsInvalidResponseBody(res *goa.ServiceError) *ListConnectionRestrictionsInvalidResponseBody {
+	body := &ListConnectionRestrictionsInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListConnectionRestrictionsInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "listConnectionRestrictions" endpoint
+// of the "agents" service.
+func NewListConnectionRestrictionsInvariantViolationResponseBody(res *goa.ServiceError) *ListConnectionRestrictionsInvariantViolationResponseBody {
+	body := &ListConnectionRestrictionsInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListConnectionRestrictionsUnexpectedResponseBody builds the HTTP response
+// body from the result of the "listConnectionRestrictions" endpoint of the
+// "agents" service.
+func NewListConnectionRestrictionsUnexpectedResponseBody(res *goa.ServiceError) *ListConnectionRestrictionsUnexpectedResponseBody {
+	body := &ListConnectionRestrictionsUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListConnectionRestrictionsGatewayErrorResponseBody builds the HTTP
+// response body from the result of the "listConnectionRestrictions" endpoint
+// of the "agents" service.
+func NewListConnectionRestrictionsGatewayErrorResponseBody(res *goa.ServiceError) *ListConnectionRestrictionsGatewayErrorResponseBody {
+	body := &ListConnectionRestrictionsGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRestrictAgentOnConnectionUnauthorizedResponseBody builds the HTTP
+// response body from the result of the "restrictAgentOnConnection" endpoint of
+// the "agents" service.
+func NewRestrictAgentOnConnectionUnauthorizedResponseBody(res *goa.ServiceError) *RestrictAgentOnConnectionUnauthorizedResponseBody {
+	body := &RestrictAgentOnConnectionUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRestrictAgentOnConnectionForbiddenResponseBody builds the HTTP response
+// body from the result of the "restrictAgentOnConnection" endpoint of the
+// "agents" service.
+func NewRestrictAgentOnConnectionForbiddenResponseBody(res *goa.ServiceError) *RestrictAgentOnConnectionForbiddenResponseBody {
+	body := &RestrictAgentOnConnectionForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRestrictAgentOnConnectionBadRequestResponseBody builds the HTTP response
+// body from the result of the "restrictAgentOnConnection" endpoint of the
+// "agents" service.
+func NewRestrictAgentOnConnectionBadRequestResponseBody(res *goa.ServiceError) *RestrictAgentOnConnectionBadRequestResponseBody {
+	body := &RestrictAgentOnConnectionBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRestrictAgentOnConnectionNotFoundResponseBody builds the HTTP response
+// body from the result of the "restrictAgentOnConnection" endpoint of the
+// "agents" service.
+func NewRestrictAgentOnConnectionNotFoundResponseBody(res *goa.ServiceError) *RestrictAgentOnConnectionNotFoundResponseBody {
+	body := &RestrictAgentOnConnectionNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRestrictAgentOnConnectionConflictResponseBody builds the HTTP response
+// body from the result of the "restrictAgentOnConnection" endpoint of the
+// "agents" service.
+func NewRestrictAgentOnConnectionConflictResponseBody(res *goa.ServiceError) *RestrictAgentOnConnectionConflictResponseBody {
+	body := &RestrictAgentOnConnectionConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRestrictAgentOnConnectionUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "restrictAgentOnConnection" endpoint of
+// the "agents" service.
+func NewRestrictAgentOnConnectionUnsupportedMediaResponseBody(res *goa.ServiceError) *RestrictAgentOnConnectionUnsupportedMediaResponseBody {
+	body := &RestrictAgentOnConnectionUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRestrictAgentOnConnectionInvalidResponseBody builds the HTTP response
+// body from the result of the "restrictAgentOnConnection" endpoint of the
+// "agents" service.
+func NewRestrictAgentOnConnectionInvalidResponseBody(res *goa.ServiceError) *RestrictAgentOnConnectionInvalidResponseBody {
+	body := &RestrictAgentOnConnectionInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRestrictAgentOnConnectionInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "restrictAgentOnConnection" endpoint of
+// the "agents" service.
+func NewRestrictAgentOnConnectionInvariantViolationResponseBody(res *goa.ServiceError) *RestrictAgentOnConnectionInvariantViolationResponseBody {
+	body := &RestrictAgentOnConnectionInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRestrictAgentOnConnectionUnexpectedResponseBody builds the HTTP response
+// body from the result of the "restrictAgentOnConnection" endpoint of the
+// "agents" service.
+func NewRestrictAgentOnConnectionUnexpectedResponseBody(res *goa.ServiceError) *RestrictAgentOnConnectionUnexpectedResponseBody {
+	body := &RestrictAgentOnConnectionUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRestrictAgentOnConnectionGatewayErrorResponseBody builds the HTTP
+// response body from the result of the "restrictAgentOnConnection" endpoint of
+// the "agents" service.
+func NewRestrictAgentOnConnectionGatewayErrorResponseBody(res *goa.ServiceError) *RestrictAgentOnConnectionGatewayErrorResponseBody {
+	body := &RestrictAgentOnConnectionGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRemoveConnectionRestrictionUnauthorizedResponseBody builds the HTTP
+// response body from the result of the "removeConnectionRestriction" endpoint
+// of the "agents" service.
+func NewRemoveConnectionRestrictionUnauthorizedResponseBody(res *goa.ServiceError) *RemoveConnectionRestrictionUnauthorizedResponseBody {
+	body := &RemoveConnectionRestrictionUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRemoveConnectionRestrictionForbiddenResponseBody builds the HTTP response
+// body from the result of the "removeConnectionRestriction" endpoint of the
+// "agents" service.
+func NewRemoveConnectionRestrictionForbiddenResponseBody(res *goa.ServiceError) *RemoveConnectionRestrictionForbiddenResponseBody {
+	body := &RemoveConnectionRestrictionForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRemoveConnectionRestrictionBadRequestResponseBody builds the HTTP
+// response body from the result of the "removeConnectionRestriction" endpoint
+// of the "agents" service.
+func NewRemoveConnectionRestrictionBadRequestResponseBody(res *goa.ServiceError) *RemoveConnectionRestrictionBadRequestResponseBody {
+	body := &RemoveConnectionRestrictionBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRemoveConnectionRestrictionNotFoundResponseBody builds the HTTP response
+// body from the result of the "removeConnectionRestriction" endpoint of the
+// "agents" service.
+func NewRemoveConnectionRestrictionNotFoundResponseBody(res *goa.ServiceError) *RemoveConnectionRestrictionNotFoundResponseBody {
+	body := &RemoveConnectionRestrictionNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRemoveConnectionRestrictionConflictResponseBody builds the HTTP response
+// body from the result of the "removeConnectionRestriction" endpoint of the
+// "agents" service.
+func NewRemoveConnectionRestrictionConflictResponseBody(res *goa.ServiceError) *RemoveConnectionRestrictionConflictResponseBody {
+	body := &RemoveConnectionRestrictionConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRemoveConnectionRestrictionUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "removeConnectionRestriction" endpoint
+// of the "agents" service.
+func NewRemoveConnectionRestrictionUnsupportedMediaResponseBody(res *goa.ServiceError) *RemoveConnectionRestrictionUnsupportedMediaResponseBody {
+	body := &RemoveConnectionRestrictionUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRemoveConnectionRestrictionInvalidResponseBody builds the HTTP response
+// body from the result of the "removeConnectionRestriction" endpoint of the
+// "agents" service.
+func NewRemoveConnectionRestrictionInvalidResponseBody(res *goa.ServiceError) *RemoveConnectionRestrictionInvalidResponseBody {
+	body := &RemoveConnectionRestrictionInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRemoveConnectionRestrictionInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "removeConnectionRestriction" endpoint
+// of the "agents" service.
+func NewRemoveConnectionRestrictionInvariantViolationResponseBody(res *goa.ServiceError) *RemoveConnectionRestrictionInvariantViolationResponseBody {
+	body := &RemoveConnectionRestrictionInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRemoveConnectionRestrictionUnexpectedResponseBody builds the HTTP
+// response body from the result of the "removeConnectionRestriction" endpoint
+// of the "agents" service.
+func NewRemoveConnectionRestrictionUnexpectedResponseBody(res *goa.ServiceError) *RemoveConnectionRestrictionUnexpectedResponseBody {
+	body := &RemoveConnectionRestrictionUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRemoveConnectionRestrictionGatewayErrorResponseBody builds the HTTP
+// response body from the result of the "removeConnectionRestriction" endpoint
+// of the "agents" service.
+func NewRemoveConnectionRestrictionGatewayErrorResponseBody(res *goa.ServiceError) *RemoveConnectionRestrictionGatewayErrorResponseBody {
+	body := &RemoveConnectionRestrictionGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewTransferUnauthorizedResponseBody builds the HTTP response body from the
 // result of the "transfer" endpoint of the "agents" service.
 func NewTransferUnauthorizedResponseBody(res *goa.ServiceError) *TransferUnauthorizedResponseBody {
@@ -6451,6 +7551,38 @@ func NewDeletePolicyGrantPayload(body *DeletePolicyGrantRequestBody, sessionToke
 	return v
 }
 
+// NewListConnectionRestrictionsPayload builds a agents service
+// listConnectionRestrictions endpoint payload.
+func NewListConnectionRestrictionsPayload(sessionToken *string) *agents.ListConnectionRestrictionsPayload {
+	v := &agents.ListConnectionRestrictionsPayload{}
+	v.SessionToken = sessionToken
+
+	return v
+}
+
+// NewRestrictAgentOnConnectionPayload builds a agents service
+// restrictAgentOnConnection endpoint payload.
+func NewRestrictAgentOnConnectionPayload(body *RestrictAgentOnConnectionRequestBody, sessionToken *string) *agents.RestrictAgentOnConnectionPayload {
+	v := &agents.RestrictAgentOnConnectionPayload{
+		AgentID:               *body.AgentID,
+		RemoteSessionClientID: *body.RemoteSessionClientID,
+	}
+	v.SessionToken = sessionToken
+
+	return v
+}
+
+// NewRemoveConnectionRestrictionPayload builds a agents service
+// removeConnectionRestriction endpoint payload.
+func NewRemoveConnectionRestrictionPayload(body *RemoveConnectionRestrictionRequestBody, sessionToken *string) *agents.RemoveConnectionRestrictionPayload {
+	v := &agents.RemoveConnectionRestrictionPayload{
+		RestrictionID: *body.RestrictionID,
+	}
+	v.SessionToken = sessionToken
+
+	return v
+}
+
 // NewTransferPayload builds a agents service transfer endpoint payload.
 func NewTransferPayload(body *TransferRequestBody, sessionToken *string) *agents.TransferPayload {
 	v := &agents.TransferPayload{
@@ -6672,6 +7804,36 @@ func ValidateDeletePolicyGrantRequestBody(body *DeletePolicyGrantRequestBody) (e
 	}
 	if body.AgentID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.agent_id", *body.AgentID, goa.FormatUUID))
+	}
+	return
+}
+
+// ValidateRestrictAgentOnConnectionRequestBody runs the validations defined on
+// RestrictAgentOnConnectionRequestBody
+func ValidateRestrictAgentOnConnectionRequestBody(body *RestrictAgentOnConnectionRequestBody) (err error) {
+	if body.AgentID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("agent_id", "body"))
+	}
+	if body.RemoteSessionClientID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("remote_session_client_id", "body"))
+	}
+	if body.AgentID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.agent_id", *body.AgentID, goa.FormatUUID))
+	}
+	if body.RemoteSessionClientID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.remote_session_client_id", *body.RemoteSessionClientID, goa.FormatUUID))
+	}
+	return
+}
+
+// ValidateRemoveConnectionRestrictionRequestBody runs the validations defined
+// on RemoveConnectionRestrictionRequestBody
+func ValidateRemoveConnectionRestrictionRequestBody(body *RemoveConnectionRestrictionRequestBody) (err error) {
+	if body.RestrictionID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("restriction_id", "body"))
+	}
+	if body.RestrictionID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.restriction_id", *body.RestrictionID, goa.FormatUUID))
 	}
 	return
 }

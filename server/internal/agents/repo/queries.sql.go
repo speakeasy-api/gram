@@ -154,6 +154,31 @@ func (q *Queries) CreateAgentWithID(ctx context.Context, arg CreateAgentWithIDPa
 	return i, err
 }
 
+const createConnectionRestrictionGrant = `-- name: CreateConnectionRestrictionGrant :one
+WITH inserted AS (
+  INSERT INTO principal_grants (organization_id, principal_urn, scope, selectors)
+  VALUES ($1, concat('agent:', $2::uuid), 'mcp:blocked_auth', $3)
+  ON CONFLICT DO NOTHING
+  RETURNING id
+)
+SELECT EXISTS (SELECT 1 FROM inserted)::boolean AS inserted
+`
+
+type CreateConnectionRestrictionGrantParams struct {
+	OrganizationID string
+	AgentID        uuid.UUID
+	Selectors      []byte
+}
+
+// Writes the restriction's grant. Inserted is false when an identical grant
+// already existed.
+func (q *Queries) CreateConnectionRestrictionGrant(ctx context.Context, arg CreateConnectionRestrictionGrantParams) (bool, error) {
+	row := q.db.QueryRow(ctx, createConnectionRestrictionGrant, arg.OrganizationID, arg.AgentID, arg.Selectors)
+	var inserted bool
+	err := row.Scan(&inserted)
+	return inserted, err
+}
+
 const deleteAgent = `-- name: DeleteAgent :one
 UPDATE agents
 SET deleted_at = clock_timestamp(),
@@ -223,6 +248,55 @@ func (q *Queries) DeleteAgentPolicyGrant(ctx context.Context, arg DeleteAgentPol
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const deleteConnectionRestriction = `-- name: DeleteConnectionRestriction :one
+DELETE FROM agent_connection_restrictions
+WHERE organization_id = $1
+  AND owner_user_id = $2
+  AND id = $3
+RETURNING id, organization_id, agent_id, owner_user_id, remote_session_client_id, taken_over_at, created_at, updated_at
+`
+
+type DeleteConnectionRestrictionParams struct {
+	OrganizationID string
+	OwnerUserID    string
+	ID             uuid.UUID
+}
+
+func (q *Queries) DeleteConnectionRestriction(ctx context.Context, arg DeleteConnectionRestrictionParams) (AgentConnectionRestriction, error) {
+	row := q.db.QueryRow(ctx, deleteConnectionRestriction, arg.OrganizationID, arg.OwnerUserID, arg.ID)
+	var i AgentConnectionRestriction
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.AgentID,
+		&i.OwnerUserID,
+		&i.RemoteSessionClientID,
+		&i.TakenOverAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const deleteConnectionRestrictionGrant = `-- name: DeleteConnectionRestrictionGrant :exec
+DELETE FROM principal_grants
+WHERE organization_id = $1
+  AND principal_urn = concat('agent:', $2::uuid)
+  AND scope = 'mcp:blocked_auth'
+  AND selectors = $3
+`
+
+type DeleteConnectionRestrictionGrantParams struct {
+	OrganizationID string
+	AgentID        uuid.UUID
+	Selectors      []byte
+}
+
+func (q *Queries) DeleteConnectionRestrictionGrant(ctx context.Context, arg DeleteConnectionRestrictionGrantParams) error {
+	_, err := q.db.Exec(ctx, deleteConnectionRestrictionGrant, arg.OrganizationID, arg.AgentID, arg.Selectors)
+	return err
 }
 
 const getAgentByID = `-- name: GetAgentByID :one
@@ -358,6 +432,113 @@ func (q *Queries) GetAgentPolicyGrantForUpdate(ctx context.Context, arg GetAgent
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const getConnectionRestriction = `-- name: GetConnectionRestriction :one
+SELECT id, organization_id, agent_id, owner_user_id, remote_session_client_id, taken_over_at, created_at, updated_at
+FROM agent_connection_restrictions
+WHERE organization_id = $1
+  AND agent_id = $2
+  AND owner_user_id = $3
+  AND remote_session_client_id = $4
+`
+
+type GetConnectionRestrictionParams struct {
+	OrganizationID        string
+	AgentID               uuid.UUID
+	OwnerUserID           string
+	RemoteSessionClientID uuid.UUID
+}
+
+func (q *Queries) GetConnectionRestriction(ctx context.Context, arg GetConnectionRestrictionParams) (AgentConnectionRestriction, error) {
+	row := q.db.QueryRow(ctx, getConnectionRestriction,
+		arg.OrganizationID,
+		arg.AgentID,
+		arg.OwnerUserID,
+		arg.RemoteSessionClientID,
+	)
+	var i AgentConnectionRestriction
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.AgentID,
+		&i.OwnerUserID,
+		&i.RemoteSessionClientID,
+		&i.TakenOverAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const hasOwnedPersonalConnection = `-- name: HasOwnedPersonalConnection :one
+SELECT (EXISTS (
+  SELECT 1
+  FROM remote_sessions rs
+  WHERE rs.subject_urn = concat('user:', $1::text)
+    AND rs.remote_session_client_id = $2
+    AND rs.deleted IS FALSE
+) AND EXISTS (
+  SELECT 1
+  FROM mcp_auth_clients ac
+  WHERE ac.organization_id = $3
+    AND ac.remote_session_client_id = $2
+    AND ac.client_type = 'remote_session'
+    AND ac.deleted IS FALSE
+))::boolean AS owned
+`
+
+type HasOwnedPersonalConnectionParams struct {
+	UserID                string
+	RemoteSessionClientID uuid.UUID
+	OrganizationID        string
+}
+
+// Whether the user holds a live connection through the upstream OAuth client,
+// and the organization uses that client for personal connections.
+func (q *Queries) HasOwnedPersonalConnection(ctx context.Context, arg HasOwnedPersonalConnectionParams) (bool, error) {
+	row := q.db.QueryRow(ctx, hasOwnedPersonalConnection, arg.UserID, arg.RemoteSessionClientID, arg.OrganizationID)
+	var owned bool
+	err := row.Scan(&owned)
+	return owned, err
+}
+
+const isConnectionOwnerRestriction = `-- name: IsConnectionOwnerRestriction :one
+SELECT EXISTS (
+  SELECT 1
+  FROM agent_connection_restrictions r
+  WHERE r.organization_id = $1
+    AND r.agent_id = $2
+    AND $3::text = 'mcp:blocked_auth'
+    AND $4::jsonb = jsonb_build_object(
+      'resource_kind', 'mcp_auth_client',
+      'resource_id', '*',
+      'client_type', 'remote_session',
+      'upstream_client', r.remote_session_client_id::text,
+      'connection_owner', r.owner_user_id
+    )
+)
+`
+
+type IsConnectionOwnerRestrictionParams struct {
+	OrganizationID string
+	AgentID        uuid.UUID
+	Scope          string
+	Selectors      []byte
+}
+
+// Whether a connection owner recorded the agent grant, which only that owner
+// may then remove.
+func (q *Queries) IsConnectionOwnerRestriction(ctx context.Context, arg IsConnectionOwnerRestrictionParams) (bool, error) {
+	row := q.db.QueryRow(ctx, isConnectionOwnerRestriction,
+		arg.OrganizationID,
+		arg.AgentID,
+		arg.Scope,
+		arg.Selectors,
+	)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
 }
 
 const latchAgentsForOwnerLossByMembership = `-- name: LatchAgentsForOwnerLossByMembership :many
@@ -605,6 +786,48 @@ func (q *Queries) ListAgentPolicyGrants(ctx context.Context, arg ListAgentPolicy
 	return items, nil
 }
 
+const listConnectionRestrictions = `-- name: ListConnectionRestrictions :many
+SELECT id, organization_id, agent_id, owner_user_id, remote_session_client_id, taken_over_at, created_at, updated_at
+FROM agent_connection_restrictions
+WHERE organization_id = $1
+  AND owner_user_id = $2
+ORDER BY created_at, id
+`
+
+type ListConnectionRestrictionsParams struct {
+	OrganizationID string
+	OwnerUserID    string
+}
+
+func (q *Queries) ListConnectionRestrictions(ctx context.Context, arg ListConnectionRestrictionsParams) ([]AgentConnectionRestriction, error) {
+	rows, err := q.db.Query(ctx, listConnectionRestrictions, arg.OrganizationID, arg.OwnerUserID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AgentConnectionRestriction
+	for rows.Next() {
+		var i AgentConnectionRestriction
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.AgentID,
+			&i.OwnerUserID,
+			&i.RemoteSessionClientID,
+			&i.TakenOverAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listManagedAgentSessions = `-- name: ListManagedAgentSessions :many
 SELECT s.id, s.project_id, s.user_session_issuer_id, iss.slug AS issuer_slug,
        c.client_name, s.authorizer_user_id, s.created_at, s.expires_at,
@@ -832,6 +1055,49 @@ func (q *Queries) ReassignAgent(ctx context.Context, arg ReassignAgentParams) (A
 		&i.UpdatedAt,
 		&i.DeletedAt,
 		&i.Deleted,
+	)
+	return i, err
+}
+
+const recordConnectionRestriction = `-- name: RecordConnectionRestriction :one
+INSERT INTO agent_connection_restrictions (organization_id, agent_id, owner_user_id, remote_session_client_id, taken_over_at)
+VALUES (
+  $1,
+  $2,
+  $3,
+  $4,
+  CASE WHEN $5::boolean THEN clock_timestamp() END
+)
+ON CONFLICT (organization_id, agent_id, owner_user_id, remote_session_client_id) DO NOTHING
+RETURNING id, organization_id, agent_id, owner_user_id, remote_session_client_id, taken_over_at, created_at, updated_at
+`
+
+type RecordConnectionRestrictionParams struct {
+	OrganizationID        string
+	AgentID               uuid.UUID
+	OwnerUserID           string
+	RemoteSessionClientID uuid.UUID
+	GrantExisted          bool
+}
+
+func (q *Queries) RecordConnectionRestriction(ctx context.Context, arg RecordConnectionRestrictionParams) (AgentConnectionRestriction, error) {
+	row := q.db.QueryRow(ctx, recordConnectionRestriction,
+		arg.OrganizationID,
+		arg.AgentID,
+		arg.OwnerUserID,
+		arg.RemoteSessionClientID,
+		arg.GrantExisted,
+	)
+	var i AgentConnectionRestriction
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.AgentID,
+		&i.OwnerUserID,
+		&i.RemoteSessionClientID,
+		&i.TakenOverAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
 	)
 	return i, err
 }

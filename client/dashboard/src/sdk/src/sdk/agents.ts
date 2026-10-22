@@ -8,11 +8,14 @@ import { agentsDelete } from "../funcs/agentsDelete.js";
 import { agentsDeletePolicyGrant } from "../funcs/agentsDeletePolicyGrant.js";
 import { agentsGet } from "../funcs/agentsGet.js";
 import { agentsList } from "../funcs/agentsList.js";
+import { agentsListConnectionRestrictions } from "../funcs/agentsListConnectionRestrictions.js";
 import { agentsListDelegableGrants } from "../funcs/agentsListDelegableGrants.js";
 import { agentsListPolicyGrants } from "../funcs/agentsListPolicyGrants.js";
 import { agentsListSessions } from "../funcs/agentsListSessions.js";
 import { agentsReassign } from "../funcs/agentsReassign.js";
+import { agentsRemoveConnectionRestriction } from "../funcs/agentsRemoveConnectionRestriction.js";
 import { agentsRename } from "../funcs/agentsRename.js";
+import { agentsRestrictOnConnection } from "../funcs/agentsRestrictOnConnection.js";
 import { agentsResume } from "../funcs/agentsResume.js";
 import { agentsRevoke } from "../funcs/agentsRevoke.js";
 import { agentsRevokeSession } from "../funcs/agentsRevokeSession.js";
@@ -20,8 +23,10 @@ import { agentsSuspend } from "../funcs/agentsSuspend.js";
 import { agentsTransfer } from "../funcs/agentsTransfer.js";
 import { agentsUpdatePolicyGrant } from "../funcs/agentsUpdatePolicyGrant.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
+import { AgentConnectionRestriction } from "../models/components/agentconnectionrestriction.js";
 import { AgentPolicyGrant } from "../models/components/agentpolicygrant.js";
 import { AgentPolicyGrantForm } from "../models/components/agentpolicygrantform.js";
+import { ListAgentConnectionRestrictionsResult } from "../models/components/listagentconnectionrestrictionsresult.js";
 import { ManagedAgent } from "../models/components/managedagent.js";
 import {
   CreateAgentRequest,
@@ -43,6 +48,10 @@ import {
   GetAgentRequest,
   GetAgentSecurity,
 } from "../models/operations/getagent.js";
+import {
+  ListAgentConnectionRestrictionsRequest,
+  ListAgentConnectionRestrictionsSecurity,
+} from "../models/operations/listagentconnectionrestrictions.js";
 import {
   ListAgentDelegableGrantsRequest,
   ListAgentDelegableGrantsSecurity,
@@ -66,9 +75,17 @@ import {
   ReassignAgentSecurity,
 } from "../models/operations/reassignagent.js";
 import {
+  RemoveAgentConnectionRestrictionRequest,
+  RemoveAgentConnectionRestrictionSecurity,
+} from "../models/operations/removeagentconnectionrestriction.js";
+import {
   RenameAgentRequest,
   RenameAgentSecurity,
 } from "../models/operations/renameagent.js";
+import {
+  RestrictAgentOnConnectionRequest,
+  RestrictAgentOnConnectionSecurity,
+} from "../models/operations/restrictagentonconnection.js";
 import {
   ResumeAgentRequest,
   ResumeAgentSecurity,
@@ -194,6 +211,25 @@ export class Agents extends ClientSDK {
   }
 
   /**
+   * listConnectionRestrictions agents
+   *
+   * @remarks
+   * List the agents the caller blocked from their own connections. Needs no agent management access.
+   */
+  async listConnectionRestrictions(
+    request?: ListAgentConnectionRestrictionsRequest | undefined,
+    security?: ListAgentConnectionRestrictionsSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<ListAgentConnectionRestrictionsResult> {
+    return unwrapAsync(agentsListConnectionRestrictions(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
    * listDelegableGrants agents
    *
    * @remarks
@@ -261,6 +297,25 @@ export class Agents extends ClientSDK {
   }
 
   /**
+   * removeConnectionRestriction agents
+   *
+   * @remarks
+   * Remove a restriction the caller wrote on their own connection. Restrictions written by an agent manager are not affected.
+   */
+  async removeConnectionRestriction(
+    request: RemoveAgentConnectionRestrictionRequest,
+    security?: RemoveAgentConnectionRestrictionSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<void> {
+    return unwrapAsync(agentsRemoveConnectionRestriction(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
    * rename agents
    */
   async rename(
@@ -269,6 +324,25 @@ export class Agents extends ClientSDK {
     options?: RequestOptions,
   ): Promise<ManagedAgent> {
     return unwrapAsync(agentsRename(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * restrictAgentOnConnection agents
+   *
+   * @remarks
+   * Block one agent in the caller's organization from the caller's own connection through an upstream OAuth client, across every auth client sharing it. Only the connection owner can do this, and it needs no agent management access. Blocks only; it never grants access.
+   */
+  async restrictOnConnection(
+    request: RestrictAgentOnConnectionRequest,
+    security?: RestrictAgentOnConnectionSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<AgentConnectionRestriction> {
+    return unwrapAsync(agentsRestrictOnConnection(
       this,
       request,
       security,

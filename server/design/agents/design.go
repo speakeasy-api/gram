@@ -105,6 +105,31 @@ var UpdatePolicyGrantForm = Type("UpdateAgentPolicyGrantForm", func() {
 	Extend(PolicyGrantForm)
 })
 
+var ConnectionRestriction = Type("AgentConnectionRestriction", func() {
+	Description("An agent the caller blocked from their own connection through one upstream OAuth client.")
+	Required("id", "agent_id", "remote_session_client_id", "created_at")
+	Attribute("id", String, func() { Format(FormatUUID) })
+	Attribute("agent_id", String, "The blocked agent", func() { Format(FormatUUID) })
+	Attribute("remote_session_client_id", String, "The upstream OAuth client the connection uses; the restriction covers every auth client sharing it", func() { Format(FormatUUID) })
+	Attribute("created_at", String, func() { Format(FormatDateTime) })
+})
+
+var ListConnectionRestrictionsResult = Type("ListAgentConnectionRestrictionsResult", func() {
+	Required("items")
+	Attribute("items", ArrayOf(ConnectionRestriction), "Restrictions the caller wrote on their own connections")
+})
+
+var RestrictAgentOnConnectionForm = Type("RestrictAgentOnConnectionForm", func() {
+	Attribute("agent_id", String, "The agent to block; any agent in the caller's organization", func() { Format(FormatUUID) })
+	Attribute("remote_session_client_id", String, "The upstream OAuth client of the caller's own connection", func() { Format(FormatUUID) })
+	Required("agent_id", "remote_session_client_id")
+})
+
+var ConnectionRestrictionIDForm = Type("AgentConnectionRestrictionIDForm", func() {
+	Attribute("restriction_id", String, "Connection restriction identifier", func() { Format(FormatUUID) })
+	Required("restriction_id")
+})
+
 var OwnerProfile = Type("AgentOwnerProfile", func() {
 	Required("display_name")
 	Attribute("display_name", String)
@@ -319,6 +344,56 @@ var _ = Service("agents", func() {
 			POST("/rpc/agents.deletePolicyGrant")
 			security.SessionHeader()
 			Body(PolicyGrantIDForm)
+			Response(StatusNoContent)
+		})
+	})
+	Method("listConnectionRestrictions", func() {
+		Description("List the agents the caller blocked from their own connections. Needs no agent management access.")
+		Meta("openapi:operationId", "listAgentConnectionRestrictions")
+		Meta("openapi:extension:x-speakeasy-name-override", "listConnectionRestrictions")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "AgentConnectionRestrictions"}`)
+		Payload(func() {
+			security.SessionPayload()
+		})
+		Result(ListConnectionRestrictionsResult)
+		HTTP(func() {
+			GET("/rpc/agents.listConnectionRestrictions")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+	})
+
+	Method("restrictAgentOnConnection", func() {
+		Description("Block one agent in the caller's organization from the caller's own connection through an upstream OAuth client, across every auth client sharing it. Only the connection owner can do this, and it needs no agent management access. Blocks only; it never grants access.")
+		Meta("openapi:operationId", "restrictAgentOnConnection")
+		Meta("openapi:extension:x-speakeasy-name-override", "restrictOnConnection")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RestrictAgentOnConnection"}`)
+		Payload(func() {
+			security.SessionPayload()
+			Extend(RestrictAgentOnConnectionForm)
+		})
+		Result(ConnectionRestriction)
+		HTTP(func() {
+			POST("/rpc/agents.restrictOnConnection")
+			security.SessionHeader()
+			Body(RestrictAgentOnConnectionForm)
+			Response(StatusOK)
+		})
+	})
+
+	Method("removeConnectionRestriction", func() {
+		Description("Remove a restriction the caller wrote on their own connection. Restrictions written by an agent manager are not affected.")
+		Meta("openapi:operationId", "removeAgentConnectionRestriction")
+		Meta("openapi:extension:x-speakeasy-name-override", "removeConnectionRestriction")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RemoveAgentConnectionRestriction"}`)
+		Payload(func() {
+			security.SessionPayload()
+			Extend(ConnectionRestrictionIDForm)
+		})
+		HTTP(func() {
+			POST("/rpc/agents.removeConnectionRestriction")
+			security.SessionHeader()
+			Body(ConnectionRestrictionIDForm)
 			Response(StatusNoContent)
 		})
 	})
