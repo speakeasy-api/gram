@@ -76,6 +76,8 @@ const (
 	AgentSourceKey       = attribute.Key(agentKeyPrefix + "source")
 	AgentProviderKey     = attribute.Key(agentKeyPrefix + "provider")
 	AgentSurfaceKey      = attribute.Key(agentKeyPrefix + "surface")
+	AgentProductKey      = attribute.Key(agentKeyPrefix + "product")
+	AgentClientKey       = attribute.Key(agentKeyPrefix + "client")
 
 	// Who and where.
 	AgentSessionIDKey      = attribute.Key(agentKeyPrefix + "session_id")
@@ -84,6 +86,7 @@ const (
 	AgentUserEmailKey      = attribute.Key(agentKeyPrefix + "user_email")
 	AgentExternalUserIDKey = attribute.Key(agentKeyPrefix + "external_user_id")
 	AgentExternalOrgIDKey  = attribute.Key(agentKeyPrefix + "external_org_id")
+	AgentAgentIDKey        = attribute.Key(agentKeyPrefix + "agent_id")
 
 	// What happened.
 	AgentModelKey          = attribute.Key(agentKeyPrefix + "model")
@@ -112,6 +115,9 @@ const (
 func IsAgentKey(key string) bool {
 	return strings.HasPrefix(key, agentKeyPrefix)
 }
+
+// InternalProvenanceSource marks records Speakeasy emits itself; only these may name the actor.
+const InternalProvenanceSource = "speakeasy-internal"
 
 const (
 	pipelineKeyPrefix  = "speakeasy."

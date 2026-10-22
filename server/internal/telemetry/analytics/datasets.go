@@ -69,12 +69,42 @@ var ToolCalls = &Dataset{
 			Typeahead:    "user_email",
 		},
 		{
-			Name:      "surface",
-			Type:      TypeString,
-			Role:      RoleDimension,
-			Operators: equalsIn,
-			Expr:      "surface",
-			Typeahead: "surface",
+			Name:        "surface",
+			Type:        TypeString,
+			Role:        RoleDimension,
+			Operators:   equalsIn,
+			Expr:        "surface",
+			Typeahead:   "surface",
+			Description: surfaceDescription,
+		},
+		{
+			Name:        "product",
+			Type:        TypeString,
+			Role:        RoleDimension,
+			Operators:   equalsIn,
+			Expr:        "product",
+			Typeahead:   "product",
+			Description: productDescription,
+		},
+		{
+			Name:        "client",
+			Type:        TypeString,
+			Role:        RoleDimension,
+			Operators:   equalsIn,
+			Expr:        "client",
+			Typeahead:   "client",
+			Description: clientDescription,
+		},
+		{
+			Name:         "agent",
+			Type:         TypeString,
+			Role:         RoleDimension,
+			Operators:    equalsIn,
+			Aggregations: countDistinct,
+			Expr:         "agent_id",
+			Typeahead:    "agent_id",
+			Description:  agentDescription,
+			Lookup:       AgentNamesLookup,
 		},
 		// status reads outcome in agent vocabulary, not a protocol status
 		// code: ok, error, rejected (a call a decision blocked) or refused (a
@@ -150,12 +180,42 @@ var Skills = &Dataset{
 			Typeahead:    "user_email",
 		},
 		{
-			Name:      "surface",
-			Type:      TypeString,
-			Role:      RoleDimension,
-			Operators: equalsIn,
-			Expr:      "surface",
-			Typeahead: "surface",
+			Name:        "surface",
+			Type:        TypeString,
+			Role:        RoleDimension,
+			Operators:   equalsIn,
+			Expr:        "surface",
+			Typeahead:   "surface",
+			Description: surfaceDescription,
+		},
+		{
+			Name:        "product",
+			Type:        TypeString,
+			Role:        RoleDimension,
+			Operators:   equalsIn,
+			Expr:        "product",
+			Typeahead:   "product",
+			Description: productDescription,
+		},
+		{
+			Name:        "client",
+			Type:        TypeString,
+			Role:        RoleDimension,
+			Operators:   equalsIn,
+			Expr:        "client",
+			Typeahead:   "client",
+			Description: clientDescription,
+		},
+		{
+			Name:         "agent",
+			Type:         TypeString,
+			Role:         RoleDimension,
+			Operators:    equalsIn,
+			Aggregations: countDistinct,
+			Expr:         "agent_id",
+			Typeahead:    "agent_id",
+			Description:  agentDescription,
+			Lookup:       AgentNamesLookup,
 		},
 		// status is the invocation's outcome in the same vocabulary as a tool
 		// call's: ok, error, rejected or refused.
@@ -183,6 +243,16 @@ var Skills = &Dataset{
 // display name both match; the field says which name it shows.
 const mcpServerDescription = "MCP server the call went to, under the display name set in Hooks settings. A raw name with no override shows as reported; a filter may name either."
 
+const (
+	surfaceDescription = "Agent surface as the producer named it, mixing the product with where it ran. Deprecated: use product and client."
+	productDescription = "Agent product that made the call: claude-code, claude-chat, cowork, codex, chatgpt, cursor, copilot and others. Empty when the producer named none Speakeasy recognizes."
+	clientDescription  = "Kind of client the product ran in: cli, ide, desktop, web, mobile, cloud or slack. Empty when the producer gives no signal for it."
+	agentDescription   = "Speakeasy agent the call ran as, under its name. Empty for a call a person made."
+)
+
+// AgentNamesLookup reads agent ids as the organization's agent names.
+const AgentNamesLookup = "agent_names"
+
 // MCPServerDisplayNamesLookup names the lookup mcp_server reads through: the
 // project's hook server-name overrides, raw name to display name.
 const MCPServerDisplayNamesLookup = "mcp_server_display_names"
@@ -193,6 +263,10 @@ var Lookups = []*Lookup{
 	{
 		Name:        MCPServerDisplayNamesLookup,
 		Description: "The project's hook server-name overrides, set in Hooks settings: a reported MCP server name with an override shows as its display name, the rest as reported.",
+	},
+	{
+		Name:        AgentNamesLookup,
+		Description: "The organization's agents: an agent id shows as the agent's name, an id with no agent as reported.",
 	},
 }
 

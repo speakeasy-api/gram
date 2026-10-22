@@ -514,6 +514,37 @@ func (q *Queries) ListActiveAgentsForAuthorization(ctx context.Context, organiza
 	return items, nil
 }
 
+const listAgentNames = `-- name: ListAgentNames :many
+SELECT id, name FROM agents
+WHERE organization_id = $1
+`
+
+type ListAgentNamesRow struct {
+	ID   uuid.UUID
+	Name string
+}
+
+// Deleted agents included, so older activity keeps its name.
+func (q *Queries) ListAgentNames(ctx context.Context, organizationID string) ([]ListAgentNamesRow, error) {
+	rows, err := q.db.Query(ctx, listAgentNames, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAgentNamesRow
+	for rows.Next() {
+		var i ListAgentNamesRow
+		if err := rows.Scan(&i.ID, &i.Name); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listAgentOwnerProfiles = `-- name: ListAgentOwnerProfiles :many
 SELECT u.id, u.display_name, u.photo_url
 FROM users AS u

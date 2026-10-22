@@ -108,7 +108,7 @@ func (l *Logger) inbound(ctx context.Context, record *log.Record) (*otelv1.Inbou
 	}
 
 	inbound.SetProvenance((&otelv1.InboundLogRecord_Provenance_builder{
-		Source:         new(otelsvc.ProvenanceSource),
+		Source:         new(enrich.InternalProvenanceSource),
 		OrganizationId: &t.organizationID,
 		ProjectId:      &t.projectID,
 	}).Build())

@@ -25,9 +25,12 @@ func agentEventFixture(orgID string, recordID, sessionID, turnID, eventID, event
 		Source:             "claude-code",
 		Provider:           "anthropic",
 		Surface:            "claude-code",
+		Product:            "claude-code",
+		Client:             "",
 		UserID:             "",
 		UserEmail:          "dev@example.com",
 		ExternalUserID:     "",
+		AgentID:            "",
 		AccountType:        "",
 		BillingMode:        "",
 		ExternalOrgID:      "",
@@ -72,6 +75,10 @@ func TestSourceQueriesAgainstClickHouse(t *testing.T) {
 
 	preCall := agentEventFixture(orgID, "r2", "s1", "t1", "tc1", "tool_call", base+1)
 	preCall.ToolName = "Bash"
+	// Only the earlier observation says where the call ran and which agent
+	// made it; an empty value on the later one must not blank them.
+	preCall.Client = "desktop"
+	preCall.AgentID = "agent-1"
 	postCall := agentEventFixture(orgID, "r3", "s1", "t1", "tc1", "tool_call_result", base+2)
 	postCall.ToolName = "Bash"
 	postCall.Outcome = "error"
@@ -137,12 +144,13 @@ func TestSourceQueriesAgainstClickHouse(t *testing.T) {
 
 		type call struct {
 			org, project, id, tool, mcpServer, mcpTool, skill, session, user, surface, status string
+			product, client, agentID                                                          string
 			durationNano, startedAt, endedAt                                                  int64
 		}
 		var got []call
 		for result.Next() {
 			var c call
-			require.NoError(t, result.Scan(&c.org, &c.project, &c.id, &c.tool, &c.mcpServer, &c.mcpTool, &c.skill, &c.session, &c.user, &c.surface, &c.status, &c.durationNano, &c.startedAt, &c.endedAt))
+			require.NoError(t, result.Scan(&c.org, &c.project, &c.id, &c.tool, &c.mcpServer, &c.mcpTool, &c.skill, &c.session, &c.user, &c.surface, &c.product, &c.client, &c.agentID, &c.status, &c.durationNano, &c.startedAt, &c.endedAt))
 			got = append(got, c)
 		}
 		require.NoError(t, result.Err())
@@ -155,6 +163,10 @@ func TestSourceQueriesAgainstClickHouse(t *testing.T) {
 		require.Empty(t, got[0].skill, "a plain tool call names no skill")
 		require.Equal(t, "s1", got[0].session)
 		require.Equal(t, "error", got[0].status, "the later observation wins")
+		require.Equal(t, "claude-code", got[0].product)
+		require.Equal(t, "desktop", got[0].client, "an empty client on the result does not blank the call's")
+		require.Equal(t, "agent-1", got[0].agentID)
+		require.Empty(t, got[1].agentID, "a call no agent made names none")
 		require.Equal(t, int64(5_000_000), got[0].durationNano)
 		require.Equal(t, base+1, got[0].startedAt)
 		require.Equal(t, base+2, got[0].endedAt)
@@ -185,12 +197,13 @@ func TestSourceQueriesAgainstClickHouse(t *testing.T) {
 
 		type invocation struct {
 			org, project, id, tool, mcpServer, mcpTool, skill, session, user, surface, status string
+			product, client, agentID                                                          string
 			durationNano, startedAt, endedAt                                                  int64
 		}
 		var got []invocation
 		for result.Next() {
 			var c invocation
-			require.NoError(t, result.Scan(&c.org, &c.project, &c.id, &c.tool, &c.mcpServer, &c.mcpTool, &c.skill, &c.session, &c.user, &c.surface, &c.status, &c.durationNano, &c.startedAt, &c.endedAt))
+			require.NoError(t, result.Scan(&c.org, &c.project, &c.id, &c.tool, &c.mcpServer, &c.mcpTool, &c.skill, &c.session, &c.user, &c.surface, &c.product, &c.client, &c.agentID, &c.status, &c.durationNano, &c.startedAt, &c.endedAt))
 			got = append(got, c)
 		}
 		require.NoError(t, result.Err())

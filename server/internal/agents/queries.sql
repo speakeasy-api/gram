@@ -317,3 +317,8 @@ SET deleted_at = COALESCE(s.deleted_at, clock_timestamp())
 FROM target
 WHERE s.id = target.id
 RETURNING s.id, s.project_id, s.user_session_issuer_id, s.jti, s.deleted_at, target.issuer_project_id, target.deleted AS already_revoked;
+
+-- name: ListAgentNames :many
+-- Deleted agents included, so older activity keeps its name.
+SELECT id, name FROM agents
+WHERE organization_id = @organization_id;

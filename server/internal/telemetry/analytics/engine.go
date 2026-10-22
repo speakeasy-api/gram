@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	agentsRepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
 	hooksRepo "github.com/speakeasy-api/gram/server/internal/hooks/repo"
 )
 
@@ -25,6 +26,7 @@ type Engine struct {
 func NewEngine(db *pgxpool.Pool, ch Querier) (*Engine, error) {
 	catalog, err := Default.WithLoaders(map[string]LookupLoader{
 		MCPServerDisplayNamesLookup: mcpServerDisplayNames(hooksRepo.New(db)),
+		AgentNamesLookup:            agentNames(agentsRepo.New(db)),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("bind catalog lookups: %w", err)
@@ -101,6 +103,37 @@ func mcpServerDisplayNames(hooks *hooksRepo.Queries) LookupLoader {
 		}
 		return names, nil
 	}
+}
+
+// agentNames loads the organization's agents, id to name.
+func agentNames(agents *agentsRepo.Queries) LookupLoader {
+	return func(ctx context.Context, tenant Tenant) (map[string]string, error) {
+		rows, err := agents.ListAgentNames(ctx, tenant.OrganizationID)
+		if err != nil {
+			return nil, fmt.Errorf("list agent names: %w", err)
+		}
+		pairs := make(map[string]string, len(rows))
+		for _, row := range rows {
+			pairs[row.ID.String()] = row.Name
+		}
+		return uniqueAgentNames(pairs), nil
+	}
+}
+
+// uniqueAgentNames suffixes a shared name with each agent's short id, so reads never merge two agents.
+func uniqueAgentNames(names map[string]string) map[string]string {
+	shared := make(map[string]int, len(names))
+	for _, name := range names {
+		shared[name]++
+	}
+	unique := make(map[string]string, len(names))
+	for id, name := range names {
+		if shared[name] > 1 {
+			name = name + " (" + id[:min(len(id), 8)] + ")"
+		}
+		unique[id] = name
+	}
+	return unique
 }
 
 // UnixNano is undefined outside the years 1678 to 2262, so a bound is checked

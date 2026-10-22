@@ -83,6 +83,10 @@ func (CodexLog) Surface(*otelv1.InboundLogRecord) (string, string, error) {
 	return scopeNameKey, codexSurface, nil
 }
 
+func (CodexLog) Client(*otelv1.InboundLogRecord) (string, string, error) {
+	return "", "", nil
+}
+
 func (CodexLog) EventName(record *otelv1.InboundLogRecord) (string, string, error) {
 	key, name := logRawEventName(record)
 	return key, name, nil

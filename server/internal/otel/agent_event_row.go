@@ -197,9 +197,12 @@ func agentEventRow(columns canonicalColumns, enrichment rowEnrichment) chrepo.Ag
 		Source:             columns.source,
 		Provider:           columns.provider,
 		Surface:            columns.surface,
+		Product:            columns.product,
+		Client:             columns.client,
 		UserID:             enrichment.userID,
 		UserEmail:          columns.userEmail,
 		ExternalUserID:     columns.externalUserID,
+		AgentID:            columns.agentID,
 		AccountType:        enrichment.accountType,
 		BillingMode:        enrichment.billingMode,
 		ExternalOrgID:      columns.externalOrgID,
@@ -269,6 +272,8 @@ type canonicalColumns struct {
 	source       string
 	provider     string
 	surface      string
+	product      string
+	client       string
 
 	sessionID      string
 	turnID         string
@@ -276,6 +281,7 @@ type canonicalColumns struct {
 	userEmail      string
 	externalUserID string
 	externalOrgID  string
+	agentID        string
 
 	model          string
 	querySource    string
@@ -309,6 +315,10 @@ func (c *canonicalColumns) read(key string, value any) {
 		c.provider = enrichmentString(value)
 	case string(enrich.AgentSurfaceKey):
 		c.surface = enrichmentString(value)
+	case string(enrich.AgentProductKey):
+		c.product = enrichmentString(value)
+	case string(enrich.AgentClientKey):
+		c.client = enrichmentString(value)
 	case string(enrich.AgentSessionIDKey):
 		c.sessionID = enrichmentString(value)
 	case string(enrich.AgentTurnIDKey):
@@ -321,6 +331,8 @@ func (c *canonicalColumns) read(key string, value any) {
 		c.externalUserID = enrichmentString(value)
 	case string(enrich.AgentExternalOrgIDKey):
 		c.externalOrgID = enrichmentString(value)
+	case string(enrich.AgentAgentIDKey):
+		c.agentID = enrichmentString(value)
 	case string(enrich.AgentModelKey):
 		c.model = enrichmentString(value)
 	case string(enrich.AgentQuerySourceKey):

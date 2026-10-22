@@ -18,6 +18,7 @@ type LogDialect interface {
 	// answer is not read from the record.
 	Provider(record *otelv1.InboundLogRecord) (key string, val string, err error)
 	Surface(record *otelv1.InboundLogRecord) (key string, val string, err error)
+	Client(record *otelv1.InboundLogRecord) (key string, val string, err error)
 
 	// What the record is, in agent vocabulary. Every answer names the
 	// attribute it came from; an empty key means the producer did not say.

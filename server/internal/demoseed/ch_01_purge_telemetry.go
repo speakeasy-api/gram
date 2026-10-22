@@ -320,12 +320,12 @@ func (s *seeder) chTranscriptRows(ctx context.Context, ch driver.Conn) error {
 	if err := ch.Exec(ctx, `
 		INSERT INTO agent_events
 		  (organization_id, project_id, occurred_at_unix_nano, observed_at_unix_nano,
-		   record_id, session_id, event_id, raw_event_name, source, surface,
+		   record_id, session_id, event_id, raw_event_name, source, surface, product, client,
 		   user_id, user_email, provider, model, attributes, resource_attributes, scope_attributes)
 		SELECT ?, toString(gram_project_id), time_unix_nano, observed_time_unix_nano,
 		       concat('transcript:', toString(attributes.gram.chat.message.id)), chat_id,
 		       concat('transcript:', toString(attributes.gram.chat.message.id)), 'session.observed',
-		       'transcript', hook_source, user_id, user_email, 'anthropic',
+		       'transcript', hook_source, 'claude-chat', 'web', user_id, user_email, 'anthropic',
 		       toString(attributes.gen_ai.response.model), '{}', '{}', '{}'
 		FROM telemetry_logs
 		WHERE gram_project_id = toUUID(?)

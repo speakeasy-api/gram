@@ -15,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/otel/dialect"
 	"github.com/speakeasy-api/gram/server/internal/otelpub"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 const (
@@ -51,6 +52,8 @@ type toolCall struct {
 	externalUserID  string
 	userID          string
 	userEmail       string
+
+	agentID string
 }
 
 func (c toolCall) record(end time.Time, statusCode int, resultIsError bool, failure *oops.ShareableError) log.Record {
@@ -85,6 +88,12 @@ func (c toolCall) record(end time.Time, statusCode int, resultIsError bool, fail
 		if kv.Value.AsString() != "" {
 			attrs = append(attrs, kv)
 		}
+	}
+	if c.agentID != "" {
+		attrs = append(attrs,
+			attr.AuthorizationActorTypeKey.String(string(urn.PrincipalTypeAgent)),
+			attr.AuthorizationActorIDKey.String(c.agentID),
+		)
 	}
 	if failure != nil {
 		// A shareable error's text is what the client was told.

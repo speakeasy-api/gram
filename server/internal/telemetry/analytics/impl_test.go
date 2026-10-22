@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/analytics"
+	agentsRepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
 	hooksRepo "github.com/speakeasy-api/gram/server/internal/hooks/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/otel/chrepo"
@@ -43,6 +44,12 @@ func TestDescribe(t *testing.T) {
 	require.NotNil(t, byName["mcp_server"].Lookup, "describe says which map mcp_server reads through")
 	require.Equal(t, MCPServerDisplayNamesLookup, byName["mcp_server"].Lookup.Name)
 	require.Contains(t, byName["mcp_server"].Lookup.Description, "Hooks settings")
+	require.NotNil(t, byName["agent"].Lookup, "an agent shows under its name")
+	require.Equal(t, AgentNamesLookup, byName["agent"].Lookup.Name)
+	require.Equal(t, []string{"count_distinct"}, byName["agent"].Aggregations)
+	require.Contains(t, *byName["surface"].Description, "Deprecated", "surface points readers at product and client")
+	require.NotNil(t, byName["product"].Description)
+	require.NotNil(t, byName["client"].Description)
 	require.Nil(t, byName["tool_name"].Lookup, "a field read as reported names no lookup")
 	require.Nil(t, byName["tool_name"].Description, "a field with nothing to add has no description")
 	require.Nil(t, byName["user"].Description)
@@ -84,6 +91,48 @@ func TestDescribeDatasetsCarriesFieldDescriptions(t *testing.T) {
 	require.NotNil(t, described[0].Fields[0].Description)
 	require.Equal(t, "Which producers fill it.", *described[0].Fields[0].Description)
 	require.Nil(t, described[0].Fields[1].Description, "a field with nothing to add has no description")
+}
+
+func TestQueryReadsAgentThroughItsName(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+
+	agent, err := agentsRepo.New(ti.db).CreateAgent(ctx, agentsRepo.CreateAgentParams{
+		OrganizationID: ti.organizationID,
+		OwnerUserID:    ti.userID,
+		ProjectID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		Name:           "release-bot",
+	})
+	require.NoError(t, err)
+
+	base := time.Date(2026, 9, 2, 10, 0, 0, 0, time.UTC)
+	call := func(recordID, agentID string, at time.Time) chrepo.AgentEventRow {
+		r := agentEventFixture(ti.organizationID, recordID, "s1", "t1", recordID, "tool_call_result", at.UnixNano())
+		r.ProjectID = ti.projectID
+		r.ToolName = "Bash"
+		r.AgentID = agentID
+		return r
+	}
+	require.NoError(t, chrepo.New(ti.ch).InsertAgentEvents(ctx, []chrepo.AgentEventRow{
+		call("c1", agent.ID.String(), base),
+		call("c2", agent.ID.String(), base.Add(time.Minute)),
+		call("c3", "", base.Add(2*time.Minute)),
+	}))
+	from, to := base.Add(-time.Hour).Format(time.RFC3339), base.Add(time.Hour).Format(time.RFC3339)
+
+	result, err := ti.service.Query(ctx, &gen.QueryPayload{
+		SessionToken: nil, ProjectSlugInput: nil,
+		Dataset: "tool_calls", From: from, To: to, Grain: nil,
+		Dimensions: []string{"agent"},
+		Measures:   []*gen.AnalyticsMeasure{{Op: "count", Field: nil, Alias: nil}},
+		Filters:    []*gen.AnalyticsFilter{{Field: "agent", Operator: "equals", Values: []string{"release-bot"}}},
+		OrderBy:    []*gen.AnalyticsOrderBy{{Measure: "count", Direction: "desc"}},
+		Limit:      0, Ungrouped: false,
+	})
+	require.NoError(t, err)
+	require.Len(t, result.Rows, 1, "a filter speaks the agent's name")
+	require.Equal(t, "release-bot", result.Rows[0]["agent"])
+	require.EqualValues(t, 2, result.Rows[0]["count"], "the call a person made is not the agent's")
 }
 
 func TestQueryReadsMCPServerThroughTheOverrideLookup(t *testing.T) {
