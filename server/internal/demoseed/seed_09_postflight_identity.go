@@ -306,6 +306,7 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 		// unreviewed IS the absence of one — so the table stores just the two
 		// decided states, and both have to survive the reseed with their full
 		// complement of rows.
+		{byOrg(s.q.PostflightIDLinkedAITools), 5, "demo seed postflight: %d AI tool decisions linked to their catalog product, expected 5"},
 		{byOrg(s.q.PostflightIDApprovedAITools), 3, "demo seed postflight: %d approved AI tools, expected 3"},
 		{byOrg(s.q.PostflightIDBlockedAITools), 2, "demo seed postflight: %d blocked AI tools, expected 2"},
 		// Anything else in the column would be a row the seed no longer means

@@ -1,0 +1,934 @@
+{
+  "Notice": "Frozen bootstrap. Production is the source of truth after seeding. Add new clients through the admin review queue, not this file.",
+  "Products": [
+    {
+      "ID": "claude-code",
+      "VendorKey": "anthropic",
+      "DisplayName": "Claude Code",
+      "Category": "harness",
+      "Signatures": {
+        "BundleIDs": null,
+        "Binaries": ["claude"],
+        "ConfigDirs": ["~/.claude"],
+        "ProcessNames": ["claude"]
+      },
+      "VersionPlistKey": "",
+      "ClientInfoNames": ["claude-code", "Claude Code", "claude-ai"],
+      "Documents": [
+        {
+          "URL": "https://claude.ai/oauth/claude-code-client-metadata",
+          "DisplayName": "Anthropic (Claude Code)",
+          "Enabled": true
+        }
+      ]
+    },
+    {
+      "ID": "claude",
+      "VendorKey": "anthropic",
+      "DisplayName": "Claude",
+      "Category": "",
+      "Signatures": {
+        "BundleIDs": null,
+        "Binaries": null,
+        "ConfigDirs": null,
+        "ProcessNames": null
+      },
+      "VersionPlistKey": "",
+      "ClientInfoNames": null,
+      "Documents": [
+        {
+          "URL": "https://claude.ai/oauth/mcp-oauth-client-metadata",
+          "DisplayName": "Anthropic (Claude)",
+          "Enabled": true
+        }
+      ]
+    },
+    {
+      "ID": "vscode",
+      "VendorKey": "microsoft",
+      "DisplayName": "Visual Studio Code",
+      "Category": "",
+      "Signatures": {
+        "BundleIDs": null,
+        "Binaries": null,
+        "ConfigDirs": null,
+        "ProcessNames": null
+      },
+      "VersionPlistKey": "",
+      "ClientInfoNames": null,
+      "Documents": [
+        {
+          "URL": "https://vscode.dev/oauth/client-metadata.json",
+          "DisplayName": "Visual Studio Code",
+          "Enabled": true
+        },
+        {
+          "URL": "https://insiders.vscode.dev/oauth/client-metadata.json",
+          "DisplayName": "Visual Studio Code (Insiders)",
+          "Enabled": true
+        }
+      ]
+    },
+    {
+      "ID": "zed",
+      "VendorKey": "zed",
+      "DisplayName": "Zed",
+      "Category": "harness",
+      "Signatures": {
+        "BundleIDs": ["dev.zed.Zed"],
+        "Binaries": null,
+        "ConfigDirs": ["~/.config/zed"],
+        "ProcessNames": ["Zed"]
+      },
+      "VersionPlistKey": "",
+      "ClientInfoNames": null,
+      "Documents": [
+        {
+          "URL": "https://zed.dev/oauth/client-metadata.json",
+          "DisplayName": "Zed",
+          "Enabled": true
+        }
+      ]
+    },
+    {
+      "ID": "goose",
+      "VendorKey": "block",
+      "DisplayName": "Goose",
+      "Category": "harness",
+      "Signatures": {
+        "BundleIDs": null,
+        "Binaries": ["goose"],
+        "ConfigDirs": ["~/.config/goose"],
+        "ProcessNames": ["goose"]
+      },
+      "VersionPlistKey": "",
+      "ClientInfoNames": null,
+      "Documents": [
+        {
+          "URL": "https://goose-docs.ai/oauth/client-metadata.json",
+          "DisplayName": "Goose",
+          "Enabled": true
+        }
+      ]
+    },
+    {
+      "ID": "chatgpt",
+      "VendorKey": "openai",
+      "DisplayName": "ChatGPT",
+      "Category": "assistant",
+      "Signatures": {
+        "BundleIDs": ["com.openai.codex"],
+        "Binaries": null,
+        "ConfigDirs": null,
+        "ProcessNames": ["ChatGPT"]
+      },
+      "VersionPlistKey": "",
+      "ClientInfoNames": ["ChatGPT", "chatgpt"],
+      "Documents": [
+        {
+          "URL": "https://chatgpt.com/oauth/*/client.json",
+          "DisplayName": "ChatGPT (connectors)",
+          "Enabled": true
+        },
+        {
+          "URL": "https://chatgpt.com/oauth/client.json",
+          "DisplayName": "ChatGPT",
+          "Enabled": true
+        }
+      ]
+    },
+    {
+      "ID": "chatgpt-classic",
+      "VendorKey": "openai",
+      "DisplayName": "ChatGPT Classic",
+      "Category": "assistant",
+      "Signatures": {
+        "BundleIDs": ["com.openai.chat"],
+        "Binaries": null,
+        "ConfigDirs": null,
+        "ProcessNames": ["ChatGPT Classic"]
+      },
+      "VersionPlistKey": "",
+      "ClientInfoNames": null,
+      "Documents": null
+    },
+    {
+      "ID": "codex",
+      "VendorKey": "openai",
+      "DisplayName": "Codex",
+      "Category": "harness",
+      "Signatures": {
+        "BundleIDs": null,
+        "Binaries": ["codex"],
+        "ConfigDirs": ["~/.codex"],
+        "ProcessNames": ["codex"]
+      },
+      "VersionPlistKey": "",
+      "ClientInfoNames": ["codex", "codex-cli", "Codex CLI"],
+      "Documents": [
+        {
+          "URL": "https://chatgpt.com/oauth/codex/*/client.json",
+          "DisplayName": "Codex CLI",
+          "Enabled": true
+        },
+        {
+          "URL": "https://chatgpt.com/oauth/codex/client.json",
+          "DisplayName": "Codex CLI (stable document)",
+          "Enabled": true
+        }
+      ]
+    },
+    {
+      "ID": "notion",
+      "VendorKey": "notion",
+      "DisplayName": "Notion",
+      "Category": "",
+      "Signatures": {
+        "BundleIDs": null,
+        "Binaries": null,
+        "ConfigDirs": null,
+        "ProcessNames": null
+      },
+      "VersionPlistKey": "",
+      "ClientInfoNames": null,
+      "Documents": [
+        {
+          "URL": "https://www.notion.so/oauth/mcp-client-metadata.json",
+          "DisplayName": "Notion",
+          "Enabled": true
+        },
+        {
+          "URL": "https://app.notion.com/oauth/mcp-client-metadata.json",
+          "DisplayName": "Notion (app.notion.com)",
+          "Enabled": true
+        }
+      ]
+    },
+    {
+      "ID": "mcpjam",
+      "VendorKey": "mcpjam",
+      "DisplayName": "MCPJam Inspector",
+      "Category": "",
+      "Signatures": {
+        "BundleIDs": null,
+        "Binaries": null,
+        "ConfigDirs": null,
+        "ProcessNames": null
+      },
+      "VersionPlistKey": "",
+      "ClientInfoNames": null,
+      "Documents": [
+        {
+          "URL": "https://www.mcpjam.com/.well-known/oauth/client-metadata.json",
+          "DisplayName": "MCPJam Inspector",
+          "Enabled": true
+        }
+      ]
+    },
+    {
+      "ID": "factory-droid",
+      "VendorKey": "factory",
+      "DisplayName": "Factory Droid",
+      "Category": "",
+      "Signatures": {
+        "BundleIDs": null,
+        "Binaries": null,
+        "ConfigDirs": null,
+        "ProcessNames": null
+      },
+      "VersionPlistKey": "",
+      "ClientInfoNames": null,
+      "Documents": [
+        {
+          "URL": "https://api.factory.ai/mcp/oauth-client",
+          "DisplayName": "Factory Droid",
+          "Enabled": true
+        }
+      ]
+    },
+    {
+      "ID": "toolhive",
+      "VendorKey": "stacklok",
+      "DisplayName": "ToolHive",
+      "Category": "",
+      "Signatures": {
+        "BundleIDs": null,
+        "Binaries": null,
+        "ConfigDirs": null,
+        "ProcessNames": null
+      },
+      "VersionPlistKey": "",
+      "ClientInfoNames": null,
+      "Documents": [
+        {
+          "URL": "https://toolhive.dev/oauth/client-metadata.json",
+          "DisplayName": "ToolHive",
+          "Enabled": true
+        }
+      ]
+    },
+    {
+      "ID": "hermes-agent",
+      "VendorKey": "nousresearch",
+      "DisplayName": "Hermes Agent",
+      "Category": "assistant",
+      "Signatures": {
+        "BundleIDs": null,
+        "Binaries": ["hermes"],
+        "ConfigDirs": ["~/.hermes"],
+        "ProcessNames": ["hermes"]
+      },
+      "VersionPlistKey": "",
+      "ClientInfoNames": null,
+      "Documents": [
+        {
+          "URL": "https://nousresearch.github.io/hermes-agent/docs/oauth/client-metadata.json",
+          "DisplayName": "Hermes Agent",
+          "Enabled": true
+        }
+      ]
+    },
+    {
+      "ID": "skydive",
+      "VendorKey": "skydive",
+      "DisplayName": "Skydive",
+      "Category": "",
+      "Signatures": {
+        "BundleIDs": null,
+        "Binaries": null,
+        "ConfigDirs": null,
+        "ProcessNames": null
+      },
+      "VersionPlistKey": "",
+      "ClientInfoNames": null,
+      "Documents": [
+        {
+          "URL": "https://www.skydive.com/api/v1/external-oauth/client-metadata",
+          "DisplayName": "Skydive",
+          "Enabled": true
+        }
+      ]
+    },
+    {
+      "ID": "opencode",
+      "VendorKey": "opencode",
+      "DisplayName": "opencode",
+      "Category": "harness",
+      "Signatures": {
+        "BundleIDs": null,
+        "Binaries": ["opencode"],
+        "ConfigDirs": ["~/.config/opencode"],
+        "ProcessNames": ["opencode"]
+      },
+      "VersionPlistKey": "",
+      "ClientInfoNames": ["opencode"],
+      "Documents": [
+        {
+          "URL": "https://opencode.ai/oauth/opencode/client.json",
+          "DisplayName": "opencode",
+          "Enabled": true
+        }
+      ]
+    },
+    {
+      "ID": "github-copilot-cli",
+      "VendorKey": "github",
+      "DisplayName": "GitHub Copilot CLI",
+      "Category": "",
+      "Signatures": {
+        "BundleIDs": null,
+        "Binaries": null,
+        "ConfigDirs": null,
+        "ProcessNames": null
+      },
+      "VersionPlistKey": "",
+      "ClientInfoNames": null,
+      "Documents": [
+        {
+          "URL": "https://github.com/copilot/cli/client-metadata.json",
+          "DisplayName": "GitHub Copilot CLI",
+          "Enabled": true
+        }
+      ]
+    },
+    {
+      "ID": "conductor",
+      "VendorKey": "conductor",
+      "DisplayName": "Conductor",
+      "Category": "harness",
+      "Signatures": {
+        "BundleIDs": ["com.conductor.app"],
+        "Binaries": null,
+        "ConfigDirs": ["~/.conductor"],
+        "ProcessNames": ["conductor"]
+      },
+      "VersionPlistKey": "",
+      "ClientInfoNames": null,
+      "Documents": [
+        {
+          "URL": "https://api.conductor.build/oauth/client-metadata.json",
+          "DisplayName": "Conductor",
+          "Enabled": true
+        }
+      ]
+    },
+    {
+      "ID": "vercel-connect",
+      "VendorKey": "vercel",
+      "DisplayName": "Vercel Connect",
+      "Category": "",
+      "Signatures": {
+        "BundleIDs": null,
+        "Binaries": null,
+        "ConfigDirs": null,
+        "ProcessNames": null
+      },
+      "VersionPlistKey": "",
+      "ClientInfoNames": null,
+      "Documents": [
+        {
+          "URL": "https://connect.vercel.com/connectors/*",
+          "DisplayName": "Vercel Connect (connectors)",
+          "Enabled": true
+        }
+      ]
+    },
+    {
+      "ID": "linear",
+      "VendorKey": "linear",
+      "DisplayName": "Linear",
+      "Category": "",
+      "Signatures": {
+        "BundleIDs": null,
+        "Binaries": null,
+        "ConfigDirs": null,
+        "ProcessNames": null
+      },
+      "VersionPlistKey": "",
+      "ClientInfoNames": null,
+      "Documents": [
+        {
+          "URL": "https://linear.app/.well-known/oauth-client-metadata/mcp.json",
+          "DisplayName": "Linear",
+          "Enabled": true
+        }
+      ]
+    },
+    {
+      "ID": "lovable",
+      "VendorKey": "lovable",
+      "DisplayName": "Lovable",
+      "Category": "",
+      "Signatures": {
+        "BundleIDs": null,
+        "Binaries": null,
+        "ConfigDirs": null,
+        "ProcessNames": null
+      },
+      "VersionPlistKey": "",
+      "ClientInfoNames": null,
+      "Documents": [
+        {
+          "URL": "https://api.lovable.dev/.well-known/oauth-client",
+          "DisplayName": "Lovable",
+          "Enabled": true
+        }
+      ]
+    },
+    {
+      "ID": "antigravity",
+      "VendorKey": "google",
+      "DisplayName": "Google Antigravity",
+      "Category": "harness",
+      "Signatures": {
+        "BundleIDs": ["com.google.antigravity"],
+        "Binaries": ["agy"],
+        "ConfigDirs": ["~/.gemini/antigravity", "~/.gemini/antigravity-cli"],
+        "ProcessNames": ["Antigravity", "agy", "antigravity"]
+      },
+      "VersionPlistKey": "",
+      "ClientInfoNames": null,
+      "Documents": [
+        {
+          "URL": "https://antigravity.google/oauth/client-metadata.json",
+          "DisplayName": "Google Antigravity",
+          "Enabled": true
+        }
+      ]
+    },
+    {
+      "ID": "cursor",
+      "VendorKey": "cursor",
+      "DisplayName": "Cursor",
+      "Category": "harness",
+      "Signatures": {
+        "BundleIDs": ["com.todesktop.230313mzl4w4u92"],
+        "Binaries": ["cursor"],
+        "ConfigDirs": ["~/.cursor"],
+        "ProcessNames": ["Cursor"]
+      },
+      "VersionPlistKey": "",
+      "ClientInfoNames": ["Cursor", "cursor", "cursor-vscode"],
+      "Documents": null
+    },
+    {
+      "ID": "gemini-cli",
+      "VendorKey": "google",
+      "DisplayName": "Gemini CLI",
+      "Category": "harness",
+      "Signatures": {
+        "BundleIDs": null,
+        "Binaries": ["gemini"],
+        "ConfigDirs": ["~/.gemini/tmp"],
+        "ProcessNames": ["gemini"]
+      },
+      "VersionPlistKey": "",
+      "ClientInfoNames": ["gemini-cli", "Gemini CLI"],
+      "Documents": null
+    },
+    {
+      "ID": "windsurf",
+      "VendorKey": "codeium",
+      "DisplayName": "Windsurf",
+      "Category": "harness",
+      "Signatures": {
+        "BundleIDs": ["com.exafunction.windsurf"],
+        "Binaries": ["windsurf"],
+        "ConfigDirs": ["~/.codeium/windsurf"],
+        "ProcessNames": ["Windsurf"]
+      },
+      "VersionPlistKey": "",
+      "ClientInfoNames": ["Windsurf", "windsurf"],
+      "Documents": null
+    },
+    {
+      "ID": "aider",
+      "VendorKey": "aider",
+      "DisplayName": "Aider",
+      "Category": "harness",
+      "Signatures": {
+        "BundleIDs": null,
+        "Binaries": ["aider"],
+        "ConfigDirs": ["~/.aider"],
+        "ProcessNames": ["aider"]
+      },
+      "VersionPlistKey": "",
+      "ClientInfoNames": ["aider"],
+      "Documents": null
+    },
+    {
+      "ID": "openclaw",
+      "VendorKey": "openclaw",
+      "DisplayName": "OpenClaw",
+      "Category": "assistant",
+      "Signatures": {
+        "BundleIDs": null,
+        "Binaries": ["openclaw"],
+        "ConfigDirs": ["~/.openclaw"],
+        "ProcessNames": ["openclaw"]
+      },
+      "VersionPlistKey": "",
+      "ClientInfoNames": ["openclaw", "OpenClaw"],
+      "Documents": null
+    },
+    {
+      "ID": "pi",
+      "VendorKey": "pi",
+      "DisplayName": "Pi",
+      "Category": "harness",
+      "Signatures": {
+        "BundleIDs": null,
+        "Binaries": ["pi"],
+        "ConfigDirs": ["~/.pi"],
+        "ProcessNames": ["pi"]
+      },
+      "VersionPlistKey": "",
+      "ClientInfoNames": ["pi"],
+      "Documents": null
+    },
+    {
+      "ID": "crush",
+      "VendorKey": "charm",
+      "DisplayName": "Crush",
+      "Category": "harness",
+      "Signatures": {
+        "BundleIDs": null,
+        "Binaries": ["crush"],
+        "ConfigDirs": ["~/.config/crush"],
+        "ProcessNames": ["crush"]
+      },
+      "VersionPlistKey": "",
+      "ClientInfoNames": ["crush", "Crush"],
+      "Documents": null
+    },
+    {
+      "ID": "qwen-code",
+      "VendorKey": "alibaba",
+      "DisplayName": "Qwen Code",
+      "Category": "harness",
+      "Signatures": {
+        "BundleIDs": null,
+        "Binaries": ["qwen"],
+        "ConfigDirs": null,
+        "ProcessNames": ["qwen"]
+      },
+      "VersionPlistKey": "",
+      "ClientInfoNames": ["qwen-code", "Qwen Code"],
+      "Documents": null
+    },
+    {
+      "ID": "cline",
+      "VendorKey": "cline",
+      "DisplayName": "Cline",
+      "Category": "harness",
+      "Signatures": {
+        "BundleIDs": null,
+        "Binaries": ["cline"],
+        "ConfigDirs": [
+          "~/.vscode*/extensions/saoudrizwan.claude-dev-*",
+          "~/.cursor/extensions/saoudrizwan.claude-dev-*",
+          "~/.windsurf/extensions/saoudrizwan.claude-dev-*"
+        ],
+        "ProcessNames": ["cline"]
+      },
+      "VersionPlistKey": "",
+      "ClientInfoNames": ["cline", "Cline"],
+      "Documents": null
+    },
+    {
+      "ID": "roo-code",
+      "VendorKey": "roocode",
+      "DisplayName": "Roo Code",
+      "Category": "harness",
+      "Signatures": {
+        "BundleIDs": null,
+        "Binaries": null,
+        "ConfigDirs": [
+          "~/.vscode*/extensions/rooveterinaryinc.roo-cline-*",
+          "~/.cursor/extensions/rooveterinaryinc.roo-cline-*",
+          "~/.windsurf/extensions/rooveterinaryinc.roo-cline-*"
+        ],
+        "ProcessNames": null
+      },
+      "VersionPlistKey": "",
+      "ClientInfoNames": ["roo-code", "Roo Code"],
+      "Documents": null
+    },
+    {
+      "ID": "continue",
+      "VendorKey": "continue",
+      "DisplayName": "Continue",
+      "Category": "harness",
+      "Signatures": {
+        "BundleIDs": null,
+        "Binaries": ["cn"],
+        "ConfigDirs": [
+          "~/.vscode*/extensions/continue.continue-*",
+          "~/.cursor/extensions/continue.continue-*",
+          "~/.windsurf/extensions/continue.continue-*"
+        ],
+        "ProcessNames": null
+      },
+      "VersionPlistKey": "",
+      "ClientInfoNames": ["continue", "Continue"],
+      "Documents": null
+    },
+    {
+      "ID": "kilo-code",
+      "VendorKey": "kilocode",
+      "DisplayName": "Kilo Code",
+      "Category": "harness",
+      "Signatures": {
+        "BundleIDs": null,
+        "Binaries": ["kilo", "kilocode"],
+        "ConfigDirs": [
+          "~/.vscode*/extensions/kilocode.kilo-code-*",
+          "~/.cursor/extensions/kilocode.kilo-code-*",
+          "~/.windsurf/extensions/kilocode.kilo-code-*"
+        ],
+        "ProcessNames": null
+      },
+      "VersionPlistKey": "",
+      "ClientInfoNames": ["kilo-code", "Kilo Code"],
+      "Documents": null
+    },
+    {
+      "ID": "augment",
+      "VendorKey": "augment",
+      "DisplayName": "Augment Code",
+      "Category": "harness",
+      "Signatures": {
+        "BundleIDs": null,
+        "Binaries": null,
+        "ConfigDirs": [
+          "~/.vscode*/extensions/augment.vscode-augment-*",
+          "~/.cursor/extensions/augment.vscode-augment-*",
+          "~/.windsurf/extensions/augment.vscode-augment-*"
+        ],
+        "ProcessNames": null
+      },
+      "VersionPlistKey": "",
+      "ClientInfoNames": ["augment", "Augment Code"],
+      "Documents": null
+    },
+    {
+      "ID": "devin",
+      "VendorKey": "cognition",
+      "DisplayName": "Devin",
+      "Category": "harness",
+      "Signatures": {
+        "BundleIDs": null,
+        "Binaries": ["devin"],
+        "ConfigDirs": [
+          "~/.vscode*/extensions/cognition.devin-*",
+          "~/.cursor/extensions/cognition.devin-*",
+          "~/.windsurf/extensions/cognition.devin-*"
+        ],
+        "ProcessNames": null
+      },
+      "VersionPlistKey": "",
+      "ClientInfoNames": ["devin", "Devin"],
+      "Documents": null
+    },
+    {
+      "ID": "amp",
+      "VendorKey": "sourcegraph",
+      "DisplayName": "Amp",
+      "Category": "harness",
+      "Signatures": {
+        "BundleIDs": null,
+        "Binaries": ["amp"],
+        "ConfigDirs": null,
+        "ProcessNames": ["amp"]
+      },
+      "VersionPlistKey": "",
+      "ClientInfoNames": ["amp", "Amp"],
+      "Documents": null
+    },
+    {
+      "ID": "openhands",
+      "VendorKey": "allhands",
+      "DisplayName": "OpenHands",
+      "Category": "harness",
+      "Signatures": {
+        "BundleIDs": null,
+        "Binaries": ["openhands"],
+        "ConfigDirs": null,
+        "ProcessNames": ["openhands"]
+      },
+      "VersionPlistKey": "",
+      "ClientInfoNames": ["openhands", "OpenHands"],
+      "Documents": null
+    },
+    {
+      "ID": "trae",
+      "VendorKey": "bytedance",
+      "DisplayName": "Trae",
+      "Category": "harness",
+      "Signatures": {
+        "BundleIDs": ["com.trae.app"],
+        "Binaries": null,
+        "ConfigDirs": ["~/.trae", "~/Library/Application Support/Trae"],
+        "ProcessNames": ["Trae"]
+      },
+      "VersionPlistKey": "",
+      "ClientInfoNames": ["trae", "Trae"],
+      "Documents": null
+    },
+    {
+      "ID": "warp",
+      "VendorKey": "warp",
+      "DisplayName": "Warp",
+      "Category": "harness",
+      "Signatures": {
+        "BundleIDs": ["dev.warp.Warp-Stable"],
+        "Binaries": null,
+        "ConfigDirs": ["~/.warp"],
+        "ProcessNames": ["Warp"]
+      },
+      "VersionPlistKey": "",
+      "ClientInfoNames": ["warp", "Warp"],
+      "Documents": null
+    },
+    {
+      "ID": "cherry-studio",
+      "VendorKey": "cherrystudio",
+      "DisplayName": "Cherry Studio",
+      "Category": "assistant",
+      "Signatures": {
+        "BundleIDs": ["com.kangfenmao.CherryStudio"],
+        "Binaries": null,
+        "ConfigDirs": ["~/Library/Application Support/CherryStudio"],
+        "ProcessNames": ["Cherry Studio"]
+      },
+      "VersionPlistKey": "",
+      "ClientInfoNames": ["cherry-studio", "Cherry Studio"],
+      "Documents": null
+    },
+    {
+      "ID": "msty",
+      "VendorKey": "msty",
+      "DisplayName": "Msty",
+      "Category": "assistant",
+      "Signatures": {
+        "BundleIDs": ["app.msty.app"],
+        "Binaries": null,
+        "ConfigDirs": ["~/Library/Application Support/Msty"],
+        "ProcessNames": ["Msty"]
+      },
+      "VersionPlistKey": "",
+      "ClientInfoNames": ["msty", "Msty"],
+      "Documents": null
+    },
+    {
+      "ID": "anythingllm",
+      "VendorKey": "mintplexlabs",
+      "DisplayName": "AnythingLLM",
+      "Category": "assistant",
+      "Signatures": {
+        "BundleIDs": null,
+        "Binaries": null,
+        "ConfigDirs": ["~/Library/Application Support/anythingllm-desktop"],
+        "ProcessNames": ["AnythingLLM"]
+      },
+      "VersionPlistKey": "",
+      "ClientInfoNames": ["anythingllm", "AnythingLLM"],
+      "Documents": null
+    },
+    {
+      "ID": "open-webui",
+      "VendorKey": "openwebui",
+      "DisplayName": "Open WebUI",
+      "Category": "assistant",
+      "Signatures": {
+        "BundleIDs": null,
+        "Binaries": ["open-webui"],
+        "ConfigDirs": null,
+        "ProcessNames": ["open-webui"]
+      },
+      "VersionPlistKey": "",
+      "ClientInfoNames": ["open-webui", "Open WebUI"],
+      "Documents": null
+    },
+    {
+      "ID": "jan",
+      "VendorKey": "menlo",
+      "DisplayName": "Jan",
+      "Category": "local_model",
+      "Signatures": {
+        "BundleIDs": ["jan.ai.app"],
+        "Binaries": null,
+        "ConfigDirs": ["~/Library/Application Support/Jan", "~/.config/jan"],
+        "ProcessNames": ["Jan"]
+      },
+      "VersionPlistKey": "",
+      "ClientInfoNames": null,
+      "Documents": null
+    },
+    {
+      "ID": "gpt4all",
+      "VendorKey": "nomic",
+      "DisplayName": "GPT4All",
+      "Category": "local_model",
+      "Signatures": {
+        "BundleIDs": ["com.nomic-ai.gpt4all"],
+        "Binaries": null,
+        "ConfigDirs": ["~/Library/Application Support/GPT4All"],
+        "ProcessNames": ["gpt4all"]
+      },
+      "VersionPlistKey": "",
+      "ClientInfoNames": null,
+      "Documents": null
+    },
+    {
+      "ID": "llamacpp",
+      "VendorKey": "ggml",
+      "DisplayName": "llama.cpp",
+      "Category": "local_model",
+      "Signatures": {
+        "BundleIDs": null,
+        "Binaries": ["llama-server", "llama-cli"],
+        "ConfigDirs": null,
+        "ProcessNames": ["llama-server"]
+      },
+      "VersionPlistKey": "",
+      "ClientInfoNames": null,
+      "Documents": null
+    },
+    {
+      "ID": "vllm",
+      "VendorKey": "vllm",
+      "DisplayName": "vLLM",
+      "Category": "local_model",
+      "Signatures": {
+        "BundleIDs": null,
+        "Binaries": ["vllm"],
+        "ConfigDirs": null,
+        "ProcessNames": ["vllm"]
+      },
+      "VersionPlistKey": "",
+      "ClientInfoNames": null,
+      "Documents": null
+    },
+    {
+      "ID": "localai",
+      "VendorKey": "localai",
+      "DisplayName": "LocalAI",
+      "Category": "local_model",
+      "Signatures": {
+        "BundleIDs": null,
+        "Binaries": ["local-ai"],
+        "ConfigDirs": null,
+        "ProcessNames": ["local-ai"]
+      },
+      "VersionPlistKey": "",
+      "ClientInfoNames": null,
+      "Documents": null
+    },
+    {
+      "ID": "koboldcpp",
+      "VendorKey": "koboldcpp",
+      "DisplayName": "KoboldCpp",
+      "Category": "local_model",
+      "Signatures": {
+        "BundleIDs": null,
+        "Binaries": ["koboldcpp"],
+        "ConfigDirs": null,
+        "ProcessNames": ["koboldcpp"]
+      },
+      "VersionPlistKey": "",
+      "ClientInfoNames": null,
+      "Documents": null
+    },
+    {
+      "ID": "ollama",
+      "VendorKey": "ollama",
+      "DisplayName": "Ollama",
+      "Category": "local_model",
+      "Signatures": {
+        "BundleIDs": ["com.electron.ollama"],
+        "Binaries": ["ollama"],
+        "ConfigDirs": ["~/.ollama"],
+        "ProcessNames": ["ollama"]
+      },
+      "VersionPlistKey": "",
+      "ClientInfoNames": null,
+      "Documents": null
+    },
+    {
+      "ID": "lmstudio",
+      "VendorKey": "lmstudio",
+      "DisplayName": "LM Studio",
+      "Category": "local_model",
+      "Signatures": {
+        "BundleIDs": ["ai.elementlabs.lmstudio"],
+        "Binaries": ["lms"],
+        "ConfigDirs": ["~/.lmstudio"],
+        "ProcessNames": ["LM Studio"]
+      },
+      "VersionPlistKey": "",
+      "ClientInfoNames": null,
+      "Documents": null
+    }
+  ]
+}

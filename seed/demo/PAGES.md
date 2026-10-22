@@ -346,3 +346,7 @@ No Stripe subscription, promotion, or local billing settings are seeded for it.
 Browser verification: [~] — follow check 30 in `seed/demo/verify.md`.
 
 The seeded gateway uses Progressive discovery. Settings shows this default and Inspect can reconnect in Direct mode to show qualified member tools. Choosing a mode in Inspect leaves the gateway default unchanged.
+
+AI tool decisions: all five seeded built-ins reference global catalog products.
+The catalog bootstrap runs before tenant provisioning; reseeding preserves the
+references and catalog edits. Postflight checks five matching product links.

@@ -569,3 +569,9 @@ LEFT JOIN sigint_custom_signals cs
 WHERE ss.project_id = @project_id::uuid AND ss.deleted IS FALSE
   AND (s.id IS NULL OR s.deleted IS TRUE
     OR cs.id IS NULL OR cs.deleted IS TRUE);
+
+-- name: PostflightIDLinkedAITools :one
+SELECT count(*) FROM ai_scan_targets t
+JOIN ai_products p ON p.id = t.ai_product_id
+WHERE t.organization_id = @org_id::text AND t.ai_product_id = t.id
+  AND t.id IN ('claude-code', 'codex', 'hermes-agent', 'zed', 'goose');
