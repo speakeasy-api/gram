@@ -216,6 +216,20 @@ step. The gap-fill lookup checks ClickHouse in batches bounded by organization,
 project, the batch's UTC partition days, and source. It first matches the
 deterministic migration id, then matches a different live id by anchor, policy
 id and version, source, rule id, and span offsets.
+prompt_injection and llm_judge findings match without span offsets: the two
+stores render the judged event at different lengths, so the same verdict
+carries different offsets.
+
+Gap-fill reads Postgres one project at a time (every project of `-org`, or
+only `-project`), paging by `(created_at, id)` so the `(project_id,
+created_at)` indexes drive each page. A page that a read replica cancels with
+a recovery conflict (SQLSTATE `40001`) is retried from the same position up
+to four times before the run fails.
+
+An organization-wide gap-fill lists the organization's projects once at the
+start, so projects created during the run are not covered, and resuming with
+`-gap-fill-cursor` can skip projects added since the original run. If projects
+may have been added, re-run without the cursor; matching is idempotent.
 
 1. Run a gap-fill dry run:
 
@@ -233,8 +247,12 @@ id and version, source, rule id, and span offsets.
    `skipped_ch_newer` counts Postgres marks ignored because ClickHouse has an
    explicit reversal or a newer state event, and `inserts` is the number of
    missing ClickHouse rows.
-3. Repeat the same command with `-dry-run=false`. Preserve `-org`, `-project`,
-   `-policy`, `-sources`, `-from`, and `-to` when resuming with `-cursor`.
+3. Repeat the same command with `-dry-run=false`. To resume, pass the
+   `-gap-fill-cursor <project_id>/<created_at>/<id>` value the failure log
+   prints (`-cursor` does not apply to gap-fill) and preserve `-org`,
+   `-project`, `-policy`, `-sources`, `-from`, and `-to`. Pass `-from`
+   explicitly on resume (the failure log prints the effective value), since
+   the gap-fill default is relative to run time.
 4. Run the gap-fill dry run again. Every source should report zero
    `state_copies` and zero `inserts`.
 5. For each project, run the policy-filter sweep dry run:
