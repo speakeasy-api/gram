@@ -43,6 +43,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oauth/jwtclaims"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/otel/dialect"
 	"github.com/speakeasy-api/gram/server/internal/otelpub"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	"github.com/speakeasy-api/gram/server/internal/rag"
@@ -447,7 +448,7 @@ func handleToolsCall(
 
 		logAttrs[attr.EventSourceKey] = string(tm.EventSourceToolCall)
 		logAttrs[attr.ToolCallIDKey] = call.id
-		logAttrs[attr.OutcomeKey] = toolCallOutcome(rw.statusCode, rw.resultIsError)
+		logAttrs[attr.OutcomeKey] = dialect.ToolCallOutcome(rw.statusCode, rw.resultIsError)
 		logAttrs[attr.ToolCallDurationKey] = time.Since(call.start).Seconds()
 		logAttrs.RecordStatusCode(rw.statusCode)
 		logAttrs.RecordRequestBody(requestBytes)
@@ -572,7 +573,7 @@ func handleToolsCall(
 			return nil, failure
 		}
 		// The call's records follow the upstream's own isError verdict.
-		rw.resultIsError = mcpResultIsError(rw.body.Bytes())
+		rw.resultIsError = dialect.MCPResultIsError(rw.body.Bytes())
 		bs, err := json.Marshal(result[json.RawMessage]{
 			ID:             req.ID,
 			Result:         json.RawMessage(rw.body.Bytes()),
@@ -588,13 +589,12 @@ func handleToolsCall(
 		return bs, nil
 	}
 
-	chunk, structured, err := formatResult(*rw, plan.Kind)
+	responseContent, structured, err := formatResult(*rw, plan.Kind)
 	if err != nil {
 		failure := oops.E(oops.CodeUnexpected, err, "failed format tool call result").LogError(ctx, logger)
 		recordToolCallErrorStatus(ctx, rw, failure)
 		return nil, failure
 	}
-	responseContent := []json.RawMessage{chunk}
 	if plan.Kind != gateway.ToolKindPrompt {
 		responsePayload, parseErr := mcpriskscan.ToolResultPayload(responseContent, structured)
 		if parseErr != nil {
@@ -829,15 +829,16 @@ func discardWithheldBody(body *bytes.Buffer) {
 }
 
 // formatResult turns a tool's raw HTTP response body into an MCP content
-// chunk. When the body is a JSON object it also returns it verbatim as
+// array. When the body is a JSON object it also returns it verbatim as
 // structuredContent so spec-compliant clients (MCP 2025-06-18) receive a
 // parsed object instead of having to re-parse the stringified text block.
 // structured is nil for non-JSON bodies and for JSON that is not an object
 // (arrays/scalars), which the spec reserves the field for.
-func formatResult(rw toolCallResponseWriter, toolKind gateway.ToolKind) (chunk json.RawMessage, structured json.RawMessage, err error) {
+func formatResult(rw toolCallResponseWriter, toolKind gateway.ToolKind) (content []json.RawMessage, structured json.RawMessage, err error) {
 	body := rw.body.Bytes()
 	if len(body) == 0 {
-		return nil, nil, nil
+		// MCP requires an array of content blocks, not null or [null].
+		return []json.RawMessage{}, nil, nil
 	}
 
 	ct := rw.headers.Get("content-type")
@@ -867,7 +868,7 @@ func formatResult(rw toolCallResponseWriter, toolKind gateway.ToolKind) (chunk j
 			}
 		}
 
-		return bs, structured, nil
+		return []json.RawMessage{bs}, structured, nil
 	case strings.HasPrefix(mt, "image/"):
 		encoded := base64.StdEncoding.EncodeToString(body)
 		bs, err := json.Marshal(contentChunk[json.RawMessage, string]{
@@ -881,7 +882,7 @@ func formatResult(rw toolCallResponseWriter, toolKind gateway.ToolKind) (chunk j
 			return nil, nil, fmt.Errorf("serialize image content: %w", err)
 		}
 
-		return bs, nil, nil
+		return []json.RawMessage{bs}, nil, nil
 	case strings.HasPrefix(mt, "audio/"):
 		encoded := base64.StdEncoding.EncodeToString(body)
 		bs, err := json.Marshal(contentChunk[json.RawMessage, string]{
@@ -895,7 +896,7 @@ func formatResult(rw toolCallResponseWriter, toolKind gateway.ToolKind) (chunk j
 			return nil, nil, fmt.Errorf("serialize audio content: %w", err)
 		}
 
-		return bs, nil, nil
+		return []json.RawMessage{bs}, nil, nil
 	default:
 		return nil, nil, fmt.Errorf("unsupported content type %q", ct)
 	}
@@ -933,7 +934,7 @@ func filterOmittedEnvVars(
 		return fmt.Errorf("get metadata for toolset: %w", err)
 	}
 
-	mcpMeta, err := mcpmetadata.ToMCPMetadata(ctx, repo, rawMetadata)
+	mcpMeta, err := mcpmetadata.ToMCPMetadata(ctx, repo, mcpmetadata.MetadataRecord(rawMetadata))
 	if err != nil {
 		return fmt.Errorf("convert to mcp metadata: %w", err)
 	}

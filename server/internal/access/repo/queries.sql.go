@@ -217,6 +217,7 @@ WHERE organization_id = $1
     'resource_kind', $3::text,
     'resource_id', $4::text
   )
+  AND principal_type <> 'api_key'
 `
 
 type DeletePrincipalGrantsByResourceParams struct {
@@ -245,6 +246,7 @@ DELETE FROM principal_grants
 WHERE organization_id = $1
   AND scope = $2
   AND selectors = $3
+  AND principal_type <> 'api_key'
 `
 
 type DeletePrincipalGrantsByTargetParams struct {
@@ -2862,6 +2864,7 @@ type ListPrincipalGrantsByOrgRow struct {
 
 // Queries for managing principal grants (RBAC).
 // principal_grants is org-scoped (no project_id); every query is scoped to organization_id.
+// Audience reads and replacements skip api_key rows: a key's policy is owned by the keys service.
 // Returns all grant rows for an organization, optionally filtered by principal URN.
 func (q *Queries) ListPrincipalGrantsByOrg(ctx context.Context, arg ListPrincipalGrantsByOrgParams) ([]ListPrincipalGrantsByOrgRow, error) {
 	rows, err := q.db.Query(ctx, listPrincipalGrantsByOrg, arg.OrganizationID, arg.PrincipalUrn)
@@ -2901,6 +2904,7 @@ WHERE organization_id = $1
     'resource_kind', $3::text,
     'resource_id', $4::text
   )
+  AND principal_type <> 'api_key'
 ORDER BY principal_urn
 `
 
@@ -2952,6 +2956,7 @@ WHERE organization_id = $1
     'resource_kind', $3::text
   )
   AND selectors->>'resource_id' = ANY($4::text[])
+  AND principal_type <> 'api_key'
 ORDER BY principal_urn
 `
 

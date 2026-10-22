@@ -11,6 +11,7 @@ import (
 	_ "embed"
 	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"html/template"
@@ -30,11 +31,14 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/consentpage"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
+	"github.com/speakeasy-api/gram/server/internal/mcpaccess"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -100,6 +104,15 @@ func (d consentTemplateData) ConsentPath() string {
 // staying bounded.
 const consentFormMaxBytes = 1 << 20 // 1 MiB
 
+type consentApprovalError struct {
+	// Message explains why this origin or capture cannot be approved.
+	Message string
+	// ActionURL leads to the required surface or access request.
+	ActionURL string
+	// ActionLabel names the recovery action when one exists.
+	ActionLabel string
+}
+
 // consentTemplateData is the field set the consent template renders against.
 type consentTemplateData struct {
 	// ShowDiscoveryMode exposes optional gateway connection settings.
@@ -125,6 +138,8 @@ type consentTemplateData struct {
 	// remote-session challenges, or when at least one challenge has been
 	// completed (a card is Connected). Cancel is always available.
 	ConsentEnabled bool
+	// ApprovalError blocks approval while keeping Cancel available.
+	ApprovalError *consentApprovalError
 	// FirstParty swaps the approve/deny client-grant footer for a terminal
 	// completion message: a first-party challenge has no MCP client to grant
 	// to, so linking the cards is the whole job.
@@ -176,6 +191,8 @@ type consentTemplateData struct {
 	// template renders disabled; a missing or failed bundle therefore fails
 	// closed.
 	ShowToolsIsland bool
+	// GatewayInventory is the captured gateway inventory used by both consent views.
+	GatewayInventory string
 	// ConsentToolsURL is the state-authorized inventory action the island
 	// POSTs its tools/list request to.
 	ConsentToolsURL string
@@ -558,6 +575,12 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		return oops.E(oops.CodeUnauthorized, nil, "authn challenge subject is not resolved").LogError(ctx, logger)
 	}
 
+	if endpoint.MetaMcpServerID.Valid {
+		if err := s.consentToolInventoryCache.DeleteByPrefix(ctx, "consentToolInventory:"+stateID+":"); err != nil {
+			return oops.E(oops.CodeUnavailable, err, "could not invalidate the previous gateway capture")
+		}
+	}
+
 	subjectDisplay := resolveSubjectDisplay(ctx, s.db, *challengeState.Subject)
 
 	autoRefreshPolicy := s.resolveAutoRefreshPolicy(ctx, endpoint.OrganizationID)
@@ -636,10 +659,7 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		everyCardAutoRefreshes = everyCardAutoRefreshes && c.AutoRefreshChecked
 	}
 	autoRefreshOn := len(cards) > 0 && everyCardAutoRefreshes
-	// Chained cards enable access too: the runtime chains when no interactive token exists.
-	// A gateway's servers each connect on their own page, and a server not
-	// yet connected answers its tool calls with a link to that page, so
-	// approving the gateway waits on none of them.
+	// Gateway capture below decides whether any member can be approved.
 	consentEnabled := gateway != nil || len(cards) == 0 || connectedCardCount > 0 || chainedCardCount > 0
 
 	agentSelectionEnabled := false
@@ -713,40 +733,81 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		}
 	}
 
-	// Only modern endpoints can author per-tool consent: legacy and meta-MCP
-	// endpoints remain unrestricted-only, and toolset-fronting servers qualify
-	// only when every tool is representable in the island. The island owns
-	// approve-button enabling, so unavailable checks must hide it rather than
-	// prevent unrestricted approval.
+	// Modern single-server endpoints offer optional tool selection. Gateways
+	// require a complete capture before approving any discovery mode.
 	showToolsIsland := false
-	if !challengeState.FirstParty {
+	if !challengeState.FirstParty && focusServer == "" {
 		var eligibilityErr error
 		showToolsIsland, eligibilityErr = s.consentToolPickerEligible(ctx, endpoint)
 		if eligibilityErr != nil {
 			logger.WarnContext(ctx, "consent tool picker eligibility unavailable", attr.SlogError(eligibilityErr))
 		}
 	}
-	if showToolsIsland {
-		lockedDown, lerr := s.customDomainLockdownApplies(ctx, logger, endpoint.ProjectID)
+	var gatewayInventory string
+	var approvalError *consentApprovalError
+	if showToolsIsland && gateway != nil {
+		lockedDown, lockErr := s.endpointCustomDomainLockdown(ctx, logger, endpoint)
+		if lockErr != nil {
+			return lockErr
+		}
+		if lockedDown {
+			domain, domainErr := customdomainsrepo.New(s.db).GetCustomDomainByOrganization(ctx, endpoint.OrganizationID)
+			if domainErr != nil {
+				return oops.E(oops.CodeUnavailable, domainErr, "could not load the gateway's custom domain")
+			}
+			approvalError = &consentApprovalError{Message: "This gateway's custom domain is not ready. Ask an administrator to finish setup before reconnecting your client.", ActionURL: "", ActionLabel: ""}
+			if domain.Verified && domain.Activated {
+				gatewayURL, err := endpoint.RootURL("https://" + domain.Domain)
+				if err != nil {
+					return oops.E(oops.CodeUnexpected, err, "build custom-domain gateway URL").LogError(ctx, logger)
+				}
+				approvalError = &consentApprovalError{Message: "Reconnect your AI client using this gateway's MCP URL on its custom domain:", ActionURL: gatewayURL, ActionLabel: gatewayURL}
+			}
+		} else {
+			gatewayInventory, err = s.captureGatewayConsentInventory(r, endpoint, challengeState, gateway)
+			if err != nil {
+				logger.WarnContext(ctx, "gateway consent capture failed", attr.SlogError(err))
+				approvalError = &consentApprovalError{Message: "Tools could not be captured. This gateway cannot be approved. Try again later.", ActionURL: "", ActionLabel: ""}
+				if denied, ok := errors.AsType[*oops.ShareableError](err); ok && denied.Code == oops.CodeForbidden {
+					approvalError.Message = "You do not have access to this gateway. Request access before approving it."
+					approvalError.ActionURL = s.requestAccessURL(ctx, endpoint.connectResourceID().String(), endpoint.Slug)
+					approvalError.ActionLabel = "Request access"
+					if endpoint.IsOrganizationGateway() {
+						if auth, ok := contextvalues.GetAuthContext(ctx); ok && auth != nil {
+							approvalError.ActionURL = mcpaccess.AuthorizationChallengesURL(s.siteURL, auth.OrganizationSlug)
+						}
+					}
+				}
+				if errors.Is(err, errConnectionCatalogTooLarge) {
+					approvalError.Message = "Tool definitions are too large to approve here. Ask an administrator to reduce the tool inventory."
+				}
+				if errors.Is(err, errConsentCaptureSuperseded) {
+					approvalError.Message = "This page was replaced by a newer one. Reload the page to continue."
+				}
+			} else if gateway.ReadyCount == 0 {
+				approvalError = &consentApprovalError{Message: "No servers could be verified. Resolve the server statuses above before approving access.", ActionURL: "", ActionLabel: ""}
+			}
+		}
+	} else if showToolsIsland {
+		lockedDown, lerr := s.endpointCustomDomainLockdown(ctx, logger, endpoint)
 		if lerr != nil {
 			return lerr
 		}
-		// The consent transport enumerates the live upstream inventory and is
-		// therefore lockdown-protected like runtime MCP dispatch. On the
-		// platform origin, hide the island so the page does not deadlock on a
-		// relative transport request that must be rejected; the ordinary
-		// unrestricted approval path remains available.
-		if lockedDown {
-			showToolsIsland = false
-		}
+		showToolsIsland = !lockedDown
 	}
+	if approvalError != nil {
+		showToolsIsland = false
+		consentEnabled = false
+		agentSelectionEnabled = false
+	}
+
 	prefillAttr := ""
 	if showToolsIsland {
-		prefillAttr = consentPrefillAttr(
-			s.consentToolSelectionPrefill(ctx, endpoint, *challengeState.Subject, clientRowID),
-		)
+		if policy := s.consentStoredSessionPolicy(ctx, endpoint, *challengeState.Subject, clientRowID); policy != nil {
+			prefillAttr = consentPrefillAttr(policy.Selection, policy.Catalog)
+		}
 	}
-	inventoryDeferred := consentInventoryDeferred(cards, prefillAttr != "")
+	inventoryDeferred := gateway == nil && consentInventoryDeferred(cards, prefillAttr != "")
 	showDiscoveryMode := !challengeState.FirstParty && focusServer == "" && gatewayDiscoveryOptionsOffered(endpoint)
 	var prefillDiscoveryMode metamcp.DiscoveryMode
 	if showDiscoveryMode {
@@ -765,6 +826,7 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		ScriptURL:               consentScriptURL,
 		RemoteSessionCards:      cards,
 		ConsentEnabled:          consentEnabled,
+		ApprovalError:           approvalError,
 		FirstParty:              challengeState.FirstParty,
 		ClientIDOrigin:          clientIDOrigin,
 		LoopbackRedirectWarning: loopbackRedirectWarning,
@@ -775,6 +837,7 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		AutoRefreshOn:           autoRefreshOn,
 		AutoRefreshHasSessions:  autoRefreshHasSessions,
 		ShowToolsIsland:         showToolsIsland,
+		GatewayInventory:        gatewayInventory,
 		ShowDiscoveryMode:       showDiscoveryMode,
 		PrefillDiscoveryMode:    prefillDiscoveryMode,
 		ConsentToolsURL:         endpoint.consentPath() + "/mcp",
@@ -917,6 +980,15 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageConsent)
 		return oops.E(oops.CodeUnauthorized, nil, "authn challenge subject is not resolved").LogError(ctx, logger)
 	}
+	if endpoint.MetaMcpServerID.Valid && !challengeState.FirstParty {
+		lockedDown, err := s.endpointCustomDomainLockdown(ctx, logger, endpoint)
+		if err != nil {
+			return err
+		}
+		if lockedDown {
+			return oops.E(oops.CodeForbidden, nil, "Start authorization from this gateway's custom domain to approve access.")
+		}
+	}
 
 	selectedAgentID := strings.TrimSpace(r.PostForm.Get("agent_id"))
 	if (action == "approve_agent") != (selectedAgentID != "") {
@@ -956,15 +1028,9 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		}
 	}
 
-	// A restrictive approve binds to the exact inventory snapshot the island
-	// displayed: the island submits its attempt id only after fetching every
-	// page, and only a COMPLETE snapshot satisfies the lookup. A missing,
-	// incomplete, or expired snapshot is retryable — reload the page — and
-	// must not consume the challenge; a store outage is an operational 503.
-	// Approvals without tool_filtering=on (pages rendered before the picker
-	// deployed or with the product feature off) skip the binding: they mint the
-	// unrestricted grant the pre-picker flow always minted, so stripping the
-	// field can only widen a submission to the status quo, never past it.
+	// Gateway approval always binds to a complete attempt, including live
+	// discovery: only successfully discovered members may be authorized.
+	materializeGateway := endpoint.MetaMcpServerID.Valid && !challengeState.FirstParty && selectedAgentID == ""
 	var boundInventory *consentToolInventory
 	if reuse {
 		boundInventory, err = s.consentReuseInventory(ctx, endpoint, challengeState, r.PostForm.Get("tool_inventory_id"))
@@ -973,7 +1039,7 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 			return nil
 		}
 	}
-	if selectedAgentID == "" && !reuse && r.PostForm.Get("tool_filtering") == "on" {
+	if selectedAgentID == "" && !reuse && (r.PostForm.Get("tool_filtering") == "on" || materializeGateway) {
 		eligible, eerr := s.consentToolPickerEligible(ctx, endpoint)
 		if eerr != nil {
 			return oops.E(oops.CodeUnavailable, eerr, "service temporarily unavailable").LogError(ctx, logger)
@@ -986,7 +1052,7 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		if aerr != nil {
 			return oops.E(oops.CodeConflict, aerr, "tool inventory is no longer available; reload the page and try again").LogWarn(ctx, logger)
 		}
-		inventory, found, gerr := s.getCompletedConsentInventory(ctx, stateID, attempt)
+		inventory, found, gerr := s.getCompletedConsentInventory(ctx, endpoint, stateID, attempt)
 		if gerr != nil {
 			return oops.E(oops.CodeUnavailable, gerr, "service temporarily unavailable").LogError(ctx, logger)
 		}
@@ -994,11 +1060,14 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 			return oops.E(oops.CodeConflict, nil, "tool inventory is no longer available; reload the page and try again").LogWarn(ctx, logger)
 		}
 		boundInventory = &inventory
+		if materializeGateway && len(inventory.MemberBindings) == 0 {
+			return oops.E(oops.CodeFailedPrecondition, nil, "No servers could be verified. Resolve the server statuses before approving access.")
+		}
 	}
 
 	if selectedAgentID == "" && !reuse && boundInventory == nil && r.PostForm.Get("tool_inventory_id") != "" {
 		if attempt, aerr := consentAttemptID(r.PostForm.Get("tool_inventory_id")); aerr == nil {
-			if inventory, found, gerr := s.getCompletedConsentInventory(ctx, stateID, attempt); gerr == nil && found {
+			if inventory, found, gerr := s.getCompletedConsentInventory(ctx, endpoint, stateID, attempt); gerr == nil && found {
 				boundInventory = &inventory
 			}
 		}
@@ -1012,7 +1081,25 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		}
 	}
 
-	toolPolicy, err := s.consentGatewayPolicy(ctx, endpoint, challengeState, selectedAgentID, r.PostForm.Get("discovery_mode"), toolSelection)
+	catalogMode := toolfilter.CatalogModeLive
+	if materializeGateway {
+		if toolSelection != nil {
+			catalogMode = toolfilter.CatalogModeCached
+		}
+		if requested := r.PostForm.Get("tool_catalog_mode"); requested != "" {
+			catalogMode = toolfilter.CatalogMode(requested)
+		}
+		if catalogMode != toolfilter.CatalogModeLive && catalogMode != toolfilter.CatalogModeCached {
+			return oops.E(oops.CodeBadRequest, nil, "invalid tool catalog mode").LogWarn(ctx, logger)
+		}
+		if toolSelection != nil && len(toolSelection.LiveAnnotations()) > 0 {
+			return oops.E(oops.CodeBadRequest, nil, "Specific tools must use the tools captured at consent").LogWarn(ctx, logger)
+		}
+		if toolSelection != nil && catalogMode != toolfilter.CatalogModeCached {
+			return oops.E(oops.CodeBadRequest, nil, "Specific tools requires a cached catalog").LogWarn(ctx, logger)
+		}
+	}
+	toolPolicy, err := s.consentGatewayPolicy(ctx, endpoint, challengeState, selectedAgentID, r.PostForm.Get("discovery_mode"))
 	if err != nil {
 		return err
 	}
@@ -1074,6 +1161,27 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		return oops.E(oops.CodeUnavailable, err, "read upstream client picks").LogError(ctx, logger)
 	}
 
+	if materializeGateway {
+		reference, err := s.publishConnectionCatalog(ctx, endpoint, challengeState, boundInventory, toolSelection, catalogMode, r.PostForm.Get("tool_filtering") != "on", upstreamPicks, duration, time.Now())
+		if err != nil {
+			if errors.Is(err, errConnectionCatalogTooLarge) {
+				return oops.E(oops.CodeInvalid, err, "Selected tool definitions are too large to approve. Choose fewer tools or contact an administrator.").LogWarn(ctx, logger)
+			}
+			if errors.Is(err, errConsentConfigurationChanged) {
+				return oops.E(oops.CodeFailedPrecondition, err, "Server configuration changed. Reload consent to review access.").LogWarn(ctx, logger)
+			}
+			return oops.E(oops.CodeUnavailable, err, "could not save the approved tool catalog; retry consent").LogError(ctx, logger)
+		}
+		if toolPolicy == nil {
+			toolPolicy = &toolfilter.SessionPolicy{Resource: endpointToolSelectionResource(endpoint), Selection: toolSelection, Gateway: &toolfilter.GatewayOptions{DiscoveryMode: nil}, Catalog: nil}
+		}
+		toolPolicy.Selection = toolSelection
+		toolPolicy.Catalog = reference
+		if _, err := json.Marshal(toolPolicy); err != nil {
+			return oops.E(oops.CodeInvalid, err, "invalid gateway approval; reload consent").LogWarn(ctx, logger)
+		}
+	}
+
 	// Atomic GETDEL: a consent approval consumes the authn-challenge state
 	// single-use. Parallel POSTs (e.g. user double-submits) lose the race
 	// and get "not found or expired", so only one grant is ever minted per
@@ -1130,6 +1238,8 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 	}
 	if agentAuthorization != nil {
 		code = agentAuthorizationCodePrefix + code
+	} else if toolPolicy != nil && toolPolicy.Catalog != nil {
+		code = catalogAuthorizationCodePrefix + code
 	} else if toolPolicy != nil {
 		code = gatewayAuthorizationCodePrefix + code
 	}
@@ -1150,7 +1260,7 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		Endpoint:                    &grantEndpoint,
 		AgentAuthorization:          agentAuthorization,
 		DesiredSessionDurationHours: duration,
-		ToolSelection:               toolSelection,
+		ToolSelection:               legacyToolSelection(toolSelection, toolPolicy),
 		SignInID:                    nil,
 		GatewayPolicy:               toolPolicy,
 		UpstreamClientPicks:         upstreamPicks,

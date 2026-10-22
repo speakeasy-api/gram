@@ -348,6 +348,11 @@ func mcpRuntimeFlags() []cli.Flag {
 			EnvVars: []string{"GRAM_OPENAI_APPS_CHALLENGE_TOKEN"},
 		},
 		&cli.StringFlag{
+			Name:    "mcp-registry-auth",
+			Usage:   "Proof record served at /.well-known/mcp-registry-auth on the platform hosts, for the official MCP registry's HTTP ownership check (\"v=MCPv1; k=ed25519; p=<public key>\"). Empty serves not found.",
+			EnvVars: []string{"GRAM_MCP_REGISTRY_AUTH"},
+		},
+		&cli.StringFlag{
 			Name:    "presidio-analyzer-url",
 			Usage:   "Base URL of the Presidio Analyzer service (e.g. http://presidio-analyzer:3000). Empty disables PII scanning.",
 			EnvVars: []string{"PRESIDIO_ANALYZER_URL"},
@@ -1245,6 +1250,9 @@ func newStartCommand() *cli.Command {
 			assistantsCore.SetWakeCanceller(triggerApp)
 			assistantsCore.SetDashboardIngestor(triggerApp)
 			assistantsCore.SetChatMessageWriter(chatWriter)
+			if err := installKitLocalRuntimeFromCLI(c, assistantsCore, db, auditLogger, redisClient, serverURL); err != nil {
+				return err
+			}
 			assistantsCore.SetAssetStorage(assetStorage)
 			assistantsCore.SetAssetSigningKey(c.String(usersessions.JWTSigningKeyFlag))
 			assistantsCore.SetSlackImageInlining(env, slackapi.NewClient("", guardianPolicy.PooledClient()))
@@ -1676,6 +1684,7 @@ func newStartCommand() *cli.Command {
 				publishSignaler := &background.TemporalPluginPublisher{TemporalEnv: temporalEnv}
 				pluginsPublishSignaler, skillsPublishSignaler = publishSignaler, publishSignaler
 			}
+			roleManager.WithPluginPublisher(pluginsPublishSignaler)
 			if pluginPublisher != nil {
 				pluginPublisher.WithDistributionAdmission(distributionAdmission)
 			}

@@ -107,6 +107,7 @@ func (s *AssistantIdentityService) upgrade(ctx context.Context, principal Princi
 }
 
 func registerAssistantIdentityTool(reg *Registrar, service *AssistantIdentityService) {
+	registerAssistantRuntimeTool(reg, service)
 	addTool(reg, &mcp.Tool{
 		Meta: nil, InputSchema: nil, OutputSchema: nil, Icons: nil,
 		Name:        upgradeAssistantIdentityToolName,

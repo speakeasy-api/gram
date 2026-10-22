@@ -144,6 +144,8 @@ export function isAgentPolicyNarrowable(resourceType: ResourceType): boolean {
  * The resource kind a scope's selectors must carry. Mirrors
  * `ResourceKindForScope` in server/internal/authz/selector.go, which derives it
  * from the scope; `ValidateSelector` rejects a selector that disagrees.
+ * mcp:auth grants are deliberately unrepresentable here until the auth client
+ * editor exists, so stored ones are preserved and locked.
  */
 const RESOURCE_KIND_BY_SCOPE_FAMILY: Record<
   string,

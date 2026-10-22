@@ -246,8 +246,7 @@
             </summary>
             <div class="flex flex-col gap-3 px-6 pt-4 pb-6 sm:px-8">
               <p class="text-xs text-muted-foreground">
-                A server that needs you to sign in works as soon as you connect
-                it, now or the first time you use it.
+                {{if .ShowToolsIsland}}Only servers verified at consent are included. If access or a connection changes, reload this page to review it.{{else}}Connect a server that needs you to sign in before using it.{{end}}
               </p>
               <ul class="m-0 flex max-h-96 list-none flex-col overflow-y-auto border p-0">
                 {{range .Gateway.Servers}}
@@ -650,17 +649,25 @@
         </div>
         {{end}}
 
+        {{with .ApprovalError}}
+        <div role="alert" class="border-b px-6 py-6 text-sm sm:px-8">
+          <p>{{.Message}}</p>
+          {{if .ActionURL}}<a class="underline" href="{{.ActionURL}}">{{.ActionLabel}}</a>{{end}}
+        </div>
+        {{end}}
         {{if .ShowToolsIsland}}
         <div data-agent-self-only class="flex flex-col gap-3 border-b px-6 py-6 sm:px-8"
         >
           <h2 class="text-eyebrow">Tool access</h2>
           <div
             id="consent-tools-root"
+            data-gateway-inventory="{{.GatewayInventory}}"
             data-tools-url="{{.ConsentToolsURL}}"
             data-state="{{.State}}"
             data-csrf-token="{{.CSRFToken}}"
             data-form-id="consent-approve-form"
             data-approve-button-id="consent-approve-button"
+            data-gateway="{{if .ShowDiscoveryMode}}true{{else}}false{{end}}"
             data-consent-enabled="{{if .ConsentEnabled}}true{{else}}false{{end}}"
             data-inventory-deferred="{{if .ConsentToolsDeferred}}true{{else}}false{{end}}"
             data-server-name="{{.MCPSlug}}"
@@ -670,8 +677,9 @@
             aria-live="polite"
           >
             <p class="text-sm text-muted-foreground">
-              Loading available tools…
+              Loading tool choices. Approval is unavailable until they appear.
             </p>
+            <noscript>To choose tools, enable JavaScript and reload this page.</noscript>
           </div>
         </div>
         {{end}}
@@ -891,7 +899,7 @@
             >
               Give access
             </button>
-            {{if and (not .ConsentEnabled) (not .ShowToolsIsland)}}
+            {{if and (not .ConsentEnabled) (not .ShowToolsIsland) (not .ApprovalError)}}
             <p data-agent-self-only class="text-muted-foreground mt-2 text-xs">
               Connect a service above to enable access.
             </p>

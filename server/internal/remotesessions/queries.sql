@@ -6132,7 +6132,7 @@ WHERE organization_id = @organization_id::text AND project_id = @project_id::uui
 -- session issuer that no grant adopted, when the user denies consent.
 UPDATE remote_session_ema_credentials
 SET access_token_encrypted = NULL, deleted_at = clock_timestamp(), updated_at = clock_timestamp()
-WHERE organization_id = @organization_id::text AND project_id = @project_id::uuid
+WHERE organization_id = @organization_id::text
   AND user_session_issuer_id = @user_session_issuer_id::uuid
   AND subject_urn = @subject_urn::text AND sign_in_id = @sign_in_id::uuid
   AND ema_provider = 'speakeasy' AND user_session_id IS NULL

@@ -1,14 +1,13 @@
-// Consent-time tool inventory snapshots. The consent island performs a real
-// MCP session (initialize → paginated tools/list) against the consent-scoped
-// transport; every tools/list page the server RELAYS is captured into a
-// per-attempt snapshot, and approval binds to a snapshot only once it is
-// complete — so the exact inventory shown to the user is the one the
-// selection is validated against.
+// Consent-time tool inventory snapshots. Gateways capture server-side and
+// replace one snapshot per challenge on reload. Single-server consent uses an
+// MCP session and accumulates each relayed tools/list page per attempt.
+// Approval requires a complete capture matching the displayed attempt.
 
 package mcp
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"slices"
@@ -26,6 +25,9 @@ import (
 )
 
 const (
+	// consentGatewayResourcePrefix identifies a gateway capture.
+	consentGatewayResourcePrefix = "meta_mcp_server:"
+
 	// consentToolInventoryTTL matches the authn-challenge state TTL: a
 	// snapshot is only addressable through a live state, and approval
 	// consumes the state, so a longer TTL would only keep dead entries.
@@ -55,19 +57,27 @@ var errConsentInventoryUnavailable = errors.New("consent tool inventory store un
 // errConsentConfigurationChanged requires a fresh page and discovery attempt.
 var errConsentConfigurationChanged = errors.New("server configuration changed; reload consent")
 
+// errConsentCaptureSuperseded marks a gateway capture a later page load
+// replaced while it was still discovering; only the newest capture publishes.
+var errConsentCaptureSuperseded = errors.New("a newer consent page replaced this capture; reload consent")
+
 // consentInventoryTool is one captured tool: name plus the known annotation
-// values whose raw hints are explicitly true.
+// values whose raw hints are explicitly true. Source names the member server
+// a gateway tool comes from and is empty for every other endpoint.
 type consentInventoryTool struct {
+	// Definition preserves the full gateway schema captured during discovery.
+	Definition *toolListEntry `json:"definition,omitempty"`
 	// DefinitionHash detects changes to a tool's schema or metadata, even
 	// when its name and annotation choices are unchanged.
 	DefinitionHash string `json:"definition_hash,omitempty"`
 
 	Name        string   `json:"name"`
 	Annotations []string `json:"annotations"`
+	Source      string   `json:"source,omitempty"`
 }
 
-// consentToolInventory is the per-(state, attempt) snapshot. It accumulates
-// across tools/list pages and becomes immutable once Complete.
+// consentToolInventory holds complete gateway discovery or accumulates a
+// single-server attempt across tools/list pages.
 type consentToolInventory struct {
 	CompletedAt time.Time `json:"completed_at"`
 
@@ -77,8 +87,8 @@ type consentToolInventory struct {
 	// StateID keys the snapshot to one authn challenge.
 	StateID string `json:"state_id"`
 
-	// Attempt is the island's per-hydration UUID; a retry starts a fresh
-	// attempt so a half-fetched inventory can never satisfy approval.
+	// Attempt identifies the displayed capture. A reload or retry invalidates
+	// the previous attempt so it cannot satisfy approval.
 	Attempt string `json:"attempt"`
 
 	// Resource is the endpointToolSelectionResource the selection will bind
@@ -101,15 +111,24 @@ type consentToolInventory struct {
 	// established; the consent transport's DELETE only terminates an
 	// exactly matching session.
 	McpSessionID string `json:"mcp_session_id"`
+
+	// MemberOutcomes preserves the discovery result for every attempted member.
+	MemberOutcomes []consentMemberOutcome `json:"member_outcomes,omitempty"`
+
+	// MemberBindings pins the successful discovery routes and client choices.
+	MemberBindings map[string]connectionCatalogMember `json:"member_bindings,omitempty"`
 }
 
-func consentToolInventoryCacheKey(stateID, attempt string) string {
+func consentToolInventoryCacheKey(stateID, attempt, resource string) string {
+	if strings.HasPrefix(resource, consentGatewayResourcePrefix) {
+		attempt = "gateway"
+	}
 	return "consentToolInventory:" + stateID + ":" + attempt
 }
 
 // CacheKey implements cache.CacheableObject.
 func (i consentToolInventory) CacheKey() string {
-	return consentToolInventoryCacheKey(i.StateID, i.Attempt)
+	return consentToolInventoryCacheKey(i.StateID, i.Attempt, i.Resource)
 }
 
 // AdditionalCacheKeys implements cache.CacheableObject.
@@ -135,7 +154,7 @@ func (s *Service) loadConsentInventoryDraft(ctx context.Context, endpoint *Resol
 	if err != nil {
 		return consentToolInventory{}, err
 	}
-	cached, err := s.consentToolInventoryCache.Get(ctx, consentToolInventoryCacheKey(stateID, attempt))
+	cached, err := s.consentToolInventoryCache.Get(ctx, consentToolInventoryCacheKey(stateID, attempt, endpointToolSelectionResource(endpoint)))
 	if err == nil {
 		if cached.BackendHash != backendHash {
 			return consentToolInventory{}, errConsentConfigurationChanged
@@ -155,6 +174,8 @@ func (s *Service) loadConsentInventoryDraft(ctx context.Context, endpoint *Resol
 		ExpectedCursor: "",
 		Complete:       false,
 		McpSessionID:   "",
+		MemberBindings: nil,
+		MemberOutcomes: nil,
 	}, nil
 }
 
@@ -165,6 +186,23 @@ func (s *Service) loadConsentInventoryDraft(ctx context.Context, endpoint *Resol
 // complete as what approval reads. Returns the updated draft.
 func (s *Service) appendConsentInventoryPage(
 	ctx context.Context,
+	draft consentToolInventory,
+	requestCursor string,
+	pageTools []consentInventoryTool,
+	nextCursor string,
+) (consentToolInventory, error) {
+	draft, err := mergeConsentInventoryPage(draft, requestCursor, pageTools, nextCursor)
+	if err != nil {
+		return draft, err
+	}
+	if err := s.consentToolInventoryCache.Store(ctx, draft); err != nil {
+		return draft, fmt.Errorf("%w: store inventory snapshot: %w", errConsentInventoryUnavailable, err)
+	}
+	return draft, nil
+}
+
+// mergeConsentInventoryPage is appendConsentInventoryPage without storing.
+func mergeConsentInventoryPage(
 	draft consentToolInventory,
 	requestCursor string,
 	pageTools []consentInventoryTool,
@@ -211,8 +249,14 @@ func (s *Service) appendConsentInventoryPage(
 		draft.Complete = true
 		draft.CompletedAt = time.Now()
 	}
-	if err := s.consentToolInventoryCache.Store(ctx, draft); err != nil {
-		return draft, fmt.Errorf("%w: store inventory snapshot: %w", errConsentInventoryUnavailable, err)
+	if strings.HasPrefix(draft.Resource, consentGatewayResourcePrefix) {
+		raw, err := json.Marshal(draft)
+		if err != nil {
+			return draft, fmt.Errorf("encode gateway capture: %w", err)
+		}
+		if len(raw) > connectionCatalogMaxBytes {
+			return draft, errConnectionCatalogTooLarge
+		}
 	}
 	return draft, nil
 }
@@ -221,16 +265,16 @@ func (s *Service) appendConsentInventoryPage(
 // found=false with nil error covers a missing OR incomplete snapshot —
 // both retryable by reloading — while an error means the store itself is
 // unavailable.
-func (s *Service) getCompletedConsentInventory(ctx context.Context, stateID, attempt string) (consentToolInventory, bool, error) {
+func (s *Service) getCompletedConsentInventory(ctx context.Context, endpoint *ResolvedMcpEndpoint, stateID, attempt string) (consentToolInventory, bool, error) {
 	var zero consentToolInventory
-	cached, err := s.consentToolInventoryCache.Get(ctx, consentToolInventoryCacheKey(stateID, attempt))
+	cached, err := s.consentToolInventoryCache.Get(ctx, consentToolInventoryCacheKey(stateID, attempt, endpointToolSelectionResource(endpoint)))
 	if err != nil {
 		if errors.Is(err, redisCache.ErrCacheMiss) {
 			return zero, false, nil
 		}
 		return zero, false, fmt.Errorf("%w: %w", errConsentInventoryUnavailable, err)
 	}
-	if !cached.Complete {
+	if !cached.Complete || cached.Attempt != attempt {
 		return zero, false, nil
 	}
 	return cached, true, nil
@@ -319,8 +363,10 @@ func (s *Service) enumerateToolsetConsentInventory(ctx context.Context, endpoint
 		}
 		tools = append(tools, consentInventoryTool{
 			Name:           base.Name,
+			Definition:     nil,
 			DefinitionHash: consentEvidenceHash(tool),
 			Annotations:    values,
+			Source:         "",
 		})
 	}
 	return tools, roleHidden, nil

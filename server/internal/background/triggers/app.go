@@ -535,12 +535,29 @@ func (a *App) CreateWakeInstance(ctx context.Context, params CreateWakeInstanceP
 		return triggerrepo.TriggerInstance{}, fmt.Errorf("%w: %w", ErrBadRequest, err)
 	}
 
-	owner, err := assistantrepo.New(a.db).GetAssistant(ctx, assistantrepo.GetAssistantParams{ProjectID: params.ProjectID, AssistantID: params.AssistantID})
+	tx, err := a.db.Begin(ctx)
+	if err != nil {
+		return triggerrepo.TriggerInstance{}, fmt.Errorf("begin wake create transaction: %w", err)
+	}
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+
+	assistants := assistantrepo.New(tx)
+	if err := assistants.AcquireAssistantAdvisoryLock(ctx, params.AssistantID.String()); err != nil {
+		return triggerrepo.TriggerInstance{}, fmt.Errorf("lock wake assistant authority: %w", err)
+	}
+
+	owner, err := assistants.GetAssistant(ctx, assistantrepo.GetAssistantParams{ProjectID: params.ProjectID, AssistantID: params.AssistantID})
 	if err != nil {
 		return triggerrepo.TriggerInstance{}, fmt.Errorf("resolve wake owner: %w", err)
 	}
 	if owner.OrganizationID != params.OrganizationID {
 		return triggerrepo.TriggerInstance{}, fmt.Errorf("%w: wake organization mismatch", ErrBadRequest)
+	}
+	if owner.Status != "active" {
+		return triggerrepo.TriggerInstance{}, fmt.Errorf("%w: wake assistant is not active", ErrBadRequest)
+	}
+	if err := validateWakeRuntimeAuthority(ctx, tx, params); err != nil {
+		return triggerrepo.TriggerInstance{}, err
 	}
 	userID := owner.CreatedByUserID.String
 	credential, hasCredential := contextvalues.PrincipalCredentialAuthorization(ctx)
@@ -582,12 +599,6 @@ func (a *App) CreateWakeInstance(ctx context.Context, params CreateWakeInstanceP
 	if err != nil {
 		return triggerrepo.TriggerInstance{}, fmt.Errorf("marshal wake config: %w", err)
 	}
-
-	tx, err := a.db.Begin(ctx)
-	if err != nil {
-		return triggerrepo.TriggerInstance{}, fmt.Errorf("begin wake create transaction: %w", err)
-	}
-	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
 
 	item, err := triggerrepo.New(tx).CreateTriggerInstance(ctx, triggerrepo.CreateTriggerInstanceParams{
 		OrganizationID: params.OrganizationID,

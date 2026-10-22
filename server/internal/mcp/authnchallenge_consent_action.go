@@ -91,6 +91,16 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 		}
 		return oauthAuthorityError(err).LogError(ctx, logger)
 	}
+	action := r.PostForm.Get("action")
+	if endpoint.MetaMcpServerID.Valid && (action == "identity_chaining_check" || action == "validate") {
+		lockedDown, err := s.endpointCustomDomainLockdown(ctx, logger, endpoint)
+		if err != nil {
+			return err
+		}
+		if lockedDown {
+			return oops.E(oops.CodeForbidden, nil, "Start authorization from this gateway's custom domain to approve access.").LogWarn(ctx, logger)
+		}
+	}
 	subject := *challengeState.Subject
 
 	switch r.PostForm.Get("action") {

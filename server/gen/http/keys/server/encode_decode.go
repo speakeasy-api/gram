@@ -1063,13 +1063,44 @@ func unmarshalAgentPolicyGrantFormRequestBodyToKeysAgentPolicyGrantForm(v *Agent
 // *AgentPolicySelectorRequestBody.
 func unmarshalAgentPolicySelectorRequestBodyToKeysAgentPolicySelector(v *AgentPolicySelectorRequestBody) *keys.AgentPolicySelector {
 	res := &keys.AgentPolicySelector{
-		ResourceKind:   *v.ResourceKind,
-		ResourceID:     *v.ResourceID,
-		Disposition:    v.Disposition,
-		Tool:           v.Tool,
-		ProjectID:      v.ProjectID,
-		ServerURL:      v.ServerURL,
-		ServerIdentity: v.ServerIdentity,
+		ResourceKind:    *v.ResourceKind,
+		ResourceID:      *v.ResourceID,
+		ClientType:      v.ClientType,
+		ConnectionOwner: v.ConnectionOwner,
+		Disposition:     v.Disposition,
+		Tool:            v.Tool,
+		ProjectID:       v.ProjectID,
+		ServerURL:       v.ServerURL,
+		ServerIdentity:  v.ServerIdentity,
+	}
+
+	return res
+}
+
+// unmarshalAPIKeyPolicyGrantRequestBodyToKeysAPIKeyPolicyGrant builds a value
+// of type *keys.APIKeyPolicyGrant from a value of type
+// *APIKeyPolicyGrantRequestBody.
+func unmarshalAPIKeyPolicyGrantRequestBodyToKeysAPIKeyPolicyGrant(v *APIKeyPolicyGrantRequestBody) *keys.APIKeyPolicyGrant {
+	if v == nil {
+		return nil
+	}
+	res := &keys.APIKeyPolicyGrant{
+		Scope: *v.Scope,
+	}
+	res.Selector = unmarshalAPIKeyPolicySelectorRequestBodyToKeysAPIKeyPolicySelector(v.Selector)
+
+	return res
+}
+
+// unmarshalAPIKeyPolicySelectorRequestBodyToKeysAPIKeyPolicySelector builds a
+// value of type *keys.APIKeyPolicySelector from a value of type
+// *APIKeyPolicySelectorRequestBody.
+func unmarshalAPIKeyPolicySelectorRequestBodyToKeysAPIKeyPolicySelector(v *APIKeyPolicySelectorRequestBody) *keys.APIKeyPolicySelector {
+	res := &keys.APIKeyPolicySelector{
+		ResourceKind: *v.ResourceKind,
+		ResourceID:   *v.ResourceID,
+		ProjectID:    v.ProjectID,
+		ClientType:   v.ClientType,
 	}
 
 	return res
@@ -1130,13 +1161,46 @@ func marshalKeysAgentDelegatedGrantToAgentDelegatedGrantResponseBody(v *keys.Age
 // *keys.AgentPolicySelector.
 func marshalKeysAgentPolicySelectorToAgentPolicySelectorResponseBody(v *keys.AgentPolicySelector) *AgentPolicySelectorResponseBody {
 	res := &AgentPolicySelectorResponseBody{
-		ResourceKind:   v.ResourceKind,
-		ResourceID:     v.ResourceID,
-		Disposition:    v.Disposition,
-		Tool:           v.Tool,
-		ProjectID:      v.ProjectID,
-		ServerURL:      v.ServerURL,
-		ServerIdentity: v.ServerIdentity,
+		ResourceKind:    v.ResourceKind,
+		ResourceID:      v.ResourceID,
+		ClientType:      v.ClientType,
+		ConnectionOwner: v.ConnectionOwner,
+		Disposition:     v.Disposition,
+		Tool:            v.Tool,
+		ProjectID:       v.ProjectID,
+		ServerURL:       v.ServerURL,
+		ServerIdentity:  v.ServerIdentity,
+	}
+
+	return res
+}
+
+// marshalKeysAPIKeyPolicyGrantToAPIKeyPolicyGrantResponseBody builds a value
+// of type *APIKeyPolicyGrantResponseBody from a value of type
+// *keys.APIKeyPolicyGrant.
+func marshalKeysAPIKeyPolicyGrantToAPIKeyPolicyGrantResponseBody(v *keys.APIKeyPolicyGrant) *APIKeyPolicyGrantResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &APIKeyPolicyGrantResponseBody{
+		Scope: v.Scope,
+	}
+	if v.Selector != nil {
+		res.Selector = marshalKeysAPIKeyPolicySelectorToAPIKeyPolicySelectorResponseBody(v.Selector)
+	}
+
+	return res
+}
+
+// marshalKeysAPIKeyPolicySelectorToAPIKeyPolicySelectorResponseBody builds a
+// value of type *APIKeyPolicySelectorResponseBody from a value of type
+// *keys.APIKeyPolicySelector.
+func marshalKeysAPIKeyPolicySelectorToAPIKeyPolicySelectorResponseBody(v *keys.APIKeyPolicySelector) *APIKeyPolicySelectorResponseBody {
+	res := &APIKeyPolicySelectorResponseBody{
+		ResourceKind: v.ResourceKind,
+		ResourceID:   v.ResourceID,
+		ProjectID:    v.ProjectID,
+		ClientType:   v.ClientType,
 	}
 
 	return res
@@ -1170,6 +1234,16 @@ func marshalKeysKeyToKeyResponseBody(v *keys.Key) *KeyResponseBody {
 	}
 	if v.DelegatedGrants != nil {
 		res.DelegatedGrants = marshalKeysAgentDelegatedPolicyToAgentDelegatedPolicyResponseBody(v.DelegatedGrants)
+	}
+	if v.PolicyGrants != nil {
+		res.PolicyGrants = make([]*APIKeyPolicyGrantResponseBody, len(v.PolicyGrants))
+		for i, val := range v.PolicyGrants {
+			if val == nil {
+				res.PolicyGrants[i] = nil
+				continue
+			}
+			res.PolicyGrants[i] = marshalKeysAPIKeyPolicyGrantToAPIKeyPolicyGrantResponseBody(val)
+		}
 	}
 
 	return res

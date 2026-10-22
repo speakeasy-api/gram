@@ -47,6 +47,9 @@ func GrantsSatisfy(grants []Grant, check Check) bool {
 	if err := validateInput(check); err != nil {
 		return false
 	}
+	if personalCheckUnbound(check) {
+		return false
+	}
 	grant, _ := matchingGrant(grants, check.expand())
 	return grant != nil
 }
@@ -369,6 +372,9 @@ type grantCheckEvaluation struct {
 }
 
 func evaluateGrantCheck(grants []Grant, check Check) (grantCheckEvaluation, error) {
+	if personalCheckUnbound(check) {
+		return grantCheckEvaluation{Grant: nil, Check: nil, Denied: false}, nil
+	}
 	grant, matchedCheck := matchingGrant(grants, check.expand())
 	if grant == nil {
 		return grantCheckEvaluation{Grant: nil, Check: nil, Denied: false}, nil
@@ -419,7 +425,13 @@ func grantMatchingCheck(grant *Grant, checks []Check) *Check {
 			continue
 		}
 
-		if !check.matchesAllowSelector(grant.Selector) {
+		var matched bool
+		if isAPIKeyGrant(grant) {
+			matched = apiKeyGrantMatches(grant, check)
+		} else {
+			matched = check.matchesAllowSelector(grant.Selector)
+		}
+		if !matched {
 			continue
 		}
 		return check
@@ -434,7 +446,8 @@ func grantMatchingCheck(grant *Grant, checks []Check) *Check {
 func allScopeGrants() []Grant {
 	grants := make([]Grant, 0, len(scopeVisibilityByScope))
 	for s, visibility := range scopeVisibilityByScope {
-		if visibility != scopeVisibilityUserVisible {
+		// Administering an organization implies no use of its auth clients.
+		if visibility != scopeVisibilityUserVisible || s == ScopeMCPAuth {
 			continue
 		}
 		grants = append(grants, NewGrant(s, WildcardResource))

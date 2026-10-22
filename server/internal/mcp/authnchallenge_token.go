@@ -30,6 +30,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
@@ -132,6 +133,8 @@ type mintSessionParams struct {
 	// UpstreamClientPicks is the consent page's upstream client pick per MCP
 	// server, recorded as a new credential's choices.
 	UpstreamClientPicks map[uuid.UUID]uuid.UUID
+	// Catalog supplies the exact auth-client bindings approved by browser consent.
+	Catalog *connectionCatalog
 }
 
 type mintedSession struct {
@@ -267,6 +270,11 @@ type tokenGrant struct {
 // none takes the clientless branch.
 func (s *Service) tokenGrantFor(r *http.Request, grantType string, creds presentedClientCredentials) (tokenGrant, bool) {
 	switch grantType {
+	case "client_credentials":
+		if s.assistantWorkloadTokens == nil {
+			return tokenGrant{clientAuth: tokenClientAuthUndeclared, resolveMode: "", authenticated: nil, clientless: nil}, false
+		}
+		return tokenGrant{clientAuth: tokenClientAuthRequired, resolveMode: lookupClientOnly, authenticated: s.handleAssistantClientCredentialsGrant, clientless: nil}, true
 	// Authorization-code and refresh grants continue an authorization that
 	// already passed admission, so they resolve the client from the database
 	// only.
@@ -547,15 +555,17 @@ func (s *Service) handleTokenJWTBearerGrant(
 	authorizationCtx, err := s.contextForSessionSubject(ctx, endpoint, result.Subject, "id-jag:"+result.Claims.JTI, clientRow.ClientID)
 	if err == nil && endpoint.MetaMcpServerID.Valid {
 		var members []metaMember
-		authorizationCtx, members, err = s.resolveEndpointMemberSnapshot(authorizationCtx, logger, endpoint)
+		authorizationCtx, members, err = s.resolveEndpointMemberSnapshot(authorizationCtx, logger, mandatorySurfaceTokenIssuance, endpoint)
 		if err == nil && len(members) == 0 {
 			err = oops.E(oops.CodeForbidden, authz.ErrDenied, "subject cannot access any meta MCP members")
 		}
 	} else if err == nil {
+		connect := authz.MCPCheck(authz.ScopeMCPConnect, endpoint.connectResourceID().String(), endpoint.ProjectID.String())
 		authorizationCtx, err = s.authz.PrepareContext(authorizationCtx)
 		if err == nil {
-			err = s.authz.Require(authorizationCtx, authz.MCPCheck(authz.ScopeMCPConnect, endpoint.connectResourceID().String(), endpoint.ProjectID.String()))
+			err = s.authz.Require(authorizationCtx, connect)
 		}
+		s.newMandatoryShadow(authorizationCtx, endpoint.OrganizationID).shadowRequire(authorizationCtx, mandatorySurfaceTokenIssuance, err, connect)
 	}
 	if err != nil {
 		if shareable, ok := errors.AsType[*oops.ShareableError](err); ok && (shareable.Code == oops.CodeForbidden || shareable.Code == oops.CodeUnauthorized) {
@@ -586,6 +596,7 @@ func (s *Service) handleTokenJWTBearerGrant(
 		Subject:                result.Subject,
 		ToolSelection:          nil,
 		UpstreamClientPicks:    nil,
+		Catalog:                nil,
 	}, logger)
 	if err != nil {
 		return err
@@ -816,12 +827,14 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 	}
 	var toolSelection []byte
 	toolPolicy := toolfilter.PolicyForSelection(grant.ToolSelection)
+	catalogCode := strings.HasPrefix(req.Code, catalogAuthorizationCodePrefix)
+	gatewayCode := catalogCode || strings.HasPrefix(req.Code, gatewayAuthorizationCodePrefix)
 	if grant.GatewayPolicy != nil {
-		if toolPolicy != nil || !strings.HasPrefix(req.Code, gatewayAuthorizationCodePrefix) {
+		if toolPolicy != nil || !gatewayCode || catalogCode != (grant.GatewayPolicy.Catalog != nil) {
 			return rejectGrant("invalid gateway connection options; reauthorize")
 		}
 		toolPolicy = grant.GatewayPolicy
-	} else if strings.HasPrefix(req.Code, gatewayAuthorizationCodePrefix) {
+	} else if gatewayCode {
 		return rejectGrant("missing gateway connection options; reauthorize")
 	}
 	if toolPolicy != nil {
@@ -841,6 +854,17 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 			return oops.E(oops.CodeUnexpected, merr, "encode tool selection").LogError(ctx, logger)
 		}
 		toolSelection = encoded
+	}
+
+	var catalog *connectionCatalog
+	if toolPolicy != nil && toolPolicy.Catalog != nil {
+		catalog, err = s.loadConnectionCatalog(contextvalues.SetOAuthClientID(ctx, clientRow.ClientID), endpoint, subject, toolPolicy.Catalog, time.Now())
+		if errors.Is(err, errConnectionCatalogExpired) {
+			return rejectGrant("approved tools expired; give consent again")
+		}
+		if err != nil {
+			return oops.E(oops.CodeUnavailable, err, "could not load approved tools; try again later")
+		}
 	}
 
 	policy, audience, err := s.authorizationCodeIssuancePolicy(endpoint)
@@ -880,6 +904,7 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 		Subject:                subject,
 		ToolSelection:          toolSelection,
 		UpstreamClientPicks:    grant.UpstreamClientPicks,
+		Catalog:                catalog,
 	}, logger)
 	if err != nil {
 		// Almost all errors here occur before the 200 is written — issuer
@@ -1336,6 +1361,7 @@ func (s *Service) rotateRefreshToken(
 		Subject:                oldSession.SubjectUrn,
 		ToolSelection:          oldSession.ToolSelection,
 		UpstreamClientPicks:    nil,
+		Catalog:                nil,
 	}, logger)
 	if err != nil {
 		return true, err
@@ -1870,6 +1896,7 @@ func (s *Service) mintSession(
 		DesiredSessionDuration: params.DesiredSessionDuration,
 		Replayable:             params.Replayable,
 		UpstreamClientPicks:    params.UpstreamClientPicks,
+		Catalog:                params.Catalog,
 	}, logger)
 }
 
@@ -1944,6 +1971,8 @@ type sessionIssuance struct {
 	// UpstreamClientPicks is the consent page's upstream client pick per MCP
 	// server, recorded with a new credential's choices.
 	UpstreamClientPicks map[uuid.UUID]uuid.UUID
+	// Catalog supplies the exact auth-client bindings approved by browser consent.
+	Catalog *connectionCatalog
 }
 
 // issueSession mints the access token of an issuance and persists its session
@@ -2069,9 +2098,20 @@ func (s *Service) issueSession(
 	if !issuance.CredentialID.Valid {
 		pickedServers := make([]uuid.UUID, 0, len(issuance.UpstreamClientPicks))
 		pickedClients := make([]uuid.UUID, 0, len(issuance.UpstreamClientPicks))
-		for serverID, clientID := range issuance.UpstreamClientPicks {
-			pickedServers = append(pickedServers, serverID)
-			pickedClients = append(pickedClients, clientID)
+		var pickedAuthClients []uuid.UUID
+		if issuance.Catalog != nil {
+			for _, member := range issuance.Catalog.Members {
+				if member.Auth != nil {
+					pickedServers = append(pickedServers, member.ServerID)
+					pickedClients = append(pickedClients, member.Auth.RegistrationID.UUID)
+					pickedAuthClients = append(pickedAuthClients, member.Auth.ClientID)
+				}
+			}
+		} else {
+			for serverID, clientID := range issuance.UpstreamClientPicks {
+				pickedServers = append(pickedServers, serverID)
+				pickedClients = append(pickedClients, clientID)
+			}
 		}
 		if _, err := queries.RecordUpstreamClientSelections(ctx, usersessions_repo.RecordUpstreamClientSelectionsParams{
 			UserSessionIssuerID: issuance.UserSessionIssuerID,
@@ -2080,6 +2120,7 @@ func (s *Service) issueSession(
 			Source:              upstreamclients.SelectionSourceIssuance,
 			PickedMcpServerIds:  pickedServers,
 			PickedClientIds:     pickedClients,
+			PickedAuthClientIds: pickedAuthClients,
 		}); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "record upstream client selections").LogError(ctx, logger)
 		}

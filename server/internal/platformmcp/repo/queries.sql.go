@@ -3145,7 +3145,8 @@ func (q *Queries) GetPlatformMCPPluginInventoryItem(ctx context.Context, arg Get
 
 const getPlatformMCPPluginMembershipVersion = `-- name: GetPlatformMCPPluginMembershipVersion :one
 SELECT md5(COALESCE(jsonb_agg(
-  jsonb_build_array(ps.id, ps.sort_order, ps.display_name, ps.policy, ps.toolset_id, ps.mcp_server_id, ps.meta_mcp_server_id)
+  -- NULL holds the retired toolset_id slot so versions stay stable.
+  jsonb_build_array(ps.id, ps.sort_order, ps.display_name, ps.policy, NULL::uuid, ps.mcp_server_id, ps.meta_mcp_server_id)
   ORDER BY ps.sort_order, ps.display_name, ps.id
 )::text, '[]'))::text AS membership_version
 FROM plugin_servers ps
@@ -5795,6 +5796,57 @@ func (q *Queries) ListPlatformMCPPluginAssignments(ctx context.Context, arg List
 	return items, nil
 }
 
+const listPlatformMCPPluginAssignmentsWithModes = `-- name: ListPlatformMCPPluginAssignmentsWithModes :many
+SELECT pa.principal_urn, pa.install_mode
+FROM plugin_assignments pa
+JOIN plugins p
+  ON p.id = pa.plugin_id
+  AND p.organization_id = pa.organization_id
+  AND p.deleted IS FALSE
+JOIN projects
+  ON projects.id = p.project_id
+  AND projects.organization_id = p.organization_id
+  AND projects.deleted IS FALSE
+WHERE pa.plugin_id = $1
+  AND pa.organization_id = $2
+  AND p.project_id = $3
+ORDER BY pa.principal_urn
+`
+
+type ListPlatformMCPPluginAssignmentsWithModesParams struct {
+	PluginID       uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.UUID
+}
+
+type ListPlatformMCPPluginAssignmentsWithModesRow struct {
+	PrincipalUrn string
+	InstallMode  string
+}
+
+// The same exact-plugin assignment set as ListPlatformMCPPluginAssignments,
+// with each assignment's install mode, which the optimistic-concurrency version
+// also covers.
+func (q *Queries) ListPlatformMCPPluginAssignmentsWithModes(ctx context.Context, arg ListPlatformMCPPluginAssignmentsWithModesParams) ([]ListPlatformMCPPluginAssignmentsWithModesRow, error) {
+	rows, err := q.db.Query(ctx, listPlatformMCPPluginAssignmentsWithModes, arg.PluginID, arg.OrganizationID, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPlatformMCPPluginAssignmentsWithModesRow
+	for rows.Next() {
+		var i ListPlatformMCPPluginAssignmentsWithModesRow
+		if err := rows.Scan(&i.PrincipalUrn, &i.InstallMode); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listPlatformMCPPluginInventory = `-- name: ListPlatformMCPPluginInventory :many
 
 SELECT
@@ -5931,7 +5983,8 @@ func (q *Queries) ListPlatformMCPPluginInventory(ctx context.Context, arg ListPl
 const listPlatformMCPPluginMemberships = `-- name: ListPlatformMCPPluginMemberships :many
 WITH membership_version AS (
   SELECT md5(COALESCE(jsonb_agg(
-    jsonb_build_array(ps.id, ps.sort_order, ps.display_name, ps.policy, ps.toolset_id, ps.mcp_server_id, ps.meta_mcp_server_id)
+    -- NULL holds the retired toolset_id slot so versions stay stable.
+    jsonb_build_array(ps.id, ps.sort_order, ps.display_name, ps.policy, NULL::uuid, ps.mcp_server_id, ps.meta_mcp_server_id)
     ORDER BY ps.sort_order, ps.display_name, ps.id
   )::text, '[]'))::text AS value
   FROM plugin_servers ps
@@ -5946,7 +5999,7 @@ SELECT
     CASE
       WHEN ps.mcp_server_id IS NOT NULL THEN 'mcp_server'
       WHEN ps.meta_mcp_server_id IS NOT NULL THEN 'gateway'
-      -- A leftover toolset-keyed row has no server-keyed target.
+      -- A live toolset-only row lands here until AIM-581 drops plugin_servers.toolset_id.
       ELSE 'unresolved'
     END::text AS target_kind,
     COALESCE(ps.mcp_server_id, ps.meta_mcp_server_id) AS target_id,

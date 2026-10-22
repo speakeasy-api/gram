@@ -3349,7 +3349,8 @@ LIMIT @result_limit;
 
 -- name: GetPlatformMCPPluginMembershipVersion :one
 SELECT md5(COALESCE(jsonb_agg(
-  jsonb_build_array(ps.id, ps.sort_order, ps.display_name, ps.policy, ps.toolset_id, ps.mcp_server_id, ps.meta_mcp_server_id)
+  -- NULL holds the retired toolset_id slot so versions stay stable.
+  jsonb_build_array(ps.id, ps.sort_order, ps.display_name, ps.policy, NULL::uuid, ps.mcp_server_id, ps.meta_mcp_server_id)
   ORDER BY ps.sort_order, ps.display_name, ps.id
 )::text, '[]'))::text AS membership_version
 FROM plugin_servers ps
@@ -3366,7 +3367,8 @@ WHERE ps.plugin_id = @plugin_id
 -- backend references before exposing them as actionable targets.
 WITH membership_version AS (
   SELECT md5(COALESCE(jsonb_agg(
-    jsonb_build_array(ps.id, ps.sort_order, ps.display_name, ps.policy, ps.toolset_id, ps.mcp_server_id, ps.meta_mcp_server_id)
+    -- NULL holds the retired toolset_id slot so versions stay stable.
+    jsonb_build_array(ps.id, ps.sort_order, ps.display_name, ps.policy, NULL::uuid, ps.mcp_server_id, ps.meta_mcp_server_id)
     ORDER BY ps.sort_order, ps.display_name, ps.id
   )::text, '[]'))::text AS value
   FROM plugin_servers ps
@@ -3381,7 +3383,7 @@ SELECT
     CASE
       WHEN ps.mcp_server_id IS NOT NULL THEN 'mcp_server'
       WHEN ps.meta_mcp_server_id IS NOT NULL THEN 'gateway'
-      -- A leftover toolset-keyed row has no server-keyed target.
+      -- A live toolset-only row lands here until AIM-581 drops plugin_servers.toolset_id.
       ELSE 'unresolved'
     END::text AS target_kind,
     COALESCE(ps.mcp_server_id, ps.meta_mcp_server_id) AS target_id,
@@ -3463,6 +3465,25 @@ LIMIT @result_limit;
 -- required for the optimistic-concurrency version; no principal leaves this
 -- internal query boundary.
 SELECT pa.principal_urn
+FROM plugin_assignments pa
+JOIN plugins p
+  ON p.id = pa.plugin_id
+  AND p.organization_id = pa.organization_id
+  AND p.deleted IS FALSE
+JOIN projects
+  ON projects.id = p.project_id
+  AND projects.organization_id = p.organization_id
+  AND projects.deleted IS FALSE
+WHERE pa.plugin_id = @plugin_id
+  AND pa.organization_id = @organization_id
+  AND p.project_id = @project_id
+ORDER BY pa.principal_urn;
+
+-- name: ListPlatformMCPPluginAssignmentsWithModes :many
+-- The same exact-plugin assignment set as ListPlatformMCPPluginAssignments,
+-- with each assignment's install mode, which the optimistic-concurrency version
+-- also covers.
+SELECT pa.principal_urn, pa.install_mode
 FROM plugin_assignments pa
 JOIN plugins p
   ON p.id = pa.plugin_id

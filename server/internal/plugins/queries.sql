@@ -188,12 +188,12 @@ WHERE id = @id
   AND deleted IS FALSE;
 
 -- name: GetPluginServerByBackend :one
--- Look up a live plugin server by its backend (toolset or mcp_server).
+-- Look up a live plugin server by its mcp_server backend.
 -- Used by AttachToDefaultPlugin to no-op on already-attached servers before
 -- inserting: a duplicate insert can trip the (plugin_id, display_name)
 -- unique index rather than a backend one, and either way the failed
 -- statement aborts the caller's surrounding transaction.
-SELECT * FROM plugin_servers
+SELECT id, plugin_id, project_id, mcp_server_id, meta_mcp_server_id, display_name, policy, sort_order, created_at, updated_at, deleted_at, deleted FROM plugin_servers
 WHERE plugin_id = @plugin_id
   AND EXISTS (
     SELECT 1 FROM plugins
@@ -236,21 +236,7 @@ WHERE plugins.id = plugin_servers.plugin_id
   AND plugins.project_id = @project_id
   AND plugin_servers.mcp_server_id = @mcp_server_id
   AND plugin_servers.deleted IS FALSE
-RETURNING plugin_servers.*, plugins.name AS plugin_name, plugins.slug AS plugin_slug;
-
--- name: SoftDeletePluginServersByToolsetID :many
--- Detaches toolset-keyed rows when their toolset is deleted; wrapper-keyed rows
--- detach with the wrapper.
-UPDATE plugin_servers
-SET deleted_at = clock_timestamp(),
-    updated_at = clock_timestamp()
-FROM plugins
-WHERE plugins.id = plugin_servers.plugin_id
-  AND plugins.project_id = @project_id
-  AND plugins.organization_id = @organization_id
-  AND plugin_servers.toolset_id = @toolset_id
-  AND plugin_servers.deleted IS FALSE
-RETURNING plugin_servers.*, plugins.name AS plugin_name, plugins.slug AS plugin_slug;
+RETURNING plugin_servers.id, plugin_servers.plugin_id, plugin_servers.project_id, plugin_servers.mcp_server_id, plugin_servers.meta_mcp_server_id, plugin_servers.display_name, plugin_servers.policy, plugin_servers.sort_order, plugin_servers.created_at, plugin_servers.updated_at, plugin_servers.deleted_at, plugin_servers.deleted, plugins.name AS plugin_name, plugins.slug AS plugin_slug;
 
 -- name: SoftDeletePluginServersByGatewayID :many
 UPDATE plugin_servers
@@ -261,7 +247,7 @@ WHERE plugins.id = plugin_servers.plugin_id
   AND plugins.organization_id = @organization_id
   AND plugin_servers.meta_mcp_server_id = @gateway_id
   AND plugin_servers.deleted IS FALSE
-RETURNING plugin_servers.*, plugins.name AS plugin_name, plugins.slug AS plugin_slug;
+RETURNING plugin_servers.id, plugin_servers.plugin_id, plugin_servers.project_id, plugin_servers.mcp_server_id, plugin_servers.meta_mcp_server_id, plugin_servers.display_name, plugin_servers.policy, plugin_servers.sort_order, plugin_servers.created_at, plugin_servers.updated_at, plugin_servers.deleted_at, plugin_servers.deleted, plugins.name AS plugin_name, plugins.slug AS plugin_slug;
 
 -- name: HasPluginMembershipForGateway :one
 SELECT EXISTS (
@@ -283,7 +269,7 @@ VALUES (
   @policy,
   @sort_order
 )
-RETURNING *;
+RETURNING id, plugin_id, project_id, mcp_server_id, meta_mcp_server_id, display_name, policy, sort_order, created_at, updated_at, deleted_at, deleted;
 
 -- name: HasCanonicalWrapper :one
 -- A hosted entry is stored under its toolset's live canonical wrapper, which shares the toolset id.
@@ -306,7 +292,7 @@ FROM plugins p
 JOIN meta_mcp_servers g ON g.id = @meta_mcp_server_id
   AND g.project_id = p.project_id AND g.deleted IS FALSE
 WHERE p.id = @plugin_id AND p.project_id = @project_id AND p.deleted IS FALSE
-RETURNING *;
+RETURNING id, plugin_id, project_id, mcp_server_id, meta_mcp_server_id, display_name, policy, sort_order, created_at, updated_at, deleted_at, deleted;
 
 -- name: GetGatewayForPluginServer :one
 SELECT g.id, g.name, g.visibility, (g.user_session_issuer_id IS NOT NULL)::bool AS has_oauth,
@@ -344,7 +330,7 @@ WHERE
   AND s.deleted IS FALSE;
 
 -- name: ListPluginServers :many
-SELECT *
+SELECT id, plugin_id, project_id, mcp_server_id, meta_mcp_server_id, display_name, policy, sort_order, created_at, updated_at, deleted_at, deleted
 FROM plugin_servers
 WHERE plugin_id = @plugin_id
   AND deleted IS FALSE
@@ -355,7 +341,7 @@ ORDER BY sort_order ASC, created_at ASC;
 -- a set of plugins (e.g. ListPlugins) without one round-trip per plugin.
 -- Joins plugins and scopes by project_id as defense-in-depth, so this stays
 -- safe even if a future caller passes plugin IDs it hasn't already scoped.
-SELECT plugin_servers.*
+SELECT plugin_servers.id, plugin_servers.plugin_id, plugin_servers.project_id, plugin_servers.mcp_server_id, plugin_servers.meta_mcp_server_id, plugin_servers.display_name, plugin_servers.policy, plugin_servers.sort_order, plugin_servers.created_at, plugin_servers.updated_at, plugin_servers.deleted_at, plugin_servers.deleted
 FROM plugin_servers
 JOIN plugins ON plugins.id = plugin_servers.plugin_id
 WHERE plugin_servers.plugin_id = ANY(@plugin_ids::uuid[])
@@ -372,7 +358,7 @@ SET display_name = @display_name,
 WHERE id = @id
   AND plugin_id = @plugin_id
   AND deleted IS FALSE
-RETURNING *;
+RETURNING id, plugin_id, project_id, mcp_server_id, meta_mcp_server_id, display_name, policy, sort_order, created_at, updated_at, deleted_at, deleted;
 
 -- name: SyncMcpServerDisplayName :execrows
 -- Keep auto-derived plugin server names in sync with their MCP server while
@@ -405,7 +391,7 @@ SET deleted_at = clock_timestamp(),
 WHERE id = @id
   AND plugin_id = @plugin_id
   AND deleted IS FALSE
-RETURNING *;
+RETURNING id, plugin_id, project_id, mcp_server_id, meta_mcp_server_id, display_name, policy, sort_order, created_at, updated_at, deleted_at, deleted;
 
 -- name: HasPluginGithubConnectionForProject :one
 SELECT EXISTS (
@@ -1170,6 +1156,10 @@ UPDATE projects SET created_at = '1990-01-01', deleted_at = clock_timestamp() WH
 -- name: AgeRoleSetupProjectFixture :exec
 UPDATE projects SET created_at = '2000-01-01' WHERE id = $1;
 
+-- name: CountLivePluginServersByMCPServerIDFixture :one
+SELECT count(*) FROM plugin_servers ps JOIN plugins p ON p.id = ps.plugin_id
+WHERE p.project_id = @project_id AND ps.mcp_server_id = @mcp_server_id AND ps.deleted IS FALSE;
+
 -- name: CreateRoleSetupGlobalRoleFixture :exec
 INSERT INTO global_roles (id, workos_slug, workos_name, workos_created_at, workos_updated_at) VALUES ($1,'setup-global','Global Engineering',clock_timestamp(),clock_timestamp());
 
@@ -1216,9 +1206,10 @@ SELECT COALESCE((SELECT pid FROM pg_catalog.pg_stat_activity WHERE datname = cur
 -- Load latest live contents with the inventory for typed platform classification.
 -- Prefer the canonical wrapper, but allow fallback when it is enabled and endpointless.
 -- A disabled canonical wrapper still blocks automatic delivery through alternatives.
+-- A wrapper whose backing toolset is deleted is never delivered.
 SELECT m.id, m.project_id, COALESCE(NULLIF(m.name, ''), NULLIF(m.slug, ''), m.id::text)::text AS name,
-  'mcp_server'::text AS backend_kind, COALESCE(m.toolset_id, m.id)::uuid AS resource_id, m.toolset_id AS legacy_toolset_id,
-  (m.visibility <> 'disabled' AND (m.unproxied_mcp_server_id IS NOT NULL OR EXISTS (
+  COALESCE(m.toolset_id, m.id)::uuid AS resource_id, m.toolset_id AS legacy_toolset_id,
+  (m.visibility <> 'disabled' AND (m.toolset_id IS NULL OR backing.id IS NOT NULL) AND (m.unproxied_mcp_server_id IS NOT NULL OR EXISTS (
     SELECT 1 FROM mcp_endpoints e WHERE e.mcp_server_id = m.id AND e.project_id = p.id AND e.deleted IS FALSE
   )) AND NOT (m.toolset_id IS NOT NULL AND m.id <> m.toolset_id AND EXISTS (
     SELECT 1 FROM mcp_servers canonical WHERE canonical.id = m.toolset_id AND canonical.project_id = p.id AND canonical.deleted IS FALSE
@@ -1235,23 +1226,11 @@ LEFT JOIN LATERAL (
 ) latest ON true
 WHERE p.organization_id = @organization_id AND p.id = @project_id
   AND p.deleted IS FALSE AND m.deleted IS FALSE
-UNION ALL
--- A toolset with no MCP server is a removal candidate only; it is never delivered.
-SELECT t.id, t.project_id, t.name, 'toolset'::text, t.id, t.id, FALSE::boolean, latest.tool_urns
-FROM toolsets t JOIN projects p ON p.id = t.project_id
-LEFT JOIN LATERAL (
-  SELECT v.tool_urns FROM toolset_versions v
-  WHERE v.toolset_id = t.id AND v.deleted IS FALSE
-  ORDER BY v.version DESC LIMIT 1
-) latest ON true
-WHERE p.organization_id = @organization_id AND p.id = @project_id
-  AND p.deleted IS FALSE AND t.deleted IS FALSE
-ORDER BY id;
+ORDER BY m.id;
 
 -- name: HasRoleDeliveryMembership :one
 -- Automatic delivery treats all wrappers on the same toolset as one delivery.
 -- Setup/eligibility preserve deleted history; explicit new grants/audiences do not.
--- Removals recorded under the retired toolset key still count as history.
 SELECT EXISTS (
   SELECT 1 FROM plugin_servers ps JOIN plugins p ON p.id = ps.plugin_id
   WHERE p.id = @plugin_id AND p.organization_id = @organization_id AND p.project_id = @project_id
@@ -1260,8 +1239,7 @@ SELECT EXISTS (
         SELECT m.id FROM mcp_servers m
         WHERE m.toolset_id = sqlc.narg('legacy_toolset_id')::uuid
           AND m.project_id = @project_id AND m.deleted IS FALSE
-      ))
-      OR (ps.toolset_id = sqlc.narg('legacy_toolset_id')::uuid AND ps.deleted IS TRUE AND @preserve_removal::boolean))
+      )))
     AND (ps.deleted IS FALSE OR @preserve_removal::boolean)
 );
 
@@ -1337,7 +1315,7 @@ WHERE p.organization_id = @organization_id AND p.id = @project_id
 -- name: ListPlatformCleanupMemberships :many
 -- Exact membership audit provenance only. Initiating-user Default attachments
 -- and manually updated entries remain ambiguous and must never be auto-cleaned.
-SELECT sqlc.embed(ps),
+SELECT ps.id, ps.plugin_id, ps.project_id, ps.mcp_server_id, ps.meta_mcp_server_id, ps.display_name, ps.policy, ps.sort_order, ps.created_at, ps.updated_at, ps.deleted_at, ps.deleted,
   (EXISTS (
     SELECT 1 FROM audit_logs a
     WHERE a.organization_id = @organization_id AND a.project_id = @project_id
@@ -1359,8 +1337,8 @@ LEFT JOIN mcp_servers m ON m.id = ps.mcp_server_id AND m.project_id = @project_i
 WHERE p.organization_id = @organization_id AND p.project_id = @project_id
   AND project.organization_id = @organization_id AND project.deleted IS FALSE
   AND p.deleted IS FALSE AND ps.deleted IS FALSE
-  AND (ps.toolset_id IS NOT NULL OR m.toolset_id IS NOT NULL)
-  AND (sqlc.narg('toolset_id')::uuid IS NULL OR ps.toolset_id = sqlc.narg('toolset_id')::uuid OR m.toolset_id = sqlc.narg('toolset_id')::uuid)
+  AND m.toolset_id IS NOT NULL
+  AND (sqlc.narg('toolset_id')::uuid IS NULL OR m.toolset_id = sqlc.narg('toolset_id')::uuid)
   AND (cardinality(@membership_ids::uuid[]) = 0 OR ps.id = ANY(@membership_ids::uuid[]))
   AND ps.id > @after_id::uuid
 ORDER BY ps.id
@@ -1390,4 +1368,4 @@ WHERE ps.id = @id AND ps.plugin_id = @plugin_id AND ps.deleted IS FALSE
   AND p.organization_id = @organization_id AND p.project_id = @project_id
   AND project.id = p.project_id AND project.organization_id = @organization_id
   AND project.deleted IS FALSE
-RETURNING ps.*;
+RETURNING ps.id, ps.plugin_id, ps.project_id, ps.mcp_server_id, ps.meta_mcp_server_id, ps.display_name, ps.policy, ps.sort_order, ps.created_at, ps.updated_at, ps.deleted_at, ps.deleted;

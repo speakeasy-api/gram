@@ -89038,6 +89038,51 @@ components:
                 - state
                 - decision
                 - enforceable
+        APIKeyPolicyGrant:
+            type: object
+            properties:
+                scope:
+                    type: string
+                    description: 'mcp:connect, mcp:auth, or a block: mcp:blocked_connect, mcp:blocked_auth'
+                    enum:
+                        - mcp:connect
+                        - mcp:blocked_connect
+                        - mcp:auth
+                        - mcp:blocked_auth
+                selector:
+                    $ref: '#/components/schemas/APIKeyPolicySelector'
+            required:
+                - scope
+                - selector
+        APIKeyPolicySelector:
+            type: object
+            properties:
+                client_type:
+                    type: string
+                    description: Auth client type filter (mcp:auth only).
+                    enum:
+                        - service_account
+                        - static_credential
+                        - pass_through
+                        - ema
+                        - '*'
+                project_id:
+                    type: string
+                    description: The project the servers are in; required when resource_id is '*', and the key's own project when it is bound to one.
+                    format: uuid
+                resource_id:
+                    type: string
+                    description: A server or auth client ID, or '*' for every server in project_id. mcp:auth grants must name their client.
+                resource_kind:
+                    type: string
+                    description: mcp for mcp:connect grants, mcp_auth_client for mcp:auth grants
+                    enum:
+                        - mcp
+                        - mcp_auth_client
+            description: 'What an API key policy grant covers: servers (mcp) or auth clients (mcp_auth_client).'
+            required:
+                - resource_kind
+                - resource_id
         AccessMember:
             type: object
             properties:
@@ -90643,7 +90688,7 @@ components:
                     format: date-time
                 failed:
                     type: integer
-                    description: Failed tool calls in the bucket.
+                    description: Tool calls in the bucket that failed with status 400 or above. Tool errors returned inside HTTP 200 (isError) are not counted here.
                     format: int64
                 total:
                     type: integer
@@ -90678,7 +90723,7 @@ components:
                 unknown:
                     type: integer
                     format: int64
-            description: Tool calls inside the window by outcome class. In-band tool errors (isError inside HTTP 200) count as success.
+            description: Tool calls inside the window by outcome class. failed counts isError tool errors in 2xx/3xx responses and hook-reported tool errors; hosted rows recorded before 2026-10-15 and remote rows recorded before this change shipped still count as success.
             required:
                 - success
                 - unauthorized
@@ -92208,6 +92253,11 @@ components:
                 name:
                     type: string
                     description: Display name of the plugin. Absent for the synthesized observability plugin.
+                servers:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AgentPluginServer'
+                    description: 'MCP servers the plugin contains, in display order, possibly none. Display-only: the agent installs the plugin, not these entries. Absent for the synthesized observability plugin, which carries hooks rather than servers.'
                 slug:
                     type: string
                     description: Plugin slug. Combined with marketplace_name, this identifies the plugin in the managed tool.
@@ -92215,6 +92265,18 @@ components:
                 - slug
                 - marketplace_name
                 - install_mode
+        AgentPluginServer:
+            type: object
+            properties:
+                dashboard_url:
+                    type: string
+                    description: Link to the server's page in the Speakeasy dashboard. Present only when the enrolled user holds mcp:read on the server; the agent tells the user that links need that scope when it is absent.
+                    format: uri
+                name:
+                    type: string
+                    description: Display name of the server within its plugin.
+            required:
+                - name
         AgentPolicyGrant:
             type: object
             properties:
@@ -92277,6 +92339,19 @@ components:
         AgentPolicySelector:
             type: object
             properties:
+                client_type:
+                    type: string
+                    description: Auth client type filter (mcp:auth scopes only).
+                    enum:
+                        - remote_session
+                        - service_account
+                        - static_credential
+                        - pass_through
+                        - ema
+                        - '*'
+                connection_owner:
+                    type: string
+                    description: 'Personal connection owner filter (mcp:auth scopes on remote_session clients only): a user ID, ''*'', or ''$represented_user''.'
                 disposition:
                     type: string
                     description: Tool disposition filter (MCP scopes only).
@@ -92287,7 +92362,7 @@ components:
                         - open_world
                 project_id:
                     type: string
-                    description: Project filter (MCP, environment, and assistant scopes).
+                    description: Project filter (MCP, environment, assistant, and mcp:auth scopes).
                 resource_id:
                     type: string
                     description: The resource identifier, or '*' for all resources of this kind.
@@ -92304,6 +92379,7 @@ components:
                         - risk_policy
                         - chat
                         - agent
+                        - mcp_auth_client
                         - '*'
                 server_identity:
                     type: string
@@ -92601,6 +92677,12 @@ components:
                     type: array
                     items:
                         $ref: '#/components/schemas/AnalyticsDataset'
+                    description: The datasets the caller can read
+                restricted_datasets:
+                    type: array
+                    items:
+                        type: string
+                    description: Names of the datasets the caller cannot read, such as one only organization administrators can read, so a saved widget over one can say why it shows nothing rather than reading as broken
             required:
                 - datasets
         AnalyticsDimensionValue:
@@ -93237,6 +93319,13 @@ components:
                     type: string
                     description: The project ID owning the assistant.
                     format: uuid
+                runtime_version:
+                    type: integer
+                    description: 'Desired runtime protocol version: 2 is the default runtime, 3 is Kit. Runtime changes require a settled assistant and available destination.'
+                    enum:
+                        - 2
+                        - 3
+                    format: int64
                 skills:
                     type: array
                     items:
@@ -93272,6 +93361,7 @@ components:
                 - skills
                 - warm_ttl_seconds
                 - max_concurrency
+                - runtime_version
                 - status
                 - created_at
                 - updated_at
@@ -96185,6 +96275,12 @@ components:
                     type: string
                     description: The name of the key
                     maxLength: 255
+                policy_grants:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/APIKeyPolicyGrant'
+                    description: 'Optional policy for an ordinary key: mcp:connect and mcp:auth grants, and mcp:blocked_connect and mcp:blocked_auth blocks, that its server and auth client access is evaluated against. Not yet enforced. Requires org admin.'
+                    maxItems: 100
                 project_id:
                     type: string
                     description: Optional project binding. Omit for an organization-wide key; independent of permission scopes and the Gram-Project header.
@@ -104042,6 +104138,11 @@ components:
                 organization_id:
                     type: string
                     description: The organization ID this key belongs to
+                policy_grants:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/APIKeyPolicyGrant'
+                    description: An ordinary key's own policy
                 project_id:
                     type: string
                     description: The optional project ID this key is scoped to
@@ -106034,6 +106135,8 @@ components:
                         - mcp:blocked_write
                         - mcp:connect
                         - mcp:blocked_connect
+                        - mcp:auth
+                        - mcp:blocked_auth
                         - environment:read
                         - environment:blocked_read
                         - environment:write
@@ -106088,6 +106191,8 @@ components:
                             - mcp:blocked_write
                             - mcp:connect
                             - mcp:blocked_connect
+                            - mcp:auth
+                            - mcp:blocked_auth
                             - environment:read
                             - environment:blocked_read
                             - environment:write
@@ -107784,7 +107889,7 @@ components:
                     description: The slug of the toolset
                 tool_count:
                     type: integer
-                    description: The number of distinct configured tools in the latest toolset version, excluding external MCP proxy tools. Counts configured tool URNs, so it may differ from the number of tools that resolve against the active deployment.
+                    description: 'Number of tools the toolset serves: deployment-backed tools (HTTP, function, external MCP) that resolve in the project''s latest completed deployment, plus its prompt templates and registered platform tools. External MCP proxy tools are excluded.'
                     format: int64
                 tool_selection_mode:
                     type: string
@@ -115210,6 +115315,8 @@ components:
                         - mcp:blocked_write
                         - mcp:connect
                         - mcp:blocked_connect
+                        - mcp:auth
+                        - mcp:blocked_auth
                         - environment:read
                         - environment:blocked_read
                         - environment:write
@@ -115572,6 +115679,7 @@ components:
                         - mcp:blocked_read
                         - mcp:blocked_write
                         - mcp:blocked_connect
+                        - mcp:blocked_auth
                         - environment:blocked_read
                         - environment:blocked_write
                         - skill:blocked_read
@@ -115596,6 +115704,7 @@ components:
                         - chat
                         - agent
                         - workload
+                        - mcp_auth_client
                 slug:
                     type: string
                     description: Unique scope identifier.
@@ -115614,6 +115723,8 @@ components:
                         - mcp:blocked_write
                         - mcp:connect
                         - mcp:blocked_connect
+                        - mcp:auth
+                        - mcp:blocked_auth
                         - environment:read
                         - environment:blocked_read
                         - environment:write
@@ -116104,6 +116215,19 @@ components:
         Selector:
             type: object
             properties:
+                client_type:
+                    type: string
+                    description: Auth client type filter (mcp:auth and mcp:blocked_auth only).
+                    enum:
+                        - remote_session
+                        - service_account
+                        - static_credential
+                        - pass_through
+                        - ema
+                        - '*'
+                connection_owner:
+                    type: string
+                    description: Personal connection owner filter (mcp:auth and mcp:blocked_auth on remote_session clients only). A user ID, '*', or '$represented_user' for the user the request acts for. Never lets a caller use another user's connection.
                 disposition:
                     type: string
                     description: Tool disposition filter (MCP scopes only).
@@ -116114,7 +116238,7 @@ components:
                         - open_world
                 project_id:
                     type: string
-                    description: Project filter (MCP, environment, and assistant scopes). When set with resource_id='*', grants access to every resource of the kind in the project.
+                    description: Project filter (MCP, environment, assistant, mcp:auth, and mcp:blocked_auth scopes). When set with resource_id='*', grants access to every resource of the kind in the project. For mcp:auth and mcp:blocked_auth it is the project of the server using the client.
                 resource_id:
                     type: string
                     description: The resource identifier, or '*' for all resources of this kind.
@@ -116132,6 +116256,7 @@ components:
                         - chat
                         - agent
                         - workload
+                        - mcp_auth_client
                         - '*'
                 server_url:
                     type: string
@@ -123340,6 +123465,13 @@ components:
         UpdateAssistantForm:
             type: object
             properties:
+                expected_runtime_version:
+                    type: integer
+                    description: The runtime version read before requesting a switch. Required with runtime_version; conflicts require a fresh read.
+                    enum:
+                        - 2
+                        - 3
+                    format: int64
                 id:
                     type: string
                     description: The assistant ID.
@@ -123362,6 +123494,13 @@ components:
                 name:
                     type: string
                     description: The assistant name.
+                runtime_version:
+                    type: integer
+                    description: 'Desired runtime protocol: 2 for the default runtime, 3 for Kit. Switching requires the assistant and all background work to be settled.'
+                    enum:
+                        - 2
+                        - 3
+                    format: int64
                 status:
                     type: string
                     description: The assistant status.

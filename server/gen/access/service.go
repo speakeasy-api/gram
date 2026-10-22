@@ -1388,12 +1388,20 @@ type Selector struct {
 	ResourceKind string
 	// The resource identifier, or '*' for all resources of this kind.
 	ResourceID string
+	// Auth client type filter (mcp:auth and mcp:blocked_auth only).
+	ClientType *string
+	// Personal connection owner filter (mcp:auth and mcp:blocked_auth on
+	// remote_session clients only). A user ID, '*', or '$represented_user' for the
+	// user the request acts for. Never lets a caller use another user's connection.
+	ConnectionOwner *string
 	// Tool disposition filter (MCP scopes only).
 	Disposition *string
 	// Specific tool name filter (MCP scopes only).
 	Tool *string
-	// Project filter (MCP, environment, and assistant scopes). When set with
-	// resource_id='*', grants access to every resource of the kind in the project.
+	// Project filter (MCP, environment, assistant, mcp:auth, and mcp:blocked_auth
+	// scopes). When set with resource_id='*', grants access to every resource of
+	// the kind in the project. For mcp:auth and mcp:blocked_auth it is the project
+	// of the server using the client.
 	ProjectID *string
 	// Server URL filter (risk policy scopes only). Include the URI scheme, for
 	// example https://api.example.com.

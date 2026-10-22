@@ -118,13 +118,12 @@ func (q *Queries) FillRemoteSessionResources(ctx context.Context, arg FillRemote
 }
 
 const getPluginServerFixture = `-- name: GetPluginServerFixture :one
-SELECT toolset_id, mcp_server_id, deleted
+SELECT mcp_server_id, deleted
 FROM plugin_servers
 WHERE id = $1
 `
 
 type GetPluginServerFixtureRow struct {
-	ToolsetID   uuid.NullUUID
 	McpServerID uuid.NullUUID
 	Deleted     bool
 }
@@ -132,7 +131,7 @@ type GetPluginServerFixtureRow struct {
 func (q *Queries) GetPluginServerFixture(ctx context.Context, id uuid.UUID) (GetPluginServerFixtureRow, error) {
 	row := q.db.QueryRow(ctx, getPluginServerFixture, id)
 	var i GetPluginServerFixtureRow
-	err := row.Scan(&i.ToolsetID, &i.McpServerID, &i.Deleted)
+	err := row.Scan(&i.McpServerID, &i.Deleted)
 	return i, err
 }
 
@@ -340,10 +339,8 @@ SELECT
     )
   )::boolean AS mcp_slug_is_endpoint,
   EXISTS (SELECT 1 FROM toolset_prompts AS tp WHERE tp.toolset_id = t.id)::boolean AS has_prompts,
-  EXISTS (SELECT 1 FROM assistant_toolsets AS at WHERE at.toolset_id = t.id)::boolean AS has_assistants,
   EXISTS (SELECT 1 FROM slack_app_toolsets AS sat WHERE sat.toolset_id = t.id)::boolean AS has_slack_apps,
   EXISTS (SELECT 1 FROM user_oauth_tokens AS uot WHERE uot.toolset_id = t.id AND uot.deleted IS FALSE)::boolean AS has_user_oauth_tokens,
-  EXISTS (SELECT 1 FROM plugin_servers AS ps WHERE ps.toolset_id = t.id AND ps.deleted IS FALSE)::boolean AS has_toolset_plugin_entries,
   EXISTS (
     SELECT 1
     FROM meta_mcp_server_members AS m
@@ -478,10 +475,8 @@ type ListCandidatesRow struct {
 	EndpointCount                 int64
 	McpSlugIsEndpoint             bool
 	HasPrompts                    bool
-	HasAssistants                 bool
 	HasSlackApps                  bool
 	HasUserOauthTokens            bool
-	HasToolsetPluginEntries       bool
 	InGateway                     bool
 	RemoteSessionIssuerIds        []uuid.UUID
 	RemoteIssuerNames             []string
@@ -546,10 +541,8 @@ func (q *Queries) ListCandidates(ctx context.Context, toolsetIds []uuid.UUID) ([
 			&i.EndpointCount,
 			&i.McpSlugIsEndpoint,
 			&i.HasPrompts,
-			&i.HasAssistants,
 			&i.HasSlackApps,
 			&i.HasUserOauthTokens,
-			&i.HasToolsetPluginEntries,
 			&i.InGateway,
 			&i.RemoteSessionIssuerIds,
 			&i.RemoteIssuerNames,
@@ -698,54 +691,6 @@ func (q *Queries) MakeClientSelfOwnedFixture(ctx context.Context, id uuid.UUID) 
 	return err
 }
 
-const rekeyToolsetMetadata = `-- name: RekeyToolsetMetadata :execrows
-UPDATE mcp_metadata AS md
-SET toolset_id = NULL, mcp_server_id = $1, updated_at = clock_timestamp()
-WHERE md.project_id = $2
-  AND md.toolset_id = $3
-  AND NOT EXISTS (
-    SELECT 1 FROM mcp_metadata AS existing
-    WHERE existing.project_id = $2 AND existing.mcp_server_id = $1
-  )
-`
-
-type RekeyToolsetMetadataParams struct {
-	McpServerID uuid.NullUUID
-	ProjectID   uuid.UUID
-	ToolsetID   uuid.NullUUID
-}
-
-// Moves the toolset's metadata row onto the server it now describes, unless
-// the server already has one.
-func (q *Queries) RekeyToolsetMetadata(ctx context.Context, arg RekeyToolsetMetadataParams) (int64, error) {
-	result, err := q.db.Exec(ctx, rekeyToolsetMetadata, arg.McpServerID, arg.ProjectID, arg.ToolsetID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
-const seedAssistantToolsetFixture = `-- name: SeedAssistantToolsetFixture :exec
-WITH assistant AS (
-  INSERT INTO assistants (organization_id, project_id, name, model, instructions, created_by_user_id)
-  VALUES ($3, $2, 'fixture-assistant', 'fixture-model', 'fixture', 'fixture-user')
-  RETURNING id
-)
-INSERT INTO assistant_toolsets (assistant_id, toolset_id, project_id)
-SELECT id, $1, $2 FROM assistant
-`
-
-type SeedAssistantToolsetFixtureParams struct {
-	ToolsetID      uuid.UUID
-	ProjectID      uuid.UUID
-	OrganizationID string
-}
-
-func (q *Queries) SeedAssistantToolsetFixture(ctx context.Context, arg SeedAssistantToolsetFixtureParams) error {
-	_, err := q.db.Exec(ctx, seedAssistantToolsetFixture, arg.ToolsetID, arg.ProjectID, arg.OrganizationID)
-	return err
-}
-
 const seedCompletedDeploymentFixture = `-- name: SeedCompletedDeploymentFixture :one
 
 WITH deployment AS (
@@ -828,17 +773,16 @@ func (q *Queries) SeedExternalMCPProxyFixture(ctx context.Context, arg SeedExter
 const seedPluginServerFixture = `-- name: SeedPluginServerFixture :one
 WITH plugin AS (
   INSERT INTO plugins (organization_id, project_id, name, slug)
-  VALUES ($5, $1, $4, $4)
+  VALUES ($4, $1, $3, $3)
   RETURNING id
 )
-INSERT INTO plugin_servers (plugin_id, project_id, toolset_id, mcp_server_id, display_name)
-SELECT id, $1, $2, $3, $4 FROM plugin
+INSERT INTO plugin_servers (plugin_id, project_id, mcp_server_id, display_name)
+SELECT id, $1, $2, $3 FROM plugin
 RETURNING id
 `
 
 type SeedPluginServerFixtureParams struct {
 	ProjectID      uuid.NullUUID
-	ToolsetID      uuid.NullUUID
 	McpServerID    uuid.NullUUID
 	Name           string
 	OrganizationID string
@@ -847,7 +791,6 @@ type SeedPluginServerFixtureParams struct {
 func (q *Queries) SeedPluginServerFixture(ctx context.Context, arg SeedPluginServerFixtureParams) (uuid.UUID, error) {
 	row := q.db.QueryRow(ctx, seedPluginServerFixture,
 		arg.ProjectID,
-		arg.ToolsetID,
 		arg.McpServerID,
 		arg.Name,
 		arg.OrganizationID,

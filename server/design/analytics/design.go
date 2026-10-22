@@ -116,7 +116,8 @@ var DatasetType = Type("AnalyticsDataset", func() {
 })
 
 var DescribeResult = Type("AnalyticsDescribeResult", func() {
-	Attribute("datasets", ArrayOf(DatasetType))
+	Attribute("datasets", ArrayOf(DatasetType), "The datasets the caller can read")
+	Attribute("restricted_datasets", ArrayOf(String), "Names of the datasets the caller cannot read, such as one only organization administrators can read, so a saved widget over one can say why it shows nothing rather than reading as broken")
 	Required("datasets")
 })
 

@@ -34,9 +34,11 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/speakeasy-api/gram/server/internal/assistantidentity"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth/principalcredential"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
@@ -299,9 +301,13 @@ const agentAuthorizationCodePrefix = "agent-v1."
 
 const gatewayAuthorizationCodePrefix = "gateway-v1."
 
-// CacheKey implements cache.CacheableObject. Agent authorization grants use a
-// namespace that older binaries do not read, so a mixed-version deployment
-// cannot silently redeem one as a human session.
+const catalogAuthorizationCodePrefix = "gateway-v2."
+
+// userSessionGrantTTL bounds authorization-code redemption.
+const userSessionGrantTTL = 10 * time.Minute
+
+// CacheKey implements cache.CacheableObject. Agent and catalogue grants use
+// namespaces that older binaries cannot redeem without their restrictions.
 func (g UserSessionGrant) CacheKey() string {
 	return userSessionGrantCacheKey(g.UserSessionIssuerID, g.Code, g.AgentAuthorization != nil)
 }
@@ -310,6 +316,8 @@ func userSessionGrantCacheKey(issuerID uuid.UUID, code string, agentAuthorizatio
 	prefix := "userSessionGrant:"
 	if strings.HasPrefix(code, gatewayAuthorizationCodePrefix) {
 		prefix = "gatewayUserSessionGrant:"
+	} else if strings.HasPrefix(code, catalogAuthorizationCodePrefix) {
+		prefix = "gatewayCatalogGrant:"
 	}
 	if agentAuthorization {
 		prefix = "agentUserSessionGrant:"
@@ -317,13 +325,9 @@ func userSessionGrantCacheKey(issuerID uuid.UUID, code string, agentAuthorizatio
 	return prefix + issuerID.String() + ":" + code
 }
 
-// userSessionGrantTTL is how long an authorization code can be exchanged. 10
-// minutes is the standard OAuth code lifetime: enough for a slow round trip
-// from the MCP client to /token, short enough to limit exposure if the code
-// leaks.
-const userSessionGrantTTL = 10 * time.Minute
-
-// TTL implements cache.CacheableObject.
+// TTL implements cache.CacheableObject. 10 minutes is the standard OAuth code
+// lifetime — enough for a slow round trip from the MCP client to /token, short
+// enough to limit exposure if the code leaks.
 func (g UserSessionGrant) TTL() time.Duration { return userSessionGrantTTL }
 
 // errIssuerGateOrgLookup marks the post-validation operational path in
@@ -639,6 +643,30 @@ func (s *Service) validateUserSessionToken(ctx context.Context, token, baseURL s
 			}
 			return ctx, nil, nil, false, fmt.Errorf("%w: %w", errWorkloadSessionCredentialLoad, qerr)
 		}
+		if row.UserSessionClientID.Valid {
+			client, clientErr := usersessions_repo.New(s.db).GetUserSessionClientByID(ctx, usersessions_repo.GetUserSessionClientByIDParams{
+				ID: row.UserSessionClientID.UUID, ProjectID: endpoint.ProjectID, OrganizationID: endpoint.OrganizationID,
+			})
+			if clientErr != nil && !errors.Is(clientErr, pgx.ErrNoRows) {
+				return ctx, nil, nil, false, fmt.Errorf("%w: %w", errWorkloadSessionCredentialLoad, clientErr)
+			}
+			if clientErr != nil || client.UserSessionIssuerID != endpoint.UserSessionIssuerID {
+				return ctx, nil, nil, false, fmt.Errorf("%w: workload client registration is no longer eligible", errCredentialRejected)
+			}
+			// A client reference alone does not identify an assistant credential:
+			// existing workload sessions can belong to ordinary OAuth clients.
+			// Either assistant binding marker requires the complete live binding;
+			// missing, revoked or retired bindings must still fail closed.
+			if strings.HasPrefix(client.ClientID, assistantWorkloadClientPrefix) || client.AssistantRuntimeID.Valid || client.AssistantTriggerWorkloadBindingID.Valid {
+				identity, bindingErr := s.loadAssistantWorkloadClientIdentity(ctx, endpoint, row.UserSessionClientID.UUID)
+				if bindingErr != nil && !errors.Is(bindingErr, pgx.ErrNoRows) && !errors.Is(bindingErr, assistantidentity.ErrInvalidIdentity) {
+					return ctx, nil, nil, false, fmt.Errorf("%w: %w", errWorkloadSessionCredentialLoad, bindingErr)
+				}
+				if bindingErr != nil || urn.NewWorkloadSubject(identity.IssuerID, identity.Subject).String() != subject.String() {
+					return ctx, nil, nil, false, fmt.Errorf("%w: assistant workload registration is no longer eligible", errCredentialRejected)
+				}
+			}
+		}
 		reach := workloadSessionReachResource
 		var credential workloadSessionCredential
 		var cerr error
@@ -662,7 +690,15 @@ func (s *Service) validateUserSessionToken(ctx context.Context, token, baseURL s
 			return ctx, nil, nil, false, err
 		}
 	}
-	newCtx = s.identityValidator.StampValidatedSession(newCtx, session)
+	if subject.Kind == urn.SessionSubjectKindWorkload {
+		agentID, ok := authz.AdmittedWorkloadAgent(newCtx)
+		if !ok {
+			return ctx, nil, nil, false, fmt.Errorf("%w: workload admission has no agent principal", errCredentialRejected)
+		}
+		newCtx = s.identityValidator.StampValidatedWorkloadSession(newCtx, session, agentID)
+	} else {
+		newCtx = s.identityValidator.StampValidatedSession(newCtx, session)
+	}
 	// Only the token endpoint's authorization-code grants carry a refresh
 	// token: the issuer-scoped sessions of a per-endpoint authorization
 	// server, which validate against the issuer audience, and the

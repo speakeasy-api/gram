@@ -168,8 +168,29 @@ func (s *seeder) sigintReading(sensor demoSigintSensor, members []demoSigintMemb
 	}
 
 	definition := sha256.Sum256([]byte(s.name("sigint-definition-" + sensor.key)))
-	departments := [2]string{"engineering", "support"}
+	departments := [2]string{"engineering", "marketing"}
 	regions := [2]string{"us-east", "eu-west"}
+	attributes := map[string]string{"region": regions[n%2], "environment": "production"}
+	// Different missingness patterns exercise absent labels independently. The
+	// model dimensions describe the source, not this synthetic classifier.
+	if n%5 != 0 {
+		attributes["department"] = departments[n%2]
+	}
+	if n%7 != 0 {
+		attributes["model_name"] = "anthropic/claude-opus-5"
+		attributes["model_family"] = "anthropic"
+		if n%2 != 0 {
+			attributes["model_name"] = "gpt-6.1-sol"
+			attributes["model_family"] = "openai"
+		}
+	}
+	if n%11 != 0 {
+		providers := [3]string{"bedrock", "anthropic", "openrouter"}
+		if n%2 != 0 {
+			providers = [3]string{"openai", "azure", "openrouter"}
+		}
+		attributes["inference_provider"] = providers[(n/2)%len(providers)]
+	}
 	sourceTime := s.now.UTC().AddDate(0, 0, -n).Add(-time.Hour)
 	request := readings.Context{TriggerKind: readings.TriggerStream, RunID: uuid.Nil, RequestedAt: sourceTime.Add(time.Second)}
 	eventID := s.name("sigint-source-" + strconv.Itoa(n))
@@ -216,7 +237,7 @@ func (s *seeder) sigintReading(sensor demoSigintSensor, members []demoSigintMemb
 		BillingMode:                "",
 		AssistantID:                nil,
 		Replayed:                   new(true),
-		Attributes:                 map[string]string{"department": departments[n%2], "region": regions[n%2], "environment": "production"},
+		Attributes:                 attributes,
 		ResultType:                 sigintReadingResultTypes[sensor.mode],
 		Probabilities:              probabilities,
 		SelectedSignalID:           selectedID,

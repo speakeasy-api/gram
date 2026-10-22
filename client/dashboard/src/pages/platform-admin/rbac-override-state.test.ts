@@ -1,42 +1,70 @@
-import { Scope } from "@gram/client/models/components/rolegrant.js";
-import { describe, expect, it } from "vitest";
-import { GROUP_ORDER, SCOPE_DEFS } from "./rbac-override-state";
+import { beforeEach, expect, it } from "vitest";
+import { getRBACScopeOverrideHeader } from "@/components/dev-toolbar-utils";
+import {
+  loadCatalog,
+  loadState,
+  saveCatalog,
+  saveState,
+} from "./rbac-override-state";
 
-// The override replaces the caller's grants outright, so a grantable scope
-// missing here is silently denied while the toolbar says "all scopes" —
-// agent pages rendered empty that way when the agent scopes were added.
-// Deny-effect scopes are left out, and so are the scopes meant for agents:
-// a person reaches the device-sync and hook-ingest routes through org:admin.
-const NOT_OVERRIDABLE = new Set<string>([
-  Scope.OrgDeviceAgentSync,
-  Scope.OrgHooksIngest,
-]);
+beforeEach(() => localStorage.clear());
 
-describe("RBAC override scope list", () => {
-  it("covers every grantable scope the server defines", () => {
-    const listed = new Set(SCOPE_DEFS.map((def) => def.scope));
-    const missing = Object.values(Scope).filter(
-      (scope) =>
-        !scope.includes(":blocked_") &&
-        !NOT_OVERRIDABLE.has(scope) &&
-        !listed.has(scope),
-    );
-    expect(missing).toEqual([]);
+it("reconciles catalog and saved choices in the header without mounting the editor", () => {
+  saveState({
+    enabled: true,
+    scopes: {
+      "org:read": { enabled: false, resources: null },
+      "saved:read": { enabled: true, resources: ["resource-a"] },
+    },
   });
+  const scope = {
+    slug: "new:read",
+    resourceType: "new",
+    description: "New scope",
+    visibility: "user_visible",
+  };
+  saveCatalog([
+    scope,
+    { ...scope, slug: "new:blocked_read", visibility: "internal" },
+  ]);
+  expect(loadCatalog().map((scope) => scope.slug)).toEqual([
+    "org:read",
+    "new:read",
+  ]);
+  expect(loadState().scopes["org:read"]?.enabled).toBe(false);
+  expect(getRBACScopeOverrideHeader(true)?.split(",").sort()).toEqual([
+    "new:read",
+    "saved:read=resource-a",
+  ]);
+});
 
-  it("lists only scopes the server defines, each once", () => {
-    const known = new Set<string>(Object.values(Scope));
-    const scopes = SCOPE_DEFS.map((def) => def.scope);
-    expect(scopes.filter((scope) => !known.has(scope))).toEqual([]);
-    expect(new Set(scopes).size).toBe(scopes.length);
-  });
+it("leaves auth client scopes out because overrides never grant them", () => {
+  const catalog = saveCatalog([
+    {
+      slug: "mcp:connect",
+      resourceType: "mcp",
+      description: "Connect to and use MCP servers.",
+      visibility: "user_visible",
+    },
+    {
+      slug: "mcp:auth",
+      resourceType: "mcp_auth_client",
+      description: "Use an upstream auth client to reach MCP servers.",
+      visibility: "user_visible",
+    },
+  ]);
+  expect(catalog.map((scope) => scope.slug)).toEqual([
+    "org:read",
+    "mcp:connect",
+  ]);
+  expect(loadState().scopes["mcp:auth"]).toBeUndefined();
+});
 
-  it("renders every scope under a group", () => {
-    const groups = new Set(GROUP_ORDER.map((group) => group.key));
-    expect(
-      SCOPE_DEFS.filter((def) => !groups.has(def.resourceType)).map(
-        (def) => def.scope,
-      ),
-    ).toEqual([]);
-  });
+it("distinguishes a disabled override from an active override with no grants", () => {
+  const scopes = { "org:read": { enabled: false, resources: null } };
+  saveState({ enabled: true, scopes });
+  expect(getRBACScopeOverrideHeader(true)).toBe("rbac-override:none");
+  expect(getRBACScopeOverrideHeader(false)).toBeNull();
+  saveState({ enabled: false, scopes });
+  expect(getRBACScopeOverrideHeader(true)).toBeNull();
 });

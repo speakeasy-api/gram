@@ -53,7 +53,7 @@ func TestBuildAgentPluginsView_ObservabilityWithoutAssignments(t *testing.T) {
 		marketplaceRow("acme", "Acme Corp", "default", true, "tokA", now),
 	}
 
-	result := mv.BuildAgentPluginsView(rows, testMarketplaceURL)
+	result := mv.BuildAgentPluginsView(rows, testMarketplaceURL, nil)
 
 	require.Len(t, result.Marketplaces, 1)
 	// Name must equal the published marketplace.json name (naming.MarketplaceName),
@@ -76,7 +76,7 @@ func TestBuildAgentPluginsView_ObservabilityPlusAssignments(t *testing.T) {
 		withPlugin(base, "sales-tools", now),
 	}
 
-	result := mv.BuildAgentPluginsView(rows, testMarketplaceURL)
+	result := mv.BuildAgentPluginsView(rows, testMarketplaceURL, nil)
 
 	require.Len(t, result.Marketplaces, 1)
 
@@ -101,7 +101,7 @@ func TestBuildAgentPluginsView_MultipleProjectsYieldDistinctMarketplaces(t *test
 		marketplaceRow("acme", "Acme Corp", "sales", false, "tokB", now),
 	}
 
-	result := mv.BuildAgentPluginsView(rows, testMarketplaceURL)
+	result := mv.BuildAgentPluginsView(rows, testMarketplaceURL, nil)
 
 	require.Len(t, result.Marketplaces, 2, "distinct project-scoped names do not collapse")
 	byName := map[string]string{}
@@ -139,7 +139,7 @@ func TestBuildAgentPluginsView_CollapsedProjectPluginsDropped(t *testing.T) {
 		withPlugin(loser, "loser-plugin", now),
 	}
 
-	result := mv.BuildAgentPluginsView(rows, testMarketplaceURL)
+	result := mv.BuildAgentPluginsView(rows, testMarketplaceURL, nil)
 
 	require.Len(t, result.Marketplaces, 1)
 	slugs := make([]string, 0, len(result.Plugins))
@@ -165,7 +165,7 @@ func TestBuildAgentPluginsView_SameNameRowsCollapseToDefault(t *testing.T) {
 		marketplaceRow("acme", "Acme Corp", "other", true, "tokB", now),
 	}
 
-	result := mv.BuildAgentPluginsView(rows, testMarketplaceURL)
+	result := mv.BuildAgentPluginsView(rows, testMarketplaceURL, nil)
 
 	require.Len(t, result.Marketplaces, 1, "same-named rows collapse to one")
 	require.Equal(t, "acme-corp-speakeasy", result.Marketplaces[0].Name)
@@ -182,7 +182,7 @@ func TestBuildAgentPluginsView_OmitsObservabilityWhenDisabled(t *testing.T) {
 		withPlugin(row, "engineering-tools", now),
 	}
 
-	result := mv.BuildAgentPluginsView(rows, testMarketplaceURL)
+	result := mv.BuildAgentPluginsView(rows, testMarketplaceURL, nil)
 
 	require.Len(t, result.Marketplaces, 1)
 	slugs := make([]string, 0, len(result.Plugins))
@@ -206,7 +206,7 @@ func TestBuildAgentPluginsView_EmitsFrozenPublishedName(t *testing.T) {
 	row := marketplaceRow("acme", "Renamed Corp", "tools", false, "tokA", now)
 	row.PublishedHooksConfig = snapshot
 
-	result := mv.BuildAgentPluginsView([]repo.GetAgentPluginSetRow{row}, testMarketplaceURL)
+	result := mv.BuildAgentPluginsView([]repo.GetAgentPluginSetRow{row}, testMarketplaceURL, nil)
 
 	require.Len(t, result.Marketplaces, 1)
 	require.Equal(t, "acme-speakeasy", result.Marketplaces[0].Name)
@@ -225,7 +225,7 @@ func TestBuildAgentPluginsView_OverrideWinsOverPublishedName(t *testing.T) {
 	row.PublishedHooksConfig = snapshot
 	row.MarketplaceNameOverride = pgtype.Text{String: "team-tools", Valid: true}
 
-	result := mv.BuildAgentPluginsView([]repo.GetAgentPluginSetRow{row}, testMarketplaceURL)
+	result := mv.BuildAgentPluginsView([]repo.GetAgentPluginSetRow{row}, testMarketplaceURL, nil)
 
 	require.Len(t, result.Marketplaces, 1)
 	require.Equal(t, "team-tools", result.Marketplaces[0].Name)
@@ -234,7 +234,7 @@ func TestBuildAgentPluginsView_OverrideWinsOverPublishedName(t *testing.T) {
 func TestBuildAgentPluginsView_EmptyRows(t *testing.T) {
 	t.Parallel()
 
-	result := mv.BuildAgentPluginsView(nil, testMarketplaceURL)
+	result := mv.BuildAgentPluginsView(nil, testMarketplaceURL, map[uuid.UUID][]*gen.AgentPluginServer{})
 
 	require.Empty(t, result.Marketplaces)
 	require.Empty(t, result.Plugins)
@@ -248,7 +248,7 @@ func TestBuildAgentPluginsView_SkipsRowsWithMissingMarketplaceToken(t *testing.T
 	row := marketplaceRow("acme", "Acme Corp", "default", true, "", now)
 	row.MarketplaceToken = pgtype.Text{Valid: false}
 
-	result := mv.BuildAgentPluginsView([]repo.GetAgentPluginSetRow{row}, testMarketplaceURL)
+	result := mv.BuildAgentPluginsView([]repo.GetAgentPluginSetRow{row}, testMarketplaceURL, nil)
 
 	require.Empty(t, result.Marketplaces)
 	require.Empty(t, result.Plugins)
@@ -259,17 +259,17 @@ func TestAttachAgentPrincipal_ETagTracksPrincipal(t *testing.T) {
 
 	now := time.Date(2026, 5, 29, 12, 0, 0, 0, time.UTC)
 	rows := []repo.GetAgentPluginSetRow{marketplaceRow("acme", "Acme Corp", "default", true, "tokA", now)}
-	human := mv.BuildAgentPluginsView(rows, testMarketplaceURL)
+	human := mv.BuildAgentPluginsView(rows, testMarketplaceURL, nil)
 	humanEtag := human.Etag
 
 	attach := func(name string) string {
-		result := mv.BuildAgentPluginsView(rows, testMarketplaceURL)
+		result := mv.BuildAgentPluginsView(rows, testMarketplaceURL, nil)
 		mv.AttachAgentPrincipal(result, &gen.AgentPollingPrincipal{Urn: "agent:11111111-1111-1111-1111-111111111111", DisplayName: name})
 		return result.Etag
 	}
 	original := attach("CI agent")
 
-	require.Equal(t, humanEtag, mv.BuildAgentPluginsView(rows, testMarketplaceURL).Etag, "human ETag is unaffected")
+	require.Equal(t, humanEtag, mv.BuildAgentPluginsView(rows, testMarketplaceURL, nil).Etag, "human ETag is unaffected")
 	require.NotEqual(t, humanEtag, original, "agent ETag covers the principal")
 	require.Equal(t, original, attach("CI agent"), "stable for the same principal")
 	require.NotEqual(t, original, attach("Renamed agent"), "a rename changes the ETag")
@@ -290,9 +290,9 @@ func TestBuildAgentPluginsView_ETagIgnoresRowsThatDoNotRender(t *testing.T) {
 	// than rendering a second marketplace — the case this test pins.
 	collapsed := marketplaceRow("acme", "Acme Corp", "other", true, "tokB", now.Add(2*time.Hour))
 
-	baseResult := mv.BuildAgentPluginsView(base, testMarketplaceURL)
-	withSkipped := mv.BuildAgentPluginsView(append(append([]repo.GetAgentPluginSetRow{}, base...), skipped), testMarketplaceURL)
-	withCollapsed := mv.BuildAgentPluginsView(append(append([]repo.GetAgentPluginSetRow{}, base...), collapsed), testMarketplaceURL)
+	baseResult := mv.BuildAgentPluginsView(base, testMarketplaceURL, nil)
+	withSkipped := mv.BuildAgentPluginsView(append(append([]repo.GetAgentPluginSetRow{}, base...), skipped), testMarketplaceURL, nil)
+	withCollapsed := mv.BuildAgentPluginsView(append(append([]repo.GetAgentPluginSetRow{}, base...), collapsed), testMarketplaceURL, nil)
 
 	require.Equal(t, baseResult.Etag, withSkipped.Etag, "skipped rows should not affect the sync token")
 	require.Equal(t, baseResult.Etag, withCollapsed.Etag, "collapsed marketplace rows should not affect the sync token")
@@ -308,14 +308,48 @@ func TestBuildAgentPluginsView_ETagStableAndSensitive(t *testing.T) {
 		return []repo.GetAgentPluginSetRow{withPlugin(marketplaceRow("acme", "Acme Corp", "default", true, "tokA", ts), "eng", ts)}
 	}
 
-	a := mv.BuildAgentPluginsView(rowsAt(t0), testMarketplaceURL).Etag
-	b := mv.BuildAgentPluginsView(rowsAt(t0), testMarketplaceURL).Etag
+	a := mv.BuildAgentPluginsView(rowsAt(t0), testMarketplaceURL, nil).Etag
+	b := mv.BuildAgentPluginsView(rowsAt(t0), testMarketplaceURL, nil).Etag
 	require.Equal(t, a, b, "stable for identical input")
 
-	c := mv.BuildAgentPluginsView(rowsAt(t0.Add(time.Second)), testMarketplaceURL).Etag
+	c := mv.BuildAgentPluginsView(rowsAt(t0.Add(time.Second)), testMarketplaceURL, nil).Etag
 	require.NotEqual(t, a, c, "changes when a timestamp changes")
 
-	prod := mv.BuildAgentPluginsView(rowsAt(t0), func(tok string) string { return "https://prod/" + tok }).Etag
-	staging := mv.BuildAgentPluginsView(rowsAt(t0), func(tok string) string { return "https://staging/" + tok }).Etag
+	prod := mv.BuildAgentPluginsView(rowsAt(t0), func(tok string) string { return "https://prod/" + tok }, nil).Etag
+	staging := mv.BuildAgentPluginsView(rowsAt(t0), func(tok string) string { return "https://staging/" + tok }, nil).Etag
 	require.Equal(t, prod, staging, "ETag ignores the deployment-config marketplace URL")
+}
+
+func TestBuildAgentPluginsView_UnavailableServersLeaveListsOff(t *testing.T) {
+	t.Parallel()
+	now := time.Now()
+	row := withPlugin(marketplaceRow("acme", "Acme", "default", true, "tok", now), "engineering", now)
+
+	unavailable := mv.BuildAgentPluginsView([]repo.GetAgentPluginSetRow{row}, testMarketplaceURL, nil)
+	empty := mv.BuildAgentPluginsView([]repo.GetAgentPluginSetRow{row}, testMarketplaceURL, map[uuid.UUID][]*gen.AgentPluginServer{})
+
+	require.Len(t, unavailable.Plugins, 2)
+	require.Len(t, empty.Plugins, 2)
+	require.Nil(t, unavailable.Plugins[1].Servers, "unreadable lists are left off, not reported as empty")
+	require.NotNil(t, empty.Plugins[1].Servers)
+	require.Empty(t, empty.Plugins[1].Servers)
+	require.NotEqual(t, unavailable.Etag, empty.Etag,
+		"an agent that polled while lists were unreadable must see a change once they recover")
+}
+
+func TestBuildAgentPluginsView_ETagTracksServers(t *testing.T) {
+	t.Parallel()
+	now := time.Now()
+	row := withPlugin(marketplaceRow("acme", "Acme", "default", true, "tok", now), "engineering", now)
+	rows := []repo.GetAgentPluginSetRow{row}
+	with := func(servers ...*gen.AgentPluginServer) string {
+		return mv.BuildAgentPluginsView(rows, testMarketplaceURL, map[uuid.UUID][]*gen.AgentPluginServer{row.PluginID.UUID: servers}).Etag
+	}
+
+	unlinked := with(&gen.AgentPluginServer{Name: "Linear", DashboardURL: nil})
+	require.Equal(t, unlinked, with(&gen.AgentPluginServer{Name: "Linear", DashboardURL: nil}))
+	require.NotEqual(t, unlinked, with(&gen.AgentPluginServer{Name: "Linear", DashboardURL: new("https://dashboard.example/linear")}),
+		"gaining a dashboard link changes the ETag")
+	require.NotEqual(t, unlinked, with(&gen.AgentPluginServer{Name: "GitHub", DashboardURL: nil}),
+		"a renamed server changes the ETag")
 }
