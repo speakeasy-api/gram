@@ -1194,13 +1194,15 @@ func marshalKeysAgentPolicyGrantFormToAgentPolicyGrantFormRequestBody(v *keys.Ag
 // *keys.AgentPolicySelector.
 func marshalKeysAgentPolicySelectorToAgentPolicySelectorRequestBody(v *keys.AgentPolicySelector) *AgentPolicySelectorRequestBody {
 	res := &AgentPolicySelectorRequestBody{
-		ResourceKind:   v.ResourceKind,
-		ResourceID:     v.ResourceID,
-		Disposition:    v.Disposition,
-		Tool:           v.Tool,
-		ProjectID:      v.ProjectID,
-		ServerURL:      v.ServerURL,
-		ServerIdentity: v.ServerIdentity,
+		ResourceKind:    v.ResourceKind,
+		ResourceID:      v.ResourceID,
+		ClientType:      v.ClientType,
+		ConnectionOwner: v.ConnectionOwner,
+		Disposition:     v.Disposition,
+		Tool:            v.Tool,
+		ProjectID:       v.ProjectID,
+		ServerURL:       v.ServerURL,
+		ServerIdentity:  v.ServerIdentity,
 	}
 
 	return res
@@ -1229,13 +1231,15 @@ func marshalAgentPolicyGrantFormRequestBodyToKeysAgentPolicyGrantForm(v *AgentPo
 // *AgentPolicySelectorRequestBody.
 func marshalAgentPolicySelectorRequestBodyToKeysAgentPolicySelector(v *AgentPolicySelectorRequestBody) *keys.AgentPolicySelector {
 	res := &keys.AgentPolicySelector{
-		ResourceKind:   v.ResourceKind,
-		ResourceID:     v.ResourceID,
-		Disposition:    v.Disposition,
-		Tool:           v.Tool,
-		ProjectID:      v.ProjectID,
-		ServerURL:      v.ServerURL,
-		ServerIdentity: v.ServerIdentity,
+		ResourceKind:    v.ResourceKind,
+		ResourceID:      v.ResourceID,
+		ClientType:      v.ClientType,
+		ConnectionOwner: v.ConnectionOwner,
+		Disposition:     v.Disposition,
+		Tool:            v.Tool,
+		ProjectID:       v.ProjectID,
+		ServerURL:       v.ServerURL,
+		ServerIdentity:  v.ServerIdentity,
 	}
 
 	return res
@@ -1286,13 +1290,15 @@ func unmarshalAgentDelegatedGrantResponseBodyToKeysAgentDelegatedGrant(v *AgentD
 // *AgentPolicySelectorResponseBody.
 func unmarshalAgentPolicySelectorResponseBodyToKeysAgentPolicySelector(v *AgentPolicySelectorResponseBody) *keys.AgentPolicySelector {
 	res := &keys.AgentPolicySelector{
-		ResourceKind:   *v.ResourceKind,
-		ResourceID:     *v.ResourceID,
-		Disposition:    v.Disposition,
-		Tool:           v.Tool,
-		ProjectID:      v.ProjectID,
-		ServerURL:      v.ServerURL,
-		ServerIdentity: v.ServerIdentity,
+		ResourceKind:    *v.ResourceKind,
+		ResourceID:      *v.ResourceID,
+		ClientType:      v.ClientType,
+		ConnectionOwner: v.ConnectionOwner,
+		Disposition:     v.Disposition,
+		Tool:            v.Tool,
+		ProjectID:       v.ProjectID,
+		ServerURL:       v.ServerURL,
+		ServerIdentity:  v.ServerIdentity,
 	}
 
 	return res
