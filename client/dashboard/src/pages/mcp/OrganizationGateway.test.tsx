@@ -121,17 +121,12 @@ beforeEach(() => {
   vi.clearAllMocks();
 });
 
-it("routes the MCP page switch through access review before mutating", () => {
+it("confirms before turning the gateway on", () => {
   render(<OrganizationGateway />);
   fireEvent.click(screen.getByRole("switch", { name: "Organization Gateway" }));
   expect(state.setOn).not.toHaveBeenCalled();
-  const enable = screen.getByRole("button", {
-    name: "Enable Organization Gateway",
-  }) as HTMLButtonElement;
-  expect(enable.disabled).toBe(true);
-  fireEvent.click(screen.getByRole("button", { name: "Assignments loaded" }));
-  fireEvent.click(screen.getByRole("checkbox"));
-  fireEvent.click(enable);
+  expect(screen.getByText(/recommend reviewing MCP assignments/)).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "Turn on" }));
   expect(state.setOn).toHaveBeenCalledWith(
     true,
     expect.objectContaining({ onSuccess: expect.any(Function) }),
