@@ -29,7 +29,7 @@ export type McpServerToolsetSummary = {
    */
   externalOauthServerId?: string | undefined;
   /**
-   * The ID of the MCP server that stands in for the toolset: its canonical server, whose ID is the toolset's, or when it has none, its oldest server with an endpoint. Absent when it has neither.
+   * The ID of the MCP server that stands in for the toolset: its canonical server, whose ID is the toolset's, or when it has none, its oldest live server with a live endpoint. Absent when it has neither.
    */
   hostingMcpServerId?: string | undefined;
   /**

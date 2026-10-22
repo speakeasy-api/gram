@@ -471,7 +471,7 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
     !!mcpServer &&
     !isUnproxied &&
     hasScope("org:admin", organization.id) &&
-    hasScope("mcp:read", grantResourceId);
+    hasScope("mcp:read", mcpServer.id);
 
   // A Remote MCP server's identity is derived, so the readiness item reads the
   // same answer the pill does. Judging it on a bound client alone reported

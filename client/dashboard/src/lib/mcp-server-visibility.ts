@@ -74,8 +74,8 @@ export async function invalidateMcpServerQueries(
     invalidateAllPlugins(queryClient, { refetchType: "all" }),
     invalidateAllPublishStatus(queryClient, { refetchType: "all" }),
     // A hosted server's visibility writes through to its toolset and billing counts.
-    invalidateAllToolset(queryClient),
-    invalidateAllListToolsets(queryClient),
-    invalidateAllGetPeriodUsage(queryClient),
+    invalidateAllToolset(queryClient, { refetchType: "all" }),
+    invalidateAllListToolsets(queryClient, { refetchType: "all" }),
+    invalidateAllGetPeriodUsage(queryClient, { refetchType: "all" }),
   ]);
 }

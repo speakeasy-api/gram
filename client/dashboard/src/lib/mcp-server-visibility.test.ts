@@ -186,9 +186,18 @@ describe("invalidateMcpServerQueries", () => {
       filters,
     );
     // A hosted server's visibility writes through to its toolset.
-    expect(mocks.invalidateAllToolset).toHaveBeenCalledWith(queryClient);
-    expect(mocks.invalidateAllListToolsets).toHaveBeenCalledWith(queryClient);
-    expect(mocks.invalidateAllGetPeriodUsage).toHaveBeenCalledWith(queryClient);
+    expect(mocks.invalidateAllToolset).toHaveBeenCalledWith(
+      queryClient,
+      filters,
+    );
+    expect(mocks.invalidateAllListToolsets).toHaveBeenCalledWith(
+      queryClient,
+      filters,
+    );
+    expect(mocks.invalidateAllGetPeriodUsage).toHaveBeenCalledWith(
+      queryClient,
+      filters,
+    );
   });
 
   it("waits for every invalidation before resolving", async () => {

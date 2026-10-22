@@ -173,7 +173,11 @@ export default function MCPServerDetails(): JSX.Element | null {
   }
   const renderTabContent = () => {
     // Hosted tabs and settings need the toolset; never fall back to another layout.
-    if (hosted && activeTab !== "overview" && !hostedToolset) {
+    const needsToolset =
+      activeTab !== "overview" &&
+      activeTab !== "sessions" &&
+      activeTab !== "guardrails";
+    if (hosted && needsToolset && !hostedToolset) {
       if (isLoadingToolset) return null;
       return (
         <div className="mx-auto w-full max-w-[1270px] px-8 py-8">

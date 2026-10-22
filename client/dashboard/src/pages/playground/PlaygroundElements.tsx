@@ -221,7 +221,7 @@ function AuthWarningBanner({
         {missingCount === 1 ? "variable" : "variables"} not configured.{" "}
         <routes.mcp.details.Link
           params={[toolsetSlug]}
-          hash="environment"
+          hash="authentication"
           className="hover:text-foreground font-medium underline"
         >
           Configure now

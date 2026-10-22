@@ -40,7 +40,7 @@ export function HostedToolsTab({
   toolset: Toolset;
 }): React.JSX.Element {
   const { hasScope } = useRBAC();
-  const canWrite = hasScope("mcp:write");
+  const canWrite = hasScope("mcp:write", toolset.id);
   const queryClient = useQueryClient();
   const telemetry = useTelemetry();
   const client = useSdkClient();
@@ -100,8 +100,12 @@ export function HostedToolsTab({
       void invalidateAllToolset(queryClient);
       void invalidateAllMcpServers(queryClient);
       void invalidateAllGetMcpServer(queryClient);
+      void invalidateListToolsetToolFilters(queryClient, [
+        { slug: toolset.slug },
+      ]);
     },
     onError: (error) => {
+      toast.error(error.message || "Failed to update tools");
       telemetry.capture("toolset_event", {
         action: "toolset_update_failed",
         error: error.message,
@@ -290,12 +294,21 @@ export function HostedToolsTab({
               const currentUrns = fullToolset.toolUrns || [];
               const newUrns = [...new Set([...currentUrns, ...toolUrns])];
 
-              await client.toolsets.updateBySlug({
-                slug: toolset.slug,
-                updateToolsetRequestBody: {
-                  toolUrns: newUrns,
-                },
-              });
+              try {
+                await client.toolsets.updateBySlug({
+                  slug: toolset.slug,
+                  updateToolsetRequestBody: {
+                    toolUrns: newUrns,
+                  },
+                });
+              } catch (error) {
+                toast.error(
+                  error instanceof Error
+                    ? error.message
+                    : "Failed to add tools",
+                );
+                return;
+              }
 
               toast.success(
                 `Added ${toolUrns.length} tool${toolUrns.length !== 1 ? "s" : ""} to ${toolset.name}`,
@@ -305,6 +318,9 @@ export function HostedToolsTab({
               void invalidateAllToolset(queryClient);
               void invalidateAllMcpServers(queryClient);
               void invalidateAllGetMcpServer(queryClient);
+              void invalidateListToolsetToolFilters(queryClient, [
+                { slug: toolset.slug },
+              ]);
             })(toolUrns);
           }}
         />

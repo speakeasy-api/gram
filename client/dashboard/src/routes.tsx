@@ -499,7 +499,7 @@ const ROUTE_STRUCTURE = {
           },
         },
       },
-      // Every MCP server's page; `:toolsetSlug` links redirect here (prefix retired in AIS-643).
+      // Every MCP server's details page; legacy `:toolsetSlug` links redirect here.
       x: {
         title: "MCP Server Details",
         url: "x/:mcpServerSlug",

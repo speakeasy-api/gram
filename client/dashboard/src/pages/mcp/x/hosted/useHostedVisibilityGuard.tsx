@@ -12,6 +12,7 @@ import type {
 } from "@gram/client/models/components/mcpserver.js";
 import { useGetMcpMetadata } from "@gram/client/react-query/getMcpMetadata.js";
 import { useListEnvironments } from "@gram/client/react-query/listEnvironments.js";
+import { GramError } from "@gram/client/models/errors/gramerror.js";
 import React, { useMemo, useState } from "react";
 
 // Confirmations before a hosted server's visibility changes, as the toolset page had.
@@ -41,7 +42,11 @@ export function useHostedVisibilityGuard({
     enabled,
   });
   // A canonical server shares its toolset's metadata; any other host has its own.
-  const { data: metadataData, isLoading: metadataLoading } = useGetMcpMetadata(
+  const {
+    data: metadataData,
+    isLoading: metadataLoading,
+    error: metadataError,
+  } = useGetMcpMetadata(
     canonical ? { toolsetSlug: toolsetSlug ?? "" } : { mcpServerId: server.id },
     undefined,
     // 404 means no attached environment, so it must not lock Public.
@@ -65,14 +70,25 @@ export function useHostedVisibilityGuard({
   );
 
   const current = server.visibility;
-  const [publicPending, setPublicPending] =
-    useState<McpServerVisibility | null>(null);
+  // Keeps the visibility the warning opened from, so a refetch can't change the next dialog.
+  const [publicPending, setPublicPending] = useState<{
+    next: McpServerVisibility;
+    from: McpServerVisibility;
+  } | null>(null);
   const [enablePending, setEnablePending] =
     useState<McpServerVisibility | null>(null);
   const [oauthBlockOpen, setOauthBlockOpen] = useState(false);
   // Until the attached environment resolves, Public could skip the warning.
   const publicUnavailable =
-    hosted && (!enabled || metadataLoading || !environmentsData || !toolset);
+    hosted &&
+    (!enabled ||
+      metadataLoading ||
+      (!!metadataError &&
+        !(
+          metadataError instanceof GramError && metadataError.statusCode === 404
+        )) ||
+      !environmentsData ||
+      !toolset);
 
   const needsEnableDialog = (next: McpServerVisibility) =>
     next === "disabled" || current === "disabled";
@@ -88,7 +104,7 @@ export function useHostedVisibilityGuard({
     if (blockedByOAuth(next)) {
       setOauthBlockOpen(true);
     } else if (next === "public") {
-      setPublicPending(next);
+      setPublicPending({ next, from: current });
     } else if (needsEnableDialog(next)) {
       setEnablePending(next);
     } else {
@@ -118,11 +134,11 @@ export function useHostedVisibilityGuard({
           isOpen={publicPending !== null}
           onClose={() => setPublicPending(null)}
           onConfirm={() => {
-            const next = publicPending;
+            const pending = publicPending;
             setPublicPending(null);
-            if (!next) return;
-            if (needsEnableDialog(next)) setEnablePending(next);
-            else apply(next);
+            if (!pending) return;
+            if (pending.from === "disabled") setEnablePending(pending.next);
+            else apply(pending.next);
           }}
           isLoading={isApplying}
           toolsetSlug={toolsetSlug}

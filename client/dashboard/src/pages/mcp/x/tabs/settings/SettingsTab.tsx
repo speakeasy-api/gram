@@ -208,6 +208,7 @@ export function SettingsTab({
         >
           <ServerInstructionsSection
             mcpServerId={mcpServer.id}
+            writeResourceId={hostedToolset.id}
             name={mcpServer.name || hostedToolset.name}
             tools={hostedToolset.tools}
           />

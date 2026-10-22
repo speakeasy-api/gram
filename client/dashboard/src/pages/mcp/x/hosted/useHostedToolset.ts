@@ -14,11 +14,15 @@ export function useHostedToolset(server: McpServer | undefined): {
   const gramProject = useProjectSlugForRequests();
   const summarySlug = server?.toolset?.slug;
   // The summary is absent when its read failed; find the slug from the list instead.
-  const { data: toolsetsResult, isLoading: isLoadingList } = useListToolsets(
-    { gramProject },
-    undefined,
-    { enabled: server !== undefined && !summarySlug, throwOnError: false },
-  );
+  const {
+    data: toolsetsResult,
+    isLoading: isLoadingList,
+    isError: listFailed,
+    refetch: refetchList,
+  } = useListToolsets({ gramProject }, undefined, {
+    enabled: server !== undefined && !summarySlug,
+    throwOnError: false,
+  });
   const slug =
     summarySlug ??
     toolsetsResult?.toolsets.find((t) => t.id === server?.toolsetId)?.slug;
@@ -36,7 +40,10 @@ export function useHostedToolset(server: McpServer | undefined): {
     isLoading:
       server !== undefined &&
       ((!summarySlug && isLoadingList) || (!!slug && isLoadingToolset)),
-    isError,
-    refetch: () => void refetch(),
+    isError: isError || (!summarySlug && listFailed),
+    refetch: () => {
+      if (!summarySlug && listFailed) void refetchList();
+      else void refetch();
+    },
   };
 }

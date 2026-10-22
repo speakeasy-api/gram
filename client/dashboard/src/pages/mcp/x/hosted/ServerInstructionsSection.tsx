@@ -21,10 +21,13 @@ const INSTRUCTIONS_SOFT_LIMIT = 2000;
 /** Server instructions for any MCP server, with AI drafting from its tools. */
 export function ServerInstructionsSection({
   mcpServerId,
+  writeResourceId,
   name,
   tools,
 }: {
   mcpServerId: string;
+  /** The id mcp:write is granted on: the toolset id for a hosted server. */
+  writeResourceId: string;
   name: string;
   tools: { name: string; description?: string | undefined }[];
 }): React.JSX.Element {
@@ -46,7 +49,7 @@ export function ServerInstructionsSection({
     (metadataResult.isError && !metadataIs404) ||
     form.isLoading;
   const { hasScope } = useRBAC();
-  const canWrite = hasScope("mcp:write");
+  const canWrite = hasScope("mcp:write", writeResourceId);
   const charCount = form.instructionsHandlers.value?.length ?? 0;
   const overLimit = charCount > INSTRUCTIONS_SOFT_LIMIT;
 
@@ -58,7 +61,7 @@ export function ServerInstructionsSection({
           className="min-h-[150px] w-full"
           value={form.instructionsHandlers.value ?? ""}
           onChange={form.instructionsHandlers.onChange}
-          disabled={!canWrite}
+          disabled={!canWrite || isLoading}
         />
         {charCount > 0 && (
           <span

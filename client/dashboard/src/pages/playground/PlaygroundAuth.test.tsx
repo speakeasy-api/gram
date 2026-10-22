@@ -189,7 +189,7 @@ describe("independent environment configuration", () => {
         screen
           .getByRole("link", { name: "Configure auth" })
           .getAttribute("href"),
-      ).toBe("/mcp/legacy-t#environment");
+      ).toBe("/mcp/legacy-t#authentication");
       const save = screen.getByRole("button", {
         name: "Save",
       }) as HTMLButtonElement;
@@ -227,13 +227,13 @@ describe("independent environment configuration", () => {
     const { rerender } = render(<PlaygroundAuth toolset={toolset} />);
     expect(
       screen.getByRole("link", { name: "Configure auth" }).getAttribute("href"),
-    ).toBe("/mcp/legacy-t#environment");
+    ).toBe("/mcp/legacy-t#authentication");
     rerender(
       <PlaygroundAuth toolset={{ ...toolset, slug: "another-toolset" }} />,
     );
     expect(
       screen.getByRole("link", { name: "Configure auth" }).getAttribute("href"),
-    ).toBe("/mcp/another-toolset#environment");
+    ).toBe("/mcp/another-toolset#authentication");
   });
 
   it("keeps Save disabled while saving", () => {

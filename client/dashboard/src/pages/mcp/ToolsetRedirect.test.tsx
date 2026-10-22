@@ -65,7 +65,11 @@ import { ToolsetRedirectPage } from "./ToolsetRedirect";
 
 function Landed() {
   const location = useLocation();
-  return <p data-testid="landed">{location.pathname + location.hash}</p>;
+  return (
+    <p data-testid="landed">
+      {location.pathname + location.search + location.hash}
+    </p>
+  );
 }
 
 function visit(url: string) {
@@ -114,6 +118,13 @@ describe("ToolsetRedirectPage", () => {
   ])("sends %s to %s", (suffix, target) => {
     visit(`/acme/projects/default/mcp/my-tools${suffix}`);
     expect(screen.getByTestId("landed").textContent).toBe(target);
+  });
+
+  it("keeps the query string", () => {
+    visit("/acme/projects/default/mcp/my-tools/tools?q=search");
+    expect(screen.getByTestId("landed").textContent).toBe(
+      "/mcp/x/my-server/tools?q=search",
+    );
   });
 
   it("sends a toolset with no canonical wrapper to its hosting server", () => {

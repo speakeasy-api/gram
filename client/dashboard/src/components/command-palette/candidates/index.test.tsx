@@ -516,6 +516,7 @@ describe("useMcpServerCandidates", () => {
       await hosted?.run("open");
     });
     expect(mocks.goToMcpServerOverview).toHaveBeenCalledWith("hosted-x1");
+    expect(mocks.goToToolsetDetails).not.toHaveBeenCalled();
   });
 
   // Without the summary there is no toolset slug; the server page redirects.
@@ -601,6 +602,7 @@ describe("useMcpServerCandidates", () => {
     });
     expect(mocks.updateMcpServer).not.toHaveBeenCalled();
     expect(mocks.goToMcpServerOverview).toHaveBeenCalledWith("hosted-x1");
+    expect(mocks.goToToolsetDetails).not.toHaveBeenCalled();
   });
 
   // A hosted server is granted under its toolset id (the server resolves the

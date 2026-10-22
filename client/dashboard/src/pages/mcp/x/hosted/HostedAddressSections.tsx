@@ -82,7 +82,9 @@ export function HostedAddressSections({
             variant="secondary"
             size="sm"
             className="mr-2"
-            disabled={updateToolsetMutation.isPending}
+            disabled={
+              updateToolsetMutation.isPending || !!mcpSlugError || !mcpSlug
+            }
             onClick={() => {
               updateToolsetMutation.mutate({
                 request: {
@@ -126,7 +128,7 @@ export function HostedAddressSections({
       </RequireScope>
     );
 
-  const anyChanges = mcpSlug !== toolset.mcpSlug;
+  const anyChanges = mcpSlug !== (toolset.mcpSlug || "");
 
   const saveButton = anyChanges && (
     <Button
