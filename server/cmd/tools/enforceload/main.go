@@ -707,7 +707,11 @@ func runFullPoint(
 		_ = inbox.Close()
 		_ = redisClient.Del(context.WithoutCancel(ctx), enforcereply.InboxKey(inbox.ReplicaID())).Err()
 	}()
-	dispatcher, err := enforcereply.NewDispatcher(pointCtx, logger, otel.GetMeterProvider(), loop.broker, inbox, enforcereply.DispatcherConfig{WaitTimeout: cfg.timeout, LaneWaitTimeout: nil, Flags: nil})
+	dispatcher, err := enforcereply.NewDispatcher(pointCtx, logger, otel.GetMeterProvider(), loop.broker, inbox, enforcereply.DispatcherConfig{
+		WaitTimeout:     cfg.timeout,
+		LaneWaitTimeout: enforcereply.DefaultLaneWaitTimeouts(),
+		Flags:           nil,
+	})
 	if err != nil {
 		return sweepResult{}, fmt.Errorf("create dispatcher: %w", err)
 	}
