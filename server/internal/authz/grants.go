@@ -74,6 +74,18 @@ var SystemRoleGrants = map[string][]*RoleGrant{
 	SystemRoleMember: roleGrantsForScopes(memberScopes),
 }
 
+// SystemRoleAssistantGrants returns the assistant-kind grants from a built-in
+// role's canonical grant set, or nil for any other role slug.
+func SystemRoleAssistantGrants(roleSlug string) []*RoleGrant {
+	var grants []*RoleGrant
+	for _, grant := range SystemRoleGrants[roleSlug] {
+		if ResourceKindForScope(Scope(grant.Scope)) == ResourceKindAssistant {
+			grants = append(grants, &RoleGrant{Scope: grant.Scope, Selectors: nil})
+		}
+	}
+	return grants
+}
+
 // SeedSystemRoleGrants bootstraps the fixed grant sets for system roles once.
 func SeedSystemRoleGrants(ctx context.Context, db *pgxpool.Pool, organizationID string) error {
 	tx, err := db.Begin(ctx)

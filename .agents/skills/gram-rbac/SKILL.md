@@ -67,7 +67,7 @@ Scope vocabulary, grant types, and enforcement logic are defined here. `authz`'s
 
 **Error model.** `errors.go` defines sentinel errors (`ErrDenied`, `ErrMissingGrants`, `ErrNoChecks`, `ErrInvalidCheck`) and typed errors (`DeniedError`, `InvalidCheckError`). The engine maps these to `oops` codes — `ErrDenied` → `oops.CodeForbidden`, everything else → `oops.CodeUnexpected` with a logged message.
 
-**Grant loading.** `LoadGrants(ctx, db, orgID, principals)` reads the principal URN set and returns the flattened `[]Grant`. Called by both `Engine.PrepareContext` (middleware path) and `access.ListGrants` (user-facing). Each row's `selectors` JSONB is parsed via `SelectorFromRow`. It also supplies unrestricted `assistant:read`/`assistant:write` defaults for the built-in Admin and Member role principals (`role:global:<id>`), because organizations seeded before the assistant scopes have no stored rows for them and system-role grants are immutable.
+**Grant loading.** `LoadGrants(ctx, db, orgID, principals)` reads the principal URN set and returns the flattened `[]Grant`. Called by both `Engine.PrepareContext` (middleware path) and `access.ListGrants` (user-facing). Each row's `selectors` JSONB is parsed via `SelectorFromRow`. It returns exactly the stored rows and never synthesizes defaults: built-in role grants are editable per organization, so an empty grant set for a scope family may be an explicit revocation. When new default scopes must reach existing organizations, write the rows with a one-time operator backfill (as `server/cmd/tools/migrations/assistantrolegrants` does for the assistant scopes) instead of filling them in at load time.
 
 **Sync semantics.** `SyncGrants` distinguishes nil from empty: `RoleGrant{Selectors: nil}` writes a single wildcard row; `RoleGrant{Selectors: []Selector{}}` writes nothing (no access). Each non-nil selector is validated by `ValidateSelector` before insert.
 
@@ -79,7 +79,7 @@ Scope vocabulary, grant types, and enforcement logic are defined here. `authz`'s
 
 **Full-access grant list.** `ListGrants` returns a hard-coded full-access scope list when enforcement is intentionally skipped, such as sessionless or API-key requests. That inline list in `server/internal/access/impl.go` must grow whenever a new scope is added. The parallel test expectation is `expectedFullAccessScopes` in `server/internal/access/listusergrants_test.go`.
 
-**System role gating.** `isSystemRole(slug)` in `impl.go` checks against `authz.SystemRoleAdmin` and `authz.SystemRoleMember`. System roles cannot be renamed, deleted, or have their grant set edited; only member assignment is allowed.
+**System role gating.** `isSystemRole(slug)` in `impl.go` checks against `authz.SystemRoleAdmin` and `authz.SystemRoleMember`. System roles cannot be renamed or deleted. Their grants are stored per organization and may be edited through `UpdateRole` (the Admin role must keep `org:admin`), and their members can be reassigned.
 
 ### Non-generated files
 
