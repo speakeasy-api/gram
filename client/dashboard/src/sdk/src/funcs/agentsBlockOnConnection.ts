@@ -13,9 +13,9 @@ import { RequestOptions } from "../lib/sdks.js";
 import { resolveSecurity } from "../lib/security.js";
 import { pathToFunc } from "../lib/url.js";
 import {
-  AgentConnectionRestriction,
-  AgentConnectionRestriction$inboundSchema,
-} from "../models/components/agentconnectionrestriction.js";
+  AgentConnectionBlock,
+  AgentConnectionBlock$inboundSchema,
+} from "../models/components/agentconnectionblock.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -31,27 +31,27 @@ import {
   ServiceError$inboundSchema,
 } from "../models/errors/serviceerror.js";
 import {
-  RestrictAgentOnConnectionRequest,
-  RestrictAgentOnConnectionRequest$outboundSchema,
-  RestrictAgentOnConnectionSecurity,
-} from "../models/operations/restrictagentonconnection.js";
+  BlockAgentOnConnectionRequest,
+  BlockAgentOnConnectionRequest$outboundSchema,
+  BlockAgentOnConnectionSecurity,
+} from "../models/operations/blockagentonconnection.js";
 import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
 /**
- * restrictAgentOnConnection agents
+ * blockAgentOnConnection agents
  *
  * @remarks
  * Block one agent in the caller's organization from the caller's own connection through an upstream OAuth client, across every auth client sharing it. Only the connection owner can do this, and it needs no agent management access. Blocks only; it never grants access.
  */
-export function agentsRestrictOnConnection(
+export function agentsBlockOnConnection(
   client: GramCore,
-  request: RestrictAgentOnConnectionRequest,
-  security?: RestrictAgentOnConnectionSecurity | undefined,
+  request: BlockAgentOnConnectionRequest,
+  security?: BlockAgentOnConnectionSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
-    AgentConnectionRestriction,
+    AgentConnectionBlock,
     | ServiceError
     | GramError
     | ResponseValidationError
@@ -73,13 +73,13 @@ export function agentsRestrictOnConnection(
 
 async function $do(
   client: GramCore,
-  request: RestrictAgentOnConnectionRequest,
-  security?: RestrictAgentOnConnectionSecurity | undefined,
+  request: BlockAgentOnConnectionRequest,
+  security?: BlockAgentOnConnectionSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [
     Result<
-      AgentConnectionRestriction,
+      AgentConnectionBlock,
       | ServiceError
       | GramError
       | ResponseValidationError
@@ -95,18 +95,18 @@ async function $do(
 > {
   const parsed = safeParse(
     request,
-    (value) => z.parse(RestrictAgentOnConnectionRequest$outboundSchema, value),
+    (value) => z.parse(BlockAgentOnConnectionRequest$outboundSchema, value),
     "Input validation failed",
   );
   if (!parsed.ok) {
     return [parsed, { status: "invalid" }];
   }
   const payload = parsed.value;
-  const body = encodeJSON("body", payload.RestrictAgentOnConnectionForm, {
+  const body = encodeJSON("body", payload.BlockAgentOnConnectionForm, {
     explode: true,
   });
 
-  const path = pathToFunc("/rpc/agents.restrictOnConnection")();
+  const path = pathToFunc("/rpc/agents.blockOnConnection")();
 
   const headers = new Headers(compactMap({
     "Content-Type": "application/json",
@@ -130,7 +130,7 @@ async function $do(
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "restrictAgentOnConnection",
+    operationID: "blockAgentOnConnection",
     oAuth2Scopes: null,
 
     resolvedSecurity: requestSecurity,
@@ -174,7 +174,7 @@ async function $do(
   };
 
   const [result] = await M.match<
-    AgentConnectionRestriction,
+    AgentConnectionBlock,
     | ServiceError
     | GramError
     | ResponseValidationError
@@ -185,7 +185,7 @@ async function $do(
     | UnexpectedClientError
     | SDKValidationError
   >(
-    M.json(200, AgentConnectionRestriction$inboundSchema),
+    M.json(200, AgentConnectionBlock$inboundSchema),
     M.jsonErr([400, 401, 403, 404, 409, 415, 422], ServiceError$inboundSchema),
     M.jsonErr([500, 502], ServiceError$inboundSchema),
     M.fail("4XX"),

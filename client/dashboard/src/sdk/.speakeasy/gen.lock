@@ -114,20 +114,20 @@ trackedFiles:
   src/funcs/agentReportSessionMoved.ts: {}
   src/funcs/agentUpdateConfiguration.ts: {}
   src/funcs/agentUpsertAiScanTarget.ts: {}
+  src/funcs/agentsBlockOnConnection.ts: {}
   src/funcs/agentsCreate.ts: {}
   src/funcs/agentsCreatePolicyGrant.ts: {}
   src/funcs/agentsDelete.ts: {}
   src/funcs/agentsDeletePolicyGrant.ts: {}
   src/funcs/agentsGet.ts: {}
   src/funcs/agentsList.ts: {}
-  src/funcs/agentsListConnectionRestrictions.ts: {}
+  src/funcs/agentsListConnectionBlocks.ts: {}
   src/funcs/agentsListDelegableGrants.ts: {}
   src/funcs/agentsListPolicyGrants.ts: {}
   src/funcs/agentsListSessions.ts: {}
   src/funcs/agentsReassign.ts: {}
-  src/funcs/agentsRemoveConnectionRestriction.ts: {}
+  src/funcs/agentsRemoveConnectionBlock.ts: {}
   src/funcs/agentsRename.ts: {}
-  src/funcs/agentsRestrictOnConnection.ts: {}
   src/funcs/agentsResume.ts: {}
   src/funcs/agentsRevoke.ts: {}
   src/funcs/agentsRevokeSession.ts: {}
@@ -889,8 +889,8 @@ trackedFiles:
   src/models/components/addtoolmetadatabatchresult.ts: {}
   src/models/components/adminopenrouterkey.ts: {}
   src/models/components/admitworkloadsubjectform.ts: {}
-  src/models/components/agentconnectionrestriction.ts: {}
-  src/models/components/agentconnectionrestrictionidform.ts: {}
+  src/models/components/agentconnectionblock.ts: {}
+  src/models/components/agentconnectionblockidform.ts: {}
   src/models/components/agentdelegatedgrant.ts: {}
   src/models/components/agentdelegatedpolicy.ts: {}
   src/models/components/agentidform.ts: {}
@@ -974,6 +974,7 @@ trackedFiles:
   src/models/components/beginresponsebody.ts: {}
   src/models/components/beginslackdirectoryconnectionrequestbody.ts: {}
   src/models/components/billingemail.ts: {}
+  src/models/components/blockagentonconnectionform.ts: {}
   src/models/components/builtincard.ts: {}
   src/models/components/builtindashboard.ts: {}
   src/models/components/builtinexclusioncategory.ts: {}
@@ -1341,7 +1342,7 @@ trackedFiles:
   src/models/components/launchercontext.ts: {}
   src/models/components/launcherjudgment.ts: {}
   src/models/components/listactorattributesresult.ts: {}
-  src/models/components/listagentconnectionrestrictionsresult.ts: {}
+  src/models/components/listagentconnectionblocksresult.ts: {}
   src/models/components/listagentsresult.ts: {}
   src/models/components/listaidetectionsresult.ts: {}
   src/models/components/listaidetectionusersresult.ts: {}
@@ -1701,7 +1702,6 @@ trackedFiles:
   src/models/components/responsefilter.ts: {}
   src/models/components/restoreoktaserversuggestionrequestbody.ts: {}
   src/models/components/restoreskillversionrequestbody.ts: {}
-  src/models/components/restrictagentonconnectionform.ts: {}
   src/models/components/retryschedulerequestbody.ts: {}
   src/models/components/revokeallremotesessionsresult.ts: {}
   src/models/components/revokeidentityproviderconnectionrequestbody.ts: {}
@@ -2152,6 +2152,7 @@ trackedFiles:
   src/models/operations/authtransferin.ts: {}
   src/models/operations/authtransferout.ts: {}
   src/models/operations/beginslackdirectoryconnection.ts: {}
+  src/models/operations/blockagentonconnection.ts: {}
   src/models/operations/cancelstripesubscription.ts: {}
   src/models/operations/captureevent.ts: {}
   src/models/operations/checkdomainhealth.ts: {}
@@ -2501,7 +2502,7 @@ trackedFiles:
   src/models/operations/killswitchespreviewoverlaps.ts: {}
   src/models/operations/launcherjudge.ts: {}
   src/models/operations/listadminopenrouterkeys.ts: {}
-  src/models/operations/listagentconnectionrestrictions.ts: {}
+  src/models/operations/listagentconnectionblocks.ts: {}
   src/models/operations/listagentdelegablegrants.ts: {}
   src/models/operations/listagentpolicygrants.ts: {}
   src/models/operations/listagents.ts: {}
@@ -2716,7 +2717,7 @@ trackedFiles:
   src/models/operations/registerdomain.ts: {}
   src/models/operations/registerworkloadissuer.ts: {}
   src/models/operations/releasesessionquarantine.ts: {}
-  src/models/operations/removeagentconnectionrestriction.ts: {}
+  src/models/operations/removeagentconnectionblock.ts: {}
   src/models/operations/removedashboardwidget.ts: {}
   src/models/operations/removemetamcpmember.ts: {}
   src/models/operations/removeoauthserver.ts: {}
@@ -2739,7 +2740,6 @@ trackedFiles:
   src/models/operations/resolveshadowmcpinventoryrequest.ts: {}
   src/models/operations/restoreoktaserversuggestion.ts: {}
   src/models/operations/restoreskillversion.ts: {}
-  src/models/operations/restrictagentonconnection.ts: {}
   src/models/operations/resumeagent.ts: {}
   src/models/operations/resumestripesubscription.ts: {}
   src/models/operations/resumetriggerinstance.ts: {}
@@ -2956,8 +2956,8 @@ trackedFiles:
   src/react-query/admitWorkloadSubject.ts: {}
   src/react-query/agent.core.ts: {}
   src/react-query/agent.ts: {}
-  src/react-query/agentConnectionRestrictions.core.ts: {}
-  src/react-query/agentConnectionRestrictions.ts: {}
+  src/react-query/agentConnectionBlocks.core.ts: {}
+  src/react-query/agentConnectionBlocks.ts: {}
   src/react-query/agentPlugins.core.ts: {}
   src/react-query/agentPlugins.ts: {}
   src/react-query/agentSessionMeta.core.ts: {}
@@ -3029,6 +3029,7 @@ trackedFiles:
   src/react-query/authClients.ts: {}
   src/react-query/batchKillswitchUserBadges.ts: {}
   src/react-query/beginSlackDirectoryConnection.ts: {}
+  src/react-query/blockAgentOnConnection.ts: {}
   src/react-query/builtinExclusions.core.ts: {}
   src/react-query/builtinExclusions.ts: {}
   src/react-query/cancelStripeSubscription.ts: {}
@@ -3700,7 +3701,7 @@ trackedFiles:
   src/react-query/remoteSessionsDetachBinding.ts: {}
   src/react-query/remoteSessionsListBindings.core.ts: {}
   src/react-query/remoteSessionsListBindings.ts: {}
-  src/react-query/removeAgentConnectionRestriction.ts: {}
+  src/react-query/removeAgentConnectionBlock.ts: {}
   src/react-query/removeDashboardWidget.ts: {}
   src/react-query/removeMetaMcpMember.ts: {}
   src/react-query/removeOAuthServer.ts: {}
@@ -3726,7 +3727,6 @@ trackedFiles:
   src/react-query/resourceAudience.ts: {}
   src/react-query/restoreOktaServerSuggestion.ts: {}
   src/react-query/restoreSkillVersion.ts: {}
-  src/react-query/restrictAgentOnConnection.ts: {}
   src/react-query/resumeStripeSubscription.ts: {}
   src/react-query/resumeTrigger.ts: {}
   src/react-query/retireJsonWebKey.ts: {}
@@ -4598,6 +4598,17 @@ examples:
       responses:
         "200":
           application/json: {"authorization_url": "https://inconsequential-plastic.info/"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  blockAgentOnConnection:
+    speakeasy-default-block-agent-on-connection:
+      requestBody:
+        application/json: {"agent_id": "05599942-68bd-4ac4-8521-914e82008ca3", "remote_session_client_id": "a799131c-d6eb-4109-b6fe-ae3116fb46ed"}
+      responses:
+        "200":
+          application/json: {"agent_id": "2a87d88f-73e5-45f1-a6c4-0a1b2706f429", "created_at": "2024-09-27T21:42:17.888Z", "id": "39427abe-c149-4d8d-ad4b-78c82d41a63c", "remote_session_client_id": "d14a2549-6106-4012-9429-bb15ebd42ef8"}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
@@ -8985,6 +8996,18 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  listAgentConnectionBlocks:
+    speakeasy-default-list-agent-connection-blocks:
+      parameters:
+        query:
+          limit: 50
+      responses:
+        "200":
+          application/json: {"items": [{"agent_id": "4604cfc6-0c09-4186-acbf-359eb68ee934", "created_at": "2026-09-07T06:31:09.339Z", "id": "1a4560f4-1e19-49b0-9135-9e979de8181e", "remote_session_client_id": "35ce369f-a669-44d8-a95a-c5051625b9bc"}]}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   listAgentConnectionRestrictions:
     speakeasy-default-list-agent-connection-restrictions:
       responses:
@@ -11445,6 +11468,15 @@ examples:
       responses:
         "200":
           application/json: {"created_at": "2025-01-11T01:29:16.674Z", "id": "a7122205-786f-4b15-abff-e6fa9d451167", "organization_id": "<id>", "project_id": "139dc5f1-b529-4109-a8fb-126f8cf08944", "reason": "<value>", "risk_policy_name": "<value>", "session_id": "<id>", "user_id": "<id>"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  removeAgentConnectionBlock:
+    speakeasy-default-remove-agent-connection-block:
+      requestBody:
+        application/json: {"block_id": "db47634b-4fca-4f07-9e39-ca8b16abd433"}
+      responses:
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":

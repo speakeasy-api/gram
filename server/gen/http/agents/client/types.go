@@ -80,20 +80,20 @@ type DeletePolicyGrantRequestBody struct {
 	AgentID string `form:"agent_id" json:"agent_id" xml:"agent_id"`
 }
 
-// RestrictAgentOnConnectionRequestBody is the type of the "agents" service
-// "restrictAgentOnConnection" endpoint HTTP request body.
-type RestrictAgentOnConnectionRequestBody struct {
+// BlockAgentOnConnectionRequestBody is the type of the "agents" service
+// "blockAgentOnConnection" endpoint HTTP request body.
+type BlockAgentOnConnectionRequestBody struct {
 	// The agent to block; any agent in the caller's organization
 	AgentID string `form:"agent_id" json:"agent_id" xml:"agent_id"`
 	// The upstream OAuth client of the caller's own connection
 	RemoteSessionClientID string `form:"remote_session_client_id" json:"remote_session_client_id" xml:"remote_session_client_id"`
 }
 
-// RemoveConnectionRestrictionRequestBody is the type of the "agents" service
-// "removeConnectionRestriction" endpoint HTTP request body.
-type RemoveConnectionRestrictionRequestBody struct {
-	// Connection restriction identifier
-	RestrictionID string `form:"restriction_id" json:"restriction_id" xml:"restriction_id"`
+// RemoveConnectionBlockRequestBody is the type of the "agents" service
+// "removeConnectionBlock" endpoint HTTP request body.
+type RemoveConnectionBlockRequestBody struct {
+	// Connection block identifier
+	BlockID string `form:"block_id" json:"block_id" xml:"block_id"`
 }
 
 // TransferRequestBody is the type of the "agents" service "transfer" endpoint
@@ -246,21 +246,23 @@ type UpdatePolicyGrantResponseBody struct {
 	UpdatedAt *string                          `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
-// ListConnectionRestrictionsResponseBody is the type of the "agents" service
-// "listConnectionRestrictions" endpoint HTTP response body.
-type ListConnectionRestrictionsResponseBody struct {
-	// Restrictions the caller wrote on their own connections
-	Items []*AgentConnectionRestrictionResponseBody `form:"items,omitempty" json:"items,omitempty" xml:"items,omitempty"`
+// ListConnectionBlocksResponseBody is the type of the "agents" service
+// "listConnectionBlocks" endpoint HTTP response body.
+type ListConnectionBlocksResponseBody struct {
+	// Blocks the caller wrote on their own connections
+	Items []*AgentConnectionBlockResponseBody `form:"items,omitempty" json:"items,omitempty" xml:"items,omitempty"`
+	// Cursor for the next page; absent when exhausted.
+	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
 }
 
-// RestrictAgentOnConnectionResponseBody is the type of the "agents" service
-// "restrictAgentOnConnection" endpoint HTTP response body.
-type RestrictAgentOnConnectionResponseBody struct {
+// BlockAgentOnConnectionResponseBody is the type of the "agents" service
+// "blockAgentOnConnection" endpoint HTTP response body.
+type BlockAgentOnConnectionResponseBody struct {
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// The blocked agent
 	AgentID *string `form:"agent_id,omitempty" json:"agent_id,omitempty" xml:"agent_id,omitempty"`
-	// The upstream OAuth client the connection uses; the restriction covers every
-	// auth client sharing it
+	// The upstream OAuth client the connection uses; the block covers every auth
+	// client sharing it
 	RemoteSessionClientID *string `form:"remote_session_client_id,omitempty" json:"remote_session_client_id,omitempty" xml:"remote_session_client_id,omitempty"`
 	CreatedAt             *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 }
@@ -2378,10 +2380,10 @@ type DeletePolicyGrantGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// ListConnectionRestrictionsUnauthorizedResponseBody is the type of the
-// "agents" service "listConnectionRestrictions" endpoint HTTP response body
-// for the "unauthorized" error.
-type ListConnectionRestrictionsUnauthorizedResponseBody struct {
+// ListConnectionBlocksUnauthorizedResponseBody is the type of the "agents"
+// service "listConnectionBlocks" endpoint HTTP response body for the
+// "unauthorized" error.
+type ListConnectionBlocksUnauthorizedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2397,10 +2399,10 @@ type ListConnectionRestrictionsUnauthorizedResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// ListConnectionRestrictionsForbiddenResponseBody is the type of the "agents"
-// service "listConnectionRestrictions" endpoint HTTP response body for the
+// ListConnectionBlocksForbiddenResponseBody is the type of the "agents"
+// service "listConnectionBlocks" endpoint HTTP response body for the
 // "forbidden" error.
-type ListConnectionRestrictionsForbiddenResponseBody struct {
+type ListConnectionBlocksForbiddenResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2416,10 +2418,10 @@ type ListConnectionRestrictionsForbiddenResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// ListConnectionRestrictionsBadRequestResponseBody is the type of the "agents"
-// service "listConnectionRestrictions" endpoint HTTP response body for the
+// ListConnectionBlocksBadRequestResponseBody is the type of the "agents"
+// service "listConnectionBlocks" endpoint HTTP response body for the
 // "bad_request" error.
-type ListConnectionRestrictionsBadRequestResponseBody struct {
+type ListConnectionBlocksBadRequestResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2435,10 +2437,9 @@ type ListConnectionRestrictionsBadRequestResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// ListConnectionRestrictionsNotFoundResponseBody is the type of the "agents"
-// service "listConnectionRestrictions" endpoint HTTP response body for the
-// "not_found" error.
-type ListConnectionRestrictionsNotFoundResponseBody struct {
+// ListConnectionBlocksNotFoundResponseBody is the type of the "agents" service
+// "listConnectionBlocks" endpoint HTTP response body for the "not_found" error.
+type ListConnectionBlocksNotFoundResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2454,10 +2455,9 @@ type ListConnectionRestrictionsNotFoundResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// ListConnectionRestrictionsConflictResponseBody is the type of the "agents"
-// service "listConnectionRestrictions" endpoint HTTP response body for the
-// "conflict" error.
-type ListConnectionRestrictionsConflictResponseBody struct {
+// ListConnectionBlocksConflictResponseBody is the type of the "agents" service
+// "listConnectionBlocks" endpoint HTTP response body for the "conflict" error.
+type ListConnectionBlocksConflictResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2473,10 +2473,10 @@ type ListConnectionRestrictionsConflictResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// ListConnectionRestrictionsUnsupportedMediaResponseBody is the type of the
-// "agents" service "listConnectionRestrictions" endpoint HTTP response body
-// for the "unsupported_media" error.
-type ListConnectionRestrictionsUnsupportedMediaResponseBody struct {
+// ListConnectionBlocksUnsupportedMediaResponseBody is the type of the "agents"
+// service "listConnectionBlocks" endpoint HTTP response body for the
+// "unsupported_media" error.
+type ListConnectionBlocksUnsupportedMediaResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2492,10 +2492,9 @@ type ListConnectionRestrictionsUnsupportedMediaResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// ListConnectionRestrictionsInvalidResponseBody is the type of the "agents"
-// service "listConnectionRestrictions" endpoint HTTP response body for the
-// "invalid" error.
-type ListConnectionRestrictionsInvalidResponseBody struct {
+// ListConnectionBlocksInvalidResponseBody is the type of the "agents" service
+// "listConnectionBlocks" endpoint HTTP response body for the "invalid" error.
+type ListConnectionBlocksInvalidResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2511,10 +2510,10 @@ type ListConnectionRestrictionsInvalidResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// ListConnectionRestrictionsInvariantViolationResponseBody is the type of the
-// "agents" service "listConnectionRestrictions" endpoint HTTP response body
-// for the "invariant_violation" error.
-type ListConnectionRestrictionsInvariantViolationResponseBody struct {
+// ListConnectionBlocksInvariantViolationResponseBody is the type of the
+// "agents" service "listConnectionBlocks" endpoint HTTP response body for the
+// "invariant_violation" error.
+type ListConnectionBlocksInvariantViolationResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2530,10 +2529,10 @@ type ListConnectionRestrictionsInvariantViolationResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// ListConnectionRestrictionsUnexpectedResponseBody is the type of the "agents"
-// service "listConnectionRestrictions" endpoint HTTP response body for the
+// ListConnectionBlocksUnexpectedResponseBody is the type of the "agents"
+// service "listConnectionBlocks" endpoint HTTP response body for the
 // "unexpected" error.
-type ListConnectionRestrictionsUnexpectedResponseBody struct {
+type ListConnectionBlocksUnexpectedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2549,10 +2548,10 @@ type ListConnectionRestrictionsUnexpectedResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// ListConnectionRestrictionsGatewayErrorResponseBody is the type of the
-// "agents" service "listConnectionRestrictions" endpoint HTTP response body
-// for the "gateway_error" error.
-type ListConnectionRestrictionsGatewayErrorResponseBody struct {
+// ListConnectionBlocksGatewayErrorResponseBody is the type of the "agents"
+// service "listConnectionBlocks" endpoint HTTP response body for the
+// "gateway_error" error.
+type ListConnectionBlocksGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2568,10 +2567,10 @@ type ListConnectionRestrictionsGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// RestrictAgentOnConnectionUnauthorizedResponseBody is the type of the
-// "agents" service "restrictAgentOnConnection" endpoint HTTP response body for
-// the "unauthorized" error.
-type RestrictAgentOnConnectionUnauthorizedResponseBody struct {
+// BlockAgentOnConnectionUnauthorizedResponseBody is the type of the "agents"
+// service "blockAgentOnConnection" endpoint HTTP response body for the
+// "unauthorized" error.
+type BlockAgentOnConnectionUnauthorizedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2587,10 +2586,10 @@ type RestrictAgentOnConnectionUnauthorizedResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// RestrictAgentOnConnectionForbiddenResponseBody is the type of the "agents"
-// service "restrictAgentOnConnection" endpoint HTTP response body for the
+// BlockAgentOnConnectionForbiddenResponseBody is the type of the "agents"
+// service "blockAgentOnConnection" endpoint HTTP response body for the
 // "forbidden" error.
-type RestrictAgentOnConnectionForbiddenResponseBody struct {
+type BlockAgentOnConnectionForbiddenResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2606,10 +2605,10 @@ type RestrictAgentOnConnectionForbiddenResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// RestrictAgentOnConnectionBadRequestResponseBody is the type of the "agents"
-// service "restrictAgentOnConnection" endpoint HTTP response body for the
+// BlockAgentOnConnectionBadRequestResponseBody is the type of the "agents"
+// service "blockAgentOnConnection" endpoint HTTP response body for the
 // "bad_request" error.
-type RestrictAgentOnConnectionBadRequestResponseBody struct {
+type BlockAgentOnConnectionBadRequestResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2625,10 +2624,10 @@ type RestrictAgentOnConnectionBadRequestResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// RestrictAgentOnConnectionNotFoundResponseBody is the type of the "agents"
-// service "restrictAgentOnConnection" endpoint HTTP response body for the
+// BlockAgentOnConnectionNotFoundResponseBody is the type of the "agents"
+// service "blockAgentOnConnection" endpoint HTTP response body for the
 // "not_found" error.
-type RestrictAgentOnConnectionNotFoundResponseBody struct {
+type BlockAgentOnConnectionNotFoundResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2644,10 +2643,10 @@ type RestrictAgentOnConnectionNotFoundResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// RestrictAgentOnConnectionConflictResponseBody is the type of the "agents"
-// service "restrictAgentOnConnection" endpoint HTTP response body for the
+// BlockAgentOnConnectionConflictResponseBody is the type of the "agents"
+// service "blockAgentOnConnection" endpoint HTTP response body for the
 // "conflict" error.
-type RestrictAgentOnConnectionConflictResponseBody struct {
+type BlockAgentOnConnectionConflictResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2663,10 +2662,10 @@ type RestrictAgentOnConnectionConflictResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// RestrictAgentOnConnectionUnsupportedMediaResponseBody is the type of the
-// "agents" service "restrictAgentOnConnection" endpoint HTTP response body for
+// BlockAgentOnConnectionUnsupportedMediaResponseBody is the type of the
+// "agents" service "blockAgentOnConnection" endpoint HTTP response body for
 // the "unsupported_media" error.
-type RestrictAgentOnConnectionUnsupportedMediaResponseBody struct {
+type BlockAgentOnConnectionUnsupportedMediaResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2682,10 +2681,10 @@ type RestrictAgentOnConnectionUnsupportedMediaResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// RestrictAgentOnConnectionInvalidResponseBody is the type of the "agents"
-// service "restrictAgentOnConnection" endpoint HTTP response body for the
+// BlockAgentOnConnectionInvalidResponseBody is the type of the "agents"
+// service "blockAgentOnConnection" endpoint HTTP response body for the
 // "invalid" error.
-type RestrictAgentOnConnectionInvalidResponseBody struct {
+type BlockAgentOnConnectionInvalidResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2701,10 +2700,10 @@ type RestrictAgentOnConnectionInvalidResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// RestrictAgentOnConnectionInvariantViolationResponseBody is the type of the
-// "agents" service "restrictAgentOnConnection" endpoint HTTP response body for
+// BlockAgentOnConnectionInvariantViolationResponseBody is the type of the
+// "agents" service "blockAgentOnConnection" endpoint HTTP response body for
 // the "invariant_violation" error.
-type RestrictAgentOnConnectionInvariantViolationResponseBody struct {
+type BlockAgentOnConnectionInvariantViolationResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2720,10 +2719,10 @@ type RestrictAgentOnConnectionInvariantViolationResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// RestrictAgentOnConnectionUnexpectedResponseBody is the type of the "agents"
-// service "restrictAgentOnConnection" endpoint HTTP response body for the
+// BlockAgentOnConnectionUnexpectedResponseBody is the type of the "agents"
+// service "blockAgentOnConnection" endpoint HTTP response body for the
 // "unexpected" error.
-type RestrictAgentOnConnectionUnexpectedResponseBody struct {
+type BlockAgentOnConnectionUnexpectedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2739,10 +2738,10 @@ type RestrictAgentOnConnectionUnexpectedResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// RestrictAgentOnConnectionGatewayErrorResponseBody is the type of the
-// "agents" service "restrictAgentOnConnection" endpoint HTTP response body for
-// the "gateway_error" error.
-type RestrictAgentOnConnectionGatewayErrorResponseBody struct {
+// BlockAgentOnConnectionGatewayErrorResponseBody is the type of the "agents"
+// service "blockAgentOnConnection" endpoint HTTP response body for the
+// "gateway_error" error.
+type BlockAgentOnConnectionGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2758,10 +2757,10 @@ type RestrictAgentOnConnectionGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// RemoveConnectionRestrictionUnauthorizedResponseBody is the type of the
-// "agents" service "removeConnectionRestriction" endpoint HTTP response body
-// for the "unauthorized" error.
-type RemoveConnectionRestrictionUnauthorizedResponseBody struct {
+// RemoveConnectionBlockUnauthorizedResponseBody is the type of the "agents"
+// service "removeConnectionBlock" endpoint HTTP response body for the
+// "unauthorized" error.
+type RemoveConnectionBlockUnauthorizedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2777,10 +2776,10 @@ type RemoveConnectionRestrictionUnauthorizedResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// RemoveConnectionRestrictionForbiddenResponseBody is the type of the "agents"
-// service "removeConnectionRestriction" endpoint HTTP response body for the
+// RemoveConnectionBlockForbiddenResponseBody is the type of the "agents"
+// service "removeConnectionBlock" endpoint HTTP response body for the
 // "forbidden" error.
-type RemoveConnectionRestrictionForbiddenResponseBody struct {
+type RemoveConnectionBlockForbiddenResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2796,10 +2795,10 @@ type RemoveConnectionRestrictionForbiddenResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// RemoveConnectionRestrictionBadRequestResponseBody is the type of the
-// "agents" service "removeConnectionRestriction" endpoint HTTP response body
-// for the "bad_request" error.
-type RemoveConnectionRestrictionBadRequestResponseBody struct {
+// RemoveConnectionBlockBadRequestResponseBody is the type of the "agents"
+// service "removeConnectionBlock" endpoint HTTP response body for the
+// "bad_request" error.
+type RemoveConnectionBlockBadRequestResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2815,10 +2814,10 @@ type RemoveConnectionRestrictionBadRequestResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// RemoveConnectionRestrictionNotFoundResponseBody is the type of the "agents"
-// service "removeConnectionRestriction" endpoint HTTP response body for the
+// RemoveConnectionBlockNotFoundResponseBody is the type of the "agents"
+// service "removeConnectionBlock" endpoint HTTP response body for the
 // "not_found" error.
-type RemoveConnectionRestrictionNotFoundResponseBody struct {
+type RemoveConnectionBlockNotFoundResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2834,10 +2833,10 @@ type RemoveConnectionRestrictionNotFoundResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// RemoveConnectionRestrictionConflictResponseBody is the type of the "agents"
-// service "removeConnectionRestriction" endpoint HTTP response body for the
+// RemoveConnectionBlockConflictResponseBody is the type of the "agents"
+// service "removeConnectionBlock" endpoint HTTP response body for the
 // "conflict" error.
-type RemoveConnectionRestrictionConflictResponseBody struct {
+type RemoveConnectionBlockConflictResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2853,10 +2852,10 @@ type RemoveConnectionRestrictionConflictResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// RemoveConnectionRestrictionUnsupportedMediaResponseBody is the type of the
-// "agents" service "removeConnectionRestriction" endpoint HTTP response body
-// for the "unsupported_media" error.
-type RemoveConnectionRestrictionUnsupportedMediaResponseBody struct {
+// RemoveConnectionBlockUnsupportedMediaResponseBody is the type of the
+// "agents" service "removeConnectionBlock" endpoint HTTP response body for the
+// "unsupported_media" error.
+type RemoveConnectionBlockUnsupportedMediaResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2872,10 +2871,9 @@ type RemoveConnectionRestrictionUnsupportedMediaResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// RemoveConnectionRestrictionInvalidResponseBody is the type of the "agents"
-// service "removeConnectionRestriction" endpoint HTTP response body for the
-// "invalid" error.
-type RemoveConnectionRestrictionInvalidResponseBody struct {
+// RemoveConnectionBlockInvalidResponseBody is the type of the "agents" service
+// "removeConnectionBlock" endpoint HTTP response body for the "invalid" error.
+type RemoveConnectionBlockInvalidResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2891,10 +2889,10 @@ type RemoveConnectionRestrictionInvalidResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// RemoveConnectionRestrictionInvariantViolationResponseBody is the type of the
-// "agents" service "removeConnectionRestriction" endpoint HTTP response body
-// for the "invariant_violation" error.
-type RemoveConnectionRestrictionInvariantViolationResponseBody struct {
+// RemoveConnectionBlockInvariantViolationResponseBody is the type of the
+// "agents" service "removeConnectionBlock" endpoint HTTP response body for the
+// "invariant_violation" error.
+type RemoveConnectionBlockInvariantViolationResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2910,10 +2908,10 @@ type RemoveConnectionRestrictionInvariantViolationResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// RemoveConnectionRestrictionUnexpectedResponseBody is the type of the
-// "agents" service "removeConnectionRestriction" endpoint HTTP response body
-// for the "unexpected" error.
-type RemoveConnectionRestrictionUnexpectedResponseBody struct {
+// RemoveConnectionBlockUnexpectedResponseBody is the type of the "agents"
+// service "removeConnectionBlock" endpoint HTTP response body for the
+// "unexpected" error.
+type RemoveConnectionBlockUnexpectedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2929,10 +2927,10 @@ type RemoveConnectionRestrictionUnexpectedResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// RemoveConnectionRestrictionGatewayErrorResponseBody is the type of the
-// "agents" service "removeConnectionRestriction" endpoint HTTP response body
-// for the "gateway_error" error.
-type RemoveConnectionRestrictionGatewayErrorResponseBody struct {
+// RemoveConnectionBlockGatewayErrorResponseBody is the type of the "agents"
+// service "removeConnectionBlock" endpoint HTTP response body for the
+// "gateway_error" error.
+type RemoveConnectionBlockGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -4225,14 +4223,14 @@ type AgentPolicySelectorResponseBody struct {
 	ServerIdentity *string `form:"server_identity,omitempty" json:"server_identity,omitempty" xml:"server_identity,omitempty"`
 }
 
-// AgentConnectionRestrictionResponseBody is used to define fields on response
-// body types.
-type AgentConnectionRestrictionResponseBody struct {
+// AgentConnectionBlockResponseBody is used to define fields on response body
+// types.
+type AgentConnectionBlockResponseBody struct {
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// The blocked agent
 	AgentID *string `form:"agent_id,omitempty" json:"agent_id,omitempty" xml:"agent_id,omitempty"`
-	// The upstream OAuth client the connection uses; the restriction covers every
-	// auth client sharing it
+	// The upstream OAuth client the connection uses; the block covers every auth
+	// client sharing it
 	RemoteSessionClientID *string `form:"remote_session_client_id,omitempty" json:"remote_session_client_id,omitempty" xml:"remote_session_client_id,omitempty"`
 	CreatedAt             *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 }
@@ -4317,23 +4315,21 @@ func NewDeletePolicyGrantRequestBody(p *agents.DeletePolicyGrantPayload) *Delete
 	return body
 }
 
-// NewRestrictAgentOnConnectionRequestBody builds the HTTP request body from
-// the payload of the "restrictAgentOnConnection" endpoint of the "agents"
-// service.
-func NewRestrictAgentOnConnectionRequestBody(p *agents.RestrictAgentOnConnectionPayload) *RestrictAgentOnConnectionRequestBody {
-	body := &RestrictAgentOnConnectionRequestBody{
+// NewBlockAgentOnConnectionRequestBody builds the HTTP request body from the
+// payload of the "blockAgentOnConnection" endpoint of the "agents" service.
+func NewBlockAgentOnConnectionRequestBody(p *agents.BlockAgentOnConnectionPayload) *BlockAgentOnConnectionRequestBody {
+	body := &BlockAgentOnConnectionRequestBody{
 		AgentID:               p.AgentID,
 		RemoteSessionClientID: p.RemoteSessionClientID,
 	}
 	return body
 }
 
-// NewRemoveConnectionRestrictionRequestBody builds the HTTP request body from
-// the payload of the "removeConnectionRestriction" endpoint of the "agents"
-// service.
-func NewRemoveConnectionRestrictionRequestBody(p *agents.RemoveConnectionRestrictionPayload) *RemoveConnectionRestrictionRequestBody {
-	body := &RemoveConnectionRestrictionRequestBody{
-		RestrictionID: p.RestrictionID,
+// NewRemoveConnectionBlockRequestBody builds the HTTP request body from the
+// payload of the "removeConnectionBlock" endpoint of the "agents" service.
+func NewRemoveConnectionBlockRequestBody(p *agents.RemoveConnectionBlockPayload) *RemoveConnectionBlockRequestBody {
+	body := &RemoveConnectionBlockRequestBody{
+		BlockID: p.BlockID,
 	}
 	return body
 }
@@ -6181,26 +6177,27 @@ func NewDeletePolicyGrantGatewayError(body *DeletePolicyGrantGatewayErrorRespons
 	return v
 }
 
-// NewListConnectionRestrictionsListAgentConnectionRestrictionsResultOK builds
-// a "agents" service "listConnectionRestrictions" endpoint result from a HTTP
-// "OK" response.
-func NewListConnectionRestrictionsListAgentConnectionRestrictionsResultOK(body *ListConnectionRestrictionsResponseBody) *agents.ListAgentConnectionRestrictionsResult {
-	v := &agents.ListAgentConnectionRestrictionsResult{}
-	v.Items = make([]*agents.AgentConnectionRestriction, len(body.Items))
+// NewListConnectionBlocksListAgentConnectionBlocksResultOK builds a "agents"
+// service "listConnectionBlocks" endpoint result from a HTTP "OK" response.
+func NewListConnectionBlocksListAgentConnectionBlocksResultOK(body *ListConnectionBlocksResponseBody) *agents.ListAgentConnectionBlocksResult {
+	v := &agents.ListAgentConnectionBlocksResult{
+		NextCursor: body.NextCursor,
+	}
+	v.Items = make([]*agents.AgentConnectionBlock, len(body.Items))
 	for i, val := range body.Items {
 		if val == nil {
 			v.Items[i] = nil
 			continue
 		}
-		v.Items[i] = unmarshalAgentConnectionRestrictionResponseBodyToAgentsAgentConnectionRestriction(val)
+		v.Items[i] = unmarshalAgentConnectionBlockResponseBodyToAgentsAgentConnectionBlock(val)
 	}
 
 	return v
 }
 
-// NewListConnectionRestrictionsUnauthorized builds a agents service
-// listConnectionRestrictions endpoint unauthorized error.
-func NewListConnectionRestrictionsUnauthorized(body *ListConnectionRestrictionsUnauthorizedResponseBody) *goa.ServiceError {
+// NewListConnectionBlocksUnauthorized builds a agents service
+// listConnectionBlocks endpoint unauthorized error.
+func NewListConnectionBlocksUnauthorized(body *ListConnectionBlocksUnauthorizedResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -6213,9 +6210,9 @@ func NewListConnectionRestrictionsUnauthorized(body *ListConnectionRestrictionsU
 	return v
 }
 
-// NewListConnectionRestrictionsForbidden builds a agents service
-// listConnectionRestrictions endpoint forbidden error.
-func NewListConnectionRestrictionsForbidden(body *ListConnectionRestrictionsForbiddenResponseBody) *goa.ServiceError {
+// NewListConnectionBlocksForbidden builds a agents service
+// listConnectionBlocks endpoint forbidden error.
+func NewListConnectionBlocksForbidden(body *ListConnectionBlocksForbiddenResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -6228,9 +6225,9 @@ func NewListConnectionRestrictionsForbidden(body *ListConnectionRestrictionsForb
 	return v
 }
 
-// NewListConnectionRestrictionsBadRequest builds a agents service
-// listConnectionRestrictions endpoint bad_request error.
-func NewListConnectionRestrictionsBadRequest(body *ListConnectionRestrictionsBadRequestResponseBody) *goa.ServiceError {
+// NewListConnectionBlocksBadRequest builds a agents service
+// listConnectionBlocks endpoint bad_request error.
+func NewListConnectionBlocksBadRequest(body *ListConnectionBlocksBadRequestResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -6243,9 +6240,9 @@ func NewListConnectionRestrictionsBadRequest(body *ListConnectionRestrictionsBad
 	return v
 }
 
-// NewListConnectionRestrictionsNotFound builds a agents service
-// listConnectionRestrictions endpoint not_found error.
-func NewListConnectionRestrictionsNotFound(body *ListConnectionRestrictionsNotFoundResponseBody) *goa.ServiceError {
+// NewListConnectionBlocksNotFound builds a agents service listConnectionBlocks
+// endpoint not_found error.
+func NewListConnectionBlocksNotFound(body *ListConnectionBlocksNotFoundResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -6258,9 +6255,9 @@ func NewListConnectionRestrictionsNotFound(body *ListConnectionRestrictionsNotFo
 	return v
 }
 
-// NewListConnectionRestrictionsConflict builds a agents service
-// listConnectionRestrictions endpoint conflict error.
-func NewListConnectionRestrictionsConflict(body *ListConnectionRestrictionsConflictResponseBody) *goa.ServiceError {
+// NewListConnectionBlocksConflict builds a agents service listConnectionBlocks
+// endpoint conflict error.
+func NewListConnectionBlocksConflict(body *ListConnectionBlocksConflictResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -6273,9 +6270,9 @@ func NewListConnectionRestrictionsConflict(body *ListConnectionRestrictionsConfl
 	return v
 }
 
-// NewListConnectionRestrictionsUnsupportedMedia builds a agents service
-// listConnectionRestrictions endpoint unsupported_media error.
-func NewListConnectionRestrictionsUnsupportedMedia(body *ListConnectionRestrictionsUnsupportedMediaResponseBody) *goa.ServiceError {
+// NewListConnectionBlocksUnsupportedMedia builds a agents service
+// listConnectionBlocks endpoint unsupported_media error.
+func NewListConnectionBlocksUnsupportedMedia(body *ListConnectionBlocksUnsupportedMediaResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -6288,9 +6285,9 @@ func NewListConnectionRestrictionsUnsupportedMedia(body *ListConnectionRestricti
 	return v
 }
 
-// NewListConnectionRestrictionsInvalid builds a agents service
-// listConnectionRestrictions endpoint invalid error.
-func NewListConnectionRestrictionsInvalid(body *ListConnectionRestrictionsInvalidResponseBody) *goa.ServiceError {
+// NewListConnectionBlocksInvalid builds a agents service listConnectionBlocks
+// endpoint invalid error.
+func NewListConnectionBlocksInvalid(body *ListConnectionBlocksInvalidResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -6303,9 +6300,9 @@ func NewListConnectionRestrictionsInvalid(body *ListConnectionRestrictionsInvali
 	return v
 }
 
-// NewListConnectionRestrictionsInvariantViolation builds a agents service
-// listConnectionRestrictions endpoint invariant_violation error.
-func NewListConnectionRestrictionsInvariantViolation(body *ListConnectionRestrictionsInvariantViolationResponseBody) *goa.ServiceError {
+// NewListConnectionBlocksInvariantViolation builds a agents service
+// listConnectionBlocks endpoint invariant_violation error.
+func NewListConnectionBlocksInvariantViolation(body *ListConnectionBlocksInvariantViolationResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -6318,9 +6315,9 @@ func NewListConnectionRestrictionsInvariantViolation(body *ListConnectionRestric
 	return v
 }
 
-// NewListConnectionRestrictionsUnexpected builds a agents service
-// listConnectionRestrictions endpoint unexpected error.
-func NewListConnectionRestrictionsUnexpected(body *ListConnectionRestrictionsUnexpectedResponseBody) *goa.ServiceError {
+// NewListConnectionBlocksUnexpected builds a agents service
+// listConnectionBlocks endpoint unexpected error.
+func NewListConnectionBlocksUnexpected(body *ListConnectionBlocksUnexpectedResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -6333,9 +6330,9 @@ func NewListConnectionRestrictionsUnexpected(body *ListConnectionRestrictionsUne
 	return v
 }
 
-// NewListConnectionRestrictionsGatewayError builds a agents service
-// listConnectionRestrictions endpoint gateway_error error.
-func NewListConnectionRestrictionsGatewayError(body *ListConnectionRestrictionsGatewayErrorResponseBody) *goa.ServiceError {
+// NewListConnectionBlocksGatewayError builds a agents service
+// listConnectionBlocks endpoint gateway_error error.
+func NewListConnectionBlocksGatewayError(body *ListConnectionBlocksGatewayErrorResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -6348,11 +6345,10 @@ func NewListConnectionRestrictionsGatewayError(body *ListConnectionRestrictionsG
 	return v
 }
 
-// NewRestrictAgentOnConnectionAgentConnectionRestrictionOK builds a "agents"
-// service "restrictAgentOnConnection" endpoint result from a HTTP "OK"
-// response.
-func NewRestrictAgentOnConnectionAgentConnectionRestrictionOK(body *RestrictAgentOnConnectionResponseBody) *agents.AgentConnectionRestriction {
-	v := &agents.AgentConnectionRestriction{
+// NewBlockAgentOnConnectionAgentConnectionBlockOK builds a "agents" service
+// "blockAgentOnConnection" endpoint result from a HTTP "OK" response.
+func NewBlockAgentOnConnectionAgentConnectionBlockOK(body *BlockAgentOnConnectionResponseBody) *agents.AgentConnectionBlock {
+	v := &agents.AgentConnectionBlock{
 		ID:                    *body.ID,
 		AgentID:               *body.AgentID,
 		RemoteSessionClientID: *body.RemoteSessionClientID,
@@ -6362,9 +6358,9 @@ func NewRestrictAgentOnConnectionAgentConnectionRestrictionOK(body *RestrictAgen
 	return v
 }
 
-// NewRestrictAgentOnConnectionUnauthorized builds a agents service
-// restrictAgentOnConnection endpoint unauthorized error.
-func NewRestrictAgentOnConnectionUnauthorized(body *RestrictAgentOnConnectionUnauthorizedResponseBody) *goa.ServiceError {
+// NewBlockAgentOnConnectionUnauthorized builds a agents service
+// blockAgentOnConnection endpoint unauthorized error.
+func NewBlockAgentOnConnectionUnauthorized(body *BlockAgentOnConnectionUnauthorizedResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -6377,9 +6373,9 @@ func NewRestrictAgentOnConnectionUnauthorized(body *RestrictAgentOnConnectionUna
 	return v
 }
 
-// NewRestrictAgentOnConnectionForbidden builds a agents service
-// restrictAgentOnConnection endpoint forbidden error.
-func NewRestrictAgentOnConnectionForbidden(body *RestrictAgentOnConnectionForbiddenResponseBody) *goa.ServiceError {
+// NewBlockAgentOnConnectionForbidden builds a agents service
+// blockAgentOnConnection endpoint forbidden error.
+func NewBlockAgentOnConnectionForbidden(body *BlockAgentOnConnectionForbiddenResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -6392,9 +6388,9 @@ func NewRestrictAgentOnConnectionForbidden(body *RestrictAgentOnConnectionForbid
 	return v
 }
 
-// NewRestrictAgentOnConnectionBadRequest builds a agents service
-// restrictAgentOnConnection endpoint bad_request error.
-func NewRestrictAgentOnConnectionBadRequest(body *RestrictAgentOnConnectionBadRequestResponseBody) *goa.ServiceError {
+// NewBlockAgentOnConnectionBadRequest builds a agents service
+// blockAgentOnConnection endpoint bad_request error.
+func NewBlockAgentOnConnectionBadRequest(body *BlockAgentOnConnectionBadRequestResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -6407,9 +6403,9 @@ func NewRestrictAgentOnConnectionBadRequest(body *RestrictAgentOnConnectionBadRe
 	return v
 }
 
-// NewRestrictAgentOnConnectionNotFound builds a agents service
-// restrictAgentOnConnection endpoint not_found error.
-func NewRestrictAgentOnConnectionNotFound(body *RestrictAgentOnConnectionNotFoundResponseBody) *goa.ServiceError {
+// NewBlockAgentOnConnectionNotFound builds a agents service
+// blockAgentOnConnection endpoint not_found error.
+func NewBlockAgentOnConnectionNotFound(body *BlockAgentOnConnectionNotFoundResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -6422,9 +6418,9 @@ func NewRestrictAgentOnConnectionNotFound(body *RestrictAgentOnConnectionNotFoun
 	return v
 }
 
-// NewRestrictAgentOnConnectionConflict builds a agents service
-// restrictAgentOnConnection endpoint conflict error.
-func NewRestrictAgentOnConnectionConflict(body *RestrictAgentOnConnectionConflictResponseBody) *goa.ServiceError {
+// NewBlockAgentOnConnectionConflict builds a agents service
+// blockAgentOnConnection endpoint conflict error.
+func NewBlockAgentOnConnectionConflict(body *BlockAgentOnConnectionConflictResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -6437,9 +6433,9 @@ func NewRestrictAgentOnConnectionConflict(body *RestrictAgentOnConnectionConflic
 	return v
 }
 
-// NewRestrictAgentOnConnectionUnsupportedMedia builds a agents service
-// restrictAgentOnConnection endpoint unsupported_media error.
-func NewRestrictAgentOnConnectionUnsupportedMedia(body *RestrictAgentOnConnectionUnsupportedMediaResponseBody) *goa.ServiceError {
+// NewBlockAgentOnConnectionUnsupportedMedia builds a agents service
+// blockAgentOnConnection endpoint unsupported_media error.
+func NewBlockAgentOnConnectionUnsupportedMedia(body *BlockAgentOnConnectionUnsupportedMediaResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -6452,9 +6448,9 @@ func NewRestrictAgentOnConnectionUnsupportedMedia(body *RestrictAgentOnConnectio
 	return v
 }
 
-// NewRestrictAgentOnConnectionInvalid builds a agents service
-// restrictAgentOnConnection endpoint invalid error.
-func NewRestrictAgentOnConnectionInvalid(body *RestrictAgentOnConnectionInvalidResponseBody) *goa.ServiceError {
+// NewBlockAgentOnConnectionInvalid builds a agents service
+// blockAgentOnConnection endpoint invalid error.
+func NewBlockAgentOnConnectionInvalid(body *BlockAgentOnConnectionInvalidResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -6467,9 +6463,9 @@ func NewRestrictAgentOnConnectionInvalid(body *RestrictAgentOnConnectionInvalidR
 	return v
 }
 
-// NewRestrictAgentOnConnectionInvariantViolation builds a agents service
-// restrictAgentOnConnection endpoint invariant_violation error.
-func NewRestrictAgentOnConnectionInvariantViolation(body *RestrictAgentOnConnectionInvariantViolationResponseBody) *goa.ServiceError {
+// NewBlockAgentOnConnectionInvariantViolation builds a agents service
+// blockAgentOnConnection endpoint invariant_violation error.
+func NewBlockAgentOnConnectionInvariantViolation(body *BlockAgentOnConnectionInvariantViolationResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -6482,9 +6478,9 @@ func NewRestrictAgentOnConnectionInvariantViolation(body *RestrictAgentOnConnect
 	return v
 }
 
-// NewRestrictAgentOnConnectionUnexpected builds a agents service
-// restrictAgentOnConnection endpoint unexpected error.
-func NewRestrictAgentOnConnectionUnexpected(body *RestrictAgentOnConnectionUnexpectedResponseBody) *goa.ServiceError {
+// NewBlockAgentOnConnectionUnexpected builds a agents service
+// blockAgentOnConnection endpoint unexpected error.
+func NewBlockAgentOnConnectionUnexpected(body *BlockAgentOnConnectionUnexpectedResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -6497,9 +6493,9 @@ func NewRestrictAgentOnConnectionUnexpected(body *RestrictAgentOnConnectionUnexp
 	return v
 }
 
-// NewRestrictAgentOnConnectionGatewayError builds a agents service
-// restrictAgentOnConnection endpoint gateway_error error.
-func NewRestrictAgentOnConnectionGatewayError(body *RestrictAgentOnConnectionGatewayErrorResponseBody) *goa.ServiceError {
+// NewBlockAgentOnConnectionGatewayError builds a agents service
+// blockAgentOnConnection endpoint gateway_error error.
+func NewBlockAgentOnConnectionGatewayError(body *BlockAgentOnConnectionGatewayErrorResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -6512,9 +6508,9 @@ func NewRestrictAgentOnConnectionGatewayError(body *RestrictAgentOnConnectionGat
 	return v
 }
 
-// NewRemoveConnectionRestrictionUnauthorized builds a agents service
-// removeConnectionRestriction endpoint unauthorized error.
-func NewRemoveConnectionRestrictionUnauthorized(body *RemoveConnectionRestrictionUnauthorizedResponseBody) *goa.ServiceError {
+// NewRemoveConnectionBlockUnauthorized builds a agents service
+// removeConnectionBlock endpoint unauthorized error.
+func NewRemoveConnectionBlockUnauthorized(body *RemoveConnectionBlockUnauthorizedResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -6527,9 +6523,9 @@ func NewRemoveConnectionRestrictionUnauthorized(body *RemoveConnectionRestrictio
 	return v
 }
 
-// NewRemoveConnectionRestrictionForbidden builds a agents service
-// removeConnectionRestriction endpoint forbidden error.
-func NewRemoveConnectionRestrictionForbidden(body *RemoveConnectionRestrictionForbiddenResponseBody) *goa.ServiceError {
+// NewRemoveConnectionBlockForbidden builds a agents service
+// removeConnectionBlock endpoint forbidden error.
+func NewRemoveConnectionBlockForbidden(body *RemoveConnectionBlockForbiddenResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -6542,9 +6538,9 @@ func NewRemoveConnectionRestrictionForbidden(body *RemoveConnectionRestrictionFo
 	return v
 }
 
-// NewRemoveConnectionRestrictionBadRequest builds a agents service
-// removeConnectionRestriction endpoint bad_request error.
-func NewRemoveConnectionRestrictionBadRequest(body *RemoveConnectionRestrictionBadRequestResponseBody) *goa.ServiceError {
+// NewRemoveConnectionBlockBadRequest builds a agents service
+// removeConnectionBlock endpoint bad_request error.
+func NewRemoveConnectionBlockBadRequest(body *RemoveConnectionBlockBadRequestResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -6557,9 +6553,9 @@ func NewRemoveConnectionRestrictionBadRequest(body *RemoveConnectionRestrictionB
 	return v
 }
 
-// NewRemoveConnectionRestrictionNotFound builds a agents service
-// removeConnectionRestriction endpoint not_found error.
-func NewRemoveConnectionRestrictionNotFound(body *RemoveConnectionRestrictionNotFoundResponseBody) *goa.ServiceError {
+// NewRemoveConnectionBlockNotFound builds a agents service
+// removeConnectionBlock endpoint not_found error.
+func NewRemoveConnectionBlockNotFound(body *RemoveConnectionBlockNotFoundResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -6572,9 +6568,9 @@ func NewRemoveConnectionRestrictionNotFound(body *RemoveConnectionRestrictionNot
 	return v
 }
 
-// NewRemoveConnectionRestrictionConflict builds a agents service
-// removeConnectionRestriction endpoint conflict error.
-func NewRemoveConnectionRestrictionConflict(body *RemoveConnectionRestrictionConflictResponseBody) *goa.ServiceError {
+// NewRemoveConnectionBlockConflict builds a agents service
+// removeConnectionBlock endpoint conflict error.
+func NewRemoveConnectionBlockConflict(body *RemoveConnectionBlockConflictResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -6587,9 +6583,9 @@ func NewRemoveConnectionRestrictionConflict(body *RemoveConnectionRestrictionCon
 	return v
 }
 
-// NewRemoveConnectionRestrictionUnsupportedMedia builds a agents service
-// removeConnectionRestriction endpoint unsupported_media error.
-func NewRemoveConnectionRestrictionUnsupportedMedia(body *RemoveConnectionRestrictionUnsupportedMediaResponseBody) *goa.ServiceError {
+// NewRemoveConnectionBlockUnsupportedMedia builds a agents service
+// removeConnectionBlock endpoint unsupported_media error.
+func NewRemoveConnectionBlockUnsupportedMedia(body *RemoveConnectionBlockUnsupportedMediaResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -6602,9 +6598,9 @@ func NewRemoveConnectionRestrictionUnsupportedMedia(body *RemoveConnectionRestri
 	return v
 }
 
-// NewRemoveConnectionRestrictionInvalid builds a agents service
-// removeConnectionRestriction endpoint invalid error.
-func NewRemoveConnectionRestrictionInvalid(body *RemoveConnectionRestrictionInvalidResponseBody) *goa.ServiceError {
+// NewRemoveConnectionBlockInvalid builds a agents service
+// removeConnectionBlock endpoint invalid error.
+func NewRemoveConnectionBlockInvalid(body *RemoveConnectionBlockInvalidResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -6617,9 +6613,9 @@ func NewRemoveConnectionRestrictionInvalid(body *RemoveConnectionRestrictionInva
 	return v
 }
 
-// NewRemoveConnectionRestrictionInvariantViolation builds a agents service
-// removeConnectionRestriction endpoint invariant_violation error.
-func NewRemoveConnectionRestrictionInvariantViolation(body *RemoveConnectionRestrictionInvariantViolationResponseBody) *goa.ServiceError {
+// NewRemoveConnectionBlockInvariantViolation builds a agents service
+// removeConnectionBlock endpoint invariant_violation error.
+func NewRemoveConnectionBlockInvariantViolation(body *RemoveConnectionBlockInvariantViolationResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -6632,9 +6628,9 @@ func NewRemoveConnectionRestrictionInvariantViolation(body *RemoveConnectionRest
 	return v
 }
 
-// NewRemoveConnectionRestrictionUnexpected builds a agents service
-// removeConnectionRestriction endpoint unexpected error.
-func NewRemoveConnectionRestrictionUnexpected(body *RemoveConnectionRestrictionUnexpectedResponseBody) *goa.ServiceError {
+// NewRemoveConnectionBlockUnexpected builds a agents service
+// removeConnectionBlock endpoint unexpected error.
+func NewRemoveConnectionBlockUnexpected(body *RemoveConnectionBlockUnexpectedResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -6647,9 +6643,9 @@ func NewRemoveConnectionRestrictionUnexpected(body *RemoveConnectionRestrictionU
 	return v
 }
 
-// NewRemoveConnectionRestrictionGatewayError builds a agents service
-// removeConnectionRestriction endpoint gateway_error error.
-func NewRemoveConnectionRestrictionGatewayError(body *RemoveConnectionRestrictionGatewayErrorResponseBody) *goa.ServiceError {
+// NewRemoveConnectionBlockGatewayError builds a agents service
+// removeConnectionBlock endpoint gateway_error error.
+func NewRemoveConnectionBlockGatewayError(body *RemoveConnectionBlockGatewayErrorResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -7934,15 +7930,15 @@ func ValidateUpdatePolicyGrantResponseBody(body *UpdatePolicyGrantResponseBody) 
 	return
 }
 
-// ValidateListConnectionRestrictionsResponseBody runs the validations defined
-// on ListConnectionRestrictionsResponseBody
-func ValidateListConnectionRestrictionsResponseBody(body *ListConnectionRestrictionsResponseBody) (err error) {
+// ValidateListConnectionBlocksResponseBody runs the validations defined on
+// ListConnectionBlocksResponseBody
+func ValidateListConnectionBlocksResponseBody(body *ListConnectionBlocksResponseBody) (err error) {
 	if body.Items == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("items", "body"))
 	}
 	for _, e := range body.Items {
 		if e != nil {
-			if err2 := ValidateAgentConnectionRestrictionResponseBody(e); err2 != nil {
+			if err2 := ValidateAgentConnectionBlockResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -7950,9 +7946,9 @@ func ValidateListConnectionRestrictionsResponseBody(body *ListConnectionRestrict
 	return
 }
 
-// ValidateRestrictAgentOnConnectionResponseBody runs the validations defined
-// on RestrictAgentOnConnectionResponseBody
-func ValidateRestrictAgentOnConnectionResponseBody(body *RestrictAgentOnConnectionResponseBody) (err error) {
+// ValidateBlockAgentOnConnectionResponseBody runs the validations defined on
+// BlockAgentOnConnectionResponseBody
+func ValidateBlockAgentOnConnectionResponseBody(body *BlockAgentOnConnectionResponseBody) (err error) {
 	if body.ID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
 	}
@@ -10903,9 +10899,9 @@ func ValidateDeletePolicyGrantGatewayErrorResponseBody(body *DeletePolicyGrantGa
 	return
 }
 
-// ValidateListConnectionRestrictionsUnauthorizedResponseBody runs the
-// validations defined on listConnectionRestrictions_unauthorized_response_body
-func ValidateListConnectionRestrictionsUnauthorizedResponseBody(body *ListConnectionRestrictionsUnauthorizedResponseBody) (err error) {
+// ValidateListConnectionBlocksUnauthorizedResponseBody runs the validations
+// defined on listConnectionBlocks_unauthorized_response_body
+func ValidateListConnectionBlocksUnauthorizedResponseBody(body *ListConnectionBlocksUnauthorizedResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -10927,9 +10923,9 @@ func ValidateListConnectionRestrictionsUnauthorizedResponseBody(body *ListConnec
 	return
 }
 
-// ValidateListConnectionRestrictionsForbiddenResponseBody runs the validations
-// defined on listConnectionRestrictions_forbidden_response_body
-func ValidateListConnectionRestrictionsForbiddenResponseBody(body *ListConnectionRestrictionsForbiddenResponseBody) (err error) {
+// ValidateListConnectionBlocksForbiddenResponseBody runs the validations
+// defined on listConnectionBlocks_forbidden_response_body
+func ValidateListConnectionBlocksForbiddenResponseBody(body *ListConnectionBlocksForbiddenResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -10951,9 +10947,9 @@ func ValidateListConnectionRestrictionsForbiddenResponseBody(body *ListConnectio
 	return
 }
 
-// ValidateListConnectionRestrictionsBadRequestResponseBody runs the
-// validations defined on listConnectionRestrictions_bad_request_response_body
-func ValidateListConnectionRestrictionsBadRequestResponseBody(body *ListConnectionRestrictionsBadRequestResponseBody) (err error) {
+// ValidateListConnectionBlocksBadRequestResponseBody runs the validations
+// defined on listConnectionBlocks_bad_request_response_body
+func ValidateListConnectionBlocksBadRequestResponseBody(body *ListConnectionBlocksBadRequestResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -10975,9 +10971,9 @@ func ValidateListConnectionRestrictionsBadRequestResponseBody(body *ListConnecti
 	return
 }
 
-// ValidateListConnectionRestrictionsNotFoundResponseBody runs the validations
-// defined on listConnectionRestrictions_not_found_response_body
-func ValidateListConnectionRestrictionsNotFoundResponseBody(body *ListConnectionRestrictionsNotFoundResponseBody) (err error) {
+// ValidateListConnectionBlocksNotFoundResponseBody runs the validations
+// defined on listConnectionBlocks_not_found_response_body
+func ValidateListConnectionBlocksNotFoundResponseBody(body *ListConnectionBlocksNotFoundResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -10999,9 +10995,9 @@ func ValidateListConnectionRestrictionsNotFoundResponseBody(body *ListConnection
 	return
 }
 
-// ValidateListConnectionRestrictionsConflictResponseBody runs the validations
-// defined on listConnectionRestrictions_conflict_response_body
-func ValidateListConnectionRestrictionsConflictResponseBody(body *ListConnectionRestrictionsConflictResponseBody) (err error) {
+// ValidateListConnectionBlocksConflictResponseBody runs the validations
+// defined on listConnectionBlocks_conflict_response_body
+func ValidateListConnectionBlocksConflictResponseBody(body *ListConnectionBlocksConflictResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -11023,10 +11019,298 @@ func ValidateListConnectionRestrictionsConflictResponseBody(body *ListConnection
 	return
 }
 
-// ValidateListConnectionRestrictionsUnsupportedMediaResponseBody runs the
+// ValidateListConnectionBlocksUnsupportedMediaResponseBody runs the
+// validations defined on listConnectionBlocks_unsupported_media_response_body
+func ValidateListConnectionBlocksUnsupportedMediaResponseBody(body *ListConnectionBlocksUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListConnectionBlocksInvalidResponseBody runs the validations defined
+// on listConnectionBlocks_invalid_response_body
+func ValidateListConnectionBlocksInvalidResponseBody(body *ListConnectionBlocksInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListConnectionBlocksInvariantViolationResponseBody runs the
+// validations defined on listConnectionBlocks_invariant_violation_response_body
+func ValidateListConnectionBlocksInvariantViolationResponseBody(body *ListConnectionBlocksInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListConnectionBlocksUnexpectedResponseBody runs the validations
+// defined on listConnectionBlocks_unexpected_response_body
+func ValidateListConnectionBlocksUnexpectedResponseBody(body *ListConnectionBlocksUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListConnectionBlocksGatewayErrorResponseBody runs the validations
+// defined on listConnectionBlocks_gateway_error_response_body
+func ValidateListConnectionBlocksGatewayErrorResponseBody(body *ListConnectionBlocksGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateBlockAgentOnConnectionUnauthorizedResponseBody runs the validations
+// defined on blockAgentOnConnection_unauthorized_response_body
+func ValidateBlockAgentOnConnectionUnauthorizedResponseBody(body *BlockAgentOnConnectionUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateBlockAgentOnConnectionForbiddenResponseBody runs the validations
+// defined on blockAgentOnConnection_forbidden_response_body
+func ValidateBlockAgentOnConnectionForbiddenResponseBody(body *BlockAgentOnConnectionForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateBlockAgentOnConnectionBadRequestResponseBody runs the validations
+// defined on blockAgentOnConnection_bad_request_response_body
+func ValidateBlockAgentOnConnectionBadRequestResponseBody(body *BlockAgentOnConnectionBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateBlockAgentOnConnectionNotFoundResponseBody runs the validations
+// defined on blockAgentOnConnection_not_found_response_body
+func ValidateBlockAgentOnConnectionNotFoundResponseBody(body *BlockAgentOnConnectionNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateBlockAgentOnConnectionConflictResponseBody runs the validations
+// defined on blockAgentOnConnection_conflict_response_body
+func ValidateBlockAgentOnConnectionConflictResponseBody(body *BlockAgentOnConnectionConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateBlockAgentOnConnectionUnsupportedMediaResponseBody runs the
+// validations defined on blockAgentOnConnection_unsupported_media_response_body
+func ValidateBlockAgentOnConnectionUnsupportedMediaResponseBody(body *BlockAgentOnConnectionUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateBlockAgentOnConnectionInvalidResponseBody runs the validations
+// defined on blockAgentOnConnection_invalid_response_body
+func ValidateBlockAgentOnConnectionInvalidResponseBody(body *BlockAgentOnConnectionInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateBlockAgentOnConnectionInvariantViolationResponseBody runs the
 // validations defined on
-// listConnectionRestrictions_unsupported_media_response_body
-func ValidateListConnectionRestrictionsUnsupportedMediaResponseBody(body *ListConnectionRestrictionsUnsupportedMediaResponseBody) (err error) {
+// blockAgentOnConnection_invariant_violation_response_body
+func ValidateBlockAgentOnConnectionInvariantViolationResponseBody(body *BlockAgentOnConnectionInvariantViolationResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -11048,9 +11332,9 @@ func ValidateListConnectionRestrictionsUnsupportedMediaResponseBody(body *ListCo
 	return
 }
 
-// ValidateListConnectionRestrictionsInvalidResponseBody runs the validations
-// defined on listConnectionRestrictions_invalid_response_body
-func ValidateListConnectionRestrictionsInvalidResponseBody(body *ListConnectionRestrictionsInvalidResponseBody) (err error) {
+// ValidateBlockAgentOnConnectionUnexpectedResponseBody runs the validations
+// defined on blockAgentOnConnection_unexpected_response_body
+func ValidateBlockAgentOnConnectionUnexpectedResponseBody(body *BlockAgentOnConnectionUnexpectedResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -11072,10 +11356,202 @@ func ValidateListConnectionRestrictionsInvalidResponseBody(body *ListConnectionR
 	return
 }
 
-// ValidateListConnectionRestrictionsInvariantViolationResponseBody runs the
+// ValidateBlockAgentOnConnectionGatewayErrorResponseBody runs the validations
+// defined on blockAgentOnConnection_gateway_error_response_body
+func ValidateBlockAgentOnConnectionGatewayErrorResponseBody(body *BlockAgentOnConnectionGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRemoveConnectionBlockUnauthorizedResponseBody runs the validations
+// defined on removeConnectionBlock_unauthorized_response_body
+func ValidateRemoveConnectionBlockUnauthorizedResponseBody(body *RemoveConnectionBlockUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRemoveConnectionBlockForbiddenResponseBody runs the validations
+// defined on removeConnectionBlock_forbidden_response_body
+func ValidateRemoveConnectionBlockForbiddenResponseBody(body *RemoveConnectionBlockForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRemoveConnectionBlockBadRequestResponseBody runs the validations
+// defined on removeConnectionBlock_bad_request_response_body
+func ValidateRemoveConnectionBlockBadRequestResponseBody(body *RemoveConnectionBlockBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRemoveConnectionBlockNotFoundResponseBody runs the validations
+// defined on removeConnectionBlock_not_found_response_body
+func ValidateRemoveConnectionBlockNotFoundResponseBody(body *RemoveConnectionBlockNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRemoveConnectionBlockConflictResponseBody runs the validations
+// defined on removeConnectionBlock_conflict_response_body
+func ValidateRemoveConnectionBlockConflictResponseBody(body *RemoveConnectionBlockConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRemoveConnectionBlockUnsupportedMediaResponseBody runs the
+// validations defined on removeConnectionBlock_unsupported_media_response_body
+func ValidateRemoveConnectionBlockUnsupportedMediaResponseBody(body *RemoveConnectionBlockUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRemoveConnectionBlockInvalidResponseBody runs the validations
+// defined on removeConnectionBlock_invalid_response_body
+func ValidateRemoveConnectionBlockInvalidResponseBody(body *RemoveConnectionBlockInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRemoveConnectionBlockInvariantViolationResponseBody runs the
 // validations defined on
-// listConnectionRestrictions_invariant_violation_response_body
-func ValidateListConnectionRestrictionsInvariantViolationResponseBody(body *ListConnectionRestrictionsInvariantViolationResponseBody) (err error) {
+// removeConnectionBlock_invariant_violation_response_body
+func ValidateRemoveConnectionBlockInvariantViolationResponseBody(body *RemoveConnectionBlockInvariantViolationResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -11097,9 +11573,9 @@ func ValidateListConnectionRestrictionsInvariantViolationResponseBody(body *List
 	return
 }
 
-// ValidateListConnectionRestrictionsUnexpectedResponseBody runs the
-// validations defined on listConnectionRestrictions_unexpected_response_body
-func ValidateListConnectionRestrictionsUnexpectedResponseBody(body *ListConnectionRestrictionsUnexpectedResponseBody) (err error) {
+// ValidateRemoveConnectionBlockUnexpectedResponseBody runs the validations
+// defined on removeConnectionBlock_unexpected_response_body
+func ValidateRemoveConnectionBlockUnexpectedResponseBody(body *RemoveConnectionBlockUnexpectedResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -11121,494 +11597,9 @@ func ValidateListConnectionRestrictionsUnexpectedResponseBody(body *ListConnecti
 	return
 }
 
-// ValidateListConnectionRestrictionsGatewayErrorResponseBody runs the
-// validations defined on listConnectionRestrictions_gateway_error_response_body
-func ValidateListConnectionRestrictionsGatewayErrorResponseBody(body *ListConnectionRestrictionsGatewayErrorResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateRestrictAgentOnConnectionUnauthorizedResponseBody runs the
-// validations defined on restrictAgentOnConnection_unauthorized_response_body
-func ValidateRestrictAgentOnConnectionUnauthorizedResponseBody(body *RestrictAgentOnConnectionUnauthorizedResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateRestrictAgentOnConnectionForbiddenResponseBody runs the validations
-// defined on restrictAgentOnConnection_forbidden_response_body
-func ValidateRestrictAgentOnConnectionForbiddenResponseBody(body *RestrictAgentOnConnectionForbiddenResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateRestrictAgentOnConnectionBadRequestResponseBody runs the validations
-// defined on restrictAgentOnConnection_bad_request_response_body
-func ValidateRestrictAgentOnConnectionBadRequestResponseBody(body *RestrictAgentOnConnectionBadRequestResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateRestrictAgentOnConnectionNotFoundResponseBody runs the validations
-// defined on restrictAgentOnConnection_not_found_response_body
-func ValidateRestrictAgentOnConnectionNotFoundResponseBody(body *RestrictAgentOnConnectionNotFoundResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateRestrictAgentOnConnectionConflictResponseBody runs the validations
-// defined on restrictAgentOnConnection_conflict_response_body
-func ValidateRestrictAgentOnConnectionConflictResponseBody(body *RestrictAgentOnConnectionConflictResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateRestrictAgentOnConnectionUnsupportedMediaResponseBody runs the
-// validations defined on
-// restrictAgentOnConnection_unsupported_media_response_body
-func ValidateRestrictAgentOnConnectionUnsupportedMediaResponseBody(body *RestrictAgentOnConnectionUnsupportedMediaResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateRestrictAgentOnConnectionInvalidResponseBody runs the validations
-// defined on restrictAgentOnConnection_invalid_response_body
-func ValidateRestrictAgentOnConnectionInvalidResponseBody(body *RestrictAgentOnConnectionInvalidResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateRestrictAgentOnConnectionInvariantViolationResponseBody runs the
-// validations defined on
-// restrictAgentOnConnection_invariant_violation_response_body
-func ValidateRestrictAgentOnConnectionInvariantViolationResponseBody(body *RestrictAgentOnConnectionInvariantViolationResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateRestrictAgentOnConnectionUnexpectedResponseBody runs the validations
-// defined on restrictAgentOnConnection_unexpected_response_body
-func ValidateRestrictAgentOnConnectionUnexpectedResponseBody(body *RestrictAgentOnConnectionUnexpectedResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateRestrictAgentOnConnectionGatewayErrorResponseBody runs the
-// validations defined on restrictAgentOnConnection_gateway_error_response_body
-func ValidateRestrictAgentOnConnectionGatewayErrorResponseBody(body *RestrictAgentOnConnectionGatewayErrorResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateRemoveConnectionRestrictionUnauthorizedResponseBody runs the
-// validations defined on removeConnectionRestriction_unauthorized_response_body
-func ValidateRemoveConnectionRestrictionUnauthorizedResponseBody(body *RemoveConnectionRestrictionUnauthorizedResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateRemoveConnectionRestrictionForbiddenResponseBody runs the
-// validations defined on removeConnectionRestriction_forbidden_response_body
-func ValidateRemoveConnectionRestrictionForbiddenResponseBody(body *RemoveConnectionRestrictionForbiddenResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateRemoveConnectionRestrictionBadRequestResponseBody runs the
-// validations defined on removeConnectionRestriction_bad_request_response_body
-func ValidateRemoveConnectionRestrictionBadRequestResponseBody(body *RemoveConnectionRestrictionBadRequestResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateRemoveConnectionRestrictionNotFoundResponseBody runs the validations
-// defined on removeConnectionRestriction_not_found_response_body
-func ValidateRemoveConnectionRestrictionNotFoundResponseBody(body *RemoveConnectionRestrictionNotFoundResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateRemoveConnectionRestrictionConflictResponseBody runs the validations
-// defined on removeConnectionRestriction_conflict_response_body
-func ValidateRemoveConnectionRestrictionConflictResponseBody(body *RemoveConnectionRestrictionConflictResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateRemoveConnectionRestrictionUnsupportedMediaResponseBody runs the
-// validations defined on
-// removeConnectionRestriction_unsupported_media_response_body
-func ValidateRemoveConnectionRestrictionUnsupportedMediaResponseBody(body *RemoveConnectionRestrictionUnsupportedMediaResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateRemoveConnectionRestrictionInvalidResponseBody runs the validations
-// defined on removeConnectionRestriction_invalid_response_body
-func ValidateRemoveConnectionRestrictionInvalidResponseBody(body *RemoveConnectionRestrictionInvalidResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateRemoveConnectionRestrictionInvariantViolationResponseBody runs the
-// validations defined on
-// removeConnectionRestriction_invariant_violation_response_body
-func ValidateRemoveConnectionRestrictionInvariantViolationResponseBody(body *RemoveConnectionRestrictionInvariantViolationResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateRemoveConnectionRestrictionUnexpectedResponseBody runs the
-// validations defined on removeConnectionRestriction_unexpected_response_body
-func ValidateRemoveConnectionRestrictionUnexpectedResponseBody(body *RemoveConnectionRestrictionUnexpectedResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateRemoveConnectionRestrictionGatewayErrorResponseBody runs the
-// validations defined on
-// removeConnectionRestriction_gateway_error_response_body
-func ValidateRemoveConnectionRestrictionGatewayErrorResponseBody(body *RemoveConnectionRestrictionGatewayErrorResponseBody) (err error) {
+// ValidateRemoveConnectionBlockGatewayErrorResponseBody runs the validations
+// defined on removeConnectionBlock_gateway_error_response_body
+func ValidateRemoveConnectionBlockGatewayErrorResponseBody(body *RemoveConnectionBlockGatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -13396,9 +13387,9 @@ func ValidateAgentPolicySelectorResponseBody(body *AgentPolicySelectorResponseBo
 	return
 }
 
-// ValidateAgentConnectionRestrictionResponseBody runs the validations defined
-// on AgentConnectionRestrictionResponseBody
-func ValidateAgentConnectionRestrictionResponseBody(body *AgentConnectionRestrictionResponseBody) (err error) {
+// ValidateAgentConnectionBlockResponseBody runs the validations defined on
+// AgentConnectionBlockResponseBody
+func ValidateAgentConnectionBlockResponseBody(body *AgentConnectionBlockResponseBody) (err error) {
 	if body.ID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
 	}

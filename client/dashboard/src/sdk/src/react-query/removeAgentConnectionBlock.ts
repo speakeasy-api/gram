@@ -8,7 +8,7 @@ import {
   UseMutationResult,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { agentsRemoveConnectionRestriction } from "../funcs/agentsRemoveConnectionRestriction.js";
+import { agentsRemoveConnectionBlock } from "../funcs/agentsRemoveConnectionBlock.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
 import { GramError } from "../models/errors/gramerror.js";
@@ -23,22 +23,22 @@ import { ResponseValidationError } from "../models/errors/responsevalidationerro
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import { ServiceError } from "../models/errors/serviceerror.js";
 import {
-  RemoveAgentConnectionRestrictionRequest,
-  RemoveAgentConnectionRestrictionSecurity,
-} from "../models/operations/removeagentconnectionrestriction.js";
+  RemoveAgentConnectionBlockRequest,
+  RemoveAgentConnectionBlockSecurity,
+} from "../models/operations/removeagentconnectionblock.js";
 import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
-export type RemoveAgentConnectionRestrictionMutationVariables = {
-  request: RemoveAgentConnectionRestrictionRequest;
-  security?: RemoveAgentConnectionRestrictionSecurity | undefined;
+export type RemoveAgentConnectionBlockMutationVariables = {
+  request: RemoveAgentConnectionBlockRequest;
+  security?: RemoveAgentConnectionBlockSecurity | undefined;
   options?: RequestOptions;
 };
 
-export type RemoveAgentConnectionRestrictionMutationData = void;
+export type RemoveAgentConnectionBlockMutationData = void;
 
-export type RemoveAgentConnectionRestrictionMutationError =
+export type RemoveAgentConnectionBlockMutationError =
   | ServiceError
   | GramError
   | ResponseValidationError
@@ -50,49 +50,49 @@ export type RemoveAgentConnectionRestrictionMutationError =
   | SDKValidationError;
 
 /**
- * removeConnectionRestriction agents
+ * removeConnectionBlock agents
  *
  * @remarks
- * Remove a restriction the caller wrote on their own connection. Restrictions written by an agent manager are not affected.
+ * Remove a block the caller wrote on their own connection. Blocks written by an agent manager are not affected.
  */
-export function useRemoveAgentConnectionRestrictionMutation(
+export function useRemoveAgentConnectionBlockMutation(
   options?: MutationHookOptions<
-    RemoveAgentConnectionRestrictionMutationData,
-    RemoveAgentConnectionRestrictionMutationError,
-    RemoveAgentConnectionRestrictionMutationVariables
+    RemoveAgentConnectionBlockMutationData,
+    RemoveAgentConnectionBlockMutationError,
+    RemoveAgentConnectionBlockMutationVariables
   >,
 ): UseMutationResult<
-  RemoveAgentConnectionRestrictionMutationData,
-  RemoveAgentConnectionRestrictionMutationError,
-  RemoveAgentConnectionRestrictionMutationVariables
+  RemoveAgentConnectionBlockMutationData,
+  RemoveAgentConnectionBlockMutationError,
+  RemoveAgentConnectionBlockMutationVariables
 > {
   const client = useGramContext();
   return useMutation({
-    ...buildRemoveAgentConnectionRestrictionMutation(client, options),
+    ...buildRemoveAgentConnectionBlockMutation(client, options),
     ...options,
   });
 }
 
-export function mutationKeyRemoveAgentConnectionRestriction(): MutationKey {
-  return ["@gram/client", "agents", "removeConnectionRestriction"];
+export function mutationKeyRemoveAgentConnectionBlock(): MutationKey {
+  return ["@gram/client", "agents", "removeConnectionBlock"];
 }
 
-export function buildRemoveAgentConnectionRestrictionMutation(
+export function buildRemoveAgentConnectionBlockMutation(
   client$: GramCore,
   hookOptions?: RequestOptions,
 ): {
   mutationKey: MutationKey;
   mutationFn: (
-    variables: RemoveAgentConnectionRestrictionMutationVariables,
-  ) => Promise<RemoveAgentConnectionRestrictionMutationData>;
+    variables: RemoveAgentConnectionBlockMutationVariables,
+  ) => Promise<RemoveAgentConnectionBlockMutationData>;
 } {
   return {
-    mutationKey: mutationKeyRemoveAgentConnectionRestriction(),
-    mutationFn: function removeAgentConnectionRestrictionMutationFn({
+    mutationKey: mutationKeyRemoveAgentConnectionBlock(),
+    mutationFn: function removeAgentConnectionBlockMutationFn({
       request,
       security,
       options,
-    }): Promise<RemoveAgentConnectionRestrictionMutationData> {
+    }): Promise<RemoveAgentConnectionBlockMutationData> {
       const mergedOptions = {
         ...hookOptions,
         ...options,
@@ -105,7 +105,7 @@ export function buildRemoveAgentConnectionRestrictionMutation(
           ),
         },
       };
-      return unwrapAsync(agentsRemoveConnectionRestriction(
+      return unwrapAsync(agentsRemoveConnectionBlock(
         client$,
         request,
         security,

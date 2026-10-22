@@ -42,15 +42,15 @@ type Service interface {
 	DeletePolicyGrant(context.Context, *DeletePolicyGrantPayload) (err error)
 	// List the agents the caller blocked from their own connections. Needs no
 	// agent management access.
-	ListConnectionRestrictions(context.Context, *ListConnectionRestrictionsPayload) (res *ListAgentConnectionRestrictionsResult, err error)
+	ListConnectionBlocks(context.Context, *ListConnectionBlocksPayload) (res *ListAgentConnectionBlocksResult, err error)
 	// Block one agent in the caller's organization from the caller's own
 	// connection through an upstream OAuth client, across every auth client
 	// sharing it. Only the connection owner can do this, and it needs no agent
 	// management access. Blocks only; it never grants access.
-	RestrictAgentOnConnection(context.Context, *RestrictAgentOnConnectionPayload) (res *AgentConnectionRestriction, err error)
-	// Remove a restriction the caller wrote on their own connection. Restrictions
-	// written by an agent manager are not affected.
-	RemoveConnectionRestriction(context.Context, *RemoveConnectionRestrictionPayload) (err error)
+	BlockAgentOnConnection(context.Context, *BlockAgentOnConnectionPayload) (res *AgentConnectionBlock, err error)
+	// Remove a block the caller wrote on their own connection. Blocks written by
+	// an agent manager are not affected.
+	RemoveConnectionBlock(context.Context, *RemoveConnectionBlockPayload) (err error)
 	// Transfer implements transfer.
 	Transfer(context.Context, *TransferPayload) (res *ManagedAgent, err error)
 	// Reassign implements reassign.
@@ -85,16 +85,16 @@ const ServiceName = "agents"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [20]string{"listSessions", "revokeSession", "list", "create", "get", "rename", "listDelegableGrants", "listPolicyGrants", "createPolicyGrant", "updatePolicyGrant", "deletePolicyGrant", "listConnectionRestrictions", "restrictAgentOnConnection", "removeConnectionRestriction", "transfer", "reassign", "suspend", "resume", "revoke", "delete"}
+var MethodNames = [20]string{"listSessions", "revokeSession", "list", "create", "get", "rename", "listDelegableGrants", "listPolicyGrants", "createPolicyGrant", "updatePolicyGrant", "deletePolicyGrant", "listConnectionBlocks", "blockAgentOnConnection", "removeConnectionBlock", "transfer", "reassign", "suspend", "resume", "revoke", "delete"}
 
-// AgentConnectionRestriction is the result type of the agents service
-// restrictAgentOnConnection method.
-type AgentConnectionRestriction struct {
+// AgentConnectionBlock is the result type of the agents service
+// blockAgentOnConnection method.
+type AgentConnectionBlock struct {
 	ID string
 	// The blocked agent
 	AgentID string
-	// The upstream OAuth client the connection uses; the restriction covers every
-	// auth client sharing it
+	// The upstream OAuth client the connection uses; the block covers every auth
+	// client sharing it
 	RemoteSessionClientID string
 	CreatedAt             string
 }
@@ -177,6 +177,16 @@ type AgentSession struct {
 	LastUsedAt       *string
 }
 
+// BlockAgentOnConnectionPayload is the payload type of the agents service
+// blockAgentOnConnection method.
+type BlockAgentOnConnectionPayload struct {
+	SessionToken *string
+	// The agent to block; any agent in the caller's organization
+	AgentID string
+	// The upstream OAuth client of the caller's own connection
+	RemoteSessionClientID string
+}
+
 // CreatePayload is the payload type of the agents service create method.
 type CreatePayload struct {
 	SessionToken *string
@@ -229,11 +239,13 @@ type GetPayload struct {
 	ID           string
 }
 
-// ListAgentConnectionRestrictionsResult is the result type of the agents
-// service listConnectionRestrictions method.
-type ListAgentConnectionRestrictionsResult struct {
-	// Restrictions the caller wrote on their own connections
-	Items []*AgentConnectionRestriction
+// ListAgentConnectionBlocksResult is the result type of the agents service
+// listConnectionBlocks method.
+type ListAgentConnectionBlocksResult struct {
+	// Blocks the caller wrote on their own connections
+	Items []*AgentConnectionBlock
+	// Cursor for the next page; absent when exhausted.
+	NextCursor *string
 }
 
 // ListAgentsResult is the result type of the agents service list method.
@@ -244,10 +256,14 @@ type ListAgentsResult struct {
 	NextCursor *string
 }
 
-// ListConnectionRestrictionsPayload is the payload type of the agents service
-// listConnectionRestrictions method.
-type ListConnectionRestrictionsPayload struct {
+// ListConnectionBlocksPayload is the payload type of the agents service
+// listConnectionBlocks method.
+type ListConnectionBlocksPayload struct {
 	SessionToken *string
+	// Cursor for the next page of blocks.
+	Cursor *string
+	// The number of blocks to return per page.
+	Limit int
 }
 
 // ListDelegableGrantsPayload is the payload type of the agents service
@@ -342,12 +358,12 @@ type ReassignPayload struct {
 	OwnerUserID string
 }
 
-// RemoveConnectionRestrictionPayload is the payload type of the agents service
-// removeConnectionRestriction method.
-type RemoveConnectionRestrictionPayload struct {
+// RemoveConnectionBlockPayload is the payload type of the agents service
+// removeConnectionBlock method.
+type RemoveConnectionBlockPayload struct {
 	SessionToken *string
-	// Connection restriction identifier
-	RestrictionID string
+	// Connection block identifier
+	BlockID string
 }
 
 // RenamePayload is the payload type of the agents service rename method.
@@ -355,16 +371,6 @@ type RenamePayload struct {
 	SessionToken *string
 	ID           string
 	Name         string
-}
-
-// RestrictAgentOnConnectionPayload is the payload type of the agents service
-// restrictAgentOnConnection method.
-type RestrictAgentOnConnectionPayload struct {
-	SessionToken *string
-	// The agent to block; any agent in the caller's organization
-	AgentID string
-	// The upstream OAuth client of the caller's own connection
-	RemoteSessionClientID string
 }
 
 // ResumePayload is the payload type of the agents service resume method.
