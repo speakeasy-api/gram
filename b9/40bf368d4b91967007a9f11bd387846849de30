@@ -1,0 +1,67 @@
+server/internal/risk/enforcereply/dispatch.go
+  h_e404c1a6a54184 12,62-63,175,351,359-360,365-367,369,421,488,556-558,566
+server/internal/risk/enforcereply/dispatch_test.go
+  h_e404c1a6a54184 248-278,417,450-456,458-476,840,849-851,853,855-858,869-873
+pystreams/src/pystreams/risk/enforce_handler.py
+  s_ad2d0c24ceb8da::t_a74e6f641d9204 46-48,188-192,194-196,212,252-253
+  h_e404c1a6a54184 115-119,193
+pystreams/tests/test_risk_enforce.py
+  s_ad2d0c24ceb8da::t_133ea7767eb68e 657,659,661-663,667,675
+  h_e404c1a6a54184 643-645,648-656,664
+server/internal/scanners/gitleaks/enforce_handler.go
+  s_ad2d0c24ceb8da::t_6fdbcedf4d1d40 23,29-32,44-46,51-55,57-60,84-86,92-96,98-101,135,141-142,145,147,191-192
+  h_e404c1a6a54184 56,97,136-140
+server/cmd/gram/mcp_risk.go
+  h_e404c1a6a54184 65-68
+server/cmd/gram/streams.go
+  h_e404c1a6a54184 608,622,658
+server/internal/scanners/customruleanalyzer/enforce_handler.go
+  h_e404c1a6a54184 11,48,55,62-64,75,109-113,147
+server/internal/scanners/customruleanalyzer/enforce_handler_test.go
+  h_e404c1a6a54184 10,13,44,47
+server/internal/scanners/enforcement/helpers.go
+  h_e404c1a6a54184 4,16-17,28-44
+server/internal/scanners/gitleaks/enforce_handler_test.go
+  h_e404c1a6a54184 308,325,328,339-340
+server/internal/scanners/promptinjection/enforce_handler.go
+  h_e404c1a6a54184 11,50,57,64-66,77,113-115,159
+server/internal/scanners/promptinjection/enforce_handler_test.go
+  h_e404c1a6a54184 10-11,13,18,44-64,70-72,75,78,105
+server/internal/scanners/promptpolicy/enforce_handler.go
+  h_e404c1a6a54184 11,50,57,64-66,77,116-118,154
+server/internal/scanners/promptpolicy/enforce_handler_test.go
+  h_e404c1a6a54184 10,15,51,54
+server/internal/feature/flags.go
+  h_e404c1a6a54184 22
+server/internal/risk/prompt_policy_scanner_test.go
+  h_e404c1a6a54184 16,25,73,75,78,112,145-197
+server/internal/risk/scanner.go
+  h_e404c1a6a54184 599-604,613-614,627,629-630,635,645-646,648-649,654,657-658,660-661,666,669-678,700,881-884,890-891,897,984-989,991-1009,1033-1057,1151,1153,1167-1168,1200-1201,1276,1278-1296,1298,1429,1432-1436,1451-1456,1458,1460-1464,1466,1472,1477,1486-1497,1499-1500,1505,1513-1515,1519-1520,1524,1527-1530,1536-1537,1542,1548-1549,1552,1555-1562,1566,1568,1572,1575-1577,1579,1601,1617-1625,1629-1637,1639-1640,1642-1655,1657-1660,1662-1692,2149,2151-2152
+server/internal/risk/scanner_llm_test.go
+  h_e404c1a6a54184 493-496,509-511,521-522,524-525
+server/internal/risk/scanner_test.go
+  h_e404c1a6a54184 343,348-366,389,679-681,690,727,919-964,965-968,969-990,991,992-993
+server/cmd/tools/enforceload/main.go
+  h_e404c1a6a54184 38,43,179,206,210,234-237,262,547-554,557,564-570,572-656,658,663,665-674,724-725,727-730,743,748,754,803
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b940bf368d4b91967007a9f11bd387846849de30",
+  "prompts": {},
+  "humans": {
+    "h_e404c1a6a54184": {
+      "author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  },
+  "sessions": {
+    "s_ad2d0c24ceb8da": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "fcc6e428-0421-4f38-87ca-9d1950a637de",
+        "model": "unknown"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
