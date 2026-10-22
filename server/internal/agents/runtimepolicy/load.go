@@ -146,5 +146,6 @@ func normalizeAgentPolicyGrant(row accessrepo.GetPrincipalGrantsRow) (authz.Gran
 		PrincipalUrn: row.PrincipalUrn.String(),
 		Scope:        scope,
 		Selector:     selector,
+		Inferred:     false,
 	}, true
 }

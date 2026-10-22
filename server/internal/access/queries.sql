@@ -13,10 +13,21 @@ ORDER BY principal_urn, scope;
 -- name: GetPrincipalGrants :many
 -- Returns all grant rows matching a set of principal URNs within an org.
 -- Used by the access resolver to load grants for a user+role in a single query.
-SELECT principal_urn, scope, selectors
-FROM principal_grants
-WHERE organization_id = @organization_id
-  AND principal_urn = ANY(@principal_urns::text[]);
+-- inferred marks a grant the default auth permission backfill wrote that no
+-- explicit write has taken over, so it never outranks an inherited block.
+SELECT g.principal_urn, g.scope, g.selectors,
+  EXISTS (
+    SELECT 1
+    FROM auth_permission_provisions p
+    WHERE p.organization_id = g.organization_id
+      AND p.principal_urn = g.principal_urn
+      AND p.scope = g.scope
+      AND p.selectors = g.selectors
+      AND p.taken_over_at IS NULL
+  )::boolean AS inferred
+FROM principal_grants g
+WHERE g.organization_id = @organization_id
+  AND g.principal_urn = ANY(@principal_urns::text[]);
 
 -- name: ListPrincipalGrantsByResource :many
 -- Returns grant rows for a single resource selector.

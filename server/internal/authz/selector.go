@@ -269,6 +269,7 @@ func NewGrant(scope Scope, resourceID string) Grant {
 		PrincipalUrn: "",
 		Scope:        scope,
 		Selector:     NewSelector(scope, resourceID),
+		Inferred:     false,
 	}
 }
 
@@ -278,6 +279,7 @@ func NewGrantWithSelector(scope Scope, selector Selector) Grant {
 		PrincipalUrn: "",
 		Scope:        scope,
 		Selector:     selector,
+		Inferred:     false,
 	}
 }
 

@@ -792,7 +792,7 @@ func roleAuthzGrants(role *accessgen.Role) ([]authz.Grant, bool) {
 		}
 		scope := authz.Scope(grant.Scope)
 		if grant.Selectors == nil {
-			grants = append(grants, authz.Grant{PrincipalUrn: role.PrincipalUrn, Scope: scope, Selector: authz.NewSelector(scope, authz.WildcardResource)})
+			grants = append(grants, authz.Grant{PrincipalUrn: role.PrincipalUrn, Scope: scope, Selector: authz.NewSelector(scope, authz.WildcardResource), Inferred: false})
 			continue
 		}
 		for _, selector := range grant.Selectors {
@@ -816,7 +816,7 @@ func roleAuthzGrants(role *accessgen.Role) ([]authz.Grant, bool) {
 				unevaluated = true
 				continue
 			}
-			grants = append(grants, authz.Grant{PrincipalUrn: role.PrincipalUrn, Scope: scope, Selector: converted})
+			grants = append(grants, authz.Grant{PrincipalUrn: role.PrincipalUrn, Scope: scope, Selector: converted, Inferred: false})
 		}
 	}
 	return grants, unevaluated

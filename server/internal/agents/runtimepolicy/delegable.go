@@ -96,7 +96,7 @@ func delegableGrants(agent, owner, caller []authz.Grant, representedUserID strin
 					if !ok || !authz.GrantsContainSelector([]authz.Grant{callerGrant}, scope, narrowed) {
 						continue
 					}
-					candidate := authz.Grant{PrincipalUrn: "", Scope: scope, Selector: narrowed}
+					candidate := authz.Grant{PrincipalUrn: "", Scope: scope, Selector: narrowed, Inferred: false}
 					key, err := delegableGrantKey(candidate)
 					if err != nil {
 						return nil, err
@@ -168,7 +168,7 @@ func delegationFor(candidate authz.Grant, carryExclusions bool, representedUserI
 				return nil, false
 			}
 			if !slices.ContainsFunc(delegated[1:], func(existing authz.Grant) bool { return maps.Equal(existing.Selector, overlap.selector) }) {
-				delegated = append(delegated, authz.Grant{PrincipalUrn: "", Scope: exclusion, Selector: overlap.selector})
+				delegated = append(delegated, authz.Grant{PrincipalUrn: "", Scope: exclusion, Selector: overlap.selector, Inferred: false})
 			}
 		}
 	}

@@ -114,11 +114,11 @@ func TestRun_SharedClientGrantsMirrorServerAccess(t *testing.T) {
 	require.Equal(t, 3, report.PendingGrantsByKind[GrantSharedClient])
 
 	concrete := authz.AuthClientSelector(clientID.String(), "")
-	require.Contains(t, f.grantsOf(connects), authz.Grant{PrincipalUrn: connects.String(), Scope: authz.ScopeMCPAuth, Selector: concrete})
-	require.Contains(t, f.grantsOf(oneTool), authz.Grant{PrincipalUrn: oneTool.String(), Scope: authz.ScopeMCPAuth, Selector: authz.AuthClientTypeSelector(TypeServiceAccount, project)},
-		"a user never gets a concrete client grant, which would outrank inherited blocks")
-	require.Contains(t, f.grantsOf(writes), authz.Grant{PrincipalUrn: writes.String(), Scope: authz.ScopeMCPAuth, Selector: authz.AuthClientTypeSelector(TypeServiceAccount, project)},
-		"a wildcard grant is mirrored as a wildcard, never as a concrete client")
+	require.Contains(t, f.grantsOf(connects), authz.Grant{PrincipalUrn: connects.String(), Scope: authz.ScopeMCPAuth, Selector: concrete, Inferred: true})
+	require.Contains(t, f.grantsOf(oneTool), authz.Grant{PrincipalUrn: oneTool.String(), Scope: authz.ScopeMCPAuth, Selector: concrete, Inferred: true},
+		"a user's grant names the client and is marked inferred, so it never outranks inherited blocks")
+	require.Contains(t, f.grantsOf(writes), authz.Grant{PrincipalUrn: writes.String(), Scope: authz.ScopeMCPAuth, Selector: concrete, Inferred: true},
+		"a wildcard grant names the clients it reaches today, never a whole client type")
 	for _, grant := range f.grantsOf(elsewhere) {
 		require.NotEqual(t, authz.ScopeMCPAuth, grant.Scope, "no access to the server, no client")
 	}
@@ -199,7 +199,7 @@ func TestRun_AgentsGetThePersonalDefault(t *testing.T) {
 	report := f.run(true)
 
 	require.Equal(t, 2, report.PendingGrantsByKind[GrantPersonalDefault], "user:all and the agent")
-	require.Contains(t, f.grantsOf(agent), authz.Grant{PrincipalUrn: agent.String(), Scope: authz.ScopeMCPAuth, Selector: authz.PersonalAuthClientSelector()})
+	require.Contains(t, f.grantsOf(agent), authz.Grant{PrincipalUrn: agent.String(), Scope: authz.ScopeMCPAuth, Selector: authz.PersonalAuthClientSelector(), Inferred: true})
 }
 
 func TestRun_ProvisionedKeyPoliciesGetLaterClients(t *testing.T) {
@@ -342,6 +342,82 @@ func TestRun_UserServerGrantsKeepInheritedBlocks(t *testing.T) {
 	f.grant(role, authz.ScopeMCPBlockedAuth, authz.AuthClientSelector(clientID.String(), ""))
 	grants := append(f.grantsOf(user), f.grantsOf(role)...)
 	require.False(t, mandatory(t, authz.GrantsToContext(ctx, grants), f, check).Allowed, "a role's block still applies")
+}
+
+func TestRun_SharedClientGrantsNeverReachOtherClients(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	project := f.projectID.String()
+	serverA, clientA := f.sharedClient()
+	serverB, clientB := f.sharedClient()
+
+	concreteUser := urn.NewPrincipal(urn.PrincipalTypeUser, "user_concrete_a")
+	wildcardUser := urn.NewPrincipal(urn.PrincipalTypeUser, "user_project_wide")
+	orgRole := urn.NewPrincipal(urn.PrincipalTypeRole, "org_wide")
+	f.grant(concreteUser, authz.ScopeMCPConnect, authz.Selector{authz.SelectorKeyResourceKind: authz.ResourceKindMCP, authz.SelectorKeyResourceID: serverA.String()})
+	f.grant(wildcardUser, authz.ScopeMCPConnect, authz.ProjectServersSelector(project))
+	f.grant(orgRole, authz.ScopeMCPConnect, authz.Selector{authz.SelectorKeyResourceKind: authz.ResourceKindMCP, authz.SelectorKeyResourceID: authz.WildcardResource})
+	f.run(true)
+
+	session := "session_1"
+	userCtx := func(principal urn.Principal, grants []authz.Grant) context.Context {
+		ctx := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{ActiveOrganizationID: f.orgID, UserID: principal.ID, SessionID: &session, AccountType: "enterprise"})
+		return authz.GrantsToContext(ctx, grants)
+	}
+	useClient := func(clientID uuid.UUID) authz.Check {
+		return authz.MCPAuthClientCheck(clientID.String(), authz.MCPAuthClientDimensions{ClientType: TypeServiceAccount, ProjectID: project, ConnectionOwner: ""})
+	}
+	// A client created after the backfill, which no run has seen.
+	later := uuid.New()
+
+	for _, principal := range []urn.Principal{concreteUser, wildcardUser, orgRole} {
+		for _, grant := range f.grantsOf(principal) {
+			if grant.Scope == authz.ScopeMCPAuth {
+				require.NotEqual(t, authz.WildcardResource, grant.Selector.ResourceID(), "%s: provisioned grants name clients", principal)
+			}
+		}
+	}
+
+	require.True(t, mandatory(t, userCtx(concreteUser, f.grantsOf(concreteUser)), f, useClient(clientA)).Allowed, "the user keeps today's reach")
+	require.False(t, mandatory(t, userCtx(concreteUser, f.grantsOf(concreteUser)), f, useClient(clientB)).Allowed, "access to server A is not use of server B's client")
+	require.False(t, mandatory(t, userCtx(concreteUser, f.grantsOf(concreteUser)), f, useClient(later)).Allowed, "nor of a client created later")
+
+	require.True(t, mandatory(t, userCtx(wildcardUser, f.grantsOf(wildcardUser)), f, useClient(clientA), useClient(clientB)).Allowed, "a project-wide grant reaches today's clients")
+	require.False(t, mandatory(t, userCtx(wildcardUser, f.grantsOf(wildcardUser)), f, useClient(later)).Allowed, "a wildcard grant never pre-authorizes later clients")
+
+	member := urn.NewPrincipal(urn.PrincipalTypeUser, "member")
+	roleGrants := f.grantsOf(orgRole)
+	require.True(t, mandatory(t, userCtx(member, roleGrants), f, useClient(clientA), useClient(clientB)).Allowed)
+	require.False(t, mandatory(t, userCtx(member, roleGrants), f, useClient(later)).Allowed, "an organization-wide grant never becomes a client-type grant")
+
+	// Granting server access afterwards grants no use of its client.
+	f.grant(concreteUser, authz.ScopeMCPConnect, authz.Selector{authz.SelectorKeyResourceKind: authz.ResourceKindMCP, authz.SelectorKeyResourceID: serverB.String()})
+	grants := f.grantsOf(concreteUser)
+	require.True(t, mandatory(t, userCtx(concreteUser, grants), f, authz.MCPCheck(authz.ScopeMCPConnect, serverB.String(), project)).Allowed)
+	require.False(t, mandatory(t, userCtx(concreteUser, grants), f, useClient(clientB)).Allowed, "connect access to B does not grant B's upstream identity")
+	require.False(t, mandatory(t, userCtx(concreteUser, grants), f, useClient(later)).Allowed)
+}
+
+func TestRun_TakenOverUserGrantsOutrankInheritedBlocks(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	serverID, clientID := f.sharedClient()
+	user := urn.NewPrincipal(urn.PrincipalTypeUser, "user_taken_over")
+	role := urn.NewPrincipal(urn.PrincipalTypeRole, "blocks_taken_over")
+	f.grant(user, authz.ScopeMCPConnect, authz.Selector{authz.SelectorKeyResourceKind: authz.ResourceKindMCP, authz.SelectorKeyResourceID: serverID.String()})
+	f.run(true)
+	f.grant(role, authz.ScopeMCPBlockedAuth, authz.AuthClientSelector(clientID.String(), ""))
+
+	session := "session_1"
+	ctx := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{ActiveOrganizationID: f.orgID, UserID: user.ID, SessionID: &session, AccountType: "enterprise"})
+	check := authz.MCPAuthClientCheck(clientID.String(), authz.MCPAuthClientDimensions{ClientType: TypeServiceAccount, ProjectID: f.projectID.String(), ConnectionOwner: ""})
+	require.False(t, mandatory(t, authz.GrantsToContext(ctx, append(f.grantsOf(user), f.grantsOf(role)...)), f, check).Allowed, "the provisioned grant yields to the block")
+
+	// An administrator granting the same client to the user by name makes the
+	// grant theirs, and a direct grant outranks the inherited block.
+	explicit := []*authz.RoleGrant{{Scope: string(authz.ScopeMCPAuth), Selectors: []authz.Selector{authz.AuthClientSelector(clientID.String(), "")}}}
+	require.NoError(t, authz.PatchPrincipalGrants(t.Context(), f.pool, f.orgID, user, explicit, nil))
+	require.True(t, mandatory(t, authz.GrantsToContext(ctx, append(f.grantsOf(user), f.grantsOf(role)...)), f, check).Allowed)
 }
 
 func TestRun_NeverRestoresAGrantTakenOverThenRemoved(t *testing.T) {
