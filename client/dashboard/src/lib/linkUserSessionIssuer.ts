@@ -1,12 +1,8 @@
 import type { Gram } from "@gram/client";
 import type { RequestOptions } from "@gram/client/lib/sdks.js";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
-import {
-  UpdateMcpServerFormNetworkAccessMode,
-  UpdateMcpServerFormVisibility,
-} from "@gram/client/models/components/updatemcpserverform.js";
 import { GramError } from "@gram/client/models/errors/gramerror.js";
-import { requireKnownEnumValue } from "@/lib/enum";
+import { mcpServerUpdateForm } from "@/lib/mcpServerUpdateForm";
 
 type SdkClient = Pick<Gram, "mcpServers" | "toolsets">;
 
@@ -15,31 +11,15 @@ async function updateServerIssuer(
   latest: McpServer,
   userSessionIssuerId: string,
   options?: RequestOptions,
-): Promise<void> {
+): Promise<boolean> {
+  const { visibility, ...form } = mcpServerUpdateForm(latest);
+  if (!visibility) return false;
   await client.mcpServers.update(
-    {
-      updateMcpServerForm: {
-        id: latest.id,
-        environmentId: latest.environmentId,
-        networkAccessMode: requireKnownEnumValue(
-          UpdateMcpServerFormNetworkAccessMode,
-          latest.networkAccessMode,
-        ),
-        remoteMcpServerId: latest.remoteMcpServerId,
-        tunneledMcpServerId: latest.tunneledMcpServerId,
-        toolsetId: latest.toolsetId,
-        unproxiedMcpServerId: latest.unproxiedMcpServerId,
-        toolVariationsGroupId: latest.toolVariationsGroupId,
-        userSessionIssuerId,
-        visibility: requireKnownEnumValue(
-          UpdateMcpServerFormVisibility,
-          latest.visibility,
-        ),
-      },
-    },
+    { updateMcpServerForm: { ...form, visibility, userSessionIssuerId } },
     undefined,
     options,
   );
+  return true;
 }
 
 export async function linkMcpServerUserSessionIssuer(
@@ -53,7 +33,13 @@ export async function linkMcpServerUserSessionIssuer(
     undefined,
     options,
   );
-  await updateServerIssuer(client, latest, userSessionIssuerId, options);
+  if (
+    !(await updateServerIssuer(client, latest, userSessionIssuerId, options))
+  ) {
+    throw new Error(
+      "This server's visibility is not supported by this version of Speakeasy. Refresh the page before editing.",
+    );
+  }
 }
 
 // Falls back to the toolset call only while the toolset has no canonical MCP server.
@@ -79,8 +65,10 @@ export async function linkToolsetUserSessionIssuer(
     }
   }
 
-  if (canonical) {
-    await updateServerIssuer(client, canonical, userSessionIssuerId, options);
+  if (
+    canonical &&
+    (await updateServerIssuer(client, canonical, userSessionIssuerId, options))
+  ) {
     return;
   }
 

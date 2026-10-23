@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/speakeasy-api/gram/server/gen/types"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/mv"
@@ -40,6 +41,9 @@ func (s *Service) WithHostedAddressWriter(writer HostedAddressWriter) *Service {
 }
 
 func (s *Service) updateHostedEndpoint(ctx context.Context, logger *slog.Logger, existing repo.McpEndpoint, server mcpserversrepo.McpServer, mcpServerID uuid.NullUUID, customDomainID uuid.NullUUID, slug string) (*types.McpEndpoint, error) {
+	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, server.ID.String(), server.ProjectID.String())); err != nil {
+		return nil, err
+	}
 	if s.hostedAddresses == nil {
 		return nil, oops.E(oops.CodeInvalid, nil, "manage hosted MCP endpoint addresses through the toolset")
 	}

@@ -33,7 +33,8 @@ export function useMcpSlugValidation(
           if (!available && !stale) {
             setSlugError("This slug is already taken");
           }
-        });
+        })
+        .catch(() => undefined);
     }
     return () => {
       stale = true;

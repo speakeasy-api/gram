@@ -41,6 +41,7 @@ const testState = vi.hoisted(() => ({
     | undefined,
   mutate: vi.fn(),
   mutateGateway: vi.fn(),
+  getServer: vi.fn(),
   invalidateGetGateway: vi.fn().mockResolvedValue(undefined),
   invalidateListGateway: vi.fn().mockResolvedValue(undefined),
   invalidateGetServer: vi.fn().mockResolvedValue(undefined),
@@ -230,6 +231,10 @@ vi.mock("@gram/client/react-query/listToolsets.js", () => ({
 vi.mock("@gram/client/react-query/toolset.js", () => ({
   invalidateAllToolset: testState.invalidateToolset,
 }));
+vi.mock("@/contexts/Sdk", () => ({
+  useSdkClient: () => ({ mcpServers: { get: testState.getServer } }),
+}));
+
 vi.mock("@gram/client/react-query/updateMcpServer.js", () => ({
   useUpdateMcpServerMutation: (options: {
     onError?: (error: Error) => void;
@@ -280,6 +285,7 @@ const hostedServer: McpServer = {
   networkAccessMode: "public_only",
   toolsetId: "toolset-1",
   environmentId: "environment-1",
+  toolVariationsGroupId: "variation-group-1",
   visibility: "public",
   createdAt: new Date(0),
   updatedAt: new Date(0),
@@ -339,6 +345,7 @@ beforeEach(() => {
   testState.requireScopeProps = undefined;
   testState.mutate.mockReset();
   testState.mutateGateway.mockReset();
+  testState.getServer.mockReset().mockResolvedValue(hostedServer);
   testState.invalidateGetGateway.mockClear();
   testState.invalidateListGateway.mockClear();
   testState.invalidateGetServer.mockClear();
@@ -421,17 +428,21 @@ describe("NetworkAccessSection", () => {
     fireEvent.click(screen.getByRole("option", { name: /Public and private/ }));
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
-    expect(testState.mutate).toHaveBeenCalledWith({
-      request: {
-        updateMcpServerForm: {
-          id: "toolset-1",
-          networkAccessMode: "dual",
-          toolsetId: "toolset-1",
-          environmentId: "environment-1",
-          visibility: "public",
+    await waitFor(() =>
+      expect(testState.mutate).toHaveBeenCalledWith({
+        request: {
+          updateMcpServerForm: {
+            id: "toolset-1",
+            networkAccessMode: "dual",
+            toolsetId: "toolset-1",
+            environmentId: "environment-1",
+            toolVariationsGroupId: "variation-group-1",
+            visibility: "public",
+          },
         },
-      },
-    });
+      }),
+    );
+    expect(testState.getServer).toHaveBeenCalledWith({ id: "toolset-1" });
 
     await testState.mutationOptions?.onSuccess?.();
     await waitFor(() =>
@@ -452,7 +463,12 @@ describe("NetworkAccessSection", () => {
     }
   });
 
-  it("shows an error toast when a hosted server update fails", () => {
+  it("saves over a concurrent change using the latest server", async () => {
+    testState.getServer.mockResolvedValue({
+      ...hostedServer,
+      toolVariationsGroupId: "variation-group-2",
+      visibility: "private",
+    });
     render(
       <NetworkAccessSection mcpServer={hostedServer} toolset={hostedToolset} />,
     );
@@ -462,7 +478,48 @@ describe("NetworkAccessSection", () => {
     );
     fireEvent.click(screen.getByRole("option", { name: /Public and private/ }));
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
-    expect(testState.mutate).toHaveBeenCalled();
+
+    await waitFor(() =>
+      expect(testState.mutate).toHaveBeenCalledWith({
+        request: {
+          updateMcpServerForm: expect.objectContaining({
+            toolVariationsGroupId: "variation-group-2",
+            visibility: "private",
+          }),
+        },
+      }),
+    );
+  });
+
+  it("shows an error toast when the latest hosted server cannot be loaded", async () => {
+    testState.getServer.mockRejectedValue(new Error("Server lookup failed"));
+    render(
+      <NetworkAccessSection mcpServer={hostedServer} toolset={hostedToolset} />,
+    );
+
+    fireEvent.click(
+      screen.getByRole("combobox", { name: "Network access mode" }),
+    );
+    fireEvent.click(screen.getByRole("option", { name: /Public and private/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() =>
+      expect(testState.toastError).toHaveBeenCalledWith("Server lookup failed"),
+    );
+    expect(testState.mutate).not.toHaveBeenCalled();
+  });
+
+  it("shows an error toast when a hosted server update fails", async () => {
+    render(
+      <NetworkAccessSection mcpServer={hostedServer} toolset={hostedToolset} />,
+    );
+
+    fireEvent.click(
+      screen.getByRole("combobox", { name: "Network access mode" }),
+    );
+    fireEvent.click(screen.getByRole("option", { name: /Public and private/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(testState.mutate).toHaveBeenCalled());
 
     testState.mutationOptions?.onError?.(new Error("Server update failed"));
 
@@ -470,7 +527,7 @@ describe("NetworkAccessSection", () => {
     expect(testState.toastSuccess).not.toHaveBeenCalled();
   });
 
-  it("requires confirmation before making a hosted server private only", () => {
+  it("requires confirmation before making a hosted server private only", async () => {
     render(
       <NetworkAccessSection mcpServer={hostedServer} toolset={hostedToolset} />,
     );
@@ -486,14 +543,16 @@ describe("NetworkAccessSection", () => {
     );
     expect(testState.mutate).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "Make private only" }));
-    expect(testState.mutate).toHaveBeenCalledWith({
-      request: {
-        updateMcpServerForm: expect.objectContaining({
-          id: "toolset-1",
-          networkAccessMode: "private_only",
-        }),
-      },
-    });
+    await waitFor(() =>
+      expect(testState.mutate).toHaveBeenCalledWith({
+        request: {
+          updateMcpServerForm: expect.objectContaining({
+            id: "toolset-1",
+            networkAccessMode: "private_only",
+          }),
+        },
+      }),
+    );
   });
 
   it("shows the traffic graph for a private hosted toolset", () => {

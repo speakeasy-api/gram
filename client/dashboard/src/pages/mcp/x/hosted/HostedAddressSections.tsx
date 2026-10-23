@@ -21,23 +21,23 @@ import { PageSection } from "@/pages/mcp/PageSection";
 import { useRoutes } from "@/routes";
 import { invalidateMcpServerQueries } from "@/lib/mcp-server-visibility";
 import { patchMcpEndpointInCache } from "@/hooks/useRootMcpEndpoint";
-import {
-  invalidateAllMcpEndpoints,
-  useMcpEndpoints,
-} from "@gram/client/react-query/mcpEndpoints.js";
-import { invalidateAllToolset } from "@gram/client/react-query/toolset.js";
+import type { McpEndpoint } from "@gram/client/models/components/mcpendpoint.js";
 import { useUpdateMcpEndpointMutation } from "@gram/client/react-query/updateMcpEndpoint.js";
 import { useQueryClient } from "@tanstack/react-query";
 import { Globe } from "lucide-react";
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { useParams } from "react-router";
 import { toast } from "sonner";
 
 // The server applies canonical endpoint writes to the toolset's hosting columns.
 export function HostedAddressSections({
   toolset,
+  endpoints,
+  isLoadingEndpoints,
 }: {
   toolset: Toolset;
+  endpoints: McpEndpoint[];
+  isLoadingEndpoints: boolean;
 }): React.JSX.Element {
   const { hasScope } = useRBAC();
   const canWrite = hasScope("mcp:write");
@@ -48,28 +48,30 @@ export function HostedAddressSections({
   const { domain } = useCustomDomain();
   const routes = useRoutes();
 
-  const { data: endpointsResult } = useMcpEndpoints({
-    mcpServerId: toolset.id,
-  });
-  const hostedEndpoint = endpointsResult?.mcpEndpoints.find(
-    (e) =>
-      e.slug === toolset.mcpSlug &&
-      (e.customDomainId ?? undefined) === (toolset.customDomainId ?? undefined),
-  );
+  const hostedEndpoint = useMemo(() => {
+    const matching = endpoints.find(
+      (e) =>
+        e.slug === toolset.mcpSlug &&
+        (e.customDomainId ?? undefined) ===
+          (toolset.customDomainId ?? undefined),
+    );
+    if (matching) return matching;
+    const nonRoot = endpoints.filter((e) => !e.isDomainRoot);
+    return nonRoot.length === 1 ? nonRoot[0] : undefined;
+  }, [endpoints, toolset.mcpSlug, toolset.customDomainId]);
 
   const updateEndpointMutation = useUpdateMcpEndpointMutation({
     onSuccess: (updated) => {
       patchMcpEndpointInCache(queryClient, updated);
-      void invalidateAllToolset(queryClient);
       void invalidateMcpServerQueries(queryClient);
-      void invalidateAllMcpEndpoints(queryClient);
       toast.success("MCP settings saved successfully");
       telemetry.capture("mcp_event", {
         action: "mcp_settings_saved",
         slug: toolset.slug,
       });
     },
-    onError: () => {
+    onError: (error) => {
+      toast.error(error.message || "Failed to save MCP settings");
       // Discard staged changes
       setMcpSlug(toolset.mcpSlug || "");
     },
@@ -82,6 +84,22 @@ export function HostedAddressSections({
     mcpSlug,
     toolset.mcpSlug,
     toolset.customDomainId,
+  );
+
+  // Account for legacy Pro tier which can still access custom domains
+  const canAccessCustomDomain = !productTier.includes("base");
+  const linkableDomain =
+    canWrite &&
+    canAccessCustomDomain &&
+    !toolset.customDomainId &&
+    domain?.activated &&
+    domain.verified
+      ? domain
+      : undefined;
+  const linkDomainSlugError = useMcpSlugValidation(
+    linkableDomain ? mcpSlug : undefined,
+    undefined,
+    linkableDomain?.id,
   );
 
   const updateHostedEndpoint = (fields: {
@@ -121,6 +139,7 @@ export function HostedAddressSections({
               !hostedEndpoint ||
               updateEndpointMutation.isPending ||
               !!mcpSlugError ||
+              !!linkDomainSlugError ||
               !mcpSlug
             }
             onClick={() => {
@@ -136,9 +155,6 @@ export function HostedAddressSections({
         <TooltipContent>{domain.domain}</TooltipContent>
       </Tooltip>
     );
-
-  // Account for legacy Pro tier which can still access custom domains
-  const canAccessCustomDomain = !productTier.includes("base");
 
   const customDomain =
     domain && canAccessCustomDomain && !toolset.customDomainId ? (
@@ -241,13 +257,23 @@ export function HostedAddressSections({
             </Stack>
           </BlockInner>
         </Block>
+        {canWrite && !isLoadingEndpoints && !hostedEndpoint && (
+          <Text muted small className="mt-2">
+            This server&apos;s address could not be loaded. Refresh the page to
+            edit it.
+          </Text>
+        )}
       </PageSection>
 
       <PageSection
         heading="Custom Domain"
         description="Host your MCP server at your own domain."
       >
-        <Block label="Domain" className="p-0">
+        <Block
+          label="Domain"
+          error={linkableDomain ? linkDomainSlugError : null}
+          className="p-0"
+        >
           <BlockInner>
             <Stack direction="horizontal" align="center">
               <Text mono small>

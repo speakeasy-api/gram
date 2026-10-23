@@ -61,7 +61,6 @@ describe("useMcpServerAuthTarget", () => {
       {
         updateMcpServerForm: expect.objectContaining({
           id: "mcp-server-id",
-          networkAccessMode: "private_only",
           remoteMcpServerId: "remote-id",
           userSessionIssuerId: "organization-issuer-id",
           visibility: "public",
@@ -69,6 +68,9 @@ describe("useMcpServerAuthTarget", () => {
       },
       undefined,
       undefined,
+    );
+    expect(update.mock.calls[0]![0].updateMcpServerForm).not.toHaveProperty(
+      "networkAccessMode",
     );
   });
 

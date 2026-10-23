@@ -1,5 +1,6 @@
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import { GramError } from "@gram/client/models/errors/gramerror.js";
+import { unrecognized } from "@gram/client/types/unrecognized.js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { linkToolsetUserSessionIssuer } from "./linkUserSessionIssuer";
 
@@ -53,7 +54,6 @@ describe("linkToolsetUserSessionIssuer", () => {
           toolsetId: "toolset-1",
           environmentId: "environment-1",
           toolVariationsGroupId: "variation-group-1",
-          networkAccessMode: "dual",
           visibility: "public",
           userSessionIssuerId: "issuer-1",
         },
@@ -62,6 +62,18 @@ describe("linkToolsetUserSessionIssuer", () => {
       undefined,
     );
     expect(setUserSessionIssuer).not.toHaveBeenCalled();
+    expect(update.mock.calls[0]![0].updateMcpServerForm).not.toHaveProperty(
+      "networkAccessMode",
+    );
+  });
+
+  it("falls back to the toolset call when the server visibility is unknown", async () => {
+    get.mockResolvedValue({ ...canonical, visibility: unrecognized("future") });
+
+    await linkToolsetUserSessionIssuer(client, toolset, "issuer-1");
+
+    expect(update).not.toHaveBeenCalled();
+    expect(setUserSessionIssuer).toHaveBeenCalledTimes(1);
   });
 
   it("falls back to the toolset call when no canonical server exists", async () => {

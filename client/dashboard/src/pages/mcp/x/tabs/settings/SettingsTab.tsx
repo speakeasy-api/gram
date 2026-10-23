@@ -172,7 +172,11 @@ export function SettingsTab({
             resourceId={hostedToolset.id}
             level="section"
           >
-            <HostedAddressSections toolset={hostedToolset} />
+            <HostedAddressSections
+              toolset={hostedToolset}
+              endpoints={endpoints}
+              isLoadingEndpoints={isLoadingEndpoints}
+            />
             <NetworkAccessSection
               mcpServer={mcpServer}
               toolset={hostedToolset}

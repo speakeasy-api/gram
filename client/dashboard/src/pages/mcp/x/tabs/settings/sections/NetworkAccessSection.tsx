@@ -19,6 +19,8 @@ import {
 import { Text } from "@/components/ui/Text";
 import { Stack } from "@/components/ui/Stack";
 import { useOrganization } from "@/contexts/Auth";
+import { useSdkClient } from "@/contexts/Sdk";
+import { mcpServerUpdateForm } from "@/lib/mcpServerUpdateForm";
 import {
   endpointUsesPrivateIngress,
   privateMcpEndpointUrls,
@@ -182,6 +184,8 @@ function NetworkAccessSectionContent({
       ));
   const [draft, setDraft] = useState<McpServerNetworkAccessMode>(currentMode);
   const [confirmPrivateOnlyOpen, setConfirmPrivateOnlyOpen] = useState(false);
+  const [loadingLatest, setLoadingLatest] = useState(false);
+  const client = useSdkClient();
 
   useEffect(() => {
     setDraft(currentMode);
@@ -320,7 +324,9 @@ function NetworkAccessSectionContent({
     },
     onError,
   });
-  const isUpdating = mcpServer ? update.isPending : updateGateway.isPending;
+  const isUpdating = mcpServer
+    ? loadingLatest || update.isPending
+    : updateGateway.isPending;
 
   const save = () => {
     if (
@@ -337,7 +343,37 @@ function NetworkAccessSectionContent({
       return;
     }
 
-    if (metaMcpServer) {
+    if (toolset && mcpServer) {
+      const networkAccessMode = requireKnownEnumValue(
+        UpdateMcpServerFormNetworkAccessMode,
+        draft,
+      );
+      setLoadingLatest(true);
+      void client.mcpServers
+        .get({ id: mcpServer.id })
+        .then((latest) => {
+          update.mutate({
+            request: {
+              updateMcpServerForm: {
+                ...mcpServerUpdateForm(latest),
+                networkAccessMode,
+                visibility: requireKnownEnumValue(
+                  KnownUpdateMcpServerFormVisibility,
+                  latest.visibility,
+                ),
+              },
+            },
+          });
+        })
+        .catch((error: unknown) => {
+          onError(
+            error instanceof Error
+              ? error
+              : new Error("Failed to update network access"),
+          );
+        })
+        .finally(() => setLoadingLatest(false));
+    } else if (metaMcpServer) {
       updateGateway.mutate({
         request: {
           updateMetaMcpServerForm: {
