@@ -9,7 +9,10 @@ import { useUnproxiedMcpServers } from "@gram/client/react-query/unproxiedMcpSer
 import { Navigate, useLocation, useParams } from "react-router";
 import { RESERVED_MCP_SEGMENTS } from "@/lib/sources";
 import { useGetMcpServer } from "@gram/client/react-query/getMcpServer.js";
-import { withoutMcpXSegment } from "../x/MCPServerDetailsRouting";
+import {
+  MCP_SECTION_INDEX,
+  withoutMcpXSegment,
+} from "../x/MCPServerDetailsRouting";
 import {
   legacySourceKindLookups,
   parseLegacySourceKind,
@@ -208,7 +211,10 @@ export function RedirectFromMcpXNamespace(): JSX.Element | null {
   }
   if (isLoading) return null;
   if (!server) return <Navigate to={routes.mcp.href()} replace />;
-  const rest = location.pathname.split("/").filter(Boolean).slice(6);
+  const rest = location.pathname
+    .split("/")
+    .filter(Boolean)
+    .slice(MCP_SECTION_INDEX + 3);
   return (
     <Navigate
       to={`${[routes.mcp.details.href(server.id), ...rest].join("/")}${location.search}${location.hash}`}

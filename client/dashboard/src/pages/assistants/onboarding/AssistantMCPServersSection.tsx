@@ -241,9 +241,13 @@ function AttachedServerRow({
   const serverParam = reservedServer
     ? mcpServerRouteParam(reservedServer)
     : serverRef.slug;
+  const slugCode = <code className="truncate text-xs">{serverRef.slug}</code>;
 
   const link =
-    serverRef.kind === "toolset" ? (
+    reservedSlug && !reservedServer ? (
+      // Unlinked until the id is known: the bare slug would open a static page.
+      <span className="min-w-0">{slugCode}</span>
+    ) : serverRef.kind === "toolset" ? (
       <routes.toolset.Link
         params={[serverRef.slug]}
         className="min-w-0 hover:no-underline"
