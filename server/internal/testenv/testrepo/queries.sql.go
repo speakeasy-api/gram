@@ -6796,6 +6796,34 @@ func (q *Queries) SetWorkloadIssuerKeySourceFixture(ctx context.Context, arg Set
 	return result.RowsAffected(), nil
 }
 
+const setWorkloadIssuerWildcardAdmissionForTest = `-- name: SetWorkloadIssuerWildcardAdmissionForTest :execrows
+UPDATE workload_issuers SET allow_wildcard_admission = $1
+WHERE organization_id = $2
+  AND project_id IS NOT DISTINCT FROM $3::uuid
+  AND id = $4 AND deleted IS FALSE
+`
+
+type SetWorkloadIssuerWildcardAdmissionForTestParams struct {
+	AllowWildcardAdmission bool
+	OrganizationID         string
+	ProjectID              uuid.NullUUID
+	ID                     uuid.UUID
+}
+
+// Test-only fixture for an issuer policy change while admission waits on its lock.
+func (q *Queries) SetWorkloadIssuerWildcardAdmissionForTest(ctx context.Context, arg SetWorkloadIssuerWildcardAdmissionForTestParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setWorkloadIssuerWildcardAdmissionForTest,
+		arg.AllowWildcardAdmission,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.ID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const setWorkosLastEventIDFixture = `-- name: SetWorkosLastEventIDFixture :exec
 UPDATE organization_metadata
 SET workos_last_event_id = $1

@@ -23,7 +23,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 	"github.com/speakeasy-api/gram/server/internal/workloadidentity"
-	"github.com/speakeasy-api/gram/server/internal/workloadpolicy/repo"
 )
 
 func admit(t *testing.T, ctx context.Context, ti *testInstance, subject string, matchKind string, agentID uuid.UUID) (*gen.WorkloadIdentityPolicy, error) {
@@ -313,7 +312,7 @@ func TestAdmitSubject_RevalidatesIssuerAfterLockWait(t *testing.T) {
 	registered := registerAnthropic(t, ctx, ti, true)
 	agent := newAgent(t, ctx, ti, "assigned-workload")
 	holder := testenv.BeginTx(t, ctx, ti.conn)
-	affected, err := repo.New(holder).SetWorkloadIssuerWildcardAdmissionForTest(ctx, repo.SetWorkloadIssuerWildcardAdmissionForTestParams{OrganizationID: ti.orgID, ProjectID: uuid.NullUUID{}, ID: uuid.MustParse(registered.Issuers[0].ID), AllowWildcardAdmission: false})
+	affected, err := testrepo.New(holder).SetWorkloadIssuerWildcardAdmissionForTest(ctx, testrepo.SetWorkloadIssuerWildcardAdmissionForTestParams{OrganizationID: ti.orgID, ProjectID: uuid.NullUUID{}, ID: uuid.MustParse(registered.Issuers[0].ID), AllowWildcardAdmission: false})
 	require.NoError(t, err)
 	require.Equal(t, int64(1), affected)
 	holderPID, err := testrepo.New(holder).BackendPIDFixture(ctx)

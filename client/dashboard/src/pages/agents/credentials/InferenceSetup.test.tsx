@@ -23,6 +23,7 @@ const mocks = vi.hoisted(() => ({
   admin: false,
   emptyIssuers: false,
   includeScopedIssuers: false,
+  duplicateProject: null as string | null,
 }));
 vi.mock("@/lib/utils", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/utils")>()),
@@ -94,6 +95,21 @@ vi.mock("@gram/client/react-query/workloadIdentities.js", async () => {
           },
         ]
       : [];
+  const admissions = () =>
+    mocks.duplicateProject === null
+      ? []
+      : [
+          {
+            id: "admission_existing",
+            issuer: issuer.issuer,
+            subject: "workload:worker",
+            matchKind: "exact",
+            projectId: mocks.duplicateProject,
+            organizationId: "org_example",
+            agentId: "agent_existing",
+            agentName: "Existing worker",
+          },
+        ];
   const queryKeyWorkloadIdentities = (request: unknown) => [
     "workload-identities",
     request,
@@ -105,11 +121,11 @@ vi.mock("@gram/client/react-query/workloadIdentities.js", async () => {
         queryKey: queryKeyWorkloadIdentities(request),
         queryFn: async () => ({
           issuers: mocks.emptyIssuers ? [] : [issuer, ...scopedIssuers()],
-          admissions: [],
+          admissions: admissions(),
         }),
         initialData: {
           issuers: mocks.emptyIssuers ? [] : [issuer, ...scopedIssuers()],
-          admissions: [],
+          admissions: admissions(),
         },
         staleTime: Infinity,
       }),
@@ -182,6 +198,7 @@ beforeEach(() => {
   mocks.admin = false;
   mocks.emptyIssuers = false;
   mocks.includeScopedIssuers = false;
+  mocks.duplicateProject = null;
   mocks.create.mockResolvedValue({ id: "agent_one" });
   mocks.register.mockResolvedValue({
     issuers: [{ ...issuer, projectId: "project_one" }],
@@ -542,3 +559,38 @@ it("offers only organization and current-project trust and scopes project admiss
     },
   });
 });
+
+it.each([
+  { selected: "issuer_project", existingTier: "", blocked: false },
+  { selected: "issuer_one", existingTier: "project_one", blocked: false },
+  { selected: "issuer_project", existingTier: "project_one", blocked: true },
+  { selected: "issuer_one", existingTier: "", blocked: true },
+])(
+  "matches duplicates only in selected issuer tier: $selected / $existingTier",
+  async ({ selected, existingTier, blocked }) => {
+    mocks.includeScopedIssuers = true;
+    mocks.duplicateProject = existingTier;
+    setup();
+    fill();
+    fireEvent.change(screen.getByLabelText("Workload issuer"), {
+      target: { value: selected },
+    });
+    fireEvent.click(screen.getByRole("checkbox"));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Create inference identity" }),
+    );
+    if (blocked) {
+      expect((await screen.findByRole("alert")).textContent).toContain(
+        "already connected",
+      );
+      expect(mocks.create).not.toHaveBeenCalled();
+      expect(mocks.register).not.toHaveBeenCalled();
+      expect(mocks.admit).not.toHaveBeenCalled();
+    } else {
+      await screen.findByRole("status");
+      expect(mocks.create).toHaveBeenCalledTimes(1);
+      expect(mocks.register).not.toHaveBeenCalled();
+      expect(mocks.admit).toHaveBeenCalledTimes(1);
+    }
+  },
+);

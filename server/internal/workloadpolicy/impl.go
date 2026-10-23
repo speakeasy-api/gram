@@ -155,6 +155,11 @@ func (s *Service) resolve(ctx context.Context, scope authz.Scope, explicitProjec
 		// authorization used by other project APIs; never trust the header itself.
 		if original, ok := contextvalues.GetAuthContext(ctx); ok && original != nil {
 			cloned := *original
+			if _, byKey := contextvalues.APIKeyAuthorization(ctx); !byKey {
+				// Dashboard context projects are incidental, not credential boundaries.
+				cloned.ProjectID = nil
+				cloned.ProjectSlug = nil
+			}
 			ctx = contextvalues.SetAuthContext(ctx, &cloned)
 		}
 		var err error

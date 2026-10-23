@@ -212,7 +212,12 @@ export function useWorkloadSetup({
   const conflicting =
     connection === null || ours
       ? undefined
-      : existingRule(connection.issuer, admissions, connection);
+      : existingRule(
+          connection.issuer,
+          admissions,
+          connection,
+          customFlow ? selectedIssuer?.projectId : undefined,
+        );
   const ruleConflict =
     conflicting === undefined
       ? null
