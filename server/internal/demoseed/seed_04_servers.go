@@ -445,8 +445,8 @@ func (s *seeder) seedServers(ctx context.Context) error {
 			return fmt.Errorf("insert demo upstream client choice for session %d on %s: %w", c.session, c.server, err)
 		}
 	}
-	// Organization authorizations carry the same explicit member choices as
-	// project gateway sessions, including the expired history row.
+	// Organization authorizations include Linear and Slack plus GitHub, private
+	// inventory, and both EMA servers, including on the expired history row.
 	for i := 1; i <= 3; i++ {
 		for _, server := range []string{"linear", "slack", "github", "private-inventory", "ema-tracker", "ema-wiki"} {
 			client := uuid.NullUUID{UUID: uuid.Nil, Valid: false}

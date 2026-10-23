@@ -72,7 +72,7 @@ type GatewaySessionSummary struct {
 
 // ListGatewaySessionsOutput is a bounded, privacy-preserving authorization page.
 type ListGatewaySessionsOutput struct {
-	// Items contains only the selected gateway's authorized records.
+	// Items contains authorized records for the requested organization or gateway scope.
 	Items []GatewaySessionSummary `json:"items"`
 	// NextCursor continues this exact query, when another page exists.
 	NextCursor *string `json:"next_cursor,omitempty"`

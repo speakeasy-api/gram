@@ -1,5 +1,5 @@
-import { renderHook } from "@testing-library/react";
-import { beforeEach, expect, it, vi } from "vitest";
+import { cleanup, renderHook } from "@testing-library/react";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { isSendable } from "./types";
 
 const state = vi.hoisted(() => ({
@@ -103,6 +103,7 @@ vi.mock("@tanstack/react-query", () => ({
   },
 }));
 import { useGatewayConnectionCandidates } from "./useGatewayConnectionCandidates";
+afterEach(cleanup);
 beforeEach(() => {
   state.org = "org-one";
   state.project = "project-one";

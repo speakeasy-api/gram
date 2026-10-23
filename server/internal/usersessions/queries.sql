@@ -2920,15 +2920,17 @@ SELECT s.id, s.user_session_issuer_id, s.user_session_client_id, s.subject_urn, 
        k.name AS api_key_name
 FROM user_sessions AS s
 JOIN user_session_issuers AS iss ON iss.id = s.user_session_issuer_id
-LEFT JOIN user_session_clients AS c ON c.id = s.user_session_client_id
+LEFT JOIN user_session_clients AS c ON c.id = s.user_session_client_id AND c.organization_id = s.organization_id
 LEFT JOIN users AS u
   ON s.subject_urn::text LIKE 'user:%'
   AND u.id = split_part(s.subject_urn::text, ':', 2)
+  AND u.deleted_at IS NULL
 LEFT JOIN api_keys AS k
   ON k.id = CASE
              WHEN s.subject_urn::text LIKE 'apikey:%'
              THEN split_part(s.subject_urn::text, ':', 2)::uuid
            END
+  AND k.organization_id = s.organization_id
 LEFT JOIN agents agent ON s.subject_urn::text = 'agent:' || agent.id::text AND agent.organization_id = @organization_id AND agent.deleted IS FALSE
 WHERE s.organization_id = @organization_id
  AND iss.organization_id = @organization_id AND iss.deleted IS FALSE

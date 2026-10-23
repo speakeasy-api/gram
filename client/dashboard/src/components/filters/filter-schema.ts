@@ -39,6 +39,17 @@ export function calendarDateRangeValue(from: Date, to: Date): DateRangeValue {
   };
 }
 
+/** Bounds for querying or saving a custom range, separate from calendar display dates. */
+export function customDateRangeBounds(
+  value: DateRangeValue | undefined,
+): { from: Date; to: Date } | null {
+  if (!value?.customRange) return null;
+  return {
+    from: value.customRange.from,
+    to: value.calendarEnd ?? value.customRange.to,
+  };
+}
+
 export interface FilterOption {
   label: string;
   value: string;
