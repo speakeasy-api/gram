@@ -4,7 +4,11 @@ import {
   useSession,
 } from "@/contexts/Auth";
 import { getRBACScopeOverrideHeader } from "@/components/dev-toolbar-utils";
-import { useProjectSlugForRequests, useSdkClient } from "@/contexts/Sdk";
+import {
+  useProjectSlugForRequests,
+  useSdkClient,
+  useSlugs,
+} from "@/contexts/Sdk";
 import { DEMO_ORG_SLUG } from "@/lib/demo";
 import { encodeIdentityUrn, withIdentityWindow } from "@/lib/identity-urn";
 import { fetchRegisteredAgents } from "@/pages/identities/identityRoster";
@@ -29,6 +33,7 @@ export function useAgentIdentityCandidates({
   const isPlatformAdmin = useIsPlatformAdmin();
   const sdk = useSdkClient();
   const projectSlug = useProjectSlugForRequests();
+  const { projectSlug: routeProjectSlug } = useSlugs();
   const routes = useRoutes({ projectSlug });
   const navigate = useNavigate();
   const { search } = useLocation();
@@ -121,7 +126,9 @@ export function useAgentIdentityCandidates({
             );
           },
         };
-        if (!agent.permissions?.write) return [identity];
+        // Request headers may fall back to the default project in the org shell;
+        // only a real project route can offer this project-scoped control.
+        if (!routeProjectSlug || !agent.permissions?.write) return [identity];
         return [
           identity,
           {
@@ -148,5 +155,5 @@ export function useAgentIdentityCandidates({
           },
         ];
       });
-  }, [data, navigate, queryEnabled, routes, search]);
+  }, [data, navigate, queryEnabled, routes, routeProjectSlug, search]);
 }

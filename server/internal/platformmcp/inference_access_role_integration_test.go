@@ -158,4 +158,67 @@ func TestInferenceAccessRoleConfiguration(t *testing.T) {
 	stored, err = manager.GetRoleByID(ctx, principal.OrganizationID, roleID)
 	require.NoError(t, err)
 	require.Equal(t, []*accessgen.RoleGrant{baseline}, stored.Grants)
+
+	// Existing grants may encode all projects with either no project selector
+	// or an explicit wildcard. Enable converges both; disable removes both.
+	for _, tc := range []struct {
+		name      string
+		canonical bool
+		enable    bool
+	}{
+		{name: "enable-wildcard", canonical: false, enable: true},
+		{name: "enable-both", canonical: true, enable: true},
+		{name: "disable-wildcard", canonical: false, enable: false},
+		{name: "disable-both", canonical: true, enable: false},
+	} {
+		// Cases share the same role and run sequentially to verify convergence.
+		wildcard := inferenceAccessRoleGrant(project.ID, true)
+		wildcard.Selectors[0].ProjectID = new("*")
+		projectGrant := inferenceAccessRoleGrant(project.ID, false)
+		seed := []*accessgen.RoleGrant{wildcard, projectGrant}
+		if tc.canonical {
+			seed = append(seed, inferenceAccessRoleGrant(project.ID, true))
+		}
+		tx, err := conn.Begin(ctx) //nolint:glint // notestingrawsql: role manager transaction uses generated queries.
+		require.NoError(t, err)
+		defer func() { _ = tx.Rollback(ctx) }()
+		seeded, _, err := manager.UpdateRoleTx(ctx, tx, principal.OrganizationID, organization.WorkosID.String, access.RoleAuditActor{Principal: urn.NewPrincipal(urn.PrincipalTypeUser, principal.UserID)}, &accessgen.UpdateRolePayload{ID: roleID, AddGrants: seed})
+		require.NoError(t, err)
+		require.NoError(t, tx.Commit(ctx))
+		mutation := all
+		mutation.Enabled = tc.enable
+		mutation.IdempotencyKey = tc.name
+		mutation.ExpectedVersion, err = service.roleVersion(seeded.After)
+		require.NoError(t, err)
+		result, err := service.ConfigureInference(ctx, principal, mutation)
+		require.NoError(t, err)
+		require.Equal(t, tc.enable, result.ExactGrantPresent)
+		stored, err := manager.GetRoleByID(ctx, principal.OrganizationID, roleID)
+		require.NoError(t, err)
+		require.True(t, hasInferenceAccessRoleGrant(stored, project.ID, false), "project-specific inference remains")
+		require.Contains(t, stored.Grants, baseline, "unrelated MCP scope remains")
+		broad := 0
+		for _, grant := range stored.Grants {
+			if grant.Scope != "inference:execute" {
+				continue
+			}
+			for _, selector := range grant.Selectors {
+				if selector.ProjectID == nil {
+					broad++
+				} else {
+					require.Equal(t, project.ID.String(), *selector.ProjectID, "wildcard spelling is removed")
+				}
+			}
+		}
+		if tc.enable {
+			require.Equal(t, 1, broad, "enable keeps only one canonical grant")
+			mutation.Enabled = false
+			mutation.IdempotencyKey += "-cleanup"
+			mutation.ExpectedVersion = result.Role.Version
+			_, err = service.ConfigureInference(ctx, principal, mutation)
+			require.NoError(t, err)
+		} else {
+			require.Zero(t, broad)
+		}
+	}
 }

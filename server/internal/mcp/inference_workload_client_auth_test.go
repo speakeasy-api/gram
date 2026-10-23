@@ -31,8 +31,10 @@ func TestWorkloadInference_RejectsClientAuthentication(t *testing.T) {
 			}
 			response := httptest.NewRecorder()
 			require.NoError(t, f.ti.service.HandleSharedToken(response, request))
-			require.NotEqual(t, http.StatusOK, response.Code)
-			require.Empty(t, decodeSharedTokenResponse(t, response).AccessToken)
+			require.Equal(t, http.StatusBadRequest, response.Code, response.Body.String())
+			rejected := decodeSharedTokenResponse(t, response)
+			require.Equal(t, "invalid_target", rejected.Error)
+			require.Empty(t, rejected.AccessToken)
 			require.Empty(t, f.workloadSessions(t))
 			// Rejection must not consume the assertion or silently treat credentials as absent.
 			accepted := exchangeWorkloadInference(t, f, assertion)

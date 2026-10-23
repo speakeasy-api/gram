@@ -24,6 +24,7 @@ func TestInferenceAccessRoleGrantIsNarrowAndDistinctFromMCP(t *testing.T) {
 	// A broader grant is deliberately not reported as the exact grant managed here.
 	allProjects := "*"
 	grant.Selectors[0].ProjectID = &allProjects
+	require.True(t, hasInferenceAccessRoleGrant(role, project, true))
 	require.False(t, hasInferenceAccessRoleGrant(role, project, false))
 	grant.Selectors[0].ProjectID = nil
 	require.False(t, hasInferenceAccessRoleGrant(role, project, false))
@@ -59,4 +60,24 @@ func TestExplicitAllProjectsInferenceGrantIsNotMCPAccess(t *testing.T) {
 	allowed, err = authz.GrantsAuthorize(grants, authz.MCPCheck(authz.ScopeMCPConnect, uuid.NewString(), project))
 	require.NoError(t, err)
 	require.False(t, allowed, "inference grants cannot cause MCP role delivery or exposure approval")
+}
+
+func TestAllProjectsInferenceGrantStatusRejectsNarrowedSelectors(t *testing.T) {
+	t.Parallel()
+	project := uuid.New()
+	for _, projectID := range []*string{nil, new("*")} {
+		for _, narrow := range []func(*accessgen.Selector){
+			func(s *accessgen.Selector) { s.Tool = new("tool") },
+			func(s *accessgen.Selector) { s.Disposition = new("read_only") },
+			func(s *accessgen.Selector) { s.ServerURL = new("https://example.invalid/mcp") },
+			func(s *accessgen.Selector) { s.ClientType = new("service_account") },
+			func(s *accessgen.Selector) { s.ConnectionOwner = new("user:test") },
+			func(s *accessgen.Selector) { s.UpstreamClient = new("client:test") },
+		} {
+			grant := inferenceAccessRoleGrant(project, true)
+			grant.Selectors[0].ProjectID = projectID
+			narrow(grant.Selectors[0])
+			require.False(t, hasInferenceAccessRoleGrant(&accessgen.Role{Grants: []*accessgen.RoleGrant{grant}}, project, true))
+		}
+	}
 }

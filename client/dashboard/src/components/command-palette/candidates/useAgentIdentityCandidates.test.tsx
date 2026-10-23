@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   scopeOverride: null as string | null,
   sdk: { name: "sdk" },
   projectSlug: "project-one",
+  routeProjectSlug: "project-one" as string | undefined,
   search: "?range=30d&from=2025-01-01&to=2025-01-31&tab=ignored",
   navigate: vi.fn(),
   href: vi.fn((urn: string) => `/identities/${urn}/overview`),
@@ -45,6 +46,7 @@ vi.mock("@/components/dev-toolbar-utils", () => ({
 vi.mock("@/contexts/Sdk", () => ({
   useSdkClient: () => mocks.sdk,
   useProjectSlugForRequests: () => mocks.projectSlug,
+  useSlugs: () => ({ projectSlug: mocks.routeProjectSlug }),
 }));
 vi.mock("@/routes", () => ({
   useRoutes: (overrides: unknown) => {
@@ -97,6 +99,7 @@ describe("useAgentIdentityCandidates", () => {
     mocks.isPlatformAdmin = false;
     mocks.scopeOverride = null;
     mocks.projectSlug = "project-one";
+    mocks.routeProjectSlug = "project-one";
     mocks.queryData = undefined;
     mocks.hasNextPage = false;
     mocks.isFetchingNextPage = false;
@@ -231,6 +234,32 @@ describe("useAgentIdentityCandidates", () => {
     rerender({ enabled: false });
     expect(result.current).toEqual([]);
     expect(mocks.fetchNextPage).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not offer the project-scoped alias in the org shell despite the request default", () => {
+    mocks.projectSlug = "default";
+    mocks.routeProjectSlug = undefined;
+    mocks.queryData = {
+      pages: [
+        {
+          items: [
+            { id: "editable", name: "Worker", permissions: { write: true } },
+          ],
+        },
+      ],
+    };
+    const { result, rerender } = renderHook(() =>
+      useAgentIdentityCandidates({ enabled: true }),
+    );
+    expect(result.current.map((candidate) => candidate.id)).toEqual([
+      "agent-identity:editable",
+    ]);
+    mocks.routeProjectSlug = "project-one";
+    mocks.projectSlug = "project-one";
+    rerender();
+    expect(result.current.map((candidate) => candidate.id)).toContain(
+      "agent-inference-access:editable",
+    );
   });
 
   it("adds an inference-access alias only for editable agents and keeps names private", () => {

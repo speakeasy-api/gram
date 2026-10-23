@@ -83,6 +83,9 @@ it("filters inference endpoints before selecting, including stale cross-project 
       group.options.map((option) => option.id),
     ),
   ).toEqual(["a", "org"]);
+  act(() => {
+    result.current.onEndpointChange("a");
+  });
   rerender({ projectId: "proj-b" });
   expect(result.current.selectedEndpointId).toBe("b");
   expect(result.current.values?.token_endpoint).toBe(

@@ -51,7 +51,7 @@ func hasInferenceAccessRoleGrant(role *accessgen.Role, projectID uuid.UUID, allP
 			continue
 		}
 		for _, selector := range grant.Selectors {
-			if selector.ResourceKind == "inference" && selector.ResourceID == "*" && ((allProjects && selector.ProjectID == nil) || (!allProjects && selector.ProjectID != nil && *selector.ProjectID == projectID.String())) && selector.Tool == nil && selector.Disposition == nil && selector.ServerURL == nil && selector.ClientType == nil && selector.ConnectionOwner == nil && selector.UpstreamClient == nil {
+			if selector.ResourceKind == "inference" && selector.ResourceID == "*" && ((allProjects && (selector.ProjectID == nil || *selector.ProjectID == "*")) || (!allProjects && selector.ProjectID != nil && *selector.ProjectID == projectID.String())) && selector.Tool == nil && selector.Disposition == nil && selector.ServerURL == nil && selector.ClientType == nil && selector.ConnectionOwner == nil && selector.UpstreamClient == nil {
 				return true
 			}
 		}
@@ -98,6 +98,15 @@ func (s *AccessRoleMutationService) ConfigureInference(ctx context.Context, prin
 		addGrants = []*accessgen.RoleGrant{grant}
 	} else {
 		removeGrants = []*accessgen.RoleGrant{grant}
+	}
+	if input.AllProjects {
+		// Remove the equivalent wildcard spelling on both enable and disable.
+		// UpdateRoleTx removes exact selectors before adding the canonical one,
+		// so enabling converges to one grant without touching narrowed grants.
+		wildcard := inferenceAccessRoleGrant(project.ID, true)
+		allProjects := "*"
+		wildcard.Selectors[0].ProjectID = &allProjects
+		removeGrants = append(removeGrants, wildcard)
 	}
 	// Only inference grants change here, so role delivery cannot gain MCP Use
 	// access and needs no administrator exposure-approval marker.

@@ -10,6 +10,12 @@ it.each([
   "ftp://api.example.test",
   "not a URL",
   "https://user:secret@api.example.test",
+  "https://api.example.test?token=abc",
+  "https://api.example.test#frag",
+  "https://api.example.test?",
+  "https://api.example.test#",
+  "http://localhost:8080?token=abc",
+  "http://localhost:8080#",
 ])("rejects unsafe destination %s", (base) => {
   expect(inferenceCompletionEndpoint(base, false)).toBeNull();
   expect(inferenceCompletionEndpoint(base, true)).toBeNull();

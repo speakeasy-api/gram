@@ -3,6 +3,8 @@ export function inferenceCompletionEndpoint(
   base: string,
   localDevelopment: boolean,
 ): string | null {
+  // Inspect delimiters themselves: URL.search/hash hide empty ? and #.
+  if (base.includes("?") || base.includes("#")) return null;
   try {
     const url = new URL(base);
     const localHTTP =
