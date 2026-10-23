@@ -24346,6 +24346,46 @@ func unmarshalAdminMcpServerHealthRemoteSessionsResponseBodyToAdminAdminMcpServe
 	return res
 }
 
+// unmarshalAdminMcpServerHealthUpstreamAuthResponseBodyToAdminAdminMcpServerHealthUpstreamAuth
+// builds a value of type *admin.AdminMcpServerHealthUpstreamAuth from a value
+// of type *AdminMcpServerHealthUpstreamAuthResponseBody.
+func unmarshalAdminMcpServerHealthUpstreamAuthResponseBodyToAdminAdminMcpServerHealthUpstreamAuth(v *AdminMcpServerHealthUpstreamAuthResponseBody) *admin.AdminMcpServerHealthUpstreamAuth {
+	if v == nil {
+		return nil
+	}
+	res := &admin.AdminMcpServerHealthUpstreamAuth{
+		Status:               *v.Status,
+		RequiresUpstreamAuth: v.RequiresUpstreamAuth,
+	}
+	res.AuthClients = make([]*admin.AdminMcpServerHealthAuthClient, len(v.AuthClients))
+	for i, val := range v.AuthClients {
+		if val == nil {
+			res.AuthClients[i] = nil
+			continue
+		}
+		res.AuthClients[i] = unmarshalAdminMcpServerHealthAuthClientResponseBodyToAdminAdminMcpServerHealthAuthClient(val)
+	}
+
+	return res
+}
+
+// unmarshalAdminMcpServerHealthAuthClientResponseBodyToAdminAdminMcpServerHealthAuthClient
+// builds a value of type *admin.AdminMcpServerHealthAuthClient from a value of
+// type *AdminMcpServerHealthAuthClientResponseBody.
+func unmarshalAdminMcpServerHealthAuthClientResponseBodyToAdminAdminMcpServerHealthAuthClient(v *AdminMcpServerHealthAuthClientResponseBody) *admin.AdminMcpServerHealthAuthClient {
+	res := &admin.AdminMcpServerHealthAuthClient{
+		ID:                    *v.ID,
+		ClientType:            *v.ClientType,
+		Source:                *v.Source,
+		Enabled:               *v.Enabled,
+		RemoteSessionClientID: v.RemoteSessionClientID,
+		ServerCount:           *v.ServerCount,
+		HeaderCount:           *v.HeaderCount,
+	}
+
+	return res
+}
+
 // unmarshalAdminMcpServerToolCallOutcomesResponseBodyToAdminAdminMcpServerToolCallOutcomes
 // builds a value of type *admin.AdminMcpServerToolCallOutcomes from a value of
 // type *AdminMcpServerToolCallOutcomesResponseBody.

@@ -705,3 +705,56 @@ VALUES
      'prescription_version', @prescription_version::int, 'state', @state::text),
    now() + (@expires_in::text)::interval, now() - (@created_ago::text)::interval,
    now() - (@created_ago::text)::interval);
+
+-- Typed auth clients, as the upstream OAuth migration records them: Linear's
+-- personal client over its OAuth registration, and one static credential
+-- shared by GitHub and Linear, so the server settings show a shared client
+-- and a server offering two. Slack is left undecided about upstream
+-- authentication.
+-- The projects delete cascades the clients, their headers and associations.
+-- name: ServersInsertAuthClient :exec
+INSERT INTO mcp_auth_clients
+  (id, organization_id, project_id, client_type, source, name,
+   remote_session_client_id, client_attachment_scope)
+SELECT @id::uuid, @org_id::text, @project_id::uuid, @client_type::text,
+       'backfill', @name::text, c.id, c.attachment_scope
+FROM (SELECT 1) AS one
+LEFT JOIN remote_session_clients AS c
+  ON c.id = sqlc.narg(remote_session_client_id)::uuid;
+
+-- The value is a placeholder; stored values are never returned.
+-- name: ServersInsertAuthClientHeader :exec
+INSERT INTO mcp_auth_client_headers
+  (id, auth_client_id, organization_id, name, is_secret, value)
+VALUES
+  (@id::uuid, @auth_client_id::uuid, @org_id::text, @name::text, TRUE,
+   @value::text);
+
+-- name: ServersInsertServerAuthClient :exec
+INSERT INTO mcp_server_auth_clients
+  (id, project_id, organization_id, mcp_server_id, auth_client_id,
+   client_attachment_scope, source)
+SELECT @id::uuid, @project_id::uuid, @org_id::text, @mcp_server_id::uuid,
+       ac.id, ac.attachment_scope, 'backfill'
+FROM mcp_auth_clients AS ac
+WHERE ac.id = @auth_client_id::uuid;
+
+-- name: ServersMarkRequiresUpstreamAuth :exec
+UPDATE mcp_servers
+SET requires_upstream_auth = TRUE
+WHERE project_id = @project_id::uuid
+  AND id = ANY(@ids::uuid[]);
+
+-- Engineers may use the shared GitHub token; Contractors are blocked from
+-- it on every server that offers it. Cleared by id at the top of the seed.
+-- name: ServersInsertAuthClientRoleGrants :exec
+INSERT INTO principal_grants (id, organization_id, principal_urn, scope, selectors)
+SELECT v.id, @org_id::text, 'role:organization:' || r.id, v.scope,
+       jsonb_build_object('resource_kind', 'mcp_auth_client',
+         'resource_id', (@auth_client_id::uuid)::text)
+FROM (VALUES
+  (@use_id::uuid, 'engineer', 'mcp:auth'),
+  (@block_id::uuid, 'contractors', 'mcp:blocked_auth')
+) AS v(id, slug, scope)
+JOIN organization_roles r
+  ON r.organization_id = @org_id::text AND r.workos_slug = v.slug;

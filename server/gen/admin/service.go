@@ -772,6 +772,28 @@ type AdminMcpServerHealth struct {
 	// issuer.
 	LegacyAuth        *string
 	UserSessionIssuer *AdminMcpServerHealthUserSessionIssuer
+	// How the server reaches its upstream. Omitted for toolset-only servers.
+	UpstreamAuth *AdminMcpServerHealthUpstreamAuth
+}
+
+// One auth client the server offers for reaching its upstream. Never carries
+// its name or header values.
+type AdminMcpServerHealthAuthClient struct {
+	// Auth client id.
+	ID string
+	// How the client authenticates upstream.
+	ClientType string
+	// backfill when created from existing configuration, admin when an
+	// administrator created it.
+	Source string
+	// Whether the client can be used.
+	Enabled bool
+	// The OAuth registration behind an OAuth-backed client.
+	RemoteSessionClientID *string
+	// Servers offering the client, this one included.
+	ServerCount int
+	// Headers the client sends upstream.
+	HeaderCount int
 }
 
 // The identities telemetry is matched on for this server.
@@ -888,6 +910,17 @@ type AdminMcpServerHealthTrustedRemoteSession struct {
 	IssuerID string
 	// The remote session client ID Speakeasy uses with the trusted issuer.
 	ClientID string
+}
+
+// Whether the server's upstream needs authentication and the auth clients it
+// offers.
+type AdminMcpServerHealthUpstreamAuth struct {
+	// configured, setup_incomplete (required with no enabled client),
+	// no_auth_required or undecided.
+	Status string
+	// Whether the upstream needs authentication. Omitted while undecided.
+	RequiresUpstreamAuth *bool
+	AuthClients          []*AdminMcpServerHealthAuthClient
 }
 
 // The user session issuer that authenticates the server's users.

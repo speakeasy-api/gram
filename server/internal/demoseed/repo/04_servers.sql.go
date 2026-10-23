@@ -150,6 +150,104 @@ func (q *Queries) ServersInsertAttachmentSession(ctx context.Context, arg Server
 	return err
 }
 
+const serversInsertAuthClient = `-- name: ServersInsertAuthClient :exec
+INSERT INTO mcp_auth_clients
+  (id, organization_id, project_id, client_type, source, name,
+   remote_session_client_id, client_attachment_scope)
+SELECT $1::uuid, $2::text, $3::uuid, $4::text,
+       'backfill', $5::text, c.id, c.attachment_scope
+FROM (SELECT 1) AS one
+LEFT JOIN remote_session_clients AS c
+  ON c.id = $6::uuid
+`
+
+type ServersInsertAuthClientParams struct {
+	ID                    uuid.UUID
+	OrgID                 string
+	ProjectID             uuid.UUID
+	ClientType            string
+	Name                  string
+	RemoteSessionClientID uuid.NullUUID
+}
+
+// Typed auth clients, as the upstream OAuth migration records them: Linear's
+// personal client over its OAuth registration, and one static credential
+// shared by GitHub and Linear, so the server settings show a shared client
+// and a server offering two. Slack is left undecided about upstream
+// authentication.
+// The projects delete cascades the clients, their headers and associations.
+func (q *Queries) ServersInsertAuthClient(ctx context.Context, arg ServersInsertAuthClientParams) error {
+	_, err := q.db.Exec(ctx, serversInsertAuthClient,
+		arg.ID,
+		arg.OrgID,
+		arg.ProjectID,
+		arg.ClientType,
+		arg.Name,
+		arg.RemoteSessionClientID,
+	)
+	return err
+}
+
+const serversInsertAuthClientHeader = `-- name: ServersInsertAuthClientHeader :exec
+INSERT INTO mcp_auth_client_headers
+  (id, auth_client_id, organization_id, name, is_secret, value)
+VALUES
+  ($1::uuid, $2::uuid, $3::text, $4::text, TRUE,
+   $5::text)
+`
+
+type ServersInsertAuthClientHeaderParams struct {
+	ID           uuid.UUID
+	AuthClientID uuid.UUID
+	OrgID        string
+	Name         string
+	Value        string
+}
+
+// The value is a placeholder; stored values are never returned.
+func (q *Queries) ServersInsertAuthClientHeader(ctx context.Context, arg ServersInsertAuthClientHeaderParams) error {
+	_, err := q.db.Exec(ctx, serversInsertAuthClientHeader,
+		arg.ID,
+		arg.AuthClientID,
+		arg.OrgID,
+		arg.Name,
+		arg.Value,
+	)
+	return err
+}
+
+const serversInsertAuthClientRoleGrants = `-- name: ServersInsertAuthClientRoleGrants :exec
+INSERT INTO principal_grants (id, organization_id, principal_urn, scope, selectors)
+SELECT v.id, $1::text, 'role:organization:' || r.id, v.scope,
+       jsonb_build_object('resource_kind', 'mcp_auth_client',
+         'resource_id', ($2::uuid)::text)
+FROM (VALUES
+  ($3::uuid, 'engineer', 'mcp:auth'),
+  ($4::uuid, 'contractors', 'mcp:blocked_auth')
+) AS v(id, slug, scope)
+JOIN organization_roles r
+  ON r.organization_id = $1::text AND r.workos_slug = v.slug
+`
+
+type ServersInsertAuthClientRoleGrantsParams struct {
+	OrgID        string
+	AuthClientID uuid.UUID
+	UseID        uuid.UUID
+	BlockID      uuid.UUID
+}
+
+// Engineers may use the shared GitHub token; Contractors are blocked from
+// it on every server that offers it. Cleared by id at the top of the seed.
+func (q *Queries) ServersInsertAuthClientRoleGrants(ctx context.Context, arg ServersInsertAuthClientRoleGrantsParams) error {
+	_, err := q.db.Exec(ctx, serversInsertAuthClientRoleGrants,
+		arg.OrgID,
+		arg.AuthClientID,
+		arg.UseID,
+		arg.BlockID,
+	)
+	return err
+}
+
 const serversInsertEMABindings = `-- name: ServersInsertEMABindings :exec
 INSERT INTO remote_session_ema_bindings
   (id, project_id, organization_id, user_session_issuer_id,
@@ -1261,6 +1359,35 @@ func (q *Queries) ServersInsertRoleServerMemberships(ctx context.Context, arg Se
 	return result.RowsAffected(), nil
 }
 
+const serversInsertServerAuthClient = `-- name: ServersInsertServerAuthClient :exec
+INSERT INTO mcp_server_auth_clients
+  (id, project_id, organization_id, mcp_server_id, auth_client_id,
+   client_attachment_scope, source)
+SELECT $1::uuid, $2::uuid, $3::text, $4::uuid,
+       ac.id, ac.attachment_scope, 'backfill'
+FROM mcp_auth_clients AS ac
+WHERE ac.id = $5::uuid
+`
+
+type ServersInsertServerAuthClientParams struct {
+	ID           uuid.UUID
+	ProjectID    uuid.UUID
+	OrgID        string
+	McpServerID  uuid.UUID
+	AuthClientID uuid.UUID
+}
+
+func (q *Queries) ServersInsertServerAuthClient(ctx context.Context, arg ServersInsertServerAuthClientParams) error {
+	_, err := q.db.Exec(ctx, serversInsertServerAuthClient,
+		arg.ID,
+		arg.ProjectID,
+		arg.OrgID,
+		arg.McpServerID,
+		arg.AuthClientID,
+	)
+	return err
+}
+
 const serversInsertServerClientAssociation = `-- name: ServersInsertServerClientAssociation :exec
 INSERT INTO mcp_server_remote_session_clients
   (id, project_id, organization_id, mcp_server_id, remote_session_client_id,
@@ -1571,6 +1698,23 @@ func (q *Queries) ServersInsertValidatedSession(ctx context.Context, arg Servers
 		arg.HoursAgo,
 		arg.DaysAgo,
 	)
+	return err
+}
+
+const serversMarkRequiresUpstreamAuth = `-- name: ServersMarkRequiresUpstreamAuth :exec
+UPDATE mcp_servers
+SET requires_upstream_auth = TRUE
+WHERE project_id = $1::uuid
+  AND id = ANY($2::uuid[])
+`
+
+type ServersMarkRequiresUpstreamAuthParams struct {
+	ProjectID uuid.UUID
+	Ids       []uuid.UUID
+}
+
+func (q *Queries) ServersMarkRequiresUpstreamAuth(ctx context.Context, arg ServersMarkRequiresUpstreamAuthParams) error {
+	_, err := q.db.Exec(ctx, serversMarkRequiresUpstreamAuth, arg.ProjectID, arg.Ids)
 	return err
 }
 

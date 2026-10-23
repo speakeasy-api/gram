@@ -1979,6 +1979,8 @@ type DescribeMcpServerHealthResponseBody struct {
 	// issuer.
 	LegacyAuth        *string                                            `form:"legacy_auth,omitempty" json:"legacy_auth,omitempty" xml:"legacy_auth,omitempty"`
 	UserSessionIssuer *AdminMcpServerHealthUserSessionIssuerResponseBody `form:"user_session_issuer,omitempty" json:"user_session_issuer,omitempty" xml:"user_session_issuer,omitempty"`
+	// How the server reaches its upstream. Omitted for toolset-only servers.
+	UpstreamAuth *AdminMcpServerHealthUpstreamAuthResponseBody `form:"upstream_auth,omitempty" json:"upstream_auth,omitempty" xml:"upstream_auth,omitempty"`
 }
 
 // GetMcpServerToolCallsResponseBody is the type of the "admin" service
@@ -21886,6 +21888,37 @@ type AdminMcpServerHealthRemoteSessionsResponseBody struct {
 	ValidationStatusCounts map[string]int64 `form:"validation_status_counts" json:"validation_status_counts" xml:"validation_status_counts"`
 }
 
+// AdminMcpServerHealthUpstreamAuthResponseBody is used to define fields on
+// response body types.
+type AdminMcpServerHealthUpstreamAuthResponseBody struct {
+	// configured, setup_incomplete (required with no enabled client),
+	// no_auth_required or undecided.
+	Status string `form:"status" json:"status" xml:"status"`
+	// Whether the upstream needs authentication. Omitted while undecided.
+	RequiresUpstreamAuth *bool                                         `form:"requires_upstream_auth,omitempty" json:"requires_upstream_auth,omitempty" xml:"requires_upstream_auth,omitempty"`
+	AuthClients          []*AdminMcpServerHealthAuthClientResponseBody `form:"auth_clients" json:"auth_clients" xml:"auth_clients"`
+}
+
+// AdminMcpServerHealthAuthClientResponseBody is used to define fields on
+// response body types.
+type AdminMcpServerHealthAuthClientResponseBody struct {
+	// Auth client id.
+	ID string `form:"id" json:"id" xml:"id"`
+	// How the client authenticates upstream.
+	ClientType string `form:"client_type" json:"client_type" xml:"client_type"`
+	// backfill when created from existing configuration, admin when an
+	// administrator created it.
+	Source string `form:"source" json:"source" xml:"source"`
+	// Whether the client can be used.
+	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
+	// The OAuth registration behind an OAuth-backed client.
+	RemoteSessionClientID *string `form:"remote_session_client_id,omitempty" json:"remote_session_client_id,omitempty" xml:"remote_session_client_id,omitempty"`
+	// Servers offering the client, this one included.
+	ServerCount int `form:"server_count" json:"server_count" xml:"server_count"`
+	// Headers the client sends upstream.
+	HeaderCount int `form:"header_count" json:"header_count" xml:"header_count"`
+}
+
 // AdminMcpServerToolCallOutcomesResponseBody is used to define fields on
 // response body types.
 type AdminMcpServerToolCallOutcomesResponseBody struct {
@@ -23989,6 +24022,9 @@ func NewDescribeMcpServerHealthResponseBody(res *admin.AdminMcpServerHealth) *De
 	}
 	if res.UserSessionIssuer != nil {
 		body.UserSessionIssuer = marshalAdminAdminMcpServerHealthUserSessionIssuerToAdminMcpServerHealthUserSessionIssuerResponseBody(res.UserSessionIssuer)
+	}
+	if res.UpstreamAuth != nil {
+		body.UpstreamAuth = marshalAdminAdminMcpServerHealthUpstreamAuthToAdminMcpServerHealthUpstreamAuthResponseBody(res.UpstreamAuth)
 	}
 	return body
 }

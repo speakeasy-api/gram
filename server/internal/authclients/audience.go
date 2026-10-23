@@ -6,13 +6,13 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"log/slog"
 	"slices"
 	"sort"
 	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	gen "github.com/speakeasy-api/gram/server/gen/auth_clients"
 	"github.com/speakeasy-api/gram/server/gen/types"
@@ -69,7 +69,11 @@ func (s *Service) GetAuthClientAudience(ctx context.Context, payload *gen.GetAut
 		return nil, oops.E(oops.CodeUnexpected, err, "get auth client").LogError(ctx, logger)
 	}
 
-	return s.audience(ctx, s.db, client, logger)
+	view, err := readAudience(ctx, s.db, client)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "read auth client audience").LogError(ctx, logger)
+	}
+	return view, nil
 }
 
 func (s *Service) SetAuthClientAudience(ctx context.Context, payload *gen.SetAuthClientAudiencePayload) (*types.AuthClientAudience, error) {
@@ -83,11 +87,7 @@ func (s *Service) SetAuthClientAudience(ctx context.Context, payload *gen.SetAut
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid auth client id").LogError(ctx, logger)
 	}
 
-	type wanted struct {
-		principal urn.Principal
-		level     string
-	}
-	desired := make(map[string]wanted, len(payload.Entries))
+	desired := make(map[string]audienceRule, len(payload.Entries))
 	for _, entry := range payload.Entries {
 		if entry == nil {
 			continue
@@ -110,39 +110,132 @@ func (s *Service) SetAuthClientAudience(ctx context.Context, payload *gen.SetAut
 			}
 			return nil, oops.E(oops.CodeUnexpected, err, "validate principal").LogError(ctx, logger)
 		}
-		desired[key] = wanted{principal: principal, level: entry.Level}
+		desired[key] = audienceRule{principal: principal, level: entry.Level}
 	}
 
-	dbtx, err := s.db.Begin(ctx)
+	after, err := saveAudience(ctx, s.db, s.audit, audienceSave{
+		OrganizationID:   authCtx.ActiveOrganizationID,
+		ClientID:         clientID,
+		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName: authCtx.Email,
+		ExpectedVersion:  &payload.ExpectedVersion,
+		Desired: func([]authz.Grant) map[string]audienceRule {
+			return desired
+		},
+	})
+	switch {
+	case errors.Is(err, ErrAuthClientNotFound):
+		return nil, oops.E(oops.CodeNotFound, err, "auth client not found").LogError(ctx, logger)
+	case errors.Is(err, ErrAudienceChanged):
+		return nil, oops.E(oops.CodeFailedPrecondition, nil, "who may use this auth client changed while you were editing; reload and try again")
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "save auth client audience").LogError(ctx, logger)
+	}
+	return after, nil
+}
+
+var (
+	ErrAuthClientNotFound = errors.New("auth client not found")
+	ErrAudienceChanged    = errors.New("auth client audience changed")
+	ErrPrincipalInvalid   = errors.New("principal cannot hold auth client rules")
+)
+
+type audienceRule struct {
+	principal urn.Principal
+	level     string
+}
+
+type audienceSave struct {
+	OrganizationID   string
+	ClientID         uuid.UUID
+	Actor            urn.Principal
+	ActorDisplayName *string
+	// ExpectedVersion, when set, refuses the save unless the client's own
+	// rules are unchanged since the caller read them.
+	ExpectedVersion *string
+	// Desired computes the client's complete set of own rules, keyed by
+	// ruleKey, from the grants currently held under the client row lock.
+	Desired func(current []authz.Grant) map[string]audienceRule
+}
+
+// SetPrincipalLevel sets one principal's own rule on one auth client to
+// LevelUse, LevelBlocked, or, when level is empty, no rule, and keeps every
+// other principal's rules. It writes the same audit event as a full save.
+func SetPrincipalLevel(ctx context.Context, db *pgxpool.Pool, auditLogger *audit.Logger, organizationID string, actor urn.Principal, clientID uuid.UUID, principal urn.Principal, level string) (*types.AuthClientAudience, error) {
+	if _, ok := levelScopes[level]; !ok && level != "" {
+		return nil, fmt.Errorf("unknown level %q", level)
+	}
+	if _, err := parseAudiencePrincipal(principal.String()); err != nil {
+		return nil, errors.Join(ErrPrincipalInvalid, err)
+	}
+	if err := authz.ValidatePrincipal(ctx, db, organizationID, principal); err != nil {
+		if errors.Is(err, authz.ErrPrincipalInvalid) || errors.Is(err, authz.ErrPrincipalNotFound) {
+			return nil, errors.Join(ErrPrincipalInvalid, err)
+		}
+		return nil, fmt.Errorf("validate principal: %w", err)
+	}
+	return saveAudience(ctx, db, auditLogger, audienceSave{
+		OrganizationID:   organizationID,
+		ClientID:         clientID,
+		Actor:            actor,
+		ActorDisplayName: nil,
+		ExpectedVersion:  nil,
+		Desired: func(current []authz.Grant) map[string]audienceRule {
+			desired := make(map[string]audienceRule, len(current)+1)
+			for _, grant := range current {
+				if grant.PrincipalUrn == principal.String() {
+					continue
+				}
+				held, err := urn.ParsePrincipal(grant.PrincipalUrn)
+				if err != nil {
+					continue
+				}
+				grantLevel := LevelUse
+				if grant.Scope == authz.ScopeMCPBlockedAuth {
+					grantLevel = LevelBlocked
+				}
+				desired[ruleKey(grant.PrincipalUrn, grant.Scope)] = audienceRule{principal: held, level: grantLevel}
+			}
+			if level != "" {
+				desired[ruleKey(principal.String(), levelScopes[level])] = audienceRule{principal: principal, level: level}
+			}
+			return desired
+		},
+	})
+}
+
+func saveAudience(ctx context.Context, db *pgxpool.Pool, auditLogger *audit.Logger, save audienceSave) (*types.AuthClientAudience, error) {
+	dbtx, err := db.Begin(ctx)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
+		return nil, fmt.Errorf("begin transaction: %w", err)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
 	queries := repo.New(dbtx)
 	// The client row lock serializes saves, so the version check and the
 	// replacement are one step.
-	client, err := queries.LockAuthClient(ctx, repo.LockAuthClientParams{ID: clientID, OrganizationID: authCtx.ActiveOrganizationID})
+	client, err := queries.LockAuthClient(ctx, repo.LockAuthClientParams{ID: save.ClientID, OrganizationID: save.OrganizationID})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrAuthClientNotFound
+	}
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, oops.E(oops.CodeNotFound, err, "auth client not found").LogError(ctx, logger)
-		}
-		return nil, oops.E(oops.CodeUnexpected, err, "lock auth client").LogError(ctx, logger)
+		return nil, fmt.Errorf("lock auth client: %w", err)
 	}
 
-	current, err := clientGrants(ctx, dbtx, authCtx.ActiveOrganizationID, clientID.String())
+	current, err := clientGrants(ctx, dbtx, save.OrganizationID, save.ClientID.String())
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list auth client grants").LogError(ctx, logger)
+		return nil, fmt.Errorf("list auth client grants: %w", err)
 	}
-	if audienceVersion(current) != payload.ExpectedVersion {
-		return nil, oops.E(oops.CodeFailedPrecondition, nil, "who may use this auth client changed while you were editing; reload and try again")
+	if save.ExpectedVersion != nil && audienceVersion(current) != *save.ExpectedVersion {
+		return nil, ErrAudienceChanged
 	}
 
-	before, err := s.audience(ctx, dbtx, client, logger)
+	before, err := readAudience(ctx, dbtx, client)
 	if err != nil {
 		return nil, err
 	}
 
+	desired := save.Desired(current)
 	// A rule kept as it is keeps the grants that express it, whatever their
 	// selector, so saving never takes over a provisioned grant nobody touched.
 	held := make(map[string]struct{}, len(current))
@@ -154,14 +247,14 @@ func (s *Service) SetAuthClientAudience(ctx context.Context, payload *gen.SetAut
 		}
 		principal, err := urn.ParsePrincipal(grant.PrincipalUrn)
 		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "parse grant principal").LogError(ctx, logger)
+			return nil, fmt.Errorf("parse grant principal: %w", err)
 		}
 		remove := []*authz.RoleGrant{{Scope: string(grant.Scope), Selectors: []authz.Selector{grant.Selector}}}
-		if err := authz.PatchPrincipalGrants(ctx, dbtx, authCtx.ActiveOrganizationID, principal, nil, remove); err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "remove auth client grant").LogError(ctx, logger)
+		if err := authz.PatchPrincipalGrants(ctx, dbtx, save.OrganizationID, principal, nil, remove); err != nil {
+			return nil, fmt.Errorf("remove auth client grant: %w", err)
 		}
-		if err := takeOver(ctx, dbtx, authCtx.ActiveOrganizationID, grant.PrincipalUrn, grant.Scope, grant.Selector); err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "take over removed auth client grant").LogError(ctx, logger)
+		if err := takeOver(ctx, dbtx, save.OrganizationID, grant.PrincipalUrn, grant.Scope, grant.Selector); err != nil {
+			return nil, fmt.Errorf("take over removed auth client grant: %w", err)
 		}
 	}
 
@@ -177,35 +270,35 @@ func (s *Service) SetAuthClientAudience(ctx context.Context, payload *gen.SetAut
 		scope := levelScopes[rule.level]
 		selector := ruleSelector(client, scope)
 		add := []*authz.RoleGrant{{Scope: string(scope), Selectors: []authz.Selector{selector}}}
-		if err := authz.PatchPrincipalGrants(ctx, dbtx, authCtx.ActiveOrganizationID, rule.principal, add, nil); err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "write auth client grant").LogError(ctx, logger)
+		if err := authz.PatchPrincipalGrants(ctx, dbtx, save.OrganizationID, rule.principal, add, nil); err != nil {
+			return nil, fmt.Errorf("write auth client grant: %w", err)
 		}
-		if err := takeOver(ctx, dbtx, authCtx.ActiveOrganizationID, rule.principal.String(), scope, selector); err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "take over auth client grant").LogError(ctx, logger)
+		if err := takeOver(ctx, dbtx, save.OrganizationID, rule.principal.String(), scope, selector); err != nil {
+			return nil, fmt.Errorf("take over auth client grant: %w", err)
 		}
 	}
 
-	after, err := s.audience(ctx, dbtx, client, logger)
+	after, err := readAudience(ctx, dbtx, client)
 	if err != nil {
 		return nil, err
 	}
 
-	if err := s.audit.LogAuthClientAudienceUpdate(ctx, dbtx, audit.LogAuthClientAudienceUpdateEvent{
-		OrganizationID:         authCtx.ActiveOrganizationID,
+	if err := auditLogger.LogAuthClientAudienceUpdate(ctx, dbtx, audit.LogAuthClientAudienceUpdateEvent{
+		OrganizationID:         save.OrganizationID,
 		ProjectID:              client.ProjectID.UUID,
-		Actor:                  urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
-		ActorDisplayName:       authCtx.Email,
+		Actor:                  save.Actor,
+		ActorDisplayName:       save.ActorDisplayName,
 		ActorSlug:              nil,
 		AuthClientURN:          urn.NewAuthClient(client.ID),
 		AuthClientName:         client.Name,
 		AudienceSnapshotBefore: before,
 		AudienceSnapshotAfter:  after,
 	}); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "log auth client audience update").LogError(ctx, logger)
+		return nil, fmt.Errorf("log auth client audience update: %w", err)
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
+		return nil, fmt.Errorf("commit transaction: %w", err)
 	}
 
 	return after, nil
@@ -223,18 +316,18 @@ func ruleSelector(client repo.McpAuthClient, scope authz.Scope) authz.Selector {
 	return selector
 }
 
-func (s *Service) audience(ctx context.Context, db repo.DBTX, client repo.McpAuthClient, logger *slog.Logger) (*types.AuthClientAudience, error) {
+func readAudience(ctx context.Context, db repo.DBTX, client repo.McpAuthClient) (*types.AuthClientAudience, error) {
 	own, err := clientGrants(ctx, db, client.OrganizationID, client.ID.String())
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list auth client grants").LogError(ctx, logger)
+		return nil, fmt.Errorf("list auth client grants: %w", err)
 	}
 	broad, err := clientGrants(ctx, db, client.OrganizationID, authz.WildcardResource)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list broad auth client grants").LogError(ctx, logger)
+		return nil, fmt.Errorf("list broad auth client grants: %w", err)
 	}
 	servers, err := repo.New(db).ListAuthClientServers(ctx, repo.ListAuthClientServersParams{OrganizationID: client.OrganizationID, AuthClientIds: []uuid.UUID{client.ID}})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list auth client servers").LogError(ctx, logger)
+		return nil, fmt.Errorf("list auth client servers: %w", err)
 	}
 
 	personal := client.ClientType == authz.AuthClientTypeRemoteSession
