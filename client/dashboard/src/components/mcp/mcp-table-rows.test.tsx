@@ -20,7 +20,6 @@ const { resolveEndpoints } = vi.hoisted(() => ({
 }));
 
 vi.mock("@/hooks/useToolsetUrl", () => ({
-  useMcpUrl: () => ({ url: undefined }),
   useResolvedMcpServerUrl: resolveEndpoints,
 }));
 

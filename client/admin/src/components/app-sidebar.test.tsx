@@ -229,6 +229,10 @@ describe("AppSidebar", () => {
           { label: "Use Cases & Playbooks", href: "/onboarding-playbooks" },
           { label: "Remote Session Issuers", href: "/remote-session-issuers" },
           {
+            label: "Upstream OAuth migration",
+            href: "/upstream-oauth-migration",
+          },
+          {
             label: "External MCP migration",
             href: "/external-mcp-migration",
           },

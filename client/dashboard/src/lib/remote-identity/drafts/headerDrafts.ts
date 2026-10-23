@@ -61,9 +61,10 @@ export function headerDraftFromServer(
 }
 
 // Inbound headers a pass-through row may not read from; mirrors the proxy.
-// Authorization is deliberately absent: forwarding the caller's own upstream
-// credential is what pass-through identity is for.
+// Authorization may carry the caller's Speakeasy credential, so an upstream
+// credential must arrive in a header of its own.
 const DENIED_PASS_THROUGH_SOURCES = new Set([
+  "authorization",
   "cookie",
   "set-cookie",
   "proxy-authorization",
@@ -161,7 +162,7 @@ export function headerDraftErrors(
         continue;
       }
       // Mirrors the proxy, which is the control that actually holds: these
-      // carry the dashboard's own session rather than anything meant for the
+      // carry Speakeasy's own credentials rather than anything meant for the
       // upstream. Checked here so the refusal arrives while editing instead of
       // as a failed request later.
       if (DENIED_PASS_THROUGH_SOURCES.has(source.toLowerCase())) {

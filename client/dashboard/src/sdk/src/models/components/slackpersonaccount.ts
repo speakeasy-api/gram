@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
@@ -24,7 +25,7 @@ export const SlackPersonAccountDirectoryStatus = {
 /**
  * Freshness of the workspace snapshot, independent of mapping state.
  */
-export type SlackPersonAccountDirectoryStatus = ClosedEnum<
+export type SlackPersonAccountDirectoryStatus = OpenEnum<
   typeof SlackPersonAccountDirectoryStatus
 >;
 
@@ -44,9 +45,10 @@ export type SlackPersonAccount = {
 };
 
 /** @internal */
-export const SlackPersonAccountDirectoryStatus$inboundSchema: z.ZodMiniEnum<
-  typeof SlackPersonAccountDirectoryStatus
-> = z.enum(SlackPersonAccountDirectoryStatus);
+export const SlackPersonAccountDirectoryStatus$inboundSchema: z.ZodMiniType<
+  SlackPersonAccountDirectoryStatus,
+  unknown
+> = openEnums.inboundSchema(SlackPersonAccountDirectoryStatus);
 
 /** @internal */
 export const SlackPersonAccount$inboundSchema: z.ZodMiniType<

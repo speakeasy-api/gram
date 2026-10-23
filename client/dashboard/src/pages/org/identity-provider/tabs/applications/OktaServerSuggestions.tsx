@@ -1,3 +1,4 @@
+import { enumPresentation } from "@/lib/enum";
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -222,7 +223,10 @@ function SuggestionCard({
   onDismiss: () => void;
   onRestore: () => void;
 }): JSX.Element {
-  const badge = STATE_BADGE[suggestion.state];
+  const badge = enumPresentation(STATE_BADGE, suggestion.state, {
+    variant: "neutral",
+    label: "Unknown",
+  });
   const installable = isSuggestionInstallable(suggestion);
   const name = suggestion.title ?? suggestion.serverName;
   const apps = primaryFirst(

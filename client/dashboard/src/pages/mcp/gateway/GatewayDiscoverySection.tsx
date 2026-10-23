@@ -1,3 +1,5 @@
+import { isKnownEnumValue } from "@/lib/enum";
+import { UpdateMetaMcpServerFormDiscoveryMode } from "@gram/client/models/components/updatemetamcpserverform.js";
 import { RequireScope } from "@/components/require-scope";
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -29,6 +31,14 @@ export function GatewayDiscoverySection({
   const { hasScope } = useRBAC();
   const canWrite = hasScope("mcp:write", metaMcpServer.projectId);
   const [mode, setMode] = useState(metaMcpServer.discoveryMode);
+  const supportsEditing = isKnownEnumValue(
+    UpdateMetaMcpServerFormDiscoveryMode,
+    metaMcpServer.discoveryMode,
+  );
+  const knownDraft = isKnownEnumValue(
+    UpdateMetaMcpServerFormDiscoveryMode,
+    mode,
+  );
   const queryClient = useQueryClient();
   const update = useUpdateMetaMcpServerMutation({
     onSuccess: async () => {
@@ -61,15 +71,20 @@ export function GatewayDiscoverySection({
               Default mode
             </FieldLabel>
             <Select
-              value={mode}
+              value={supportsEditing && knownDraft ? mode : ""}
               onValueChange={(value) => {
-                if (value === "direct" || value === "progressive")
+                if (
+                  canWrite &&
+                  supportsEditing &&
+                  !update.isPending &&
+                  isKnownEnumValue(UpdateMetaMcpServerFormDiscoveryMode, value)
+                )
                   setMode(value);
               }}
-              disabled={!canWrite || update.isPending}
+              disabled={!canWrite || !supportsEditing || update.isPending}
             >
               <SelectTrigger id="gateway-discovery-mode">
-                <SelectValue />
+                <SelectValue placeholder="Unknown mode" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="progressive">Progressive</SelectItem>
@@ -81,8 +96,9 @@ export function GatewayDiscoverySection({
         </SettingsSection.Body>
         <SettingsSection.Footer>
           <SettingsSection.FooterHint>
-            Applies to connections using the gateway default. Clients may need
-            to reconnect to refresh their tool list.
+            {supportsEditing
+              ? "Applies to connections using the gateway default. Clients may need to reconnect to refresh their tool list."
+              : "Refresh the page before changing this gateway’s unsupported discovery mode."}
           </SettingsSection.FooterHint>
           <SettingsSection.FooterActions>
             <RequireScope
@@ -94,10 +110,22 @@ export function GatewayDiscoverySection({
                 pending={update.isPending}
                 disabled={
                   !canWrite ||
+                  !supportsEditing ||
+                  !knownDraft ||
                   mode === metaMcpServer.discoveryMode ||
                   update.isPending
                 }
-                onClick={() =>
+                onClick={() => {
+                  if (
+                    !canWrite ||
+                    !supportsEditing ||
+                    update.isPending ||
+                    !isKnownEnumValue(
+                      UpdateMetaMcpServerFormDiscoveryMode,
+                      mode,
+                    )
+                  )
+                    return;
                   update.mutate({
                     request: {
                       updateMetaMcpServerForm: {
@@ -106,8 +134,8 @@ export function GatewayDiscoverySection({
                         discoveryMode: mode,
                       },
                     },
-                  })
-                }
+                  });
+                }}
               />
             </RequireScope>
           </SettingsSection.FooterActions>

@@ -21,6 +21,7 @@ import (
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
@@ -40,14 +41,25 @@ func createCanonicalWrapper(t *testing.T, ctx context.Context, ti *testInstance,
 	}
 }
 
-func addToolsetKeyedEntry(t *testing.T, ctx context.Context, ti *testInstance, pluginID string, toolsetID uuid.UUID, name string) pluginsrepo.PluginServer {
+// addToolsetKeyedEntry plants an entry under the toolset key, as pods before the server-key writers wrote.
+func addToolsetKeyedEntry(t *testing.T, ctx context.Context, ti *testInstance, pluginID string, toolsetID uuid.UUID, name string) testrepo.PluginServer {
 	t.Helper()
-	row, err := pluginsrepo.New(ti.conn).AddPluginServer(ctx, pluginsrepo.AddPluginServerParams{
+	row, err := testrepo.New(ti.conn).InsertToolsetKeyedPluginServerFixture(ctx, testrepo.InsertToolsetKeyedPluginServerFixtureParams{
 		PluginID: uuid.MustParse(pluginID), ToolsetID: uuid.NullUUID{UUID: toolsetID, Valid: true},
-		McpServerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, DisplayName: name, Policy: "required", SortOrder: 0,
+		DisplayName: name, Policy: "required", SortOrder: 0, DeletedAt: pgtype.Timestamptz{Valid: false},
 	})
 	require.NoError(t, err)
 	return row
+}
+
+// addToolsetKeyedMetadata plants install page metadata under the toolset key.
+func addToolsetKeyedMetadata(t *testing.T, ctx context.Context, ti *testInstance, toolset toolsetsrepo.Toolset) uuid.UUID {
+	t.Helper()
+	id, err := testrepo.New(ti.conn).InsertToolsetKeyedMcpMetadataFixture(ctx, testrepo.InsertToolsetKeyedMcpMetadataFixtureParams{
+		ToolsetID: uuid.NullUUID{UUID: toolset.ID, Valid: true}, ProjectID: toolset.ProjectID, Instructions: pgtype.Text{Valid: false}, HeaderDisplayNames: []byte("{}"),
+	})
+	require.NoError(t, err)
+	return id
 }
 
 var manifestVersion = regexp.MustCompile(`\b1\d{12}\b`)
@@ -69,7 +81,7 @@ func TestPluginsService_PublishPlugins_HostedEntryIdenticalAfterRekey(t *testing
 	ac, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 
-	toolset := createTestToolset(t, ctx, ti.conn, "rekeyed")
+	toolset := createUnwrappedTestToolset(t, ctx, ti.conn, "rekeyed")
 	require.NoError(t, toolsetsrepo.New(ti.conn).SetToolsetMCPPublicByID(ctx, toolsetsrepo.SetToolsetMCPPublicByIDParams{McpIsPublic: true, ID: toolset.ID, ProjectID: toolset.ProjectID}))
 	domain, err := customdomainsrepo.New(ti.conn).CreateCustomDomain(ctx, customdomainsrepo.CreateCustomDomainParams{
 		OrganizationID: ac.ActiveOrganizationID, Domain: "hosted-" + uuid.NewString()[:8] + ".example.test", ProvisionerKind: "ingress", IpAllowlist: []string{},
@@ -83,15 +95,9 @@ func TestPluginsService_PublishPlugins_HostedEntryIdenticalAfterRekey(t *testing
 	require.NoError(t, err)
 	createCanonicalWrapper(t, ctx, ti, toolset, "public", uuid.NullUUID{UUID: domain.ID, Valid: true}, toolset.McpSlug.String)
 
-	metadata, err := mcpmetarepo.New(ti.conn).UpsertMetadata(ctx, mcpmetarepo.UpsertMetadataParams{
-		ToolsetID: uuid.NullUUID{UUID: toolset.ID, Valid: true}, ProjectID: *ac.ProjectID,
-		ExternalDocumentationUrl: pgtype.Text{Valid: false}, ExternalDocumentationText: pgtype.Text{Valid: false},
-		LogoID: uuid.NullUUID{Valid: false}, Instructions: pgtype.Text{Valid: false}, DefaultEnvironmentID: uuid.NullUUID{Valid: false},
-		InstallationOverrideUrl: pgtype.Text{Valid: false},
-	})
-	require.NoError(t, err)
+	metadata := addToolsetKeyedMetadata(t, ctx, ti, toolset)
 	_, err = mcpmetarepo.New(ti.conn).UpsertEnvironmentConfig(ctx, mcpmetarepo.UpsertEnvironmentConfigParams{
-		ProjectID: *ac.ProjectID, McpMetadataID: metadata.ID, VariableName: "HOSTED_API_KEY",
+		ProjectID: *ac.ProjectID, McpMetadataID: metadata, VariableName: "HOSTED_API_KEY",
 		HeaderDisplayName: pgtype.Text{String: "Authorization", Valid: true}, ProvidedBy: "user",
 	})
 	require.NoError(t, err)
@@ -116,7 +122,7 @@ func TestPluginsService_PublishPlugins_HostedEntryIdenticalAfterRekey(t *testing
 	_, err = ti.conn.Exec(ctx, `UPDATE plugin_servers SET toolset_id = NULL, mcp_server_id = $1 WHERE id = $2`, toolset.ID, entry.ID)
 	require.NoError(t, err)
 	//nolint:glint // notestingrawsql: mirrors the dependent move, which re-keys rows in place.
-	_, err = ti.conn.Exec(ctx, `UPDATE mcp_metadata SET toolset_id = NULL, mcp_server_id = $1 WHERE id = $2`, toolset.ID, metadata.ID)
+	_, err = ti.conn.Exec(ctx, `UPDATE mcp_metadata SET toolset_id = NULL, mcp_server_id = $1 WHERE id = $2`, toolset.ID, metadata)
 	require.NoError(t, err)
 
 	_, err = ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
@@ -129,7 +135,7 @@ func TestPluginsService_PublishPlugins_HostedEntryPublishesPrimaryEndpoint(t *te
 	mock := &mockGitHubPublisher{}
 	ctx, ti := newTestPluginsServiceWithGitHub(t, mock)
 
-	toolset := createTestToolset(t, ctx, ti.conn, "primary")
+	toolset := createUnwrappedTestToolset(t, ctx, ti.conn, "primary")
 	createCanonicalWrapper(t, ctx, ti, toolset, "private", uuid.NullUUID{UUID: uuid.Nil, Valid: false}, toolset.McpSlug.String, toolset.McpSlug.String+"-second")
 	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Primary"})
 	require.NoError(t, err)
@@ -153,7 +159,7 @@ func TestPluginsService_PublishPlugins_EndpointlessHostedEntryKeepsToolsetAddres
 	mock := &mockGitHubPublisher{}
 	ctx, ti := newTestPluginsServiceWithGitHub(t, mock)
 
-	toolset := createTestToolset(t, ctx, ti.conn, "endpointless")
+	toolset := createUnwrappedTestToolset(t, ctx, ti.conn, "endpointless")
 	require.NoError(t, toolsetsrepo.New(ti.conn).SetToolsetMCPPublicByID(ctx, toolsetsrepo.SetToolsetMCPPublicByIDParams{McpIsPublic: true, ID: toolset.ID, ProjectID: toolset.ProjectID}))
 	createCanonicalWrapper(t, ctx, ti, toolset, "public", uuid.NullUUID{UUID: uuid.Nil, Valid: false})
 	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Endpointless"})
@@ -175,7 +181,7 @@ func TestPluginsService_PublishPlugins_EndpointlessHostedEntryKeepsToolsetAddres
 
 func TestPluginsService_AddPluginServer_RejectsTwinsUnderEitherKey(t *testing.T) {
 	t.Parallel()
-	ctx, ti := newServerKeyPluginsService(t)
+	ctx, ti := newTestPluginsService(t)
 
 	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Keys"})
 	require.NoError(t, err)
@@ -186,7 +192,7 @@ func TestPluginsService_AddPluginServer_RejectsTwinsUnderEitherKey(t *testing.T)
 		require.Equal(t, oops.CodeConflict, shareable.Code)
 	}
 
-	byToolset := createTestToolset(t, ctx, ti.conn, "by-toolset")
+	byToolset := createUnwrappedTestToolset(t, ctx, ti.conn, "by-toolset")
 	createCanonicalWrapper(t, ctx, ti, byToolset, "private", uuid.NullUUID{UUID: uuid.Nil, Valid: false}, byToolset.McpSlug.String)
 	added, err := ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{PluginID: plugin.ID, ToolsetID: conv.PtrEmpty(byToolset.ID.String()), Policy: "required"})
 	require.NoError(t, err)
@@ -200,14 +206,14 @@ func TestPluginsService_AddPluginServer_RejectsTwinsUnderEitherKey(t *testing.T)
 	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{PluginID: plugin.ID, McpServerID: conv.PtrEmpty(byToolset.ID.String()), DisplayName: conv.PtrEmpty("Twin"), Policy: "required"})
 	requireConflict(err)
 
-	byServer := createTestToolset(t, ctx, ti.conn, "by-server")
+	byServer := createUnwrappedTestToolset(t, ctx, ti.conn, "by-server")
 	createCanonicalWrapper(t, ctx, ti, byServer, "private", uuid.NullUUID{UUID: uuid.Nil, Valid: false}, byServer.McpSlug.String)
 	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{PluginID: plugin.ID, McpServerID: conv.PtrEmpty(byServer.ID.String()), Policy: "required"})
 	require.NoError(t, err)
 	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{PluginID: plugin.ID, ToolsetID: conv.PtrEmpty(byServer.ID.String()), DisplayName: conv.PtrEmpty("Twin 2"), Policy: "required"})
 	requireConflict(err)
 
-	legacy := createTestToolset(t, ctx, ti.conn, "by-legacy")
+	legacy := createUnwrappedTestToolset(t, ctx, ti.conn, "by-legacy")
 	addToolsetKeyedEntry(t, ctx, ti, plugin.ID, legacy.ID, "Legacy")
 	createCanonicalWrapper(t, ctx, ti, legacy, "private", uuid.NullUUID{UUID: uuid.Nil, Valid: false}, legacy.McpSlug.String)
 	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{PluginID: plugin.ID, ToolsetID: conv.PtrEmpty(legacy.ID.String()), DisplayName: conv.PtrEmpty("Twin 3"), Policy: "required"})
@@ -215,15 +221,14 @@ func TestPluginsService_AddPluginServer_RejectsTwinsUnderEitherKey(t *testing.T)
 	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{PluginID: plugin.ID, McpServerID: conv.PtrEmpty(legacy.ID.String()), DisplayName: conv.PtrEmpty("Twin 4"), Policy: "required"})
 	requireConflict(err)
 
-	unwrapped := createTestToolset(t, ctx, ti.conn, "unwrapped")
-	added, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{PluginID: plugin.ID, ToolsetID: conv.PtrEmpty(unwrapped.ID.String()), Policy: "required"})
-	require.NoError(t, err)
-	require.NotNil(t, added.ToolsetID, "a toolset without a canonical server keeps the toolset key")
-	require.Equal(t, unwrapped.ID.String(), *added.ToolsetID)
-	require.Nil(t, added.McpServerID)
+	unwrapped := createUnwrappedTestToolset(t, ctx, ti.conn, "unwrapped")
+	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{PluginID: plugin.ID, ToolsetID: conv.PtrEmpty(unwrapped.ID.String()), Policy: "required"})
+	var shareable *oops.ShareableError
+	require.ErrorAs(t, err, &shareable)
+	require.Equal(t, oops.CodeBadRequest, shareable.Code, "a toolset without an MCP server cannot be added")
 
-	// A canonical server disabled out of sync with its toolset would drop the entry from packages; keep the toolset key.
-	drifted := createTestToolset(t, ctx, ti.conn, "drifted")
+	// A canonical server disabled out of sync with its toolset still keys the entry.
+	drifted := createUnwrappedTestToolset(t, ctx, ti.conn, "drifted")
 	createCanonicalWrapper(t, ctx, ti, drifted, "disabled", uuid.NullUUID{UUID: uuid.Nil, Valid: false})
 	added, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{PluginID: plugin.ID, ToolsetID: conv.PtrEmpty(drifted.ID.String()), Policy: "required"})
 	require.NoError(t, err)
@@ -231,7 +236,8 @@ func TestPluginsService_AddPluginServer_RejectsTwinsUnderEitherKey(t *testing.T)
 	require.NoError(t, err)
 	idx := slices.IndexFunc(stored, func(row pluginsrepo.PluginServer) bool { return row.ID.String() == added.ID })
 	require.GreaterOrEqual(t, idx, 0)
-	require.Equal(t, uuid.NullUUID{UUID: drifted.ID, Valid: true}, stored[idx].ToolsetID)
+	require.Equal(t, uuid.NullUUID{UUID: drifted.ID, Valid: true}, stored[idx].McpServerID)
+	require.False(t, stored[idx].ToolsetID.Valid)
 	require.Equal(t, new(drifted.ID.String()), added.ToolsetID)
 	require.Equal(t, new(drifted.ID.String()), added.McpServerID)
 }
@@ -244,18 +250,12 @@ func TestPluginsService_PublishPlugins_HostedEntryIgnoresMetadataTwin(t *testing
 	ac, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 
-	toolset := createTestToolset(t, ctx, ti.conn, "metadata-twin")
+	toolset := createUnwrappedTestToolset(t, ctx, ti.conn, "metadata-twin")
 	require.NoError(t, toolsetsrepo.New(ti.conn).SetToolsetMCPPublicByID(ctx, toolsetsrepo.SetToolsetMCPPublicByIDParams{McpIsPublic: true, ID: toolset.ID, ProjectID: toolset.ProjectID}))
 	createCanonicalWrapper(t, ctx, ti, toolset, "public", uuid.NullUUID{UUID: uuid.Nil, Valid: false}, toolset.McpSlug.String)
 
 	meta := mcpmetarepo.New(ti.conn)
-	owned, err := meta.UpsertMetadata(ctx, mcpmetarepo.UpsertMetadataParams{
-		ToolsetID: uuid.NullUUID{UUID: toolset.ID, Valid: true}, ProjectID: *ac.ProjectID,
-		ExternalDocumentationUrl: pgtype.Text{Valid: false}, ExternalDocumentationText: pgtype.Text{Valid: false},
-		LogoID: uuid.NullUUID{Valid: false}, Instructions: pgtype.Text{Valid: false}, DefaultEnvironmentID: uuid.NullUUID{Valid: false},
-		InstallationOverrideUrl: pgtype.Text{Valid: false},
-	})
-	require.NoError(t, err)
+	owned := addToolsetKeyedMetadata(t, ctx, ti, toolset)
 	twin, err := meta.UpsertMetadataByMcpServerID(ctx, mcpmetarepo.UpsertMetadataByMcpServerIDParams{
 		McpServerID: uuid.NullUUID{UUID: toolset.ID, Valid: true}, ProjectID: *ac.ProjectID,
 		ExternalDocumentationUrl: pgtype.Text{Valid: false}, ExternalDocumentationText: pgtype.Text{Valid: false},
@@ -267,7 +267,7 @@ func TestPluginsService_PublishPlugins_HostedEntryIgnoresMetadataTwin(t *testing
 		metadataID uuid.UUID
 		variable   string
 		header     string
-	}{{owned.ID, "OWNED_KEY", "X-Owned"}, {twin.ID, "TWIN_KEY", "X-Twin"}} {
+	}{{owned, "OWNED_KEY", "X-Owned"}, {twin.ID, "TWIN_KEY", "X-Twin"}} {
 		_, err = meta.UpsertEnvironmentConfig(ctx, mcpmetarepo.UpsertEnvironmentConfigParams{
 			ProjectID: *ac.ProjectID, McpMetadataID: cfg.metadataID, VariableName: cfg.variable,
 			HeaderDisplayName: pgtype.Text{String: cfg.header, Valid: true}, ProvidedBy: "user",
@@ -293,18 +293,12 @@ func TestPluginsService_CompatibilityIgnoresMetadataTwinHeaders(t *testing.T) {
 	ac, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 
-	toolset := createTestToolset(t, ctx, ti.conn, "twin-headers")
+	toolset := createUnwrappedTestToolset(t, ctx, ti.conn, "twin-headers")
 	require.NoError(t, toolsetsrepo.New(ti.conn).SetToolsetMCPPublicByID(ctx, toolsetsrepo.SetToolsetMCPPublicByIDParams{McpIsPublic: true, ID: toolset.ID, ProjectID: toolset.ProjectID}))
 	createCanonicalWrapper(t, ctx, ti, toolset, "public", uuid.NullUUID{UUID: uuid.Nil, Valid: false}, toolset.McpSlug.String)
 
 	meta := mcpmetarepo.New(ti.conn)
-	_, err := meta.UpsertMetadata(ctx, mcpmetarepo.UpsertMetadataParams{
-		ToolsetID: uuid.NullUUID{UUID: toolset.ID, Valid: true}, ProjectID: *ac.ProjectID,
-		ExternalDocumentationUrl: pgtype.Text{Valid: false}, ExternalDocumentationText: pgtype.Text{Valid: false},
-		LogoID: uuid.NullUUID{Valid: false}, Instructions: pgtype.Text{Valid: false}, DefaultEnvironmentID: uuid.NullUUID{Valid: false},
-		InstallationOverrideUrl: pgtype.Text{Valid: false},
-	})
-	require.NoError(t, err)
+	addToolsetKeyedMetadata(t, ctx, ti, toolset)
 	twin, err := meta.UpsertMetadataByMcpServerID(ctx, mcpmetarepo.UpsertMetadataByMcpServerIDParams{
 		McpServerID: uuid.NullUUID{UUID: toolset.ID, Valid: true}, ProjectID: *ac.ProjectID,
 		ExternalDocumentationUrl: pgtype.Text{Valid: false}, ExternalDocumentationText: pgtype.Text{Valid: false},
@@ -331,4 +325,46 @@ func TestPluginsService_CompatibilityIgnoresMetadataTwinHeaders(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Empty(t, issues)
+}
+
+// A server that holds a toolset's id without being its canonical wrapper does not lend the toolset its metadata.
+func TestPluginsService_ToolsetEntryIgnoresMetadataOfNonCanonicalServerWithItsID(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestPluginsService(t)
+	ac, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	toolset := createUnwrappedTestToolset(t, ctx, ti.conn, "id-held")
+	other := createUnwrappedTestToolset(t, ctx, ti.conn, "id-holder-backing")
+	_, err := testrepo.New(ti.conn).CreateRemoteMCPServerFixture(ctx, testrepo.CreateRemoteMCPServerFixtureParams{
+		ID: toolset.ID, ProjectID: toolset.ProjectID, ToolsetID: uuid.NullUUID{UUID: other.ID, Valid: true}, Visibility: "private",
+	})
+	require.NoError(t, err)
+	meta := mcpmetarepo.New(ti.conn)
+	held, err := meta.UpsertMetadataByMcpServerID(ctx, mcpmetarepo.UpsertMetadataByMcpServerIDParams{
+		McpServerID: uuid.NullUUID{UUID: toolset.ID, Valid: true}, ProjectID: *ac.ProjectID,
+		ExternalDocumentationUrl: pgtype.Text{Valid: false}, ExternalDocumentationText: pgtype.Text{Valid: false},
+		LogoID: uuid.NullUUID{Valid: false}, Instructions: pgtype.Text{Valid: false}, DefaultEnvironmentID: uuid.NullUUID{Valid: false},
+		InstallationOverrideUrl: pgtype.Text{Valid: false},
+	})
+	require.NoError(t, err)
+	_, err = meta.UpsertEnvironmentConfig(ctx, mcpmetarepo.UpsertEnvironmentConfigParams{
+		ProjectID: *ac.ProjectID, McpMetadataID: held.ID, VariableName: "HELD_KEY",
+		HeaderDisplayName: pgtype.Text{String: "X-Held", Valid: true}, ProvidedBy: "user",
+	})
+	require.NoError(t, err)
+
+	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Id Held"})
+	require.NoError(t, err)
+	addToolsetKeyedEntry(t, ctx, ti, plugin.ID, toolset.ID, "Toolset entry")
+
+	pluginIDs := []uuid.UUID{uuid.MustParse(plugin.ID)}
+	envs, err := pluginsrepo.New(ti.conn).ListPluginEnvironmentConfigsForProject(ctx, pluginsrepo.ListPluginEnvironmentConfigsForProjectParams{ProjectID: *ac.ProjectID, PluginIds: pluginIDs})
+	require.NoError(t, err)
+	require.Empty(t, envs, "the toolset entry must not read the id holder's metadata")
+	issues, err := pluginsrepo.New(ti.conn).ListAgentPluginCompatibilityIssuesForProject(ctx, pluginsrepo.ListAgentPluginCompatibilityIssuesForProjectParams{ProjectID: *ac.ProjectID, PluginIds: pluginIDs})
+	require.NoError(t, err)
+	for _, issue := range issues {
+		require.NotEqual(t, "mcp_server_requires_user_header", issue.Reason)
+	}
 }

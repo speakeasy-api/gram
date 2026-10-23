@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
@@ -19,7 +20,7 @@ export const ChatSummaryStatus = {
 /**
  * Chat session status
  */
-export type ChatSummaryStatus = ClosedEnum<typeof ChatSummaryStatus>;
+export type ChatSummaryStatus = OpenEnum<typeof ChatSummaryStatus>;
 
 /**
  * Summary information for a chat session
@@ -80,9 +81,10 @@ export type ChatSummary = {
 };
 
 /** @internal */
-export const ChatSummaryStatus$inboundSchema: z.ZodMiniEnum<
-  typeof ChatSummaryStatus
-> = z.enum(ChatSummaryStatus);
+export const ChatSummaryStatus$inboundSchema: z.ZodMiniType<
+  ChatSummaryStatus,
+  unknown
+> = openEnums.inboundSchema(ChatSummaryStatus);
 
 /** @internal */
 export const ChatSummary$inboundSchema: z.ZodMiniType<ChatSummary, unknown> = z

@@ -1733,6 +1733,69 @@ type DirectoryGroup struct {
 	WorkosLastEventID pgtype.Text
 }
 
+type DirectoryReviewAttributeOptOut struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: opaque-confidential
+	AttributeKey string
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
+}
+
+type DirectoryReviewItem struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	Kind string
+	// @access: confidential
+	DirectoryGroupID uuid.NullUUID
+	// @access: opaque-confidential
+	AttributeKey pgtype.Text
+	// @access: opaque-restricted
+	AttributeValue pgtype.Text
+	// @access: confidential
+	Occurrence int32
+	// @access: confidential
+	State string
+	// @access: confidential
+	ResolvedAt pgtype.Timestamptz
+	// @access: confidential
+	ResolvedByUserID pgtype.Text
+	// @access: confidential
+	NotifiedAt pgtype.Timestamptz
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+}
+
+type DirectoryReviewOrgState struct {
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	BaselineAt pgtype.Timestamptz
+	// @access: confidential
+	EmailsDisabledAt pgtype.Timestamptz
+	// @access: confidential
+	LastEmailedAt pgtype.Timestamptz
+	// @access: confidential
+	RemindersSent int32
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+}
+
 type DirectoryRoleMapping struct {
 	// @access: confidential
 	ID uuid.UUID
@@ -2718,6 +2781,93 @@ type McpApprovalRequestRequester struct {
 	Deleted bool
 }
 
+type McpAuthClient struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	ProjectID uuid.NullUUID
+	// @access: confidential
+	AttachmentScope pgtype.Text
+	// @access: confidential
+	ClientType string
+	// @access: confidential
+	Source string
+	// @access: opaque-confidential
+	Name string
+	// @access: confidential
+	Enabled bool
+	// @access: confidential
+	CreatedByUserID pgtype.Text
+	// @access: confidential
+	RemoteSessionClientID uuid.NullUUID
+	// @access: confidential
+	ClientAttachmentScope pgtype.Text
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
+}
+
+type McpAuthClientEma struct {
+	// @access: confidential
+	AuthClientID uuid.UUID
+	// @access: confidential
+	ClientType string
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	RemoteSessionClientID uuid.UUID
+	// @access: confidential
+	RemoteSessionIssuerID uuid.UUID
+	// @access: restricted
+	Resource string
+	// @access: opaque-restricted
+	RequestedScopes []string
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
+}
+
+type McpAuthClientHeader struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	AuthClientID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	Name string
+	// @access: opaque-restricted
+	Description pgtype.Text
+	// @access: confidential
+	IsRequired bool
+	// @access: confidential
+	IsSecret bool
+	// @access: secret-restricted
+	Value pgtype.Text
+	// @access: confidential
+	ValueFromRequestHeader pgtype.Text
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
+}
+
 type McpEndpoint struct {
 	// @access: confidential
 	ID uuid.UUID
@@ -2907,6 +3057,34 @@ type McpServer struct {
 	Visibility string
 	// @access: confidential
 	NetworkAccessMode pgtype.Text
+	// Whether the upstream needs authentication: true needs it, false explicitly needs none, NULL is undecided.
+	// @access: confidential
+	RequiresUpstreamAuth pgtype.Bool
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
+}
+
+type McpServerAuthClient struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	McpServerID uuid.UUID
+	// @access: confidential
+	AuthClientID uuid.UUID
+	// @access: confidential
+	ClientAttachmentScope string
+	// @access: confidential
+	Source string
 	// @access: confidential
 	CreatedAt pgtype.Timestamptz
 	// @access: confidential
@@ -2959,6 +3137,35 @@ type McpServerToolMetadatum struct {
 	IdempotentHint pgtype.Bool
 	// @access: confidential
 	OpenWorldHint pgtype.Bool
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
+}
+
+type McpSkillLink struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: confidential
+	SkillID uuid.UUID
+	// @access: confidential
+	PinnedVersionID uuid.NullUUID
+	// @access: confidential
+	TargetKind string
+	// @access: confidential
+	McpServerID uuid.NullUUID
+	// @access: confidential
+	MetaMcpServerID uuid.NullUUID
+	// @access: confidential
+	CreatedByUserID string
 	// @access: confidential
 	CreatedAt pgtype.Timestamptz
 	// @access: confidential
@@ -5081,6 +5288,10 @@ type RemoteSessionEmaCredential struct {
 	SignInID uuid.NullUUID
 	// @access: confidential
 	UserSessionID uuid.NullUUID
+	// @access: confidential
+	AuthClientID uuid.NullUUID
+	// @access: confidential
+	AuthClientAttachmentScope pgtype.Text
 	// @access: opaque-restricted
 	RequestedScopes []string
 	// @access: opaque-restricted
@@ -7213,6 +7424,10 @@ type UpstreamClientSelection struct {
 	NoAuth bool
 	// @access: confidential
 	Source string
+	// @access: confidential
+	AuthClientID uuid.NullUUID
+	// @access: confidential
+	AuthClientAttachmentScope pgtype.Text
 	// @access: confidential
 	CreatedAt pgtype.Timestamptz
 	// @access: confidential

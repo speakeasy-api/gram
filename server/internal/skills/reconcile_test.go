@@ -154,16 +154,15 @@ func TestPendingSkillSessionVersionsAreProjectScopedAndExcludeIneligibleObservat
 	require.NoError(t, err)
 	require.Empty(t, projects)
 
-	// A read over a hosted MCP server arrives reconciled with the MCP session
+	// A read over a MCP surface arrives reconciled with the MCP session
 	// id. That session is neither a dev nor an assistant one, so the read is
 	// not a session mapping for the metrics sync and not an efficacy
 	// candidate, however complete the row is.
 	resolver := mcpskills.NewResolver(testenv.NewLogger(t), ti.conn)
 	written, err := resolver.RecordRead(ctx, mcpskills.Read{
-		ProjectID: ti.projectID,
 		Entry: mcpskills.Entry{
-			SkillID: version.SkillID, VersionID: version.SkillVersionID, PluginID: uuid.Nil,
-			Name: "mapped-skill", Content: content, RawSHA256: contentSHA256(content), Frontmatter: nil, Pinned: false,
+			SkillID: version.SkillID, ProjectID: ti.projectID, VersionID: version.SkillVersionID, ProjectSlug: "mapped",
+			Name: "mapped-skill", Content: content, RawSHA256: contentSHA256(content), Frontmatter: nil,
 		},
 		UserID: ti.authContext.UserID, SessionID: "mcp-session-1", SeenAt: seenAt.Add(time.Minute),
 	})

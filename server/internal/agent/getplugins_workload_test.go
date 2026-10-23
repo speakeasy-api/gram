@@ -148,6 +148,27 @@ func TestJWTAuth_WorkloadTokenPollsItsAgentsPlugins(t *testing.T) {
 	require.Equal(t, device.actor.String(), res.Principal.Urn)
 }
 
+// A workload's poll lists the MCP servers in its agent's plugins, as an agent
+// key's poll does.
+func TestJWTAuth_WorkloadTokenPollsItsAgentsMCPServers(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestAgentService(t)
+	publishMarketplace(t, ctx, ti.conn, ti.projectID, "tok")
+	device := newWorkloadDevice(t, ctx, ti, []authz.Grant{authz.NewGrant(authz.ScopeOrgDeviceAgentSync, ti.orgID)})
+	agentTool := seedPlugin(t, ctx, ti.conn, ti.orgID, ti.projectID, "agent-tool")
+	assignPlugin(t, ctx, ti.conn, agentTool, ti.orgID, device.actor.String())
+	_, linearURL := seedToolsetServer(t, ti, agentTool, "team-linear", "Team Linear")
+	otherTool := seedPlugin(t, ctx, ti.conn, ti.orgID, ti.projectID, "other-tool")
+	assignPlugin(t, ctx, ti.conn, otherTool, ti.orgID, urn.NewPrincipal(urn.PrincipalTypeAgent, uuid.NewString()).String())
+	seedToolsetServer(t, ti, otherTool, "slack", "Slack")
+
+	admitted, err := ti.service.JWTAuth(getPluginsContext(t), device.token, deviceAgentTokenScheme)
+	require.NoError(t, err)
+	res, err := ti.service.GetPlugins(admitted, &gen.GetPluginsPayload{})
+	require.NoError(t, err)
+	require.Equal(t, map[string]string{"speakeasy-team-linear": linearURL}, mcpServersByName(res))
+}
+
 // Withdrawing the workload's assignment refuses its token on the next call,
 // though the token itself has not expired.
 func TestJWTAuth_WithdrawnAssignmentRefusedOnNextCall(t *testing.T) {

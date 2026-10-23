@@ -182,3 +182,17 @@ describe("Servers on a service page", () => {
     expect(screen.queryByText(/doesn’t accept/)).toBeNull();
   });
 });
+
+it("shows unknown server status neutrally even when the known providers do not cover it", () => {
+  show(
+    row({
+      isDefault: false,
+      servers: [
+        server({ status: "future_status" as EMAServiceServer["status"] }),
+      ],
+    }),
+  );
+  expect(screen.getByText("Unknown")).toBeTruthy();
+  expect(screen.queryByText("Working")).toBeNull();
+  expect(screen.queryByText("Needs attention")).toBeNull();
+});

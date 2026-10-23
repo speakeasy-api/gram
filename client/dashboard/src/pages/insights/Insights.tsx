@@ -1,6 +1,5 @@
 import type { ReactNode } from "react";
 import { Outlet } from "react-router";
-import { InsightsAgentsContent } from "@/components/observe/InsightsAgents";
 import { InsightsToolsContent } from "@/components/observe/InsightsTools";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
@@ -40,15 +39,5 @@ export function InsightsHooksPage(): JSX.Element {
     <RequireScope scope="org:admin" level="page">
       <InsightsToolsContent />
     </RequireScope>
-  );
-}
-
-export function InsightsAgentsPage(): JSX.Element {
-  return (
-    <ObservePageShell>
-      <RequireScope scope="org:admin" level="page">
-        <InsightsAgentsContent />
-      </RequireScope>
-    </ObservePageShell>
   );
 }

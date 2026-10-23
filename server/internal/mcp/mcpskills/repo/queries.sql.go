@@ -12,40 +12,98 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const getServedSkillRecipient = `-- name: GetServedSkillRecipient :one
-SELECT u.email
-FROM users u
-WHERE u.id = $1
-  AND u.deleted_at IS NULL
-  AND u.workos_deleted_at IS NULL
-  AND EXISTS (
-    SELECT 1
-    FROM organization_user_relationships our
-    JOIN organization_metadata om
-      ON om.id = our.organization_id
-      AND om.disabled_at IS NULL
-    WHERE our.organization_id = $2
-      AND our.user_id = u.id
-      AND our.deleted_at IS NULL
-  )
+const createMCPSkillLink = `-- name: CreateMCPSkillLink :one
+INSERT INTO mcp_skill_links (
+    organization_id
+  , project_id
+  , skill_id
+  , pinned_version_id
+  , target_kind
+  , mcp_server_id
+  , meta_mcp_server_id
+  , created_by_user_id
+)
+VALUES (
+    $1
+  , $2
+  , $3
+  , $4
+  , $5
+  , $6
+  , $7
+  , $8
+)
+RETURNING id, organization_id, project_id, skill_id, pinned_version_id, target_kind, mcp_server_id, meta_mcp_server_id, created_by_user_id, created_at, updated_at, deleted_at, deleted
 `
 
-type GetServedSkillRecipientParams struct {
-	UserID         string
-	OrganizationID string
+type CreateMCPSkillLinkParams struct {
+	OrganizationID  string
+	ProjectID       uuid.UUID
+	SkillID         uuid.UUID
+	PinnedVersionID uuid.NullUUID
+	TargetKind      string
+	McpServerID     uuid.NullUUID
+	MetaMcpServerID uuid.NullUUID
+	CreatedByUserID string
 }
 
-// The authenticated caller as a recipient of served skills: their email, read
-// only while they are a live user holding an active membership in the enabled
-// organization that owns the endpoint. Delivery principals are resolved from
-// the row, so a user removed from the organization, or deleted, whose session
-// or token still validates is no row and so no recipient. The membership
-// predicate is the one IsOrganizationMember applies at login.
-func (q *Queries) GetServedSkillRecipient(ctx context.Context, arg GetServedSkillRecipientParams) (string, error) {
-	row := q.db.QueryRow(ctx, getServedSkillRecipient, arg.UserID, arg.OrganizationID)
-	var email string
-	err := row.Scan(&email)
-	return email, err
+// Links a skill to the MCP surface that serves it. The caller validates that
+// the id columns fit target_kind; the foreign keys keep the skill, its pinned
+// version and any stored target inside the link's project.
+func (q *Queries) CreateMCPSkillLink(ctx context.Context, arg CreateMCPSkillLinkParams) (McpSkillLink, error) {
+	row := q.db.QueryRow(ctx, createMCPSkillLink,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.SkillID,
+		arg.PinnedVersionID,
+		arg.TargetKind,
+		arg.McpServerID,
+		arg.MetaMcpServerID,
+		arg.CreatedByUserID,
+	)
+	var i McpSkillLink
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.SkillID,
+		&i.PinnedVersionID,
+		&i.TargetKind,
+		&i.McpServerID,
+		&i.MetaMcpServerID,
+		&i.CreatedByUserID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const deleteMCPSkillLink = `-- name: DeleteMCPSkillLink :execrows
+UPDATE mcp_skill_links
+SET deleted_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE organization_id = $1
+  AND project_id = $2
+  AND id = $3
+  AND deleted IS FALSE
+`
+
+type DeleteMCPSkillLinkParams struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+	ID             uuid.UUID
+}
+
+// Soft-deletes one live link, so the surface stops serving the skill through
+// it.
+func (q *Queries) DeleteMCPSkillLink(ctx context.Context, arg DeleteMCPSkillLinkParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteMCPSkillLink, arg.OrganizationID, arg.ProjectID, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const insertMCPSkillObservation = `-- name: InsertMCPSkillObservation :execrows
@@ -153,26 +211,62 @@ func (q *Queries) InsertMCPSkillObservation(ctx context.Context, arg InsertMCPSk
 	return result.RowsAffected(), nil
 }
 
-const listServedSkillsForEndpoint = `-- name: ListServedSkillsForEndpoint :many
+const isServedSkillRecipient = `-- name: IsServedSkillRecipient :one
+SELECT EXISTS (
+  SELECT 1
+  FROM users u
+  JOIN organization_user_relationships our
+    ON our.user_id = u.id
+    AND our.organization_id = $1
+    AND our.deleted_at IS NULL
+  JOIN organization_metadata om
+    ON om.id = our.organization_id
+    AND om.disabled_at IS NULL
+  WHERE u.id = $2
+    AND u.deleted_at IS NULL
+    AND u.workos_deleted_at IS NULL
+) AS recipient
+`
+
+type IsServedSkillRecipientParams struct {
+	OrganizationID string
+	UserID         string
+}
+
+// Whether the authenticated caller may receive served skills: a live user
+// holding an active membership in the enabled organization that owns the
+// endpoint. A user removed from the organization, or deleted, whose session or
+// token still validates is not a recipient. The membership predicate is the
+// one IsOrganizationMember applies at login.
+func (q *Queries) IsServedSkillRecipient(ctx context.Context, arg IsServedSkillRecipientParams) (bool, error) {
+	row := q.db.QueryRow(ctx, isServedSkillRecipient, arg.OrganizationID, arg.UserID)
+	var recipient bool
+	err := row.Scan(&recipient)
+	return recipient, err
+}
+
+const listServedSkillsForTarget = `-- name: ListServedSkillsForTarget :many
 WITH candidates AS (
   SELECT
       sk.id AS skill_id,
+      sk.project_id,
+      p.slug AS project_slug,
       sk.name AS skill_name,
-      p.id AS plugin_id,
-      (sd.pinned_version_id IS NOT NULL)::boolean AS pinned,
+      l.id AS link_id,
+      (l.pinned_version_id IS NOT NULL)::boolean AS pinned,
       resolved.id AS version_id,
       resolved.content,
       resolved.raw_sha256,
       resolved.effective_at
-  FROM skill_distributions sd
-  JOIN skills sk
-    ON sk.id = sd.skill_id
-    AND sk.project_id = sd.project_id
-    AND sk.archived_at IS NULL
-  JOIN plugins p
-    ON p.id = sd.plugin_id
-    AND p.project_id = sd.project_id
+  FROM mcp_skill_links l
+  JOIN projects p
+    ON p.id = l.project_id
+    AND p.organization_id = l.organization_id
     AND p.deleted IS FALSE
+  JOIN skills sk
+    ON sk.id = l.skill_id
+    AND sk.project_id = l.project_id
+    AND sk.archived_at IS NULL
   JOIN LATERAL (
     SELECT
       sv.id,
@@ -181,128 +275,136 @@ WITH candidates AS (
       COALESCE(sv.promoted_at, sv.created_at)::timestamptz AS effective_at
     FROM skill_versions sv
     LEFT JOIN skill_version_origins svo
-      ON svo.project_id = sd.project_id
+      ON svo.project_id = l.project_id
       AND svo.skill_id = sv.skill_id
       AND svo.skill_version_id = sv.id
-    WHERE sv.skill_id = sd.skill_id
+    WHERE sv.skill_id = l.skill_id
       AND sv.spec_valid IS TRUE
-      AND (sd.pinned_version_id IS NULL OR sv.id = sd.pinned_version_id)
+      AND (l.pinned_version_id IS NULL OR sv.id = l.pinned_version_id)
     ORDER BY (svo.origin IS DISTINCT FROM 'captured') DESC, COALESCE(sv.promoted_at, sv.created_at) DESC, sv.id DESC
     LIMIT 1
   ) resolved ON TRUE
-  WHERE sd.project_id = $2
-    AND sd.channel = 'plugin'
-    AND sd.assistant_id IS NULL
-    AND sd.revoked_at IS NULL
-    AND ($3::text IS NULL OR sk.name = $3::text)
-    AND EXISTS (
-      SELECT 1
-      FROM plugin_servers ps
-      WHERE ps.plugin_id = p.id
-        AND ps.deleted IS FALSE
-        AND (
-          ps.toolset_id = $4::uuid
-          OR (
-            $5::uuid IS NOT NULL
-            AND ps.mcp_server_id = $5::uuid
-          )
-        )
-    )
-    AND EXISTS (
-      SELECT 1
-      FROM plugin_assignments pa
-      WHERE pa.plugin_id = p.id
-        AND pa.organization_id = p.organization_id
-        AND pa.principal_urn = ANY($6::text[])
+  WHERE l.organization_id = $2
+    AND l.deleted IS FALSE
+    AND ($3::text IS NULL OR p.slug = $3::text)
+    AND ($4::text IS NULL OR sk.name = $4::text)
+    AND (
+      (l.target_kind = 'mcp_server' AND l.mcp_server_id = ANY($5::uuid[]))
+      OR (
+        l.target_kind = 'meta_mcp_server'
+        AND $6::uuid IS NOT NULL
+        AND l.meta_mcp_server_id = $6::uuid
+      )
+      OR (
+        $7::text IS NOT NULL
+        AND l.target_kind = $7::text
+      )
     )
 ),
 pins AS (
-  SELECT skill_name, COUNT(DISTINCT version_id)::int AS pinned_versions
+  SELECT skill_id, COUNT(DISTINCT version_id)::int AS pinned_versions
   FROM candidates
   WHERE pinned
-  GROUP BY skill_name
+  GROUP BY skill_id
+),
+winners AS (
+  SELECT DISTINCT ON (c.skill_id)
+      c.skill_id,
+      c.project_id,
+      c.project_slug,
+      c.skill_name,
+      c.version_id,
+      c.content,
+      c.raw_sha256,
+      COALESCE(pins.pinned_versions, 0)::int AS pinned_versions
+  FROM candidates c
+  LEFT JOIN pins ON pins.skill_id = c.skill_id
+  ORDER BY c.skill_id, c.pinned DESC, c.effective_at DESC, c.version_id DESC, c.link_id ASC
 )
-SELECT DISTINCT ON (c.skill_name)
-    c.skill_id,
-    c.skill_name,
-    c.plugin_id,
-    c.pinned,
-    c.version_id,
-    c.content,
-    c.raw_sha256,
-    c.effective_at,
-    COALESCE(pins.pinned_versions, 0)::int AS pinned_versions
-FROM candidates c
-LEFT JOIN pins ON pins.skill_name = c.skill_name
-ORDER BY c.skill_name ASC, c.pinned DESC, c.effective_at DESC, c.version_id DESC, c.plugin_id ASC
+SELECT
+    w.skill_id,
+    w.project_id,
+    w.project_slug,
+    w.skill_name,
+    w.version_id,
+    w.content,
+    w.raw_sha256,
+    w.pinned_versions
+FROM winners w
+ORDER BY w.project_slug ASC, w.skill_name ASC
 LIMIT $1
 `
 
-type ListServedSkillsForEndpointParams struct {
-	RowLimit      int32
-	ProjectID     uuid.UUID
-	SkillName     pgtype.Text
-	ToolsetID     uuid.UUID
-	McpServerID   uuid.NullUUID
-	PrincipalUrns []string
+type ListServedSkillsForTargetParams struct {
+	RowLimit          int32
+	OrganizationID    string
+	ProjectSlug       pgtype.Text
+	SkillName         pgtype.Text
+	McpServerIds      []uuid.UUID
+	MetaMcpServerID   uuid.NullUUID
+	RowLessTargetKind pgtype.Text
 }
 
-type ListServedSkillsForEndpointRow struct {
+type ListServedSkillsForTargetRow struct {
 	SkillID        uuid.UUID
+	ProjectID      uuid.UUID
+	ProjectSlug    string
 	SkillName      string
-	PluginID       uuid.UUID
-	Pinned         bool
 	VersionID      uuid.UUID
 	Content        string
 	RawSha256      string
-	EffectiveAt    pgtype.Timestamptz
 	PinnedVersions int32
 }
 
-// The skills a hosted toolset endpoint serves over MCP to one caller, one row
-// per skill name, ordered by name. A candidate is an active plugin-channel
-// distribution whose plugin belongs to the endpoint's project, is not deleted,
-// contains the endpoint's backend (the toolset itself, or the mcp_servers row
-// fronting it when the caller passes one), and is assigned to at least one of
-// the caller's principal URNs. The skill must not be archived. Each candidate
-// carries the distribution's resolved version: the pin when one is set,
-// otherwise the latest valid version under the same ordering as
-// GetLatestValidSkillVersion.
+// The skills an MCP surface serves over the Skills extension, one row per
+// skill, ordered by project slug and then name. A candidate is a live
+// mcp_skill_links row in the surface's organization that names the surface: an
+// mcp_server link to any of @mcp_server_ids (the surface's own server, plus
+// the member servers a gateway inherits), a meta_mcp_server link to
+// @meta_mcp_server_id, or a link of the row-less kind @row_less_target_kind
+// (such as the organization gateway). The skill must not be archived and its
+// project must not be deleted. Each candidate carries the link's resolved
+// version: the pin when one is set, otherwise the latest valid version under
+// the same ordering as GetLatestValidSkillVersion.
 //
-// A skill carried by several matching plugins has several candidates, and the
-// query keeps one: a pinned candidate beats one that tracks the latest
-// version, and between pins the newest resolved version (by effective time,
-// then version id) wins; the plugin id breaks a tie between two
-// distributions of the same version. pinned_versions counts the distinct
-// versions the skill is pinned to across its candidates, so a caller can tell
-// when pins disagree. The limit counts skills, not candidates, so a skill
-// carried by many plugins never crowds out a later skill by name. An empty
-// principal list matches nothing.
-func (q *Queries) ListServedSkillsForEndpoint(ctx context.Context, arg ListServedSkillsForEndpointParams) ([]ListServedSkillsForEndpointRow, error) {
-	rows, err := q.db.Query(ctx, listServedSkillsForEndpoint,
+// The organization, not one project, bounds the read because a gateway spans
+// every project in it; each link's project is pinned to its skill's by
+// foreign key. Skills from different projects may share a name: each is its
+// own row, told apart by project_slug.
+//
+// A skill linked several times has several candidates, and the query keeps
+// one: a pinned candidate beats one that tracks the latest version, and
+// between pins the newest resolved version (by effective time, then version
+// id) wins; the link id breaks a tie between two links of the same version.
+// pinned_versions counts the distinct versions the skill is pinned to across
+// its candidates, so a caller can tell when pins disagree. The limit counts
+// skills, not candidates, so a skill linked many times never crowds out a
+// later skill.
+func (q *Queries) ListServedSkillsForTarget(ctx context.Context, arg ListServedSkillsForTargetParams) ([]ListServedSkillsForTargetRow, error) {
+	rows, err := q.db.Query(ctx, listServedSkillsForTarget,
 		arg.RowLimit,
-		arg.ProjectID,
+		arg.OrganizationID,
+		arg.ProjectSlug,
 		arg.SkillName,
-		arg.ToolsetID,
-		arg.McpServerID,
-		arg.PrincipalUrns,
+		arg.McpServerIds,
+		arg.MetaMcpServerID,
+		arg.RowLessTargetKind,
 	)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []ListServedSkillsForEndpointRow
+	var items []ListServedSkillsForTargetRow
 	for rows.Next() {
-		var i ListServedSkillsForEndpointRow
+		var i ListServedSkillsForTargetRow
 		if err := rows.Scan(
 			&i.SkillID,
+			&i.ProjectID,
+			&i.ProjectSlug,
 			&i.SkillName,
-			&i.PluginID,
-			&i.Pinned,
 			&i.VersionID,
 			&i.Content,
 			&i.RawSha256,
-			&i.EffectiveAt,
 			&i.PinnedVersions,
 		); err != nil {
 			return nil, err

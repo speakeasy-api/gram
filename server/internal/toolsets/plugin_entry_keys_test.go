@@ -13,6 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
 func updateToolsetPayload(slug types.Slug) *gen.UpdateToolsetPayload {
@@ -46,8 +47,8 @@ func TestToolsetsService_PluginEntriesFollowRenameAndDelete(t *testing.T) {
 		OrganizationID: authCtx.ActiveOrganizationID, ProjectID: *authCtx.ProjectID, Name: "Other", Slug: "other-" + uuid.NewString()[:8], Description: pgtype.Text{String: "", Valid: false},
 	})
 	require.NoError(t, err)
-	_, err = plugins.AddPluginServer(ctx, pluginsrepo.AddPluginServerParams{
-		PluginID: other.ID, ToolsetID: uuid.NullUUID{UUID: toolsetID, Valid: true}, McpServerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+	_, err = testrepo.New(ti.conn).InsertToolsetKeyedPluginServerFixture(ctx, testrepo.InsertToolsetKeyedPluginServerFixtureParams{
+		PluginID: other.ID, ToolsetID: uuid.NullUUID{UUID: toolsetID, Valid: true},
 		DisplayName: "Hosted Toolset", Policy: "required", SortOrder: 0,
 	})
 	require.NoError(t, err)
@@ -58,7 +59,7 @@ func TestToolsetsService_PluginEntriesFollowRenameAndDelete(t *testing.T) {
 	})
 	require.NoError(t, err)
 	kept, err := plugins.AddPluginServer(ctx, pluginsrepo.AddPluginServerParams{
-		PluginID: other.ID, ToolsetID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, McpServerID: uuid.NullUUID{UUID: uuid.MustParse(bystander.ID), Valid: true},
+		PluginID: other.ID, McpServerID: uuid.NullUUID{UUID: uuid.MustParse(bystander.ID), Valid: true},
 		DisplayName: "Bystander", Policy: "required", SortOrder: 1,
 	})
 	require.NoError(t, err)
@@ -115,8 +116,8 @@ func TestToolsetsService_ReenableDoesNotTwinLegacyEntry(t *testing.T) {
 	_, err = ti.service.UpdateToolset(ctx, disable)
 	require.NoError(t, err)
 	require.NoError(t, plugins.SoftDeletePluginServers(ctx, defaultPlugin.ID))
-	_, err = plugins.AddPluginServer(ctx, pluginsrepo.AddPluginServerParams{
-		PluginID: defaultPlugin.ID, ToolsetID: uuid.NullUUID{UUID: toolsetID, Valid: true}, McpServerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+	_, err = testrepo.New(ti.conn).InsertToolsetKeyedPluginServerFixture(ctx, testrepo.InsertToolsetKeyedPluginServerFixtureParams{
+		PluginID: defaultPlugin.ID, ToolsetID: uuid.NullUUID{UUID: toolsetID, Valid: true},
 		DisplayName: "Legacy Entry", Policy: "required", SortOrder: 0,
 	})
 	require.NoError(t, err)
