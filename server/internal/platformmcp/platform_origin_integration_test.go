@@ -252,3 +252,21 @@ func TestPluginDeviceAgentURLFollowsPlatformHostWithoutDefaultHost(t *testing.T)
 	require.NotEmpty(t, plugin.Instructions)
 	require.Equal(t, testExtraHostBaseURL+"/example-org/device-agent", plugin.Instructions[0].URL)
 }
+
+// When reading the organization's default host fails, member links fall back
+// to the request's platform host, even when no logger was given.
+func TestMemberLinkBasesFallBackWithNilLogger(t *testing.T) {
+	t.Parallel()
+
+	ctx, f := newMemberMCPURLFixture(t, "platform_mcp_member_urls_nil_logger")
+	service := f.service.WithOrganizationHosts(testOrganizationHosts(t), nil)
+	ctx = requestorigin.WithContext(ctx, requestorigin.Origin{Surface: requestorigin.SurfacePlatform, BaseURL: testExtraHostBaseURL, OrganizationID: "", NetworkIngressID: uuid.Nil, NetworkIdentity: nil})
+
+	var serverURL *url.URL
+	require.NotPanics(t, func() {
+		// No organization has this ID, so the metadata read fails.
+		serverURL, _ = service.memberLinkBases(ctx, "missing-organization")
+	})
+	require.NotNil(t, serverURL)
+	require.Equal(t, testExtraHostBaseURL, serverURL.String())
+}
