@@ -3800,6 +3800,9 @@ CREATE TABLE IF NOT EXISTS remote_session_clients (
   -- at creation: no update query sets this column.
   credential_owner TEXT NOT NULL DEFAULT 'subject',
 
+  -- Administrator-chosen label. NULL means unset, and readers show client_id.
+  display_name TEXT,
+
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   deleted_at timestamptz,
@@ -3862,6 +3865,7 @@ COMMENT ON COLUMN remote_session_clients.organization_id IS '@access: confidenti
 COMMENT ON COLUMN remote_session_clients.attachment_scope IS '@access: confidential';
 COMMENT ON COLUMN remote_session_clients.remote_session_issuer_id IS '@access: confidential';
 COMMENT ON COLUMN remote_session_clients.client_id IS '@access: restricted';
+COMMENT ON COLUMN remote_session_clients.display_name IS '@access: opaque-confidential';
 COMMENT ON COLUMN remote_session_clients.client_secret_encrypted IS '@access: secret-restricted';
 COMMENT ON COLUMN remote_session_clients.client_id_issued_at IS '@access: confidential';
 COMMENT ON COLUMN remote_session_clients.client_secret_expires_at IS '@access: confidential';
