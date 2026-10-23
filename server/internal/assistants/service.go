@@ -1352,10 +1352,71 @@ type environmentBinding struct {
 	environmentID uuid.UUID
 }
 
-// requireReadableEnvironmentBindings requires environment:read on every
-// environment this write binds to a server, except bindings the assistant
+// readableEnvironments returns which of the payload's environments the caller
+// can read. It authorizes before any assistant locks are taken.
+func (s *ServiceCore) readableEnvironments(ctx context.Context, projectID uuid.UUID, toolsets []*types.AssistantToolsetRef, mcpServers []*types.AssistantMCPServerRef) (func(environmentID uuid.UUID) bool, error) {
+	slugs := make([]string, 0, len(toolsets)+len(mcpServers))
+	addSlug := func(slug *string) {
+		if slug != nil && *slug != "" && !slices.Contains(slugs, *slug) {
+			slugs = append(slugs, *slug)
+		}
+	}
+	for _, ref := range toolsets {
+		if ref != nil {
+			addSlug(ref.EnvironmentSlug)
+		}
+	}
+	for _, ref := range mcpServers {
+		if ref != nil {
+			addSlug(ref.EnvironmentSlug)
+		}
+	}
+	if len(slugs) == 0 {
+		return nil, nil
+	}
+
+	rows, err := assistantrepo.New(s.db).ResolveEnvironmentsForWrite(ctx, assistantrepo.ResolveEnvironmentsForWriteParams{ProjectID: projectID, Slugs: slugs})
+	if err != nil {
+		return nil, fmt.Errorf("resolve assistant environments: %w", err)
+	}
+	checks := make([]authz.Check, 0, len(rows)+1)
+	for _, row := range rows {
+		checks = append(checks, authz.EnvironmentCheck(authz.ScopeEnvironmentRead, row.ID.String(), projectID.String()))
+	}
+	// An unknown slug reports not-found only to callers who can read the project's environments.
+	unresolved := len(rows) < len(slugs)
+	if unresolved {
+		checks = append(checks, authz.EnvironmentCheck(authz.ScopeEnvironmentRead, projectID.String(), projectID.String()))
+	}
+	readable, err := s.authz.Filter(ctx, checks)
+	if err != nil {
+		return nil, fmt.Errorf("authorize assistant environments: %w", err)
+	}
+	canRead := idSetPredicate(readable)
+	if unresolved && !canRead(projectID) {
+		return nil, errEnvironmentBindingForbidden
+	}
+	return canRead, nil
+}
+
+// idSetPredicate reports membership in ids, ignoring any that are not UUIDs.
+func idSetPredicate(ids []string) func(uuid.UUID) bool {
+	allowed := make(map[uuid.UUID]struct{}, len(ids))
+	for _, id := range ids {
+		if parsed, err := uuid.Parse(id); err == nil {
+			allowed[parsed] = struct{}{}
+		}
+	}
+	return func(id uuid.UUID) bool {
+		_, ok := allowed[id]
+		return ok
+	}
+}
+
+// requireReadableEnvironmentBindings requires every environment this write
+// binds to a server to be in canBindEnvironment, except bindings the assistant
 // already has. assistantID is uuid.Nil for a new assistant.
-func (s *ServiceCore) requireReadableEnvironmentBindings(ctx context.Context, tx pgx.Tx, projectID, assistantID uuid.UUID, toolsets []resolvedToolsetInsert, servers []resolvedMcpServerInsert) error {
+func requireReadableEnvironmentBindings(ctx context.Context, tx pgx.Tx, projectID, assistantID uuid.UUID, toolsets []resolvedToolsetInsert, servers []resolvedMcpServerInsert, canBindEnvironment func(environmentID uuid.UUID) bool) error {
 	requested := make([]environmentBinding, 0, len(toolsets)+len(servers))
 	for _, ref := range toolsets {
 		if ref.EnvironmentID.Valid {
@@ -1391,12 +1452,8 @@ func (s *ServiceCore) requireReadableEnvironmentBindings(ctx context.Context, tx
 		if _, ok := existing[binding]; ok {
 			continue
 		}
-		err := s.authz.Require(ctx, authz.EnvironmentCheck(authz.ScopeEnvironmentRead, binding.environmentID.String(), projectID.String()))
-		if shareable, ok := errors.AsType[*oops.ShareableError](err); ok && shareable.Code == oops.CodeForbidden {
-			return fmt.Errorf("%w: %w", errEnvironmentBindingForbidden, err)
-		}
-		if err != nil {
-			return fmt.Errorf("authorize assistant environment binding: %w", err)
+		if canBindEnvironment == nil || !canBindEnvironment(binding.environmentID) {
+			return fmt.Errorf("environment %s: %w", binding.environmentID, errEnvironmentBindingForbidden)
 		}
 	}
 	return nil
@@ -1613,6 +1670,7 @@ func (s *ServiceCore) CreateAssistant(
 	status string,
 	provisionIdentity bool,
 	canEnableMCP func(toolsetID uuid.UUID) bool,
+	canBindEnvironment func(environmentID uuid.UUID) bool,
 ) (assistantRecord, error) {
 	if createdByUserID == "" {
 		return assistantRecord{}, fmt.Errorf("create assistant: missing user id")
@@ -1666,7 +1724,7 @@ func (s *ServiceCore) CreateAssistant(
 	if err != nil {
 		return assistantRecord{}, err
 	}
-	if err := s.requireReadableEnvironmentBindings(ctx, tx, projectID, uuid.Nil, resolved, resolvedMcpServers); err != nil {
+	if err := requireReadableEnvironmentBindings(ctx, tx, projectID, uuid.Nil, resolved, resolvedMcpServers, canBindEnvironment); err != nil {
 		return assistantRecord{}, err
 	}
 	if err := writeAssistantAttachments(ctx, tx, record.ID, projectID, resolved, true, resolvedMcpServers, true); err != nil {
@@ -1785,6 +1843,7 @@ func (s *ServiceCore) UpdateAssistant(
 	maxConcurrency *int,
 	status *string,
 	canEnableMCP func(toolsetID uuid.UUID) bool,
+	canBindEnvironment func(environmentID uuid.UUID) bool,
 	selection ...runtimeSelectionChange,
 ) (assistantRecord, error) {
 	change := runtimeSelectionChange{Version: nil, ExpectedVersion: nil}
@@ -1866,7 +1925,7 @@ func (s *ServiceCore) UpdateAssistant(
 		}
 	}
 	if toolsets != nil || mcpServers != nil {
-		if err := s.requireReadableEnvironmentBindings(ctx, tx, projectID, record.ID, resolved, resolvedMcpServers); err != nil {
+		if err := requireReadableEnvironmentBindings(ctx, tx, projectID, record.ID, resolved, resolvedMcpServers, canBindEnvironment); err != nil {
 			return assistantRecord{}, err
 		}
 		if err := writeAssistantAttachments(ctx, tx, record.ID, projectID, resolved, toolsets != nil, resolvedMcpServers, mcpServers != nil); err != nil {

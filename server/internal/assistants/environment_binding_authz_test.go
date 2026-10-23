@@ -36,24 +36,36 @@ func TestAssistantEnvironmentBindingRequiresEnvironmentRead(t *testing.T) {
 	stagingID := f.environmentID(t, staging)
 	name := "Assistant"
 	noRead := sessionContextWithGrants(t, f.projectID)
+	update := func(ctx context.Context, toolsets []*types.AssistantToolsetRef, servers []*types.AssistantMCPServerRef) error {
+		canBindEnvironment, err := f.core.readableEnvironments(ctx, f.projectID, toolsets, servers)
+		if err != nil {
+			return err
+		}
+		_, err = f.core.UpdateAssistant(ctx, f.projectID, f.assistant, &name, nil, nil, toolsets, servers, nil, nil, nil, allowAllMCPEnable, canBindEnvironment)
+		return err
+	}
 
-	_, err := f.core.UpdateAssistant(noRead, f.projectID, f.assistant, &name, nil, nil,
-		[]*types.AssistantToolsetRef{{ToolsetSlug: "billing", EnvironmentSlug: &staging}}, nil, nil, nil, nil, allowAllMCPEnable)
+	err := update(noRead, []*types.AssistantToolsetRef{{ToolsetSlug: "billing", EnvironmentSlug: &staging}}, nil)
 	require.ErrorIs(t, err, errEnvironmentBindingForbidden)
 
 	// Resubmitting a binding the assistant already has selects nothing new.
 	f.addServerRow(t, f.hosted.ID, stagingID)
-	_, err = f.core.UpdateAssistant(noRead, f.projectID, f.assistant, &name, nil, nil,
-		[]*types.AssistantToolsetRef{{ToolsetSlug: "billing", EnvironmentSlug: &staging}}, nil, nil, nil, nil, allowAllMCPEnable)
+	err = update(noRead, []*types.AssistantToolsetRef{{ToolsetSlug: "billing", EnvironmentSlug: &staging}}, nil)
 	require.NoError(t, err)
 
 	// The same environment on another server is a new binding.
-	_, err = f.core.UpdateAssistant(noRead, f.projectID, f.assistant, &name, nil, nil, nil,
-		[]*types.AssistantMCPServerRef{{McpServerSlug: "remote", EnvironmentSlug: &staging}}, nil, nil, nil, allowAllMCPEnable)
+	err = update(noRead, nil, []*types.AssistantMCPServerRef{{McpServerSlug: "remote", EnvironmentSlug: &staging}})
 	require.ErrorIs(t, err, errEnvironmentBindingForbidden)
 
+	// An unknown slug is indistinguishable from an unreadable one.
+	missing := "missing"
+	err = update(noRead, nil, []*types.AssistantMCPServerRef{{McpServerSlug: "remote", EnvironmentSlug: &missing}})
+	require.ErrorIs(t, err, errEnvironmentBindingForbidden)
+	err = update(sessionContextWithGrants(t, f.projectID, authz.NewGrant(authz.ScopeEnvironmentRead, authz.WildcardResource)), nil,
+		[]*types.AssistantMCPServerRef{{McpServerSlug: "remote", EnvironmentSlug: &missing}})
+	require.ErrorIs(t, err, errAssistantValidation)
+
 	canRead := sessionContextWithGrants(t, f.projectID, authz.NewGrant(authz.ScopeEnvironmentRead, stagingID.UUID.String()))
-	_, err = f.core.UpdateAssistant(canRead, f.projectID, f.assistant, &name, nil, nil, nil,
-		[]*types.AssistantMCPServerRef{{McpServerSlug: "remote", EnvironmentSlug: &staging}}, nil, nil, nil, allowAllMCPEnable)
+	err = update(canRead, nil, []*types.AssistantMCPServerRef{{McpServerSlug: "remote", EnvironmentSlug: &staging}})
 	require.NoError(t, err)
 }

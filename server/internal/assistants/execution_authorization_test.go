@@ -77,7 +77,7 @@ func TestAgentBackedTurnsRunWithPrincipalCredentials(t *testing.T) {
 	seedProjectRead(t, db, "user-2", project)
 	seedMCPConnect(t, db, "user-1", project)
 	core := newProvisioningCore(t, db)
-	assistant, err := core.CreateAssistant(t.Context(), "org-test", project, "user-1", "Execution", "openai/gpt-4o-mini", "", nil, nil, 300, 1, StatusActive, true, nil)
+	assistant, err := core.CreateAssistant(t.Context(), "org-test", project, "user-1", "Execution", "openai/gpt-4o-mini", "", nil, nil, 300, 1, StatusActive, true, nil, nil)
 	require.NoError(t, err)
 	toolset, err := toolsetsrepo.New(db).CreateToolset(t.Context(), toolsetsrepo.CreateToolsetParams{OrganizationID: "org-test", ProjectID: project, Name: "Business", Slug: "business", Description: pgtype.Text{}, DefaultEnvironmentSlug: pgtype.Text{}, McpSlug: pgtype.Text{}, McpEnabled: true})
 	require.NoError(t, err)
