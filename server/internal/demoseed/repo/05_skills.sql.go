@@ -340,14 +340,14 @@ SELECT $1::uuid, $2::uuid, c,
        encode(sha256(convert_to(c, 'UTF8')), 'hex'),
        'Add on-call paging step', TRUE, $3::text,
        now() - interval '3 days', now() - interval '3 days'
-FROM (SELECT $4::text || E'- page the on-call before any manual failover.\n' AS c) s
+FROM (SELECT $4::text AS c) s
 `
 
 type SkillsInsertRunbookV2Params struct {
 	ID              uuid.UUID
 	SkillID         uuid.UUID
 	CreatedByUserID string
-	BaseContent     string
+	Content         string
 }
 
 // Runbook v2: the base runbook content plus an on-call paging step.
@@ -356,7 +356,7 @@ func (q *Queries) SkillsInsertRunbookV2(ctx context.Context, arg SkillsInsertRun
 		arg.ID,
 		arg.SkillID,
 		arg.CreatedByUserID,
-		arg.BaseContent,
+		arg.Content,
 	)
 	return err
 }

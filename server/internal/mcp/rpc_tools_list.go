@@ -199,6 +199,12 @@ func handleToolsList(
 		}
 	}
 
+	// An empty toolset must list [] rather than null: some clients reject a
+	// null tools array during startup.
+	if tools == nil {
+		tools = []*toolListEntry{}
+	}
+
 	result := &toolsListResult{
 		ID: req.ID,
 		Result: toolsListResultTools{

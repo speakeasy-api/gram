@@ -61,7 +61,7 @@ SELECT @id::uuid, @skill_id::uuid, c,
        encode(sha256(convert_to(c, 'UTF8')), 'hex'),
        'Add on-call paging step', TRUE, @created_by_user_id::text,
        now() - interval '3 days', now() - interval '3 days'
-FROM (SELECT @base_content::text || E'- page the on-call before any manual failover.\n' AS c) s;
+FROM (SELECT @content::text AS c) s;
 
 -- name: SkillsInsertVersionLineage :exec
 INSERT INTO skill_version_lineages (skill_version_id, skill_id, derived_from_version_id)
