@@ -829,7 +829,11 @@ function ScopeLine({
             value={state.value}
             disabled={pending || !canManage}
             options={options}
-            className={state.blocked ? "text-default-destructive" : undefined}
+            className={
+              state.blocked
+                ? "text-default-destructive hover:text-default-destructive"
+                : undefined
+            }
           />
         </RequireScope>
       )}

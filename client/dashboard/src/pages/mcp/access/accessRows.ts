@@ -417,6 +417,27 @@ function isClosed(cell: ScopeCell, reachable: string[] | null): boolean {
   );
 }
 
+/**
+ * Whether this line's own blocks alone close it: an unnarrowed one, or, with
+ * a catalogue, narrowed ones that between them cover every tool the grants
+ * open. A block trimming only some of those tools leaves the line open.
+ */
+function closedByOwnBlocks(
+  cell: ScopeCell,
+  catalog: ToolSelectionTool[],
+): boolean {
+  const own = cell.blocks.filter((block) => !isInherited(cell, block));
+  if (own.some(isUnnarrowed)) return true;
+  if (own.length === 0 || catalog.length === 0) return false;
+  const granted = catalog.filter((tool) =>
+    cell.grants.some((grant) => coversTool(grant, tool)),
+  );
+  return (
+    granted.length > 0 &&
+    granted.every((tool) => own.some((block) => coversTool(block, tool)))
+  );
+}
+
 export function scopeState(
   row: AccessRow,
   scope: ScopeKey,
@@ -444,9 +465,7 @@ export function scopeState(
     const cancellingSelf = cancelling?.principalUrn === row.principalUrn;
     // The row's own block decides the line, so naming another principal's
     // block beside it would only repeat the answer.
-    const blocked = cell.blocks.some(
-      (block) => !isInherited(cell, block) && isUnnarrowed(block),
-    );
+    const blocked = closedByOwnBlocks(cell, catalog);
     return {
       value: blocked ? "Blocked" : "No access",
       granted: false,

@@ -261,6 +261,21 @@ describe("a person and the roles they are in", () => {
     expect(state.value).toBe("No access");
   });
 
+  it("calls a narrowed own block blocked when it covers every granted tool", () => {
+    const row = rowFor([
+      role("Collaborator", { level: "use" }),
+      role("Collaborator", {
+        appliesTo: "resource",
+        level: "blocked",
+        tools: ["a", "b", "c", "d", "e"],
+      }),
+    ]);
+    const state = scopeState(row, "use", catalog);
+
+    expect(state.value).toBe("Blocked");
+    expect(state.blocked).toBe(true);
+  });
+
   it("does not call a narrowed own block blocked", () => {
     const row = rowFor([
       role("Collaborator", { level: "use" }),
