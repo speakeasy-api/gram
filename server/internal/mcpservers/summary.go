@@ -16,7 +16,7 @@ import (
 )
 
 // EnrichViews fills each view's toolset summary, primary endpoint, platform
-// endpoint slug and has_endpoint in up to three queries, whatever the number of
+// endpoint slug and has_endpoint in up to four queries, whatever the number of
 // servers. views[i] must be servers[i]'s view. A failed query is logged and
 // leaves its fields empty; endpointsResolved reports whether the primary and
 // platform endpoint fields could be read.
@@ -59,6 +59,26 @@ func EnrichViews(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, ser
 		}
 		for _, row := range rows {
 			summaries[row.ID] = mv.BuildMcpServerToolsetSummaryView(row)
+		}
+	}
+	if len(summaries) > 0 {
+		toolsetIDs := make([]uuid.UUID, 0, len(summaries))
+		for id := range summaries {
+			toolsetIDs = append(toolsetIDs, id)
+		}
+		// Kept apart from the summary query so a failed endpoint read never drops a summary.
+		hosts, err := repo.New(db).ListToolsetHostingMCPServerIDs(ctx, repo.ListToolsetHostingMCPServerIDsParams{
+			OrganizationID: organizationID,
+			ToolsetIds:     toolsetIDs,
+			ProjectIds:     projectIDs,
+		})
+		if err != nil {
+			logger.WarnContext(ctx, "list toolset hosting mcp servers", attr.SlogError(err))
+		}
+		for _, host := range hosts {
+			if summary, ok := summaries[host.ToolsetID]; ok {
+				summary.HostingMcpServerID = new(host.McpServerID.String())
+			}
 		}
 	}
 
