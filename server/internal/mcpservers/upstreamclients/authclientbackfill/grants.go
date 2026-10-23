@@ -433,6 +433,7 @@ func planAttachmentGrants(ctx context.Context, q *Queries, opts Options, plan *g
 	// the organization's write gate allows it. Until then they wait: nothing
 	// is written without the dimension, and the run reports them pending.
 	writable := authz.UpstreamSelectorWritesAllowed(ctx, opts.OrganizationID)
+	var candidates []ListLiveAgentAttachmentsRow
 	for _, row := range rows {
 		reason := attachmentRemediationReason(row)
 		if reason != "" {
@@ -461,24 +462,61 @@ func planAttachmentGrants(ctx context.Context, q *Queries, opts Options, plan *g
 		if plan.existing[key] {
 			continue
 		}
-		if opts.Apply {
-			// Decide again from a read taken after locking what the decision
-			// reads, held until the grant commits.
-			fresh, live, err := lockAttachment(ctx, q, opts.OrganizationID, row.BindingID)
-			if err != nil {
+		if !opts.Apply {
+			if err := plan.want(GrantAttachment, principal, authz.ScopeMCPAuth, selector); err != nil {
 				return err
 			}
-			if !live {
-				// Revoked meanwhile: nothing is left to carry over.
-				continue
-			}
-			if reason := attachmentRemediationReason(fresh); reason != "" {
-				report.AttachmentRemediations = append(report.AttachmentRemediations, AttachmentRemediation{BindingID: fresh.BindingID.String(), AgentID: fresh.AgentID.String(), Reason: reason})
-				continue
-			}
-			principal = urn.NewPrincipal(urn.PrincipalTypeAgent, fresh.AgentID.String())
-			selector = authz.ConnectionAuthClientSelector(fresh.RemoteSessionClientID.String(), fresh.OwnerUserID)
+			continue
 		}
+		candidates = append(candidates, row)
+	}
+	if len(candidates) == 0 {
+		return nil
+	}
+
+	// Owner and membership lifecycle writers (membership removal, user
+	// deprovisioning and disabling) lock the user or membership before the
+	// agents they latch, so every candidate's owner and membership is locked
+	// first, in a fixed order, before any attachment or agent: locks are held
+	// for the whole transaction, so taking them per attachment would put a
+	// later attachment's owner after an earlier attachment's agent.
+	owners := make([]string, 0, len(candidates))
+	locked := map[string]bool{}
+	for _, row := range candidates {
+		if !locked[row.OwnerUserID] {
+			locked[row.OwnerUserID] = true
+			owners = append(owners, row.OwnerUserID)
+		}
+	}
+	slices.Sort(owners)
+	if err := q.LockAttachmentOwners(ctx, owners); err != nil {
+		return fmt.Errorf("lock attachment owners: %w", err)
+	}
+	if err := q.LockAttachmentOwnerMemberships(ctx, LockAttachmentOwnerMembershipsParams{OrganizationID: opts.OrganizationID, UserIds: owners}); err != nil {
+		return fmt.Errorf("lock attachment owner memberships: %w", err)
+	}
+	for _, row := range candidates {
+		// Decide again from a read taken after locking what the decision
+		// reads, held until the grant commits.
+		fresh, live, err := lockAttachment(ctx, q, opts.OrganizationID, row.BindingID)
+		if err != nil {
+			return err
+		}
+		if !live {
+			// Revoked meanwhile: nothing is left to carry over.
+			continue
+		}
+		if reason := attachmentRemediationReason(fresh); reason != "" {
+			report.AttachmentRemediations = append(report.AttachmentRemediations, AttachmentRemediation{BindingID: fresh.BindingID.String(), AgentID: fresh.AgentID.String(), Reason: reason})
+			continue
+		}
+		if !locked[fresh.OwnerUserID] {
+			// The agent changed owner after the owners were locked, so its
+			// new owner is not held; a later run decides it.
+			continue
+		}
+		principal := urn.NewPrincipal(urn.PrincipalTypeAgent, fresh.AgentID.String())
+		selector := authz.ConnectionAuthClientSelector(fresh.RemoteSessionClientID.String(), fresh.OwnerUserID)
 		if err := plan.want(GrantAttachment, principal, authz.ScopeMCPAuth, selector); err != nil {
 			return err
 		}
@@ -503,9 +541,6 @@ func lockAttachment(ctx context.Context, q *Queries, organizationID string, bind
 		}},
 		{"connection", func(ctx context.Context) error {
 			return q.LockAttachmentSession(ctx, LockAttachmentSessionParams{BindingID: bindingID, OrganizationID: organizationID})
-		}},
-		{"owner", func(ctx context.Context) error {
-			return q.LockAttachmentOwner(ctx, LockAttachmentOwnerParams{BindingID: bindingID, OrganizationID: organizationID})
 		}},
 		{"upstream issuer", func(ctx context.Context) error {
 			return q.LockAttachmentUpstreamIssuer(ctx, LockAttachmentUpstreamIssuerParams{BindingID: bindingID, OrganizationID: organizationID})

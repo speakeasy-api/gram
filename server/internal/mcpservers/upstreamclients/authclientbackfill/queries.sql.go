@@ -281,6 +281,15 @@ func (q *Queries) DeleteEMABindingFixture(ctx context.Context, id uuid.UUID) err
 	return err
 }
 
+const disableUserFixture = `-- name: DisableUserFixture :exec
+UPDATE users SET deleted_at = clock_timestamp() WHERE id = $1
+`
+
+func (q *Queries) DisableUserFixture(ctx context.Context, id string) error {
+	_, err := q.db.Exec(ctx, disableUserFixture, id)
+	return err
+}
+
 const findEMAAuthClient = `-- name: FindEMAAuthClient :one
 SELECT ac.id, e.requested_scopes
 FROM mcp_auth_client_emas AS e
@@ -3037,7 +3046,6 @@ func (q *Queries) LockAttachmentConfiguration(ctx context.Context, arg LockAttac
 }
 
 const lockAttachmentIssuers = `-- name: LockAttachmentIssuers :exec
-
 SELECT usi.id
 FROM user_session_issuers AS usi
 WHERE usi.id IN (
@@ -3059,6 +3067,43 @@ type LockAttachmentIssuersParams struct {
 	OrganizationID string
 }
 
+func (q *Queries) LockAttachmentIssuers(ctx context.Context, arg LockAttachmentIssuersParams) error {
+	_, err := q.db.Exec(ctx, lockAttachmentIssuers, arg.BindingID, arg.OrganizationID)
+	return err
+}
+
+const lockAttachmentOwnerMemberships = `-- name: LockAttachmentOwnerMemberships :exec
+SELECT membership.user_id
+FROM organization_user_relationships AS membership
+WHERE membership.organization_id = $1
+  AND membership.user_id = ANY($2::text[])
+  AND membership.deleted_at IS NULL
+ORDER BY membership.user_id
+FOR SHARE
+`
+
+type LockAttachmentOwnerMembershipsParams struct {
+	OrganizationID string
+	UserIds        []string
+}
+
+// Their live memberships in the organization, after the users and before any
+// attachment or agent lock, as membership removal locks the membership before
+// latching the agents.
+func (q *Queries) LockAttachmentOwnerMemberships(ctx context.Context, arg LockAttachmentOwnerMembershipsParams) error {
+	_, err := q.db.Exec(ctx, lockAttachmentOwnerMemberships, arg.OrganizationID, arg.UserIds)
+	return err
+}
+
+const lockAttachmentOwners = `-- name: LockAttachmentOwners :exec
+
+SELECT owner.id
+FROM users AS owner
+WHERE owner.id = ANY($1::text[])
+ORDER BY owner.id
+FOR SHARE
+`
+
 // The attachment locks below hold, until the grants commit, every row that
 // makes an attachment servable, so none of the writers that make it
 // unservable (issuer deletion or migration, attachment revocation, agent
@@ -3067,36 +3112,17 @@ type LockAttachmentIssuersParams struct {
 // the upstream client, its issuer, the project, the sign-in binding or the
 // auth client) can commit between the read that decides a grant and the
 // grant. FOR SHARE, not FOR KEY SHARE, so they also wait on writers that only
-// update a column, such as a reauthorization's grant_generation. They are
-// taken in this order, issuers first and then the binding before its
-// connection, as issuer-first child writers and agent admission take them,
-// and a row already gone locks nothing: the read that follows then reports
-// the attachment for remediation.
-func (q *Queries) LockAttachmentIssuers(ctx context.Context, arg LockAttachmentIssuersParams) error {
-	_, err := q.db.Exec(ctx, lockAttachmentIssuers, arg.BindingID, arg.OrganizationID)
-	return err
-}
-
-const lockAttachmentOwner = `-- name: LockAttachmentOwner :exec
-SELECT owner.id
-FROM principal_remote_session_bindings AS b
-JOIN agents AS a ON a.organization_id = b.organization_id AND a.id = b.principal_id
-JOIN users AS owner ON owner.id = a.owner_user_id
-JOIN organization_user_relationships AS membership
-  ON membership.organization_id = a.organization_id
- AND membership.user_id = owner.id
- AND membership.deleted_at IS NULL
-WHERE b.id = $1 AND b.organization_id = $2
-FOR SHARE OF owner, membership
-`
-
-type LockAttachmentOwnerParams struct {
-	BindingID      uuid.UUID
-	OrganizationID string
-}
-
-func (q *Queries) LockAttachmentOwner(ctx context.Context, arg LockAttachmentOwnerParams) error {
-	_, err := q.db.Exec(ctx, lockAttachmentOwner, arg.BindingID, arg.OrganizationID)
+// update a column, such as a reauthorization's grant_generation. Every
+// candidate's owner and membership are locked first, once for the whole run,
+// then each attachment's issuers, the binding before its connection, the
+// upstream issuer before its client, as user and membership lifecycle
+// writers, issuer-first child writers, agent admission and issuer migration
+// take them. A row already gone locks nothing: the read that follows then
+// reports the attachment for remediation.
+// Every candidate attachment's owner, in id order, before any attachment or
+// agent lock, as user lifecycle writers lock a user before its agents.
+func (q *Queries) LockAttachmentOwners(ctx context.Context, userIds []string) error {
+	_, err := q.db.Exec(ctx, lockAttachmentOwners, userIds)
 	return err
 }
 
@@ -3567,6 +3593,17 @@ SELECT id FROM mcp_servers WHERE id = $1 FOR UPDATE NOWAIT
 func (q *Queries) ProbeServerLockFixture(ctx context.Context, id uuid.UUID) (uuid.UUID, error) {
 	row := q.db.QueryRow(ctx, probeServerLockFixture, id)
 	var id_2 uuid.UUID
+	err := row.Scan(&id_2)
+	return id_2, err
+}
+
+const probeUserLockFixture = `-- name: ProbeUserLockFixture :one
+SELECT id FROM users WHERE id = $1 FOR UPDATE NOWAIT
+`
+
+func (q *Queries) ProbeUserLockFixture(ctx context.Context, id string) (string, error) {
+	row := q.db.QueryRow(ctx, probeUserLockFixture, id)
+	var id_2 string
 	err := row.Scan(&id_2)
 	return id_2, err
 }

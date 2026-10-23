@@ -2108,11 +2108,34 @@ ORDER BY b.id;
 -- the upstream client, its issuer, the project, the sign-in binding or the
 -- auth client) can commit between the read that decides a grant and the
 -- grant. FOR SHARE, not FOR KEY SHARE, so they also wait on writers that only
--- update a column, such as a reauthorization's grant_generation. They are
--- taken in this order, issuers first and then the binding before its
--- connection, as issuer-first child writers and agent admission take them,
--- and a row already gone locks nothing: the read that follows then reports
--- the attachment for remediation.
+-- update a column, such as a reauthorization's grant_generation. Every
+-- candidate's owner and membership are locked first, once for the whole run,
+-- then each attachment's issuers, the binding before its connection, the
+-- upstream issuer before its client, as user and membership lifecycle
+-- writers, issuer-first child writers, agent admission and issuer migration
+-- take them. A row already gone locks nothing: the read that follows then
+-- reports the attachment for remediation.
+
+-- name: LockAttachmentOwners :exec
+-- Every candidate attachment's owner, in id order, before any attachment or
+-- agent lock, as user lifecycle writers lock a user before its agents.
+SELECT owner.id
+FROM users AS owner
+WHERE owner.id = ANY(@user_ids::text[])
+ORDER BY owner.id
+FOR SHARE;
+
+-- name: LockAttachmentOwnerMemberships :exec
+-- Their live memberships in the organization, after the users and before any
+-- attachment or agent lock, as membership removal locks the membership before
+-- latching the agents.
+SELECT membership.user_id
+FROM organization_user_relationships AS membership
+WHERE membership.organization_id = @organization_id
+  AND membership.user_id = ANY(@user_ids::text[])
+  AND membership.deleted_at IS NULL
+ORDER BY membership.user_id
+FOR SHARE;
 
 -- name: LockAttachmentIssuers :exec
 SELECT usi.id
@@ -2147,18 +2170,6 @@ WHERE rs.id = (
   WHERE b.id = @binding_id AND b.organization_id = @organization_id
 )
 FOR SHARE;
-
--- name: LockAttachmentOwner :exec
-SELECT owner.id
-FROM principal_remote_session_bindings AS b
-JOIN agents AS a ON a.organization_id = b.organization_id AND a.id = b.principal_id
-JOIN users AS owner ON owner.id = a.owner_user_id
-JOIN organization_user_relationships AS membership
-  ON membership.organization_id = a.organization_id
- AND membership.user_id = owner.id
- AND membership.deleted_at IS NULL
-WHERE b.id = @binding_id AND b.organization_id = @organization_id
-FOR SHARE OF owner, membership;
 
 -- name: LockAttachmentUpstreamIssuer :exec
 -- The upstream client's issuer, before the client itself, as issuer
@@ -2207,6 +2218,12 @@ WHERE rs.id = (SELECT b.remote_session_id FROM principal_remote_session_bindings
 UPDATE remote_sessions AS rs
 SET deleted_at = clock_timestamp()
 WHERE rs.id = (SELECT b.remote_session_id FROM principal_remote_session_bindings AS b WHERE b.id = @binding_id);
+
+-- name: DisableUserFixture :exec
+UPDATE users SET deleted_at = clock_timestamp() WHERE id = @id;
+
+-- name: ProbeUserLockFixture :one
+SELECT id FROM users WHERE id = @id FOR UPDATE NOWAIT;
 
 -- name: ProbeAttachmentBindingLockFixture :one
 SELECT b.id
