@@ -270,7 +270,7 @@ DELETE FROM principal_grants
 WHERE organization_id = $1
   AND principal_urn = $2
   AND scope = $3
-  AND selectors->>'resource_id' = '*'
+  AND COALESCE(selectors->>'resource_id', '*') = '*'
   AND (selectors - 'resource_kind' - 'resource_id') = '{}'::jsonb
 `
 
@@ -280,11 +280,11 @@ type DeletePrincipalWildcardGrantsParams struct {
 	Scope          string
 }
 
-// Removes a principal's unrestricted rows for one scope: a selector naming only
-// a resource kind and the wildcard resource ID. Older writers stored the kind
-// as "*" or under another name, so matching on the kind the scope implies
-// today would leave those rows granting access after an administrator removed
-// them.
+// Removes a principal's unrestricted rows for one scope: a selector naming at
+// most a resource kind and the wildcard resource ID. Older writers stored the
+// kind as "*" or under another name, or left out resource_id (which the grant
+// matcher reads as "*"), so matching on the kind the scope implies today would
+// leave those rows granting access after an administrator removed them.
 func (q *Queries) DeletePrincipalWildcardGrants(ctx context.Context, arg DeletePrincipalWildcardGrantsParams) (int64, error) {
 	result, err := q.db.Exec(ctx, deletePrincipalWildcardGrants, arg.OrganizationID, arg.PrincipalUrn, arg.Scope)
 	if err != nil {

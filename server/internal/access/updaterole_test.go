@@ -239,17 +239,20 @@ func TestService_UpdateRole_RemovingUnrestrictedGrantRemovesLegacyWildcardRow(t 
 	role, err := ti.service.UpdateRole(ctx, &gen.UpdateRolePayload{ID: roleID, AddGrants: []*gen.RoleGrant{narrow}})
 	require.NoError(t, err)
 
-	// An unrestricted row stored with a wildcard kind, as older writers did.
-	// The editor shows it as "All servers", so removing that must delete it.
+	// Unrestricted rows in shapes older writers stored: a wildcard kind, and
+	// a kind with no resource_id, which the grant matcher reads as "*". The
+	// editor shows them as "All servers", so removing that must delete them.
 	principal, err := urn.ParsePrincipal(role.PrincipalUrn)
 	require.NoError(t, err)
-	_, err = repo.New(ti.conn).UpsertPrincipalGrant(ctx, repo.UpsertPrincipalGrantParams{
-		OrganizationID: authCtx.ActiveOrganizationID,
-		PrincipalUrn:   principal,
-		Scope:          string(authz.ScopeMCPWrite),
-		Selectors:      []byte(`{"resource_kind":"*","resource_id":"*"}`),
-	})
-	require.NoError(t, err)
+	for _, selectors := range []string{`{"resource_kind":"*","resource_id":"*"}`, `{"resource_kind":"mcp"}`} {
+		_, err = repo.New(ti.conn).UpsertPrincipalGrant(ctx, repo.UpsertPrincipalGrantParams{
+			OrganizationID: authCtx.ActiveOrganizationID,
+			PrincipalUrn:   principal,
+			Scope:          string(authz.ScopeMCPWrite),
+			Selectors:      []byte(selectors),
+		})
+		require.NoError(t, err)
+	}
 
 	role, err = ti.service.UpdateRole(ctx, &gen.UpdateRolePayload{
 		ID:           roleID,
