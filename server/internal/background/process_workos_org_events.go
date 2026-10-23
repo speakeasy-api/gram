@@ -57,10 +57,11 @@ func ExecuteProcessWorkOSOrganizationEventsWorkflowDebounced(ctx context.Context
 			TaskQueue:                string(temporalEnv.Queue()),
 			WorkflowIDReusePolicy:    enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
 			WorkflowIDConflictPolicy: enums.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING,
-			// 30m fits the activity's worst-case retry budget (5 attempts ×
-			// 5m StartToCloseTimeout + backoff). Tighter would cut the retry
+			// 1h fits two reads, each with the activity's worst-case retry
+			// budget (5 attempts × 5m StartToCloseTimeout + backoff), plus the
+			// wait before the empty-page re-read. Tighter would cut the retry
 			// policy off mid-retry on a sustained WorkOS/DB slowdown.
-			WorkflowRunTimeout: 30 * time.Minute,
+			WorkflowRunTimeout: time.Hour,
 			// StartDelay is the debounce coalescing window: concurrent
 			// SignalWithStartWorkflow calls within this window land on the same
 			// pending execution rather than spawning serial runs. Tune this to
