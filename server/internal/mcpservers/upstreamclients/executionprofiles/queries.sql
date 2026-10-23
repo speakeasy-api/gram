@@ -9,8 +9,9 @@ ON CONFLICT (assistant_id, trigger_instance_id, execution_context) WHERE deleted
 -- name: LockProfile :one
 -- Locks the live profile for an assistant, root trigger and execution context
 -- so one turn at a time decides its next version. Its latest version is read
--- by GetProfile after the lock is held, in a statement whose snapshot sees
--- the version a turn that held the lock before it committed.
+-- by GetProfile after the lock is held. Each statement takes its own snapshot
+-- under READ COMMITTED, which Bind runs at, so that read sees the version a
+-- turn that held the lock before it committed.
 SELECT p.id
 FROM execution_selection_profiles AS p
 WHERE p.organization_id = @organization_id

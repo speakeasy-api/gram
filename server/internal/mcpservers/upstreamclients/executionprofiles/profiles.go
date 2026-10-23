@@ -195,8 +195,13 @@ type Binding struct {
 
 // TxStarter begins the transaction a bind runs in.
 type TxStarter interface {
-	Begin(ctx context.Context) (pgx.Tx, error)
+	BeginTx(ctx context.Context, options pgx.TxOptions) (pgx.Tx, error)
 }
+
+// readCommitted is the isolation a bind needs: each statement takes its own
+// snapshot, so the version read after LockProfile includes one a turn that
+// held the lock before it committed.
+var readCommitted = pgx.TxOptions{IsoLevel: pgx.ReadCommitted, AccessMode: "", DeferrableMode: "", BeginQuery: "", CommitQuery: ""}
 
 // Bind returns the profile version a turn under target binds, deciding a new
 // version first when a server the assistant reaches has no choice yet and one
@@ -209,7 +214,7 @@ func Bind(ctx context.Context, db TxStarter, target Target, source string) (Bind
 	if target.Context != ContextUserBacked && target.Context != ContextUserless {
 		return zero, fmt.Errorf("unknown execution context %q", target.Context)
 	}
-	tx, err := db.Begin(ctx)
+	tx, err := db.BeginTx(ctx, readCommitted)
 	if err != nil {
 		return zero, fmt.Errorf("begin execution profile bind: %w", err)
 	}

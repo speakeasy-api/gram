@@ -413,8 +413,9 @@ type LockProfileParams struct {
 
 // Locks the live profile for an assistant, root trigger and execution context
 // so one turn at a time decides its next version. Its latest version is read
-// by GetProfile after the lock is held, in a statement whose snapshot sees
-// the version a turn that held the lock before it committed.
+// by GetProfile after the lock is held. Each statement takes its own snapshot
+// under READ COMMITTED, which Bind runs at, so that read sees the version a
+// turn that held the lock before it committed.
 func (q *Queries) LockProfile(ctx context.Context, arg LockProfileParams) (uuid.UUID, error) {
 	row := q.db.QueryRow(ctx, lockProfile,
 		arg.OrganizationID,

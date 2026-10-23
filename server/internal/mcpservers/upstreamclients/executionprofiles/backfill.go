@@ -81,7 +81,7 @@ func Backfill(ctx context.Context, db TxStarter, organizationID string, apply bo
 // listTargets reads the organization's targets in a transaction it closes
 // before any target is bound, so a run never holds two connections.
 func listTargets(ctx context.Context, db TxStarter, organizationID string) ([]ListProfileTargetsRow, error) {
-	tx, err := db.Begin(ctx)
+	tx, err := db.BeginTx(ctx, readCommitted)
 	if err != nil {
 		return nil, fmt.Errorf("begin execution profile target list: %w", err)
 	}
@@ -96,7 +96,7 @@ func listTargets(ctx context.Context, db TxStarter, organizationID string) ([]Li
 // previewTarget decides what a bind under target would record, in a
 // transaction of its own that writes nothing.
 func previewTarget(ctx context.Context, db TxStarter, target Target) (plan, error) {
-	tx, err := db.Begin(ctx)
+	tx, err := db.BeginTx(ctx, readCommitted)
 	if err != nil {
 		return plan{}, fmt.Errorf("begin execution profile preview: %w", err)
 	}

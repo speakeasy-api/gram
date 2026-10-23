@@ -213,13 +213,16 @@ func TestBindConcurrentTurnsDecideOneVersion(t *testing.T) {
 	const turns = 4
 	results := make(chan Binding, turns)
 	errs := make(chan error, turns)
+	start := make(chan struct{})
 	for range turns {
 		go func() {
+			<-start
 			binding, err := Bind(t.Context(), f.pool, Target{OrganizationID: f.orgID, ProjectID: f.projectID, AssistantID: f.assistant, TriggerID: f.trigger, Context: ContextUserBacked}, SourceIssuance)
 			results <- binding
 			errs <- err
 		}()
 	}
+	close(start)
 	written := 0
 	for range turns {
 		require.NoError(t, <-errs)
