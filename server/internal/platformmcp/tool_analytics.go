@@ -21,6 +21,7 @@ const (
 	listAnalyticsDimensionValuesToolName = "list_analytics_dimension_values"
 	runAnalyticsQueryToolName            = "run_analytics_query"
 	getSignalDefinitionToolName          = "get_signal_definition"
+	findSignalSessionsToolName           = "find_signal_sessions"
 
 	// analyticsFeature names the capability in refusals.
 	analyticsFeature = "analytics"
@@ -86,8 +87,11 @@ func registerAnalyticsTools(reg *Registrar, service *AnalyticsService) {
 	}
 	definition := &mcp.Tool{Name: getSignalDefinitionToolName, Title: "Inspect a Signal Measurement Definition", Description: "Read the immutable question, signal criteria, ordering and input contract behind a definition_hash returned by a signal measurement. Select the exact project, sensor and fingerprint. An absent historical snapshot is reported as unavailable, never reconstructed from current configuration. Requires Signals Intelligence and project:read; returns definition content, not conversation content.", Annotations: readOnlyAnnotations(), InputSchema: analyticsProjectSchema(map[string]*jsonschema.Schema{"sensor_id": uuidSchema("Contributing sensor UUID."), "definition_hash": stringSchema("Exact 64-character semantic fingerprint from the measurement.", 64, 64)}, []string{"project_id", "sensor_id", "definition_hash"})}
 
+	finder := &mcp.Tool{Name: findSignalSessionsToolName, Title: "Find Cross-session Signal Patterns", Description: "Measure signal presence, breadth and concentration across conversations in one exact project. Optionally select a peer predicate for separately named same-message and same-session co-occurrence with joint-answer denominators, and compare an equal-duration previous window with explicit comparability gates. signal_query uses the chart's sensor, probability rule, trigger/run and filters, without group_by. Evidence is an opt-in sample of at most twenty recent permitted conversations, containing reference coordinates only; open transcripts in the dashboard. Coverage remains unknown and differences are exploratory, not causal or significance claims. Requires Signals Intelligence and project:read; every evidence reference additionally passes chat access checks.", Annotations: readOnlyAnnotations(), InputSchema: analyticsProjectSchema(map[string]*jsonschema.Schema{
+		"from": dateTimeSchema("Inclusive source-time boundary."), "to": dateTimeSchema("Exclusive source-time boundary."), "signal_query": signalFindingsQuerySchema(), "peer": signalSelectionSchema(), "compare_previous": {Type: "boolean", Description: "Compare the adjacent equal-duration window, with comparability markers."}, "evidence": {Type: "boolean", Description: "Include bounded, permission-checked conversation references. Defaults to false."},
+	}, []string{"project_id", "from", "to", "signal_query"})}
 	if !live {
-		for _, tool := range []*mcp.Tool{describe, values, query, definition} {
+		for _, tool := range []*mcp.Tool{describe, values, query, definition, finder} {
 			tool.Description += " Analytics queries are unavailable in this deployment."
 			addTool(reg, tool, meta, unavailableTool(analyticsFeature))
 		}
@@ -112,6 +116,11 @@ func registerAnalyticsTools(reg *Registrar, service *AnalyticsService) {
 	addTool(reg, definition, meta, func(ctx context.Context, _ *mcp.CallToolRequest, input GetSignalDefinitionInput) (*mcp.CallToolResult, GetSignalDefinitionOutput, error) {
 		return analyticsToolCall(ctx, service.logger, definition.Name, func(principal Principal) (GetSignalDefinitionOutput, error) {
 			return service.Definition(ctx, principal, input)
+		})
+	})
+	addTool(reg, finder, meta, func(ctx context.Context, _ *mcp.CallToolRequest, input FindSignalSessionsInput) (*mcp.CallToolResult, FindSignalSessionsOutput, error) {
+		return analyticsToolCall(ctx, service.logger, finder.Name, func(principal Principal) (FindSignalSessionsOutput, error) {
+			return service.FindSignalSessions(ctx, principal, input)
 		})
 	})
 }
@@ -250,7 +259,7 @@ func signalScopeSchema() *jsonschema.Schema {
 	}, []string{"sensor_id"})
 }
 
-func signalQuerySchema() *jsonschema.Schema {
+func signalSelectionSchema() *jsonschema.Schema {
 	selection := closedObject(map[string]*jsonschema.Schema{
 		"sensor_id":     uuidSchema("Contributing sensor from signal_metrics.sensors."),
 		"signal_id":     uuidSchema("Signal for multi-label or exclusive measurements; omit with minimum_level."),
@@ -258,13 +267,17 @@ func signalQuerySchema() *jsonschema.Schema {
 		"threshold":     {Type: "number", ExclusiveMinimum: new(float64(0)), Maximum: new(float64(1)), Description: "Explicit probability threshold greater than zero. Exclusive mode uses the selected signal."},
 	}, []string{"sensor_id", "threshold"})
 	selection.OneOf = []*jsonschema.Schema{{Required: []string{"signal_id"}}, {Required: []string{"minimum_level"}}}
+	return selection
+}
+
+func signalQuerySchema() *jsonschema.Schema {
 	filter := closedObject(map[string]*jsonschema.Schema{
 		"dimension": signalDimensionSchema(),
 		"operator":  stringSchema("Comparison advertised by signal_metrics.operators.", 1, 64),
 		"values":    boundedArraySchema(stringSchema("Exact value; empty is distinct from missing.", 0, 32768), 0, 100, true),
 	}, []string{"dimension", "operator"})
 	return closedObject(map[string]*jsonschema.Schema{
-		"selection": selection,
+		"selection": signalSelectionSchema(),
 		"trigger":   stringSchema("Evaluation population: stream or manual.", 1, 64),
 		"run_id":    uuidSchema("Exact manual run, absent for streaming."),
 		"group_by":  boundedArraySchema(signalDimensionSchema(), 0, 3, true),
@@ -272,4 +285,12 @@ func signalQuerySchema() *jsonschema.Schema {
 		"groups":    {Type: "integer", Minimum: new(float64(1)), Maximum: new(float64(20)), Description: "Top groups over the complete window; default five."},
 		"points":    {Type: "integer", Minimum: new(float64(1)), Maximum: new(float64(10000)), Description: "Complete-series point budget across all selected groups; default 2000."},
 	}, []string{"selection"})
+}
+
+func signalFindingsQuerySchema() *jsonschema.Schema {
+	schema := signalQuerySchema()
+	for _, field := range []string{"group_by", "groups", "points"} {
+		delete(schema.Properties, field)
+	}
+	return schema
 }

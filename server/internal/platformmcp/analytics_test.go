@@ -39,6 +39,12 @@ func (s *stubAnalyticsEngine) ReadSignalDefinition(context.Context, analytics.Te
 	return nil, ErrUnavailable
 }
 
+func (s *stubAnalyticsEngine) SignalFindings(_ context.Context, tenant analytics.Tenant, _ analytics.Window, _ analytics.SignalFindingsRequest, _ analytics.ConversationAccess) (*analytics.SignalFindings, error) {
+	s.calls++
+	s.tenant = tenant
+	return &analytics.SignalFindings{Concentration: analytics.Row{"top_session_share": 0.5}}, s.err
+}
+
 func (s *stubAnalyticsEngine) Query(_ context.Context, tenant analytics.Tenant, req analytics.Request) (*analytics.QueryResult, error) {
 	s.calls++
 	s.tenant = tenant

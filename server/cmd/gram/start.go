@@ -1934,6 +1934,7 @@ func newStartCommand() *cli.Command {
 				ToolCallSearch:            telemetryrepo.New(chDB),
 				TelemetryDrilldown:        telemetryrepo.New(chDB),
 				Analytics:                 analyticsSvc.Engine(),
+				ConversationAccess:        chatService,
 				Widgets:                   widgetsSvc,
 				Dashboards:                dashboardsSvc,
 				WorkflowRun:               posthogClient,
@@ -1955,6 +1956,7 @@ func newStartCommand() *cli.Command {
 			mcp.Attach(mux, mcpRuntime.MCP, mcpRuntime.Metadata)
 			mcp.AttachAuthenticationHost(mcpAuthenticationHost, mcpRuntime.MCP)
 
+			analyticsSvc.WithConversationAccess(chatService)
 			chat.Attach(mux, chatService)
 			variations.Attach(mux, variations.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger))
 			customdomains.Attach(mux, customdomains.NewService(

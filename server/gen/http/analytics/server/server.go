@@ -20,6 +20,7 @@ import (
 type Server struct {
 	Mounts           []*MountPoint
 	SignalDefinition http.Handler
+	SignalFindings   http.Handler
 	Query            http.Handler
 	Describe         http.Handler
 	DimensionValues  http.Handler
@@ -53,11 +54,13 @@ func New(
 	return &Server{
 		Mounts: []*MountPoint{
 			{"SignalDefinition", "GET", "/rpc/analytics.signalDefinition"},
+			{"SignalFindings", "POST", "/rpc/analytics.signalFindings"},
 			{"Query", "POST", "/rpc/analytics.query"},
 			{"Describe", "GET", "/rpc/analytics.describe"},
 			{"DimensionValues", "POST", "/rpc/analytics.dimensionValues"},
 		},
 		SignalDefinition: NewSignalDefinitionHandler(e.SignalDefinition, mux, decoder, encoder, errhandler, formatter),
+		SignalFindings:   NewSignalFindingsHandler(e.SignalFindings, mux, decoder, encoder, errhandler, formatter),
 		Query:            NewQueryHandler(e.Query, mux, decoder, encoder, errhandler, formatter),
 		Describe:         NewDescribeHandler(e.Describe, mux, decoder, encoder, errhandler, formatter),
 		DimensionValues:  NewDimensionValuesHandler(e.DimensionValues, mux, decoder, encoder, errhandler, formatter),
@@ -70,6 +73,7 @@ func (s *Server) Service() string { return "analytics" }
 // Use wraps the server handlers with the given middleware.
 func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.SignalDefinition = m(s.SignalDefinition)
+	s.SignalFindings = m(s.SignalFindings)
 	s.Query = m(s.Query)
 	s.Describe = m(s.Describe)
 	s.DimensionValues = m(s.DimensionValues)
@@ -81,6 +85,7 @@ func (s *Server) MethodNames() []string { return analytics.MethodNames[:] }
 // Mount configures the mux to serve the analytics endpoints.
 func Mount(mux goahttp.Muxer, h *Server) {
 	MountSignalDefinitionHandler(mux, h.SignalDefinition)
+	MountSignalFindingsHandler(mux, h.SignalFindings)
 	MountQueryHandler(mux, h.Query)
 	MountDescribeHandler(mux, h.Describe)
 	MountDimensionValuesHandler(mux, h.DimensionValues)
@@ -121,6 +126,59 @@ func NewSignalDefinitionHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "signalDefinition")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "analytics")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountSignalFindingsHandler configures the mux to serve the "analytics"
+// service "signalFindings" endpoint.
+func MountSignalFindingsHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/analytics.signalFindings", f)
+}
+
+// NewSignalFindingsHandler creates a HTTP handler which loads the HTTP request
+// and calls the "analytics" service "signalFindings" endpoint.
+func NewSignalFindingsHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeSignalFindingsRequest(mux, decoder)
+		encodeResponse = EncodeSignalFindingsResponse(encoder)
+		encodeError    = EncodeSignalFindingsError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "signalFindings")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "analytics")
 		payload, err := decodeRequest(r)
 		if err != nil {

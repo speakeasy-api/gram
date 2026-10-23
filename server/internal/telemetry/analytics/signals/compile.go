@@ -98,8 +98,12 @@ var measures = []string{
 	"uniqExactIf(conversation_id, measured AND isNotNull(conversation_id)) AS evaluated_sessions",
 	"uniqExactIf(conversation_id, hit AND isNotNull(conversation_id)) AS matched_sessions",
 	"uniqExactIf(definition_hash, definition_hash != '') AS definition_count",
+	"countIf(measured AND definition_hash = '') AS unknown_measured_definitions",
 	"groupUniqArrayIf(16)(definition_hash, definition_hash != '') AS definition_hashes",
 	"groupUniqArray(16)(configured_model) AS classifier_models",
+	"groupUniqArray(16)(provider) AS classifier_providers",
+	"groupUniqArrayArray(16)(models) AS evaluated_models",
+	"countIf(measured AND empty(models)) AS unknown_measured_models",
 	"groupUniqArray(16)(compiler_version) AS compiler_versions",
 	"groupUniqArray(16)(input_strategy) AS input_strategies",
 	"max(inserted_at) AS latest_inserted_at",
@@ -268,7 +272,7 @@ func validateSelection(selection Selection) error {
 }
 
 func canonicalSource(ctx Context, request Request) squirrel.SelectBuilder {
-	source := sql.Select("id", "event_id", "event_occurred_at", "conversation_id", "conversation_role", "source", "actor_user_id", "assistant_id", "attributes", "status", "definition_hash", "configured_model", "compiler_version", "input_strategy", "inserted_at", "result_type", "selected_signal_id", "probabilities.signal_id AS signal_ids", "probabilities.probability AS signal_probabilities").
+	source := sql.Select("id", "event_id", "event_occurred_at", "conversation_id", "conversation_role", "source", "actor_user_id", "assistant_id", "attributes", "status", "definition_hash", "configured_model", "provider", "models", "compiler_version", "input_strategy", "inserted_at", "result_type", "selected_signal_id", "probabilities.signal_id AS signal_ids", "probabilities.probability AS signal_probabilities").
 		From("sigint_readings_v2 FINAL").
 		Where("organization_id = ? AND project_id = toUUID(?)", ctx.OrganizationID, ctx.ProjectID).
 		Where("trigger_kind = ? AND run_id = toUUID(?) AND sensor_id = toUUID(?)", request.Trigger, request.RunID, request.Selection.SensorID).

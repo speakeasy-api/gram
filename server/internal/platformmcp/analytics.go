@@ -23,6 +23,7 @@ type AnalyticsEngine interface {
 	Values(ctx context.Context, tenant analytics.Tenant, req analytics.ValuesRequest) ([]analytics.DimensionValue, error)
 	DescribeSignals(ctx context.Context, tenant analytics.Tenant) (*analytics.SignalCatalog, error)
 	ReadSignalDefinition(ctx context.Context, tenant analytics.Tenant, sensorID, hash string) (*analytics.SignalDefinition, error)
+	SignalFindings(ctx context.Context, tenant analytics.Tenant, window analytics.Window, request analytics.SignalFindingsRequest, access analytics.ConversationAccess) (*analytics.SignalFindings, error)
 }
 
 var (
@@ -45,9 +46,10 @@ type AnalyticsService struct {
 	flags         feature.Provider
 	organizations OrganizationSlugResolver
 	// projects holds the caller to project:read on the exact project named.
-	projects       ProjectReadResolver
-	budget         OperationBudget
-	signalFeatures analytics.SignalFeatures
+	projects           ProjectReadResolver
+	budget             OperationBudget
+	signalFeatures     analytics.SignalFeatures
+	conversationAccess analytics.ConversationAccess
 }
 
 // NewAnalyticsService returns nil without a logger, an engine, an
@@ -56,7 +58,15 @@ func NewAnalyticsService(logger *slog.Logger, engine AnalyticsEngine, flags feat
 	if logger == nil || engine == nil || organizations == nil || projects == nil {
 		return nil
 	}
-	return &AnalyticsService{logger: logger, engine: engine, flags: flags, organizations: organizations, projects: projects, budget: budget, signalFeatures: signalFeatures}
+	return &AnalyticsService{logger: logger, engine: engine, flags: flags, organizations: organizations, projects: projects, budget: budget, signalFeatures: signalFeatures, conversationAccess: nil}
+}
+
+// WithConversationAccess applies the underlying chat gate to requested evidence.
+func (s *AnalyticsService) WithConversationAccess(access analytics.ConversationAccess) *AnalyticsService {
+	if s != nil {
+		s.conversationAccess = access
+	}
+	return s
 }
 
 func (s *AnalyticsService) valid() bool {

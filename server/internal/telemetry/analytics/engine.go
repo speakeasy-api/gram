@@ -91,10 +91,10 @@ func (e *Engine) Query(ctx context.Context, tenant Tenant, req Request) (*QueryR
 // definition companions that explain the measured population.
 func signalColumns() []Column {
 	columns := []Column{{Name: "time_bucket", Kind: ColumnTime}, {Name: "bucket_end", Kind: ColumnTime}, {Name: "latest_inserted_at", Kind: ColumnTime}}
-	for _, name := range []string{"series_id", "partial", "observed", "definition_hashes", "classifier_models", "compiler_versions", "input_strategies"} {
+	for _, name := range []string{"series_id", "partial", "observed", "definition_hashes", "classifier_models", "classifier_providers", "evaluated_models", "compiler_versions", "input_strategies"} {
 		columns = append(columns, Column{Name: name, Kind: ColumnDimension})
 	}
-	for _, name := range []string{"observed_outcomes", "answered", "unmeasured", "matched_messages", "failed", "not_applicable", "draft", "evaluated_sessions", "matched_sessions", "definition_count", "probability_bins", "match_share", "session_breadth"} {
+	for _, name := range []string{"observed_outcomes", "answered", "unmeasured", "matched_messages", "failed", "not_applicable", "draft", "evaluated_sessions", "matched_sessions", "definition_count", "unknown_measured_definitions", "unknown_measured_models", "probability_bins", "match_share", "session_breadth"} {
 		columns = append(columns, Column{Name: name, Kind: ColumnMeasure})
 	}
 	return columns

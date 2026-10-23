@@ -142,6 +142,7 @@ var _ = Service("analytics", func() {
 	Security(security.Session, security.ProjectSlug)
 	shared.DeclareErrorResponses()
 	signalDefinitionMethod()
+	signalFindingsMethod()
 
 	Method("query", func() {
 		Description("Run a query against one dataset. Grouped: aggregate over dimensions, optionally bucketed by time. Ungrouped: rows at the dataset's grain, newest first.")

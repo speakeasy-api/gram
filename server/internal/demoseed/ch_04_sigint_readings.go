@@ -232,7 +232,7 @@ func (s *seeder) sigintReading(sensor demoSigintSensor, members []demoSigintMemb
 		FailureReason:                 "",
 		DefinitionHash:                definitionHash,
 		ConfiguredModel:               "demo-classifier",
-		Models:                        nil,
+		Models:                        []string{"demo-classifier"},
 		CompilerVersion:               "demo-compiler-v1",
 		Provider:                      "demo",
 		InputStrategy:                 sensor.inputStrategy,

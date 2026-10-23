@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/telemetry/analytics"
@@ -100,4 +101,51 @@ func TestSignalDefinitionToolHasExactScopeAndUnavailableParity(t *testing.T) {
 	var refusal *ToolRefusalError
 	require.ErrorAs(t, err, &refusal)
 	require.Contains(t, refusal.Payload, `"code":"feature_unavailable"`)
+}
+
+func TestSignalSessionFinderSharesEntitlementAndUnavailableContract(t *testing.T) {
+	t.Parallel()
+	h := newAnalyticsTestHarness(t, feature.EvaluationEnabled, allowAnalyticsBudget)
+	args := fmt.Sprintf(`{"project_id":%q,%s,"signal_query":{"selection":{"sensor_id":%q,"signal_id":%q,"threshold":0.5}},"compare_previous":true}`, h.project.ID.String(), analyticsTestWindow, uuid.NewString(), uuid.NewString())
+	_, err := h.invoke(t, findSignalSessionsToolName, args)
+	require.Equal(t, analyticsNotEnabledCode, requireAnalyticsRefusal(t, err).Code)
+	require.Zero(t, h.engine.calls)
+	h.service.signalFeatures = signalAnalyticsFeatures(true)
+	raw, err := h.invoke(t, findSignalSessionsToolName, args)
+	require.NoError(t, err)
+	result, ok := raw.(FindSignalSessionsOutput)
+	require.True(t, ok)
+	require.InDelta(t, .5, result.Findings.Concentration["top_session_share"], .000001)
+	reg := newRegistrar(newTestMCPServer())
+	registerAnalyticsTools(reg, nil)
+	live, unavailable := descriptorByName(t, h.reg, findSignalSessionsToolName), descriptorByName(t, reg, findSignalSessionsToolName)
+	require.Equal(t, bothAudiences, live.Meta.Audiences)
+	require.Equal(t, ProjectScopeExplicit, live.Meta.ProjectScope)
+	require.Equal(t, live.Meta, unavailable.Meta)
+	require.JSONEq(t, string(live.InputSchema), string(unavailable.InputSchema))
+	var schema struct {
+		Properties map[string]struct {
+			Properties map[string]any `json:"properties"`
+		} `json:"properties"`
+	}
+	require.NoError(t, json.Unmarshal(live.InputSchema, &schema))
+	for _, field := range []string{"group_by", "groups", "points"} {
+		require.NotContains(t, schema.Properties["signal_query"].Properties, field)
+	}
+}
+
+func TestSignalEvidenceRejectsMismatchedCallerContext(t *testing.T) {
+	t.Parallel()
+	h := newAnalyticsTestHarness(t, feature.EvaluationEnabled, allowAnalyticsBudget)
+	h.service.signalFeatures = signalAnalyticsFeatures(true)
+	principal := testRiskPrincipal("user")
+	input := FindSignalSessionsInput{ProjectID: h.project.ID.String(), From: "2026-09-01T00:00:00Z", To: "2026-09-08T00:00:00Z", Evidence: true}
+	ctx := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{UserID: "another-user", ActiveOrganizationID: principal.OrganizationID})
+	_, err := h.service.FindSignalSessions(ctx, principal, input)
+	require.ErrorIs(t, err, ErrForbidden)
+	require.Zero(t, h.engine.calls)
+	ctx = contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{UserID: principal.UserID, ActiveOrganizationID: principal.OrganizationID})
+	_, err = h.service.FindSignalSessions(ctx, principal, input)
+	require.NoError(t, err)
+	require.Equal(t, 1, h.engine.calls)
 }

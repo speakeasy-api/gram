@@ -16,15 +16,17 @@ import (
 // Client is the "analytics" service client.
 type Client struct {
 	SignalDefinitionEndpoint goa.Endpoint
+	SignalFindingsEndpoint   goa.Endpoint
 	QueryEndpoint            goa.Endpoint
 	DescribeEndpoint         goa.Endpoint
 	DimensionValuesEndpoint  goa.Endpoint
 }
 
 // NewClient initializes a "analytics" service client given the endpoints.
-func NewClient(signalDefinition, query, describe, dimensionValues goa.Endpoint) *Client {
+func NewClient(signalDefinition, signalFindings, query, describe, dimensionValues goa.Endpoint) *Client {
 	return &Client{
 		SignalDefinitionEndpoint: signalDefinition,
+		SignalFindingsEndpoint:   signalFindings,
 		QueryEndpoint:            query,
 		DescribeEndpoint:         describe,
 		DimensionValuesEndpoint:  dimensionValues,
@@ -52,6 +54,29 @@ func (c *Client) SignalDefinition(ctx context.Context, p *SignalDefinitionPayloa
 		return
 	}
 	return ires.(*AnalyticsSignalDefinition), nil
+}
+
+// SignalFindings calls the "signalFindings" endpoint of the "analytics"
+// service.
+// SignalFindings may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) SignalFindings(ctx context.Context, p *SignalFindingsPayload) (res *AnalyticsSignalFindings, err error) {
+	var ires any
+	ires, err = c.SignalFindingsEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AnalyticsSignalFindings), nil
 }
 
 // Query calls the "query" endpoint of the "analytics" service.

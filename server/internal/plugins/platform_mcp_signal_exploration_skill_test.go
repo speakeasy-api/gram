@@ -16,7 +16,7 @@ func TestGeneratePlatformMCPPackageEmitsSignalExplorationWorkflow(t *testing.T) 
 	require.NoError(t, err)
 	require.Equal(t, source, files["speakeasy/"+path])
 	require.Equal(t, source, files["agent-plugins/speakeasy/"+path])
-	for _, tool := range []string{"list_projects", "describe_analytics_catalog", "list_analytics_dimension_values", "run_analytics_query", "get_signal_definition"} {
+	for _, tool := range []string{"list_projects", "describe_analytics_catalog", "list_analytics_dimension_values", "run_analytics_query", "get_signal_definition", "find_signal_sessions"} {
 		require.Contains(t, string(source), "`"+tool+"`")
 	}
 	require.Contains(t, string(source), "unknown census coverage")

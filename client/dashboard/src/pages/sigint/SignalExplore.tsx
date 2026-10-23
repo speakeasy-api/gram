@@ -19,6 +19,7 @@ import {
 } from "./explorationModel";
 import { SignalResults } from "./SignalResults";
 import { SignalAttributes } from "./SignalAttributes";
+import { SignalSessions } from "./SignalSessions";
 
 export function SignalExplore(): JSX.Element {
   return (
@@ -196,6 +197,13 @@ function SignalWorkbench({
         sensorName={submittedSensor?.name ?? "Selected sensor"}
         onRetry={() => void query.refetch()}
       />
+      {query.data && !query.isError && (
+        <SignalSessions
+          key={JSON.stringify(submitted)}
+          request={submitted}
+          catalog={catalog}
+        />
+      )}
     </div>
   );
 }

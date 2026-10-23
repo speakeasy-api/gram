@@ -51,6 +51,19 @@ client's own connection and select the exact project requested by the user.
    Historical snapshots may be unavailable; current configuration is not a
    reconstruction of a past measurement. Treat definition, classifier and input
    changes as possible explanations for a trend.
+7. For cross-session questions call `find_signal_sessions` with the same window,
+   source and predicate, omitting `group_by`. Presence and breadth count exact
+   conversations; concentration divides top-session hits by all hits linked to
+   conversations. A `peer` predicate produces separate same-message and
+   same-session joint-answer denominators. Do not interchange those units.
+   `compare_previous: true` retains the previous values, descriptive share
+   difference and failed comparability gates. Recent windows, sparse observations
+   or changed definitions cannot support an unqualified trend claim. Unknown
+   census coverage remains a limitation even when those gates pass.
+8. Request `evidence: true` only when supporting conversation references help.
+   Results contain bounded permitted examples, never transcripts or an exhaustive
+   session list. Open the referenced conversation in the dashboard for content;
+   an absent example does not establish absence of matching activity.
 
 Return the scope, chosen rule, numerator/denominator, supporting measures, query
 time and limitations together. These are descriptive observations, not task
