@@ -471,21 +471,15 @@ func TestKitProtocolRunTurnPersistsReplaysAndProjects(t *testing.T) {
 	require.False(t, interrupted)
 	mu.Lock()
 	require.Equal(t, 4, prompts)
-	require.Len(t, desiredSets, 3)
-	require.Contains(t, string(desiredSets[0]), "Bearer first-token")
-	require.Contains(t, string(desiredSets[0]), "attached")
-	require.Contains(t, string(desiredSets[1]), "Bearer rotated-token")
-	require.NotContains(t, string(desiredSets[1]), "attached")
-	require.NotContains(t, string(desiredSets[1]), "first-token")
-	require.JSONEq(t, `[]`, string(desiredSets[2]))
+	require.Empty(t, desiredSets, "native configuration must not receive per-turn bearer credentials")
 	closes := 0
 	for _, method := range methods {
 		if method == "session/close" {
 			closes++
 		}
 	}
-	require.Equal(t, 2, closes)
-	require.Equal(t, 6, connections, "interrupt must not dial or replace projector control")
+	require.Zero(t, closes)
+	require.Equal(t, 4, connections, "interrupt must not dial or replace projector control")
 	mu.Unlock()
 }
 

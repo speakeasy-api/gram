@@ -116,7 +116,7 @@ func TestTokenGrantForDeclaresClientAuthentication(t *testing.T) {
 		}
 	}
 
-	for _, grantType := range []string{"", "client_credentials", "password", "urn:example:grant-type:unknown"} {
+	for _, grantType := range []string{"", "password", "urn:example:grant-type:unknown"} {
 		_, ok := service.tokenGrantFor(newTokenDispatchRequest(t, url.Values{}), grantType, presentedClientCredentials{})
 		require.False(t, ok, grantType)
 	}

@@ -92,9 +92,7 @@ func (s *Service) HandleSharedAuthorizationServerMetadata(w http.ResponseWriter,
 		return oops.E(oops.CodeUnexpected, err, "build OAuth server URLs").LogError(ctx, issuer.logger)
 	}
 	grantTypes := []string{oauthwire.GrantTypeAuthorizationCode, oauthwire.GrantTypeRefreshToken}
-	if s.assistantWorkloadTokens != nil {
-		grantTypes = append(grantTypes, "client_credentials")
-	}
+	grantTypes = append(grantTypes, "client_credentials")
 	var grantProfiles []string
 	if issuer.idJAGConfigured {
 		grantTypes = append(grantTypes, oauthwire.GrantTypeJWTBearer)
@@ -331,9 +329,6 @@ func (s *Service) HandleSharedToken(w http.ResponseWriter, r *http.Request) erro
 	case oauthwire.GrantTypeRefreshToken:
 		endpoint, err = s.sharedRefreshTokenEndpoint(ctx, w, logger, issuer.authorizationServer, r.PostForm.Get(oauthwire.ParamRefreshToken))
 	case "client_credentials", oauthwire.GrantTypeJWTBearer:
-		if grantType == "client_credentials" && s.assistantWorkloadTokens == nil {
-			return writeTokenError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeUnsupportedGrantType, "unsupported grant_type")
-		}
 		resources := r.PostForm[oauthwire.ParamResource]
 		if grantType == oauthwire.GrantTypeJWTBearer && len(resources) == 0 && extractClientCredentials(r).clientless(r) {
 			return s.handleIssuerWorkloadAssertionGrant(ctx, w, r, issuer)

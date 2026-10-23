@@ -2,4 +2,4 @@
 "server": patch
 ---
 
-Restore Kit assistant access to platform and attached MCP tools using the existing per-turn credentials. Allow inference without MCP attachments and refresh connections safely when credentials or attachments change.
+Restore Kit assistant access to built-in and attached MCP tools with stable agent credentials and native OAuth renewal. Add authenticated private-key OAuth registration for ordinary agents, enforce live client revocation, and keep MCP connection failures independent from inference startup.

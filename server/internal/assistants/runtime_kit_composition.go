@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"net/url"
 	"strings"
 
@@ -20,13 +21,14 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 )
 
-// KitMCPProvisionRequest carries authoritative runtime/root identity to the
+// KitMCPProvisionRequest carries the stable agent and exact resource to the
 // composition callback. It does not carry an initiating user's credential.
 type KitMCPProvisionRequest struct {
 	Resource                                                          *url.URL
 	LifecycleTx                                                       pgx.Tx
 	RuntimeID, ProjectID, AssistantID, TriggerID, UserSessionIssuerID uuid.UUID
 	OrganizationID                                                    string
+	AgentID, MCPResourceID                                            uuid.UUID
 }
 type KitMCPProvisionResult struct {
 	Resource, Issuer             *url.URL
@@ -35,10 +37,10 @@ type KitMCPProvisionResult struct {
 }
 type KitMCPProvisioner func(context.Context, KitMCPProvisionRequest) (KitMCPProvisionResult, error)
 
-// KitLocalCompositionConfig configures inference startup and per-turn MCP transport.
+// KitLocalCompositionConfig configures inference and native MCP authentication.
 type KitLocalCompositionConfig struct {
 	// Legacy machine-provisioning options are retained for configuration compatibility.
-	// MCP connections now use the ordinary per-turn server set and credentials.
+	// Native MCP connections use stable agent clients and renew inside Kit.
 	PersistedMCP                                 bool
 	Environment, Image, ExtraCACertFile, Network string
 	Origin                                       *url.URL
@@ -185,16 +187,7 @@ func (s *ServiceCore) kitCompositionBootstrap(ctx context.Context, r assistantRu
 		return zero, fmt.Errorf("get Kit assistant: %w", err)
 	}
 	assistant := assistantRecordFromGetRow(row)
-	// Inference startup follows the event selected by the ordinary execution path.
-	// Warmup has no event and uses the same dashboard fallback as wake turns.
-	event, _ := ctx.Value(kitExecutionEventKey{}).(assistantThreadEventRecord)
-	trigger, _ := ctx.Value(kitExecutionTriggerKey{}).(uuid.UUID)
-	if trigger == uuid.Nil {
-		trigger, err = s.executionTrigger(ctx, assistant, event)
-		if err != nil {
-			return zero, err
-		}
-	}
+	trigger := uuid.Nil
 	var resolved assistantidentity.Resolution
 	if r.LifecycleTx != nil {
 		resolved, err = s.identities.ResolveLocked(ctx, r.LifecycleTx, assistant.OrganizationID, r.ProjectID, r.AssistantID, trigger)
@@ -207,7 +200,7 @@ func (s *ServiceCore) kitCompositionBootstrap(ctx context.Context, r assistantRu
 	if resolved.State != assistantidentity.Active || resolved.Identity == nil {
 		return zero, assistantidentity.ErrInvalidIdentity
 	}
-	// Connections are supplied per turn, not as a singleton machine attachment.
+	// Each configured connection receives an independent native client.
 	// An unavailable attachment must not prevent inference or other connections.
 	mcpJSON := []byte(`{"mcpServers":{}}`)
 	gateway, err := s.rotateKitGatewayTokenAlreadyLocked(ctx, r)
@@ -216,7 +209,59 @@ func (s *ServiceCore) kitCompositionBootstrap(ctx context.Context, r assistantRu
 	}
 	instructions := []byte("# Speakeasy assistant\n\n" + assistant.Instructions + "\n\nUse the configured MCP tools. If a connection reports an authentication error, explain it and continue with available tools. Never request secrets or invent credentials.\n")
 	bootstrap, _, err := PrepareKitStartupBootstrap(ctx, s.assistantTokens, KitStartupBootstrapInput{LifecycleTx: r.LifecycleTx, Model: assistant.Model, Environment: c.Environment, Identity: *resolved.Identity, RuntimeID: r.ID, Lifetime: assistanttokens.MaxInferenceLifetime, Origin: c.Origin.String(), AgentsMD: instructions, MCPJSON: mcpJSON, MCPFiles: nil, GatewayToken: []byte(gateway)})
-	return bootstrap, err
+	if err != nil {
+		return zero, err
+	}
+	var key kitInferenceFile
+	if err := json.Unmarshal(bootstrap.InferenceJSON, &key); err != nil {
+		return zero, fmt.Errorf("decode native inference credential: %w", err)
+	}
+	if err := s.hydrateAssistantToolSources(ctx, r.ProjectID, &assistant); err != nil {
+		return zero, err
+	}
+	servers := s.currentRuntimeMCPServers(ctx, assistant)
+	config := map[string]any{}
+	files := map[string][]byte{}
+	for _, server := range servers {
+		entry := map[string]any{"type": "streamable-http", "url": server.URL}
+		headers := make(map[string]string, len(server.Headers)+1)
+		maps.Copy(headers, server.Headers)
+		// These addresses are constructed by the existing trusted runtime resolver,
+		// not arbitrary caller URLs. Non-OAuth resources use the same stable key.
+		headers["Authorization"] = "Bearer " + key.APIKey
+		entry["headers"] = headers
+		// Native authentication owns renewal. A provisioning failure affects only
+		// this connection; retaining its URL lets Kit report the connection error.
+		if !strings.Contains(server.URL, "/platform/mcp/") && c.ProvisionMCP != nil {
+			resource, parseErr := url.Parse(server.URL)
+			if parseErr == nil {
+				var resourceID uuid.UUID
+				for _, attached := range assistant.MCPServers {
+					if attached.EndpointSlug == strings.TrimPrefix(resource.Path, "/mcp/") {
+						resourceID = attached.MCPServerID
+					}
+				}
+				client, provisionErr := c.ProvisionMCP(ctx, KitMCPProvisionRequest{Resource: resource, LifecycleTx: r.LifecycleTx, RuntimeID: r.ID, ProjectID: r.ProjectID, AssistantID: r.AssistantID, OrganizationID: assistant.OrganizationID, AgentID: resolved.Identity.AgentID, MCPResourceID: resourceID, TriggerID: uuid.Nil, UserSessionIssuerID: uuid.Nil})
+				if provisionErr == nil {
+					native, filename, credential, configErr := kitMachineMCPServer(client, fmt.Sprintf("mcp-%x", sha256.Sum256([]byte(server.ID))))
+					if configErr == nil {
+						entry = native
+						if len(server.Headers) != 0 {
+							entry["headers"] = server.Headers
+						}
+						files[filename] = credential
+					}
+				}
+			}
+		}
+		config[server.ID] = entry
+	}
+	bootstrap.MCPJSON, err = json.Marshal(map[string]any{"mcpServers": config})
+	bootstrap.MCPFiles = files
+	if err != nil {
+		return zero, fmt.Errorf("encode native MCP configuration: %w", err)
+	}
+	return bootstrap, nil
 }
 
 func kitResourceAttached(a assistantRecord, serverURL, resource *url.URL) bool {
@@ -243,7 +288,7 @@ func kitMachineMCPConfig(clients map[string]KitMCPProvisionResult) ([]byte, map[
 	files := make(map[string][]byte, len(clients))
 	for name, client := range clients {
 		if strings.TrimSpace(name) == "" {
-			return nil, nil, errors.New("Kit MCP connection requires a name")
+			return nil, nil, errors.New("kit MCP connection requires a name")
 		}
 		// Hash names instead of embedding untrusted connection names in paths.
 		prefix := fmt.Sprintf("mcp-%x", sha256.Sum256([]byte(name)))
@@ -272,7 +317,7 @@ func kitCompositionMCP(c KitLocalCompositionConfig, client KitMCPProvisionResult
 func kitMachineMCPServer(client KitMCPProvisionResult, prefix string) (map[string]any, string, []byte, error) {
 	for _, address := range []*url.URL{client.Resource, client.Issuer} {
 		if address == nil || address.Scheme != "https" || address.Host == "" || address.User != nil || address.Fragment != "" {
-			return nil, "", nil, errors.New("Kit machine MCP requires HTTPS resource and issuer URLs without credentials or fragments")
+			return nil, "", nil, errors.New("kit machine MCP requires HTTPS resource and issuer URLs without credentials or fragments")
 		}
 	}
 	if client.ClientID == "" {

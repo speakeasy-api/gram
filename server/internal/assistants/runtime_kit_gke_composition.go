@@ -16,8 +16,8 @@ import (
 )
 
 // KitGKECompositionConfig opts new version-3 conversations into the production
-// runtime. It does not convert or import existing conversations. MCP uses the
-// same per-turn credential and server assembly as the default runtime.
+// runtime. It does not convert or import existing conversations. Native MCP
+// clients renew their own short-lived credentials without restarting sessions.
 type KitGKECompositionConfig struct {
 	KitLocalCompositionConfig
 	GKE       GKERuntimeConfig

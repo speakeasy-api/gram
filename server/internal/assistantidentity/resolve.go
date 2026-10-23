@@ -61,6 +61,9 @@ func (s *Service) Resolve(ctx context.Context, db DB, org string, project, assis
 }
 
 func resolve(ctx context.Context, tx pgx.Tx, org string, project, assistant, trigger uuid.UUID) (Resolution, error) {
+	if trigger == uuid.Nil {
+		return resolveStable(ctx, tx, org, project, assistant)
+	}
 	if org == "" || project == uuid.Nil || assistant == uuid.Nil || trigger == uuid.Nil {
 		return Resolution{}, ErrInvalidIdentity
 	}
@@ -141,4 +144,27 @@ func readSnapshot(ctx context.Context, db DB) (pgx.Tx, error) {
 		return nil, fmt.Errorf("begin identity read snapshot: %w", err)
 	}
 	return tx, nil
+}
+
+// resolveStable uses the existing assistant-to-agent binding, without selecting
+// any trigger or requiring a workload issuer for a native agent credential.
+func resolveStable(ctx context.Context, tx pgx.Tx, org string, project, assistant uuid.UUID) (Resolution, error) {
+	if org == "" || project == uuid.Nil || assistant == uuid.Nil {
+		return Resolution{}, ErrInvalidIdentity
+	}
+	binding, err := repo.New(tx).GetAssistantBinding(ctx, repo.GetAssistantBindingParams{ProjectID: project, AssistantID: assistant})
+	if err != nil {
+		return Resolution{}, fmt.Errorf("resolve stable assistant agent: %w", err)
+	}
+	if binding.OrganizationID != org {
+		return Resolution{}, ErrInvalidIdentity
+	}
+	agent, err := agents.ResolvePrincipal(ctx, tx, org, urn.NewPrincipal(urn.PrincipalTypeAgent, binding.OriginalAgentID.String()))
+	if err != nil {
+		return Resolution{}, fmt.Errorf("resolve stable assistant agent: %w", err)
+	}
+	if lifecycle.Derive(agent) != lifecycle.Active {
+		return Resolution{State: Unavailable, Identity: nil}, nil
+	}
+	return Resolution{State: Active, Identity: &Identity{OrganizationID: org, ProjectID: project, AssistantID: assistant, AgentID: agent.ID, TriggerID: uuid.Nil, IssuerID: uuid.Nil, Subject: ""}}, nil
 }

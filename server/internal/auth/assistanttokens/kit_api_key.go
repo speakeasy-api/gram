@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	agentrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
+	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
 	"github.com/speakeasy-api/gram/server/internal/assistantidentity"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	tokenrepo "github.com/speakeasy-api/gram/server/internal/auth/assistanttokens/repo"
@@ -55,7 +56,7 @@ func (m *Manager) IssueKitAPIKeyInTx(ctx context.Context, tx pgx.Tx, in Inferenc
 	if tx == nil || in.RuntimeID == uuid.Nil || in.Lifetime <= 0 || in.Lifetime > MaxInferenceLifetime {
 		return KitAPIKey{}, fmt.Errorf("invalid Kit API-key transaction, runtime or lifetime")
 	}
-	ceiling, err := m.snapshotInferenceCeiling(ctx, tx, in.Identity)
+	ceiling, err := m.snapshotKitAgentCeiling(ctx, tx, in.Identity)
 	if err != nil {
 		return KitAPIKey{}, fmt.Errorf("resolve Kit workload authority: %w", err)
 	}
@@ -132,4 +133,38 @@ func (m *Manager) AuthorizeKitAPIKey(ctx context.Context) (context.Context, bool
 	}
 	ctx = context.WithValue(ctx, inferenceContextKey{}, identity)
 	return context.WithValue(ctx, inferenceRuntimeContextKey{}, row.RuntimeID), true, nil
+}
+
+func (m *Manager) snapshotKitAgentCeiling(ctx context.Context, tx pgx.Tx, identity assistantidentity.Identity) (inferenceCeiling, error) {
+	if identity.TriggerID != uuid.Nil {
+		return m.snapshotInferenceCeiling(ctx, tx, identity)
+	}
+	resolved, err := new(assistantidentity.Service).ResolveLocked(ctx, tx, identity.OrganizationID, identity.ProjectID, identity.AssistantID, uuid.Nil)
+	if err != nil {
+		return inferenceCeiling{}, fmt.Errorf("derive stable agent ceiling: %w", err)
+	}
+	if resolved.Identity == nil || *resolved.Identity != identity {
+		return inferenceCeiling{}, assistantidentity.ErrInvalidIdentity
+	}
+	agent, err := agentrepo.New(tx).GetAgentByIDForUpdate(ctx, agentrepo.GetAgentByIDForUpdateParams{OrganizationID: identity.OrganizationID, ID: identity.AgentID})
+	if err != nil {
+		return inferenceCeiling{}, fmt.Errorf("derive stable agent ceiling: %w", err)
+	}
+	ac := new(contextvalues.AuthContext)
+	ac.ActiveOrganizationID, ac.ProjectID = identity.OrganizationID, &identity.ProjectID
+	ctx = contextvalues.WithPrincipalCredentialAuthorization(ctx, ac, urn.NewPrincipal(urn.PrincipalTypeAgent, identity.AgentID.String()), contextvalues.PrincipalCredential{AuthorizerUserID: agent.OwnerUserID, DelegatedGrants: nil, DelegatedGrantsVersion: 0, DerivesPolicyAtAdmission: true})
+	admission, err := runtimepolicy.AdmitPrincipalCredentialWithDBTX(ctx, tx)
+	if err != nil {
+		return inferenceCeiling{}, fmt.Errorf("derive stable agent ceiling: %w", err)
+	}
+	version := runtimepolicy.IssuedDelegatedPolicyVersion
+	policy, err := runtimepolicy.NewDelegatedPolicy(version, admission.Credential)
+	if err != nil {
+		return inferenceCeiling{}, fmt.Errorf("derive stable agent ceiling: %w", err)
+	}
+	raw, err := runtimepolicy.EncodeDelegatedPolicy(version, policy)
+	if err != nil {
+		return inferenceCeiling{}, fmt.Errorf("encode stable agent ceiling: %w", err)
+	}
+	return inferenceCeiling{Policy: raw, EncodingVersion: version}, nil
 }

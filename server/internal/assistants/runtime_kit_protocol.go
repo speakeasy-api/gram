@@ -126,23 +126,13 @@ func (p *KitRuntimeProtocol) RunTurn(ctx context.Context, r assistantRuntimeReco
 	if err != nil {
 		return fmt.Errorf("kit protocol operation: %w", err)
 	}
-	servers := kitTurnMCPServers(req)
-	if found && req.MCPServers != nil {
-		if err := p.closeForMCPReplacement(ctx, r, session.SessionID); err != nil {
-			return err
-		}
-	}
 	c, err := p.dial(ctx, r)
 	if err != nil {
 		return fmt.Errorf("kit protocol operation: %w", err)
 	}
 	defer closeKitTransport(c)
 	params := map[string]any{"cwd": p.config.CWD}
-	// After closing the resident session, cold resume accepts the complete
-	// current set, including empty. No additive update retains removed servers.
-	if req.MCPServers != nil {
-		params["mcpServers"] = servers
-	}
+
 	// session/new gives this connection control of the new session. A second
 	// resume on that same connection is rejected by the gateway.
 	var startup json.RawMessage
@@ -166,11 +156,7 @@ func (p *KitRuntimeProtocol) RunTurn(ctx context.Context, r assistantRuntimeReco
 		// A concurrent creator can win persistence. Only that winning mapping may
 		// receive a prompt; attach and resume it instead of using our empty orphan.
 		needsResume = session.SessionID != created.SessionID
-		if needsResume && req.MCPServers != nil {
-			if err := p.closeForMCPReplacement(ctx, r, session.SessionID); err != nil {
-				return err
-			}
-		}
+
 	}
 	if err = c.AttachSession(ctx, session.SessionID); err != nil {
 		return fmt.Errorf("kit protocol operation: %w", err)

@@ -153,6 +153,7 @@ type mintedSession struct {
 type sessionIssuancePolicy string
 
 const (
+	sessionIssuancePolicyAgentClient    sessionIssuancePolicy = "agent_client"
 	sessionIssuancePolicyIssuerScoped   sessionIssuancePolicy = "issuer_scoped"
 	sessionIssuancePolicyResourceScoped sessionIssuancePolicy = "resource_scoped"
 	// sessionIssuancePolicyResourceBound is a shared authorization server's
@@ -271,10 +272,7 @@ type tokenGrant struct {
 func (s *Service) tokenGrantFor(r *http.Request, grantType string, creds presentedClientCredentials) (tokenGrant, bool) {
 	switch grantType {
 	case "client_credentials":
-		if s.assistantWorkloadTokens == nil {
-			return tokenGrant{clientAuth: tokenClientAuthUndeclared, resolveMode: "", authenticated: nil, clientless: nil}, false
-		}
-		return tokenGrant{clientAuth: tokenClientAuthRequired, resolveMode: lookupClientOnly, authenticated: s.handleAssistantClientCredentialsGrant, clientless: nil}, true
+		return tokenGrant{clientAuth: tokenClientAuthRequired, resolveMode: lookupClientOnly, authenticated: s.handleAgentClientCredentialsGrant, clientless: nil}, true
 	// Authorization-code and refresh grants continue an authorization that
 	// already passed admission, so they resolve the client from the database
 	// only.
@@ -1856,6 +1854,13 @@ func (s *Service) mintSession(
 		if params.Audience != "" {
 			return nil, oops.E(oops.CodeUnexpected, nil, "issuer-scoped session must not override its audience").LogError(ctx, logger)
 		}
+	case sessionIssuancePolicyAgentClient:
+		if params.Audience == "" || params.Subject.Kind != urn.SessionSubjectKindAgent {
+			return nil, oops.C(oops.CodeUnauthorized)
+		}
+		audience, resource, refreshable = params.Audience, params.Audience, false
+		lifetime := 15 * time.Minute
+		params.DesiredSessionDuration = &lifetime
 	case sessionIssuancePolicyResourceBound:
 		if params.Audience == "" {
 			return nil, oops.E(oops.CodeUnexpected, nil, "resource-bound session requires its resource").LogError(ctx, logger)

@@ -165,7 +165,11 @@ func TestKitCompositionBootstrapWithoutAttachments(t *testing.T) {
 	}}
 	bootstrap, err := core.kitCompositionBootstrap(t.Context(), assistantRuntimeRecord{ID: row.ID, ProjectID: project, AssistantID: assistant.ID, RuntimeVersion: 3}, config)
 	require.NoError(t, err)
-	require.JSONEq(t, `{"mcpServers":{}}`, string(bootstrap.MCPJSON))
+	var configured struct {
+		Servers map[string]json.RawMessage `json:"mcpServers"`
+	}
+	require.NoError(t, json.Unmarshal(bootstrap.MCPJSON, &configured))
+	require.Contains(t, configured.Servers, "_p-assistants")
 	require.Empty(t, bootstrap.MCPFiles)
 	require.NotEmpty(t, bootstrap.InferenceJSON)
 	require.NotContains(t, string(bootstrap.AgentsMD), "unavailable in this runtime")
@@ -190,7 +194,7 @@ func TestKitCompositionBootstrapWithoutAttachments(t *testing.T) {
 		require.NoError(t, err)
 		var identity assistantidentity.Identity
 		require.NoError(t, json.Unmarshal(binding.IdentityJson, &identity))
-		expected, err := core.identities.Resolve(t.Context(), db, "org-test", project, assistant.ID, trigger.ID)
+		expected, err := core.identities.Resolve(t.Context(), db, "org-test", project, assistant.ID, uuid.Nil)
 		require.NoError(t, err)
 		require.Equal(t, *expected.Identity, identity)
 	}

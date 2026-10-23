@@ -17,11 +17,18 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
+	agentrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/assistants"
 	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/chat"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
+	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/oauthwire"
+	"github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/speakeasy-api/gram/server/internal/usersessions"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/authserver"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 	"github.com/urfave/cli/v2"
@@ -112,7 +119,6 @@ func installKitLocalRuntimeFromCLI(c *cli.Context, core *assistants.ServiceCore,
 	if base.Provider == assistants.RuntimeProviderLocal && c.String("environment") == "local" {
 		localOrigin = base.Local.ServerURL
 	}
-	provisioner := mcp.NewAssistantRuntimeWorkloadProvisioner(db, auditLogger)
 	config := assistants.KitLocalCompositionConfig{
 		PersistedMCP: base.Provider != assistants.RuntimeProviderLocal,
 		Environment:  c.String("environment"), Image: c.String("assistant-kit-image"), ExtraCACertFile: c.String("assistant-runtime-local-ca-file"),
@@ -121,18 +127,24 @@ func installKitLocalRuntimeFromCLI(c *cli.Context, core *assistants.ServiceCore,
 		ProvisionMCP: func(ctx context.Context, r assistants.KitMCPProvisionRequest) (assistants.KitMCPProvisionResult, error) {
 			var zero assistants.KitMCPProvisionResult
 			tx := r.LifecycleTx
-			owned := tx == nil
-			if owned {
-				var err error
-				tx, err = db.Begin(ctx)
-				if err != nil {
-					return zero, fmt.Errorf("configure Kit workload: %w", err)
-				}
-				defer func() { _ = tx.Rollback(ctx) }()
+			var beginErr error
+			if tx == nil {
+				tx, beginErr = db.Begin(ctx)
+			} else {
+				tx, beginErr = tx.Begin(ctx)
 			}
-			resourceURL, issuerURL := resource, issuer
-			if base.Provider != assistants.RuntimeProviderLocal {
-				resourceURL = r.Resource
+			if beginErr != nil {
+				return zero, fmt.Errorf("begin native client registration: %w", beginErr)
+			}
+			defer func() { _ = tx.Rollback(ctx) }()
+			server, err := mcpserversrepo.New(tx).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: r.MCPResourceID, ProjectID: r.ProjectID})
+			if err != nil || !server.UserSessionIssuerID.Valid {
+				return zero, fmt.Errorf("connection has no OAuth issuer")
+			}
+			r.UserSessionIssuerID = server.UserSessionIssuerID.UUID
+			resourceURL := r.Resource
+			var issuerURL *url.URL
+			{
 				if resourceURL == nil {
 					return zero, fmt.Errorf("kit requires a persisted MCP resource")
 				}
@@ -157,30 +169,28 @@ func installKitLocalRuntimeFromCLI(c *cli.Context, core *assistants.ServiceCore,
 				}
 			}
 			if err := validateKitMCPBinding(ctx, tx, r, resourceURL, issuerURL, hosts, localOrigin); err != nil {
-				return zero, err
+				return zero, fmt.Errorf("provision native agent client: %w", err)
 			}
-			if _, err := mcp.RevokeAssistantRuntimeWorkloadClients(ctx, tx, r.OrganizationID, r.ProjectID, r.RuntimeID); err != nil {
-				return zero, fmt.Errorf("configure Kit workload: %w", err)
-			}
-			workloadConfig, privatePEM, err := kitWorkloadClientCredentials(authMethod)
+			workloadConfig, privatePEM, err := kitWorkloadClientCredentials("private_key_jwt")
 			if err != nil {
-				return zero, err
+				return zero, fmt.Errorf("provision native agent client: %w", err)
 			}
-			workloadConfig.UserSessionIssuerID = r.UserSessionIssuerID
-			workloadConfig.TriggerID = r.TriggerID
-			client, err := provisioner.ProvisionLocked(ctx, tx, r.RuntimeID, workloadConfig)
+			agent, err := agentrepo.New(tx).GetAgentByID(ctx, agentrepo.GetAgentByIDParams{OrganizationID: r.OrganizationID, ID: r.AgentID})
 			if err != nil {
-				return zero, fmt.Errorf("configure Kit workload: %w", err)
+				return zero, fmt.Errorf("provision native agent client: %w", err)
 			}
-			if client.RuntimeID != r.RuntimeID || client.TriggerID != r.TriggerID {
-				return zero, fmt.Errorf("kit workload registration returned a mismatched runtime binding")
+			ac := new(contextvalues.AuthContext)
+			ac.ActiveOrganizationID, ac.ProjectID = r.OrganizationID, &r.ProjectID
+			agentCtx := contextvalues.WithPrincipalCredentialAuthorization(ctx, ac, urn.NewPrincipal(urn.PrincipalTypeAgent, r.AgentID.String()), contextvalues.PrincipalCredential{AuthorizerUserID: agent.OwnerUserID, DelegatedGrants: nil, DelegatedGrantsVersion: 0, DerivesPolicyAtAdmission: true})
+			client, err := mcp.RegisterAgentOAuthClient(agentCtx, tx, mcp.AgentAuthorizationTarget{Scope: authz.ScopeMCPConnect, OrganizationID: r.OrganizationID, ProjectID: r.ProjectID, UserSessionIssuerID: r.UserSessionIssuerID, MCPResourceID: r.MCPResourceID}, usersessions.RegistrationRequest{ClientName: "Native agent", GrantTypes: []string{"client_credentials"}, TokenEndpointAuthMethod: oauthwire.AuthMethodPrivateKeyJWT, JWKS: workloadConfig.JWKS, RedirectURIs: []string{}, ResponseTypes: []string{}, JWKSURI: ""})
+			if err != nil {
+				return zero, fmt.Errorf("provision native agent client: %w", err)
 			}
-			if owned {
-				if err := tx.Commit(ctx); err != nil {
-					return zero, fmt.Errorf("commit Kit workload registration: %w", err)
-				}
+
+			if err := tx.Commit(ctx); err != nil {
+				return zero, fmt.Errorf("commit agent client registration: %w", err)
 			}
-			return assistants.KitMCPProvisionResult{Resource: resourceURL, Issuer: issuerURL, ClientID: client.ClientID, Secret: client.Secret, AuthMethod: authMethod, PrivateKeyPEM: privatePEM}, nil
+			return assistants.KitMCPProvisionResult{Resource: resourceURL, Issuer: issuerURL, ClientID: client.ClientID, Secret: "", AuthMethod: "private_key_jwt", PrivateKeyPEM: privatePEM}, nil
 		},
 	}
 	if base.Provider == assistants.RuntimeProviderLocal {

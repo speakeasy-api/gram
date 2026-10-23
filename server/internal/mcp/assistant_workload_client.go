@@ -119,6 +119,9 @@ func (s *Service) provisionAssistantWorkloadClientLocked(ctx context.Context, tx
 	q := usersessions_repo.New(tx)
 	var noSecretExpiry pgtype.Timestamptz
 	row, err := q.CreateUserSessionClient(ctx, usersessions_repo.CreateUserSessionClientParams{
+		TrustedSubjectUrn: pgtype.Text{String: "", Valid: false},
+		AuthorizerUserID:  pgtype.Text{String: "", Valid: false},
+		DelegatedGrants:   nil, DelegatedGrantsVersion: pgtype.Int4{Int32: 0, Valid: false},
 		UserSessionIssuerID: p.UserSessionIssuerID, ClientID: assistantWorkloadClientPrefix + uuid.NewString(), ClientSecretHash: hash,
 		ClientName: "Assistant workload", RedirectUris: []string{}, TokenEndpointAuthMethod: p.AuthMethod,
 		ClientSecretExpiresAt: noSecretExpiry, ClientJwks: inline, ClientJwksUri: conv.ToPGTextEmpty(p.JWKSURI),
