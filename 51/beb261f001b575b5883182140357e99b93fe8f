@@ -1,0 +1,23 @@
+pystreams/src/pystreams/cmd/multi.py
+  s_dc89ea5159cdcf::t_122efe6c178c85 43
+pystreams/tests/test_multi.py
+  s_dc89ea5159cdcf::t_1338e364083b52 12
+pystreams/tests/test_risk_enforce.py
+  s_dc89ea5159cdcf::t_ab0863bfd76d1c 16,25-29
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "51beb261f001b575b5883182140357e99b93fe8f",
+  "prompts": {},
+  "sessions": {
+    "s_dc89ea5159cdcf": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "104c7732-7201-4b08-b421-6c1ef3104d36",
+        "model": "claude-fable-5-1"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
