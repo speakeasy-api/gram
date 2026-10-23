@@ -368,6 +368,7 @@ type PostgresReader struct {
 	chatMetadata              *ChatMetadataService
 	chatSearch                *ChatSearchService
 	organizationGateway       *OrganizationGatewayService
+	gatewaySessions           GatewaySessionManagement
 	dataExports               *DataExportReadService
 	dataExportMutations       *dataExportMutationService
 	dataExportRouteToggle     *DataExportRouteToggleService
@@ -407,6 +408,7 @@ func NewPostgresReader(logger *slog.Logger, db *pgxpool.Pool) *PostgresReader {
 		chatMetadata:              nil,
 		chatSearch:                nil,
 		organizationGateway:       nil,
+		gatewaySessions:           nil,
 		dataExports:               nil,
 		dataExportMutations:       nil,
 		dataExportRouteToggle:     nil,
@@ -1109,4 +1111,12 @@ func inventoryQueryResult(mcps []MCP, query string, limit int) []MCP {
 		}
 	}
 	return mcps[:min(len(mcps), limit)]
+}
+
+// WithGatewaySessions shares the dashboard gateway connection reads.
+func (r *PostgresReader) WithGatewaySessions(service GatewaySessionManagement) *PostgresReader {
+	if r != nil {
+		r.gatewaySessions = service
+	}
+	return r
 }

@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   scopes: [] as string[],
+  gatewayCandidateOptions: [] as Array<{ enabled: boolean }>,
   includeNewResourceFixtures: false,
   /**
    * When set, the mcp:write grant is selector-scoped to these server ids:
@@ -54,6 +55,13 @@ const mocks = vi.hoisted(() => ({
   // Every SDK list hook records the options it was called with so the test can
   // prove nothing fetches while the palette is closed.
   calls: {} as Record<string, unknown[]>,
+}));
+
+vi.mock("./useGatewayConnectionCandidates", () => ({
+  useGatewayConnectionCandidates: (options: { enabled: boolean }) => {
+    mocks.gatewayCandidateOptions.push(options);
+    return [];
+  },
 }));
 
 function record(name: string, args: unknown[]) {
@@ -1523,6 +1531,12 @@ describe("useRuleCandidates", () => {
 });
 
 describe("useLauncherCandidates", () => {
+  it("registers gateway discovery with the palette open state", () => {
+    renderCandidates({ enabled: false });
+    expect(mocks.gatewayCandidateOptions.at(-1)).toMatchObject({
+      enabled: false,
+    });
+  });
   it("orders sources: actions, recents, marketplace, mcp servers, catalog, …, people", () => {
     mocks.scopes = ["org:read", "org:admin", "mcp:write", "project:read"];
     mocks.actions = [
