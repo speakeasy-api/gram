@@ -17,6 +17,9 @@ import (
 // Query agent session data by dataset and field, never by table or SQL. The
 // catalog describe serves is the contract.
 type Service interface {
+	// Inspect the immutable semantic definition used by a signal reading. Requires
+	// signals_intelligence and project:read.
+	SignalDefinition(context.Context, *SignalDefinitionPayload) (res *AnalyticsSignalDefinition, err error)
 	// Run a query against one dataset. Grouped: aggregate over dimensions,
 	// optionally bucketed by time. Ungrouped: rows at the dataset's grain, newest
 	// first.
@@ -50,7 +53,7 @@ const ServiceName = "analytics"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [3]string{"query", "describe", "dimensionValues"}
+var MethodNames = [4]string{"signalDefinition", "query", "describe", "dimensionValues"}
 
 // A dataset and the fields it exposes. The builder is generated from this.
 type AnalyticsDataset struct {
@@ -71,13 +74,19 @@ type AnalyticsDescribeResult struct {
 	// administrators can read, so a saved widget over one can say why it shows
 	// nothing rather than reading as broken
 	RestrictedDatasets []string
+	// Signal measurement contract and current sensor/signal names, when entitled
+	SignalMetrics *AnalyticsSignalCatalog
 }
 
 type AnalyticsDimensionValue struct {
-	// A non-empty value of the dimension
+	// A recorded dimension value. Signal attributes may be empty; present
+	// distinguishes an absent label.
 	Value string
 	// Rows at the dataset's grain carrying this value inside the window
 	Count int64
+	// For signal attributes, false distinguishes absent labels from present empty
+	// strings
+	Present *bool
 }
 
 // AnalyticsDimensionValuesResult is the result type of the analytics service
@@ -157,6 +166,127 @@ type AnalyticsQueryResult struct {
 	Plan string
 	// Result rows
 	Rows []map[string]any
+	// Measurement semantics and complete-series metadata for dataset signals
+	SignalResult *AnalyticsSignalResult
+}
+
+type AnalyticsSignalCatalog struct {
+	Dataset           string
+	Unit              string
+	Population        string
+	Steps             []string
+	Operators         []string
+	SystemDimensions  []string
+	InitialAttributes []string
+	MaxSpanDays       int
+	MaxGroups         int
+	MaxPoints         int
+	Sensors           []*AnalyticsSignalSensor
+	Signals           []*AnalyticsSignalName
+}
+
+// AnalyticsSignalDefinition is the result type of the analytics service
+// signalDefinition method.
+type AnalyticsSignalDefinition struct {
+	SensorID       string
+	DefinitionHash string
+	Definition     map[string]any
+	CapturedAt     string
+}
+
+// Exactly one system field or arbitrary attribute key.
+type AnalyticsSignalDimension struct {
+	// System dimension from the analytics catalog: source, role, actor, assistant
+	// or definition
+	Field *string
+	// Exact label key, at most 256 UTF-8 bytes; the shared query engine enforces
+	// the byte limit.
+	Attribute *string
+}
+
+type AnalyticsSignalFilter struct {
+	Dimension *AnalyticsSignalDimension
+	// Comparison from the analytics catalog: equals, in, exists or missing
+	Operator string
+	Values   []string
+}
+
+type AnalyticsSignalMetadata struct {
+	Selection          *AnalyticsSignalSelection
+	Trigger            string
+	RunID              *string
+	Step               string
+	PhysicalResolution string
+	TimeAxis           string
+	Unit               string
+	Population         string
+	Coverage           string
+	QueriedAt          string
+	From               string
+	To                 string
+	Filters            []*AnalyticsSignalFilter
+	// Live, not a replayable historical snapshot
+	Snapshot        string
+	Exact           bool
+	SeriesComplete  bool
+	GroupsTruncated bool
+	GroupBy         []*AnalyticsSignalDimension
+	PointBudget     int
+}
+
+type AnalyticsSignalName struct {
+	ID   string
+	Name string
+}
+
+type AnalyticsSignalQuery struct {
+	Selection *AnalyticsSignalSelection
+	// Evaluation population: stream or manual
+	Trigger string
+	RunID   *string
+	GroupBy []*AnalyticsSignalDimension
+	Filters []*AnalyticsSignalFilter
+	// Top groups selected over the whole window
+	Groups int
+	// Budget across complete selected series
+	Points int
+}
+
+type AnalyticsSignalResult struct {
+	Metadata *AnalyticsSignalMetadata
+	// Exact whole-window measures, including groups outside the selected top groups
+	Summary map[string]any
+	// Whole-window totals for selected groups; group_values follows
+	// metadata.group_by
+	Groups []map[string]any
+}
+
+type AnalyticsSignalScope struct {
+	SensorID string
+	// Evaluation population: stream or manual
+	Trigger string
+	// Required for manual; absent for stream
+	RunID *string
+}
+
+type AnalyticsSignalSelection struct {
+	SensorID string
+	// For multi-label or exclusive results; omit when minimum_level is set
+	SignalID *string
+	// Zero-based ordered level; matches cumulative probability at or above this
+	// level
+	MinimumLevel *int
+	// Explicit probability threshold greater than zero. Exclusive results use the
+	// selected signal instead.
+	Threshold float64
+}
+
+type AnalyticsSignalSensor struct {
+	ID        string
+	Name      string
+	Mode      string
+	Enabled   bool
+	SignalIds []string
 }
 
 // DescribePayload is the payload type of the analytics service describe method.
@@ -172,6 +302,11 @@ type DimensionValuesPayload struct {
 	Dataset string
 	// Dimension to list values of
 	Dimension string
+	// Required for dataset signals
+	SignalScope *AnalyticsSignalScope
+	// With dimension=attribute, the exact signal attribute key.
+	// dimension=attribute_keys discovers keys.
+	Attribute *string
 	// Start of the half-open window [from, to), ISO 8601
 	From string
 	// End of the half-open window [from, to), ISO 8601
@@ -188,11 +323,15 @@ type QueryPayload struct {
 	ProjectSlugInput *string
 	// Dataset to query, per describe
 	Dataset string
+	// Required for dataset signals; uses semantic metrics and its own group/point
+	// budgets instead of composed measures
+	SignalQuery *AnalyticsSignalQuery
 	// Start of the half-open window [from, to), ISO 8601
 	From string
 	// End of the half-open window [from, to), ISO 8601
 	To string
-	// Time bucket width for a grouped query. Absent means none.
+	// Time interval from the analytics catalog. Composed queries admit none,
+	// minute, hour, day, week or month. Signal measurements also admit auto.
 	Grain *string
 	// Group-by key when grouped; projected columns when ungrouped. At most 3.
 	Dimensions []string
@@ -208,6 +347,15 @@ type QueryPayload struct {
 	Limit int
 	// Return rows at the dataset's grain instead of aggregating.
 	Ungrouped bool
+}
+
+// SignalDefinitionPayload is the payload type of the analytics service
+// signalDefinition method.
+type SignalDefinitionPayload struct {
+	SensorID         string
+	DefinitionHash   string
+	SessionToken     *string
+	ProjectSlugInput *string
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

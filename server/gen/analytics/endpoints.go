@@ -16,9 +16,10 @@ import (
 
 // Endpoints wraps the "analytics" service endpoints.
 type Endpoints struct {
-	Query           goa.Endpoint
-	Describe        goa.Endpoint
-	DimensionValues goa.Endpoint
+	SignalDefinition goa.Endpoint
+	Query            goa.Endpoint
+	Describe         goa.Endpoint
+	DimensionValues  goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "analytics" service with endpoints.
@@ -26,17 +27,54 @@ func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
 	a := s.(Auther)
 	return &Endpoints{
-		Query:           NewQueryEndpoint(s, a.APIKeyAuth),
-		Describe:        NewDescribeEndpoint(s, a.APIKeyAuth),
-		DimensionValues: NewDimensionValuesEndpoint(s, a.APIKeyAuth),
+		SignalDefinition: NewSignalDefinitionEndpoint(s, a.APIKeyAuth),
+		Query:            NewQueryEndpoint(s, a.APIKeyAuth),
+		Describe:         NewDescribeEndpoint(s, a.APIKeyAuth),
+		DimensionValues:  NewDimensionValuesEndpoint(s, a.APIKeyAuth),
 	}
 }
 
 // Use applies the given middleware to all the "analytics" service endpoints.
 func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
+	e.SignalDefinition = m(e.SignalDefinition)
 	e.Query = m(e.Query)
 	e.Describe = m(e.Describe)
 	e.DimensionValues = m(e.DimensionValues)
+}
+
+// NewSignalDefinitionEndpoint returns an endpoint function that calls the
+// method "signalDefinition" of service "analytics".
+func NewSignalDefinitionEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*SignalDefinitionPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.SignalDefinition(ctx, p)
+	}
 }
 
 // NewQueryEndpoint returns an endpoint function that calls the method "query"

@@ -13,6 +13,7 @@ import (
 	hooksRepo "github.com/speakeasy-api/gram/server/internal/hooks/repo"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	riskRepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
+	signalquery "github.com/speakeasy-api/gram/server/internal/telemetry/analytics/signals"
 )
 
 // Engine is the query path without its transport, shared by the analytics
@@ -21,6 +22,7 @@ import (
 type Engine struct {
 	catalog *Catalog
 	ch      Querier
+	db      *pgxpool.Pool
 }
 
 // NewEngine binds the default catalog's lookups to their loaders over db and
@@ -34,7 +36,7 @@ func NewEngine(db *pgxpool.Pool, ch Querier) (*Engine, error) {
 	if err != nil {
 		return nil, fmt.Errorf("bind catalog lookups: %w", err)
 	}
-	return &Engine{catalog: catalog, ch: ch}, nil
+	return &Engine{catalog: catalog, ch: ch, db: db}, nil
 }
 
 // Catalog is the contract the engine answers: what describe serves.
@@ -49,11 +51,27 @@ type QueryResult struct {
 	Plan    string
 	Columns []Column
 	Rows    []Row
+	// SignalResult preserves the semantic companions for a signal measurement.
+	SignalResult *SignalResult
 }
 
 // Query loads the lookups the request reads, compiles it and runs it. A
 // request the compiler rejects comes back as an *Error.
 func (e *Engine) Query(ctx context.Context, tenant Tenant, req Request) (*QueryResult, error) {
+	if req.Dataset == signalquery.Dataset && e.catalog.signalMetrics {
+		if req.SignalQuery == nil || req.Ungrouped || len(req.Measures)+len(req.Dimensions)+len(req.Filters)+len(req.OrderBy) > 0 {
+			return nil, newError(ErrUnsatisfiable, req.Dataset, "signal_query", "", "signals requires signal_query instead of composed measures, dimensions or filters")
+		}
+		step := string(req.Grain)
+		result, err := e.SignalQuery(ctx, tenant, Window{FromUnixNano: req.FromUnixNano, ToUnixNano: req.ToUnixNano}, step, *req.SignalQuery)
+		if err != nil {
+			return nil, err
+		}
+		return &QueryResult{Dataset: signalquery.Dataset, Plan: "signals.canonical_final", Columns: signalColumns(), Rows: result.Rows, SignalResult: result}, nil
+	}
+	if req.SignalQuery != nil {
+		return nil, newError(ErrUnknownDataset, req.Dataset, "signal_query", "", "signal_query is only supported by the signals dataset")
+	}
 	lookups, err := e.catalog.LoadLookups(ctx, tenant, req.Dataset, req.Reads())
 	if err != nil {
 		return nil, fmt.Errorf("load the dataset's lookups: %w", err)
@@ -66,12 +84,31 @@ func (e *Engine) Query(ctx context.Context, tenant Tenant, req Request) (*QueryR
 	if err != nil {
 		return nil, fmt.Errorf("run analytics query: %w", err)
 	}
-	return &QueryResult{Dataset: plan.Dataset, Plan: plan.Name, Columns: plan.Columns, Rows: rows}, nil
+	return &QueryResult{Dataset: plan.Dataset, Plan: plan.Name, Columns: plan.Columns, Rows: rows, SignalResult: nil}, nil
+}
+
+// signalColumns describes every time-series field, including outcome and
+// definition companions that explain the measured population.
+func signalColumns() []Column {
+	columns := []Column{{Name: "time_bucket", Kind: ColumnTime}, {Name: "bucket_end", Kind: ColumnTime}, {Name: "latest_inserted_at", Kind: ColumnTime}}
+	for _, name := range []string{"series_id", "partial", "observed", "definition_hashes", "classifier_models", "compiler_versions", "input_strategies"} {
+		columns = append(columns, Column{Name: name, Kind: ColumnDimension})
+	}
+	for _, name := range []string{"observed_outcomes", "answered", "unmeasured", "matched_messages", "failed", "not_applicable", "draft", "evaluated_sessions", "matched_sessions", "definition_count", "probability_bins", "match_share", "session_breadth"} {
+		columns = append(columns, Column{Name: name, Kind: ColumnMeasure})
+	}
+	return columns
 }
 
 // Values lists a dimension's values inside a window, most frequent first,
 // read through its lookup like a query. Errors are as for Query.
 func (e *Engine) Values(ctx context.Context, tenant Tenant, req ValuesRequest) ([]DimensionValue, error) {
+	if req.Dataset == signalquery.Dataset && e.catalog.signalMetrics {
+		return e.signalValues(ctx, tenant, req)
+	}
+	if req.SignalScope != nil || req.Attribute != "" {
+		return nil, newError(ErrUnsatisfiable, req.Dataset, "signal_scope", "", "signal scope and attributes require dataset signals")
+	}
 	lookups, err := e.catalog.LoadLookups(ctx, tenant, req.Dataset, []string{req.Dimension})
 	if err != nil {
 		return nil, fmt.Errorf("load the dataset's lookups: %w", err)

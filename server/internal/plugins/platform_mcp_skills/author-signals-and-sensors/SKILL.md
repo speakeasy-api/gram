@@ -42,7 +42,8 @@ scores. Sensors perform classification; they do not enforce access policies.
 5. Agree the matching expression. Omission on creation defaults to
    `message.role == "user"`. Only `message.role` is exposed; do not invent actor,
    department, cohort, replay, or tool fields. Conversation ingestion currently
-   evaluates user/assistant creation events, including historical imports.
+   evaluates original user/assistant creation events, including historical imports.
+   Transcript copies, synthetic summaries and unknown rewrites are not new targets.
 6. Optionally call `preview_sensor_match` with bounded, caller-supplied role
    examples. Report matched, not matched, and errors separately. Missing message
    context is unbound, not an empty role. This tests metadata eligibility, not
@@ -75,6 +76,8 @@ scores. Sensors perform classification; they do not enforce access policies.
     signal, call `find_signals` and verify its exact ID and definition. Report
     committed enabled state and configuration readiness separately from active inference
     or observed readings, which these tools cannot prove.
+    For observed measurements, use the `explore-signal-patterns` workflow and the
+    shared analytics tools with an explicit matching rule and time window.
 11. A committed receipt with `snapshot_scope: verification_unavailable` means the
     write succeeded but the fresh read failed. Keep the same retry key and inputs;
     retry verification rather than creating again. A false `target_available` in
