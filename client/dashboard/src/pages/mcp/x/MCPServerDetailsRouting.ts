@@ -33,7 +33,7 @@ function decodePathSegment(segment: string): string {
 }
 
 // Project pages sit under /:orgSlug/projects/:projectSlug, so `mcp` is segment 3.
-const MCP_SECTION_INDEX = 3;
+export const MCP_SECTION_INDEX = 3;
 
 function pathSegments(pathname: string): string[] {
   return pathname.split("/").filter(Boolean);

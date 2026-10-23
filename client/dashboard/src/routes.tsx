@@ -1270,8 +1270,8 @@ export const useRoutes = (overrides?: {
         ] ?? "",
       );
 
-    // A shadowed route's sub-pages are inactive too: `/mcp/catalog/overview`
-    // is a catalog entry, not the Overview tab of a server slugged "catalog".
+    // A shadowed route stays inactive even when a sub-page path matches:
+    // `/mcp/catalog/overview` is a catalog entry, not a server's Overview.
     const active =
       !shadowedByStaticSibling &&
       (matchesCurrent(urlWithParent) ||
