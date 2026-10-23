@@ -42,6 +42,7 @@ export function StepServers({
   allServers,
   onAllServersChange,
   allServersRefusal,
+  refusedServers,
   scopeLabel,
   selected,
   onChange,
@@ -64,6 +65,12 @@ export function StepServers({
    * covers. It can still be turned off, never on.
    */
   allServersRefusal?: AllServersRefusal;
+  /**
+   * Servers a tick would be refused for, by id, with why: the grant is
+   * refused when the person saving it, or the agent's owner, cannot reach the
+   * server. One already ticked can still be unticked.
+   */
+  refusedServers?: ReadonlyMap<string, string>;
   /**
    * What "all" covers, named: the agent's project, or the organization where
    * the agent already holds a wildcard that reaches every one of them.
@@ -93,6 +100,7 @@ export function StepServers({
   const query = search.trim().toLowerCase();
   const isSelected = (id: string) =>
     allServers || selected.some((entry) => entry.server.id === id);
+  const isRefused = (id: string) => refusedServers?.has(id) ?? false;
   // A server that authorizes each person separately needs an account attached
   // to the agent before a key can call it, and this flow has no step for that.
   // Offering it would issue a key that reaches the gateway and then fails on
@@ -171,11 +179,17 @@ export function StepServers({
                 size="sm"
                 variant="secondary"
                 disabled={
-                  allServers || shown.every((server) => isSelected(server.id))
+                  allServers ||
+                  shown.every(
+                    (server) => isSelected(server.id) || isRefused(server.id),
+                  )
                 }
                 onClick={() => {
                   const additions = shown
-                    .filter((server) => !isSelected(server.id))
+                    .filter(
+                      (server) =>
+                        !isSelected(server.id) && !isRefused(server.id),
+                    )
                     .map((server) => ({ server }));
                   onChange([...selected, ...additions]);
                 }}
@@ -271,12 +285,14 @@ export function StepServers({
             <ul className="divide-border divide-y">
               {shown.map((server) => {
                 const checked = isSelected(server.id);
+                const refusal = refusedServers?.get(server.id);
+                const locked = allServers || (!checked && !!refusal);
                 return (
                   <li key={server.id}>
                     <label
                       className={cn(
                         "flex items-center gap-4 px-4 py-3",
-                        allServers
+                        locked
                           ? "cursor-default"
                           : checked
                             ? "cursor-pointer bg-accent/40"
@@ -288,7 +304,7 @@ export function StepServers({
                           true until the wildcard above is turned off. */}
                       <Checkbox
                         checked={checked}
-                        disabled={allServers}
+                        disabled={locked}
                         onCheckedChange={() => toggle(server)}
                         aria-label={server.name}
                       />
@@ -302,6 +318,9 @@ export function StepServers({
                         <span className="text-muted-foreground block truncate font-mono text-xs">
                           /mcp/{server.slug}
                         </span>
+                        {refusal && (
+                          <span className="mt-1 block text-xs">{refusal}</span>
+                        )}
                       </span>
                     </label>
                   </li>
