@@ -1,3 +1,4 @@
+import { showPaymentMethods } from "@/components/billing/payment-method-visibility";
 import { CancelPaygDialog } from "@/components/billing/cancel-payg-dialog";
 import { usePaygCheckoutAccess } from "@/components/billing/payg-checkout-access";
 import {
@@ -12,7 +13,6 @@ import { PaygPortalButton } from "@/components/billing/payg-portal-button";
 import { ResumePaygButton } from "@/components/billing/resume-payg-button";
 import { StartPaygCheckoutCTA } from "@/components/billing/start-payg-checkout-cta";
 import { useStripeSubscription } from "@/components/billing/use-stripe-subscription";
-import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
@@ -23,6 +23,7 @@ import { useSession } from "@/contexts/Auth";
 import { useProductTier } from "@/hooks/useProductTier";
 import { isNotFoundError } from "@/lib/route-errors";
 import type { ReactNode } from "react";
+import { Heading } from "../ui/Heading";
 
 /**
  * Offers checkout during an active trial or when Free/Base or PAYG has no subscription.
@@ -30,11 +31,21 @@ import type { ReactNode } from "react";
  * Unsubscribed PAYG organizations retain a way to finish billing setup.
  * Attached subscriptions expose their live state and management controls.
  */
-export function PaygPlanSection(): JSX.Element | null {
+export function PaygPlanSection({
+  paymentDetails = false,
+}: {
+  paymentDetails?: boolean;
+} = {}): JSX.Element | null {
   const productTier = useProductTier();
   const { eligible, trialLifecycle } = usePaygCheckoutAccess("active-trial");
 
-  if (trialLifecycle === "active") {
+  if (
+    productTier !== "base" &&
+    !showPaymentMethods(productTier, trialLifecycle, eligible)
+  )
+    return null;
+
+  if (trialLifecycle === "active" && !paymentDetails) {
     // The eligibility gate (flag, admin scope) decides whether there is
     // anything to offer; a section whose only content is an action the viewer
     // cannot take would just be announcing a dead end.
@@ -42,12 +53,12 @@ export function PaygPlanSection(): JSX.Element | null {
     return <AddPaymentMethodSection activeTrial />;
   }
 
-  if (productTier === "base") return <BasePaymentSection />;
+  if (productTier === "base" && !paymentDetails) return <BasePaymentSection />;
 
-  if (productTier !== "payg") return null;
+  if (productTier !== "payg" && !paymentDetails) return null;
 
   return (
-    <PaymentSection description="Your pay-as-you-go subscription, payment method, and invoices.">
+    <PaymentSection>
       <PaygPlanBody />
     </PaymentSection>
   );
@@ -98,16 +109,17 @@ function PaymentSection({
   description,
   children,
 }: {
-  description: string;
+  description?: string;
   children: ReactNode;
 }): JSX.Element {
   return (
-    <Page.Section>
-      {/* Secondary section: suppress the area eyebrow. */}
-      <Page.Section.Title area="">Payment</Page.Section.Title>
-      <Page.Section.Description>{description}</Page.Section.Description>
-      <Page.Section.Body>{children}</Page.Section.Body>
-    </Page.Section>
+    <section className="space-y-6">
+      <div className="border-b border-border pb-2">
+        <Heading variant="h3">Payment</Heading>
+      </div>
+      {description && <Text muted>{description}</Text>}
+      {children}
+    </section>
   );
 }
 
@@ -205,8 +217,8 @@ function PaygPlanDetails({
   const copy = planCopy(state, subscription);
 
   return (
-    <Stack gap={4}>
-      <Stack gap={1}>
+    <Stack gap={6}>
+      <Stack gap={2}>
         <Text className="font-medium">{copy.headline}</Text>
         <Text muted small>
           {copy.detail}

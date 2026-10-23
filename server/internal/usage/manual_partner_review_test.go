@@ -3,6 +3,7 @@ package usage
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"testing"
 	"time"
@@ -118,8 +119,26 @@ func TestPartnerCheckoutRejectsChangedBindingAfterRemoteRead(t *testing.T) {
 	ctx := ti.adminContext(t)
 	_, err := ti.service.CreateStripeCheckout(ctx, nil)
 	require.NoError(t, err)
+	queries := repo.New(ti.db)
+	metadata, err := queries.GetBillingMetadata(t.Context(), ti.orgID)
+	require.NoError(t, err)
+	_, _, inputs := ti.stripe.snapshot()
+	concurrentInput := inputs[0]
+	concurrentInput.IdempotencyKey = "concurrent-checkout"
+	concurrent, err := ti.stripe.CreateCheckoutSession(t.Context(), concurrentInput)
+	require.NoError(t, err)
+	// Both sessions exist remotely. Change the binding during every remote read
+	// so the invariant is exercised independently of preliminary expiry checks.
 	ti.stripe.beforeCheckoutRead = func() error {
-		return repo.New(ti.db).SetStripeCheckoutSessionFixture(t.Context(), repo.SetStripeCheckoutSessionFixtureParams{OrganizationID: ti.orgID, StripeCheckoutSessionID: pgtype.Text{String: "checkout_changed", Valid: true}})
+		current, err := queries.GetBillingMetadata(t.Context(), ti.orgID)
+		if err != nil {
+			return fmt.Errorf("read concurrent checkout binding: %w", err)
+		}
+		next := concurrent.ID
+		if current.StripeCheckoutSessionID.String == concurrent.ID {
+			next = metadata.StripeCheckoutSessionID.String
+		}
+		return queries.SetStripeCheckoutSessionFixture(t.Context(), repo.SetStripeCheckoutSessionFixtureParams{OrganizationID: ti.orgID, StripeCheckoutSessionID: pgtype.Text{String: next, Valid: true}})
 	}
 	_, err = ti.service.CreateStripeCheckout(ctx, nil)
 	require.ErrorContains(t, err, "binding changed")

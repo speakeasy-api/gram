@@ -1,3 +1,4 @@
+import { MemoryRouter, useLocation } from "react-router";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   cleanup,
@@ -55,7 +56,10 @@ vi.mock("@/hooks/useRBAC", () => ({
 }));
 
 vi.mock("@/contexts/Auth", () => ({
-  useSession: () => mocks.session(),
+  useSession: () => ({
+    organization: { slug: "test-org" },
+    ...mocks.session(),
+  }),
 }));
 
 vi.mock("@/contexts/Telemetry", () => ({
@@ -172,13 +176,19 @@ function notFound(): Error {
   });
 }
 
+function LocationProbe() {
+  return <span data-testid="location">{useLocation().pathname}</span>;
+}
+
 /** The section's children reach for the query client to invalidate. */
 function render(ui: ReactNode) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
   return rtlRender(
-    <QueryClientProvider client={client}>{ui}</QueryClientProvider>,
+    <QueryClientProvider client={client}>
+      <MemoryRouter>{ui}</MemoryRouter>
+    </QueryClientProvider>,
   );
 }
 
@@ -583,10 +593,18 @@ describe("PaygPlanSection", () => {
         trial: null,
       });
 
-      render(<PaygPlanSection />);
+      render(
+        <>
+          <PaygPlanSection />
+          <LocationProbe />
+        </>,
+      );
       fireEvent.click(checkoutCta()!);
 
-      expect(mocks.checkoutMutate).toHaveBeenCalledTimes(1);
+      expect(mocks.checkoutMutate).not.toHaveBeenCalled();
+      expect(screen.getByTestId("location").textContent).toBe(
+        "/test-org/billing/setup",
+      );
       expect(mocks.refetch).not.toHaveBeenCalled();
     });
 
@@ -794,13 +812,21 @@ describe("PaygPlanSection", () => {
       queryState({ isError: true, error: notFound() });
     });
 
-    it("reuses checkout with generic nontrial copy", () => {
-      render(<PaygPlanSection />);
+    it("navigates to checkout with generic nontrial copy", () => {
+      render(
+        <>
+          <PaygPlanSection />
+          <LocationProbe />
+        </>,
+      );
       expect(
         screen.getByText("Add a payment method to start pay as you go."),
       ).toBeTruthy();
       fireEvent.click(checkoutCta()!);
-      expect(mocks.checkoutMutate).toHaveBeenCalledTimes(1);
+      expect(mocks.checkoutMutate).not.toHaveBeenCalled();
+      expect(screen.getByTestId("location").textContent).toBe(
+        "/test-org/billing/setup",
+      );
     });
 
     it.each([undefined, "unknown_flow", "tailscale_partner_gateway"])(
@@ -881,3 +907,7 @@ describe("PaygPlanSection", () => {
     },
   );
 });
+
+vi.mock("@/components/ui/hooks/useConfig", () => ({
+  useConfig: () => ({ theme: "light" }),
+}));

@@ -108,6 +108,8 @@ type Client interface {
 	GetCustomer(context.Context, string) (*CustomerDetails, error)
 	UpdateCustomer(context.Context, UpdateCustomerInput) error
 	CreateCheckoutSession(context.Context, CreateCheckoutSessionInput) (*CheckoutSession, error)
+	// PublishableKey is the Stripe.js key paired with this client. Empty when unset.
+	PublishableKey() string
 	GetCheckoutSession(context.Context, string) (*CheckoutSessionState, error)
 	GetSubscription(context.Context, string) (*SubscriptionState, error)
 	SetSubscriptionCancelAtPeriodEnd(context.Context, SetSubscriptionCancelAtPeriodEndInput) (*SubscriptionState, error)
@@ -207,7 +209,9 @@ func validAccountType(accountType string) string {
 	return ""
 }
 
-// CreateCheckoutSessionInput describes the hosted Checkout session for a PAYG subscription.
+// CreateCheckoutSessionInput describes a Checkout session for a PAYG subscription.
+// ReturnURL selects embedded Checkout. SuccessURL and CancelURL select the hosted page.
+// Stripe rejects a session that sets both.
 type CreateCheckoutSessionInput struct {
 	// CustomerID identifies the Stripe customer that owns the subscription.
 	CustomerID string
@@ -221,11 +225,25 @@ type CreateCheckoutSessionInput struct {
 	// OrganizationSlug is the organization slug included in Stripe metadata.
 	OrganizationSlug string
 
-	// SuccessURL is the browser destination after successful Checkout.
+	// SuccessURL is the browser destination after successful hosted Checkout.
 	SuccessURL string
 
-	// CancelURL is the browser destination when Checkout is canceled.
+	// CancelURL is the browser destination when hosted Checkout is canceled.
 	CancelURL string
+
+	// ReturnURL is where embedded Checkout sends the browser after a redirect-based
+	// payment method. It must contain the literal {CHECKOUT_SESSION_ID} template.
+	ReturnURL string
+
+	// EmbeddedBrandingV1 applies the immutable v1 appearance to new embedded intents.
+	// Leave false when replaying intents created before this branding version.
+	EmbeddedBrandingV1 bool
+
+	// EmbeddedBrandingDarkV1 applies the immutable dark preset, not the current UI tokens.
+	EmbeddedBrandingDarkV1 bool
+
+	// EmbeddedFormPrototype selects the uncommitted form feasibility preview.
+	EmbeddedFormPrototype bool
 
 	// TrialEnd is the UTC-aligned financial trial end. Speakeasy retains the exact
 	// product trial end separately and the interval between them is a free stub.
@@ -246,13 +264,18 @@ type CheckoutSession struct {
 	// ID is Stripe's stable Checkout Session identifier.
 	ID string
 
-	// URL is Stripe's hosted Checkout page.
+	// URL is Stripe's hosted Checkout page. Empty for embedded Checkout.
 	URL string
+
+	// ClientSecret mounts embedded Checkout in the browser.
+	ClientSecret string
 }
 
 // CheckoutSessionState is the current Stripe state used to activate PAYG.
 type CheckoutSessionState struct {
 	Partner                *CheckoutPartnerState
+	PaymentStatus          string
+	OrganizationID         string
 	ID                     string
 	Status                 string
 	CustomerID             string
@@ -260,6 +283,14 @@ type CheckoutSessionState struct {
 	SubscriptionCustomerID string
 	SubscriptionStatus     string
 	BillingCycleAnchor     time.Time
+}
+
+// PaymentReady reports whether Checkout has satisfied the payment gate. Metered
+// trials can complete with unpaid status even after collecting a payment method.
+// Callers must still verify completion, ownership, and subscription lifecycle.
+func (s *CheckoutSessionState) PaymentReady() bool {
+	return s != nil && (s.PaymentStatus == "paid" || s.PaymentStatus == "no_payment_required" ||
+		(s.PaymentStatus == "unpaid" && s.SubscriptionStatus == "trialing"))
 }
 
 // SubscriptionState is the live Stripe subscription data needed by billing callers.
@@ -577,13 +608,14 @@ func (s *sdkAPI) listCreditNotes(ctx context.Context, params *stripesdk.CreditNo
 }
 
 type client struct {
-	api           stripeAPI
-	catalog       Catalog
-	webhookSecret string
+	api            stripeAPI
+	catalog        Catalog
+	webhookSecret  string
+	publishableKey string
 }
 
 // NewClient creates a real Stripe client using the repository HTTP policy.
-func NewClient(guardianPolicy *guardian.Policy, apiKey, webhookSecret string, catalog Catalog) Client {
+func NewClient(guardianPolicy *guardian.Policy, apiKey, webhookSecret, publishableKey string, catalog Catalog) Client {
 	retries := guardian.DefaultRetryConfig()
 	retries.WaitMax = 10 * time.Second
 	retries.MaxAttempts = 1
@@ -598,10 +630,15 @@ func NewClient(guardianPolicy *guardian.Policy, apiKey, webhookSecret string, ca
 	sdkClient := stripesdk.NewClient(apiKey, stripesdk.WithBackends(backends))
 
 	return &client{
-		api:           &sdkAPI{client: sdkClient},
-		catalog:       catalog,
-		webhookSecret: webhookSecret,
+		api:            &sdkAPI{client: sdkClient},
+		catalog:        catalog,
+		webhookSecret:  webhookSecret,
+		publishableKey: publishableKey,
 	}
+}
+
+func (c *client) PublishableKey() string {
+	return c.publishableKey
 }
 
 func (c *client) CreateCustomer(ctx context.Context, input CreateCustomerInput) (*Customer, error) {
@@ -772,8 +809,40 @@ func (c *client) CreateCheckoutSession(ctx context.Context, input CreateCheckout
 	} else {
 		params.AllowPromotionCodes = new(true)
 	}
-	params.CancelURL = stripesdk.String(input.CancelURL)
 	params.ClientReferenceID = stripesdk.String(input.OrganizationID)
+	if input.ReturnURL != "" {
+		params.UIMode = stripesdk.String(string(stripesdk.CheckoutSessionUIModeEmbeddedPage))
+		params.ReturnURL = stripesdk.String(input.ReturnURL)
+		if input.EmbeddedBrandingV1 || input.EmbeddedBrandingDarkV1 {
+			// Never change this preset: durable intents must replay identical parameters.
+			params.BrandingSettings = &stripesdk.CheckoutSessionCreateBrandingSettingsParams{
+				DisplayName:     nil,
+				Icon:            nil,
+				Logo:            nil,
+				UnsetFields:     nil,
+				BackgroundColor: stripesdk.String("#ffffff"),
+				ButtonColor:     stripesdk.String("#303030"),
+				BorderStyle:     stripesdk.String("rectangular"),
+				FontFamily:      stripesdk.String("inter"),
+			}
+		}
+		if input.EmbeddedBrandingDarkV1 {
+			// Frozen from dark bg-surface-primary-default and primary: black and white.
+			params.BrandingSettings.BackgroundColor = stripesdk.String("#000000")
+			params.BrandingSettings.ButtonColor = stripesdk.String("#ffffff")
+		}
+
+		// Card payments stay on the page. Redirect-based methods still use ReturnURL.
+		params.RedirectOnCompletion = stripesdk.String(string(stripesdk.CheckoutSessionRedirectOnCompletionIfRequired))
+		if input.EmbeddedFormPrototype {
+			params.UIMode = stripesdk.String(string(stripesdk.CheckoutSessionUIModeForm))
+			params.BrandingSettings = nil
+			params.RedirectOnCompletion = nil
+		}
+	} else {
+		params.CancelURL = stripesdk.String(input.CancelURL)
+		params.SuccessURL = stripesdk.String(input.SuccessURL)
+	}
 	params.Customer = stripesdk.String(input.CustomerID)
 	params.ExpiresAt = new(input.ExpiresAt.Unix())
 	params.LineItems = []*stripesdk.CheckoutSessionCreateLineItemParams{
@@ -800,7 +869,6 @@ func (c *client) CreateCheckoutSession(ctx context.Context, input CreateCheckout
 	params.SubscriptionData = new(stripesdk.CheckoutSessionCreateSubscriptionDataParams)
 	// Subscription metadata is also copied by Stripe onto invoice.parent.subscription_details.metadata.
 	params.SubscriptionData.Metadata = contractMetadata(identity)
-	params.SuccessURL = stripesdk.String(input.SuccessURL)
 	if input.TrialEnd != nil {
 		params.SubscriptionData.TrialEnd = new(input.TrialEnd.Unix())
 	} else {
@@ -818,7 +886,7 @@ func (c *client) CreateCheckoutSession(ctx context.Context, input CreateCheckout
 		}
 		return nil, fmt.Errorf("create Stripe Checkout session: %w", err)
 	}
-	return &CheckoutSession{ID: session.ID, URL: session.URL}, nil
+	return &CheckoutSession{ID: session.ID, URL: session.URL, ClientSecret: session.ClientSecret}, nil
 }
 
 func (c *client) ExpireCheckoutSession(ctx context.Context, id string) error {
@@ -848,6 +916,8 @@ func (c *client) GetCheckoutSession(ctx context.Context, id string) (*CheckoutSe
 		Partner:                nil,
 		ID:                     session.ID,
 		Status:                 string(session.Status),
+		PaymentStatus:          string(session.PaymentStatus),
+		OrganizationID:         session.Metadata[organizationIDMetadataKey],
 		CustomerID:             "",
 		SubscriptionID:         "",
 		SubscriptionCustomerID: "",
@@ -1267,7 +1337,15 @@ func (s *stubClient) ResolveGatewayPromotionCode(context.Context, string) (strin
 
 func (s *stubClient) CreateCheckoutSession(ctx context.Context, input CreateCheckoutSessionInput) (*CheckoutSession, error) {
 	s.logger.DebugContext(ctx, "stub Stripe Checkout session creation skipped")
-	return &CheckoutSession{ID: "cs_local_stub", URL: fmt.Sprintf("http://localhost:3000/%s/billing", url.PathEscape(input.OrganizationSlug))}, nil
+	return &CheckoutSession{
+		ID:           "cs_local_stub",
+		URL:          fmt.Sprintf("http://localhost:3000/%s/billing", url.PathEscape(input.OrganizationSlug)),
+		ClientSecret: "",
+	}, nil
+}
+
+func (*stubClient) PublishableKey() string {
+	return ""
 }
 
 func (s *stubClient) GetCheckoutSession(context.Context, string) (*CheckoutSessionState, error) {

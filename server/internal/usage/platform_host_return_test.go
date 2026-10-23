@@ -83,8 +83,7 @@ func TestCreateStripeCheckoutReturnsToExtraPlatformHost(t *testing.T) {
 
 	_, _, checkouts := ti.stripe.snapshot()
 	require.Len(t, checkouts, 1)
-	require.Equal(t, extraPlatformHostURL+"/"+ti.orgSlug+"/billing", checkouts[0].SuccessURL)
-	require.Equal(t, checkouts[0].SuccessURL, checkouts[0].CancelURL)
+	require.Equal(t, stripeCheckoutEmbeddedReturnURL(extraPlatformHostURL+"/"+ti.orgSlug+"/billing"), checkouts[0].ReturnURL)
 	require.Contains(t, checkouts[0].IdempotencyKey, ":"+stripeCheckoutReturnBasePrefix)
 	require.Equal(t, "none", checkoutIntentTrialFingerprint(checkouts[0].IdempotencyKey))
 }
@@ -100,7 +99,7 @@ func TestCreateStripeCheckoutRecordsSiteURLReturnBaseOnSiteHost(t *testing.T) {
 
 	_, _, checkouts := ti.stripe.snapshot()
 	require.Len(t, checkouts, 1)
-	require.Equal(t, "https://app.example.test/"+ti.orgSlug+"/billing", checkouts[0].SuccessURL)
+	require.Equal(t, stripeCheckoutEmbeddedReturnURL("https://app.example.test/"+ti.orgSlug+"/billing"), checkouts[0].ReturnURL)
 	require.Contains(t, checkouts[0].IdempotencyKey, ":"+stripeCheckoutReturnBasePrefix)
 	require.Equal(t, "none", checkoutIntentTrialFingerprint(checkouts[0].IdempotencyKey))
 }
@@ -123,7 +122,7 @@ func TestCreateStripeCheckoutReplaysSiteHostIntentAfterSiteURLChange(t *testing.
 	_, _, checkouts := ti.stripe.snapshot()
 	require.Len(t, checkouts, 2)
 	require.Equal(t, checkouts[0], checkouts[1])
-	require.Equal(t, "https://app.example.test/"+ti.orgSlug+"/billing", checkouts[1].SuccessURL)
+	require.Equal(t, stripeCheckoutEmbeddedReturnURL("https://app.example.test/"+ti.orgSlug+"/billing"), checkouts[1].ReturnURL)
 	require.Empty(t, ti.stripe.expiredCheckoutIDs)
 }
 
@@ -195,7 +194,7 @@ func TestCreateStripeCheckoutReplaysLiveIntentAfterHostSwitch(t *testing.T) {
 			_, _, checkouts := ti.stripe.snapshot()
 			require.Len(t, checkouts, 2)
 			require.Equal(t, checkouts[0], checkouts[1])
-			require.Equal(t, tc.wantBase+ti.orgSlug+"/billing", checkouts[1].SuccessURL)
+			require.Equal(t, stripeCheckoutEmbeddedReturnURL(tc.wantBase+ti.orgSlug+"/billing"), checkouts[1].ReturnURL)
 			require.Empty(t, ti.stripe.expiredCheckoutIDs)
 		})
 	}
@@ -222,16 +221,15 @@ func TestCreateStripeCheckoutRecoversLifecycleStaleIntentWithOriginalHost(t *tes
 	require.Error(t, err)
 	requireOopsCode(t, err, oops.CodeConflict)
 
-	checkoutURL, err := ti.service.CreateStripeCheckout(ti.adminContext(t), &gen.CreateStripeCheckoutPayload{})
+	_, err = ti.service.CreateStripeCheckout(ti.adminContext(t), &gen.CreateStripeCheckoutPayload{})
 	require.NoError(t, err)
-	require.Equal(t, "https://checkout.stripe.test/2", checkoutURL)
 	require.Equal(t, []string{"cs_1"}, ti.stripe.expiredCheckoutIDs)
 
 	_, _, checkouts := ti.stripe.snapshot()
 	require.Len(t, checkouts, 3)
 	require.Equal(t, checkouts[0], checkouts[1])
-	require.Equal(t, extraPlatformHostURL+"/"+ti.orgSlug+"/billing", checkouts[1].SuccessURL)
-	require.Equal(t, "https://app.example.test/"+ti.orgSlug+"/billing", checkouts[2].SuccessURL)
+	require.Equal(t, stripeCheckoutEmbeddedReturnURL(extraPlatformHostURL+"/"+ti.orgSlug+"/billing"), checkouts[1].ReturnURL)
+	require.Equal(t, stripeCheckoutEmbeddedReturnURL("https://app.example.test/"+ti.orgSlug+"/billing"), checkouts[2].ReturnURL)
 }
 
 func TestStripeCheckoutReturnBaseRoundTripsThroughIdempotencyKey(t *testing.T) {

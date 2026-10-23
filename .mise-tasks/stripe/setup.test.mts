@@ -1,12 +1,18 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
+  persistStripeSettings,
   provisionCatalog,
   preflightLocalSetup,
+  publishableKeyFromStripeCLI,
+  resolveSecretKey,
   setupStripe,
 } from "./setup.mts";
 import { execFileSync } from "node:child_process";
 import {
+  chmodSync,
+  lstatSync,
+  mkdirSync,
   mkdtempSync,
   readFileSync,
   readdirSync,
@@ -15,7 +21,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 const meter = {
   id: "mtr_synthetic",
@@ -199,7 +205,7 @@ test("orchestration shares credentials and preflights before remote writes", asy
       },
       resolveKey: async () => {
         steps.push("key");
-        return { key };
+        return { key, publishableKey: "pk_test_synthetic" };
       },
       webhookSecret: async (actual) => {
         assert.equal(actual, key);
@@ -237,6 +243,7 @@ test("orchestration shares credentials and preflights before remote writes", asy
           "STRIPE_PRICE_ID_MCP_EGRESS",
           "STRIPE_PRICE_ID_RISK_SCANS",
           "STRIPE_PRICE_ID_TUM",
+          "STRIPE_PUBLISHABLE_KEY",
           "STRIPE_WEBHOOK_SECRET",
         ]);
         assert.equal(
@@ -248,6 +255,7 @@ test("orchestration shares credentials and preflights before remote writes", asy
             assert.equal(value, "existing_risk");
         }
         assert.equal(settings.STRIPE_API_KEY, key);
+        assert.equal(settings.STRIPE_PUBLISHABLE_KEY, "pk_test_synthetic");
         assert.equal(settings.STRIPE_WEBHOOK_SECRET, "whsec_synthetic");
         assert.equal(settings.STRIPE_PRICE_ID_MCP_EGRESS, mcpEgressPrice.id);
         assert.equal(settings.STRIPE_PRICE_ID_RISK_SCANS, riskScansPrice.id);
@@ -270,6 +278,7 @@ test("orchestration shares credentials and preflights before remote writes", asy
         },
         resolveKey: async () => ({
           key: failure === "key" ? "sk_live_synthetic" : "sk_test_synthetic",
+          publishableKey: "pk_test_synthetic",
         }),
         webhookSecret: async () => {
           throw new Error("listener authentication failed");
@@ -736,7 +745,10 @@ for (const [first, second] of [
       await assert.rejects(
         setupStripe({
           preflight: async () => {},
-          resolveKey: async () => ({ key: "sk_test_synthetic" }),
+          resolveKey: async () => ({
+            key: "sk_test_synthetic",
+            publishableKey: "pk_test_synthetic",
+          }),
           webhookSecret: async () => "whsec_synthetic",
           provision: async () => ({
             meter: meters[0]!,
@@ -757,3 +769,251 @@ for (const [first, second] of [
     });
   }
 }
+
+test("reads the Stripe CLI test-mode publishable key", () => {
+  assert.equal(
+    publishableKeyFromStripeCLI(
+      "test_mode_publishable_key = 'pk_test_example123'\ntest_mode_api_key = 'sk_test_example'",
+    ),
+    "pk_test_example123",
+  );
+  assert.equal(
+    publishableKeyFromStripeCLI(
+      "test_mode_pub_key = 'pk_test_older123'\ntest_mode_api_key = 'sk_test_example'",
+    ),
+    "pk_test_older123",
+  );
+  assert.equal(
+    publishableKeyFromStripeCLI("test_mode_api_key = sk_test_only"),
+    "",
+  );
+});
+
+test("setup preserves CLI credentials after they become persisted environment settings", async () => {
+  let saved: Record<string, string> = {};
+  let cliConfig =
+    "test_mode_api_key = 'sk_test_original'\ntest_mode_publishable_key = 'pk_test_original'";
+  const run = () =>
+    setupStripe({
+      preflight: async () => {},
+      resolveKey: () => resolveSecretKey(saved, async () => cliConfig),
+      webhookSecret: async () => "whsec_synthetic",
+      provision: async () => ({
+        meter,
+        price,
+        mcpEgressPrice,
+        riskScansPrice,
+        mcpEgressMeter,
+        riskScansMeter,
+        portalConfiguration: portal,
+      }),
+      persist: async (settings) => {
+        saved = settings;
+      },
+    });
+  await run();
+  assert.equal(saved.STRIPE_PUBLISHABLE_KEY, "pk_test_original");
+  // A subsequent CLI login must not replace the explicitly configured pair.
+  cliConfig =
+    "test_mode_api_key = 'sk_test_other'\ntest_mode_publishable_key = 'pk_test_other'";
+  await run();
+  assert.equal(saved.STRIPE_API_KEY, "sk_test_original");
+  assert.equal(saved.STRIPE_PUBLISHABLE_KEY, "pk_test_original");
+});
+
+test("setup rejects an incomplete replacement key pair before provisioning or overwriting settings", async () => {
+  const saved = {
+    STRIPE_API_KEY: "sk_test_original",
+    STRIPE_PUBLISHABLE_KEY: "pk_test_original",
+  };
+  for (const publishableKey of [
+    undefined,
+    "",
+    "unset",
+    "pk_live_synthetic",
+    "invalid",
+  ]) {
+    await assert.rejects(
+      setupStripe({
+        preflight: async () => {},
+        resolveKey: () =>
+          resolveSecretKey(
+            {
+              STRIPE_API_KEY: "sk_test_replacement",
+              STRIPE_PUBLISHABLE_KEY: publishableKey,
+            },
+            async () => {
+              assert.fail(
+                "environment secrets must not borrow a CLI publishable key",
+              );
+            },
+          ),
+        webhookSecret: async () => {
+          assert.fail("must validate keys before starting the listener");
+        },
+        provision: async () => {
+          assert.fail("must validate keys before provisioning");
+        },
+        persist: async (settings) => {
+          Object.assign(saved, settings);
+          assert.fail("must not overwrite a working configuration");
+        },
+      }),
+      /matching sandbox publishable key/,
+    );
+    assert.deepEqual(saved, {
+      STRIPE_API_KEY: "sk_test_original",
+      STRIPE_PUBLISHABLE_KEY: "pk_test_original",
+    });
+  }
+});
+
+function persistenceFixture(t: import("node:test").TestContext) {
+  const root = mkdtempSync(join(tmpdir(), "stripe-persistence-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  execFileSync("git", ["init", "--quiet", root]);
+  execFileSync("git", ["-C", root, "config", "core.excludesFile", "/dev/null"]);
+  writeFileSync(join(root, ".gitignore"), "mise*.local.toml\n");
+  const path = join(root, "mise.local.toml");
+  const original = "# Keep this comment\n[env]\nUNRELATED = 'preserve'\n";
+  writeFileSync(path, original, { mode: 0o640 });
+  const env = {
+    GRAM_ENVIRONMENT: "local",
+    GRAM_SERVER_URL: "http://localhost:8080",
+    GRAM_SERVER_PORT: "8080",
+  };
+  const stagedFiles = () =>
+    readdirSync(root).filter((name) => name.startsWith("mise.stripe-"));
+  return { root, path, original, env, stagedFiles };
+}
+
+test("persistence atomically saves all settings and preserves unrelated config and mode", async (t) => {
+  const f = persistenceFixture(t);
+  await persistStripeSettings(
+    { FIRST: "sk_test_synthetic", SECOND: "" },
+    {
+      root: f.root,
+      env: f.env,
+      set: async (path, name, value) => {
+        assert.notEqual(path, f.path);
+        assert.equal(lstatSync(path).mode & 0o777, 0o600);
+        assert.equal(readFileSync(f.path, "utf8"), f.original);
+        writeFileSync(
+          path,
+          readFileSync(path, "utf8") + `${name} = ${JSON.stringify(value)}\n`,
+        );
+      },
+    },
+  );
+  assert.equal(
+    readFileSync(f.path, "utf8"),
+    f.original + 'FIRST = "sk_test_synthetic"\nSECOND = ""\n',
+  );
+  assert.equal(lstatSync(f.path).mode & 0o777, 0o640);
+  assert.deepEqual(f.stagedFiles(), []);
+});
+
+test("a mid-write failure leaves original config intact and cleans staging", async (t) => {
+  const f = persistenceFixture(t);
+  await assert.rejects(
+    persistStripeSettings(
+      { FIRST: "one", SECOND: "two" },
+      {
+        root: f.root,
+        env: f.env,
+        set: async (path, name) => {
+          writeFileSync(path, "partial config");
+          if (name === "SECOND") throw new Error("simulated mise failure");
+        },
+      },
+    ),
+    /simulated mise failure/,
+  );
+  assert.equal(readFileSync(f.path, "utf8"), f.original);
+  assert.equal(lstatSync(f.path).mode & 0o777, 0o640);
+  assert.deepEqual(f.stagedFiles(), []);
+});
+
+test("persistence keeps concurrent edits and cleans staging", async (t) => {
+  const f = persistenceFixture(t);
+  await assert.rejects(
+    persistStripeSettings(
+      { FIRST: "one" },
+      {
+        root: f.root,
+        env: f.env,
+        set: async () => {
+          writeFileSync(f.path, "# concurrent edit\n");
+          chmodSync(f.path, 0o600);
+        },
+      },
+    ),
+    /changed during Stripe setup/,
+  );
+  assert.equal(readFileSync(f.path, "utf8"), "# concurrent edit\n");
+  assert.equal(lstatSync(f.path).mode & 0o777, 0o600);
+  assert.deepEqual(f.stagedFiles(), []);
+});
+
+test("persistence creates new config privately and refuses linked config", async (t) => {
+  const f = persistenceFixture(t);
+  rmSync(f.path);
+  const set = async (path: string) => {
+    writeFileSync(path, "[env]\nFIRST = 'one'\n");
+  };
+  await persistStripeSettings(
+    { FIRST: "one" },
+    { root: f.root, env: f.env, set },
+  );
+  assert.equal(readFileSync(f.path, "utf8"), "[env]\nFIRST = 'one'\n");
+  assert.equal(lstatSync(f.path).mode & 0o777, 0o600);
+  rmSync(f.path);
+  symlinkSync(join(f.root, ".gitignore"), f.path);
+  await assert.rejects(
+    persistStripeSettings(
+      { FIRST: "one" },
+      {
+        root: f.root,
+        env: f.env,
+        set: async () => {
+          assert.fail("unsafe config must not reach mise");
+        },
+      },
+    ),
+    /no links/,
+  );
+  assert.equal(
+    readFileSync(join(f.root, ".gitignore"), "utf8"),
+    "mise*.local.toml\n",
+  );
+  assert.deepEqual(f.stagedFiles(), []);
+});
+
+test("real mise persists with isolated trust and preserves comments and unrelated config", async (t) => {
+  const f = persistenceFixture(t);
+  const mise = execFileSync("sh", ["-c", "command -v mise"], {
+    encoding: "utf8",
+  }).trim();
+  const home = join(f.root, "home");
+  mkdirSync(home);
+  const env = {
+    ...f.env,
+    PATH: `${dirname(mise)}:/usr/bin:/bin`,
+    HOME: home,
+    MISE_CONFIG_DIR: join(home, "config"),
+    MISE_DATA_DIR: join(home, "data"),
+    MISE_CACHE_DIR: join(home, "cache"),
+    MISE_STATE_DIR: join(home, "state"),
+  };
+  await persistStripeSettings(
+    { STRIPE_API_KEY: "sk_test_synthetic", STRIPE_PUBLISHABLE_KEY: "" },
+    { root: f.root, env },
+  );
+  const saved = readFileSync(f.path, "utf8");
+  assert.match(saved, /# Keep this comment/);
+  assert.match(saved, /UNRELATED = 'preserve'/);
+  assert.match(saved, /STRIPE_API_KEY = "sk_test_synthetic"/);
+  assert.match(saved, /STRIPE_PUBLISHABLE_KEY = ""/);
+  assert.equal(lstatSync(f.path).mode & 0o777, 0o640);
+  assert.deepEqual(f.stagedFiles(), []);
+});
