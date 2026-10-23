@@ -11,6 +11,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -29,6 +30,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd/admission"
+	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
 // HandleAuthorize implements the OAuth 2.1 authorization endpoint (RFC 6749
@@ -184,14 +186,14 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 	// Registered callbacks can still be attacker-controlled. Before authentication,
 	// only loopback destinations receive automatic error redirects.
 	if err := req.ValidatePostRedirect(); err != nil {
-		return writePreAuthenticationAuthorizeError(ctx, w, r, logger, issuer, req.RedirectURI, req.State, "", err)
+		return writePreAuthenticationAuthorizeError(ctx, w, r, logger, issuer, req.RedirectURI, req.State, "", authorizationErrorPage(client, req.ClientID, endpoint.Slug), err)
 	}
 	// RFC 8707 §2: a resource naming some other server means the client
 	// believes it is getting a token for an endpoint this one will never mint
 	// for. Rejecting makes that misconfiguration visible at the point it
 	// happens instead of at first use.
 	if err := oauthwire.ValidateResourceIndicators(req.Resources, resource); err != nil {
-		return writePreAuthenticationAuthorizeError(ctx, w, r, logger, issuer, req.RedirectURI, req.State, "resource_mismatch", err)
+		return writePreAuthenticationAuthorizeError(ctx, w, r, logger, issuer, req.RedirectURI, req.State, "resource_mismatch", authorizationErrorPage(client, req.ClientID, endpoint.Slug), err)
 	}
 
 	challengeID := uuid.NewString()
@@ -335,7 +337,9 @@ func writeAuthorizeOAuthError(ctx context.Context, w http.ResponseWriter, logger
 // automatically only for loopback destinations. Other callbacks require an
 // explicit user click, preventing DCR and CIMD phishing redirects (RFC 9700 §4.11.2).
 // failureReason preserves resource-rejection telemetry across response modes.
-func writePreAuthenticationAuthorizeError(ctx context.Context, w http.ResponseWriter, r *http.Request, logger *slog.Logger, issuer, redirectURI, originalState, failureReason string, err error) error {
+// page names the client and server the way the consent page does; its error
+// and callback fields are filled in here.
+func writePreAuthenticationAuthorizeError(ctx context.Context, w http.ResponseWriter, r *http.Request, logger *slog.Logger, issuer, redirectURI, originalState, failureReason string, page oauthui.AuthorizationError, err error) error {
 	code := "invalid_request"
 	description := err.Error()
 	if oauthErr, ok := errors.AsType[*oauthwire.Error](err); ok {
@@ -362,13 +366,35 @@ func writePreAuthenticationAuthorizeError(ctx context.Context, w http.ResponseWr
 		return oops.E(oops.CodeUnexpected, err, "build client redirect").LogError(ctx, logger)
 	}
 	if !oauthwire.MayAutoRedirectBeforeAuthentication(redirectURI) {
-		if err := oauthui.WriteAuthorizationError(ctx, w, redirect, code, description); err != nil {
+		page.CallbackURL, page.Code, page.Description = redirect, code, description
+		if err := oauthui.WriteAuthorizationError(ctx, w, page); err != nil {
 			return oops.E(oops.CodeUnexpected, err, "render authorization error page").LogError(ctx, logger)
 		}
 		return nil
 	}
 	http.Redirect(w, r, redirect, http.StatusFound)
 	return nil
+}
+
+// authorizationErrorPage names the client and server on the authorization
+// error page as the consent page does. clientID is the value the request
+// presented, which the browser already holds.
+func authorizationErrorPage(client *usersessions_repo.UserSessionClient, clientID, serverName string) oauthui.AuthorizationError {
+	page := oauthui.AuthorizationError{
+		CallbackURL:    "",
+		Code:           "",
+		Description:    "",
+		ClientName:     client.ClientName,
+		ClientID:       clientID,
+		ClientIDOrigin: "",
+		ServerName:     serverName,
+	}
+	if client.ClientIDMetadataUri.Valid {
+		if u, err := url.Parse(client.ClientIDMetadataUri.String); err == nil {
+			page.ClientIDOrigin = u.Host
+		}
+	}
+	return page
 }
 
 // writeAuthorizeError emits an OAuth 2.1 authorization error (RFC 6749

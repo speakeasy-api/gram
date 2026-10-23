@@ -428,7 +428,7 @@ func (s *OAuthHTTP) AuthorizeHandler() http.Handler {
 			return
 		}
 		if err := request.ValidatePostRedirect(); err != nil {
-			writePreAuthenticationOAuthError(w, r, request.RedirectURI, request.State, err)
+			writePreAuthenticationOAuthError(w, r, client, request.ClientID, request.RedirectURI, request.State, err)
 			return
 		}
 
@@ -1525,7 +1525,8 @@ func writeRequestOAuthError(w http.ResponseWriter, status int, err error) {
 
 // writePreAuthenticationOAuthError requires a user click for registered callbacks
 // outside loopback; later browser legs retain their existing redirect behavior.
-func writePreAuthenticationOAuthError(w http.ResponseWriter, r *http.Request, redirectURI, state string, err error) {
+// clientID is the value the request presented.
+func writePreAuthenticationOAuthError(w http.ResponseWriter, r *http.Request, client platformoauth.Client, clientID, redirectURI, state string, err error) {
 	if oauthwire.MayAutoRedirectBeforeAuthentication(redirectURI) {
 		redirectOAuthError(w, r, redirectURI, state, err)
 		return
@@ -1536,7 +1537,16 @@ func writePreAuthenticationOAuthError(w http.ResponseWriter, r *http.Request, re
 	}
 	setOAuthTelemetryOutcome(w, oauthError.Code)
 	callback := redirectURL(redirectURI, "", state, oauthError.Code, oauthError.Description)
-	if err := oauthui.WriteAuthorizationError(r.Context(), w, callback, oauthError.Code, oauthError.Description); err != nil {
+	page := oauthui.AuthorizationError{
+		CallbackURL:    callback,
+		Code:           oauthError.Code,
+		Description:    oauthError.Description,
+		ClientName:     client.Name,
+		ClientID:       clientID,
+		ClientIDOrigin: clientIDOrigin(client),
+		ServerName:     "Speakeasy",
+	}
+	if err := oauthui.WriteAuthorizationError(r.Context(), w, page); err != nil {
 		writeOAuthError(w, http.StatusInternalServerError, oautherr.CodeServerError, "could not render authorization page")
 	}
 }

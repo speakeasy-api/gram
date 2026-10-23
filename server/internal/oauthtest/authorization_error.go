@@ -31,7 +31,9 @@ func RequireAuthorizationErrorCallback(t *testing.T, response *httptest.Response
 			if node.Type != html.ElementNode {
 				continue
 			}
-			require.NotEqual(t, "script", node.Data)
+			if node.Data == "script" {
+				requireNonNavigatingScript(t, node, response.Header().Get("Content-Security-Policy"))
+			}
 			for _, attr := range node.Attr {
 				if node.Data == "a" && attr.Key == "href" {
 					callbacks = append(callbacks, attr.Val)
@@ -48,4 +50,29 @@ func RequireAuthorizationErrorCallback(t *testing.T, response *httptest.Response
 	parsed, err := url.Parse(callback)
 	require.NoError(t, err)
 	return parsed
+}
+
+// requireNonNavigatingScript allows only inline scripts admitted by the
+// response's CSP nonce that cannot move the browser to the callback. The page
+// must leave that step to the person.
+func requireNonNavigatingScript(t *testing.T, script *html.Node, csp string) {
+	t.Helper()
+	nonce := ""
+	for _, attr := range script.Attr {
+		require.NotEqual(t, "src", attr.Key, "authorization error scripts must be inline")
+		if attr.Key == "nonce" {
+			nonce = attr.Val
+		}
+	}
+	require.NotEmpty(t, nonce)
+	require.Contains(t, csp, "script-src 'nonce-"+nonce+"'")
+	var body strings.Builder
+	for child := range script.Descendants() {
+		if child.Type == html.TextNode {
+			body.WriteString(child.Data)
+		}
+	}
+	for _, navigation := range []string{"location", "window.open", ".href", ".submit(", ".click("} {
+		require.NotContains(t, body.String(), navigation)
+	}
 }

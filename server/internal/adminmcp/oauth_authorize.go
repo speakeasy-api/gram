@@ -115,20 +115,20 @@ func (s *StaffOAuthAuthorization) AuthorizeHandler() http.Handler {
 			return
 		}
 		if err := request.ValidatePostRedirect(); err != nil {
-			staffPreAuthenticationError(w, r, request.RedirectURI, request.State, err)
+			staffPreAuthenticationError(w, r, client, request.RedirectURI, request.State, err)
 			return
 		}
 		if err := oauthwire.ValidateResourceIndicators(request.Resources, s.resource); err != nil {
-			staffPreAuthenticationError(w, r, request.RedirectURI, request.State, err)
+			staffPreAuthenticationError(w, r, client, request.RedirectURI, request.State, err)
 			return
 		}
 		if !validStaffPKCEChallenge(request.CodeChallenge) {
-			staffPreAuthenticationError(w, r, request.RedirectURI, request.State, &oauthwire.Error{Code: "invalid_request", Description: "invalid PKCE S256 challenge"})
+			staffPreAuthenticationError(w, r, client, request.RedirectURI, request.State, &oauthwire.Error{Code: "invalid_request", Description: "invalid PKCE S256 challenge"})
 			return
 		}
 		scopes, ok := normalizeRequestedScopes(r.URL.Query().Get("scope"), s.writes.WritesAvailable())
 		if !ok {
-			staffPreAuthenticationError(w, r, request.RedirectURI, request.State, &oauthwire.Error{Code: "invalid_scope", Description: "requested scope is not available"})
+			staffPreAuthenticationError(w, r, client, request.RedirectURI, request.State, &oauthwire.Error{Code: "invalid_scope", Description: "requested scope is not available"})
 			return
 		}
 		csrf, err := staffOpaqueToken()
@@ -390,7 +390,7 @@ func staffRequestError(w http.ResponseWriter, err error) {
 	}
 }
 
-func staffPreAuthenticationError(w http.ResponseWriter, r *http.Request, redirectURI, state string, err error) {
+func staffPreAuthenticationError(w http.ResponseWriter, r *http.Request, client staffOAuthClient, redirectURI, state string, err error) {
 	callback, oauthErr, buildErr := staffErrorCallback(redirectURI, state, err)
 	if buildErr != nil {
 		staffOAuthError(w, http.StatusBadRequest, oauthErr.Code, oauthErr.Description)
@@ -400,7 +400,16 @@ func staffPreAuthenticationError(w http.ResponseWriter, r *http.Request, redirec
 		http.Redirect(w, r, callback, http.StatusSeeOther)
 		return
 	}
-	if err := oauthui.WriteAuthorizationError(r.Context(), w, callback, oauthErr.Code, oauthErr.Description); err != nil {
+	page := oauthui.AuthorizationError{
+		CallbackURL:    callback,
+		Code:           oauthErr.Code,
+		Description:    oauthErr.Description,
+		ClientName:     client.Name,
+		ClientID:       client.ID,
+		ClientIDOrigin: "",
+		ServerName:     "Speakeasy Admin",
+	}
+	if err := oauthui.WriteAuthorizationError(r.Context(), w, page); err != nil {
 		staffOAuthError(w, http.StatusInternalServerError, oautherr.CodeServerError, "could not render authorization page")
 	}
 }

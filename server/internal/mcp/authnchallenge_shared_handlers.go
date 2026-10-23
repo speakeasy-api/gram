@@ -195,8 +195,10 @@ func (s *Service) rejectSharedAuthorizeResource(w http.ResponseWriter, r *http.R
 	if !redirectURIMatches(&client, req.RedirectURI) {
 		return writeAuthorizeError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeInvalidTarget, description)
 	}
+	// The rejected resource names no server this issuer will identify, so the
+	// page names only the client.
 	return writePreAuthenticationAuthorizeError(ctx, w, r, logger, issuer.authorizationServer.issuer, req.RedirectURI, req.State, string(rejection),
-		&oauthwire.Error{Code: oautherr.CodeInvalidTarget, Description: description})
+		authorizationErrorPage(&client, req.ClientID, ""), &oauthwire.Error{Code: oautherr.CodeInvalidTarget, Description: description})
 }
 
 // sharedResourceDescription is the error_description for a refused resource
