@@ -1,11 +1,16 @@
 package plugins
 
 import (
+	"context"
+	"net/url"
 	"strings"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/orghost"
+	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 )
 
 // WithOrganizationHosts makes generated plugins use the platform host stored as
@@ -23,10 +28,25 @@ func (s *Service) WithOrganizationHosts(resolver *orghost.Resolver) *Service {
 // or the configured server URL when none is stored. Custom-domain addresses
 // are resolved by the caller and never use this base.
 func (s *Service) organizationServerURL(defaultHost pgtype.Text) string {
-	if s.orgHosts != nil {
-		if serverURL, _, ok := s.orgHosts.StoredPlatformBaseURLs(defaultHost); ok {
-			return strings.TrimRight(serverURL.String(), "/")
-		}
+	configured, err := url.Parse(s.serverURL)
+	if err != nil {
+		return s.serverURL
 	}
-	return s.serverURL
+	base, _ := s.orgHosts.StoredPlatformBaseURLsOr(defaultHost, configured, nil)
+	return strings.TrimRight(base.String(), "/")
+}
+
+// projectServerURL is organizationServerURL for the organization that owns
+// projectID. It reads the project only when a resolver is set, and falls back
+// to the configured server URL when that read fails.
+func (s *Service) projectServerURL(ctx context.Context, projectID uuid.UUID) string {
+	if s.orgHosts == nil {
+		return s.serverURL
+	}
+	project, err := projectsrepo.New(s.db).GetProjectWithOrganizationMetadata(ctx, projectID)
+	if err != nil {
+		s.logger.WarnContext(ctx, "failed to fetch organization default host, falling back to server url", attr.SlogError(err))
+		return s.serverURL
+	}
+	return s.organizationServerURL(project.DefaultHost)
 }

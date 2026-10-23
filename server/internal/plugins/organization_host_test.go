@@ -179,3 +179,43 @@ func TestPluginServerURLIgnoresUnknownStoredHost(t *testing.T) {
 
 	require.Equal(t, testConfiguredServerURL, downloadObservabilityServerURL(t, ctx, svc))
 }
+
+func TestPublishedServerURLMatchesMCPAddressHost(t *testing.T) {
+	t.Parallel()
+
+	mock := &mockGitHubPublisher{}
+	ctx, ti := newTestPluginsServiceWithGitHub(t, mock)
+	ti.service.WithOrganizationHosts(orghost.New(orghost.Config{
+		ServerURL:                  &url.URL{Scheme: "https", Host: "app.getgram.ai"},
+		SiteURL:                    nil,
+		PlatformHosts:              map[string]string{"platform.example.test": "https://platform.example.test"},
+		LegacyDefaultHost:          nil,
+		NewOrganizationDefaultHost: nil,
+	}))
+	setOrganizationDefaultHost(t, ctx, ti, "https://platform.example.test")
+
+	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Agreement"})
+	require.NoError(t, err)
+	toolset := createTestToolset(t, ctx, ti.conn, "agreement")
+	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{PluginID: plugin.ID, ToolsetID: conv.PtrEmpty(toolset.ID.String()), Policy: "required", SortOrder: 0})
+	require.NoError(t, err)
+	_, err = ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
+	require.NoError(t, err)
+
+	require.Contains(t, string(mock.lastPushedFiles[plugin.Slug+"/.mcp.json"]), "https://platform.example.test/mcp/"+toolset.McpSlug.String)
+	var serverURLs []string
+	for name, content := range mock.lastPushedFiles {
+		if path.Base(name) != "speakeasy.json" {
+			continue
+		}
+		var config struct {
+			ServerURL string `json:"server_url"`
+		}
+		require.NoError(t, json.Unmarshal(content, &config))
+		serverURLs = append(serverURLs, config.ServerURL)
+	}
+	require.NotEmpty(t, serverURLs)
+	for _, serverURL := range serverURLs {
+		require.Equal(t, "https://platform.example.test", serverURL)
+	}
+}
