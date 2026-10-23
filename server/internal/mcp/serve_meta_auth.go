@@ -20,7 +20,7 @@ import (
 // connecting it through the gateway, by memberNeedsSignIn. It checks
 // capability, not whether a person has connected yet: an OAuth member stays
 // supported so they can connect it.
-func (s *Service) derivedMemberAuth(ctx context.Context, member metaMember) (supported bool, needsOAuth bool, err error) {
+func (s *Service) derivedMemberAuth(ctx context.Context, shadow *mandatoryShadow, shadowSurface string, member metaMember) (supported bool, needsOAuth bool, err error) {
 	oauth := memberNeedsSignIn(member)
 	if member.backend != metaMemberBackendHosted {
 		if !member.remoteServerID.Valid {
@@ -58,7 +58,7 @@ func (s *Service) derivedMemberAuth(ctx context.Context, member metaMember) (sup
 	if member.serverID == toolset.ID && !toolset.McpEnabled {
 		return false, false, nil
 	}
-	allowed, err := s.memberToolsetConnectAllowed(ctx, true, &toolset)
+	allowed, err := s.memberToolsetConnectAllowed(ctx, shadow, shadowSurface, true, &toolset)
 	if err != nil || !allowed {
 		return false, false, err
 	}

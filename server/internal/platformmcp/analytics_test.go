@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/telemetry/analytics"
 )
@@ -102,6 +103,13 @@ func newAnalyticsTestHarness(t *testing.T, evaluation feature.Evaluation, budget
 func (h *analyticsTestHarness) invoke(t *testing.T, tool, arguments string) (any, error) {
 	t.Helper()
 	return descriptorByName(t, h.reg, tool).Invoke(ContextWithPrincipal(t.Context(), testRiskPrincipal("user")), json.RawMessage(arguments))
+}
+
+// invokeWithGrants calls the tool as a caller holding exactly grants.
+func (h *analyticsTestHarness) invokeWithGrants(t *testing.T, tool, arguments string, grants ...authz.Grant) (any, error) {
+	t.Helper()
+	ctx := authz.GrantsToContext(ContextWithPrincipal(t.Context(), testRiskPrincipal("user")), grants)
+	return descriptorByName(t, h.reg, tool).Invoke(ctx, json.RawMessage(arguments))
 }
 
 func (h *analyticsTestHarness) projectArguments() string {
@@ -266,9 +274,13 @@ func TestDescribeAnalyticsCatalogServesTheCatalog(t *testing.T) {
 	require.Equal(t, []string{"none", "hour", "day", "week", "month"}, output.Grains)
 	require.Equal(t, AnalyticsLimits{MaxDimensions: 3, MaxFilterValues: 100, DefaultLimit: 100, MaxLimit: 1000, MaxRowsLimit: 200, DefaultValuesLimit: 50, MaxValuesLimit: 200}, output.Limits)
 
+	// The harness loads no grants, so a dataset for org admins alone is not
+	// described.
 	declared := make([]string, 0, len(analytics.Default.Datasets()))
 	for _, ds := range analytics.Default.Datasets() {
-		declared = append(declared, ds.Name)
+		if _, restricted := ds.AccessCheck(testRiskPrincipal("user").OrganizationID); !restricted {
+			declared = append(declared, ds.Name)
+		}
 	}
 	served := make([]string, 0, len(output.Datasets))
 	byName := make(map[string]AnalyticsDataset, len(output.Datasets))
@@ -526,4 +538,50 @@ func TestAnalyticsToolSchemasRejectWhatTheCompilerWouldRefuse(t *testing.T) {
 	}
 	require.Zero(t, h.engine.calls)
 	require.Empty(t, h.projects.inputs, "a request the schema rejects never reaches the project resolver")
+}
+
+func TestDescribeAnalyticsCatalogListsRiskFindingsToOrgAdmins(t *testing.T) {
+	t.Parallel()
+
+	h := newAnalyticsTestHarness(t, feature.EvaluationEnabled, allowAnalyticsBudget)
+	organizationID := testRiskPrincipal("user").OrganizationID
+	raw, err := h.invokeWithGrants(t, describeAnalyticsCatalogToolName, h.projectArguments(), authz.NewGrant(authz.ScopeOrgAdmin, organizationID))
+	require.NoError(t, err)
+	output, ok := raw.(DescribeAnalyticsCatalogOutput)
+	require.True(t, ok)
+
+	var riskFindings *AnalyticsDataset
+	for i := range output.Datasets {
+		if output.Datasets[i].Name == "risk_findings" {
+			riskFindings = &output.Datasets[i]
+		}
+	}
+	require.NotNil(t, riskFindings, "an org admin is described the risk dataset")
+	require.Equal(t, "metric", riskFindings.Kind, "it answers aggregates only")
+	require.Equal(t, "event", output.Datasets[0].Kind, "tool_calls answers rows too")
+
+	raw, err = h.invokeWithGrants(t, describeAnalyticsCatalogToolName, h.projectArguments(), authz.NewGrant(authz.ScopeProjectRead, h.project.ID.String()))
+	require.NoError(t, err)
+	output, ok = raw.(DescribeAnalyticsCatalogOutput)
+	require.True(t, ok)
+	for _, ds := range output.Datasets {
+		require.NotEqual(t, "risk_findings", ds.Name, "a member is not described the risk dataset")
+	}
+}
+
+func TestAnalyticsToolsRefuseRiskFindingsToMembers(t *testing.T) {
+	t.Parallel()
+
+	h := newAnalyticsTestHarness(t, feature.EvaluationEnabled, allowAnalyticsBudget)
+	member := authz.NewGrant(authz.ScopeProjectRead, h.project.ID.String())
+	for tool, arguments := range map[string]string{
+		runAnalyticsQueryToolName:            `{"project_id":"` + h.project.ID.String() + `","dataset":"risk_findings",` + analyticsTestWindow + `,"measures":[{"op":"count"}]}`,
+		listAnalyticsDimensionValuesToolName: `{"project_id":"` + h.project.ID.String() + `","dataset":"risk_findings","dimension":"category",` + analyticsTestWindow + `}`,
+	} {
+		_, err := h.invokeWithGrants(t, tool, arguments, member)
+		require.Error(t, err, tool)
+		require.Contains(t, err.Error(), `"code":"forbidden"`, tool)
+		require.Contains(t, err.Error(), "Only organization administrators", tool)
+	}
+	require.Zero(t, h.engine.calls, "a refused read never reaches the engine")
 }
