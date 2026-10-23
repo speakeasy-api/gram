@@ -481,3 +481,13 @@ func GetUpstreamOAuthMigrationStatusAdminPath() string {
 func RunUpstreamOAuthMigrationAdminPath() string {
 	return "/admin/upstreamOAuthMigration.run"
 }
+
+// EnableUpstreamAuthEnforcementAdminPath returns the URL path to the admin service enableUpstreamAuthEnforcement HTTP endpoint.
+func EnableUpstreamAuthEnforcementAdminPath() string {
+	return "/admin/upstreamOAuthMigration.enableEnforcement"
+}
+
+// DisableUpstreamAuthEnforcementAdminPath returns the URL path to the admin service disableUpstreamAuthEnforcement HTTP endpoint.
+func DisableUpstreamAuthEnforcementAdminPath() string {
+	return "/admin/upstreamOAuthMigration.disableEnforcement"
+}

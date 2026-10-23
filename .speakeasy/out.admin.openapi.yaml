@@ -7415,6 +7415,156 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
       x-speakeasy-name-override: startTrial
+  /admin/upstreamOAuthMigration.disableEnforcement:
+    post:
+      description: 'Disables upstream auth enforcement for one organization. This is its rollback: requests return to the upstream client choice within a minute. Safe to call when enforcement is already off.'
+      operationId: adminDisableUpstreamAuthEnforcement
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DisableUpstreamAuthEnforcementRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminUpstreamOAuthMigrationStatus'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      summary: disableUpstreamAuthEnforcement admin
+      tags:
+        - admin
+      x-speakeasy-name-override: disableUpstreamAuthEnforcement
+  /admin/upstreamOAuthMigration.enableEnforcement:
+    post:
+      description: 'Enables upstream auth enforcement for one organization: its direct proxied servers and assistant turns are served by the typed auth client resolver, and using the chosen auth client requires mcp:auth. Refused unless the organization is migrated, its auth clients are recorded, its default auth permissions are granted, every credential choice that can name an auth client does, and its assistant profiles are recorded. Choices left ambiguous and profile gaps are not blocking: those credentials are asked to reconnect and those turns are refused with the reason. Shadow parity and the cross-organization denial notice are confirmed by the caller, since they are read from telemetry and communication outside the database. Enabled enforcement does not depend on the auth-client-resolver flags.'
+      operationId: adminEnableUpstreamAuthEnforcement
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnableUpstreamAuthEnforcementRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminUpstreamOAuthMigrationStatus'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      summary: enableUpstreamAuthEnforcement admin
+      tags:
+        - admin
+      x-speakeasy-name-override: enableUpstreamAuthEnforcement
   /admin/upstreamOAuthMigration.organizations:
     get:
       description: Lists every organization the upstream OAuth migration applies to, so staff can check and migrate them one by one.
@@ -9914,6 +10064,25 @@ components:
         - id
         - customer_id
         - status
+    AdminUpstreamAuthEnforcement:
+      type: object
+      properties:
+        blockers:
+          type: array
+          items:
+            type: string
+          description: What keeps enforcement from being turned on, empty when ready.
+        enabled:
+          type: boolean
+          description: Whether enforcement is on.
+        ready:
+          type: boolean
+          description: Whether the coverage enforcement needs is in place, so it can be turned on.
+      description: One organization's upstream auth enforcement.
+      required:
+        - enabled
+        - ready
+        - blockers
     AdminUpstreamOAuthMigrationAuthClientKind:
       type: object
       properties:
@@ -9979,6 +10148,10 @@ components:
         pending_clients:
           type: integer
           description: Auth clients not yet recorded.
+          format: int64
+        pending_grants:
+          type: integer
+          description: Default auth permission grants (mcp:auth) the organization's roles, users, agents and API keys are missing, which a run adds. Enforcement needs them, so existing callers keep their access.
           format: int64
         pending_headers:
           type: integer
@@ -10277,6 +10450,8 @@ components:
           type: integer
           description: Live user session credentials scanned.
           format: int64
+        enforcement:
+          $ref: '#/components/schemas/AdminUpstreamAuthEnforcement'
         execution_profiles:
           $ref: '#/components/schemas/AdminUpstreamOAuthMigrationExecutionProfiles'
         migrated:
@@ -10804,6 +10979,14 @@ components:
           minLength: 1
       required:
         - id
+    DisableUpstreamAuthEnforcementRequestBody:
+      type: object
+      properties:
+        organization_id:
+          type: string
+          description: The organization ID.
+      required:
+        - organization_id
     EMAProvider:
       type: object
       properties:
@@ -10871,6 +11054,22 @@ components:
           minLength: 1
       required:
         - id
+    EnableUpstreamAuthEnforcementRequestBody:
+      type: object
+      properties:
+        cross_organization_denial_communicated:
+          type: boolean
+          description: The organization was told that valid credentials from another organization are refused on its public servers once enforcement is on, instead of being served anonymously.
+        organization_id:
+          type: string
+          description: The organization ID.
+        shadow_parity_confirmed:
+          type: boolean
+          description: The caller checked the organization's mandatory authorization shadow (mcp.authz.mandatory_shadow) and found no unexplained new denial.
+      required:
+        - organization_id
+        - shadow_parity_confirmed
+        - cross_organization_denial_communicated
     Error:
       type: object
       properties:

@@ -2,6 +2,8 @@ import type { AdminInferenceKey } from "@gram/admin-client/models/components/adm
 import { buildAdminGetUpstreamOAuthMigrationStatusQuery } from "@gram/admin-client/react-query/adminGetUpstreamOAuthMigrationStatus.core";
 import { buildAdminListUpstreamOAuthMigrationOrganizationsQuery } from "@gram/admin-client/react-query/adminListUpstreamOAuthMigrationOrganizations.core";
 import { buildAdminRunUpstreamOAuthMigrationMutation } from "@gram/admin-client/react-query/adminRunUpstreamOAuthMigration";
+import { buildAdminEnableUpstreamAuthEnforcementMutation } from "@gram/admin-client/react-query/adminEnableUpstreamAuthEnforcement";
+import { buildAdminDisableUpstreamAuthEnforcementMutation } from "@gram/admin-client/react-query/adminDisableUpstreamAuthEnforcement";
 import type { AdminUpstreamOAuthMigrationOrganizations } from "@gram/admin-client/models/components/adminupstreamoauthmigrationorganizations";
 import type { AdminUpstreamOAuthMigrationRun } from "@gram/admin-client/models/components/adminupstreamoauthmigrationrun";
 import type { AdminUpstreamOAuthMigrationStatus } from "@gram/admin-client/models/components/adminupstreamoauthmigrationstatus";
@@ -1119,6 +1121,42 @@ export function runUpstreamOAuthMigration(
 ): Promise<AdminUpstreamOAuthMigrationRun> {
   return redirecting(
     generatedRunUpstreamOAuthMigrationMutation.mutationFn({
+      request: { organizationId: organizationID },
+    }),
+  );
+}
+
+const generatedEnableUpstreamAuthEnforcementMutation =
+  buildAdminEnableUpstreamAuthEnforcementMutation(redirectingClient, {
+    retries: { strategy: "none" },
+  });
+
+// The caller confirms what the server cannot check: the shadow evaluation
+// agrees, and the organization was told about the cross-organization denial.
+export function enableUpstreamAuthEnforcement(
+  organizationID: string,
+): Promise<AdminUpstreamOAuthMigrationStatus> {
+  return redirecting(
+    generatedEnableUpstreamAuthEnforcementMutation.mutationFn({
+      request: {
+        organizationId: organizationID,
+        shadowParityConfirmed: true,
+        crossOrganizationDenialCommunicated: true,
+      },
+    }),
+  );
+}
+
+const generatedDisableUpstreamAuthEnforcementMutation =
+  buildAdminDisableUpstreamAuthEnforcementMutation(redirectingClient, {
+    retries: { strategy: "none" },
+  });
+
+export function disableUpstreamAuthEnforcement(
+  organizationID: string,
+): Promise<AdminUpstreamOAuthMigrationStatus> {
+  return redirecting(
+    generatedDisableUpstreamAuthEnforcementMutation.mutationFn({
       request: { organizationId: organizationID },
     }),
   );
