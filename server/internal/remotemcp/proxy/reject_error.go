@@ -101,9 +101,10 @@ type ToolResultError struct {
 	Message string
 }
 
-// Error implements [error] for logs. The agent sees Message.
+// Error implements [error] for logs and spans. It leaves out Message, which
+// can carry an approval request token. The agent sees Message.
 func (e *ToolResultError) Error() string {
-	return "tool error result: " + e.Message
+	return "tool error result"
 }
 
 // RejectErrorFromCause coerces an arbitrary error into a *RejectError so

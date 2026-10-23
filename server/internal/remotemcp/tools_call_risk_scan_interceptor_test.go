@@ -483,6 +483,7 @@ func TestRiskScanRejectionReturnsHeldCallsAsToolResults(t *testing.T) {
 	toolResult, ok := errors.AsType[*proxy.ToolResultError](riskScanRejection(held))
 	require.True(t, ok, "a held call is answered with a tool result")
 	require.Equal(t, held.UserMessage, toolResult.Message)
+	require.NotContains(t, toolResult.Error(), held.ApprovalToken, "the request token stays out of logs and spans")
 
 	blocked := mcpriskscan.Decision{Disposition: mcpriskscan.DispositionDeny, UserMessage: "Blocked by Remote policy", ApprovalToken: ""}
 	rejection, ok := errors.AsType[*proxy.RejectError](riskScanRejection(blocked))
