@@ -3070,11 +3070,30 @@ var MetaMcpMemberUsage = Type("MetaMcpMemberUsage", func() {
 	Required("mcp_server_id", "tool_calls", "error_count")
 })
 
+var MetaMcpDiscoveryFailureBucket = Type("MetaMcpDiscoveryFailureBucket", func() {
+	Description("Members left out of the gateway's tool listings during one time bucket.")
+
+	Attribute("bucket_time_unix_nano", String, "Bucket start time in Unix nanoseconds (string for JS precision)")
+	Attribute("count", Int64, "Members left out of a tool listing in this bucket. A listing that left out several members counts each of them.")
+
+	Required("bucket_time_unix_nano", "count")
+})
+
+var MetaMcpDiscoveryFailures = Type("MetaMcpDiscoveryFailures", func() {
+	Description("Time series of members the gateway left out of its tool listings because they could not be listed.")
+
+	Attribute("interval_seconds", Int64, "Bucket width in seconds, chosen from the length of the requested window")
+	Attribute("buckets", ArrayOf(MetaMcpDiscoveryFailureBucket), "Buckets covering the requested window in ascending time order, gap-filled with zeros. The first bucket starts at the window start, and failures are counted up to but excluding the window end, so the last bucket may be partial.")
+
+	Required("interval_seconds", "buckets")
+})
+
 var GetMetaMcpServerUsageResult = Type("GetMetaMcpServerUsageResult", func() {
 	Description("Discovery funnel plus per-member execution breakdown for one gateway (meta MCP server). Zero counts mean no rows were observed in the window within telemetry retention — they do not distinguish an idle gateway from traffic outside the window or the 90-day retention; telemetry-disabled organizations get a not-found error instead of zeros.")
 
 	Attribute("funnel", MetaMcpDiscoveryFunnel)
 	Attribute("members", ArrayOf(MetaMcpMemberUsage), "Per-member execution breakdown, most active first")
+	Attribute("discovery_failures", MetaMcpDiscoveryFailures, "Members left out of the gateway's tool listings over the window")
 
 	Required("funnel", "members")
 })

@@ -20,6 +20,7 @@ export function StackedTimeBarChart({
   tooltipLabels,
   datasets,
   tooltipAfterBody,
+  onBucketHover,
   onRangeSelect,
   height = 200,
   expanded = false,
@@ -31,6 +32,7 @@ export function StackedTimeBarChart({
   tooltipLabels: string[];
   datasets: TimeSeriesDataset[];
   tooltipAfterBody?: (dataIndex: number) => string[];
+  onBucketHover?: (dataIndex: number | null) => void;
   onRangeSelect?: (from: Date, to: Date) => void;
   height?: number;
   expanded?: boolean;
@@ -98,6 +100,12 @@ export function StackedTimeBarChart({
     responsive: true,
     maintainAspectRatio: false,
     interaction: { mode: "index", intersect: false },
+    onHover: (_event, elements) => {
+      onBucketHover?.(elements[0]?.index ?? null);
+    },
+    onClick: (_event, elements) => {
+      onBucketHover?.(elements[0]?.index ?? null);
+    },
     plugins: {
       legend: expanded && !compact ? EXPANDED_LEGEND : SHARED_LEGEND,
       tooltip: {

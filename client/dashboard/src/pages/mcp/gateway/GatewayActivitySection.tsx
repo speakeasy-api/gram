@@ -259,11 +259,6 @@ export function GatewayActivitySection({
           </div>
         ) : (
           <div className="@container flex flex-col gap-6">
-            <GatewayDiscoveryFailures
-              metaMcpServerId={metaMcpServerId}
-              from={from}
-              to={to}
-            />
             {overviewFailed ? (
               <LoadError what="usage metrics" />
             ) : (
@@ -335,6 +330,20 @@ export function GatewayActivitySection({
                 />
               </>
             )}
+
+            <GatewayDiscoveryFailures
+              metaMcpServerId={metaMcpServerId}
+              from={from}
+              to={to}
+              failures={usage.data?.discoveryFailures}
+              loading={usage.isLoading || usage.isPlaceholderData}
+              error={usageFailed}
+              expandedChart={expandedChart}
+              onExpand={setExpandedChart}
+              onRangeSelect={handleRangeSelect}
+              isZoomed={customRange !== null}
+              onResetZoom={() => clearCustomRange()}
+            />
 
             {usageFailed ? (
               <LoadError what="the discovery funnel and member breakdown" />

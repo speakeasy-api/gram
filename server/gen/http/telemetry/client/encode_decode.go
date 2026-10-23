@@ -9375,6 +9375,40 @@ func unmarshalMetaMcpMemberUsageResponseBodyToTelemetryMetaMcpMemberUsage(v *Met
 	return res
 }
 
+// unmarshalMetaMcpDiscoveryFailuresResponseBodyToTelemetryMetaMcpDiscoveryFailures
+// builds a value of type *telemetry.MetaMcpDiscoveryFailures from a value of
+// type *MetaMcpDiscoveryFailuresResponseBody.
+func unmarshalMetaMcpDiscoveryFailuresResponseBodyToTelemetryMetaMcpDiscoveryFailures(v *MetaMcpDiscoveryFailuresResponseBody) *telemetry.MetaMcpDiscoveryFailures {
+	if v == nil {
+		return nil
+	}
+	res := &telemetry.MetaMcpDiscoveryFailures{
+		IntervalSeconds: *v.IntervalSeconds,
+	}
+	res.Buckets = make([]*telemetry.MetaMcpDiscoveryFailureBucket, len(v.Buckets))
+	for i, val := range v.Buckets {
+		if val == nil {
+			res.Buckets[i] = nil
+			continue
+		}
+		res.Buckets[i] = unmarshalMetaMcpDiscoveryFailureBucketResponseBodyToTelemetryMetaMcpDiscoveryFailureBucket(val)
+	}
+
+	return res
+}
+
+// unmarshalMetaMcpDiscoveryFailureBucketResponseBodyToTelemetryMetaMcpDiscoveryFailureBucket
+// builds a value of type *telemetry.MetaMcpDiscoveryFailureBucket from a value
+// of type *MetaMcpDiscoveryFailureBucketResponseBody.
+func unmarshalMetaMcpDiscoveryFailureBucketResponseBodyToTelemetryMetaMcpDiscoveryFailureBucket(v *MetaMcpDiscoveryFailureBucketResponseBody) *telemetry.MetaMcpDiscoveryFailureBucket {
+	res := &telemetry.MetaMcpDiscoveryFailureBucket{
+		BucketTimeUnixNano: *v.BucketTimeUnixNano,
+		Count:              *v.Count,
+	}
+
+	return res
+}
+
 // unmarshalProjectOverviewSummaryResponseBodyToTelemetryProjectOverviewSummary
 // builds a value of type *telemetry.ProjectOverviewSummary from a value of
 // type *ProjectOverviewSummaryResponseBody.

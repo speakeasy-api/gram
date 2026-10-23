@@ -2070,11 +2070,14 @@ func (s *Service) GetMetaMcpServerUsage(ctx context.Context, payload *telem_gen.
 		return nil, err
 	}
 
+	intervalSeconds := max(calculateInterval(timeStart, timeEnd), (timeEnd-timeStart)/int64(time.Second)/maxDiscoveryFailureBuckets+1)
+
 	usage, err := s.chRepo.GetMetaMCPServerUsage(ctx, repo.GetMetaMCPServerUsageParams{
 		GramProjectID:   authCtx.ProjectID.String(),
 		MetaMCPServerID: metaMCPServerID.String(),
 		TimeStart:       timeStart,
 		TimeEnd:         timeEnd,
+		IntervalSeconds: intervalSeconds,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error fetching meta mcp server usage")
@@ -2111,6 +2114,14 @@ func (s *Service) GetMetaMcpServerUsage(ctx context.Context, payload *telem_gen.
 		members = append(members, entry)
 	}
 
+	failureBuckets := make([]*telem_gen.MetaMcpDiscoveryFailureBucket, 0, len(usage.DiscoveryFailures))
+	for _, bucket := range usage.DiscoveryFailures {
+		failureBuckets = append(failureBuckets, &telem_gen.MetaMcpDiscoveryFailureBucket{
+			BucketTimeUnixNano: strconv.FormatInt(bucket.BucketTimeUnixNano, 10),
+			Count:              uint64ToInt64(bucket.Count),
+		})
+	}
+
 	return &telem_gen.GetMetaMcpServerUsageResult{
 		Funnel: &telem_gen.MetaMcpDiscoveryFunnel{
 			ListServers:    uint64ToInt64(usage.Funnel.ListServers),
@@ -2119,6 +2130,10 @@ func (s *Service) GetMetaMcpServerUsage(ctx context.Context, payload *telem_gen.
 			ExecuteTool:    uint64ToInt64(usage.Funnel.ExecuteTool),
 		},
 		Members: members,
+		DiscoveryFailures: &telem_gen.MetaMcpDiscoveryFailures{
+			IntervalSeconds: intervalSeconds,
+			Buckets:         failureBuckets,
+		},
 	}, nil
 }
 
@@ -2809,6 +2824,11 @@ func (s *Service) GetProjectOverview(ctx context.Context, payload *telem_gen.Get
 		MetricsMode: metricsMode,
 	}, nil
 }
+
+// maxDiscoveryFailureBuckets bounds the gateway discovery failure series at a
+// year of daily buckets. Telemetry is kept for 90 days, so a wider window only
+// widens the buckets instead of growing the response.
+const maxDiscoveryFailureBuckets = 366
 
 // calculateInterval determines the appropriate time bucket interval based on the time range.
 // Returns interval in seconds.

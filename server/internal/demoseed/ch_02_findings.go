@@ -840,7 +840,7 @@ func (s *seeder) chfGatewayDiscovery(ctx context.Context, ch driver.Conn) error 
 	}
 	// A few Direct tools/list calls left a remote member out. The runtime
 	// records one row per omitted member with the upstream's status and fixed
-	// text naming the member, which the gateway's Activity section lists.
+	// text naming the member, which the gateway's Activity section charts.
 	omitted := []struct {
 		member string
 		status int
