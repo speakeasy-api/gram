@@ -454,18 +454,3 @@ LEFT JOIN LATERAL (
 ) address ON TRUE
 WHERE s.id = ANY(@toolset_ids::uuid[])
   AND s.deleted IS FALSE;
-
--- name: MirrorToolsetHosting :one
--- Writes a hosted toolset's hosting columns from its canonical server so pods that still read them stay consistent.
-UPDATE toolsets
-SET
-    name = @name
-  , mcp_slug = @mcp_slug
-  , mcp_enabled = @mcp_enabled
-  , mcp_is_public = @mcp_is_public
-  , custom_domain_id = @custom_domain_id
-  , user_session_issuer_id = @user_session_issuer_id
-  , tool_variations_group_id = @tool_variations_group_id
-  , updated_at = clock_timestamp()
-WHERE id = @id AND project_id = @project_id AND deleted IS FALSE
-RETURNING *;

@@ -17,7 +17,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
-	"github.com/speakeasy-api/gram/server/internal/hostedmcp"
 	"github.com/speakeasy-api/gram/server/internal/hostedmcp/hostingstate"
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
@@ -181,28 +180,6 @@ func (s *Service) updateHostedEndpoint(ctx context.Context, logger *slog.Logger,
 		}
 	}
 
-	// The server slug follows its single address, as pods that compare it with the toolset's mcp_slug expect.
-	if server.Slug.String != slug {
-		renamed, err := mcpserversrepo.New(dbtx).SyncHostedMCPServer(ctx, mcpserversrepo.SyncHostedMCPServerParams{
-			Name: server.Name, Slug: pgtype.Text{String: slug, Valid: true}, Visibility: server.Visibility,
-			UserSessionIssuerID: server.UserSessionIssuerID, ToolVariationsGroupID: server.ToolVariationsGroupID,
-			NetworkAccessMode: server.NetworkAccessMode, ID: server.ID, ProjectID: server.ProjectID,
-		})
-		if err != nil {
-			var pgErr *pgconn.PgError
-			if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
-				return nil, oops.E(oops.CodeConflict, err, "this slug is already taken").LogWarn(ctx, logger)
-			}
-			return nil, oops.E(oops.CodeUnexpected, err, "update hosted MCP server slug").LogError(ctx, logger)
-		}
-		if err := hostedmcp.LogUpdate(ctx, dbtx, s.audit, hostedmcp.Actor{UserID: authCtx.UserID, Email: authCtx.Email, System: ""}, authCtx.ActiveOrganizationID, server, renamed); err != nil {
-			return nil, err //nolint:wrapcheck // oops errors pass through.
-		}
-	}
-	if err := hostingstate.MirrorToToolset(ctx, dbtx, *authCtx.ProjectID, server.ID); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "mirror hosted MCP state to toolset").LogError(ctx, logger)
-	}
-
 	if err := s.requestPublicationForMCPMembership(ctx, dbtx, authCtx, []uuid.NullUUID{existing.McpServerID}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "enqueue endpoint publication").LogError(ctx, logger)
 	}
@@ -243,6 +220,32 @@ func isCanonicalHosted(server mcpserversrepo.McpServer) bool {
 	return server.ToolsetID.Valid && server.ToolsetID.UUID == server.ID
 }
 
+// checkHostedNewAddress applies the hosted address rules to an endpoint created on a canonical hosted server: the
+// slug length, the organization's verified and activated custom domain only, the organization prefix on the
+// platform and for free accounts, and a private network mode's ingress namespace.
+func checkHostedNewAddress(ctx context.Context, tx pgx.Tx, logger *slog.Logger, authCtx *contextvalues.AuthContext, server mcpserversrepo.McpServer, slug string, customDomainID uuid.NullUUID) error {
+	if len(slug) > maxHostedSlugLength {
+		return oops.E(oops.CodeBadRequest, nil, "a hosted MCP slug must be at most %d characters", maxHostedSlugLength).LogWarn(ctx, logger)
+	}
+	if customDomainID.Valid {
+		domain, err := customdomainsrepo.New(tx).GetCustomDomainByOrganization(ctx, authCtx.ActiveOrganizationID)
+		switch {
+		case err != nil && !errors.Is(err, pgx.ErrNoRows):
+			return oops.E(oops.CodeUnexpected, err, "load organization custom domain").LogError(ctx, logger)
+		case err != nil || !domain.Activated || !domain.Verified || domain.ID != customDomainID.UUID:
+			return oops.E(oops.CodeInvalid, err, "a hosted MCP server can only use the organization's verified custom domain").LogWarn(ctx, logger)
+		}
+	}
+	if (!customDomainID.Valid || authCtx.AccountType == "free") && validateSlugPrefix(slug, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, authCtx.OrganizationSlug) != nil {
+		return oops.E(oops.CodeBadRequest, nil, "mcp slug must be prefixed with the org slug for free accounts").LogWarn(ctx, logger)
+	}
+	others, err := repo.New(tx).ListMCPEndpointsByMCPServerID(ctx, repo.ListMCPEndpointsByMCPServerIDParams{ProjectID: server.ProjectID, McpServerID: server.ID})
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "list hosted MCP endpoints").LogError(ctx, logger)
+	}
+	return checkHostedIngress(ctx, tx, logger, authCtx, server, append(others, proposedAddress(customDomainID, slug)))
+}
+
 // checkHostedIngress requires a live private ingress covering every endpoint of a hosted server whose network
 // mode is not public_only, even while it is disabled, so a re-enable cannot bypass it.
 func checkHostedIngress(ctx context.Context, tx pgx.Tx, logger *slog.Logger, authCtx *contextvalues.AuthContext, server mcpserversrepo.McpServer, endpoints []repo.McpEndpoint) error {
@@ -255,6 +258,21 @@ func checkHostedIngress(ctx context.Context, tx pgx.Tx, logger *slog.Logger, aut
 	}
 	if err := hostingstate.CheckPrivateIngress(ctx, tx, authCtx.ActiveOrganizationID, endpoints); err != nil {
 		return err //nolint:wrapcheck // oops errors pass through.
+	}
+	return nil
+}
+
+// rejectLastHostedAddress keeps an enabled hosted server from losing its last address.
+func rejectLastHostedAddress(ctx context.Context, tx pgx.Tx, logger *slog.Logger, server mcpserversrepo.McpServer) error {
+	if !isCanonicalHosted(server) || server.Visibility == mcpservers.VisibilityDisabled {
+		return nil
+	}
+	endpoints, err := repo.New(tx).ListMCPEndpointsByMCPServerID(ctx, repo.ListMCPEndpointsByMCPServerIDParams{ProjectID: server.ProjectID, McpServerID: server.ID})
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "list hosted MCP endpoints").LogError(ctx, logger)
+	}
+	if len(endpoints) <= 1 {
+		return oops.E(oops.CodeInvalid, nil, "disable the server before removing its last address").LogWarn(ctx, logger)
 	}
 	return nil
 }

@@ -377,8 +377,5 @@ func applyHostedServerChange(ctx context.Context, tx pgx.Tx, auditLogger *audit.
 		}
 		result.ClearedRootDomainIDs = tombstone.RootDomainIDs(cleared)
 	}
-	if err := hostingstate.MirrorToToolset(ctx, tx, toolset.ProjectID, toolset.ID); err != nil {
-		return hostedServerWrite{}, oops.E(oops.CodeUnexpected, err, "mirror hosted MCP state to toolset")
-	}
 	return result, nil
 }
