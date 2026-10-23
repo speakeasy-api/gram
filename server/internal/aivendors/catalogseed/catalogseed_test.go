@@ -16,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/aivendors/catalogseed/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
 func TestApplyCompleteAndIdempotent(t *testing.T) {
@@ -89,7 +90,7 @@ func TestApplyPreservesStaffEditsAndDeletions(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, Apply(ctx, db))
 	q := repo.New(db)
-	require.NoError(t, q.EditProductFixture(ctx, repo.EditProductFixtureParams{
+	require.NoError(t, testrepo.New(db).EditProductFixture(ctx, testrepo.EditProductFixtureParams{
 		ID: "claude-code", DisplayName: "Staff title",
 		DeletedAt: pgtype.Timestamptz{Time: time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC), Valid: true},
 	}))
@@ -100,7 +101,7 @@ func TestApplyPreservesStaffEditsAndDeletions(t *testing.T) {
 		if i%2 == 0 {
 			deletedAt = pgtype.Timestamptz{Time: time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC), Valid: true}
 		}
-		require.NoError(t, q.EditDocumentFixture(ctx, repo.EditDocumentFixtureParams{
+		require.NoError(t, testrepo.New(db).EditDocumentFixture(ctx, testrepo.EditDocumentFixtureParams{
 			ID: d.ID, Url: "https://example.com/" + d.ID.String(), DisplayName: "Reviewed document",
 			Enabled: false, DeletedAt: deletedAt,
 		}))
@@ -209,7 +210,7 @@ func TestApplyPreservesExistingDocumentURL(t *testing.T) {
 				ID: id, AiProductID: "staff-product", Url: url, DisplayName: "Staff document", Enabled: false,
 			}))
 			if deleted {
-				require.NoError(t, q.EditDocumentFixture(ctx, repo.EditDocumentFixtureParams{
+				require.NoError(t, testrepo.New(db).EditDocumentFixture(ctx, testrepo.EditDocumentFixtureParams{
 					ID: id, Url: url, DisplayName: "Staff document", Enabled: false,
 					DeletedAt: pgtype.Timestamptz{Time: time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC), Valid: true},
 				}))
@@ -236,7 +237,7 @@ func TestApplySkipsDocumentsOfDeletedProduct(t *testing.T) {
 		BundleIds: []string{}, Binaries: []string{}, ConfigDirs: []string{},
 		ProcessNames: []string{}, ClientInfoNames: []string{},
 	}))
-	require.NoError(t, q.EditProductFixture(ctx, repo.EditProductFixtureParams{
+	require.NoError(t, testrepo.New(db).EditProductFixture(ctx, testrepo.EditProductFixtureParams{
 		ID: "claude-code", DisplayName: "Staff title",
 		DeletedAt: pgtype.Timestamptz{Time: time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC), Valid: true},
 	}))

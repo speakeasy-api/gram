@@ -2719,3 +2719,14 @@ UPDATE network_ingress_certificate_states
 SET updated_at = updated_at - interval '1 hour'
 WHERE network_ingress_id = @network_ingress_id
   AND state_key = 'issuance-lease';
+
+-- name: EditProductFixture :exec
+UPDATE ai_products
+SET display_name = @display_name, deleted_at = sqlc.narg('deleted_at')
+WHERE id = @id;
+
+-- name: EditDocumentFixture :exec
+UPDATE ai_product_cimd_documents
+SET url = @url, display_name = @display_name, enabled = @enabled,
+    deleted_at = sqlc.narg('deleted_at')
+WHERE id = @id;

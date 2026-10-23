@@ -223,8 +223,8 @@ type Snapshot struct {
 	// ListVersion is the catalog revision, echoed by agents on receipts.
 	ListVersion int32
 
-	// ETag fingerprints the schema version, ListVersion, and the served
-	// targets.
+	// ETag fingerprints the schema version, ListVersion, full catalog
+	// fingerprint, and served targets.
 	ETag string
 
 	targets  []Target

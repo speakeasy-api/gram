@@ -16,6 +16,8 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/access"
 	accessserver "github.com/speakeasy-api/gram/server/gen/http/access/server"
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
+	"github.com/speakeasy-api/gram/server/internal/agent/aitargets"
+	agentrepo "github.com/speakeasy-api/gram/server/internal/agent/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -483,4 +485,24 @@ func TestService_ListAIDetections_FiltersOnTheEffectiveCategory(t *testing.T) {
 	result, err = ti.service.ListAIDetections(ctx, &gen.ListAIDetectionsPayload{Category: &harness, DirectoryGroupID: nil, SessionToken: nil})
 	require.NoError(t, err)
 	require.Empty(t, result.Detections, "and is not returned under the category it left, whatever the row stores")
+}
+
+func TestService_ListAIDetections_RejectsInvalidOrganizationCatalog(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestAccessService(t)
+	ctx, orgID, _ := withUniqueDetectionOrg(t, ctx, ti)
+	target, ok := aitargets.DefaultByID(ti.service.aiCatalog.Snapshot(), "claude-code")
+	require.True(t, ok)
+	target.ID = "conflicting-custom-target"
+	_, err := agentrepo.New(ti.conn).UpsertAIScanTarget(ctx, aitargets.UpsertParams(orgID, target))
+	require.NoError(t, err)
+	seedAIDetection(t, ctx, ti, orgID, "claude-code", "serial-1", "member@example.com", "running", "harness", "", time.Now().UTC())
+
+	result, err := ti.service.ListAIDetections(ctx, &gen.ListAIDetectionsPayload{})
+	require.Nil(t, result, "invalid decisions must not be reported as unreviewed")
+	var shareable *oops.ShareableError
+	require.ErrorAs(t, err, &shareable)
+	require.Equal(t, oops.CodeConflict, shareable.Code)
+	require.Contains(t, shareable.Error(), "organization admin")
+	require.NotContains(t, shareable.Error(), target.ID, "non-admin inventory readers must not see custom target details")
 }

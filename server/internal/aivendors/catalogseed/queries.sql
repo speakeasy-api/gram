@@ -41,14 +41,3 @@ SELECT * FROM ai_products ORDER BY id;
 
 -- name: ListDocuments :many
 SELECT * FROM ai_product_cimd_documents ORDER BY id;
-
--- name: EditProductFixture :exec
-UPDATE ai_products
-SET display_name = @display_name, deleted_at = sqlc.narg('deleted_at')
-WHERE id = @id;
-
--- name: EditDocumentFixture :exec
-UPDATE ai_product_cimd_documents
-SET url = @url, display_name = @display_name, enabled = @enabled,
-    deleted_at = sqlc.narg('deleted_at')
-WHERE id = @id;

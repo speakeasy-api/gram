@@ -1,7 +1,8 @@
 # AI client catalog snapshots
 
-API and MCP processes synchronously apply `catalogseed.EnsureCatalog` and load
-one database snapshot before opening their listeners. Startup therefore needs
+API, MCP, and private ingress processes synchronously apply
+`catalogseed.EnsureCatalog` and load one database snapshot before opening their
+listeners. Startup therefore needs
 write access to the reference tables. Existing edits and soft deletions survive
 bootstrap. The worker remains responsible for the cross-organization decision
 backfill; complete the reconciliation in `catalogseed/README.md` before reader
@@ -26,6 +27,10 @@ URL and product ID to break ties. The database's `is_pattern` discriminator is
 authoritative. Invalid patterns are logged and omitted from all projections;
 that is a successful partial load, distinct from a database failure. A valid
 empty catalog is published, including when staff soft-delete every product.
+Soft deletion removes a product's automatic admission and gateway matcher
+definitions; an empty catalog applies the same policy to the last product.
+Retaining a last good snapshot is reserved for read or validation failures,
+not valid staff deletions.
 
 Vendor matchers require exactly one live product. If a refresh makes a blocked
 custom vendor matcher ambiguous and no specific matcher resolves the caller,

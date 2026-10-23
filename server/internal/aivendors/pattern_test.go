@@ -194,6 +194,17 @@ func TestValidatePattern_RejectsMalformed(t *testing.T) {
 	require.ErrorIs(t, validatePattern("https:///x"), errPatternUnparseable)
 }
 
+func TestPatternRejectsPathInsideQueryOrFragment(t *testing.T) {
+	t.Parallel()
+	for _, pattern := range []string{
+		"https://example.com?redirect=/oauth/*/client.json",
+		"https://example.com#/oauth/*/client.json",
+	} {
+		require.ErrorIs(t, validatePattern(pattern), errPatternUnparseable)
+		require.False(t, matchesPattern(pattern, strings.ReplaceAll(pattern, "*", "connector")))
+	}
+}
+
 // TestCatalog_PatternsAreValid is the guard that makes the whole design
 // safe: it runs validatePattern over every wildcard actually shipped, so a
 // dangerous catalog entry fails the build rather than silently widening

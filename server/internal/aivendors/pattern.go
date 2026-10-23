@@ -186,5 +186,9 @@ func splitAuthorityAndPath(raw string) (string, string, bool) {
 		// No path, or an empty authority ("https:///x").
 		return "", "", false
 	}
+	if suffix := strings.IndexAny(rest, "?#"); suffix >= 0 && suffix < slash {
+		// A slash in a query or fragment cannot begin the URL's path.
+		return "", "", false
+	}
 	return raw[:len(scheme)+slash], rest[slash+1:], true
 }
