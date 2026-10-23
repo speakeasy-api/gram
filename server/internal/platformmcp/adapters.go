@@ -390,6 +390,7 @@ type PostgresReader struct {
 	analytics                 *AnalyticsService
 	widgets                   *WidgetService
 	dashboards                *DashboardsService
+	codeModeAvailable         CodeModeAvailability
 }
 
 func NewPostgresReader(logger *slog.Logger, db *pgxpool.Pool) *PostgresReader {
@@ -431,7 +432,17 @@ func NewPostgresReader(logger *slog.Logger, db *pgxpool.Pool) *PostgresReader {
 		analytics:                 nil,
 		widgets:                   nil,
 		dashboards:                nil,
+		codeModeAvailable:         nil,
 	}
+}
+
+// WithCodeModeAvailability lets gateway connection settings report the
+// discovery mode a gateway serves while Code Mode is unavailable.
+func (r *PostgresReader) WithCodeModeAvailability(check CodeModeAvailability) *PostgresReader {
+	if r != nil {
+		r.codeModeAvailable = check
+	}
+	return r
 }
 
 func (r *PostgresReader) WithAuthorization(engine *authz.Engine) *PostgresReader {

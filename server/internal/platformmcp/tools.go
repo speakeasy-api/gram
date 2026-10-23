@@ -288,7 +288,7 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 		connectionMutationService = connectionMutations[0]
 	}
 	if postgresReader, ok := reader.(*PostgresReader); ok {
-		registerMCPConnectionSettingsTool(reg, NewMCPConnectionSettingsService(postgresReader.db))
+		registerMCPConnectionSettingsTool(reg, NewMCPConnectionSettingsService(postgresReader.db).WithCodeModeAvailability(postgresReader.codeModeAvailable))
 		registerMCPConnectionMutationTools(reg, connectionMutationService)
 		if postgresReader.networkIngress == nil {
 			registerUnavailableNetworkIngressTool(reg)

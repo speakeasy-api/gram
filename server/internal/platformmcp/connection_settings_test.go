@@ -1,9 +1,12 @@
 package platformmcp
 
 import (
+	"context"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 
@@ -12,6 +15,7 @@ import (
 	metarepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
+	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
 func TestMCPConnectionSettingsToolHasSameInputSchemaWhenUnavailable(t *testing.T) {
@@ -137,10 +141,32 @@ func TestGatewayConnectionSettingsReportsStoredDiscoveryMode(t *testing.T) {
 	got, err := service.Get(ctx, principal, input)
 	require.NoError(t, err)
 	require.Equal(t, "progressive", got.DiscoveryMode)
-	_, err = q.UpdateMetaMCPServer(ctx, metarepo.UpdateMetaMCPServerParams{ID: gateway.ID, ProjectID: project.ID, OrganizationID: principal.OrganizationID, Name: gateway.Name, UserSessionIssuerID: gateway.UserSessionIssuerID, Instructions: gateway.Instructions, DiscoveryMode: conv.ToPGText("code_mode")})
+	require.Equal(t, "progressive", got.EffectiveDiscoveryMode)
+	require.NotNil(t, got.CodeModeAvailable)
+	require.False(t, *got.CodeModeAvailable, "no code runtime reads as unavailable")
+	issuer, err := usersessionsrepo.New(conn).CreateUserSessionIssuer(ctx, usersessionsrepo.CreateUserSessionIssuerParams{
+		ProjectID: project.ID, OrganizationID: conv.ToPGText(principal.OrganizationID), Slug: "usi-" + uuid.NewString()[:8], AuthnChallengeMode: "interactive",
+		SessionDuration: pgtype.Interval{Microseconds: time.Hour.Microseconds(), Days: 0, Months: 0, Valid: true},
+	})
+	require.NoError(t, err)
+	issuerID := issuer.ID
+	_, err = q.UpdateMetaMCPServer(ctx, metarepo.UpdateMetaMCPServerParams{ID: gateway.ID, ProjectID: project.ID, OrganizationID: principal.OrganizationID, Name: gateway.Name, UserSessionIssuerID: uuid.NullUUID{UUID: issuerID, Valid: true}, Instructions: gateway.Instructions, DiscoveryMode: conv.ToPGText("code_mode")})
 	require.NoError(t, err)
 	updated, err := service.Get(ctx, principal, input)
 	require.NoError(t, err)
 	require.Equal(t, "code_mode", updated.DiscoveryMode)
+	require.Equal(t, "progressive", updated.EffectiveDiscoveryMode, "Code Mode the organization cannot use is served as Progressive")
 	require.Equal(t, got.Version, updated.Version, "discovery mode does not alter the address/network mutation version")
+
+	entitled := service.WithCodeModeAvailability(func(_ context.Context, organizationID string) bool { return organizationID == principal.OrganizationID })
+	served, err := entitled.Get(ctx, principal, input)
+	require.NoError(t, err)
+	require.True(t, *served.CodeModeAvailable)
+	require.Equal(t, "code_mode", served.EffectiveDiscoveryMode)
+
+	_, err = q.UpdateMetaMCPServer(ctx, metarepo.UpdateMetaMCPServerParams{ID: gateway.ID, ProjectID: project.ID, OrganizationID: principal.OrganizationID, Name: gateway.Name, UserSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, Instructions: gateway.Instructions, DiscoveryMode: conv.ToPGText("code_mode")})
+	require.NoError(t, err)
+	anonymous, err := entitled.Get(ctx, principal, input)
+	require.NoError(t, err)
+	require.Equal(t, "progressive", anonymous.EffectiveDiscoveryMode, "a gateway without sign-in never serves Code Mode")
 }

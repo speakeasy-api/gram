@@ -129,6 +129,9 @@ type platformMCPConfig struct {
 	RiskPolicyCache          policycore.PolicyCacheInvalidator
 	RiskExclusionReconciler  risk.RiskExclusionReconciler
 	RegistryDiscoveryEnabled bool
+	// CodeModeAvailable lets gateway connection settings report whether Code
+	// Mode is served. Nil reports it unavailable.
+	CodeModeAvailable platformmcp.CodeModeAvailability
 	// RiskAnalysisDescriber reports the run state of a project's Watchdog
 	// analysis. Nil keeps get_risk_analysis_status visible as a stub rather
 	// than reporting a state nothing observed.
@@ -504,6 +507,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 	skillAuthoring := platformmcp.NewSkillsService(config.Skills, platformmcp.NewPostgresSkillTargets(config.DB), store, config.Authz, registrationGate, budgets.Skills).
 		WithInsights(config.SkillInsights, budgets.Diagnostics)
 	platformReader := platformmcp.NewPostgresReader(config.Logger, config.DB).
+		WithCodeModeAvailability(config.CodeModeAvailable).
 		WithXAAReadiness(oktaresourceconnections.NewService(config.Logger, config.TracerProvider, config.DB, config.Sessions, config.Authz, config.AuditLogger, config.FeatureFlags), newPlatformMCPOktaSignIn(config), config.FeatureFlags).
 		WithInternalSessionIssuer(config.IssuerGate).
 		WithXAAIdentityChaining(chaining, config.OutboundCallbackOrigin).
@@ -871,7 +875,7 @@ func newPlatformMCPGateways(config platformMCPConfig, authorizer platformmcp.Aut
 func newPlatformMCPConnectionMutations(config platformMCPConfig) *platformmcp.MCPConnectionMutationService {
 	service, err := platformmcp.NewMCPConnectionMutationService(
 		config.DB,
-		platformmcp.NewMCPConnectionSettingsService(config.DB),
+		platformmcp.NewMCPConnectionSettingsService(config.DB).WithCodeModeAvailability(config.CodeModeAvailable),
 		mcpendpoints.NewService(config.Logger, config.TracerProvider, config.DB, config.Sessions, config.Authz, config.AuditLogger, config.TemporalEnv, config.PluginPublisher != nil),
 		config.AuditLogger, config.Authz, config.NetworkAccessAdmission, config.PublicationRequests, config.PluginPublishSignaler,
 	)
@@ -1195,6 +1199,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 	skillAuthoring := platformmcp.NewSkillsService(config.Skills, platformmcp.NewPostgresSkillTargets(config.DB), store, config.Authz, registrationGate, budgets.Skills).
 		WithInsights(config.SkillInsights, budgets.Diagnostics)
 	platformReader := platformmcp.NewPostgresReader(config.Logger, config.DB).
+		WithCodeModeAvailability(config.CodeModeAvailable).
 		WithXAAReadiness(oktaresourceconnections.NewService(config.Logger, config.TracerProvider, config.DB, config.Sessions, config.Authz, config.AuditLogger, config.FeatureFlags), newPlatformMCPOktaSignIn(config), config.FeatureFlags).
 		WithInternalSessionIssuer(config.IssuerGate).
 		WithXAAIdentityChaining(chaining, config.OutboundCallbackOrigin).

@@ -1949,6 +1949,7 @@ func newStartCommand() *cli.Command {
 				SessionPortability:        platformmcp.FeatureChecker(sessionPortabilityEnabled),
 				LocalFixture:              platformFixture,
 				RegistryDiscoveryEnabled:  c.Bool("registry-discovery-enabled"),
+				CodeModeAvailable:         mcpService.CodeModeAvailable,
 			})
 			if err != nil {
 				return err

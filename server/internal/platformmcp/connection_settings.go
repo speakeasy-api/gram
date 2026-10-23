@@ -54,7 +54,18 @@ type MCPConnectionPluginMembership struct {
 }
 
 type MCPConnectionSettings struct {
-	DiscoveryMode     string                          `json:"discovery_mode,omitempty"`
+	// DiscoveryMode is a gateway's stored default discovery mode.
+	DiscoveryMode string `json:"discovery_mode,omitempty"`
+
+	// EffectiveDiscoveryMode is the mode a gateway serves now: a stored
+	// code_mode serves progressive while Code Mode is unavailable to the
+	// organization or the gateway does not require sign-in.
+	EffectiveDiscoveryMode string `json:"effective_discovery_mode,omitempty"`
+
+	// CodeModeAvailable reports, for a gateway, whether the code runtime is
+	// available and the organization has Code Mode.
+	CodeModeAvailable *bool `json:"code_mode_available,omitempty"`
+
 	ProjectID         string                          `json:"project_id"`
 	TargetKind        MCPConnectionSettingsTargetKind `json:"target_kind"`
 	TargetID          string                          `json:"target_id"`
@@ -67,15 +78,31 @@ type MCPConnectionSettings struct {
 	PluginMemberships []MCPConnectionPluginMembership `json:"plugin_memberships"`
 }
 
+// CodeModeAvailability reports whether an organization can use Code Mode now:
+// the code runtime is available and the organization has the entitlement.
+type CodeModeAvailability func(ctx context.Context, organizationID string) bool
+
 type MCPConnectionSettingsService struct {
 	queries *platformrepo.Queries
+	// codeModeAvailable is nil when the deployment has no code runtime,
+	// which reads as unavailable.
+	codeModeAvailable CodeModeAvailability
 }
 
 func NewMCPConnectionSettingsService(db platformrepo.DBTX) *MCPConnectionSettingsService {
 	if db == nil {
 		return nil
 	}
-	return &MCPConnectionSettingsService{queries: platformrepo.New(db)}
+	return &MCPConnectionSettingsService{queries: platformrepo.New(db), codeModeAvailable: nil}
+}
+
+// WithCodeModeAvailability lets gateway settings report the discovery mode
+// the gateway actually serves.
+func (s *MCPConnectionSettingsService) WithCodeModeAvailability(check CodeModeAvailability) *MCPConnectionSettingsService {
+	if s != nil {
+		s.codeModeAvailable = check
+	}
+	return s
 }
 
 func (s *MCPConnectionSettingsService) Get(ctx context.Context, principal Principal, input GetMCPConnectionSettingsInput) (MCPConnectionSettings, error) {
@@ -155,7 +182,16 @@ func (s *MCPConnectionSettingsService) get(ctx context.Context, queries *platfor
 	settings := MCPConnectionSettings{
 		ProjectID: projectID.String(), TargetKind: input.TargetKind, TargetID: targetID.String(),
 		Name: row.Name, Visibility: row.Visibility, NetworkMode: row.NetworkMode, DiscoveryMode: row.DiscoveryMode,
+		EffectiveDiscoveryMode: "", CodeModeAvailable: nil,
 		Version: "", Endpoints: endpoints, Ingress: ingress, PluginMemberships: memberships,
+	}
+	if input.TargetKind == MCPConnectionSettingsGateway {
+		available := s.codeModeAvailable != nil && s.codeModeAvailable(ctx, principal.OrganizationID)
+		settings.CodeModeAvailable = &available
+		settings.EffectiveDiscoveryMode = row.DiscoveryMode
+		if row.DiscoveryMode == "code_mode" && (!available || !row.GatewayRequiresSignIn) {
+			settings.EffectiveDiscoveryMode = "progressive"
+		}
 	}
 	version := connectionAddressVersion{ProjectID: settings.ProjectID, TargetKind: settings.TargetKind, TargetID: settings.TargetID, NetworkMode: settings.NetworkMode, Endpoints: nil}
 	for _, endpoint := range endpoints {
