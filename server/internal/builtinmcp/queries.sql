@@ -30,13 +30,10 @@ RETURNING id, hidden, environment_id, user_session_issuer_id, user_session_issue
 SELECT issuer.id
 FROM user_session_issuers AS issuer
 LEFT JOIN projects AS project ON project.id = issuer.project_id
+JOIN projects AS target_project ON target_project.id = @project_id::uuid
+  AND target_project.organization_id = @organization_id::text
+  AND target_project.deleted IS FALSE
 WHERE issuer.id = @id AND issuer.deleted IS FALSE
-  AND EXISTS (
-    SELECT 1 FROM projects AS target_project
-    WHERE target_project.id = @project_id::uuid
-      AND target_project.organization_id = @organization_id::text
-      AND target_project.deleted IS FALSE
-  )
   AND (issuer.project_id IS NULL OR issuer.project_id = @project_id::uuid)
   AND COALESCE(issuer.organization_id, project.organization_id) = @organization_id::text
-FOR SHARE OF issuer;
+FOR SHARE OF issuer, target_project;

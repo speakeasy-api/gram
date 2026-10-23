@@ -489,10 +489,12 @@ const (
 	// McpEntryPointKey is the bounded entry-point dimension on the
 	// mcp.toolset_slug_fallback counter: which public surface resolved a
 	// request through the legacy toolsets.mcp_slug lookup.
-	McpEntryPointKey       = attribute.Key("gram.mcp.entry_point")
-	McpRequestedTagsKey    = attribute.Key("gram.mcp.requested_tags")
-	McpToolsReturnedKey    = attribute.Key("gram.mcp.tools_returned")
-	McpToolsFilteredKey    = attribute.Key("gram.mcp.tools_filtered")
+	McpEntryPointKey    = attribute.Key("gram.mcp.entry_point")
+	McpRequestedTagsKey = attribute.Key("gram.mcp.requested_tags")
+	McpToolsReturnedKey = attribute.Key("gram.mcp.tools_returned")
+	McpToolsFilteredKey = attribute.Key("gram.mcp.tools_filtered")
+	// BuiltinMcpServerIDKey identifies a synthetic built-in resource, not an MCP server row.
+	BuiltinMcpServerIDKey  = attribute.Key("gram.builtin_mcp_server.id")
 	McpServerIDKey         = attribute.Key("gram.mcp_server.id")
 	McpServerIDsKey        = attribute.Key("gram.mcp_server.ids")
 	McpEndpointIDKey       = attribute.Key("gram.mcp_endpoint.id")
@@ -3190,6 +3192,10 @@ func SlogResourceURN(v string) slog.Attr      { return slog.String(string(Resour
 
 func ResourceURI(v string) attribute.KeyValue { return ResourceURIKey.String(v) }
 func SlogResourceURI(v string) slog.Attr      { return slog.String(string(ResourceURIKey), v) }
+
+func SlogBuiltinMcpServerID(v string) slog.Attr {
+	return slog.String(string(BuiltinMcpServerIDKey), v)
+}
 
 func McpServerID(v string) attribute.KeyValue { return McpServerIDKey.String(v) }
 func SlogMcpServerID(v string) slog.Attr      { return slog.String(string(McpServerIDKey), v) }

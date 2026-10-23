@@ -178,26 +178,23 @@ const validateUserSessionIssuer = `-- name: ValidateUserSessionIssuer :one
 SELECT issuer.id
 FROM user_session_issuers AS issuer
 LEFT JOIN projects AS project ON project.id = issuer.project_id
-WHERE issuer.id = $1 AND issuer.deleted IS FALSE
-  AND EXISTS (
-    SELECT 1 FROM projects AS target_project
-    WHERE target_project.id = $2::uuid
-      AND target_project.organization_id = $3::text
-      AND target_project.deleted IS FALSE
-  )
-  AND (issuer.project_id IS NULL OR issuer.project_id = $2::uuid)
-  AND COALESCE(issuer.organization_id, project.organization_id) = $3::text
-FOR SHARE OF issuer
+JOIN projects AS target_project ON target_project.id = $1::uuid
+  AND target_project.organization_id = $2::text
+  AND target_project.deleted IS FALSE
+WHERE issuer.id = $3 AND issuer.deleted IS FALSE
+  AND (issuer.project_id IS NULL OR issuer.project_id = $1::uuid)
+  AND COALESCE(issuer.organization_id, project.organization_id) = $2::text
+FOR SHARE OF issuer, target_project
 `
 
 type ValidateUserSessionIssuerParams struct {
-	ID             uuid.UUID
 	ProjectID      uuid.UUID
 	OrganizationID string
+	ID             uuid.UUID
 }
 
 func (q *Queries) ValidateUserSessionIssuer(ctx context.Context, arg ValidateUserSessionIssuerParams) (uuid.UUID, error) {
-	row := q.db.QueryRow(ctx, validateUserSessionIssuer, arg.ID, arg.ProjectID, arg.OrganizationID)
+	row := q.db.QueryRow(ctx, validateUserSessionIssuer, arg.ProjectID, arg.OrganizationID, arg.ID)
 	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err

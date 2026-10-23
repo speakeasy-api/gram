@@ -67,7 +67,7 @@ func registerAccessReadTools(reg *Registrar, accessReads *AccessReadService) {
 	addTool(reg, &mcp.Tool{
 		Name:        "get_mcp_access",
 		Title:       "Inspect Access to One MCP Server",
-		Description: "Inspect which roles can enter one exact configured MCP server through its configured endpoint and which known tools or behavior classes they can use. Uses the same authorization resource and selector semantics as that endpoint; dynamic servers may not have an enumerable tool catalog. Matching plugins summarize live contents assigned to each exact role, not access grants or installation state.",
+		Description: "Inspect role access to one exact configured MCP or built-in ID in its explicit project. Built-in coverage requires an exact connect rule, applies only to already-assigned machines subject to credential and owner ceilings, never humans, and does not offer assignments or plugin distribution. Inspect configured servers through their configured endpoint and which known tools or behavior classes they can use. Uses the same authorization resource and selector semantics as that endpoint; dynamic servers may not have an enumerable tool catalog. Matching plugins summarize live contents assigned to each exact role, not access grants or installation state.",
 		Annotations: readOnlyAnnotations(),
 	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input GetMCPAccessInput) (*mcp.CallToolResult, GetMCPAccessOutput, error) {
 		return principalToolCall(ctx, accessReadToolResult, func(principal Principal) (GetMCPAccessOutput, error) {
