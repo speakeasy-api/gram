@@ -234,7 +234,8 @@ func (s *seeder) seedRoles(ctx context.Context) error {
 	}
 
 	// Show the completed one-time onboarding result, not a pending repair job.
-	// Role plugins stay role-only; the Default plugin remains Everyone.
+	// Role plugins stay role-only and install by default; the Default plugin
+	// remains Everyone and is available for members to turn on.
 	// Matching server content is populated after the servers exist below.
 	defaultPluginID, err := s.q.RolesInsertDefaultPlugin(ctx, repo.RolesInsertDefaultPluginParams{
 		OrganizationID: org,

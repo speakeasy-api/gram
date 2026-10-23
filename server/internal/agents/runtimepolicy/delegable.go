@@ -22,7 +22,13 @@ var ErrTooManyDelegableGrantCandidates = errors.New("too many delegable grant ca
 // Optional resource constraints narrow candidates before containment, so an
 // unrelated exclusion does not hide a safe concrete candidate.
 func DelegableGrants(agent, owner, caller []authz.Grant, constraints ...authz.Selector) ([]authz.Grant, error) {
-	return delegableGrants(agent, owner, caller, false, constraints)
+	return delegableGrants(agent, owner, caller, "", false, constraints)
+}
+
+// DelegableGrantsFor is DelegableGrants for a credential that will act for
+// representedUserID, as DelegationContainedFor decides containment.
+func DelegableGrantsFor(representedUserID string, agent, owner, caller []authz.Grant, constraints ...authz.Selector) ([]authz.Grant, error) {
+	return delegableGrants(agent, owner, caller, representedUserID, false, constraints)
 }
 
 // DelegableGrantsWithExclusions returns what DelegableGrants does, except that
@@ -30,7 +36,7 @@ func DelegableGrants(agent, owner, caller []authz.Grant, constraints ...authz.Se
 // removing the candidate. A wildcard allow overlapping one blocked resource
 // stays delegable, paired with the exclusion for that resource.
 func DelegableGrantsWithExclusions(agent, owner, caller []authz.Grant) ([]authz.Grant, error) {
-	return delegableGrants(agent, owner, caller, true, nil)
+	return delegableGrants(agent, owner, caller, "", true, nil)
 }
 
 // DelegatedRuntimeGrants derives the policy that bounds a credential storing
@@ -39,7 +45,13 @@ func DelegableGrantsWithExclusions(agent, owner, caller []authz.Grant) ([]authz.
 // stored delegated policy decodes to. A workload acts for no user and passes
 // its agent's policy as all three.
 func DelegatedRuntimeGrants(agent, owner, delegator []authz.Grant) ([]authz.Grant, error) {
-	grants, err := DelegableGrantsWithExclusions(agent, owner, delegator)
+	return DelegatedRuntimeGrantsFor("", agent, owner, delegator)
+}
+
+// DelegatedRuntimeGrantsFor is DelegatedRuntimeGrants for a credential acting
+// for representedUserID.
+func DelegatedRuntimeGrantsFor(representedUserID string, agent, owner, delegator []authz.Grant) ([]authz.Grant, error) {
+	grants, err := delegableGrants(agent, owner, delegator, representedUserID, true, nil)
 	if err != nil {
 		return nil, fmt.Errorf("derive delegable grants: %w", err)
 	}
@@ -50,7 +62,7 @@ func DelegatedRuntimeGrants(agent, owner, delegator []authz.Grant) ([]authz.Gran
 	return policy.RuntimeGrants(), nil
 }
 
-func delegableGrants(agent, owner, caller []authz.Grant, carryExclusions bool, constraints []authz.Selector) ([]authz.Grant, error) {
+func delegableGrants(agent, owner, caller []authz.Grant, representedUserID string, carryExclusions bool, constraints []authz.Selector) ([]authz.Grant, error) {
 	candidates := make(map[string]authz.Grant)
 	visited := make(map[string]struct{})
 	for _, grant := range agent {
@@ -62,7 +74,7 @@ func delegableGrants(agent, owner, caller []authz.Grant, carryExclusions bool, c
 		selector := grant.Selector
 		compatible := true
 		for _, constraint := range constraints {
-			selector, compatible = intersectSelectors(selector, constraint)
+			selector, compatible = intersectSelectors(selector, constraint, representedUserID)
 			if !compatible {
 				break
 			}
@@ -75,13 +87,13 @@ func delegableGrants(agent, owner, caller []authz.Grant, carryExclusions bool, c
 				continue
 			}
 			for _, ownerGrant := range owner {
-				selector, ok := intersectSelectors(selector, ownerGrant.Selector)
-				if !ok || !authz.GrantsContainSelector([]authz.Grant{ownerGrant}, scope, selector) {
+				selector, ok := intersectSelectors(selector, ownerGrant.Selector, representedUserID)
+				if !ok || !authz.GrantsContainSelectorFor(representedUserID, []authz.Grant{ownerGrant}, scope, selector) {
 					continue
 				}
 				for _, callerGrant := range caller {
-					narrowed, ok := intersectSelectors(selector, callerGrant.Selector)
-					if !ok || !authz.GrantsContainSelector([]authz.Grant{callerGrant}, scope, narrowed) {
+					narrowed, ok := intersectSelectors(selector, callerGrant.Selector, representedUserID)
+					if !ok || !authz.GrantsContainSelectorFor(representedUserID, []authz.Grant{callerGrant}, scope, narrowed) {
 						continue
 					}
 					candidate := authz.Grant{PrincipalUrn: "", Scope: scope, Selector: narrowed}
@@ -93,7 +105,7 @@ func delegableGrants(agent, owner, caller []authz.Grant, carryExclusions bool, c
 						continue
 					}
 					visited[key] = struct{}{}
-					delegated, ok := delegationFor(candidate, carryExclusions, agent, owner, caller)
+					delegated, ok := delegationFor(candidate, carryExclusions, representedUserID, agent, owner, caller)
 					if !ok {
 						continue
 					}
@@ -101,7 +113,7 @@ func delegableGrants(agent, owner, caller []authz.Grant, carryExclusions bool, c
 					if err != nil {
 						continue
 					}
-					safe, err := DelegationContained(policy, agent, owner, caller)
+					safe, err := DelegationContainedFor(representedUserID, policy, agent, owner, caller)
 					if err != nil {
 						return nil, err
 					}
@@ -144,15 +156,15 @@ func delegableGrantKey(grant authz.Grant) (string, error) {
 // containment. It reports false when a direct grant overrides only part of an
 // overlap: delegated policies cannot express that override, and the carried
 // exclusion would also withdraw the directly granted part.
-func delegationFor(candidate authz.Grant, carryExclusions bool, policies ...[]authz.Grant) ([]authz.Grant, bool) {
+func delegationFor(candidate authz.Grant, carryExclusions bool, representedUserID string, policies ...[]authz.Grant) ([]authz.Grant, bool) {
 	delegated := []authz.Grant{candidate}
 	exclusion, ok := authz.ExclusionScopeFor(candidate.Scope)
 	if !carryExclusions || !ok || !IsRuntimeScopeSafe(CurrentRuntimeScopeRegistryVersion, exclusion) {
 		return delegated, true
 	}
 	for _, policy := range policies {
-		for _, overlap := range liveOverlaps(policy, candidate, exclusion) {
-			if overlap.inherited && partiallyOverridden(policy, candidate.Scope, overlap.selector) {
+		for _, overlap := range liveOverlaps(policy, candidate, exclusion, representedUserID) {
+			if overlap.inherited && partiallyOverridden(policy, candidate.Scope, overlap.selector, representedUserID) {
 				return nil, false
 			}
 			if !slices.ContainsFunc(delegated[1:], func(existing authz.Grant) bool { return maps.Equal(existing.Selector, overlap.selector) }) {
@@ -167,7 +179,7 @@ func delegationFor(candidate authz.Grant, carryExclusions bool, policies ...[]au
 // of overlap for scope at runtime, such as one tool on a blocked server.
 // liveOverlaps has already removed overlaps a direct grant fully overrides;
 // both follow authz.DirectOverrideGrants and must change with it.
-func partiallyOverridden(policy []authz.Grant, scope authz.Scope, overlap authz.Selector) bool {
+func partiallyOverridden(policy []authz.Grant, scope authz.Scope, overlap authz.Selector, representedUserID string) bool {
 	if !authz.ExclusionYieldsToDirectGrants(scope) {
 		return false
 	}
@@ -175,8 +187,8 @@ func partiallyOverridden(policy []authz.Grant, scope authz.Scope, overlap authz.
 		if authz.IsBlocklistScope(direct.Scope) {
 			continue
 		}
-		narrowed, ok := intersectSelectors(overlap, direct.Selector)
-		if ok && authz.GrantsContainSelector([]authz.Grant{direct}, scope, narrowed) {
+		narrowed, ok := intersectSelectors(overlap, direct.Selector, representedUserID)
+		if ok && authz.GrantsContainSelectorFor(representedUserID, []authz.Grant{direct}, scope, narrowed) {
 			return true
 		}
 	}
@@ -193,22 +205,31 @@ func partiallyOverridden(policy []authz.Grant, scope authz.Scope, overlap authz.
 // issuance share this check so neither can broaden a parent's effective
 // permissions.
 func DelegationContained(delegated DelegatedPolicy, policies ...[]authz.Grant) (bool, error) {
+	return DelegationContainedFor("", delegated, policies...)
+}
+
+// DelegationContainedFor is DelegationContained for a credential acting for
+// representedUserID. A parent restriction pinned to another user's connection
+// cannot overlap a grant on the represented user's own connection, so it does
+// not have to be carried. An empty representedUserID assumes every such
+// restriction overlaps.
+func DelegationContainedFor(representedUserID string, delegated DelegatedPolicy, policies ...[]authz.Grant) (bool, error) {
 	grants := delegated.RuntimeGrants()
 	for _, grant := range grants {
 		if authz.IsBlocklistScope(grant.Scope) {
 			continue
 		}
 		for _, policy := range policies {
-			if !authz.GrantsContainSelector(policy, grant.Scope, grant.Selector) {
+			if !authz.GrantsContainSelectorFor(representedUserID, policy, grant.Scope, grant.Selector) {
 				return false, nil
 			}
 			exclusion, hasExclusion := authz.ExclusionScopeFor(grant.Scope)
 			if !hasExclusion {
 				continue
 			}
-			for _, overlap := range liveOverlaps(policy, grant, exclusion) {
+			for _, overlap := range liveOverlaps(policy, grant, exclusion, representedUserID) {
 				covered := slices.ContainsFunc(grants, func(carried authz.Grant) bool {
-					return carried.Scope == exclusion && carried.Selector.StrictMatches(overlap.selector)
+					return carried.Scope == exclusion && carried.Selector.StrictMatchesFor(overlap.selector, representedUserID)
 				})
 				if !covered {
 					return false, nil
@@ -231,20 +252,20 @@ type liveOverlap struct {
 // evaluator. A direct grant naming the restricted resource outranks
 // restrictions inherited from roles or user:all, exactly as it does at
 // runtime; the principal's own restrictions are never outranked.
-func liveOverlaps(policy []authz.Grant, grant authz.Grant, exclusion authz.Scope) []liveOverlap {
+func liveOverlaps(policy []authz.Grant, grant authz.Grant, exclusion authz.Scope, representedUserID string) []liveOverlap {
 	var overlaps []liveOverlap
 	for _, restriction := range policy {
 		if !slices.Contains(authz.ScopeImplicationClosure(restriction.Scope), exclusion) {
 			continue
 		}
-		overlap, ok := intersectSelectors(grant.Selector, restriction.Selector)
+		overlap, ok := intersectRestriction(grant.Selector, restriction.Selector, representedUserID)
 		if !ok {
 			continue
 		}
 		inherited := !authz.IsDirectGrant(restriction)
 		outranked := inherited &&
 			authz.ExclusionYieldsToDirectGrants(grant.Scope) &&
-			authz.GrantsContainSelector(authz.DirectOverrideGrants(policy), grant.Scope, overlap)
+			authz.GrantsContainSelectorFor(representedUserID, authz.DirectOverrideGrants(policy), grant.Scope, overlap)
 		if !outranked {
 			overlaps = append(overlaps, liveOverlap{selector: overlap, inherited: inherited})
 		}
@@ -254,7 +275,51 @@ func liveOverlaps(policy []authz.Grant, grant authz.Grant, exclusion authz.Scope
 
 // A selector is a conjunction of exact values or wildcards. Intersection keeps
 // every pinned dimension from either side; incompatible values have no overlap.
-func intersectSelectors(a, b authz.Selector) (authz.Selector, bool) {
+// A symbolic connection owner and a concrete one overlap only for some
+// represented users, which an allow selector cannot express, so allow
+// intersection treats them as disjoint and drops the authority, unless the
+// credential acts for a known user who is that concrete owner: the overlap is
+// then that user's own connection, kept symbolic so the stored policy is not
+// rewritten.
+func intersectSelectors(a, b authz.Selector, representedUserID string) (authz.Selector, bool) {
+	return intersectWith(a, b, func(left, right string) (string, bool) {
+		if representedUserID == "" {
+			return "", false
+		}
+		if (left == authz.SelectorValueRepresentedUser && right == representedUserID) ||
+			(right == authz.SelectorValueRepresentedUser && left == representedUserID) {
+			return authz.SelectorValueRepresentedUser, true
+		}
+		return "", false
+	})
+}
+
+// intersectRestriction intersects a grant with a restriction that may withdraw
+// part of it. Unequal values do not prove disjointness when one owner is
+// symbolic: the overlap is the concrete owner's connection, kept concrete, for
+// every represented user who could be that owner.
+func intersectRestriction(grant, restriction authz.Selector, representedUserID string) (authz.Selector, bool) {
+	overlap, ok := intersectWith(grant, restriction, func(left, right string) (string, bool) {
+		if left == authz.SelectorValueRepresentedUser {
+			return right, true
+		}
+		if right == authz.SelectorValueRepresentedUser {
+			return left, true
+		}
+		return "", false
+	})
+	if !ok {
+		return nil, false
+	}
+	// Acting for a known user, only that user's own connection is reachable.
+	owner, pinned := overlap[authz.SelectorKeyConnectionOwner]
+	if representedUserID != "" && pinned && owner != authz.WildcardResource && owner != authz.SelectorValueRepresentedUser && owner != representedUserID {
+		return nil, false
+	}
+	return overlap, true
+}
+
+func intersectWith(a, b authz.Selector, ownerConflict func(left, right string) (string, bool)) (authz.Selector, bool) {
 	result := maps.Clone(a)
 	if result == nil {
 		result = make(authz.Selector)
@@ -265,9 +330,17 @@ func intersectSelectors(a, b authz.Selector) (authz.Selector, bool) {
 			result[key] = value
 			continue
 		}
-		if value != "*" && value != previous {
+		if value == "*" || value == previous {
+			continue
+		}
+		if key != authz.SelectorKeyConnectionOwner {
 			return nil, false
 		}
+		owner, ok := ownerConflict(previous, value)
+		if !ok {
+			return nil, false
+		}
+		result[key] = owner
 	}
 	return result, true
 }

@@ -19,7 +19,7 @@ func Eligible(ctx context.Context, tx pgx.Tx, org string, projectID, mcpServerID
 	}
 	var selected *server
 	for _, candidate := range candidates {
-		if candidate.Eligible && candidate.BackendKind == "mcp_server" && candidate.ID == mcpServerID {
+		if candidate.Eligible && candidate.ID == mcpServerID {
 			selected = &candidate
 			break
 		}

@@ -51,6 +51,27 @@ const ServiceName = "keys"
 // MethodKey key.
 var MethodNames = [5]string{"createKey", "rotateKey", "listKeys", "revokeKey", "verifyKey"}
 
+type APIKeyPolicyGrant struct {
+	// mcp:connect, mcp:auth, or a block: mcp:blocked_connect, mcp:blocked_auth
+	Scope    string
+	Selector *APIKeyPolicySelector
+}
+
+// What an API key policy grant covers: servers (mcp) or auth clients
+// (mcp_auth_client).
+type APIKeyPolicySelector struct {
+	// mcp for mcp:connect grants, mcp_auth_client for mcp:auth grants
+	ResourceKind string
+	// A server or auth client ID, or '*' for every server in project_id. mcp:auth
+	// grants must name their client.
+	ResourceID string
+	// The project the servers are in; required when resource_id is '*', and the
+	// key's own project when it is bound to one.
+	ProjectID *string
+	// Auth client type filter (mcp:auth only).
+	ClientType *string
+}
+
 type AgentDelegatedGrant struct {
 	Scope    string
 	Selector *AgentPolicySelector
@@ -75,11 +96,16 @@ type AgentPolicySelector struct {
 	ResourceKind string
 	// The resource identifier, or '*' for all resources of this kind.
 	ResourceID string
+	// Auth client type filter (mcp:auth scopes only).
+	ClientType *string
+	// Personal connection owner filter (mcp:auth scopes on remote_session clients
+	// only): a user ID, '*', or '$represented_user'.
+	ConnectionOwner *string
 	// Tool disposition filter (MCP scopes only).
 	Disposition *string
 	// Specific tool name filter (MCP scopes only).
 	Tool *string
-	// Project filter (MCP, environment, and assistant scopes).
+	// Project filter (MCP, environment, assistant, and mcp:auth scopes).
 	ProjectID *string
 	// Server URL filter (risk policy scopes only).
 	ServerURL *string
@@ -106,6 +132,10 @@ type CreateKeyPayload struct {
 	RequestedGrants []*AgentPolicyGrantForm
 	// Agent credential expiry; defaults to 90 days and cannot exceed one year
 	ExpiresAt *string
+	// Optional policy for an ordinary key: mcp:connect and mcp:auth grants, and
+	// mcp:blocked_connect and mcp:blocked_auth blocks, that its server and auth
+	// client access is evaluated against. Not yet enforced. Requires org admin.
+	PolicyGrants []*APIKeyPolicyGrant
 }
 
 // Key is the result type of the keys service createKey method.
@@ -132,6 +162,8 @@ type Key struct {
 	DelegatedGrants *AgentDelegatedPolicy
 	// Delegated policy format version
 	DelegatedGrantsVersion *int
+	// An ordinary key's own policy
+	PolicyGrants []*APIKeyPolicyGrant
 	// Required expiry for an agent key; legacy keys may not expire.
 	ExpiresAt *string
 	// The creation date of the key.

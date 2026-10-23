@@ -128,7 +128,6 @@ func (q *Queries) GetHeaderDisplayNamesByToolsetIDs(ctx context.Context, arg Get
 
 const getMetadataByBackendID = `-- name: GetMetadataByBackendID :one
 SELECT id,
-       toolset_id,
        mcp_server_id,
        project_id,
        external_documentation_url,
@@ -158,7 +157,6 @@ func (q *Queries) GetMetadataByBackendID(ctx context.Context, arg GetMetadataByB
 	var i McpMetadatum
 	err := row.Scan(
 		&i.ID,
-		&i.ToolsetID,
 		&i.McpServerID,
 		&i.ProjectID,
 		&i.ExternalDocumentationUrl,
@@ -219,7 +217,6 @@ func (q *Queries) ListEnvironmentConfigs(ctx context.Context, mcpMetadataID uuid
 
 const lockMetadataByBackendID = `-- name: LockMetadataByBackendID :one
 SELECT id,
-       toolset_id,
        mcp_server_id,
        project_id,
        external_documentation_url,
@@ -250,7 +247,6 @@ func (q *Queries) LockMetadataByBackendID(ctx context.Context, arg LockMetadataB
 	var i McpMetadatum
 	err := row.Scan(
 		&i.ID,
-		&i.ToolsetID,
 		&i.McpServerID,
 		&i.ProjectID,
 		&i.ExternalDocumentationUrl,
@@ -277,7 +273,6 @@ DO UPDATE SET logo_id = EXCLUDED.logo_id,
               updated_at = clock_timestamp()
 WHERE mcp_metadata.logo_id IS NULL
 RETURNING id,
-          toolset_id,
           mcp_server_id,
           project_id,
           external_documentation_url,
@@ -306,7 +301,6 @@ func (q *Queries) SetDefaultLogoIfUnset(ctx context.Context, arg SetDefaultLogoI
 	var i McpMetadatum
 	err := row.Scan(
 		&i.ID,
-		&i.ToolsetID,
 		&i.McpServerID,
 		&i.ProjectID,
 		&i.ExternalDocumentationUrl,
@@ -328,7 +322,6 @@ SET header_display_names = $1
 WHERE id = $2
   AND project_id = $3
 RETURNING id,
-          toolset_id,
           mcp_server_id,
           project_id,
           external_documentation_url,
@@ -353,7 +346,6 @@ func (q *Queries) SetHeaderDisplayNames(ctx context.Context, arg SetHeaderDispla
 	var i McpMetadatum
 	err := row.Scan(
 		&i.ID,
-		&i.ToolsetID,
 		&i.McpServerID,
 		&i.ProjectID,
 		&i.ExternalDocumentationUrl,
@@ -442,7 +434,6 @@ DO UPDATE SET project_id = EXCLUDED.project_id,
               installation_override_url = EXCLUDED.installation_override_url,
               updated_at = clock_timestamp()
 RETURNING id,
-          toolset_id,
           mcp_server_id,
           project_id,
           external_documentation_url,
@@ -481,7 +472,6 @@ func (q *Queries) UpsertMetadataByMcpServerID(ctx context.Context, arg UpsertMet
 	var i McpMetadatum
 	err := row.Scan(
 		&i.ID,
-		&i.ToolsetID,
 		&i.McpServerID,
 		&i.ProjectID,
 		&i.ExternalDocumentationUrl,

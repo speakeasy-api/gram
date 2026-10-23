@@ -131,6 +131,29 @@ type RotateClientRequestBody struct {
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 }
 
+// DuplicateClientRequestBody is the type of the
+// "organizationRemoteSessionClients" service "duplicateClient" endpoint HTTP
+// request body.
+type DuplicateClientRequestBody struct {
+	// The remote_session_client id to duplicate.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// client_id of a fresh upstream registration, e.g. from /oauth/proxy-register.
+	// Omit to copy the source's client_id and secret.
+	ClientID *string `form:"client_id,omitempty" json:"client_id,omitempty" xml:"client_id,omitempty"`
+	// client_secret of the fresh registration. Only with client_id. Speakeasy
+	// encrypts before persisting; the plaintext is never returned.
+	ClientSecret *string `form:"client_secret,omitempty" json:"client_secret,omitempty" xml:"client_secret,omitempty"`
+	// How the fresh registration authenticates at the issuer's token endpoint.
+	// Only with client_id; omit to keep the source's method.
+	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
+	// When the issuer reported issuing the client_id (RFC 7591
+	// client_id_issued_at). Omit to record the time of this call.
+	ClientIDIssuedAt *string `form:"client_id_issued_at,omitempty" json:"client_id_issued_at,omitempty" xml:"client_id_issued_at,omitempty"`
+	// When the issuer reported the client secret expires (RFC 7591
+	// client_secret_expires_at). Omit when the issuer reported no expiry.
+	ClientSecretExpiresAt *string `form:"client_secret_expires_at,omitempty" json:"client_secret_expires_at,omitempty" xml:"client_secret_expires_at,omitempty"`
+}
+
 // RemoveClientFromMcpServerRequestBody is the type of the
 // "organizationRemoteSessionClients" service "removeClientFromMcpServer"
 // endpoint HTTP request body.
@@ -625,6 +648,78 @@ type DetachClientKeySetResponseBody struct {
 // "organizationRemoteSessionClients" service "rotateClient" endpoint HTTP
 // response body.
 type RotateClientResponseBody struct {
+	// Recorded effective registration grants. Null means unknown; an empty array
+	// means no recorded grants.
+	GrantTypes []string `json:"grant_types"`
+	// The remote_session_client id.
+	ID string `form:"id" json:"id" xml:"id"`
+	// The owning project id. Empty for organization-level and global clients.
+	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// The owning organization id. Empty for legacy rows not yet backfilled and
+	// global clients.
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	// The owning remote_session_issuer id.
+	RemoteSessionIssuerID string `form:"remote_session_issuer_id" json:"remote_session_issuer_id" xml:"remote_session_issuer_id"`
+	// The user_session_issuers this client is attached to via the join table.
+	// Empty for a standalone client with no attachments.
+	UserSessionIssuerIds []string `form:"user_session_issuer_ids" json:"user_session_issuer_ids" xml:"user_session_issuer_ids"`
+	// The client_id used to identify this client at the issuer's token and
+	// authorization endpoints.
+	ClientID string `form:"client_id" json:"client_id" xml:"client_id"`
+	// When set, the client is in Client ID Metadata Document (CIMD) mode:
+	// Speakeasy hosts its OAuth client metadata document at this URL and uses it
+	// as the client_id. Null for non-CIMD clients.
+	ClientIDMetadataURI *string `form:"client_id_metadata_uri,omitempty" json:"client_id_metadata_uri,omitempty" xml:"client_id_metadata_uri,omitempty"`
+	ClientIDIssuedAt    *string `form:"client_id_issued_at,omitempty" json:"client_id_issued_at,omitempty" xml:"client_id_issued_at,omitempty"`
+	// Null when the secret does not expire.
+	ClientSecretExpiresAt *string `form:"client_secret_expires_at,omitempty" json:"client_secret_expires_at,omitempty" xml:"client_secret_expires_at,omitempty"`
+	// When the issuer's token endpoint last answered invalid_client for this
+	// client_id, meaning the issuer no longer recognizes the registration. Null
+	// while the registration is in good standing; cleared by a successful
+	// rotation, a successful refresh, or a replaced secret.
+	UpstreamRejectedAt *string `form:"upstream_rejected_at,omitempty" json:"upstream_rejected_at,omitempty" xml:"upstream_rejected_at,omitempty"`
+	// How the client authenticates at the issuer's token endpoint. Null resolves
+	// to client_secret_basic at runtime.
+	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
+	// Identifier used as the aud claim in private_key_jwt assertions. Null
+	// resolves to issuer.
+	TokenEndpointAuthAudienceFormat *string `form:"token_endpoint_auth_audience_format,omitempty" json:"token_endpoint_auth_audience_format,omitempty" xml:"token_endpoint_auth_audience_format,omitempty"`
+	// The organization JSON Web Key Set attached to this client, set on create or
+	// through attachKeySet and detachKeySet. Null when no key set is attached.
+	JSONWebKeySetID *string `form:"json_web_key_set_id,omitempty" json:"json_web_key_set_id,omitempty" xml:"json_web_key_set_id,omitempty"`
+	// Explicit upstream OAuth scopes the dance requests for this client. Null
+	// falls back to the issuer's scopes_supported.
+	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
+	// Upstream OAuth audience sent on the authorize redirect and token exchange.
+	// Null omits the audience parameter.
+	Audience *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+	// Whether the client was registered upstream with the legacy callback URL. The
+	// authorize leg then sends that URL and a JSON state instead of the current
+	// callback. Cleared when the client is rotated.
+	LegacyCallbackURL bool `form:"legacy_callback_url" json:"legacy_callback_url" xml:"legacy_callback_url"`
+	// Who the upstream access credential belongs to. subject means each caller
+	// connects their own upstream account; self means the client holds one
+	// credential for itself, obtained with the client_credentials grant, that
+	// every caller shares.
+	CredentialOwner string `form:"credential_owner" json:"credential_owner" xml:"credential_owner"`
+	// The redirect URI this client registers with its upstream provider. It never
+	// changes after the client is created. Absent on global clients and on clients
+	// with credential_owner self, which have no callback.
+	CallbackURL *string `form:"callback_url,omitempty" json:"callback_url,omitempty" xml:"callback_url,omitempty"`
+	// The redirect URI to register in the customer identity provider's app when
+	// this client is a user session issuer's trusted sign-in client. Present only
+	// on organization-owned clients outside any project and not managed by an
+	// identity provider connection, the only clients a user session issuer can
+	// trust.
+	FederatedCallbackURL *string `form:"federated_callback_url,omitempty" json:"federated_callback_url,omitempty" xml:"federated_callback_url,omitempty"`
+	CreatedAt            string  `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt            string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
+// DuplicateClientResponseBody is the type of the
+// "organizationRemoteSessionClients" service "duplicateClient" endpoint HTTP
+// response body.
+type DuplicateClientResponseBody struct {
 	// Recorded effective registration grants. Null means unknown; an empty array
 	// means no recorded grants.
 	GrantTypes []string `json:"grant_types"`
@@ -2821,6 +2916,196 @@ type RotateClientGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// DuplicateClientUnauthorizedResponseBody is the type of the
+// "organizationRemoteSessionClients" service "duplicateClient" endpoint HTTP
+// response body for the "unauthorized" error.
+type DuplicateClientUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DuplicateClientForbiddenResponseBody is the type of the
+// "organizationRemoteSessionClients" service "duplicateClient" endpoint HTTP
+// response body for the "forbidden" error.
+type DuplicateClientForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DuplicateClientBadRequestResponseBody is the type of the
+// "organizationRemoteSessionClients" service "duplicateClient" endpoint HTTP
+// response body for the "bad_request" error.
+type DuplicateClientBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DuplicateClientNotFoundResponseBody is the type of the
+// "organizationRemoteSessionClients" service "duplicateClient" endpoint HTTP
+// response body for the "not_found" error.
+type DuplicateClientNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DuplicateClientConflictResponseBody is the type of the
+// "organizationRemoteSessionClients" service "duplicateClient" endpoint HTTP
+// response body for the "conflict" error.
+type DuplicateClientConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DuplicateClientUnsupportedMediaResponseBody is the type of the
+// "organizationRemoteSessionClients" service "duplicateClient" endpoint HTTP
+// response body for the "unsupported_media" error.
+type DuplicateClientUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DuplicateClientInvalidResponseBody is the type of the
+// "organizationRemoteSessionClients" service "duplicateClient" endpoint HTTP
+// response body for the "invalid" error.
+type DuplicateClientInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DuplicateClientInvariantViolationResponseBody is the type of the
+// "organizationRemoteSessionClients" service "duplicateClient" endpoint HTTP
+// response body for the "invariant_violation" error.
+type DuplicateClientInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DuplicateClientUnexpectedResponseBody is the type of the
+// "organizationRemoteSessionClients" service "duplicateClient" endpoint HTTP
+// response body for the "unexpected" error.
+type DuplicateClientUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DuplicateClientGatewayErrorResponseBody is the type of the
+// "organizationRemoteSessionClients" service "duplicateClient" endpoint HTTP
+// response body for the "gateway_error" error.
+type DuplicateClientGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // DeleteClientUnauthorizedResponseBody is the type of the
 // "organizationRemoteSessionClients" service "deleteClient" endpoint HTTP
 // response body for the "unauthorized" error.
@@ -3718,6 +4003,54 @@ func NewDetachClientKeySetResponseBody(res *types.RemoteSessionClient) *DetachCl
 // service.
 func NewRotateClientResponseBody(res *types.RemoteSessionClient) *RotateClientResponseBody {
 	body := &RotateClientResponseBody{
+		ID:                              res.ID,
+		ProjectID:                       res.ProjectID,
+		OrganizationID:                  res.OrganizationID,
+		RemoteSessionIssuerID:           res.RemoteSessionIssuerID,
+		ClientID:                        res.ClientID,
+		ClientIDMetadataURI:             res.ClientIDMetadataURI,
+		ClientIDIssuedAt:                res.ClientIDIssuedAt,
+		ClientSecretExpiresAt:           res.ClientSecretExpiresAt,
+		UpstreamRejectedAt:              res.UpstreamRejectedAt,
+		TokenEndpointAuthMethod:         res.TokenEndpointAuthMethod,
+		TokenEndpointAuthAudienceFormat: res.TokenEndpointAuthAudienceFormat,
+		JSONWebKeySetID:                 res.JSONWebKeySetID,
+		Audience:                        res.Audience,
+		LegacyCallbackURL:               res.LegacyCallbackURL,
+		CredentialOwner:                 res.CredentialOwner,
+		CallbackURL:                     res.CallbackURL,
+		FederatedCallbackURL:            res.FederatedCallbackURL,
+		CreatedAt:                       res.CreatedAt,
+		UpdatedAt:                       res.UpdatedAt,
+	}
+	if res.GrantTypes != nil {
+		body.GrantTypes = make([]string, len(res.GrantTypes))
+		for i, val := range res.GrantTypes {
+			body.GrantTypes[i] = val
+		}
+	}
+	if res.UserSessionIssuerIds != nil {
+		body.UserSessionIssuerIds = make([]string, len(res.UserSessionIssuerIds))
+		for i, val := range res.UserSessionIssuerIds {
+			body.UserSessionIssuerIds[i] = val
+		}
+	} else {
+		body.UserSessionIssuerIds = []string{}
+	}
+	if res.Scope != nil {
+		body.Scope = make([]string, len(res.Scope))
+		for i, val := range res.Scope {
+			body.Scope[i] = val
+		}
+	}
+	return body
+}
+
+// NewDuplicateClientResponseBody builds the HTTP response body from the result
+// of the "duplicateClient" endpoint of the "organizationRemoteSessionClients"
+// service.
+func NewDuplicateClientResponseBody(res *types.RemoteSessionClient) *DuplicateClientResponseBody {
+	body := &DuplicateClientResponseBody{
 		ID:                              res.ID,
 		ProjectID:                       res.ProjectID,
 		OrganizationID:                  res.OrganizationID,
@@ -5441,6 +5774,156 @@ func NewRotateClientGatewayErrorResponseBody(res *goa.ServiceError) *RotateClien
 	return body
 }
 
+// NewDuplicateClientUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "duplicateClient" endpoint of the
+// "organizationRemoteSessionClients" service.
+func NewDuplicateClientUnauthorizedResponseBody(res *goa.ServiceError) *DuplicateClientUnauthorizedResponseBody {
+	body := &DuplicateClientUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDuplicateClientForbiddenResponseBody builds the HTTP response body from
+// the result of the "duplicateClient" endpoint of the
+// "organizationRemoteSessionClients" service.
+func NewDuplicateClientForbiddenResponseBody(res *goa.ServiceError) *DuplicateClientForbiddenResponseBody {
+	body := &DuplicateClientForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDuplicateClientBadRequestResponseBody builds the HTTP response body from
+// the result of the "duplicateClient" endpoint of the
+// "organizationRemoteSessionClients" service.
+func NewDuplicateClientBadRequestResponseBody(res *goa.ServiceError) *DuplicateClientBadRequestResponseBody {
+	body := &DuplicateClientBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDuplicateClientNotFoundResponseBody builds the HTTP response body from
+// the result of the "duplicateClient" endpoint of the
+// "organizationRemoteSessionClients" service.
+func NewDuplicateClientNotFoundResponseBody(res *goa.ServiceError) *DuplicateClientNotFoundResponseBody {
+	body := &DuplicateClientNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDuplicateClientConflictResponseBody builds the HTTP response body from
+// the result of the "duplicateClient" endpoint of the
+// "organizationRemoteSessionClients" service.
+func NewDuplicateClientConflictResponseBody(res *goa.ServiceError) *DuplicateClientConflictResponseBody {
+	body := &DuplicateClientConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDuplicateClientUnsupportedMediaResponseBody builds the HTTP response body
+// from the result of the "duplicateClient" endpoint of the
+// "organizationRemoteSessionClients" service.
+func NewDuplicateClientUnsupportedMediaResponseBody(res *goa.ServiceError) *DuplicateClientUnsupportedMediaResponseBody {
+	body := &DuplicateClientUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDuplicateClientInvalidResponseBody builds the HTTP response body from the
+// result of the "duplicateClient" endpoint of the
+// "organizationRemoteSessionClients" service.
+func NewDuplicateClientInvalidResponseBody(res *goa.ServiceError) *DuplicateClientInvalidResponseBody {
+	body := &DuplicateClientInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDuplicateClientInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "duplicateClient" endpoint of the
+// "organizationRemoteSessionClients" service.
+func NewDuplicateClientInvariantViolationResponseBody(res *goa.ServiceError) *DuplicateClientInvariantViolationResponseBody {
+	body := &DuplicateClientInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDuplicateClientUnexpectedResponseBody builds the HTTP response body from
+// the result of the "duplicateClient" endpoint of the
+// "organizationRemoteSessionClients" service.
+func NewDuplicateClientUnexpectedResponseBody(res *goa.ServiceError) *DuplicateClientUnexpectedResponseBody {
+	body := &DuplicateClientUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDuplicateClientGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "duplicateClient" endpoint of the
+// "organizationRemoteSessionClients" service.
+func NewDuplicateClientGatewayErrorResponseBody(res *goa.ServiceError) *DuplicateClientGatewayErrorResponseBody {
+	body := &DuplicateClientGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewDeleteClientUnauthorizedResponseBody builds the HTTP response body from
 // the result of the "deleteClient" endpoint of the
 // "organizationRemoteSessionClients" service.
@@ -5910,6 +6393,23 @@ func NewRotateClientPayload(body *RotateClientRequestBody, sessionToken *string,
 	return v
 }
 
+// NewDuplicateClientPayload builds a organizationRemoteSessionClients service
+// duplicateClient endpoint payload.
+func NewDuplicateClientPayload(body *DuplicateClientRequestBody, sessionToken *string, apikeyToken *string) *organizationremotesessionclients.DuplicateClientPayload {
+	v := &organizationremotesessionclients.DuplicateClientPayload{
+		ID:                      *body.ID,
+		ClientID:                body.ClientID,
+		ClientSecret:            body.ClientSecret,
+		TokenEndpointAuthMethod: body.TokenEndpointAuthMethod,
+		ClientIDIssuedAt:        body.ClientIDIssuedAt,
+		ClientSecretExpiresAt:   body.ClientSecretExpiresAt,
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+
+	return v
+}
+
 // NewDeleteClientPayload builds a organizationRemoteSessionClients service
 // deleteClient endpoint payload.
 func NewDeleteClientPayload(id string, sessionToken *string, apikeyToken *string) *organizationremotesessionclients.DeleteClientPayload {
@@ -6082,6 +6582,29 @@ func ValidateRotateClientRequestBody(body *RotateClientRequestBody) (err error) 
 	}
 	if body.ID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	return
+}
+
+// ValidateDuplicateClientRequestBody runs the validations defined on
+// DuplicateClientRequestBody
+func ValidateDuplicateClientRequestBody(body *DuplicateClientRequestBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if body.TokenEndpointAuthMethod != nil {
+		if !(*body.TokenEndpointAuthMethod == "client_secret_basic" || *body.TokenEndpointAuthMethod == "client_secret_post" || *body.TokenEndpointAuthMethod == "none") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.token_endpoint_auth_method", *body.TokenEndpointAuthMethod, []any{"client_secret_basic", "client_secret_post", "none"}))
+		}
+	}
+	if body.ClientIDIssuedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.client_id_issued_at", *body.ClientIDIssuedAt, goa.FormatDateTime))
+	}
+	if body.ClientSecretExpiresAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.client_secret_expires_at", *body.ClientSecretExpiresAt, goa.FormatDateTime))
 	}
 	return
 }

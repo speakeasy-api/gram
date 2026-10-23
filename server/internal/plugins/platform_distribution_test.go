@@ -174,7 +174,11 @@ func TestPlatformToolsetDistributionAfterAssistantRemoval(t *testing.T) {
 				t.Parallel()
 				ctx, ti := newTestPluginsService(t)
 				ac, _ := contextvalues.GetAuthContext(ctx)
-				_, toolsetID := platformDistributionServer(t, ctx, ti, wrapped)
+				params, toolsetID := platformDistributionServer(t, ctx, ti, wrapped)
+				serverID := toolsetID
+				if wrapped {
+					serverID = params.McpServerID.UUID
+				}
 				_, err := toolsetsrepo.New(ti.conn).CreateToolsetVersion(ctx, toolsetsrepo.CreateToolsetVersionParams{
 					ToolsetID: toolsetID, Version: 1,
 					ToolUrns:     []urn.Tool{urn.NewTool(urn.ToolKindPlatform, "slack", "send_message")},
@@ -187,7 +191,7 @@ func TestPlatformToolsetDistributionAfterAssistantRemoval(t *testing.T) {
 					Name: "Distribution assistant", Model: "test-model", Instructions: "Test distribution", WarmTtlSeconds: 60, MaxConcurrency: 1, Status: "active",
 				})
 				require.NoError(t, err)
-				_, err = q.AddAssistantToolsets(ctx, []assistantsrepo.AddAssistantToolsetsParams{{AssistantID: assistant.ID, ToolsetID: toolsetID, ProjectID: *ac.ProjectID}})
+				_, err = q.AddAssistantMcpServers(ctx, []assistantsrepo.AddAssistantMcpServersParams{{AssistantID: assistant.ID, McpServerID: serverID, ProjectID: *ac.ProjectID}})
 				require.NoError(t, err)
 				role := createTestRolePrincipal(t, ctx, ti, "assistant-distribution")
 				principal, err := urn.ParsePrincipal(role)
@@ -207,7 +211,7 @@ func TestPlatformToolsetDistributionAfterAssistantRemoval(t *testing.T) {
 				}
 				assertExcluded("Before assistant removal")
 				if removal == "detach" {
-					require.NoError(t, q.ClearAssistantToolsets(ctx, assistantsrepo.ClearAssistantToolsetsParams{AssistantID: assistant.ID, ProjectID: *ac.ProjectID}))
+					require.NoError(t, q.ClearAssistantMcpServersForServers(ctx, assistantsrepo.ClearAssistantMcpServersForServersParams{AssistantID: assistant.ID, ProjectID: *ac.ProjectID, McpServerIds: []uuid.UUID{serverID}}))
 				} else {
 					require.NoError(t, q.DeleteAssistant(ctx, assistantsrepo.DeleteAssistantParams{AssistantID: assistant.ID, ProjectID: *ac.ProjectID}))
 				}

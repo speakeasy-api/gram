@@ -73,9 +73,7 @@ const (
 	blockerTransport          = "uses a transport remote MCP servers do not support"
 	blockerVariations         = "uses tool variations, which the switch would drop"
 	blockerPrompts            = "has prompts, which the switch would drop"
-	blockerAssistants         = "is attached to an assistant through its toolset"
 	blockerSlackApps          = "is attached to a Slack app through its toolset"
-	blockerToolsetPlugin      = "is in a plugin through its toolset rather than its server"
 	blockerGateway            = "is a member of a gateway"
 	blockerNoServer           = "has no server row; only the legacy toolset address serves it"
 	blockerManyServers        = "has more than one server row"
@@ -161,14 +159,8 @@ func assess(row repo.ListCandidatesRow) Candidate {
 	if row.HasPrompts {
 		block(blockerPrompts)
 	}
-	if row.HasAssistants {
-		block(blockerAssistants)
-	}
 	if row.HasSlackApps {
 		block(blockerSlackApps)
-	}
-	if row.HasToolsetPluginEntries {
-		block(blockerToolsetPlugin)
 	}
 	if row.InGateway {
 		block(blockerGateway)

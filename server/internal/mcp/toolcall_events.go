@@ -2,7 +2,6 @@ package mcp
 
 import (
 	"context"
-	"encoding/json"
 	"log/slog"
 	"strconv"
 	"time"
@@ -112,7 +111,7 @@ func publishToolCallRecord(ctx context.Context, logger *otelpub.Logger, slogger 
 // toolCallErrorType is empty for a call the client read as a success.
 func toolCallErrorType(statusCode int, resultIsError bool, failure *oops.ShareableError) string {
 	switch {
-	case toolCallOutcome(statusCode, resultIsError) == dialect.OutcomeOK:
+	case dialect.ToolCallOutcome(statusCode, resultIsError) == dialect.OutcomeOK:
 		return ""
 	case failure != nil && failure.Code != "":
 		return string(failure.Code)
@@ -121,22 +120,6 @@ func toolCallErrorType(statusCode int, resultIsError bool, failure *oops.Shareab
 	default:
 		return strconv.Itoa(statusCode)
 	}
-}
-
-// toolCallOutcome follows the verdict the client reads as isError.
-func toolCallOutcome(statusCode int, resultIsError bool) string {
-	if resultIsError || statusCode < 200 || statusCode >= 300 {
-		return dialect.OutcomeError
-	}
-	return dialect.OutcomeOK
-}
-
-// mcpResultIsError reads isError off a forwarded tool result document.
-func mcpResultIsError(body []byte) bool {
-	var result struct {
-		IsError bool `json:"isError"`
-	}
-	return json.Unmarshal(body, &result) == nil && result.IsError
 }
 
 // toolCallCaller names the caller only when they belong to the tool's

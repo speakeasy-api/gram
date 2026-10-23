@@ -725,6 +725,29 @@ var _ = Service("organizationRemoteSessionClients", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RotateOrganizationRemoteSessionClient"}`)
 	})
 
+	Method("duplicateClient", func() {
+		Description("Create a new standalone remote_session_client with a copy of an existing client's configuration in the caller's organization. The copy keeps the source's issuer, project, credential owner, authentication settings, key set, scopes, audience, and callback, and by default reuses its client_id and stored secret, so no secret is re-entered. A client metadata document (CIMD) client gets a new hosted document and client_id. To give the copy its own upstream registration instead, register one through /oauth/proxy-register and pass the returned credentials; this is refused for credential_owner self clients. A private_key_jwt client that is not a CIMD client cannot be duplicated, because the provider knows only the source's key set URL. The source is unchanged and the copy has no user_session_issuer attachments. Clients managed by an identity provider connection cannot be duplicated. Requires org:admin.")
+
+		Payload(func() {
+			Extend(DuplicateOrganizationRemoteSessionClientForm)
+			security.SessionPayload()
+			security.ByKeyPayload()
+		})
+
+		Result(RemoteSessionClient)
+
+		HTTP(func() {
+			POST("/rpc/organizationRemoteSessionClients.duplicate")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "duplicateOrganizationRemoteSessionClient")
+		Meta("openapi:extension:x-speakeasy-name-override", "duplicate")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DuplicateOrganizationRemoteSessionClient"}`)
+	})
+
 	Method("deleteClient", func() {
 		Description("Soft-delete a remote_session_client in the caller's organization. Cascades to the remote_sessions minted against it. Requires org:admin.")
 

@@ -217,6 +217,7 @@ WHERE organization_id = $1
     'resource_kind', $3::text,
     'resource_id', $4::text
   )
+  AND principal_type <> 'api_key'
 `
 
 type DeletePrincipalGrantsByResourceParams struct {
@@ -245,6 +246,7 @@ DELETE FROM principal_grants
 WHERE organization_id = $1
   AND scope = $2
   AND selectors = $3
+  AND principal_type <> 'api_key'
 `
 
 type DeletePrincipalGrantsByTargetParams struct {
@@ -257,6 +259,34 @@ type DeletePrincipalGrantsByTargetParams struct {
 // replacement writes where the caller supplies the full desired principal set.
 func (q *Queries) DeletePrincipalGrantsByTarget(ctx context.Context, arg DeletePrincipalGrantsByTargetParams) (int64, error) {
 	result, err := q.db.Exec(ctx, deletePrincipalGrantsByTarget, arg.OrganizationID, arg.Scope, arg.Selectors)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const deletePrincipalWildcardGrants = `-- name: DeletePrincipalWildcardGrants :execrows
+DELETE FROM principal_grants
+WHERE organization_id = $1
+  AND principal_urn = $2
+  AND scope = $3
+  AND COALESCE(selectors->>'resource_id', '*') = '*'
+  AND (selectors - 'resource_kind' - 'resource_id') = '{}'::jsonb
+`
+
+type DeletePrincipalWildcardGrantsParams struct {
+	OrganizationID string
+	PrincipalUrn   urn.Principal
+	Scope          string
+}
+
+// Removes a principal's unrestricted rows for one scope: a selector naming at
+// most a resource kind and the wildcard resource ID. Older writers stored the
+// kind as "*" or under another name, or left out resource_id (which the grant
+// matcher reads as "*"), so matching on the kind the scope implies today would
+// leave those rows granting access after an administrator removed them.
+func (q *Queries) DeletePrincipalWildcardGrants(ctx context.Context, arg DeletePrincipalWildcardGrantsParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deletePrincipalWildcardGrants, arg.OrganizationID, arg.PrincipalUrn, arg.Scope)
 	if err != nil {
 		return 0, err
 	}
@@ -2862,6 +2892,7 @@ type ListPrincipalGrantsByOrgRow struct {
 
 // Queries for managing principal grants (RBAC).
 // principal_grants is org-scoped (no project_id); every query is scoped to organization_id.
+// Audience reads and replacements skip api_key rows: a key's policy is owned by the keys service.
 // Returns all grant rows for an organization, optionally filtered by principal URN.
 func (q *Queries) ListPrincipalGrantsByOrg(ctx context.Context, arg ListPrincipalGrantsByOrgParams) ([]ListPrincipalGrantsByOrgRow, error) {
 	rows, err := q.db.Query(ctx, listPrincipalGrantsByOrg, arg.OrganizationID, arg.PrincipalUrn)
@@ -2901,6 +2932,7 @@ WHERE organization_id = $1
     'resource_kind', $3::text,
     'resource_id', $4::text
   )
+  AND principal_type <> 'api_key'
 ORDER BY principal_urn
 `
 
@@ -2952,6 +2984,7 @@ WHERE organization_id = $1
     'resource_kind', $3::text
   )
   AND selectors->>'resource_id' = ANY($4::text[])
+  AND principal_type <> 'api_key'
 ORDER BY principal_urn
 `
 

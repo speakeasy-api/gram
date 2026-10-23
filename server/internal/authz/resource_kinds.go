@@ -21,4 +21,8 @@ const (
 	// principal type. A grant of workload:write authorizes configuring the trust
 	// policy, not acting as, or writing to, any one workload.
 	ResourceKindWorkload = "workload"
+	// ResourceKindMCPAuthClient is an upstream auth client: the identity Speakeasy
+	// presents to an upstream MCP server. Use is granted by mcp:auth with no
+	// server dimension, so a block follows the client to every server sharing it.
+	ResourceKindMCPAuthClient = "mcp_auth_client"
 )

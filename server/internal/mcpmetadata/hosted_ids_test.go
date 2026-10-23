@@ -31,7 +31,6 @@ func requireHostedIDs(t *testing.T, ctx context.Context, ti *testInstance, metad
 	require.NoError(t, err)
 	require.Equal(t, row.ID.String(), metadata.ID)
 	require.True(t, row.McpServerID.Valid)
-	require.False(t, row.ToolsetID.Valid)
 }
 
 // Callers reading toolset_id still get it from a hosted server-keyed row, under every addressing form.
@@ -65,9 +64,8 @@ func TestMcpMetadata_NonHostedRowsKeepOneID(t *testing.T) {
 
 	ctx, ti := newTestMCPMetadataService(t)
 
-	// A leftover toolset-keyed row is not read without a canonical wrapper, and a save has no key.
+	// A toolset without a canonical wrapper has no metadata, and a save has no key.
 	unwrapped := createHostedToolset(t, ctx, ti, "ids-unwrapped")
-	seedToolsetKeyedRow(t, ctx, ti, unwrapped, "legacy", uuid.NullUUID{})
 	_, err := ti.service.GetMcpMetadata(ctx, &gen.GetMcpMetadataPayload{ToolsetSlug: new(types.Slug(unwrapped.Slug))})
 	requireOopsCode(t, err, oops.CodeNotFound)
 	_, err = ti.service.SetMcpMetadata(ctx, &gen.SetMcpMetadataPayload{ToolsetSlug: new(types.Slug(unwrapped.Slug)), Instructions: new("saved")})
