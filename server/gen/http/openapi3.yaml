@@ -16237,6 +16237,93 @@ paths:
             x-speakeasy-name-override: blockOnConnection
             x-speakeasy-react-hook:
                 name: BlockAgentOnConnection
+    /rpc/agents.checkPolicyGrants:
+        post:
+            description: 'Check whether policy grants could be written without writing them: to agent_id, or to a new agent the caller would own. Uses the containment rule of agents.create and agents.createPolicyGrant, which still check every write.'
+            operationId: checkAgentPolicyGrants
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CheckAgentPolicyGrantsForm'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/CheckAgentPolicyGrantsResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: checkPolicyGrants agents
+            tags:
+                - agents
+            x-speakeasy-name-override: checkPolicyGrants
+            x-speakeasy-react-hook:
+                name: CheckAgentPolicyGrants
     /rpc/agents.create:
         post:
             operationId: createAgent
@@ -94213,6 +94300,21 @@ components:
                 - selector
                 - created_at
                 - updated_at
+        AgentPolicyGrantCheck:
+            type: object
+            properties:
+                allowed:
+                    type: boolean
+                    description: Whether the grant fits within the caller's and the owner's permissions.
+                limited_by:
+                    type: string
+                    description: Whose permissions the grant exceeds; absent when allowed.
+                    enum:
+                        - caller
+                        - owner
+            description: Whether one policy grant could be written, by the same rule agents.create and agents.createPolicyGrant enforce.
+            required:
+                - allowed
         AgentPolicyGrantForm:
             type: object
             properties:
@@ -97574,6 +97676,32 @@ components:
                 - tool_calls
                 - tool_results
                 - risk_only
+        CheckAgentPolicyGrantsForm:
+            type: object
+            properties:
+                agent_id:
+                    type: string
+                    description: The agent the grants would be written to. Omit for an agent the caller would create and own.
+                    format: uuid
+                policy_grants:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AgentPolicyGrantForm'
+                    description: The grants to check, answered in the same order.
+                    minItems: 1
+                    maxItems: 100
+            required:
+                - policy_grants
+        CheckAgentPolicyGrantsResult:
+            type: object
+            properties:
+                results:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AgentPolicyGrantCheck'
+                    description: One answer per requested grant, in request order.
+            required:
+                - results
         CimdClientPreset:
             type: object
             properties:

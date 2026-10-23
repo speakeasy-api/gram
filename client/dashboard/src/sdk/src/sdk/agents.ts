@@ -3,6 +3,7 @@
  */
 
 import { agentsBlockOnConnection } from "../funcs/agentsBlockOnConnection.js";
+import { agentsCheckPolicyGrants } from "../funcs/agentsCheckPolicyGrants.js";
 import { agentsCreate } from "../funcs/agentsCreate.js";
 import { agentsCreatePolicyGrant } from "../funcs/agentsCreatePolicyGrant.js";
 import { agentsDelete } from "../funcs/agentsDelete.js";
@@ -26,11 +27,16 @@ import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { AgentConnectionBlock } from "../models/components/agentconnectionblock.js";
 import { AgentPolicyGrant } from "../models/components/agentpolicygrant.js";
 import { AgentPolicyGrantForm } from "../models/components/agentpolicygrantform.js";
+import { CheckAgentPolicyGrantsResult } from "../models/components/checkagentpolicygrantsresult.js";
 import { ManagedAgent } from "../models/components/managedagent.js";
 import {
   BlockAgentOnConnectionRequest,
   BlockAgentOnConnectionSecurity,
 } from "../models/operations/blockagentonconnection.js";
+import {
+  CheckAgentPolicyGrantsRequest,
+  CheckAgentPolicyGrantsSecurity,
+} from "../models/operations/checkagentpolicygrants.js";
 import {
   CreateAgentRequest,
   CreateAgentSecurity,
@@ -126,6 +132,25 @@ export class Agents extends ClientSDK {
     options?: RequestOptions,
   ): Promise<AgentConnectionBlock> {
     return unwrapAsync(agentsBlockOnConnection(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * checkPolicyGrants agents
+   *
+   * @remarks
+   * Check whether policy grants could be written without writing them: to agent_id, or to a new agent the caller would own. Uses the containment rule of agents.create and agents.createPolicyGrant, which still check every write.
+   */
+  async checkPolicyGrants(
+    request: CheckAgentPolicyGrantsRequest,
+    security?: CheckAgentPolicyGrantsSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<CheckAgentPolicyGrantsResult> {
+    return unwrapAsync(agentsCheckPolicyGrants(
       this,
       request,
       security,

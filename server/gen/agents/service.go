@@ -34,6 +34,10 @@ type Service interface {
 	ListDelegableGrants(context.Context, *ListDelegableGrantsPayload) (res []*AgentPolicyGrantForm, err error)
 	// ListPolicyGrants implements listPolicyGrants.
 	ListPolicyGrants(context.Context, *ListPolicyGrantsPayload) (res []*AgentPolicyGrant, err error)
+	// Check whether policy grants could be written without writing them: to
+	// agent_id, or to a new agent the caller would own. Uses the containment rule
+	// of agents.create and agents.createPolicyGrant, which still check every write.
+	CheckPolicyGrants(context.Context, *CheckPolicyGrantsPayload) (res *CheckAgentPolicyGrantsResult, err error)
 	// CreatePolicyGrant implements createPolicyGrant.
 	CreatePolicyGrant(context.Context, *CreatePolicyGrantPayload) (res *AgentPolicyGrant, err error)
 	// UpdatePolicyGrant implements updatePolicyGrant.
@@ -85,7 +89,7 @@ const ServiceName = "agents"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [20]string{"listSessions", "revokeSession", "list", "create", "get", "rename", "listDelegableGrants", "listPolicyGrants", "createPolicyGrant", "updatePolicyGrant", "deletePolicyGrant", "listConnectionBlocks", "blockAgentOnConnection", "removeConnectionBlock", "transfer", "reassign", "suspend", "resume", "revoke", "delete"}
+var MethodNames = [21]string{"listSessions", "revokeSession", "list", "create", "get", "rename", "listDelegableGrants", "listPolicyGrants", "checkPolicyGrants", "createPolicyGrant", "updatePolicyGrant", "deletePolicyGrant", "listConnectionBlocks", "blockAgentOnConnection", "removeConnectionBlock", "transfer", "reassign", "suspend", "resume", "revoke", "delete"}
 
 // AgentConnectionBlock is the result type of the agents service
 // blockAgentOnConnection method.
@@ -126,6 +130,15 @@ type AgentPolicyGrant struct {
 	Selector  *AgentPolicySelector
 	CreatedAt string
 	UpdatedAt string
+}
+
+// Whether one policy grant could be written, by the same rule agents.create
+// and agents.createPolicyGrant enforce.
+type AgentPolicyGrantCheck struct {
+	// Whether the grant fits within the caller's and the owner's permissions.
+	Allowed bool
+	// Whose permissions the grant exceeds; absent when allowed.
+	LimitedBy *string
 }
 
 type AgentPolicyGrantForm struct {
@@ -185,6 +198,24 @@ type BlockAgentOnConnectionPayload struct {
 	AgentID string
 	// The upstream OAuth client of the caller's own connection
 	RemoteSessionClientID string
+}
+
+// CheckAgentPolicyGrantsResult is the result type of the agents service
+// checkPolicyGrants method.
+type CheckAgentPolicyGrantsResult struct {
+	// One answer per requested grant, in request order.
+	Results []*AgentPolicyGrantCheck
+}
+
+// CheckPolicyGrantsPayload is the payload type of the agents service
+// checkPolicyGrants method.
+type CheckPolicyGrantsPayload struct {
+	SessionToken *string
+	// The agent the grants would be written to. Omit for an agent the caller would
+	// create and own.
+	AgentID *string
+	// The grants to check, answered in the same order.
+	PolicyGrants []*AgentPolicyGrantForm
 }
 
 // CreatePayload is the payload type of the agents service create method.

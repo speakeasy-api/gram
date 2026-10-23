@@ -7,7 +7,7 @@ import { useOrganization, useProject, useSession } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import type { ManagedAgent } from "@gram/client/models/components/managedagent.js";
 import { GramError } from "@gram/client/models/errors/gramerror.js";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   useCallback,
   useEffect,
@@ -30,7 +30,11 @@ import {
   mintInstallCommand,
 } from "./gateway";
 import { StepInstall } from "./StepInstall";
-import { StepServers, type ServerSelection } from "./StepServers";
+import {
+  StepServers,
+  type AllServersRefusal,
+  type ServerSelection,
+} from "./StepServers";
 import { StepVerify, type VerifyState } from "./StepVerify";
 import { StepWorkload, WorkloadPlatformPicker } from "./StepWorkload";
 import { useWorkloadSetup } from "./useWorkloadSetup";
@@ -369,6 +373,90 @@ export function CredentialsWizard({
     allServersProjectIDs.length === 0
       ? organization.name
       : allServersProjectIDs.map(projectName).join(", ");
+  // The wildcard "All servers" would write, or undefined where choosing it
+  // writes nothing: an agent that already holds one keeps it. A new agent's
+  // waits for its project, as creating one does.
+  const wildcardToWrite = useMemo(() => {
+    if (existing && !editing) return undefined;
+    if (editing && wildcardReach !== undefined) return undefined;
+    const projectId = existing ? scopedProjectID : project.id;
+    if (!existing && !projectId) return undefined;
+    return {
+      resourceKind: "mcp" as const,
+      resourceId: "*",
+      ...(projectId ? { projectId } : {}),
+    };
+  }, [existing, editing, wildcardReach, scopedProjectID, project.id]);
+  // A wildcard is accepted only when the person saving it, and the agent's
+  // owner, can reach every server it covers, including servers this list
+  // never shows them. The server answers that with the rule the write itself
+  // applies, so the choice is withheld up front rather than offered and then
+  // refused when the agent is created.
+  const agentId = agent?.id;
+  const wildcardCheck = useQuery({
+    queryKey: [
+      "agent-policy-check",
+      organization.id,
+      user.id,
+      agentId ?? null,
+      wildcardToWrite,
+    ],
+    queryFn: ({ signal }) =>
+      sdk.agents.checkPolicyGrants(
+        {
+          checkAgentPolicyGrantsForm: {
+            ...(agentId ? { agentId } : {}),
+            policyGrants: [
+              {
+                effect: "allow",
+                scope: CONNECT_SCOPE,
+                selector: wildcardToWrite!,
+              },
+            ],
+          },
+        },
+        undefined,
+        { signal },
+      ),
+    enabled: wildcardToWrite !== undefined,
+    retry: false,
+    throwOnError: false,
+  });
+  const recheckWildcard = wildcardCheck.refetch;
+  const recheck = useCallback(() => {
+    if (wildcardToWrite !== undefined) void recheckWildcard();
+  }, [wildcardToWrite, recheckWildcard]);
+  const wildcardAnswer = wildcardCheck.data?.results[0];
+  const allServersRefusal = ((): AllServersRefusal | undefined => {
+    if (wildcardToWrite === undefined) return undefined;
+    if (wildcardAnswer?.allowed === true) return undefined;
+    if (wildcardAnswer?.limitedBy === "owner") {
+      return {
+        message: `This agent's owner cannot reach every server in ${allServersScopeName}, so the agent cannot either. Choose its servers below, or ask an administrator to review the owner's access.`,
+      };
+    }
+    if (wildcardAnswer !== undefined) {
+      return {
+        message: `You cannot reach every server in ${allServersScopeName}, so this agent cannot either. Choose its servers below, or ask an administrator for access to the rest.`,
+      };
+    }
+    if (wildcardCheck.isError) {
+      return {
+        message: `Could not check that you can reach every server in ${allServersScopeName}.`,
+        retry: recheck,
+      };
+    }
+    return {
+      message: `Checking that you can reach every server in ${allServersScopeName}…`,
+      pending: true,
+    };
+  })();
+  // Saving "All servers" while it is refused would be refused by the server
+  // in turn; said here, before anything is written, instead.
+  const allServersBlocked =
+    allServers && allServersRefusal !== undefined && !allServersRefusal.pending
+      ? allServersRefusal.message
+      : null;
   // The rows the picker offers. Under "All servers" they are the ones those
   // wildcards reach, so an organization-wide one shows every project's;
   // otherwise it is the project the agent is bound to.
@@ -452,6 +540,7 @@ export function CredentialsWizard({
     if (!projectID) {
       throw new Error("This project is still loading. Try again in a moment.");
     }
+    if (allServersBlocked) throw new Error(allServersBlocked);
     // "All servers" is one wildcard selector rather than today's inventory
     // listed out, so it covers the servers added after this is saved. Scoped
     // to the project, never the draft's bare `null`: `null` means
@@ -505,6 +594,10 @@ export function CredentialsWizard({
     // The selection is only the agent's reach once the grants have been
     // reconciled into it; before that every grant would read as withdrawn.
     if (!reconciled || saving) return;
+    if (allServersBlocked) {
+      setError(allServersBlocked);
+      return;
+    }
     setSaving(true);
     setError(null);
     try {
@@ -948,9 +1041,15 @@ export function CredentialsWizard({
               servers={listedServers}
               isLoading={inventory.isLoading}
               isError={inventory.isError}
-              onRetry={inventory.refetch}
+              onRetry={() => {
+                inventory.refetch();
+                // Coming back to the tab after asking for access is also the
+                // moment the answer may have changed.
+                recheck();
+              }}
               scopeLabel={allServersScopeName}
               allServers={allServers}
+              allServersRefusal={allServersRefusal}
               onAllServersChange={(next) => {
                 setAllServers(next);
                 setHighlight(next ? "server:all" : null);
@@ -1071,16 +1170,18 @@ export function CredentialsWizard({
       : step === 1
         ? !allServers && selected.length === 0
           ? "Select at least one MCP server."
-          : // A key names servers one by one, and a server that authorizes
-            // each person separately is not one a key can name. So "all
-            // servers" with none of them left is a key that would reach
-            // nothing — said here rather than after the agent is created.
-            allServers &&
-              !inventory.isLoading &&
-              !inventory.isError &&
-              listedServers.every((server) => server.issuerId)
-            ? "No server here can be reached with a key yet."
-            : null
+          : allServersBlocked
+            ? allServersBlocked
+            : // A key names servers one by one, and a server that authorizes
+              // each person separately is not one a key can name. So "all
+              // servers" with none of them left is a key that would reach
+              // nothing, said here rather than after the agent is created.
+              allServers &&
+                !inventory.isLoading &&
+                !inventory.isError &&
+                listedServers.every((server) => server.issuerId)
+              ? "No server here can be reached with a key yet."
+              : null
         : null;
 
   const footer = () => {
@@ -1092,11 +1193,13 @@ export function CredentialsWizard({
           note={
             step === 0
               ? "Renaming an agent is recorded in the organization audit log."
-              : reconciled
-                ? "Changing what an agent reaches is recorded in the organization audit log."
-                : inventory.isError
-                  ? "The server list could not be loaded, so the servers this agent reaches are not known. Retry the list before saving."
-                  : "Reading the servers this agent reaches…"
+              : allServersBlocked
+                ? allServersBlocked
+                : reconciled
+                  ? "Changing what an agent reaches is recorded in the organization audit log."
+                  : inventory.isError
+                    ? "The server list could not be loaded, so the servers this agent reaches are not known. Retry the list before saving."
+                    : "Reading the servers this agent reaches…"
           }
           onBack={step === 0 ? undefined : () => setStep(step - 1)}
           primary={
@@ -1111,7 +1214,7 @@ export function CredentialsWizard({
               <Button
                 // Nothing may be written until the stored grants are in the
                 // selection: the diff against an empty one withdraws them all.
-                disabled={saving || !reconciled}
+                disabled={saving || !reconciled || allServersBlocked !== null}
                 onClick={() => void save()}
               >
                 {saving ? "Saving…" : "Save changes and exit"}

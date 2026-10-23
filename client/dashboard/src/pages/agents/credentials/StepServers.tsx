@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 import { useRoutes } from "@/routes";
 import { MCP_AUTHENTICATION_SECTION_ID } from "@/pages/mcp/x/tabs/settings/sections/authentication/AuthenticationSection";
 import { ChevronRight } from "lucide-react";
-import { useEffect, useState, type JSX } from "react";
+import { useEffect, useId, useState, type JSX } from "react";
 import { Link } from "react-router";
 import { WizardStepHeader } from "./WizardChrome";
 import type { InventoryServer } from "./useServerInventory";
@@ -25,6 +25,15 @@ export interface ServerSelection {
   tools?: string[];
 }
 
+/** Why "All servers" cannot be turned on, said beside it. */
+export interface AllServersRefusal {
+  message: string;
+  /** Still being checked, rather than refused. */
+  pending?: boolean;
+  /** Asks again, where the check itself failed. */
+  retry?: () => void;
+}
+
 export function StepServers({
   servers,
   isLoading,
@@ -32,6 +41,7 @@ export function StepServers({
   onRetry,
   allServers,
   onAllServersChange,
+  allServersRefusal,
   scopeLabel,
   selected,
   onChange,
@@ -49,6 +59,12 @@ export function StepServers({
   allServers: boolean;
   onAllServersChange: (next: boolean) => void;
   /**
+   * Set while "All servers" cannot be saved: the wildcard is refused unless
+   * the person saving it, and the agent's owner, reach every server it
+   * covers. It can still be turned off, never on.
+   */
+  allServersRefusal?: AllServersRefusal;
+  /**
    * What "all" covers, named: the agent's project, or the organization where
    * the agent already holds a wildcard that reaches every one of them.
    * Nothing here chooses it — it is the reach the grant carries.
@@ -58,6 +74,8 @@ export function StepServers({
   onChange: (next: ServerSelection[]) => void;
 }): JSX.Element {
   const routes = useRoutes();
+  const refusalId = useId();
+  const allServersLocked = !allServers && allServersRefusal !== undefined;
   // "Change identity" opens the server's settings in another tab, so the
   // inventory this list was built from is stale the moment it is used. Coming
   // back to this tab is the signal that something may have changed.
@@ -184,11 +202,25 @@ export function StepServers({
           {/* Above the rows and outside the filters, because it is not one of
               them: it covers servers this list has never shown, including the
               ones that do not exist yet. */}
-          <label className="border-border hover:bg-muted/40 flex cursor-pointer items-center gap-4 border-b px-4 py-3">
+          <label
+            className={cn(
+              "border-border flex items-center gap-4 px-4 py-3",
+              // The retry below belongs to this row, so the row's rule moves
+              // under it.
+              !allServersRefusal?.retry && "border-b",
+              allServersLocked
+                ? "cursor-not-allowed"
+                : "hover:bg-muted/40 cursor-pointer",
+            )}
+          >
             <Checkbox
               checked={allServers}
+              // Locked only on the way on: a refused wildcard that is already
+              // ticked can still be turned off.
+              disabled={allServersLocked}
               onCheckedChange={() => onAllServersChange(!allServers)}
               aria-label="All servers"
+              aria-describedby={allServersRefusal ? refusalId : undefined}
             />
             <span className="min-w-0 flex-1">
               <span className="block">All servers</span>
@@ -203,8 +235,30 @@ export function StepServers({
                 {perUserCount > 0 &&
                   ` The ${perUserCount} below that authorize each person separately stay out of the key: the agent reaches them once an account is connected.`}
               </span>
+              {allServersRefusal && (
+                <span
+                  id={refusalId}
+                  role={allServersRefusal.pending ? "status" : undefined}
+                  className="mt-1 block text-xs"
+                >
+                  {allServersRefusal.message}
+                </span>
+              )}
             </span>
           </label>
+          {/* Outside the label, which would otherwise lend the button its
+              own text as a name. */}
+          {allServersRefusal?.retry && (
+            <div className="border-border border-b px-4 pb-3 pl-12">
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={allServersRefusal.retry}
+              >
+                Check again
+              </Button>
+            </div>
+          )}
           {shown.length === 0 ? (
             <Text muted small className="block px-4 py-10 text-center">
               {servers.length === 0
