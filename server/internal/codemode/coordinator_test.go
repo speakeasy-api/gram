@@ -257,7 +257,7 @@ func TestCoordinatorWallTimeIncludesAdmission(t *testing.T) {
 			_, err := coordinator.Execute(t.Context(), scope, "1", nil)
 			done <- err
 		}()
-		time.Sleep(2 * time.Second)
+		<-time.After(2 * time.Second)
 		release()
 		require.ErrorContains(t, <-done, "runtime unavailable")
 		require.Equal(t, started.Add(MaxWallTime), <-provider.deadline, "time spent queued for admission counts toward the wall time")

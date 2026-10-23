@@ -5,6 +5,7 @@ package codemode
 import (
 	"context"
 	"encoding/json"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -231,5 +232,6 @@ func TestCodeRunnerFullSizeCallbackFitsEnvelope(t *testing.T) {
 	result := client.Run(t.Context(), uuid.New(), `response = await tools.call("remote--ping", {})
 len(response["data"])`, func(context.Context) (Host, error) { return host, nil })
 	require.Nil(t, result.Error, "%+v", result.Error)
+	require.JSONEq(t, strconv.Itoa(MaxResultBytes-len(base)), string(result.Value), "Python receives the whole payload")
 	require.Equal(t, []CallOutcome{{Path: "remote--ping", Outcome: "completed"}}, result.ToolCalls)
 }
