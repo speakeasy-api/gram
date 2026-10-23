@@ -22,8 +22,10 @@ import (
 	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	skillsrepo "github.com/speakeasy-api/gram/server/internal/skills/repo"
+	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 // skillsFixture is one public hosted toolset in the test user's project,
@@ -382,6 +384,31 @@ func TestServePublic_Skills_ReadServesMarkdownAndRecordsOneActivationPerSession(
 	}
 	require.Equal(t, sessionA, observations[0].SessionID.String)
 	require.Equal(t, sessionB, observations[1].SessionID.String)
+}
+
+func TestServePublic_Skills_ReadWritesSkillLoadToToolUsageLogs(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	f := newSkillsFixture(t, ctx, ti)
+	skillID, _ := servedSkill(t, ctx, ti, f, "logged-skill")
+	body := makeMetaRPCBody(t, mcpversions.MethodResourcesRead, map[string]any{"uri": f.uri("logged-skill")})
+	session := "skills-session-" + uuid.NewString()[:8]
+
+	for range 2 {
+		w, err := servePublicHTTP(t, ctx, ti, f.mcpSlug, body, "", map[string]string{"Mcp-Session-Id": session})
+		require.NoError(t, err)
+		requireRPCResult(t, w)
+	}
+
+	// Every load is a row, even a re-read the activation record dedupes. The
+	// skill name survives the tool IO scrub (tool IO logs are off here), which
+	// is what classifies the row as a skill on the tool-usage pages.
+	requireTelemetryRowCount(t, `gram_project_id = ? AND event_source = ? AND skill_name = ? AND gram_urn = ?
+		AND toolset_slug != '' AND toString(attributes.gram.mcp.skill.id) = ?
+		AND toString(attributes.gram.mcp.skill.version_id) != '' AND startsWith(toString(attributes.gram.mcp.skill.digest), 'sha256:')
+		AND toString(attributes.http.response.status_code) = '200'`,
+		2, f.projectID.String(), string(telemetry.EventSourceResourceRead), "logged-skill", urn.NewSkill(skillID).String(), skillID.String())
 }
 
 func TestServePublic_Skills_ReadUnknownURIIsInvalidParams(t *testing.T) {
