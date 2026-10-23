@@ -38,15 +38,21 @@ vi.mock(
   }),
 );
 vi.mock("@/components/sessions/ClientDetailSheet", () => ({
-  ClientDetailSheet: ({ clientId }: { clientId: string }) => (
-    <div>Registration {clientId}</div>
+  ClientDetailSheet: ({
+    clientId,
+    client,
+  }: {
+    clientId: string;
+    client?: { clientName: string };
+  }) => (
+    <div>
+      Registration {clientId}
+      {client && <span>Loaded {client.clientName}</span>}
+    </div>
   ),
 }));
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({ hasScope: () => true }),
-}));
-vi.mock("./GatewayRegisteredClients", () => ({
-  GatewayRegisteredClients: () => null,
 }));
 vi.mock("@/components/sessions/RevokeSessionDialog", () => ({
   RevokeSessionDialog: ({ onRevoked }: { onRevoked: () => void }) => (
@@ -110,6 +116,7 @@ function setup(
   clients.push(queryClient);
   const view = render(
     <GatewayConnectionsTab
+      issuerId={gatewayId ? "issuer" : undefined}
       gatewayId={gatewayId}
       projectId={gatewayId ? "project" : undefined}
     />,
@@ -266,4 +273,34 @@ it("converts a bookmarked calendar selection to an exclusive next-day bound", as
   expect(new URL(request.url).searchParams.get("created_before")).toBe(
     new Date(2026, 2, 9).toISOString(),
   );
+});
+
+it("keeps the loaded registration row when opening its bookmarked detail sheet", async () => {
+  const { user } = setup((request) => {
+    if (new URL(request.url).pathname.includes("userSessionClients"))
+      return json({
+        items: [
+          {
+            id: "loaded-registration",
+            client_name: "Example desktop",
+            client_id: "public-client",
+            user_session_issuer_id: "issuer",
+            active_session_count: 0,
+            credential_kind: "public",
+            redirect_uris: [],
+            client_id_issued_at: "2026-01-01T00:00:00Z",
+            created_at: "2026-01-01T00:00:00Z",
+            updated_at: "2026-01-01T00:00:00Z",
+          },
+        ],
+      });
+    return json({ items: [] });
+  }, "gateway");
+  await user.click(
+    screen.getByRole("button", { name: "Show registered clients" }),
+  );
+  await screen.findByText("Example desktop");
+  await user.click(screen.getByRole("button", { name: "Open menu" }));
+  await user.click(screen.getByText("View registration"));
+  expect(await screen.findByText("Loaded Example desktop")).toBeTruthy();
 });

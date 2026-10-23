@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	gatewaygen "github.com/speakeasy-api/gram/server/gen/gateway_sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -29,7 +30,7 @@ type ListGatewaySessionsInput struct {
 	// GatewayID names an exact project gateway in the caller's organization.
 	GatewayID *string `json:"gateway_id,omitempty" jsonschema:"exact project gateway UUID; omit for organization scope"`
 	// Search is supplied by the caller, never inferred from returned identities.
-	Search *string `json:"search,omitempty" jsonschema:"literal identity name, email, or subject search; identities are omitted from results"`
+	Search *string `json:"search,omitempty" jsonschema:"literal identity name, email, or subject search; at most 200 Unicode characters; identities are omitted from results"`
 	// ServerID restricts configured upstream associations, not historical usage.
 	ServerID *string `json:"server_id,omitempty" jsonschema:"exact member server UUID"`
 	// ProviderID restricts the upstream provider.
@@ -37,15 +38,15 @@ type ListGatewaySessionsInput struct {
 	// Status defaults to active.
 	Status string `json:"status,omitempty" jsonschema:"active, expired, revoked, or all; defaults to active"`
 	// CreatedAfter is an inclusive RFC3339 timestamp.
-	CreatedAfter *string `json:"created_after,omitempty"`
+	CreatedAfter *string `json:"created_after,omitempty" jsonschema:"inclusive creation timestamp in RFC3339 format"`
 	// CreatedBefore is an exclusive RFC3339 timestamp.
-	CreatedBefore *string `json:"created_before,omitempty"`
+	CreatedBefore *string `json:"created_before,omitempty" jsonschema:"exclusive creation timestamp in RFC3339 format"`
 	// Sort defaults to newest.
 	Sort string `json:"sort,omitempty" jsonschema:"newest, oldest, last_used, or expiry"`
 	// Cursor must be reused only with identical filters and ordering.
-	Cursor *string `json:"cursor,omitempty"`
+	Cursor *string `json:"cursor,omitempty" jsonschema:"next_cursor from the previous page; reuse only with identical filters and ordering"`
 	// Limit bounds one page, default 50 and maximum 100.
-	Limit int `json:"limit,omitempty"`
+	Limit int `json:"limit,omitempty" jsonschema:"page size from 1 to 100; omit for the default of 50"`
 }
 
 // GatewaySessionSummary contains operational metadata, never subject identities,
@@ -111,13 +112,25 @@ func listGatewaySessions(ctx context.Context, service GatewaySessionManagement, 
 	return output, nil
 }
 
+func gatewaySessionInputSchema() *jsonschema.Schema {
+	schema, err := jsonschema.For[ListGatewaySessionsInput](nil)
+	if err != nil {
+		panic(fmt.Sprintf("platformmcp: infer list_gateway_sessions input schema: %v", err))
+	}
+	schema.Properties["search"].MaxLength = new(200)
+	schema.Properties["limit"].Minimum = new(float64(1))
+	schema.Properties["limit"].Maximum = new(float64(100))
+	return schema
+}
+
 func registerGatewaySessionTool(reg *Registrar, service GatewaySessionManagement) {
 	// This can span every project in an organization. Managed assistants have no
 	// organization-admin identity, so only external administrators are admitted.
 	addTool(reg, &mcp.Tool{ //nolint:exhaustruct // Optional SDK fields use documented defaults.
 		Name: listGatewaySessionsToolName, Title: "List Gateway Sessions",
-		Description: "Inspect a bounded page of inbound gateway authorizations. Choose organization scope explicitly, or an exact project gateway ID. Filter by caller-supplied identity search, member server association, provider, status, and creation timestamps; order by creation, last use, or authorization expiry. Reuse next_cursor only with identical filters. Results omit identities, client names, JWT identifiers, workload claims, and secrets. Association does not prove historical use. An unexpired authorization deadline does not guarantee a refresh grant exists. Read-only; use the dashboard to review identities or revoke sessions.",
+		Description: "Inspect a bounded page of inbound gateway authorizations. Choose organization scope explicitly, or an exact project gateway ID. Filter by caller-supplied identity search (at most 200 Unicode characters), member server association, provider, status, and creation timestamps; order by creation, last use, or authorization expiry. Reuse next_cursor only with identical filters. Results omit identities, client names, JWT identifiers, workload claims, and secrets. Association does not prove historical use. An unexpired authorization deadline does not guarantee a refresh grant exists. Read-only; use the dashboard to review identities or revoke sessions.",
 		Annotations: readOnlyAnnotations(),
+		InputSchema: gatewaySessionInputSchema(),
 	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: externalOnly, ProjectScope: ProjectScopeNone, DiscoveryScopes: nil}, func(ctx context.Context, _ *mcp.CallToolRequest, input ListGatewaySessionsInput) (*mcp.CallToolResult, ListGatewaySessionsOutput, error) {
 		return principalToolCall(ctx, gatewaySessionToolResult, func(principal Principal) (ListGatewaySessionsOutput, error) {
 			return listGatewaySessions(ctx, service, principal, input)
