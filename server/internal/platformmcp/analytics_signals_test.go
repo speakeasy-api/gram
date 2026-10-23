@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/telemetry/analytics"
@@ -53,6 +54,30 @@ func TestExploreDoesNotGrantSignalEntitlement(t *testing.T) {
 	require.ErrorAs(t, err, &refusal)
 	require.Contains(t, refusal.Payload, "feature_not_enabled")
 	require.Zero(t, h.engine.calls)
+}
+
+func TestSignalEntitlementDoesNotGrantRiskDatasetAccess(t *testing.T) {
+	t.Parallel()
+	h := newAnalyticsTestHarness(t, feature.EvaluationEnabled, allowAnalyticsBudget)
+	h.service.signalFeatures = signalAnalyticsFeatures(true)
+	member := authz.NewGrant(authz.ScopeProjectRead, h.project.ID.String())
+	raw, err := h.invokeWithGrants(t, describeAnalyticsCatalogToolName, h.projectArguments(), member)
+	require.NoError(t, err)
+	catalog, ok := raw.(DescribeAnalyticsCatalogOutput)
+	require.True(t, ok)
+	require.NotNil(t, catalog.SignalMetrics)
+	require.Equal(t, "signals", catalog.SignalMetrics.Dataset)
+	for _, dataset := range catalog.Datasets {
+		require.NotEqual(t, "risk_findings", dataset.Name)
+	}
+	for tool, arguments := range map[string]string{
+		runAnalyticsQueryToolName:            `{"project_id":"` + h.project.ID.String() + `","dataset":"risk_findings",` + analyticsTestWindow + `,"measures":[{"op":"count"}]}`,
+		listAnalyticsDimensionValuesToolName: `{"project_id":"` + h.project.ID.String() + `","dataset":"risk_findings","dimension":"category",` + analyticsTestWindow + `}`,
+	} {
+		_, err := h.invokeWithGrants(t, tool, arguments, member)
+		require.Equal(t, "forbidden", requireAnalyticsRefusal(t, err).Code, tool)
+	}
+	require.Zero(t, h.engine.calls, "signal entitlement must not authorize risk data reads")
 }
 
 func TestSignalDefinitionToolHasExactScopeAndUnavailableParity(t *testing.T) {

@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/analytics"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -39,6 +40,24 @@ func TestSignalAPIEntitlementAndProjectAccess(t *testing.T) {
 	_, err = ti.service.Describe(denied, &gen.DescribePayload{})
 	requireOopsCode(t, err, oops.CodeForbidden)
 	_, err = ti.service.Query(denied, &gen.QueryPayload{Dataset: "signals"})
+	requireOopsCode(t, err, oops.CodeForbidden)
+}
+
+func TestSignalAPIEntitlementPreservesRiskDatasetRestrictions(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	ti.service.signalFeatures = signalFeaturesStub(true)
+	ctx = authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeProjectRead, ti.projectID))
+	catalog, err := ti.service.Describe(ctx, &gen.DescribePayload{})
+	require.NoError(t, err)
+	require.NotNil(t, catalog.SignalMetrics)
+	require.Equal(t, []string{"risk_findings"}, catalog.RestrictedDatasets)
+	for _, dataset := range catalog.Datasets {
+		require.NotEqual(t, "risk_findings", dataset.Name)
+	}
+	_, err = ti.service.Query(ctx, &gen.QueryPayload{Dataset: "risk_findings"})
+	requireOopsCode(t, err, oops.CodeForbidden)
+	_, err = ti.service.DimensionValues(ctx, &gen.DimensionValuesPayload{Dataset: "risk_findings", Dimension: "category"})
 	requireOopsCode(t, err, oops.CodeForbidden)
 }
 
