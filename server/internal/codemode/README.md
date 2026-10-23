@@ -193,8 +193,10 @@ pods are never evicted. Each pod admits twelve concurrent executions (the
 runner's `GRAM_CODE_RUNNER_CAPACITY` default), or the smaller capacity its
 runner reports, so a pod from an older template is never sent more than it
 admits; a worker starts in about a
-millisecond, so pods are CPU-bound and should request about 1 CPU and 1 to 1.5
-GiB. Readiness polls start at 25 ms and back off to one second, so adopting a
+millisecond, so pods are CPU-bound. Each execution's two CPU-second budget
+keeps contention fair, so a pod can request 500m (bursting to 2 CPU) and 1 to
+1.5 GiB; cold starts are dominated by node scale-up, so packing more runners per
+node keeps them warm. Readiness polls start at 25 ms and back off to one second, so adopting a
 warm pod costs little more than the controller's bind. Claims expire after five
 minutes; pods still in use renew their claim two minutes before expiry, so an
 active organization keeps its warm pods. A pod refuses admission with less than
