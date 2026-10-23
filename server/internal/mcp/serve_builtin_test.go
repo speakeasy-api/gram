@@ -28,6 +28,8 @@ import (
 	envrepo "github.com/speakeasy-api/gram/server/internal/environments/repo"
 	keysrepo "github.com/speakeasy-api/gram/server/internal/keys/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/stretchr/testify/require"
 )
@@ -72,7 +74,13 @@ func serveBuiltinHTTP(t *testing.T, ti *testInstance, projectID uuid.UUID, token
 
 func serveBuiltinHTTPOn(t *testing.T, ctx context.Context, ti *testInstance, projectID uuid.UUID, token string, body []byte, headers map[string]string) (*httptest.ResponseRecorder, error) {
 	t.Helper()
-	request := httptest.NewRequest(http.MethodPost, "/mcp/builtin/"+projectID.String()+"/slack", bytes.NewReader(body))
+	project, err := projectsrepo.New(ti.conn).GetProjectByID(ctx, projectID)
+	if err != nil {
+		return httptest.NewRecorder(), err
+	}
+	org, err := orgrepo.New(ti.conn).GetOrganizationMetadata(ctx, project.OrganizationID)
+	require.NoError(t, err)
+	request := httptest.NewRequest(http.MethodPost, "/mcp/builtin/"+org.Slug+"/"+project.Slug+"/slack", bytes.NewReader(body))
 	request.Header.Set("Content-Type", "application/json")
 	if token != "" {
 		request.Header.Set("Authorization", "Bearer "+token)
@@ -81,7 +89,8 @@ func serveBuiltinHTTPOn(t *testing.T, ctx context.Context, ti *testInstance, pro
 		request.Header.Set(name, value)
 	}
 	route := chi.NewRouteContext()
-	route.URLParams.Add("projectID", projectID.String())
+	route.URLParams.Add("organizationSlug", org.Slug)
+	route.URLParams.Add("projectSlug", project.Slug)
 	route.URLParams.Add("builtinKey", "slack")
 	request = request.WithContext(context.WithValue(ctx, chi.RouteCtxKey, route))
 	response := httptest.NewRecorder()
@@ -189,7 +198,7 @@ func TestServeBuiltin_CustomDomainLockdown(t *testing.T) {
 	require.Contains(t, response.Body.String(), "Speakeasy Built-in MCP")
 	foreign := customdomains.WithContext(t.Context(), &customdomains.Context{OrganizationID: "org_other", Domain: "other.example.com", DomainID: uuid.New()})
 	_, err = serveBuiltinHTTPOn(t, foreign, ti, *ac.ProjectID, token, makeInitializeBody(), nil)
-	requireAgentGatewayCode(t, err, oops.CodeForbidden)
+	requireAgentGatewayCode(t, err, oops.CodeNotFound)
 }
 
 func TestServeBuiltin_RejectsInvalidEnvelope(t *testing.T) {

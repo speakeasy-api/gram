@@ -28,18 +28,21 @@ func (e *Engine) RequireBuiltinConnect(ctx context.Context, serverID, projectID 
 	}
 	// Both principal-credential and workload admission preserve the agent's
 	// live policy at index one, independently of credential and owner ceilings.
-	explicit := false
-	for _, grant := range authorization.policies[1] {
-		if grant.Scope == ScopeMCPConnect &&
-			grant.Selector[SelectorKeyResourceKind] == ResourceKindMCP &&
-			grant.Selector[SelectorKeyResourceID] == serverID &&
-			grant.Selector[SelectorKeyProjectID] == projectID {
-			explicit = true
-			break
-		}
-	}
+	explicit := BuiltinConnectExplicitlyGranted(authorization.policies[1], serverID, projectID)
 	if !explicit {
 		return oops.C(oops.CodeForbidden)
 	}
 	return e.evaluateRequired(ctx, authorization, append([]Check{MCPCheck(ScopeMCPConnect, serverID, projectID)}, checks...)...)
+}
+
+// BuiltinConnectExplicitlyGranted tests the required exact live-agent grant.
+// It does not evaluate blocks or credential/owner ceilings; callers must still
+// evaluate the complete policy intersection before granting access.
+func BuiltinConnectExplicitlyGranted(grants []Grant, serverID, projectID string) bool {
+	for _, grant := range grants {
+		if grant.Scope == ScopeMCPConnect && grant.Selector[SelectorKeyResourceKind] == ResourceKindMCP && grant.Selector[SelectorKeyResourceID] == serverID && grant.Selector[SelectorKeyProjectID] == projectID {
+			return true
+		}
+	}
+	return false
 }

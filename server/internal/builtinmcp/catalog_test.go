@@ -23,7 +23,7 @@ func TestCatalogStableProjectIdentity(t *testing.T) {
 	require.NotEqual(t, ID(project, Slack), ID(other, Slack))
 	base, err := url.Parse("https://mcp.example")
 	require.NoError(t, err)
-	require.Equal(t, "https://mcp.example/mcp/builtin/"+project.String()+"/slack", URL(base, project, Slack))
+	require.Equal(t, "https://mcp.example/mcp/builtin/example/project/slack", URL(base, "example", "project", Slack))
 }
 
 func TestCatalogExplicitSlackTools(t *testing.T) {

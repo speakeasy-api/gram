@@ -23,8 +23,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/orghost"
 	projectrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
+	issuerrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
 func TestSettingsStoreIntegration(t *testing.T) {
@@ -102,6 +104,43 @@ func TestSettingsStoreIntegration(t *testing.T) {
 	require.Equal(t, "2", reset.Version)
 	require.False(t, reset.Hidden)
 	require.Nil(t, reset.EnvironmentID)
+	issuers := issuerrepo.New(db)
+	issuer, err := issuers.CreateUserSessionIssuer(ctx, issuerrepo.CreateUserSessionIssuerParams{ProjectID: project, OrganizationID: pgtype.Text{}, Slug: "builtin-issuer", AuthnChallengeMode: "shared", SessionDuration: pgtype.Interval{Microseconds: int64(time.Hour / time.Microsecond), Valid: true}})
+	require.NoError(t, err)
+	sibling, err := issuers.CreateUserSessionIssuer(ctx, issuerrepo.CreateUserSessionIssuerParams{ProjectID: otherProject, OrganizationID: pgtype.Text{}, Slug: "sibling-issuer", AuthnChallengeMode: "shared", SessionDuration: pgtype.Interval{Microseconds: int64(time.Hour / time.Microsecond), Valid: true}})
+	require.NoError(t, err)
+	_, err = store.Update(admin, org, project, Slack, Update{ExpectedVersion: "2", UserSessionIssuerID: uuid.NullUUID{UUID: sibling.ID, Valid: true}})
+	require.Error(t, err, "sibling project issuers cannot be bound")
+	bound, err := store.Update(admin, org, project, Slack, Update{ExpectedVersion: "2", UserSessionIssuerID: uuid.NullUUID{UUID: issuer.ID, Valid: true}})
+	require.NoError(t, err)
+	require.True(t, bound.UserSessionIssuerBound)
+	require.Equal(t, issuer.ID.String(), *bound.UserSessionIssuerID)
+	preserved, err := store.Update(admin, org, project, Slack, Update{ExpectedVersion: bound.Version, Hidden: true})
+	require.NoError(t, err)
+	require.True(t, preserved.UserSessionIssuerBound)
+	require.Equal(t, bound.UserSessionIssuerID, preserved.UserSessionIssuerID)
+	_, err = repo.New(db).BindUserSessionIssuer(ctx, repo.BindUserSessionIssuerParams{ProjectID: uuid.NullUUID{UUID: project, Valid: true}, BuiltinKey: Slack, UserSessionIssuerID: uuid.NullUUID{UUID: sibling.ID, Valid: true}})
+	require.ErrorIs(t, err, pgx.ErrNoRows, "implicit binding must never replace a winner")
+	_, err = issuers.DeleteUserSessionIssuer(ctx, issuerrepo.DeleteUserSessionIssuerParams{ID: issuer.ID, ProjectID: project})
+	require.ErrorIs(t, err, pgx.ErrNoRows, "builtin binding blocks soft deletion")
+	err = testrepo.New(db).ForceHardDeleteUserSessionIssuerFixture(ctx, issuer.ID)
+	require.NoError(t, err)
+	deleted, err := store.Get(admin, org, project, Slack)
+	require.NoError(t, err)
+	require.Nil(t, deleted.UserSessionIssuerID)
+	require.True(t, deleted.UserSessionIssuerBound, "hard deletion must not reopen implicit selection")
+	_, err = store.Update(admin, org, project, Slack, Update{ExpectedVersion: deleted.Version, UserSessionIssuerID: uuid.NullUUID{UUID: issuer.ID, Valid: true}})
+	require.Error(t, err, "deleted issuer cannot be selected")
+	organizationIssuer, err := issuers.CreateOrganizationUserSessionIssuer(ctx, issuerrepo.CreateOrganizationUserSessionIssuerParams{OrganizationID: pgtype.Text{String: org, Valid: true}, Slug: "organization-issuer", AuthnChallengeMode: "shared", SessionDuration: pgtype.Interval{Microseconds: int64(time.Hour / time.Microsecond), Valid: true}})
+	require.NoError(t, err)
+	rebound, err := store.Update(admin, org, project, Slack, Update{ExpectedVersion: deleted.Version, UserSessionIssuerID: uuid.NullUUID{UUID: organizationIssuer.ID, Valid: true}})
+	require.NoError(t, err)
+	require.True(t, rebound.UserSessionIssuerBound)
+	references, err := issuers.ListOrganizationUserSessionIssuerMCPServers(ctx, issuerrepo.ListOrganizationUserSessionIssuerMCPServersParams{UserSessionIssuerID: organizationIssuer.ID, OrganizationID: org})
+	require.NoError(t, err)
+	require.Len(t, references, 1, "organization deletion preflight includes builtins")
+	_, err = issuers.DeleteOrganizationUserSessionIssuer(ctx, issuerrepo.DeleteOrganizationUserSessionIssuerParams{ID: organizationIssuer.ID, OrganizationID: org})
+	require.ErrorIs(t, err, pgx.ErrNoRows, "organization deletion must respect builtin references")
 	// Effective exclusions apply even to a canonical administrator, and a
 	// prepared allow grant must not mask a newly added live exclusion.
 	selector, err := authz.NewSelector(authz.ScopeOrgBlockedAdmin, org).MarshalJSON()

@@ -438,6 +438,7 @@ func (s *Service) placeRemoteSessionRecheck(ctx context.Context, logger *slog.Lo
 	// The runtime resolver re-applies visibility, network access and the issuer gate from the ref, as the callback does.
 	var publicAuthority networkingress.Authority
 	ref := EndpointRef{
+		BuiltinID:       uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		CustomDomainID:  placement.CustomDomainID,
 		Authority:       publicAuthority,
 		BaseURL:         "",

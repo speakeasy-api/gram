@@ -2618,14 +2618,16 @@ func DecodeSetOrganizationWhitelistResponse(decoder func(*http.Response) goahttp
 // *BuiltinMcpServerResponseBody.
 func unmarshalBuiltinMcpServerResponseBodyToProjectsBuiltinMcpServer(v *BuiltinMcpServerResponseBody) *projects.BuiltinMcpServer {
 	res := &projects.BuiltinMcpServer{
-		ID:            *v.ID,
-		Key:           *v.Key,
-		Name:          *v.Name,
-		Description:   *v.Description,
-		URL:           *v.URL,
-		Hidden:        *v.Hidden,
-		EnvironmentID: v.EnvironmentID,
-		Version:       *v.Version,
+		ID:                     *v.ID,
+		Key:                    *v.Key,
+		Name:                   *v.Name,
+		Description:            *v.Description,
+		URL:                    *v.URL,
+		Hidden:                 *v.Hidden,
+		EnvironmentID:          v.EnvironmentID,
+		UserSessionIssuerID:    v.UserSessionIssuerID,
+		UserSessionIssuerBound: *v.UserSessionIssuerBound,
+		Version:                *v.Version,
 	}
 	res.Tools = make([]*projects.BuiltinMcpTool, len(v.Tools))
 	for i, val := range v.Tools {

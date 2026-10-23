@@ -40,6 +40,8 @@ import {
 } from "@/components/ui/Sheet";
 import { Text } from "@/components/ui/Text";
 import { useOrganization, useProject } from "@/contexts/Auth";
+import { useProjectSlugForRequests } from "@/contexts/Sdk";
+import { useEffectiveUserSessionIssuers } from "@/hooks/useEffectiveUserSessionIssuers";
 import { useTabScrollReset } from "@/hooks/useTabScrollReset";
 import { useRoutes } from "@/routes";
 import type { BuiltinMcpServer } from "@gram/client/models/components/builtinmcpserver.js";
@@ -264,16 +266,18 @@ function BuiltinConnectSection({ server }: { server: BuiltinMcpServer }) {
       <SettingsSection.Header>
         <SettingsSection.Title>Direct connection</SettingsSection.Title>
         <SettingsSection.Description>
-          Point an agent at this project&rsquo;s endpoint for {server.name} and
-          authenticate with an agent key.
+          Point an agent at this project&rsquo;s endpoint for {server.name}.
         </SettingsSection.Description>
       </SettingsSection.Header>
       <SettingsSection.Panel>
         <SettingsSection.Body>
           {/* The address is in the rail and inside every snippet below; a
               third copy of it here was the same fact said three times. */}
+          <Text small muted as="p">
+            With an agent key, one of the credentials this endpoint accepts:
+          </Text>
           <SegmentedControl
-            ariaLabel="Snippet format"
+            ariaLabel="Agent key snippet format"
             value={active.id}
             onChange={setRecipe}
             options={CONNECT_RECIPES.map(({ id, label }) => ({
@@ -431,7 +435,8 @@ function BuiltinAuthenticationTab({ server }: { server: BuiltinMcpServer }) {
           Authentication
         </Page.Section.Title>
         <Page.Section.Description>
-          What Speakeasy uses to call {server.name} on your behalf.
+          Configure inbound OAuth separately from the credentials Speakeasy
+          sends to {server.name}.
         </Page.Section.Description>
       </Page.Section>
 
@@ -514,12 +519,145 @@ function BuiltinAuthenticationTab({ server }: { server: BuiltinMcpServer }) {
         </SettingsSection.Panel>
       </SettingsSection>
 
+      {server.key === "slack" && (
+        <BuiltinInboundOAuth
+          key={`${server.version}:${server.userSessionIssuerId ?? ""}`}
+          server={server}
+        />
+      )}
+
       <Text small muted as="p">
-        These credentials are what Speakeasy sends to {server.name}. They are
-        not what a client sends to reach this server: a connection made through
-        a gateway is authenticated by that gateway.
+        These credentials are what Speakeasy sends to {server.name}, not what a
+        client sends to reach this server. A direct connection is authenticated
+        at the endpoint itself; a connection made through a gateway is
+        authenticated by that gateway. Either way the caller is an agent or a
+        workload &mdash; people cannot connect to this server.
       </Text>
     </div>
+  );
+}
+
+function BuiltinInboundOAuth({ server }: { server: BuiltinMcpServer }) {
+  const projectSlug = useProjectSlugForRequests();
+  const { issuers, isLoading, isError } = useEffectiveUserSessionIssuers({
+    projectSlug,
+  });
+  const update = useUpdateBuiltinMcpServer();
+  const [selectedId, setSelectedId] = useState(
+    server.userSessionIssuerId ?? "",
+  );
+  const current = issuers.find(
+    (issuer) => issuer.id === server.userSessionIssuerId,
+  );
+  // The listing includes both tiers; automatic resolution prefers project issuers.
+  const projectIssuers = issuers.filter((issuer) => issuer.projectId !== "");
+  const automaticCandidates =
+    projectIssuers.length > 0 ? projectIssuers : issuers;
+  const automatic =
+    !server.userSessionIssuerBound && automaticCandidates.length === 1
+      ? automaticCandidates[0]
+      : undefined;
+  const active = server.userSessionIssuerBound ? current : automatic;
+  const unavailable = server.userSessionIssuerBound
+    ? "OAuth is unavailable because the bound authorization server is no longer eligible. Select a replacement."
+    : automaticCandidates.length > 1
+      ? "OAuth is unavailable because multiple authorization servers are eligible. Select one explicitly."
+      : "OAuth is unavailable because no authorization server is eligible for this project.";
+
+  return (
+    <SettingsSection>
+      <SettingsSection.Header>
+        <SettingsSection.Title>Inbound OAuth</SettingsSection.Title>
+        <SettingsSection.Description>
+          Choose the authorization server that authenticates OAuth clients
+          connecting directly to Slack. This does not change upstream Slack
+          tokens or gateway authentication.
+        </SettingsSection.Description>
+      </SettingsSection.Header>
+      <SettingsSection.Panel>
+        <SettingsSection.Body>
+          {isLoading ? (
+            <Text small>Loading authorization servers…</Text>
+          ) : isError ? (
+            <Alert variant="warning">
+              Could not load authorization servers. OAuth availability cannot be
+              determined.
+            </Alert>
+          ) : (
+            <>
+              <Text small as="p">
+                {active
+                  ? `${server.userSessionIssuerBound ? "Bound" : "Automatic"} authorization server: ${active.slug}`
+                  : unavailable}
+              </Text>
+              <Field>
+                <FieldLabel htmlFor="builtin-inbound-issuer">
+                  OAuth authorization server
+                </FieldLabel>
+                <Select
+                  value={selectedId || "unselected"}
+                  onValueChange={setSelectedId}
+                  disabled={update.isPending || issuers.length === 0}
+                >
+                  <SelectTrigger id="builtin-inbound-issuer">
+                    <SelectValue placeholder="Select an authorization server" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="unselected" disabled>
+                      Select an authorization server
+                    </SelectItem>
+                    {server.userSessionIssuerId && !current && (
+                      <SelectItem value={server.userSessionIssuerId} disabled>
+                        Current binding unavailable
+                      </SelectItem>
+                    )}
+                    {issuers.map((issuer) => (
+                      <SelectItem key={issuer.id} value={issuer.id}>
+                        {issuer.slug} (
+                        {issuer.projectId ? "Project" : "Organization"})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </Field>
+            </>
+          )}
+          <Text small muted as="p">
+            Agent and workload keys remain available independently of OAuth
+            configuration.
+          </Text>
+        </SettingsSection.Body>
+        <SettingsSection.Footer>
+          <SettingsSection.FooterHint>
+            Saving binds this server to the selected authorization server. An
+            automatic default is also persisted on its first successful
+            resolution, including OAuth metadata requests.
+          </SettingsSection.FooterHint>
+          <SettingsSection.FooterActions>
+            <FooterSaveButton
+              pending={update.isPending}
+              disabled={
+                update.isPending ||
+                isLoading ||
+                isError ||
+                !issuers.some((issuer) => issuer.id === selectedId) ||
+                (server.userSessionIssuerBound &&
+                  selectedId === server.userSessionIssuerId)
+              }
+              onClick={() =>
+                update.save({
+                  key: server.key,
+                  hidden: server.hidden,
+                  expectedVersion: server.version,
+                  environmentId: server.environmentId,
+                  userSessionIssuerId: selectedId,
+                })
+              }
+            />
+          </SettingsSection.FooterActions>
+        </SettingsSection.Footer>
+      </SettingsSection.Panel>
+    </SettingsSection>
   );
 }
 

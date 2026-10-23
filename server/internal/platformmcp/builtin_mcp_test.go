@@ -69,7 +69,7 @@ func TestBuiltinMCPConfigureRequiresConfirmedVersionAndExactProject(t *testing.T
 	principal := Principal{OrganizationID: "org_example", UserID: "user_example"}
 	project := uuid.NewString()
 	valid := ConfigureBuiltinMCPInput{ProjectID: project, Key: "slack", Hidden: true, ExpectedVersion: "0", Confirmed: true}
-	for _, name := range []string{"project", "key", "version", "confirmation", "environment"} {
+	for _, name := range []string{"project", "key", "version", "confirmation", "environment", "issuer"} {
 		input := valid
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
@@ -82,6 +82,9 @@ func TestBuiltinMCPConfigureRequiresConfirmedVersionAndExactProject(t *testing.T
 				input.ExpectedVersion = ""
 			case "confirmation":
 				input.Confirmed = false
+			case "issuer":
+				invalid := ""
+				input.UserSessionIssuerID = &invalid
 			case "environment":
 				invalid := ""
 				input.EnvironmentID = &invalid
@@ -102,11 +105,16 @@ func TestBuiltinMCPConfigureRequiresConfirmedVersionAndExactProject(t *testing.T
 	require.Equal(t, "0", core.update.ExpectedVersion)
 	require.True(t, core.update.Hidden)
 	require.False(t, core.update.EnvironmentID.Valid)
+	require.False(t, core.update.UserSessionIssuerID.Valid)
+	issuer := uuid.NewString()
+	valid.UserSessionIssuerID = &issuer
 	environment := uuid.NewString()
 	valid.EnvironmentID = &environment
 	_, err = configureBuiltinMCP(t.Context(), core, principal, valid)
 	require.NoError(t, err)
 	require.Equal(t, environment, core.update.EnvironmentID.UUID.String())
+	require.True(t, core.update.UserSessionIssuerID.Valid)
+	require.Equal(t, issuer, core.update.UserSessionIssuerID.UUID.String())
 }
 func TestBuiltinMCPToolsEnforceAdminBeforeCore(t *testing.T) {
 	t.Parallel()

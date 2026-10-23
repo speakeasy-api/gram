@@ -27,8 +27,8 @@ func ID(projectID uuid.UUID, key string) uuid.UUID {
 	return uuid.NewSHA1(namespace, []byte(projectID.String()+"/"+key))
 }
 
-func URL(base *url.URL, projectID uuid.UUID, key string) string {
-	return base.JoinPath("mcp", "builtin", projectID.String(), key).String()
+func URL(base *url.URL, organizationSlug, projectSlug, key string) string {
+	return base.JoinPath("mcp", "builtin", organizationSlug, projectSlug, key).String()
 }
 
 // The allowlist is deliberate: adding a global platform tool must not silently

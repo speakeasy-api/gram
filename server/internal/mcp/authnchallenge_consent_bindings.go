@@ -58,7 +58,7 @@ func (s *Service) serveConsentAgentConnections(w http.ResponseWriter, r *http.Re
 		if err != nil || id == uuid.Nil {
 			return oops.C(oops.CodeBadRequest)
 		}
-		selected = &AgentAuthorizationResult{AgentID: id, AuthorizerUserID: state.AuthorizerUserID, Target: AgentAuthorizationTarget{Scope: "", OrganizationID: "", ProjectID: uuid.Nil, UserSessionIssuerID: uuid.Nil, MCPResourceID: uuid.Nil}}
+		selected = &AgentAuthorizationResult{AgentID: id, AuthorizerUserID: state.AuthorizerUserID, Target: AgentAuthorizationTarget{Builtin: false, Scope: "", OrganizationID: "", ProjectID: uuid.Nil, UserSessionIssuerID: uuid.Nil, MCPResourceID: uuid.Nil}}
 	} else {
 		selected, err = s.authorizeConsentAgent(ctx, state, endpoint, r.PostForm.Get("agent_id"))
 		if err != nil {

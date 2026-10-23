@@ -583,6 +583,9 @@ func (s *Service) LoadResolvedMcpEndpointBySlug(ctx context.Context, logger *slo
 // loadResolvedMcpEndpointBySlug is LoadResolvedMcpEndpointBySlug with the
 // entry point its legacy fallback is attributed to.
 func (s *Service) loadResolvedMcpEndpointBySlug(ctx context.Context, logger *slog.Logger, slug string, mcpRouteBase mcproute.Base, fallbackEntryPoint mcpmetrics.LegacyFallbackEntryPoint) (*ResolvedMcpEndpoint, error) {
+	if mcpRouteBase == mcproute.Builtin {
+		return s.loadBuiltinOAuthEndpoint(ctx, slug)
+	}
 	if mcpRouteBase == mcproute.OrganizationGateway {
 		gateway, err := s.loadOrganizationGateway(ctx, slug)
 		if err != nil {

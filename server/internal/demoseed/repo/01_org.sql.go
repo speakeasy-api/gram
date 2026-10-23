@@ -88,6 +88,17 @@ func (q *Queries) OrgDeleteAssistantMCPServers(ctx context.Context, orgID string
 	return err
 }
 
+const orgDeleteBuiltinMCPSettings = `-- name: OrgDeleteBuiltinMCPSettings :exec
+DELETE FROM builtin_mcp_settings
+WHERE project_id IN (SELECT id FROM projects WHERE organization_id = $1::text)
+`
+
+// Clear settings before issuer/project deletion can detach their ownership.
+func (q *Queries) OrgDeleteBuiltinMCPSettings(ctx context.Context, orgID string) error {
+	_, err := q.db.Exec(ctx, orgDeleteBuiltinMCPSettings, orgID)
+	return err
+}
+
 const orgDeleteBusinessMemories = `-- name: OrgDeleteBusinessMemories :exec
 DELETE FROM business_memories WHERE organization_id = $1::text
 `

@@ -42,7 +42,7 @@ import { Result } from "../types/fp.js";
  * updateBuiltinMcpServer projects
  *
  * @remarks
- * Update visual visibility and the default environment of a built-in MCP server. Only live organization administrators may update settings; humans cannot connect to built-ins. Requires the current version.
+ * Update the user session issuer binding, visual visibility and the default environment of a built-in MCP server. Only live organization administrators may update settings; humans cannot connect to built-ins. Requires the current version.
  */
 export function projectsUpdateBuiltinMcpServer(
   client: GramCore,

@@ -179,6 +179,11 @@ DELETE FROM remote_protected_resources WHERE project_id = @project_id::uuid;
 -- name: OrgDeleteMetaMCPServers :exec
 DELETE FROM meta_mcp_servers WHERE organization_id = @org_id::text;
 
+-- name: OrgDeleteBuiltinMCPSettings :exec
+-- Clear settings before issuer/project deletion can detach their ownership.
+DELETE FROM builtin_mcp_settings
+WHERE project_id IN (SELECT id FROM projects WHERE organization_id = @org_id::text);
+
 -- name: OrgDeleteUserSessionIssuers :exec
 DELETE FROM user_session_issuers WHERE project_id = @project_id::uuid OR organization_id = @org_id::text;
 

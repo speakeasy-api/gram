@@ -17,7 +17,7 @@ func builtinMCPMethods() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name":"BuiltinMcpServers"}`)
 	})
 	Method("updateBuiltinMcpServer", func() {
-		Description("Update visual visibility and the default environment of a built-in MCP server. Only live organization administrators may update settings; humans cannot connect to built-ins. Requires the current version.")
+		Description("Update the user session issuer binding, visual visibility and the default environment of a built-in MCP server. Only live organization administrators may update settings; humans cannot connect to built-ins. Requires the current version.")
 		Security(security.Session, security.ProjectSlug)
 		Payload(func() {
 			security.ProjectPayload()
@@ -25,6 +25,7 @@ func builtinMCPMethods() {
 			Attribute("key", String, "Immutable built-in key")
 			Attribute("hidden", Boolean, "Hide from discovery only; runtime access and gateway membership do not change")
 			Attribute("environment_id", String, "Project environment override; omit to use the project's default environment", func() { Format(FormatUUID) })
+			Attribute("user_session_issuer_id", String, "Bind a live user session issuer from this organization and project; omission preserves the existing binding", func() { Format(FormatUUID) })
 			Attribute("expected_version", String, "Version returned by the latest read")
 			Required("key", "hidden", "expected_version")
 			Meta("openapi:typename", "UpdateBuiltinMcpServerForm")
@@ -54,8 +55,10 @@ var BuiltinMcpServer = Type("BuiltinMcpServer", func() {
 	Attribute("url", String)
 	Attribute("hidden", Boolean)
 	Attribute("environment_id", String, func() { Format(FormatUUID) })
+	Attribute("user_session_issuer_id", String, func() { Format(FormatUUID) })
+	Attribute("user_session_issuer_bound", Boolean, "Whether an issuer has been bound; remains true if that issuer is deleted")
 	Attribute("version", String)
 	Attribute("tools", ArrayOf(BuiltinMcpTool))
 	Attribute("credential_variables", ArrayOf(String))
-	Required("id", "key", "name", "description", "url", "hidden", "version", "tools", "credential_variables")
+	Required("id", "key", "name", "description", "url", "hidden", "user_session_issuer_bound", "version", "tools", "credential_variables")
 })

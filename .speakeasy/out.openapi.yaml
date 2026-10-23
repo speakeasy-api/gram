@@ -50365,7 +50365,7 @@ paths:
         name: UpdateProject
   /rpc/projects.updateBuiltinMcpServer:
     post:
-      description: Update visual visibility and the default environment of a built-in MCP server. Only live organization administrators may update settings; humans cannot connect to built-ins. Requires the current version.
+      description: Update the user session issuer binding, visual visibility and the default environment of a built-in MCP server. Only live organization administrators may update settings; humans cannot connect to built-ins. Requires the current version.
       operationId: updateBuiltinMcpServer
       parameters:
         - allowEmptyValue: true
@@ -86356,6 +86356,12 @@ components:
             $ref: '#/components/schemas/BuiltinMcpTool'
         url:
           type: string
+        user_session_issuer_bound:
+          type: boolean
+          description: Whether an issuer has been bound; remains true if that issuer is deleted
+        user_session_issuer_id:
+          type: string
+          format: uuid
         version:
           type: string
       required:
@@ -86365,6 +86371,7 @@ components:
         - description
         - url
         - hidden
+        - user_session_issuer_bound
         - version
         - tools
         - credential_variables
@@ -101579,6 +101586,10 @@ components:
     OrganizationUserSessionIssuerMigratePreflight:
       type: object
       properties:
+        builtin_binding_count:
+          type: integer
+          description: Number of live built-in MCP bindings to the source issuer. Rebind these explicitly before migrating; a nonzero count blocks migration.
+          format: int64
         can_migrate:
           type: boolean
           description: True when no hard blocker is present.
@@ -101636,6 +101647,7 @@ components:
         - conflicting_client_ids
         - principal_binding_conflict_count
         - ema_binding_conflict_count
+        - builtin_binding_count
         - platform_owned
         - warnings
         - warnings_fingerprint
@@ -114521,6 +114533,10 @@ components:
         key:
           type: string
           description: Immutable built-in key
+        user_session_issuer_id:
+          type: string
+          description: Bind a live user session issuer from this organization and project; omission preserves the existing binding
+          format: uuid
       required:
         - key
         - hidden
@@ -116863,6 +116879,7 @@ components:
             - mcp_server
             - toolset
             - meta_mcp_server
+            - builtin_mcp_server
         name:
           type: string
           description: The display name.
@@ -116876,7 +116893,7 @@ components:
         slug:
           type: string
           description: The MCP server or toolset slug. Absent for meta MCP servers and MCP servers without one.
-      description: A live MCP server, toolset, or meta MCP server attached to a user_session_issuer.
+      description: A live MCP server, toolset, meta MCP server, or built-in MCP server attached to a user_session_issuer.
       required:
         - kind
         - id

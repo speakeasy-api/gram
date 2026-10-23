@@ -397,6 +397,12 @@ func (g *metaGateContext) memberTokens(ctx context.Context, member metaMember) (
 // rest would show a person connections, and the services behind them, for
 // servers their access does not include.
 func (s *Service) listEndpointClients(ctx context.Context, endpoint *ResolvedMcpEndpoint, challengeState AuthnChallengeState) ([]remotesessions.Client, error) {
+	// Built-in executors resolve their declared project environment credentials;
+	// issuer-linked remote clients are unrelated to this code-owned backend.
+	if endpoint.IsBuiltin() {
+		return nil, nil
+	}
+
 	if endpoint.IsOrganizationGateway() {
 		clients, err := s.remoteChallengeMgr.ListOrganizationClients(ctx, endpoint.OrganizationID, endpoint.UserSessionIssuerID)
 		if err != nil {

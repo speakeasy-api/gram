@@ -69,6 +69,14 @@ func (s *seeder) seedServers(ctx context.Context) error {
 		return fmt.Errorf("insert demo user session issuers: %w", err)
 	}
 
+	if err := s.q.ServersInsertBuiltinSlackSettings(ctx, repo.ServersInsertBuiltinSlackSettingsParams{
+		ID:        s.det("builtin-slack-settings"),
+		ProjectID: proj,
+		IssuerID:  s.det("issuer-slack"),
+	}); err != nil {
+		return fmt.Errorf("insert demo built-in slack settings: %w", err)
+	}
+
 	if err := s.q.ServersInsertMCPServers(ctx, repo.ServersInsertMCPServersParams{
 		SupportID:         s.det("mcpserver-support"),
 		ProjectID:         proj,

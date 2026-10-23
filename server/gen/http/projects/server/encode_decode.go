@@ -2450,14 +2450,16 @@ func EncodeSetOrganizationWhitelistError(encoder func(context.Context, http.Resp
 // *projects.BuiltinMcpServer.
 func marshalProjectsBuiltinMcpServerToBuiltinMcpServerResponseBody(v *projects.BuiltinMcpServer) *BuiltinMcpServerResponseBody {
 	res := &BuiltinMcpServerResponseBody{
-		ID:            v.ID,
-		Key:           v.Key,
-		Name:          v.Name,
-		Description:   v.Description,
-		URL:           v.URL,
-		Hidden:        v.Hidden,
-		EnvironmentID: v.EnvironmentID,
-		Version:       v.Version,
+		ID:                     v.ID,
+		Key:                    v.Key,
+		Name:                   v.Name,
+		Description:            v.Description,
+		URL:                    v.URL,
+		Hidden:                 v.Hidden,
+		EnvironmentID:          v.EnvironmentID,
+		UserSessionIssuerID:    v.UserSessionIssuerID,
+		UserSessionIssuerBound: v.UserSessionIssuerBound,
+		Version:                v.Version,
 	}
 	if v.Tools != nil {
 		res.Tools = make([]*BuiltinMcpToolResponseBody, len(v.Tools))

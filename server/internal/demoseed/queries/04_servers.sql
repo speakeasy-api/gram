@@ -38,6 +38,12 @@ INSERT INTO user_session_issuers (id, project_id, organization_id, slug,
   (@gateway_id::uuid, @project_id::uuid, @org_id::text, 'acme-agent-gateway',
    'interactive', make_interval(secs => 14 * 24 * 60 * 60), 'endpoint');
 
+-- name: ServersInsertBuiltinSlackSettings :exec
+-- Built-ins are code-owned: this preference needs no server or toolset row.
+INSERT INTO builtin_mcp_settings
+  (id, project_id, builtin_key, user_session_issuer_id, user_session_issuer_bound)
+VALUES (@id::uuid, @project_id::uuid, 'slack', @issuer_id::uuid, true);
+
 -- name: ServersInsertMCPServers :exec
 INSERT INTO mcp_servers (id, project_id, name, slug, toolset_id,
                          remote_mcp_server_id, user_session_issuer_id,

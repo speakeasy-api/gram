@@ -29,6 +29,7 @@ import { ConsolidateIssuerDialog } from "./ConsolidateIssuerDialog";
 import {
   authorizationServerModeLabel,
   consolidationTargets,
+  linkedMcpServerKindLabel,
   settingValue,
   unavailableReason,
 } from "./issuerDisplay";
@@ -240,7 +241,7 @@ function McpServersSection({
               </td>
               <td className="px-3 py-3">
                 <Text small muted>
-                  {server.kind === "meta_mcp_server" ? "Gateway" : "MCP server"}
+                  {linkedMcpServerKindLabel(server.kind)}
                 </Text>
               </td>
             </DotRow>

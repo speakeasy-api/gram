@@ -5,16 +5,15 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/speakeasy-api/gram/server/gen/types"
+	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"net/http"
+	"strings"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
-	"goa.design/goa/v3/security"
 
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/builtinmcp"
-	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcp/httpheaders"
@@ -23,69 +22,43 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
-	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
-	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-const BuiltinRoute = "/mcp/builtin/{projectID}/{builtinKey}"
+const BuiltinRoute = "/mcp/builtin/{organizationSlug}/{projectSlug}/{builtinKey}"
 
-// ServeBuiltin serves a code-owned server without provisioning a database row.
-// Authentication is header-only. No interactive login or assistant-token
-// fallback is offered, and authenticated humans are always denied.
+// ServeBuiltin dispatches a code-owned backend after shared ingress admission.
 func (s *Service) ServeBuiltin(w http.ResponseWriter, r *http.Request) error {
-	projectID, err := uuid.Parse(chi.URLParam(r, "projectID"))
-	key := chi.URLParam(r, "builtinKey")
-	definition, exists := builtinmcp.Lookup(key)
-	if err != nil || projectID == uuid.Nil || !exists {
-		return oops.C(oops.CodeNotFound)
+	endpoint, err := s.loadBuiltinEndpoint(r.Context(), builtinRequestSlug(r))
+	if err != nil {
+		return err
 	}
+	projectID := endpoint.ProjectID
+	parts := strings.Split(endpoint.Slug, "/")
+	key, projectSlug := parts[2], parts[1]
+	definition, _ := builtinmcp.Lookup(key)
 	prepared, handled, err := s.prepareTerminatedMCPRequest(w, r, s.logger, platformToolsetMaxBodyBytes, mcpversions.SupportedPlatformToolset(), mcpmetrics.SurfacePlatform)
 	if err != nil || handled {
 		return err
 	}
-	token := httpheaders.AuthorizationBearerToken(r)
-	if token == "" {
-		return oops.C(oops.CodeUnauthorized)
-	}
-	ctx, err := s.auth.AuthorizeWithPostAuthenticationCheck(r.Context(), token, &security.APIKeyScheme{Name: constants.KeySecurityScheme, Scopes: nil, RequiredScopes: []string{"consumer"}}, func(ctx context.Context) error {
-		actor, ok := contextvalues.AuthenticatedActor(ctx)
-		mode, hasMode := contextvalues.APIKeyAuthorization(ctx)
-		if !ok || actor.Type != urn.PrincipalTypeAgent || !hasMode || mode != contextvalues.APIKeyAuthorizationModePrincipal {
-			return oops.C(oops.CodeForbidden)
-		}
-		return nil
-	})
+	ctx, _, policy, err := s.authenticateIssuerGate(r.Context(), w, httpheaders.AuthorizationBearerToken(r), s.BaseURLForRequest(r), endpoint)
 	if err != nil {
 		return fmt.Errorf("serve built-in MCP: %w", err)
+	}
+	ctx = withMandatoryAdmission(ctx)
+	id := endpoint.BuiltinID.UUID
+	if err := s.authz.RequireBuiltinConnect(ctx, id.String(), projectID.String()); err != nil {
+		return fmt.Errorf("authorize built-in MCP connection: %w", err)
 	}
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil {
 		return oops.C(oops.CodeUnauthorized)
 	}
-	project, err := projectsrepo.New(s.db).GetProjectByIDAndOrganizationID(ctx, projectsrepo.GetProjectByIDAndOrganizationIDParams{ID: projectID, OrganizationID: authCtx.ActiveOrganizationID})
-	if errors.Is(err, pgx.ErrNoRows) {
-		return oops.C(oops.CodeNotFound)
-	}
-	if err != nil {
-		return fmt.Errorf("serve built-in MCP: %w", err)
-	}
-	if err := s.enforceAgentGatewayCustomDomainLockdown(ctx, s.logger, project.OrganizationID); err != nil {
-		return fmt.Errorf("serve built-in MCP: %w", err)
-	}
-	ctx, err = s.authz.PrepareContext(ctx)
-	if err != nil {
-		return fmt.Errorf("serve built-in MCP: %w", err)
-	}
-	id := builtinmcp.ID(projectID, key)
-	if err := s.authz.RequireBuiltinConnect(ctx, id.String(), projectID.String()); err != nil {
-		return fmt.Errorf("serve built-in MCP: %w", err)
-	}
 	bound := *authCtx
 	bound.ProjectID = &projectID
-	bound.ProjectSlug = &project.Slug
+	bound.ProjectSlug = &projectSlug
 	ctx = contextvalues.SetAuthContext(ctx, &bound)
-	metering.AttributeMCPBandwidth(ctx, project.OrganizationID, projectID)
+	metering.AttributeMCPBandwidth(ctx, endpoint.OrganizationID, projectID)
 	metering.AttributeMCPBandwidthServer(ctx, metering.MCPServerTypePlatformToolset, id.String(), "builtin-"+key)
 	if prepared.empty() {
 		return nil
@@ -98,6 +71,19 @@ func (s *Service) ServeBuiltin(w http.ResponseWriter, r *http.Request) error {
 	tools, err := s.builtinToolset(ctx, definition, projectID)
 	if err != nil {
 		return fmt.Errorf("serve built-in MCP: %w", err)
+	}
+	if policy != nil {
+		if policy.Resource != "builtin_mcp:"+id.String() || policy.Catalog != nil || policy.Gateway != nil {
+			return oops.C(oops.CodeForbidden)
+		}
+		selected := tools.Tools[:0]
+		for _, tool := range tools.Tools {
+			model := tool.Executor.Descriptor().ToTool(projectID)
+			if len(toolfilter.FilterToolsBySelection([]*types.Tool{model}, policy.Selection)) != 0 {
+				selected = append(selected, tool)
+			}
+		}
+		tools.Tools = selected
 	}
 	s.metrics.RecordMCPRequest(ctx, version.Declared, req.Method, mcpmetrics.SurfacePlatform)
 	var body json.RawMessage

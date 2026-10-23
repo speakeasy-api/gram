@@ -47,10 +47,13 @@ func BuildUpdateBuiltinMcpServerPayload(projectsUpdateBuiltinMcpServerBody strin
 	{
 		err = json.Unmarshal([]byte(projectsUpdateBuiltinMcpServerBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"environment_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"expected_version\": \"abc123\",\n      \"hidden\": false,\n      \"key\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"environment_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"expected_version\": \"abc123\",\n      \"hidden\": false,\n      \"key\": \"abc123\",\n      \"user_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
 		}
 		if body.EnvironmentID != nil {
 			err = goa.MergeErrors(err, goa.ValidateFormat("body.environment_id", *body.EnvironmentID, goa.FormatUUID))
+		}
+		if body.UserSessionIssuerID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.user_session_issuer_id", *body.UserSessionIssuerID, goa.FormatUUID))
 		}
 		if err != nil {
 			return nil, err
@@ -69,10 +72,11 @@ func BuildUpdateBuiltinMcpServerPayload(projectsUpdateBuiltinMcpServerBody strin
 		}
 	}
 	v := &projects.UpdateBuiltinMcpServerPayload{
-		Key:             body.Key,
-		Hidden:          body.Hidden,
-		EnvironmentID:   body.EnvironmentID,
-		ExpectedVersion: body.ExpectedVersion,
+		Key:                 body.Key,
+		Hidden:              body.Hidden,
+		EnvironmentID:       body.EnvironmentID,
+		UserSessionIssuerID: body.UserSessionIssuerID,
+		ExpectedVersion:     body.ExpectedVersion,
 	}
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput

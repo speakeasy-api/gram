@@ -152,3 +152,15 @@ export function changesIssuerUrl(
 ): boolean {
   return warnings.some((warning) => warning.field === "issuer_url");
 }
+
+/** Linked resource kinds have different destinations; labels must not imply otherwise. */
+export function linkedMcpServerKindLabel(kind: string): string {
+  switch (kind) {
+    case "builtin_mcp_server":
+      return "Built-in MCP server";
+    case "meta_mcp_server":
+      return "Gateway";
+    default:
+      return "MCP server";
+  }
+}

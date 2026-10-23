@@ -1156,6 +1156,11 @@ type BuiltinMcpSetting struct {
 	// @access: confidential
 	EnvironmentID uuid.NullUUID
 	// @access: confidential
+	UserSessionIssuerID uuid.NullUUID
+	// Records an explicit issuer binding even after issuer deletion, preventing implicit fallback.
+	// @access: confidential
+	UserSessionIssuerBound bool
+	// @access: confidential
 	Version int64
 	// @access: confidential
 	UpdatedAt pgtype.Timestamptz

@@ -47,7 +47,15 @@ func (s *Service) UpdateBuiltinMcpServer(ctx context.Context, payload *gen.Updat
 		}
 		environmentID = uuid.NullUUID{UUID: id, Valid: true}
 	}
-	row, err := builtinmcp.NewStore(s.db, s.audit, s.builtinHosts).Update(ctx, ac.ActiveOrganizationID, *ac.ProjectID, payload.Key, builtinmcp.Update{Hidden: payload.Hidden, EnvironmentID: environmentID, ExpectedVersion: payload.ExpectedVersion})
+	issuerID := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+	if payload.UserSessionIssuerID != nil {
+		id, err := uuid.Parse(*payload.UserSessionIssuerID)
+		if err != nil || id == uuid.Nil {
+			return nil, oops.E(oops.CodeInvalid, nil, "invalid user session issuer ID")
+		}
+		issuerID = uuid.NullUUID{UUID: id, Valid: true}
+	}
+	row, err := builtinmcp.NewStore(s.db, s.audit, s.builtinHosts).Update(ctx, ac.ActiveOrganizationID, *ac.ProjectID, payload.Key, builtinmcp.Update{UserSessionIssuerID: issuerID, Hidden: payload.Hidden, EnvironmentID: environmentID, ExpectedVersion: payload.ExpectedVersion})
 	if err != nil {
 		return nil, fmt.Errorf("manage built-in MCP: %w", err)
 	}
@@ -59,5 +67,5 @@ func toBuiltinServer(row builtinmcp.Server) *gen.BuiltinMcpServer {
 	for _, tool := range row.Tools {
 		tools = append(tools, &gen.BuiltinMcpTool{Name: tool.Name, Description: tool.Description, InputSchema: tool.InputSchema})
 	}
-	return &gen.BuiltinMcpServer{ID: row.ID, Key: row.Key, Name: row.Name, Description: row.Description, URL: row.URL, Hidden: row.Hidden, EnvironmentID: row.EnvironmentID, Version: row.Version, Tools: tools, CredentialVariables: row.CredentialVariables}
+	return &gen.BuiltinMcpServer{UserSessionIssuerID: row.UserSessionIssuerID, UserSessionIssuerBound: row.UserSessionIssuerBound, ID: row.ID, Key: row.Key, Name: row.Name, Description: row.Description, URL: row.URL, Hidden: row.Hidden, EnvironmentID: row.EnvironmentID, Version: row.Version, Tools: tools, CredentialVariables: row.CredentialVariables}
 }

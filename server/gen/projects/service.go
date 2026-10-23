@@ -21,9 +21,10 @@ type Service interface {
 	// organization administrators may discover built-ins. Hidden servers are
 	// included for settings management; hiding never changes runtime authorization.
 	ListBuiltinMcpServers(context.Context, *ListBuiltinMcpServersPayload) (res *ListBuiltinMcpServersResult, err error)
-	// Update visual visibility and the default environment of a built-in MCP
-	// server. Only live organization administrators may update settings; humans
-	// cannot connect to built-ins. Requires the current version.
+	// Update the user session issuer binding, visual visibility and the default
+	// environment of a built-in MCP server. Only live organization administrators
+	// may update settings; humans cannot connect to built-ins. Requires the
+	// current version.
 	UpdateBuiltinMcpServer(context.Context, *UpdateBuiltinMcpServerPayload) (res *BuiltinMcpServer, err error)
 	// Get project details by slug.
 	GetProject(context.Context, *GetProjectPayload) (res *GetProjectResult, err error)
@@ -92,9 +93,12 @@ type BuiltinMcpServer struct {
 	URL                 string
 	Hidden              bool
 	EnvironmentID       *string
-	Version             string
-	Tools               []*BuiltinMcpTool
-	CredentialVariables []string
+	UserSessionIssuerID *string
+	// Whether an issuer has been bound; remains true if that issuer is deleted
+	UserSessionIssuerBound bool
+	Version                string
+	Tools                  []*BuiltinMcpTool
+	CredentialVariables    []string
 }
 
 type BuiltinMcpTool struct {
@@ -254,6 +258,9 @@ type UpdateBuiltinMcpServerPayload struct {
 	Hidden bool
 	// Project environment override; omit to use the project's default environment
 	EnvironmentID *string
+	// Bind a live user session issuer from this organization and project; omission
+	// preserves the existing binding
+	UserSessionIssuerID *string
 	// Version returned by the latest read
 	ExpectedVersion string
 }

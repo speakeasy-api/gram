@@ -21,7 +21,7 @@ func TestPlatformUsageAttribution(t *testing.T) {
 		RequestBytes:       42,
 		OutputBytes:        84,
 		ResponseStatusCode: 200,
-		MCPURL:             conv.PtrEmpty("https://mcp.example/mcp/builtin/project/slack"),
+		MCPURL:             conv.PtrEmpty("https://mcp.example/mcp/builtin/organization/project/slack"),
 	}
 	for _, tc := range []struct {
 		name      string

@@ -23859,7 +23859,7 @@ func projectsUsage() {
 	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] projects COMMAND [flags]\n\n", os.Args[0])
 	fmt.Fprintln(os.Stderr, "COMMAND:")
 	fmt.Fprintln(os.Stderr, `    list-builtin-mcp-servers: List code-owned MCP servers and their project preferences. Only live organization administrators may discover built-ins. Hidden servers are included for settings management; hiding never changes runtime authorization.`)
-	fmt.Fprintln(os.Stderr, `    update-builtin-mcp-server: Update visual visibility and the default environment of a built-in MCP server. Only live organization administrators may update settings; humans cannot connect to built-ins. Requires the current version.`)
+	fmt.Fprintln(os.Stderr, `    update-builtin-mcp-server: Update the user session issuer binding, visual visibility and the default environment of a built-in MCP server. Only live organization administrators may update settings; humans cannot connect to built-ins. Requires the current version.`)
 	fmt.Fprintln(os.Stderr, `    get-project: Get project details by slug.`)
 	fmt.Fprintln(os.Stderr, `    create-project: Create a new project.`)
 	fmt.Fprintln(os.Stderr, `    update-project: Update the display name of the current project.`)
@@ -23903,7 +23903,7 @@ func projectsUpdateBuiltinMcpServerUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Update visual visibility and the default environment of a built-in MCP server. Only live organization administrators may update settings; humans cannot connect to built-ins. Requires the current version.`)
+	fmt.Fprintln(os.Stderr, `Update the user session issuer binding, visual visibility and the default environment of a built-in MCP server. Only live organization administrators may update settings; humans cannot connect to built-ins. Requires the current version.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
@@ -23912,7 +23912,7 @@ func projectsUpdateBuiltinMcpServerUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "projects update-builtin-mcp-server --body '{\n      \"environment_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"expected_version\": \"abc123\",\n      \"hidden\": false,\n      \"key\": \"abc123\"\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "projects update-builtin-mcp-server --body '{\n      \"environment_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"expected_version\": \"abc123\",\n      \"hidden\": false,\n      \"key\": \"abc123\",\n      \"user_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func projectsGetProjectUsage() {

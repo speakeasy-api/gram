@@ -150,6 +150,24 @@ func (q *Queries) ServersInsertAttachmentSession(ctx context.Context, arg Server
 	return err
 }
 
+const serversInsertBuiltinSlackSettings = `-- name: ServersInsertBuiltinSlackSettings :exec
+INSERT INTO builtin_mcp_settings
+  (id, project_id, builtin_key, user_session_issuer_id, user_session_issuer_bound)
+VALUES ($1::uuid, $2::uuid, 'slack', $3::uuid, true)
+`
+
+type ServersInsertBuiltinSlackSettingsParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+	IssuerID  uuid.UUID
+}
+
+// Built-ins are code-owned: this preference needs no server or toolset row.
+func (q *Queries) ServersInsertBuiltinSlackSettings(ctx context.Context, arg ServersInsertBuiltinSlackSettingsParams) error {
+	_, err := q.db.Exec(ctx, serversInsertBuiltinSlackSettings, arg.ID, arg.ProjectID, arg.IssuerID)
+	return err
+}
+
 const serversInsertEMABindings = `-- name: ServersInsertEMABindings :exec
 INSERT INTO remote_session_ema_bindings
   (id, project_id, organization_id, user_session_issuer_id,

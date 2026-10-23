@@ -25,12 +25,13 @@ type GetBuiltinMCPInput struct {
 	Key       string `json:"key" jsonschema:"immutable built-in catalog key, for example slack"`
 }
 type ConfigureBuiltinMCPInput struct {
-	ProjectID       string  `json:"project_id"`
-	Key             string  `json:"key"`
-	Hidden          bool    `json:"hidden" jsonschema:"visual discovery preference only; not an authorization or runtime control"`
-	EnvironmentID   *string `json:"environment_id,omitempty" jsonschema:"project environment UUID; omit to clear the override and use the project default"`
-	ExpectedVersion string  `json:"expected_version" jsonschema:"exact version from a fresh get_builtin_mcp result"`
-	Confirmed       bool    `json:"confirmed" jsonschema:"true only after explicit user confirmation of these exact settings"`
+	UserSessionIssuerID *string `json:"user_session_issuer_id,omitempty" jsonschema:"live issuer UUID in this organization and project; omission preserves the existing binding"`
+	ProjectID           string  `json:"project_id"`
+	Key                 string  `json:"key"`
+	Hidden              bool    `json:"hidden" jsonschema:"visual discovery preference only; not an authorization or runtime control"`
+	EnvironmentID       *string `json:"environment_id,omitempty" jsonschema:"project environment UUID; omit to clear the override and use the project default"`
+	ExpectedVersion     string  `json:"expected_version" jsonschema:"exact version from a fresh get_builtin_mcp result"`
+	Confirmed           bool    `json:"confirmed" jsonschema:"true only after explicit user confirmation of these exact settings"`
 }
 type ListBuiltinMCPsOutput struct {
 	Servers []builtinmcp.Server `json:"servers"`
@@ -73,7 +74,15 @@ func configureBuiltinMCP(ctx context.Context, core BuiltinMCPManagement, princip
 		}
 		environment = uuid.NullUUID{UUID: id, Valid: true}
 	}
-	result, err := core.Update(ctx, principal.OrganizationID, project, input.Key, builtinmcp.Update{Hidden: input.Hidden, EnvironmentID: environment, ExpectedVersion: input.ExpectedVersion})
+	issuerID := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+	if input.UserSessionIssuerID != nil {
+		id, err := uuid.Parse(*input.UserSessionIssuerID)
+		if err != nil || id == uuid.Nil {
+			return builtinmcp.Server{}, errBuiltinMCPInvalid
+		}
+		issuerID = uuid.NullUUID{UUID: id, Valid: true}
+	}
+	result, err := core.Update(ctx, principal.OrganizationID, project, input.Key, builtinmcp.Update{UserSessionIssuerID: issuerID, Hidden: input.Hidden, EnvironmentID: environment, ExpectedVersion: input.ExpectedVersion})
 	if err != nil {
 		return builtinmcp.Server{}, fmt.Errorf("configure built-in MCP: %w", err)
 	}

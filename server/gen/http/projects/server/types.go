@@ -24,6 +24,9 @@ type UpdateBuiltinMcpServerRequestBody struct {
 	Hidden *bool `form:"hidden,omitempty" json:"hidden,omitempty" xml:"hidden,omitempty"`
 	// Project environment override; omit to use the project's default environment
 	EnvironmentID *string `form:"environment_id,omitempty" json:"environment_id,omitempty" xml:"environment_id,omitempty"`
+	// Bind a live user session issuer from this organization and project; omission
+	// preserves the existing binding
+	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
 	// Version returned by the latest read
 	ExpectedVersion *string `form:"expected_version,omitempty" json:"expected_version,omitempty" xml:"expected_version,omitempty"`
 }
@@ -77,16 +80,19 @@ type ListBuiltinMcpServersResponseBody struct {
 // UpdateBuiltinMcpServerResponseBody is the type of the "projects" service
 // "updateBuiltinMcpServer" endpoint HTTP response body.
 type UpdateBuiltinMcpServerResponseBody struct {
-	ID                  string                        `form:"id" json:"id" xml:"id"`
-	Key                 string                        `form:"key" json:"key" xml:"key"`
-	Name                string                        `form:"name" json:"name" xml:"name"`
-	Description         string                        `form:"description" json:"description" xml:"description"`
-	URL                 string                        `form:"url" json:"url" xml:"url"`
-	Hidden              bool                          `form:"hidden" json:"hidden" xml:"hidden"`
-	EnvironmentID       *string                       `form:"environment_id,omitempty" json:"environment_id,omitempty" xml:"environment_id,omitempty"`
-	Version             string                        `form:"version" json:"version" xml:"version"`
-	Tools               []*BuiltinMcpToolResponseBody `form:"tools" json:"tools" xml:"tools"`
-	CredentialVariables []string                      `form:"credential_variables" json:"credential_variables" xml:"credential_variables"`
+	ID                  string  `form:"id" json:"id" xml:"id"`
+	Key                 string  `form:"key" json:"key" xml:"key"`
+	Name                string  `form:"name" json:"name" xml:"name"`
+	Description         string  `form:"description" json:"description" xml:"description"`
+	URL                 string  `form:"url" json:"url" xml:"url"`
+	Hidden              bool    `form:"hidden" json:"hidden" xml:"hidden"`
+	EnvironmentID       *string `form:"environment_id,omitempty" json:"environment_id,omitempty" xml:"environment_id,omitempty"`
+	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
+	// Whether an issuer has been bound; remains true if that issuer is deleted
+	UserSessionIssuerBound bool                          `form:"user_session_issuer_bound" json:"user_session_issuer_bound" xml:"user_session_issuer_bound"`
+	Version                string                        `form:"version" json:"version" xml:"version"`
+	Tools                  []*BuiltinMcpToolResponseBody `form:"tools" json:"tools" xml:"tools"`
+	CredentialVariables    []string                      `form:"credential_variables" json:"credential_variables" xml:"credential_variables"`
 }
 
 // GetProjectResponseBody is the type of the "projects" service "getProject"
@@ -2175,16 +2181,19 @@ type SetOrganizationWhitelistGatewayErrorResponseBody struct {
 
 // BuiltinMcpServerResponseBody is used to define fields on response body types.
 type BuiltinMcpServerResponseBody struct {
-	ID                  string                        `form:"id" json:"id" xml:"id"`
-	Key                 string                        `form:"key" json:"key" xml:"key"`
-	Name                string                        `form:"name" json:"name" xml:"name"`
-	Description         string                        `form:"description" json:"description" xml:"description"`
-	URL                 string                        `form:"url" json:"url" xml:"url"`
-	Hidden              bool                          `form:"hidden" json:"hidden" xml:"hidden"`
-	EnvironmentID       *string                       `form:"environment_id,omitempty" json:"environment_id,omitempty" xml:"environment_id,omitempty"`
-	Version             string                        `form:"version" json:"version" xml:"version"`
-	Tools               []*BuiltinMcpToolResponseBody `form:"tools" json:"tools" xml:"tools"`
-	CredentialVariables []string                      `form:"credential_variables" json:"credential_variables" xml:"credential_variables"`
+	ID                  string  `form:"id" json:"id" xml:"id"`
+	Key                 string  `form:"key" json:"key" xml:"key"`
+	Name                string  `form:"name" json:"name" xml:"name"`
+	Description         string  `form:"description" json:"description" xml:"description"`
+	URL                 string  `form:"url" json:"url" xml:"url"`
+	Hidden              bool    `form:"hidden" json:"hidden" xml:"hidden"`
+	EnvironmentID       *string `form:"environment_id,omitempty" json:"environment_id,omitempty" xml:"environment_id,omitempty"`
+	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
+	// Whether an issuer has been bound; remains true if that issuer is deleted
+	UserSessionIssuerBound bool                          `form:"user_session_issuer_bound" json:"user_session_issuer_bound" xml:"user_session_issuer_bound"`
+	Version                string                        `form:"version" json:"version" xml:"version"`
+	Tools                  []*BuiltinMcpToolResponseBody `form:"tools" json:"tools" xml:"tools"`
+	CredentialVariables    []string                      `form:"credential_variables" json:"credential_variables" xml:"credential_variables"`
 }
 
 // BuiltinMcpToolResponseBody is used to define fields on response body types.
@@ -2261,14 +2270,16 @@ func NewListBuiltinMcpServersResponseBody(res *projects.ListBuiltinMcpServersRes
 // result of the "updateBuiltinMcpServer" endpoint of the "projects" service.
 func NewUpdateBuiltinMcpServerResponseBody(res *projects.BuiltinMcpServer) *UpdateBuiltinMcpServerResponseBody {
 	body := &UpdateBuiltinMcpServerResponseBody{
-		ID:            res.ID,
-		Key:           res.Key,
-		Name:          res.Name,
-		Description:   res.Description,
-		URL:           res.URL,
-		Hidden:        res.Hidden,
-		EnvironmentID: res.EnvironmentID,
-		Version:       res.Version,
+		ID:                     res.ID,
+		Key:                    res.Key,
+		Name:                   res.Name,
+		Description:            res.Description,
+		URL:                    res.URL,
+		Hidden:                 res.Hidden,
+		EnvironmentID:          res.EnvironmentID,
+		UserSessionIssuerID:    res.UserSessionIssuerID,
+		UserSessionIssuerBound: res.UserSessionIssuerBound,
+		Version:                res.Version,
 	}
 	if res.Tools != nil {
 		body.Tools = make([]*BuiltinMcpToolResponseBody, len(res.Tools))
@@ -3981,10 +3992,11 @@ func NewListBuiltinMcpServersPayload(sessionToken *string, projectSlugInput *str
 // updateBuiltinMcpServer endpoint payload.
 func NewUpdateBuiltinMcpServerPayload(body *UpdateBuiltinMcpServerRequestBody, sessionToken *string, projectSlugInput *string) *projects.UpdateBuiltinMcpServerPayload {
 	v := &projects.UpdateBuiltinMcpServerPayload{
-		Key:             *body.Key,
-		Hidden:          *body.Hidden,
-		EnvironmentID:   body.EnvironmentID,
-		ExpectedVersion: *body.ExpectedVersion,
+		Key:                 *body.Key,
+		Hidden:              *body.Hidden,
+		EnvironmentID:       body.EnvironmentID,
+		UserSessionIssuerID: body.UserSessionIssuerID,
+		ExpectedVersion:     *body.ExpectedVersion,
 	}
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
@@ -4117,6 +4129,9 @@ func ValidateUpdateBuiltinMcpServerRequestBody(body *UpdateBuiltinMcpServerReque
 	}
 	if body.EnvironmentID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.environment_id", *body.EnvironmentID, goa.FormatUUID))
+	}
+	if body.UserSessionIssuerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.user_session_issuer_id", *body.UserSessionIssuerID, goa.FormatUUID))
 	}
 	return
 }

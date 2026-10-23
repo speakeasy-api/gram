@@ -9,6 +9,7 @@ type BuiltinMcpUpdateForm = {
   key: string;
   hidden: boolean;
   environmentId?: string;
+  userSessionIssuerId?: string;
   expectedVersion: string;
 };
 

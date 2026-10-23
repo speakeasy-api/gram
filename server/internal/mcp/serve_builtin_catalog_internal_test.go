@@ -2,7 +2,6 @@ package mcp
 
 import (
 	"context"
-	"log/slog"
 	"testing"
 
 	"github.com/google/uuid"
@@ -10,6 +9,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 func TestBuiltinMemberCannotBypassConnectionCatalog(t *testing.T) {
@@ -20,7 +20,7 @@ func TestBuiltinMemberCannotBypassConnectionCatalog(t *testing.T) {
 	member := metaMember{backend: metaMemberBackendBuiltin, builtinKey: "slack", serverID: uuid.New(), projectID: uuid.New(), slug: "builtin_slack"}
 	gate := &metaGateContext{catalog: &connectionCatalog{}, catalogMode: toolfilter.CatalogModeLive}
 	ctx := context.Background()
-	logger := slog.Default()
+	logger := testenv.NewLogger(t)
 	_, err := service.describeMetaMember(ctx, logger, gate, member)
 	require.ErrorContains(t, err, catalogMemberNotApproved)
 	result, err := service.executeMetaMemberTool(ctx, logger, gate, []metaMember{member}, &rawRequest{}, "builtin_slack--test", nil, nil)

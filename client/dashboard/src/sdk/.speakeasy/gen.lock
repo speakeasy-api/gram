@@ -7864,7 +7864,7 @@ examples:
           target_id: "6dcbb5e1-5161-4baf-ac8d-f4611f29834a"
       responses:
         "200":
-          application/json: {"can_migrate": true, "cimd_client_count": 501939, "client_count": 28777, "conflicting_client_ids": [], "consent_count": 553825, "ema_binding_conflict_count": 650417, "platform_owned": false, "principal_binding_conflict_count": 90292, "remote_session_count": 748407, "session_count": 154481, "warnings": [], "warnings_fingerprint": "<value>"}
+          application/json: {"builtin_binding_count": 552758, "can_migrate": true, "cimd_client_count": 501939, "client_count": 28777, "conflicting_client_ids": [], "consent_count": 553825, "ema_binding_conflict_count": 650417, "platform_owned": false, "principal_binding_conflict_count": 90292, "remote_session_count": 748407, "session_count": 154481, "warnings": [], "warnings_fingerprint": "<value>"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -9294,7 +9294,7 @@ examples:
     speakeasy-default-list-builtin-mcp-servers:
       responses:
         "200":
-          application/json: {"servers": [{"credential_variables": ["<value 1>", "<value 2>"], "description": "zowie optimal speedily", "hidden": false, "id": "8bfe066b-c084-4cc1-9d93-516def26f6ff", "key": "<key>", "name": "<value>", "tools": [], "url": "https://slow-whale.org/", "version": "<value>"}]}
+          application/json: {"servers": [{"credential_variables": ["<value 1>", "<value 2>"], "description": "zowie optimal speedily", "hidden": false, "id": "8bfe066b-c084-4cc1-9d93-516def26f6ff", "key": "<key>", "name": "<value>", "tools": [], "url": "https://slow-whale.org/", "user_session_issuer_bound": false, "version": "<value>"}]}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
@@ -13143,7 +13143,7 @@ examples:
         application/json: {"expected_version": "<value>", "hidden": true, "key": "<key>"}
       responses:
         "200":
-          application/json: {"credential_variables": ["<value 1>", "<value 2>", "<value 3>"], "description": "loudly consign safely where till oh", "hidden": true, "id": "225ff58d-75b5-4933-84b6-4d043b3c332d", "key": "<key>", "name": "<value>", "tools": [{"description": "yippee far hm cruelty against friendly whether", "input_schema": "<value>", "name": "<value>"}], "url": "https://red-schedule.net", "version": "<value>"}
+          application/json: {"credential_variables": ["<value 1>", "<value 2>", "<value 3>"], "description": "loudly consign safely where till oh", "hidden": true, "id": "225ff58d-75b5-4933-84b6-4d043b3c332d", "key": "<key>", "name": "<value>", "tools": [{"description": "yippee far hm cruelty against friendly whether", "input_schema": "<value>", "name": "<value>"}], "url": "https://red-schedule.net", "user_session_issuer_bound": true, "version": "<value>"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":

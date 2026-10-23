@@ -22,6 +22,11 @@ export type BuiltinMcpServer = {
   name: string;
   tools: Array<BuiltinMcpTool>;
   url: string;
+  /**
+   * Whether an issuer has been bound; remains true if that issuer is deleted
+   */
+  userSessionIssuerBound: boolean;
+  userSessionIssuerId?: string | undefined;
   version: string;
 };
 
@@ -40,12 +45,16 @@ export const BuiltinMcpServer$inboundSchema: z.ZodMiniType<
     name: z.string(),
     tools: z.array(BuiltinMcpTool$inboundSchema),
     url: z.string(),
+    user_session_issuer_bound: z.boolean(),
+    user_session_issuer_id: z.optional(z.string()),
     version: z.string(),
   }),
   z.transform((v) => {
     return remap$(v, {
       "credential_variables": "credentialVariables",
       "environment_id": "environmentId",
+      "user_session_issuer_bound": "userSessionIssuerBound",
+      "user_session_issuer_id": "userSessionIssuerId",
     });
   }),
 );

@@ -22,6 +22,10 @@ export type UpdateBuiltinMcpServerForm = {
    * Immutable built-in key
    */
   key: string;
+  /**
+   * Bind a live user session issuer from this organization and project; omission preserves the existing binding
+   */
+  userSessionIssuerId?: string | undefined;
 };
 
 /** @internal */
@@ -30,6 +34,7 @@ export type UpdateBuiltinMcpServerForm$Outbound = {
   expected_version: string;
   hidden: boolean;
   key: string;
+  user_session_issuer_id?: string | undefined;
 };
 
 /** @internal */
@@ -42,11 +47,13 @@ export const UpdateBuiltinMcpServerForm$outboundSchema: z.ZodMiniType<
     expectedVersion: z.string(),
     hidden: z.boolean(),
     key: z.string(),
+    userSessionIssuerId: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
       environmentId: "environment_id",
       expectedVersion: "expected_version",
+      userSessionIssuerId: "user_session_issuer_id",
     });
   }),
 );

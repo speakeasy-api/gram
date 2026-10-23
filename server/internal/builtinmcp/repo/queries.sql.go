@@ -11,8 +11,49 @@ import (
 	"github.com/google/uuid"
 )
 
+const bindUserSessionIssuer = `-- name: BindUserSessionIssuer :one
+INSERT INTO builtin_mcp_settings (project_id, builtin_key, user_session_issuer_id, user_session_issuer_bound)
+VALUES ($1, $2, $3, true)
+ON CONFLICT (project_id, builtin_key) DO UPDATE
+SET user_session_issuer_id = EXCLUDED.user_session_issuer_id,
+    user_session_issuer_bound = true,
+    version = builtin_mcp_settings.version + 1,
+    updated_at = clock_timestamp()
+WHERE NOT builtin_mcp_settings.user_session_issuer_bound
+RETURNING id, hidden, environment_id, user_session_issuer_id, user_session_issuer_bound, version
+`
+
+type BindUserSessionIssuerParams struct {
+	ProjectID           uuid.NullUUID
+	BuiltinKey          string
+	UserSessionIssuerID uuid.NullUUID
+}
+
+type BindUserSessionIssuerRow struct {
+	ID                     uuid.UUID
+	Hidden                 bool
+	EnvironmentID          uuid.NullUUID
+	UserSessionIssuerID    uuid.NullUUID
+	UserSessionIssuerBound bool
+	Version                int64
+}
+
+func (q *Queries) BindUserSessionIssuer(ctx context.Context, arg BindUserSessionIssuerParams) (BindUserSessionIssuerRow, error) {
+	row := q.db.QueryRow(ctx, bindUserSessionIssuer, arg.ProjectID, arg.BuiltinKey, arg.UserSessionIssuerID)
+	var i BindUserSessionIssuerRow
+	err := row.Scan(
+		&i.ID,
+		&i.Hidden,
+		&i.EnvironmentID,
+		&i.UserSessionIssuerID,
+		&i.UserSessionIssuerBound,
+		&i.Version,
+	)
+	return i, err
+}
+
 const getSettings = `-- name: GetSettings :one
-SELECT hidden, environment_id, version
+SELECT hidden, environment_id, user_session_issuer_id, user_session_issuer_bound, version
 FROM builtin_mcp_settings
 WHERE project_id = $1 AND builtin_key = $2
 `
@@ -23,36 +64,48 @@ type GetSettingsParams struct {
 }
 
 type GetSettingsRow struct {
-	Hidden        bool
-	EnvironmentID uuid.NullUUID
-	Version       int64
+	Hidden                 bool
+	EnvironmentID          uuid.NullUUID
+	UserSessionIssuerID    uuid.NullUUID
+	UserSessionIssuerBound bool
+	Version                int64
 }
 
 func (q *Queries) GetSettings(ctx context.Context, arg GetSettingsParams) (GetSettingsRow, error) {
 	row := q.db.QueryRow(ctx, getSettings, arg.ProjectID, arg.BuiltinKey)
 	var i GetSettingsRow
-	err := row.Scan(&i.Hidden, &i.EnvironmentID, &i.Version)
+	err := row.Scan(
+		&i.Hidden,
+		&i.EnvironmentID,
+		&i.UserSessionIssuerID,
+		&i.UserSessionIssuerBound,
+		&i.Version,
+	)
 	return i, err
 }
 
 const insertSettings = `-- name: InsertSettings :one
-INSERT INTO builtin_mcp_settings (project_id, builtin_key, hidden, environment_id)
-VALUES ($1, $2, $3, $4)
+INSERT INTO builtin_mcp_settings (project_id, builtin_key, hidden, environment_id, user_session_issuer_id, user_session_issuer_bound)
+VALUES ($1, $2, $3, $4, $5, $6)
 ON CONFLICT (project_id, builtin_key) DO NOTHING
-RETURNING hidden, environment_id, version
+RETURNING hidden, environment_id, user_session_issuer_id, user_session_issuer_bound, version
 `
 
 type InsertSettingsParams struct {
-	ProjectID     uuid.NullUUID
-	BuiltinKey    string
-	Hidden        bool
-	EnvironmentID uuid.NullUUID
+	ProjectID              uuid.NullUUID
+	BuiltinKey             string
+	Hidden                 bool
+	EnvironmentID          uuid.NullUUID
+	UserSessionIssuerID    uuid.NullUUID
+	UserSessionIssuerBound bool
 }
 
 type InsertSettingsRow struct {
-	Hidden        bool
-	EnvironmentID uuid.NullUUID
-	Version       int64
+	Hidden                 bool
+	EnvironmentID          uuid.NullUUID
+	UserSessionIssuerID    uuid.NullUUID
+	UserSessionIssuerBound bool
+	Version                int64
 }
 
 func (q *Queries) InsertSettings(ctx context.Context, arg InsertSettingsParams) (InsertSettingsRow, error) {
@@ -61,42 +114,85 @@ func (q *Queries) InsertSettings(ctx context.Context, arg InsertSettingsParams) 
 		arg.BuiltinKey,
 		arg.Hidden,
 		arg.EnvironmentID,
+		arg.UserSessionIssuerID,
+		arg.UserSessionIssuerBound,
 	)
 	var i InsertSettingsRow
-	err := row.Scan(&i.Hidden, &i.EnvironmentID, &i.Version)
+	err := row.Scan(
+		&i.Hidden,
+		&i.EnvironmentID,
+		&i.UserSessionIssuerID,
+		&i.UserSessionIssuerBound,
+		&i.Version,
+	)
 	return i, err
 }
 
 const updateSettings = `-- name: UpdateSettings :one
 UPDATE builtin_mcp_settings
-SET hidden = $1, environment_id = $2, version = version + 1, updated_at = clock_timestamp()
-WHERE project_id = $3 AND builtin_key = $4 AND version = $5
-RETURNING hidden, environment_id, version
+SET hidden = $1, environment_id = $2, user_session_issuer_id = $3, user_session_issuer_bound = $4, version = version + 1, updated_at = clock_timestamp()
+WHERE project_id = $5 AND builtin_key = $6 AND version = $7
+RETURNING hidden, environment_id, user_session_issuer_id, user_session_issuer_bound, version
 `
 
 type UpdateSettingsParams struct {
-	Hidden          bool
-	EnvironmentID   uuid.NullUUID
-	ProjectID       uuid.NullUUID
-	BuiltinKey      string
-	ExpectedVersion int64
+	Hidden                 bool
+	EnvironmentID          uuid.NullUUID
+	UserSessionIssuerID    uuid.NullUUID
+	UserSessionIssuerBound bool
+	ProjectID              uuid.NullUUID
+	BuiltinKey             string
+	ExpectedVersion        int64
 }
 
 type UpdateSettingsRow struct {
-	Hidden        bool
-	EnvironmentID uuid.NullUUID
-	Version       int64
+	Hidden                 bool
+	EnvironmentID          uuid.NullUUID
+	UserSessionIssuerID    uuid.NullUUID
+	UserSessionIssuerBound bool
+	Version                int64
 }
 
 func (q *Queries) UpdateSettings(ctx context.Context, arg UpdateSettingsParams) (UpdateSettingsRow, error) {
 	row := q.db.QueryRow(ctx, updateSettings,
 		arg.Hidden,
 		arg.EnvironmentID,
+		arg.UserSessionIssuerID,
+		arg.UserSessionIssuerBound,
 		arg.ProjectID,
 		arg.BuiltinKey,
 		arg.ExpectedVersion,
 	)
 	var i UpdateSettingsRow
-	err := row.Scan(&i.Hidden, &i.EnvironmentID, &i.Version)
+	err := row.Scan(
+		&i.Hidden,
+		&i.EnvironmentID,
+		&i.UserSessionIssuerID,
+		&i.UserSessionIssuerBound,
+		&i.Version,
+	)
 	return i, err
+}
+
+const validateUserSessionIssuer = `-- name: ValidateUserSessionIssuer :one
+SELECT issuer.id
+FROM user_session_issuers AS issuer
+LEFT JOIN projects AS project ON project.id = issuer.project_id
+WHERE issuer.id = $1 AND issuer.deleted IS FALSE
+  AND (issuer.project_id IS NULL OR issuer.project_id = $2::uuid)
+  AND COALESCE(issuer.organization_id, project.organization_id) = $3::text
+FOR SHARE OF issuer
+`
+
+type ValidateUserSessionIssuerParams struct {
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) ValidateUserSessionIssuer(ctx context.Context, arg ValidateUserSessionIssuerParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, validateUserSessionIssuer, arg.ID, arg.ProjectID, arg.OrganizationID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
 }

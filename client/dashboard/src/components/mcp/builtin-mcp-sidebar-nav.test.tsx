@@ -25,7 +25,7 @@ vi.mock("@/components/mcp/useBuiltinMcpServers", () => ({
             name: "Slack",
             hidden: false,
             version: "1",
-            url: "https://example.test/mcp/builtin/p/slack",
+            url: "https://example.test/mcp/builtin/acme/project-one/slack",
             tools: [],
             environmentId: undefined,
           },

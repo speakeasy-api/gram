@@ -247,7 +247,13 @@ func (s *Service) requireWorkloadSessionAuthorization(ctx context.Context, endpo
 		}
 		return ctx, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, target.connectCheck()); err != nil {
+	var authorizationErr error
+	if endpoint.IsBuiltin() {
+		authorizationErr = s.authz.RequireBuiltinConnect(ctx, endpoint.BuiltinID.UUID.String(), endpoint.ProjectID.String())
+	} else {
+		authorizationErr = s.authz.Require(ctx, target.connectCheck())
+	}
+	if err := authorizationErr; err != nil {
 		// A denial is the assigned agent's authority being gone or withdrawn;
 		// an engine failure reached no decision and stays unmarked.
 		if !isCredentialDenial(err) {

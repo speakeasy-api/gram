@@ -201,7 +201,7 @@ func ParseSessionSelection(raw []byte) (*SessionSelection, error) {
 // server-authored "<kind>:<uuid>" shape with a canonical, non-zero UUID.
 func validResource(resource string) bool {
 	kind, id, ok := strings.Cut(resource, ":")
-	if !ok || (kind != "mcp_server" && kind != "toolset" && kind != gatewayResourceKind) {
+	if !ok || (kind != "builtin_mcp" && kind != "mcp_server" && kind != "toolset" && kind != gatewayResourceKind) {
 		return false
 	}
 	parsed, err := uuid.Parse(id)

@@ -4,6 +4,11 @@ import type { ReactNode } from "react";
 
 const state = vi.hoisted(() => ({
   admin: true,
+  issuers: [] as { id: string; slug: string; projectId: string }[],
+  issuerError: false,
+  issuerLoading: false,
+  userSessionIssuerId: undefined as string | undefined,
+  userSessionIssuerBound: false,
   builtinKey: "slack",
   pathname: "/mcp/builtin/slack/overview",
   environments: [
@@ -25,13 +30,15 @@ vi.mock("@/components/mcp/useBuiltinMcpServers", () => ({
       isError: false,
       servers: [
         {
+          userSessionIssuerId: state.userSessionIssuerId,
+          userSessionIssuerBound: state.userSessionIssuerBound,
           id: "builtin-one",
           key: "slack",
           name: "Slack",
           description: "Send messages in your Slack workspace.",
           hidden: true,
           version: "4",
-          url: "https://api.example.test/mcp/builtin/project-one/slack",
+          url: "https://api.example.test/mcp/builtin/acme/project-one/slack",
           tools: [
             {
               name: "slack_send_message",
@@ -56,6 +63,13 @@ vi.mock("@/components/mcp/useBuiltinMcpServers", () => ({
       ],
     };
   },
+}));
+vi.mock("@/hooks/useEffectiveUserSessionIssuers", () => ({
+  useEffectiveUserSessionIssuers: () => ({
+    issuers: state.issuers,
+    isLoading: state.issuerLoading,
+    isError: state.issuerError,
+  }),
 }));
 vi.mock("@/components/mcp/useUpdateBuiltinMcpServer", () => ({
   useUpdateBuiltinMcpServer: () => ({ save: state.save, isPending: false }),
@@ -218,6 +232,11 @@ afterEach(cleanup);
 beforeEach(() => {
   vi.clearAllMocks();
   state.admin = true;
+  state.issuers = [];
+  state.issuerError = false;
+  state.issuerLoading = false;
+  state.userSessionIssuerId = undefined;
+  state.userSessionIssuerBound = false;
   state.builtinKey = "slack";
   state.pathname = "/mcp/builtin/slack/overview";
   state.environments = [
@@ -234,7 +253,7 @@ it("leads with connecting an agent and with what is missing before it can work",
   // The address is handed over ready to paste, not as a bare line to retype.
   expect(
     screen.getByText(
-      /https:\/\/api\.example\.test\/mcp\/builtin\/project-one\/slack[\s\S]*Authorization: Bearer \$SPEAKEASY_AGENT_KEY/,
+      /https:\/\/api\.example\.test\/mcp\/builtin\/acme\/project-one\/slack[\s\S]*Authorization: Bearer \$SPEAKEASY_AGENT_KEY/,
     ),
   ).toBeTruthy();
   // The one thing standing between the server and a working call, with a way
@@ -298,15 +317,14 @@ it("reports each upstream credential and where it is stored", () => {
   ).toBe("/environments/default");
 });
 
-it("keeps the authentication tab about upstream credentials, not inbound policy", () => {
+it("separates upstream credentials from inbound OAuth policy", () => {
   state.pathname = "/mcp/builtin/slack/authentication";
   render(<BuiltinMcpServerPage />);
 
   expect(screen.getByText("Upstream authentication")).toBeTruthy();
 
-  // How a client authenticates to reach this server is not settled here, so
-  // the tab never rules a way in or out.
-  expect(screen.queryByText(/OAuth/i)).toBeNull();
+  // Inbound OAuth is configured separately from upstream credentials.
+  expect(screen.getByText("Inbound OAuth")).toBeTruthy();
   expect(screen.queryByText(/sign-?in/i)).toBeNull();
   expect(screen.queryByText(/only agent keys/i)).toBeNull();
   expect(screen.queryByText(/unsupported|not supported/i)).toBeNull();
@@ -317,6 +335,11 @@ it("keeps the authentication tab about upstream credentials, not inbound policy"
   // credential is stored first is the one every tool gets.
   expect(screen.queryByText(/first credential/i)).toBeNull();
   expect(screen.getByText(/some require the user token/i)).toBeTruthy();
+
+  // Machines connect and people do not; neither fact is an OAuth claim.
+  expect(
+    screen.getByText(/people cannot connect to this server/i),
+  ).toBeTruthy();
 });
 
 it.each(["overview", "tools", "authentication"])(
@@ -336,10 +359,29 @@ it("scopes the connect recipe to a direct connection and claims no stable addres
   render(<BuiltinMcpServerPage />);
   expect(screen.getByText("Direct connection")).toBeTruthy();
 
-  // The address carries a project id, so it is neither shared across projects
-  // nor permanent.
+  // The address is organization- and project-addressed, so it is neither
+  // shared across projects nor permanent.
   expect(screen.queryByText(/every project/i)).toBeNull();
   expect(screen.queryByText(/never changes/i)).toBeNull();
+});
+
+it("serves the endpoint the API returned rather than composing one", () => {
+  render(<BuiltinMcpServerPage />);
+  const snippet = screen.getByText(
+    /https:\/\/api\.example\.test\/mcp\/builtin\/acme\/project-one\/slack/,
+  );
+  expect(snippet).toBeTruthy();
+  // The synthetic id is internal; it never reaches a connection recipe.
+  expect(screen.queryByText(/[0-9a-f]{8}-[0-9a-f]{4}-/i)).toBeNull();
+});
+
+it("offers the agent key as one credential, not as the only mechanism", () => {
+  render(<BuiltinMcpServerPage />);
+  expect(
+    screen.getByText(/one of the credentials this endpoint accepts/i),
+  ).toBeTruthy();
+  expect(screen.queryByText(/only agent keys/i)).toBeNull();
+  expect(screen.queryByText(/OAuth/i)).toBeNull();
 });
 
 it("previews the selected environment's credentials before saving", () => {
@@ -361,7 +403,7 @@ it("previews the selected environment's credentials before saving", () => {
   render(<BuiltinMcpServerPage />);
   expect(screen.getByRole("link", { name: "Production" })).toBeTruthy();
 
-  fireEvent.change(screen.getByRole("combobox"), {
+  fireEvent.change(screen.getAllByRole("combobox")[0]!, {
     target: { value: "env-two" },
   });
 
@@ -389,10 +431,10 @@ it("opens the tool drawer as a disclosure, not as a toggle", () => {
 it("saves the credential environment against the version it read", () => {
   state.pathname = "/mcp/builtin/slack/authentication";
   render(<BuiltinMcpServerPage />);
-  fireEvent.change(screen.getByRole("combobox"), {
+  fireEvent.change(screen.getAllByRole("combobox")[0]!, {
     target: { value: "env-one" },
   });
-  fireEvent.click(screen.getByRole("button", { name: /save/i }));
+  fireEvent.click(screen.getAllByRole("button", { name: /save/i })[0]!);
   expect(state.save).toHaveBeenCalledWith({
     key: "slack",
     expectedVersion: "4",
@@ -419,4 +461,135 @@ it("sends a bare built-in address to its overview", () => {
   state.pathname = "/mcp/builtin/slack";
   render(<BuiltinMcpServerPage />);
   expect(screen.getByText("redirect:/mcp/builtin/slack/overview")).toBeTruthy();
+});
+
+it("binds an eligible organization issuer explicitly when OAuth is ambiguous", () => {
+  state.pathname = "/mcp/builtin/slack/authentication";
+  state.issuers = [
+    { id: "issuer-one", slug: "project-login", projectId: "project-one" },
+    { id: "issuer-two", slug: "org-login", projectId: "" },
+    {
+      id: "issuer-three",
+      slug: "other-project-login",
+      projectId: "project-one",
+    },
+  ];
+  render(<BuiltinMcpServerPage />);
+  expect(
+    screen.getByText(/OAuth is unavailable because multiple/),
+  ).toBeTruthy();
+  expect(screen.getByText(/keys remain available independently/)).toBeTruthy();
+  fireEvent.change(screen.getAllByRole("combobox")[1]!, {
+    target: { value: "issuer-two" },
+  });
+  fireEvent.click(screen.getAllByRole("button", { name: /save/i })[1]!);
+  expect(state.save).toHaveBeenCalledWith({
+    key: "slack",
+    hidden: true,
+    expectedVersion: "4",
+    environmentId: undefined,
+    userSessionIssuerId: "issuer-two",
+  });
+});
+
+it("shows an automatic default before it has been persisted", () => {
+  state.pathname = "/mcp/builtin/slack/authentication";
+  state.issuers = [
+    { id: "issuer-one", slug: "project-login", projectId: "project-one" },
+  ];
+  render(<BuiltinMcpServerPage />);
+  expect(
+    screen.getByText("Automatic authorization server: project-login"),
+  ).toBeTruthy();
+});
+
+it("does not fall back from an invalid persisted issuer binding", () => {
+  state.pathname = "/mcp/builtin/slack/authentication";
+  state.userSessionIssuerBound = true;
+  state.userSessionIssuerId = "removed-issuer";
+  state.issuers = [
+    { id: "issuer-one", slug: "project-login", projectId: "project-one" },
+  ];
+  render(<BuiltinMcpServerPage />);
+  expect(
+    screen.getByText(/bound authorization server is no longer eligible/),
+  ).toBeTruthy();
+  expect(screen.queryByText(/Automatic authorization server:/)).toBeNull();
+});
+
+it("limits no-issuer unavailability to OAuth", () => {
+  state.pathname = "/mcp/builtin/slack/authentication";
+  render(<BuiltinMcpServerPage />);
+  expect(
+    screen.getByText(/OAuth is unavailable because no authorization server/),
+  ).toBeTruthy();
+  expect(screen.getByText(/keys remain available independently/)).toBeTruthy();
+});
+
+it("does not report OAuth availability from a failed issuer listing", () => {
+  state.pathname = "/mcp/builtin/slack/authentication";
+  state.issuerError = true;
+  render(<BuiltinMcpServerPage />);
+  expect(screen.getByText(/Could not load authorization servers/)).toBeTruthy();
+  expect(screen.queryByText(/OAuth is unavailable because no/)).toBeNull();
+  expect(
+    (screen.getAllByRole("button", { name: /save/i })[1] as HTMLButtonElement)
+      .disabled,
+  ).toBe(true);
+});
+
+it("shows the persisted binding regardless of how it was selected", () => {
+  state.pathname = "/mcp/builtin/slack/authentication";
+  state.userSessionIssuerBound = true;
+  state.userSessionIssuerId = "issuer-two";
+  state.issuers = [
+    { id: "issuer-one", slug: "project-login", projectId: "project-one" },
+    { id: "issuer-two", slug: "org-login", projectId: "" },
+  ];
+  render(<BuiltinMcpServerPage />);
+  expect(
+    screen.getByText("Bound authorization server: org-login"),
+  ).toBeTruthy();
+  expect(screen.queryByText(/OAuth is unavailable/)).toBeNull();
+  expect(
+    (screen.getAllByRole("button", { name: /save/i })[1] as HTMLButtonElement)
+      .disabled,
+  ).toBe(true);
+});
+
+it("prefers one project issuer over multiple organization issuers", () => {
+  state.pathname = "/mcp/builtin/slack/authentication";
+  state.issuers = [
+    { id: "issuer-one", slug: "project-login", projectId: "project-one" },
+    { id: "issuer-two", slug: "org-login", projectId: "" },
+    { id: "issuer-three", slug: "other-org-login", projectId: "" },
+  ];
+  render(<BuiltinMcpServerPage />);
+  expect(
+    screen.getByText("Automatic authorization server: project-login"),
+  ).toBeTruthy();
+  expect(screen.queryByText(/OAuth is unavailable/)).toBeNull();
+});
+
+it("does not bypass ambiguous project issuers with a unique organization issuer", () => {
+  state.pathname = "/mcp/builtin/slack/authentication";
+  state.issuers = [
+    { id: "issuer-one", slug: "project-login", projectId: "project-one" },
+    { id: "issuer-two", slug: "other-project-login", projectId: "project-one" },
+    { id: "issuer-three", slug: "org-login", projectId: "" },
+  ];
+  render(<BuiltinMcpServerPage />);
+  expect(
+    screen.getByText(/OAuth is unavailable because multiple/),
+  ).toBeTruthy();
+  expect(screen.queryByText(/Automatic authorization server:/)).toBeNull();
+});
+
+it("uses a unique organization issuer when no project issuer exists", () => {
+  state.pathname = "/mcp/builtin/slack/authentication";
+  state.issuers = [{ id: "issuer-one", slug: "org-login", projectId: "" }];
+  render(<BuiltinMcpServerPage />);
+  expect(
+    screen.getByText("Automatic authorization server: org-login"),
+  ).toBeTruthy();
 });
