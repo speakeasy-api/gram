@@ -2680,6 +2680,245 @@ func DecodeRotateClientResponse(decoder func(*http.Response) goahttp.Decoder, re
 	}
 }
 
+// BuildDuplicateClientRequest instantiates a HTTP request object with method
+// and path set to call the "organizationRemoteSessionClients" service
+// "duplicateClient" endpoint
+func (c *Client) BuildDuplicateClientRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: DuplicateClientOrganizationRemoteSessionClientsPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("organizationRemoteSessionClients", "duplicateClient", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeDuplicateClientRequest returns an encoder for requests sent to the
+// organizationRemoteSessionClients duplicateClient server.
+func EncodeDuplicateClientRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*organizationremotesessionclients.DuplicateClientPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("organizationRemoteSessionClients", "duplicateClient", "*organizationremotesessionclients.DuplicateClientPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		body := NewDuplicateClientRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("organizationRemoteSessionClients", "duplicateClient", err)
+		}
+		return nil
+	}
+}
+
+// DecodeDuplicateClientResponse returns a decoder for responses returned by
+// the organizationRemoteSessionClients duplicateClient endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeDuplicateClientResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeDuplicateClientResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body DuplicateClientResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationRemoteSessionClients", "duplicateClient", err)
+			}
+			err = ValidateDuplicateClientResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationRemoteSessionClients", "duplicateClient", err)
+			}
+			res := NewDuplicateClientRemoteSessionClientOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body DuplicateClientUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationRemoteSessionClients", "duplicateClient", err)
+			}
+			err = ValidateDuplicateClientUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationRemoteSessionClients", "duplicateClient", err)
+			}
+			return nil, NewDuplicateClientUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body DuplicateClientForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationRemoteSessionClients", "duplicateClient", err)
+			}
+			err = ValidateDuplicateClientForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationRemoteSessionClients", "duplicateClient", err)
+			}
+			return nil, NewDuplicateClientForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body DuplicateClientBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationRemoteSessionClients", "duplicateClient", err)
+			}
+			err = ValidateDuplicateClientBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationRemoteSessionClients", "duplicateClient", err)
+			}
+			return nil, NewDuplicateClientBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body DuplicateClientNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationRemoteSessionClients", "duplicateClient", err)
+			}
+			err = ValidateDuplicateClientNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationRemoteSessionClients", "duplicateClient", err)
+			}
+			return nil, NewDuplicateClientNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body DuplicateClientConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationRemoteSessionClients", "duplicateClient", err)
+			}
+			err = ValidateDuplicateClientConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationRemoteSessionClients", "duplicateClient", err)
+			}
+			return nil, NewDuplicateClientConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body DuplicateClientUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationRemoteSessionClients", "duplicateClient", err)
+			}
+			err = ValidateDuplicateClientUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationRemoteSessionClients", "duplicateClient", err)
+			}
+			return nil, NewDuplicateClientUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body DuplicateClientInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationRemoteSessionClients", "duplicateClient", err)
+			}
+			err = ValidateDuplicateClientInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationRemoteSessionClients", "duplicateClient", err)
+			}
+			return nil, NewDuplicateClientInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body DuplicateClientInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("organizationRemoteSessionClients", "duplicateClient", err)
+				}
+				err = ValidateDuplicateClientInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("organizationRemoteSessionClients", "duplicateClient", err)
+				}
+				return nil, NewDuplicateClientInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body DuplicateClientUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("organizationRemoteSessionClients", "duplicateClient", err)
+				}
+				err = ValidateDuplicateClientUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("organizationRemoteSessionClients", "duplicateClient", err)
+				}
+				return nil, NewDuplicateClientUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("organizationRemoteSessionClients", "duplicateClient", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body DuplicateClientGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationRemoteSessionClients", "duplicateClient", err)
+			}
+			err = ValidateDuplicateClientGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationRemoteSessionClients", "duplicateClient", err)
+			}
+			return nil, NewDuplicateClientGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("organizationRemoteSessionClients", "duplicateClient", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildDeleteClientRequest instantiates a HTTP request object with method and
 // path set to call the "organizationRemoteSessionClients" service
 // "deleteClient" endpoint
