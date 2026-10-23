@@ -59,8 +59,9 @@ const (
 	// SelectionStaleNoAuth is a no-auth choice, or one naming the server's
 	// headers, on a server that now has an upstream OAuth client association
 	// or offers an enabled OAuth-backed client. It is already unusable, or is
-	// once the typed resolver is enabled; the credential reconnects, or its
-	// next issuance replaces it.
+	// once the typed resolver is enabled; the credential reconnects. A later
+	// issuance replaces only an untyped no-auth choice, never one naming an
+	// auth client.
 	SelectionStaleNoAuth SelectionOutcome = "stale_no_auth"
 
 	// SelectionUnusable is an OAuth choice the upstream client choice already
@@ -152,8 +153,11 @@ type liveCredential struct {
 // choice's credential. A choice the upstream client choice reads as no-auth,
 // explicit or naming the server's headers, holds while the server has no
 // upstream OAuth client association, as GetUpstreamClientSelection reads it,
-// and the server offers no enabled OAuth-backed client. An OAuth choice holds
-// while its registration is associated with the server and bound to issuer.
+// and the server offers no enabled OAuth-backed client. A choice already
+// naming an auth client is usable while that client is, as the typed
+// resolver reads it, whatever the legacy issuer binding. An unmapped OAuth
+// choice holds while its registration is associated with the server and
+// bound to issuer, which is what the upstream client choice serves it on.
 func decideSelection(row ListSelectionMappingsRow, issuer uuid.UUID) (SelectionOutcome, uuid.UUID) {
 	readsNoAuth := row.NoAuth || row.NamesHeaders
 	staleNoAuth := readsNoAuth && (row.ServerHasAssociations || row.ServerHasOauthClients)
@@ -161,11 +165,11 @@ func decideSelection(row ListSelectionMappingsRow, issuer uuid.UUID) (SelectionO
 	switch {
 	case staleNoAuth:
 		return SelectionStaleNoAuth, uuid.Nil
-	case oauthRejected:
-		return SelectionUnusable, uuid.Nil
 	case row.AuthClientID.Valid && row.MappedUsable:
 		return SelectionMapped, uuid.Nil
 	case row.AuthClientID.Valid:
+		return SelectionUnusable, uuid.Nil
+	case oauthRejected:
 		return SelectionUnusable, uuid.Nil
 	case row.NoAuth && len(row.CandidateIds) == 0:
 		return SelectionNoAuth, uuid.Nil
@@ -280,6 +284,11 @@ func mapSelection(ctx context.Context, q *Queries, opts Options, credential live
 	}
 	if err := q.LockSelectionServerAuthClients(ctx, LockSelectionServerAuthClientsParams{McpServerID: row.McpServerID, OrganizationID: opts.OrganizationID}); err != nil {
 		return false, "", fmt.Errorf("lock auth clients of selection %s: %w", row.ID, err)
+	}
+	if row.RemoteSessionClientID.Valid {
+		if err := q.LockSelectionIssuerBinding(ctx, LockSelectionIssuerBindingParams{RemoteSessionClientID: row.RemoteSessionClientID.UUID, UserSessionIssuerID: credential.issuer}); err != nil {
+			return false, "", fmt.Errorf("lock issuer binding of selection %s: %w", row.ID, err)
+		}
 	}
 	fresh, err := q.ListSelectionMappings(ctx, ListSelectionMappingsParams{OrganizationID: opts.OrganizationID, Cursor: uuid.Nil, OnlyID: uuid.NullUUID{UUID: row.ID, Valid: true}, PageSize: 1})
 	if err != nil {

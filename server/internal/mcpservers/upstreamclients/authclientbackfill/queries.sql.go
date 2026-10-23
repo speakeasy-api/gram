@@ -1870,9 +1870,14 @@ JOIN agents AS a ON a.organization_id = b.organization_id AND a.id = b.principal
 LEFT JOIN remote_sessions AS rs ON rs.id = b.remote_session_id
 WHERE b.organization_id = $1
   AND b.revoked_at IS NULL
+  AND ($2::uuid IS NULL OR b.id = $2::uuid)
 ORDER BY b.id
-FOR SHARE OF b, a
 `
+
+type ListLiveAgentAttachmentsParams struct {
+	OrganizationID string
+	BindingID      uuid.NullUUID
+}
 
 type ListLiveAgentAttachmentsRow struct {
 	BindingID             uuid.UUID
@@ -1892,12 +1897,12 @@ type ListLiveAgentAttachmentsRow struct {
 // one: the connection is still live at the attached grant generation, it
 // belongs to the user who attached it, that user still owns the agent, the
 // agent and its owner are active, and the sign-in, project, upstream client
-// and issuer are live and reach the attachment's project.
-// Held until the grants commit, so an agent cannot be suspended, revoked,
-// latched or reassigned, nor its attachment revoked, between this check and
-// the grant it decides.
-func (q *Queries) ListLiveAgentAttachments(ctx context.Context, organizationID string) ([]ListLiveAgentAttachmentsRow, error) {
-	rows, err := q.db.Query(ctx, listLiveAgentAttachments, organizationID)
+// and issuer are live and reach the attachment's project. binding_id, when
+// set, reads that one attachment. It takes no lock: a grant is written only
+// from a read of one attachment taken after LockAttachmentIssuers through
+// LockAttachmentAuthClients hold what it decides from.
+func (q *Queries) ListLiveAgentAttachments(ctx context.Context, arg ListLiveAgentAttachmentsParams) ([]ListLiveAgentAttachmentsRow, error) {
+	rows, err := q.db.Query(ctx, listLiveAgentAttachments, arg.OrganizationID, arg.BindingID)
 	if err != nil {
 		return nil, err
 	}
@@ -2966,6 +2971,158 @@ func (q *Queries) ListUndecidedUpstreamAuthServers(ctx context.Context, arg List
 	return items, nil
 }
 
+const lockAttachmentAuthClients = `-- name: LockAttachmentAuthClients :exec
+SELECT ac.id
+FROM mcp_auth_clients AS ac
+WHERE ac.organization_id = $1
+  AND ac.client_type = 'remote_session'
+  AND ac.deleted IS FALSE
+  AND ac.remote_session_client_id = (
+    SELECT b.remote_session_client_id
+    FROM principal_remote_session_bindings AS b
+    WHERE b.id = $2 AND b.organization_id = $1
+  )
+ORDER BY ac.id
+FOR SHARE
+`
+
+type LockAttachmentAuthClientsParams struct {
+	OrganizationID string
+	BindingID      uuid.UUID
+}
+
+func (q *Queries) LockAttachmentAuthClients(ctx context.Context, arg LockAttachmentAuthClientsParams) error {
+	_, err := q.db.Exec(ctx, lockAttachmentAuthClients, arg.OrganizationID, arg.BindingID)
+	return err
+}
+
+const lockAttachmentBinding = `-- name: LockAttachmentBinding :exec
+SELECT b.id
+FROM principal_remote_session_bindings AS b
+JOIN agents AS a ON a.organization_id = b.organization_id AND a.id = b.principal_id
+WHERE b.id = $1 AND b.organization_id = $2
+FOR SHARE OF b, a
+`
+
+type LockAttachmentBindingParams struct {
+	BindingID      uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) LockAttachmentBinding(ctx context.Context, arg LockAttachmentBindingParams) error {
+	_, err := q.db.Exec(ctx, lockAttachmentBinding, arg.BindingID, arg.OrganizationID)
+	return err
+}
+
+const lockAttachmentConfiguration = `-- name: LockAttachmentConfiguration :exec
+SELECT c.id
+FROM principal_remote_session_bindings AS b
+JOIN remote_session_clients AS c ON c.id = b.remote_session_client_id
+JOIN remote_session_issuers AS issuer ON issuer.id = c.remote_session_issuer_id
+JOIN projects AS p ON p.id = b.project_id
+JOIN remote_session_client_user_session_issuers AS link
+  ON link.remote_session_client_id = c.id
+ AND link.user_session_issuer_id = b.user_session_issuer_id
+WHERE b.id = $1 AND b.organization_id = $2
+FOR SHARE OF c, issuer, p, link
+`
+
+type LockAttachmentConfigurationParams struct {
+	BindingID      uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) LockAttachmentConfiguration(ctx context.Context, arg LockAttachmentConfigurationParams) error {
+	_, err := q.db.Exec(ctx, lockAttachmentConfiguration, arg.BindingID, arg.OrganizationID)
+	return err
+}
+
+const lockAttachmentIssuers = `-- name: LockAttachmentIssuers :exec
+
+SELECT usi.id
+FROM user_session_issuers AS usi
+WHERE usi.id IN (
+  SELECT b.user_session_issuer_id
+  FROM principal_remote_session_bindings AS b
+  WHERE b.id = $1 AND b.organization_id = $2
+  UNION
+  SELECT rs.user_session_issuer_id
+  FROM principal_remote_session_bindings AS b
+  JOIN remote_sessions AS rs ON rs.id = b.remote_session_id
+  WHERE b.id = $1 AND b.organization_id = $2
+)
+ORDER BY usi.id
+FOR SHARE
+`
+
+type LockAttachmentIssuersParams struct {
+	BindingID      uuid.UUID
+	OrganizationID string
+}
+
+// The attachment locks below hold, until the grants commit, every row that
+// makes an attachment servable, so none of the writers that make it
+// unservable (issuer deletion or migration, attachment revocation, agent
+// suspension, revocation or reassignment, reauthorization or revocation of
+// the connection, removal of the owner or their membership, and removal of
+// the upstream client, its issuer, the project, the sign-in binding or the
+// auth client) can commit between the read that decides a grant and the
+// grant. FOR SHARE, not FOR KEY SHARE, so they also wait on writers that only
+// update a column, such as a reauthorization's grant_generation. They are
+// taken in this order, issuers first and then the binding before its
+// connection, as issuer-first child writers and agent admission take them,
+// and a row already gone locks nothing: the read that follows then reports
+// the attachment for remediation.
+func (q *Queries) LockAttachmentIssuers(ctx context.Context, arg LockAttachmentIssuersParams) error {
+	_, err := q.db.Exec(ctx, lockAttachmentIssuers, arg.BindingID, arg.OrganizationID)
+	return err
+}
+
+const lockAttachmentOwner = `-- name: LockAttachmentOwner :exec
+SELECT owner.id
+FROM principal_remote_session_bindings AS b
+JOIN agents AS a ON a.organization_id = b.organization_id AND a.id = b.principal_id
+JOIN users AS owner ON owner.id = a.owner_user_id
+JOIN organization_user_relationships AS membership
+  ON membership.organization_id = a.organization_id
+ AND membership.user_id = owner.id
+ AND membership.deleted_at IS NULL
+WHERE b.id = $1 AND b.organization_id = $2
+FOR SHARE OF owner, membership
+`
+
+type LockAttachmentOwnerParams struct {
+	BindingID      uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) LockAttachmentOwner(ctx context.Context, arg LockAttachmentOwnerParams) error {
+	_, err := q.db.Exec(ctx, lockAttachmentOwner, arg.BindingID, arg.OrganizationID)
+	return err
+}
+
+const lockAttachmentSession = `-- name: LockAttachmentSession :exec
+SELECT rs.id
+FROM remote_sessions AS rs
+WHERE rs.id = (
+  SELECT b.remote_session_id
+  FROM principal_remote_session_bindings AS b
+  WHERE b.id = $1 AND b.organization_id = $2
+)
+FOR SHARE
+`
+
+type LockAttachmentSessionParams struct {
+	BindingID      uuid.UUID
+	OrganizationID string
+}
+
+// The connection may be gone; then the subquery is NULL and nothing is locked.
+func (q *Queries) LockAttachmentSession(ctx context.Context, arg LockAttachmentSessionParams) error {
+	_, err := q.db.Exec(ctx, lockAttachmentSession, arg.BindingID, arg.OrganizationID)
+	return err
+}
+
 const lockOrganizationBackfill = `-- name: LockOrganizationBackfill :exec
 SELECT pg_advisory_xact_lock(hashtext('authclientbackfill:' || $1::text))
 `
@@ -2974,6 +3131,30 @@ SELECT pg_advisory_xact_lock(hashtext('authclientbackfill:' || $1::text))
 // transaction's life.
 func (q *Queries) LockOrganizationBackfill(ctx context.Context, organizationID string) error {
 	_, err := q.db.Exec(ctx, lockOrganizationBackfill, organizationID)
+	return err
+}
+
+const lockSelectionIssuerBinding = `-- name: LockSelectionIssuerBinding :exec
+SELECT link.remote_session_client_id
+FROM remote_session_client_user_session_issuers AS link
+WHERE link.remote_session_client_id = $1::uuid
+  AND link.user_session_issuer_id = $2::uuid
+FOR SHARE OF link
+`
+
+type LockSelectionIssuerBindingParams struct {
+	RemoteSessionClientID uuid.UUID
+	UserSessionIssuerID   uuid.UUID
+}
+
+// Holds the binding of an unmapped OAuth choice's registration to its
+// credential's user session issuer, which is what makes the upstream client
+// choice usable, against unbinding until the transaction ends, so a choice is
+// never named after the binding it was decided from is gone. Taken after
+// LockSelectionServerAuthClients. A binding that is already gone locks
+// nothing, and the fresh decision then rejects the choice.
+func (q *Queries) LockSelectionIssuerBinding(ctx context.Context, arg LockSelectionIssuerBindingParams) error {
+	_, err := q.db.Exec(ctx, lockSelectionIssuerBinding, arg.RemoteSessionClientID, arg.UserSessionIssuerID)
 	return err
 }
 
@@ -3341,6 +3522,20 @@ func (q *Queries) PlanClientHeaders(ctx context.Context, arg PlanClientHeadersPa
 	return items, nil
 }
 
+const probeAttachmentBindingLockFixture = `-- name: ProbeAttachmentBindingLockFixture :one
+SELECT b.id
+FROM principal_remote_session_bindings AS b
+WHERE b.id = $1
+FOR UPDATE NOWAIT
+`
+
+func (q *Queries) ProbeAttachmentBindingLockFixture(ctx context.Context, bindingID uuid.UUID) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, probeAttachmentBindingLockFixture, bindingID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const probeServerLockFixture = `-- name: ProbeServerLockFixture :one
 SELECT id FROM mcp_servers WHERE id = $1 FOR UPDATE NOWAIT
 `
@@ -3351,6 +3546,17 @@ func (q *Queries) ProbeServerLockFixture(ctx context.Context, id uuid.UUID) (uui
 	var id_2 uuid.UUID
 	err := row.Scan(&id_2)
 	return id_2, err
+}
+
+const reauthorizeAttachmentConnectionFixture = `-- name: ReauthorizeAttachmentConnectionFixture :exec
+UPDATE remote_sessions AS rs
+SET grant_generation = rs.grant_generation + 1
+WHERE rs.id = (SELECT b.remote_session_id FROM principal_remote_session_bindings AS b WHERE b.id = $1)
+`
+
+func (q *Queries) ReauthorizeAttachmentConnectionFixture(ctx context.Context, bindingID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, reauthorizeAttachmentConnectionFixture, bindingID)
+	return err
 }
 
 const recordAuthPermissionProvision = `-- name: RecordAuthPermissionProvision :exec
@@ -3658,6 +3864,17 @@ func (q *Queries) RetireStaleBackfillLinks(ctx context.Context, organizationID s
 		return nil, err
 	}
 	return items, nil
+}
+
+const revokeAttachmentConnectionFixture = `-- name: RevokeAttachmentConnectionFixture :exec
+UPDATE remote_sessions AS rs
+SET deleted_at = clock_timestamp()
+WHERE rs.id = (SELECT b.remote_session_id FROM principal_remote_session_bindings AS b WHERE b.id = $1)
+`
+
+func (q *Queries) RevokeAttachmentConnectionFixture(ctx context.Context, bindingID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, revokeAttachmentConnectionFixture, bindingID)
+	return err
 }
 
 const seedAgentAttachmentFixture = `-- name: SeedAgentAttachmentFixture :one
@@ -4421,6 +4638,21 @@ func (q *Queries) TryLockOrganizationBackfill(ctx context.Context, organizationI
 	var i TryLockOrganizationBackfillRow
 	err := row.Scan(&i.Locked, &i.StartedAt)
 	return i, err
+}
+
+const unbindClientIssuerFixture = `-- name: UnbindClientIssuerFixture :exec
+DELETE FROM remote_session_client_user_session_issuers
+WHERE remote_session_client_id = $1 AND user_session_issuer_id = $2
+`
+
+type UnbindClientIssuerFixtureParams struct {
+	RemoteSessionClientID uuid.UUID
+	UserSessionIssuerID   uuid.UUID
+}
+
+func (q *Queries) UnbindClientIssuerFixture(ctx context.Context, arg UnbindClientIssuerFixtureParams) error {
+	_, err := q.db.Exec(ctx, unbindClientIssuerFixture, arg.RemoteSessionClientID, arg.UserSessionIssuerID)
+	return err
 }
 
 const unlockOrganizationBackfill = `-- name: UnlockOrganizationBackfill :exec

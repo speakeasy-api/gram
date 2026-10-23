@@ -1799,6 +1799,19 @@ WHERE ac.organization_id = @organization_id::text
 ORDER BY ac.id
 FOR SHARE OF ac;
 
+-- name: LockSelectionIssuerBinding :exec
+-- Holds the binding of an unmapped OAuth choice's registration to its
+-- credential's user session issuer, which is what makes the upstream client
+-- choice usable, against unbinding until the transaction ends, so a choice is
+-- never named after the binding it was decided from is gone. Taken after
+-- LockSelectionServerAuthClients. A binding that is already gone locks
+-- nothing, and the fresh decision then rejects the choice.
+SELECT link.remote_session_client_id
+FROM remote_session_client_user_session_issuers AS link
+WHERE link.remote_session_client_id = @remote_session_client_id::uuid
+  AND link.user_session_issuer_id = @user_session_issuer_id::uuid
+FOR SHARE OF link;
+
 -- name: MapSelectionToAuthClient :execrows
 -- Names a typed auth client on one choice, conditional on the evidence it was
 -- decided from: the choice is still unmapped and unchanged, and the client is
@@ -2031,7 +2044,10 @@ ORDER BY role_urn;
 -- one: the connection is still live at the attached grant generation, it
 -- belongs to the user who attached it, that user still owns the agent, the
 -- agent and its owner are active, and the sign-in, project, upstream client
--- and issuer are live and reach the attachment's project.
+-- and issuer are live and reach the attachment's project. binding_id, when
+-- set, reads that one attachment. It takes no lock: a grant is written only
+-- from a read of one attachment taken after LockAttachmentIssuers through
+-- LockAttachmentAuthClients hold what it decides from.
 SELECT
   b.id AS binding_id,
   b.principal_id AS agent_id,
@@ -2081,11 +2097,110 @@ JOIN agents AS a ON a.organization_id = b.organization_id AND a.id = b.principal
 LEFT JOIN remote_sessions AS rs ON rs.id = b.remote_session_id
 WHERE b.organization_id = @organization_id
   AND b.revoked_at IS NULL
-ORDER BY b.id
--- Held until the grants commit, so an agent cannot be suspended, revoked,
--- latched or reassigned, nor its attachment revoked, between this check and
--- the grant it decides.
+  AND (sqlc.narg('binding_id')::uuid IS NULL OR b.id = sqlc.narg('binding_id')::uuid)
+ORDER BY b.id;
+
+-- The attachment locks below hold, until the grants commit, every row that
+-- makes an attachment servable, so none of the writers that make it
+-- unservable (issuer deletion or migration, attachment revocation, agent
+-- suspension, revocation or reassignment, reauthorization or revocation of
+-- the connection, removal of the owner or their membership, and removal of
+-- the upstream client, its issuer, the project, the sign-in binding or the
+-- auth client) can commit between the read that decides a grant and the
+-- grant. FOR SHARE, not FOR KEY SHARE, so they also wait on writers that only
+-- update a column, such as a reauthorization's grant_generation. They are
+-- taken in this order, issuers first and then the binding before its
+-- connection, as issuer-first child writers and agent admission take them,
+-- and a row already gone locks nothing: the read that follows then reports
+-- the attachment for remediation.
+
+-- name: LockAttachmentIssuers :exec
+SELECT usi.id
+FROM user_session_issuers AS usi
+WHERE usi.id IN (
+  SELECT b.user_session_issuer_id
+  FROM principal_remote_session_bindings AS b
+  WHERE b.id = @binding_id AND b.organization_id = @organization_id
+  UNION
+  SELECT rs.user_session_issuer_id
+  FROM principal_remote_session_bindings AS b
+  JOIN remote_sessions AS rs ON rs.id = b.remote_session_id
+  WHERE b.id = @binding_id AND b.organization_id = @organization_id
+)
+ORDER BY usi.id
+FOR SHARE;
+
+-- name: LockAttachmentBinding :exec
+SELECT b.id
+FROM principal_remote_session_bindings AS b
+JOIN agents AS a ON a.organization_id = b.organization_id AND a.id = b.principal_id
+WHERE b.id = @binding_id AND b.organization_id = @organization_id
 FOR SHARE OF b, a;
+
+-- name: LockAttachmentSession :exec
+-- The connection may be gone; then the subquery is NULL and nothing is locked.
+SELECT rs.id
+FROM remote_sessions AS rs
+WHERE rs.id = (
+  SELECT b.remote_session_id
+  FROM principal_remote_session_bindings AS b
+  WHERE b.id = @binding_id AND b.organization_id = @organization_id
+)
+FOR SHARE;
+
+-- name: LockAttachmentOwner :exec
+SELECT owner.id
+FROM principal_remote_session_bindings AS b
+JOIN agents AS a ON a.organization_id = b.organization_id AND a.id = b.principal_id
+JOIN users AS owner ON owner.id = a.owner_user_id
+JOIN organization_user_relationships AS membership
+  ON membership.organization_id = a.organization_id
+ AND membership.user_id = owner.id
+ AND membership.deleted_at IS NULL
+WHERE b.id = @binding_id AND b.organization_id = @organization_id
+FOR SHARE OF owner, membership;
+
+-- name: LockAttachmentConfiguration :exec
+SELECT c.id
+FROM principal_remote_session_bindings AS b
+JOIN remote_session_clients AS c ON c.id = b.remote_session_client_id
+JOIN remote_session_issuers AS issuer ON issuer.id = c.remote_session_issuer_id
+JOIN projects AS p ON p.id = b.project_id
+JOIN remote_session_client_user_session_issuers AS link
+  ON link.remote_session_client_id = c.id
+ AND link.user_session_issuer_id = b.user_session_issuer_id
+WHERE b.id = @binding_id AND b.organization_id = @organization_id
+FOR SHARE OF c, issuer, p, link;
+
+-- name: LockAttachmentAuthClients :exec
+SELECT ac.id
+FROM mcp_auth_clients AS ac
+WHERE ac.organization_id = @organization_id
+  AND ac.client_type = 'remote_session'
+  AND ac.deleted IS FALSE
+  AND ac.remote_session_client_id = (
+    SELECT b.remote_session_client_id
+    FROM principal_remote_session_bindings AS b
+    WHERE b.id = @binding_id AND b.organization_id = @organization_id
+  )
+ORDER BY ac.id
+FOR SHARE;
+
+-- name: ReauthorizeAttachmentConnectionFixture :exec
+UPDATE remote_sessions AS rs
+SET grant_generation = rs.grant_generation + 1
+WHERE rs.id = (SELECT b.remote_session_id FROM principal_remote_session_bindings AS b WHERE b.id = @binding_id);
+
+-- name: RevokeAttachmentConnectionFixture :exec
+UPDATE remote_sessions AS rs
+SET deleted_at = clock_timestamp()
+WHERE rs.id = (SELECT b.remote_session_id FROM principal_remote_session_bindings AS b WHERE b.id = @binding_id);
+
+-- name: ProbeAttachmentBindingLockFixture :one
+SELECT b.id
+FROM principal_remote_session_bindings AS b
+WHERE b.id = @binding_id
+FOR UPDATE NOWAIT;
 
 -- name: ListAuthClientGrantRows :many
 -- Existing grants of the given scopes, to tell which defaults are missing.
@@ -2220,6 +2335,10 @@ WHERE credential_id = @credential_id AND mcp_server_id = @mcp_server_id AND dele
 INSERT INTO remote_session_client_user_session_issuers (remote_session_client_id, user_session_issuer_id)
 VALUES (@remote_session_client_id, @user_session_issuer_id)
 ON CONFLICT DO NOTHING;
+
+-- name: UnbindClientIssuerFixture :exec
+DELETE FROM remote_session_client_user_session_issuers
+WHERE remote_session_client_id = @remote_session_client_id AND user_session_issuer_id = @user_session_issuer_id;
 
 -- name: ProbeServerLockFixture :one
 -- Fails with lock_not_available while anyone holds a lock on the server row.

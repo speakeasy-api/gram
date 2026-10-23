@@ -22073,8 +22073,6 @@ func marshalAdminAdminUpstreamOAuthMigrationAuthClientsToAdminUpstreamOAuthMigra
 			}
 			res.SelectionClasses[i] = marshalAdminAdminUpstreamOAuthMigrationSelectionClassToAdminUpstreamOAuthMigrationSelectionClassResponseBody(val)
 		}
-	} else {
-		res.SelectionClasses = []*AdminUpstreamOAuthMigrationSelectionClassResponseBody{}
 	}
 	if v.SelectionGaps != nil {
 		res.SelectionGaps = make([]*AdminUpstreamOAuthMigrationSelectionGapResponseBody, len(v.SelectionGaps))
@@ -22085,8 +22083,6 @@ func marshalAdminAdminUpstreamOAuthMigrationAuthClientsToAdminUpstreamOAuthMigra
 			}
 			res.SelectionGaps[i] = marshalAdminAdminUpstreamOAuthMigrationSelectionGapToAdminUpstreamOAuthMigrationSelectionGapResponseBody(val)
 		}
-	} else {
-		res.SelectionGaps = []*AdminUpstreamOAuthMigrationSelectionGapResponseBody{}
 	}
 
 	return res
@@ -22158,6 +22154,9 @@ func marshalAdminAdminUpstreamOAuthMigrationAuthClientKindToAdminUpstreamOAuthMi
 // *AdminUpstreamOAuthMigrationSelectionClassResponseBody from a value of type
 // *admin.AdminUpstreamOAuthMigrationSelectionClass.
 func marshalAdminAdminUpstreamOAuthMigrationSelectionClassToAdminUpstreamOAuthMigrationSelectionClassResponseBody(v *admin.AdminUpstreamOAuthMigrationSelectionClass) *AdminUpstreamOAuthMigrationSelectionClassResponseBody {
+	if v == nil {
+		return nil
+	}
 	res := &AdminUpstreamOAuthMigrationSelectionClassResponseBody{
 		CredentialClass: v.CredentialClass,
 		Selections:      v.Selections,
@@ -22177,6 +22176,9 @@ func marshalAdminAdminUpstreamOAuthMigrationSelectionClassToAdminUpstreamOAuthMi
 // builds a value of type *AdminUpstreamOAuthMigrationSelectionGapResponseBody
 // from a value of type *admin.AdminUpstreamOAuthMigrationSelectionGap.
 func marshalAdminAdminUpstreamOAuthMigrationSelectionGapToAdminUpstreamOAuthMigrationSelectionGapResponseBody(v *admin.AdminUpstreamOAuthMigrationSelectionGap) *AdminUpstreamOAuthMigrationSelectionGapResponseBody {
+	if v == nil {
+		return nil
+	}
 	res := &AdminUpstreamOAuthMigrationSelectionGapResponseBody{
 		SelectionID:     v.SelectionID,
 		CredentialClass: v.CredentialClass,

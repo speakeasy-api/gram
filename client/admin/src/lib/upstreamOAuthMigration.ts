@@ -18,7 +18,7 @@ export function needsMigrationRun(
       a.pendingHeaders +
       a.pendingRetirements +
       a.pendingMarkedServers +
-      a.pendingSelectionMappings +
+      (a.pendingSelectionMappings ?? 0) +
       a.failedPhases.length >
     0
   );

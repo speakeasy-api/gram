@@ -86,7 +86,7 @@ var AdminUpstreamOAuthMigrationSelectionClass = Type("AdminUpstreamOAuthMigratio
 	Attribute("no_auth", Int64, "Explicit no-auth choices on servers with no auth client.")
 	Attribute("ambiguous", Int64, "Choices several auth clients could serve. They are never guessed: configure the server or ask the credential to reconnect.")
 	Attribute("no_client", Int64, "Choices whose upstream OAuth client has no live, enabled auth client linked to the server.")
-	Attribute("stale_no_auth", Int64, "No-auth choices on servers that now offer an OAuth-backed client; the credential reconnects.")
+	Attribute("stale_no_auth", Int64, "No-auth choices, and choices naming the server's headers, on servers that now offer an OAuth-backed client; the credential reconnects.")
 	Attribute("unusable", Int64, "Choices naming an auth client that is no longer usable for the server; the credential reconnects.")
 })
 
@@ -104,7 +104,9 @@ var AdminUpstreamOAuthMigrationSelectionGap = Type("AdminUpstreamOAuthMigrationS
 
 var AdminUpstreamOAuthMigrationAuthClients = Type("AdminUpstreamOAuthMigrationAuthClients", func() {
 	Description("Where one organization stands in recording a typed auth client for every upstream identity its servers are configured with (upstream OAuth clients, source credential headers and identity chaining upstreams), and in retiring backfilled records the configuration no longer yields. Nothing reads these records yet.")
-	Required("complete", "in_progress", "associations", "pending_clients", "pending_links", "pending_headers", "pending_retirements", "pending_marked_servers", "unresolved", "unresolved_associations", "warnings", "kinds", "failed_phases", "selections_complete", "pending_selection_mappings", "selection_classes", "selection_gaps", "selection_gap_count")
+	Required("complete", "in_progress", "associations", "pending_clients", "pending_links", "pending_headers", "pending_retirements", "pending_marked_servers", "unresolved", "unresolved_associations", "warnings", "kinds", "failed_phases")
+	// The selection fields are optional: replicas older than them omit them
+	// during a rolling deploy, and a client must still read the rest.
 
 	Attribute("complete", Boolean, "Whether every configured identity has its auth client, server links and header copies recorded, no backfilled record is left to retire, no server offering one is left undecided, and no phase failed.")
 	Attribute("in_progress", Boolean, "Whether a run is recording typed auth clients for the organization right now. The other counts are then empty; check again when it finishes.")
@@ -118,7 +120,7 @@ var AdminUpstreamOAuthMigrationAuthClients = Type("AdminUpstreamOAuthMigrationAu
 	Attribute("unresolved_associations", ArrayOf(AdminUpstreamOAuthMigrationUnresolvedAssociation), "The configuration counted in unresolved.")
 	Attribute("warnings", ArrayOf(AdminUpstreamOAuthMigrationUnresolvedAssociation), "Configuration worth a look that needs no action and does not hold back complete, such as a server at an identity chaining upstream's origin that only live discovery could confirm.")
 	Attribute("kinds", ArrayOf(AdminUpstreamOAuthMigrationAuthClientKind), "The same counts for each kind of configured identity.")
-	Attribute("failed_phases", ArrayOf(String), "Phases whose check failed: oauth, headers, ema, reconcile, mark or selections. The counts cover the other phases.")
+	Attribute("failed_phases", ArrayOf(String), "Phases whose check failed: oauth, headers, ema, ema_warnings, reconcile, mark, selections or grants. The counts cover the other phases.")
 	Attribute("selections_complete", Boolean, "Whether every live credential choice names a usable auth client or is an explicit no-auth choice, and the selections check did not fail.")
 	Attribute("pending_selection_mappings", Int64, "Live credential choices with exactly one auth client to name, not yet named.")
 	Attribute("selection_classes", ArrayOf(AdminUpstreamOAuthMigrationSelectionClass), "Credential choice coverage for each credential class.")

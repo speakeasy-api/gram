@@ -4,9 +4,13 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgerrcode"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	agentsrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
@@ -76,6 +80,12 @@ func TestRun_AttachmentsBecomeGrantsOnTheOwnersConnection(t *testing.T) {
 	transferredBinding := f.attach(transferred, registration, "user:"+previous, previous, 0)
 	foreign := f.agent(owner)
 	foreignBinding := f.attach(foreign, registration, "user:"+owner, stranger, 0)
+	// An inactive agent is reported as such whatever else is wrong with the
+	// attachment, so an admin resumes it before anyone reconnects.
+	inactiveTransferred := f.agent(owner)
+	inactiveTransferredBinding := f.attach(inactiveTransferred, registration, "user:"+previous, previous, 0)
+	_, err := agentsrepo.New(f.pool).SuspendAgent(f.t.Context(), agentsrepo.SuspendAgentParams{OrganizationID: f.orgID, ID: inactiveTransferred})
+	require.NoError(t, err)
 	byAgent := f.agent(owner)
 	byAgentBinding := f.attach(byAgent, registration, urn.NewAgentSubject(byAgent).String(), owner, 0)
 	stale := f.agent(owner)
@@ -87,6 +97,7 @@ func TestRun_AttachmentsBecomeGrantsOnTheOwnersConnection(t *testing.T) {
 	require.Equal(t, 1, dry.PendingGrantsByKind[GrantAttachment])
 	require.ElementsMatch(t, []AttachmentRemediation{
 		{BindingID: transferredBinding.String(), AgentID: transferred.String(), Reason: AttachmentOwnerChanged},
+		{BindingID: inactiveTransferredBinding.String(), AgentID: inactiveTransferred.String(), Reason: AttachmentAgentInactive},
 		{BindingID: foreignBinding.String(), AgentID: foreign.String(), Reason: AttachmentForeignConnection},
 		{BindingID: byAgentBinding.String(), AgentID: byAgent.String(), Reason: AttachmentNotByUser},
 		{BindingID: staleBinding.String(), AgentID: stale.String(), Reason: AttachmentConnectionGone},
@@ -99,7 +110,7 @@ func TestRun_AttachmentsBecomeGrantsOnTheOwnersConnection(t *testing.T) {
 		PrincipalUrn: agent.String(), Scope: authz.ScopeMCPAuth,
 		Selector: authz.ConnectionAuthClientSelector(registration.String(), owner), Inferred: true,
 	}, "the agent keeps its owner's connection, and only that one")
-	for _, other := range []uuid.UUID{transferred, foreign, byAgent, stale, unmapped} {
+	for _, other := range []uuid.UUID{transferred, inactiveTransferred, foreign, byAgent, stale, unmapped} {
 		f.requireNoConnectionGrant(other)
 	}
 	require.Zero(t, f.run(false).PendingGrantsByKind[GrantAttachment])
@@ -128,6 +139,11 @@ func TestRun_AttachmentsTheRuntimeNoLongerServesAreRemediated(t *testing.T) {
 				OrganizationID: f.orgID, OwnerUserID: owner, OwnerReassignmentReason: pgtype.Text{String: "membership_removed", Valid: true},
 			})
 			require.NoError(f.t, err)
+		}},
+		{"owner no longer a member", AttachmentAgentInactive, func(f *fixture, _, _, _ uuid.UUID, owner string) {
+			require.NoError(f.t, orgrepo.New(f.pool).DeleteOrganizationUserRelationship(f.t.Context(), orgrepo.DeleteOrganizationUserRelationshipParams{
+				OrganizationID: f.orgID, UserID: pgtype.Text{String: owner, Valid: true},
+			}))
 		}},
 		{"deleted sign-in", AttachmentConfigurationGone, func(f *fixture, _, binding, _ uuid.UUID, _ string) {
 			require.NoError(f.t, f.q.SoftDeleteAttachmentUserSessionIssuerFixture(f.t.Context(), binding))
@@ -198,4 +214,55 @@ func TestRun_AttachmentsWaitForTheUpstreamSelectorWriteGate(t *testing.T) {
 	after, err := Run(authz.WithUpstreamSelectorWriteGate(t.Context(), nil), f.pool, Options{OrganizationID: f.orgID, Apply: false, PageSize: 0})
 	require.NoError(t, err)
 	require.Zero(t, after.AttachmentsWaiting)
+}
+
+// A reauthorization or revocation of the attached connection that is in
+// flight when the backfill decides a grant commits before the grant does: the
+// backfill waits on the connection it locked, decides again from what
+// committed, and writes no grant for an attachment the runtime no longer
+// serves.
+func TestRun_AttachmentGrantWaitsOnAConcurrentConnectionChange(t *testing.T) {
+	t.Parallel()
+	for name, change := range map[string]func(q *Queries, ctx context.Context, binding uuid.UUID) error{
+		"reauthorized": func(q *Queries, ctx context.Context, binding uuid.UUID) error {
+			return q.ReauthorizeAttachmentConnectionFixture(ctx, binding)
+		},
+		"revoked": func(q *Queries, ctx context.Context, binding uuid.UUID) error {
+			return q.RevokeAttachmentConnectionFixture(ctx, binding)
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			f := newFixture(t)
+			registration := f.client("subject")
+			f.associate(f.server(), registration)
+			f.run(true)
+			owner := f.member()
+			agentID := f.agent(owner)
+			binding := f.attach(agentID, registration, "user:"+owner, owner, 0)
+
+			tx, err := f.pool.Begin(t.Context()) //nolint:glint // notestingrawsql: transaction boundary only; the write uses a generated SQLc method.
+			require.NoError(t, err)
+			t.Cleanup(func() { _ = tx.Rollback(context.WithoutCancel(t.Context())) })
+			require.NoError(t, change(New(tx), t.Context(), binding))
+
+			done := make(chan Report, 1)
+			go func() {
+				report, err := Run(t.Context(), f.pool, Options{OrganizationID: f.orgID, Apply: true, PageSize: 0})
+				assert.NoError(t, err)
+				done <- report
+			}()
+			require.Eventually(t, func() bool {
+				_, err := f.q.ProbeAttachmentBindingLockFixture(t.Context(), binding)
+				var pgErr *pgconn.PgError
+				return errors.As(err, &pgErr) && pgErr.Code == pgerrcode.LockNotAvailable
+			}, 10*time.Second, 20*time.Millisecond, "the backfill holds the attachment and waits on its connection")
+			require.NoError(t, tx.Commit(t.Context()))
+
+			report := <-done
+			require.Empty(t, report.PhaseErrors)
+			require.Equal(t, []AttachmentRemediation{{BindingID: binding.String(), AgentID: agentID.String(), Reason: AttachmentConnectionGone}}, report.AttachmentRemediations)
+			f.requireNoConnectionGrant(agentID)
+		})
+	}
 }

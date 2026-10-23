@@ -41,7 +41,7 @@ export type AdminUpstreamOAuthMigrationSelectionClass = {
    */
   selections: number;
   /**
-   * No-auth choices on servers that now offer an OAuth-backed client; the credential reconnects.
+   * No-auth choices, and choices naming the server's headers, on servers that now offer an OAuth-backed client; the credential reconnects.
    */
   staleNoAuth: number;
   /**

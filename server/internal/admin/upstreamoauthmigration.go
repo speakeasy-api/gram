@@ -219,11 +219,11 @@ func (s *Service) authClientMigrationStatus(ctx context.Context, organizationID 
 			Warnings:                 []*gen.AdminUpstreamOAuthMigrationUnresolvedAssociation{},
 			Kinds:                    []*gen.AdminUpstreamOAuthMigrationAuthClientKind{},
 			FailedPhases:             []string{},
-			SelectionsComplete:       false,
-			PendingSelectionMappings: 0,
+			SelectionsComplete:       new(false),
+			PendingSelectionMappings: new(int64(0)),
 			SelectionClasses:         []*gen.AdminUpstreamOAuthMigrationSelectionClass{},
 			SelectionGaps:            []*gen.AdminUpstreamOAuthMigrationSelectionGap{},
-			SelectionGapCount:        0,
+			SelectionGapCount:        new(int64(0)),
 		}
 	case err != nil:
 		logger.ErrorContext(ctx, "check typed auth clients", attr.SlogError(err))
@@ -294,11 +294,11 @@ func (s *Service) authClientMigrationStatus(ctx context.Context, organizationID 
 		Warnings:                 warnings,
 		Kinds:                    kinds,
 		FailedPhases:             phases,
-		SelectionsComplete:       gapCount == 0 && report.PendingSelectionMappings == 0 && !selectionsFailed,
-		PendingSelectionMappings: int64(report.PendingSelectionMappings),
+		SelectionsComplete:       new(gapCount == 0 && report.PendingSelectionMappings == 0 && !selectionsFailed),
+		PendingSelectionMappings: new(int64(report.PendingSelectionMappings)),
 		SelectionClasses:         classes,
 		SelectionGaps:            gaps,
-		SelectionGapCount:        int64(gapCount),
+		SelectionGapCount:        new(int64(gapCount)),
 	}
 }
 

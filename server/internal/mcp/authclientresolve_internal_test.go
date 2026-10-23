@@ -138,7 +138,10 @@ func TestDecideAuthClient(t *testing.T) {
 			res := decideAuthClient(tc.row)
 			require.Equal(t, tc.outcome, res.outcome)
 			require.Equal(t, tc.reason, res.reason)
-			if res.outcome == authClientResolved && (res.clientType == authClientTypeRemoteSession || res.clientType == authClientTypeServiceAccount) {
+			oauthBacked := res.clientType == authClientTypeRemoteSession || res.clientType == authClientTypeServiceAccount
+			mappedFallback := res.outcome == authClientLegacy && (res.reason == authClientReasonHeadersStale || res.reason == authClientReasonLegacyMayChain)
+			// A mapped fallback keeps its validated registration for the permit.
+			if oauthBacked && (res.outcome == authClientResolved || mappedFallback) {
 				require.Equal(t, validUUID(registrationID), res.choice.clientID)
 				require.Equal(t, validUUID(issuerID), res.choice.remoteSessionIssuerID)
 			} else {
@@ -1207,9 +1210,25 @@ func TestAuthClientConsentUsesSharedResolver(t *testing.T) {
 		f.sourceHeader("X-Version", false, text("current"), pgtype.Text{})
 		f.copyHeader(clientID, "X-Version", false, false, text("stale"), pgtype.Text{})
 		selector := f.choose(validUUID(clientID))
+		permitter := &recordingPermitter{asked: nil}
+		f.service.authClientPermitter = permitter
 		allowed := f.serve(selector)
 		require.Equal(t, authClientLegacy, allowed.outcome)
 		require.Equal(t, authClientReasonHeadersStale, allowed.reason)
+		require.Len(t, permitter.asked, 1)
+		require.Equal(t, validUUID(f.registration), permitter.asked[0].RegistrationID, "the fallback is permitted on the validated registration")
+
+		gateway := &recordingPermitter{asked: nil}
+		f.service.authClientPermitter = gateway
+		members := []metaMember{{serverID: f.serverID, backend: metaMemberBackendProxied}}
+		choices := &memberChoices{selector: selector, subject: urn.NewUserSubject("user_1")}
+		choices.apply(t.Context(), testenv.NewLogger(t), members, true)
+		require.Len(t, gateway.asked, 1)
+		require.Equal(t, validUUID(f.registration), gateway.asked[0].RegistrationID, "a gateway member's fallback is permitted on it too")
+		if members[0].authClient != nil {
+			require.Equal(t, authClientLegacy, members[0].authClient.outcome, "the fallback is still served the old way")
+		}
+
 		f.service.authClientPermitter = denyPermitter{}
 		require.Equal(t, authClientNoAccess, f.serve(selector).outcome)
 		denied, err := f.service.resolveAuthClientForConsent(t.Context(), f.orgID, f.serverID, validUUID(f.registration), urn.NewUserSubject("user_1"))

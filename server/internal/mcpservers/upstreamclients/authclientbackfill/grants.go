@@ -425,7 +425,7 @@ func planAPIKeyGrants(ctx context.Context, q *Queries, opts Options, uses []List
 // connection. An attachment the runtime would no longer serve, or whose client
 // is not recorded, is reported for remediation instead.
 func planAttachmentGrants(ctx context.Context, q *Queries, opts Options, plan *grantPlan, report *Report) error {
-	rows, err := q.ListLiveAgentAttachments(ctx, opts.OrganizationID)
+	rows, err := q.ListLiveAgentAttachments(ctx, ListLiveAgentAttachmentsParams{OrganizationID: opts.OrganizationID, BindingID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}})
 	if err != nil {
 		return fmt.Errorf("list agent attachments: %w", err)
 	}
@@ -454,6 +454,31 @@ func planAttachmentGrants(ctx context.Context, q *Queries, opts Options, plan *g
 			}
 			continue
 		}
+		key, err := grantKey(principal.String(), authz.ScopeMCPAuth, selector)
+		if err != nil {
+			return err
+		}
+		if plan.existing[key] {
+			continue
+		}
+		if opts.Apply {
+			// Decide again from a read taken after locking what the decision
+			// reads, held until the grant commits.
+			fresh, live, err := lockAttachment(ctx, q, opts.OrganizationID, row.BindingID)
+			if err != nil {
+				return err
+			}
+			if !live {
+				// Revoked meanwhile: nothing is left to carry over.
+				continue
+			}
+			if reason := attachmentRemediationReason(fresh); reason != "" {
+				report.AttachmentRemediations = append(report.AttachmentRemediations, AttachmentRemediation{BindingID: fresh.BindingID.String(), AgentID: fresh.AgentID.String(), Reason: reason})
+				continue
+			}
+			principal = urn.NewPrincipal(urn.PrincipalTypeAgent, fresh.AgentID.String())
+			selector = authz.ConnectionAuthClientSelector(fresh.RemoteSessionClientID.String(), fresh.OwnerUserID)
+		}
 		if err := plan.want(GrantAttachment, principal, authz.ScopeMCPAuth, selector); err != nil {
 			return err
 		}
@@ -461,17 +486,62 @@ func planAttachmentGrants(ctx context.Context, q *Queries, opts Options, plan *g
 	return nil
 }
 
+// lockAttachment locks every row that makes one attachment servable, in the
+// order lifecycle writers take them, and reads the attachment again after the
+// locks. live is false when the attachment is no longer unrevoked.
+func lockAttachment(ctx context.Context, q *Queries, organizationID string, bindingID uuid.UUID) (ListLiveAgentAttachmentsRow, bool, error) {
+	var none ListLiveAgentAttachmentsRow
+	locks := []struct {
+		name string
+		lock func(context.Context) error
+	}{
+		{"issuers", func(ctx context.Context) error {
+			return q.LockAttachmentIssuers(ctx, LockAttachmentIssuersParams{BindingID: bindingID, OrganizationID: organizationID})
+		}},
+		{"binding", func(ctx context.Context) error {
+			return q.LockAttachmentBinding(ctx, LockAttachmentBindingParams{BindingID: bindingID, OrganizationID: organizationID})
+		}},
+		{"connection", func(ctx context.Context) error {
+			return q.LockAttachmentSession(ctx, LockAttachmentSessionParams{BindingID: bindingID, OrganizationID: organizationID})
+		}},
+		{"owner", func(ctx context.Context) error {
+			return q.LockAttachmentOwner(ctx, LockAttachmentOwnerParams{BindingID: bindingID, OrganizationID: organizationID})
+		}},
+		{"configuration", func(ctx context.Context) error {
+			return q.LockAttachmentConfiguration(ctx, LockAttachmentConfigurationParams{BindingID: bindingID, OrganizationID: organizationID})
+		}},
+		{"auth clients", func(ctx context.Context) error {
+			return q.LockAttachmentAuthClients(ctx, LockAttachmentAuthClientsParams{BindingID: bindingID, OrganizationID: organizationID})
+		}},
+	}
+	for _, l := range locks {
+		if err := l.lock(ctx); err != nil {
+			return none, false, fmt.Errorf("lock attachment %s %s: %w", bindingID, l.name, err)
+		}
+	}
+	rows, err := q.ListLiveAgentAttachments(ctx, ListLiveAgentAttachmentsParams{OrganizationID: organizationID, BindingID: uuid.NullUUID{UUID: bindingID, Valid: true}})
+	if err != nil {
+		return none, false, fmt.Errorf("reread attachment %s: %w", bindingID, err)
+	}
+	if len(rows) == 0 {
+		return none, false, nil
+	}
+	return rows[0], true, nil
+}
+
 func attachmentRemediationReason(row ListLiveAgentAttachmentsRow) string {
 	attacher, err := urn.ParseSessionSubject(row.AttachedBySubjectID)
 	switch {
+	// An inactive agent needs an admin to resume it or give it a new owner
+	// before any other remediation can help, so it is reported first.
+	case !row.AgentActive:
+		return AttachmentAgentInactive
 	case err != nil || attacher.Kind != urn.SessionSubjectKindUser:
 		return AttachmentNotByUser
 	case attacher.ID != row.OwnerUserID:
 		return AttachmentOwnerChanged
 	case row.ConnectionSubject != row.AttachedBySubjectID:
 		return AttachmentForeignConnection
-	case !row.AgentActive:
-		return AttachmentAgentInactive
 	case !row.ConnectionLive:
 		return AttachmentConnectionGone
 	case !row.ConfigurationLive:

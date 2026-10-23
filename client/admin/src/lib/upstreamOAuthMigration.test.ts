@@ -45,6 +45,18 @@ function status(
 }
 
 describe("needsMigrationRun", () => {
+  it("reads a status from a server that predates selection coverage", () => {
+    const s = status(true, true);
+    if (s.authClients) {
+      delete s.authClients.selectionsComplete;
+      delete s.authClients.pendingSelectionMappings;
+      delete s.authClients.selectionClasses;
+      delete s.authClients.selectionGaps;
+      delete s.authClients.selectionGapCount;
+    }
+    expect(needsMigrationRun(s)).toBe(false);
+  });
+
   it("includes a migrated organization whose auth clients are incomplete", () => {
     expect(needsMigrationRun(status(true, false))).toBe(true);
   });

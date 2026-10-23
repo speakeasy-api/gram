@@ -93257,7 +93257,7 @@ components:
                     type: array
                     items:
                         type: string
-                    description: 'Phases whose check failed: oauth, headers, ema, reconcile, mark or selections. The counts cover the other phases.'
+                    description: 'Phases whose check failed: oauth, headers, ema, ema_warnings, reconcile, mark, selections or grants. The counts cover the other phases.'
                 in_progress:
                     type: boolean
                     description: Whether a run is recording typed auth clients for the organization right now. The other counts are then empty; check again when it finishes.
@@ -93336,11 +93336,6 @@ components:
                 - warnings
                 - kinds
                 - failed_phases
-                - selections_complete
-                - pending_selection_mappings
-                - selection_classes
-                - selection_gaps
-                - selection_gap_count
         AdminUpstreamOAuthMigrationOrganization:
             type: object
             properties:
@@ -93451,7 +93446,7 @@ components:
                     format: int64
                 stale_no_auth:
                     type: integer
-                    description: No-auth choices on servers that now offer an OAuth-backed client; the credential reconnects.
+                    description: No-auth choices, and choices naming the server's headers, on servers that now offer an OAuth-backed client; the credential reconnects.
                     format: int64
                 unusable:
                     type: integer

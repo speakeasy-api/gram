@@ -484,11 +484,13 @@ func TestChoiceNamingTheServersHeadersIsKeptWhenAClientIsAssociated(t *testing.T
 	f := newFixture(t)
 	issuer := f.projectIssuer()
 	server := f.server(issuer)
+	// A header client linked to the server that carries its current headers,
+	// which issuance names on a no-auth choice.
+	f.staticAuthorization(server)
+	headers := f.authClient("static_credential", uuid.Nil, server)
 	credential := f.session(issuer)
 	f.record(issuer, credential)
-	headers, err := f.q.SeedHeaderAuthClientFixture(t.Context(), SeedHeaderAuthClientFixtureParams{OrganizationID: f.orgID, ProjectID: uuid.NullUUID{UUID: f.projectID, Valid: true}})
-	require.NoError(t, err)
-	require.NoError(t, f.q.NameAuthClientOnSelectionFixture(t.Context(), NameAuthClientOnSelectionFixtureParams{AuthClientID: headers, CredentialID: credential, McpServerID: server}))
+	require.Equal(t, uuid.NullUUID{UUID: headers, Valid: true}, f.namedAuthClient(credential, server).AuthClientID)
 
 	covered, err := Run(t.Context(), f.pool, Options{OrganizationID: f.orgID, Apply: false, PageSize: 0})
 	require.NoError(t, err)

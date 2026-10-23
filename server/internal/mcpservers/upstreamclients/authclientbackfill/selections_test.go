@@ -308,6 +308,26 @@ func TestRun_OAuthChoiceTheIssuerIsNotBoundToIsAGap(t *testing.T) {
 	require.False(t, f.selection(credential, server).AuthClientID.Valid)
 }
 
+// A choice already naming its registration's auth client no longer depends on
+// the legacy issuer binding: the typed resolver serves it on the client
+// alone, so removing the binding leaves it covered.
+func TestRun_MappedOAuthChoiceKeepsCoverageWhenTheIssuerBindingIsRemoved(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	server, registration := f.server(), f.client("subject")
+	f.associate(server, registration)
+	f.run(true)
+	credential := f.interactiveCredential()
+	f.oauthSelection(credential, server, registration)
+	require.Equal(t, 1, f.run(true).SelectionsMapped)
+	require.NoError(t, f.q.UnbindClientIssuerFixture(t.Context(), UnbindClientIssuerFixtureParams{RemoteSessionClientID: registration, UserSessionIssuerID: f.sessionIssuer()}))
+
+	report := f.run(true)
+	require.Equal(t, 1, report.Selections[ClassInteractive].Outcomes[SelectionMapped])
+	require.Empty(t, report.SelectionGaps)
+	require.True(t, f.selection(credential, server).AuthClientID.Valid)
+}
+
 func TestRun_MappedHeaderChoiceBesideANewOAuthAssociationIsStale(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
@@ -365,6 +385,43 @@ func TestRun_ChoiceIsDecidedAgainUnderLock(t *testing.T) {
 	require.Equal(t, 1, report.Selections[ClassInteractive].Outcomes[SelectionAmbiguous])
 	require.Equal(t, 1, report.Selections[ClassInteractive].Gaps())
 	require.Len(t, selectionGaps(report, SelectionAmbiguous), 1)
+	require.False(t, f.selection(credential, server).AuthClientID.Valid)
+}
+
+// TestRun_OAuthChoiceIsNotMappedAfterItsIssuerBindingIsRemoved removes the
+// binding an unmapped OAuth choice is decided from while the mapping waits on
+// it: the choice is decided again and left unmapped.
+func TestRun_OAuthChoiceIsNotMappedAfterItsIssuerBindingIsRemoved(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	server, registration := f.server(), f.client("subject")
+	f.associate(server, registration)
+	f.run(true)
+	credential := f.interactiveCredential()
+	f.oauthSelection(credential, server, registration)
+
+	tx, err := f.pool.Begin(t.Context()) //nolint:glint // notestingrawsql: transaction boundary only; the write uses a generated SQLc method.
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = tx.Rollback(context.WithoutCancel(t.Context())) })
+	require.NoError(t, New(tx).UnbindClientIssuerFixture(t.Context(), UnbindClientIssuerFixtureParams{RemoteSessionClientID: registration, UserSessionIssuerID: f.sessionIssuer()}))
+
+	done := make(chan Report, 1)
+	go func() {
+		report, err := Run(t.Context(), f.pool, Options{OrganizationID: f.orgID, Apply: true, PageSize: 0})
+		assert.NoError(t, err)
+		done <- report
+	}()
+	require.Eventually(t, func() bool {
+		_, err := f.q.ProbeServerLockFixture(t.Context(), server)
+		var pgErr *pgconn.PgError
+		return errors.As(err, &pgErr) && pgErr.Code == pgerrcode.LockNotAvailable
+	}, 10*time.Second, 20*time.Millisecond, "the mapping holds the server and waits on the binding")
+	require.NoError(t, tx.Commit(t.Context()))
+
+	report := <-done
+	require.Equal(t, 1, report.PendingSelectionMappings, "the first read saw the binding")
+	require.Zero(t, report.SelectionsMapped)
+	require.Len(t, selectionGaps(report, SelectionUnusable), 1)
 	require.False(t, f.selection(credential, server).AuthClientID.Valid)
 }
 

@@ -21869,8 +21869,8 @@ type AdminUpstreamOAuthMigrationAuthClientsResponseBody struct {
 	Warnings []*AdminUpstreamOAuthMigrationUnresolvedAssociationResponseBody `form:"warnings,omitempty" json:"warnings,omitempty" xml:"warnings,omitempty"`
 	// The same counts for each kind of configured identity.
 	Kinds []*AdminUpstreamOAuthMigrationAuthClientKindResponseBody `form:"kinds,omitempty" json:"kinds,omitempty" xml:"kinds,omitempty"`
-	// Phases whose check failed: oauth, headers, ema, reconcile, mark or
-	// selections. The counts cover the other phases.
+	// Phases whose check failed: oauth, headers, ema, ema_warnings, reconcile,
+	// mark, selections or grants. The counts cover the other phases.
 	FailedPhases []string `form:"failed_phases,omitempty" json:"failed_phases,omitempty" xml:"failed_phases,omitempty"`
 	// Whether every live credential choice names a usable auth client or is an
 	// explicit no-auth choice, and the selections check did not fail.
@@ -21957,8 +21957,8 @@ type AdminUpstreamOAuthMigrationSelectionClassResponseBody struct {
 	// Choices whose upstream OAuth client has no live, enabled auth client linked
 	// to the server.
 	NoClient *int64 `form:"no_client,omitempty" json:"no_client,omitempty" xml:"no_client,omitempty"`
-	// No-auth choices on servers that now offer an OAuth-backed client; the
-	// credential reconnects.
+	// No-auth choices, and choices naming the server's headers, on servers that
+	// now offer an OAuth-backed client; the credential reconnects.
 	StaleNoAuth *int64 `form:"stale_no_auth,omitempty" json:"stale_no_auth,omitempty" xml:"stale_no_auth,omitempty"`
 	// Choices naming an auth client that is no longer usable for the server; the
 	// credential reconnects.
@@ -67758,21 +67758,6 @@ func ValidateAdminUpstreamOAuthMigrationAuthClientsResponseBody(body *AdminUpstr
 	}
 	if body.FailedPhases == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("failed_phases", "body"))
-	}
-	if body.SelectionsComplete == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("selections_complete", "body"))
-	}
-	if body.PendingSelectionMappings == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("pending_selection_mappings", "body"))
-	}
-	if body.SelectionClasses == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("selection_classes", "body"))
-	}
-	if body.SelectionGaps == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("selection_gaps", "body"))
-	}
-	if body.SelectionGapCount == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("selection_gap_count", "body"))
 	}
 	for _, e := range body.UnresolvedAssociations {
 		if e != nil {

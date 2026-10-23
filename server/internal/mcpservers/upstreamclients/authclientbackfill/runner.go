@@ -688,8 +688,13 @@ func clientsRecorded(ctx context.Context, db TxStarter, organizationID string) (
 // nothing left to retire. A client or link awaiting retirement keeps its
 // stable id, so a grant written on it now would come back if it were revived.
 func sharedReady(r Report) bool {
-	if len(r.PhaseErrors) > 0 {
-		return false
+	for name := range r.PhaseErrors {
+		// Selection coverage only reports and maps credential choices; it
+		// records no client or link a grant depends on. Its failure stays
+		// reported and keeps selections incomplete.
+		if name != PhaseSelections {
+			return false
+		}
 	}
 	return r.Mode == "apply" || (r.PendingRetiredClients == 0 && r.PendingRetiredLinks == 0)
 }

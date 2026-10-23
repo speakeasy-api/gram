@@ -22,14 +22,16 @@ const (
 	SelectorKeyProjectID      = "project_id"
 	SelectorKeyServerURL      = "server_url"
 	SelectorKeyServerIdentity = "server_identity"
-	// SelectorKeyClientType and SelectorKeyConnectionOwner narrow mcp:auth
-	// grants to an auth client type and to the owner of a personal connection.
+	// SelectorKeyClientType and SelectorKeyConnectionOwner narrow mcp:auth and
+	// mcp:blocked_auth grants to an auth client type and to the owner of a
+	// personal connection.
 	SelectorKeyClientType      = "client_type"
 	SelectorKeyConnectionOwner = "connection_owner"
-	// SelectorKeyUpstreamClient narrows mcp:auth grants on personal clients to
-	// one upstream OAuth client, the remote_session_clients id behind it. With
-	// a connection owner it names one logical connection across every auth
-	// client sharing that upstream client.
+	// SelectorKeyUpstreamClient narrows mcp:auth and mcp:blocked_auth grants
+	// on personal clients to one upstream OAuth client, the
+	// remote_session_clients id behind it. With a connection owner it names one
+	// logical connection across every auth client sharing that upstream
+	// client, which is what a connection owner's block names.
 	SelectorKeyUpstreamClient = "upstream_client"
 )
 

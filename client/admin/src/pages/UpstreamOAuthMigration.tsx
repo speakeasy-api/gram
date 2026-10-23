@@ -460,19 +460,32 @@ function SelectionCoverage({
 }: {
   authClients: AdminUpstreamOAuthMigrationAuthClients;
 }): JSX.Element | null {
-  if (a.selectionClasses.length === 0) {
+  // A server older than credential choice coverage omits it while a deploy
+  // rolls out: that is unknown, never complete.
+  const classes = a.selectionClasses;
+  if (classes === undefined || a.selectionsComplete === undefined) {
+    return (
+      <p className="text-muted-foreground text-xs">
+        Credential choices: coverage unknown; this server did not report it.
+        Check again once the deploy finishes.
+      </p>
+    );
+  }
+  if (classes.length === 0) {
     return null;
   }
+  const gaps = a.selectionGaps ?? [];
+  const gapCount = a.selectionGapCount ?? gaps.length;
   return (
     <div className="space-y-1">
       <p className="text-muted-foreground text-xs">
         Credential choices:{" "}
         {a.selectionsComplete
           ? "every choice is covered (auth client or explicit no-auth)"
-          : `${a.pendingSelectionMappings} to name, ${a.selectionGapCount} without a usable auth client`}
+          : `${a.pendingSelectionMappings ?? "unknown"} to name, ${gapCount} without a usable auth client`}
       </p>
       <ul className="text-muted-foreground text-xs">
-        {a.selectionClasses.map((c) => (
+        {classes.map((c) => (
           <li key={c.credentialClass}>
             {c.credentialClass}: {c.mapped} of {c.selections} named, {c.noAuth}{" "}
             no-auth, {c.pending} to name
@@ -484,16 +497,16 @@ function SelectionCoverage({
           </li>
         ))}
       </ul>
-      {a.selectionGaps.length > 0 ? (
+      {gaps.length > 0 ? (
         <ul className="text-muted-foreground font-mono text-xs">
-          {a.selectionGaps.map((gap) => (
+          {gaps.map((gap) => (
             <li key={gap.selectionId}>
               {gap.credentialClass} {gap.outcome}: credential {gap.credentialId}
               , server {gap.mcpServerId} in project {gap.projectId}
             </li>
           ))}
-          {a.selectionGapCount > a.selectionGaps.length ? (
-            <li>and {a.selectionGapCount - a.selectionGaps.length} more</li>
+          {gapCount > gaps.length ? (
+            <li>and {gapCount - gaps.length} more</li>
           ) : null}
         </ul>
       ) : null}
