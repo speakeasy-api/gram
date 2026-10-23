@@ -104,7 +104,40 @@ func TestGatewayModeOnlySessionIsBoundAndUnrestricted(t *testing.T) {
 	require.ErrorContains(t, err, "invalid access token")
 }
 
-func TestGatewayDirectPaginationRejectsChangedInventory(t *testing.T) {
+type directListing struct {
+	Result *struct {
+		Tools []struct {
+			Name string `json:"name"`
+		} `json:"tools"`
+		NextCursor *string `json:"nextCursor"`
+	} `json:"result"`
+	Error *struct {
+		Message string `json:"message"`
+	} `json:"error"`
+}
+
+func listDirectGateway(t *testing.T, ti *testInstance, slug string, params map[string]any) directListing {
+	t.Helper()
+	w, err := servePublicHTTP(t, t.Context(), ti, slug, makeMetaRPCBody(t, "tools/list", params), "", nil)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, w.Code)
+	var listing directListing
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &listing), w.Body.String())
+	return listing
+}
+
+func (l directListing) names() []string {
+	if l.Result == nil {
+		return nil
+	}
+	names := make([]string, 0, len(l.Result.Tools))
+	for _, tool := range l.Result.Tools {
+		names = append(names, tool.Name)
+	}
+	return names
+}
+
+func TestGatewayDirectListsWholeInventoryInOneResponse(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestMCPService(t)
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
@@ -114,35 +147,231 @@ func TestGatewayDirectPaginationRejectsChangedInventory(t *testing.T) {
 	for i := range names {
 		names[i] = fmt.Sprintf("tool_%03d", i)
 	}
-	seedHostedMetaMember(t, ctx, ti, gateway.ID, "Paged tools", 1, mcpservers.VisibilityPublic, names...)
+	seedHostedMetaMember(t, ctx, ti, gateway.ID, "Many tools", 1, mcpservers.VisibilityPublic, names...)
 	setGatewayMode(t, ctx, ti, gateway.ID, "direct")
-	w, err := servePublicHTTP(t, t.Context(), ti, slug, makeMetaRPCBody(t, "tools/list", map[string]any{}), "", nil)
-	require.NoError(t, err)
-	require.Equal(t, http.StatusOK, w.Code)
-	var page struct {
-		Result struct {
-			Tools      []json.RawMessage `json:"tools"`
-			NextCursor string            `json:"nextCursor"`
-		} `json:"result"`
-	}
-	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &page))
-	require.Len(t, page.Result.Tools, 100)
-	cursor := page.Result.NextCursor
-	require.NotEmpty(t, cursor)
-	w, err = servePublicHTTP(t, t.Context(), ti, slug, makeMetaRPCBody(t, "tools/list", map[string]any{"cursor": cursor}), "", nil)
-	require.NoError(t, err)
-	require.Equal(t, http.StatusOK, w.Code)
-	page.Result.NextCursor = ""
-	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &page))
-	require.Len(t, page.Result.Tools, 1)
-	require.Empty(t, page.Result.NextCursor)
-	seedHostedMetaMember(t, ctx, ti, gateway.ID, "Added tools", 2, mcpservers.VisibilityPublic, "new_tool")
-	w, err = servePublicHTTP(t, t.Context(), ti, slug, makeMetaRPCBody(t, "tools/list", map[string]any{"cursor": cursor}), "", nil)
-	require.NoError(t, err)
-	require.Equal(t, http.StatusOK, w.Code)
-	require.Contains(t, w.Body.String(), "gateway inventory changed")
+	listing := listDirectGateway(t, ti, slug, map[string]any{})
+	require.Nil(t, listing.Error)
+	require.Len(t, listing.Result.Tools, 101)
+	require.Nil(t, listing.Result.NextCursor)
 }
 
+func TestGatewayDirectRejectsCursorFromAPaginatedListing(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPService(t)
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	slug := "gateway-" + uuid.NewString()
+	gateway := createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, uuid.Nil)
+	seedHostedMetaMember(t, ctx, ti, gateway.ID, "Hosted tools", 1, mcpservers.VisibilityPublic, "alpha")
+	setGatewayMode(t, ctx, ti, gateway.ID, "direct")
+	listing := listDirectGateway(t, ti, slug, map[string]any{"cursor": "eyJvZmZzZXQiOjEwMH0"})
+	require.Nil(t, listing.Result)
+	require.NotNil(t, listing.Error)
+	require.Contains(t, listing.Error.Message, "restart tools/list")
+}
+
+// scriptedUpstream is a streamable-HTTP MCP server whose tools/list pages its
+// current tools and can be made to fail every call with a raw status and body.
+type scriptedUpstream struct {
+	url string
+
+	mu         sync.Mutex
+	tools      []any
+	pageSize   int
+	failStatus int
+	failBody   string
+
+	initializes atomic.Int32
+	listings    atomic.Int32
+}
+
+func newScriptedUpstream(t *testing.T, tools []any, pageSize int) *scriptedUpstream {
+	t.Helper()
+	u := &scriptedUpstream{tools: tools, pageSize: pageSize}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		var request struct {
+			ID     json.RawMessage `json:"id"`
+			Method string          `json:"method"`
+			Params struct {
+				Cursor string `json:"cursor"`
+			} `json:"params"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Errorf("decode upstream request: %v", err)
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		if len(request.ID) == 0 {
+			w.WriteHeader(http.StatusAccepted)
+			return
+		}
+		u.mu.Lock()
+		tools, pageSize, failStatus, failBody := u.tools, u.pageSize, u.failStatus, u.failBody
+		u.mu.Unlock()
+		if failStatus != 0 {
+			w.WriteHeader(failStatus)
+			_, _ = w.Write([]byte(failBody))
+			return
+		}
+		var response any
+		switch request.Method {
+		case "initialize":
+			u.initializes.Add(1)
+			response = map[string]any{"jsonrpc": "2.0", "id": request.ID, "result": map[string]any{"protocolVersion": "2025-03-26", "capabilities": map[string]any{"tools": map[string]any{}}, "serverInfo": map[string]string{"name": "scripted-test", "version": "1"}}}
+		case "tools/list":
+			u.listings.Add(1)
+			offset := 0
+			if request.Params.Cursor != "" {
+				if _, err := fmt.Sscanf(request.Params.Cursor, "page-%d", &offset); err != nil {
+					t.Errorf("parse upstream cursor: %v", err)
+					w.WriteHeader(http.StatusBadRequest)
+					return
+				}
+			}
+			end := min(offset+pageSize, len(tools))
+			page := map[string]any{"tools": tools[offset:end]}
+			if end < len(tools) {
+				page["nextCursor"] = fmt.Sprintf("page-%d", end)
+			}
+			response = map[string]any{"jsonrpc": "2.0", "id": request.ID, "result": page}
+		default:
+			response = map[string]any{"jsonrpc": "2.0", "id": request.ID, "result": map[string]any{}}
+		}
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(response); err != nil {
+			t.Errorf("encode upstream response: %v", err)
+		}
+	}))
+	t.Cleanup(server.Close)
+	u.url = server.URL
+	return u
+}
+
+func (u *scriptedUpstream) fail(status int, body string) {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	u.failStatus, u.failBody = status, body
+}
+
+func (u *scriptedUpstream) setTools(tools []any) {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	u.tools = tools
+}
+
+func scriptedTools(prefix string, n int) []any {
+	tools := make([]any, n)
+	for i := range tools {
+		tools[i] = map[string]any{"name": fmt.Sprintf("%s_%03d", prefix, i), "inputSchema": map[string]any{"type": "object"}}
+	}
+	return tools
+}
+
+func TestGatewayDirectListsPagedUpstreamInOneDiscovery(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPService(t)
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	slug := "gateway-" + uuid.NewString()
+	gateway := createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, uuid.Nil)
+	upstream := newScriptedUpstream(t, scriptedTools("tool", 150), 60)
+	memberSlug := "paged-" + uuid.NewString()[:8]
+	seedMetaMemberWithUpstream(t, ctx, ti.conn, *authCtx.ProjectID, gateway.ID, "Paged tools", memberSlug, 1, upstream.url)
+	setGatewayMode(t, ctx, ti, gateway.ID, "direct")
+	listing := listDirectGateway(t, ti, slug, map[string]any{})
+	require.Nil(t, listing.Error)
+	require.Len(t, listing.Result.Tools, 150)
+	require.Nil(t, listing.Result.NextCursor)
+	require.Contains(t, listing.names(), memberSlug+"--tool_149")
+	require.Equal(t, int32(1), upstream.initializes.Load())
+	require.Equal(t, int32(3), upstream.listings.Load())
+}
+
+func TestGatewayDirectFailsWhenAMemberDoesNotAnswer(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name   string
+		status int
+		body   string
+	}{
+		{name: "rate limited with a non-JSON body", status: http.StatusTooManyRequests, body: "rate limited"},
+		{name: "rate limited with a JSON-RPC error", status: http.StatusTooManyRequests, body: `{"jsonrpc":"2.0","id":1,"error":{"code":-32000,"message":"rate limited"}}`},
+		{name: "server error", status: http.StatusInternalServerError, body: ""},
+		{name: "unavailable", status: http.StatusServiceUnavailable, body: ""},
+		{name: "JSON-RPC error", status: http.StatusOK, body: `{"jsonrpc":"2.0","id":1,"error":{"code":-32603,"message":"internal"}}`},
+		{name: "unreadable success", status: http.StatusOK, body: "not json"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ctx, ti := newTestMCPService(t)
+			authCtx, _ := contextvalues.GetAuthContext(ctx)
+			slug := "gateway-" + uuid.NewString()
+			gateway := createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, uuid.Nil)
+			healthy := seedHostedMetaMember(t, ctx, ti, gateway.ID, "Hosted tools", 1, mcpservers.VisibilityPublic, "alpha")
+			upstream := newScriptedUpstream(t, scriptedTools("tool", 3), 100)
+			upstream.fail(tc.status, tc.body)
+			memberSlug := "failing-" + uuid.NewString()[:8]
+			seedMetaMemberWithUpstream(t, ctx, ti.conn, *authCtx.ProjectID, gateway.ID, "Failing tools", memberSlug, 2, upstream.url)
+			setGatewayMode(t, ctx, ti, gateway.ID, "direct")
+			listing := listDirectGateway(t, ti, slug, map[string]any{})
+			require.Nil(t, listing.Result, "a member that did not answer must not yield a partial listing")
+			require.NotNil(t, listing.Error)
+			require.Contains(t, listing.Error.Message, "gateway tool inventory is incomplete")
+			require.Contains(t, listing.Error.Message, memberSlug)
+			require.NotContains(t, listing.Error.Message, healthy.slug)
+		})
+	}
+}
+
+func TestGatewayDirectRecoversAndSeesLiveToolsAfterAFailedListing(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPService(t)
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	slug := "gateway-" + uuid.NewString()
+	gateway := createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, uuid.Nil)
+	upstream := newScriptedUpstream(t, scriptedTools("tool", 120), 50)
+	memberSlug := "flaky-" + uuid.NewString()[:8]
+	seedMetaMemberWithUpstream(t, ctx, ti.conn, *authCtx.ProjectID, gateway.ID, "Flaky tools", memberSlug, 1, upstream.url)
+	setGatewayMode(t, ctx, ti, gateway.ID, "direct")
+	upstream.fail(http.StatusTooManyRequests, "rate limited")
+	listing := listDirectGateway(t, ti, slug, map[string]any{})
+	require.Nil(t, listing.Result)
+	require.NotNil(t, listing.Error)
+	upstream.fail(0, "")
+	listing = listDirectGateway(t, ti, slug, map[string]any{})
+	require.Nil(t, listing.Error)
+	require.Len(t, listing.Result.Tools, 120)
+	upstream.setTools(scriptedTools("tool", 121))
+	listing = listDirectGateway(t, ti, slug, map[string]any{})
+	require.Nil(t, listing.Error)
+	require.Len(t, listing.Result.Tools, 121)
+	require.Contains(t, listing.names(), memberSlug+"--tool_120")
+}
+
+func TestGatewayDirectOmitsMembersThatRejectTheCredential(t *testing.T) {
+	t.Parallel()
+	for _, status := range []int{http.StatusUnauthorized, http.StatusForbidden} {
+		t.Run(http.StatusText(status), func(t *testing.T) {
+			t.Parallel()
+			ctx, ti := newTestMCPService(t)
+			authCtx, _ := contextvalues.GetAuthContext(ctx)
+			slug := "gateway-" + uuid.NewString()
+			gateway := createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, uuid.Nil)
+			member := seedHostedMetaMember(t, ctx, ti, gateway.ID, "Hosted tools", 1, mcpservers.VisibilityPublic, "alpha")
+			upstream := newScriptedUpstream(t, scriptedTools("tool", 3), 100)
+			upstream.fail(status, "")
+			rejectingSlug := "rejecting-" + uuid.NewString()[:8]
+			seedMetaMemberWithUpstream(t, ctx, ti.conn, *authCtx.ProjectID, gateway.ID, "Rejecting tools", rejectingSlug, 2, upstream.url)
+			setGatewayMode(t, ctx, ti, gateway.ID, "direct")
+			listing := listDirectGateway(t, ti, slug, map[string]any{})
+			require.Nil(t, listing.Error)
+			require.Equal(t, []string{member.slug + "--alpha"}, listing.names())
+		})
+	}
+}
 func TestDirectRejectsMalformedCatalogWhileProgressiveRemainsUsable(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestMCPService(t)
@@ -208,7 +437,7 @@ func newListingUpstream(t *testing.T, tools []any, beforeList func() bool) strin
 	return upstream.URL
 }
 
-func TestGatewayDirectListsReachableMembersWhenOneIsDown(t *testing.T) {
+func TestGatewayDirectFailsWhenAMemberIsDown(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestMCPService(t)
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
@@ -221,12 +450,11 @@ func TestGatewayDirectListsReachableMembersWhenOneIsDown(t *testing.T) {
 	downSlug := "down-" + uuid.NewString()[:8]
 	seedMetaMemberWithUpstream(t, ctx, ti.conn, *authCtx.ProjectID, gateway.ID, "Down tools", downSlug, 2, downURL)
 	setGatewayMode(t, ctx, ti, gateway.ID, "direct")
-	w, err := servePublicHTTP(t, t.Context(), ti, slug, makeMetaRPCBody(t, "tools/list", map[string]any{}), "", nil)
-	require.NoError(t, err)
-	require.Equal(t, http.StatusOK, w.Code)
-	require.Contains(t, w.Body.String(), member.slug+"--alpha")
-	require.NotContains(t, w.Body.String(), downSlug+"--")
-	require.NotContains(t, w.Body.String(), `"error"`)
+	listing := listDirectGateway(t, ti, slug, map[string]any{})
+	require.Nil(t, listing.Result)
+	require.NotNil(t, listing.Error)
+	require.Contains(t, listing.Error.Message, downSlug)
+	require.NotContains(t, listing.Error.Message, member.slug+"--alpha")
 }
 
 func TestGatewayDirectDescribesMembersConcurrently(t *testing.T) {
@@ -287,9 +515,9 @@ func TestGatewayDirectBoundsTheWholeInventory(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, w.Code)
 	require.Less(t, time.Since(started), 2*time.Second)
-	// Members past the budget are skipped, not a failed listing.
-	require.NotContains(t, w.Body.String(), `"error"`)
-	require.Contains(t, w.Body.String(), `"tools":[]`)
+	// Members past the budget leave the inventory unknown, so the listing fails.
+	require.Contains(t, w.Body.String(), "gateway tool inventory is incomplete")
+	require.NotContains(t, w.Body.String(), `"tools"`)
 }
 
 func TestGatewayDirectGivesQueuedMembersTheirOwnDeadline(t *testing.T) {

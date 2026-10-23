@@ -417,12 +417,7 @@ func TestConnectionCatalogCachedDiscoveryNeverContactsUpstream(t *testing.T) {
 						require.Len(t, listed.Result.Tools, 1)
 						require.Empty(t, listed.Result.NextCursor)
 					} else {
-						require.Len(t, listed.Result.Tools, 100)
-						page, err := servePublicHTTP(t, t.Context(), ti, slug, makeMetaRPCBody(t, "tools/list", map[string]any{"cursor": listed.Result.NextCursor}), connection.token, nil)
-						require.NoError(t, err)
-						listed.Result.NextCursor = ""
-						require.NoError(t, json.Unmarshal(page.Body.Bytes(), &listed))
-						require.Len(t, listed.Result.Tools, 50)
+						require.Len(t, listed.Result.Tools, 150)
 						require.Empty(t, listed.Result.NextCursor)
 					}
 				}
