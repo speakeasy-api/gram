@@ -59,14 +59,21 @@ type MCPConnectionMutationService struct {
 	eligibility networkaccess.EligibilityChecker
 	publication plugins.PublicationRequests
 	publisher   plugins.PluginPublishSignaler
+	reconcile   func(context.Context, []uuid.UUID) error
 	now         func() time.Time
+}
+
+// WithCustomDomainReconcile sets how custom domains whose root a mutation cleared are reconciled after commit.
+func (s *MCPConnectionMutationService) WithCustomDomainReconcile(reconcile func(context.Context, []uuid.UUID) error) *MCPConnectionMutationService {
+	s.reconcile = reconcile
+	return s
 }
 
 func NewMCPConnectionMutationService(db *pgxpool.Pool, settings *MCPConnectionSettingsService, endpoints MCPConnectionEndpointWriter, auditLogger *audit.Logger, authorizer *authz.Engine, eligibility networkaccess.EligibilityChecker, publication plugins.PublicationRequests, publisher plugins.PluginPublishSignaler) (*MCPConnectionMutationService, error) {
 	if db == nil || settings == nil || endpoints == nil || auditLogger == nil || authorizer == nil || eligibility == nil {
 		return nil, ErrMCPConnectionMutationInvalid
 	}
-	return &MCPConnectionMutationService{db: db, settings: settings, endpoints: endpoints, audit: auditLogger, authorizer: authorizer, eligibility: eligibility, publication: publication, publisher: publisher, now: time.Now}, nil
+	return &MCPConnectionMutationService{db: db, settings: settings, endpoints: endpoints, audit: auditLogger, authorizer: authorizer, eligibility: eligibility, publication: publication, publisher: publisher, reconcile: nil, now: time.Now}, nil
 }
 
 type SetMCPAddressInput struct {
@@ -225,7 +232,9 @@ func (s *MCPConnectionMutationService) SetNetworkAccess(ctx context.Context, pri
 		return MCPConnectionMutationOutput{}, err
 	}
 	normalized := connectionMutationInput{ProjectID: project.ID.String(), TargetKind: kind, TargetID: targetID.String(), ExpectedVersion: input.ExpectedVersion, Mode: string(mode)}
+	var clearedRootDomainIDs []uuid.UUID
 	result, receipt, err := s.execute(ctx, principal, project, operationSetMCPNetworkAccess, input.IdempotencyKey, normalized, func(ctx context.Context, tx pgx.Tx) (connectionMutationReceipt, error) {
+		clearedRootDomainIDs = nil
 		finalize, err := s.eligibility.PrepareNetworkAccess(ctx, networkaccess.EligibilityInput{OrganizationID: principal.OrganizationID, Mode: mode})
 		if err != nil {
 			return connectionMutationReceipt{}, connectionMutationUnavailable(err)
@@ -246,7 +255,7 @@ func (s *MCPConnectionMutationService) SetNetworkAccess(ctx context.Context, pri
 					return connectionMutationReceipt{}, connectionMutationUnavailable(err)
 				}
 				actor := &contextvalues.AuthContext{ActiveOrganizationID: principal.OrganizationID, UserID: principal.UserID, ProjectID: &project.ID}
-				err = toolsets.SetHostedNetworkAccessInTransaction(ctx, tx, s.audit, actor, targetID, mode)
+				clearedRootDomainIDs, err = toolsets.SetHostedNetworkAccessInTransaction(ctx, tx, s.audit, actor, targetID, mode)
 			} else {
 				_, err = mcpservers.UpdateMCPServerNetworkAccessModeInTransaction(ctx, tx, s.audit, mcpservers.LifecycleUpdateInput{OrganizationID: principal.OrganizationID, ProjectID: project.ID, ActorUserID: principal.UserID, ServerID: targetID}, mode, finalize)
 			}
@@ -264,6 +273,11 @@ func (s *MCPConnectionMutationService) SetNetworkAccess(ctx context.Context, pri
 	})
 	if err != nil {
 		return MCPConnectionMutationOutput{}, err
+	}
+	if s.reconcile != nil && len(clearedRootDomainIDs) > 0 {
+		if err := s.reconcile(ctx, clearedRootDomainIDs); err != nil {
+			return MCPConnectionMutationOutput{}, fmt.Errorf("reconcile hosted MCP custom domains: %w", err)
+		}
 	}
 	return s.finish(ctx, principal, project.ID, input.ProjectID, kind, targetID, result, receipt)
 }

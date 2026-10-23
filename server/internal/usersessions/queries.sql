@@ -1001,7 +1001,8 @@ WHERE binding.user_session_issuer_id = @source_issuer_id
       )
   );
 
--- name: UpdateMCPServersToUserSessionIssuer :execrows
+-- name: UpdateMCPServersToUserSessionIssuer :many
+-- Returns each moved server so hosted ones can be audited as their own update.
 UPDATE mcp_servers AS server
 SET user_session_issuer_id = @target_issuer_id,
     updated_at = clock_timestamp()
@@ -1019,7 +1020,8 @@ WHERE server.user_session_issuer_id = @source_issuer_id
         (issuer.project_id IS NULL AND issuer.organization_id = @organization_id::text)
         OR (issuer.project_id IS NOT NULL AND issuer_project.organization_id = @organization_id::text AND issuer_project.deleted IS FALSE)
       )
-  );
+  )
+RETURNING server.id, server.project_id, (server.toolset_id IS NOT DISTINCT FROM server.id)::boolean AS canonical;
 
 -- name: ListMCPServerProjectIDsForUserSessionIssuerMigration :many
 -- Every affected project must recompute its denormalized remote-session issuer

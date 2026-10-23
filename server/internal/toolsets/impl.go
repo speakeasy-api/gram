@@ -876,6 +876,10 @@ func (s *Service) CloneToolset(ctx context.Context, payload *gen.CloneToolsetPay
 	}); err != nil {
 		return nil, err //nolint:wrapcheck // oops errors pass through.
 	}
+	clonedToolset, err = tr.GetToolsetByIDAndProject(ctx, repo.GetToolsetByIDAndProjectParams{ID: clonedToolset.ID, ProjectID: clonedToolset.ProjectID})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "reload mirrored toolset").LogError(ctx, logger)
+	}
 
 	// Clone the latest toolset version
 	latestVersion, err := tr.GetLatestToolsetVersion(ctx, originalToolset.ID)

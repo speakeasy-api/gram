@@ -95,8 +95,9 @@ export function ServerUrlSection({
   const orgRoutes = useOrgRoutes();
   const { hasScope } = useRBAC();
   const canManageDomains = hasScope("org:admin");
-  // Canonical hosted servers keep exactly one address: edit only.
-  const singleAddress = !!mcpServer && isCanonicalHostedWrapper(mcpServer);
+  // A hosted server keeps one address: edit it, or add one only when it has none.
+  const singleAddress =
+    !!mcpServer && isCanonicalHostedWrapper(mcpServer) && endpoints.length > 0;
   const privateMode =
     mcpServer?.networkAccessMode === McpServerNetworkAccessMode.Dual ||
     mcpServer?.networkAccessMode === McpServerNetworkAccessMode.PrivateOnly;

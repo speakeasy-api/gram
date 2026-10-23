@@ -30,6 +30,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
+	"github.com/speakeasy-api/gram/server/internal/hostedmcp/hostingstate"
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
@@ -150,6 +151,11 @@ func (s *Service) CreateMcpEndpoint(ctx context.Context, payload *gen.CreateMcpE
 	if err := lockEndpointMutationScope(ctx, dbtx, authCtx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "lock endpoint mutation scope").LogError(ctx, logger)
 	}
+	if mcpServerID.Valid {
+		if err := lockHostedToolset(ctx, dbtx, *authCtx.ProjectID, mcpServerID.UUID); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "lock hosted toolset").LogError(ctx, logger)
+		}
+	}
 
 	// Match the deletion and update paths' lock order — custom domains before
 	// backend rows — so a create racing a backend deletion cannot deadlock:
@@ -187,8 +193,11 @@ func (s *Service) CreateMcpEndpoint(ctx context.Context, payload *gen.CreateMcpE
 	if err := verifyEndpointReferenceOwnership(ctx, dbtx, *authCtx.ProjectID, authCtx.ActiveOrganizationID, mcpServerID, metaMcpServerID, customDomainID); err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "invalid mcp endpoint").LogError(ctx, logger)
 	}
-	if mcpServerID.Valid && isCanonicalHosted(mcpServer) {
-		return nil, oops.E(oops.CodeInvalid, nil, "a hosted MCP server keeps a single address; change that address instead").LogWarn(ctx, logger)
+	hosted := mcpServerID.Valid && isCanonicalHosted(mcpServer)
+	if hosted {
+		if err := checkHostedCreate(ctx, dbtx, logger, authCtx, mcpServer, customDomainID, slug); err != nil {
+			return nil, err
+		}
 	}
 
 	if err := LockSlugScope(ctx, dbtx, customDomainID, slug); err != nil {
@@ -236,6 +245,14 @@ func (s *Service) CreateMcpEndpoint(ctx context.Context, payload *gen.CreateMcpE
 		Slug:             created.Slug,
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "log mcp endpoint creation").LogError(ctx, logger)
+	}
+	if hosted {
+		if err := s.followHostedSlug(ctx, dbtx, logger, authCtx, mcpServer, created.Slug); err != nil {
+			return nil, err
+		}
+		if err := hostingstate.MirrorToToolset(ctx, dbtx, *authCtx.ProjectID, mcpServer.ID); err != nil {
+			return nil, err //nolint:wrapcheck // oops errors pass through.
+		}
 	}
 
 	// Meta-MCP-backed endpoints never participate in default-plugin attachment
@@ -558,7 +575,7 @@ func (s *Service) UpdateMcpEndpoint(ctx context.Context, payload *gen.UpdateMcpE
 		}
 		for _, server := range lockedServers {
 			if isCanonicalHosted(server) {
-				return nil, oops.E(oops.CodeInvalid, nil, "a hosted MCP server's endpoints cannot move to or from another backend; create or delete endpoints instead").LogWarn(ctx, logger)
+				return nil, oops.E(oops.CodeInvalid, nil, "a hosted MCP server's address cannot move to or from another backend").LogWarn(ctx, logger)
 			}
 		}
 	}

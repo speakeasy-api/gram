@@ -6028,7 +6028,7 @@ func (q *Queries) TouchUserSessionLastUsed(ctx context.Context, arg TouchUserSes
 	return err
 }
 
-const updateMCPServersToUserSessionIssuer = `-- name: UpdateMCPServersToUserSessionIssuer :execrows
+const updateMCPServersToUserSessionIssuer = `-- name: UpdateMCPServersToUserSessionIssuer :many
 UPDATE mcp_servers AS server
 SET user_session_issuer_id = $1,
     updated_at = clock_timestamp()
@@ -6047,6 +6047,7 @@ WHERE server.user_session_issuer_id = $2
         OR (issuer.project_id IS NOT NULL AND issuer_project.organization_id = $3::text AND issuer_project.deleted IS FALSE)
       )
   )
+RETURNING server.id, server.project_id, (server.toolset_id IS NOT DISTINCT FROM server.id)::boolean AS canonical
 `
 
 type UpdateMCPServersToUserSessionIssuerParams struct {
@@ -6055,12 +6056,31 @@ type UpdateMCPServersToUserSessionIssuerParams struct {
 	OrganizationID string
 }
 
-func (q *Queries) UpdateMCPServersToUserSessionIssuer(ctx context.Context, arg UpdateMCPServersToUserSessionIssuerParams) (int64, error) {
-	result, err := q.db.Exec(ctx, updateMCPServersToUserSessionIssuer, arg.TargetIssuerID, arg.SourceIssuerID, arg.OrganizationID)
+type UpdateMCPServersToUserSessionIssuerRow struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+	Canonical bool
+}
+
+// Returns each moved server so hosted ones can be audited as their own update.
+func (q *Queries) UpdateMCPServersToUserSessionIssuer(ctx context.Context, arg UpdateMCPServersToUserSessionIssuerParams) ([]UpdateMCPServersToUserSessionIssuerRow, error) {
+	rows, err := q.db.Query(ctx, updateMCPServersToUserSessionIssuer, arg.TargetIssuerID, arg.SourceIssuerID, arg.OrganizationID)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
-	return result.RowsAffected(), nil
+	defer rows.Close()
+	var items []UpdateMCPServersToUserSessionIssuerRow
+	for rows.Next() {
+		var i UpdateMCPServersToUserSessionIssuerRow
+		if err := rows.Scan(&i.ID, &i.ProjectID, &i.Canonical); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const updateMetaMCPServersToUserSessionIssuer = `-- name: UpdateMetaMCPServersToUserSessionIssuer :execrows

@@ -369,7 +369,7 @@ func legacyVisibility(toolset toolsets_repo.Toolset) string {
 	}
 }
 
-func TestExportMcpMetadata_BySlugKeepsFrozenAliasIdentity(t *testing.T) {
+func TestExportMcpMetadata_BySlugKeepsToolsetAddressIdentity(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestMCPMetadataService(t)
 
@@ -384,9 +384,9 @@ func TestExportMcpMetadata_BySlugKeepsFrozenAliasIdentity(t *testing.T) {
 
 	result, err := ti.service.ExportMcpMetadata(ctx, &gen.ExportMcpMetadataPayload{McpSlug: new(types.Slug(legacy.McpSlug.String))})
 	require.NoError(t, err)
-	require.Equal(t, legacy.Slug, result.Slug, "the frozen alias keeps naming its toolset")
+	require.Equal(t, legacy.Slug, result.Slug, "a toolset's address keeps naming its toolset")
 
-	// A toolset created after the flip has no alias: its endpoint slug names it.
+	// An endpoint slug no toolset holds names the endpoint's server.
 	_, err = mcpendpoints_repo.New(ti.conn).CreateMCPEndpoint(ctx, mcpendpoints_repo.CreateMCPEndpointParams{
 		ProjectID: other.ProjectID, McpServerID: uuid.NullUUID{UUID: otherServer.ID, Valid: true}, Slug: "endpoint-owner-second",
 	})

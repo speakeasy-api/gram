@@ -723,7 +723,7 @@ func (s *Service) resolveExportToolset(ctx context.Context, projectID uuid.UUID,
 		return toolsets_repo.Toolset{}, nil, oops.E(oops.CodeBadRequest, nil, "mcp_slug and mcp_server_id are mutually exclusive")
 	case mcpSlugProvided:
 		mcpSlug := conv.ToLower(string(*payload.McpSlug))
-		// A toolset's frozen alias keeps naming that toolset; otherwise the slug names an endpoint's server.
+		// A toolset's mirrored address keeps naming that toolset; otherwise the slug names an endpoint's server.
 		toolset, err := s.toolsetRepo.GetToolsetByMcpSlugAndProject(ctx, toolsets_repo.GetToolsetByMcpSlugAndProjectParams{
 			McpSlug:   conv.ToPGText(mcpSlug),
 			ProjectID: projectID,
@@ -2078,7 +2078,7 @@ func safeTemplateURL(rawURL string, allowedScheme string) (template.URL, error) 
 
 func (s *Service) resolveMCPURLFromContext(ctx context.Context, toolset toolsets_repo.Toolset, serverUrl string) (string, error) {
 	// The canonical server's address wins: its platform endpoint first, else its oldest endpoint on a live custom
-	// domain; the toolset's frozen alias stands only when it has neither.
+	// domain; the toolset's own address stands only when it has neither.
 	hosting, err := hostingstate.Load(ctx, s.db, toolset.OrganizationID, []uuid.UUID{toolset.ID})
 	if err != nil {
 		return "", fmt.Errorf("load hosted MCP address: %w", err)
@@ -2163,8 +2163,8 @@ func (s *Service) loadToolsetFromContextAndSlug(ctx context.Context, mcpSlug str
 		return &toolset, false, nil
 	case err != nil:
 		return nil, false, fmt.Errorf("load hosted MCP network policy: %w", err)
-	case !hostedmcp.IsCanonical(&server, toolset.ID):
-		return nil, false, fmt.Errorf("%w: hosted MCP identity belongs to another server", errToolsetNotFound)
+	case !hostedmcp.InSync(toolset, &server):
+		return nil, false, fmt.Errorf("%w: hosted MCP server does not match its toolset", errToolsetNotFound)
 	}
 	// The canonical wrapper owns hosting state; the toolset slug is only the legacy alias.
 	toolset = hostedmcp.WithServerState(toolset, &server)

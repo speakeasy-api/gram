@@ -185,12 +185,14 @@ func TestUpdateMcpEndpointHostedMovesOntoVerifiedDomain(t *testing.T) {
 	endpoint := f.requireProjected(t, ctx)
 	require.Equal(t, uuid.NullUUID{UUID: domain.ID, Valid: true}, endpoint.CustomDomainID)
 	require.Equal(t, "on-domain", endpoint.Slug)
+	f.requireMirrored(t, ctx)
 
 	// A live domain cannot be left: clients may hold URLs on it.
 	_, err = f.ti.service.UpdateMcpEndpoint(ctx, f.payload(f.authCtx.OrganizationSlug+"-off-domain", nil))
 	requireOopsCode(t, err, oops.CodeInvalid)
 	require.ErrorContains(t, err, "cannot leave its custom domain")
 	require.Equal(t, "on-domain", f.requireProjected(t, ctx).Slug)
+	f.requireMirrored(t, ctx)
 }
 
 func TestUpdateMcpEndpointHostedAppliesHostedAddressRules(t *testing.T) {
@@ -232,7 +234,7 @@ func TestUpdateMcpEndpointRejectsRepointingToOrFromHostedServer(t *testing.T) {
 		p.McpServerID = new(otherServer.String())
 	}))
 	requireOopsCode(t, err, oops.CodeInvalid)
-	require.ErrorContains(t, err, "create or delete endpoints instead")
+	require.ErrorContains(t, err, "cannot move to or from another backend")
 	require.Equal(t, f.endpoint, f.requireProjected(t, ctx))
 
 	foreign, err := mcpendpointsrepo.New(f.ti.conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
@@ -328,7 +330,7 @@ func TestUpdateMcpEndpointHostedLeavesUnservableDomain(t *testing.T) {
 			})
 			require.NoError(t, err)
 		},
-		"soft-deleted": func(t *testing.T, ctx context.Context, f *hostedAddressFixture, domain customdomainsrepo.CustomDomain) {
+		"soft-deleted, endpoint left behind": func(t *testing.T, ctx context.Context, f *hostedAddressFixture, domain customdomainsrepo.CustomDomain) {
 			t.Helper()
 			require.NoError(t, customdomainsrepo.New(f.ti.conn).DeleteCustomDomain(ctx, f.authCtx.ActiveOrganizationID))
 		},
@@ -365,6 +367,7 @@ func TestUpdateMcpEndpointHostedLeavesUnservableDomain(t *testing.T) {
 			require.NoError(t, err)
 			require.Contains(t, string(record.BeforeSnapshot), domain.ID.String())
 			require.NotContains(t, string(record.AfterSnapshot), domain.ID.String())
+			f.requireMirrored(t, ctx)
 		})
 	}
 }
@@ -393,6 +396,7 @@ func TestUpdateMcpEndpointHostedLeavingDomainAppliesPlatformRules(t *testing.T) 
 	endpoint := f.requireProjected(t, ctx)
 	require.False(t, endpoint.CustomDomainID.Valid)
 	require.Equal(t, renamed, endpoint.Slug)
+	f.requireMirrored(t, ctx)
 }
 
 func TestUpdateMcpEndpointHostedKeepsHealthDisabledDomain(t *testing.T) {
@@ -419,6 +423,7 @@ func TestUpdateMcpEndpointHostedKeepsHealthDisabledDomain(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeInvalid)
 	require.ErrorContains(t, err, "cannot leave its custom domain")
 	require.Equal(t, placed, f.requireProjected(t, ctx), "clients on a domain that can be reverified keep their URL")
+	f.requireMirrored(t, ctx)
 }
 
 func TestUpdateMcpEndpointHostedLeavingDomainProbesKeptSlug(t *testing.T) {
@@ -475,6 +480,7 @@ func TestUpdateMcpEndpointHostedLeavingDomainDropsRoot(t *testing.T) {
 	require.Equal(t, f.endpoint.ID, endpoint.ID)
 	require.False(t, endpoint.CustomDomainID.Valid)
 	require.False(t, endpoint.IsDomainRoot.Valid && endpoint.IsDomainRoot.Bool, "the platform endpoint is not a domain root")
+	f.requireMirrored(t, ctx)
 }
 
 func TestUpdateMcpEndpointHostedAcceptsServerScopedWrite(t *testing.T) {
@@ -502,6 +508,7 @@ func TestUpdateMcpEndpointHostedAcceptsServerScopedWrite(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, newSlug, string(view.Slug))
 	require.Equal(t, newSlug, f.requireProjected(t, ctx).Slug)
+	f.requireMirrored(t, ctx)
 
 	_, err = f.ti.service.UpdateMcpEndpoint(scoped, &gen.UpdateMcpEndpointPayload{
 		SessionToken:     nil,

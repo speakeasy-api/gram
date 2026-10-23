@@ -717,18 +717,7 @@ func newPlatformMCPLifecycleVisibilityService(config platformMCPConfig, readines
 		}
 		_, err := config.PluginPublisher.PublishProject(ctx, plugins.PublishProjectInput{ProjectID: projectID, CreatedByUserID: userID, CommitMessage: commitMessage, SkipIfUnchanged: true})
 		return err
-	}, func(ctx context.Context, domainIDs []uuid.UUID) error {
-		if config.TemporalEnv == nil {
-			return nil
-		}
-		var result []error
-		for _, domainID := range domainIDs {
-			if _, err := (&background.CustomDomainRegistrationClient{TemporalEnv: config.TemporalEnv}).ExecuteCustomDomainReconcile(ctx, domainID); err != nil {
-				result = append(result, err)
-			}
-		}
-		return errors.Join(result...)
-	}, readiness, config.JWTSigningKey)
+	}, platformMCPReconcileCustomDomains(config), readiness, config.JWTSigningKey)
 	if err != nil {
 		return nil, err
 	}
@@ -872,6 +861,22 @@ func newPlatformMCPGateways(config platformMCPConfig, authorizer platformmcp.Aut
 	return service
 }
 
+// platformMCPReconcileCustomDomains reconciles custom domains whose root a committed write cleared.
+func platformMCPReconcileCustomDomains(config platformMCPConfig) func(context.Context, []uuid.UUID) error {
+	return func(ctx context.Context, domainIDs []uuid.UUID) error {
+		if config.TemporalEnv == nil {
+			return nil
+		}
+		var result []error
+		for _, domainID := range domainIDs {
+			if _, err := (&background.CustomDomainRegistrationClient{TemporalEnv: config.TemporalEnv}).ExecuteCustomDomainReconcile(ctx, domainID); err != nil {
+				result = append(result, err)
+			}
+		}
+		return errors.Join(result...)
+	}
+}
+
 func newPlatformMCPConnectionMutations(config platformMCPConfig) *platformmcp.MCPConnectionMutationService {
 	service, err := platformmcp.NewMCPConnectionMutationService(
 		config.DB,
@@ -883,7 +888,7 @@ func newPlatformMCPConnectionMutations(config platformMCPConfig) *platformmcp.MC
 		config.Logger.WarnContext(context.Background(), "Platform MCP connection mutations unavailable", attr.SlogError(err))
 		return nil
 	}
-	return service
+	return service.WithCustomDomainReconcile(platformMCPReconcileCustomDomains(config))
 }
 
 func loadBrowserPlatformMCPCatalogDescriptors(ctx context.Context, catalog *externalmcp.CatalogService) ([]platformmcp.RegistryCatalogSource, error) {

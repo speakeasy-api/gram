@@ -120,6 +120,15 @@ describe("ServerUrlSection", () => {
     expect(screen.queryByText("Hosted Address")).toBeNull();
   });
 
+  it("offers to add an address to a canonical server that has none", () => {
+    renderSection(server({ id: "toolset-1", toolsetId: "toolset-1" }), []);
+
+    expect(screen.getByText("No hosted address")).toBeTruthy();
+    expect(
+      screen.getAllByRole("button", { name: "Add" }).length,
+    ).toBeGreaterThan(0);
+  });
+
   it("keeps add and remove for other servers", () => {
     renderSection(server({ toolsetId: "toolset-1" }), [
       platformEndpoint,

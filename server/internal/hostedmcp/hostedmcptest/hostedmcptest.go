@@ -54,6 +54,18 @@ func oldVisibility(toolset toolsetsrepo.Toolset) string {
 // older pod's drift check sees them in step, and that the older toolset-to-server sync writes nothing.
 func RequireMirrored(t *testing.T, ctx context.Context, db *pgxpool.Pool, projectID, toolsetID uuid.UUID) {
 	t.Helper()
+	requireMirrored(t, ctx, db, projectID, toolsetID, 1)
+}
+
+// RequireMirroredWithoutAddress is RequireMirrored for a hosted server left with no endpoint, as a deleted domain
+// leaves it: the toolset keeps its last address and the older sync must not restore it.
+func RequireMirroredWithoutAddress(t *testing.T, ctx context.Context, db *pgxpool.Pool, projectID, toolsetID uuid.UUID) {
+	t.Helper()
+	requireMirrored(t, ctx, db, projectID, toolsetID, 0)
+}
+
+func requireMirrored(t *testing.T, ctx context.Context, db *pgxpool.Pool, projectID, toolsetID uuid.UUID, endpoints int) {
+	t.Helper()
 
 	state := load(t, ctx, db, projectID, toolsetID)
 	want := hostingstate.MirrorOf(state.toolset, state.server, state.endpoints)
@@ -66,7 +78,7 @@ func RequireMirrored(t *testing.T, ctx context.Context, db *pgxpool.Pool, projec
 	require.Equal(t, want.ToolVariationsGroupID, state.toolset.ToolVariationsGroupID, "tool_variations_group_id")
 	require.Equal(t, oldVisibility(state.toolset), state.server.Visibility, "an older pod's drift check sees the server in step")
 	require.Equal(t, state.toolset.McpSlug, state.server.Slug, "the server slug follows its single address")
-	require.Len(t, state.endpoints, 1, "a hosted server keeps a single address")
+	require.Len(t, state.endpoints, endpoints, "a hosted server keeps at most a single address")
 
 	tx := testenv.BeginTx(t, ctx, db)
 	defer func() { _ = tx.Rollback(context.Background()) }()

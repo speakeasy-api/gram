@@ -242,6 +242,10 @@ func TestServiceCreateAssistantAutoEnablesMCPOnAttachedToolsets(t *testing.T) {
 		Slug: ts.McpSlug, ToolsetID: uuid.NullUUID{UUID: ts.ID, Valid: true}, Visibility: "disabled",
 	})
 	require.NoError(t, err)
+	_, err = mcpendpointsRepo.New(conn).CreateMCPEndpoint(t.Context(), mcpendpointsRepo.CreateMCPEndpointParams{
+		ProjectID: projectID, McpServerID: uuid.NullUUID{UUID: ts.ID, Valid: true}, Slug: ts.McpSlug.String,
+	})
+	require.NoError(t, err)
 
 	ctx = authztest.WithExactGrants(t, ctx, assistantWriteGrant(projectID), mcpConnectGrant(), mcpWriteGrant(ts.ID))
 	_, err = svc.CreateAssistant(ctx, &gen.CreateAssistantPayload{
@@ -323,6 +327,10 @@ func newMCPEnableFixture(t *testing.T, dbName string) (mcpEnableFixture, context
 	_, err = mcpserversRepo.New(conn).CreateMCPServer(t.Context(), mcpserversRepo.CreateMCPServerParams{
 		ID: disabled.ID, ProjectID: projectID, Name: pgtype.Text{String: disabled.Name, Valid: true},
 		Slug: disabled.McpSlug, ToolsetID: uuid.NullUUID{UUID: disabled.ID, Valid: true}, Visibility: "disabled",
+	})
+	require.NoError(t, err)
+	_, err = mcpendpointsRepo.New(conn).CreateMCPEndpoint(t.Context(), mcpendpointsRepo.CreateMCPEndpointParams{
+		ProjectID: projectID, McpServerID: uuid.NullUUID{UUID: disabled.ID, Valid: true}, Slug: disabled.McpSlug.String,
 	})
 	require.NoError(t, err)
 	enabled, err := toolsetsQ.CreateToolset(t.Context(), toolsetsRepo.CreateToolsetParams{
@@ -495,6 +503,10 @@ func TestServiceUpdateAssistantAutoEnablesMCPOnAttachedToolsets(t *testing.T) {
 	_, err = mcpserversRepo.New(conn).CreateMCPServer(t.Context(), mcpserversRepo.CreateMCPServerParams{
 		ID: ts.ID, ProjectID: projectID, Name: pgtype.Text{String: ts.Name, Valid: true},
 		Slug: ts.McpSlug, ToolsetID: uuid.NullUUID{UUID: ts.ID, Valid: true}, Visibility: "disabled",
+	})
+	require.NoError(t, err)
+	_, err = mcpendpointsRepo.New(conn).CreateMCPEndpoint(t.Context(), mcpendpointsRepo.CreateMCPEndpointParams{
+		ProjectID: projectID, McpServerID: uuid.NullUUID{UUID: ts.ID, Valid: true}, Slug: ts.McpSlug.String,
 	})
 	require.NoError(t, err)
 
