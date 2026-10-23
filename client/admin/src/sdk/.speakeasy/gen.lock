@@ -48,7 +48,9 @@ trackedFiles:
   src/funcs/adminDeleteOnboardingUseCase.ts: {}
   src/funcs/adminDescribeMcpServerHealth.ts: {}
   src/funcs/adminDisableOrganization.ts: {}
+  src/funcs/adminDisableUpstreamAuthEnforcement.ts: {}
   src/funcs/adminEnableOrganization.ts: {}
+  src/funcs/adminEnableUpstreamAuthEnforcement.ts: {}
   src/funcs/adminExtendTrial.ts: {}
   src/funcs/adminFetchGlobalIssuerMetadata.ts: {}
   src/funcs/adminGetGlobalIssuer.ts: {}
@@ -222,6 +224,7 @@ trackedFiles:
   src/models/components/adminstripecustomer.ts: {}
   src/models/components/adminstripesubscription.ts: {}
   src/models/components/adminstripesubscriptioncandidate.ts: {}
+  src/models/components/adminupstreamauthenforcement.ts: {}
   src/models/components/adminupstreamoauthmigrationauthclientkind.ts: {}
   src/models/components/adminupstreamoauthmigrationauthclients.ts: {}
   src/models/components/adminupstreamoauthmigrationexecutionprofilegap.ts: {}
@@ -252,9 +255,11 @@ trackedFiles:
   src/models/components/deleteonboardingplaybookrequestbody.ts: {}
   src/models/components/deleteonboardingusecaserequestbody.ts: {}
   src/models/components/disableorganizationrequestbody.ts: {}
+  src/models/components/disableupstreamauthenforcementrequestbody.ts: {}
   src/models/components/emaprovider.ts: {}
   src/models/components/emaproviderorder.ts: {}
   src/models/components/enableorganizationrequestbody.ts: {}
+  src/models/components/enableupstreamauthenforcementrequestbody.ts: {}
   src/models/components/extendtrialrequestbody.ts: {}
   src/models/components/fetchissuermetadatarequestbody.ts: {}
   src/models/components/globalremotesessionissuer.ts: {}
@@ -368,7 +373,9 @@ trackedFiles:
   src/react-query/adminDescribeMcpServerHealth.core.ts: {}
   src/react-query/adminDescribeMcpServerHealth.ts: {}
   src/react-query/adminDisableOrganization.ts: {}
+  src/react-query/adminDisableUpstreamAuthEnforcement.ts: {}
   src/react-query/adminEnableOrganization.ts: {}
+  src/react-query/adminEnableUpstreamAuthEnforcement.ts: {}
   src/react-query/adminExtendTrial.ts: {}
   src/react-query/adminFetchGlobalIssuerMetadata.ts: {}
   src/react-query/adminGetGlobalIssuer.core.ts: {}
@@ -729,6 +736,17 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  adminDisableUpstreamAuthEnforcement:
+    speakeasy-default-admin-disable-upstream-auth-enforcement:
+      requestBody:
+        application/json: {"organization_id": "<id>"}
+      responses:
+        "200":
+          application/json: {"credentials": 23173, "migrated": false, "organization_id": "<id>", "pending_associations": 912265, "pending_selections": 44397, "reconnect_credentials": 169705, "servers": 411189, "unresolved_servers": []}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   adminEnableOrganization:
     speakeasy-default-admin-enable-organization:
       requestBody:
@@ -740,6 +758,17 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  adminEnableUpstreamAuthEnforcement:
+    speakeasy-default-admin-enable-upstream-auth-enforcement:
+      requestBody:
+        application/json: {"cross_organization_denial_communicated": true, "organization_id": "<id>", "shadow_parity_confirmed": false}
+      responses:
+        "200":
+          application/json: {"credentials": 282773, "migrated": true, "organization_id": "<id>", "pending_associations": 614923, "pending_selections": 681368, "reconnect_credentials": 361153, "servers": 559255, "unresolved_servers": [{"mcp_server_id": "43f57f6e-9b2c-4a12-9c76-686930a3db4a", "project_id": "094eb9c1-e6da-4112-bf2b-5fd0bb742f20"}]}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   adminExtendTrial:
     speakeasy-default-admin-extend-trial:
       requestBody:

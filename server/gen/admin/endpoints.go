@@ -112,6 +112,8 @@ type Endpoints struct {
 	ListUpstreamOAuthMigrationOrganizations goa.Endpoint
 	GetUpstreamOAuthMigrationStatus         goa.Endpoint
 	RunUpstreamOAuthMigration               goa.Endpoint
+	EnableUpstreamAuthEnforcement           goa.Endpoint
+	DisableUpstreamAuthEnforcement          goa.Endpoint
 }
 
 // UploadPlatformImageRequestData holds both the payload and the HTTP request
@@ -232,6 +234,8 @@ func NewEndpoints(s Service) *Endpoints {
 		ListUpstreamOAuthMigrationOrganizations: NewListUpstreamOAuthMigrationOrganizationsEndpoint(s, a.APIKeyAuth),
 		GetUpstreamOAuthMigrationStatus:         NewGetUpstreamOAuthMigrationStatusEndpoint(s, a.APIKeyAuth),
 		RunUpstreamOAuthMigration:               NewRunUpstreamOAuthMigrationEndpoint(s, a.APIKeyAuth),
+		EnableUpstreamAuthEnforcement:           NewEnableUpstreamAuthEnforcementEndpoint(s, a.APIKeyAuth),
+		DisableUpstreamAuthEnforcement:          NewDisableUpstreamAuthEnforcementEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -332,6 +336,8 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.ListUpstreamOAuthMigrationOrganizations = m(e.ListUpstreamOAuthMigrationOrganizations)
 	e.GetUpstreamOAuthMigrationStatus = m(e.GetUpstreamOAuthMigrationStatus)
 	e.RunUpstreamOAuthMigration = m(e.RunUpstreamOAuthMigration)
+	e.EnableUpstreamAuthEnforcement = m(e.EnableUpstreamAuthEnforcement)
+	e.DisableUpstreamAuthEnforcement = m(e.DisableUpstreamAuthEnforcement)
 }
 
 // NewLoginEndpoint returns an endpoint function that calls the method "login"
@@ -2480,5 +2486,51 @@ func NewRunUpstreamOAuthMigrationEndpoint(s Service, authAPIKeyFn security.AuthA
 			return nil, err
 		}
 		return s.RunUpstreamOAuthMigration(ctx, p)
+	}
+}
+
+// NewEnableUpstreamAuthEnforcementEndpoint returns an endpoint function that
+// calls the method "enableUpstreamAuthEnforcement" of service "admin".
+func NewEnableUpstreamAuthEnforcementEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*EnableUpstreamAuthEnforcementPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.EnableUpstreamAuthEnforcement(ctx, p)
+	}
+}
+
+// NewDisableUpstreamAuthEnforcementEndpoint returns an endpoint function that
+// calls the method "disableUpstreamAuthEnforcement" of service "admin".
+func NewDisableUpstreamAuthEnforcementEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*DisableUpstreamAuthEnforcementPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.DisableUpstreamAuthEnforcement(ctx, p)
 	}
 }

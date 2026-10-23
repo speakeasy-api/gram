@@ -37,6 +37,7 @@ function status(
             failedPhases: [],
             selectionsComplete: true,
             pendingSelectionMappings: 0,
+            pendingGrants: 0,
             selectionClasses: [],
             selectionGaps: [],
             selectionGapCount: 0,
@@ -103,6 +104,12 @@ describe("needsMigrationRun", () => {
       s.authClients.pendingClients = 0;
       s.authClients.pendingSelectionMappings = 1;
     }
+    expect(needsMigrationRun(s)).toBe(true);
+  });
+
+  it("includes an organization with default permissions to grant", () => {
+    const s = status(true, true);
+    if (s.authClients) s.authClients.pendingGrants = 2;
     expect(needsMigrationRun(s)).toBe(true);
   });
 
