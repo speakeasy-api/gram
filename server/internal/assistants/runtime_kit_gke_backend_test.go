@@ -497,3 +497,26 @@ func TestKitGKEBackendRestoreRejectsProxyImageDrift(t *testing.T) {
 	_, err = k.Ensure(t.Context(), r)
 	require.ErrorContains(t, err, "TLS proxy image digest compatibility mismatch")
 }
+
+func TestKitGKEBootstrapGenerationRefreshPreservesRuntime(t *testing.T) {
+	t.Parallel()
+	k, client, r, fences := kitGKEBackendFixture(t)
+	k.config.Provision.SnapshotsEnabled = true
+	k.config.Snapshots = &kitGKEFakeCheckpointDriver{client: client, restored: true}
+	initial, err := k.Ensure(t.Context(), r)
+	require.NoError(t, err)
+	r.BackendMetadataJSON = initial.BackendMetadataJSON
+	k.config.BootstrapGeneration = "per-turn-mcp-v1"
+	refreshed, err := k.Ensure(t.Context(), r)
+	require.NoError(t, err)
+	r.BackendMetadataJSON = refreshed.BackendMetadataJSON
+	state, _, err := k.loadAuthority(t.Context(), r)
+	require.NoError(t, err)
+	require.Equal(t, "active", state.Phase)
+	require.Equal(t, r.ID, state.Metadata.RuntimeID)
+	require.Equal(t, "per-turn-mcp-v1", state.Metadata.BootstrapGeneration)
+	require.Equal(t, 1, *fences, "old machine credentials must be fenced before restore")
+	_, err = k.Ensure(t.Context(), r)
+	require.NoError(t, err)
+	require.Equal(t, 1, *fences, "current bootstrap must not restart on every turn")
+}

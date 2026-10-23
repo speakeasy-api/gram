@@ -16,7 +16,7 @@ import (
 // Call before taking any of those locks in another order. Unlike Resolve it
 // neither acquires another connection nor opens a separate read snapshot.
 func (s *Service) ResolveLocked(ctx context.Context, tx pgx.Tx, org string, project, assistant, trigger uuid.UUID) (Resolution, error) {
-	if org == "" || project == uuid.Nil || assistant == uuid.Nil || trigger == uuid.Nil {
+	if org == "" || project == uuid.Nil || assistant == uuid.Nil {
 		return Resolution{}, ErrInvalidIdentity
 	}
 	q := repo.New(tx)
@@ -26,6 +26,9 @@ func (s *Service) ResolveLocked(ctx context.Context, tx pgx.Tx, org string, proj
 	}
 	if a.OrganizationID != org {
 		return Resolution{}, ErrInvalidIdentity
+	}
+	if trigger == uuid.Nil {
+		return resolveStable(ctx, tx, org, project, assistant)
 	}
 	roots, err := q.LockTriggers(ctx, repo.LockTriggersParams{ProjectID: project, TriggerIds: []uuid.UUID{trigger}})
 	if err != nil {

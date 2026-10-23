@@ -126,28 +126,13 @@ func (p *KitRuntimeProtocol) RunTurn(ctx context.Context, r assistantRuntimeReco
 	if err != nil {
 		return fmt.Errorf("kit protocol operation: %w", err)
 	}
-	if err := validateKitMCPStartup(found, req.MCPServers != nil); err != nil {
-		return err
-	}
-	servers := make([]map[string]any, 0, len(req.MCPServers))
-	for _, s := range req.MCPServers {
-		headers := make([]map[string]string, 0, len(s.Headers))
-		for name, value := range s.Headers {
-			headers = append(headers, map[string]string{"name": name, "value": value})
-		}
-		servers = append(servers, map[string]any{"type": "http", "name": s.ID, "url": s.URL, "headers": headers})
-	}
 	c, err := p.dial(ctx, r)
 	if err != nil {
 		return fmt.Errorf("kit protocol operation: %w", err)
 	}
 	defer closeKitTransport(c)
 	params := map[string]any{"cwd": p.config.CWD}
-	// Only new sessions receive an explicit initial configuration. Omission
-	// retains resident configuration; [] is not a clearing operation.
-	if req.MCPServers != nil {
-		params["mcpServers"] = servers
-	}
+
 	// session/new gives this connection control of the new session. A second
 	// resume on that same connection is rejected by the gateway.
 	var startup json.RawMessage
@@ -171,6 +156,7 @@ func (p *KitRuntimeProtocol) RunTurn(ctx context.Context, r assistantRuntimeReco
 		// A concurrent creator can win persistence. Only that winning mapping may
 		// receive a prompt; attach and resume it instead of using our empty orphan.
 		needsResume = session.SessionID != created.SessionID
+
 	}
 	if err = c.AttachSession(ctx, session.SessionID); err != nil {
 		return fmt.Errorf("kit protocol operation: %w", err)
@@ -235,11 +221,6 @@ func (p *KitRuntimeProtocol) RunTurn(ctx context.Context, r assistantRuntimeReco
 		}
 	}()
 	if needsResume {
-		// A concurrent session/new winner can turn creation into resume.
-		// Never reinterpret a desired set as additive upserts or silent retention.
-		if err := validateKitMCPStartup(true, req.MCPServers != nil); err != nil {
-			return err
-		}
 		params["sessionId"] = session.SessionID
 		params["replayFrom"] = map[string]string{"type": "start"}
 		startup, err = c.Call(work, "session/resume", params, session.SessionID)

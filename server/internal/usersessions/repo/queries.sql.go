@@ -923,7 +923,7 @@ const createUserSessionClient = `-- name: CreateUserSessionClient :one
 WITH issuer AS (
     SELECT issuer.id, issuer.project_id, issuer.organization_id
     FROM user_session_issuers AS issuer
-    WHERE issuer.id = $9
+    WHERE issuer.id = $13
       AND issuer.deleted IS FALSE
     FOR KEY SHARE OF issuer
 )
@@ -938,7 +938,8 @@ INSERT INTO user_session_clients (
     client_secret_expires_at,
     token_endpoint_auth_method,
     client_jwks,
-    client_jwks_uri
+    client_jwks_uri,
+    subject_urn, authorizer_user_id, delegated_grants, delegated_grants_version
 )
 SELECT
     issuer.project_id,
@@ -951,7 +952,11 @@ SELECT
     $5,
     $6::text,
     $7::jsonb,
-    $8::text
+    $8::text,
+    $9::text,
+    $10::text,
+    $11::jsonb,
+    $12::integer
 FROM issuer
 RETURNING id, assistant_trigger_workload_binding_id, assistant_runtime_id, project_id, organization_id, user_session_issuer_id, client_id, client_secret_hash, client_name, subject_urn, authorizer_user_id, delegated_grants, delegated_grants_version, redirect_uris, client_id_issued_at, client_secret_expires_at, client_id_metadata_uri, client_id_metadata_fetched_at, client_id_metadata_cache_expires_at, client_id_metadata_etag, token_endpoint_auth_method, client_jwks, client_jwks_uri, created_at, updated_at, deleted_at, deleted
 `
@@ -965,6 +970,10 @@ type CreateUserSessionClientParams struct {
 	TokenEndpointAuthMethod string
 	ClientJwks              []byte
 	ClientJwksUri           pgtype.Text
+	TrustedSubjectUrn       pgtype.Text
+	AuthorizerUserID        pgtype.Text
+	DelegatedGrants         []byte
+	DelegatedGrantsVersion  pgtype.Int4
 	UserSessionIssuerID     uuid.UUID
 }
 
@@ -990,6 +999,10 @@ func (q *Queries) CreateUserSessionClient(ctx context.Context, arg CreateUserSes
 		arg.TokenEndpointAuthMethod,
 		arg.ClientJwks,
 		arg.ClientJwksUri,
+		arg.TrustedSubjectUrn,
+		arg.AuthorizerUserID,
+		arg.DelegatedGrants,
+		arg.DelegatedGrantsVersion,
 		arg.UserSessionIssuerID,
 	)
 	var i UserSessionClient

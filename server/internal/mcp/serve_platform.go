@@ -6,9 +6,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/speakeasy-api/gram/server/internal/constants"
+	"github.com/speakeasy-api/gram/server/internal/urn"
+	"goa.design/goa/v3/security"
 	"log/slog"
 	"net/http"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -16,6 +20,7 @@ import (
 
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/auth/principalcredential"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -76,11 +81,35 @@ func (s *Service) ServePlatformToolset(w http.ResponseWriter, r *http.Request) e
 		return oops.C(oops.CodeUnauthorized)
 	}
 
-	authedCtx, _, err := s.assistantTokens.AuthorizeRuntime(ctx, token)
+	var authedCtx context.Context
+	if principalcredential.IsToken(token) {
+		authedCtx, err = s.authenticatePrincipalCredential(ctx, token)
+		actor, ok := contextvalues.AuthenticatedActor(authedCtx)
+		if err == nil && (!ok || actor.Type != urn.PrincipalTypeAgent) {
+			err = oops.C(oops.CodeUnauthorized)
+		}
+	} else if strings.HasPrefix(token, "gram_") {
+		authedCtx, err = s.auth.AuthorizeWithPostAuthenticationCheck(ctx, token, &security.APIKeyScheme{Name: constants.KeySecurityScheme, Scopes: nil, RequiredScopes: []string{"consumer"}}, func(ctx context.Context) error {
+			actor, ok := contextvalues.AuthenticatedActor(ctx)
+			mode, principalKey := contextvalues.APIKeyAuthorization(ctx)
+			if !ok || actor.Type != urn.PrincipalTypeAgent || !principalKey || mode != contextvalues.APIKeyAuthorizationModePrincipal {
+				return oops.C(oops.CodeUnauthorized)
+			}
+			return nil
+		})
+	} else {
+		authedCtx, _, err = s.assistantTokens.AuthorizeRuntime(ctx, token)
+	}
 	if err != nil {
 		return oops.E(oops.CodeUnauthorized, err, "failed to authorize platform toolset request").LogError(ctx, s.logger)
 	}
 	ctx = authedCtx
+	if project := r.Header.Get("Gram-Project"); project != "" {
+		ctx, err = s.auth.Authorize(ctx, project, &security.APIKeyScheme{Name: constants.ProjectSlugSecuritySchema, Scopes: nil, RequiredScopes: nil})
+		if err != nil {
+			return err
+		}
+	}
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
@@ -123,9 +152,9 @@ func (s *Service) ServePlatformToolset(w http.ResponseWriter, r *http.Request) e
 
 // authorizePlatformToolset gates entry to a platform toolset before any work
 // runs. The managed-assistant toolset carries the dashboard egress tool and is
-// reserved for a project's managed assistant; any other assistant token for the
-// project is rejected as if the toolset did not exist, rather than relying on
-// downstream tools to refuse the call.
+// legacy assistant tokens remain restricted to the managed assistant. Ordinary
+// agent credentials instead use live agent policy and per-tool authorization;
+// neither runtime variant requires a managed-assistant row for those callers.
 func (s *Service) authorizePlatformToolset(ctx context.Context, slug string, authCtx *contextvalues.AuthContext) error {
 	switch slug {
 	case platformtools.ResearchToolsetSlug:
@@ -142,21 +171,25 @@ func (s *Service) authorizePlatformToolset(ctx context.Context, slug string, aut
 		return nil
 	}
 
-	principal, ok := contextvalues.GetAssistantPrincipal(ctx)
-	if !ok {
-		return oops.E(oops.CodeNotFound, nil, "platform toolset not found")
-	}
+	actor, agent := contextvalues.AuthenticatedActor(ctx)
+	if !agent || actor.Type != urn.PrincipalTypeAgent {
+		principal, ok := contextvalues.GetAssistantPrincipal(ctx)
+		if !ok {
+			return oops.E(oops.CodeNotFound, nil, "platform toolset not found")
+		}
 
-	managed, err := assistantrepo.New(s.db).GetManagedAssistantByProject(ctx, *authCtx.ProjectID)
-	switch {
-	case errors.Is(err, pgx.ErrNoRows):
-		return oops.E(oops.CodeNotFound, nil, "platform toolset not found")
-	case err != nil:
-		return oops.E(oops.CodeUnexpected, err, "resolve managed assistant").LogError(ctx, s.logger)
-	}
+		managed, err := assistantrepo.New(s.db).GetManagedAssistantByProject(ctx, *authCtx.ProjectID)
+		switch {
+		case errors.Is(err, pgx.ErrNoRows):
+			return oops.E(oops.CodeNotFound, nil, "platform toolset not found")
+		case err != nil:
+			return oops.E(oops.CodeUnexpected, err, "resolve managed assistant").LogError(ctx, s.logger)
+		}
 
-	if managed.ID != principal.AssistantID {
-		return oops.E(oops.CodeNotFound, nil, "platform toolset not found")
+		if managed.ID != principal.AssistantID {
+			return oops.E(oops.CodeNotFound, nil, "platform toolset not found")
+		}
+
 	}
 
 	// The two managed-only toolsets are rollout variants of each other: an org

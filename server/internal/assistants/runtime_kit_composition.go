@@ -3,31 +3,32 @@ package assistants
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"net/url"
 	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/speakeasy-api/gram/server/internal/assistantidentity"
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
-	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
-// KitMCPProvisionRequest carries authoritative runtime/root identity to the
+// KitMCPProvisionRequest carries the stable agent and exact resource to the
 // composition callback. It does not carry an initiating user's credential.
 type KitMCPProvisionRequest struct {
 	Resource                                                          *url.URL
 	LifecycleTx                                                       pgx.Tx
 	RuntimeID, ProjectID, AssistantID, TriggerID, UserSessionIssuerID uuid.UUID
 	OrganizationID                                                    string
+	AgentID, MCPResourceID                                            uuid.UUID
 }
 type KitMCPProvisionResult struct {
 	Resource, Issuer             *url.URL
@@ -36,12 +37,10 @@ type KitMCPProvisionResult struct {
 }
 type KitMCPProvisioner func(context.Context, KitMCPProvisionRequest) (KitMCPProvisionResult, error)
 
-// KitLocalCompositionConfig is an explicit local-only opt-in. This first
-// composition admits one configured, attached, issuer-gated MCP resource.
-// Built-in platform endpoints are intentionally unsupported: no human token or
-// inference bearer is ever substituted for their missing machine-auth contract.
+// KitLocalCompositionConfig configures inference and native MCP authentication.
 type KitLocalCompositionConfig struct {
-	// PersistedMCP derives production machine connections from the assistant attachment.
+	// Legacy machine-provisioning options are retained for configuration compatibility.
+	// Native MCP connections use stable agent clients and renew inside Kit.
 	PersistedMCP                                 bool
 	Environment, Image, ExtraCACertFile, Network string
 	Origin                                       *url.URL
@@ -63,22 +62,11 @@ func validateKitLocalComposition(c KitLocalCompositionConfig) error {
 }
 
 func validateKitComposition(c KitLocalCompositionConfig) error {
-	if c.Image == "" || c.ProvisionMCP == nil || c.TurnStream == nil || (!c.PersistedMCP && c.MCPUserSessionIssuerID == uuid.Nil) {
-		return errors.New("kit composition requires explicit image, resource issuer, provisioning callback and turn stream")
+	if c.Image == "" || c.TurnStream == nil {
+		return errors.New("kit composition requires an explicit image and turn stream")
 	}
 	if c.Origin == nil || c.Origin.String() != "https://ai.speakeasy.com" || c.AllowInsecureInference {
 		return errors.New("kit requires the HTTPS Speakeasy provider origin")
-	}
-	if c.PersistedMCP {
-		return nil
-	}
-	for _, u := range []*url.URL{c.MCPResource, c.MCPIssuer} {
-		if u == nil || u.Scheme != "https" || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
-			return errors.New("kit machine MCP resource and issuer must be explicit HTTPS URLs")
-		}
-	}
-	if !strings.HasPrefix(c.MCPResource.Path, "/mcp/") || strings.Contains(strings.TrimPrefix(c.MCPResource.Path, "/mcp/"), "/") || strings.TrimPrefix(c.MCPResource.Path, "/mcp/") == "" {
-		return errors.New("kit composition supports an issuer-gated attached /mcp/<slug> resource only")
 	}
 	return nil
 }
@@ -172,13 +160,18 @@ func (s *ServiceCore) kitProtocolFactory(c KitLocalCompositionConfig, cidrs []st
 	}
 }
 
-// The verified filesystem config owns the machine-auth connections. Do not
-// shadow it with legacy per-turn server overlays or management credentials.
+// Per-turn MCP configuration uses the same scoped credentials as the default runtime.
+type kitExecutionEventKey struct{}
+type kitExecutionTriggerKey struct{}
+
+var errKitStartupUndispatched = errors.New("kit startup did not dispatch event")
+
 type kitConfiguredRuntimeProtocol struct{ *KitRuntimeProtocol }
 
 func (p *kitConfiguredRuntimeProtocol) RunTurn(ctx context.Context, r assistantRuntimeRecord, turn runTurnRequest) error {
-	turn.AuthToken = ""
-	turn.MCPServers = nil
+	// A missing connection snapshot is not an inference failure. Preserve the
+	// resident configuration and let Kit report individual connection failures.
+	// Do not repeat discovery or authentication on the turn admission path.
 	return p.KitRuntimeProtocol.RunTurn(ctx, r, turn)
 }
 
@@ -194,36 +187,7 @@ func (s *ServiceCore) kitCompositionBootstrap(ctx context.Context, r assistantRu
 		return zero, fmt.Errorf("get Kit assistant: %w", err)
 	}
 	assistant := assistantRecordFromGetRow(row)
-	attachments, err := q.LoadAssistantMcpServers(ctx, assistantrepo.LoadAssistantMcpServersParams{ProjectID: r.ProjectID, AssistantIds: []uuid.UUID{r.AssistantID}})
-	for _, attached := range attachments {
-		assistant.MCPServers = append(assistant.MCPServers, assistantMCPServerRow{ServerSlug: pgtype.Text{String: "", Valid: false}, ToolsetSlug: pgtype.Text{String: "", Valid: false}, DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false}, EnvironmentID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, EnvironmentSlug: pgtype.Text{String: "", Valid: false}, MCPServerID: attached.McpServerID, Visibility: attached.Visibility, EndpointSlug: attached.EndpointSlug})
-	}
-	if err != nil {
-		return zero, fmt.Errorf("load Kit assistant MCP servers: %w", err)
-	}
-	if c.PersistedMCP {
-		c.MCPResource, c.MCPUserSessionIssuerID, err = s.kitPersistedMCP(ctx, db, assistant)
-		if err != nil {
-			return zero, err
-		}
-	}
-	if !kitResourceAttached(assistant, s.serverURL, c.MCPResource) {
-		return zero, errors.New("configured Kit MCP resource is not an enabled attachment of this assistant")
-	}
-	trigger := c.RootTriggerID
-	if c.PersistedMCP {
-		trigger = uuid.Nil // Production selects only this assistant's persisted root.
-	}
-	if trigger == uuid.Nil {
-		roots, err := usersessionsrepo.New(db).ListAssistantWorkloadRuntimeRoots(ctx, usersessionsrepo.ListAssistantWorkloadRuntimeRootsParams{ProjectID: r.ProjectID, OrganizationID: assistant.OrganizationID, AssistantID: r.AssistantID})
-		if err != nil {
-			return zero, fmt.Errorf("compose local kit runtime: %w", err)
-		}
-		if len(roots) != 1 {
-			return zero, errors.New("kit startup requires an explicit root trigger when multiple roots exist")
-		}
-		trigger = roots[0]
-	}
+	trigger := uuid.Nil
 	var resolved assistantidentity.Resolution
 	if r.LifecycleTx != nil {
 		resolved, err = s.identities.ResolveLocked(ctx, r.LifecycleTx, assistant.OrganizationID, r.ProjectID, r.AssistantID, trigger)
@@ -236,27 +200,68 @@ func (s *ServiceCore) kitCompositionBootstrap(ctx context.Context, r assistantRu
 	if resolved.State != assistantidentity.Active || resolved.Identity == nil {
 		return zero, assistantidentity.ErrInvalidIdentity
 	}
-	client, err := c.ProvisionMCP(ctx, KitMCPProvisionRequest{Resource: c.MCPResource, LifecycleTx: r.LifecycleTx, RuntimeID: r.ID, ProjectID: r.ProjectID, AssistantID: r.AssistantID, OrganizationID: assistant.OrganizationID, TriggerID: trigger, UserSessionIssuerID: c.MCPUserSessionIssuerID})
-	if err != nil {
-		return zero, err
-	}
-	if c.PersistedMCP {
-		if client.Resource == nil || client.Issuer == nil || client.Resource.String() != c.MCPResource.String() {
-			return zero, errors.New("kit MCP provisioner returned a mismatched resource")
-		}
-		c.MCPIssuer = client.Issuer
-	}
-	mcpJSON, files, err := kitCompositionMCP(c, client)
-	if err != nil {
-		return zero, err
-	}
+	// Each configured connection receives an independent native client.
+	// An unavailable attachment must not prevent inference or other connections.
+	mcpJSON := []byte(`{"mcpServers":{}}`)
 	gateway, err := s.rotateKitGatewayTokenAlreadyLocked(ctx, r)
 	if err != nil {
 		return zero, err
 	}
-	instructions := []byte("# Speakeasy assistant\n\n" + assistant.Instructions + "\n\nUse the configured independent workload MCP connection. Built-in platform endpoints and human-delegated sign-in are unavailable in this runtime. Never request or substitute a user's credentials.\n")
-	bootstrap, _, err := PrepareKitStartupBootstrap(ctx, s.assistantTokens, KitStartupBootstrapInput{LifecycleTx: r.LifecycleTx, Model: assistant.Model, Environment: c.Environment, Identity: *resolved.Identity, RuntimeID: r.ID, Lifetime: assistanttokens.MaxInferenceLifetime, Origin: c.Origin.String(), AgentsMD: instructions, MCPJSON: mcpJSON, MCPFiles: files, GatewayToken: []byte(gateway)})
-	return bootstrap, err
+	instructions := []byte("# Speakeasy assistant\n\n" + assistant.Instructions + "\n\nUse the configured MCP tools. If a connection reports an authentication error, explain it and continue with available tools. Never request secrets or invent credentials.\n")
+	bootstrap, _, err := PrepareKitStartupBootstrap(ctx, s.assistantTokens, KitStartupBootstrapInput{LifecycleTx: r.LifecycleTx, Model: assistant.Model, Environment: c.Environment, Identity: *resolved.Identity, RuntimeID: r.ID, Lifetime: assistanttokens.MaxInferenceLifetime, Origin: c.Origin.String(), AgentsMD: instructions, MCPJSON: mcpJSON, MCPFiles: nil, GatewayToken: []byte(gateway)})
+	if err != nil {
+		return zero, err
+	}
+	var key kitInferenceFile
+	if err := json.Unmarshal(bootstrap.InferenceJSON, &key); err != nil {
+		return zero, fmt.Errorf("decode native inference credential: %w", err)
+	}
+	if err := s.hydrateAssistantToolSources(ctx, r.ProjectID, &assistant); err != nil {
+		return zero, err
+	}
+	servers := s.currentRuntimeMCPServers(ctx, assistant)
+	config := map[string]any{}
+	files := map[string][]byte{}
+	for _, server := range servers {
+		entry := map[string]any{"type": "streamable-http", "url": server.URL}
+		headers := make(map[string]string, len(server.Headers)+1)
+		maps.Copy(headers, server.Headers)
+		// These addresses are constructed by the existing trusted runtime resolver,
+		// not arbitrary caller URLs. Non-OAuth resources use the same stable key.
+		headers["Authorization"] = "Bearer " + key.APIKey
+		entry["headers"] = headers
+		// Native authentication owns renewal. A provisioning failure affects only
+		// this connection; retaining its URL lets Kit report the connection error.
+		if !strings.Contains(server.URL, "/platform/mcp/") && c.ProvisionMCP != nil {
+			resource, parseErr := url.Parse(server.URL)
+			if parseErr == nil {
+				var resourceID uuid.UUID
+				for _, attached := range assistant.MCPServers {
+					if attached.EndpointSlug == strings.TrimPrefix(resource.Path, "/mcp/") {
+						resourceID = attached.MCPServerID
+					}
+				}
+				client, provisionErr := c.ProvisionMCP(ctx, KitMCPProvisionRequest{Resource: resource, LifecycleTx: r.LifecycleTx, RuntimeID: r.ID, ProjectID: r.ProjectID, AssistantID: r.AssistantID, OrganizationID: assistant.OrganizationID, AgentID: resolved.Identity.AgentID, MCPResourceID: resourceID, TriggerID: uuid.Nil, UserSessionIssuerID: uuid.Nil})
+				if provisionErr == nil {
+					native, filename, credential, configErr := kitMachineMCPServer(client, fmt.Sprintf("mcp-%x", sha256.Sum256([]byte(server.ID))))
+					if configErr == nil {
+						entry = native
+						if len(server.Headers) != 0 {
+							entry["headers"] = server.Headers
+						}
+						files[filename] = credential
+					}
+				}
+			}
+		}
+		config[server.ID] = entry
+	}
+	bootstrap.MCPJSON, err = json.Marshal(map[string]any{"mcpServers": config})
+	bootstrap.MCPFiles = files
+	if err != nil {
+		return zero, fmt.Errorf("encode native MCP configuration: %w", err)
+	}
+	return bootstrap, nil
 }
 
 func kitResourceAttached(a assistantRecord, serverURL, resource *url.URL) bool {
@@ -275,9 +280,48 @@ func kitResourceAttached(a assistantRecord, serverURL, resource *url.URL) bool {
 	}
 	return false
 }
+
+// kitMachineMCPConfig uses only locally supplied URLs and credentials. Kit owns
+// discovery, authentication, token renewal, and individual connection failures.
+func kitMachineMCPConfig(clients map[string]KitMCPProvisionResult) ([]byte, map[string][]byte, error) {
+	servers := make(map[string]any, len(clients))
+	files := make(map[string][]byte, len(clients))
+	for name, client := range clients {
+		if strings.TrimSpace(name) == "" {
+			return nil, nil, errors.New("kit MCP connection requires a name")
+		}
+		// Hash names instead of embedding untrusted connection names in paths.
+		prefix := fmt.Sprintf("mcp-%x", sha256.Sum256([]byte(name)))
+		if name == "workload" {
+			prefix = "mcp-workload"
+		}
+		server, filename, credential, err := kitMachineMCPServer(client, prefix)
+		if err != nil {
+			return nil, nil, err
+		}
+		servers[name] = server
+		files[filename] = credential
+	}
+	data, err := json.Marshal(map[string]any{"mcpServers": servers})
+	if err != nil {
+		return nil, nil, fmt.Errorf("encode kit MCP configuration: %w", err)
+	}
+	return data, files, nil
+}
+
 func kitCompositionMCP(c KitLocalCompositionConfig, client KitMCPProvisionResult) ([]byte, map[string][]byte, error) {
+	client.Resource, client.Issuer = c.MCPResource, c.MCPIssuer
+	return kitMachineMCPConfig(map[string]KitMCPProvisionResult{"workload": client})
+}
+
+func kitMachineMCPServer(client KitMCPProvisionResult, prefix string) (map[string]any, string, []byte, error) {
+	for _, address := range []*url.URL{client.Resource, client.Issuer} {
+		if address == nil || address.Scheme != "https" || address.Host == "" || address.User != nil || address.Fragment != "" {
+			return nil, "", nil, errors.New("kit machine MCP requires HTTPS resource and issuer URLs without credentials or fragments")
+		}
+	}
 	if client.ClientID == "" {
-		return nil, nil, errors.New("kit MCP provisioning returned no confidential client")
+		return nil, "", nil, errors.New("kit MCP provisioning returned no confidential client")
 	}
 	var filename string
 	var credential []byte
@@ -285,31 +329,28 @@ func kitCompositionMCP(c KitLocalCompositionConfig, client KitMCPProvisionResult
 	switch client.AuthMethod {
 	case "", "client_secret_basic":
 		if client.Secret == "" || len(client.PrivateKeyPEM) != 0 {
-			return nil, nil, errors.New("invalid Kit shared-secret credentials")
+			return nil, "", nil, errors.New("invalid Kit shared-secret credentials")
 		}
-		filename = "mcp-workload-secret"
+		filename = prefix + "-secret"
 		credential = []byte(client.Secret)
 		method = map[string]string{"type": "client_secret", "client_secret_file": "/home/kit/.kit/credentials/" + filename}
 	case "private_key_jwt":
 		if len(client.PrivateKeyPEM) == 0 || client.Secret != "" {
-			return nil, nil, errors.New("invalid Kit private-key credentials")
+			return nil, "", nil, errors.New("invalid Kit private-key credentials")
 		}
-		filename = "mcp-workload-private-key.pem"
+		filename = prefix + "-private-key.pem"
 		credential = client.PrivateKeyPEM
 		method = map[string]string{"type": "private_key_jwt", "private_key_file": "/home/kit/.kit/credentials/" + filename, "signing_algorithm": "ES256"}
 	default:
-		return nil, nil, errors.New("unsupported Kit MCP authentication method")
+		return nil, "", nil, errors.New("unsupported Kit MCP authentication method")
 	}
-	data, err := json.Marshal(map[string]any{"mcpServers": map[string]any{"workload": map[string]any{
-		"type": "streamable-http", "url": c.MCPResource.String(), "auth": map[string]any{
-			"type": "client_credentials", "client_id": client.ClientID, "resource": c.MCPResource.String(), "expected_issuer": c.MCPIssuer.String(), "scopes": []string{"mcp:connect"},
+	server := map[string]any{
+		"type": "streamable-http", "url": client.Resource.String(), "auth": map[string]any{
+			"type": "client_credentials", "client_id": client.ClientID, "resource": client.Resource.String(), "expected_issuer": client.Issuer.String(), "scopes": []string{"mcp:connect"},
 			"method": method,
 		},
-	}}})
-	if err != nil {
-		return nil, nil, fmt.Errorf("encode kit MCP configuration: %w", err)
 	}
-	return data, map[string][]byte{filename: credential}, nil
+	return server, filename, credential, nil
 }
 
 // These helpers deliberately do not acquire an advisory lock on a second

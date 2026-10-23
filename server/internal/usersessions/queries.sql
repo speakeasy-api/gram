@@ -1763,7 +1763,8 @@ INSERT INTO user_session_clients (
     client_secret_expires_at,
     token_endpoint_auth_method,
     client_jwks,
-    client_jwks_uri
+    client_jwks_uri,
+    subject_urn, authorizer_user_id, delegated_grants, delegated_grants_version
 )
 SELECT
     issuer.project_id,
@@ -1776,7 +1777,11 @@ SELECT
     @client_secret_expires_at,
     @token_endpoint_auth_method::text,
     sqlc.narg('client_jwks')::jsonb,
-    sqlc.narg('client_jwks_uri')::text
+    sqlc.narg('client_jwks_uri')::text,
+    sqlc.narg('trusted_subject_urn')::text,
+    sqlc.narg('authorizer_user_id')::text,
+    sqlc.narg('delegated_grants')::jsonb,
+    sqlc.narg('delegated_grants_version')::integer
 FROM issuer
 RETURNING *;
 

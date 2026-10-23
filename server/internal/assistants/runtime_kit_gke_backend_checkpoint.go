@@ -150,7 +150,7 @@ type kitGKEAuthorityHandle struct {
 // top-level metadata so ordinary metadata updates cannot recursively nest it.
 func kitGKEAuthorityMetadata(state kitGKEAuthority) (kitGKEBackendMetadata, error) {
 	m := state.Metadata
-	state.Metadata = kitGKEBackendMetadata{Checkpoint: nil, TLSCertificate: nil, Provisioning: false, CheckpointMarker: "", ProxyImageDigest: "", ImageDigest: "", ContainerID: "", AuthorityUID: "", AuthorityNotAfter: time.Time{}, RuntimeID: uuid.Nil, AssistantID: uuid.Nil, ProjectID: uuid.Nil, Version: 0, Namespace: "", Fingerprint: "", ClaimUID: "", TemplateUID: "", SecretUID: "", SecretName: "", PodName: "", PodUID: ""}
+	state.Metadata = kitGKEBackendMetadata{BootstrapGeneration: "", Checkpoint: nil, TLSCertificate: nil, Provisioning: false, CheckpointMarker: "", ProxyImageDigest: "", ImageDigest: "", ContainerID: "", AuthorityUID: "", AuthorityNotAfter: time.Time{}, RuntimeID: uuid.Nil, AssistantID: uuid.Nil, ProjectID: uuid.Nil, Version: 0, Namespace: "", Fingerprint: "", ClaimUID: "", TemplateUID: "", SecretUID: "", SecretName: "", PodName: "", PodUID: ""}
 	raw, err := json.Marshal(state)
 	if err != nil {
 		return m, fmt.Errorf("marshal Kit GKE authority state: %w", err)
@@ -644,6 +644,7 @@ func (k *KitGKERuntimeBackend) restore(ctx context.Context, r assistantRuntimeRe
 	if digest != state.Metadata.ImageDigest {
 		return empty, fmt.Errorf("cold restored image changed")
 	}
+	state.Metadata.BootstrapGeneration = k.config.BootstrapGeneration
 	state.Metadata.AuthorityNotAfter = time.Now().Add(assistanttokens.MaxInferenceLifetime - time.Hour)
 	_, state.Metadata.ContainerID, err = kitGKEProcessIdentity(pod)
 	if err != nil {

@@ -14,6 +14,7 @@ import (
 	"log/slog"
 	"mime"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -83,13 +84,13 @@ func (s *Service) HandleRegister(w http.ResponseWriter, r *http.Request) error {
 // Generated client_secret is returned plaintext exactly once; only its
 // bcrypt hash is persisted in user_session_clients.client_secret_hash.
 func (s *Service) ServeRegister(w http.ResponseWriter, r *http.Request, endpoint *ResolvedMcpEndpoint) error {
-	return s.serveRegister(w, r, endpoint.LogWith(s.logger).With(attr.SlogToolsetMCPSlug(endpoint.Slug)), endpoint.UserSessionIssuerID)
+	return s.serveRegister(w, r, endpoint.LogWith(s.logger).With(attr.SlogToolsetMCPSlug(endpoint.Slug)), endpoint.UserSessionIssuerID, endpoint)
 }
 
 // serveRegister registers a client with the issuer. Clients belong to the
 // issuer, not to an MCP server, so per-endpoint and shared authorization
 // servers share it.
-func (s *Service) serveRegister(w http.ResponseWriter, r *http.Request, logger *slog.Logger, issuerID uuid.UUID) error {
+func (s *Service) serveRegister(w http.ResponseWriter, r *http.Request, logger *slog.Logger, issuerID uuid.UUID, endpoints ...*ResolvedMcpEndpoint) error {
 	ctx := r.Context()
 
 	if ct := r.Header.Get("Content-Type"); ct != "" {
@@ -101,7 +102,10 @@ func (s *Service) serveRegister(w http.ResponseWriter, r *http.Request, logger *
 
 	r.Body = http.MaxBytesReader(w, r.Body, dcrMaxBodyBytes)
 
-	var req usersessions.RegistrationRequest
+	var req struct {
+		usersessions.RegistrationRequest
+		AgentURN string `json:"agent_urn,omitempty"`
+	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
 			return writeDCRError(ctx, w, logger, "invalid_client_metadata", fmt.Sprintf("request body exceeds %d bytes", dcrMaxBodyBytes))
@@ -110,7 +114,32 @@ func (s *Service) serveRegister(w http.ResponseWriter, r *http.Request, logger *
 	}
 
 	req.SetDefaults()
-	if err := req.Validate(usersessions.RegistrableGrantTypes, usersessions.SupportedAuthMethods); err != nil {
+	var target *AgentAuthorizationTarget
+	grants := usersessions.RegistrableGrantTypes
+	if req.AgentURN != "" {
+		if len(endpoints) != 1 || req.TokenEndpointAuthMethod != "private_key_jwt" || len(req.GrantTypes) != 1 || req.GrantTypes[0] != "client_credentials" {
+			return writeDCRError(ctx, w, logger, "invalid_client_metadata", "agent registration requires private_key_jwt and client_credentials on a resource endpoint")
+		}
+		endpoint := endpoints[0]
+		token, found := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
+		if !found || token == "" {
+			return oops.C(oops.CodeUnauthorized)
+		}
+		keyCtx, identity, err := s.authenticateIssuerGateAgentKey(ctx, token, endpoint)
+		if err != nil {
+			return err
+		}
+		if identity.String() != req.AgentURN {
+			return oops.C(oops.CodeUnauthorized)
+		}
+		ctx = keyCtx
+		target, _ = agentAuthorizationTarget(endpoint)
+		if target == nil {
+			return oops.C(oops.CodeUnauthorized)
+		}
+		grants = []string{"client_credentials"}
+	}
+	if err := req.Validate(grants, usersessions.SupportedAuthMethods); err != nil {
 		if oauthErr, ok := errors.AsType[*oauthwire.Error](err); ok {
 			return writeDCRError(ctx, w, logger, oauthErr.Code, oauthErr.Description)
 		}
@@ -147,18 +176,28 @@ func (s *Service) serveRegister(w http.ResponseWriter, r *http.Request, logger *
 		return writeDCRError(ctx, w, logger, "invalid_client_metadata", fmt.Sprintf("unsupported token_endpoint_auth_method %q", req.TokenEndpointAuthMethod))
 	}
 
-	row, err := usersessions_repo.New(s.db).CreateUserSessionClient(ctx, usersessions_repo.CreateUserSessionClientParams{
-		UserSessionIssuerID: issuerID,
-		ClientID:            clientID,
-		ClientSecretHash:    clientSecretHash,
-		ClientName:          req.ClientName,
-		RedirectUris:        req.RedirectURIs,
-		// RFC 7591 §3.2.1 expires_at=0 = non-expiring; we leave the Postgres column NULL.
-		ClientSecretExpiresAt:   pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: 0, Valid: false},
-		TokenEndpointAuthMethod: req.TokenEndpointAuthMethod,
-		ClientJwks:              req.JWKS,
-		ClientJwksUri:           conv.ToPGTextEmpty(req.JWKSURI),
-	})
+	var row usersessions_repo.UserSessionClient
+	var err error
+	if target != nil {
+		row, err = RegisterAgentOAuthClient(ctx, s.db, *target, req.RegistrationRequest)
+		clientID = row.ClientID
+	} else {
+		row, err = usersessions_repo.New(s.db).CreateUserSessionClient(ctx, usersessions_repo.CreateUserSessionClientParams{
+			TrustedSubjectUrn: pgtype.Text{String: "", Valid: false},
+			AuthorizerUserID:  pgtype.Text{String: "", Valid: false},
+			DelegatedGrants:   nil, DelegatedGrantsVersion: pgtype.Int4{Int32: 0, Valid: false},
+			UserSessionIssuerID: issuerID,
+			ClientID:            clientID,
+			ClientSecretHash:    clientSecretHash,
+			ClientName:          req.ClientName,
+			RedirectUris:        req.RedirectURIs,
+			// RFC 7591 §3.2.1 expires_at=0 = non-expiring; we leave the Postgres column NULL.
+			ClientSecretExpiresAt:   pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: 0, Valid: false},
+			TokenEndpointAuthMethod: req.TokenEndpointAuthMethod,
+			ClientJwks:              req.JWKS,
+			ClientJwksUri:           conv.ToPGTextEmpty(req.JWKSURI),
+		})
+	}
 	if err != nil {
 		// The insert re-reads the issuer under lock, so a registration that
 		// resolved the endpoint before a migration or delete retired its

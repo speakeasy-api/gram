@@ -3,6 +3,7 @@ package assistants
 import (
 	"context"
 	"net/url"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -51,7 +52,8 @@ func TestPrincipalCredentialsUseActingUserOrWorkloadOwnerUpstreamSessions(t *tes
 	manager := assistanttokens.New("test-secret", db, engine, newTestPrincipalCredentials(t, db), cache.NewRedisCacheAdapter(redisClient))
 	core.assistantTokens = manager
 	var dispatched atomic.Pointer[string]
-	core.runtime = testRuntimeBackend{backend: runtimeBackendGKE, runTurnToken: &dispatched}
+	var dispatchedServers atomic.Pointer[[]runtimeMCPServer]
+	core.runtime = testRuntimeBackend{backend: runtimeBackendGKE, runTurnToken: &dispatched, runTurnMCPServers: &dispatchedServers}
 
 	enc := testenv.NewEncryptionClient(t)
 	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil)
@@ -72,6 +74,13 @@ func TestPrincipalCredentialsUseActingUserOrWorkloadOwnerUpstreamSessions(t *tes
 		t.Helper()
 		_, err := core.processEventTurn(ctx, assistantThreadRecord{ID: thread, ProjectID: project, AssistantID: assistant.ID, SourceKind: source}, assistant, assistantRuntimeRecord{}, assistantThreadEventRecord{ID: uuid.New(), EventID: uuid.NewString(), NormalizedPayloadJSON: []byte(payload)})
 		require.NoError(t, err)
+		servers := *dispatchedServers.Load()
+		require.NotEmpty(t, servers)
+		platform := false
+		for _, server := range servers {
+			platform = platform || strings.Contains(server.URL, "/platform/mcp/")
+		}
+		require.True(t, platform)
 		authed, _, err := manager.AuthorizeRuntime(ctx, *dispatched.Load())
 		require.NoError(t, err)
 		return authed

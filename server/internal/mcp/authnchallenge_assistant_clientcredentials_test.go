@@ -26,7 +26,7 @@ func TestAssistantClientCredentialsDispatch(t *testing.T) {
 	s, _, _ := newTokenDispatchTestService(t)
 	r := newTokenDispatchRequest(t, url.Values{})
 	_, ok := s.tokenGrantFor(r, "client_credentials", presentedClientCredentials{})
-	require.False(t, ok)
+	require.True(t, ok)
 	s.assistantWorkloadTokens = assistantWorkloadIssuerFunc(func(context.Context, AssistantWorkloadTokenRequest) (AssistantWorkloadToken, error) {
 		return AssistantWorkloadToken{}, errors.New("denied")
 	})
