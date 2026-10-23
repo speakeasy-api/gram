@@ -35,7 +35,7 @@ func TestKitInferenceLiveAdmissionAndCaptureOwnership(t *testing.T) {
 	seedProjectRead(t, db, "user-1", project)
 	seedMCPConnect(t, db, "user-1", project)
 	core := newProvisioningCore(t, db)
-	assistant, err := core.CreateAssistant(t.Context(), "org-test", project, "user-1", "Inference", "openai/gpt-4o-mini", "", nil, nil, 300, 1, StatusActive, true, nil)
+	assistant, err := core.CreateAssistant(t.Context(), "org-test", project, "user-1", "Inference", "openai/gpt-4o-mini", "", nil, nil, 300, 1, StatusActive, true, nil, nil)
 	require.NoError(t, err)
 	trigger, err := core.resolveDashboardTriggerInstance(t.Context(), "org-test", project, assistant.ID, assistant.Name)
 	require.NoError(t, err)

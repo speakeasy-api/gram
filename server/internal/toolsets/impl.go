@@ -32,7 +32,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	domainsRepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	deploymentsRepo "github.com/speakeasy-api/gram/server/internal/deployments/repo"
-	environmentsRepo "github.com/speakeasy-api/gram/server/internal/environments/repo"
+	"github.com/speakeasy-api/gram/server/internal/environments"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	mcpmetadataRepo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
@@ -49,6 +49,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 	tplRepo "github.com/speakeasy-api/gram/server/internal/templates/repo"
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
+	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	"github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usageRepo "github.com/speakeasy-api/gram/server/internal/usage/repo"
@@ -61,7 +62,6 @@ type Service struct {
 	db                       *pgxpool.Pool
 	policy                   *guardian.Policy
 	repo                     *repo.Queries
-	environmentRepo          *environmentsRepo.Queries
 	auth                     *auth.Auth
 	authz                    *authz.Engine
 	toolsets                 *Toolsets
@@ -102,7 +102,6 @@ func NewService(
 		repo:                     repo.New(db),
 		auth:                     auth.New(logger, db, sessions, authzEngine),
 		authz:                    authzEngine,
-		environmentRepo:          environmentsRepo.New(db),
 		toolsets:                 NewToolsets(db),
 		domainsRepo:              domainsRepo.New(db),
 		usageRepo:                usageRepo.New(db),
@@ -171,6 +170,7 @@ func (s *Service) CreateToolset(ctx context.Context, payload *gen.CreateToolsetP
 		OrganizationID:          authCtx.ActiveOrganizationID,
 		OrganizationSlug:        authCtx.OrganizationSlug,
 		ProjectID:               *authCtx.ProjectID,
+		Authz:                   s.authz,
 		ActorUserID:             authCtx.UserID,
 		ActorEmail:              authCtx.Email,
 		Name:                    payload.Name,
@@ -517,15 +517,14 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 		updateParams.Description = pgtype.Text{String: *payload.Description, Valid: true}
 	}
 
-	if payload.DefaultEnvironmentSlug != nil {
-		_, err := s.environmentRepo.WithTx(dbtx).GetEnvironmentBySlug(ctx, environmentsRepo.GetEnvironmentBySlugParams{
-			Slug:      conv.ToLower(*payload.DefaultEnvironmentSlug),
-			ProjectID: *authCtx.ProjectID,
-		})
+	// Changing the default environment takes environment:read on the new one,
+	// as linking does; resubmitting the current one needs nothing more.
+	if payload.DefaultEnvironmentSlug != nil && conv.ToLower(*payload.DefaultEnvironmentSlug) != existingToolset.DefaultEnvironmentSlug.String {
+		environment, err := environments.ResolveReadableEnvironment(ctx, logger, s.authz, dbtx, *authCtx.ProjectID, toolconfig.Slug(string(*payload.DefaultEnvironmentSlug)))
 		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "error finding environment")
+			return nil, err
 		}
-		updateParams.DefaultEnvironmentSlug = conv.ToPGText(conv.ToLower(*payload.DefaultEnvironmentSlug))
+		updateParams.DefaultEnvironmentSlug = conv.ToPGText(environment.Slug)
 	}
 
 	customDomainID, err := s.resolveCustomDomain(ctx, dbtx, logger, authCtx, existingToolset, payload.CustomDomainID)
@@ -878,6 +877,13 @@ func (s *Service) CloneToolset(ctx context.Context, payload *gen.CloneToolsetPay
 		return nil, err
 	}
 
+	// The clone's default environment reaches every tool it runs, so it is
+	// copied only for a caller who can read it.
+	defaultEnvironmentSlug, err := readableDefaultEnvironmentSlug(ctx, dbtx, s.authz, *authCtx.ProjectID, originalToolset.DefaultEnvironmentSlug)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to authorize default environment").LogError(ctx, logger)
+	}
+
 	// Generate new slug with _copy suffix
 	slugSuffix, err := conv.GenerateRandomSlug(5)
 	if err != nil {
@@ -898,7 +904,7 @@ func (s *Service) CloneToolset(ctx context.Context, payload *gen.CloneToolsetPay
 		OrganizationID:         authCtx.ActiveOrganizationID,
 		ProjectID:              *authCtx.ProjectID,
 		Description:            originalToolset.Description,
-		DefaultEnvironmentSlug: originalToolset.DefaultEnvironmentSlug,
+		DefaultEnvironmentSlug: defaultEnvironmentSlug,
 		McpSlug:                conv.ToPGText(mcpSlug),
 		McpEnabled:             false, // Don't auto-enable MCP for cloned toolsets
 	}

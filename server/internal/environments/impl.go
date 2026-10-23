@@ -32,6 +32,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -80,29 +81,41 @@ func NewService(logger *slog.Logger,
 // and for slug-miss paths in update/delete/clone, where authorizing before
 // reporting not-found keeps the response from becoming an existence oracle.
 func (s *Service) requireProjectEnvironmentWrite(ctx context.Context, projectID uuid.UUID) error {
-	return s.authz.Require(ctx, authz.Check{
-		Scope:        authz.ScopeEnvironmentWrite,
-		ResourceKind: "environment",
-		ResourceID:   projectID.String(),
-		Dimensions:   map[string]string{"project_id": projectID.String()},
-	})
+	return s.authz.Require(ctx, authz.EnvironmentCheck(authz.ScopeEnvironmentWrite, projectID.String(), projectID.String()))
 }
 
-// requireProjectEnvironmentRead gates on an environment:read grant confined to
-// this project via the project_id dimension. A wildcard env:read grant (or, by
-// scope expansion, env:write) satisfies it; a single-env grant does not. Used
-// by the source/toolset link handlers: binding an environment to a source or
-// toolset exposes that environment's secret values to a resource the caller can
-// invoke, so the caller must already hold read access to those secrets. Gating
-// on project:write instead would let a caller without environment:read
-// exfiltrate secrets by linking an environment to a resource they can run.
-func (s *Service) requireProjectEnvironmentRead(ctx context.Context, projectID uuid.UUID) error {
-	return s.authz.Require(ctx, authz.Check{
-		Scope:        authz.ScopeEnvironmentRead,
-		ResourceKind: "environment",
-		ResourceID:   projectID.String(),
-		Dimensions:   map[string]string{"project_id": projectID.String()},
-	})
+// requireLinkedEnvironmentRead authorizes removing a link with the same grant
+// that could have created it: environment:read on the linked environment. With
+// no link to remove it falls back to project-wide environment:read, so the
+// response does not reveal which sources or toolsets are linked.
+func (s *Service) requireLinkedEnvironmentRead(ctx context.Context, projectID uuid.UUID, linked repo.Environment, err error) error {
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return s.authz.Require(ctx, authz.EnvironmentCheck(authz.ScopeEnvironmentRead, projectID.String(), projectID.String()))
+	case err != nil:
+		return oops.E(oops.CodeUnexpected, err, "failed to load linked environment").LogError(ctx, s.logger)
+	}
+	return s.authz.Require(ctx, authz.EnvironmentCheck(authz.ScopeEnvironmentRead, linked.ID.String(), projectID.String()))
+}
+
+// resolveLinkableEnvironment parses and loads the environment a caller wants to
+// bind to a source or toolset, requiring environment:read on it. Binding
+// exposes the environment's secret values to a resource the caller can invoke,
+// so project:write alone must not authorize it — otherwise a caller without
+// environment:read could exfiltrate secrets by linking an environment to a
+// resource they can run.
+func (s *Service) resolveLinkableEnvironment(ctx context.Context, projectID uuid.UUID, rawEnvironmentID string) (uuid.UUID, error) {
+	environmentID, err := uuid.Parse(rawEnvironmentID)
+	if err != nil {
+		return uuid.Nil, oops.E(oops.CodeBadRequest, err, "invalid environment_id").LogError(ctx, s.logger)
+	}
+
+	environment, err := ResolveReadableEnvironment(ctx, s.logger, s.authz, s.db, projectID, toolconfig.ID(environmentID))
+	if err != nil {
+		return uuid.Nil, err
+	}
+
+	return environment.ID, nil
 }
 
 func Attach(mux goahttp.Muxer, service *Service) {
@@ -260,12 +273,7 @@ func (s *Service) UpdateEnvironment(ctx context.Context, payload *gen.UpdateEnvi
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to fetch environment").LogError(ctx, logger)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{
-		Scope:        authz.ScopeEnvironmentWrite,
-		ResourceKind: "environment",
-		ResourceID:   environment.ID.String(),
-		Dimensions:   map[string]string{"project_id": authCtx.ProjectID.String()},
-	}); err != nil {
+	if err := s.authz.Require(ctx, authz.EnvironmentCheck(authz.ScopeEnvironmentWrite, environment.ID.String(), authCtx.ProjectID.String())); err != nil {
 		return nil, err
 	}
 
@@ -451,12 +459,7 @@ func (s *Service) CloneEnvironment(ctx context.Context, payload *gen.CloneEnviro
 	// check covers both reading the source and producing the destination. Future
 	// per-env granularity is additive at the role layer (per-env grants instead
 	// of wildcard).
-	if err := s.authz.Require(ctx, authz.Check{
-		Scope:        authz.ScopeEnvironmentWrite,
-		ResourceKind: "environment",
-		ResourceID:   sourceEnv.ID.String(),
-		Dimensions:   map[string]string{"project_id": authCtx.ProjectID.String()},
-	}); err != nil {
+	if err := s.authz.Require(ctx, authz.EnvironmentCheck(authz.ScopeEnvironmentWrite, sourceEnv.ID.String(), authCtx.ProjectID.String())); err != nil {
 		return nil, err
 	}
 
@@ -561,12 +564,7 @@ func (s *Service) DeleteEnvironment(ctx context.Context, payload *gen.DeleteEnvi
 		return oops.E(oops.CodeUnexpected, err, "failed to fetch environment").LogError(ctx, logger)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{
-		Scope:        authz.ScopeEnvironmentWrite,
-		ResourceKind: "environment",
-		ResourceID:   environment.ID.String(),
-		Dimensions:   map[string]string{"project_id": authCtx.ProjectID.String()},
-	}); err != nil {
+	if err := s.authz.Require(ctx, authz.EnvironmentCheck(authz.ScopeEnvironmentWrite, environment.ID.String(), authCtx.ProjectID.String())); err != nil {
 		return err
 	}
 
@@ -644,22 +642,9 @@ func (s *Service) SetSourceEnvironmentLink(ctx context.Context, payload *gen.Set
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.requireProjectEnvironmentRead(ctx, *authCtx.ProjectID); err != nil {
+	environmentID, err := s.resolveLinkableEnvironment(ctx, *authCtx.ProjectID, payload.EnvironmentID)
+	if err != nil {
 		return nil, err
-	}
-
-	environmentID, err := uuid.Parse(payload.EnvironmentID)
-	if err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "invalid environment_id").LogError(ctx, s.logger)
-	}
-
-	// Verify the environment exists and belongs to the project
-	_, err = s.repo.GetEnvironmentByID(ctx, repo.GetEnvironmentByIDParams{
-		ID:        environmentID,
-		ProjectID: *authCtx.ProjectID,
-	})
-	if err != nil {
-		return nil, oops.E(oops.CodeNotFound, err, "environment not found").LogError(ctx, s.logger)
 	}
 
 	link, err := s.repo.SetSourceEnvironment(ctx, repo.SetSourceEnvironmentParams{
@@ -686,11 +671,16 @@ func (s *Service) DeleteSourceEnvironmentLink(ctx context.Context, payload *gen.
 		return oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.requireProjectEnvironmentRead(ctx, *authCtx.ProjectID); err != nil {
+	linked, err := s.repo.GetEnvironmentForSource(ctx, repo.GetEnvironmentForSourceParams{
+		SourceKind: string(payload.SourceKind),
+		SourceSlug: payload.SourceSlug,
+		ProjectID:  *authCtx.ProjectID,
+	})
+	if err := s.requireLinkedEnvironmentRead(ctx, *authCtx.ProjectID, linked, err); err != nil {
 		return err
 	}
 
-	err := s.repo.DeleteSourceEnvironment(ctx, repo.DeleteSourceEnvironmentParams{
+	err = s.repo.DeleteSourceEnvironment(ctx, repo.DeleteSourceEnvironmentParams{
 		SourceKind: string(payload.SourceKind),
 		SourceSlug: payload.SourceSlug,
 		ProjectID:  *authCtx.ProjectID,
@@ -739,27 +729,14 @@ func (s *Service) SetToolsetEnvironmentLink(ctx context.Context, payload *gen.Se
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.requireProjectEnvironmentRead(ctx, *authCtx.ProjectID); err != nil {
-		return nil, err
-	}
-
 	toolsetID, err := uuid.Parse(payload.ToolsetID)
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid toolset_id").LogError(ctx, s.logger)
 	}
 
-	environmentID, err := uuid.Parse(payload.EnvironmentID)
+	environmentID, err := s.resolveLinkableEnvironment(ctx, *authCtx.ProjectID, payload.EnvironmentID)
 	if err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "invalid environment_id").LogError(ctx, s.logger)
-	}
-
-	// Verify the environment exists and belongs to the project
-	_, err = s.repo.GetEnvironmentByID(ctx, repo.GetEnvironmentByIDParams{
-		ID:        environmentID,
-		ProjectID: *authCtx.ProjectID,
-	})
-	if err != nil {
-		return nil, oops.E(oops.CodeNotFound, err, "environment not found").LogError(ctx, s.logger)
+		return nil, err
 	}
 
 	link, err := s.repo.SetToolsetEnvironment(ctx, repo.SetToolsetEnvironmentParams{
@@ -784,13 +761,17 @@ func (s *Service) DeleteToolsetEnvironmentLink(ctx context.Context, payload *gen
 		return oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.requireProjectEnvironmentRead(ctx, *authCtx.ProjectID); err != nil {
-		return err
-	}
-
 	toolsetID, err := uuid.Parse(payload.ToolsetID)
 	if err != nil {
 		return oops.E(oops.CodeBadRequest, err, "invalid toolset_id").LogError(ctx, s.logger)
+	}
+
+	linked, err := s.repo.GetEnvironmentForToolset(ctx, repo.GetEnvironmentForToolsetParams{
+		ToolsetID: toolsetID,
+		ProjectID: *authCtx.ProjectID,
+	})
+	if err := s.requireLinkedEnvironmentRead(ctx, *authCtx.ProjectID, linked, err); err != nil {
+		return err
 	}
 
 	err = s.repo.DeleteToolsetEnvironment(ctx, repo.DeleteToolsetEnvironmentParams{

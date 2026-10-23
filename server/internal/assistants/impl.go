@@ -179,6 +179,10 @@ func (s *Service) CreateAssistant(ctx context.Context, payload *gen.CreateAssist
 	if err != nil {
 		return nil, err
 	}
+	canBindEnvironment, err := s.core.readableEnvironments(ctx, *authCtx.ProjectID, payload.Toolsets, payload.McpServers)
+	if err != nil {
+		return nil, mapAssistantStoreError(ctx, s.logger, err, "authorize assistant environments")
+	}
 	record, err := s.core.CreateAssistant(
 		ctx,
 		authCtx.ActiveOrganizationID,
@@ -194,6 +198,7 @@ func (s *Service) CreateAssistant(ctx context.Context, payload *gen.CreateAssist
 		conv.PtrValOrEmpty(payload.Status, StatusActive),
 		true,
 		canEnableMCP,
+		canBindEnvironment,
 	)
 	if err != nil {
 		return nil, mapAssistantStoreError(ctx, s.logger, err, "create assistant")
@@ -223,6 +228,10 @@ func (s *Service) UpdateAssistant(ctx context.Context, payload *gen.UpdateAssist
 	if err != nil {
 		return nil, err
 	}
+	canBindEnvironment, err := s.core.readableEnvironments(ctx, *authCtx.ProjectID, payload.Toolsets, payload.McpServers)
+	if err != nil {
+		return nil, mapAssistantStoreError(ctx, s.logger, err, "authorize assistant environments")
+	}
 	record, err := s.core.UpdateAssistant(
 		ctx,
 		*authCtx.ProjectID,
@@ -236,6 +245,7 @@ func (s *Service) UpdateAssistant(ctx context.Context, payload *gen.UpdateAssist
 		payload.MaxConcurrency,
 		payload.Status,
 		canEnableMCP,
+		canBindEnvironment,
 		runtimeSelectionChange{Version: payload.RuntimeVersion, ExpectedVersion: payload.ExpectedRuntimeVersion},
 	)
 	if err != nil {
@@ -501,16 +511,7 @@ func (s *Service) requireAttachmentAccess(ctx context.Context, projectID uuid.UU
 	if err != nil {
 		return nil, err
 	}
-	allowed := make(map[uuid.UUID]struct{}, len(writable))
-	for _, id := range writable {
-		if parsed, parseErr := uuid.Parse(id); parseErr == nil {
-			allowed[parsed] = struct{}{}
-		}
-	}
-	return func(id uuid.UUID) bool {
-		_, ok := allowed[id]
-		return ok
-	}, nil
+	return idSetPredicate(writable), nil
 }
 
 func (s *Service) Kind() string {
@@ -590,6 +591,8 @@ func mapAssistantStoreError(ctx context.Context, logger *slog.Logger, err error,
 		return oops.E(oops.CodeUnauthorized, err, "%s", message).LogWarn(ctx, logger)
 	case errors.Is(err, errMCPEnableForbidden):
 		return oops.E(oops.CodeForbidden, err, "%s", errMCPEnableForbidden.Error()).LogWarn(ctx, logger)
+	case errors.Is(err, errEnvironmentBindingForbidden):
+		return oops.E(oops.CodeForbidden, err, "%s", errEnvironmentBindingForbidden.Error()).LogWarn(ctx, logger)
 	case errors.Is(err, errToolsetNoMCPServer):
 		return oops.E(oops.CodeBadRequest, err, "%s", hostedmcp.NoServerMessage).LogWarn(ctx, logger)
 	case errors.Is(err, errAssistantValidation):

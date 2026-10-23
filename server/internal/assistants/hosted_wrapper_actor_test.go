@@ -23,7 +23,7 @@ func TestUpdateAssistantWithoutUserEnablesHostedWrapperAsCreator(t *testing.T) {
 	require.NoError(t, err)
 	project := newProvisioningProject(t, db, "hosted-wrapper-actor")
 	core := newProvisioningCore(t, db)
-	record, err := core.CreateAssistant(t.Context(), "org-test", project, "user-1", "Background edits", "openai/gpt-4o-mini", "", nil, nil, 300, 1, StatusActive, true, nil)
+	record, err := core.CreateAssistant(t.Context(), "org-test", project, "user-1", "Background edits", "openai/gpt-4o-mini", "", nil, nil, 300, 1, StatusActive, true, nil, nil)
 	require.NoError(t, err)
 	ts, err := toolsetsrepo.New(db).CreateToolset(t.Context(), toolsetsrepo.CreateToolsetParams{
 		OrganizationID: "org-test", ProjectID: project, Name: "Linear", Slug: "linear",
@@ -33,7 +33,7 @@ func TestUpdateAssistantWithoutUserEnablesHostedWrapperAsCreator(t *testing.T) {
 
 	// No auth context: the hosted wrapper sync is attributed to the assistant's creator.
 	_, err = core.UpdateAssistant(t.Context(), project, record.ID, nil, nil, nil,
-		[]*types.AssistantToolsetRef{{ToolsetSlug: ts.Slug, EnvironmentSlug: nil}}, nil, nil, nil, nil, allowAllMCPEnable)
+		[]*types.AssistantToolsetRef{{ToolsetSlug: ts.Slug, EnvironmentSlug: nil}}, nil, nil, nil, nil, allowAllMCPEnable, nil)
 	require.NoError(t, err)
 
 	server, err := mcpserversrepo.New(db).GetMCPServerByIDAndProjectID(t.Context(), mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: ts.ID, ProjectID: project})
@@ -52,7 +52,7 @@ func TestUpdateAssistantByAgentEnablesHostedWrapperAsAgent(t *testing.T) {
 	require.NoError(t, err)
 	project := newProvisioningProject(t, db, "hosted-wrapper-agent-actor")
 	core := newProvisioningCore(t, db)
-	record, err := core.CreateAssistant(t.Context(), "org-test", project, "user-1", "Agent edits", "openai/gpt-4o-mini", "", nil, nil, 300, 1, StatusActive, true, nil)
+	record, err := core.CreateAssistant(t.Context(), "org-test", project, "user-1", "Agent edits", "openai/gpt-4o-mini", "", nil, nil, 300, 1, StatusActive, true, nil, nil)
 	require.NoError(t, err)
 	ts, err := toolsetsrepo.New(db).CreateToolset(t.Context(), toolsetsrepo.CreateToolsetParams{
 		OrganizationID: "org-test", ProjectID: project, Name: "Linear", Slug: "linear",
@@ -65,7 +65,7 @@ func TestUpdateAssistantByAgentEnablesHostedWrapperAsAgent(t *testing.T) {
 	require.Empty(t, assistantActor(ctx, "user-1").UserID, "an agent write is not attributed to the creator")
 
 	_, err = core.UpdateAssistant(ctx, project, record.ID, nil, nil, nil,
-		[]*types.AssistantToolsetRef{{ToolsetSlug: ts.Slug, EnvironmentSlug: nil}}, nil, nil, nil, nil, allowAllMCPEnable)
+		[]*types.AssistantToolsetRef{{ToolsetSlug: ts.Slug, EnvironmentSlug: nil}}, nil, nil, nil, nil, allowAllMCPEnable, nil)
 	require.NoError(t, err)
 
 	created, err := audittest.LatestAuditLogByAction(t.Context(), db, audit.ActionMcpServerCreate)
