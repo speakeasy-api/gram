@@ -129,9 +129,8 @@ WHERE project_id = @project_id::uuid
 -- credential kind, plus the pre-column row. A rerun that dropped or
 -- duplicated any of them would leave the badges telling a different story
 -- than the one they were seeded to tell.
--- One issuer per Connections credential story (acme-partner-gateway), three
--- project MCP issuers, and the organization-wide workforce issuer used by
--- GitHub.
+-- Two upstream MCP issuers, two independent gateway issuers, and one
+-- Connections issuer; GitHub uses the organization workforce issuer.
 -- name: PostflightIDProjectUserSessionIssuers :one
 SELECT count(*) FROM user_session_issuers
 WHERE project_id = @project_id::uuid AND deleted IS FALSE;
@@ -569,3 +568,8 @@ LEFT JOIN sigint_custom_signals cs
 WHERE ss.project_id = @project_id::uuid AND ss.deleted IS FALSE
   AND (s.id IS NULL OR s.deleted IS TRUE
     OR cs.id IS NULL OR cs.deleted IS TRUE);
+
+-- name: PostflightIDGatewayIssuers :one
+SELECT count(DISTINCT user_session_issuer_id)::bigint
+FROM meta_mcp_servers
+WHERE project_id = @project_id::uuid AND deleted IS FALSE;

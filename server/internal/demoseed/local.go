@@ -149,6 +149,8 @@ func RunLocalFixtures(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool
 		{"api key policy", localAPIKeyPolicySQL, []any{spec.OrgID, localAPIKeyID(), spec.ProjectID()}},
 		{"default environment", localEnvironmentSQL, []any{spec.OrgID, spec.ProjectID(), localEnvironmentID()}},
 		{"mcp registry", localMCPRegistrySQL, nil},
+		{"enable code mode", localCodeModeFeatureSQL, []any{spec.OrgID}},
+		{"code mode gateway", localCodeModeGatewaySQL, []any{spec.OrgID, spec.ProjectID()}},
 		{"mcp app asset", localMCPAppAssetSQL, []any{
 			localMCPAppAssetID(), spec.ProjectID(), spec.OrgID, app.url, app.size, app.sha256,
 		}},
@@ -266,6 +268,7 @@ func bustLocalCaches(ctx context.Context, logger *slog.Logger, cache *redis.Clie
 		productfeatures.FeatureSessionCapture,
 		productfeatures.FeatureSkills,
 		productfeatures.FeaturePlatformMCP,
+		productfeatures.FeatureCodeMode,
 		productfeatures.FeatureSSO,
 		productfeatures.FeatureSCIM,
 	} {
@@ -366,6 +369,16 @@ VALUES ($1, 'platform_mcp')
 ON CONFLICT (organization_id, feature_name) WHERE deleted IS FALSE DO NOTHING
 `
 
+// Code Mode is a staff-managed entitlement; enabled locally so the seeded Code
+// Mode gateway runs against the local runtime. The shared demo org never gets
+// it: once a deployment runs the code runtime, Code Mode spends runner
+// capacity on whoever explores the demo.
+const localCodeModeFeatureSQL = `
+INSERT INTO organization_features (organization_id, feature_name)
+VALUES ($1, 'code_mode')
+ON CONFLICT (organization_id, feature_name) WHERE deleted IS FALSE DO NOTHING
+`
+
 // SSO and directory sync (scim) are paid entitlements that gate the WorkOS
 // admin portal; enabled locally so the identity setup flow works end to end.
 const localIdentityFeaturesSQL = `
@@ -412,6 +425,13 @@ INSERT INTO environments (id, organization_id, project_id, name, slug)
 VALUES ($3, $1, $2, 'Default', 'default')
 ON CONFLICT (project_id, slug) WHERE deleted IS FALSE
 DO UPDATE SET name = EXCLUDED.name, updated_at = clock_timestamp()
+`
+
+// The shared seed stores this gateway as Progressive because the demo org has
+// no code runtime; local stacks can run one, so the gateway shows Code Mode.
+const localCodeModeGatewaySQL = `
+UPDATE meta_mcp_servers SET discovery_mode = 'code_mode', updated_at = clock_timestamp()
+WHERE organization_id = $1 AND project_id = $2 AND name = 'Python Code Gateway' AND deleted IS FALSE
 `
 
 // The default registry backing the Catalog page. Global, not tenant-scoped,

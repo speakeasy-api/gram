@@ -141,10 +141,10 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 		// credential kind, plus the pre-column row. A rerun that dropped or
 		// duplicated any of them would leave the badges telling a different
 		// story than the one they were seeded to tell.
-		// One issuer per Connections credential story (acme-partner-gateway),
-		// three project MCP issuers, and the organization-wide workforce issuer
-		// used by GitHub.
-		{byProj(s.q.PostflightIDProjectUserSessionIssuers), 4, "demo seed postflight: expected 4 project user session issuers, found %d"},
+		// Two upstream MCP issuers, two independent gateway issuers, and one
+		// Connections issuer; GitHub uses the organization workforce issuer.
+		{byProj(s.q.PostflightIDProjectUserSessionIssuers), 5, "demo seed postflight: expected 5 project user session issuers, found %d"},
+		{byProj(s.q.PostflightIDGatewayIssuers), 2, "demo seed postflight: expected 2 distinct gateway issuers, found %d"},
 		{byOrg(s.q.PostflightIDOrgUserSessionIssuers), 1, "demo seed postflight: expected 1 organization user session issuer, found %d"},
 		// The workforce issuer shows a shared authorization server.
 		{func(ctx context.Context) (int64, error) {

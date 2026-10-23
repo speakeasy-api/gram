@@ -126,6 +126,9 @@ func (s *Service) MintUserSession(ctx context.Context, payload *gen.MintUserSess
 		if !hasMeta || !mode.Valid() {
 			return nil, oops.E(oops.CodeBadRequest, nil, "discovery_mode requires a gateway and a supported mode")
 		}
+		if mode == metamcp.DiscoveryModeCode && !s.codeModeSelection.Allows(ctx, authCtx.ActiveOrganizationID) {
+			return nil, oops.E(oops.CodeForbidden, nil, "gateway code mode is not available")
+		}
 		toolPolicy, err = json.Marshal(&toolfilter.SessionPolicy{
 			Resource:  "meta_mcp_server:" + target.resourceID,
 			Selection: nil,

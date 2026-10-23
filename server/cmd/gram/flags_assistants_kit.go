@@ -193,7 +193,7 @@ func installKitLocalRuntimeFromCLI(c *cli.Context, core *assistants.ServiceCore,
 		if len(caCert) == 0 || c.String("assistant-runtime-gke-cluster-endpoint") == "" {
 			return fmt.Errorf("kit GKE requires assistant runtime cluster endpoint and CA")
 		}
-		base.GKE.Dynamic, err = k8s.NewRemoteDynamicClient(c.Context, c.String("assistant-runtime-gke-cluster-endpoint"), caCert)
+		base.GKE.Dynamic, err = k8s.NewRemoteDynamicClient(c.Context, c.String("assistant-runtime-gke-cluster-endpoint"), caCert, k8s.RemoteClientOptions{QPS: 0, Burst: 0})
 		if err != nil {
 			return fmt.Errorf("build Kit assistant cluster client: %w", err)
 		}

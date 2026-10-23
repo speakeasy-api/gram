@@ -3128,6 +3128,7 @@ WHERE m.id = @mcp_server_id
 -- Deliberately returns no upstream URL, credentials, or provider resource data.
 SELECT
     CASE WHEN @target_kind::text = 'gateway' THEN COALESCE(gateway.discovery_mode, 'progressive') ELSE '' END::text AS discovery_mode,
+    (@target_kind::text = 'gateway' AND gateway.user_session_issuer_id IS NOT NULL)::boolean AS gateway_requires_sign_in,
     CASE WHEN @target_kind::text = 'gateway' THEN gateway.name ELSE COALESCE(server.name, server.slug, '') END::text AS name,
     CASE WHEN @target_kind::text = 'gateway' THEN gateway.visibility ELSE server.visibility END::text AS visibility,
     COALESCE(

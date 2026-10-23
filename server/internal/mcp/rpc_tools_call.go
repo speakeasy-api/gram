@@ -518,8 +518,18 @@ func handleToolsCall(
 		recordToolCallErrorStatus(ctx, rw, failure)
 		return nil, failure
 	}
+	if invocation, ok := ctx.Value(metaCodeInvocationKey{}).(*metaCodeInvocation); ok {
+		invocation.dispatched = true
+	}
 	err = toolProxy.Do(ctx, rw, bytes.NewReader(params.Arguments), toolCallEnv, plan, logAttrs)
 	if err != nil {
+		// The proxy refused a body it could not decode before contacting the
+		// tool's server, so a Code Mode program can fix it and call again.
+		if invocation, ok := ctx.Value(metaCodeInvocationKey{}).(*metaCodeInvocation); ok && errors.Is(err, gateway.ErrToolInputRejected) {
+			invocation.dispatched = false
+			invocation.rejected = true
+			invocation.message = "invalid request body"
+		}
 		if rejected, ok := toolCallRejection(ctx, logger, err, attr.SlogToolName(params.Name)); ok {
 			recordToolCallErrorStatus(ctx, rw, rejected)
 			return nil, rejected
@@ -536,6 +546,16 @@ func handleToolsCall(
 	}
 
 	outputBytes = int64(rw.body.Len())
+
+	// The proxy refused the input before contacting the tool's server, so a
+	// Code Mode program can fix its arguments and call again.
+	if rw.headers.Get(gateway.ToolInputRejectedHeader) != "" {
+		if invocation, ok := ctx.Value(metaCodeInvocationKey{}).(*metaCodeInvocation); ok {
+			invocation.dispatched = false
+			invocation.rejected = true
+			invocation.message = toolInputRejection(rw.body.Bytes())
+		}
+	}
 
 	// Extract function metrics from headers (originally trailers from functions runner)
 	if cpuStr := rw.headers.Get(functions.FunctionsCPUHeader); cpuStr != "" {
@@ -970,4 +990,15 @@ func filterOmittedEnvVars(
 	}
 
 	return nil
+}
+
+// toolInputRejection extracts the proxy's input refusal from its error body.
+func toolInputRejection(body []byte) string {
+	var refusal struct {
+		Error string `json:"error"`
+	}
+	if err := json.Unmarshal(body, &refusal); err == nil && refusal.Error != "" {
+		return refusal.Error
+	}
+	return strings.TrimSpace(string(body))
 }
