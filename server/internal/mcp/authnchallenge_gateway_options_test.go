@@ -1,7 +1,9 @@
 package mcp
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"testing"
 
 	"github.com/google/uuid"
@@ -10,6 +12,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/stretchr/testify/require"
 )
 
@@ -22,7 +25,15 @@ func TestConsentGatewayModeChoices(t *testing.T) {
 	require.NoError(t, err)
 	require.Nil(t, policy)
 	_, err = service.consentGatewayPolicy(ctx, endpoint, AuthnChallengeState{}, "", "code_mode")
-	require.ErrorContains(t, err, "code mode is not available", "missing runtime fails closed")
+	requireOopsCode(t, err, oops.CodeUnavailable, "a runtime that cannot start runners is retryable")
+	entitled := false
+	available := &Service{codeExecutor: availableCodeExecutor{}, platformFeatureChecker: func(context.Context, string, string) bool { return entitled }}
+	_, err = available.consentGatewayPolicy(ctx, endpoint, AuthnChallengeState{}, "", "code_mode")
+	requireOopsCode(t, err, oops.CodeForbidden, "an organization without the entitlement is refused")
+	entitled = true
+	policy, err = available.consentGatewayPolicy(ctx, endpoint, AuthnChallengeState{}, "", "code_mode")
+	require.NoError(t, err)
+	require.Equal(t, metamcp.DiscoveryModeCode, *policy.Gateway.DiscoveryMode)
 	policy, err = service.consentGatewayPolicy(ctx, endpoint, AuthnChallengeState{}, "", "direct")
 	require.NoError(t, err)
 	require.Nil(t, policy.Selection)
@@ -44,6 +55,17 @@ func TestConsentGatewayModeChoices(t *testing.T) {
 	require.Equal(t, endpointToolSelectionResource(organizationGateway), policy.Resource)
 	_, err = service.consentGatewayPolicy(ctx, organizationGateway, AuthnChallengeState{FirstParty: true}, "", "direct")
 	require.Error(t, err)
+}
+
+type availableCodeExecutor struct{ codemode.Disabled }
+
+func (availableCodeExecutor) Available() bool { return true }
+
+func requireOopsCode(t *testing.T, err error, code oops.Code, msg string) {
+	t.Helper()
+	shareable, ok := errors.AsType[*oops.ShareableError](err)
+	require.True(t, ok, msg)
+	require.Equal(t, code, shareable.Code, msg)
 }
 
 func TestGatewayGrantNamespaceSeparatesOldReaders(t *testing.T) {

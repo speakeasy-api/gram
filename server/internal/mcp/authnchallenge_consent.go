@@ -828,11 +828,13 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		metaServer, readErr := metamcprepo.New(s.db).GetMetaMCPServer(ctx, metamcprepo.GetMetaMCPServerParams{
 			ID: endpoint.MetaMcpServerID.UUID, ProjectID: endpoint.ProjectID, OrganizationID: endpoint.OrganizationID,
 		})
+		// Display only: an unreadable default leaves the page without it.
 		if readErr != nil {
-			return oops.E(oops.CodeUnexpected, readErr, "read gateway discovery mode").LogError(ctx, logger)
+			logger.WarnContext(ctx, "read gateway discovery mode", attr.SlogError(readErr))
 		}
-		switch metaServer.DiscoveryMode {
-		case "code_mode":
+		switch {
+		case readErr != nil:
+		case metaServer.DiscoveryMode == "code_mode":
 			gatewayDefaultMode = "Code Mode"
 			// admitMetaGate serves Code Mode gateways as Progressive while the
 			// runtime is off or the organization is not entitled to Code Mode.
@@ -840,10 +842,8 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 				gatewayDefaultMode = "Progressive"
 				codeModeUnavailable = true
 			}
-		case "direct":
+		case metaServer.DiscoveryMode == "direct":
 			gatewayDefaultMode = "Direct"
-		case "progressive":
-			gatewayDefaultMode = "Progressive"
 		default:
 			gatewayDefaultMode = "Progressive"
 		}

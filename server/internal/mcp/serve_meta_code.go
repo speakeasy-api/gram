@@ -152,7 +152,7 @@ func (s *Service) executeMetaCode(ctx context.Context, logger *slog.Logger, endp
 	refresh, _ := ctx.Value(metaCodeRefreshKey{}).(metaCodeGateRefresher)
 	backend, err := newMetaCodeBackend(ctx, s, gate, members, *endpoint, server.UserSessionIssuerID, params.Meta, refresh)
 	if err != nil {
-		return nil, oops.E(oops.CodeForbidden, err, "code admission is unavailable")
+		return nil, oops.E(oops.CodeUnexpected, err, "code admission is unavailable").LogError(ctx, logger)
 	}
 	defer backend.sessions.end(ctx)
 	factory := codemode.HostFactory(func(runCtx context.Context) (codemode.Host, error) {

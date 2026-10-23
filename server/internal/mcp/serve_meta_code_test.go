@@ -214,8 +214,10 @@ func TestCodeModeNeverServesAnonymousCallers(t *testing.T) {
 
 	execute := makeMetaRPCBody(t, "tools/call", map[string]any{"name": "execute", "arguments": map[string]any{"code": "1"}})
 	for _, bearer := range []string{"", uuid.NewString()} {
-		_, err := servePublicHTTP(t, t.Context(), ti, slug, execute, bearer, map[string]string{"Mcp-Session-Id": uuid.NewString()})
+		w, err := servePublicHTTP(t, t.Context(), ti, slug, execute, bearer, map[string]string{"Mcp-Session-Id": uuid.NewString()})
 		require.NoError(t, err)
+		require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+		require.Contains(t, w.Body.String(), `"error":{"code":-32002,"message":"unknown tool \"execute\""}`, "execute is refused, not run")
 	}
 	require.Empty(t, executor.callers(), "an anonymous caller never reaches the code runtime")
 }

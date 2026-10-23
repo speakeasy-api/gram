@@ -771,9 +771,10 @@
                   id="discovery-mode-help"
                   class="text-muted-foreground mt-2 text-sm"
                 >
-                  Progressive discovers tools as needed. Direct lists every
-                  available tool. Use Direct if your client cannot discover
-                  tools progressively. {{if .ShowCodeMode}}Code Mode exposes one execute tool to discover and call tools using Python.{{end}}
+                  Progressive discovers tools as needed, starting from
+                  <code>list_servers</code>. Direct lists every available tool
+                  as a qualified <code>server--tool</code> name. Use Direct if
+                  your client cannot discover tools progressively. {{if .ShowCodeMode}}Code Mode exposes one execute tool to discover and call tools using Python, with <code>tools.search</code>, <code>tools.describe</code> and <code>tools.call</code>.{{end}}
                 </p>
               </dd>
             </div>

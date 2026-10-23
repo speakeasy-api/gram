@@ -484,7 +484,7 @@ func testOrganizationGatewayPicksTools(t *testing.T, mode metamcp.DiscoveryMode,
 	decoy := createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, "meta-"+uuid.NewString(), uuid.Nil)
 	hosted := seedHostedMetaMember(t, ctx, ti, decoy.ID, "Hosted tools", 3, mcpservers.VisibilityPrivate, "alpha", "beta")
 	setToolsetMcpPrivate(t, ctx, ti, hosted.toolsetID, *authCtx.ProjectID)
-	upstream := newCatalogUpstream(t, 1)
+	upstream := newCatalogUpstream(t, 2)
 	remoteID := seedMetaMemberWithUpstream(t, ctx, ti.conn, *authCtx.ProjectID, decoy.ID, "Remote", "remote-counted", 4, upstream.url)
 	require.NoError(t, testrepo.New(ti.conn).SetMCPServerVisibilityFixture(ctx, testrepo.SetMCPServerVisibilityFixtureParams{ID: remoteID, ProjectID: *authCtx.ProjectID, Visibility: mcpservers.VisibilityPrivate}))
 	for _, id := range []uuid.UUID{hosted.serverID, hosted.toolsetID, remoteID} {
@@ -517,6 +517,7 @@ func testOrganizationGatewayPicksTools(t *testing.T, mode metamcp.DiscoveryMode,
 			require.Contains(t, paths, "remote-counted--tool_000")
 			if !all {
 				require.NotContains(t, paths, hosted.slug+"--beta")
+				require.NotContains(t, paths, "remote-counted--tool_001")
 			}
 			for _, path := range []string{hosted.slug + "--alpha", "remote-counted--tool_000"} {
 				described, err := host.Describe(ctx, path)
@@ -649,12 +650,20 @@ func testOrganizationGatewayPicksTools(t *testing.T, mode metamcp.DiscoveryMode,
 	require.Zero(t, tokenCalls.Load(), "organization gateway discovery never refreshes credentials")
 	if mode == metamcp.DiscoveryModeCode {
 		upstream.future.Store(true)
-		body := makeMetaRPCBody(t, "tools/call", map[string]any{"name": "execute", "arguments": map[string]any{"code": "remote-counted--tool_001"}})
-		rejected, err := serveOrganizationGatewayHTTP(t, t.Context(), ti, fx.organizationSlug, tokens.AccessToken, body)
-		require.NoError(t, err)
-		require.Contains(t, rejected.Body.String(), `"isError":true`)
-		require.Equal(t, before, upstream.requests.Load())
-		body = makeMetaRPCBody(t, "tools/call", map[string]any{"name": "execute", "arguments": map[string]any{"code": "remote-counted--tool_000"}})
+		// A tool added after consent is never callable; one the upstream
+		// already had is callable only if the consent selected it.
+		refused := []string{"remote-counted--tool_002"}
+		if !all {
+			refused = append(refused, "remote-counted--tool_001")
+		}
+		for _, path := range refused {
+			body := makeMetaRPCBody(t, "tools/call", map[string]any{"name": "execute", "arguments": map[string]any{"code": path}})
+			rejected, err := serveOrganizationGatewayHTTP(t, t.Context(), ti, fx.organizationSlug, tokens.AccessToken, body)
+			require.NoError(t, err)
+			require.Contains(t, rejected.Body.String(), `"isError":true`, path)
+			require.Equal(t, before, upstream.requests.Load(), path)
+		}
+		body := makeMetaRPCBody(t, "tools/call", map[string]any{"name": "execute", "arguments": map[string]any{"code": "remote-counted--tool_000"}})
 		called, err := serveOrganizationGatewayHTTP(t, t.Context(), ti, fx.organizationSlug, tokens.AccessToken, body)
 		require.NoError(t, err)
 		require.Contains(t, called.Body.String(), "executed live")

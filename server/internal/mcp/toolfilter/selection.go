@@ -91,7 +91,8 @@ type AllowEntry struct {
 // entries. An empty allow list authorizes zero tools.
 type SessionSelection struct {
 	// Resource pins the selection to the endpoint whose tool inventory the
-	// user consented on: "mcp_server:<uuid>" or "toolset:<uuid>". Session
+	// user consented on: "mcp_server:<uuid>", "toolset:<uuid>" or, for a
+	// gateway, "meta_mcp_server:<uuid>". Session
 	// tokens are portable across endpoints sharing an issuer, so a selection
 	// served against a different resource is rejected, never reinterpreted.
 	Resource string `json:"resource"`

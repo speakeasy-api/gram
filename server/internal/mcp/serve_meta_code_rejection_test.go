@@ -37,10 +37,15 @@ func TestCodeBridgeRejectsInvalidHostedArguments(t *testing.T) {
 		require.Equal(t, "tool_call_rejected", result.Error, arguments)
 		require.Contains(t, string(result.Content), "The input to the tool is invalid", arguments)
 	}
+	// A body that does not decode is refused before dispatch as well.
+	result, err := host.Call(ctx, hosted.slug+"--get_customer", json.RawMessage(`{"pathParameters":"c-1"}`))
+	require.NoError(t, err)
+	require.Equal(t, "tool_call_rejected", result.Error)
+	require.Contains(t, string(result.Content), "invalid request body")
 
 	// Valid arguments pass validation and reach dispatch; the fixture has no
 	// server URL, so the outcome is unknown rather than rejected.
-	result, err := host.Call(ctx, hosted.slug+"--get_customer", json.RawMessage(`{"customer_id":"c-1"}`))
+	result, err = host.Call(ctx, hosted.slug+"--get_customer", json.RawMessage(`{"customer_id":"c-1"}`))
 	require.NoError(t, err)
 	require.Equal(t, "tool_call_outcome_unknown", result.Error)
 }
@@ -88,16 +93,14 @@ func addHTTPToolWithSchema(t *testing.T, ctx context.Context, ti *testInstance, 
 	})
 	require.NoError(t, err)
 
-	urns := []urn.Tool{toolURN}
-	for _, existing := range hosted.toolURNs {
-		urns = append(urns, existing)
-	}
+	latest, err := toolsets_repo.New(ti.conn).GetLatestToolsetVersion(ctx, hosted.toolsetID)
+	require.NoError(t, err)
 	_, err = toolsets_repo.New(ti.conn).CreateToolsetVersion(ctx, toolsets_repo.CreateToolsetVersionParams{
 		ToolsetID:     hosted.toolsetID,
-		Version:       2,
-		ToolUrns:      urns,
+		Version:       latest.Version + 1,
+		ToolUrns:      append([]urn.Tool{toolURN}, latest.ToolUrns...),
 		ResourceUrns:  []urn.Resource{},
-		PredecessorID: uuid.NullUUID{},
+		PredecessorID: uuid.NullUUID{UUID: latest.ID, Valid: true},
 	})
 	require.NoError(t, err)
 }
