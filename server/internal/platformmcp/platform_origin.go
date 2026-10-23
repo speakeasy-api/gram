@@ -45,14 +45,23 @@ func platformBaseURL(ctx context.Context, fallback *url.URL) *url.URL {
 // the configured URLs, because their callers may not reach a platform host.
 // Without a resolver or a stored platform host, links follow the request's
 // platform origin and then the configured URLs.
+// The stored dashboard URL is nil when the stored host is the server host and
+// no dashboard URL is configured.
 func organizationBaseURLs(ctx context.Context, orgHosts *orghost.Resolver, defaultHost pgtype.Text, serverURL, dashboardURL *url.URL) (*url.URL, *url.URL) {
-	origin, hasOrigin := requestorigin.FromContext(ctx)
-	if orgHosts != nil && (!hasOrigin || origin.Surface == requestorigin.SurfacePlatform) {
-		if storedServerURL, storedDashboardURL, ok := orgHosts.StoredPlatformHost(defaultHost); ok {
+	if orgHosts != nil && storedHostApplies(ctx) {
+		if storedServerURL, storedDashboardURL, ok := orgHosts.StoredPlatformBaseURLs(defaultHost); ok {
 			return storedServerURL, storedDashboardURL
 		}
 	}
 	return platformBaseURL(ctx, serverURL), requestDashboardURL(ctx, dashboardURL, serverURL)
+}
+
+// storedHostApplies reports whether links built for this request may use an
+// organization's stored default host: a platform request or one with no
+// origin. Custom-domain and private-network requests keep the configured URLs.
+func storedHostApplies(ctx context.Context) bool {
+	origin, ok := requestorigin.FromContext(ctx)
+	return !ok || origin.Surface == requestorigin.SurfacePlatform
 }
 
 // requestDashboardURL returns the dashboard URL on the extra platform host a

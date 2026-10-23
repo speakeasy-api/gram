@@ -138,10 +138,7 @@ func (s *PluginsService) GetMyMCPConnectionStatus(ctx context.Context, principal
 		output.NextAction = "ask_administrator"
 		return output, nil
 	}
-	serverURL, _, err := s.memberLinkBases(ctx, principal.OrganizationID)
-	if err != nil {
-		return GetMyMCPConnectionStatusOutput{}, err
-	}
+	serverURL, _ := s.memberLinkBases(ctx, principal.OrganizationID)
 	output.ConnectionURL = serverURL.JoinPath("mcp", target.endpointSlug).String()
 	if target.associatedClients != nil && len(target.associatedClients) == 0 && target.remoteSessionIssuerID != uuid.Nil {
 		// A proxied server with no associated client that still derives an

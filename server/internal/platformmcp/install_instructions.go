@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
@@ -92,18 +93,20 @@ func (s *PluginsService) GetMyInstallInstructions(ctx context.Context, principal
 }
 
 // memberLinkBases returns the server and dashboard base URLs of links given to
-// a member of organizationID, as organizationBaseURLs chooses them.
-func (s *PluginsService) memberLinkBases(ctx context.Context, organizationID string) (serverURL, dashboardURL *url.URL, err error) {
+// a member of organizationID, as organizationBaseURLs chooses them. The stored
+// default host is optional: when reading it fails, links fall back to the
+// request's platform host or the configured URLs.
+func (s *PluginsService) memberLinkBases(ctx context.Context, organizationID string) (serverURL, dashboardURL *url.URL) {
 	defaultHost := pgtype.Text{String: "", Valid: false}
-	if s.orgHosts != nil {
+	if s.orgHosts != nil && storedHostApplies(ctx) {
 		org, err := organizationsrepo.New(s.db).GetOrganizationMetadata(ctx, organizationID)
 		if err != nil {
-			return nil, nil, fmt.Errorf("read organization default host: %w", err)
+			s.orgHostsLogger.WarnContext(ctx, "read organization default host for member links", attr.SlogError(err))
+		} else {
+			defaultHost = org.DefaultHost
 		}
-		defaultHost = org.DefaultHost
 	}
-	serverURL, dashboardURL = organizationBaseURLs(ctx, s.orgHosts, defaultHost, s.serverURL, s.dashboardURL)
-	return serverURL, dashboardURL, nil
+	return organizationBaseURLs(ctx, s.orgHosts, defaultHost, s.serverURL, s.dashboardURL)
 }
 
 // installProjectID parses the named project ID, or resolves the organization's
@@ -132,12 +135,10 @@ func (s *PluginsService) installProjectID(ctx context.Context, principal Princip
 
 func (s *PluginsService) pluginInstallInstructions(ctx context.Context, organizationID string, client OnboardingClientFamily, name string) (GetMyInstallInstructionsOutput, error) {
 	deviceAgentURL := ""
-	if authCtx, ok := contextvalues.GetAuthContext(ctx); ok && authCtx != nil && s.dashboardURL != nil && authCtx.ActiveOrganizationID == organizationID && authCtx.OrganizationSlug != "" {
-		_, dashboardURL, err := s.memberLinkBases(ctx, organizationID)
-		if err != nil {
-			return GetMyInstallInstructionsOutput{}, err
+	if authCtx, ok := contextvalues.GetAuthContext(ctx); ok && authCtx != nil && authCtx.ActiveOrganizationID == organizationID && authCtx.OrganizationSlug != "" {
+		if _, dashboardURL := s.memberLinkBases(ctx, organizationID); dashboardURL != nil {
+			deviceAgentURL = dashboardURL.JoinPath(authCtx.OrganizationSlug, "device-agent").String()
 		}
-		deviceAgentURL = dashboardURL.JoinPath(authCtx.OrganizationSlug, "device-agent").String()
 	}
 	output := GetMyInstallInstructionsOutput{
 		TargetKind: "plugin", TargetName: name, ClientFamily: client,
@@ -164,10 +165,7 @@ func (s *PluginsService) standaloneMCPInstallInstructions(ctx context.Context, o
 		output.Fallback = "This MCP server does not have a public installation endpoint. Use the dashboard or ask an organization administrator for the supported setup path."
 		return output, nil
 	}
-	serverURL, _, err := s.memberLinkBases(ctx, organizationID)
-	if err != nil {
-		return GetMyInstallInstructionsOutput{}, err
-	}
+	serverURL, _ := s.memberLinkBases(ctx, organizationID)
 	endpoint := serverURL.JoinPath("mcp", slug).String()
 	switch client {
 	case OnboardingClientClaudeCode, OnboardingClientClaudeCowork, OnboardingClientCodex, OnboardingClientCursor, OnboardingClientOpencode, OnboardingClientOther:

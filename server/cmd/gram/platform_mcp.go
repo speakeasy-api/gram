@@ -450,7 +450,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		WithAuthClientResolver(config.FeatureFlags).
 		WithIdentityChaining(chaining).
 		WithInstallLinks(config.DashboardURL, config.ServerURL).
-		WithOrganizationHosts(config.CallbackOrigins.OrganizationHosts).
+		WithOrganizationHosts(config.CallbackOrigins.OrganizationHosts, config.Logger).
 		WithAssignmentMutations(config.FeatureFlags, organizationSlugs, config.AuditLogger, pluginAssignmentMutationBudget).
 		WithMetadataMutations(config.Logger, plugins.NewPluginMetadataCore(config.AuditLogger, config.PublicationRequests), platformMCPPluginMetadataBudget(config, limitStore)).
 		WithPublicationRequests(config.PublicationRequests).
@@ -1161,7 +1161,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		WithAuthClientResolver(config.FeatureFlags).
 		WithIdentityChaining(chaining).
 		WithInstallLinks(config.DashboardURL, config.ServerURL).
-		WithOrganizationHosts(config.CallbackOrigins.OrganizationHosts).
+		WithOrganizationHosts(config.CallbackOrigins.OrganizationHosts, config.Logger).
 		WithAssignmentMutations(config.FeatureFlags, organizationSlugs, config.AuditLogger, pluginAssignmentMutationBudget).
 		WithMetadataMutations(config.Logger, plugins.NewPluginMetadataCore(config.AuditLogger, config.PublicationRequests), platformMCPPluginMetadataBudget(config, limitStore)).
 		WithPublicationRequests(config.PublicationRequests).

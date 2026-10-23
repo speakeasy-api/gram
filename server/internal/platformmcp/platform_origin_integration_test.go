@@ -211,7 +211,7 @@ func TestMemberMCPURLsFollowOrganizationDefaultHost(t *testing.T) {
 
 	ctx, f := newMemberMCPURLFixture(t, "platform_mcp_member_urls_org_default_host")
 	require.NoError(t, organizationsrepo.New(f.conn).SetOrganizationDefaultHostForTest(ctx, organizationsrepo.SetOrganizationDefaultHostForTestParams{ID: f.principal.OrganizationID, DefaultHost: pgtype.Text{String: testExtraHostBaseURL, Valid: true}}))
-	service := f.service.WithOrganizationHosts(testOrganizationHosts(t))
+	service := f.service.WithOrganizationHosts(testOrganizationHosts(t), testenv.NewLogger(t))
 	ctx = requestorigin.WithContext(ctx, requestorigin.Origin{Surface: requestorigin.SurfacePlatform, BaseURL: testCanonicalBaseURL, OrganizationID: "", NetworkIngressID: uuid.Nil, NetworkIdentity: nil})
 	wantURL := testExtraHostBaseURL + "/mcp/" + f.endpointSlug
 
@@ -236,4 +236,19 @@ func TestMemberMCPURLsFollowOrganizationDefaultHost(t *testing.T) {
 	private, err := service.GetMyMCPConnectionStatus(privateCtx, f.principal, GetMyMCPStatusInput{ProjectID: f.project.ID.String(), MCPID: f.mcpID.String()})
 	require.NoError(t, err)
 	require.Equal(t, testCanonicalBaseURL+"/mcp/"+f.endpointSlug, private.ConnectionURL)
+}
+
+// Without a stored default host, the device-agent link follows the platform
+// host the request arrived on.
+func TestPluginDeviceAgentURLFollowsPlatformHostWithoutDefaultHost(t *testing.T) {
+	t.Parallel()
+
+	ctx, f := newMemberMCPURLFixture(t, "platform_mcp_member_urls_no_default_host")
+	service := f.service.WithOrganizationHosts(testOrganizationHosts(t), testenv.NewLogger(t))
+	ctx = requestorigin.WithContext(ctx, requestorigin.Origin{Surface: requestorigin.SurfacePlatform, BaseURL: testExtraHostBaseURL, OrganizationID: "", NetworkIngressID: uuid.Nil, NetworkIdentity: nil})
+
+	plugin, err := service.pluginInstallInstructions(ctx, f.principal.OrganizationID, OnboardingClientCursor, "Example plugin")
+	require.NoError(t, err)
+	require.NotEmpty(t, plugin.Instructions)
+	require.Equal(t, testExtraHostBaseURL+"/example-org/device-agent", plugin.Instructions[0].URL)
 }

@@ -163,4 +163,9 @@ func TestStoredPlatformHostServerHostWithoutSiteURL(t *testing.T) {
 	})
 	_, _, ok := resolver.StoredPlatformHost(stored("https://ai.example.com"))
 	require.False(t, ok)
+
+	serverURL, siteURL, ok := resolver.StoredPlatformBaseURLs(stored("https://ai.example.com"))
+	require.True(t, ok)
+	require.Equal(t, "https://ai.example.com", serverURL.String())
+	require.Nil(t, siteURL)
 }

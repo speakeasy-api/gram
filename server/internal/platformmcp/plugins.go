@@ -461,8 +461,10 @@ type PluginsService struct {
 	metadataBudget OperationBudget
 
 	// orgHosts resolves the platform host stored as an organization's default
-	// host. Nil links follow the request's platform origin.
-	orgHosts *orghost.Resolver
+	// host. Nil links follow the request's platform origin. orgHostsLogger
+	// records failed reads of that host.
+	orgHosts       *orghost.Resolver
+	orgHostsLogger *slog.Logger
 }
 
 func NewPluginsService(db *pgxpool.Pool, budget OperationBudget, cursorKeyMaterial string) *PluginsService {
@@ -583,10 +585,13 @@ func (s *PluginsService) WithInstallLinks(dashboardURL, serverURL *url.URL) *Plu
 }
 
 // WithOrganizationHosts makes member links use the platform host stored as the
-// organization's default host, the host the dashboard serves it on.
-func (s *PluginsService) WithOrganizationHosts(resolver *orghost.Resolver) *PluginsService {
+// organization's default host, the host the dashboard serves it on. logger
+// records failed reads of that host, after which links fall back to the
+// request's platform origin.
+func (s *PluginsService) WithOrganizationHosts(resolver *orghost.Resolver, logger *slog.Logger) *PluginsService {
 	if s != nil {
 		s.orgHosts = resolver
+		s.orgHostsLogger = logger
 	}
 	return s
 }
