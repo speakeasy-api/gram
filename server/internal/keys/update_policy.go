@@ -44,6 +44,10 @@ func (s *Service) UpdateKeyPolicy(ctx context.Context, payload *gen.UpdateKeyPol
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
+	if err := authz.LockAuthPermissionBackfillTx(ctx, dbtx, authCtx.ActiveOrganizationID); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "lock auth permission backfill").LogError(ctx, s.logger)
+	}
+
 	kr := s.repo.WithTx(dbtx)
 	key, err := kr.GetAPIKeyByIDForUpdate(ctx, repo.GetAPIKeyByIDForUpdateParams{ID: keyID, OrganizationID: authCtx.ActiveOrganizationID})
 	if errors.Is(err, pgx.ErrNoRows) || (err == nil && key.DeletedAt.Valid) {
