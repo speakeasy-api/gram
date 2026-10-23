@@ -39,9 +39,10 @@ export function GatewayDiscoverySection({
     undefined,
     { throwOnError: false },
   );
-  // Code Mode is rolled out per organization by Speakeasy; organizations
-  // without it are never offered it.
+  // Code Mode is rolled out per organization by Speakeasy. Organizations
+  // without it still see it, disabled, so they know to ask for it.
   const entitled = features.data?.codeModeEnabled === true;
+  const notEnabled = features.data !== undefined && !entitled;
   // Code Mode is never offered to anonymous callers.
   const requiresSignIn = !metaMcpServer.userSessionIssuerId;
   const supportsEditing = isKnownEnumValue(
@@ -104,25 +105,29 @@ export function GatewayDiscoverySection({
               <SelectContent>
                 <SelectItem value="progressive">Progressive</SelectItem>
                 <SelectItem value="direct">Direct</SelectItem>
-                {(metaMcpServer.codeModeEnabled ||
-                  (entitled && requiresSignIn) ||
-                  metaMcpServer.discoveryMode === "code_mode") && (
-                  <SelectItem
-                    value="code_mode"
-                    disabled={!metaMcpServer.codeModeEnabled}
-                  >
-                    {requiresSignIn
+                <SelectItem
+                  value="code_mode"
+                  disabled={!metaMcpServer.codeModeEnabled}
+                >
+                  {notEnabled
+                    ? "Code Mode (not enabled)"
+                    : requiresSignIn
                       ? "Code Mode (requires sign-in)"
                       : "Code Mode"}
-                  </SelectItem>
-                )}
+                </SelectItem>
               </SelectContent>
             </Select>
+            {notEnabled && metaMcpServer.discoveryMode !== "code_mode" && (
+              <p className="text-muted-foreground text-sm">
+                Code Mode is not enabled for your organization. Contact
+                Speakeasy to turn it on.
+              </p>
+            )}
             {metaMcpServer.discoveryMode === "code_mode" &&
               !metaMcpServer.codeModeEnabled && (
                 <p className="text-muted-foreground text-sm">
-                  {!entitled
-                    ? "Code Mode is not enabled for your organization."
+                  {notEnabled
+                    ? "Code Mode is not enabled for your organization; contact Speakeasy to turn it on."
                     : requiresSignIn
                       ? "Code Mode requires sign-in, and this gateway allows anonymous callers."
                       : "The code runtime is unavailable."}{" "}

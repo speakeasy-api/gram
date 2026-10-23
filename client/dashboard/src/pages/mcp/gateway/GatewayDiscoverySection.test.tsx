@@ -220,10 +220,14 @@ it("allows changing a direct gateway to progressive", async () => {
   );
 });
 
-it("only offers Python when code mode is available", async () => {
+it("only lets Code Mode be chosen when it is available", async () => {
   const view = show();
   fireEvent.click(screen.getByRole("combobox"));
-  expect(screen.queryByRole("option", { name: "Code Mode" })).toBeNull();
+  expect(
+    screen
+      .getByRole("option", { name: "Code Mode" })
+      .getAttribute("aria-disabled"),
+  ).toBe("true");
   view.unmount();
   state.codeEnabled = true;
   show();
@@ -277,21 +281,24 @@ it("disables Code Mode for a gateway that allows anonymous callers", () => {
   expect(option.getAttribute("aria-disabled")).toBe("true");
 });
 
-it("never offers Code Mode to an organization without it", () => {
+it("shows Code Mode disabled to an organization without it", () => {
   state.entitled = false;
   render(
     <TooltipProvider>
       <GatewayDiscoverySection
         metaMcpServer={{
           ...gateway,
-          userSessionIssuerId: undefined,
           codeModeEnabled: false,
         }}
       />
     </TooltipProvider>,
   );
+  expect(screen.getByText(/Contact\s+Speakeasy to turn it on/i)).toBeTruthy();
   fireEvent.click(screen.getByRole("combobox"));
-  expect(screen.queryByRole("option", { name: /Code Mode/ })).toBeNull();
+  const option = screen.getByRole("option", {
+    name: "Code Mode (not enabled)",
+  });
+  expect(option.getAttribute("aria-disabled")).toBe("true");
 });
 
 it("explains a saved Code gateway in an organization without Code Mode", () => {
