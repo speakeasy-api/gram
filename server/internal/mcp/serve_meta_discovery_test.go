@@ -424,6 +424,34 @@ func TestGatewayDirectRetriesARateLimitedMemberAfterRetryAfter(t *testing.T) {
 	require.Contains(t, listing.names(), memberSlug+"--tool_120")
 }
 
+func TestGatewayDirectListsHealthyMembersQueuedBehindRateLimitedOnes(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPService(t)
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	slug := "gateway-" + uuid.NewString()
+	gateway := createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, uuid.Nil)
+	// More rate-limited members than the concurrency limit come first, and
+	// wait out their Retry-After. The healthy member queued behind them takes
+	// a second to answer, so it is listed only if it can start while they wait.
+	for i := range 6 {
+		limited := newScriptedUpstream(t, scriptedTools("tool", 1), 100)
+		limited.fail(http.StatusTooManyRequests, "2", "rate limited", -1)
+		limitedSlug := fmt.Sprintf("limited%d-%s", i, uuid.NewString()[:8])
+		seedMetaMemberWithUpstream(t, ctx, ti.conn, *authCtx.ProjectID, gateway.ID, "Limited "+limitedSlug, limitedSlug, int32(i+1), limited.url)
+	}
+	slow := func() bool {
+		<-time.After(time.Second)
+		return true
+	}
+	healthy := newListingUpstream(t, []any{map[string]any{"name": "ping", "inputSchema": map[string]any{"type": "object"}}}, slow)
+	healthySlug := "healthy-" + uuid.NewString()[:8]
+	seedMetaMemberWithUpstream(t, ctx, ti.conn, *authCtx.ProjectID, gateway.ID, "Healthy tools", healthySlug, 7, healthy)
+	setGatewayMode(t, ctx, ti, gateway.ID, "direct")
+	listing := listDirectGateway(t, ti, slug, map[string]any{})
+	require.Nil(t, listing.Error)
+	require.Equal(t, []string{healthySlug + "--ping"}, listing.names())
+}
+
 func TestGatewayDirectOmitsAMemberWhoseRetryAfterOutlastsTheListing(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestMCPService(t)
@@ -444,6 +472,7 @@ func TestGatewayDirectOmitsAMemberWhoseRetryAfterOutlastsTheListing(t *testing.T
 	require.Equal(t, int32(1), upstream.failures.Load())
 	requireOmittedMemberLog(t, omittedMemberLogs(t, *authCtx.ProjectID, gateway.ID, 1)[0], http.StatusTooManyRequests, memberSlug)
 }
+
 func TestGatewayDirectOmitsMembersThatRejectTheCredential(t *testing.T) {
 	t.Parallel()
 	for _, status := range []int{http.StatusUnauthorized, http.StatusForbidden} {
@@ -458,15 +487,23 @@ func TestGatewayDirectOmitsMembersThatRejectTheCredential(t *testing.T) {
 			upstream.fail(status, "", "", -1)
 			rejectingSlug := "rejecting-" + uuid.NewString()[:8]
 			seedMetaMemberWithUpstream(t, ctx, ti.conn, *authCtx.ProjectID, gateway.ID, "Rejecting tools", rejectingSlug, 2, upstream.url)
+			// A failing member in the same listing writes the one row, in the
+			// same batch any row for the rejecting member would join.
+			failing := newScriptedUpstream(t, scriptedTools("tool", 1), 100)
+			failing.fail(http.StatusBadRequest, "", "", -1)
+			failingSlug := "failing-" + uuid.NewString()[:8]
+			seedMetaMemberWithUpstream(t, ctx, ti.conn, *authCtx.ProjectID, gateway.ID, "Failing tools", failingSlug, 3, failing.url)
 			setGatewayMode(t, ctx, ti, gateway.ID, "direct")
 			listing := listDirectGateway(t, ti, slug, map[string]any{})
 			require.Nil(t, listing.Error)
 			require.Equal(t, []string{member.slug + "--alpha"}, listing.names())
-			// A credential exclusion is not a failure, so it records nothing.
-			omittedMemberLogs(t, *authCtx.ProjectID, gateway.ID, 0)
+			// A credential exclusion is not a failure, so only the failing
+			// member is recorded.
+			requireOmittedMemberLog(t, omittedMemberLogs(t, *authCtx.ProjectID, gateway.ID, 1)[0], http.StatusBadRequest, failingSlug)
 		})
 	}
 }
+
 func TestDirectOmitsMalformedCatalogWhileProgressiveRemainsUsable(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestMCPService(t)
@@ -486,6 +523,10 @@ func TestDirectOmitsMalformedCatalogWhileProgressiveRemainsUsable(t *testing.T) 
 	require.Equal(t, []string{healthy.slug + "--alpha"}, listing.names())
 	requireOmittedMemberLog(t, omittedMemberLogs(t, *authCtx.ProjectID, gateway.ID, 1)[0], http.StatusBadGateway, memberSlug)
 }
+
+// newListingUpstream serves a minimal streamable-HTTP MCP server whose
+// tools/list returns tools. beforeList, when set, runs first and can fail the
+// listing by returning false.
 func newListingUpstream(t *testing.T, tools []any, beforeList func() bool) string {
 	t.Helper()
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
