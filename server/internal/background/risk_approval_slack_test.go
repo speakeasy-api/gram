@@ -66,5 +66,5 @@ func TestRiskApprovalSlackWorkflowUpdatesCardsOnExpiry(t *testing.T) {
 	t.Parallel()
 	finished, took := riskApprovalSlackRun(t, 1, 30*time.Minute, 0)
 	require.Equal(t, int32(1), finished)
-	require.GreaterOrEqual(t, took, 30*time.Minute+riskApprovalSlackExpiryGrace)
+	require.InDelta(t, float64(30*time.Minute+riskApprovalSlackExpiryGrace), float64(took), float64(time.Second), "the expiry timer, plus its grace, ends the wait")
 }
