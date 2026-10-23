@@ -682,7 +682,7 @@ func (s *Service) UpdateRemoteSessionClient(ctx context.Context, payload *gen.Up
 	}
 
 	// Best effort and post-commit, as on delete.
-	s.revoker.RevokeAllDetached(ctx, revokedCredentials(revokedSessions))
+	s.revoker.RevokeAllIssuedToDetached(ctx, revokedCredentials(revokedSessions), issuingClientAuth(existing.RemoteSessionClient))
 
 	// Set after the audit snapshot so it matches the snapshot before.
 	afterView.CallbackURL = s.clientCallbackURL(updated)
