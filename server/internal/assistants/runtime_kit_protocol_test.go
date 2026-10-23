@@ -450,6 +450,9 @@ func TestKitProtocolRunTurnPersistsReplaysAndProjects(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, (&kitConfiguredRuntimeProtocol{restarted}).RunTurn(ctx, r, runTurnRequest{AuthToken: "rotated-token", MCPServers: []runtimeMCPServer{{ID: "platform", URL: "https://example.invalid/platform"}}, Model: "openai/gpt-4.1", ThreadID: key.ThreadID, Prompt: "hello", EventID: eventID, CanonicalUserMessageID: currentID}))
 	require.NoError(t, (&kitConfiguredRuntimeProtocol{restarted}).RunTurn(ctx, r, runTurnRequest{AuthToken: "third-token", MCPServers: []runtimeMCPServer{}, Model: "openai/gpt-4.1", ThreadID: key.ThreadID, Prompt: "hello", EventID: eventID, CanonicalUserMessageID: currentID}))
+	// Connection discovery can be unavailable while inference remains healthy.
+	// Preserve the resident set: no additional close or MCP replacement occurs.
+	require.NoError(t, (&kitConfiguredRuntimeProtocol{restarted}).RunTurn(ctx, r, runTurnRequest{MCPServers: nil, Model: "openai/gpt-4.1", ThreadID: key.ThreadID, Prompt: "hello", EventID: eventID, CanonicalUserMessageID: currentID}))
 	messages, err := chatrepo.New(db).ListLatestGenerationChatMessages(ctx, chatrepo.ListLatestGenerationChatMessagesParams{ProjectID: key.ProjectID, ChatID: chatID})
 	require.NoError(t, err)
 	users, finals := 0, 0
@@ -467,7 +470,7 @@ func TestKitProtocolRunTurnPersistsReplaysAndProjects(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, interrupted)
 	mu.Lock()
-	require.Equal(t, 3, prompts)
+	require.Equal(t, 4, prompts)
 	require.Len(t, desiredSets, 3)
 	require.Contains(t, string(desiredSets[0]), "Bearer first-token")
 	require.Contains(t, string(desiredSets[0]), "attached")
@@ -482,7 +485,7 @@ func TestKitProtocolRunTurnPersistsReplaysAndProjects(t *testing.T) {
 		}
 	}
 	require.Equal(t, 2, closes)
-	require.Equal(t, 5, connections, "interrupt must not dial or replace projector control")
+	require.Equal(t, 6, connections, "interrupt must not dial or replace projector control")
 	mu.Unlock()
 }
 

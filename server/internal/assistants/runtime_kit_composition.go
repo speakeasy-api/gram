@@ -166,21 +166,9 @@ var errKitStartupUndispatched = errors.New("kit startup did not dispatch event")
 type kitConfiguredRuntimeProtocol struct{ *KitRuntimeProtocol }
 
 func (p *kitConfiguredRuntimeProtocol) RunTurn(ctx context.Context, r assistantRuntimeRecord, turn runTurnRequest) error {
-	// Nil means discovery was unavailable, not an intentionally empty set.
-	// Retry authoritative discovery before changing any resident connection.
-	if turn.MCPServers == nil {
-		assistant, err := p.config.Core.getAssistantForDispatch(ctx, r.AssistantID)
-		if err != nil {
-			return fmt.Errorf("retry Kit MCP discovery: %w", err)
-		}
-		if assistant.ProjectID != r.ProjectID {
-			return ErrKitRuntimeBinding
-		}
-		turn.MCPServers = p.config.Core.currentRuntimeMCPServers(ctx, assistant)
-		if turn.MCPServers == nil {
-			return errors.New("kit MCP discovery unavailable; existing connections retained")
-		}
-	}
+	// A missing connection snapshot is not an inference failure. Preserve the
+	// resident configuration and let Kit report individual connection failures.
+	// Do not repeat discovery or authentication on the turn admission path.
 	return p.KitRuntimeProtocol.RunTurn(ctx, r, turn)
 }
 
