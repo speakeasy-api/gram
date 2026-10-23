@@ -15,15 +15,15 @@ func TestRotationRegistrationScope(t *testing.T) {
 	row := func(clientScope []string) repo.GetRemoteSessionClientForRotationRow {
 		return repo.GetRemoteSessionClientForRotationRow{
 			RemoteSessionClient:     repo.RemoteSessionClient{Scope: clientScope},
-			IssuerScopesSupported:   []string{"read", "write", "admin"},
+			IssuerScopesSupported:   []string{"read", "write"},
 			IssuerScopeOverride:     nil,
 			IssuerOmitScopeFallback: pgtype.Bool{Bool: false, Valid: false},
 		}
 	}
 
-	require.Equal(t, []string{"read"}, rotationRegistrationScope(row([]string{"read"}), []string{"write"}), "a stored scope wins")
-	require.Equal(t, []string{"write"}, rotationRegistrationScope(row(nil), []string{"write"}), "the login's request is registered")
-	require.Equal(t, []string{"read", "write", "admin"}, rotationRegistrationScope(row(nil), nil), "without a login, the issuer catalogue")
+	require.Equal(t, []string{"read"}, rotationRegistrationScope(row([]string{"read"}), []string{"files:read"}), "a stored scope wins")
+	require.Equal(t, []string{"read", "write", "files:read"}, rotationRegistrationScope(row(nil), []string{"write", "files:read"}), "the login's request widens the issuer scope")
+	require.Equal(t, []string{"read", "write"}, rotationRegistrationScope(row(nil), nil), "without a login, the issuer catalogue")
 
 	override := row(nil)
 	override.IssuerScopeOverride = []string{"read"}

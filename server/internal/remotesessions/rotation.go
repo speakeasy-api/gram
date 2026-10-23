@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -802,19 +803,19 @@ func (m *ChallengeManager) rotateRejectedRegistration(ctx context.Context, organ
 
 // rotationRegistrationScope keeps a replacement registered for what logins
 // request: a registration naming no scope can leave a provider granting less.
+// The client serves every resource on its issuer, so the triggering login's
+// request widens the issuer-level scope rather than replacing it.
 func rotationRegistrationScope(row repo.GetRemoteSessionClientForRotationRow, requested []string) []string {
 	if len(row.RemoteSessionClient.Scope) > 0 {
 		return row.RemoteSessionClient.Scope
 	}
-	if len(requested) > 0 {
-		return requested
+	scope := issuerRegistrationScope(row.IssuerScopesSupported, row.IssuerScopeOverride, row.IssuerOmitScopeFallback, issuerLevelResource())
+	for _, s := range requested {
+		if !slices.Contains(scope, s) {
+			scope = append(scope, s)
+		}
 	}
-	login := Client{ //nolint:exhaustruct // Only scope inputs are used by RequestedScopes.
-		IssuerScopesSupported:   row.IssuerScopesSupported,
-		IssuerScopeOverride:     row.IssuerScopeOverride,
-		IssuerOmitScopeFallback: row.IssuerOmitScopeFallback.Valid && row.IssuerOmitScopeFallback.Bool,
-	}
-	return login.RequestedScopes(ResourceScopes{Pin: nil, ChallengeScopes: nil, ScopesSupported: nil, Live: false, UseDiscovered: true}).Scopes
+	return scope
 }
 
 // timestampPtr is the nullable form of a pgtype.Timestamptz.
