@@ -401,9 +401,9 @@ WHERE m.project_id = @project_id::uuid AND m.deleted IS TRUE;
 -- name: PostflightCountApprovalsServers :one
 SELECT count(*)
 FROM mcp_servers s
-JOIN mcp_endpoints e ON e.mcp_server_id = s.id AND e.deleted IS FALSE
+JOIN mcp_endpoints e ON e.mcp_server_id = s.id AND e.project_id = s.project_id AND e.deleted IS FALSE
 JOIN plugin_servers ps ON ps.mcp_server_id = s.id AND ps.deleted IS FALSE
-JOIN plugins p ON p.id = ps.plugin_id AND p.is_default IS TRUE AND p.deleted IS FALSE
+JOIN plugins p ON p.id = ps.plugin_id AND p.project_id = s.project_id AND p.is_default IS TRUE AND p.deleted IS FALSE
 WHERE s.project_id = @project_id::uuid AND s.builtin_backend = 'approvals'
   AND s.deleted IS FALSE;
 
