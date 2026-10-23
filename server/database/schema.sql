@@ -15761,3 +15761,96 @@ COMMENT ON COLUMN assistant_kit_interrupt_requests.attempt IS '@access: confiden
 COMMENT ON COLUMN assistant_kit_interrupt_requests.outcome IS '@access: confidential';
 COMMENT ON COLUMN assistant_kit_interrupt_requests.created_at IS '@access: confidential';
 COMMENT ON COLUMN assistant_kit_interrupt_requests.acknowledged_at IS '@access: confidential';
+
+CREATE TABLE IF NOT EXISTS registry_promotion_candidates (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id text NOT NULL,
+  project_id uuid,
+  mcp_server_id uuid,
+  remote_mcp_server_id uuid,
+  source_revision text NOT NULL,
+  eligible boolean NOT NULL DEFAULT false,
+  reason text NOT NULL,
+  observed_successes bigint NOT NULL DEFAULT 0,
+  observed_failures bigint NOT NULL DEFAULT 0,
+  observed_days integer NOT NULL DEFAULT 0,
+  checked_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  registry_entry_id uuid,
+  public_metadata jsonb,
+  endpoint_identity text,
+  request_digest text,
+  retry_key text,
+  promoted_by text,
+  promoted_at timestamptz,
+  docs_url text,
+  docs_queued_at timestamptz,
+  delivery_error text,
+  discovery_last_attempt_at timestamptz,
+  discovery_next_attempt_at timestamptz,
+  discovery_failures integer NOT NULL DEFAULT 0,
+  docs_attempts integer NOT NULL DEFAULT 0,
+  docs_failures integer NOT NULL DEFAULT 0,
+  docs_last_attempt_at timestamptz,
+  docs_next_attempt_at timestamptz,
+  docs_needs_attention boolean NOT NULL DEFAULT false,
+  docs_lease_until timestamptz,
+  docs_lease_token uuid,
+  docs_revision uuid NOT NULL DEFAULT generate_uuidv7(),
+  docs_retry_key text,
+  docs_retry_revision text,
+  docs_retry_by text,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  CONSTRAINT registry_promotion_candidates_pkey PRIMARY KEY (id),
+  CONSTRAINT registry_promotion_candidates_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL,
+  CONSTRAINT registry_promotion_candidates_mcp_server_id_fkey FOREIGN KEY (mcp_server_id) REFERENCES mcp_servers(id) ON DELETE SET NULL,
+  CONSTRAINT registry_promotion_candidates_remote_mcp_server_id_fkey FOREIGN KEY (remote_mcp_server_id) REFERENCES remote_mcp_servers(id) ON DELETE SET NULL,
+  CONSTRAINT registry_promotion_candidates_registry_entry_id_fkey FOREIGN KEY (registry_entry_id) REFERENCES mcp_registry_entries(id) ON DELETE SET NULL
+);
+
+CREATE UNIQUE INDEX registry_promotion_candidates_source_key ON registry_promotion_candidates(project_id, mcp_server_id);
+CREATE UNIQUE INDEX registry_promotion_candidates_endpoint_key ON registry_promotion_candidates(endpoint_identity) WHERE endpoint_identity IS NOT NULL;
+CREATE UNIQUE INDEX registry_promotion_candidates_docs_slug_key ON registry_promotion_candidates((public_metadata->>'docs_slug')) WHERE public_metadata IS NOT NULL;
+CREATE UNIQUE INDEX registry_promotion_candidates_retry_key ON registry_promotion_candidates(project_id, retry_key) WHERE retry_key IS NOT NULL;
+CREATE INDEX registry_promotion_candidates_pending_idx ON registry_promotion_candidates(docs_next_attempt_at, id) WHERE promoted_at IS NOT NULL AND docs_queued_at IS NULL AND docs_needs_attention IS FALSE;
+CREATE INDEX registry_promotion_candidates_discovery_idx ON registry_promotion_candidates(discovery_next_attempt_at, id) WHERE promoted_at IS NULL;
+
+COMMENT ON COLUMN registry_promotion_candidates.id IS '@access: confidential';
+COMMENT ON COLUMN registry_promotion_candidates.organization_id IS '@access: confidential';
+COMMENT ON COLUMN registry_promotion_candidates.project_id IS '@access: confidential';
+COMMENT ON COLUMN registry_promotion_candidates.mcp_server_id IS '@access: confidential';
+COMMENT ON COLUMN registry_promotion_candidates.remote_mcp_server_id IS '@access: confidential';
+COMMENT ON COLUMN registry_promotion_candidates.source_revision IS '@access: confidential';
+COMMENT ON COLUMN registry_promotion_candidates.eligible IS '@access: confidential';
+COMMENT ON COLUMN registry_promotion_candidates.reason IS '@access: confidential';
+COMMENT ON COLUMN registry_promotion_candidates.observed_successes IS '@access: confidential';
+COMMENT ON COLUMN registry_promotion_candidates.observed_failures IS '@access: confidential';
+COMMENT ON COLUMN registry_promotion_candidates.observed_days IS '@access: confidential';
+COMMENT ON COLUMN registry_promotion_candidates.checked_at IS '@access: confidential';
+COMMENT ON COLUMN registry_promotion_candidates.registry_entry_id IS '@access: confidential';
+COMMENT ON COLUMN registry_promotion_candidates.request_digest IS '@access: confidential';
+COMMENT ON COLUMN registry_promotion_candidates.retry_key IS '@access: confidential';
+COMMENT ON COLUMN registry_promotion_candidates.promoted_at IS '@access: confidential';
+COMMENT ON COLUMN registry_promotion_candidates.docs_queued_at IS '@access: confidential';
+COMMENT ON COLUMN registry_promotion_candidates.delivery_error IS '@access: confidential';
+COMMENT ON COLUMN registry_promotion_candidates.created_at IS '@access: confidential';
+COMMENT ON COLUMN registry_promotion_candidates.updated_at IS '@access: confidential';
+COMMENT ON COLUMN registry_promotion_candidates.public_metadata IS 'Staff-reviewed public catalogue and documentation input.
+@access: opaque-restricted';
+COMMENT ON COLUMN registry_promotion_candidates.endpoint_identity IS '@access: restricted';
+COMMENT ON COLUMN registry_promotion_candidates.promoted_by IS '@access: confidential-pii';
+COMMENT ON COLUMN registry_promotion_candidates.docs_url IS '@access: restricted';
+COMMENT ON COLUMN registry_promotion_candidates.discovery_last_attempt_at IS '@access: confidential';
+COMMENT ON COLUMN registry_promotion_candidates.discovery_next_attempt_at IS '@access: confidential';
+COMMENT ON COLUMN registry_promotion_candidates.discovery_failures IS '@access: confidential';
+COMMENT ON COLUMN registry_promotion_candidates.docs_attempts IS '@access: confidential';
+COMMENT ON COLUMN registry_promotion_candidates.docs_failures IS '@access: confidential';
+COMMENT ON COLUMN registry_promotion_candidates.docs_last_attempt_at IS '@access: confidential';
+COMMENT ON COLUMN registry_promotion_candidates.docs_next_attempt_at IS '@access: confidential';
+COMMENT ON COLUMN registry_promotion_candidates.docs_needs_attention IS '@access: confidential';
+COMMENT ON COLUMN registry_promotion_candidates.docs_lease_until IS '@access: confidential';
+COMMENT ON COLUMN registry_promotion_candidates.docs_lease_token IS '@access: confidential';
+COMMENT ON COLUMN registry_promotion_candidates.docs_revision IS '@access: confidential';
+COMMENT ON COLUMN registry_promotion_candidates.docs_retry_key IS '@access: confidential';
+COMMENT ON COLUMN registry_promotion_candidates.docs_retry_revision IS '@access: confidential';
+COMMENT ON COLUMN registry_promotion_candidates.docs_retry_by IS '@access: confidential-pii';
