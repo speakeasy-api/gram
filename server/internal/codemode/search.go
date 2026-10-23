@@ -11,7 +11,7 @@ import (
 )
 
 const (
-	// maxQueryBytes bounds tokenization and cursor inputs to 1 KiB.
+	// maxQueryBytes bounds the query, server filter, and tool path inputs to 1 KiB.
 	maxQueryBytes = 1024
 	// maxCursorBytes bounds decoding before allocating a cursor document.
 	maxCursorBytes = 512
@@ -183,6 +183,9 @@ func relevance(rawQuery string, query []string, document Document) int {
 	const exactPathScore = 100000
 	if strings.EqualFold(strings.TrimSpace(rawQuery), document.Candidate.Path) {
 		return exactPathScore
+	}
+	if len(query) == 0 {
+		return 0
 	}
 	name := tokenSet(document.Name)
 	description := tokenSet(document.Candidate.Description)
