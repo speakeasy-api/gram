@@ -1782,6 +1782,7 @@ LEFT JOIN remote_sessions AS rs ON rs.id = b.remote_session_id
 WHERE b.organization_id = $1
   AND b.revoked_at IS NULL
 ORDER BY b.id
+FOR SHARE OF b, a
 `
 
 type ListLiveAgentAttachmentsRow struct {
@@ -1803,6 +1804,9 @@ type ListLiveAgentAttachmentsRow struct {
 // belongs to the user who attached it, that user still owns the agent, the
 // agent and its owner are active, and the sign-in, project, upstream client
 // and issuer are live and reach the attachment's project.
+// Held until the grants commit, so an agent cannot be suspended, revoked,
+// latched or reassigned, nor its attachment revoked, between this check and
+// the grant it decides.
 func (q *Queries) ListLiveAgentAttachments(ctx context.Context, organizationID string) ([]ListLiveAgentAttachmentsRow, error) {
 	rows, err := q.db.Query(ctx, listLiveAgentAttachments, organizationID)
 	if err != nil {

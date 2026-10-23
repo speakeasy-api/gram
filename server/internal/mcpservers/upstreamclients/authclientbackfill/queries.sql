@@ -1782,7 +1782,11 @@ JOIN agents AS a ON a.organization_id = b.organization_id AND a.id = b.principal
 LEFT JOIN remote_sessions AS rs ON rs.id = b.remote_session_id
 WHERE b.organization_id = @organization_id
   AND b.revoked_at IS NULL
-ORDER BY b.id;
+ORDER BY b.id
+-- Held until the grants commit, so an agent cannot be suspended, revoked,
+-- latched or reassigned, nor its attachment revoked, between this check and
+-- the grant it decides.
+FOR SHARE OF b, a;
 
 -- name: ListAuthClientGrantRows :many
 -- Existing grants of the given scopes, to tell which defaults are missing.
