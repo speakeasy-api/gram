@@ -12,6 +12,8 @@
 //     HOSTED_MCP_WRAPPERS_MIGRATION.md. It defaults to a dry run.
 //   - auth-permission-defaults: PostgreSQL application-data backfill; see
 //     AUTH_PERMISSION_DEFAULTS_BACKFILL.md. It defaults to a dry run.
+//   - client-scopes: clears scopes copied onto remote session clients before
+//     #7199; see CLIENT_SCOPES_BACKFILL.md. It defaults to a dry run.
 //
 // Each guide documents its own connectivity, secret environment variables,
 // invocation modes, output, and recovery procedure. Flags are subcommand-local;
@@ -101,9 +103,11 @@ func run() int {
 		return runHostedMCPWrappers(args, os.Stdout, os.Getenv)
 	case authPermissionDefaultsName:
 		return runAuthPermissionDefaults(args, os.Stdout, os.Getenv)
+	case "client-scopes":
+		return runClientScopes(args, os.Stdout, os.Getenv)
 	default:
 		// The unrecognized name is deliberately not echoed (log injection).
-		log.Printf("unknown migration subcommand (available: riskfindings, riskfindingscols, openrouter-disable-causes, pro-entitlements, hosted-mcp-wrappers, auth-permission-defaults)")
+		log.Printf("unknown migration subcommand (available: riskfindings, riskfindingscols, openrouter-disable-causes, pro-entitlements, hosted-mcp-wrappers, auth-permission-defaults, client-scopes)")
 		return 2
 	}
 }
