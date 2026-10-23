@@ -15836,3 +15836,53 @@ COMMENT ON COLUMN assistant_kit_interrupt_requests.attempt IS '@access: confiden
 COMMENT ON COLUMN assistant_kit_interrupt_requests.outcome IS '@access: confidential';
 COMMENT ON COLUMN assistant_kit_interrupt_requests.created_at IS '@access: confidential';
 COMMENT ON COLUMN assistant_kit_interrupt_requests.acknowledged_at IS '@access: confidential';
+
+-- Project preferences do not provision a server; built-ins are code-owned.
+CREATE TABLE IF NOT EXISTS builtin_mcp_settings (
+  project_id uuid REFERENCES projects(id) ON DELETE SET NULL,
+  builtin_key text NOT NULL CHECK (builtin_key <> ''),
+  hidden boolean NOT NULL DEFAULT false,
+  environment_id uuid REFERENCES environments(id) ON DELETE SET NULL,
+  user_session_issuer_id uuid REFERENCES user_session_issuers(id) ON DELETE SET NULL,
+  user_session_issuer_bound boolean NOT NULL DEFAULT false,
+  version bigint NOT NULL DEFAULT 1,
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  PRIMARY KEY (id)
+);
+CREATE UNIQUE INDEX IF NOT EXISTS builtin_mcp_settings_project_key_idx ON builtin_mcp_settings (project_id, builtin_key);
+COMMENT ON COLUMN builtin_mcp_settings.project_id IS '@access: confidential';
+COMMENT ON COLUMN builtin_mcp_settings.builtin_key IS '@access: confidential';
+COMMENT ON COLUMN builtin_mcp_settings.hidden IS '@access: confidential';
+COMMENT ON COLUMN builtin_mcp_settings.environment_id IS '@access: confidential';
+COMMENT ON COLUMN builtin_mcp_settings.user_session_issuer_id IS '@access: confidential';
+COMMENT ON COLUMN builtin_mcp_settings.user_session_issuer_bound IS 'Records an explicit issuer binding even after issuer deletion, preventing implicit fallback.
+@access: confidential';
+COMMENT ON COLUMN builtin_mcp_settings.version IS '@access: confidential';
+COMMENT ON COLUMN builtin_mcp_settings.updated_at IS '@access: confidential';
+COMMENT ON COLUMN builtin_mcp_settings.id IS '@access: confidential';
+-- Required by configured gateway synthetic built-in membership.
+CREATE TABLE IF NOT EXISTS builtin_mcp_server_members (
+ id uuid NOT NULL DEFAULT generate_uuidv7(),
+ project_id uuid,
+ meta_mcp_server_id uuid,
+ builtin_key text NOT NULL CHECK (builtin_key <> ''),
+ environment_id uuid,
+ sort_order integer NOT NULL DEFAULT 0,
+ created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+ updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+ CONSTRAINT builtin_mcp_server_members_pkey PRIMARY KEY (id),
+ CONSTRAINT builtin_mcp_server_members_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL,
+ CONSTRAINT builtin_mcp_server_members_meta_mcp_server_id_fkey FOREIGN KEY (meta_mcp_server_id) REFERENCES meta_mcp_servers(id) ON DELETE SET NULL,
+ CONSTRAINT builtin_mcp_server_members_environment_id_fkey FOREIGN KEY (environment_id) REFERENCES environments(id) ON DELETE SET NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS builtin_mcp_server_members_gateway_key_idx ON builtin_mcp_server_members(meta_mcp_server_id,builtin_key);
+CREATE INDEX IF NOT EXISTS builtin_mcp_server_members_project_id_idx ON builtin_mcp_server_members(project_id);
+COMMENT ON COLUMN builtin_mcp_server_members.id IS '@access: confidential';
+COMMENT ON COLUMN builtin_mcp_server_members.project_id IS '@access: confidential';
+COMMENT ON COLUMN builtin_mcp_server_members.meta_mcp_server_id IS '@access: confidential';
+COMMENT ON COLUMN builtin_mcp_server_members.builtin_key IS '@access: confidential';
+COMMENT ON COLUMN builtin_mcp_server_members.environment_id IS '@access: confidential';
+COMMENT ON COLUMN builtin_mcp_server_members.sort_order IS '@access: confidential';
+COMMENT ON COLUMN builtin_mcp_server_members.created_at IS '@access: confidential';
+COMMENT ON COLUMN builtin_mcp_server_members.updated_at IS '@access: confidential';
