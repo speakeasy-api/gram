@@ -53,7 +53,8 @@ export function McpToolRow({
     <div
       role="button"
       tabIndex={0}
-      aria-pressed={selected}
+      aria-haspopup="dialog"
+      aria-expanded={selected}
       onClick={onSelect}
       onKeyDown={(e) => {
         if (e.key === "Enter" || e.key === " ") {

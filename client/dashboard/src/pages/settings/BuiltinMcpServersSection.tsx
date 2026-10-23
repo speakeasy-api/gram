@@ -32,7 +32,10 @@ export function BuiltinMcpServersSection(): JSX.Element | null {
       <SettingsSection.Panel>
         <SettingsSection.Body>
           {isLoading ? (
-            <Skeleton className="h-9 w-full" />
+            <div role="status" aria-live="polite">
+              <span className="sr-only">Loading built-in servers…</span>
+              <Skeleton className="h-9 w-full" />
+            </div>
           ) : isError ? (
             <div
               role="alert"

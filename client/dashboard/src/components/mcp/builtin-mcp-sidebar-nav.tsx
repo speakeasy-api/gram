@@ -3,6 +3,8 @@ import {
   DetailSidebarNav,
   type DetailSidebarNavItem,
 } from "@/components/detail/detail-sidebar-nav";
+import { useOrganization } from "@/contexts/Auth";
+import { useRBAC } from "@/hooks/useRBAC";
 import { useBuiltinMcpCredentials } from "@/components/mcp/useBuiltinMcpCredentials";
 import { useBuiltinMcpServers } from "@/components/mcp/useBuiltinMcpServers";
 import { useUpdateBuiltinMcpServer } from "@/components/mcp/useUpdateBuiltinMcpServer";
@@ -40,11 +42,16 @@ export function BuiltinMcpSidebarNav(): React.JSX.Element | null {
   const routes = useRoutes();
   const location = useLocation();
   const { builtinKey } = useParams<{ builtinKey: string }>();
+  const organization = useOrganization();
+  const { hasScope, isLoading: permissionsLoading } = useRBAC();
   const { servers } = useBuiltinMcpServers();
   const server = servers.find((entry) => entry.key === builtinKey);
   const credentials = useBuiltinMcpCredentials(server);
 
-  if (!builtinKey) return null;
+  // The page behind this rail is org:admin only; without the same check a
+  // non-admin opening the URL gets its navigation and its lookups.
+  if (!builtinKey || permissionsLoading) return null;
+  if (!hasScope("org:admin", organization.id)) return null;
 
   const activeTab = activeBuiltinTabFromPath(location.pathname, builtinKey);
   const authenticationHref = builtinMcpTabHref(
@@ -226,14 +233,14 @@ function BuiltinVisibilityDropdown({ server }: { server: BuiltinMcpServer }) {
             ) : (
               <span className="border-border mt-1 size-3.5 shrink-0 rounded-full border" />
             )}
-            <span className="flex flex-col gap-0.5">
+            <div className="flex flex-col gap-0.5">
               <Text small className="font-medium">
                 {option.label}
               </Text>
               <Text muted small>
                 {option.description}
               </Text>
-            </span>
+            </div>
           </DropdownMenuItem>
         ))}
       </DropdownMenuContent>

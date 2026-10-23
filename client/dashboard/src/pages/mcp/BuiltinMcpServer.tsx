@@ -410,11 +410,16 @@ const PROJECT_DEFAULT_VALUE = "project-default";
 
 function BuiltinAuthenticationTab({ server }: { server: BuiltinMcpServer }) {
   const routes = useRoutes();
-  const { environments, environment, credentials, isLoading, isError } =
-    useBuiltinMcpCredentials(server);
   const [environmentId, setEnvironmentId] = useState(
     server.environmentId ?? PROJECT_DEFAULT_VALUE,
   );
+  // Read against the selection on screen, so the list below never reports the
+  // previously saved environment's credentials for the one being chosen.
+  const { environments, environment, credentials, isLoading, isError } =
+    useBuiltinMcpCredentials(
+      server,
+      environmentId === PROJECT_DEFAULT_VALUE ? null : environmentId,
+    );
   const update = useUpdateBuiltinMcpServer();
   const unchanged =
     environmentId === (server.environmentId ?? PROJECT_DEFAULT_VALUE);

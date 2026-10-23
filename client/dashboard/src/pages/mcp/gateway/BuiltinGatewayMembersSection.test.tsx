@@ -5,6 +5,9 @@ import type { ReactNode } from "react";
 const state = vi.hoisted(() => ({
   admin: true,
   canWrite: true,
+  environmentsResolved: true,
+  environmentsLoading: false,
+  environmentsError: false,
   invalidateQueries: vi.fn(),
   onSuccess: undefined as undefined | (() => Promise<void>),
   mutate: vi.fn(),
@@ -58,9 +61,11 @@ vi.mock("@gram/client/react-query/listEnvironments.js", () => ({
   useListEnvironments: (...args: unknown[]) => {
     state.query(...args);
     return {
-      data: { environments: [{ id: "env-one", name: "Production" }] },
-      isLoading: false,
-      isError: false,
+      data: state.environmentsResolved
+        ? { environments: [{ id: "env-one", name: "Production" }] }
+        : undefined,
+      isLoading: state.environmentsLoading,
+      isError: state.environmentsError,
     };
   },
 }));
@@ -128,6 +133,9 @@ beforeEach(() => {
   vi.clearAllMocks();
   state.admin = true;
   state.canWrite = true;
+  state.environmentsResolved = true;
+  state.environmentsLoading = false;
+  state.environmentsError = false;
 });
 
 it("adds a built-in on the project default, after the existing members", () => {
@@ -210,6 +218,37 @@ it("reads the override without a control when the viewer cannot write", () => {
   );
   expect(screen.queryByRole("combobox")).toBeNull();
   expect(screen.getByText("Production")).toBeTruthy();
+});
+
+it.each([
+  ["loading", { environmentsLoading: true }, "Loading…"],
+  ["unavailable", { environmentsError: true }, "Unavailable"],
+])(
+  "does not read an unresolved override as the server default while %s",
+  (_label, overrides, expected) => {
+    state.environmentsResolved = false;
+    Object.assign(state, overrides);
+    render(
+      <BuiltinMemberEnvironmentCell
+        gatewayId="gateway-one"
+        member={slackMember}
+        canWrite={false}
+      />,
+    );
+    expect(screen.getByText(expected)).toBeTruthy();
+    expect(screen.queryByText("Server default")).toBeNull();
+  },
+);
+
+it("reads a member without an override as the server default", () => {
+  render(
+    <BuiltinMemberEnvironmentCell
+      gatewayId="gateway-one"
+      member={{ ...slackMember, environmentId: undefined }}
+      canWrite={false}
+    />,
+  );
+  expect(screen.getByText("Server default")).toBeTruthy();
 });
 
 it("refreshes inspection caches after a membership write", async () => {

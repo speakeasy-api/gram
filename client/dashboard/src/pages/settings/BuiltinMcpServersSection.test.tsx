@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const state = vi.hoisted(() => ({
   isAdmin: true,
+  isLoading: false,
   hidden: false,
   isError: false,
   save: vi.fn(),
@@ -12,7 +13,7 @@ vi.mock("@/components/mcp/useBuiltinMcpServers", () => ({
   useBuiltinMcpServers: () => ({
     isAdmin: state.isAdmin,
     isError: state.isError,
-    isLoading: false,
+    isLoading: state.isLoading,
     refetch: state.refetch,
     servers: [
       {
@@ -60,6 +61,7 @@ afterEach(cleanup);
 beforeEach(() => {
   vi.clearAllMocks();
   state.isAdmin = true;
+  state.isLoading = false;
   state.hidden = false;
   state.isError = false;
 });
@@ -105,6 +107,14 @@ describe("built-in project settings", () => {
       expect.objectContaining({ hidden: false }),
     );
   });
+  it("announces the wait instead of only drawing a skeleton", () => {
+    state.isLoading = true;
+    render(<BuiltinMcpServersSection />);
+    expect(screen.getByRole("status").textContent).toContain(
+      "Loading built-in servers",
+    );
+  });
+
   it("shows a recoverable error instead of stale controls", () => {
     state.isError = true;
     render(<BuiltinMcpServersSection />);

@@ -74,6 +74,17 @@ vi.mock("@/contexts/Auth", () => ({
 vi.mock("@/contexts/Sdk", () => ({
   useProjectSlugForRequests: () => "project-one",
 }));
+// The credentials hook asks the same question the page's guard does, so the
+// two have to agree in tests as they do in the app.
+vi.mock("@/hooks/useRBAC", () => ({
+  useRBAC: () => ({
+    hasScope: (scope: string, resourceId: string) =>
+      state.admin && scope === "org:admin" && resourceId === "org-one",
+    hasAnyScope: () => state.admin,
+    hasAllScopes: () => state.admin,
+    isLoading: false,
+  }),
+}));
 vi.mock("@/components/require-scope", () => ({
   RequireScope: ({
     children,
@@ -329,6 +340,50 @@ it("scopes the connect recipe to a direct connection and claims no stable addres
   // nor permanent.
   expect(screen.queryByText(/every project/i)).toBeNull();
   expect(screen.queryByText(/never changes/i)).toBeNull();
+});
+
+it("previews the selected environment's credentials before saving", () => {
+  state.pathname = "/mcp/builtin/slack/authentication";
+  state.environments = [
+    {
+      id: "env-one",
+      name: "Production",
+      slug: "default",
+      entries: [{ name: "SLACK_BOT_TOKEN" }],
+    },
+    {
+      id: "env-two",
+      name: "Staging",
+      slug: "staging",
+      entries: [],
+    },
+  ];
+  render(<BuiltinMcpServerPage />);
+  expect(screen.getByRole("link", { name: "Production" })).toBeTruthy();
+
+  fireEvent.change(screen.getByRole("combobox"), {
+    target: { value: "env-two" },
+  });
+
+  // The selection on screen is what the list describes; the saved one is gone.
+  expect(screen.getByRole("link", { name: "Staging" })).toBeTruthy();
+  expect(screen.queryByRole("link", { name: "Production" })).toBeNull();
+  expect(screen.queryByText("Set")).toBeNull();
+});
+
+it("opens the tool drawer as a disclosure, not as a toggle", () => {
+  state.pathname = "/mcp/builtin/slack/tools";
+  render(<BuiltinMcpServerPage />);
+  const row = screen.getByRole("button", { name: /slack_send_message/ });
+
+  expect(row.getAttribute("aria-pressed")).toBeNull();
+  expect(row.getAttribute("aria-haspopup")).toBe("dialog");
+  expect(row.getAttribute("aria-expanded")).toBe("false");
+
+  // The open sheet hides the rest of the page from the a11y tree, so the row
+  // is read from the handle taken before it opened.
+  fireEvent.click(row);
+  expect(row.getAttribute("aria-expanded")).toBe("true");
 });
 
 it("saves the credential environment against the version it read", () => {

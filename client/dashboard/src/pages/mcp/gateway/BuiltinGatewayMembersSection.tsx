@@ -12,6 +12,7 @@ import { useProjectSlugForRequests } from "@/contexts/Sdk";
 import { useOrganization } from "@/contexts/Auth";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useRoutes } from "@/routes";
+import type { Environment } from "@gram/client/models/components/environment.js";
 import type { MetaMcpMember } from "@gram/client/models/components/metamcpmember.js";
 import { useListEnvironments } from "@gram/client/react-query/listEnvironments.js";
 import { invalidateAllMetaMcpMembers } from "@gram/client/react-query/metaMcpMembers.js";
@@ -21,6 +22,28 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Plus } from "lucide-react";
 import { Link } from "react-router";
 import { toast } from "sonner";
+
+/**
+ * What a viewer who cannot change the override sees. An override whose name
+ * has not been resolved is not the same as having no override, so it never
+ * reads as the server's default.
+ */
+function readOnlyEnvironmentLabel(
+  environmentId: string | undefined,
+  state: {
+    environments: Environment[] | undefined;
+    isLoading: boolean;
+    isError: boolean;
+  },
+): string {
+  if (!environmentId) return "Server default";
+  const name = state.environments?.find(
+    (entry) => entry.id === environmentId,
+  )?.name;
+  if (name) return name;
+  if (state.isLoading) return "Loading…";
+  return "Unavailable";
+}
 
 /** Unset means the member follows whatever the built-in server is set to. */
 const SERVER_DEFAULT_VALUE = "server-default";
@@ -187,13 +210,13 @@ export function BuiltinMemberEnvironmentCell({
   const value = member.environmentId ?? SERVER_DEFAULT_VALUE;
 
   if (!canWrite) {
-    const name = member.environmentId
-      ? data?.environments.find((entry) => entry.id === member.environmentId)
-          ?.name
-      : undefined;
     return (
       <Text small muted className="truncate">
-        {name ?? "Server default"}
+        {readOnlyEnvironmentLabel(member.environmentId, {
+          environments: data?.environments,
+          isLoading,
+          isError,
+        })}
       </Text>
     );
   }

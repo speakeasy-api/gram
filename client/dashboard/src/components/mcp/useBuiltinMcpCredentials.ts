@@ -1,4 +1,6 @@
+import { useOrganization } from "@/contexts/Auth";
 import { useProjectSlugForRequests } from "@/contexts/Sdk";
+import { useRBAC } from "@/hooks/useRBAC";
 import type { BuiltinMcpServer } from "@gram/client/models/components/builtinmcpserver.js";
 import type { Environment } from "@gram/client/models/components/environment.js";
 import { useListEnvironments } from "@gram/client/react-query/listEnvironments.js";
@@ -33,16 +35,30 @@ export type BuiltinMcpCredentials = {
  */
 export function useBuiltinMcpCredentials(
   server: BuiltinMcpServer | undefined,
+  /**
+   * The environment to read against instead of the saved one: `null` is the
+   * project default. Lets a form preview an unsaved selection.
+   */
+  pendingEnvironmentId?: string | null,
 ): BuiltinMcpCredentials {
   const gramProject = useProjectSlugForRequests();
+  const organization = useOrganization();
+  const { hasScope } = useRBAC();
+  // Environments carry credential values, and only an admin may configure a
+  // built-in, so nobody else asks for them.
+  const enabled = hasScope("org:admin", organization.id);
   const { data, isLoading, isError } = useListEnvironments(
     { gramProject },
     undefined,
-    { throwOnError: false },
+    { throwOnError: false, enabled },
   );
   const environments = data?.environments ?? [];
-  const environment = server?.environmentId
-    ? environments.find((candidate) => candidate.id === server.environmentId)
+  const selectedId =
+    pendingEnvironmentId === undefined
+      ? server?.environmentId
+      : (pendingEnvironmentId ?? undefined);
+  const environment = selectedId
+    ? environments.find((candidate) => candidate.id === selectedId)
     : environments.find(
         (candidate) => candidate.slug === PROJECT_DEFAULT_ENVIRONMENT_SLUG,
       );
@@ -61,7 +77,9 @@ export function useBuiltinMcpCredentials(
     environment,
     credentials,
     ready: credentials.some((credential) => credential.set),
-    isLoading,
+    // A disabled query never resolves, so report it as still loading rather
+    // than as an answered "nothing is stored".
+    isLoading: enabled ? isLoading : true,
     isError,
   };
 }
