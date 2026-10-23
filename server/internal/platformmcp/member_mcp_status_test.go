@@ -3,6 +3,8 @@ package platformmcp
 import (
 	"context"
 	"encoding/json"
+	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"net/url"
 	"strings"
 	"testing"
@@ -130,7 +132,7 @@ func TestMemberMCPConnectionStatusProjectsOnlyCallerState(t *testing.T) {
 	ctx = authz.GrantsToContext(ctx, []authz.Grant{authz.NewGrant(authz.ScopeMCPConnect, mcpID.String())})
 	serverURL, err := url.Parse("https://gram.example.test")
 	require.NoError(t, err)
-	clientID := uuid.New()
+	clientID := associateMemberMCPClient(t, ctx, conn, principal.OrganizationID, project.ID, mcpID, remoteIssuerID)
 	input := GetMyMCPStatusInput{ProjectID: project.ID.String(), MCPID: mcpID.String()}
 
 	for _, test := range []struct {
@@ -197,9 +199,20 @@ func TestMemberMCPConnectionClientsSelectTargetIssuer(t *testing.T) {
 	targetClient := remotesessions.Client{ID: uuid.New(), RemoteSessionIssuerID: targetIssuer}
 	otherClient := remotesessions.Client{ID: uuid.New(), RemoteSessionIssuerID: uuid.New()}
 
-	require.Equal(t, []remotesessions.Client{targetClient}, memberMCPConnectionClients([]remotesessions.Client{otherClient, targetClient}, targetIssuer))
-	require.Empty(t, memberMCPConnectionClients([]remotesessions.Client{otherClient, targetClient}, uuid.Nil))
-	require.Empty(t, memberMCPConnectionClients([]remotesessions.Client{otherClient}, targetIssuer))
+	byIssuer := func(issuer uuid.UUID) memberMCPStatusTarget {
+		return memberMCPStatusTarget{remoteSessionIssuerID: issuer}
+	}
+	require.Equal(t, []remotesessions.Client{targetClient}, memberMCPConnectionClients([]remotesessions.Client{otherClient, targetClient}, byIssuer(targetIssuer)))
+	require.Empty(t, memberMCPConnectionClients([]remotesessions.Client{otherClient, targetClient}, byIssuer(uuid.Nil)))
+	require.Empty(t, memberMCPConnectionClients([]remotesessions.Client{otherClient}, byIssuer(targetIssuer)))
+
+	// A proxied server's own clients count whatever authorization server was
+	// derived for it.
+	sameIssuerOther := remotesessions.Client{ID: uuid.New(), RemoteSessionIssuerID: targetIssuer}
+	associated := memberMCPStatusTarget{remoteSessionIssuerID: uuid.Nil, associatedClients: map[uuid.UUID]bool{otherClient.ID: true}}
+	require.Equal(t, []remotesessions.Client{otherClient}, memberMCPConnectionClients([]remotesessions.Client{otherClient, targetClient, sameIssuerOther}, associated))
+	require.True(t, associated.signInRequired())
+	require.False(t, memberMCPStatusTarget{remoteSessionIssuerID: targetIssuer, associatedClients: map[uuid.UUID]bool{}}.signInRequired(), "no associated client means no sign-in, even with a derived issuer")
 }
 
 func TestMemberMCPStatusOutputsContainOnlyBoundedCallerFields(t *testing.T) {
@@ -256,4 +269,26 @@ func TestMemberMCPStatusNotFoundIsSafe(t *testing.T) {
 	require.NotContains(t, string(payload), "permission")
 	require.NotContains(t, string(payload), "organization")
 	require.NotContains(t, string(payload), "grant")
+}
+
+// associateMemberMCPClient creates a client of remoteIssuerID in the project
+// and associates it with the MCP server, as configuring the server's User
+// Identity does.
+func associateMemberMCPClient(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string, projectID, mcpID, remoteIssuerID uuid.UUID) uuid.UUID {
+	t.Helper()
+	client, err := remotesessionsrepo.New(conn).CreateRemoteSessionClient(ctx, remotesessionsrepo.CreateRemoteSessionClientParams{
+		ProjectID:             conv.ToNullUUID(projectID),
+		OrganizationID:        conv.ToPGTextEmpty(organizationID),
+		RemoteSessionIssuerID: remoteIssuerID,
+		ClientID:              "member-client-" + uuid.NewString()[:8],
+		ClientIDIssuedAt:      pgtype.Timestamptz{Time: time.Now(), Valid: true},
+	})
+	require.NoError(t, err)
+	require.NoError(t, testrepo.New(conn).InsertMCPServerRemoteSessionClientFixture(ctx, testrepo.InsertMCPServerRemoteSessionClientFixtureParams{
+		ProjectID:             projectID,
+		OrganizationID:        organizationID,
+		McpServerID:           mcpID,
+		RemoteSessionClientID: client.ID,
+	}))
+	return client.ID
 }

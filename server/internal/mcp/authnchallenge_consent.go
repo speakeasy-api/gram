@@ -31,9 +31,12 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
+	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oauth/wellknown"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
@@ -75,8 +78,7 @@ var consentScriptHash = func() string {
 }()
 
 // consentScriptURL is the path the consent template loads the script from.
-// Hardcoded to the /mcp surface (like the install-page script) so the
-// /x/mcp surface reuses the same route rather than registering its own.
+// Hardcoded to the /mcp surface, like the install-page script.
 var consentScriptURL = "/mcp/consent-page-" + consentScriptHash + ".js"
 
 // remoteSetHashEmpty is the SHA-256 of an empty remote-set, used by the
@@ -94,7 +96,7 @@ func (d consentTemplateData) ConsentPath() string {
 	if d.SharedConsentPath != "" {
 		return d.SharedConsentPath
 	}
-	return "/" + d.MCPRouteBase + "/" + d.MCPSlug + "/connect"
+	return "/" + d.MCPRouteBase.String() + "/" + d.MCPSlug + "/connect"
 }
 
 // consentFormMaxBytes caps the consent form body to defend against memory
@@ -106,9 +108,14 @@ const consentFormMaxBytes = 1 << 20 // 1 MiB
 
 // consentTemplateData is the field set the consent template renders against.
 type consentTemplateData struct {
-	ClientName   string
-	MCPSlug      string
-	MCPRouteBase string
+	// ShowDiscoveryMode exposes optional gateway connection settings.
+	ShowDiscoveryMode bool
+	// PrefillDiscoveryMode is the mode this subject chose on its previous
+	// connection; empty selects the gateway default.
+	PrefillDiscoveryMode metamcp.DiscoveryMode
+	ClientName           string
+	MCPSlug              string
+	MCPRouteBase         mcproute.Base
 	// SharedConsentPath is the consent page path on the issuer's shared
 	// authorization server when it is serving the request. Empty when the
 	// endpoint's own authorization server is, whose consent page lives under
@@ -231,6 +238,11 @@ type sessionDurationOption struct {
 // means never connected. Only Connected enables consent — the other two are
 // no better than none until the user reconnects.
 type remoteSessionCard struct {
+	// consentPermissionsHash fingerprints the effective upstream request.
+	consentPermissionsHash string
+	// consentReuseReady requires a routable connection with all requested scopes.
+	consentReuseReady bool
+
 	ClientID   string
 	IssuerSlug string
 
@@ -448,7 +460,7 @@ func (s *Service) HandleConsent(w http.ResponseWriter, r *http.Request) error {
 		return oops.E(oops.CodeBadRequest, nil, "an mcp slug must be provided").LogError(ctx, s.logger)
 	}
 	logger := s.logger.With(attr.SlogToolsetMCPSlug(mcpSlug))
-	endpoint, err := s.LoadResolvedMcpEndpointBySlug(ctx, logger, mcpSlug, "mcp")
+	endpoint, err := s.LoadResolvedMcpEndpointBySlug(ctx, logger, mcpSlug, mcproute.MCP)
 	if err != nil {
 		return err
 	}
@@ -474,8 +486,8 @@ func (s *Service) ServeConsentScript(w http.ResponseWriter, r *http.Request) err
 }
 
 // ServeConsent is the post-resolution entry point for the consent UI
-// (GET) and consent POST handlers, shared by /mcp's HandleConsent
-// (toolset-keyed) and /x/mcp's mcp_endpoint-keyed route registration.
+// (GET) and consent POST handlers, called by HandleConsent after slug
+// resolution.
 func (s *Service) ServeConsent(w http.ResponseWriter, r *http.Request, endpoint *ResolvedMcpEndpoint) error {
 	switch r.Method {
 	case http.MethodGet:
@@ -646,6 +658,23 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		}
 	}
 
+	if r.URL.Query().Get("consent") != "required" && len(agentOptions) == 0 &&
+		consentReuseEligible(endpoint, challengeState) && consentBrowserMatches(r, challengeState, time.Now()) &&
+		consentRemoteFingerprint(endpoint, cards) != "" {
+		eligible, eligibilityErr := s.consentToolPickerEligible(ctx, endpoint)
+		lockedDown, lockdownErr := s.customDomainLockdownApplies(ctx, logger, endpoint.ProjectID)
+		if eligibilityErr != nil {
+			logger.WarnContext(ctx, "saved consent eligibility unavailable", attr.SlogError(eligibilityErr))
+		}
+		if eligible && eligibilityErr == nil && lockdownErr == nil && !lockedDown {
+			if _, lookupErr := usersessions_repo.New(s.db).GetUserSessionConsentResource(ctx, consentResourceParams(endpoint, challengeState, clientRowID)); lookupErr == nil {
+				return renderConsentReuse(w, endpoint, challengeState)
+			} else if !errors.Is(lookupErr, pgx.ErrNoRows) {
+				logger.WarnContext(ctx, "saved consent lookup unavailable", attr.SlogError(lookupErr))
+			}
+		}
+	}
+
 	// Skip the interstitial when it has nothing to ask. A server fronting a
 	// single upstream that the subject has not linked yet leaves the page with
 	// exactly one useful control, and the user already expressed intent by
@@ -719,6 +748,11 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		)
 	}
 	inventoryDeferred := consentInventoryDeferred(cards, prefillAttr != "")
+	showDiscoveryMode := !challengeState.FirstParty && focusServer == "" && gatewayDiscoveryOptionsOffered(endpoint)
+	var prefillDiscoveryMode metamcp.DiscoveryMode
+	if showDiscoveryMode {
+		prefillDiscoveryMode = s.consentDiscoveryModePrefill(ctx, endpoint, *challengeState.Subject, clientRowID)
+	}
 
 	data := consentTemplateData{
 		ClientName:              clientName,
@@ -741,6 +775,8 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		AutoRefreshOn:           autoRefreshOn,
 		AutoRefreshHasSessions:  autoRefreshHasSessions,
 		ShowToolsIsland:         showToolsIsland,
+		ShowDiscoveryMode:       showDiscoveryMode,
+		PrefillDiscoveryMode:    prefillDiscoveryMode,
 		ConsentToolsURL:         endpoint.consentPath() + "/mcp",
 		ConsentToolsScriptURL:   consentToolsScriptURL,
 		ConsentToolsPrefill:     prefillAttr,
@@ -814,8 +850,21 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 	// attacker-controllable bucket the guards above describe rather than
 	// counting against a config's health signal.
 	action := r.PostForm.Get("action")
-	if action != "approve" && action != "approve_agent" && action != "deny" {
-		return oops.E(oops.CodeBadRequest, nil, `action must be "approve", "approve_agent", or "deny"`).LogError(ctx, logger)
+	if action != "approve" && action != "approve_agent" && action != "deny" && action != "reuse" {
+		return oops.E(oops.CodeBadRequest, nil, `action must be "approve", "approve_agent", "reuse", or "deny"`).LogError(ctx, logger)
+	}
+
+	reuse := action == "reuse"
+	if reuse {
+		if !consentReuseEligible(endpoint, challengeState) || !consentBrowserMatches(r, challengeState, time.Now()) {
+			http.Redirect(w, r, consentFullPageURL(endpoint, challengeState), http.StatusSeeOther)
+			return nil
+		}
+		agents, err := s.eligibleConsentAgents(ctx, challengeState, endpoint)
+		if err != nil || len(agents) != 0 {
+			http.Redirect(w, r, consentFullPageURL(endpoint, challengeState), http.StatusSeeOther)
+			return nil
+		}
 	}
 
 	// The RFC 9207 `iss` both branches below emit, resolved once so the deny
@@ -876,6 +925,10 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		// grant while ignoring the newly introduced agent_id field.
 		return oops.E(oops.CodeBadRequest, nil, "agent approval action and selection do not match").LogError(ctx, logger)
 	}
+	// The credential the grant mints is the selected agent's for an agent
+	// approval, so its upstream client picks are judged by the agent's own
+	// connections.
+	pickState := challengeState
 	if selectedAgentID != "" {
 		selectedAgent, err := s.authorizeConsentAgent(ctx, challengeState, endpoint, selectedAgentID)
 		if err != nil {
@@ -884,6 +937,7 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		// Keep the challenge retryable while the human connects and attaches
 		// required services. Human-owned tokens alone do not authorize an agent.
 		subject := urn.NewAgentSubject(selectedAgent.AgentID)
+		pickState.Subject = &subject
 		agentCtx, err := s.contextForSessionSubject(ctx, endpoint, subject, "", "")
 		if err != nil {
 			return oops.E(oops.CodeUnavailable, err, "resolve selected agent identity").LogWarn(ctx, logger)
@@ -912,7 +966,14 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 	// unrestricted grant the pre-picker flow always minted, so stripping the
 	// field can only widen a submission to the status quo, never past it.
 	var boundInventory *consentToolInventory
-	if selectedAgentID == "" && r.PostForm.Get("tool_filtering") == "on" {
+	if reuse {
+		boundInventory, err = s.consentReuseInventory(ctx, endpoint, challengeState, r.PostForm.Get("tool_inventory_id"))
+		if err != nil || boundInventory == nil {
+			http.Redirect(w, r, consentFullPageURL(endpoint, challengeState), http.StatusSeeOther)
+			return nil
+		}
+	}
+	if selectedAgentID == "" && !reuse && r.PostForm.Get("tool_filtering") == "on" {
 		eligible, eerr := s.consentToolPickerEligible(ctx, endpoint)
 		if eerr != nil {
 			return oops.E(oops.CodeUnavailable, eerr, "service temporarily unavailable").LogError(ctx, logger)
@@ -935,12 +996,25 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		boundInventory = &inventory
 	}
 
+	if selectedAgentID == "" && !reuse && boundInventory == nil && r.PostForm.Get("tool_inventory_id") != "" {
+		if attempt, aerr := consentAttemptID(r.PostForm.Get("tool_inventory_id")); aerr == nil {
+			if inventory, found, gerr := s.getCompletedConsentInventory(ctx, stateID, attempt); gerr == nil && found {
+				boundInventory = &inventory
+			}
+		}
+	}
+
 	var toolSelection *toolfilter.SessionSelection
-	if selectedAgentID == "" {
+	if selectedAgentID == "" && !reuse {
 		toolSelection, err = chosenToolSelection(r.PostForm, boundInventory)
 		if err != nil {
 			return oops.E(oops.CodeBadRequest, err, "invalid tool selection").LogError(ctx, logger)
 		}
+	}
+
+	toolPolicy, err := s.consentGatewayPolicy(ctx, endpoint, challengeState, selectedAgentID, r.PostForm.Get("discovery_mode"), toolSelection)
+	if err != nil {
+		return err
 	}
 
 	// Resolve the user_session_clients row id for the consent FK.
@@ -970,6 +1044,36 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 	}
 	s.recordPrivateOAuthAuthority(ctx, challengeState.Endpoint.Authority, authorityStarted, nil)
 
+	duration := desiredSessionDurationHours(r.PostForm.Get("session_duration_hours"))
+	var approval *consentApprovalTransaction
+	// Both authorization routes share client and resource identities. Every
+	// explicit human approval must supersede older evidence, including when
+	// the per-endpoint route cannot save a reusable replacement.
+	if selectedAgentID == "" && !challengeState.FirstParty && challengeState.Subject.Kind == urn.SessionSubjectKindUser {
+		evidence := boundInventory
+		if !consentReuseEligible(endpoint, challengeState) {
+			evidence = nil
+		}
+		approval, err = s.beginConsentApproval(ctx, endpoint, challengeState, clientRow.ID, evidence, toolSelection, duration, reuse)
+		if err != nil {
+			return oops.E(oops.CodeUnavailable, err, "prepare consent approval").LogError(ctx, logger)
+		}
+		if approval == nil {
+			http.Redirect(w, r, consentFullPageURL(endpoint, challengeState), http.StatusSeeOther)
+			return nil
+		}
+		defer o11y.NoLogDefer(func() error { return approval.tx.Rollback(ctx) })
+		toolSelection, duration = approval.selection, approval.duration
+	}
+
+	// For each server offering several upstream clients, the one usable card
+	// the credential goes through is recorded as its choice. Read before the
+	// challenge is consumed, so a failure leaves the page retryable.
+	upstreamPicks, err := s.consentUpstreamClientPicks(ctx, endpoint, pickState)
+	if err != nil {
+		return oops.E(oops.CodeUnavailable, err, "read upstream client picks").LogError(ctx, logger)
+	}
+
 	// Atomic GETDEL: a consent approval consumes the authn-challenge state
 	// single-use. Parallel POSTs (e.g. user double-submits) lose the race
 	// and get "not found or expired", so only one grant is ever minted per
@@ -981,6 +1085,9 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 	}
 	if err := s.validateConsentChallenge(ctx, endpoint, &challengeState, r.PostForm.Get("csrf_token")); err != nil {
 		return err.LogError(ctx, logger)
+	}
+	if reuse && !consentBrowserMatches(r, challengeState, time.Now()) {
+		return oops.E(oops.CodeUnauthorized, nil, "invalid consent browser binding").LogWarn(ctx, logger)
 	}
 	subject := *challengeState.Subject
 
@@ -1002,7 +1109,7 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 	// (principal_urn, user_session_client_id, remote_set_hash) makes this
 	// idempotent on re-consent for the same set; we treat the duplicate-key
 	// error as a no-op (consent already on file).
-	if agentAuthorization == nil {
+	if agentAuthorization == nil && approval == nil {
 		if _, err := usersessions_repo.New(s.db).CreateUserSessionConsent(ctx, usersessions_repo.CreateUserSessionConsentParams{
 			SubjectUrn:          subject,
 			UserSessionClientID: clientRow.ID,
@@ -1023,6 +1130,8 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 	}
 	if agentAuthorization != nil {
 		code = agentAuthorizationCodePrefix + code
+	} else if toolPolicy != nil {
+		code = gatewayAuthorizationCodePrefix + code
 	}
 
 	// The POST may arrive through a global continuation surface. Preserve the
@@ -1040,9 +1149,11 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		Subject:                     subject,
 		Endpoint:                    &grantEndpoint,
 		AgentAuthorization:          agentAuthorization,
-		DesiredSessionDurationHours: desiredSessionDurationHours(r.PostForm.Get("session_duration_hours")),
+		DesiredSessionDurationHours: duration,
 		ToolSelection:               toolSelection,
 		SignInID:                    nil,
+		GatewayPolicy:               toolPolicy,
+		UpstreamClientPicks:         upstreamPicks,
 		CreatedAt:                   time.Now(),
 	}
 	// Only a human subject's own session is linked to its sign-in.
@@ -1052,6 +1163,13 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 	if err := s.userSessionGrantCache.Store(ctx, grant); err != nil {
 		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageConsent)
 		return oops.E(oops.CodeUnexpected, err, "store user session grant").LogError(ctx, logger)
+	}
+
+	if approval != nil {
+		if err := approval.tx.Commit(ctx); err != nil {
+			_, _ = s.userSessionGrantCache.GetAndDelete(ctx, grant.CacheKey())
+			return oops.E(oops.CodeUnexpected, err, "commit consent approval").LogError(ctx, logger)
+		}
 	}
 
 	s.evictConsentToolInventory(ctx, stateID)
@@ -1379,14 +1497,15 @@ func cardLinks(c remotesessions.Client, ownResource bool) (documentation, policy
 
 // resourceDisplayOwner decides whether a client recorded its RFC 9728
 // display members for a resource this endpoint routes the client's grant
-// to: the single proxied server's upstream, or a meta member claiming the
-// client's authorization server. A client that recorded none owns none.
+// to: the single proxied server's upstream, or a meta member associated with
+// the client. A client that recorded none owns none.
 // Meta member rows load once, on first use, and serve every card.
 type resourceDisplayOwner struct {
 	endpoint *ResolvedMcpEndpoint
 	load     func(ctx context.Context) ([]metamcprepo.ListMetaMCPProxiedMemberResourcesRow, error)
 	loaded   bool
-	// upstreams is each issuer's member resources, keyed by remote_session_issuer_id.
+	// upstreams is each client's associated member resources, keyed by
+	// remote_session_client_id.
 	upstreams map[uuid.UUID][]metamcprepo.ListMetaMCPProxiedMemberResourcesRow
 }
 
@@ -1441,16 +1560,14 @@ func (o *resourceDisplayOwner) owns(ctx context.Context, c remotesessions.Client
 		}
 		o.upstreams = make(map[uuid.UUID][]metamcprepo.ListMetaMCPProxiedMemberResourcesRow, len(rows))
 		for _, row := range rows {
-			if row.RemoteSessionIssuerID.Valid {
-				o.upstreams[row.RemoteSessionIssuerID.UUID] = append(o.upstreams[row.RemoteSessionIssuerID.UUID], row)
-			}
+			o.upstreams[row.RemoteSessionClientID] = append(o.upstreams[row.RemoteSessionClientID], row)
 		}
 		o.loaded = true
 	}
 	// A client a project owns routes only to its own project's servers, so
 	// only they can lend it their resource. A stored gateway's members all
 	// share its project.
-	return slices.ContainsFunc(o.upstreams[c.RemoteSessionIssuerID], func(row metamcprepo.ListMetaMCPProxiedMemberResourcesRow) bool {
+	return slices.ContainsFunc(o.upstreams[c.ID], func(row metamcprepo.ListMetaMCPProxiedMemberResourcesRow) bool {
 		if c.ProjectID.Valid && c.ProjectID.UUID != row.ProjectID {
 			return false
 		}
@@ -1603,7 +1720,22 @@ func (s *Service) buildRemoteSessionCards(
 			chainCheck = s.consentChainCheckAtRender(ctx, chainRequests[c.ID])
 		}
 		identityReconnect := connected && !slices.Contains(state.Scopes, "openid") && slices.Contains(requested, "openid")
+		requested = slices.Clone(requested)
+		slices.Sort(requested)
+		permissionHash := consentEvidenceHash(struct {
+			ClientID uuid.UUID
+			IssuerID uuid.UUID
+			Issuer   string
+			Resource string
+			Scopes   []string
+		}{ClientID: c.ID, IssuerID: c.RemoteSessionIssuerID, Issuer: c.IssuerIdentifier, Resource: c.ResourceIdentifier, Scopes: requested})
+		reuseReady := connected && state.ValidationStatus != remotesessions.ValidationOutcomeInactive && state.ValidationStatus != remotesessions.ValidationOutcomeRejectedByMember
+		for _, scope := range requested {
+			reuseReady = reuseReady && slices.Contains(state.Scopes, scope)
+		}
 		cards = append(cards, remoteSessionCard{
+			consentPermissionsHash: permissionHash,
+			consentReuseReady:      reuseReady,
 			ClientID:               c.ID.String(),
 			IssuerSlug:             c.IssuerSlug,
 			IssuerDisplay:          issuerDisplay,

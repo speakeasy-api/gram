@@ -24,8 +24,7 @@ var ErrServerNotInOrganization = errors.New("mcp server is not a live resource o
 // from a caller-provided identifier.
 type ServerSource struct {
 	// FrontingServerID is the fronting mcp_servers.id the route resolved for
-	// this request — the same row whether the request arrived via /mcp/{slug}
-	// or /x/mcp/{slug}, and regardless of the toolset, remote, or tunneled
+	// this request, regardless of the toolset, remote, or tunneled
 	// backend behind it. Invalid marks a serving mode with no fronting server
 	// (the legacy toolset-only fallback), which is deliberately unsupported.
 	FrontingServerID uuid.NullUUID

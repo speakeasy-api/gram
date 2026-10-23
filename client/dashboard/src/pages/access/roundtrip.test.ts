@@ -1,3 +1,4 @@
+import { unrecognized } from "@gram/client/types/unrecognized.js";
 import { describe, it, expect } from "vitest";
 import type { Role } from "@gram/client/models/components/role.js";
 import type { ScopeDefinition } from "@gram/client/models/components/scopedefinition.js";
@@ -322,5 +323,53 @@ describe("applyRemoveRule", () => {
     expect(next).not.toBeNull();
     expect(next!.rules).toHaveLength(1);
     expect(next!.rules[0]!.effect).toBe("allow");
+  });
+});
+
+describe("forward-compatible role grants", () => {
+  it.each(["future:read", "__proto__", "constructor"])(
+    "preserves unknown scope %s and its selectors",
+    (scope) => {
+      const grants: Role["grants"] = [
+        {
+          scope: unrecognized(scope),
+          selectors: [{ resourceKind: "mcp", resourceId: "*" }],
+        },
+      ];
+      expect(
+        sdkGrantsFromForm(
+          grantsFromRole(role(grants), scopeDefinitions),
+          scopeDefinitions,
+        ),
+      ).toEqual(grants);
+    },
+  );
+  it("preserves unknown resource kinds and dispositions when another grant changes", () => {
+    const grants: Role["grants"] = [
+      {
+        scope: "mcp:connect",
+        selectors: [
+          { resourceKind: unrecognized("future_resource"), resourceId: "*" },
+        ],
+      },
+      {
+        scope: "mcp:write",
+        selectors: [
+          {
+            resourceKind: "mcp",
+            resourceId: "server-1",
+            disposition: unrecognized("__proto__"),
+          },
+        ],
+      },
+    ];
+    const form = grantsFromRole(role(grants), scopeDefinitions);
+    const after = sdkGrantsFromForm(form, scopeDefinitions);
+    expect(after).toEqual(grants);
+    expect(form["mcp:write"]?.rules[0]?.annotations).toEqual([]);
+    expect(diffGrants(grants, [...after, { scope: "project:read" }])).toEqual({
+      addGrants: [{ scope: "project:read", selectors: undefined }],
+      removeGrants: [],
+    });
   });
 });

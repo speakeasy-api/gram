@@ -16,6 +16,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
@@ -35,14 +36,14 @@ func (s *Service) HandleConsentAction(w http.ResponseWriter, r *http.Request) er
 		return oops.E(oops.CodeBadRequest, nil, "an mcp slug must be provided").LogError(ctx, s.logger)
 	}
 	logger := s.logger.With(attr.SlogToolsetMCPSlug(mcpSlug))
-	endpoint, err := s.LoadResolvedMcpEndpointBySlug(ctx, logger, mcpSlug, "mcp")
+	endpoint, err := s.LoadResolvedMcpEndpointBySlug(ctx, logger, mcpSlug, mcproute.MCP)
 	if err != nil {
 		return err
 	}
 	return s.ServeConsentAction(w, r, endpoint)
 }
 
-// ServeConsentAction is the post-resolution handler, shared with /x/mcp.
+// ServeConsentAction is the post-resolution handler.
 func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, endpoint *ResolvedMcpEndpoint) error {
 	ctx := r.Context()
 	logger := endpoint.LogWith(s.logger)
@@ -268,6 +269,21 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 	}
 }
 
+// clientServesHostedMember reports whether a hosted member the consent
+// subject is admitted to authenticates through client.
+func (s *Service) clientServesHostedMember(ctx context.Context, endpoint *ResolvedMcpEndpoint, challengeState AuthnChallengeState, client remotesessions.Client) (bool, error) {
+	members, err := s.consentSubjectMembers(ctx, endpoint, challengeState)
+	if err != nil {
+		return false, err
+	}
+	for _, member := range members {
+		if member.backend != metaMemberBackendProxied && memberUsesClient(member, client.ID, client.RemoteSessionIssuerID, client.ProjectID) {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 // buildRemoteConnectURL builds the upstream authorization URL for one remote
 // session client. Shared by the page's explicit Connect action and by the
 // consent page's auto-connect, so both legs resolve the upstream resource
@@ -304,7 +320,20 @@ func (s *Service) buildRemoteConnectURL(
 		clientResource, resourceMember, claimedByMember, rerr = s.resolveMetaMemberResource(memberCtx, logger, endpoint, client)
 	}
 	// Gate on the claim, not an empty resource: an ambiguous meta MCP has
-	// decided, and falling back would qualify the credential anyway.
+	// decided, and falling back would qualify the credential anyway. A
+	// gateway client no proxied member is associated with serves only the
+	// hosted members that use it, which keep the issuer-derived path; one
+	// that serves no member at all is refused rather than qualified by the
+	// issuer's inventory.
+	if rerr == nil && !claimedByMember && endpoint.MetaMcpServerID.Valid {
+		hosted, herr := s.clientServesHostedMember(ctx, endpoint, challengeState, client)
+		if herr != nil {
+			return "", false, oops.E(oops.CodeUnexpected, herr, "resolve gateway members for connection").LogError(ctx, logger)
+		}
+		if !hosted {
+			return "", false, oops.E(oops.CodeBadRequest, nil, "this connection is not configured for any server this gateway serves").LogWarn(ctx, logger)
+		}
+	}
 	if rerr == nil && !claimedByMember {
 		boundIDs := make([]uuid.UUID, 0, len(bound))
 		for i := range bound {
@@ -351,6 +380,9 @@ func (s *Service) buildRemoteConnectURL(
 	challengeURL, hop, berr := s.startRemoteLogin(ctx, challengeState, s.remoteChallengeMgr.RemoteLoginCallbackOrigin(client), parent, func(parent remotesessions.ParentChallenge) (string, error) {
 		return s.remoteChallengeMgr.BuildAuthorizationUrl(ctx, parent, client)
 	})
+	if errors.Is(berr, remotesessions.ErrIssuerNoAuthorizationEndpoint) {
+		return "", false, oops.E(oops.CodeBadRequest, berr, "This service doesn't support signing in from Speakeasy.").LogWarn(ctx, logger)
+	}
 	if berr != nil {
 		return "", false, oops.E(oops.CodeUnexpected, berr, "build authorization url").LogError(ctx, logger)
 	}

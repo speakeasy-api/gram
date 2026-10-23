@@ -32,6 +32,7 @@ func registerPluginTools(reg *Registrar, plugins *PluginsService) {
 		Name:        operationSetPluginAssignments,
 		Title:       "Set Plugin Assignments",
 		Description: setDescription,
+		Annotations: setPluginAssignmentsAnnotations(),
 	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input SetPluginAssignmentsInput) (*mcp.CallToolResult, SetPluginAssignmentsOutput, error) {
 		return principalToolCall(ctx, pluginToolResult, func(principal Principal) (SetPluginAssignmentsOutput, error) {
 			return plugins.SetPluginAssignments(ctx, principal, input)
@@ -136,7 +137,7 @@ func registerUnavailablePluginTools(reg *Registrar) {
 		{"get_my_mcp_access", "Check My MCP Access", "Check your access to one MCP server. This is not switched on for your organization yet.", true},
 		{"get_my_mcp_connection_status", "Check My MCP Connection", "Check your authorization state for one MCP server. This is not switched on for your organization yet.", true},
 	} {
-		manifest := &mcp.Tool{Name: tool.name, Title: tool.title, Description: tool.description}
+		manifest := &mcp.Tool{Name: tool.name, Title: tool.title, Description: tool.description, Annotations: setPluginAssignmentsAnnotations()}
 		if tool.readOnly {
 			manifest.Annotations = readOnlyAnnotations()
 		}
@@ -177,7 +178,13 @@ const unavailableRepublishPluginDescription = "Request a publish of a project's 
 // registrations. Republishing unchanged inputs is a no-op, so the tool is
 // idempotent, and it never removes anything.
 func republishPluginAnnotations() *mcp.ToolAnnotations {
-	return &mcp.ToolAnnotations{IdempotentHint: true, DestructiveHint: new(false)}
+	return &mcp.ToolAnnotations{IdempotentHint: true, DestructiveHint: new(false), OpenWorldHint: new(false)}
+}
+
+// set_plugin_assignments replaces the whole set, so it can take a plugin away
+// from people who had it.
+func setPluginAssignmentsAnnotations() *mcp.ToolAnnotations {
+	return writeAnnotations(true, true, false)
 }
 
 // registerRepublishPluginTool keeps one manifest for both registrations, so

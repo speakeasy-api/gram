@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -98,7 +99,7 @@ func TestHandleTokenCode_AgentAuthorizationUsesIsolatedGrantNamespace(t *testing
 		AudienceURN:         urn.NewToolset(fx.toolset.ID).String(),
 		OrganizationID:      fx.orgID,
 		ProjectID:           fx.target.ProjectID,
-		RouteBase:           "mcp",
+		RouteBase:           mcproute.MCP,
 		Slug:                fx.toolset.McpSlug.String,
 		ToolsetID:           uuid.NullUUID{UUID: fx.toolset.ID, Valid: true},
 		UserSessionIssuerID: fx.target.UserSessionIssuerID,
@@ -186,8 +187,7 @@ func TestHandleTokenCode_ResourceIndicator(t *testing.T) {
 	require.Equal(t, http.StatusBadRequest, w.Code)
 	require.Contains(t, w.Body.String(), "invalid_target")
 
-	// Same server, wrong route base: /mcp and /x/mcp mint different audiences,
-	// so they are never interchangeable resource identifiers.
+	// The retired /x/mcp form is not an accepted resource identifier.
 	w = redeem(strings.Replace(advertisedResource, "/mcp/", "/x/mcp/", 1))
 	require.Equal(t, http.StatusBadRequest, w.Code)
 	require.Contains(t, w.Body.String(), "invalid_target")

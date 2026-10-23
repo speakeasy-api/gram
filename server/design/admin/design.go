@@ -1365,6 +1365,7 @@ var _ = Service("admin", func() {
 	supportMatrixMethods()
 	supportCoverageMethods()
 	mcpServerHealthMethods()
+	hookClientsMethods()
 	externalMcpMigrationMethods()
 	registryDesign()
 	onboardingStackMethods()
@@ -1438,4 +1439,5 @@ var _ = Service("admin", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "listCustomerUsage")
 	})
 
+	upstreamOAuthMigrationMethods()
 })

@@ -12,40 +12,307 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const getServedSkillRecipient = `-- name: GetServedSkillRecipient :one
-SELECT u.email
-FROM users u
-WHERE u.id = $1
-  AND u.deleted_at IS NULL
-  AND u.workos_deleted_at IS NULL
-  AND EXISTS (
-    SELECT 1
-    FROM organization_user_relationships our
-    JOIN organization_metadata om
-      ON om.id = our.organization_id
-      AND om.disabled_at IS NULL
-    WHERE our.organization_id = $2
-      AND our.user_id = u.id
-      AND our.deleted_at IS NULL
-  )
+const createMCPSkillLink = `-- name: CreateMCPSkillLink :one
+INSERT INTO mcp_skill_links (
+    organization_id
+  , project_id
+  , skill_id
+  , pinned_version_id
+  , target_kind
+  , mcp_server_id
+  , meta_mcp_server_id
+  , created_by_user_id
+)
+VALUES (
+    $1
+  , $2
+  , $3
+  , $4
+  , $5
+  , $6
+  , $7
+  , $8
+)
+RETURNING id, organization_id, project_id, skill_id, pinned_version_id, target_kind, mcp_server_id, meta_mcp_server_id, created_by_user_id, created_at, updated_at, deleted_at, deleted
 `
 
-type GetServedSkillRecipientParams struct {
-	UserID         string
-	OrganizationID string
+type CreateMCPSkillLinkParams struct {
+	OrganizationID  string
+	ProjectID       uuid.UUID
+	SkillID         uuid.UUID
+	PinnedVersionID uuid.NullUUID
+	TargetKind      string
+	McpServerID     uuid.NullUUID
+	MetaMcpServerID uuid.NullUUID
+	CreatedByUserID string
 }
 
-// The authenticated caller as a recipient of served skills: their email, read
-// only while they are a live user holding an active membership in the enabled
-// organization that owns the endpoint. Delivery principals are resolved from
-// the row, so a user removed from the organization, or deleted, whose session
-// or token still validates is no row and so no recipient. The membership
-// predicate is the one IsOrganizationMember applies at login.
-func (q *Queries) GetServedSkillRecipient(ctx context.Context, arg GetServedSkillRecipientParams) (string, error) {
-	row := q.db.QueryRow(ctx, getServedSkillRecipient, arg.UserID, arg.OrganizationID)
-	var email string
-	err := row.Scan(&email)
-	return email, err
+// Links a skill to the MCP surface that serves it. The caller validates that
+// the id columns fit target_kind; the foreign keys keep the skill, its pinned
+// version and any stored target inside the link's project.
+func (q *Queries) CreateMCPSkillLink(ctx context.Context, arg CreateMCPSkillLinkParams) (McpSkillLink, error) {
+	row := q.db.QueryRow(ctx, createMCPSkillLink,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.SkillID,
+		arg.PinnedVersionID,
+		arg.TargetKind,
+		arg.McpServerID,
+		arg.MetaMcpServerID,
+		arg.CreatedByUserID,
+	)
+	var i McpSkillLink
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.SkillID,
+		&i.PinnedVersionID,
+		&i.TargetKind,
+		&i.McpServerID,
+		&i.MetaMcpServerID,
+		&i.CreatedByUserID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const deleteMCPSkillLink = `-- name: DeleteMCPSkillLink :execrows
+UPDATE mcp_skill_links
+SET deleted_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE organization_id = $1
+  AND project_id = $2
+  AND id = $3
+  AND deleted IS FALSE
+`
+
+type DeleteMCPSkillLinkParams struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+	ID             uuid.UUID
+}
+
+// Soft-deletes one live link, so the surface stops serving the skill through
+// it.
+func (q *Queries) DeleteMCPSkillLink(ctx context.Context, arg DeleteMCPSkillLinkParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteMCPSkillLink, arg.OrganizationID, arg.ProjectID, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const getLinkableMCPServer = `-- name: GetLinkableMCPServer :one
+SELECT
+    ms.id,
+    ms.project_id,
+    ms.toolset_id,
+    COALESCE(ms.name, t.name, ms.slug, ms.id::text)::text AS name
+FROM mcp_servers ms
+JOIN projects p
+  ON p.id = ms.project_id
+  AND p.organization_id = $1
+  AND p.deleted IS FALSE
+LEFT JOIN toolsets t
+  ON t.id = ms.toolset_id
+  AND t.project_id = ms.project_id
+  AND t.deleted IS FALSE
+WHERE ms.project_id = $2
+  AND ms.id = $3
+  AND ms.deleted IS FALSE
+`
+
+type GetLinkableMCPServerParams struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+	ID             uuid.UUID
+}
+
+type GetLinkableMCPServerRow struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+	ToolsetID uuid.NullUUID
+	Name      string
+}
+
+// A live MCP server in the caller's project that a skill can be linked to,
+// with the name a link view shows and the toolset its grants are keyed on.
+func (q *Queries) GetLinkableMCPServer(ctx context.Context, arg GetLinkableMCPServerParams) (GetLinkableMCPServerRow, error) {
+	row := q.db.QueryRow(ctx, getLinkableMCPServer, arg.OrganizationID, arg.ProjectID, arg.ID)
+	var i GetLinkableMCPServerRow
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.ToolsetID,
+		&i.Name,
+	)
+	return i, err
+}
+
+const getLinkableMetaMCPServer = `-- name: GetLinkableMetaMCPServer :one
+SELECT
+    mm.id,
+    mm.project_id,
+    mm.name
+FROM meta_mcp_servers mm
+WHERE mm.organization_id = $1
+  AND mm.project_id = $2
+  AND mm.id = $3
+  AND mm.deleted IS FALSE
+`
+
+type GetLinkableMetaMCPServerParams struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+	ID             uuid.UUID
+}
+
+type GetLinkableMetaMCPServerRow struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+	Name      string
+}
+
+// A live meta MCP gateway in the caller's project that a skill can be linked
+// to.
+func (q *Queries) GetLinkableMetaMCPServer(ctx context.Context, arg GetLinkableMetaMCPServerParams) (GetLinkableMetaMCPServerRow, error) {
+	row := q.db.QueryRow(ctx, getLinkableMetaMCPServer, arg.OrganizationID, arg.ProjectID, arg.ID)
+	var i GetLinkableMetaMCPServerRow
+	err := row.Scan(&i.ID, &i.ProjectID, &i.Name)
+	return i, err
+}
+
+const getLiveMCPSkillLinkForTarget = `-- name: GetLiveMCPSkillLinkForTarget :one
+SELECT id, organization_id, project_id, skill_id, pinned_version_id, target_kind, mcp_server_id, meta_mcp_server_id, created_by_user_id, created_at, updated_at, deleted_at, deleted
+FROM mcp_skill_links
+WHERE organization_id = $1
+  AND project_id = $2
+  AND skill_id = $3
+  AND target_kind = $4
+  AND mcp_server_id IS NOT DISTINCT FROM $5::uuid
+  AND meta_mcp_server_id IS NOT DISTINCT FROM $6::uuid
+  AND deleted IS FALSE
+`
+
+type GetLiveMCPSkillLinkForTargetParams struct {
+	OrganizationID  string
+	ProjectID       uuid.UUID
+	SkillID         uuid.UUID
+	TargetKind      string
+	McpServerID     uuid.NullUUID
+	MetaMcpServerID uuid.NullUUID
+}
+
+// The live link of one skill to one target, if any. Row-less targets match on
+// their kind with both id columns NULL, as the unique index treats them.
+func (q *Queries) GetLiveMCPSkillLinkForTarget(ctx context.Context, arg GetLiveMCPSkillLinkForTargetParams) (McpSkillLink, error) {
+	row := q.db.QueryRow(ctx, getLiveMCPSkillLinkForTarget,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.SkillID,
+		arg.TargetKind,
+		arg.McpServerID,
+		arg.MetaMcpServerID,
+	)
+	var i McpSkillLink
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.SkillID,
+		&i.PinnedVersionID,
+		&i.TargetKind,
+		&i.McpServerID,
+		&i.MetaMcpServerID,
+		&i.CreatedByUserID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const getMCPSkillLink = `-- name: GetMCPSkillLink :one
+SELECT
+    l.id, l.organization_id, l.project_id, l.skill_id, l.pinned_version_id, l.target_kind, l.mcp_server_id, l.meta_mcp_server_id, l.created_by_user_id, l.created_at, l.updated_at, l.deleted_at, l.deleted,
+    s.name AS skill_name,
+    s.display_name AS skill_display_name,
+    ms.toolset_id AS mcp_server_toolset_id,
+    ms.name AS mcp_server_name,
+    ms.slug AS mcp_server_slug,
+    t.name AS toolset_name,
+    mm.name AS meta_mcp_server_name
+FROM mcp_skill_links l
+JOIN skills s
+  ON s.project_id = l.project_id
+  AND s.id = l.skill_id
+LEFT JOIN mcp_servers ms
+  ON ms.project_id = l.project_id
+  AND ms.id = l.mcp_server_id
+LEFT JOIN toolsets t
+  ON t.project_id = ms.project_id
+  AND t.id = ms.toolset_id
+LEFT JOIN meta_mcp_servers mm
+  ON mm.project_id = l.project_id
+  AND mm.id = l.meta_mcp_server_id
+WHERE l.organization_id = $1
+  AND l.project_id = $2
+  AND l.id = $3
+`
+
+type GetMCPSkillLinkParams struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+	ID             uuid.UUID
+}
+
+type GetMCPSkillLinkRow struct {
+	McpSkillLink       McpSkillLink
+	SkillName          string
+	SkillDisplayName   string
+	McpServerToolsetID uuid.NullUUID
+	McpServerName      pgtype.Text
+	McpServerSlug      pgtype.Text
+	ToolsetName        pgtype.Text
+	MetaMcpServerName  pgtype.Text
+}
+
+// One link in the caller's project, live or removed, with the names a link
+// view shows. A removed link is returned so an unlink can authorize against
+// the link's skill and target before answering a repeat as a no-op. The skill
+// and target are joined without liveness filters so a link to an archived
+// skill or a removed target can still be inspected and removed.
+func (q *Queries) GetMCPSkillLink(ctx context.Context, arg GetMCPSkillLinkParams) (GetMCPSkillLinkRow, error) {
+	row := q.db.QueryRow(ctx, getMCPSkillLink, arg.OrganizationID, arg.ProjectID, arg.ID)
+	var i GetMCPSkillLinkRow
+	err := row.Scan(
+		&i.McpSkillLink.ID,
+		&i.McpSkillLink.OrganizationID,
+		&i.McpSkillLink.ProjectID,
+		&i.McpSkillLink.SkillID,
+		&i.McpSkillLink.PinnedVersionID,
+		&i.McpSkillLink.TargetKind,
+		&i.McpSkillLink.McpServerID,
+		&i.McpSkillLink.MetaMcpServerID,
+		&i.McpSkillLink.CreatedByUserID,
+		&i.McpSkillLink.CreatedAt,
+		&i.McpSkillLink.UpdatedAt,
+		&i.McpSkillLink.DeletedAt,
+		&i.McpSkillLink.Deleted,
+		&i.SkillName,
+		&i.SkillDisplayName,
+		&i.McpServerToolsetID,
+		&i.McpServerName,
+		&i.McpServerSlug,
+		&i.ToolsetName,
+		&i.MetaMcpServerName,
+	)
+	return i, err
 }
 
 const insertMCPSkillObservation = `-- name: InsertMCPSkillObservation :execrows
@@ -153,51 +420,154 @@ func (q *Queries) InsertMCPSkillObservation(ctx context.Context, arg InsertMCPSk
 	return result.RowsAffected(), nil
 }
 
-const listMCPSkillObservations = `-- name: ListMCPSkillObservations :many
-SELECT id, project_id, idempotency_key, provider, user_id, user_email, hostname, session_id, skill_name, source, source_level, source_path, raw_sha256, seen_at, skill_id, skill_version_id, reconciled_at, metrics_synced_at, efficacy_enqueued_at, reconcile_error_code, created_at
-FROM skill_observations
-WHERE project_id = $1
-  AND provider = $2::text
-ORDER BY seen_at ASC, id ASC
+const isServedSkillRecipient = `-- name: IsServedSkillRecipient :one
+SELECT EXISTS (
+  SELECT 1
+  FROM users u
+  JOIN organization_user_relationships our
+    ON our.user_id = u.id
+    AND our.organization_id = $1
+    AND our.deleted_at IS NULL
+  JOIN organization_metadata om
+    ON om.id = our.organization_id
+    AND om.disabled_at IS NULL
+  WHERE u.id = $2
+    AND u.deleted_at IS NULL
+    AND u.workos_deleted_at IS NULL
+) AS recipient
 `
 
-type ListMCPSkillObservationsParams struct {
-	ProjectID uuid.UUID
-	Provider  string
+type IsServedSkillRecipientParams struct {
+	OrganizationID string
+	UserID         string
 }
 
-// Test fixture: the activations one project recorded over MCP, oldest first.
-func (q *Queries) ListMCPSkillObservations(ctx context.Context, arg ListMCPSkillObservationsParams) ([]SkillObservation, error) {
-	rows, err := q.db.Query(ctx, listMCPSkillObservations, arg.ProjectID, arg.Provider)
+// Whether the authenticated caller may receive served skills: a live user
+// holding an active membership in the enabled organization that owns the
+// endpoint. A user removed from the organization, or deleted, whose session or
+// token still validates is not a recipient. The membership predicate is the
+// one IsOrganizationMember applies at login.
+func (q *Queries) IsServedSkillRecipient(ctx context.Context, arg IsServedSkillRecipientParams) (bool, error) {
+	row := q.db.QueryRow(ctx, isServedSkillRecipient, arg.OrganizationID, arg.UserID)
+	var recipient bool
+	err := row.Scan(&recipient)
+	return recipient, err
+}
+
+const listMCPSkillLinks = `-- name: ListMCPSkillLinks :many
+SELECT
+    l.id, l.organization_id, l.project_id, l.skill_id, l.pinned_version_id, l.target_kind, l.mcp_server_id, l.meta_mcp_server_id, l.created_by_user_id, l.created_at, l.updated_at, l.deleted_at, l.deleted,
+    s.name AS skill_name,
+    s.display_name AS skill_display_name,
+    ms.toolset_id AS mcp_server_toolset_id,
+    ms.name AS mcp_server_name,
+    ms.slug AS mcp_server_slug,
+    t.name AS toolset_name,
+    mm.name AS meta_mcp_server_name
+FROM mcp_skill_links l
+JOIN skills s
+  ON s.project_id = l.project_id
+  AND s.id = l.skill_id
+  AND s.archived_at IS NULL
+LEFT JOIN mcp_servers ms
+  ON ms.project_id = l.project_id
+  AND ms.id = l.mcp_server_id
+  AND ms.deleted IS FALSE
+LEFT JOIN toolsets t
+  ON t.project_id = ms.project_id
+  AND t.id = ms.toolset_id
+  AND t.deleted IS FALSE
+LEFT JOIN meta_mcp_servers mm
+  ON mm.project_id = l.project_id
+  AND mm.id = l.meta_mcp_server_id
+  AND mm.deleted IS FALSE
+WHERE l.organization_id = $1
+  AND l.project_id = $2
+  AND l.deleted IS FALSE
+  AND (l.mcp_server_id IS NULL OR ms.id IS NOT NULL)
+  AND (l.meta_mcp_server_id IS NULL OR mm.id IS NOT NULL)
+  AND ($3::uuid IS NULL OR l.skill_id = $3::uuid)
+  AND ($4::uuid IS NULL OR l.mcp_server_id = $4::uuid)
+  AND ($5::uuid IS NULL OR l.meta_mcp_server_id = $5::uuid)
+  AND ($6::text IS NULL OR l.target_kind = $6::text)
+  AND (
+    $7::timestamptz IS NULL
+    OR (l.created_at, l.id) > (
+      $7::timestamptz,
+      $8::uuid
+    )
+  )
+ORDER BY l.created_at ASC, l.id ASC
+LIMIT $9
+`
+
+type ListMCPSkillLinksParams struct {
+	OrganizationID  string
+	ProjectID       uuid.UUID
+	SkillID         uuid.NullUUID
+	McpServerID     uuid.NullUUID
+	MetaMcpServerID uuid.NullUUID
+	TargetKind      pgtype.Text
+	CursorCreatedAt pgtype.Timestamptz
+	CursorID        uuid.NullUUID
+	PageLimit       int32
+}
+
+type ListMCPSkillLinksRow struct {
+	McpSkillLink       McpSkillLink
+	SkillName          string
+	SkillDisplayName   string
+	McpServerToolsetID uuid.NullUUID
+	McpServerName      pgtype.Text
+	McpServerSlug      pgtype.Text
+	ToolsetName        pgtype.Text
+	MetaMcpServerName  pgtype.Text
+}
+
+// A page of the caller's project's live links, oldest first, with the names
+// a link view shows. Links of archived skills and links whose stored target
+// was removed are left out, since neither serves anything. Every filter is
+// optional.
+func (q *Queries) ListMCPSkillLinks(ctx context.Context, arg ListMCPSkillLinksParams) ([]ListMCPSkillLinksRow, error) {
+	rows, err := q.db.Query(ctx, listMCPSkillLinks,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.SkillID,
+		arg.McpServerID,
+		arg.MetaMcpServerID,
+		arg.TargetKind,
+		arg.CursorCreatedAt,
+		arg.CursorID,
+		arg.PageLimit,
+	)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []SkillObservation
+	var items []ListMCPSkillLinksRow
 	for rows.Next() {
-		var i SkillObservation
+		var i ListMCPSkillLinksRow
 		if err := rows.Scan(
-			&i.ID,
-			&i.ProjectID,
-			&i.IdempotencyKey,
-			&i.Provider,
-			&i.UserID,
-			&i.UserEmail,
-			&i.Hostname,
-			&i.SessionID,
+			&i.McpSkillLink.ID,
+			&i.McpSkillLink.OrganizationID,
+			&i.McpSkillLink.ProjectID,
+			&i.McpSkillLink.SkillID,
+			&i.McpSkillLink.PinnedVersionID,
+			&i.McpSkillLink.TargetKind,
+			&i.McpSkillLink.McpServerID,
+			&i.McpSkillLink.MetaMcpServerID,
+			&i.McpSkillLink.CreatedByUserID,
+			&i.McpSkillLink.CreatedAt,
+			&i.McpSkillLink.UpdatedAt,
+			&i.McpSkillLink.DeletedAt,
+			&i.McpSkillLink.Deleted,
 			&i.SkillName,
-			&i.Source,
-			&i.SourceLevel,
-			&i.SourcePath,
-			&i.RawSha256,
-			&i.SeenAt,
-			&i.SkillID,
-			&i.SkillVersionID,
-			&i.ReconciledAt,
-			&i.MetricsSyncedAt,
-			&i.EfficacyEnqueuedAt,
-			&i.ReconcileErrorCode,
-			&i.CreatedAt,
+			&i.SkillDisplayName,
+			&i.McpServerToolsetID,
+			&i.McpServerName,
+			&i.McpServerSlug,
+			&i.ToolsetName,
+			&i.MetaMcpServerName,
 		); err != nil {
 			return nil, err
 		}
@@ -209,26 +579,28 @@ func (q *Queries) ListMCPSkillObservations(ctx context.Context, arg ListMCPSkill
 	return items, nil
 }
 
-const listServedSkillsForEndpoint = `-- name: ListServedSkillsForEndpoint :many
+const listServedSkillsForTarget = `-- name: ListServedSkillsForTarget :many
 WITH candidates AS (
   SELECT
       sk.id AS skill_id,
+      sk.project_id,
+      p.slug AS project_slug,
       sk.name AS skill_name,
-      p.id AS plugin_id,
-      (sd.pinned_version_id IS NOT NULL)::boolean AS pinned,
+      l.id AS link_id,
+      (l.pinned_version_id IS NOT NULL)::boolean AS pinned,
       resolved.id AS version_id,
       resolved.content,
       resolved.raw_sha256,
       resolved.effective_at
-  FROM skill_distributions sd
-  JOIN skills sk
-    ON sk.id = sd.skill_id
-    AND sk.project_id = sd.project_id
-    AND sk.archived_at IS NULL
-  JOIN plugins p
-    ON p.id = sd.plugin_id
-    AND p.project_id = sd.project_id
+  FROM mcp_skill_links l
+  JOIN projects p
+    ON p.id = l.project_id
+    AND p.organization_id = l.organization_id
     AND p.deleted IS FALSE
+  JOIN skills sk
+    ON sk.id = l.skill_id
+    AND sk.project_id = l.project_id
+    AND sk.archived_at IS NULL
   JOIN LATERAL (
     SELECT
       sv.id,
@@ -237,128 +609,136 @@ WITH candidates AS (
       COALESCE(sv.promoted_at, sv.created_at)::timestamptz AS effective_at
     FROM skill_versions sv
     LEFT JOIN skill_version_origins svo
-      ON svo.project_id = sd.project_id
+      ON svo.project_id = l.project_id
       AND svo.skill_id = sv.skill_id
       AND svo.skill_version_id = sv.id
-    WHERE sv.skill_id = sd.skill_id
+    WHERE sv.skill_id = l.skill_id
       AND sv.spec_valid IS TRUE
-      AND (sd.pinned_version_id IS NULL OR sv.id = sd.pinned_version_id)
+      AND (l.pinned_version_id IS NULL OR sv.id = l.pinned_version_id)
     ORDER BY (svo.origin IS DISTINCT FROM 'captured') DESC, COALESCE(sv.promoted_at, sv.created_at) DESC, sv.id DESC
     LIMIT 1
   ) resolved ON TRUE
-  WHERE sd.project_id = $2
-    AND sd.channel = 'plugin'
-    AND sd.assistant_id IS NULL
-    AND sd.revoked_at IS NULL
-    AND ($3::text IS NULL OR sk.name = $3::text)
-    AND EXISTS (
-      SELECT 1
-      FROM plugin_servers ps
-      WHERE ps.plugin_id = p.id
-        AND ps.deleted IS FALSE
-        AND (
-          ps.toolset_id = $4::uuid
-          OR (
-            $5::uuid IS NOT NULL
-            AND ps.mcp_server_id = $5::uuid
-          )
-        )
-    )
-    AND EXISTS (
-      SELECT 1
-      FROM plugin_assignments pa
-      WHERE pa.plugin_id = p.id
-        AND pa.organization_id = p.organization_id
-        AND pa.principal_urn = ANY($6::text[])
+  WHERE l.organization_id = $2
+    AND l.deleted IS FALSE
+    AND ($3::text IS NULL OR p.slug = $3::text)
+    AND ($4::text IS NULL OR sk.name = $4::text)
+    AND (
+      (l.target_kind = 'mcp_server' AND l.mcp_server_id = ANY($5::uuid[]))
+      OR (
+        l.target_kind = 'meta_mcp_server'
+        AND $6::uuid IS NOT NULL
+        AND l.meta_mcp_server_id = $6::uuid
+      )
+      OR (
+        $7::text IS NOT NULL
+        AND l.target_kind = $7::text
+      )
     )
 ),
 pins AS (
-  SELECT skill_name, COUNT(DISTINCT version_id)::int AS pinned_versions
+  SELECT skill_id, COUNT(DISTINCT version_id)::int AS pinned_versions
   FROM candidates
   WHERE pinned
-  GROUP BY skill_name
+  GROUP BY skill_id
+),
+winners AS (
+  SELECT DISTINCT ON (c.skill_id)
+      c.skill_id,
+      c.project_id,
+      c.project_slug,
+      c.skill_name,
+      c.version_id,
+      c.content,
+      c.raw_sha256,
+      COALESCE(pins.pinned_versions, 0)::int AS pinned_versions
+  FROM candidates c
+  LEFT JOIN pins ON pins.skill_id = c.skill_id
+  ORDER BY c.skill_id, c.pinned DESC, c.effective_at DESC, c.version_id DESC, c.link_id ASC
 )
-SELECT DISTINCT ON (c.skill_name)
-    c.skill_id,
-    c.skill_name,
-    c.plugin_id,
-    c.pinned,
-    c.version_id,
-    c.content,
-    c.raw_sha256,
-    c.effective_at,
-    COALESCE(pins.pinned_versions, 0)::int AS pinned_versions
-FROM candidates c
-LEFT JOIN pins ON pins.skill_name = c.skill_name
-ORDER BY c.skill_name ASC, c.pinned DESC, c.effective_at DESC, c.version_id DESC, c.plugin_id ASC
+SELECT
+    w.skill_id,
+    w.project_id,
+    w.project_slug,
+    w.skill_name,
+    w.version_id,
+    w.content,
+    w.raw_sha256,
+    w.pinned_versions
+FROM winners w
+ORDER BY w.project_slug ASC, w.skill_name ASC
 LIMIT $1
 `
 
-type ListServedSkillsForEndpointParams struct {
-	RowLimit      int32
-	ProjectID     uuid.UUID
-	SkillName     pgtype.Text
-	ToolsetID     uuid.UUID
-	McpServerID   uuid.NullUUID
-	PrincipalUrns []string
+type ListServedSkillsForTargetParams struct {
+	RowLimit          int32
+	OrganizationID    string
+	ProjectSlug       pgtype.Text
+	SkillName         pgtype.Text
+	McpServerIds      []uuid.UUID
+	MetaMcpServerID   uuid.NullUUID
+	RowLessTargetKind pgtype.Text
 }
 
-type ListServedSkillsForEndpointRow struct {
+type ListServedSkillsForTargetRow struct {
 	SkillID        uuid.UUID
+	ProjectID      uuid.UUID
+	ProjectSlug    string
 	SkillName      string
-	PluginID       uuid.UUID
-	Pinned         bool
 	VersionID      uuid.UUID
 	Content        string
 	RawSha256      string
-	EffectiveAt    pgtype.Timestamptz
 	PinnedVersions int32
 }
 
-// The skills a hosted toolset endpoint serves over MCP to one caller, one row
-// per skill name, ordered by name. A candidate is an active plugin-channel
-// distribution whose plugin belongs to the endpoint's project, is not deleted,
-// contains the endpoint's backend (the toolset itself, or the mcp_servers row
-// fronting it when the caller passes one), and is assigned to at least one of
-// the caller's principal URNs. The skill must not be archived. Each candidate
-// carries the distribution's resolved version: the pin when one is set,
-// otherwise the latest valid version under the same ordering as
-// GetLatestValidSkillVersion.
+// The skills an MCP surface serves over the Skills extension, one row per
+// skill, ordered by project slug and then name. A candidate is a live
+// mcp_skill_links row in the surface's organization that names the surface: an
+// mcp_server link to any of @mcp_server_ids (the surface's own server, plus
+// the member servers a gateway inherits), a meta_mcp_server link to
+// @meta_mcp_server_id, or a link of the row-less kind @row_less_target_kind
+// (such as the organization gateway). The skill must not be archived and its
+// project must not be deleted. Each candidate carries the link's resolved
+// version: the pin when one is set, otherwise the latest valid version under
+// the same ordering as GetLatestValidSkillVersion.
 //
-// A skill carried by several matching plugins has several candidates, and the
-// query keeps one: a pinned candidate beats one that tracks the latest
-// version, and between pins the newest resolved version (by effective time,
-// then version id) wins; the plugin id breaks a tie between two
-// distributions of the same version. pinned_versions counts the distinct
-// versions the skill is pinned to across its candidates, so a caller can tell
-// when pins disagree. The limit counts skills, not candidates, so a skill
-// carried by many plugins never crowds out a later skill by name. An empty
-// principal list matches nothing.
-func (q *Queries) ListServedSkillsForEndpoint(ctx context.Context, arg ListServedSkillsForEndpointParams) ([]ListServedSkillsForEndpointRow, error) {
-	rows, err := q.db.Query(ctx, listServedSkillsForEndpoint,
+// The organization, not one project, bounds the read because a gateway spans
+// every project in it; each link's project is pinned to its skill's by
+// foreign key. Skills from different projects may share a name: each is its
+// own row, told apart by project_slug.
+//
+// A skill linked several times has several candidates, and the query keeps
+// one: a pinned candidate beats one that tracks the latest version, and
+// between pins the newest resolved version (by effective time, then version
+// id) wins; the link id breaks a tie between two links of the same version.
+// pinned_versions counts the distinct versions the skill is pinned to across
+// its candidates, so a caller can tell when pins disagree. The limit counts
+// skills, not candidates, so a skill linked many times never crowds out a
+// later skill.
+func (q *Queries) ListServedSkillsForTarget(ctx context.Context, arg ListServedSkillsForTargetParams) ([]ListServedSkillsForTargetRow, error) {
+	rows, err := q.db.Query(ctx, listServedSkillsForTarget,
 		arg.RowLimit,
-		arg.ProjectID,
+		arg.OrganizationID,
+		arg.ProjectSlug,
 		arg.SkillName,
-		arg.ToolsetID,
-		arg.McpServerID,
-		arg.PrincipalUrns,
+		arg.McpServerIds,
+		arg.MetaMcpServerID,
+		arg.RowLessTargetKind,
 	)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []ListServedSkillsForEndpointRow
+	var items []ListServedSkillsForTargetRow
 	for rows.Next() {
-		var i ListServedSkillsForEndpointRow
+		var i ListServedSkillsForTargetRow
 		if err := rows.Scan(
 			&i.SkillID,
+			&i.ProjectID,
+			&i.ProjectSlug,
 			&i.SkillName,
-			&i.PluginID,
-			&i.Pinned,
 			&i.VersionID,
 			&i.Content,
 			&i.RawSha256,
-			&i.EffectiveAt,
 			&i.PinnedVersions,
 		); err != nil {
 			return nil, err
@@ -369,4 +749,81 @@ func (q *Queries) ListServedSkillsForEndpoint(ctx context.Context, arg ListServe
 		return nil, err
 	}
 	return items, nil
+}
+
+const upsertMCPSkillLink = `-- name: UpsertMCPSkillLink :one
+INSERT INTO mcp_skill_links (
+    organization_id
+  , project_id
+  , skill_id
+  , pinned_version_id
+  , target_kind
+  , mcp_server_id
+  , meta_mcp_server_id
+  , created_by_user_id
+)
+VALUES (
+    $1
+  , $2
+  , $3
+  , $4
+  , $5
+  , $6
+  , $7
+  , $8
+)
+ON CONFLICT (project_id, skill_id, target_kind, mcp_server_id, meta_mcp_server_id) WHERE deleted IS FALSE
+DO UPDATE SET
+    pinned_version_id = EXCLUDED.pinned_version_id,
+    updated_at = CASE
+      WHEN mcp_skill_links.pinned_version_id IS DISTINCT FROM EXCLUDED.pinned_version_id THEN clock_timestamp()
+      ELSE mcp_skill_links.updated_at
+    END
+RETURNING id, organization_id, project_id, skill_id, pinned_version_id, target_kind, mcp_server_id, meta_mcp_server_id, created_by_user_id, created_at, updated_at, deleted_at, deleted
+`
+
+type UpsertMCPSkillLinkParams struct {
+	OrganizationID  string
+	ProjectID       uuid.UUID
+	SkillID         uuid.UUID
+	PinnedVersionID uuid.NullUUID
+	TargetKind      string
+	McpServerID     uuid.NullUUID
+	MetaMcpServerID uuid.NullUUID
+	CreatedByUserID string
+}
+
+// Links a skill to a target, or updates the pin of the live link that
+// already joins them, so repeating the same request is idempotent. updated_at
+// moves only when the pin changes. The caller validates that the id columns
+// fit target_kind; the foreign keys keep the skill, its pinned version and any
+// stored target inside the link's project.
+func (q *Queries) UpsertMCPSkillLink(ctx context.Context, arg UpsertMCPSkillLinkParams) (McpSkillLink, error) {
+	row := q.db.QueryRow(ctx, upsertMCPSkillLink,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.SkillID,
+		arg.PinnedVersionID,
+		arg.TargetKind,
+		arg.McpServerID,
+		arg.MetaMcpServerID,
+		arg.CreatedByUserID,
+	)
+	var i McpSkillLink
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.SkillID,
+		&i.PinnedVersionID,
+		&i.TargetKind,
+		&i.McpServerID,
+		&i.MetaMcpServerID,
+		&i.CreatedByUserID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
 }

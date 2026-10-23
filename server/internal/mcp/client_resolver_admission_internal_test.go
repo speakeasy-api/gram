@@ -12,6 +12,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/assistants"
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	orgsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
@@ -76,7 +77,7 @@ func TestAdmitCIMDClient_PlatformAssistant(t *testing.T) {
 			McpServerID:          uuid.NullUUID{},
 			OrganizationID:       "org-cimd",
 			ProjectID:            project.ID,
-			RouteBase:            "mcp",
+			RouteBase:            mcproute.MCP,
 			Slug:                 "test",
 			ToolsetID:            uuid.NullUUID{},
 			UpstreamResource:     "",
@@ -155,7 +156,7 @@ func TestAdmitCIMDClient_PlatformAssistantOnPinnedOrigin(t *testing.T) {
 	svc.SetCallbackOrigins(remotesessions.CallbackOrigins{Outbound: outbound, Registration: nil})
 	endpoint := &ResolvedMcpEndpoint{
 		AudienceURN: "toolset:test", CIMDAdmissionModeRaw: conv.ToPGText(string(admission.ModePresets)), CustomDomainID: uuid.NullUUID{},
-		IsPublic: true, McpServerID: uuid.NullUUID{}, OrganizationID: "org-cimd", ProjectID: project.ID, RouteBase: "mcp", Slug: "test",
+		IsPublic: true, McpServerID: uuid.NullUUID{}, OrganizationID: "org-cimd", ProjectID: project.ID, RouteBase: mcproute.MCP, Slug: "test",
 		ToolsetID: uuid.NullUUID{}, UpstreamResource: "", UserSessionIssuerID: uuid.New(),
 	}
 

@@ -333,3 +333,37 @@ func TestResolveClientIdentity_DerivesDowngradedNegotiatedVersion(t *testing.T) 
 		})
 	}
 }
+
+// A gateway handshakes once under its own project but dispatches to members
+// that may sit in other projects. The record is keyed by (project, scope,
+// session), so a member dispatch must look it up under the gateway's project
+// or every cross-project member call loses the reported client name.
+func TestResolveClientIdentity_CrossProjectMemberFindsGatewayHandshake(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	logger := testenv.NewLogger(t)
+	store, gateway := newClientIdentityFixture(t)
+	scope := metaClientInfoScope(uuid.New())
+	gateway.clientInfoScope = scope
+
+	storeSessionClientInfo(ctx, logger, store, gateway, "gateway-client", "4.5.6", mcpversions.Version20250618)
+
+	member := *gateway
+	// The member's own project: what dispatch needs, and not where the
+	// handshake record lives. A gateway scope names one gateway uniquely, so
+	// the record is keyed without a project and the dispatch still finds it.
+	member.projectID = uuid.New()
+
+	identity, _ := resolveClientIdentity(ctx, logger, store, &member, nil)
+	require.Equal(t, "gateway-client", identity.Name)
+	require.Equal(t, "4.5.6", identity.Version)
+
+	// A hosted scope keys by project, so the same member project misses —
+	// which is what the gateway scope exists to avoid.
+	hosted := member
+	hosted.clientInfoScope = ""
+	hosted.toolset = "some-toolset"
+	missed, _ := resolveClientIdentity(ctx, logger, store, &hosted, nil)
+	require.Empty(t, missed.Name)
+}

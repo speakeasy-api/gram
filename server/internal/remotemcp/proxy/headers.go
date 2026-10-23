@@ -32,7 +32,8 @@ const (
 	//   - client headers: Speakeasy credentials, sessions, caller assertions and
 	//     tunnel transport fields ([IsProtectedInboundHeader]) are not copied
 	//     upstream;
-	//   - configured headers: may not read those headers as their source, may
+	//   - configured headers: may not read those headers, Authorization or
+	//     any other [IsDeniedPassThroughSource] header as their source, may
 	//     not set Set-Cookie/Proxy-Authorization or a request-sourced Cookie,
 	//     and are re-validated on every request (an invalid optional row is
 	//     dropped, an invalid required row fails the request with 400).
@@ -61,6 +62,11 @@ var ErrReservedHeader = errors.New("reserved header")
 // ErrProtectedSource reports a configured header that reads a protected inbound
 // header. It always accompanies [ErrReservedHeader].
 var ErrProtectedSource = errors.New("protected source")
+
+// ErrAuthorizationSource reports a configured header that reads the inbound
+// Authorization, which may carry the caller's credential to Speakeasy. It always accompanies
+// [ErrProtectedSource].
+var ErrAuthorizationSource = errors.New("authorization source")
 
 // ErrProtectedDestination reports a configured header that would send a
 // request-sourced value under a protected name. It always accompanies
@@ -123,8 +129,9 @@ const tunnelHeaderPrefix = "x-gram-tunnel-"
 // transport field. Under [HeaderPolicyRemote] such a header is never copied
 // upstream and never used as the source of a configured header.
 //
-// Authorization is not listed: the copy already drops it, and a configured
-// header may forward the caller's own upstream credential from it.
+// Authorization is not listed: the copy already drops it, a configured header
+// may still send an upstream credential under that name, and
+// [IsDeniedPassThroughSource] refuses it as a source.
 func IsProtectedInboundHeader(name string) bool {
 	if mcpauthz.ReservedHeader(name) {
 		return true
@@ -460,8 +467,11 @@ func isUnownedHeader(name string) bool {
 // [HeaderPolicyRemote]. Names are matched case-insensitively, with
 // underscores read as dashes.
 func CheckRemoteHeader(h ConfiguredHeader) error {
-	if h.ValueFromRequestHeader != "" && IsProtectedInboundHeader(h.ValueFromRequestHeader) {
-		return fmt.Errorf("%w: %w: %q cannot be forwarded to a remote MCP server", ErrReservedHeader, ErrProtectedSource, h.ValueFromRequestHeader)
+	if src := h.ValueFromRequestHeader; src != "" && (IsProtectedInboundHeader(src) || IsDeniedPassThroughSource(src)) {
+		if headerKey(src) == "authorization" {
+			return fmt.Errorf("%w: %w: %w: %q cannot be forwarded to a remote MCP server", ErrReservedHeader, ErrProtectedSource, ErrAuthorizationSource, src)
+		}
+		return fmt.Errorf("%w: %w: %q cannot be forwarded to a remote MCP server", ErrReservedHeader, ErrProtectedSource, src)
 	}
 	if isReservedRemoteDestination(h) {
 		return fmt.Errorf("%w: %q cannot be configured on a remote MCP server", ErrReservedHeader, h.Name)
@@ -532,6 +542,8 @@ func resolveRemoteHeader(h ConfiguredHeader, userReq *http.Request) (string, err
 // configured header that cannot be sent to a remote MCP server.
 func remoteHeaderFailureMessage(h ConfiguredHeader, err error) string {
 	switch {
+	case errors.Is(err, ErrAuthorizationSource):
+		return fmt.Sprintf("required header %q cannot read request header %q: it may carry the caller's Speakeasy credential, so it is never forwarded to remote MCP servers", h.Name, h.ValueFromRequestHeader)
 	case errors.Is(err, ErrProtectedSource):
 		return fmt.Sprintf("required header %q cannot read request header %q: Speakeasy credentials and cookies are never forwarded to remote MCP servers", h.Name, h.ValueFromRequestHeader)
 	case errors.Is(err, ErrProtectedDestination):

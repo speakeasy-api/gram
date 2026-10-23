@@ -12,8 +12,10 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { MemoryRouter } from "react-router";
+import { unrecognized } from "@gram/client/types/unrecognized.js";
 import type { MetaMcpServer } from "@gram/client/models/components/metamcpserver.js";
 import { NetworkAccessSection } from "@/pages/mcp/x/tabs/settings/sections/NetworkAccessSection";
+import directInstructions from "./builtin-gateway-direct-instructions.txt?raw";
 import builtInInstructions from "./builtin-gateway-instructions.txt?raw";
 
 const state = vi.hoisted(() => ({
@@ -47,6 +49,9 @@ vi.mock("@/components/require-scope", () => ({
     state.requireScope(props);
     return props.children;
   },
+}));
+vi.mock("./GatewayDiscoverySection", () => ({
+  GatewayDiscoverySection: () => null,
 }));
 vi.mock("@/routes", () => ({ useRoutes: vi.fn() }));
 vi.mock(
@@ -92,6 +97,7 @@ const server = {
   projectId: "project-test",
   name: "Gateway",
   instructions: "Original",
+  discoveryMode: "progressive",
 } as MetaMcpServer;
 const renderSection = (instructions = server.instructions) =>
   render(
@@ -198,7 +204,7 @@ describe("Gateway instructions", () => {
   });
 
   it.each([undefined, "", "Original"])(
-    "edits the actual instructions and saves without a mode (saved: %s)",
+    "edits instructions without changing discovery mode (saved: %s)",
     (instructions) => {
       render(
         <GatewayInstructionsSection
@@ -361,4 +367,110 @@ describe("Gateway instructions", () => {
     expect(textarea().value).toBe("Other");
     expect(save().disabled).toBe(true);
   });
+});
+
+it.each(["future_mode", "constructor", "__proto__"])(
+  "does not infer instructions for %s",
+  (mode) => {
+    render(
+      <GatewayInstructionsSection
+        metaMcpServer={{
+          ...server,
+          discoveryMode: unrecognized(mode),
+          instructions: undefined,
+        }}
+      />,
+    );
+    expect(textarea().value).toBe("");
+    expect(textarea().disabled).toBe(true);
+    expect(textarea().placeholder).toBe("Default instructions unavailable");
+    expect(screen.queryByText(/\/ 10,000 characters\./)).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: /Copy default instructions/i }),
+    ).toBeNull();
+    expect(
+      screen.getByText(
+        /Refresh the page to view or restore default instructions/,
+      ),
+    ).toBeTruthy();
+    fireEvent.change(textarea(), {
+      target: { value: "Cannot save inferred instructions" },
+    });
+    fireEvent.click(save());
+    expect(save().disabled).toBe(true);
+    expect(state.mutate).not.toHaveBeenCalled();
+  },
+);
+
+it("preserves explicit custom instructions for an unknown mode without inferring a reset", () => {
+  render(
+    <GatewayInstructionsSection
+      metaMcpServer={{ ...server, discoveryMode: unrecognized("future_mode") }}
+    />,
+  );
+  expect(textarea().value).toBe("Original");
+  expect(textarea().disabled).toBe(false);
+  expect(screen.getByText("8 / 10,000 characters.")).toBeTruthy();
+  expect(
+    screen.getByText(
+      /Refresh the page to view or restore default instructions/,
+    ),
+  ).toBeTruthy();
+  fireEvent.change(textarea(), {
+    target: { value: "Updated custom instructions" },
+  });
+  expect(screen.getByText("27 / 10,000 characters.")).toBeTruthy();
+  fireEvent.click(save());
+  expect(state.mutate).toHaveBeenCalledWith({
+    request: {
+      updateMetaMcpServerForm: {
+        id: server.id,
+        name: server.name,
+        userSessionIssuerId: undefined,
+        instructions: "Updated custom instructions",
+      },
+    },
+  });
+  state.mutate.mockClear();
+  for (const value of ["", " \0 ", "\0 \0"]) {
+    fireEvent.change(textarea(), { target: { value } });
+    expect(save().disabled).toBe(true);
+    fireEvent.click(save());
+    expect(state.mutate).not.toHaveBeenCalled();
+  }
+});
+
+it("uses the direct default instructions for direct discovery", () => {
+  render(
+    <GatewayInstructionsSection
+      metaMcpServer={{
+        ...server,
+        discoveryMode: "direct",
+        instructions: undefined,
+      }}
+    />,
+  );
+  expect(textarea().value).toBe(directInstructions.trimEnd());
+  expect(save().disabled).toBe(true);
+});
+
+it("discards an inferred draft after the current mode becomes unknown", () => {
+  const { rerender } = renderSection("");
+  fireEvent.change(textarea(), {
+    target: { value: "Draft built from progressive instructions" },
+  });
+  rerender(
+    <GatewayInstructionsSection
+      metaMcpServer={{
+        ...server,
+        discoveryMode: unrecognized("future_mode"),
+        instructions: undefined,
+      }}
+    />,
+  );
+  expect(textarea().value).toBe("");
+  expect(textarea().disabled).toBe(true);
+  expect(save().disabled).toBe(true);
+  fireEvent.click(save());
+  expect(state.mutate).not.toHaveBeenCalled();
 });

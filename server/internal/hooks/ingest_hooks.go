@@ -23,6 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/hookevents"
 	"github.com/speakeasy-api/gram/server/internal/hooks/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpskills"
 	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -47,6 +48,8 @@ type AuthenticatedIngestOptions struct {
 	// the policies for the event type. It applies also when boundaryScans is empty.
 	contentBoundary bool
 	boundaryScans   []ahpBoundaryScan
+	// promptPolicyText overrides prompt evidence without changing transcript capture.
+	promptPolicyText *string
 	// ObserveOnly records the event without evaluating enforcement, for
 	// events the sender cannot block.
 	ObserveOnly                  bool
@@ -74,6 +77,7 @@ func defaultAuthenticatedIngestOptions() AuthenticatedIngestOptions {
 	return AuthenticatedIngestOptions{
 		contentBoundary:              false,
 		boundaryScans:                nil,
+		promptPolicyText:             nil,
 		ObserveOnly:                  false,
 		AllowWarnAcknowledgement:     true,
 		AllowSessionIdentityFallback: true,
@@ -139,6 +143,7 @@ func (s *Service) IngestAuthenticatedDetailed(ctx context.Context, authCtx *cont
 	authCopy.ProjectID = &projectID
 	payloadCopy := *payload
 	payloadCopy.ApikeyToken = nil
+	payloadCopy.DeviceAgentToken = nil
 	payloadCopy.ProjectSlugInput = nil
 	options.SourceAttributes = maps.Clone(options.SourceAttributes)
 	options.OutputToolCalls = append([]any(nil), options.OutputToolCalls...)
@@ -183,7 +188,7 @@ func (s *Service) ingest(ctx context.Context, payload *gen.IngestPayload) (res *
 		if res != nil && res.Result != nil {
 			decision = res.Result.Decision
 		}
-		s.metrics.RecordHookEventDuration(ctx, source, eventType, outcome, decision, orgSlug, *riskScanned, time.Since(start))
+		s.metrics.RecordHookEventDuration(ctx, source, eventType, outcome, decision, orgSlug, riskScanned.Load(), time.Since(start))
 	}()
 
 	if err := validateCanonicalIngestPayload(payload); err != nil {
@@ -191,7 +196,14 @@ func (s *Service) ingest(ctx context.Context, payload *gen.IngestPayload) (res *
 	}
 	source = strings.TrimSpace(payload.Source.Adapter)
 	eventType = strings.TrimSpace(payload.Event.Type)
-	if apikey := strings.TrimSpace(conv.PtrValOr(payload.ApikeyToken, "")); apikey != "" {
+	if token := pluginDeviceAgentToken(payload.DeviceAgentToken); token != "" {
+		authedCtx, err := s.authorizeWorkloadPluginRequest(ctx, token, strings.TrimSpace(conv.PtrValOr(payload.ProjectSlugInput, "")))
+		if err != nil {
+			outcome = hookMetricOutcomeUnauthorized
+			return nil, workloadHookAuthError(err)
+		}
+		ctx = authedCtx
+	} else if apikey := strings.TrimSpace(conv.PtrValOr(payload.ApikeyToken, "")); apikey != "" {
 		authedCtx, err := s.authorizePluginRequest(ctx, apikey, strings.TrimSpace(conv.PtrValOr(payload.ProjectSlugInput, "")))
 		if err != nil {
 			outcome = hookMetricOutcomeUnauthorized
@@ -556,11 +568,17 @@ func validateCanonicalIngestPayload(payload *gen.IngestPayload) error {
 	if adapter == "" {
 		return oops.E(oops.CodeInvalid, nil, "source.adapter is required")
 	}
-	// The assistant surface is derived from the observation provider, and only
-	// server-side assistant runs may claim it. Reserve those values so a client
-	// hook cannot forge assistant-attributed skill activity.
-	if isReservedAssistantAdapter(adapter) {
+	// The assistant and MCP surfaces are derived from the observation provider,
+	// and only server-side assistant runs and hosted MCP reads may claim them.
+	// Reserve those values so a client hook cannot forge assistant-attributed
+	// skill activity or an MCP load.
+	if isReservedServerAdapter(adapter) {
 		return oops.E(oops.CodeInvalid, nil, "source.adapter is reserved")
+	}
+	// Hosted MCP reads dedupe on keys with this prefix. A hook claiming one
+	// first would make the real read a silent duplicate.
+	if strings.HasPrefix(strings.TrimSpace(conv.PtrValOr(payload.IdempotencyKey, "")), mcpskills.IdempotencyKeyPrefix) {
+		return oops.E(oops.CodeInvalid, nil, "idempotency_key prefix is reserved")
 	}
 	if strings.TrimSpace(payload.Event.Type) == "" {
 		return oops.E(oops.CodeInvalid, nil, "event.type is required")
@@ -571,9 +589,9 @@ func validateCanonicalIngestPayload(payload *gen.IngestPayload) error {
 	return nil
 }
 
-func isReservedAssistantAdapter(adapter string) bool {
+func isReservedServerAdapter(adapter string) bool {
 	switch strings.ToLower(strings.Join(strings.Fields(adapter), "")) {
-	case "assistant", "assistants":
+	case "assistant", "assistants", mcpskills.ObservationProvider:
 		return true
 	default:
 		return false
@@ -635,7 +653,7 @@ func (s *Service) evaluateCanonicalHook(ctx context.Context, payload *gen.Ingest
 	switch eventType {
 	case "prompt.submitted":
 		ev := hookevents.NewUserPromptSubmit(event, hookevents.UserPromptSubmitParams{
-			Prompt: canonicalPromptText(payload),
+			Prompt: conv.PtrValOr(opts.promptPolicyText, canonicalPromptText(payload)),
 		})
 		if scanResult := s.scanUserPromptForEnforcement(ctx, ev); scanResult != nil {
 			if scanResult.Action == "quarantine" {
@@ -1895,7 +1913,12 @@ func (s *Service) persistPromptAttachments(ctx context.Context, payload *gen.Ing
 		if err != nil {
 			return fmt.Errorf("marshal prompt attachment metadata: %w", err)
 		}
-		parentID := parentResolver.resolve(promptSHA256)
+		parentID := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+		// AHP attachment-only messages have no prompt parent. The latest user
+		// row belongs to an earlier event, unlike transcript attachment fallback.
+		if promptSHA256 != "" || !strings.HasPrefix(attachment.EntryUUID, "ahp-attachment:") {
+			parentID = parentResolver.resolve(promptSHA256)
+		}
 		pending = append(pending, pendingPromptAttachment{
 			attachment: attachment,
 			content:    []byte(attachment.Content),

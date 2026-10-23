@@ -1,5 +1,13 @@
 # admin
 
+## 0.9.3
+
+### Patch Changes
+
+- 23b1010: Add a guarded staff Admin MCP proposal for adding a new MCP server to the registry, with schema validation, a full-record approval preview, duplicate-name checks at prepare, approval and execution, and a receipt that commits with the entry. Drop the outdated note that customer catalog reads still use Pulse from the admin registry pages.
+- 27d5b6c: The MCP server health page's copied investigation prompt now tells ForgeBot to use the Speakeasy Admin MCP server.
+- 56ac009: Add "Open in Stripe" links beside the Stripe customer ID and Stripe subscription ID on the admin organization record. They point at the live or test Stripe dashboard to match the admin API's Stripe key, and are hidden when no Stripe key is configured.
+
 ## 0.9.2
 
 ### Patch Changes

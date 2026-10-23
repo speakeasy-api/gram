@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
@@ -13,25 +14,17 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	environments_repo "github.com/speakeasy-api/gram/server/internal/environments/repo"
-	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/hostedmcp"
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/networkaccess"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/remotemcp/remotemcptest"
+	remotemcp_repo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
-
-// newServerKeyMCPMetadataService saves with the server-key rollout on (phase B).
-func newServerKeyMCPMetadataService(t *testing.T) (context.Context, *testInstance) {
-	t.Helper()
-	ctx, ti := newTestMCPMetadataService(t)
-	flags := &feature.InMemory{}
-	flags.SetFlag(feature.FlagHostedMCPServerKeyWrites, feature.AnyDistinctID, true)
-	ti.service.WithFeatureProvider(flags)
-	return ctx, ti
-}
 
 func createHostedToolset(t *testing.T, ctx context.Context, ti *testInstance, slug string) toolsets_repo.Toolset {
 	t.Helper()
@@ -68,11 +61,18 @@ func createCanonicalWrapper(t *testing.T, ctx context.Context, ti *testInstance,
 		RemoteMcpServerID:   uuid.NullUUID{},
 		TunneledMcpServerID: uuid.NullUUID{},
 		ToolsetID:           uuid.NullUUID{UUID: toolset.ID, Valid: true},
-		Visibility:          mcpservers.VisibilityPrivate,
+		Visibility:          hostedmcp.Visibility(toolset),
 		NetworkAccessMode:   networkaccess.Storage(networkaccess.ModePublicOnly),
 	})
 	require.NoError(t, err)
 	return server
+}
+
+// syncWrapperVisibility mirrors a toolset's MCP flags onto its canonical wrapper, as hosted Sync does.
+func syncWrapperVisibility(t *testing.T, ctx context.Context, ti *testInstance, toolset toolsets_repo.Toolset) {
+	t.Helper()
+
+	require.NoError(t, testrepo.New(ti.conn).SetMCPServerVisibilityFixture(ctx, testrepo.SetMCPServerVisibilityFixtureParams{Visibility: hostedmcp.Visibility(toolset), ID: toolset.ID, ProjectID: toolset.ProjectID}))
 }
 
 // rekeyToServer moves a toolset-keyed row onto its canonical wrapper, as the dependent move does.
@@ -109,33 +109,30 @@ func setBySlug(t *testing.T, ctx context.Context, ti *testInstance, toolset tool
 	return row
 }
 
-// seedToolsetKeyedRow writes the row shape phase A saves left behind.
-func seedToolsetKeyedRow(t *testing.T, ctx context.Context, ti *testInstance, toolset toolsets_repo.Toolset, instructions string, defaultEnv uuid.NullUUID, variables ...string) repo.McpMetadatum {
+// seedToolsetKeyedRow writes the row shape pods from before the server-key writers left behind.
+func seedToolsetKeyedRow(t *testing.T, ctx context.Context, ti *testInstance, toolset toolsets_repo.Toolset, instructions string, defaultEnv uuid.NullUUID, variables ...string) uuid.UUID {
 	t.Helper()
 
-	queries := repo.New(ti.conn)
-	row, err := queries.UpsertMetadata(ctx, repo.UpsertMetadataParams{
-		ToolsetID:                 uuid.NullUUID{UUID: toolset.ID, Valid: true},
-		ProjectID:                 toolset.ProjectID,
-		ExternalDocumentationUrl:  pgtype.Text{String: "", Valid: false},
-		ExternalDocumentationText: pgtype.Text{String: "", Valid: false},
-		LogoID:                    uuid.NullUUID{},
-		Instructions:              conv.ToPGText(instructions),
-		DefaultEnvironmentID:      defaultEnv,
-		InstallationOverrideUrl:   pgtype.Text{String: "", Valid: false},
+	id, err := testrepo.New(ti.conn).InsertToolsetKeyedMcpMetadataFixture(ctx, testrepo.InsertToolsetKeyedMcpMetadataFixtureParams{
+		ToolsetID:            uuid.NullUUID{UUID: toolset.ID, Valid: true},
+		ProjectID:            toolset.ProjectID,
+		Instructions:         conv.ToPGText(instructions),
+		HeaderDisplayNames:   []byte(`{}`),
+		DefaultEnvironmentID: defaultEnv,
 	})
 	require.NoError(t, err)
+	queries := repo.New(ti.conn)
 	for _, variable := range variables {
 		_, err := queries.UpsertEnvironmentConfig(ctx, repo.UpsertEnvironmentConfigParams{
 			ProjectID:         toolset.ProjectID,
-			McpMetadataID:     row.ID,
+			McpMetadataID:     id,
 			VariableName:      variable,
 			HeaderDisplayName: conv.ToPGText("API Key"),
 			ProvidedBy:        "user",
 		})
 		require.NoError(t, err)
 	}
-	return row
+	return id
 }
 
 // seedServerKeyedTwin writes a server-keyed row beside a toolset-keyed one, as a rolling deploy can.
@@ -195,7 +192,7 @@ func createEnvironment(t *testing.T, ctx context.Context, ti *testInstance, slug
 func TestSetMcpMetadata_NewRowsUseTheServerKey(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti := newServerKeyMCPMetadataService(t)
+	ctx, ti := newTestMCPMetadataService(t)
 	bySlug := createHostedToolset(t, ctx, ti, "hosted-new-slug")
 	createCanonicalWrapper(t, ctx, ti, bySlug)
 	byServer := createHostedToolset(t, ctx, ti, "hosted-new-server")
@@ -209,17 +206,16 @@ func TestSetMcpMetadata_NewRowsUseTheServerKey(t *testing.T) {
 	require.NoError(t, err)
 	requireHostedIDs(t, ctx, ti, serverRow, byServer.ID, true)
 
-	// A toolset without a canonical wrapper keeps the toolset key.
-	legacyRow := setBySlug(t, ctx, ti, unwrapped, &gen.SetMcpMetadataPayload{Instructions: new("hello")})
-	require.NotNil(t, legacyRow.ToolsetID)
-	require.Equal(t, unwrapped.ID.String(), *legacyRow.ToolsetID)
-	require.Nil(t, legacyRow.McpServerID)
+	// A toolset without a canonical wrapper has nothing to key the row on.
+	_, err = ti.service.SetMcpMetadata(ctx, &gen.SetMcpMetadataPayload{ToolsetSlug: new(types.Slug(unwrapped.Slug)), Instructions: new("hello")})
+	requireOopsCode(t, err, oops.CodeBadRequest)
+	require.ErrorContains(t, err, hostedmcp.NoServerMessage)
 }
 
 func TestSetMcpMetadata_RekeysToolsetRowInPlace(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti := newServerKeyMCPMetadataService(t)
+	ctx, ti := newTestMCPMetadataService(t)
 	env := createEnvironment(t, ctx, ti, "rekey-env")
 	defaultEnv := uuid.NullUUID{UUID: env.ID, Valid: true}
 
@@ -231,7 +227,7 @@ func TestSetMcpMetadata_RekeysToolsetRowInPlace(t *testing.T) {
 			legacy := seedToolsetKeyedRow(t, ctx, ti, toolset, "before", defaultEnv, "API_KEY")
 			rows, err := testrepo.New(ti.conn).SetMcpMetadataHeaderDisplayNamesFixture(ctx, testrepo.SetMcpMetadataHeaderDisplayNamesFixtureParams{
 				HeaderDisplayNames: []byte(`{"OTHER_KEY":"Alias-Key"}`),
-				ID:                 legacy.ID,
+				ID:                 legacy,
 				ProjectID:          toolset.ProjectID,
 			})
 			require.NoError(t, err)
@@ -249,7 +245,7 @@ func TestSetMcpMetadata_RekeysToolsetRowInPlace(t *testing.T) {
 			saved, err := ti.service.SetMcpMetadata(ctx, payload)
 			require.NoError(t, err)
 
-			require.Equal(t, legacy.ID.String(), saved.ID, "same row, re-keyed in place")
+			require.Equal(t, legacy.String(), saved.ID, "same row, re-keyed in place")
 			requireHostedIDs(t, ctx, ti, saved, toolset.ID, true)
 			require.NotNil(t, saved.DefaultEnvironmentID)
 			require.Equal(t, env.ID.String(), *saved.DefaultEnvironmentID)
@@ -280,7 +276,7 @@ func TestSetMcpMetadata_RekeysToolsetRowInPlace(t *testing.T) {
 func TestSetMcpMetadata_ServerKeyedRow(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti := newServerKeyMCPMetadataService(t)
+	ctx, ti := newTestMCPMetadataService(t)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
@@ -290,7 +286,7 @@ func TestSetMcpMetadata_ServerKeyedRow(t *testing.T) {
 	legacy := seedToolsetKeyedRow(t, ctx, ti, toolset, "before", uuid.NullUUID{}, "API_KEY")
 	original, err := ti.service.GetMcpMetadata(ctx, &gen.GetMcpMetadataPayload{ToolsetSlug: new(types.Slug(toolset.Slug))})
 	require.NoError(t, err)
-	require.Equal(t, legacy.ID.String(), original.Metadata.ID)
+	require.Equal(t, legacy.String(), original.Metadata.ID)
 	rekeyToServer(t, ctx, ti, toolset)
 
 	for _, payload := range []*gen.GetMcpMetadataPayload{
@@ -307,7 +303,7 @@ func TestSetMcpMetadata_ServerKeyedRow(t *testing.T) {
 
 	// Runtime readers keyed by toolset id find the server-keyed row.
 	queries := repo.New(ti.conn)
-	row, err := queries.GetMetadataByBackendID(ctx, repo.GetMetadataByBackendIDParams{ProjectID: *authCtx.ProjectID, BackendID: toolset.ID})
+	row, err := queries.GetMetadataByBackendID(ctx, repo.GetMetadataByBackendIDParams{ProjectID: *authCtx.ProjectID, BackendID: toolset.ID, ToolsetBackend: true})
 	require.NoError(t, err)
 	require.Equal(t, original.Metadata.ID, row.ID.String())
 	_, err = queries.GetHeaderDisplayNames(ctx, repo.GetHeaderDisplayNamesParams{ProjectID: *authCtx.ProjectID, BackendID: toolset.ID})
@@ -365,7 +361,7 @@ func TestSetMcpMetadata_ServerKeyedRow(t *testing.T) {
 func TestSetMcpMetadata_CollapsesTwinKeepingToolsetRow(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti := newServerKeyMCPMetadataService(t)
+	ctx, ti := newTestMCPMetadataService(t)
 	for name, viaServer := range map[string]bool{"slug": false, "server": true} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
@@ -380,7 +376,7 @@ func TestSetMcpMetadata_CollapsesTwinKeepingToolsetRow(t *testing.T) {
 			} {
 				got, err := ti.service.GetMcpMetadata(ctx, payload)
 				require.NoError(t, err)
-				require.Equal(t, toolsetRow.ID.String(), got.Metadata.ID)
+				require.Equal(t, toolsetRow.String(), got.Metadata.ID)
 			}
 
 			payload := &gen.SetMcpMetadataPayload{Instructions: new("updated")}
@@ -391,7 +387,7 @@ func TestSetMcpMetadata_CollapsesTwinKeepingToolsetRow(t *testing.T) {
 			}
 			updated, err := ti.service.SetMcpMetadata(ctx, payload)
 			require.NoError(t, err)
-			require.Equal(t, toolsetRow.ID.String(), updated.ID)
+			require.Equal(t, toolsetRow.String(), updated.ID)
 			requireHostedIDs(t, ctx, ti, updated, toolset.ID, true)
 			require.Len(t, updated.EnvironmentConfigs, 1)
 			require.Equal(t, "TOOLSET_KEY", updated.EnvironmentConfigs[0].VariableName)
@@ -403,7 +399,7 @@ func TestSetMcpMetadata_CollapsesTwinKeepingToolsetRow(t *testing.T) {
 func TestExportMcpMetadata_ByMcpServerID(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti := newServerKeyMCPMetadataService(t)
+	ctx, ti := newTestMCPMetadataService(t)
 	toolset := createHostedToolset(t, ctx, ti, "hosted-export")
 	createCanonicalWrapper(t, ctx, ti, toolset)
 
@@ -438,7 +434,7 @@ func TestExportMcpMetadata_ByMcpServerID(t *testing.T) {
 func TestHeaderDisplayNames_PreferToolsetKeyedTwin(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti := newServerKeyMCPMetadataService(t)
+	ctx, ti := newTestMCPMetadataService(t)
 	toolset := createHostedToolset(t, ctx, ti, "hosted-twin-names")
 	createCanonicalWrapper(t, ctx, ti, toolset)
 	toolsetRow := seedToolsetKeyedRow(t, ctx, ti, toolset, "toolset", uuid.NullUUID{})
@@ -458,8 +454,8 @@ func TestHeaderDisplayNames_PreferToolsetKeyedTwin(t *testing.T) {
 
 	fixtures := testrepo.New(ti.conn)
 	for id, names := range map[string]string{
-		toolsetRow.ID.String(): `{"API_KEY":"X-Toolset"}`,
-		serverRow.ID.String():  `{"API_KEY":"X-Server"}`,
+		toolsetRow.String():   `{"API_KEY":"X-Toolset"}`,
+		serverRow.ID.String(): `{"API_KEY":"X-Server"}`,
 	} {
 		rows, err := fixtures.SetMcpMetadataHeaderDisplayNamesFixture(ctx, testrepo.SetMcpMetadataHeaderDisplayNamesFixtureParams{
 			HeaderDisplayNames: []byte(names),
@@ -485,14 +481,14 @@ func TestHeaderDisplayNames_PreferToolsetKeyedTwin(t *testing.T) {
 func TestSetMcpMetadata_ServerKeyedSaveKeepsHeaderAliases(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti := newServerKeyMCPMetadataService(t)
+	ctx, ti := newTestMCPMetadataService(t)
 	toolset := createHostedToolset(t, ctx, ti, "hosted-save-aliases")
 	createCanonicalWrapper(t, ctx, ti, toolset)
 	original := seedToolsetKeyedRow(t, ctx, ti, toolset, "before", uuid.NullUUID{})
 
 	rows, err := testrepo.New(ti.conn).SetMcpMetadataHeaderDisplayNamesFixture(ctx, testrepo.SetMcpMetadataHeaderDisplayNamesFixtureParams{
 		HeaderDisplayNames: []byte(`{"API_KEY":"Alias-Key"}`),
-		ID:                 original.ID,
+		ID:                 original,
 		ProjectID:          toolset.ProjectID,
 	})
 	require.NoError(t, err)
@@ -500,7 +496,7 @@ func TestSetMcpMetadata_ServerKeyedSaveKeepsHeaderAliases(t *testing.T) {
 	rekeyToServer(t, ctx, ti, toolset)
 
 	viaSlug := setBySlug(t, ctx, ti, toolset, &gen.SetMcpMetadataPayload{Instructions: new("after")})
-	require.Equal(t, original.ID.String(), viaSlug.ID)
+	require.Equal(t, original.String(), viaSlug.ID)
 	requireHostedIDs(t, ctx, ti, viaSlug, toolset.ID, true)
 
 	queries := repo.New(ti.conn)
@@ -508,4 +504,73 @@ func TestSetMcpMetadata_ServerKeyedSaveKeepsHeaderAliases(t *testing.T) {
 	require.NoError(t, err)
 	require.JSONEq(t, `{"API_KEY":"Alias-Key"}`, string(after))
 	requireSingleMetadataRow(t, ctx, ti, toolset.ID)
+}
+
+// A toolset's id held by a server that is not its canonical wrapper (remote-backed after an in-place switch, or a
+// fresh-id wrapper) is that server's metadata, never the toolset's; the server still reads its own row.
+func TestMcpMetadata_ToolsetIgnoresNonCanonicalServerHoldingItsID(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPMetadataService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	remote := remotemcptest.SeedServer(t, ctx, ti.conn, remotemcp_repo.CreateServerParams{
+		ProjectID:     *authCtx.ProjectID,
+		TransportType: "streamable-http",
+		Url:           "https://upstream.example.com/mcp",
+	})
+	other := createHostedToolset(t, ctx, ti, "held-id-other")
+	for name, backend := range map[string]mcpservers_repo.CreateMCPServerParams{
+		"remote-backed": {RemoteMcpServerID: uuid.NullUUID{UUID: remote.ID, Valid: true}},
+		"other toolset": {ToolsetID: uuid.NullUUID{UUID: other.ID, Valid: true}},
+	} {
+		toolset := createHostedToolset(t, ctx, ti, "held-id-"+uuid.NewString()[:8])
+		_, err := mcpservers_repo.New(ti.conn).CreateMCPServer(ctx, mcpservers_repo.CreateMCPServerParams{
+			ID:                  toolset.ID,
+			ProjectID:           toolset.ProjectID,
+			Name:                conv.ToPGText("Held id"),
+			Slug:                conv.ToPGText("held-id-" + uuid.NewString()[:8]),
+			EnvironmentID:       uuid.NullUUID{},
+			UserSessionIssuerID: uuid.NullUUID{},
+			RemoteMcpServerID:   backend.RemoteMcpServerID,
+			TunneledMcpServerID: uuid.NullUUID{},
+			ToolsetID:           backend.ToolsetID,
+			Visibility:          mcpservers.VisibilityPrivate,
+			NetworkAccessMode:   networkaccess.Storage(networkaccess.ModePublicOnly),
+		})
+		require.NoError(t, err, name)
+		saved, err := ti.service.SetMcpMetadata(ctx, &gen.SetMcpMetadataPayload{McpServerID: new(toolset.ID.String()), Instructions: new("server")})
+		require.NoError(t, err, name)
+		rows, err := testrepo.New(ti.conn).SetMcpMetadataHeaderDisplayNamesFixture(ctx, testrepo.SetMcpMetadataHeaderDisplayNamesFixtureParams{
+			HeaderDisplayNames: []byte(`{"API_KEY":"X-Server"}`), ID: uuid.MustParse(saved.ID), ProjectID: toolset.ProjectID,
+		})
+		require.NoError(t, err, name)
+		require.EqualValues(t, 1, rows, name)
+
+		queries := repo.New(ti.conn)
+		_, err = queries.GetMetadataByBackendID(ctx, repo.GetMetadataByBackendIDParams{ProjectID: toolset.ProjectID, BackendID: toolset.ID, ToolsetBackend: true})
+		require.ErrorIs(t, err, pgx.ErrNoRows, name)
+		_, err = queries.GetHeaderDisplayNames(ctx, repo.GetHeaderDisplayNamesParams{ProjectID: toolset.ProjectID, BackendID: toolset.ID})
+		require.ErrorIs(t, err, pgx.ErrNoRows, name)
+		names, err := queries.GetHeaderDisplayNamesByToolsetIDs(ctx, repo.GetHeaderDisplayNamesByToolsetIDsParams{ProjectID: toolset.ProjectID, ToolsetIds: []uuid.UUID{toolset.ID}})
+		require.NoError(t, err, name)
+		require.Empty(t, names, name)
+		_, err = ti.service.GetMcpMetadata(ctx, &gen.GetMcpMetadataPayload{ToolsetSlug: new(types.Slug(toolset.Slug))})
+		requireOopsCode(t, err, oops.CodeNotFound)
+		_, err = ti.service.SetMcpMetadata(ctx, &gen.SetMcpMetadataPayload{ToolsetSlug: new(types.Slug(toolset.Slug)), Instructions: new("toolset")})
+		requireOopsCode(t, err, oops.CodeBadRequest)
+
+		got, err := ti.service.GetMcpMetadata(ctx, &gen.GetMcpMetadataPayload{McpServerID: new(toolset.ID.String())})
+		require.NoError(t, err, name)
+		require.Equal(t, saved.ID, got.Metadata.ID, name)
+		require.Equal(t, "server", *got.Metadata.Instructions, name)
+
+		// A toolset-keyed row of the toolset never reaches the server either.
+		seedToolsetKeyedRow(t, ctx, ti, toolset, "toolset", uuid.NullUUID{})
+		got, err = ti.service.GetMcpMetadata(ctx, &gen.GetMcpMetadataPayload{McpServerID: new(toolset.ID.String())})
+		require.NoError(t, err, name)
+		require.Equal(t, saved.ID, got.Metadata.ID, name)
+	}
 }

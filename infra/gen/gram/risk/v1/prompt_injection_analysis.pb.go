@@ -48,6 +48,7 @@ type PromptInjectionAnalysis struct {
 	xxx_hidden_HookSource              *string                              `protobuf:"bytes,23,opt,name=hook_source,json=hookSource"`
 	xxx_hidden_PolicyLinkReason        *string                              `protobuf:"bytes,26,opt,name=policy_link_reason,json=policyLinkReason"`
 	xxx_hidden_ExternalConversationId  *string                              `protobuf:"bytes,27,opt,name=external_conversation_id,json=externalConversationId"`
+	xxx_hidden_RunJudge                bool                                 `protobuf:"varint,28,opt,name=run_judge,json=runJudge"`
 	xxx_hidden_PriorUserRequest        *string                              `protobuf:"bytes,16,opt,name=prior_user_request,json=priorUserRequest"`
 	xxx_hidden_RecentUntrustedContent  *string                              `protobuf:"bytes,17,opt,name=recent_untrusted_content,json=recentUntrustedContent"`
 	XXX_raceDetectHookData             protoimpl.RaceDetectHookData
@@ -321,6 +322,13 @@ func (x *PromptInjectionAnalysis) GetExternalConversationId() string {
 	return ""
 }
 
+func (x *PromptInjectionAnalysis) GetRunJudge() bool {
+	if x != nil {
+		return x.xxx_hidden_RunJudge
+	}
+	return false
+}
+
 func (x *PromptInjectionAnalysis) GetPriorUserRequest() string {
 	if x != nil {
 		if x.xxx_hidden_PriorUserRequest != nil {
@@ -343,67 +351,67 @@ func (x *PromptInjectionAnalysis) GetRecentUntrustedContent() string {
 
 func (x *PromptInjectionAnalysis) SetRequestId(v string) {
 	x.xxx_hidden_RequestId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 0, 27)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 0, 28)
 }
 
 func (x *PromptInjectionAnalysis) SetChatMessageId(v string) {
 	x.xxx_hidden_ChatMessageId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 1, 27)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 1, 28)
 }
 
 func (x *PromptInjectionAnalysis) SetProjectId(v string) {
 	x.xxx_hidden_ProjectId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 2, 27)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 2, 28)
 }
 
 func (x *PromptInjectionAnalysis) SetOrganizationId(v string) {
 	x.xxx_hidden_OrganizationId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 3, 27)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 3, 28)
 }
 
 func (x *PromptInjectionAnalysis) SetRiskPolicyId(v string) {
 	x.xxx_hidden_RiskPolicyId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 4, 27)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 4, 28)
 }
 
 func (x *PromptInjectionAnalysis) SetRiskPolicyVersion(v int64) {
 	x.xxx_hidden_RiskPolicyVersion = v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 5, 27)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 5, 28)
 }
 
 func (x *PromptInjectionAnalysis) SetCreatedAt(v string) {
 	x.xxx_hidden_CreatedAt = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 6, 27)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 6, 28)
 }
 
 func (x *PromptInjectionAnalysis) SetContent(v string) {
 	x.xxx_hidden_Content = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 7, 27)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 7, 28)
 }
 
 func (x *PromptInjectionAnalysis) SetUserId(v string) {
 	x.xxx_hidden_UserId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 8, 27)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 8, 28)
 }
 
 func (x *PromptInjectionAnalysis) SetL1Enabled(v bool) {
 	x.xxx_hidden_L1Enabled = v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 9, 27)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 9, 28)
 }
 
 func (x *PromptInjectionAnalysis) SetMessageType(v string) {
 	x.xxx_hidden_MessageType = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 10, 27)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 10, 28)
 }
 
 func (x *PromptInjectionAnalysis) SetBody(v string) {
 	x.xxx_hidden_Body = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 11, 27)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 11, 28)
 }
 
 func (x *PromptInjectionAnalysis) SetToolName(v string) {
 	x.xxx_hidden_ToolName = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 12, 27)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 12, 28)
 }
 
 func (x *PromptInjectionAnalysis) SetToolCalls(v []*PromptInjectionAnalysis_ToolCall) {
@@ -412,67 +420,72 @@ func (x *PromptInjectionAnalysis) SetToolCalls(v []*PromptInjectionAnalysis_Tool
 
 func (x *PromptInjectionAnalysis) SetContentPartId(v string) {
 	x.xxx_hidden_ContentPartId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 14, 27)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 14, 28)
 }
 
 func (x *PromptInjectionAnalysis) SetChatId(v string) {
 	x.xxx_hidden_ChatId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 15, 27)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 15, 28)
 }
 
 func (x *PromptInjectionAnalysis) SetParentChatMessageId(v string) {
 	x.xxx_hidden_ParentChatMessageId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 16, 27)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 16, 28)
 }
 
 func (x *PromptInjectionAnalysis) SetOriginRiskPolicyId(v string) {
 	x.xxx_hidden_OriginRiskPolicyId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 17, 27)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 17, 28)
 }
 
 func (x *PromptInjectionAnalysis) SetOriginRiskPolicyVersion(v int64) {
 	x.xxx_hidden_OriginRiskPolicyVersion = v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 18, 27)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 18, 28)
 }
 
 func (x *PromptInjectionAnalysis) SetMessageLinkReason(v string) {
 	x.xxx_hidden_MessageLinkReason = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 19, 27)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 19, 28)
 }
 
 func (x *PromptInjectionAnalysis) SetExecutionPath(v string) {
 	x.xxx_hidden_ExecutionPath = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 20, 27)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 20, 28)
 }
 
 func (x *PromptInjectionAnalysis) SetToolCallId(v string) {
 	x.xxx_hidden_ToolCallId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 21, 27)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 21, 28)
 }
 
 func (x *PromptInjectionAnalysis) SetHookSource(v string) {
 	x.xxx_hidden_HookSource = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 22, 27)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 22, 28)
 }
 
 func (x *PromptInjectionAnalysis) SetPolicyLinkReason(v string) {
 	x.xxx_hidden_PolicyLinkReason = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 23, 27)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 23, 28)
 }
 
 func (x *PromptInjectionAnalysis) SetExternalConversationId(v string) {
 	x.xxx_hidden_ExternalConversationId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 24, 27)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 24, 28)
+}
+
+func (x *PromptInjectionAnalysis) SetRunJudge(v bool) {
+	x.xxx_hidden_RunJudge = v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 25, 28)
 }
 
 func (x *PromptInjectionAnalysis) SetPriorUserRequest(v string) {
 	x.xxx_hidden_PriorUserRequest = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 25, 27)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 26, 28)
 }
 
 func (x *PromptInjectionAnalysis) SetRecentUntrustedContent(v string) {
 	x.xxx_hidden_RecentUntrustedContent = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 26, 27)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 27, 28)
 }
 
 func (x *PromptInjectionAnalysis) HasRequestId() bool {
@@ -643,18 +656,25 @@ func (x *PromptInjectionAnalysis) HasExternalConversationId() bool {
 	return protoimpl.X.Present(&(x.XXX_presence[0]), 24)
 }
 
-func (x *PromptInjectionAnalysis) HasPriorUserRequest() bool {
+func (x *PromptInjectionAnalysis) HasRunJudge() bool {
 	if x == nil {
 		return false
 	}
 	return protoimpl.X.Present(&(x.XXX_presence[0]), 25)
 }
 
-func (x *PromptInjectionAnalysis) HasRecentUntrustedContent() bool {
+func (x *PromptInjectionAnalysis) HasPriorUserRequest() bool {
 	if x == nil {
 		return false
 	}
 	return protoimpl.X.Present(&(x.XXX_presence[0]), 26)
+}
+
+func (x *PromptInjectionAnalysis) HasRecentUntrustedContent() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 27)
 }
 
 func (x *PromptInjectionAnalysis) ClearRequestId() {
@@ -777,13 +797,18 @@ func (x *PromptInjectionAnalysis) ClearExternalConversationId() {
 	x.xxx_hidden_ExternalConversationId = nil
 }
 
-func (x *PromptInjectionAnalysis) ClearPriorUserRequest() {
+func (x *PromptInjectionAnalysis) ClearRunJudge() {
 	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 25)
+	x.xxx_hidden_RunJudge = false
+}
+
+func (x *PromptInjectionAnalysis) ClearPriorUserRequest() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 26)
 	x.xxx_hidden_PriorUserRequest = nil
 }
 
 func (x *PromptInjectionAnalysis) ClearRecentUntrustedContent() {
-	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 26)
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 27)
 	x.xxx_hidden_RecentUntrustedContent = nil
 }
 
@@ -817,6 +842,7 @@ type PromptInjectionAnalysis_builder struct {
 	PolicyLinkReason *string
 	// Raw external conversation ID; independent of the persisted Speakeasy chat_id.
 	ExternalConversationId *string
+	RunJudge               *bool
 	// Bounded causal evidence captured when the event is read. These fields are
 	// untrusted content and are never included in the published finding match.
 	PriorUserRequest       *string
@@ -828,108 +854,112 @@ func (b0 PromptInjectionAnalysis_builder) Build() *PromptInjectionAnalysis {
 	b, x := &b0, m0
 	_, _ = b, x
 	if b.RequestId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 0, 27)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 0, 28)
 		x.xxx_hidden_RequestId = b.RequestId
 	}
 	if b.ChatMessageId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 1, 27)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 1, 28)
 		x.xxx_hidden_ChatMessageId = b.ChatMessageId
 	}
 	if b.ProjectId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 2, 27)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 2, 28)
 		x.xxx_hidden_ProjectId = b.ProjectId
 	}
 	if b.OrganizationId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 3, 27)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 3, 28)
 		x.xxx_hidden_OrganizationId = b.OrganizationId
 	}
 	if b.RiskPolicyId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 4, 27)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 4, 28)
 		x.xxx_hidden_RiskPolicyId = b.RiskPolicyId
 	}
 	if b.RiskPolicyVersion != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 5, 27)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 5, 28)
 		x.xxx_hidden_RiskPolicyVersion = *b.RiskPolicyVersion
 	}
 	if b.CreatedAt != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 6, 27)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 6, 28)
 		x.xxx_hidden_CreatedAt = b.CreatedAt
 	}
 	if b.Content != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 7, 27)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 7, 28)
 		x.xxx_hidden_Content = b.Content
 	}
 	if b.UserId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 8, 27)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 8, 28)
 		x.xxx_hidden_UserId = b.UserId
 	}
 	if b.L1Enabled != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 9, 27)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 9, 28)
 		x.xxx_hidden_L1Enabled = *b.L1Enabled
 	}
 	if b.MessageType != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 10, 27)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 10, 28)
 		x.xxx_hidden_MessageType = b.MessageType
 	}
 	if b.Body != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 11, 27)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 11, 28)
 		x.xxx_hidden_Body = b.Body
 	}
 	if b.ToolName != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 12, 27)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 12, 28)
 		x.xxx_hidden_ToolName = b.ToolName
 	}
 	x.xxx_hidden_ToolCalls = &b.ToolCalls
 	if b.ContentPartId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 14, 27)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 14, 28)
 		x.xxx_hidden_ContentPartId = b.ContentPartId
 	}
 	if b.ChatId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 15, 27)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 15, 28)
 		x.xxx_hidden_ChatId = b.ChatId
 	}
 	if b.ParentChatMessageId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 16, 27)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 16, 28)
 		x.xxx_hidden_ParentChatMessageId = b.ParentChatMessageId
 	}
 	if b.OriginRiskPolicyId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 17, 27)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 17, 28)
 		x.xxx_hidden_OriginRiskPolicyId = b.OriginRiskPolicyId
 	}
 	if b.OriginRiskPolicyVersion != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 18, 27)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 18, 28)
 		x.xxx_hidden_OriginRiskPolicyVersion = *b.OriginRiskPolicyVersion
 	}
 	if b.MessageLinkReason != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 19, 27)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 19, 28)
 		x.xxx_hidden_MessageLinkReason = b.MessageLinkReason
 	}
 	if b.ExecutionPath != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 20, 27)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 20, 28)
 		x.xxx_hidden_ExecutionPath = b.ExecutionPath
 	}
 	if b.ToolCallId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 21, 27)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 21, 28)
 		x.xxx_hidden_ToolCallId = b.ToolCallId
 	}
 	if b.HookSource != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 22, 27)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 22, 28)
 		x.xxx_hidden_HookSource = b.HookSource
 	}
 	if b.PolicyLinkReason != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 23, 27)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 23, 28)
 		x.xxx_hidden_PolicyLinkReason = b.PolicyLinkReason
 	}
 	if b.ExternalConversationId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 24, 27)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 24, 28)
 		x.xxx_hidden_ExternalConversationId = b.ExternalConversationId
 	}
+	if b.RunJudge != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 25, 28)
+		x.xxx_hidden_RunJudge = *b.RunJudge
+	}
 	if b.PriorUserRequest != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 25, 27)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 26, 28)
 		x.xxx_hidden_PriorUserRequest = b.PriorUserRequest
 	}
 	if b.RecentUntrustedContent != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 26, 27)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 27, 28)
 		x.xxx_hidden_RecentUntrustedContent = b.RecentUntrustedContent
 	}
 	return m0
@@ -1050,7 +1080,7 @@ var File_gram_risk_v1_prompt_injection_analysis_proto protoreflect.FileDescripto
 
 const file_gram_risk_v1_prompt_injection_analysis_proto_rawDesc = "" +
 	"\n" +
-	",gram/risk/v1/prompt_injection_analysis.proto\x12\fgram.risk.v1\x1a\x1bgcp/pubsub/v1/options.proto\"\xac\t\n" +
+	",gram/risk/v1/prompt_injection_analysis.proto\x12\fgram.risk.v1\x1a\x1bgcp/pubsub/v1/options.proto\"\xc9\t\n" +
 	"\x17PromptInjectionAnalysis\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x01 \x01(\tR\trequestId\x12&\n" +
@@ -1084,7 +1114,8 @@ const file_gram_risk_v1_prompt_injection_analysis_proto_rawDesc = "" +
 	"\vhook_source\x18\x17 \x01(\tR\n" +
 	"hookSource\x12,\n" +
 	"\x12policy_link_reason\x18\x1a \x01(\tR\x10policyLinkReason\x128\n" +
-	"\x18external_conversation_id\x18\x1b \x01(\tR\x16externalConversationId\x12,\n" +
+	"\x18external_conversation_id\x18\x1b \x01(\tR\x16externalConversationId\x12\x1b\n" +
+	"\trun_judge\x18\x1c \x01(\bR\brunJudge\x12,\n" +
 	"\x12prior_user_request\x18\x10 \x01(\tR\x10priorUserRequest\x128\n" +
 	"\x18recent_untrusted_content\x18\x11 \x01(\tR\x16recentUntrustedContent\x1a<\n" +
 	"\bToolCall\x12\x12\n" +

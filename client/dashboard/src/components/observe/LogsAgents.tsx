@@ -138,8 +138,7 @@ const SESSION_FILTERS = defineFilters([
 
 // Static filter options. The "source" (agent type) options are NOT hardcoded
 // here — they're derived at render from the sources actually present in the
-// project's chats (see useListChatSources below), matching how InsightsAgents
-// builds its client filter.
+// project's chats (see useListChatSources below).
 const HAS_RISK_OPTIONS: OptionsById = {
   has_risk: [
     { value: "true", label: "With Risk" },
@@ -489,8 +488,7 @@ export function LogsAgentsContent(): JSX.Element {
   const chats = useMemo(() => data?.chats ?? [], [data?.chats]);
 
   // Agent-type filter options derived from the sources actually present in the
-  // project's chats — mirrors how InsightsAgents builds its client filter, so
-  // the list stays in sync with the data instead of a hardcoded catalog.
+  // project's chats, so the list stays in sync with the data.
   const { data: sourcesData } = useListChatSources(undefined, undefined, {
     throwOnError: false,
   });

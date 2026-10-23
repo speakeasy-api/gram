@@ -20,6 +20,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth/identity"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
+	"github.com/speakeasy-api/gram/server/internal/oautherr"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -47,7 +49,7 @@ func (s *Service) HandleAuthorize(w http.ResponseWriter, r *http.Request) error 
 		return oops.E(oops.CodeBadRequest, nil, "an mcp slug must be provided").LogError(ctx, s.logger)
 	}
 	logger := s.logger.With(attr.SlogToolsetMCPSlug(mcpSlug))
-	endpoint, err := s.LoadResolvedMcpEndpointBySlug(ctx, logger, mcpSlug, "mcp")
+	endpoint, err := s.LoadResolvedMcpEndpointBySlug(ctx, logger, mcpSlug, mcproute.MCP)
 	if err != nil {
 		return err
 	}
@@ -55,8 +57,7 @@ func (s *Service) HandleAuthorize(w http.ResponseWriter, r *http.Request) error 
 }
 
 // ServeAuthorize is the post-resolution entry point for the OAuth 2.1
-// authorize endpoint, shared by /mcp's HandleAuthorize (toolset-keyed)
-// and /x/mcp's mcp_endpoint-keyed route registration.
+// authorize endpoint, called by HandleAuthorize after slug resolution.
 func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoint *ResolvedMcpEndpoint) error {
 	if s.redirectToAuthorizationServer(w, r, endpoint) {
 		return nil
@@ -82,6 +83,27 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 	// we need to trust the URI first, then validate the rest once we have.
 	if err := req.ValidateRedirectableFields(); err != nil {
 		return writeAuthorizeOAuthError(ctx, w, logger, http.StatusBadRequest, err)
+	}
+
+	// The origin of the endpoint's resource. It is the mint origin by
+	// definition — the challenge below snapshots it — and the issuer derives
+	// from it, so both the error redirect below and every response built later
+	// in the flow agree on it. On the authentication host it is the platform
+	// origin, and on a shared authorization server it is the origin of the
+	// resource the client named.
+	baseURL := s.resourceBaseURL(r, endpoint)
+
+	// A client_id naming this endpoint is a misconfigured client, not a client
+	// metadata document. Refused ahead of admission so every admission mode
+	// gives the same actionable answer, and ahead of the fetch it would
+	// otherwise send back to this server.
+	namesEndpoint, err := s.clientIDNamesEndpoint(endpoint, baseURL, req.ClientID)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "check client_id against endpoint URLs").LogError(ctx, logger)
+	}
+	if namesEndpoint {
+		logger.InfoContext(ctx, "oauth authorize rejected client_id naming this endpoint", attr.SlogOAuthFailureReason(clientIDNamesEndpointReason))
+		return writeAuthorizeError(ctx, w, logger, http.StatusUnauthorized, oautherr.CodeInvalidClient, clientIDNamesEndpointDescription)
 	}
 
 	// URL-shaped client_ids resolve via CIMD here (admission-gated, inside
@@ -137,14 +159,6 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 		}
 		return oops.E(oops.CodeUnexpected, err, "check ai tool gateway block").LogError(ctx, logger)
 	}
-
-	// The origin of the endpoint's resource. It is the mint origin by
-	// definition — the challenge below snapshots it — and the issuer derives
-	// from it, so both the error redirect below and every response built later
-	// in the flow agree on it. On the authentication host it is the platform
-	// origin, and on a shared authorization server it is the origin of the
-	// resource the client named.
-	baseURL := s.resourceBaseURL(r, endpoint)
 
 	// The RFC 9207 `iss` on every authorization response, equal to the AS
 	// metadata issuer. It names the authentication host when the endpoint's
@@ -210,7 +224,7 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 		return oops.E(oops.CodeUnauthorized, err, "capture OAuth endpoint authority").LogError(ctx, logger)
 	}
 	agentTarget, _ := agentAuthorizationTarget(endpoint)
-	challengeState := AuthnChallengeState{FederatedBinding: nil, DelegationRetryUsed: false,
+	challengeState := AuthnChallengeState{ConsentBrowserHash: "", FederatedBinding: nil, DelegationRetryUsed: false,
 		Browser:                  nil,
 		Federation:               nil,
 		ID:                       challengeID,
@@ -235,6 +249,12 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 		// Auto-connect has not run for a challenge this new.
 		AutoConnectDone: false,
 		FocusServer:     "",
+	}
+
+	if endpoint.servingSharedAuthorizationServer() != nil {
+		if err := bindConsentBrowser(w, &challengeState); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "bind consent browser").LogError(ctx, logger)
+		}
 	}
 
 	if err := s.authnChallengeCache.Store(ctx, challengeState); err != nil {

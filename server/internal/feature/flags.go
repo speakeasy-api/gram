@@ -6,9 +6,6 @@ const (
 	// FlagGramMCPCatalog temporarily selects the Speakeasy MCP catalog per organization.
 	FlagGramMCPCatalog Flag = "gram-mcp-catalog"
 
-	FlagSpeakeasyOpenAPIParserV0 Flag = "speakeasy-openapi-parser-v0"
-	FlagClickhouseToolMetrics    Flag = "clickhouse-tool-metrics"
-	FlagAssistants               Flag = "assistants"
 	// FlagPromptPolicies gates the natural-language / LLM-judge ("prompt
 	// based") risk policy MVP. While set, only opted-in organizations can
 	// create or update nl-type risk policies and have them enforced. The
@@ -40,8 +37,10 @@ const (
 	// Removed once device-level matching is GA.
 	FlagDeviceLevelCoverage Flag = "device-level-coverage"
 
-	FlagRiskFindingAnalytics Flag = "risk-finding-analytics"
-	FlagRiskAsyncScanShadow  Flag = "risk-async-scan-shadow"
+	// FlagRiskFindingsClickHouseCutover means the organization is on the ClickHouse findings path:
+	// batch judges run in the analysis handlers, and finding reads and webhooks use ClickHouse.
+	// Server-side org-group targeting fails closed to the Postgres path.
+	FlagRiskFindingsClickHouseCutover Flag = "risk-findings-clickhouse-cutover"
 
 	// FlagPlatformMCPRiskMutations is the exact-project kill switch for risk
 	// policy and exclusion writes exposed through Platform MCP. It is evaluated
@@ -69,16 +68,6 @@ const (
 	// like FlagBudgets. Evaluated server-side only; removed once the toolset
 	// is GA.
 	FlagAssistantPlatformMCP Flag = "assistant-platform-mcp"
-	// FlagHostedMCPServerKeyWrites switches hosted MCP writers (plugin entries,
-	// install page metadata, assistant attachments) to the canonical MCP server
-	// key (AIM-16 phase B). Evaluated server-side; targeted by PostHog
-	// organization group (org slug), rolled out to everyone once no phase A pods
-	// remain. Fails closed to the toolset key. Removed once the AIM-507 move ships.
-	FlagHostedMCPServerKeyWrites Flag = "hosted-mcp-server-key-writes"
-	// FlagRiskWatchdog gates the Watchdog signals endpoint (risk.getSignals).
-	// Key matches the dashboard's page-level flag so a single PostHog flag
-	// controls both the UI and the API surface.
-	FlagRiskWatchdog Flag = "gram-risk-watchdog"
 	// FlagExplore gates Explore and the Platform MCP analytics tools. The key
 	// matches the dashboard's page-level flag so one PostHog flag controls
 	// both surfaces; targeted by organization group (org slug), like
@@ -211,6 +200,26 @@ const (
 	// keeps serving. Server-evaluated; target everyone to pause the platform,
 	// or an organization group to pause one organization.
 	FlagInternalSessionIssuerSigningPaused Flag = "internal-session-issuer-signing-paused"
+
+	// FlagAuthClientResolver makes the typed auth client resolver
+	// authoritative for an organization's direct proxied servers. Off, the
+	// upstream client choice keeps serving and is the rollback.
+	//
+	// Precondition: the organization's backfill is complete and its choices
+	// are mapped onto auth clients (AIM-595), including the ones issuance
+	// writes. Until then an OAuth choice with no auth client falls back to the
+	// upstream client choice, so the flag only takes effect for mapped
+	// choices. Evaluated
+	// locally with the organization id as the distinct id, so the PostHog flag
+	// must be person-aggregated and match distinct_id in a list of
+	// organization ids.
+	FlagAuthClientResolver Flag = "auth-client-resolver"
+
+	// FlagAuthClientResolverShadow runs the typed auth client resolver beside
+	// the upstream client choice, without acquiring credentials or writing,
+	// and logs where they disagree. Ignored while FlagAuthClientResolver is on.
+	// Targeted the same way as FlagAuthClientResolver.
+	FlagAuthClientResolverShadow Flag = "auth-client-resolver-shadow"
 )
 
 // Variants of FlagAssistantPlatformMCP. Anything else — no variant, an

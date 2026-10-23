@@ -21,6 +21,42 @@ const (
 	// SigintSensorDefinitionHashKey identifies the evaluated sensor configuration version.
 	SigintSensorDefinitionHashKey = attribute.Key("gram.sigint.sensor.definition_hash")
 
+	// AuthClientBackfillPhaseKey names a typed auth client backfill phase.
+	AuthClientBackfillPhaseKey = attribute.Key("gram.auth_client_backfill.phase")
+
+	// AuthClientBackfillKindKey names the kind of configured upstream identity a typed auth client backfill count covers.
+	AuthClientBackfillKindKey = attribute.Key("gram.auth_client_backfill.kind")
+
+	// AuthClientBackfillDecidedKey counts configured identities and server links a typed auth client backfill decided.
+	AuthClientBackfillDecidedKey = attribute.Key("gram.auth_client_backfill.decided")
+
+	// AuthClientBackfillWrittenKey counts records a typed auth client backfill wrote.
+	AuthClientBackfillWrittenKey = attribute.Key("gram.auth_client_backfill.written")
+
+	// AuthClientBackfillRetiredKey counts records a typed auth client backfill retired.
+	AuthClientBackfillRetiredKey = attribute.Key("gram.auth_client_backfill.retired")
+
+	// AuthClientBackfillUnresolvedKey counts configured identities a typed auth client backfill could not record without a guess.
+	AuthClientBackfillUnresolvedKey = attribute.Key("gram.auth_client_backfill.unresolved")
+
+	// AuthClientIDKey identifies the typed auth client a request resolved its upstream credential through.
+	AuthClientIDKey = attribute.Key("gram.auth_client.id")
+
+	// AuthClientTypeKey is the type of the typed auth client a request resolved through.
+	AuthClientTypeKey = attribute.Key("gram.auth_client.type")
+
+	// AuthClientOutcomeKey is the outcome of resolving a request's typed auth client.
+	AuthClientOutcomeKey = attribute.Key("gram.auth_client.outcome")
+
+	// AuthClientReasonKey is why resolving a request's typed auth client did not succeed.
+	AuthClientReasonKey = attribute.Key("gram.auth_client.reason")
+
+	// AuthClientLegacyOutcomeKey is the outcome the legacy upstream client choice reached for the same request.
+	AuthClientLegacyOutcomeKey = attribute.Key("gram.auth_client.legacy_outcome")
+
+	// AuthClientParityAgreedKey reports whether a shadow comparison of the typed auth client resolver agreed with the legacy choice.
+	AuthClientParityAgreedKey = attribute.Key("gram.auth_client.parity_agreed")
+
 	// SigintRequestedWindowSizeKey records the configured message count including the target.
 	SigintRequestedWindowSizeKey = attribute.Key("gram.sigint.window.requested_size")
 
@@ -410,7 +446,7 @@ const (
 	// 2026-07-28), otherwise from the observed `initialize` response.
 	McpNegotiatedProtocolVersionKey = attribute.Key("gram.mcp.negotiated_protocol_version")
 	// McpSurfaceKey is the inbound MCP serving surface: "hosting" for the
-	// third-party-facing /mcp/{slug} and /x/mcp/{slug} paths (all backends), or
+	// third-party-facing /mcp/{slug} path (all backends), or
 	// "platform" for the assistant-token-only /platform/mcp/{toolsetSlug} path.
 	McpSurfaceKey = attribute.Key("gram.mcp.surface")
 	// McpRejectionReasonKey is the bounded reason an inbound MCP request was
@@ -419,14 +455,20 @@ const (
 	// validation failure class such as "header_mismatch".
 	McpRejectionReasonKey = attribute.Key("gram.mcp.rejection_reason")
 	// McpSkillOriginKey is the bounded origin of a skill served over MCP:
-	// "distribution" for a managed skill distributed through a plugin, or
+	// "distribution" for a managed skill linked to the MCP surface, or
 	// "embedded" for a reviewed skill compiled into the platform toolset.
 	// Never a skill name or identifier.
 	McpSkillOriginKey = attribute.Key("gram.mcp.skill.origin")
-	// McpSkillPinConflictCountKey is how many pinned distributions lost to a
-	// different pinned version when one hosted endpoint resolved a skill
-	// carried by several plugins.
+	// McpSkillPinConflictCountKey is how many pinned skill links lost to a
+	// different pinned version when one MCP surface resolved a skill linked
+	// several times.
 	McpSkillPinConflictCountKey = attribute.Key("gram.mcp.skill.pin_conflict_count")
+	// McpSkillTargetKindKey is the kind of MCP surface a skill resolution
+	// served: "mcp_server", "meta_mcp_server" or "organization_gateway".
+	McpSkillTargetKindKey = attribute.Key("gram.mcp.skill.target_kind")
+	// McpSkillTargetIDKey is the id of the stored MCP surface a skill
+	// resolution served, or the nil UUID for a row-less surface.
+	McpSkillTargetIDKey = attribute.Key("gram.mcp.skill.target_id")
 	// McpKillswitchSurfaceKey is the kill-switch enforcement surface a covered
 	// MCP tools/call reached: "hosted" or "private_proxy".
 	McpKillswitchSurfaceKey = attribute.Key("gram.mcp.killswitch.surface")
@@ -671,6 +713,7 @@ const (
 	PackageVersionKey                 = attribute.Key("gram.package.version")
 	PKCEMethodKey                     = attribute.Key("gram.pkce.method")
 	PKCESupportKey                    = attribute.Key("gram.pkce.support")
+	PluginSlugKey                     = attribute.Key("gram.plugin.slug")
 	ProductFeatureNameKey             = attribute.Key("gram.product.feature.name")
 	ProjectIDKey                      = attribute.Key("gram.project.id")
 	ProjectNameKey                    = attribute.Key("gram.project.name")
@@ -723,7 +766,7 @@ const (
 	RiskScanLimitBytesKey        = attribute.Key("gram.risk.scan.limit_bytes")
 	RiskScanRequestIDKey         = attribute.Key("gram.risk.scan.request_id")
 	RiskScanEngineKey            = attribute.Key("gram.risk.scan.engine")
-	RiskScanGateReasonKey        = attribute.Key("gram.risk.scan.gate_reason")
+	RiskScanSelectionReasonKey   = attribute.Key("gram.risk.scan.selection_reason")
 	RiskFindingIDKey             = attribute.Key("gram.risk.finding.id")
 	RiskPolicyVersionKey         = attribute.Key("gram.risk.policy.version")
 	RiskConfidenceKey            = attribute.Key("gram.risk.confidence")
@@ -1079,6 +1122,67 @@ func SlogSigintSensorDefinitionHash(v string) slog.Attr {
 	return slog.String(string(SigintSensorDefinitionHashKey), v)
 }
 
+// SlogAuthClientBackfillPhase names a typed auth client backfill phase.
+func SlogAuthClientBackfillPhase(v string) slog.Attr {
+	return slog.String(string(AuthClientBackfillPhaseKey), v)
+}
+
+// SlogAuthClientBackfillKind names the kind of configured upstream identity a count covers.
+func SlogAuthClientBackfillKind(v string) slog.Attr {
+	return slog.String(string(AuthClientBackfillKindKey), v)
+}
+
+// SlogAuthClientBackfillDecided counts configured identities and server links decided.
+func SlogAuthClientBackfillDecided(v int) slog.Attr {
+	return slog.Int(string(AuthClientBackfillDecidedKey), v)
+}
+
+// SlogAuthClientBackfillWritten counts records written.
+func SlogAuthClientBackfillWritten(v int) slog.Attr {
+	return slog.Int(string(AuthClientBackfillWrittenKey), v)
+}
+
+// SlogAuthClientBackfillRetired counts records retired.
+func SlogAuthClientBackfillRetired(v int) slog.Attr {
+	return slog.Int(string(AuthClientBackfillRetiredKey), v)
+}
+
+// SlogAuthClientBackfillUnresolved counts configured identities not recorded without a guess.
+func SlogAuthClientBackfillUnresolved(v int) slog.Attr {
+	return slog.Int(string(AuthClientBackfillUnresolvedKey), v)
+}
+
+func AuthClientID(v string) attribute.KeyValue { return AuthClientIDKey.String(v) }
+
+// SlogAuthClientID identifies a typed auth client.
+func SlogAuthClientID(v string) slog.Attr { return slog.String(string(AuthClientIDKey), v) }
+
+func AuthClientType(v string) attribute.KeyValue { return AuthClientTypeKey.String(v) }
+
+// SlogAuthClientType is a typed auth client's type.
+func SlogAuthClientType(v string) slog.Attr { return slog.String(string(AuthClientTypeKey), v) }
+
+func AuthClientOutcome(v string) attribute.KeyValue { return AuthClientOutcomeKey.String(v) }
+
+// SlogAuthClientOutcome is the outcome of resolving a typed auth client.
+func SlogAuthClientOutcome(v string) slog.Attr { return slog.String(string(AuthClientOutcomeKey), v) }
+
+func AuthClientReason(v string) attribute.KeyValue { return AuthClientReasonKey.String(v) }
+
+// SlogAuthClientReason is why resolving a typed auth client did not succeed.
+func SlogAuthClientReason(v string) slog.Attr { return slog.String(string(AuthClientReasonKey), v) }
+
+func AuthClientLegacyOutcome(v string) attribute.KeyValue {
+	return AuthClientLegacyOutcomeKey.String(v)
+}
+
+func AuthClientParityAgreed(v bool) attribute.KeyValue { return AuthClientParityAgreedKey.Bool(v) }
+
+// SlogAuthClientLegacyOutcome is the outcome the legacy upstream client choice reached.
+func SlogAuthClientLegacyOutcome(v string) slog.Attr {
+	return slog.String(string(AuthClientLegacyOutcomeKey), v)
+}
+
 // SlogSigintRequestedWindowSize records the configured message count including the target.
 func SlogSigintRequestedWindowSize(v int) slog.Attr {
 	return slog.Int(string(SigintRequestedWindowSizeKey), v)
@@ -1249,6 +1353,7 @@ func SlogHookServerNameOverrideID(v string) slog.Attr {
 }
 
 func HookDecision(v string) attribute.KeyValue { return HookDecisionKey.String(v) }
+func SlogHookDecision(v string) slog.Attr      { return slog.String(string(HookDecisionKey), v) }
 
 func HookRiskScanned(v bool) attribute.KeyValue { return HookRiskScannedKey.Bool(v) }
 
@@ -2861,12 +2966,12 @@ func SlogRiskScanRequestID(v string) slog.Attr {
 func RiskScanEngine(v string) attribute.KeyValue { return RiskScanEngineKey.String(v) }
 func SlogRiskScanEngine(v string) slog.Attr      { return slog.String(string(RiskScanEngineKey), v) }
 
-func RiskScanGateReason[V ~string](v V) attribute.KeyValue {
-	return RiskScanGateReasonKey.String(string(v))
+func RiskScanSelectionReason[V ~string](v V) attribute.KeyValue {
+	return RiskScanSelectionReasonKey.String(string(v))
 }
 
-func SlogRiskScanGateReason(v string) slog.Attr {
-	return slog.String(string(RiskScanGateReasonKey), v)
+func SlogRiskScanSelectionReason(v string) slog.Attr {
+	return slog.String(string(RiskScanSelectionReasonKey), v)
 }
 
 func RiskFindingID(v string) attribute.KeyValue { return RiskFindingIDKey.String(v) }
@@ -3045,6 +3150,9 @@ func MetaDispatchOutcome[V ~string](v V) attribute.KeyValue {
 func ToolsetID(v string) attribute.KeyValue { return ToolsetIDKey.String(v) }
 func SlogToolsetID(v string) slog.Attr      { return slog.String(string(ToolsetIDKey), v) }
 
+func PluginSlug(v string) attribute.KeyValue { return PluginSlugKey.String(v) }
+func SlogPluginSlug(v string) slog.Attr      { return slog.String(string(PluginSlugKey), v) }
+
 func ToolsetSlug(v string) attribute.KeyValue { return ToolsetSlugKey.String(v) }
 func SlogToolsetSlug(v string) slog.Attr      { return slog.String(string(ToolsetSlugKey), v) }
 
@@ -3086,6 +3194,18 @@ func SlogMcpSkillOrigin[V ~string](v V) slog.Attr {
 func McpSkillPinConflictCount(v int) attribute.KeyValue { return McpSkillPinConflictCountKey.Int(v) }
 func SlogMcpSkillPinConflictCount(v int) slog.Attr {
 	return slog.Int(string(McpSkillPinConflictCountKey), v)
+}
+
+func McpSkillTargetKind[V ~string](v V) attribute.KeyValue {
+	return McpSkillTargetKindKey.String(string(v))
+}
+func SlogMcpSkillTargetKind[V ~string](v V) slog.Attr {
+	return slog.String(string(McpSkillTargetKindKey), string(v))
+}
+
+func McpSkillTargetID(v string) attribute.KeyValue { return McpSkillTargetIDKey.String(v) }
+func SlogMcpSkillTargetID(v string) slog.Attr {
+	return slog.String(string(McpSkillTargetIDKey), v)
 }
 
 func McpEntryPoint[V ~string](v V) attribute.KeyValue { return McpEntryPointKey.String(string(v)) }

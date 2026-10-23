@@ -10,16 +10,31 @@ import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 /**
- * migrated and previewed completed every step; failed left the server unchanged; not_attempted follows an earlier failure.
+ * What the run did, or would do, with the candidate. Absent when it was not attempted.
+ */
+export const AdminExternalMcpMigrationOutcomeAction = {
+  Migrate: "migrate",
+  Delete: "delete",
+} as const;
+/**
+ * What the run did, or would do, with the candidate. Absent when it was not attempted.
+ */
+export type AdminExternalMcpMigrationOutcomeAction = ClosedEnum<
+  typeof AdminExternalMcpMigrationOutcomeAction
+>;
+
+/**
+ * migrated, deleted and previewed completed every step; deleted removed the toolset and any server it still owned, so mcp_server_id, remote_mcp_server_id and remote_url are absent; failed left the server unchanged; not_attempted follows an earlier failure.
  */
 export const MigrationStatus = {
   Migrated: "migrated",
+  Deleted: "deleted",
   Previewed: "previewed",
   Failed: "failed",
   NotAttempted: "not_attempted",
 } as const;
 /**
- * migrated and previewed completed every step; failed left the server unchanged; not_attempted follows an earlier failure.
+ * migrated, deleted and previewed completed every step; deleted removed the toolset and any server it still owned, so mcp_server_id, remote_mcp_server_id and remote_url are absent; failed left the server unchanged; not_attempted follows an earlier failure.
  */
 export type MigrationStatus = ClosedEnum<typeof MigrationStatus>;
 
@@ -27,6 +42,10 @@ export type MigrationStatus = ClosedEnum<typeof MigrationStatus>;
  * What happened, or in a preview what would happen, to one server.
  */
 export type AdminExternalMcpMigrationOutcome = {
+  /**
+   * What the run did, or would do, with the candidate. Absent when it was not attempted.
+   */
+  action?: AdminExternalMcpMigrationOutcomeAction | undefined;
   /**
    * Each change, in order.
    */
@@ -36,11 +55,11 @@ export type AdminExternalMcpMigrationOutcome = {
    */
   mcpServerId?: string | undefined;
   /**
-   * The server's /mcp/<slug> address, which does not change.
+   * The server's /mcp/<slug> address. Migrating keeps it; deleting a server the toolset still owns removes it.
    */
   mcpSlug?: string | undefined;
   /**
-   * migrated and previewed completed every step; failed left the server unchanged; not_attempted follows an earlier failure.
+   * migrated, deleted and previewed completed every step; deleted removed the toolset and any server it still owned, so mcp_server_id, remote_mcp_server_id and remote_url are absent; failed left the server unchanged; not_attempted follows an earlier failure.
    */
   migrationStatus: MigrationStatus;
   /**
@@ -48,11 +67,11 @@ export type AdminExternalMcpMigrationOutcome = {
    */
   reason?: string | undefined;
   /**
-   * The remote MCP source the server now proxies.
+   * The remote MCP source the server proxies once migrated. Absent when the server failed; a preview's source is rolled back.
    */
   remoteMcpServerId?: string | undefined;
   /**
-   * The upstream URL the server now dials.
+   * The upstream URL the server dials once migrated. Absent when the server failed.
    */
   remoteUrl?: string | undefined;
   /**
@@ -66,6 +85,12 @@ export type AdminExternalMcpMigrationOutcome = {
 };
 
 /** @internal */
+export const AdminExternalMcpMigrationOutcomeAction$inboundSchema:
+  z.ZodMiniEnum<typeof AdminExternalMcpMigrationOutcomeAction> = z.enum(
+    AdminExternalMcpMigrationOutcomeAction,
+  );
+
+/** @internal */
 export const MigrationStatus$inboundSchema: z.ZodMiniEnum<
   typeof MigrationStatus
 > = z.enum(MigrationStatus);
@@ -76,6 +101,7 @@ export const AdminExternalMcpMigrationOutcome$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
+    action: z.optional(AdminExternalMcpMigrationOutcomeAction$inboundSchema),
     actions: z.array(z.string()),
     mcp_server_id: z.optional(z.string()),
     mcp_slug: z.optional(z.string()),
