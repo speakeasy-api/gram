@@ -38,6 +38,10 @@ import {
   IdentityChainingSection,
 } from "./sections/authentication/IdentityChainingSection";
 import { GeneralSection } from "./sections/GeneralSection";
+import {
+  UPSTREAM_CREDENTIALS_SECTION_ID,
+  UpstreamCredentialsSection,
+} from "./sections/authentication/UpstreamCredentialsSection";
 import { DangerZoneSection } from "./sections/DangerZoneSection";
 import { NetworkAccessSection } from "./sections/NetworkAccessSection";
 import {
@@ -76,6 +80,7 @@ const SCROLLABLE_SECTION_IDS: readonly string[] = [
   MCP_AGENT_SETUP_SECTION_ID,
   IDENTITY_CHAINING_SECTION_ID,
   MCP_SESSIONS_SECTION_ID,
+  UPSTREAM_CREDENTIALS_SECTION_ID,
 ];
 
 // `ready` flips once the source-backed sections can be on the page: they
@@ -241,6 +246,7 @@ export function SettingsTab({
             Headers disclosure; they are governed by the identity choice, not
             a peer of it. */}
         <AuthenticationSection mcpServer={mcpServer} mcpUrl={mcpUrl} />
+        <UpstreamCredentialsSection mcpServer={mcpServer} />
         <IdentityChainingSection mcpServer={mcpServer} />
         <ServerUrlSection
           backend={{ mcpServerId: mcpServer.id }}
@@ -280,6 +286,11 @@ export function SettingsTab({
         </>
       )}
       <AuthenticationSection mcpServer={mcpServer} mcpUrl={mcpUrl} />
+      {/* Hosted toolsets keep their own authentication, and unproxied
+          servers reach the upstream without Speakeasy in between. */}
+      {isUnproxied || mcpServer.toolsetId ? null : (
+        <UpstreamCredentialsSection mcpServer={mcpServer} />
+      )}
       {tunneledMcpServer ? (
         <Fragment key={tunneledMcpServer.id}>
           <ResourceIdentifierSection tunneledMcpServer={tunneledMcpServer} />
