@@ -65,11 +65,13 @@ function exchangeScript(tokenEndpoint?: string) {
     "MCP_URL=https://your-mcp-server-url",
     "",
     "# Read the file each time: Kubernetes replaces the token before it expires.",
-    'token=$(curl -sS --fail-with-body "$TOKEN_ENDPOINT" \\',
+    'response=$(curl -sS "$TOKEN_ENDPOINT" \\',
     '  --data-urlencode "grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer" \\',
-    '  --data-urlencode "assertion=$(cat "$SPEAKEASY_TOKEN_FILE")" \\',
-    "  | jq -r .access_token)",
+    '  --data-urlencode "assertion=$(cat "$SPEAKEASY_TOKEN_FILE")")',
+    "token=$(printf '%s' \"$response\" | jq -r '.access_token // empty')",
+    'if [ -z "$token" ]; then echo "Exchange failed: $response" >&2; exit 1; fi',
     "",
+    "# Reuse $token until it expires (expires_in seconds), then exchange again.",
     'curl -sS --fail-with-body "$MCP_URL" \\',
     '  -H "Authorization: Bearer $token" \\',
     '  -H "Content-Type: application/json" \\',
@@ -222,14 +224,15 @@ export function gkeSetupInstructions(entry: CatalogEntry): PlatformSetup {
               language="yaml"
             />
             <p className="text-muted-foreground text-sm">
-              In a Deployment, the same lines go under{" "}
-              <code>spec.template.spec</code>. The audience must match exactly:
-              Speakeasy refuses a token issued for any other.
+              In a Deployment, <code>namespace</code> stays in the
+              Deployment&apos;s own <code>metadata</code>, and the rest goes
+              under <code>spec.template.spec</code>. The audience must match
+              exactly: Speakeasy refuses a token issued for any other.
             </p>
             {/* Speakeasy accepts each token once, and Kubernetes writes a new
-                one at about 80% of its lifetime. At 600 seconds that is well
-                inside the 15-minute access token, so the next exchange always
-                finds an unused token. */}
+                one at about 80% of its lifetime. At 600 seconds that falls
+                inside the 15-minute access token, so a workload that exchanges
+                only when its access token runs out finds an unused token. */}
             <p className="text-muted-foreground text-sm">
               Keep <code>expirationSeconds</code> at 600. Speakeasy accepts each
               token once, and at 600 seconds Kubernetes writes a fresh one about
@@ -258,8 +261,10 @@ export function gkeSetupInstructions(entry: CatalogEntry): PlatformSetup {
             />
             <p className="text-muted-foreground text-sm">
               The access token lasts up to 15 minutes and cannot be refreshed.
-              When it runs out, read the file again and exchange the new token.
-              Exchange from one place in the pod: each token is accepted once.
+              Reuse it until it runs out, then read the file again and exchange
+              the new token. Exchanging again sooner can send a token Speakeasy
+              has already accepted, which it refuses, so exchange from one place
+              in the pod.
             </p>
           </>
         ),

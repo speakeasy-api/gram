@@ -10,6 +10,7 @@ import {
 const cluster =
   "https://container.googleapis.com/v1/projects/{project}/locations/{location}/clusters/{cluster}";
 
+// Patterns copied from server/internal/workloadpolicy/catalog/platforms/gke.yaml.
 const gke: CatalogEntry = {
   key: "gke",
   displayName: "GKE",
@@ -28,25 +29,25 @@ const gke: CatalogEntry = {
       key: "location",
       tier: "platform",
       label: "Location",
-      pattern: "[a-z0-9-]+",
+      pattern: "[a-z]+-[a-z]+[0-9]+(?:-[a-z])?",
     },
     {
       key: "cluster",
       tier: "platform",
       label: "Cluster name",
-      pattern: "[a-z0-9-]+",
+      pattern: "[a-z](?:[-a-z0-9]{0,38}[a-z0-9])?",
     },
     {
       key: "namespace",
       tier: "rule",
       label: "Namespace",
-      pattern: "[a-z0-9-]+",
+      pattern: "[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?",
     },
     {
       key: "service_account",
       tier: "rule",
       label: "Service account",
-      pattern: "[a-z0-9.-]+",
+      pattern: "[a-z0-9](?:[-a-z0-9.]{0,251}[a-z0-9])?",
     },
   ],
   subject: {
@@ -132,6 +133,18 @@ describe("catalogEntryForIssuer", () => {
     expect(
       catalogEntryForIssuer(entries, "https://identity.anthropic.com/agentsX"),
     ).toBeUndefined();
+  });
+
+  it("does not take an issuer with values the catalog refuses", () => {
+    expect(
+      catalogEntryForIssuer(
+        [gke],
+        "https://container.googleapis.com/v1/projects/x/locations/us-central1/clusters/payments",
+      ),
+    ).toBeUndefined();
+    expect(
+      valuesFromSubject(gke, "system:serviceaccount:billing:invoice:worker"),
+    ).toEqual({});
   });
 
   it("does not let a placeholder span a path segment", () => {

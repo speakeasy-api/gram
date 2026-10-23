@@ -269,10 +269,16 @@ export function connectedIssuer(
 
 /**
  * The values a filled template was made from, read back out of it, or null
- * when it was not made from this template. A placeholder reads one path
- * segment: every catalog pattern refuses "/", so a value never spans two.
+ * when it was not made from this template. A placeholder reads up to the next
+ * "/", and each value it reads must then pass its variable's own pattern, so
+ * text of the right shape but with values the catalog would refuse, or split
+ * at the wrong delimiter, is not read as this entry's.
  */
-function readTemplate(template: string, filled: string): VariableValues | null {
+function readTemplate(
+  entry: CatalogEntry,
+  template: string,
+  filled: string,
+): VariableValues | null {
   const keys: string[] = [];
   let source = "";
   let last = 0;
@@ -284,9 +290,17 @@ function readTemplate(template: string, filled: string): VariableValues | null {
   source += escapeRegExp(template.slice(last));
   const match = new RegExp(`^${source}$`).exec(filled);
   if (match === null) return null;
-  return Object.fromEntries(
+  const values = Object.fromEntries(
     keys.map((key, index) => [key, match[index + 1] ?? ""]),
   );
+  const valid = keys.every((key) => {
+    const variable = entry.variables.find((v) => v.key === key);
+    return (
+      variable !== undefined &&
+      variableProblem(variable, values[key] ?? "") === null
+    );
+  });
+  return valid ? values : null;
 }
 
 function escapeRegExp(text: string): string {
@@ -304,7 +318,7 @@ export function valuesFromSubject(
   subject: string,
 ): VariableValues {
   const stem = entry.subject.wildcard ? subject.replace(/\*$/, "") : subject;
-  return readTemplate(entry.subject.template, stem) ?? {};
+  return readTemplate(entry, entry.subject.template, stem) ?? {};
 }
 
 /**
@@ -315,7 +329,7 @@ export function valuesFromIssuer(
   entry: CatalogEntry,
   issuer: string,
 ): VariableValues {
-  return readTemplate(entry.issuer.value, issuer) ?? {};
+  return readTemplate(entry, entry.issuer.value, issuer) ?? {};
 }
 
 /**
@@ -328,7 +342,7 @@ export function catalogEntryForIssuer(
   issuer: string,
 ): CatalogEntry | undefined {
   return entries.find(
-    (entry) => readTemplate(entry.issuer.value, issuer) !== null,
+    (entry) => readTemplate(entry, entry.issuer.value, issuer) !== null,
   );
 }
 

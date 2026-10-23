@@ -41,6 +41,7 @@ export function CodeBlock({
           is themed. These are the three it paints with, at their dark values,
           scoped to this block. */}
       <div
+        role="group"
         aria-label={label}
         style={
           {
