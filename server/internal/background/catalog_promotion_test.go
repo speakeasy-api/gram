@@ -118,6 +118,6 @@ func TestCatalogPromotionCancellationReachesBlockedDelivery(t *testing.T) {
 	<-started
 	cancel()
 	err := <-finished
-	require.Error(t, err)
+	require.ErrorContains(t, err, "catalogue promotion canceled")
 	require.NotContains(t, err.Error(), "status must not run")
 }

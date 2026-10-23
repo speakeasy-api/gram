@@ -638,7 +638,6 @@ func mcpRuntimeFlags() []cli.Flag {
 			Required: false,
 		},
 	}
-	flags = append(flags, catalogPromotionFlags()...)
 	flags = append(flags, stripeFlags()...)
 	flags = append(flags, redisFlags()...)
 	flags = append(flags, clickHouseFlags()...)
@@ -678,6 +677,7 @@ func serverFlags() []cli.Flag {
 		},
 	)
 
+	flags = append(flags, catalogPromotionFlags()...)
 	flags = append(flags, customDomainFlags()...)
 	flags = append(flags, networkIngressQueueFlags()...)
 	flags = append(flags, networkIngressProviderFlags()...)

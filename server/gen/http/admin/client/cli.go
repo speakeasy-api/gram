@@ -2433,24 +2433,16 @@ func BuildListRegistryPromotionCandidatesPayload(adminListRegistryPromotionCandi
 
 // BuildGetRegistryPromotionCandidatePayload builds the payload for the admin
 // getRegistryPromotionCandidate endpoint from CLI flags.
-func BuildGetRegistryPromotionCandidatePayload(adminGetRegistryPromotionCandidateOrganizationID string, adminGetRegistryPromotionCandidateProjectID string, adminGetRegistryPromotionCandidateMcpServerID string, adminGetRegistryPromotionCandidateAdminSessionToken string) (*admin.GetRegistryPromotionCandidatePayload, error) {
+func BuildGetRegistryPromotionCandidatePayload(adminGetRegistryPromotionCandidateBody string, adminGetRegistryPromotionCandidateAdminSessionToken string) (*admin.GetRegistryPromotionCandidatePayload, error) {
 	var err error
-	var organizationID string
+	var body GetRegistryPromotionCandidateRequestBody
 	{
-		organizationID = adminGetRegistryPromotionCandidateOrganizationID
-	}
-	var projectID string
-	{
-		projectID = adminGetRegistryPromotionCandidateProjectID
-		err = goa.MergeErrors(err, goa.ValidateFormat("project_id", projectID, goa.FormatUUID))
+		err = json.Unmarshal([]byte(adminGetRegistryPromotionCandidateBody), &body)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"organization_id\": \"abc123\",\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
 		}
-	}
-	var mcpServerID string
-	{
-		mcpServerID = adminGetRegistryPromotionCandidateMcpServerID
-		err = goa.MergeErrors(err, goa.ValidateFormat("mcp_server_id", mcpServerID, goa.FormatUUID))
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", body.ProjectID, goa.FormatUUID))
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", body.McpServerID, goa.FormatUUID))
 		if err != nil {
 			return nil, err
 		}
@@ -2461,10 +2453,11 @@ func BuildGetRegistryPromotionCandidatePayload(adminGetRegistryPromotionCandidat
 			adminSessionToken = &adminGetRegistryPromotionCandidateAdminSessionToken
 		}
 	}
-	v := &admin.GetRegistryPromotionCandidatePayload{}
-	v.OrganizationID = organizationID
-	v.ProjectID = projectID
-	v.McpServerID = mcpServerID
+	v := &admin.GetRegistryPromotionCandidatePayload{
+		OrganizationID: body.OrganizationID,
+		ProjectID:      body.ProjectID,
+		McpServerID:    body.McpServerID,
+	}
 	v.AdminSessionToken = adminSessionToken
 
 	return v, nil
@@ -2478,10 +2471,13 @@ func BuildPromoteRegistryCandidatePayload(adminPromoteRegistryCandidateBody stri
 	{
 		err = json.Unmarshal([]byte(adminPromoteRegistryCandidateBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"auth_mode\": \"abc123\",\n      \"docs_slug\": \"abc123\",\n      \"documentation_url\": \"abc123\",\n      \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"organization_id\": \"abc123\",\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"public_description\": \"abc123\",\n      \"public_metadata_confirmed\": false,\n      \"public_name\": \"abc123\",\n      \"public_title\": \"abc123\",\n      \"public_url\": \"abc123\",\n      \"retry_key\": \"abc123\",\n      \"source_revision\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"auth_mode\": \"oauth\",\n      \"docs_slug\": \"abc123\",\n      \"documentation_url\": \"abc123\",\n      \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"organization_id\": \"abc123\",\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"public_description\": \"abc123\",\n      \"public_metadata_confirmed\": false,\n      \"public_name\": \"abc123\",\n      \"public_title\": \"abc123\",\n      \"public_url\": \"abc123\",\n      \"retry_key\": \"abc123\",\n      \"source_revision\": \"abc123\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", body.ProjectID, goa.FormatUUID))
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", body.McpServerID, goa.FormatUUID))
+		if !(body.AuthMode == "none" || body.AuthMode == "oauth") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.auth_mode", body.AuthMode, []any{"none", "oauth"}))
+		}
 		if err != nil {
 			return nil, err
 		}

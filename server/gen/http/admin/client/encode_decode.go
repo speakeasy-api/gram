@@ -15787,7 +15787,7 @@ func DecodeListRegistryPromotionCandidatesResponse(decoder func(*http.Response) 
 // "getRegistryPromotionCandidate" endpoint
 func (c *Client) BuildGetRegistryPromotionCandidateRequest(ctx context.Context, v any) (*http.Request, error) {
 	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetRegistryPromotionCandidateAdminPath()}
-	req, err := http.NewRequest("GET", u.String(), nil)
+	req, err := http.NewRequest("POST", u.String(), nil)
 	if err != nil {
 		return nil, goahttp.ErrInvalidURL("admin", "getRegistryPromotionCandidate", u.String(), err)
 	}
@@ -15810,11 +15810,10 @@ func EncodeGetRegistryPromotionCandidateRequest(encoder func(*http.Request) goah
 			head := *p.AdminSessionToken
 			req.Header.Set("Authorization", head)
 		}
-		values := req.URL.Query()
-		values.Add("organization_id", p.OrganizationID)
-		values.Add("project_id", p.ProjectID)
-		values.Add("mcp_server_id", p.McpServerID)
-		req.URL.RawQuery = values.Encode()
+		body := NewGetRegistryPromotionCandidateRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("admin", "getRegistryPromotionCandidate", err)
+		}
 		return nil
 	}
 }

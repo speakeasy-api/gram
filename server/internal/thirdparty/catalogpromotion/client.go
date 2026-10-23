@@ -211,6 +211,8 @@ func (c *client) findIssue(ctx context.Context, marker, expectedBody string) (*g
 		}
 		for _, issue := range issues {
 			if (len(issue.PullRequest) == 0 || string(issue.PullRequest) == "null") && strings.HasPrefix(issue.Body, marker+"\n") {
+				// A conflicting marker needs staff reconciliation; ignoring it could
+				// create a duplicate request or trigger unreviewed factory input.
 				if issue.Body != expectedBody {
 					return nil, deliveryError(ErrorPermanent, "marker_conflict", "guide issue marker conflicts with reviewed public metadata", nil)
 				}
@@ -296,23 +298,29 @@ func validateGuide(guide Guide) error {
 	if guide.AuthMode != "none" && guide.AuthMode != "oauth" {
 		return errors.New("guide authentication must be explicitly none or oauth")
 	}
-	if err := validatePublicURL(guide.RemoteURL); err != nil {
+	if err := ValidatePublicURL(guide.RemoteURL); err != nil {
 		return fmt.Errorf("invalid public remote URL: %w", err)
 	}
-	if err := validatePublicURL(guide.DocumentationURL); err != nil {
+	if err := ValidatePublicURL(guide.DocumentationURL); err != nil {
 		return fmt.Errorf("invalid public documentation URL: %w", err)
 	}
 	return nil
 }
 
-func validatePublicURL(raw string) error {
+// ValidatePublicURL rejects private and special-use hostnames in reviewed public inputs.
+func ValidatePublicURL(raw string) error {
 	parsed, err := url.Parse(raw)
 	if err != nil || parsed.Scheme != "https" || parsed.Hostname() == "" || parsed.User != nil || parsed.RawQuery != "" || parsed.ForceQuery || parsed.Fragment != "" || strings.ContainsAny(raw, "\r\n") {
 		return errors.New("expected an HTTPS URL without credentials, query, or fragment")
 	}
 	host := strings.ToLower(strings.TrimSuffix(parsed.Hostname(), "."))
-	if net.ParseIP(host) != nil || !strings.Contains(host, ".") || strings.HasSuffix(host, ".localhost") || strings.HasSuffix(host, ".local") || strings.HasSuffix(host, ".internal") {
+	if net.ParseIP(host) != nil || !strings.Contains(host, ".") {
 		return errors.New("expected a public provider hostname")
+	}
+	for _, suffix := range []string{"localhost", "local", "internal", "test", "invalid", "example", "home.arpa", "onion"} {
+		if host == suffix || strings.HasSuffix(host, "."+suffix) {
+			return errors.New("expected a public provider hostname")
+		}
 	}
 	return nil
 }

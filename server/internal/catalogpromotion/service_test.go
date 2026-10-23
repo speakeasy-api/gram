@@ -3,7 +3,9 @@ package catalogpromotion
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"net"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -16,6 +18,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/catalogpromotion/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/dns"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcpregistry"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -180,7 +184,7 @@ func TestPromotionTenantAndEvidenceBoundaries(t *testing.T) {
 
 func TestPromotionPublicMetadataBoundaries(t *testing.T) {
 	t.Parallel()
-	valid := PublicMetadata{Name: "io.example/catalog", Title: "Synthetic", Description: "Public service", URL: "https://catalog.example.test/mcp", DocumentationURL: "https://docs.example.test/setup", DocsSlug: "synthetic-mcp", AuthMode: "oauth"}
+	valid := PublicMetadata{Name: "io.example/catalog", Title: "Synthetic", Description: "Public service", URL: "https://catalog.example.com/mcp", DocumentationURL: "https://docs.example.com/setup", DocsSlug: "synthetic-mcp", AuthMode: "oauth"}
 	require.NoError(t, validatePublic(valid))
 	for _, raw := range []string{"https://user:secret@example.test/mcp", "https://example.test/mcp?token=secret", "https://example.test/mcp#secret", "http://example.test/mcp", "https://127.0.0.1/mcp", "https://internal.local/mcp", "https://EXAMPLE.test/mcp", "https://example.test:443/mcp"} {
 		bad := valid
@@ -250,7 +254,7 @@ func TestLateFailedDiscoveryCannotOverwriteNewerEvidence(t *testing.T) {
 	newer, err := f.service.GetCandidate(t.Context(), f.target)
 	require.NoError(t, err)
 	require.True(t, newer.Eligible)
-	require.NoError(t, q.FinishDiscovery(t.Context(), repo.FinishDiscoveryParams{ID: row.ID, ProjectID: row.ProjectID, AttemptedAt: conv.ToPGTimestamptz(attempt), Failed: true}))
+	require.NoError(t, q.FinishDiscovery(t.Context(), repo.FinishDiscoveryParams{ID: row.ID, ProjectID: row.ProjectID, AttemptedAt: conv.ToPGTimestamptz(attempt), Failed: true, FailureReason: "telemetry_unavailable"}))
 	stored, err := q.PromotionRowFixture(t.Context(), repo.PromotionRowFixtureParams{ProjectID: row.ProjectID, McpServerID: row.McpServerID})
 	require.NoError(t, err)
 	require.True(t, stored.Eligible)
@@ -286,4 +290,95 @@ func TestDocsRetryRevisionTenantAndAtomicAudit(t *testing.T) {
 	count, err := audittest.AuditLogCountByAction(t.Context(), f.db, audit.ActionCatalogPromotionRetryDocs)
 	require.NoError(t, err)
 	require.EqualValues(t, 1, count)
+}
+
+func TestPromotionFreezesEvidenceAfterPublication(t *testing.T) {
+	t.Parallel()
+	f := newPromotionFixture(t)
+	promoted, err := f.promote(t)
+	require.NoError(t, err)
+	f.health.failures = 10
+	f.service.now = func() time.Time { return f.health.now.Add(time.Hour) }
+	refreshed, err := f.service.GetCandidate(t.Context(), f.target)
+	require.NoError(t, err)
+	require.Equal(t, promoted.CheckedAt, refreshed.CheckedAt)
+	require.Equal(t, promoted.ObservedSuccesses, refreshed.ObservedSuccesses)
+	require.Equal(t, promoted.ObservedFailures, refreshed.ObservedFailures)
+	require.Equal(t, promoted.SourceRevision, refreshed.SourceRevision)
+}
+
+func TestPromotionReadFailureDoesNotBecomeNotFound(t *testing.T) {
+	t.Parallel()
+	f := newPromotionFixture(t)
+	tx := testenv.BeginTx(t, t.Context(), f.db)
+	require.NoError(t, tx.Rollback(t.Context()))
+	_, err := f.service.PromoteTx(t.Context(), tx, f.request, "user:synthetic-staff")
+	require.ErrorIs(t, err, pgx.ErrTxClosed)
+	require.NotErrorIs(t, err, ErrNotFound)
+}
+
+func TestDiscoveryClassifiesSourceRacesSeparately(t *testing.T) {
+	t.Parallel()
+	require.Equal(t, "source_changed", discoveryFailureReason(fmt.Errorf("source edit: %w", ErrStale), ""))
+	require.Equal(t, "source_changed", discoveryFailureReason(ErrNotFound, ""))
+	require.Equal(t, "telemetry_unavailable", discoveryFailureReason(fmt.Errorf("read unavailable"), ""))
+	require.Equal(t, "telemetry_unavailable", discoveryFailureReason(nil, "telemetry_unavailable"))
+	require.Empty(t, discoveryFailureReason(nil, "insufficient_evidence"))
+}
+
+func TestCandidateRefreshTracksReplacementUpstream(t *testing.T) {
+	t.Parallel()
+	f := newPromotionFixture(t)
+	before, err := f.service.GetCandidate(t.Context(), f.target)
+	require.NoError(t, err)
+	nextRemote := uuid.New()
+	require.NoError(t, repo.New(f.db).RepointPromotionSourceFixture(t.Context(), repo.RepointPromotionSourceFixtureParams{ProjectID: f.target.ProjectID, McpServerID: f.target.MCPServerID, NewRemoteID: nextRemote}))
+	after, err := f.service.GetCandidate(t.Context(), f.target)
+	require.NoError(t, err)
+	require.NotEqual(t, before.SourceRevision, after.SourceRevision)
+	require.Equal(t, nextRemote.String(), after.RemoteMCPServerID)
+}
+
+func TestDiscoveryOmitsExcludedOrganization(t *testing.T) {
+	t.Parallel()
+	f := newPromotionFixture(t)
+	targets, err := repo.New(f.db).DiscoveryTargets(t.Context(), repo.DiscoveryTargetsParams{Now: conv.ToPGTimestamptz(f.health.now), ExcludedOrganizationID: f.target.OrganizationID})
+	require.NoError(t, err)
+	require.Empty(t, targets)
+}
+
+func TestPromotionDNSOutagesRemainOperationalErrors(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name      string
+		lookupErr error
+		ip        string
+		expected  error
+	}{
+		{name: "temporary DNS", lookupErr: &net.DNSError{Err: "temporary resolver failure", Name: "private.example.com", IsTemporary: true}, expected: ErrUnavailable},
+		{name: "DNS timeout", lookupErr: &net.DNSError{Err: "resolver timeout", IsTimeout: true}, expected: ErrUnavailable},
+		{name: "cancellation", lookupErr: context.Canceled, expected: ErrUnavailable},
+		{name: "deadline", lookupErr: context.DeadlineExceeded, expected: ErrUnavailable},
+		{name: "nonexistent host", lookupErr: &net.DNSError{Err: "no such host", IsNotFound: true}, expected: ErrInvalid},
+		{name: "private address", ip: "10.0.0.1", expected: ErrInvalid},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			f := newPromotionFixture(t)
+			f.service.policy = guardian.NewDefaultPolicy(testenv.NewTracerProvider(t), guardian.WithResolver(dns.NewMockResolver(dns.MockResolverConfig{LookupIPFunc: func(context.Context, string, string) ([]net.IP, error) {
+				if tc.lookupErr != nil {
+					return nil, tc.lookupErr
+				}
+				return []net.IP{net.ParseIP(tc.ip)}, nil
+			}})))
+			tx := testenv.BeginTx(t, t.Context(), f.db)
+			_, err := f.service.ValidateTx(t.Context(), tx, f.target, f.request.SourceRevision, f.request.Public)
+			require.ErrorIs(t, err, tc.expected)
+			if errors.Is(tc.expected, ErrUnavailable) {
+				require.ErrorIs(t, err, tc.lookupErr)
+				require.NotErrorIs(t, err, ErrInvalid)
+			}
+		})
+	}
 }

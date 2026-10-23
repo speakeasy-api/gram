@@ -413,6 +413,14 @@ type MigrateExternalMcpServersRequestBody struct {
 	Servers []*AdminExternalMcpMigrationRequestRequestBody `form:"servers" json:"servers" xml:"servers"`
 }
 
+// GetRegistryPromotionCandidateRequestBody is the type of the "admin" service
+// "getRegistryPromotionCandidate" endpoint HTTP request body.
+type GetRegistryPromotionCandidateRequestBody struct {
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	ProjectID      string `form:"project_id" json:"project_id" xml:"project_id"`
+	McpServerID    string `form:"mcp_server_id" json:"mcp_server_id" xml:"mcp_server_id"`
+}
+
 // PromoteRegistryCandidateRequestBody is the type of the "admin" service
 // "promoteRegistryCandidate" endpoint HTTP request body.
 type PromoteRegistryCandidateRequestBody struct {
@@ -23330,6 +23338,18 @@ func NewMigrateExternalMcpServersRequestBody(p *admin.MigrateExternalMcpServersP
 	return body
 }
 
+// NewGetRegistryPromotionCandidateRequestBody builds the HTTP request body
+// from the payload of the "getRegistryPromotionCandidate" endpoint of the
+// "admin" service.
+func NewGetRegistryPromotionCandidateRequestBody(p *admin.GetRegistryPromotionCandidatePayload) *GetRegistryPromotionCandidateRequestBody {
+	body := &GetRegistryPromotionCandidateRequestBody{
+		OrganizationID: p.OrganizationID,
+		ProjectID:      p.ProjectID,
+		McpServerID:    p.McpServerID,
+	}
+	return body
+}
+
 // NewPromoteRegistryCandidateRequestBody builds the HTTP request body from the
 // payload of the "promoteRegistryCandidate" endpoint of the "admin" service.
 func NewPromoteRegistryCandidateRequestBody(p *admin.PromoteRegistryCandidatePayload) *PromoteRegistryCandidateRequestBody {
@@ -43012,6 +43032,21 @@ func ValidateGetRegistryPromotionCandidateResponseBody(body *GetRegistryPromotio
 	if body.DocsAttempts == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("docs_attempts", "body"))
 	}
+	if body.CheckedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.checked_at", *body.CheckedAt, goa.FormatDateTime))
+	}
+	if body.DocsLastAttemptAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.docs_last_attempt_at", *body.DocsLastAttemptAt, goa.FormatDateTime))
+	}
+	if body.DocsNextAttemptAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.docs_next_attempt_at", *body.DocsNextAttemptAt, goa.FormatDateTime))
+	}
+	if body.DocsQueuedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.docs_queued_at", *body.DocsQueuedAt, goa.FormatDateTime))
+	}
+	if body.PromotedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.promoted_at", *body.PromotedAt, goa.FormatDateTime))
+	}
 	return
 }
 
@@ -43063,6 +43098,21 @@ func ValidatePromoteRegistryCandidateResponseBody(body *PromoteRegistryCandidate
 	if body.DocsAttempts == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("docs_attempts", "body"))
 	}
+	if body.CheckedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.checked_at", *body.CheckedAt, goa.FormatDateTime))
+	}
+	if body.DocsLastAttemptAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.docs_last_attempt_at", *body.DocsLastAttemptAt, goa.FormatDateTime))
+	}
+	if body.DocsNextAttemptAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.docs_next_attempt_at", *body.DocsNextAttemptAt, goa.FormatDateTime))
+	}
+	if body.DocsQueuedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.docs_queued_at", *body.DocsQueuedAt, goa.FormatDateTime))
+	}
+	if body.PromotedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.promoted_at", *body.PromotedAt, goa.FormatDateTime))
+	}
 	return
 }
 
@@ -43113,6 +43163,21 @@ func ValidateRetryRegistryPromotionDocsResponseBody(body *RetryRegistryPromotion
 	}
 	if body.DocsAttempts == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("docs_attempts", "body"))
+	}
+	if body.CheckedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.checked_at", *body.CheckedAt, goa.FormatDateTime))
+	}
+	if body.DocsLastAttemptAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.docs_last_attempt_at", *body.DocsLastAttemptAt, goa.FormatDateTime))
+	}
+	if body.DocsNextAttemptAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.docs_next_attempt_at", *body.DocsNextAttemptAt, goa.FormatDateTime))
+	}
+	if body.DocsQueuedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.docs_queued_at", *body.DocsQueuedAt, goa.FormatDateTime))
+	}
+	if body.PromotedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.promoted_at", *body.PromotedAt, goa.FormatDateTime))
 	}
 	return
 }
@@ -70085,6 +70150,21 @@ func ValidateAdminRegistryPromotionCandidateResponseBody(body *AdminRegistryProm
 	}
 	if body.DocsAttempts == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("docs_attempts", "body"))
+	}
+	if body.CheckedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.checked_at", *body.CheckedAt, goa.FormatDateTime))
+	}
+	if body.DocsLastAttemptAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.docs_last_attempt_at", *body.DocsLastAttemptAt, goa.FormatDateTime))
+	}
+	if body.DocsNextAttemptAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.docs_next_attempt_at", *body.DocsNextAttemptAt, goa.FormatDateTime))
+	}
+	if body.DocsQueuedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.docs_queued_at", *body.DocsQueuedAt, goa.FormatDateTime))
+	}
+	if body.PromotedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.promoted_at", *body.PromotedAt, goa.FormatDateTime))
 	}
 	return
 }

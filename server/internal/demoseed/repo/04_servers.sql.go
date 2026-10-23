@@ -1141,9 +1141,9 @@ func (q *Queries) ServersInsertPrivateInventoryTunnel(ctx context.Context, arg S
 }
 
 const serversInsertRegistryPromotionCandidate = `-- name: ServersInsertRegistryPromotionCandidate :exec
-
 INSERT INTO registry_promotion_candidates (id, organization_id, project_id, mcp_server_id, remote_mcp_server_id, source_revision, eligible, reason)
 VALUES ($1::uuid, $2::text, $3::uuid, $4::uuid, $5::uuid, 'synthetic-unverified', false, 'insufficient_evidence')
+ON CONFLICT (project_id,mcp_server_id) DO NOTHING
 `
 
 type ServersInsertRegistryPromotionCandidateParams struct {
@@ -1154,9 +1154,6 @@ type ServersInsertRegistryPromotionCandidateParams struct {
 	RemoteMcpServerID uuid.UUID
 }
 
-// MCP servers, gateway endpoints, plugins, meta MCP servers, remote sessions,
-// and killswitches (seed_04_servers.go). Each query is one statement of the
-// old demo.ensure_demo_org(); tenant identifiers arrive as parameters.
 // Synthetic evidence stays ineligible and queues no public publication or messages.
 func (q *Queries) ServersInsertRegistryPromotionCandidate(ctx context.Context, arg ServersInsertRegistryPromotionCandidateParams) error {
 	_, err := q.db.Exec(ctx, serversInsertRegistryPromotionCandidate,
@@ -1170,6 +1167,7 @@ func (q *Queries) ServersInsertRegistryPromotionCandidate(ctx context.Context, a
 }
 
 const serversInsertRemoteMCPServers = `-- name: ServersInsertRemoteMCPServers :exec
+
 INSERT INTO remote_mcp_servers (id, project_id, name, slug, transport_type, url) VALUES
   ($1::uuid, $2::uuid, 'Linear', 'linear',
    'streamable-http', 'https://mcp.linear.app/mcp'),
@@ -1186,6 +1184,9 @@ type ServersInsertRemoteMCPServersParams struct {
 	GithubID  uuid.UUID
 }
 
+// MCP servers, gateway endpoints, plugins, meta MCP servers, remote sessions,
+// and killswitches (seed_04_servers.go). Each query is one statement of the
+// old demo.ensure_demo_org(); tenant identifiers arrive as parameters.
 // MCP servers and the Gateway Endpoint fronting them (AGE-3299).
 // Two backends so the gateway's member table shows both classes: the
 // toolset-backed pair executes in-process, the third-party remotes are

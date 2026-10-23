@@ -10,10 +10,10 @@ import type {
   AdminPromoteRegistryCandidateMutationVariables,
 } from "@gram/admin-client/react-query/adminPromoteRegistryCandidate";
 import { buildAdminListRegistryPromotionCandidatesQuery } from "@gram/admin-client/react-query/adminListRegistryPromotionCandidates.core";
-import { buildAdminGetRegistryPromotionCandidateQuery } from "@gram/admin-client/react-query/adminGetRegistryPromotionCandidate.core";
+import { buildAdminGetRegistryPromotionCandidateMutation } from "@gram/admin-client/react-query/adminGetRegistryPromotionCandidate";
 import { buildAdminPromoteRegistryCandidateMutation } from "@gram/admin-client/react-query/adminPromoteRegistryCandidate";
 import type { AdminListRegistryPromotionCandidatesRequest } from "@gram/admin-client/models/operations/adminlistregistrypromotioncandidates";
-import type { AdminGetRegistryPromotionCandidateRequest } from "@gram/admin-client/models/operations/admingetregistrypromotioncandidate";
+import type { GetRegistryPromotionCandidateRequestBody } from "@gram/admin-client/models/components/getregistrypromotioncandidaterequestbody";
 import type { AdminInferenceKey } from "@gram/admin-client/models/components/admininferencekey";
 import { buildAdminGetUpstreamOAuthMigrationStatusQuery } from "@gram/admin-client/react-query/adminGetUpstreamOAuthMigrationStatus.core";
 import { buildAdminListUpstreamOAuthMigrationOrganizationsQuery } from "@gram/admin-client/react-query/adminListUpstreamOAuthMigrationOrganizations.core";
@@ -1193,15 +1193,22 @@ function createRegistryPromotionCandidatesQuery(
 }
 
 function createRegistryPromotionCandidateQuery(
-  params: AdminGetRegistryPromotionCandidateRequest,
+  params: GetRegistryPromotionCandidateRequestBody,
 ) {
-  const generated = buildAdminGetRegistryPromotionCandidateQuery(
+  const generated = buildAdminGetRegistryPromotionCandidateMutation(
     redirectingClient,
-    params,
+    { retries: { strategy: "none" } },
   );
   return queryOptions({
-    ...generated,
-    queryFn: (context) => redirecting(generated.queryFn(context)),
+    queryKey: ["registryPromotionCandidate", params],
+    queryFn: ({ signal }) =>
+      redirecting(
+        generated.mutationFn({
+          request: params,
+          options: { fetchOptions: { signal } },
+        }),
+      ),
+    retry: false,
     refetchOnWindowFocus: false,
   });
 }
@@ -1225,7 +1232,7 @@ export function registryPromotionCandidatesQuery(
   return createRegistryPromotionCandidatesQuery(params);
 }
 export function registryPromotionCandidateQuery(
-  params: AdminGetRegistryPromotionCandidateRequest,
+  params: GetRegistryPromotionCandidateRequestBody,
 ): ReturnType<typeof createRegistryPromotionCandidateQuery> {
   return createRegistryPromotionCandidateQuery(params);
 }

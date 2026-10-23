@@ -4694,9 +4694,7 @@ func ParseEndpoint(
 		adminListRegistryPromotionCandidatesAdminSessionTokenFlag = adminListRegistryPromotionCandidatesFlags.String("admin-session-token", "", "")
 
 		adminGetRegistryPromotionCandidateFlags                 = flag.NewFlagSet("get-registry-promotion-candidate", flag.ExitOnError)
-		adminGetRegistryPromotionCandidateOrganizationIDFlag    = adminGetRegistryPromotionCandidateFlags.String("organization-id", "REQUIRED", "")
-		adminGetRegistryPromotionCandidateProjectIDFlag         = adminGetRegistryPromotionCandidateFlags.String("project-id", "REQUIRED", "")
-		adminGetRegistryPromotionCandidateMcpServerIDFlag       = adminGetRegistryPromotionCandidateFlags.String("mcp-server-id", "REQUIRED", "")
+		adminGetRegistryPromotionCandidateBodyFlag              = adminGetRegistryPromotionCandidateFlags.String("body", "REQUIRED", "")
 		adminGetRegistryPromotionCandidateAdminSessionTokenFlag = adminGetRegistryPromotionCandidateFlags.String("admin-session-token", "", "")
 
 		adminPromoteRegistryCandidateFlags                 = flag.NewFlagSet("promote-registry-candidate", flag.ExitOnError)
@@ -12459,7 +12457,7 @@ func ParseEndpoint(
 				data, err = adminc.BuildListRegistryPromotionCandidatesPayload(*adminListRegistryPromotionCandidatesCursorFlag, *adminListRegistryPromotionCandidatesLimitFlag, *adminListRegistryPromotionCandidatesAdminSessionTokenFlag)
 			case "get-registry-promotion-candidate":
 				endpoint = c.GetRegistryPromotionCandidate()
-				data, err = adminc.BuildGetRegistryPromotionCandidatePayload(*adminGetRegistryPromotionCandidateOrganizationIDFlag, *adminGetRegistryPromotionCandidateProjectIDFlag, *adminGetRegistryPromotionCandidateMcpServerIDFlag, *adminGetRegistryPromotionCandidateAdminSessionTokenFlag)
+				data, err = adminc.BuildGetRegistryPromotionCandidatePayload(*adminGetRegistryPromotionCandidateBodyFlag, *adminGetRegistryPromotionCandidateAdminSessionTokenFlag)
 			case "promote-registry-candidate":
 				endpoint = c.PromoteRegistryCandidate()
 				data, err = adminc.BuildPromoteRegistryCandidatePayload(*adminPromoteRegistryCandidateBodyFlag, *adminPromoteRegistryCandidateAdminSessionTokenFlag)
@@ -32875,9 +32873,7 @@ func adminListRegistryPromotionCandidatesUsage() {
 func adminGetRegistryPromotionCandidateUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] admin get-registry-promotion-candidate", os.Args[0])
-	fmt.Fprint(os.Stderr, " -organization-id STRING")
-	fmt.Fprint(os.Stderr, " -project-id STRING")
-	fmt.Fprint(os.Stderr, " -mcp-server-id STRING")
+	fmt.Fprint(os.Stderr, " -body JSON")
 	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
 	fmt.Fprintln(os.Stderr)
 
@@ -32886,14 +32882,12 @@ func adminGetRegistryPromotionCandidateUsage() {
 	fmt.Fprintln(os.Stderr, `Refresh health evidence for one exact remote MCP deployment before staff review.`)
 
 	// Flags list
-	fmt.Fprintln(os.Stderr, `    -organization-id STRING: `)
-	fmt.Fprintln(os.Stderr, `    -project-id STRING: `)
-	fmt.Fprintln(os.Stderr, `    -mcp-server-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
 	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin get-registry-promotion-candidate --organization-id \"abc123\" --project-id \"550e8400-e29b-41d4-a716-446655440000\" --mcp-server-id \"550e8400-e29b-41d4-a716-446655440000\" --admin-session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin get-registry-promotion-candidate --body '{\n      \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"organization_id\": \"abc123\",\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --admin-session-token \"abc123\"")
 }
 
 func adminPromoteRegistryCandidateUsage() {
@@ -32913,7 +32907,7 @@ func adminPromoteRegistryCandidateUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin promote-registry-candidate --body '{\n      \"auth_mode\": \"abc123\",\n      \"docs_slug\": \"abc123\",\n      \"documentation_url\": \"abc123\",\n      \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"organization_id\": \"abc123\",\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"public_description\": \"abc123\",\n      \"public_metadata_confirmed\": false,\n      \"public_name\": \"abc123\",\n      \"public_title\": \"abc123\",\n      \"public_url\": \"abc123\",\n      \"retry_key\": \"abc123\",\n      \"source_revision\": \"abc123\"\n   }' --admin-session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin promote-registry-candidate --body '{\n      \"auth_mode\": \"oauth\",\n      \"docs_slug\": \"abc123\",\n      \"documentation_url\": \"abc123\",\n      \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"organization_id\": \"abc123\",\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"public_description\": \"abc123\",\n      \"public_metadata_confirmed\": false,\n      \"public_name\": \"abc123\",\n      \"public_title\": \"abc123\",\n      \"public_url\": \"abc123\",\n      \"retry_key\": \"abc123\",\n      \"source_revision\": \"abc123\"\n   }' --admin-session-token \"abc123\"")
 }
 
 func adminRetryRegistryPromotionDocsUsage() {

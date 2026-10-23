@@ -4,7 +4,7 @@
 
 import * as z from "zod/v4-mini";
 import { GramCore } from "../core.js";
-import { encodeFormQuery } from "../lib/encodings.js";
+import { encodeJSON } from "../lib/encodings.js";
 import { matchStatusCode } from "../lib/http.js";
 import * as M from "../lib/matchers.js";
 import { compactMap } from "../lib/primitives.js";
@@ -15,6 +15,10 @@ import {
   AdminRegistryPromotionCandidate,
   AdminRegistryPromotionCandidate$inboundSchema,
 } from "../models/components/adminregistrypromotioncandidate.js";
+import {
+  GetRegistryPromotionCandidateRequestBody,
+  GetRegistryPromotionCandidateRequestBody$outboundSchema,
+} from "../models/components/getregistrypromotioncandidaterequestbody.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -29,10 +33,6 @@ import {
   ServiceError,
   ServiceError$inboundSchema,
 } from "../models/errors/serviceerror.js";
-import {
-  AdminGetRegistryPromotionCandidateRequest,
-  AdminGetRegistryPromotionCandidateRequest$outboundSchema,
-} from "../models/operations/admingetregistrypromotioncandidate.js";
 import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
@@ -44,7 +44,7 @@ import { Result } from "../types/fp.js";
  */
 export function adminGetRegistryPromotionCandidate(
   client: GramCore,
-  request: AdminGetRegistryPromotionCandidateRequest,
+  request: GetRegistryPromotionCandidateRequestBody,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -69,7 +69,7 @@ export function adminGetRegistryPromotionCandidate(
 
 async function $do(
   client: GramCore,
-  request: AdminGetRegistryPromotionCandidateRequest,
+  request: GetRegistryPromotionCandidateRequestBody,
   options?: RequestOptions,
 ): Promise<
   [
@@ -91,24 +91,19 @@ async function $do(
   const parsed = safeParse(
     request,
     (value) =>
-      z.parse(AdminGetRegistryPromotionCandidateRequest$outboundSchema, value),
+      z.parse(GetRegistryPromotionCandidateRequestBody$outboundSchema, value),
     "Input validation failed",
   );
   if (!parsed.ok) {
     return [parsed, { status: "invalid" }];
   }
   const payload = parsed.value;
-  const body = null;
+  const body = encodeJSON("body", payload, { explode: true });
 
   const path = pathToFunc("/admin/registry.promotionCandidate")();
 
-  const query = encodeFormQuery({
-    "mcp_server_id": payload.mcp_server_id,
-    "organization_id": payload.organization_id,
-    "project_id": payload.project_id,
-  });
-
   const headers = new Headers(compactMap({
+    "Content-Type": "application/json",
     Accept: "application/json",
   }));
 
@@ -128,11 +123,10 @@ async function $do(
   };
 
   const requestRes = client._createRequest(context, {
-    method: "GET",
+    method: "POST",
     baseURL: options?.serverURL,
     path: path,
     headers: headers,
-    query: query,
     body: body,
     userAgent: client._options.userAgent,
     timeoutMs: options?.timeoutMs || client._options.timeoutMs || -1,

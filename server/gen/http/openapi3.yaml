@@ -5555,30 +5555,15 @@ paths:
                 - admin
             x-speakeasy-name-override: promoteRegistryCandidate
     /admin/registry.promotionCandidate:
-        get:
+        post:
             description: Refresh health evidence for one exact remote MCP deployment before staff review.
             operationId: adminGetRegistryPromotionCandidate
-            parameters:
-                - allowEmptyValue: true
-                  in: query
-                  name: organization_id
-                  required: true
-                  schema:
-                    type: string
-                - allowEmptyValue: true
-                  in: query
-                  name: project_id
-                  required: true
-                  schema:
-                    format: uuid
-                    type: string
-                - allowEmptyValue: true
-                  in: query
-                  name: mcp_server_id
-                  required: true
-                  schema:
-                    format: uuid
-                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/GetRegistryPromotionCandidateRequestBody'
+                required: true
             responses:
                 "200":
                     content:
@@ -91993,6 +91978,7 @@ components:
             properties:
                 checked_at:
                     type: string
+                    format: date-time
                 delivery_error:
                     type: string
                 docs_attempts:
@@ -92000,10 +91986,13 @@ components:
                     format: int64
                 docs_last_attempt_at:
                     type: string
+                    format: date-time
                 docs_next_attempt_at:
                     type: string
+                    format: date-time
                 docs_queued_at:
                     type: string
+                    format: date-time
                 docs_retry_allowed:
                     type: boolean
                 docs_revision:
@@ -92033,6 +92022,7 @@ components:
                     type: string
                 promoted_at:
                     type: string
+                    format: date-time
                 public_title:
                     type: string
                 reason:
@@ -102527,6 +102517,21 @@ components:
                     $ref: '#/components/schemas/PromptTemplate'
             required:
                 - template
+        GetRegistryPromotionCandidateRequestBody:
+            type: object
+            properties:
+                mcp_server_id:
+                    type: string
+                    format: uuid
+                organization_id:
+                    type: string
+                project_id:
+                    type: string
+                    format: uuid
+            required:
+                - organization_id
+                - project_id
+                - mcp_server_id
         GetRiskPolicyChallengeResponseBody:
             type: object
             properties:
@@ -111931,6 +111936,9 @@ components:
             properties:
                 auth_mode:
                     type: string
+                    enum:
+                        - none
+                        - oauth
                 docs_slug:
                     type: string
                 documentation_url:

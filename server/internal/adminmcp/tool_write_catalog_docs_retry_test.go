@@ -2,6 +2,7 @@ package adminmcp
 
 import (
 	"context"
+	"errors"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -112,4 +113,17 @@ func TestCatalogPromotionProjectsDocsRetrySafely(t *testing.T) {
 	candidate.DocsQueuedAt = "raw unsafe text"
 	_, ok = projectCatalogPromotion(candidate)
 	require.False(t, ok)
+}
+
+func TestCatalogDocsRetryDistinguishesLookupAndStateErrors(t *testing.T) {
+	t.Parallel()
+	require.ErrorIs(t, docsRetryValidationError(catalogpromotion.ErrStale), ErrStaleState)
+	require.ErrorIs(t, docsRetryValidationError(catalogpromotion.ErrConflict), ErrStaleState)
+	missing := docsRetryValidationError(catalogpromotion.ErrNotFound)
+	require.NotErrorIs(t, missing, ErrStaleState)
+	require.ErrorContains(t, missing, "not found")
+	unavailable := docsRetryValidationError(errors.New("private database details"))
+	require.NotErrorIs(t, unavailable, ErrStaleState)
+	require.ErrorContains(t, unavailable, "unavailable")
+	require.NotContains(t, unavailable.Error(), "private database details")
 }

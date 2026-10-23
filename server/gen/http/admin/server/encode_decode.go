@@ -14171,35 +14171,33 @@ func DecodeGetRegistryPromotionCandidateRequest(mux goahttp.Muxer, decoder func(
 	return func(r *http.Request) (*admin.GetRegistryPromotionCandidatePayload, error) {
 		var payload *admin.GetRegistryPromotionCandidatePayload
 		var (
-			organizationID    string
-			projectID         string
-			mcpServerID       string
-			adminSessionToken *string
-			err               error
+			body GetRegistryPromotionCandidateRequestBody
+			err  error
 		)
-		qp := r.URL.Query()
-		organizationID = qp.Get("organization_id")
-		if organizationID == "" {
-			err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "query string"))
+		err = decoder(r).Decode(&body)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return payload, goa.MissingPayloadError()
+			}
+			var gerr *goa.ServiceError
+			if errors.As(err, &gerr) {
+				return payload, gerr
+			}
+			return payload, goa.DecodePayloadError(err.Error())
 		}
-		projectID = qp.Get("project_id")
-		if projectID == "" {
-			err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "query string"))
+		err = ValidateGetRegistryPromotionCandidateRequestBody(&body)
+		if err != nil {
+			return payload, err
 		}
-		err = goa.MergeErrors(err, goa.ValidateFormat("project_id", projectID, goa.FormatUUID))
-		mcpServerID = qp.Get("mcp_server_id")
-		if mcpServerID == "" {
-			err = goa.MergeErrors(err, goa.MissingFieldError("mcp_server_id", "query string"))
-		}
-		err = goa.MergeErrors(err, goa.ValidateFormat("mcp_server_id", mcpServerID, goa.FormatUUID))
+
+		var (
+			adminSessionToken *string
+		)
 		adminSessionTokenRaw := r.Header.Get("Authorization")
 		if adminSessionTokenRaw != "" {
 			adminSessionToken = &adminSessionTokenRaw
 		}
-		if err != nil {
-			return payload, err
-		}
-		payload = NewGetRegistryPromotionCandidatePayload(organizationID, projectID, mcpServerID, adminSessionToken)
+		payload = NewGetRegistryPromotionCandidatePayload(&body, adminSessionToken)
 		if payload.AdminSessionToken != nil {
 			if strings.Contains(*payload.AdminSessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")

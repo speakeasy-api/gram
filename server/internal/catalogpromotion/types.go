@@ -12,20 +12,21 @@ import (
 )
 
 var (
-	ErrNotFound   = errors.New("promotion candidate not found")
-	ErrStale      = errors.New("promotion source or evidence changed; refresh the candidate")
-	ErrIneligible = errors.New("remote server is not eligible for promotion")
-	ErrConflict   = errors.New("this source, endpoint, name, or retry key already belongs to a promotion")
-	ErrInvalid    = errors.New("invalid public catalogue metadata")
+	ErrNotFound    = errors.New("promotion candidate not found")
+	ErrStale       = errors.New("promotion source or evidence changed; refresh the candidate")
+	ErrIneligible  = errors.New("remote server is not eligible for promotion")
+	ErrConflict    = errors.New("this source, endpoint, name, or retry key already belongs to a promotion")
+	ErrInvalid     = errors.New("invalid public catalogue metadata")
+	ErrUnavailable = errors.New("catalogue promotion validation temporarily unavailable")
 )
 
 // Target pins the source to its canonical tenant and project.
 type Target struct {
 	// OrganizationID identifies the canonical source tenant.
 	OrganizationID string `json:"organization_id"`
-	// ProjectID identifies the source project; empty after source deletion.
+	// ProjectID pins the active source project.
 	ProjectID uuid.UUID `json:"project_id"`
-	// MCPServerID identifies the source deployment; empty after source deletion.
+	// MCPServerID pins the active source deployment.
 	MCPServerID uuid.UUID `json:"mcp_server_id"`
 }
 

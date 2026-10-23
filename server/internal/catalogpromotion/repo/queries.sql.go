@@ -212,10 +212,16 @@ JOIN projects p ON p.id = m.project_id
 JOIN remote_mcp_servers r ON r.id = m.remote_mcp_server_id AND r.project_id = m.project_id
 LEFT JOIN registry_promotion_candidates c ON c.project_id = m.project_id AND c.mcp_server_id = m.id
 WHERE m.deleted IS FALSE AND r.deleted IS FALSE AND p.deleted IS FALSE AND c.promoted_at IS NULL
-AND (c.discovery_next_attempt_at IS NULL OR c.discovery_next_attempt_at <= $1::timestamptz)
+ AND p.organization_id <> $1::text
+AND (c.discovery_next_attempt_at IS NULL OR c.discovery_next_attempt_at <= $2::timestamptz)
 ORDER BY c.discovery_last_attempt_at NULLS FIRST, m.id
 LIMIT 50
 `
+
+type DiscoveryTargetsParams struct {
+	ExcludedOrganizationID string
+	Now                    pgtype.Timestamptz
+}
 
 type DiscoveryTargetsRow struct {
 	OrganizationID string
@@ -223,8 +229,8 @@ type DiscoveryTargetsRow struct {
 	McpServerID    uuid.UUID
 }
 
-func (q *Queries) DiscoveryTargets(ctx context.Context, now pgtype.Timestamptz) ([]DiscoveryTargetsRow, error) {
-	rows, err := q.db.Query(ctx, discoveryTargets, now)
+func (q *Queries) DiscoveryTargets(ctx context.Context, arg DiscoveryTargetsParams) ([]DiscoveryTargetsRow, error) {
+	rows, err := q.db.Query(ctx, discoveryTargets, arg.ExcludedOrganizationID, arg.Now)
 	if err != nil {
 		return nil, err
 	}
@@ -259,22 +265,24 @@ func (q *Queries) FindRegistryEndpoint(ctx context.Context, url string) (bool, e
 
 const finishDiscovery = `-- name: FinishDiscovery :exec
 UPDATE registry_promotion_candidates SET discovery_failures=CASE WHEN $1::boolean THEN discovery_failures+1 ELSE 0 END,
- eligible=CASE WHEN $1::boolean AND checked_at <= $2::timestamptz THEN false ELSE eligible END,
- reason=CASE WHEN $1::boolean AND checked_at <= $2::timestamptz THEN 'telemetry_unavailable' ELSE reason END,
+ eligible=CASE WHEN $2::text <> '' AND checked_at <= $3::timestamptz THEN false ELSE eligible END,
+ reason=CASE WHEN $2::text <> '' AND checked_at <= $3::timestamptz THEN $2::text ELSE reason END,
  updated_at=clock_timestamp()
-WHERE id= $3 AND project_id IS NOT DISTINCT FROM $4::uuid AND discovery_last_attempt_at= $2::timestamptz AND promoted_at IS NULL
+WHERE id= $4 AND project_id IS NOT DISTINCT FROM $5::uuid AND discovery_last_attempt_at= $3::timestamptz AND promoted_at IS NULL
 `
 
 type FinishDiscoveryParams struct {
-	Failed      bool
-	AttemptedAt pgtype.Timestamptz
-	ID          uuid.UUID
-	ProjectID   uuid.NullUUID
+	Failed        bool
+	FailureReason string
+	AttemptedAt   pgtype.Timestamptz
+	ID            uuid.UUID
+	ProjectID     uuid.NullUUID
 }
 
 func (q *Queries) FinishDiscovery(ctx context.Context, arg FinishDiscoveryParams) error {
 	_, err := q.db.Exec(ctx, finishDiscovery,
 		arg.Failed,
+		arg.FailureReason,
 		arg.AttemptedAt,
 		arg.ID,
 		arg.ProjectID,
@@ -696,7 +704,7 @@ const promoteCandidate = `-- name: PromoteCandidate :one
 UPDATE registry_promotion_candidates SET registry_entry_id= $1,public_metadata= $2,
  endpoint_identity= $3,request_digest= $4,retry_key= $5,promoted_by= $6,
  promoted_at=clock_timestamp(),updated_at=clock_timestamp()
-WHERE id= $7 AND project_id IS NOT DISTINCT FROM $8::uuid AND promoted_at IS NULL
+WHERE id= $7 AND organization_id= $8 AND project_id IS NOT DISTINCT FROM $9::uuid AND promoted_at IS NULL
 RETURNING id, organization_id, project_id, mcp_server_id, remote_mcp_server_id, source_revision, eligible, reason, observed_successes, observed_failures, observed_days, checked_at, registry_entry_id, public_metadata, endpoint_identity, request_digest, retry_key, promoted_by, promoted_at, docs_url, docs_queued_at, delivery_error, discovery_last_attempt_at, discovery_next_attempt_at, discovery_failures, docs_attempts, docs_failures, docs_last_attempt_at, docs_next_attempt_at, docs_needs_attention, docs_lease_until, docs_lease_token, docs_revision, docs_retry_key, docs_retry_revision, docs_retry_by, created_at, updated_at
 `
 
@@ -708,6 +716,7 @@ type PromoteCandidateParams struct {
 	RetryKey         pgtype.Text
 	PromotedBy       pgtype.Text
 	ID               uuid.UUID
+	OrganizationID   string
 	ProjectID        uuid.NullUUID
 }
 
@@ -720,6 +729,7 @@ func (q *Queries) PromoteCandidate(ctx context.Context, arg PromoteCandidatePara
 		arg.RetryKey,
 		arg.PromotedBy,
 		arg.ID,
+		arg.OrganizationID,
 		arg.ProjectID,
 	)
 	var i RegistryPromotionCandidate
@@ -821,6 +831,29 @@ func (q *Queries) PromotionRowFixture(ctx context.Context, arg PromotionRowFixtu
 	return i, err
 }
 
+const repointPromotionSourceFixture = `-- name: RepointPromotionSourceFixture :exec
+WITH replacement AS (
+ INSERT INTO remote_mcp_servers(id,project_id,name,slug,transport_type,url)
+ SELECT $3::uuid,m.project_id,'Synthetic replacement','synthetic-replacement',r.transport_type,r.url
+ FROM mcp_servers m JOIN remote_mcp_servers r ON r.id=m.remote_mcp_server_id AND r.project_id=m.project_id
+ WHERE m.project_id= $1 AND m.id= $2
+ RETURNING id
+)
+UPDATE mcp_servers m SET remote_mcp_server_id=replacement.id,updated_at=clock_timestamp()
+FROM replacement WHERE m.project_id= $1 AND m.id= $2
+`
+
+type RepointPromotionSourceFixtureParams struct {
+	ProjectID   uuid.UUID
+	McpServerID uuid.UUID
+	NewRemoteID uuid.UUID
+}
+
+func (q *Queries) RepointPromotionSourceFixture(ctx context.Context, arg RepointPromotionSourceFixtureParams) error {
+	_, err := q.db.Exec(ctx, repointPromotionSourceFixture, arg.ProjectID, arg.McpServerID, arg.NewRemoteID)
+	return err
+}
+
 const retryDocs = `-- name: RetryDocs :one
 UPDATE registry_promotion_candidates SET docs_needs_attention=false,docs_failures=0,
  docs_next_attempt_at=NULL,docs_lease_token=NULL,docs_lease_until=NULL,delivery_error=NULL,
@@ -918,11 +951,12 @@ const storeEvidence = `-- name: StoreEvidence :one
 INSERT INTO registry_promotion_candidates (organization_id,project_id,mcp_server_id,remote_mcp_server_id,source_revision,eligible,reason,observed_successes,observed_failures,observed_days,checked_at)
 VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
 ON CONFLICT(project_id,mcp_server_id) DO UPDATE SET
- source_revision=EXCLUDED.source_revision, eligible=EXCLUDED.eligible, reason=EXCLUDED.reason,
+ source_revision=EXCLUDED.source_revision, remote_mcp_server_id=EXCLUDED.remote_mcp_server_id, eligible=EXCLUDED.eligible, reason=EXCLUDED.reason,
  observed_successes=EXCLUDED.observed_successes, observed_failures=EXCLUDED.observed_failures,
  observed_days=EXCLUDED.observed_days, checked_at=EXCLUDED.checked_at, updated_at=clock_timestamp()
-WHERE registry_promotion_candidates.checked_at <= EXCLUDED.checked_at
- OR registry_promotion_candidates.source_revision <> EXCLUDED.source_revision
+WHERE registry_promotion_candidates.promoted_at IS NULL
+ AND (registry_promotion_candidates.checked_at <= EXCLUDED.checked_at
+ OR registry_promotion_candidates.source_revision <> EXCLUDED.source_revision)
 RETURNING id, organization_id, project_id, mcp_server_id, remote_mcp_server_id, source_revision, eligible, reason, observed_successes, observed_failures, observed_days, checked_at, registry_entry_id, public_metadata, endpoint_identity, request_digest, retry_key, promoted_by, promoted_at, docs_url, docs_queued_at, delivery_error, discovery_last_attempt_at, discovery_next_attempt_at, discovery_failures, docs_attempts, docs_failures, docs_last_attempt_at, docs_next_attempt_at, docs_needs_attention, docs_lease_until, docs_lease_token, docs_revision, docs_retry_key, docs_retry_revision, docs_retry_by, created_at, updated_at
 `
 

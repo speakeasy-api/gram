@@ -214,7 +214,7 @@ func New(
 			{"PreviewExternalMcpMigration", "POST", "/admin/externalMcpMigration.preview"},
 			{"MigrateExternalMcpServers", "POST", "/admin/externalMcpMigration.migrate"},
 			{"ListRegistryPromotionCandidates", "GET", "/admin/registry.promotionCandidates"},
-			{"GetRegistryPromotionCandidate", "GET", "/admin/registry.promotionCandidate"},
+			{"GetRegistryPromotionCandidate", "POST", "/admin/registry.promotionCandidate"},
 			{"PromoteRegistryCandidate", "POST", "/admin/registry.promoteCandidate"},
 			{"RetryRegistryPromotionDocs", "POST", "/admin/registry.retryPromotionDocs"},
 			{"GetRegistryOktaCandidates", "GET", "/admin/registry.oktaCandidates"},
@@ -4081,7 +4081,7 @@ func MountGetRegistryPromotionCandidateHandler(mux goahttp.Muxer, h http.Handler
 			h.ServeHTTP(w, r)
 		}
 	}
-	mux.Handle("GET", "/admin/registry.promotionCandidate", f)
+	mux.Handle("POST", "/admin/registry.promotionCandidate", f)
 }
 
 // NewGetRegistryPromotionCandidateHandler creates a HTTP handler which loads

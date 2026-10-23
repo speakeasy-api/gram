@@ -162,6 +162,7 @@ import { DisableOrganizationRequestBody } from "../models/components/disableorga
 import { EnableOrganizationRequestBody } from "../models/components/enableorganizationrequestbody.js";
 import { ExtendTrialRequestBody } from "../models/components/extendtrialrequestbody.js";
 import { FetchIssuerMetadataRequestBody } from "../models/components/fetchissuermetadatarequestbody.js";
+import { GetRegistryPromotionCandidateRequestBody } from "../models/components/getregistrypromotioncandidaterequestbody.js";
 import { GlobalRemoteSessionIssuer } from "../models/components/globalremotesessionissuer.js";
 import { IssuerMigratePreflight } from "../models/components/issuermigratepreflight.js";
 import { ListSignupOffersResponseBody } from "../models/components/listsignupoffersresponsebody.js";
@@ -221,7 +222,6 @@ import { AdminGetPaygBillingSummaryRequest } from "../models/operations/adminget
 import { AdminGetProjectRequest } from "../models/operations/admingetproject.js";
 import { AdminGetRegistryEntryRequest } from "../models/operations/admingetregistryentry.js";
 import { AdminGetRegistryOktaCandidatesRequest } from "../models/operations/admingetregistryoktacandidates.js";
-import { AdminGetRegistryPromotionCandidateRequest } from "../models/operations/admingetregistrypromotioncandidate.js";
 import { AdminGetSpendBreakdownRequest } from "../models/operations/admingetspendbreakdown.js";
 import { AdminGetStripeCustomerRequest } from "../models/operations/admingetstripecustomer.js";
 import { AdminGetStripeSubscriptionRequest } from "../models/operations/admingetstripesubscription.js";
@@ -1309,7 +1309,7 @@ export class Admin extends ClientSDK {
    * Refresh health evidence for one exact remote MCP deployment before staff review.
    */
   async getRegistryPromotionCandidate(
-    request: AdminGetRegistryPromotionCandidateRequest,
+    request: GetRegistryPromotionCandidateRequestBody,
     options?: RequestOptions,
   ): Promise<AdminRegistryPromotionCandidate> {
     return unwrapAsync(adminGetRegistryPromotionCandidate(

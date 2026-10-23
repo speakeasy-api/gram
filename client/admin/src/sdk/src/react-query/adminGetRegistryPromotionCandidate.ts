@@ -3,13 +3,16 @@
  */
 
 import {
-  InvalidateQueryFilters,
-  QueryClient,
-  useQuery,
-  UseQueryResult,
-  useSuspenseQuery,
-  UseSuspenseQueryResult,
+  MutationKey,
+  useMutation,
+  UseMutationResult,
 } from "@tanstack/react-query";
+import { GramCore } from "../core.js";
+import { adminGetRegistryPromotionCandidate } from "../funcs/adminGetRegistryPromotionCandidate.js";
+import { combineSignals } from "../lib/primitives.js";
+import { RequestOptions } from "../lib/sdks.js";
+import { AdminRegistryPromotionCandidate } from "../models/components/adminregistrypromotioncandidate.js";
+import { GetRegistryPromotionCandidateRequestBody } from "../models/components/getregistrypromotioncandidaterequestbody.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -21,27 +24,19 @@ import {
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import { ServiceError } from "../models/errors/serviceerror.js";
-import { AdminGetRegistryPromotionCandidateRequest } from "../models/operations/admingetregistrypromotioncandidate.js";
+import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
-import {
-  QueryHookOptions,
-  SuspenseQueryHookOptions,
-  TupleToPrefixes,
-} from "./_types.js";
-import {
-  AdminGetRegistryPromotionCandidateQueryData,
-  buildAdminGetRegistryPromotionCandidateQuery,
-  prefetchAdminGetRegistryPromotionCandidate,
-  queryKeyAdminGetRegistryPromotionCandidate,
-} from "./adminGetRegistryPromotionCandidate.core.js";
-export {
-  type AdminGetRegistryPromotionCandidateQueryData,
-  buildAdminGetRegistryPromotionCandidateQuery,
-  prefetchAdminGetRegistryPromotionCandidate,
-  queryKeyAdminGetRegistryPromotionCandidate,
+import { MutationHookOptions } from "./_types.js";
+
+export type AdminGetRegistryPromotionCandidateMutationVariables = {
+  request: GetRegistryPromotionCandidateRequestBody;
+  options?: RequestOptions;
 };
 
-export type AdminGetRegistryPromotionCandidateQueryError =
+export type AdminGetRegistryPromotionCandidateMutationData =
+  AdminRegistryPromotionCandidate;
+
+export type AdminGetRegistryPromotionCandidateMutationError =
   | ServiceError
   | GramError
   | ResponseValidationError
@@ -58,101 +53,60 @@ export type AdminGetRegistryPromotionCandidateQueryError =
  * @remarks
  * Refresh health evidence for one exact remote MCP deployment before staff review.
  */
-export function useAdminGetRegistryPromotionCandidate(
-  request: AdminGetRegistryPromotionCandidateRequest,
-  options?: QueryHookOptions<
-    AdminGetRegistryPromotionCandidateQueryData,
-    AdminGetRegistryPromotionCandidateQueryError
+export function useAdminGetRegistryPromotionCandidateMutation(
+  options?: MutationHookOptions<
+    AdminGetRegistryPromotionCandidateMutationData,
+    AdminGetRegistryPromotionCandidateMutationError,
+    AdminGetRegistryPromotionCandidateMutationVariables
   >,
-): UseQueryResult<
-  AdminGetRegistryPromotionCandidateQueryData,
-  AdminGetRegistryPromotionCandidateQueryError
+): UseMutationResult<
+  AdminGetRegistryPromotionCandidateMutationData,
+  AdminGetRegistryPromotionCandidateMutationError,
+  AdminGetRegistryPromotionCandidateMutationVariables
 > {
   const client = useGramContext();
-  return useQuery({
-    ...buildAdminGetRegistryPromotionCandidateQuery(
-      client,
-      request,
-      options,
-    ),
+  return useMutation({
+    ...buildAdminGetRegistryPromotionCandidateMutation(client, options),
     ...options,
   });
 }
 
-/**
- * getRegistryPromotionCandidate admin
- *
- * @remarks
- * Refresh health evidence for one exact remote MCP deployment before staff review.
- */
-export function useAdminGetRegistryPromotionCandidateSuspense(
-  request: AdminGetRegistryPromotionCandidateRequest,
-  options?: SuspenseQueryHookOptions<
-    AdminGetRegistryPromotionCandidateQueryData,
-    AdminGetRegistryPromotionCandidateQueryError
-  >,
-): UseSuspenseQueryResult<
-  AdminGetRegistryPromotionCandidateQueryData,
-  AdminGetRegistryPromotionCandidateQueryError
-> {
-  const client = useGramContext();
-  return useSuspenseQuery({
-    ...buildAdminGetRegistryPromotionCandidateQuery(
-      client,
-      request,
-      options,
-    ),
-    ...options,
-  });
+export function mutationKeyAdminGetRegistryPromotionCandidate(): MutationKey {
+  return ["@gram/admin-client", "admin", "getRegistryPromotionCandidate"];
 }
 
-export function setAdminGetRegistryPromotionCandidateData(
-  client: QueryClient,
-  queryKeyBase: [
-    parameters: {
-      organizationId: string;
-      projectId: string;
-      mcpServerId: string;
+export function buildAdminGetRegistryPromotionCandidateMutation(
+  client$: GramCore,
+  hookOptions?: RequestOptions,
+): {
+  mutationKey: MutationKey;
+  mutationFn: (
+    variables: AdminGetRegistryPromotionCandidateMutationVariables,
+  ) => Promise<AdminGetRegistryPromotionCandidateMutationData>;
+} {
+  return {
+    mutationKey: mutationKeyAdminGetRegistryPromotionCandidate(),
+    mutationFn: function adminGetRegistryPromotionCandidateMutationFn({
+      request,
+      options,
+    }): Promise<AdminGetRegistryPromotionCandidateMutationData> {
+      const mergedOptions = {
+        ...hookOptions,
+        ...options,
+        fetchOptions: {
+          ...hookOptions?.fetchOptions,
+          ...options?.fetchOptions,
+          signal: combineSignals(
+            hookOptions?.fetchOptions?.signal,
+            options?.fetchOptions?.signal,
+          ),
+        },
+      };
+      return unwrapAsync(adminGetRegistryPromotionCandidate(
+        client$,
+        request,
+        mergedOptions,
+      ));
     },
-  ],
-  data: AdminGetRegistryPromotionCandidateQueryData,
-): AdminGetRegistryPromotionCandidateQueryData | undefined {
-  const key = queryKeyAdminGetRegistryPromotionCandidate(...queryKeyBase);
-
-  return client.setQueryData<AdminGetRegistryPromotionCandidateQueryData>(
-    key,
-    data,
-  );
-}
-
-export function invalidateAdminGetRegistryPromotionCandidate(
-  client: QueryClient,
-  queryKeyBase: TupleToPrefixes<
-    [parameters: {
-      organizationId: string;
-      projectId: string;
-      mcpServerId: string;
-    }]
-  >,
-  filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
-): Promise<void> {
-  return client.invalidateQueries({
-    ...filters,
-    queryKey: [
-      "@gram/admin-client",
-      "admin",
-      "getRegistryPromotionCandidate",
-      ...queryKeyBase,
-    ],
-  });
-}
-
-export function invalidateAllAdminGetRegistryPromotionCandidate(
-  client: QueryClient,
-  filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
-): Promise<void> {
-  return client.invalidateQueries({
-    ...filters,
-    queryKey: ["@gram/admin-client", "admin", "getRegistryPromotionCandidate"],
-  });
+  };
 }

@@ -29,6 +29,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
+	delivery "github.com/speakeasy-api/gram/server/internal/thirdparty/catalogpromotion"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -76,6 +77,7 @@ type featureReader interface {
 }
 
 // New wires independently retryable delivery behind the authoritative Postgres record.
+// A nil delivery permits qualification-only use; Dispatch rejects it before claiming jobs.
 func New(db *pgxpool.Pool, registry *mcpregistry.Service, features *productfeatures.Client, health HealthReader, delivery DeliveryClient, policy *guardian.Policy) *Service {
 	return &Service{db: db, registry: registry, features: features, health: health, delivery: delivery, policy: policy, now: time.Now, effectTimeout: DocsRecordTimeout}
 }
@@ -101,6 +103,9 @@ func (s *Service) GetCandidate(ctx context.Context, target Target) (Candidate, e
 		return tx.Rollback(cleanupCtx)
 	})
 	current, err := repo.New(tx).GetSource(ctx, repo.GetSourceParams{OrganizationID: target.OrganizationID, ProjectID: target.ProjectID, McpServerID: target.MCPServerID})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Candidate{}, ErrNotFound
+	}
 	if err != nil {
 		return Candidate{}, fmt.Errorf("recheck promotion source: %w", err)
 	}
@@ -315,6 +320,10 @@ func (s *Service) ValidateTx(ctx context.Context, tx pgx.Tx, target Target, revi
 	// These DNS checks never fetch source content or send customer credentials.
 	for _, raw := range []string{public.URL, public.DocumentationURL} {
 		if _, err := s.policy.ValidateHTTPSURL(ctx, raw); err != nil {
+			var dnsErr *net.DNSError
+			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) || (errors.As(err, &dnsErr) && (dnsErr.Timeout() || dnsErr.Temporary())) {
+				return Candidate{}, fmt.Errorf("%w: %w", ErrUnavailable, err)
+			}
 			return Candidate{}, ErrInvalid
 		}
 	}
@@ -342,12 +351,18 @@ func (s *Service) PromoteTx(ctx context.Context, tx pgx.Tx, request Request, act
 	}
 	// Lock the source first, matching refresh and approval lock order.
 	_, err = repo.New(tx).GetSource(ctx, repo.GetSourceParams{OrganizationID: request.Target.OrganizationID, ProjectID: request.Target.ProjectID, McpServerID: request.Target.MCPServerID})
-	if err != nil {
+	if errors.Is(err, pgx.ErrNoRows) {
 		return Candidate{}, ErrNotFound
 	}
-	prior, err := repo.New(tx).GetCandidate(ctx, repo.GetCandidateParams{OrganizationID: request.Target.OrganizationID, ProjectID: uuid.NullUUID{UUID: request.Target.ProjectID, Valid: true}, McpServerID: uuid.NullUUID{UUID: request.Target.MCPServerID, Valid: true}})
 	if err != nil {
+		return Candidate{}, fmt.Errorf("read promotion target: %w", err)
+	}
+	prior, err := repo.New(tx).GetCandidate(ctx, repo.GetCandidateParams{OrganizationID: request.Target.OrganizationID, ProjectID: uuid.NullUUID{UUID: request.Target.ProjectID, Valid: true}, McpServerID: uuid.NullUUID{UUID: request.Target.MCPServerID, Valid: true}})
+	if errors.Is(err, pgx.ErrNoRows) {
 		return Candidate{}, ErrNotFound
+	}
+	if err != nil {
+		return Candidate{}, fmt.Errorf("read promotion target: %w", err)
 	}
 	if prior.PromotedAt.Valid {
 		if prior.RequestDigest.String == digest && prior.RetryKey.String == request.RetryKey {
@@ -375,8 +390,11 @@ func (s *Service) PromoteTx(ctx context.Context, tx pgx.Tx, request Request, act
 		return Candidate{}, ErrConflict
 	}
 	source, err := repo.New(tx).GetSource(ctx, repo.GetSourceParams{OrganizationID: request.Target.OrganizationID, ProjectID: request.Target.ProjectID, McpServerID: request.Target.MCPServerID})
-	if err != nil {
+	if errors.Is(err, pgx.ErrNoRows) {
 		return Candidate{}, ErrNotFound
+	}
+	if err != nil {
+		return Candidate{}, fmt.Errorf("read promotion target: %w", err)
 	}
 	record, err := buildRecord(request.Public, source.TransportType)
 	if err != nil {
@@ -394,7 +412,7 @@ func (s *Service) PromoteTx(ctx context.Context, tx pgx.Tx, request Request, act
 		return Candidate{}, fmt.Errorf("encode public promotion metadata: %w", err)
 	}
 	row, err := repo.New(tx).PromoteCandidate(ctx, repo.PromoteCandidateParams{
-		RegistryEntryID: uuid.NullUUID{UUID: entry.ID, Valid: true}, PublicMetadata: publicJSON, EndpointIdentity: conv.ToPGText(request.Public.URL),
+		OrganizationID: request.Target.OrganizationID, RegistryEntryID: uuid.NullUUID{UUID: entry.ID, Valid: true}, PublicMetadata: publicJSON, EndpointIdentity: conv.ToPGText(request.Public.URL),
 		RequestDigest: conv.ToPGText(digest), RetryKey: conv.ToPGText(request.RetryKey), PromotedBy: conv.ToPGText(actor), ID: prior.ID, ProjectID: uuid.NullUUID{UUID: request.Target.ProjectID, Valid: true},
 	})
 	var pgerr *pgconn.PgError
@@ -439,6 +457,9 @@ func validatePublic(public PublicMetadata) error {
 }
 
 func publicURL(raw string) (*url.URL, error) {
+	if delivery.ValidatePublicURL(raw) != nil {
+		return nil, ErrInvalid
+	}
 	parsed, err := url.Parse(raw)
 	if err != nil || raw != strings.TrimSpace(raw) || len(raw) > maxPublicURL {
 		return nil, ErrInvalid
@@ -447,9 +468,7 @@ func publicURL(raw string) (*url.URL, error) {
 		return nil, ErrInvalid
 	}
 	host := strings.ToLower(parsed.Hostname())
-	if net.ParseIP(host) != nil || !strings.Contains(host, ".") || strings.HasSuffix(host, ".localhost") || strings.HasSuffix(host, ".local") || strings.HasSuffix(host, ".internal") {
-		return nil, ErrInvalid
-	}
+
 	if parsed.Port() != "" && parsed.Port() != "443" {
 		return nil, ErrInvalid
 	}

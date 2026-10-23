@@ -45,14 +45,16 @@ func promotionTarget(organizationID, projectID, serverID string) (catalogpromoti
 
 func promotionError(err error) error {
 	switch {
+	case errors.Is(err, catalogpromotion.ErrUnavailable):
+		return oops.E(oops.CodeUnavailable, nil, "catalogue promotion validation is temporarily unavailable; retry")
 	case errors.Is(err, catalogpromotion.ErrNotFound):
 		return oops.C(oops.CodeNotFound)
 	case errors.Is(err, catalogpromotion.ErrStale), errors.Is(err, catalogpromotion.ErrConflict):
 		return oops.E(oops.CodeConflict, nil, "promotion source changed or was already promoted; refresh before retrying")
 	case errors.Is(err, catalogpromotion.ErrInvalid):
-		return oops.E(oops.CodeBadRequest, nil, "provide reviewed public metadata and a canonical public HTTPS endpoint matching the eligible source")
+		return oops.E(oops.CodeBadRequest, nil, "invalid catalogue promotion input; check target identifiers, pagination cursor, retry key, and reviewed public metadata")
 	case errors.Is(err, catalogpromotion.ErrIneligible):
-		return oops.E(oops.CodeBadRequest, nil, "remote server lacks sufficient recent successful usage")
+		return oops.E(oops.CodeBadRequest, nil, "remote server does not meet the configuration and recent usage requirements for promotion")
 	default:
 		return oops.E(oops.CodeUnexpected, err, "catalogue promotion is unavailable")
 	}

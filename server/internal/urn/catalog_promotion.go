@@ -13,21 +13,10 @@ import (
 type CatalogPromotion struct {
 	// ID is the durable publication receipt identifier.
 	ID uuid.UUID
-
-	checked bool
-	err     error
 }
 
 func NewCatalogPromotion(id uuid.UUID) CatalogPromotion {
-	a := CatalogPromotion{
-		ID:      id,
-		checked: false,
-		err:     nil,
-	}
-
-	_ = a.validate()
-
-	return a
+	return CatalogPromotion{ID: id}
 }
 
 func ParseCatalogPromotion(value string) (CatalogPromotion, error) {
@@ -46,7 +35,7 @@ func ParseCatalogPromotion(value string) (CatalogPromotion, error) {
 	}
 
 	id, err := uuid.Parse(parts[1])
-	if err != nil {
+	if err != nil || id == uuid.Nil {
 		return CatalogPromotion{}, fmt.Errorf("%w: invalid catalog-promotion uuid", ErrInvalid)
 	}
 
@@ -142,17 +131,9 @@ func (u *CatalogPromotion) UnmarshalText(text []byte) error {
 	return nil
 }
 
-func (u *CatalogPromotion) validate() error {
-	if u.checked {
-		return u.err
-	}
-
-	u.checked = true
-
+func (u CatalogPromotion) validate() error {
 	if u.ID == uuid.Nil {
-		u.err = fmt.Errorf("%w: empty id", ErrInvalid)
-		return u.err
+		return fmt.Errorf("%w: empty id", ErrInvalid)
 	}
-
 	return nil
 }

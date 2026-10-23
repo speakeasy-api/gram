@@ -23,6 +23,7 @@ JOIN projects p ON p.id = m.project_id
 JOIN remote_mcp_servers r ON r.id = m.remote_mcp_server_id AND r.project_id = m.project_id
 LEFT JOIN registry_promotion_candidates c ON c.project_id = m.project_id AND c.mcp_server_id = m.id
 WHERE m.deleted IS FALSE AND r.deleted IS FALSE AND p.deleted IS FALSE AND c.promoted_at IS NULL
+ AND p.organization_id <> @excluded_organization_id::text
 AND (c.discovery_next_attempt_at IS NULL OR c.discovery_next_attempt_at <= @now::timestamptz)
 ORDER BY c.discovery_last_attempt_at NULLS FIRST, m.id
 LIMIT 50;
@@ -31,11 +32,12 @@ LIMIT 50;
 INSERT INTO registry_promotion_candidates (organization_id,project_id,mcp_server_id,remote_mcp_server_id,source_revision,eligible,reason,observed_successes,observed_failures,observed_days,checked_at)
 VALUES(@organization_id,@project_id,@mcp_server_id,@remote_mcp_server_id,@source_revision,@eligible,@reason,@observed_successes,@observed_failures,@observed_days,@checked_at)
 ON CONFLICT(project_id,mcp_server_id) DO UPDATE SET
- source_revision=EXCLUDED.source_revision, eligible=EXCLUDED.eligible, reason=EXCLUDED.reason,
+ source_revision=EXCLUDED.source_revision, remote_mcp_server_id=EXCLUDED.remote_mcp_server_id, eligible=EXCLUDED.eligible, reason=EXCLUDED.reason,
  observed_successes=EXCLUDED.observed_successes, observed_failures=EXCLUDED.observed_failures,
  observed_days=EXCLUDED.observed_days, checked_at=EXCLUDED.checked_at, updated_at=clock_timestamp()
-WHERE registry_promotion_candidates.checked_at <= EXCLUDED.checked_at
- OR registry_promotion_candidates.source_revision <> EXCLUDED.source_revision
+WHERE registry_promotion_candidates.promoted_at IS NULL
+ AND (registry_promotion_candidates.checked_at <= EXCLUDED.checked_at
+ OR registry_promotion_candidates.source_revision <> EXCLUDED.source_revision)
 RETURNING *;
 
 -- name: GetCandidate :one
@@ -54,7 +56,7 @@ ORDER BY c.id LIMIT @page_limit;
 UPDATE registry_promotion_candidates SET registry_entry_id= @registry_entry_id,public_metadata= @public_metadata,
  endpoint_identity= @endpoint_identity,request_digest= @request_digest,retry_key= @retry_key,promoted_by= @promoted_by,
  promoted_at=clock_timestamp(),updated_at=clock_timestamp()
-WHERE id= @id AND project_id IS NOT DISTINCT FROM sqlc.narg(project_id)::uuid AND promoted_at IS NULL
+WHERE id= @id AND organization_id= @organization_id AND project_id IS NOT DISTINCT FROM sqlc.narg(project_id)::uuid AND promoted_at IS NULL
 RETURNING *;
 
 -- name: PendingDeliveries :many
@@ -99,8 +101,8 @@ RETURNING *;
 
 -- name: FinishDiscovery :exec
 UPDATE registry_promotion_candidates SET discovery_failures=CASE WHEN @failed::boolean THEN discovery_failures+1 ELSE 0 END,
- eligible=CASE WHEN @failed::boolean AND checked_at <= @attempted_at::timestamptz THEN false ELSE eligible END,
- reason=CASE WHEN @failed::boolean AND checked_at <= @attempted_at::timestamptz THEN 'telemetry_unavailable' ELSE reason END,
+ eligible=CASE WHEN @failure_reason::text <> '' AND checked_at <= @attempted_at::timestamptz THEN false ELSE eligible END,
+ reason=CASE WHEN @failure_reason::text <> '' AND checked_at <= @attempted_at::timestamptz THEN @failure_reason::text ELSE reason END,
  updated_at=clock_timestamp()
 WHERE id= @id AND project_id IS NOT DISTINCT FROM sqlc.narg(project_id)::uuid AND discovery_last_attempt_at= @attempted_at::timestamptz AND promoted_at IS NULL;
 
@@ -160,3 +162,14 @@ DELETE FROM projects WHERE id = @project_id;
 
 -- name: DeletePromotionRegistryEntryFixture :exec
 DELETE FROM mcp_registry_entries WHERE id = @id;
+
+-- name: RepointPromotionSourceFixture :exec
+WITH replacement AS (
+ INSERT INTO remote_mcp_servers(id,project_id,name,slug,transport_type,url)
+ SELECT @new_remote_id::uuid,m.project_id,'Synthetic replacement','synthetic-replacement',r.transport_type,r.url
+ FROM mcp_servers m JOIN remote_mcp_servers r ON r.id=m.remote_mcp_server_id AND r.project_id=m.project_id
+ WHERE m.project_id= @project_id AND m.id= @mcp_server_id
+ RETURNING id
+)
+UPDATE mcp_servers m SET remote_mcp_server_id=replacement.id,updated_at=clock_timestamp()
+FROM replacement WHERE m.project_id= @project_id AND m.id= @mcp_server_id;

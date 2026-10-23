@@ -63,7 +63,8 @@ export function RegistryPromotionSheet({
   const [refreshRequired, setRefreshRequired] = useState(false);
   const inFlight = useRef(false);
   const retryKey = useRef(crypto.randomUUID());
-  const dirty = !result && Object.values(form).some(Boolean);
+  const dirty =
+    !result && (authMode !== "none" || Object.values(form).some(Boolean));
   useBlocker({
     shouldBlockFn: () =>
       inFlight.current ||
@@ -266,7 +267,7 @@ export function RegistryPromotionSheet({
                     disabled={mutation.isPending}
                     type={field.endsWith("Url") ? "url" : "text"}
                     maxLength={
-                      field === "publicName"
+                      field === "publicName" || field === "publicTitle"
                         ? 200
                         : field === "docsSlug"
                           ? 80

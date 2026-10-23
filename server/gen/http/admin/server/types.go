@@ -413,6 +413,14 @@ type MigrateExternalMcpServersRequestBody struct {
 	Servers []*AdminExternalMcpMigrationRequestRequestBody `form:"servers,omitempty" json:"servers,omitempty" xml:"servers,omitempty"`
 }
 
+// GetRegistryPromotionCandidateRequestBody is the type of the "admin" service
+// "getRegistryPromotionCandidate" endpoint HTTP request body.
+type GetRegistryPromotionCandidateRequestBody struct {
+	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	ProjectID      *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	McpServerID    *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
+}
+
 // PromoteRegistryCandidateRequestBody is the type of the "admin" service
 // "promoteRegistryCandidate" endpoint HTTP request body.
 type PromoteRegistryCandidateRequestBody struct {
@@ -41062,11 +41070,12 @@ func NewListRegistryPromotionCandidatesPayload(cursor *string, limit int, adminS
 
 // NewGetRegistryPromotionCandidatePayload builds a admin service
 // getRegistryPromotionCandidate endpoint payload.
-func NewGetRegistryPromotionCandidatePayload(organizationID string, projectID string, mcpServerID string, adminSessionToken *string) *admin.GetRegistryPromotionCandidatePayload {
-	v := &admin.GetRegistryPromotionCandidatePayload{}
-	v.OrganizationID = organizationID
-	v.ProjectID = projectID
-	v.McpServerID = mcpServerID
+func NewGetRegistryPromotionCandidatePayload(body *GetRegistryPromotionCandidateRequestBody, adminSessionToken *string) *admin.GetRegistryPromotionCandidatePayload {
+	v := &admin.GetRegistryPromotionCandidatePayload{
+		OrganizationID: *body.OrganizationID,
+		ProjectID:      *body.ProjectID,
+		McpServerID:    *body.McpServerID,
+	}
 	v.AdminSessionToken = adminSessionToken
 
 	return v
@@ -42000,6 +42009,27 @@ func ValidateMigrateExternalMcpServersRequestBody(body *MigrateExternalMcpServer
 	return
 }
 
+// ValidateGetRegistryPromotionCandidateRequestBody runs the validations
+// defined on GetRegistryPromotionCandidateRequestBody
+func ValidateGetRegistryPromotionCandidateRequestBody(body *GetRegistryPromotionCandidateRequestBody) (err error) {
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
+	if body.ProjectID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "body"))
+	}
+	if body.McpServerID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("mcp_server_id", "body"))
+	}
+	if body.ProjectID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
+	}
+	if body.McpServerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", *body.McpServerID, goa.FormatUUID))
+	}
+	return
+}
+
 // ValidatePromoteRegistryCandidateRequestBody runs the validations defined on
 // PromoteRegistryCandidateRequestBody
 func ValidatePromoteRegistryCandidateRequestBody(body *PromoteRegistryCandidateRequestBody) (err error) {
@@ -42047,6 +42077,11 @@ func ValidatePromoteRegistryCandidateRequestBody(body *PromoteRegistryCandidateR
 	}
 	if body.McpServerID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", *body.McpServerID, goa.FormatUUID))
+	}
+	if body.AuthMode != nil {
+		if !(*body.AuthMode == "none" || *body.AuthMode == "oauth") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.auth_mode", *body.AuthMode, []any{"none", "oauth"}))
+		}
 	}
 	return
 }

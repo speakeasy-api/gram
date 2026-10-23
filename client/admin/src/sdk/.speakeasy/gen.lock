@@ -259,6 +259,7 @@ trackedFiles:
   src/models/components/enableorganizationrequestbody.ts: {}
   src/models/components/extendtrialrequestbody.ts: {}
   src/models/components/fetchissuermetadatarequestbody.ts: {}
+  src/models/components/getregistrypromotioncandidaterequestbody.ts: {}
   src/models/components/globalremotesessionissuer.ts: {}
   src/models/components/issuerconvergencecandidate.ts: {}
   src/models/components/issuerfieldmismatch.ts: {}
@@ -340,7 +341,6 @@ trackedFiles:
   src/models/operations/admingetproject.ts: {}
   src/models/operations/admingetregistryentry.ts: {}
   src/models/operations/admingetregistryoktacandidates.ts: {}
-  src/models/operations/admingetregistrypromotioncandidate.ts: {}
   src/models/operations/admingetspendbreakdown.ts: {}
   src/models/operations/admingetstripecustomer.ts: {}
   src/models/operations/admingetstripesubscription.ts: {}
@@ -407,7 +407,6 @@ trackedFiles:
   src/react-query/adminGetRegistryEntry.ts: {}
   src/react-query/adminGetRegistryOktaCandidates.core.ts: {}
   src/react-query/adminGetRegistryOktaCandidates.ts: {}
-  src/react-query/adminGetRegistryPromotionCandidate.core.ts: {}
   src/react-query/adminGetRegistryPromotionCandidate.ts: {}
   src/react-query/adminGetSession.core.ts: {}
   src/react-query/adminGetSession.ts: {}
@@ -1063,6 +1062,8 @@ examples:
           organization_id: "<id>"
           project_id: "9f2e767f-b8c0-4cbe-885d-d3118237a221"
           mcp_server_id: "1bf24fb5-3f07-460b-bd4b-feb4cbbffe73"
+      requestBody:
+        application/json: {"mcp_server_id": "9f2e767f-b8c0-4cbe-885d-d3118237a221", "organization_id": "<id>", "project_id": "1bf24fb5-3f07-460b-bd4b-feb4cbbffe73"}
       responses:
         "200":
           application/json: {"docs_attempts": 148328, "docs_retry_allowed": true, "docs_revision": "<value>", "eligible": true, "id": "<id>", "mcp_server_id": "<id>", "observed_days": 779297, "observed_failures": 240546, "observed_successes": 705810, "organization_id": "<id>", "project_id": "<id>", "reason": "<value>", "remote_mcp_server_id": "<id>", "source_revision": "<value>", "status": "<value>"}
@@ -1445,7 +1446,7 @@ examples:
   adminPromoteRegistryCandidate:
     speakeasy-default-admin-promote-registry-candidate:
       requestBody:
-        application/json: {"auth_mode": "<value>", "docs_slug": "<value>", "documentation_url": "https://twin-ice-cream.name/", "mcp_server_id": "423d3a85-96dd-47a4-b74d-51f60b82987b", "organization_id": "<id>", "project_id": "3675c45a-74c5-432d-b703-1ffbc249652b", "public_description": "<value>", "public_metadata_confirmed": true, "public_name": "<value>", "public_title": "<value>", "public_url": "https://gloomy-stir-fry.org/", "retry_key": "<value>", "source_revision": "<value>"}
+        application/json: {"auth_mode": "none", "docs_slug": "<value>", "documentation_url": "https://twin-ice-cream.name/", "mcp_server_id": "423d3a85-96dd-47a4-b74d-51f60b82987b", "organization_id": "<id>", "project_id": "3675c45a-74c5-432d-b703-1ffbc249652b", "public_description": "<value>", "public_metadata_confirmed": true, "public_name": "<value>", "public_title": "<value>", "public_url": "https://gloomy-stir-fry.org/", "retry_key": "<value>", "source_revision": "<value>"}
       responses:
         "200":
           application/json: {"docs_attempts": 853867, "docs_retry_allowed": true, "docs_revision": "<value>", "eligible": true, "id": "<id>", "mcp_server_id": "<id>", "observed_days": 510181, "observed_failures": 892583, "observed_successes": 91890, "organization_id": "<id>", "project_id": "<id>", "reason": "<value>", "remote_mcp_server_id": "<id>", "source_revision": "<value>", "status": "<value>"}

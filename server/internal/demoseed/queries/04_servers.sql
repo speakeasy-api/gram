@@ -2,11 +2,6 @@
 -- and killswitches (seed_04_servers.go). Each query is one statement of the
 -- old demo.ensure_demo_org(); tenant identifiers arrive as parameters.
 
--- name: ServersInsertRegistryPromotionCandidate :exec
--- Synthetic evidence stays ineligible and queues no public publication or messages.
-INSERT INTO registry_promotion_candidates (id, organization_id, project_id, mcp_server_id, remote_mcp_server_id, source_revision, eligible, reason)
-VALUES (@id::uuid, @org_id::text, @project_id::uuid, @mcp_server_id::uuid, @remote_mcp_server_id::uuid, 'synthetic-unverified', false, 'insufficient_evidence');
-
 -- MCP servers and the Gateway Endpoint fronting them (AGE-3299).
 -- Two backends so the gateway's member table shows both classes: the
 -- toolset-backed pair executes in-process, the third-party remotes are
@@ -60,6 +55,12 @@ INSERT INTO mcp_servers (id, project_id, name, slug, toolset_id,
   (@github_id::uuid, @project_id::uuid, 'GitHub', 'github',
    NULL, @remote_github_id::uuid,
    @issuer_workforce_id::uuid, 'private');
+
+-- name: ServersInsertRegistryPromotionCandidate :exec
+-- Synthetic evidence stays ineligible and queues no public publication or messages.
+INSERT INTO registry_promotion_candidates (id, organization_id, project_id, mcp_server_id, remote_mcp_server_id, source_revision, eligible, reason)
+VALUES (@id::uuid, @org_id::text, @project_id::uuid, @mcp_server_id::uuid, @remote_mcp_server_id::uuid, 'synthetic-unverified', false, 'insufficient_evidence')
+ON CONFLICT (project_id,mcp_server_id) DO NOTHING;
 
 -- Every toolset with an MCP slug owns a canonical hosted wrapper (id = the
 -- toolset id) and one endpoint at its address, mirroring its hosting

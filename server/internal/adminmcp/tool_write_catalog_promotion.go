@@ -86,21 +86,21 @@ func (w *catalogPromotionWriter) prepare(ctx context.Context, input PrepareCatal
 	}
 	candidate, err := w.mutator.GetCandidate(ctx, request.Target)
 	if err != nil {
-		return ProposalOutput{}, errors.New("promotion evidence is unavailable")
+		return ProposalOutput{}, catalogPromotionValidationError(err)
 	}
 	if !candidate.Eligible || candidate.SourceRevision != request.SourceRevision {
 		return ProposalOutput{}, ErrStaleState
 	}
 	tx, err := w.store.db.Begin(ctx)
 	if err != nil {
-		return ProposalOutput{}, fmt.Errorf("begin promotion preparation: %w", err)
+		return ProposalOutput{}, catalogPromotionValidationError(err)
 	}
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(context.WithoutCancel(ctx)) })
 	if _, err := w.mutator.ValidateTx(ctx, tx, request.Target, request.SourceRevision, request.Public); err != nil {
-		return ProposalOutput{}, errors.New("promotion target or public metadata is invalid; refresh the candidate")
+		return ProposalOutput{}, catalogPromotionValidationError(err)
 	}
 	if err := tx.Commit(ctx); err != nil {
-		return ProposalOutput{}, fmt.Errorf("finish promotion preparation: %w", err)
+		return ProposalOutput{}, catalogPromotionValidationError(err)
 	}
 	args, err := json.Marshal(request)
 	if err != nil {
@@ -139,7 +139,7 @@ func (w *catalogPromotionWriter) revalidate(ctx context.Context, tx pgx.Tx, prop
 	}
 	_, err = w.mutator.ValidateTx(ctx, tx, request.Target, request.SourceRevision, request.Public)
 	if err != nil {
-		return ErrStaleState
+		return catalogPromotionValidationError(err)
 	}
 	return nil
 }
@@ -209,4 +209,13 @@ func (w *catalogPromotionWriter) registerPrepare(server *mcp.Server) {
 		out, err := w.prepare(ctx, input)
 		return nil, out, err
 	})
+}
+
+func catalogPromotionValidationError(err error) error {
+	switch {
+	case errors.Is(err, catalogpromotion.ErrStale), errors.Is(err, catalogpromotion.ErrNotFound), errors.Is(err, catalogpromotion.ErrConflict), errors.Is(err, catalogpromotion.ErrIneligible), errors.Is(err, catalogpromotion.ErrInvalid):
+		return ErrStaleState
+	default:
+		return errors.New("catalogue promotion validation is temporarily unavailable; retry")
+	}
 }

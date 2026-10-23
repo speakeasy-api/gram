@@ -87,7 +87,10 @@ func (w *catalogDocsRetryWriter) prepare(ctx context.Context, input PrepareCatal
 	}
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(context.WithoutCancel(ctx)) })
 	candidate, err := w.mutator.ValidateDocsRetryTx(ctx, tx, request.OrganizationID, request.PromotionID, request.DocsRevision)
-	if err != nil || !docsRetryMatches(candidate, request) {
+	if err != nil {
+		return ProposalOutput{}, docsRetryValidationError(err)
+	}
+	if !docsRetryMatches(candidate, request) {
 		return ProposalOutput{}, ErrStaleState
 	}
 	project, err := docsRetryProject(candidate)
@@ -134,7 +137,10 @@ func (w *catalogDocsRetryWriter) revalidate(ctx context.Context, tx pgx.Tx, prop
 		return err
 	}
 	candidate, err := w.mutator.ValidateDocsRetryTx(ctx, tx, args.Request.OrganizationID, args.Request.PromotionID, args.Request.DocsRevision)
-	if err != nil || !docsRetryMatches(candidate, args.Request) {
+	if err != nil {
+		return docsRetryValidationError(err)
+	}
+	if !docsRetryMatches(candidate, args.Request) {
 		return ErrStaleState
 	}
 	project, err := docsRetryProject(candidate)
@@ -200,4 +206,15 @@ func (w *catalogDocsRetryWriter) registerPrepare(server *mcp.Server) {
 		out, err := w.prepare(ctx, input)
 		return nil, out, err
 	})
+}
+
+func docsRetryValidationError(err error) error {
+	switch {
+	case errors.Is(err, catalogpromotion.ErrStale), errors.Is(err, catalogpromotion.ErrConflict), errors.Is(err, catalogpromotion.ErrIneligible):
+		return ErrStaleState
+	case errors.Is(err, catalogpromotion.ErrNotFound):
+		return errors.New("catalogue promotion not found")
+	default:
+		return errors.New("catalogue promotion retry state is unavailable")
+	}
 }

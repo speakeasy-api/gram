@@ -9,12 +9,12 @@ import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 export type AdminRegistryPromotionCandidate = {
-  checkedAt?: string | undefined;
+  checkedAt?: Date | undefined;
   deliveryError?: string | undefined;
   docsAttempts: number;
-  docsLastAttemptAt?: string | undefined;
-  docsNextAttemptAt?: string | undefined;
-  docsQueuedAt?: string | undefined;
+  docsLastAttemptAt?: Date | undefined;
+  docsNextAttemptAt?: Date | undefined;
+  docsQueuedAt?: Date | undefined;
   docsRetryAllowed: boolean;
   docsRevision: string;
   docsStatus?: string | undefined;
@@ -27,7 +27,7 @@ export type AdminRegistryPromotionCandidate = {
   observedSuccesses: number;
   organizationId: string;
   projectId: string;
-  promotedAt?: string | undefined;
+  promotedAt?: Date | undefined;
   publicTitle?: string | undefined;
   reason: string;
   registryEntryId?: string | undefined;
@@ -43,12 +43,20 @@ export const AdminRegistryPromotionCandidate$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
-    checked_at: z.optional(z.string()),
+    checked_at: z.optional(
+      z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+    ),
     delivery_error: z.optional(z.string()),
     docs_attempts: z.int(),
-    docs_last_attempt_at: z.optional(z.string()),
-    docs_next_attempt_at: z.optional(z.string()),
-    docs_queued_at: z.optional(z.string()),
+    docs_last_attempt_at: z.optional(
+      z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+    ),
+    docs_next_attempt_at: z.optional(
+      z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+    ),
+    docs_queued_at: z.optional(
+      z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+    ),
     docs_retry_allowed: z.boolean(),
     docs_revision: z.string(),
     docs_status: z.optional(z.string()),
@@ -61,7 +69,9 @@ export const AdminRegistryPromotionCandidate$inboundSchema: z.ZodMiniType<
     observed_successes: z.int(),
     organization_id: z.string(),
     project_id: z.string(),
-    promoted_at: z.optional(z.string()),
+    promoted_at: z.optional(
+      z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+    ),
     public_title: z.optional(z.string()),
     reason: z.string(),
     registry_entry_id: z.optional(z.string()),

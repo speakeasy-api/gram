@@ -58,6 +58,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.resetAllMocks();
+  vi.unstubAllGlobals();
 });
 async function fill(): Promise<void> {
   await screen.findByText("Ready for staff review");
@@ -170,4 +171,30 @@ it("retains draft after a source conflict and requires fresh review", async () =
       }) as HTMLButtonElement
     ).disabled,
   ).toBe(true);
+});
+
+it("limits a public title to the server's 200-character maximum", async () => {
+  await renderWithApp(
+    <RegistryPromotionSheet target={target} onClose={vi.fn<() => void>()} />,
+  );
+  await screen.findByText("Ready for staff review");
+  expect(
+    (screen.getByRole("textbox", { name: "Public title" }) as HTMLInputElement)
+      .maxLength,
+  ).toBe(200);
+});
+it("confirms closing a review when only authentication was changed", async () => {
+  const close = vi.fn<() => void>();
+  await renderWithApp(
+    <RegistryPromotionSheet target={target} onClose={close} />,
+  );
+  await screen.findByText("Ready for staff review");
+  fireEvent.click(
+    screen.getByRole("combobox", { name: "Public authentication" }),
+  );
+  fireEvent.click(await screen.findByRole("option", { name: "OAuth" }));
+  vi.stubGlobal("confirm", vi.fn().mockReturnValue(false));
+  fireEvent.click(screen.getAllByRole("button", { name: "Close" })[0]!);
+  expect(window.confirm).toHaveBeenCalledWith("Discard this promotion review?");
+  expect(close).not.toHaveBeenCalled();
 });

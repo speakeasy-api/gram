@@ -3,6 +3,7 @@ package adminmcp
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -15,9 +16,10 @@ import (
 )
 
 type promotionMutatorFake struct {
-	candidate catalogpromotion.Candidate
-	invalid   bool
-	calls     atomic.Int32
+	candidate     catalogpromotion.Candidate
+	invalid       bool
+	validationErr error
+	calls         atomic.Int32
 }
 
 func (f *promotionMutatorFake) GetCandidate(context.Context, catalogpromotion.Target) (catalogpromotion.Candidate, error) {
@@ -25,6 +27,9 @@ func (f *promotionMutatorFake) GetCandidate(context.Context, catalogpromotion.Ta
 }
 
 func (f *promotionMutatorFake) ValidateTx(_ context.Context, _ pgx.Tx, target catalogpromotion.Target, revision string, _ catalogpromotion.PublicMetadata) (catalogpromotion.Candidate, error) {
+	if f.validationErr != nil {
+		return catalogpromotion.Candidate{}, f.validationErr
+	}
 	if f.invalid || revision != f.candidate.SourceRevision || target.OrganizationID != f.candidate.OrganizationID || target.ProjectID.String() != f.candidate.ProjectID || target.MCPServerID.String() != f.candidate.MCPServerID {
 		return catalogpromotion.Candidate{}, catalogpromotion.ErrStale
 	}
@@ -121,4 +126,45 @@ func TestCatalogPromotionRequiresPublicConfirmationAndWriteScope(t *testing.T) {
 	w := &catalogPromotionWriter{writes: WriteConfig{Enabled: true, Operations: map[WriteOperation]bool{OperationPromoteRegistryCandidate: true}}} //nolint:exhaustive // Only this operation is enabled.
 	_, err = w.prepare(writePrincipalContext(t, []string{ScopeRead}), PrepareCatalogPromotionInput{})
 	require.ErrorIs(t, err, ErrWriteScope)
+}
+
+func TestCatalogPromotionApprovalSurvivesValidationOutage(t *testing.T) {
+	t.Parallel()
+	f := newProposalFixture(t, "catalog_promotion_outage")
+	project, err := projectrepo.New(f.db).CreateProject(t.Context(), projectrepo.CreateProjectParams{OrganizationID: f.orgA, Name: "Example", Slug: "example"})
+	require.NoError(t, err)
+	mutator := &promotionMutatorFake{candidate: catalogpromotion.Candidate{OrganizationID: f.orgA, ProjectID: project.ID.String(), MCPServerID: uuid.NewString(), SourceRevision: "source-v1", Eligible: true}}
+	writes := WriteConfig{Enabled: true, Operations: map[WriteOperation]bool{OperationPromoteRegistryCandidate: true}} //nolint:exhaustive // Only this operation is enabled.
+	w := &catalogPromotionWriter{store: f.store, writes: writes, baseURL: "", mutator: mutator, now: time.Now}
+	ctx := writeContext(t, f)
+	input := PrepareCatalogPromotionInput{OrganizationID: f.orgA, ProjectID: project.ID.String(), MCPServerID: mutator.candidate.MCPServerID, SourceRevision: "source-v1", PublicMetadataConfirmed: true, RetryKey: "outage"}
+	prepared, err := w.prepare(ctx, input)
+	require.NoError(t, err)
+	proposal, err := f.store.GetForOwner(ctx, uuid.MustParse(prepared.ProposalID), f.owner)
+	require.NoError(t, err)
+	for _, outage := range []error{catalogpromotion.ErrUnavailable, errors.New("private database details")} {
+		mutator.validationErr = outage
+		_, err = f.store.Approve(ctx, proposal.ID, f.owner.SubjectURN, proposal.ProposalDigest, time.Now(), allowProposalBrowser, w.revalidate)
+		require.Error(t, err)
+		require.NotErrorIs(t, err, ErrStaleState)
+		require.NotContains(t, err.Error(), "private database details")
+		persisted, readErr := f.store.GetForOwner(ctx, proposal.ID, f.owner)
+		require.NoError(t, readErr)
+		require.Equal(t, ProposalPendingApproval, persisted.Status)
+	}
+	mutator.validationErr = nil
+	approved, err := f.store.Approve(ctx, proposal.ID, f.owner.SubjectURN, proposal.ProposalDigest, time.Now(), allowProposalBrowser, w.revalidate)
+	require.NoError(t, err)
+	require.Equal(t, ProposalApproved, approved.Status)
+	input.RetryKey = "stale-source"
+	prepared, err = w.prepare(ctx, input)
+	require.NoError(t, err)
+	proposal, err = f.store.GetForOwner(ctx, uuid.MustParse(prepared.ProposalID), f.owner)
+	require.NoError(t, err)
+	mutator.invalid = true
+	_, err = f.store.Approve(ctx, proposal.ID, f.owner.SubjectURN, proposal.ProposalDigest, time.Now(), allowProposalBrowser, w.revalidate)
+	require.ErrorIs(t, err, ErrStaleState)
+	persisted, err := f.store.GetForOwner(ctx, proposal.ID, f.owner)
+	require.NoError(t, err)
+	require.Equal(t, ProposalInvalidated, persisted.Status)
 }

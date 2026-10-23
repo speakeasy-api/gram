@@ -2,6 +2,7 @@
 import { expect, test } from "vitest";
 import { GramCore } from "../sdk/src/core";
 import { HTTPClient } from "../sdk/src/lib/http";
+import { adminGetRegistryPromotionCandidate } from "../sdk/src/funcs/adminGetRegistryPromotionCandidate";
 import { adminCreateRegistryEntry } from "../sdk/src/funcs/adminCreateRegistryEntry";
 import { adminSaveRegistryEntry } from "../sdk/src/funcs/adminSaveRegistryEntry";
 import { adminGetRegistryEntry } from "../sdk/src/funcs/adminGetRegistryEntry";
@@ -88,4 +89,57 @@ test("generated Create/Save preserve synthetic JSON and concurrency tokens", asy
     }
     expect(JSON.parse(bodies[1]!).updated_at).toBe(token);
   }
+});
+
+test("eligibility refresh uses POST with a canonical target and decodes timestamps", async () => {
+  const observed: Request[] = [];
+  const client = new GramCore({
+    serverURL: "https://admin.example.com",
+    httpClient: new HTTPClient({
+      fetcher: async (input) => {
+        const request = input as Request;
+        observed.push(request);
+        return new Response(
+          JSON.stringify({
+            id,
+            organization_id: "org-example",
+            project_id: id,
+            mcp_server_id: id,
+            remote_mcp_server_id: id,
+            source_revision: "aabb",
+            eligible: true,
+            reason: "eligible",
+            status: "candidate",
+            observed_successes: 12,
+            observed_failures: 0,
+            observed_days: 2,
+            docs_revision: id,
+            docs_retry_allowed: false,
+            docs_attempts: 0,
+            checked_at: token,
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      },
+    }),
+  });
+  const result = await adminGetRegistryPromotionCandidate(client, {
+    organizationId: "org-example",
+    projectId: id,
+    mcpServerId: id,
+  });
+  expect(result.ok).toBe(true);
+  if (!result.ok) throw result.error;
+  expect(result.value.checkedAt).toEqual(new Date(token));
+  expect(observed).toHaveLength(1);
+  const request = observed[0]!;
+  expect(request.method).toBe("POST");
+  expect(request.url).toBe(
+    "https://admin.example.com/admin/registry.promotionCandidate",
+  );
+  expect(await request.json()).toEqual({
+    organization_id: "org-example",
+    project_id: id,
+    mcp_server_id: id,
+  });
 });

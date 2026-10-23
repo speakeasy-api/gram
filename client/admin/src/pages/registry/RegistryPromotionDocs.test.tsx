@@ -1,3 +1,4 @@
+import { useState, type JSX } from "react";
 import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import { useMutation } from "@tanstack/react-query";
@@ -37,6 +38,7 @@ it("retries a retained publication using its exact organization, promotion and d
     ...candidate,
     docsStatus: "retrying",
     docsRetryAllowed: false,
+    docsRevision: "00000000-0000-4000-8000-000000000003",
   });
   const updated = vi.fn<(candidate: AdminRegistryPromotionCandidate) => void>();
   await renderWithApp(
@@ -69,7 +71,7 @@ it("does not offer retry during a provider delay or after the guide request was 
         ...candidate,
         docsRetryAllowed: false,
         docsStatus: "retrying",
-        docsNextAttemptAt: "2026-10-22T12:00:00Z",
+        docsNextAttemptAt: new Date("2026-10-22T12:00:00Z"),
       }}
     />,
   );
@@ -108,4 +110,24 @@ it("keeps a retry key after an ambiguous response and masks upstream errors", as
   fireEvent.click(screen.getByRole("button", { name: "Retry guide request" }));
   await waitFor(() => expect(api.retry).toHaveBeenCalledTimes(2));
   expect(api.retry.mock.calls[1]?.[0]).toEqual(api.retry.mock.calls[0]?.[0]);
+});
+
+it("keeps the retry confirmation after adopting the rotated response revision", async () => {
+  const retried = {
+    ...candidate,
+    docsStatus: "retrying",
+    docsRetryAllowed: false,
+    docsRevision: "00000000-0000-4000-8000-000000000003",
+  };
+  api.retry.mockResolvedValue(retried);
+  function Receipt(): JSX.Element {
+    const [current, setCurrent] = useState(candidate);
+    return <RegistryPromotionDocs candidate={current} onUpdated={setCurrent} />;
+  }
+  await renderWithApp(<Receipt />);
+  fireEvent.click(screen.getByRole("button", { name: "Retry guide request" }));
+  await screen.findByText("Guide request scheduled for another attempt.");
+  expect(
+    screen.queryByRole("button", { name: "Retry guide request" }),
+  ).toBeNull();
 });

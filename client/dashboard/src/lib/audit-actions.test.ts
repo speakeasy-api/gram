@@ -41,6 +41,16 @@ function goAuditActions(): string[] {
 }
 
 describe("AUDIT_ACTIONS", () => {
+  it("describes catalogue publication and setup documentation retries", () => {
+    expect(isAuditAction("mcp-server:promote-catalogue")).toBe(true);
+    expect(isAuditAction("catalog-promotion:retry-docs")).toBe(true);
+    expect(staticActionPhrase("mcp-server:promote-catalogue")).toBe(
+      "published to the MCP catalog",
+    );
+    expect(staticActionPhrase("catalog-promotion:retry-docs")).toBe(
+      "retried setup documentation for",
+    );
+  });
   it("describes organization access changes", () => {
     expect(isAuditAction("organization:enabled")).toBe(true);
     expect(isAuditAction("organization:disabled")).toBe(true);

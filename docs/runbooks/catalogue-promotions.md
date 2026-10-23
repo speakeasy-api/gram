@@ -7,13 +7,19 @@ atomically. Staff track qualification and guide progress in the admin workflow.
 
 ## Configure delivery
 
-Configure the shared worker with these environment values:
+Configure the process running the shared worker (`worker`, or `start` when it
+runs the worker) with these environment values:
 
 | Variable                                 | Purpose                                                                                                                                                       |
 | ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `GRAM_CATALOG_GUIDES_GITHUB_TOKEN`       | GitHub App installation token or fine-grained PAT with repository access and Issues read/write on the guide repository. Operators manage expiry and rotation. |
 | `GRAM_CATALOG_GUIDES_GITHUB_REPOSITORY`  | Guide repository, default `speakeasy-api/mcp-setup-docs`.                                                                                                     |
 | `GRAM_CATALOG_PROMOTION_DELIVERY_PAUSED` | Set `true` to suspend external guide writes while retaining pending jobs, candidate discovery, and progress metrics. Defaults to `false`.                     |
+
+The GitHub token is environment-only; there is no command-line token flag.
+The admin, MCP, and private ingress processes do not consume these delivery
+settings or construct the GitHub delivery client. Provision the token only to
+the intended shared worker process.
 
 Use a token whose writes trigger Actions. Actions' built-in `GITHUB_TOKEN`
 suppresses most follow-on workflow events and is unsuitable for this integration.
@@ -77,8 +83,10 @@ within 15 minutes before approval.
 
 Staff supplies the public provider identity, title, description, endpoint,
 documentation URL, guide slug, and authentication mode (`none` or `oauth`).
-These fields are published. Do not include customer identifiers, private
-endpoints, credentials, connection headers, or customer-specific instructions.
+The catalogue publishes the provider identity, title, description, endpoint, and
+documentation URL. The guide slug and authentication mode go to the guide factory.
+Do not include customer identifiers, private endpoints, credentials, connection
+headers, or customer-specific instructions.
 Verify the endpoint and setup information against public primary sources.
 The approved endpoint must match the observed deployment. Credentials, URL
 query strings, private hostnames, and unsupported ports are rejected. Source

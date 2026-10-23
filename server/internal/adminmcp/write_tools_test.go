@@ -13,6 +13,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/catalogpromotion"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcpregistry"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
@@ -74,12 +75,12 @@ func TestAttachWritesRejectsUnimplementedOperation(t *testing.T) {
 	require.ErrorContains(t, err, "not implemented")
 	require.Nil(t, oauth.Approval.operations, "nothing becomes approvable after a configuration error")
 
-	require.NoError(t, AttachWrites(&Runtime{}, oauth, WriteDependencies{Features: &productfeatures.Client{}, Registry: mcpregistry.New(nil, nil)}, WriteConfig{}))
+	require.NoError(t, AttachWrites(&Runtime{catalogPromotions: &catalogpromotion.Service{}}, oauth, WriteDependencies{Features: &productfeatures.Client{}, Registry: mcpregistry.New(nil, nil)}, WriteConfig{}))
 	require.Contains(t, oauth.Approval.operations, OperationSetOrganizationFeature)
 	require.Contains(t, oauth.Approval.operations, OperationAssignOrganizationOnboardingPlaybook)
 	require.Contains(t, oauth.Approval.operations, OperationExtendOrganizationTrial)
 	for _, op := range AllWriteOperations {
-		require.Equal(t, op.implemented() && !op.direct() && op != OperationPromoteRegistryCandidate && op != OperationRetryRegistryPromotionDocs, oauth.Approval.operations[op] != nil, op)
+		require.Equal(t, op.implemented() && !op.direct(), oauth.Approval.operations[op] != nil, op)
 	}
 }
 

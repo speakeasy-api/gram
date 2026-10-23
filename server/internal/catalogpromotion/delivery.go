@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/speakeasy-api/gram/server/internal/catalogpromotion/repo"
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	delivery "github.com/speakeasy-api/gram/server/internal/thirdparty/catalogpromotion"
 )
@@ -33,7 +34,7 @@ func (s *Service) Discover(ctx context.Context) error {
 	ctx, cancel := context.WithTimeout(ctx, BatchTimeout)
 	defer cancel()
 	q := repo.New(s.db)
-	targets, err := q.DiscoveryTargets(ctx, conv.ToPGTimestamptz(s.now()))
+	targets, err := q.DiscoveryTargets(ctx, repo.DiscoveryTargetsParams{Now: conv.ToPGTimestamptz(s.now()), ExcludedOrganizationID: constants.DemoOrganizationID})
 	if err != nil {
 		return fmt.Errorf("select promotion discovery batch: %w", err)
 	}
@@ -56,9 +57,10 @@ func (s *Service) Discover(ctx context.Context) error {
 		}
 		result, observeErr := s.GetCandidate(recordCtx, Target{OrganizationID: target.OrganizationID, ProjectID: target.ProjectID, MCPServerID: target.McpServerID})
 		recordCancel()
-		unavailable := observeErr != nil || result.Reason == "telemetry_unavailable"
+		failureReason := discoveryFailureReason(observeErr, result.Reason)
+		unavailable := failureReason == "telemetry_unavailable"
 		saveCtx, saveCancel := context.WithTimeout(context.WithoutCancel(ctx), receiptTimeout)
-		saveErr := q.FinishDiscovery(saveCtx, repo.FinishDiscoveryParams{Failed: unavailable, ID: row.ID, AttemptedAt: conv.ToPGTimestamptz(now), ProjectID: row.ProjectID})
+		saveErr := q.FinishDiscovery(saveCtx, repo.FinishDiscoveryParams{Failed: unavailable, FailureReason: failureReason, ID: row.ID, AttemptedAt: conv.ToPGTimestamptz(now), ProjectID: row.ProjectID})
 		saveCancel()
 		if unavailable || saveErr != nil {
 			failed++
@@ -73,6 +75,9 @@ func (s *Service) Discover(ctx context.Context) error {
 // Dispatch claims each due job before HTTP, then records its outcome independently
 // of activity cancellation. Leases bound crash recovery and tokens fence late replies.
 func (s *Service) Dispatch(ctx context.Context) error {
+	if s.delivery == nil {
+		return errors.New("documentation delivery dependency is unavailable")
+	}
 	ctx, cancel := context.WithTimeout(ctx, BatchTimeout)
 	defer cancel()
 	rows, err := repo.New(s.db).PendingDeliveries(ctx, conv.ToPGTimestamptz(s.now()))
@@ -118,8 +123,6 @@ func (s *Service) deliver(ctx context.Context, target repo.RegistryPromotionCand
 		effectErr = errors.New("documentation retry attempts exhausted")
 	} else if err := json.Unmarshal(row.PublicMetadata, &public); err != nil {
 		effectErr = &delivery.DeliveryError{Kind: delivery.ErrorPermanent, RetryAfter: 0, Code: "invalid_metadata"}
-	} else if s.delivery == nil {
-		effectErr = delivery.ErrNotConfigured
 	} else if effectCtx.Err() != nil {
 		effectErr = effectCtx.Err()
 	} else {
@@ -182,4 +185,15 @@ func (s *Service) Status(ctx context.Context) (JobStatus, error) {
 		return JobStatus{}, fmt.Errorf("read catalogue promotion job status: %w", err)
 	}
 	return JobStatus{PendingDocs: row.PendingDocs, NeedsAttention: row.NeedsAttention, OldestPendingAt: row.OldestPendingAt.Time, LastDiscoveryAt: row.LastDiscoveryAt.Time, DiscoveryFailures: row.DiscoveryFailures}, nil
+}
+
+// Source edits and deletion are expected races, not telemetry outages.
+func discoveryFailureReason(err error, reason string) string {
+	if errors.Is(err, ErrStale) || errors.Is(err, ErrNotFound) {
+		return "source_changed"
+	}
+	if err != nil || reason == "telemetry_unavailable" {
+		return "telemetry_unavailable"
+	}
+	return ""
 }

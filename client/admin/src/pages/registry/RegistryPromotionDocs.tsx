@@ -81,7 +81,8 @@ export function RegistryPromotionDocs({
   };
   const submitted =
     retry.isSuccess &&
-    retry.variables?.request.docsRevision === candidate.docsRevision;
+    (retry.data?.docsRevision === candidate.docsRevision ||
+      retry.variables?.request.docsRevision === candidate.docsRevision);
   return (
     <div
       className={

@@ -4,9 +4,16 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
+import { ClosedEnum } from "../../types/enums.js";
+
+export const AuthMode = {
+  None: "none",
+  Oauth: "oauth",
+} as const;
+export type AuthMode = ClosedEnum<typeof AuthMode>;
 
 export type PromoteRegistryCandidateRequestBody = {
-  authMode: string;
+  authMode: AuthMode;
   docsSlug: string;
   documentationUrl: string;
   mcpServerId: string;
@@ -20,6 +27,11 @@ export type PromoteRegistryCandidateRequestBody = {
   retryKey: string;
   sourceRevision: string;
 };
+
+/** @internal */
+export const AuthMode$outboundSchema: z.ZodMiniEnum<typeof AuthMode> = z.enum(
+  AuthMode,
+);
 
 /** @internal */
 export type PromoteRegistryCandidateRequestBody$Outbound = {
@@ -44,7 +56,7 @@ export const PromoteRegistryCandidateRequestBody$outboundSchema: z.ZodMiniType<
   PromoteRegistryCandidateRequestBody
 > = z.pipe(
   z.object({
-    authMode: z.string(),
+    authMode: AuthMode$outboundSchema,
     docsSlug: z.string(),
     documentationUrl: z.string(),
     mcpServerId: z.string(),

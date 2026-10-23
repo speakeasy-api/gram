@@ -22,6 +22,7 @@ import (
 	projectrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	delivery "github.com/speakeasy-api/gram/server/internal/thirdparty/catalogpromotion"
 	"github.com/stretchr/testify/require"
 )
 
@@ -76,13 +77,13 @@ func newPromotionFixture(t *testing.T) promotionFixture {
 	project, err := projectrepo.New(db).CreateProject(t.Context(), projectrepo.CreateProjectParams{Name: "Synthetic", Slug: "synthetic", OrganizationID: orgID})
 	require.NoError(t, err)
 	now := time.Now().UTC()
-	source, err := repo.New(db).SeedPromotionSourceFixture(t.Context(), repo.SeedPromotionSourceFixtureParams{ProjectID: project.ID, Url: "https://catalog.example.test/mcp", CreatedAt: conv.ToPGTimestamptz(now.Add(-7 * 24 * time.Hour))})
+	source, err := repo.New(db).SeedPromotionSourceFixture(t.Context(), repo.SeedPromotionSourceFixtureParams{ProjectID: project.ID, Url: "https://catalog.example.com/mcp", CreatedAt: conv.ToPGTimestamptz(now.Add(-7 * 24 * time.Hour))})
 	require.NoError(t, err)
 	validator, err := mcpregistry.LoadValidator()
 	require.NoError(t, err)
 	health := &fakePromotionHealth{now: now}
 	policy := guardian.NewDefaultPolicy(testenv.NewTracerProvider(t), guardian.WithResolver(dns.NewMockResolver(dns.MockResolverConfig{LookupIPFunc: func(context.Context, string, string) ([]net.IP, error) { return []net.IP{net.ParseIP("8.8.8.8")}, nil }})))
-	svc := New(db, mcpregistry.New(db, validator), nil, health, nil, policy)
+	svc := New(db, mcpregistry.New(db, validator), nil, health, delivery.New(policy, delivery.Config{}), policy)
 	svc.features = fakePromotionFeatures{enabled: true}
 	svc.now = func() time.Time { return now }
 	target := Target{OrganizationID: orgID, ProjectID: project.ID, MCPServerID: source}
@@ -90,7 +91,7 @@ func newPromotionFixture(t *testing.T) promotionFixture {
 	require.NoError(t, err)
 	require.True(t, candidate.Eligible)
 	request := Request{Target: target, SourceRevision: candidate.SourceRevision, PublicMetadataConfirmed: true, RetryKey: "synthetic-retry",
-		Public: PublicMetadata{Name: "io.example/catalog", Title: "Synthetic MCP", Description: "Public synthetic service", URL: "https://catalog.example.test/mcp", DocumentationURL: "https://docs.example.test/setup", DocsSlug: "synthetic-mcp", AuthMode: "none"}}
+		Public: PublicMetadata{Name: "io.example/catalog", Title: "Synthetic MCP", Description: "Public synthetic service", URL: "https://catalog.example.com/mcp", DocumentationURL: "https://docs.example.com/setup", DocsSlug: "synthetic-mcp", AuthMode: "none"}}
 	return promotionFixture{service: svc, db: db, target: target, request: request, health: health}
 }
 

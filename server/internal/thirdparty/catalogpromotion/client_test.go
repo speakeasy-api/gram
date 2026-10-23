@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/speakeasy-api/gram/server/internal/guardian"
@@ -101,9 +102,13 @@ func TestEnsureGuideRecoversAfterAmbiguousCreate(t *testing.T) {
 
 func TestEnsureGuideRefusesConflictingIssueMarker(t *testing.T) {
 	t.Parallel()
-	methods := make(chan string, 1)
+	var reads, writes atomic.Int32
 	c := testClient(t, func(w http.ResponseWriter, r *http.Request) {
-		methods <- r.Method
+		if r.Method == http.MethodGet {
+			reads.Add(1)
+		} else {
+			writes.Add(1)
+		}
 		if err := json.NewEncoder(w).Encode([]githubIssue{{Number: 42, Body: "<!-- speakeasy-catalog-guide:example -->\nDifferent unreviewed instructions", State: "open"}}); err != nil {
 			t.Error(err)
 		}
@@ -112,7 +117,8 @@ func TestEnsureGuideRefusesConflictingIssueMarker(t *testing.T) {
 	require.ErrorContains(t, err, "conflicts with reviewed public metadata")
 	kind, _ := Classify(err)
 	require.Equal(t, ErrorPermanent, kind)
-	require.Equal(t, http.MethodGet, <-methods)
+	require.EqualValues(t, 1, reads.Load())
+	require.Zero(t, writes.Load(), "conflicting public issue must not create or trigger a guide")
 }
 
 func TestEnsureGuideRejectsPrivateInputsBeforeRequest(t *testing.T) {
@@ -192,4 +198,12 @@ func TestMissingConfigurationNeedsAttention(t *testing.T) {
 	c := New(policy, Config{})
 	_, err = c.EnsureGuide(t.Context(), Guide{})
 	require.ErrorIs(t, err, ErrNotConfigured)
+}
+
+func TestValidatePublicURLRejectsSpecialUseDomains(t *testing.T) {
+	t.Parallel()
+	for _, host := range []string{"provider.test", "provider.invalid", "provider.example", "host.home.arpa", "provider.localhost", "provider.local", "provider.internal", "hidden.onion", "PROVIDER.TEST."} {
+		require.Error(t, ValidatePublicURL("https://"+host+"/mcp"), host)
+	}
+	require.NoError(t, ValidatePublicURL("https://mcp.example.com/mcp"))
 }

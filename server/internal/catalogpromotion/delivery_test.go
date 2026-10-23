@@ -162,10 +162,11 @@ func TestDispatchEffectDeadlineRetainsRetryReceipt(t *testing.T) {
 	f := newPromotionFixture(t)
 	r := &recordingDelivery{onGuide: func(ctx context.Context) error { <-ctx.Done(); return ctx.Err() }}
 	f.service.delivery = r
-	f.service.effectTimeout = -time.Nanosecond
+	f.service.effectTimeout = time.Second
 	_, err := f.promote(t)
 	require.NoError(t, err)
 	require.Error(t, f.service.Dispatch(t.Context()))
+	require.Len(t, r.guides, 1, "deadline must interrupt the external delivery call")
 	candidate := deliveryCandidate(t, f)
 	require.Equal(t, "retrying", candidate.DocsStatus)
 	require.Equal(t, 1, candidate.DocsAttempts)
@@ -303,7 +304,7 @@ func TestDispatchCancelledEffectDoesNotStartNextGuide(t *testing.T) {
 	require.NoError(t, err)
 	project, err := projectrepo.New(f.db).CreateProject(t.Context(), projectrepo.CreateProjectParams{Name: "Second synthetic", Slug: "second-synthetic", OrganizationID: f.target.OrganizationID})
 	require.NoError(t, err)
-	source, err := repo.New(f.db).SeedPromotionSourceFixture(t.Context(), repo.SeedPromotionSourceFixtureParams{ProjectID: project.ID, CreatedAt: conv.ToPGTimestamptz(f.health.now.Add(-7 * 24 * time.Hour)), Url: "https://second.example.test/mcp"})
+	source, err := repo.New(f.db).SeedPromotionSourceFixture(t.Context(), repo.SeedPromotionSourceFixtureParams{ProjectID: project.ID, CreatedAt: conv.ToPGTimestamptz(f.health.now.Add(-7 * 24 * time.Hour)), Url: "https://second.example.com/mcp"})
 	require.NoError(t, err)
 	second := f
 	second.target = Target{OrganizationID: f.target.OrganizationID, ProjectID: project.ID, MCPServerID: source}
@@ -312,7 +313,7 @@ func TestDispatchCancelledEffectDoesNotStartNextGuide(t *testing.T) {
 	second.request.Target = second.target
 	second.request.SourceRevision = candidate.SourceRevision
 	second.request.RetryKey = "second-synthetic-retry"
-	second.request.Public.URL = "https://second.example.test/mcp"
+	second.request.Public.URL = "https://second.example.com/mcp"
 	second.request.Public.Name = "io.example/second"
 	second.request.Public.DocsSlug = "second-synthetic"
 	_, err = second.promote(t)
@@ -399,4 +400,17 @@ func TestDispatchReconcilesAfterProjectDeletedDuringDelivery(t *testing.T) {
 	require.Len(t, r.guides, 2)
 	require.Equal(t, r.guides[0], r.guides[1], "reconciliation must reuse the original public guide identity")
 	require.Equal(t, "queued", deliveryCandidate(t, f).DocsStatus)
+}
+
+func TestDispatchUnwiredDeliveryDoesNotClaimOrParkJobs(t *testing.T) {
+	t.Parallel()
+	f := newPromotionFixture(t)
+	_, err := f.promote(t)
+	require.NoError(t, err)
+	f.service.delivery = nil
+	require.Error(t, f.service.Dispatch(t.Context()))
+	candidate := deliveryCandidate(t, f)
+	require.Equal(t, "pending", candidate.DocsStatus)
+	require.Zero(t, candidate.DocsAttempts)
+	require.Empty(t, candidate.DeliveryError)
 }
