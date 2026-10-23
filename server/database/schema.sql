@@ -6454,6 +6454,10 @@ CREATE TABLE IF NOT EXISTS chat_messages (
   -- same logical conversation view share a generation.
   generation INTEGER NOT NULL DEFAULT 0,
 
+  -- Capture lineage is independent of historical import/spool replay.
+  capture_kind TEXT,
+  original_message_id uuid,
+
   -- True when the message arrived as a replay from a device's offline spool
   -- after control-plane downtime (X-Gram-Replayed on hooks.ingest), so
   -- downtime backlog — and findings produced by retroactively scanning it —
@@ -6516,6 +6520,10 @@ COMMENT ON COLUMN chat_messages.tool_outcome_notes IS '@access: opaque-restricte
 COMMENT ON COLUMN chat_messages.tool_call_summaries IS '@access: opaque-restricted';
 COMMENT ON COLUMN chat_messages.content_hash IS '@access: confidential';
 COMMENT ON COLUMN chat_messages.generation IS '@access: confidential';
+COMMENT ON COLUMN chat_messages.capture_kind IS 'Original utterance, exact transcript reobservation, synthetic summary, or unknown lineage.
+@access: confidential';
+COMMENT ON COLUMN chat_messages.original_message_id IS 'Original source-message identity for an exact transcript copy. A logical reference retained independently of source-row lifetime.
+@access: confidential';
 COMMENT ON COLUMN chat_messages.replayed IS '@access: confidential';
 COMMENT ON COLUMN chat_messages.created_at IS '@access: confidential';
 COMMENT ON COLUMN chat_messages.risk_analyzed_at IS '@access: confidential';
@@ -15592,6 +15600,26 @@ ON sigint_sensors (project_id, slug);
 
 CREATE INDEX IF NOT EXISTS sigint_sensors_project_id_id_idx
 ON sigint_sensors (project_id, id) WHERE deleted IS FALSE;
+
+CREATE TABLE IF NOT EXISTS sigint_definition_snapshots (
+  project_id uuid NOT NULL,
+  sensor_id uuid NOT NULL,
+  definition_hash TEXT NOT NULL,
+  definition JSONB NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  CONSTRAINT sigint_definition_snapshots_pkey PRIMARY KEY (project_id, sensor_id, definition_hash),
+  CONSTRAINT sigint_definition_snapshots_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE SET NULL
+);
+
+COMMENT ON COLUMN sigint_definition_snapshots.project_id IS '@access: confidential';
+COMMENT ON COLUMN sigint_definition_snapshots.sensor_id IS 'Sensor identity retained after configuration deletion.
+@access: confidential';
+COMMENT ON COLUMN sigint_definition_snapshots.definition_hash IS '@access: confidential';
+COMMENT ON COLUMN sigint_definition_snapshots.definition IS 'Immutable semantic definition whose digest is carried by evaluated readings.
+@access: opaque-restricted';
+COMMENT ON COLUMN sigint_definition_snapshots.created_at IS '@access: confidential';
+COMMENT ON COLUMN sigint_definition_snapshots.updated_at IS '@access: confidential';
 
 CREATE TABLE IF NOT EXISTS sigint_sensor_signals (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
